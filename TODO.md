@@ -20,6 +20,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Define the reference hardware for the performance targets
 - [x] Free content by default; original assets optional and configured locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md))
 - [x] Rook Plugin Exception: additional permission under section 7 of the GPL for plugins and mods ([ADR-0010](docs/adr/0010-license.md))
+- [x] Counter-Strike 1.6 only: no Half-Life, no other GoldSrc games, no game-module abstraction ([ADR-0017](docs/adr/0017-counter-strike-only.md))
 - [x] SDL3 (window, events, input, raw mouse) arrives in M2, together with the Vulkan swapchain, its first consumer. In M1 nothing uses a window or input, and the vcpkg `sdl3` port pulls X11, Wayland and D-Bus into the CI Linux with nothing to test; the M1 `nx.platform` has only the clocks (2026-10-20)
 - [ ] Legal review before the first public release, including the text of the Rook Plugin Exception ([20](docs/20-legal-and-licensing.md))
 
@@ -52,7 +53,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] 19 — Roadmap
 - [x] 20 — Legal and licensing
 - [x] Glossary
-- [x] ADRs 0001–0016
+- [x] ADRs 0001–0017
 - [x] camelCase rule documented ([02 §3.1](docs/02-coding-standards.md#31-project-rule-camelcase))
 - [x] Licenses in the REUSE format: `LICENSES/`, `LICENSE`, `REUSE.toml` and SPDX headers
 - [x] `CONTRIBUTING.md` (PR flow, DCO, standards, license of contributions, how to run the tests)

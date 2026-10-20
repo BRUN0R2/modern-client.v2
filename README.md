@@ -3,7 +3,8 @@
 [![CI](https://github.com/BRUN0R2/modern-client.v2/actions/workflows/ci.yml/badge.svg)](https://github.com/BRUN0R2/modern-client.v2/actions/workflows/ci.yml)
 [![REUSE](https://img.shields.io/badge/REUSE-3.3-green)](https://reuse.software)
 
-An open-source recreation of Counter-Strike 1.6, written from scratch in **C++26**, with
+An open-source recreation of Counter-Strike 1.6, and only Counter-Strike 1.6 (no Half-Life,
+[ADR-0017](docs/adr/0017-counter-strike-only.md)), written from scratch in **C++26**, with
 gameplay and servers identical to the original and **without the historical limits** of GoldSrc.
 
 - **Modern engine:** archetype ECS, multithreaded Job System, Vulkan (DirectX 11 in the

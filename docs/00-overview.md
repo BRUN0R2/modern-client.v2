@@ -2,8 +2,9 @@
 
 ## 1. Purpose
 
-**Modern-Client.v2** recreates Counter-Strike 1.6 from scratch, as open source, with **behavior identical to the
-original** from the point of view of players and server operators. Underneath, the
+**Modern-Client.v2** recreates Counter-Strike 1.6, and only Counter-Strike 1.6 ([ADR-0017](adr/0017-counter-strike-only.md)),
+from scratch, as open source, with **behavior identical to the original** from the point of view
+of players and server operators. Underneath, the
 engine is modern, parallel and free of the fixed caps of GoldSrc.
 
 The project has three pillars:
@@ -54,6 +55,10 @@ The project has three pillars:
   automated tests, CI on Windows and Linux.
 
 ## 4. Non-goals (for now)
+
+- **Half-Life and other GoldSrc games:** no Half-Life single player, no Half-Life Deathmatch,
+  no other GoldSrc game and no engine abstraction for them
+  ([ADR-0017](adr/0017-counter-strike-only.md)). Mods are Counter-Strike 1.6 mods.
 
 - **Binary compatibility with GoldSrc:** protocol 48 and the original clients/servers
   are not compatible with Modern-Client.v2. The limits of the original are built into that

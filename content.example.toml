@@ -20,7 +20,8 @@
 profile = "classic"
 
 [goldsrcInstall]
-# Folder that contains cstrike/ and valve/, e.g.
+# The Counter-Strike 1.6 installation: the folder with cstrike/ and valve/, which Steam names
+# after Half-Life, the base game of CS 1.6, e.g.
 #   "C:/Program Files (x86)/Steam/steamapps/common/Half-Life"
 #   "~/.local/share/Steam/steamapps/common/Half-Life"
 # Empty: detect it in the Steam libraries of this computer.

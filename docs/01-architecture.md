@@ -233,9 +233,9 @@ flowchart LR
 ```
 
 - The engine does not know the rules of Counter-Strike.
-- The `cstrike` game is statically linked in v1 (no game DLL). The
-  `nx::game::GameModule` interface exists so that, in the future, other GoldSrc games (e.g.
-  HL Deathmatch) can use the same engine.
+- The `cstrike` game is statically linked (no game DLL) and is the only game: there is no
+  game-module interface and no Half-Life or other GoldSrc game
+  ([ADR-0017](adr/0017-counter-strike-only.md)).
 - Rook plugins extend the game **only** through the API exposed in `nx.script`. There is no
   access to memory, offsets or internals.
 
