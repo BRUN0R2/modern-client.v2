@@ -151,6 +151,7 @@ ctest --preset dev-linux-gcc
 |--------|---------|---------|
 | `NX_BUILD_TESTS` | `ON` | Builds the tests and installs the vcpkg `tests` feature (GoogleTest) |
 | `NX_WARNINGS_AS_ERRORS` | `ON` | Warnings as errors (`/WX`, `-Werror`) |
+| `NX_BUILD_BENCHMARKS` | `ON` | Builds the benchmarks (`nxBench*`, `tests/bench`) and installs the vcpkg `benchmarks` feature (Google Benchmark) |
 | `NX_BUILD_CLIENT` | `ON` | Builds `next` |
 | `NX_BUILD_SERVER` | `ON` | Builds `nextds` |
 | `NX_BUILD_TOOLS` | `ON` | Builds the tools |
@@ -161,7 +162,7 @@ ctest --preset dev-linux-gcc
 | `NX_CONTRACT_SEMANTIC` | per module | `enforce` or `observe` ([02 §6.5](02-coding-standards.md#65-contracts)) |
 
 The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
-`NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS` and `NX_REFLECTION_BACKEND` exist.
+`NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS` and `NX_REFLECTION_BACKEND` exist.
 
 ## 5. Dependencies
 
@@ -186,6 +187,7 @@ The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 | Tracy | Profiler | BSD-3-Clause |
 | Dear ImGui | Development tools | MIT |
 | GoogleTest | Unit tests, including death tests, with official support for builds without exceptions | BSD-3-Clause |
+| Google Benchmark | Benchmarks of hot paths (`nxBench*`) | Apache-2.0 |
 
 Rules:
 
@@ -209,7 +211,7 @@ Rules:
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
-| `nxBench*` | Benchmarks |
+| `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
 | `fuzz*` | Fuzzing targets (libFuzzer) |
 
 ## 7. Continuous integration

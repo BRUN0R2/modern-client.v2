@@ -381,3 +381,8 @@ Destroying an entity removes the relations that point to it at the same sync poi
 | Iterate 100,000 entities with 2 components (1 thread) | < 0.2 ms |
 | Create/destroy 10,000 entities through a command buffer | < 1 ms |
 | Scheduler overhead per empty system | < 2 µs |
+
+`nxBenchEcs` measures the three (`iterateTwoComponents`, `spawnAndDestroyThroughCommands`,
+`emptySystems`); run it from a release build. On a 14-core development machine (2026-10-20),
+iteration and the scheduler meet their targets, and the command buffers do not yet: about 6 ms
+for 10,000 spawns and destroys, an item of the `TODO.md`.
