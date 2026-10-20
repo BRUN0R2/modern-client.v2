@@ -125,7 +125,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Structured logging: levels, per-module categories, compile-time checked formatting, `ConsoleSink`, a *thread-safe* `Logger` and `RateLimit` (tested under ThreadSanitizer)
 - [ ] File and JSON lines sinks
 - [x] `nx::hash64` (`constexpr` XXH64, verified against the reference implementation) and `nx::StableId`
-- [ ] BLAKE3 for content hashing (with the VFS, M2)
+- [ ] BLAKE3 for content hashing, with its first consumer (`.nxpak` packages, resource downloads or file consistency)
 - [x] Unit tests for what already exists in `nx.core` (including death tests of the default handler)
 
 ### `nx.meta`
@@ -196,7 +196,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ## M2 — Assets and visible world
 
 ### Assets
-- [ ] VFS with mounts, priority, case-insensitive lookup and path validation
+- [x] VFS with mounts, priority, case-insensitive lookup and path validation (`nx.assets`), over the native file system of `nx.platform`
 - [ ] Content sources (`engine`, `devContent`, `openContent`, `goldsrcInstall`, mods) with a redistribution flag
 - [ ] `classic`, `open`, `dev` and `custom` profiles, and reading of `content.toml` (order: `--content-config`, working directory, user profile)
 - [ ] Steam installation detection (registry and `libraryfolders.vdf` on Windows; `~/.steam`, `~/.local/share/Steam` and Flatpak on Linux)

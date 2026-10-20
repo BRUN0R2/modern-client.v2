@@ -58,6 +58,10 @@ The goal is to prove, with numbers, that the behavior is the same as in CS 1.6.
 - **Contracts:** to verify that a check fired without aborting, the test installs a handler
   that records and returns (`ContractRecorder`, *observe* mode). The default handler
   (*enforce*) is covered by death tests (`EXPECT_DEATH`).
+- **Files:** a test that reads the file system writes its input into a
+  `TemporaryDirectory`, removed at the end of the test. A test whose subject depends on a
+  property of the file system (case sensitivity) checks the property at run time and skips
+  where it does not hold, instead of a platform `#if`.
 - Literals are allowed in tests as input data and expected values. The `.clang-tidy` of the
   test directories turns off only the magic-number rules and the ones that conflict with the
   GoogleTest macros.
