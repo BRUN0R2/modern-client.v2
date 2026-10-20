@@ -131,7 +131,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Fallback path (explicit registration: `nx::meta::Description<T>`)
 - [x] Test that guarantees identical metadata on both paths (`nxMetaTests`: matching descriptions and every kind of drift)
 - [ ] Annotations on the types themselves (`[[=...]]`) instead of the descriptions, when every supported compiler accepts the syntax (MSVC does not)
-- [ ] TOML schemas derived from structs (toml++ without exceptions) with per-file/line errors
+- [x] TOML schemas derived from structs (toml++ without exceptions) with per-file/line errors (`nx.data`)
 
 ---
 

@@ -25,6 +25,9 @@ include(nxTargets)
 # `import std;` for every project target (see cmake/nxStdModule.cmake).
 nxAddStdModuleLibrary()
 
+# Runtime dependencies (vcpkg.json; docs/17-build-and-tools.md, section 5).
+find_package(tomlplusplus CONFIG REQUIRED)
+
 if(NX_BUILD_TESTS)
     enable_testing()
     find_package(GTest CONFIG REQUIRED)

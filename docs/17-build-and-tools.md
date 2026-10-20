@@ -15,6 +15,7 @@ modern-client.v2/
 │   ├── math/                   # nx.math
 │   ├── console/                # nx.console (cvars, commands, .cfg)
 │   ├── meta/                   # nx.meta (reflection facade + fallback)
+│   ├── data/                   # nx.data (TOML data and configuration files with schemas)
 │   ├── jobs/                   # nx.jobs
 │   ├── platform/               # nx.platform (SDL3)
 │   ├── ecs/                    # nx.ecs
@@ -104,6 +105,7 @@ dialect is `/std:c++latest`.
 | MSVC disables `std::println(std::ostream&, ...)` without exceptions (documented STL behavior) | Output through `std::println(stderr, ...)` or `std::fputs` (`FILE*`) |
 | GCC 16 hits an *internal compiler error* (`module_state::mangle`) when another unit uses a `friend` comparison operator with `= default` of a (non-template) class declared in a module | In those classes, *defaulted* comparisons are members: `auto operator<=>(const T&) const = default` |
 | libstdc++'s `std` module (GCC 16) advertises `__cpp_lib_saturation_arithmetic` but does not export `std::add_sat` and friends | `nx.core` uses its own saturated arithmetic on every compiler |
+| MSVC 14.51 cannot materialize a `std::optional` returned by a `consteval` call inside a template (C2440, "too many initializers") | The `nx.meta` functions that return class types (`typeAnnotation`, `Field::annotation`) are `constexpr`: pure, still evaluated at compile time where a constant is required |
 | libstdc++ keeps `std::stacktrace` in a separate library, `libstdc++exp` | `nx.core` links `stdc++exp` on GCC (`nx::currentStackTrace`) |
 | GCC 16 also applies `-Wmissing-field-initializers` (from `-Wextra`) to designated initializers that omit a member without a default initializer; MSVC does not warn | Every aggregate member that can be omitted has a default initializer (`Entity entity{};`). The required ones, such as `JobDesc::label`, have types without a default constructor: omitting them does not even compile |
 | GCC 16 spells a type imported from a named module with the module after it (`nx::ConversionError@nx.core`) in `__PRETTY_FUNCTION__`, where `nx.core:introspection` reads type names | `nx::typeName` drops every `@<module>`, so names read the same on every compiler (`Introspection.NamesTypesAttachedToAModuleWithoutTheModule`) |
