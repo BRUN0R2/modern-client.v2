@@ -41,12 +41,16 @@ inconsistency. The code stays understandable months later without historical con
 
 ## 3. Repository
 
-- Trunk-based development on `main`, which only receives commits with every required CI job
-  green ([17 §7](17-build-and-tools.md#7-continuous-integration)).
-- One commit per finished logical change, with its tests, documentation and
-  [`TODO.md`](../TODO.md) updated **in the same commit**.
+- Trunk-based development on a protected `main`: every change arrives through a pull request
+  whose required CI jobs are all green, and GitHub squash-merges it into one commit that it
+  signs (Verified). Direct pushes, force pushes and unsigned commits are refused, for
+  administrators too ([17 §8](17-build-and-tools.md#8-workflow)).
+- One pull request per finished logical change, with its tests, documentation and
+  [`TODO.md`](../TODO.md) updated **in the same change**: its squash commit is the change's
+  only commit on `main`, so a fix found by the CI never lands as a separate commit.
 - Messages in English, as Conventional Commits, with a short imperative summary of the real
-  change: `feat(console): add cvarlist, cmdlist and find`.
+  change: `feat(console): add cvarlist, cmdlist and find`. The pull request title is the
+  subject of the squash commit.
 - Every commit carries a Signed-off-by line (DCO), because of the clean room
   ([§12](#12-legal-and-clean-room)).
 - The root [`TODO.md`](../TODO.md) is the backlog: minimal, current and actionable. An item is
