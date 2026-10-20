@@ -97,7 +97,8 @@ There are two sanctioned exceptions, because they are process-wide services by n
 **contract violation handler** (`nx::setContractViolationHandler`, mirroring the C++26 global
 handler) and the **default logger** (`nx::log::setDefaultLogger`). Both have a safe default
 (abort / write to the console), are replaced only by the application and have an RAII scope
-for tests.
+for tests. A thread's identity is not global state: the worker a thread is, which `nx.jobs`
+records once when the worker starts ([04 §7](04-job-system.md#7-usage-rules)).
 
 ```cpp
 export module app.server;

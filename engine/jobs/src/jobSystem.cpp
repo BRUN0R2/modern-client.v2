@@ -40,27 +40,10 @@ static_assert(kPrioritiesByUrgency.size() == enumCount<Priority>());
 /// short gaps between bursts of jobs from paying for a sleep and a wake-up.
 constexpr int kIdleRoundsBeforeSleep = 32;
 
-// Counter::state layout.
-constexpr unsigned kGenerationShift = 32;
-constexpr std::uint32_t kEmptyList = 0;
-constexpr std::uint32_t kClosedList = std::numeric_limits<std::uint32_t>::max();
-
-[[nodiscard]] constexpr auto packState(std::uint32_t generation, std::uint32_t list) noexcept
-    -> std::uint64_t {
-    return (std::uint64_t{generation} << kGenerationShift) | list;
-}
-
-[[nodiscard]] constexpr auto generationOf(std::uint64_t state) noexcept -> std::uint32_t {
-    return truncate<std::uint32_t>(state >> kGenerationShift);
-}
-
-[[nodiscard]] constexpr auto listOf(std::uint64_t state) noexcept -> std::uint32_t {
-    return truncate<std::uint32_t>(state);
-}
-
 /// Whether the counter incarnation `generation` has completed: it was closed, or reused since.
-[[nodiscard]] constexpr auto hasCompleted(std::uint64_t state, std::uint32_t generation) noexcept -> bool {
-    return generationOf(state) != generation || listOf(state) == kClosedList;
+/// `state` is a Counter::state: the generation as tag, the continuation list as link.
+[[nodiscard]] constexpr auto hasCompleted(TaggedLink state, std::uint32_t generation) noexcept -> bool {
+    return state.tag != generation || state.link == detail::kClosedContinuations;
 }
 
 } // namespace
@@ -116,8 +99,9 @@ auto JobSystem::isComplete(JobHandle handle) const noexcept -> bool {
         return true;
     }
     // seq_cst: wait() pairs this load with its store to Counter::hasWaiter (see finishCounter).
-    return hasCompleted(m_counters[handle.m_counter].state.load(std::memory_order_seq_cst),
-                        handle.m_generation);
+    return hasCompleted(
+        TaggedLink::unpack(m_counters[handle.m_counter].state.load(std::memory_order_seq_cst)),
+        handle.m_generation);
 }
 
 auto JobSystem::stats() const -> JobSystemStats {
@@ -141,7 +125,7 @@ auto JobSystem::allocateCounter(std::uint64_t pendingJobs) -> JobHandle {
     // job publishes these stores.
     counter.pendingJobs.store(pendingJobs, std::memory_order_relaxed);
     counter.hasWaiter.store(false, std::memory_order_relaxed);
-    return JobHandle{index, generationOf(counter.state.load(std::memory_order_relaxed))};
+    return JobHandle{index, TaggedLink::unpack(counter.state.load(std::memory_order_relaxed)).tag};
 }
 
 auto JobSystem::allocateJob(const JobDesc& desc, JobHandle handle) -> detail::Job& {
@@ -151,25 +135,30 @@ auto JobSystem::allocateJob(const JobDesc& desc, JobHandle handle) -> detail::Jo
     job.priority = desc.priority;
     job.counter = handle.m_counter;
     job.poolIndex = index;
+    // relaxed: the destructor reads the count with seq_cst only after the submitting thread joined
+    // its jobs (a submit happens before the jobs it creates finish and decrement it).
     m_jobsInFlight.fetch_add(1, std::memory_order_relaxed);
     return job;
 }
 
-void JobSystem::completeWithoutJobs(JobHandle handle) {
+void JobSystem::completeWithoutJobs(JobHandle handle) noexcept {
     finishCounter(handle.m_counter);
 }
 
 void JobSystem::schedule(detail::Job& job, std::span<const JobHandle> dependsOn) {
     // The extra count keeps the job from starting while its dependencies are being registered.
+    // relaxed: no other thread can reach the job before its first continuation is published.
     job.unresolvedDependencies.store(dependsOn.size() + 1, std::memory_order_relaxed);
     for (const JobHandle dependency : dependsOn) {
         const bool isValid = dependency.isValid();
         expects(isValid, "JobSystem: a job depends on an invalid handle");
         if (!isValid || !addContinuation(dependency, job)) {
             // Already complete (or ignored after the violation): one dependency fewer to wait for.
+            // acq_rel: whichever decrement reaches zero acquires every completion before it.
             job.unresolvedDependencies.fetch_sub(1, std::memory_order_acq_rel);
         }
     }
+    // acq_rel: as above; the thread that reaches zero enqueues the job.
     if (job.unresolvedDependencies.fetch_sub(1, std::memory_order_acq_rel) == 1) {
         enqueue(job);
     }
@@ -177,24 +166,30 @@ void JobSystem::schedule(detail::Job& job, std::span<const JobHandle> dependsOn)
 
 auto JobSystem::addContinuation(JobHandle dependency, detail::Job& job) -> bool {
     detail::Counter& counter = m_counters[dependency.m_counter];
-    auto state = counter.state.load(std::memory_order_acquire);
-    if (hasCompleted(state, dependency.m_generation)) {
+    // acquire: pairs with finishCounter's exchange, so a completed counter's results are visible.
+    std::uint64_t observed = counter.state.load(std::memory_order_acquire);
+    if (hasCompleted(TaggedLink::unpack(observed), dependency.m_generation)) {
         return false;
     }
-    const auto linkIndex = m_links.acquire();
+    const PoolIndex linkIndex = m_links.acquire();
     detail::ContinuationLink& link = m_links[linkIndex];
     link.job = &job;
-    do {
+    while (true) {
+        const TaggedLink state = TaggedLink::unpack(observed);
         if (hasCompleted(state, dependency.m_generation)) {
             m_links.release(linkIndex);
             return false;
         }
-        link.next = listOf(state);
+        link.next = state.link;
         // The generation is part of the compared word, so a counter that completed or was reused
-        // in the meantime makes the exchange fail.
-    } while (!counter.state.compare_exchange_weak(state, packState(dependency.m_generation, linkIndex + 1),
-                                                  std::memory_order_acq_rel, std::memory_order_acquire));
-    return true;
+        // in the meantime makes the exchange fail. acq_rel: publishes the link to finishCounter,
+        // which walks the list after its seq_cst exchange.
+        const TaggedLink linked{.tag = dependency.m_generation, .link = linkTo(linkIndex)};
+        if (counter.state.compare_exchange_weak(observed, linked.pack(), std::memory_order_acq_rel,
+                                                std::memory_order_acquire)) {
+            return true;
+        }
+    }
 }
 
 void JobSystem::enqueue(detail::Job& job) {
@@ -210,7 +205,7 @@ auto JobSystem::currentWorker() const noexcept -> detail::Worker* {
     return tCurrentWorker != nullptr && tCurrentWorker->system == this ? tCurrentWorker : nullptr;
 }
 
-auto JobSystem::findJob(detail::Worker* self) -> detail::Job* {
+auto JobSystem::findJob(detail::Worker* self) noexcept -> detail::Job* {
     for (const Priority priority : kPrioritiesByUrgency) {
         if (self != nullptr) {
             if (const auto own = self->deques[priority].pop()) {
@@ -227,7 +222,7 @@ auto JobSystem::findJob(detail::Worker* self) -> detail::Job* {
     return nullptr;
 }
 
-auto JobSystem::steal(Priority priority, detail::Worker* self) -> detail::Job* {
+auto JobSystem::steal(Priority priority, detail::Worker* self) noexcept -> detail::Job* {
     const std::size_t workerCount = m_workers.size();
     // Each worker starts with its right-hand neighbour, which spreads the thieves over the victims.
     const std::size_t start = self != nullptr ? std::size_t{self->index} + 1 : 0;
@@ -238,7 +233,7 @@ auto JobSystem::steal(Priority priority, detail::Worker* self) -> detail::Job* {
         }
         if (const auto stolen = victim.deques[priority].steal()) {
             if (self != nullptr) {
-                self->stolenJobs.fetch_add(1, std::memory_order_relaxed);
+                self->stolenJobs.fetch_add(1, std::memory_order_relaxed); // a statistic only
             }
             return *stolen;
         }
@@ -265,8 +260,9 @@ void JobSystem::execute(detail::Job& job, detail::Worker* self) {
     job.function(context);
     job.function.reset();
 
-    const std::uint32_t counterIndex = job.counter;
+    const PoolIndex counterIndex = job.counter;
     m_jobs.release(job.poolIndex);
+    // relaxed: statistics only.
     if (self != nullptr) {
         self->executedJobs.fetch_add(1, std::memory_order_relaxed);
     } else {
@@ -286,29 +282,34 @@ void JobSystem::execute(detail::Job& job, detail::Worker* self) {
     }
 }
 
-void JobSystem::finishCounter(std::uint32_t counterIndex) {
+void JobSystem::finishCounter(PoolIndex counterIndex) {
     detail::Counter& counter = m_counters[counterIndex];
-    // Other threads only add links, never change the generation, so it can be read on its own.
-    const std::uint32_t generation = generationOf(counter.state.load(std::memory_order_relaxed));
-    const std::uint64_t closed =
-        counter.state.exchange(packState(generation, kClosedList), std::memory_order_seq_cst);
+    // Other threads only add links, never change the generation, so it can be read on its own
+    // (relaxed: the exchange below is what synchronizes with them).
+    const std::uint32_t generation = TaggedLink::unpack(counter.state.load(std::memory_order_relaxed)).tag;
+    const TaggedLink closed = TaggedLink::unpack(
+        counter.state.exchange(TaggedLink{.tag = generation, .link = detail::kClosedContinuations}.pack(),
+                               std::memory_order_seq_cst));
     // Paired with the seq_cst store in wait(): either this load sees the waiter, or the waiter's next
     // isComplete() sees the counter closed and it does not sleep.
     const bool hasWaiter = counter.hasWaiter.load(std::memory_order_seq_cst);
 
-    for (std::uint32_t link = listOf(closed); link != kEmptyList;) {
-        const std::uint32_t linkIndex = link - 1;
+    for (PoolLink link = closed.link; link != PoolLink::None;) {
+        const PoolIndex linkIndex = indexOf(link);
         const detail::ContinuationLink& continuation = m_links[linkIndex];
         detail::Job& job = *continuation.job;
         link = continuation.next;
         m_links.release(linkIndex);
+        // acq_rel: as in schedule(); this completion is one of the dependencies it counts.
         if (job.unresolvedDependencies.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             enqueue(job);
         }
     }
 
     // A new generation turns every handle to this one into "complete", so the counter can be reused.
-    counter.state.store(packState(generation + 1, kEmptyList), std::memory_order_release);
+    // release: the next owner of the counter, which acquires it from the pool, sees the new state.
+    counter.state.store(TaggedLink{.tag = generation + 1, .link = PoolLink::None}.pack(),
+                        std::memory_order_release);
     m_counters.release(counterIndex);
     if (hasWaiter) {
         wakeAll();
@@ -346,25 +347,25 @@ void JobSystem::helpUntil(Done done, BeforeSleep beforeSleep) {
     }
 }
 
-void JobSystem::sleep(std::uint32_t observedSignal, detail::Worker* self) {
+void JobSystem::sleep(std::uint32_t observedSignal, detail::Worker* self) noexcept {
     // seq_cst on both sides: either a waker sees this sleeper, or the wait below sees the waker's
     // new signal and returns immediately.
     m_sleepers.fetch_add(1, std::memory_order_seq_cst);
     m_signal.wait(observedSignal, std::memory_order_seq_cst);
     m_sleepers.fetch_sub(1, std::memory_order_seq_cst);
     if (self != nullptr) {
-        self->sleeps.fetch_add(1, std::memory_order_relaxed);
+        self->sleeps.fetch_add(1, std::memory_order_relaxed); // a statistic only
     }
 }
 
-void JobSystem::wakeOne() {
+void JobSystem::wakeOne() noexcept {
     m_signal.fetch_add(1, std::memory_order_seq_cst);
     if (m_sleepers.load(std::memory_order_seq_cst) != 0) {
         m_signal.notify_one();
     }
 }
 
-void JobSystem::wakeAll() {
+void JobSystem::wakeAll() noexcept {
     m_signal.fetch_add(1, std::memory_order_seq_cst);
     if (m_sleepers.load(std::memory_order_seq_cst) != 0) {
         m_signal.notify_all();

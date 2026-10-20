@@ -189,4 +189,16 @@ template <Integer Type>
     }
 }
 
+/// `dividend / divisor` rounded up: how many groups of `divisor` hold `dividend` items. `divisor`
+/// must not be 0.
+template <std::unsigned_integral Type>
+    requires Integer<Type>
+[[nodiscard]] constexpr auto divideRoundingUp(Type dividend, Type divisor) noexcept -> Type {
+    expects(divisor != 0, "divideRoundingUp: division by zero");
+    if (divisor == 0) {
+        return 0; // the handler let execution continue ("observe")
+    }
+    return static_cast<Type>(dividend / divisor + (dividend % divisor != 0 ? 1 : 0));
+}
+
 } // namespace nx

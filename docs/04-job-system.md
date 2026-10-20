@@ -27,8 +27,9 @@ flowchart LR
 ```
 
 - **Workers:** `N = hardware_concurrency − 1` by default (`jobs_workers`,
-  `JobSystemConfig::workerCount`, at most `kMaxWorkerCount`). CPU affinity comes with
-  `nx.platform`, if a benchmark shows a gain.
+  `JobSystemConfig::workerCount`, at most `kMaxWorkerCount`). CPU affinity, if a benchmark
+  shows a gain, needs control over OS threads in a layer `nx.jobs` may use (its own or
+  `nx.core`): `nx.platform` is in layer 2, above it ([01 §1.1](01-architecture.md#11-module-catalog)).
 - **Local deques** (Chase-Lev, `WorkStealingDeque`): one per priority in each worker. The
   owner pushes and pops at the bottom, thieves steal from the top. The deque grows on
   demand, so a *push* never fails.
@@ -37,8 +38,13 @@ flowchart LR
   exchange (Vyukov's intrusive MPSC queue). Consumers take turns through a *try-lock*; one
   that finds another consuming looks for work elsewhere instead of waiting.
 - **Priorities:** `Critical` (current frame), `Normal`, `Low` (streaming, compression) and
-  `Background` (precomputation, cache). A worker only takes `Low` if no `Critical` or
-  `Normal` work is visible.
+  `Background` (precomputation, cache). A thread looking for work tries the priorities from
+  the most urgent down: its own deque, the global queue and the other workers' deques of one
+  priority before the next. Visibility is momentary: a global queue another thread is taking
+  from at that instant is skipped, so a less urgent job can start while a more urgent one is
+  being handed out. A thread inside `wait` helps with whatever it finds, so the main thread
+  may run a `Background` job while it waits for a `Critical` one; long jobs belong to the
+  workers' lower priorities, not to code that waits on the frame.
 - **Idleness:** a thread without work does a few rounds of searching
   (`kIdleRoundsBeforeSleep`) and then sleeps in `std::atomic::wait` on a signal that changes
   with every enqueued job. No fixed-time *sleep* and no endless *busy-wait*.
@@ -95,11 +101,15 @@ jobs.wait(hitboxes);
   word: registering a continuation fails atomically if the counter has already finished or
   was reused, and an old handle reads as complete. Keeping handles after completion is
   harmless; waiting on an invalid handle (`JobHandle{}`) is a contract violation.
+  Generations are 32 bits: a handle kept while its counter is reused 2^32 times (hours of
+  continuous submission to the most reused counter) reads that newest incarnation instead,
+  which only delays a wait or a continuation and never touches freed memory.
 - A job with dependencies only enters the queue when all of them finish: each dependency
   still pending receives a continuation link, and the last job of each counter enqueues the
   continuations that became ready, without polling.
 - `parallelFor` uses one counter for all batches: the handle completes when the last batch
-  finishes.
+  finishes, and never before its dependencies: an empty range with dependencies runs one empty
+  batch after them; without dependencies, its handle is complete at once.
 - `wait(handle)` runs other jobs while it waits (*help-while-waiting*) and only sleeps
   when there is no visible work. The completion of a counter that someone is waiting on
   wakes the sleepers. On the main thread, `wait` is used only at the frame's
@@ -122,7 +132,10 @@ jobs.wait(hitboxes);
 - Job descriptors, counters and continuation links come from lock-free pools
   (`ConcurrentPool`): blocks that never change address, a Treiber free list with an ABA
   *tag*, and recycling as soon as the job finishes. After warm-up, submitting a job does
-  not call `malloc`.
+  not call `malloc`. Nodes are addressed by a strong `PoolIndex`, and the lists threaded
+  through them store a `PoolLink` (`None` or a node); a link and its 32-bit tag share one
+  word (`TaggedLink`), which the pool's free list and each counter's continuation list
+  replace with one compare-exchange.
 - The lambda captures live inside the descriptor (`kJobCaptureCapacity`, 96 bytes).
   A larger capture is a compile error (`static_assert` with a message), which forces large
   data to be passed by reference or through an arena. The captures are destroyed right after
@@ -207,7 +220,10 @@ from `nx.core`, with a named capacity and a typed error if they fill up
 - Data written by parallel jobs must be **disjoint by construction** (per chunk,
   per client, per index). Reductions use per-job accumulators, combined afterwards.
 - `thread_local` only for caches without semantics (e.g. scratch buffers), never for
-  state the code expects to find again.
+  state the code expects to find again. The one identity a thread carries is which worker it
+  is: `nx.jobs` sets it once when the worker starts, so `submit` from inside a job pushes to
+  that worker's deque. It is not global state: no thread changes another's, and jobs never
+  write it ([01 §2.1](01-architecture.md#21-no-global-state)).
 - Every job has a `label` for the profiler: `JobDesc` does not compile without it.
 
 ## 8. Determinism

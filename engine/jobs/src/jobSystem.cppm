@@ -30,10 +30,12 @@ struct JobSystemConfig {
     std::uint32_t workerCount = defaultWorkerCount();
 };
 
+/// Why a job system could not start.
 enum class JobSystemError : std::uint8_t {
-    TooManyWorkers,
+    TooManyWorkers, ///< More workers than kMaxWorkerCount.
 };
 
+/// What one worker has done since the system started.
 struct WorkerStats {
     std::uint64_t executedJobs = 0;
     std::uint64_t stolenJobs = 0; // taken from another worker's deque
@@ -60,8 +62,8 @@ class JobSystem {
 
 public:
     /// Starts the workers. Fails with TooManyWorkers above kMaxWorkerCount. A failure to create a
-    /// thread ends the process (std::thread without exceptions); nx.platform will report it as an
-    /// error when it owns thread creation.
+    /// thread ends the process: std::thread reports it only through an exception, and the engine
+    /// is built without them.
     [[nodiscard]] static auto create(const JobSystemConfig& config = {})
         -> Result<std::unique_ptr<JobSystem>, JobSystemError>;
 
@@ -88,9 +90,10 @@ public:
     }
 
     /// Calls `function` on every element of `range`, in batches that run as separate jobs. The
-    /// handle completes when every batch has run. Each batch gets a copy of `function`, and the
-    /// range must stay alive until then: borrowed ranges only (lvalues, spans, views), so a
-    /// temporary container cannot dangle. Outputs written at the element's index make the result
+    /// handle completes when every batch has run, and never before its dependencies: an empty range
+    /// with dependencies runs one empty batch after them; without, it is complete at once. Each batch gets a
+    /// copy of `function`, and the range must stay alive until then: borrowed ranges only (lvalues, spans,
+    /// views), so a temporary container cannot dangle. Outputs written at the element's index make the result
     /// independent of the worker count (docs/04, section 8).
     template <std::ranges::random_access_range Range, class Function>
         requires std::ranges::sized_range<Range> && std::ranges::borrowed_range<Range> &&
@@ -105,8 +108,9 @@ public:
 
         const auto elementCount = static_cast<std::size_t>(std::ranges::size(range));
         const std::size_t batchSize = grain.batchSize(elementCount, threadCount());
-        const std::size_t batchCount =
-            elementCount / batchSize + (elementCount % batchSize != 0 ? std::size_t{1} : std::size_t{0});
+        const std::size_t batchCount = elementCount == 0 && !desc.dependsOn.empty()
+                                           ? std::size_t{1}
+                                           : divideRoundingUp(elementCount, batchSize);
 
         const JobHandle handle = allocateCounter(batchCount);
         if (batchCount == 0) {
@@ -130,10 +134,14 @@ public:
     /// sleeps only while no job is visible to it.
     void wait(JobHandle handle);
 
+    /// Whether `handle`, which must be valid, has completed; true for every handle once its job and
+    /// everything it depends on have run.
     [[nodiscard]] auto isComplete(JobHandle handle) const noexcept -> bool;
 
+    /// Worker threads, besides the threads that wait.
     [[nodiscard]] auto workerCount() const noexcept -> std::uint32_t { return m_workerCount; }
 
+    /// What every worker has done so far: for jobs_stats.
     [[nodiscard]] auto stats() const -> JobSystemStats;
 
 private:
@@ -142,23 +150,23 @@ private:
 
     [[nodiscard]] auto allocateCounter(std::uint64_t pendingJobs) -> JobHandle;
     [[nodiscard]] auto allocateJob(const JobDesc& desc, JobHandle handle) -> detail::Job&;
-    void completeWithoutJobs(JobHandle handle);
+    void completeWithoutJobs(JobHandle handle) noexcept;
     void schedule(detail::Job& job, std::span<const JobHandle> dependsOn);
     [[nodiscard]] auto addContinuation(JobHandle dependency, detail::Job& job) -> bool;
     void enqueue(detail::Job& job);
 
     [[nodiscard]] auto currentWorker() const noexcept -> detail::Worker*;
-    [[nodiscard]] auto findJob(detail::Worker* self) -> detail::Job*;
-    [[nodiscard]] auto steal(Priority priority, detail::Worker* self) -> detail::Job*;
+    [[nodiscard]] auto findJob(detail::Worker* self) noexcept -> detail::Job*;
+    [[nodiscard]] auto steal(Priority priority, detail::Worker* self) noexcept -> detail::Job*;
     [[nodiscard]] auto hasVisibleWork() const noexcept -> bool;
     void execute(detail::Job& job, detail::Worker* self);
-    void finishCounter(std::uint32_t counterIndex);
+    void finishCounter(PoolIndex counterIndex);
 
     template <class Done, class BeforeSleep>
     void helpUntil(Done done, BeforeSleep beforeSleep);
-    void sleep(std::uint32_t observedSignal, detail::Worker* self);
-    void wakeOne();
-    void wakeAll();
+    void sleep(std::uint32_t observedSignal, detail::Worker* self) noexcept;
+    void wakeOne() noexcept;
+    void wakeAll() noexcept;
     void workerMain(detail::Worker& worker);
 
     std::uint32_t m_workerCount;

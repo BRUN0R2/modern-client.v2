@@ -7,14 +7,17 @@ export module nx.jobs:job;
 
 import std;
 import nx.core;
+import :concurrentPool;
 import :intrusiveQueue;
 
 export namespace nx::jobs {
 
 class JobSystem;
 
-/// Urgency of a job. A worker only takes a job of some priority when no job of a more urgent one is
-/// visible to it.
+/// Urgency of a job. A thread looking for work tries the priorities from the most urgent down, and
+/// takes a job of some priority only when it found none of a more urgent one: none in its own queue,
+/// in the global queue (unless another thread was taking from it at that moment) or in what it
+/// could steal.
 enum class Priority : std::uint8_t {
     Critical,   // the current frame or tick
     Normal,     // work due soon, but not on the frame's critical path
@@ -51,12 +54,14 @@ private:
 
 /// Refers to the completion of a submitted job (or of all the batches of a parallelFor). A handle
 /// is a small value: copying it is free and keeping it after completion is harmless, because the
-/// counter it names carries a generation that changes when the counter is reused.
+/// counter it names carries a generation that changes when the counter is reused. Generations are
+/// 32 bits: a handle kept while its counter is reused 2^32 times reads its newest incarnation.
 class JobHandle {
 public:
     /// An invalid handle; waiting on it is a contract violation.
     constexpr JobHandle() noexcept = default;
 
+    /// Whether the handle names a job (it came from submit or parallelFor).
     [[nodiscard]] constexpr auto isValid() const noexcept -> bool { return m_counter != kInvalidCounter; }
 
     // A member, not a hidden friend: GCC 16 crashes on defaulted friend comparisons from modules
@@ -66,15 +71,17 @@ public:
 private:
     friend class JobSystem;
 
-    static constexpr std::uint32_t kInvalidCounter = std::numeric_limits<std::uint32_t>::max();
+    /// No pool index reaches it (ConcurrentPool::kIndexLimit).
+    static constexpr PoolIndex kInvalidCounter{std::numeric_limits<std::uint32_t>::max()};
 
-    constexpr JobHandle(std::uint32_t counter, std::uint32_t generation) noexcept
+    constexpr JobHandle(PoolIndex counter, std::uint32_t generation) noexcept
         : m_counter{counter}, m_generation{generation} {}
 
-    std::uint32_t m_counter = kInvalidCounter;
+    PoolIndex m_counter = kInvalidCounter;
     std::uint32_t m_generation = 0;
 };
 
+/// How to submit a job.
 struct JobDesc {
     JobLabel label; // required: every job is named (docs/04, section 7)
     Priority priority = Priority::Normal;
@@ -110,9 +117,7 @@ public:
             return m_size;
         }
         const std::size_t targetBatches = std::max(threadCount, std::size_t{1}) * kBatchesPerThread;
-        const std::size_t remainder = elementCount % targetBatches != 0 ? std::size_t{1} : std::size_t{0};
-        const std::size_t evenSplit = elementCount / targetBatches + remainder;
-        return std::max(evenSplit, m_size);
+        return std::max(divideRoundingUp(elementCount, targetBatches), m_size);
     }
 
 private:
@@ -139,6 +144,7 @@ public:
     /// The system running the job, to submit and wait on further jobs.
     [[nodiscard]] auto jobSystem() const noexcept -> JobSystem& { return *m_system; }
 
+    /// The label the job was submitted with.
     [[nodiscard]] auto label() const noexcept -> std::string_view { return m_label; }
 
 private:
@@ -251,29 +257,32 @@ struct alignas(kCacheLineSize) Job : QueueLink {
     std::string_view label;
     /// Dependencies not yet complete, plus one while the job is still being submitted.
     std::atomic<std::size_t> unresolvedDependencies{0};
-    std::uint32_t counter = 0; // completion counter this job decrements
-    std::uint32_t poolIndex = 0;
-    std::atomic<std::uint32_t> nextFree{0};
+    PoolIndex counter{}; // completion counter this job decrements
+    PoolIndex poolIndex{};
+    std::atomic<PoolLink> nextFree{PoolLink::None};
     Priority priority = Priority::Normal;
 };
 
 /// Completion counter behind a JobHandle.
 struct alignas(kCacheLineSize) Counter {
-    /// Generation (high 32 bits) and the continuation list (low 32 bits): 0 when empty, `link + 1` of
-    /// the newest continuation link, or all ones once the counter completed. One word, so that
-    /// registering a continuation fails atomically when the counter completes or is reused.
-    std::atomic<std::uint64_t> state{0};
+    /// A TaggedLink: the generation as its tag, and the newest continuation link (None when there
+    /// is none, kClosedContinuations once the counter completed). One word, so that registering a
+    /// continuation fails atomically when the counter completes or is reused.
+    std::atomic<std::uint64_t> state{TaggedLink{}.pack()};
     std::atomic<std::uint64_t> pendingJobs{0};
     /// Set by a thread about to sleep in wait(): completion must then wake the sleepers.
     std::atomic<bool> hasWaiter{false};
-    std::atomic<std::uint32_t> nextFree{0};
+    std::atomic<PoolLink> nextFree{PoolLink::None};
 };
+
+/// The continuation list of a completed counter: closed, so no continuation joins it.
+inline constexpr PoolLink kClosedContinuations{std::numeric_limits<std::uint32_t>::max()};
 
 /// "Run `job` once this counter completes."
 struct ContinuationLink {
     Job* job = nullptr;
-    std::uint32_t next = 0; // `link + 1` of the next link in the list, 0 at the end
-    std::atomic<std::uint32_t> nextFree{0};
+    PoolLink next = PoolLink::None; // the next link in the list
+    std::atomic<PoolLink> nextFree{PoolLink::None};
 };
 
 } // namespace detail
