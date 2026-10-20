@@ -47,4 +47,8 @@ enum class FileError : std::uint8_t {
 /// any decoding.
 [[nodiscard]] auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError>;
 
+/// The path of the running executable: the programs find their `data/` next to it.
+/// Errors: ReadFailed (the operating system did not tell it).
+[[nodiscard]] auto executablePath() -> Result<std::filesystem::path, FileError>;
+
 } // namespace nx::platform

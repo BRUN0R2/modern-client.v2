@@ -12,6 +12,7 @@ export module nx.assets:mdl;
 import std;
 import nx.core;
 import nx.math;
+import :vfs;
 import :wad;
 
 export namespace nx::assets {
@@ -268,6 +269,11 @@ public:
         return m_transitions;
     }
 
+    /// Checks that `texturesFile`, this model's `*T.mdl` (texturesFilePath), has the textures and
+    /// skins every mesh of this model draws with. Errors: BadIndex (a skin reference past its
+    /// skins), BadValue (it has no texture).
+    [[nodiscard]] auto checkTextures(const MdlView& texturesFile) const -> Result<void, MdlError>;
+
     /// Decodes the animation of `sequence` from `groupFile`: the bytes this model was parsed from for
     /// group 0, the sequence group's file (`*0N.mdl`) for the others. Every run-length stream is
     /// checked to the last frame. Errors: BadIndex (no such sequence), NotSequenceGroup,
@@ -295,5 +301,10 @@ private:
     std::vector<SequenceGroup> m_sequenceGroups;
     std::span<const std::byte> m_transitions;
 };
+
+/// The `*T.mdl` that holds the textures of the model at `model`, when the model has none:
+/// "models/player.mdl" has them in "models/playerT.mdl". Errors: InvalidPath (a model path that
+/// does not end in ".mdl").
+[[nodiscard]] auto texturesFilePath(const VfsPath& model) -> Result<VfsPath, VfsError>;
 
 } // namespace nx::assets

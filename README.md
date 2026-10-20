@@ -33,7 +33,8 @@ with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime cor
 `nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars,
 commands and `.cfg`), `nx.platform` (clocks and the native file system) and `nx.assets` (the
 VFS, the Counter-Strike 1.6 installation and its detection in Steam, and fuzzed readers of every
-binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests. The architecture documentation
+binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and `nxcheck`, which reads every
+file of a Counter-Strike 1.6 installation with those readers. The architecture documentation
 is in [`docs/`](docs/README.md), the project rules in [`docs/RULES.md`](docs/RULES.md) and
 the backlog in [`TODO.md`](TODO.md).
 
@@ -52,6 +53,14 @@ ctest --preset dev-windows-msvc
 
 On Linux, use the `dev-linux-gcc` preset; the other presets and their status are in
 [docs/17 §3](docs/17-build-and-tools.md#3-presets).
+
+With Counter-Strike 1.6 installed through Steam, `nxcheck` reads every file of the installation
+with the engine's readers and reports any it cannot read
+([docs/18](docs/18-testing-and-quality.md#real-content)):
+
+```powershell
+.\build\dev-windows-msvc\bin\nxcheck.exe
+```
 
 ## License
 

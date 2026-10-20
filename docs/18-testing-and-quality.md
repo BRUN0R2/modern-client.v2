@@ -13,6 +13,7 @@
 | Parity | Fixtures from the original | Movement, weapons, economy, rules | Nightly |
 | Performance | Benchmarks | Hot paths and the full frame | Nightly |
 | Fuzzing | libFuzzer | Parsers, network decoder, `rookc` | Nightly |
+| Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 | Stress | Simulated clients | 1024 players, mass entities | Weekly |
 | *Soak* | Long-running server | 24 h+ with bots: stable memory, no timing degradation | Per release |
 
@@ -49,6 +50,30 @@ The goal is to prove, with numbers, that the behavior is the same as in CS 1.6.
 | Economy | Rewards per round-end reason, loss bonus, penalties |
 | Round | State transitions and end reasons per map type |
 | Input | Sensitivity in degrees per mouse count |
+
+## Real content
+
+Fuzzing proves that the readers survive hostile input; they must also read every file of the
+real game. `nxcheck` (`tools/nxcheck`) mounts the user's own Counter-Strike 1.6 installation,
+found through Steam or given with `--install <folder>`, and reads each file through the VFS with
+the reader of its format, on the workers of the Job System: every lump of a map, every mip
+texture of a WAD, a model with its `*T.mdl` and the animation of each sequence from its sequence
+group file, every sprite and every sound. It prints what each format read and every failure with
+its causes, and exits with 1 when a file failed, 2 when the installation cannot be used.
+
+It runs on a legitimate local copy, never in CI: no Valve file enters the repository or its
+runners ([20](20-legal-and-licensing.md)). Run it after changing a reader:
+
+```powershell
+.\build\dev-windows-msvc\bin\nxcheck.exe
+```
+
+The Steam installation (2026-10-20: 5048 files, about 550 MB, read in under half a second by a
+release build once the system has cached them) reads whole except `valve/models/doctor.mdl`, an
+MDL v9 from Half-Life's development that the original refuses too.
+Its first run found 12 files that their editors and compilers wrote differently from what the
+readers expected, and the readers now follow them
+([06 §3.1](06-assets-and-resources.md#31-goldsrc-direct-reading)).
 
 ## C++ test conventions
 

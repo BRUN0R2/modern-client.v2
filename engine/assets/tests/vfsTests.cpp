@@ -64,6 +64,18 @@ TEST(VfsPathTest, RejectsEveryBrokenRule) {
     }
 }
 
+TEST(VfsPathTest, AGoldsrcPathMaySeparateWithBackslashes) {
+    const auto path = VfsPath::parseGoldsrc("models\\hostage01.mdl");
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_EQ(path->text(), "models/hostage01.mdl");
+
+    for (const std::string_view text : {"..\\x.bsp", "\\maps\\x.bsp", "C:\\maps\\x.bsp"}) {
+        const auto broken = VfsPath::parseGoldsrc(text);
+        ASSERT_FALSE(broken.has_value()) << text;
+        EXPECT_EQ(broken.error().code, VfsError::InvalidPath);
+    }
+}
+
 TEST(VfsPathTest, TheCeilingIsInclusive) {
     const std::string extension = ".wav";
     EXPECT_TRUE(
@@ -105,6 +117,28 @@ TEST(VfsTest, ThePathResolvesToTheFirstMountThatHasIt) {
 
     const Vfs reversed = mount({cstrike.path(), addons.path()});
     EXPECT_EQ(contentOf(reversed, "sound/radio/go.wav"), "original go");
+}
+
+TEST(VfsTest, ListsEveryPathOnceAsItsMountSpellsIt) {
+    const nx::test::TemporaryDirectory addons;
+    const nx::test::TemporaryDirectory cstrike;
+    addons.write("Sound/Radio/Go.wav", "custom go");
+    cstrike.write("sound/radio/go.wav", "original go");
+    cstrike.write("maps/de_dust2.bsp", "dust2");
+    cstrike.write("readme", "not content");
+
+    const Vfs vfs = mount({addons.path(), cstrike.path()});
+    const auto texts = vfs.paths() |
+                       std::views::transform([](const VfsPath& path) { return std::string{path.text()}; }) |
+                       std::ranges::to<std::vector>();
+    EXPECT_EQ(texts, (std::vector<std::string>{"maps/de_dust2.bsp", "Sound/Radio/Go.wav"}));
+
+    const auto native = vfs.nativePath(pathOf("sound/radio/go.wav"));
+    ASSERT_TRUE(native.has_value()) << nx::describe(native.error());
+    EXPECT_EQ(*native, addons.path() / "Sound/Radio/Go.wav");
+    const auto missing = vfs.nativePath(pathOf("maps/de_nuke.bsp"));
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_EQ(missing.error().code, VfsError::NotFound);
 }
 
 TEST(VfsTest, APathNoMountHasIsNotFound) {

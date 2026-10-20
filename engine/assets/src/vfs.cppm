@@ -60,6 +60,10 @@ public:
     /// Errors: InvalidPath.
     [[nodiscard]] static auto parse(std::string_view text) -> Result<VfsPath, VfsError>;
 
+    /// A path as GoldSrc content writes it, where `\` is a separator too ("models\player01.mdl"
+    /// in a model's sequence groups): parse with every `\` read as `/`. Errors: InvalidPath.
+    [[nodiscard]] static auto parseGoldsrc(std::string_view text) -> Result<VfsPath, VfsError>;
+
     /// The path as written.
     [[nodiscard]] inline auto text() const noexcept -> std::string_view { return m_text; }
 
@@ -89,8 +93,16 @@ public:
     /// The whole file at `path`. Errors: NotFound, ReadFailed.
     [[nodiscard]] auto readAll(const VfsPath& path) const -> Result<std::vector<std::byte>, VfsError>;
 
+    /// The path of every file, as its mount spells it, in the order of their lookup keys.
+    [[nodiscard]] auto paths() const -> std::vector<VfsPath>;
+
+    /// The native file `path` resolves to, for diagnostics: content is read with readAll.
+    /// Errors: NotFound.
+    [[nodiscard]] auto nativePath(const VfsPath& path) const -> Result<std::filesystem::path, VfsError>;
+
 private:
     struct File {
+        std::string text; // its VfsPath text
         std::filesystem::path native;
         std::size_t mount = 0; // its mount's position in the priority order
     };

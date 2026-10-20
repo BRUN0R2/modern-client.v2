@@ -43,11 +43,14 @@ the embedded `engine/` mount are planned (M2, [TODO](../TODO.md)).
   than `kMaxResourcePathBytes` (1024 bytes) and extensions outside `kAllowedExtensions`: those
   of the formats of [§3](#3-supported-formats). A violation yields `VfsError::InvalidPath`,
   whose detail names the rule; text over the ceiling is reported by its size, never repeated.
+- Paths that GoldSrc content writes (a model's sequence groups: `models\hostage01.mdl`) separate
+  with `\` too: `VfsPath::parseGoldsrc` reads every `\` as `/`, then applies the same rules.
 - Creating the VFS indexes the regular files of every mount (symbolic links to directories are
   not followed: they can lead into a cycle). Lookup is O(1), by hash of the lowercased path, and
   never hands the caller's text to the operating system. Files whose relative paths are not
   valid logical paths (another extension, a `:` in a name) are not content and stay out of the
-  index.
+  index. `Vfs::paths` lists every path once, as the mount that serves it spells it, and
+  `Vfs::nativePath` names the file a path resolves to, for diagnostics.
 - Two files of one mount whose paths differ only in case (possible on Linux) would make a path
   ambiguous: creating the VFS fails with `VfsError::MountFailed`, naming both, unless a higher
   mount has that path. The VFS never picks one silently.
@@ -177,9 +180,11 @@ Readers today:
   animation, from the model or from its sequence group's file (`*01.mdl`), into every value of
   every blend, frame, bone and axis, checking each run to the last frame; a safety ceiling,
   `kMaxAnimationValues`, bounds what it allocates, since a constant axis costs the file nothing. A
-  model whose textures are in its `*T.mdl` has none, and its meshes' skin references are checked
-  against that file's skins when the two are joined (planned, with the asset handles). Every list
-  is a vector: no count has a ceiling ([§3.4](#34-removed-content-limits)).
+  model whose textures are in its `*T.mdl` has none: `texturesFilePath` names that file
+  (`models/playerT.mdl` for `models/player.mdl`) and `checkTextures` joins the two, checking the
+  meshes' skin references against its skins. A sequence group names its file as the original
+  loads it, with `\` (`VfsPath::parseGoldsrc`). Every list is a vector: no count has a ceiling
+  ([§3.4](#34-removed-content-limits)).
 
 Every reader refuses malformed input with a typed error and is fuzzed
 ([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above all have their readers; the text formats (`sentences.txt`, `materials.txt`, `hud.txt`...) are planned with their consumers (M3).
