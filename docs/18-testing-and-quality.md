@@ -104,7 +104,9 @@ The goal is to prove, with numbers, that the behavior is the same as in CS 1.6.
 | Rook compile time per 1000 lines | `rookBench` | 10% |
 
 Benchmarks run on a dedicated, stable machine. The results are published as a historical
-series.
+series. Every preset builds them (`NX_BUILD_BENCHMARKS`), so the CI keeps them compiling; until the
+dedicated machine exists they are run by hand from a release build:
+`build/release-windows-msvc/bin/nxBenchEcs`.
 
 ## Sanitizers and analysis
 

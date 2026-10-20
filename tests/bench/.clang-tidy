@@ -1,0 +1,10 @@
+---
+# Benchmark code: literals are input sizes, and the BENCHMARK macros define non-const globals
+# and special members by design.
+InheritParentConfig: true
+Checks: >
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-special-member-functions

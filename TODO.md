@@ -155,7 +155,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `std::execution`-compatible scheduler (stdexec), with asset streaming (M2)
 - [ ] Per-job scratch arena in `JobContext`, when the first consumer needs it
 - [x] Tests, including an identical result with 0, 1, 3 and 15 workers, under ThreadSanitizer in CI
-- [ ] Benchmarks (`nxBenchJobs`)
+- [x] Benchmarks (`nxBenchJobs`: empty jobs, dependency chains and `parallelFor` with 0, 1, 3 and all workers)
 
 ### `nx.ecs`
 - [x] Generational `Entity`, FIFO slots, retirement on generation exhaustion
@@ -174,7 +174,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Relations (parent/child, owner) with cleanup at the *sync point* (with gameplay, M3)
 - [x] World determinism test with 0, 1, 3 and 15 workers
 - [ ] `ent_list`, `ent_dump`, `ecs_stats`
-- [ ] Benchmarks with the targets of [03 §16](docs/03-ecs.md#16-performance-targets-reference-hardware-to-be-defined-in-m1)
+- [x] Benchmarks with the targets of [03 §16](docs/03-ecs.md#16-performance-targets-reference-hardware-to-be-defined-in-m1) (`nxBenchEcs`)
+- [ ] Command buffers within the target of 03 §16: creating and destroying 10,000 entities takes about 6 ms against < 1 ms; profile and optimize `Commands::apply`
 
 ### Platform, math and console
 - [x] `nx.platform`: clocks (monotonic, wall, `Stopwatch`) and a precise deadline wait for tick and frame pacing (`SleepTimer`)

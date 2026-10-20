@@ -14,6 +14,12 @@
         "gtest",
         "xxhash"
       ]
+    },
+    "benchmarks": {
+      "description": "Benchmarks of hot paths (Google Benchmark)",
+      "dependencies": [
+        "benchmark"
+      ]
     }
   }
 }

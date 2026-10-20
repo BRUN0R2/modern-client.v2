@@ -6,9 +6,13 @@ cmake_minimum_required(VERSION 4.3)
 # Declared before project() because the vcpkg toolchain installs manifest features there.
 option(NX_BUILD_TESTS "Build the unit tests (installs the vcpkg 'tests' feature)" ON)
 option(NX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
+option(NX_BUILD_BENCHMARKS "Build the benchmarks (installs the vcpkg 'benchmarks' feature)" ON)
 
 if(NX_BUILD_TESTS)
     list(APPEND VCPKG_MANIFEST_FEATURES "tests")
+endif()
+if(NX_BUILD_BENCHMARKS)
+    list(APPEND VCPKG_MANIFEST_FEATURES "benchmarks")
 endif()
 
 project(ModernClientV2
@@ -35,8 +39,15 @@ if(NX_BUILD_TESTS)
     include(GoogleTest)
 endif()
 
+if(NX_BUILD_BENCHMARKS)
+    find_package(benchmark CONFIG REQUIRED)
+endif()
+
 add_subdirectory(engine)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)
+endif()
+if(NX_BUILD_BENCHMARKS)
+    add_subdirectory(tests/bench)
 endif()

@@ -79,6 +79,22 @@ function(nxAddModuleLibrary target)
     add_library(${arg_ALIAS} ALIAS ${target})
 endfunction()
 
+# nxAddBenchmark(<target> SOURCES <files>... DEPENDS <targets>...)
+#
+# Creates a Google Benchmark executable. Benchmarks are not CTest tests: they are run by hand or by
+# the nightly bench job, on release builds.
+function(nxAddBenchmark target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
+
+    if(NOT arg_SOURCES)
+        message(FATAL_ERROR "nxAddBenchmark(${target}): SOURCES is required")
+    endif()
+
+    add_executable(${target} ${arg_SOURCES})
+    target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} benchmark::benchmark benchmark::benchmark_main)
+    nxTargetDefaults(${target})
+endfunction()
+
 # nxAddTest(<target> SOURCES <files>... DEPENDS <targets>...)
 #
 # Creates a GoogleTest executable and registers each test case with CTest. The helpers shared by
