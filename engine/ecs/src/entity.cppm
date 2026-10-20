@@ -33,8 +33,10 @@ public:
     [[nodiscard]] constexpr auto generation() const noexcept -> Generation { return m_generation; }
     [[nodiscard]] constexpr auto isNull() const noexcept -> bool { return m_index == kNullIndex; }
 
-    [[nodiscard]] friend constexpr auto operator==(Entity, Entity) noexcept -> bool = default;
-    [[nodiscard]] friend constexpr auto operator<=>(Entity, Entity) noexcept = default;
+    // Members, not hidden friends: GCC 16 crashes on defaulted friend comparisons from modules
+    // (docs/17-build-e-ferramentas.md, section 2.2).
+    [[nodiscard]] constexpr auto operator==(const Entity&) const noexcept -> bool = default;
+    [[nodiscard]] constexpr auto operator<=>(const Entity&) const noexcept = default;
 
 private:
     friend class EntityTable;

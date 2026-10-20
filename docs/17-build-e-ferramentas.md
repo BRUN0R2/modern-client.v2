@@ -101,6 +101,8 @@ O CMake ainda não conhece um switch `/std:c++26` para o MSVC, então o dialeto 
 | Fontes fora da árvore ganham diretórios de objeto com *hash* longo e podiam passar de 260 caracteres | **Resolvido na causa:** o fonte do módulo `std` é copiado para `build/<preset>/nxStd/` e compilado de lá, com caminhos curtos |
 | Flags que mudam o ABI (exceções, RTTI) precisam ser iguais em todas as unidades, inclusive no módulo `std` | Ficam em `CMAKE_CXX_FLAGS` globais. Warnings ficam por alvo e não se aplicam ao `nx::std` |
 | O MSVC desativa `std::println(std::ostream&, ...)` sem exceções (comportamento documentado da STL) | Saída via `std::println(stderr, ...)` ou `std::fputs` (`FILE*`) |
+| O GCC 16 tem *internal compiler error* (`module_state::mangle`) quando outra unidade usa um operador de comparação `friend` com `= default` de uma classe (não template) declarada em um módulo | Nessas classes, comparações *defaulted* são membros: `auto operator<=>(const T&) const = default` |
+| O módulo `std` do libstdc++ (GCC 16) anuncia `__cpp_lib_saturation_arithmetic`, mas não exporta `std::add_sat` e afins | O `nx.core` usa a própria aritmética saturada em todos os compiladores |
 
 ## 3. Presets
 

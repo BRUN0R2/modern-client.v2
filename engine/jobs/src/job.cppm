@@ -59,7 +59,9 @@ public:
 
     [[nodiscard]] constexpr auto isValid() const noexcept -> bool { return m_counter != kInvalidCounter; }
 
-    [[nodiscard]] friend constexpr auto operator==(JobHandle, JobHandle) noexcept -> bool = default;
+    // A member, not a hidden friend: GCC 16 crashes on defaulted friend comparisons from modules
+    // (docs/17-build-e-ferramentas.md, section 2.2).
+    [[nodiscard]] constexpr auto operator==(const JobHandle&) const noexcept -> bool = default;
 
 private:
     friend class JobSystem;
