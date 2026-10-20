@@ -116,10 +116,10 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `nx::narrow`, `nx::tryNarrow`, `nx::truncate`, `nx::tryRound`, checked and saturating arithmetic
 - [x] `EnumArray` and `Flags<E>`
 - [ ] `inplace_vector` (facade), when the first consumer exists (ECS or jobs)
-- [x] `FrameArena` with typed failures (`Exhausted`, `InvalidAlignment`)
+- [x] `FrameArena` with a typed failure (`Exhausted`); a bad alignment is a contract violation
 - [ ] Generic `PoolAllocator<T>` (the ECS chunks use the `World`'s own block pool) and `TrackedHeapAllocator`
 - [ ] Lock-free SPSC/MPSC queues with a typed queue-full error, when the first consumer exists (networking, audio)
-- [x] Structured logging: levels, per-module categories, compile-time checked formatting, `ConsoleSink`, *thread-safe* `RateLimit`
+- [x] Structured logging: levels, per-module categories, compile-time checked formatting, `ConsoleSink`, a *thread-safe* `Logger` and `RateLimit` (tested under ThreadSanitizer)
 - [ ] File and JSON lines sinks
 - [x] `nx::hash64` (`constexpr` XXH64, verified against the reference implementation) and `nx::StableId`
 - [ ] BLAKE3 for content hashing (with the VFS, M2)

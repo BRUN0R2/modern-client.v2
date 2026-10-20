@@ -96,14 +96,17 @@ constexpr auto operator*=(Vec3& v, float scale) noexcept -> Vec3& {
     return length(a - b);
 }
 
-/// Unit vector in the direction of `v`, which must not be the zero vector: it has no direction.
+/// Unit vector in the direction of `v`, which must be finite and not the zero vector (it has no
+/// direction). Any such vector has one, however large or small its components: they are divided
+/// by the largest first, so their squares neither overflow nor vanish.
 [[nodiscard]] inline auto normalized(Vec3 v) noexcept -> Vec3 {
-    const float magnitude = length(v);
-    expects(magnitude > 0.0F, "normalized: the zero vector has no direction");
-    if (magnitude == 0.0F) {
+    const float largest = std::max({std::abs(v.x), std::abs(v.y), std::abs(v.z)});
+    expects(largest > 0.0F, "normalized: the zero vector has no direction");
+    if (!(largest > 0.0F)) {
         return Vec3{}; // the handler let execution continue ("observe")
     }
-    return v / magnitude;
+    const Vec3 scaled = v / largest;
+    return scaled / length(scaled);
 }
 
 /// `a` at 0, `b` at 1: a + (b - a) * fraction.

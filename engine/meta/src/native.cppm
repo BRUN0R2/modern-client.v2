@@ -40,19 +40,40 @@ template <class Type>
 inline constexpr auto kMembers = std::define_static_array(
     std::meta::nonstatic_data_members_of(^^Type, std::meta::access_context::unchecked()));
 
+/// How many annotations of `entity` equal `value`.
 template <class Value>
-[[nodiscard]] consteval auto hasAnnotation(std::meta::info entity, const Value& value) -> bool {
+[[nodiscard]] consteval auto occurrencesOn(std::meta::info entity, const Value& value) -> std::size_t {
+    std::size_t count = 0;
     for (const auto annotation : std::meta::annotations_of_with_type(entity, ^^Value)) {
         if (std::meta::extract<Value>(annotation) == value) {
-            return true;
+            ++count;
         }
     }
-    return false;
+    return count;
 }
 
-/// Whether `entity` carries exactly the `declared` annotations. An entity without annotations
-/// matches any declaration: annotations live in the descriptions until every supported compiler
-/// accepts the `[[=...]]` syntax (docs/02-coding-standards.md, section 1.2).
+/// How many of `values` equal `value` (values of other types never do).
+template <class Value, class... Values>
+[[nodiscard]] consteval auto occurrencesIn(const Value& value, const std::tuple<Values...>& values)
+    -> std::size_t {
+    return std::apply(
+        [&value](const auto&... candidate) {
+            const auto equals = [&value]<class Candidate>(const Candidate& other) {
+                if constexpr (std::same_as<Candidate, Value>) {
+                    return other == value;
+                } else {
+                    return false;
+                }
+            };
+            return (std::size_t{0} + ... + (equals(candidate) ? std::size_t{1} : std::size_t{0}));
+        },
+        values);
+}
+
+/// Whether `entity` carries exactly the `declared` annotations, repeats included: as many in all,
+/// and each declared value as many times on both sides. An entity without annotations matches any
+/// declaration: annotations live in the descriptions until every supported compiler accepts the
+/// `[[=...]]` syntax (docs/02-coding-standards.md, section 1.2).
 template <class... Values>
 [[nodiscard]] consteval auto matchesAnnotations(std::meta::info entity, const std::tuple<Values...>& declared)
     -> bool {
@@ -61,8 +82,11 @@ template <class... Values>
         return true;
     }
     return count == sizeof...(Values) &&
-           std::apply([entity](const auto&... value) { return (hasAnnotation(entity, value) && ...); },
-                      declared);
+           std::apply(
+               [entity, &declared](const auto&... value) {
+                   return ((occurrencesOn(entity, value) == occurrencesIn(value, declared)) && ...);
+               },
+               declared);
 }
 
 template <Described Type, std::size_t Index>

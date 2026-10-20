@@ -42,6 +42,7 @@ private:
     std::vector<CauseRecord> m_records;
 };
 
+/// An expected failure: its code, human-readable context, where it happened and what caused it.
 template <ErrorCode Code>
 struct Failure {
     Code code{};
@@ -50,16 +51,39 @@ struct Failure {
     Cause cause;
 };
 
+/// What a function that can fail returns: a value, or the Failure (docs/02, section 6). Each such
+/// function is [[nodiscard]]: std::expected is not marked by the standard.
 template <class Value, ErrorCode Code>
 using Result = std::expected<Value, Failure<Code>>;
+
+namespace detail {
+
+/// How failures print a code: its enum's short name, its enumerator's name and its value.
+struct CodeIdentity {
+    std::string_view domain;
+    std::string_view code;
+    std::int64_t value = 0;
+};
+
+template <ErrorCode Code>
+[[nodiscard]] constexpr auto identify(Code code) noexcept -> CodeIdentity {
+    static_assert(std::in_range<std::int64_t>(std::numeric_limits<std::underlying_type_t<Code>>::max()),
+                  "nx: the values of an error code must fit in std::int64_t");
+    return CodeIdentity{.domain = shortTypeName<Code>(),
+                        .code = enumName(code),
+                        .value = static_cast<std::int64_t>(std::to_underlying(code))};
+}
+
+} // namespace detail
 
 /// Erases the code type of `failure`, keeping its names, value, detail and location.
 template <ErrorCode Code>
 [[nodiscard]] auto toCauseRecord(Failure<Code>&& failure) -> CauseRecord {
+    const detail::CodeIdentity identity = detail::identify(failure.code);
     return CauseRecord{
-        .domain = shortTypeName<Code>(),
-        .code = enumName(failure.code),
-        .value = static_cast<std::int64_t>(std::to_underlying(failure.code)),
+        .domain = identity.domain,
+        .code = identity.code,
+        .value = identity.value,
         .detail = std::move(failure.detail),
         .where = failure.where,
     };
@@ -108,8 +132,8 @@ void appendFailureLine(std::string& out, std::string_view domain, std::string_vi
 template <ErrorCode Code>
 [[nodiscard]] auto describe(const Failure<Code>& failure) -> std::string {
     std::string text;
-    detail::appendFailureLine(text, shortTypeName<Code>(), enumName(failure.code),
-                              static_cast<std::int64_t>(std::to_underlying(failure.code)), failure.detail,
+    const detail::CodeIdentity identity = detail::identify(failure.code);
+    detail::appendFailureLine(text, identity.domain, identity.code, identity.value, failure.detail,
                               failure.where);
     for (const auto& record : failure.cause.records()) {
         text += "\n  caused by: ";

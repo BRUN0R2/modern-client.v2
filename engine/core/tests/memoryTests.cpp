@@ -35,7 +35,7 @@ TEST(FrameArena, HandsOutValueInitializedObjects) {
 
 TEST(FrameArena, RespectsTheAlignmentOfTheType) {
     nx::FrameArena arena{kArenaBytes};
-    std::ignore = arena.allocate<std::uint8_t>(1);
+    ASSERT_TRUE(arena.allocate<std::uint8_t>(1).has_value()); // leaves the cursor unaligned
 
     const auto wide = arena.allocate<WideAligned>(2);
 
@@ -68,7 +68,7 @@ TEST(FrameArena, ReportsExhaustionAsATypedFailure) {
 
 TEST(FrameArena, ResetReleasesEverything) {
     nx::FrameArena arena{kArenaBytes};
-    std::ignore = arena.allocate<std::uint8_t>(kArenaBytes);
+    ASSERT_TRUE(arena.allocate<std::uint8_t>(kArenaBytes).has_value());
     ASSERT_EQ(arena.remaining(), 0U);
 
     arena.reset();
@@ -91,14 +91,14 @@ TEST(FrameArena, RejectsAlignmentsThatAreNotPowersOfTwo) {
 
     const auto result = arena.allocateBytes(8, 3);
 
-    EXPECT_EQ(recorder.count(), 1);
-    ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error().code, nx::ArenaError::InvalidAlignment);
+    EXPECT_EQ(recorder.count(), 1) << "a bug, reported once: not an expected failure";
+    ASSERT_TRUE(result.has_value()) << "after the report, the next power of two applies";
+    EXPECT_TRUE(isAligned(result->data(), 4));
 }
 
 TEST(FrameArena, MovingLeavesTheSourceEmpty) {
     nx::FrameArena source{kArenaBytes};
-    std::ignore = source.allocate<std::uint8_t>(10);
+    ASSERT_TRUE(source.allocate<std::uint8_t>(10).has_value());
 
     nx::FrameArena target = std::move(source);
 

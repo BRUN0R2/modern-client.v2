@@ -12,6 +12,7 @@ export module nx.core:conversion;
 import std;
 import :contracts;
 import :failure;
+import :text;
 
 export namespace nx {
 
@@ -30,9 +31,10 @@ template <class Type>
 concept Integer =
     std::integral<Type> && !std::same_as<std::remove_cv_t<Type>, bool> && !detail::CharacterType<Type>;
 
+/// Why a conversion of external data failed.
 enum class ConversionError : std::uint8_t {
-    OutOfRange,
-    NotFinite,
+    OutOfRange, ///< The value does not fit the destination type.
+    NotFinite,  ///< A floating-point value that is NaN or infinite.
 };
 
 /// Integer conversion that must not lose information; a value that does not fit is a
@@ -45,15 +47,23 @@ template <Integer To, Integer From>
     return static_cast<To>(value);
 }
 
+namespace detail {
+
+/// The detail of a conversion out of the range of `To`: "300 does not fit in [0, 255]".
+template <Integer To, class Value>
+[[nodiscard]] auto doesNotFit(Value value) -> std::string {
+    return std::format("{} does not fit {}", value,
+                       boundsText<To>(std::numeric_limits<To>::min(), std::numeric_limits<To>::max()));
+}
+
+} // namespace detail
+
 /// Integer conversion of external data; a value that does not fit is a typed failure.
 template <Integer To, Integer From>
 [[nodiscard]] auto tryNarrow(From value, std::source_location where = std::source_location::current())
     -> Result<To, ConversionError> {
     if (!std::in_range<To>(value)) {
-        return fail(ConversionError::OutOfRange,
-                    std::format("{} does not fit in [{}, {}]", value, std::numeric_limits<To>::min(),
-                                std::numeric_limits<To>::max()),
-                    where);
+        return fail(ConversionError::OutOfRange, detail::doesNotFit<To>(value), where);
     }
     return static_cast<To>(value);
 }
@@ -91,10 +101,7 @@ template <Integer To, std::floating_point From>
     constexpr auto lowest = static_cast<From>(std::numeric_limits<To>::min());
     constexpr auto upperBound = detail::upperBoundAs<To, From>();
     if (rounded < lowest || rounded >= upperBound) {
-        return fail(ConversionError::OutOfRange,
-                    std::format("{} does not fit in [{}, {}]", value, std::numeric_limits<To>::min(),
-                                std::numeric_limits<To>::max()),
-                    where);
+        return fail(ConversionError::OutOfRange, detail::doesNotFit<To>(value), where);
     }
     return static_cast<To>(rounded);
 }

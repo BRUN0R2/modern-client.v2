@@ -80,7 +80,7 @@ TEST(Quantity, IntegerOverflowIsReportedAndSaturates) {
 TEST(Quantity, IntegerDivisionByZeroIsReported) {
     const nx_test::ContractRecorder recorder;
 
-    std::ignore = Count{10} / 0;
+    std::ignore = Count{10} / 0; // only the report matters
 
     EXPECT_EQ(recorder.count(), 1);
 }

@@ -11,6 +11,8 @@ import :quantity;
 
 export namespace nx {
 
+// Unit tags: what each quantity below measures, with the suffix or prefix it prints with.
+
 struct HammerUnitsTag {
     static constexpr std::string_view kSuffix = "hu";
 };
@@ -61,6 +63,7 @@ using Money = Quantity<std::int32_t, MoneyTag>;
 /// Dimensionless multiplier (gravity, damage and speed scales).
 using Scale = Quantity<float, ScaleTag>;
 
+/// Angles. Degrees and radians never convert implicitly: toRadians and toDegrees do it.
 using Degrees = Quantity<float, DegreesTag>;
 using Radians = Quantity<float, RadiansTag>;
 
@@ -72,11 +75,15 @@ using Milliseconds = std::chrono::duration<float, std::milli>;
 inline constexpr Degrees kHalfTurnDegrees{180.0F};
 inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
 
+// Arithmetic across units: only the combinations with a physical meaning compile.
+
+/// Speed. The duration must not be zero.
 [[nodiscard]] constexpr auto operator/(HammerUnits distance, Seconds time) noexcept -> UnitsPerSecond {
     expects(time.count() != 0.0F, "speed: distance divided by a zero duration");
     return UnitsPerSecond{distance.value() / time.count()};
 }
 
+/// Distance covered.
 [[nodiscard]] constexpr auto operator*(UnitsPerSecond speed, Seconds time) noexcept -> HammerUnits {
     return HammerUnits{speed.value() * time.count()};
 }
@@ -85,11 +92,13 @@ inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
     return speed * time;
 }
 
+/// Travel time. The speed must not be zero.
 [[nodiscard]] constexpr auto operator/(HammerUnits distance, UnitsPerSecond speed) noexcept -> Seconds {
     expects(speed.value() != 0.0F, "travel time: distance divided by a zero speed");
     return Seconds{distance.value() / speed.value()};
 }
 
+/// Health or armor after taking damage, without a floor: the game rules decide what reaching zero means.
 [[nodiscard]] constexpr auto operator-(HitPoints health, Damage damage) noexcept -> HitPoints {
     return HitPoints{health.value() - damage.value()};
 }
@@ -98,6 +107,7 @@ inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
     return ArmorPoints{armor.value() - damage.value()};
 }
 
+/// Scaled damage and speed (hit group multipliers, speed modifiers).
 [[nodiscard]] constexpr auto operator*(Damage damage, Scale scale) noexcept -> Damage {
     return Damage{damage.value() * scale.value()};
 }

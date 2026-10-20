@@ -51,14 +51,20 @@ struct Quat {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-/// `q` scaled to unit length; `q` must not be zero.
+/// `q` scaled to unit length; `q` must be finite and not zero. As for vectors, the components are
+/// divided by the largest first, so their squares neither overflow nor vanish.
 [[nodiscard]] inline auto normalized(Quat q) noexcept -> Quat {
-    const float magnitude = std::sqrt(dot(q, q));
-    expects(magnitude > 0.0F, "normalized: the zero quaternion is not a rotation");
-    if (magnitude == 0.0F) {
+    const float largest = std::max({std::abs(q.x), std::abs(q.y), std::abs(q.z), std::abs(q.w)});
+    expects(largest > 0.0F, "normalized: the zero quaternion is not a rotation");
+    if (!(largest > 0.0F)) {
         return Quat{}; // the handler let execution continue ("observe")
     }
-    return Quat{.x = q.x / magnitude, .y = q.y / magnitude, .z = q.z / magnitude, .w = q.w / magnitude};
+    const Quat scaled{.x = q.x / largest, .y = q.y / largest, .z = q.z / largest, .w = q.w / largest};
+    const float magnitude = std::sqrt(dot(scaled, scaled));
+    return Quat{.x = scaled.x / magnitude,
+                .y = scaled.y / magnitude,
+                .z = scaled.z / magnitude,
+                .w = scaled.w / magnitude};
 }
 
 /// `v` rotated by the unit quaternion `q`.

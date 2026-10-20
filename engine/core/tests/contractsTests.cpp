@@ -31,7 +31,7 @@ TEST(Contracts, SatisfiedConditionsReportNothing) {
 TEST(Contracts, ViolationReachesTheHandlerWithKindDescriptionAndLocation) {
     const nx_test::ContractRecorder recorder;
 
-    std::ignore = halve(3);
+    std::ignore = halve(3); // only the report matters
 
     ASSERT_EQ(recorder.count(), 1);
     EXPECT_EQ(recorder.last().kind, nx::ContractKind::Precondition);

@@ -88,6 +88,16 @@ TEST(QuaternionTest, Normalized) {
     EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
 }
 
+TEST(QuaternionTest, NormalizesLargeAndTinyComponents) {
+    const nx_test::ContractRecorder recorder;
+    // 3e30 and 4e30 are not exact floats: the results are near 0.6 and 0.8, not equal.
+    EXPECT_TRUE(isSameRotation(nx::normalized(Quat{.x = 0, .y = 0, .z = 3e30F, .w = 4e30F}),
+                               Quat{.x = 0, .y = 0, .z = 0.6F, .w = 0.8F}));
+    EXPECT_TRUE(isSameRotation(nx::normalized(Quat{.x = 0, .y = 0, .z = 3e-30F, .w = 4e-30F}),
+                               Quat{.x = 0, .y = 0, .z = 0.6F, .w = 0.8F}));
+    EXPECT_EQ(nx_test::ContractRecorder::count(), 0);
+}
+
 TEST(QuaternionTest, SlerpMovesAtConstantAngularSpeed) {
     const Quat start{};
     const Quat end = Quat::fromAxisAngle(kAxisZ, quarterTurn());
