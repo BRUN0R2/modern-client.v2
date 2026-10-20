@@ -199,7 +199,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] VFS with mounts, priority, case-insensitive lookup and path validation (`nx.assets`), over the native file system of `nx.platform`
 - [ ] Content sources (`engine`, `devContent`, `openContent`, `goldsrcInstall`, mods) with a redistribution flag
 - [ ] `classic`, `open`, `dev` and `custom` profiles, and reading of `content.toml` (order: `--content-config`, working directory, user profile)
-- [ ] Steam installation detection (registry and `libraryfolders.vdf` on Windows; `~/.steam`, `~/.local/share/Steam` and Flatpak on Linux)
+- [x] Steam installation detection (registry and `libraryfolders.vdf` on Windows; `~/.steam`, `~/.local/share/Steam` and Flatpak on Linux): `nx::platform::steamFolders`, `nx::assets::detectGoldsrcInstall`
 - [x] Validation against `data/content/goldsrcCstrike.toml` with `ContentError::MissingEssentialFiles` (`GoldsrcInstall::open`)
 - [ ] First-start wizard ("use the original assets?") that writes `content.toml`
 - [ ] `--content`, `-basedir` and `--content-config` options

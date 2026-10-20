@@ -78,6 +78,20 @@ TEST(FileSystemTest, ReadsAWholeFileByteForByte) {
     EXPECT_TRUE(empty->empty());
 }
 
+TEST(FileSystemTest, ReadsATextFileAsItIs) {
+    const nx::test::TemporaryDirectory directory;
+    const std::string_view content{"id = \"x\"\r\n# a\xC3\xA7\xC3\xA3o\n"};
+    directory.write("data.toml", content);
+
+    const auto text = nx::platform::readTextFile(directory.path() / "data.toml");
+    ASSERT_TRUE(text.has_value()) << nx::describe(text.error());
+    EXPECT_EQ(*text, content) << "no line ending or encoding is converted";
+
+    const auto missing = nx::platform::readTextFile(directory.path() / "missing.toml");
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_EQ(missing.error().code, FileError::NotFound);
+}
+
 TEST(FileSystemTest, ReadingSomethingOtherThanAFileFails) {
     const nx::test::TemporaryDirectory directory;
     directory.makeDirectory("maps");

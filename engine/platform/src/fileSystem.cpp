@@ -46,6 +46,10 @@ constexpr std::size_t kMaxBytesPerRead = std::size_t{1} << 30;
     return std::format("{}: the file shrank while it was read", toUtf8(path));
 }
 
+/// What a file is read into: bytes, or the text of a text file.
+template <class Buffer>
+concept FileBuffer = std::same_as<Buffer, std::vector<std::byte>> || std::same_as<Buffer, std::string>;
+
 #if defined(_WIN32)
 
 [[nodiscard]] auto lastError() noexcept -> std::error_code {
@@ -68,8 +72,8 @@ private:
     HANDLE m_handle;
 };
 
-[[nodiscard]] auto readRegularFile(const std::filesystem::path& path)
-    -> Result<std::vector<std::byte>, FileError> {
+template <FileBuffer Buffer>
+[[nodiscard]] auto readRegularFile(const std::filesystem::path& path) -> Result<Buffer, FileError> {
     // Shared as a POSIX file is: other processes may write, rename or delete it meanwhile.
     const HANDLE handle =
         CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -84,7 +88,7 @@ private:
     if (GetFileSizeEx(file.get(), &size) == FALSE) {
         return fail(FileError::ReadFailed, osFailureText(path, lastError()));
     }
-    std::vector<std::byte> bytes(narrow<std::size_t>(size.QuadPart));
+    Buffer bytes(narrow<std::size_t>(size.QuadPart), {});
     std::size_t offset = 0;
     while (offset < bytes.size()) {
         const auto request = narrow<DWORD>(std::min(bytes.size() - offset, kMaxBytesPerRead));
@@ -123,8 +127,8 @@ private:
     int m_descriptor;
 };
 
-[[nodiscard]] auto readRegularFile(const std::filesystem::path& path)
-    -> Result<std::vector<std::byte>, FileError> {
+template <FileBuffer Buffer>
+[[nodiscard]] auto readRegularFile(const std::filesystem::path& path) -> Result<Buffer, FileError> {
     const int descriptor = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (descriptor < 0) {
         const std::error_code error = lastError();
@@ -136,7 +140,7 @@ private:
     if (::fstat(file.get(), &info) != 0) {
         return fail(FileError::ReadFailed, osFailureText(path, lastError()));
     }
-    std::vector<std::byte> bytes(narrow<std::size_t>(info.st_size));
+    Buffer bytes(narrow<std::size_t>(info.st_size), {});
     std::size_t offset = 0;
     while (offset < bytes.size()) {
         const ::ssize_t count = ::read(file.get(), std::span{bytes}.subspan(offset).data(),
@@ -156,6 +160,23 @@ private:
 }
 
 #endif
+
+/// readFile and readTextFile: checks that `path` is a regular file, then reads it.
+template <FileBuffer Buffer>
+[[nodiscard]] auto readWholeFile(const std::filesystem::path& path) -> Result<Buffer, FileError> {
+    std::error_code error;
+    const std::filesystem::file_status status = std::filesystem::status(path, error);
+    if (status.type() == std::filesystem::file_type::not_found) {
+        return fail(FileError::NotFound, toUtf8(path));
+    }
+    if (error) {
+        return fail(classify(error, FileError::ReadFailed), osFailureText(path, error));
+    }
+    if (!std::filesystem::is_regular_file(status)) {
+        return fail(FileError::NotAFile, toUtf8(path));
+    }
+    return readRegularFile<Buffer>(path);
+}
 
 } // namespace
 
@@ -209,18 +230,11 @@ auto listFiles(const std::filesystem::path& directory)
 }
 
 auto readFile(const std::filesystem::path& path) -> Result<std::vector<std::byte>, FileError> {
-    std::error_code error;
-    const std::filesystem::file_status status = std::filesystem::status(path, error);
-    if (status.type() == std::filesystem::file_type::not_found) {
-        return fail(FileError::NotFound, toUtf8(path));
-    }
-    if (error) {
-        return fail(classify(error, FileError::ReadFailed), osFailureText(path, error));
-    }
-    if (!std::filesystem::is_regular_file(status)) {
-        return fail(FileError::NotAFile, toUtf8(path));
-    }
-    return readRegularFile(path);
+    return readWholeFile<std::vector<std::byte>>(path);
+}
+
+auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError> {
+    return readWholeFile<std::string>(path);
 }
 
 } // namespace nx::platform

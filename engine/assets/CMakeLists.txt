@@ -8,9 +8,11 @@ nxAddModuleLibrary(nxAssets
         src/nx.assets.cppm
         src/vfs.cppm
         src/content.cppm
+        src/steam.cppm
     SOURCES
         src/vfs.cpp
         src/content.cpp
+        src/steam.cpp
     DEPENDS
         nx::core
         nx::meta

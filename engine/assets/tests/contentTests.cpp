@@ -44,13 +44,10 @@ void writeInstallation(const nx::test::TemporaryDirectory& folder, const Goldsrc
 }
 
 TEST(GoldsrcInstallTest, TheShippedDescriptionIsValid) {
-    const auto bytes =
-        nx::platform::readFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "content/goldsrcCstrike.toml");
-    ASSERT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
-    const std::string text = *bytes |
-                             std::views::transform([](std::byte byte) { return static_cast<char>(byte); }) |
-                             std::ranges::to<std::string>();
-    const auto desc = readGoldsrcInstallDesc(text, "goldsrcCstrike.toml");
+    const auto text =
+        nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY) / "content/goldsrcCstrike.toml");
+    ASSERT_TRUE(text.has_value()) << nx::describe(text.error());
+    const auto desc = readGoldsrcInstallDesc(*text, "goldsrcCstrike.toml");
     ASSERT_TRUE(desc.has_value()) << nx::describe(desc.error());
     EXPECT_FALSE(desc->redistributable) << "the user's installation never leaves the machine (ADR-0015)";
     EXPECT_EQ(desc->mounts, (std::vector<std::string>{"cstrike", "valve"}));

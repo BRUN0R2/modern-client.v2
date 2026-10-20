@@ -5,6 +5,7 @@ nxAddTest(nxAssetsTests
     SOURCES
         vfsTests.cpp
         contentTests.cpp
+        steamTests.cpp
     DEPENDS
         nx::assets)
 
