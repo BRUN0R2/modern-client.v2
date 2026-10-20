@@ -216,7 +216,7 @@ de esquecer de zerar dados em `clientDisconnected`.
 ### 8.1 Sem nulo
 
 ```rook
-let target: Player? = findPlayerByName("bruno");
+let target: Player? = findPlayerByName("Arctic");
 
 if let player = target {
     giveItem(player, ItemId.Ak47);
