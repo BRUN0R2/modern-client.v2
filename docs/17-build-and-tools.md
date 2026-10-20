@@ -36,6 +36,7 @@ modern-client.v2/
 │   ├── server/                 # cs.server
 │   └── client/                 # cs.client
 ├── apps/
+│   ├── launcher/               # nextLauncher
 │   ├── client/                 # next
 │   ├── server/                 # nextds
 │   └── master/                 # nextmaster
@@ -210,6 +211,7 @@ Rules:
 
 | Target | Description |
 |--------|-------------|
+| `nextLauncher` | Launcher: updates itself and the client, then starts `next` ([21](21-launcher-and-updates.md)). Planned (M4) |
 | `next` | Client (includes the listen server). Planned (M2–M3) |
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |

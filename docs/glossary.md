@@ -20,6 +20,7 @@
 | **Extract** | Copy of the simulation state needed to render the frame |
 | **Forward** | Plugin function called by the engine or by another plugin on an event (`pluginInit`, `roundStart`) |
 | **GoldSrc** | Original engine of Half-Life and Counter-Strike 1.6 |
+| **Launcher** | `nextLauncher`, the program players open: it updates itself and the client, then starts the game ([21](21-launcher-and-updates.md)) |
 | **Hammer unit (`hu`)** | Distance unit of maps (≈ 1 inch) |
 | **Handle** | Opaque, typed, generational identifier of an object |
 | **Hitbox / hitgroup** | Bullet collision volume tied to a bone, and the body region that sets the damage multiplier |

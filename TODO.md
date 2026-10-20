@@ -52,8 +52,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] 18 — Testing and quality
 - [x] 19 — Roadmap
 - [x] 20 — Legal and licensing
+- [x] 21 — Launcher and automatic updates (planned for M4)
 - [x] Glossary
-- [x] ADRs 0001–0018
+- [x] ADRs 0001–0019
 - [x] camelCase rule documented ([02 §3.1](docs/02-coding-standards.md#31-project-rule-camelcase))
 - [x] Licenses in the REUSE format: `LICENSES/`, `LICENSE`, `REUSE.toml` and SPDX headers
 - [x] `CONTRIBUTING.md` (PR flow, DCO, standards, license of contributions, how to run the tests)
@@ -341,6 +342,17 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Resource manifest, `ResourceAdded` and unavailable-resource policy
 - [ ] File consistency (`consistency = "exact"`)
 - [ ] Test with 32 real players and stress test with 256 simulated clients
+
+### Launcher and updates ([21](docs/21-launcher-and-updates.md), [ADR-0019](docs/adr/0019-launcher-and-automatic-updates.md))
+- [ ] Two products, `client` and `server`, each with its own releases, versions, channels (`stable`, `beta`) and manifest; compatibility through the protocol major
+- [ ] `nx.update`: manifests signed with Ed25519 (offline release key, short-lived online timestamp), rollback and freeze protection, key rotation
+- [ ] Content-defined chunks addressed by BLAKE3, shared by both products: a release downloads only the chunks the installation lacks, in parallel, resumable, with a bandwidth limit
+- [ ] Side-by-side releases per product, atomic switch of `current`, automatic rollback when the new release fails to start, crash-safe at every step
+- [ ] `nextLauncher`: updates itself, then the client, then starts `next`; typed `UpdateState`/`UpdateError` shown to the player
+- [ ] Background pre-download of the next client release while the game runs
+- [ ] `nextds`: updates at start; `sv_update_policy` (`empty`, `mapchange`, `notify`, `off`), `sv_update_interval` and the `update` command; never switches during a match
+- [ ] Release pipeline: CI builds the chunks and the manifests of each product; the release key signs offline
+- [ ] Package-manager installs and the Docker image leave updates to the package manager or the image
 
 ---
 

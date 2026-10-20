@@ -92,9 +92,15 @@ assets.
 - A2S, own master server, LAN, secure RCON, player identity.
 - Resource download (built-in and HTTP), with the rule that non-redistributable content is
   never sent and the content requirement declared by the server.
+- **Automatic, independent updates for the client and the server** ([21](21-launcher-and-updates.md),
+  [ADR-0019](adr/0019-launcher-and-automatic-updates.md)): each product has its own releases;
+  opening the launcher updates it and the client first, and a dedicated server updates at start
+  and switches when its operator's policy allows, never during a match. Signed metadata,
+  downloads of only the changed chunks, atomic switches and automatic rollback.
 
-**Exit:** a test with 32 real players over the internet, an initial stress test with 256
-simulated clients and a feel assessment by veteran players.
+**Exit:** a test with 32 real players over the internet, on clients and servers that received
+every build through their automatic updates, an initial stress test with 256 simulated clients
+and a feel assessment by veteran players.
 
 ## M5 — Complete Counter-Strike
 
