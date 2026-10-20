@@ -4,5 +4,9 @@
 nxAddTest(nxAssetsTests
     SOURCES
         vfsTests.cpp
+        contentTests.cpp
     DEPENDS
         nx::assets)
+
+# The shipped data files are tested as they are.
+target_compile_definitions(nxAssetsTests PRIVATE NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")

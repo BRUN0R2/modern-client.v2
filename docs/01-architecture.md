@@ -64,7 +64,7 @@ flowchart TB
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math |
 | `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
-| `nx.assets` | 3 | VFS, GoldSrc and modern importers, cache, handles, streaming | core, jobs, meta, platform |
+| `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, jobs, meta, data, platform |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes | core, math, jobs |
 | `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning | rhi, ecs, assets, jobs |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |

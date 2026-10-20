@@ -83,6 +83,9 @@ public:
     /// Errors: MountFailed.
     [[nodiscard]] static auto create(std::span<const std::filesystem::path> mounts) -> Result<Vfs, VfsError>;
 
+    /// Whether a mount has a file at `path`.
+    [[nodiscard]] auto contains(const VfsPath& path) const -> bool;
+
     /// The whole file at `path`. Errors: NotFound, ReadFailed.
     [[nodiscard]] auto readAll(const VfsPath& path) const -> Result<std::vector<std::byte>, VfsError>;
 

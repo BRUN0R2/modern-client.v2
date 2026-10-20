@@ -165,6 +165,12 @@ auto toUtf8(const std::filesystem::path& path) -> std::string {
            std::ranges::to<std::string>();
 }
 
+auto fromUtf8(std::string_view text) -> std::filesystem::path {
+    return std::filesystem::path{text |
+                                 std::views::transform([](char unit) { return static_cast<char8_t>(unit); }) |
+                                 std::ranges::to<std::u8string>()};
+}
+
 auto listFiles(const std::filesystem::path& directory)
     -> Result<std::vector<std::filesystem::path>, FileError> {
     std::error_code error;

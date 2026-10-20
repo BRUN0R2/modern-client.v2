@@ -26,6 +26,9 @@ enum class FileError : std::uint8_t {
 /// for the logical names the VFS gives native files.
 [[nodiscard]] auto toUtf8(const std::filesystem::path& path) -> std::string;
 
+/// The native path that the UTF-8 `text` names; `/` separates its components.
+[[nodiscard]] auto fromUtf8(std::string_view text) -> std::filesystem::path;
+
 /// Every regular file under `directory` and its subdirectories, as paths relative to it, sorted.
 /// A symbolic link to a file is listed; a symbolic link to a directory is not followed (a link
 /// can point back up, into a cycle), and a dangling link is not a file.

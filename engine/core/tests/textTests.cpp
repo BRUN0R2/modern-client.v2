@@ -18,6 +18,16 @@ TEST(Text, LowersOnlyAsciiCapitals) {
     EXPECT_EQ(nx::toLowerAscii('\xC9'), '\xC9') << "bytes beyond ASCII stay as they are";
 }
 
+TEST(Text, FindsAsciiControlBytes) {
+    static_assert(nx::isAsciiControl('\0'));
+    static_assert(nx::isAsciiControl('\n'));
+    static_assert(nx::isAsciiControl('\x1F'));
+    static_assert(nx::isAsciiControl('\x7F'));
+    static_assert(!nx::isAsciiControl(' '));
+    static_assert(!nx::isAsciiControl('~'));
+    EXPECT_FALSE(nx::isAsciiControl('\xC3')) << "bytes beyond ASCII are not control bytes";
+}
+
 TEST(Text, ComparesIgnoringAsciiCase) {
     static_assert(nx::equalsIgnoringCase("SV_Gravity", "sv_gravity"));
     static_assert(!nx::equalsIgnoringCase("sv_gravity", "sv_gravit"));

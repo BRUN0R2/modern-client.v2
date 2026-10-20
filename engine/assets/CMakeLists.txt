@@ -7,10 +7,14 @@ nxAddModuleLibrary(nxAssets
     MODULES
         src/nx.assets.cppm
         src/vfs.cppm
+        src/content.cppm
     SOURCES
         src/vfs.cpp
+        src/content.cpp
     DEPENDS
         nx::core
+        nx::meta
+        nx::data
         nx::platform)
 
 if(NX_BUILD_TESTS)
