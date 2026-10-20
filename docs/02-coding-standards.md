@@ -146,7 +146,9 @@ Exceptions, because the name comes from outside the code or is required by a too
   servers, configs and binds.
 - **Map entity classnames** come from the BSP (`func_buyzone`, `info_player_start`).
 - **Names required by tools:** `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json`,
-  `.clang-format`, `.clang-tidy`, `.editorconfig`, the vcpkg triplets
+  `.clang-format`, `.clang-tidy`, `.editorconfig`, `.gitattributes`, `.gitignore`, `.github/`,
+  `.vscode/`, `REUSE.toml` and the license texts in `LICENSES/` (named by their SPDX
+  identifiers), the vcpkg triplets
   (`x64-windows-nx.cmake`: the file must be named after the triplet, which only accepts
   lowercase letters and hyphens) and the CMake configuration variables (`NX_BUILD_TESTS`, in
   uppercase like CMake's own).
@@ -160,8 +162,9 @@ Exceptions, because the name comes from outside the code or is required by a too
 - **Translation keys** (`RZ_INFECTED_BY`).
 - **Names imposed by third parties** (standard library, Vulkan, file formats).
 
-The rule is checked by `clang-tidy` (`readability-identifier-naming`, as an error) in C++ and
-by the `naming` lint of `rookc` in Rook.
+`.clang-tidy` encodes the rule for C++ (`readability-identifier-naming`, as an error); it runs
+in CI once a Clang build with modules exists (planned, [17 §7](17-build-and-tools.md#7-continuous-integration)).
+In Rook, the `naming` lint of `rookc` will check it.
 
 ### 3.2 Other naming rules
 
@@ -525,11 +528,14 @@ if (m_budgetWarnings.allow()) {
 ## 12. Formatting and static analysis
 
 - `clang-format` with the repository's `.clang-format` (LLVM base, 4 spaces, column 110).
-- `clang-tidy` with the repository profile. Enabled groups: `bugprone-*`,
-  `cppcoreguidelines-*`, `modernize-*`, `performance-*`, `readability-*`, `concurrency-*`.
-  Exceptions are listed in `.clang-tidy` with a justification.
+- `clang-tidy` with the repository profile. Enabled groups: `bugprone-*`, `concurrency-*`,
+  `cppcoreguidelines-*`, `misc-*`, `modernize-*`, `performance-*`, `readability-*`. Exceptions
+  are listed in `.clang-tidy` with a justification. It runs in CI once a Clang build with
+  modules exists (planned).
 - Warnings as errors (`-Werror` / `/WX`) in all of the project's own targets.
-- Sanitizers in CI: TSan (GCC, on every push and PR), ASan + UBSan and MSan (Linux/Clang).
+- Sanitizers in CI: TSan on the tests of every pull request and of every push to `main` (GCC,
+  `tsan-linux-gcc`); ASan + UBSan and MSan arrive with Clang in CI (planned,
+  [17 §7](17-build-and-tools.md#7-continuous-integration)).
 
 ## 13. Review checklist
 

@@ -1,5 +1,14 @@
 ---
-# Static analysis profile (docs/02-coding-standards.md, section 12).
+# Static analysis profile (docs/02-coding-standards.md, section 12). Each disabled check says why:
+# - bugprone-easily-swappable-parameters: adjacent parameters of one type are the norm in math
+#   and conversions (min/max, a/b); strong types and designated options structs are the remedy
+#   docs/02 prescribes where swapping matters.
+# - cppcoreguidelines-pro-bounds-constant-array-index: EnumArray and std::array indexed by a
+#   checked value are the project's bounds discipline; the check wants gsl::at.
+# - misc-include-cleaner: the code imports modules; includes exist only in global module
+#   fragments, which the check does not understand.
+# - readability-identifier-length: short names are allowed where they are conventional (x, y,
+#   z, a, b in math); descriptive naming is reviewed by docs/02, section 3.2.
 Checks: >
   -*,
   bugprone-*,
@@ -14,7 +23,7 @@ Checks: >
   readability-*,
   -readability-identifier-length
 
-# "Nada de números mágicos" is enforced, not suggested.
+# No magic numbers: enforced, not suggested.
 WarningsAsErrors: >
   bugprone-*,
   concurrency-*,

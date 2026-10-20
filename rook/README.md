@@ -1,7 +1,8 @@
 # Rook
 
 Toolchain and SDK of the **Rook** plugin language
-([docs/14-rook-language.md](../docs/14-rook-language.md)):
+([docs/14-rook-language.md](../docs/14-rook-language.md)), planned for M6. Each directory arrives
+with its first code:
 
 | Directory | Contents |
 |-----------|----------|

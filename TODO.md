@@ -53,7 +53,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] 19 — Roadmap
 - [x] 20 — Legal and licensing
 - [x] Glossary
-- [x] ADRs 0001–0017
+- [x] ADRs 0001–0018
 - [x] camelCase rule documented ([02 §3.1](docs/02-coding-standards.md#31-project-rule-camelcase))
 - [x] Licenses in the REUSE format: `LICENSES/`, `LICENSE`, `REUSE.toml` and SPDX headers
 - [x] `CONTRIBUTING.md` (PR flow, DCO, standards, license of contributions, how to run the tests)
@@ -113,7 +113,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Crash report (minidump and the last log lines) when the contract handler or a crash aborts, in `nx.platform`, with the first application
 - [x] Introspection: `typeName`, `shortTypeName`, `enumName`, `enumCount`, `enumerators` (signature-based fallback)
 - [x] Text of diagnostics shared by the modules that read values: `toLowerAscii`, `boundsText`
-- [ ] Introspection through the native path (P2996) when a supported compiler offers it
+- [ ] `typeName` and `enumName` through the native path (P2996) once every supported compiler offers it (GCC 16 does and `nx.meta` already uses it; MSVC does not)
 - [x] `nx::Quantity` and units (`HammerUnits`, `UnitsPerSecond`, `HitPoints`, `ArmorPoints`, `Damage`, `Money`, `Scale`, angles, time) with literals
 - [x] `nx::narrow`, `nx::tryNarrow`, `nx::truncate`, `nx::tryRound`, checked and saturating arithmetic
 - [x] `EnumArray` and `Flags<E>`

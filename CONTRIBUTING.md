@@ -84,14 +84,9 @@ New files need an SPDX header (or a `REUSE.toml` annotation) and LF line endings
 
 ## Licensing of contributions
 
-Contributions are licensed like the files they touch
-([ADR-0010](docs/adr/0010-license.md), [`REUSE.toml`](REUSE.toml)):
-
-| Part | License |
-|------|---------|
-| Engine, game, server, tools, data and build | GPL-3.0-or-later with the Rook Plugin Exception |
-| Rook toolchain and plugin SDK (`rook/`) | MIT |
-| Documentation (`docs/`, `README.md`, `TODO.md`, this file) | CC BY 4.0 |
+Contributions are licensed like the files they touch: the table is in the
+[README](README.md#license), and each file's license in its SPDX header or in
+[`REUSE.toml`](REUSE.toml) ([ADR-0010](docs/adr/0010-license.md)).
 
 ## Reporting bugs and vulnerabilities
 

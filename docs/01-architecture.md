@@ -57,8 +57,8 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core |
 | `nx.jobs` | 1 | Job System, counters, graphs, `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window, input, native file system, clocks, OS threads (SDL3) | core, math |
-| `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, meta, jobs |
+| `nx.platform` | 2 | Window, input, native file system, clocks, OS threads (SDL3) | core (math with the window and input, M2) |
+| `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math |
 | `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
@@ -143,8 +143,11 @@ struct ServerServices {
 | Lock-free SPSC/MPSC queues | Boundary between long-lived threads (networking ↔ simulation, simulation ↔ audio) |
 | Extraction (*extract*) | Simulation → render: an immutable copy of the state needed to draw the frame |
 
-Callbacks registered by lower-layer subsystems to call higher layers are **forbidden**. The
-higher layer queries; the lower layer does not know the higher one.
+Callbacks through which a lower layer **notifies** a higher one (observers, listeners, "on
+change" hooks) are **forbidden**. The higher layer queries; the lower layer does not know the
+higher one. Running work that a higher layer hands down to be run (a job in `nx.jobs`, a system
+in `nx.ecs`, the handler of a command in `nx.console`) is not such a callback: the higher layer
+decides what runs, the lower one only when ([ADR-0018](adr/0018-work-handed-down-is-not-a-callback.md)).
 
 ## 3. Execution modes
 

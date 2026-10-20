@@ -4,8 +4,9 @@
 # Content configuration of Modern-Client.v2 (docs/06-assets-and-resources.md, section 2;
 # docs/adr/0015-free-content-and-optional-original-assets.md).
 #
-# You usually do not need this file: on the first start the game detects a Counter-Strike 1.6
-# installation and writes content.toml for you. Edit it by hand only to change the defaults.
+# You will usually not need this file: on the first start the game will detect a Counter-Strike
+# 1.6 installation and write content.toml for you (the reader arrives in M2). Edit it by hand only
+# to change the defaults.
 #
 # Where the game reads it, first match wins:
 #   1. --content-config <file> on the command line

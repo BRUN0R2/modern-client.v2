@@ -7,18 +7,22 @@ An open-source recreation of Counter-Strike 1.6, and only Counter-Strike 1.6 (no
 [ADR-0017](docs/adr/0017-counter-strike-only.md)), written from scratch in **C++26**, with
 gameplay and servers identical to the original and **without the historical limits** of GoldSrc.
 
-- **Modern engine:** archetype ECS, multithreaded Job System, Vulkan (DirectX 11 in the
-  future) and GPU skinning.
+What the project builds, milestone by milestone ([roadmap](docs/19-roadmap.md); what exists
+today is under [Status](#status)):
+
+- **Modern engine:** archetype ECS and multithreaded Job System (done); Vulkan renderer with
+  GPU skinning (M2), DirectX 11 later.
 - **No limits:** entities, precache, players (up to 1024), messages, attachments,
   body groups, sprites and HUD values.
 - **Native plugins and mods:** the **Rook** language, strongly typed and familiar to anyone
-  coming from AMX Mod X, with its own compiler, hot reload and LSP.
+  coming from AMX Mod X, with its own compiler, hot reload and LSP (M6).
 - **Servers as always:** the same cvars, configs, commands, RCON and A2S queries.
 
-> Works without any Valve asset. Anyone who owns a legitimate copy of Counter-Strike 1.6
-> (Steam) can use the original assets: the game detects the installation and configures the
-> `classic` profile locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md)).
-> No Valve asset is distributed. This project is not affiliated with Valve Corporation.
+> Will work without any Valve asset. Anyone who owns a legitimate copy of Counter-Strike 1.6
+> (Steam) will be able to use the original assets: the game will detect the installation and
+> configure the `classic` profile locally (M2,
+> [ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md)). No Valve asset is
+> distributed. This project is not affiliated with Valve Corporation.
 
 ## Status
 
@@ -43,7 +47,8 @@ cmake --build --preset dev-windows-msvc
 ctest --preset dev-windows-msvc
 ```
 
-On Linux, use the `dev-linux-gcc` or `dev-linux-clang` presets.
+On Linux, use the `dev-linux-gcc` preset; the other presets and their status are in
+[docs/17 §3](docs/17-build-and-tools.md#3-presets).
 
 ## License
 
