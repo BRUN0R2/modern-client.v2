@@ -3,3 +3,4 @@
 
 # The tools of the project (docs/17-build-and-tools.md, section 1).
 add_subdirectory(nxcheck)
+add_subdirectory(nxview)

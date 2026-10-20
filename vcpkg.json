@@ -19,7 +19,9 @@
         }
       ]
     },
-    "tomlplusplus"
+    "tomlplusplus",
+    "volk",
+    "vulkan-headers"
   ],
   "features": {
     "tests": {

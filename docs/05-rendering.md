@@ -56,6 +56,19 @@ express**. The vocabulary is close to WebGPU's.
 - Every creation error returns `nx::Result<T, RhiError>`
   (`OutOfDeviceMemory`, `UnsupportedFormat`, `DeviceLost`, `SurfaceLost`…).
 - Debug names are mandatory (`.label`), propagated to RenderDoc and the validation layers.
+- A device is created for the window it presents to (or for none): the swapchain then needs only
+  a size and a present mode, so `nx.rhi` knows nothing of `nx.platform`. One window, one device.
+- The swapchain is 8-bit UNORM, not sRGB: the `Gamma` pass writes the values of the GoldSrc curves
+  as they are ([§11](#11-visual-fidelity)).
+
+**Today** (`engine/rhi`, `engine/rhiVulkan`): the device and its frames in flight
+(`beginFrame` waits for the frame's slot and gives its `CommandList`, `submitFrame` submits and
+presents), the swapchain with its recreation on resize and while minimized, generational texture
+handles (`HandlePool`, a stale handle is a contract violation), transitions between texture states
+and render passes that clear. The validation layers, when installed and asked for, log every
+message and count every error (`Device::validationErrors`), which the tests require to be zero.
+Buffers, the renderer's own textures, samplers, bind groups and pipelines come with the first
+shaders.
 
 ```cpp
 auto lightmapAtlas = device.createTexture(nx::rhi::TextureDesc{
@@ -82,7 +95,7 @@ if (!lightmapAtlas) {
 | Present | `vid_vsync 0/1`, `r_present_mode immediate/mailbox/fifo` |
 | Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID |
 | Parallel recording | One `VkCommandPool` per worker per frame in flight |
-| Validation | Validation layers + sync validation in development builds |
+| Validation | Validation layers + sync validation in development builds (`--validation` in `nxview`; always in the tests) |
 | *Device lost* | Typed error. The renderer tries to recreate the device and resources once and, if that fails, produces a crash report |
 | Upload | Persistent mapped staging ring. A dedicated transfer queue when available |
 
