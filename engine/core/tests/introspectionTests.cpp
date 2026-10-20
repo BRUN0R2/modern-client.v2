@@ -64,6 +64,24 @@ TEST(Introspection, NamesTypes) {
     EXPECT_EQ(nx::typeName<int>(), "int");
 }
 
+TEST(Introspection, NamesTypesAttachedToAModuleWithoutTheModule) {
+    // GCC spells a type of a named module with the module after it: "nx::ConversionError@nx.core".
+    static_assert(nx::typeName<nx::ConversionError>() == "nx::ConversionError");
+    static_assert(nx::shortTypeName<nx::ConversionError>() == "ConversionError");
+    static_assert(!nx::typeName<nx::HammerUnits>().contains('@'), "nor in template arguments");
+    static_assert(nx::detail::withoutModuleAttachment("nx::BspError@nx.assets") == "nx::BspError");
+    static_assert(nx::detail::withoutModuleAttachment("nx::Quantity@nx.core<float, nx::Tag@nx.core>") ==
+                  "nx::Quantity<float, nx::Tag>");
+    static_assert(nx::detail::withoutModuleAttachment("nx::Outer@nx.ecs::Inner") == "nx::Outer::Inner");
+    static_assert(nx::detail::withoutModuleAttachment("nx::Name@nx.core:text") == "nx::Name");
+    SUCCEED();
+}
+
+TEST(Introspection, NamesArrayTypesWhole) {
+    static_assert(nx::typeName<int[3]>().ends_with(']'));
+    SUCCEED();
+}
+
 TEST(Introspection, CountsEnumeratorsBeforeTheSentinel) {
     static_assert(nx::enumCount<sample::Weapon>() == 3);
     static_assert(nx::CountedEnum<sample::Weapon>);
