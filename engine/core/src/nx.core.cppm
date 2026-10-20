@@ -4,8 +4,8 @@
 /// nx.core — foundation of the Next Engine (docs/01-architecture.md, layer 0).
 ///
 /// Typed failures, contract checks with stack traces, strong types and units, explicit conversions,
-/// enum-indexed containers, the text of diagnostics, stable hashing, frame allocation and structured
-/// logging. Depends only on the C++ standard library.
+/// enum-indexed containers, the text of diagnostics, numbers stored in bytes, stable hashing, frame
+/// allocation and structured logging. Depends only on the C++ standard library.
 export module nx.core;
 
 export import :introspection;
@@ -15,6 +15,7 @@ export import :debugging;
 export import :contracts;
 export import :failure;
 export import :conversion;
+export import :byteOrder;
 export import :quantity;
 export import :units;
 export import :enumArray;

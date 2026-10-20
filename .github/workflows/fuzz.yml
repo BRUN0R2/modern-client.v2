@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# Nightly fuzzing of the parsers of external data (docs/17-build-and-tools.md, section 7). A crash
+# fails the run; its input is kept as an artifact, to join the corpus as a test.
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Windows · MSVC · libFuzzer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install CMake and Ninja
+        run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}\..\vcpkg-cache
+          key: vcpkg-windows-fuzz-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          restore-keys: vcpkg-windows-fuzz-
+
+      - name: Configure, build and fuzz (10 minutes per target)
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          # The developer shell puts Visual Studio's own CMake first; keep the pinned one. It also
+          # puts the AddressSanitizer runtime on the PATH.
+          $cmakeDirectory = Split-Path (Get-Command cmake).Source
+          . ./scripts/devShell.ps1
+          $env:PATH = "$cmakeDirectory;$env:PATH"
+          cmake --preset fuzz-windows-msvc -DNX_FUZZ_SECONDS=600
+          cmake --build --preset fuzz-windows-msvc
+          ctest --preset fuzz-windows-msvc
+
+      - name: Keep the inputs that crashed
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-artifacts
+          path: build/fuzz-windows-msvc/fuzzArtifacts
+          if-no-files-found: ignore

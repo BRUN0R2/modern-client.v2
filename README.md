@@ -32,7 +32,7 @@ with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime cor
 (TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
 `nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars,
 commands and `.cfg`), `nx.platform` (clocks and the native file system) and `nx.assets` (the
-VFS), with tests. The architecture documentation
+VFS, the Counter-Strike 1.6 installation and the WAD3 reader), with tests. The architecture documentation
 is in [`docs/`](docs/README.md), the project rules in [`docs/RULES.md`](docs/RULES.md) and
 the backlog in [`TODO.md`](TODO.md).
 

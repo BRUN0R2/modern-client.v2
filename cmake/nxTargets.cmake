@@ -95,6 +95,49 @@ function(nxAddBenchmark target)
     nxTargetDefaults(${target})
 endfunction()
 
+# nxAddFuzzer(<target> SOURCES <files>... DEPENDS <targets>... CORPUS <directory>)
+#
+# Creates a fuzz target (tests/fuzz): SOURCES define nx::test::fuzz (tests/fuzz/fuzzTarget.hpp).
+# Its CTest test depends on the build:
+#   * with NX_FUZZ (the fuzz presets), libFuzzer fuzzes it for NX_FUZZ_SECONDS from CORPUS; new
+#     inputs go to the build tree and the input of a crash to fuzzArtifacts/;
+#   * otherwise it runs once on every file of CORPUS, so the seeds and every crash ever found stay
+#     tests of every build.
+function(nxAddFuzzer target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "CORPUS" "SOURCES;DEPENDS")
+
+    if(NOT arg_SOURCES OR NOT arg_CORPUS)
+        message(FATAL_ERROR "nxAddFuzzer(${target}): SOURCES and CORPUS are required")
+    endif()
+
+    set(fuzzDirectory "${PROJECT_SOURCE_DIR}/tests/fuzz")
+    set(corpus "${CMAKE_CURRENT_SOURCE_DIR}/${arg_CORPUS}")
+    add_executable(${target} ${arg_SOURCES})
+    target_include_directories(${target} PRIVATE "${fuzzDirectory}")
+    target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS})
+    nxTargetDefaults(${target})
+
+    if(NX_FUZZ)
+        # The preset instruments every unit; libFuzzer supplies main and calls the entry point.
+        target_sources(${target} PRIVATE "${fuzzDirectory}/libFuzzerEntry.cpp")
+        if(NOT MSVC)
+            target_link_options(${target} PRIVATE -fsanitize=fuzzer)
+        endif()
+        set(workCorpus "${CMAKE_CURRENT_BINARY_DIR}/${target}Corpus")
+        set(artifacts "${CMAKE_BINARY_DIR}/fuzzArtifacts")
+        file(MAKE_DIRECTORY "${workCorpus}" "${artifacts}")
+        add_test(NAME ${target}
+            COMMAND ${target} "${workCorpus}" "${corpus}"
+                -max_total_time=${NX_FUZZ_SECONDS} "-artifact_prefix=${artifacts}/")
+        math(EXPR timeout "${NX_FUZZ_SECONDS} * 2 + 60") # libFuzzer stops itself; this is a backstop
+        set_tests_properties(${target} PROPERTIES TIMEOUT ${timeout})
+    else()
+        target_sources(${target} PRIVATE "${fuzzDirectory}/corpusDriver.cpp")
+        target_link_libraries(${target} PRIVATE nx::core nx::platform)
+        add_test(NAME ${target}.corpus COMMAND ${target} "${corpus}")
+    endif()
+endfunction()
+
 # nxAddTest(<target> SOURCES <files>... DEPENDS <targets>...)
 #
 # Creates a GoogleTest executable and registers each test case with CTest. The helpers shared by
