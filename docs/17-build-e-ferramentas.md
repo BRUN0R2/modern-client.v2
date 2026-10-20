@@ -84,7 +84,7 @@ com fallbacks atrás de fachadas.
 | Compilador | Plataformas | Papel | Status (2026-10-20) |
 |------------|-------------|-------|---------------------|
 | MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Toolchain de desenvolvimento no Windows | **Validado**: CMake 4.3.1 e 4.4.4, Ninja, Debug e Release, 84 testes passando |
-| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Referência para reflexão estática e contratos | A validar (presets prontos) |
+| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Referência para reflexão estática e contratos | **Validado no Linux pelo CI**: GCC 16.2.0 (container `gcc:16`), módulo `std` do libstdc++, 84 testes passando. Windows (MinGW) a validar |
 | Clang (versão estável mais recente) | Linux, Windows | Sanitizers (ASan, TSan, MSan, UBSan), `clang-tidy`, `clangd` | A validar (presets prontos) |
 
 Recursos de C++26 disponíveis no MSVC 14.51 (por *feature-test macros*): **nenhum** dos
@@ -107,7 +107,7 @@ O CMake ainda não conhece um switch `/std:c++26` para o MSVC, então o dialeto 
 | Preset | Uso | Status |
 |--------|-----|--------|
 | `dev-windows-msvc` / `release-windows-msvc` | Desenvolvimento e release no Windows (Ninja + MSVC) | Validado |
-| `dev-linux-gcc` / `release-linux-gcc` | Desenvolvimento e release no Linux com GCC | A validar |
+| `dev-linux-gcc` / `release-linux-gcc` | Desenvolvimento e release no Linux com GCC | `dev-linux-gcc` validado no CI. `release-linux-gcc` a validar |
 | `dev-linux-clang` | Desenvolvimento com `clangd`/`clang-tidy` | A validar |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers (ASan + UBSan, TSan) | A validar |
 | `server-headless`, `tools` | Só `nextds` ou só ferramentas | Quando esses alvos existirem |
@@ -209,7 +209,7 @@ sob demanda. **Em funcionamento hoje:**
 |-----|----------|-----------|
 | `checks` | `reuse lint` (licença e copyright em todo arquivo), `clang-format --dry-run --Werror` e quebras de linha (nada fora de LF no repositório) | Sim |
 | `windows-msvc` | `dev-windows-msvc` e `release-windows-msvc`: configure, build e testes, pelo mesmo `scripts/devShell.ps1` do desenvolvimento | Sim |
-| `linux-gcc` | `dev-linux-gcc` no container `gcc:16`: configure, build e testes | Não: *experimental* até os presets Linux serem validados |
+| `linux-gcc` | `dev-linux-gcc` no container `gcc:16`: configure, build e testes | Sim |
 
 CMake e Ninja vêm do `pip` com faixa de versão, e o vcpkg é clonado na hora, com cache
 binário entre execuções. O CI não depende do que vem pré-instalado na imagem do runner.

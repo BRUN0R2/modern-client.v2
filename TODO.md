@@ -83,14 +83,15 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Toolchain
 - [x] Validar MSVC 14.51 (VS 2026) com CMake 4.3.1 e 4.4.4, Debug e Release
-- [ ] Validar GCC 16 e Clang no Linux
+- [x] Validar GCC 16 no Linux (GCC 16.2.0 no CI, 84 testes)
+- [ ] Validar Clang no Linux
 - [ ] Validar GCC (MinGW-w64) e Clang no Windows
 - [x] Documentar recursos nativos e com fallback do MSVC ([17 §2.1](docs/17-build-e-ferramentas.md#21-matriz-de-compiladores))
 
 ### CI
 - [x] Workflow `.github/workflows/ci.yml` (push no `main`, pull requests, sob demanda)
 - [x] Job `windows-msvc`: Debug e Release com build e testes
-- [ ] Job `linux-gcc` (GCC 16, experimental): estabilizar e torná-lo obrigatório
+- [x] Job `linux-gcc` (GCC 16) obrigatório
 - [ ] Job Linux com Clang
 - [x] Formatação (`clang-format --dry-run --Werror`) no job `checks`
 - [ ] `clang-tidy` no CI (exige build com Clang e módulos)

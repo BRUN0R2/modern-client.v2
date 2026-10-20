@@ -95,11 +95,9 @@ jobs:
           ctest --preset ${{ matrix.preset }}
 
   linux-gcc:
-    name: Linux · GCC 16 (experimental)
+    name: Linux · GCC 16
     runs-on: ubuntu-latest
     container: gcc:16
-    # The Linux presets are not validated yet (docs/17, section 2.1); this job reports, it does not gate.
-    continue-on-error: true
     defaults:
       run:
         shell: bash
