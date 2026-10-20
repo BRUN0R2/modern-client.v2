@@ -1,0 +1,80 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+/// Real-time clocks: monotonic time for frame and tick pacing, the wall clock, and a precise wait
+/// for deadlines. Simulation time is not real time: it is counted in ticks (GameTime, docs/07).
+export module nx.platform:clock;
+
+import std;
+import nx.core;
+
+export namespace nx::platform {
+
+/// Real time that only moves forward, unaffected by changes of the system date: frame and tick
+/// pacing, timeouts, load times.
+using MonotonicClock = std::chrono::steady_clock;
+using Instant = MonotonicClock::time_point;
+
+/// Date and time (UTC): logs, demos, ban expiry. The one wall clock game code reads
+/// (docs/02-padroes-de-codigo.md, section 4.1).
+using WallClock = std::chrono::system_clock;
+
+/// Measures real time from its start.
+class Stopwatch {
+public:
+    Stopwatch() noexcept : m_start{MonotonicClock::now()} {}
+
+    [[nodiscard]] auto elapsed() const noexcept -> MonotonicClock::duration {
+        return MonotonicClock::now() - m_start;
+    }
+
+    /// The time elapsed until now, which becomes the new start.
+    auto restart() noexcept -> MonotonicClock::duration {
+        const Instant now = MonotonicClock::now();
+        return now - std::exchange(m_start, now);
+    }
+
+private:
+    Instant m_start;
+};
+
+enum class ClockError : std::uint8_t {
+    TimerUnavailable, ///< The OS has no high-resolution timer (Windows before 10 1803).
+};
+
+/// Waits for deadlines with sub-millisecond precision: the pace of the server tick (sv_tickrate)
+/// and of the client frame (fps_max). The standard sleep is not enough on Windows, where it
+/// rounds to the scheduler period (15.6 ms by default), so this owns a high-resolution waitable
+/// timer there; on Linux the standard absolute sleep is already precise.
+///
+/// For the threads that pace a loop, never for jobs (docs/02-padroes-de-codigo.md, section 8). One
+/// per thread: sleepUntil is not meant to be called by two threads at once.
+class SleepTimer {
+public:
+    /// Errors: TimerUnavailable.
+    [[nodiscard]] static auto create() -> Result<SleepTimer, ClockError>;
+
+    SleepTimer(SleepTimer&& other) noexcept : m_timer{std::exchange(other.m_timer, nullptr)} {}
+    auto operator=(SleepTimer&& other) noexcept -> SleepTimer& {
+        if (this != &other) {
+            close();
+            m_timer = std::exchange(other.m_timer, nullptr);
+        }
+        return *this;
+    }
+    SleepTimer(const SleepTimer&) = delete;
+    auto operator=(const SleepTimer&) -> SleepTimer& = delete;
+    ~SleepTimer() { close(); }
+
+    /// Returns at `deadline` or after it, never before; late by the wake-up latency of the OS
+    /// (typically well under a millisecond). Returns at once for a deadline that has passed.
+    void sleepUntil(Instant deadline) const noexcept;
+
+private:
+    explicit SleepTimer(void* timer) noexcept : m_timer{timer} {}
+    void close() noexcept;
+
+    void* m_timer = nullptr; // Windows: the waitable timer handle; null elsewhere
+};
+
+} // namespace nx::platform

@@ -162,7 +162,7 @@ existem só `NX_BUILD_TESTS` e `NX_WARNINGS_AS_ERRORS`.
 
 | Biblioteca | Uso | Licença |
 |------------|-----|---------|
-| SDL3 | Janela, entrada, áudio de dispositivo, captura de voz | Zlib |
+| SDL3 (a partir do M2) | Janela, entrada, áudio de dispositivo, captura de voz | Zlib |
 | Vulkan Headers + volk | API e loader Vulkan | Apache-2.0 / MIT |
 | Vulkan Memory Allocator | Memória de GPU | MIT |
 | Slang | Compilador de shaders | Apache-2.0 com exceção LLVM |

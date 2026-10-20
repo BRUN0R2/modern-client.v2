@@ -20,6 +20,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Definir hardware de referência para as metas de desempenho
 - [x] Conteúdo livre por padrão; assets originais opcionais e configurados localmente ([ADR-0015](docs/adr/0015-conteudo-livre-e-assets-originais-opcionais.md))
 - [x] Rook Plugin Exception: permissão adicional da seção 7 da GPL para plugins e mods ([ADR-0010](docs/adr/0010-licenca.md))
+- [x] SDL3 (janela, eventos, entrada, mouse raw) entra no M2, junto com o swapchain do Vulkan, o primeiro consumidor. No M1 nada usa janela nem entrada, e o port `sdl3` do vcpkg traz X11, Wayland e D-Bus para o Linux do CI sem nada para testar; o `nx.platform` do M1 tem só os relógios (2026-10-20)
 - [ ] Revisão jurídica antes do primeiro release público, incluindo o texto da Rook Plugin Exception ([20](docs/20-legal-e-licenciamento.md))
 
 ---
@@ -167,7 +168,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Benchmarks com as metas de [03 §16](docs/03-ecs.md#16-metas-de-desempenho-hardware-de-referência-a-definir-no-m1)
 
 ### Plataforma, matemática e console
-- [ ] `nx.platform`: janela, eventos e entrada SDL3, mouse raw, relógios
+- [x] `nx.platform`: relógios (monotônico, de parede, `Stopwatch`) e espera precisa por prazo para o ritmo de tick e de frame (`SleepTimer`)
+- [ ] Threads do SO no `nx.platform` (nome, prioridade, afinidade), com o primeiro consumidor (thread de áudio, Tracy ou benchmark de afinidade)
 - [x] `nx.math`: vetores, matrizes (`Mat3`, `Mat3x4`, `Mat4`), quaternions, ângulos GoldSrc (`angleVectors`, `vectorAngles`), AABB e planos, com ponto flutuante determinístico ([07 §6](docs/07-simulacao-e-fisica.md#6-determinismo))
 - [ ] SIMD no `nx.math`, quando um benchmark mostrar ganho
 - [x] Sistema de cvars tipadas (flags `Archive`, `Notify`, `Cheat`, `ServerProtected`) no `nx.console` ([12 §5.3](docs/12-interface-hud-e-console.md#53-módulo-nxconsole))
@@ -204,6 +206,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `nxbake`: cache endereçado por conteúdo
 
 ### RHI e Vulkan
+- [ ] `nx.platform`: janela, eventos e entrada SDL3 (port `sdl3` do vcpkg), mouse raw, junto com o swapchain ([decisão](#decisões-pendentes))
 - [ ] Interface `nx.rhi` (device, queue, command list, buffers, texturas, samplers, bind groups, pipelines, queries)
 - [ ] Backend Vulkan 1.3 com volk e VMA
 - [ ] Swapchain, present modes, recriação e *device lost*

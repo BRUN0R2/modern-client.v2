@@ -46,7 +46,7 @@ toolchain documentada.
 
 - `nx.jobs` (work-stealing, contadores, prioridades, scheduler `std::execution`).
 - `nx.ecs` (arquétipos, chunks, queries, agendador, command buffers, eventos).
-- `nx.platform` (janela, entrada SDL3) e `nx.math`.
+- `nx.platform` (relógios e espera precisa para o ritmo de tick e de frame) e `nx.math`.
 - Console, cvars e comandos (base compartilhada por cliente e servidor).
 
 **Saída:** metas de desempenho de [03 §16](03-ecs.md#16-metas-de-desempenho-hardware-de-referência-a-definir-no-m1)
@@ -62,6 +62,7 @@ originais.
 - `devContent` gerado por código, para a engine rodar e ser testada sem nenhum asset
   externo.
 - Leitores BSP/WAD/MDL/SPR/WAV.
+- Janela e entrada SDL3 no `nx.platform`, junto com o swapchain: o M2 é o primeiro consumidor.
 - RHI + backend Vulkan, render graph, shaders Slang.
 - Mundo BSP com lightmaps, lightstyles, PVS, céu, água e transparências.
 - Modelos de estúdio estáticos e animados com GPU skinning (visualizador de modelos).

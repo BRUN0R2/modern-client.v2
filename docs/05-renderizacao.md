@@ -230,7 +230,8 @@ fumaça, por exemplo, deve ser idêntica).
 
 ## 12. Latência e ritmo de frame
 
-- `fps_max` com limitador preciso (espera híbrida *sleep + spin*). Sem limite quando `0`.
+- `fps_max` com limitador preciso (`nx::platform::SleepTimer`: timer de alta resolução no
+  Windows e sleep absoluto no relógio monotônico no Linux, sem *spin*). Sem limite quando `0`.
 - No modo de baixa latência, o limitador espera **antes** de amostrar a entrada, para que
   o frame seja montado com a entrada mais recente.
 - Métricas expostas: tempo de CPU por fase, tempo de GPU por passe (timestamps) e latência
