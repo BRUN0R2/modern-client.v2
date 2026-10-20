@@ -28,7 +28,7 @@ This document is **normative** for all C++ code in the repository, within the pr
 | Placeholder variable `_` | P2169 | Ignore values in structured bindings | A descriptive name |
 | Saturating arithmetic (`std::add_sat` etc.) | P0543 | Money, counters, accumulators | **Always** the project's own `nx.core` functions (`addSaturated`…), with the same results: GCC 16 advertises the feature in `<version>`, but its `std` module does not export it |
 | `std::function_ref` | P0792 | Allocation-free callbacks | Own implementation |
-| `<debugging>` | P2546 | `breakpoint_if_debugging()` in the contract handler | Per-platform intrinsics |
+| `<debugging>` | P2546 | `breakpoint_if_debugging()` in the contract handler (`nx::breakpointIfDebugging`, `nx::isDebuggerPresent`) | Per-platform primitives (`IsDebuggerPresent`/`__debugbreak`, `TracerPid`/`SIGTRAP`) |
 | `std::optional<T&>` | P2988 | Optional references without raw pointers | `nx::OptionalRef<T>` |
 
 C++20/23 features used freely: modules, concepts, ranges, `std::expected`,
@@ -393,8 +393,11 @@ auto JobSystem::submit(JobDesc desc) -> JobHandle
     post(handle : handle.isValid());
 ```
 
-- In development builds, a violation calls the project's contract handler: a log with a
-  *stack trace*, `breakpoint_if_debugging()` and a crash report.
+- A violation calls the project's contract handler. The default one (`nx::enforceContract`)
+  writes the violation and the *stack trace* (`nx::currentStackTrace`) to `stderr`, stops in
+  the debugger when one is attached (`nx::breakpointIfDebugging`) and aborts; the crash
+  report on that abort comes from the application's crash reporter (`nx.platform`, with the
+  first application).
 - In release, the default semantic is `enforce` in the networking, assets and script modules
   (the boundaries with external data) and `observe` on the hot paths measured by benchmarks.
   The choice is per module, documented in the `CMakeLists.txt`.

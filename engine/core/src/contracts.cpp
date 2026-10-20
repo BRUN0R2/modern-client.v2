@@ -21,10 +21,11 @@ constinit std::atomic<ContractViolationHandler> activeHandler{&enforceContract};
 } // namespace
 
 void enforceContract(const ContractViolation& violation) noexcept {
-    std::println(stderr, "nx: {} violated: {}\n    at {}:{} in {}", enumName(violation.kind),
-                 violation.description, violation.where.file_name(), violation.where.line(),
-                 violation.where.function_name());
+    std::println(stderr, "nx: {} violated: {}\n    at {}:{} in {}\nstack trace:\n{}",
+                 enumName(violation.kind), violation.description, violation.where.file_name(),
+                 violation.where.line(), violation.where.function_name(), currentStackTrace());
     std::fflush(stderr);
+    breakpointIfDebugging();
     std::abort();
 }
 

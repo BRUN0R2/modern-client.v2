@@ -28,7 +28,8 @@ struct ContractViolation {
 
 using ContractViolationHandler = void (*)(const ContractViolation& violation) noexcept;
 
-/// Default handler ("enforce"): writes the violation to stderr and aborts the process.
+/// Default handler ("enforce"): writes the violation and the call stack to stderr, stops in the
+/// debugger when one is attached, then aborts the process.
 void enforceContract(const ContractViolation& violation) noexcept;
 
 /// Installs `handler` for the whole process and returns the previous one; `nullptr` restores

@@ -7,6 +7,7 @@ nxAddModuleLibrary(nxCore
         src/nx.core.cppm
         src/introspection.cppm
         src/source.cppm
+        src/debugging.cppm
         src/contracts.cppm
         src/failure.cppm
         src/conversion.cppm
@@ -18,10 +19,14 @@ nxAddModuleLibrary(nxCore
         src/memory.cppm
         src/log.cppm
     SOURCES
+        src/debugging.cpp
         src/contracts.cpp
         src/failure.cpp
         src/memory.cpp
-        src/log.cpp)
+        src/log.cpp
+    DEPENDS
+        # libstdc++ keeps std::stacktrace in libstdc++exp (nx.core:debugging).
+        $<$<CXX_COMPILER_ID:GNU>:stdc++exp>)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

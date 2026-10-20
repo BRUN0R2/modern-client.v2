@@ -64,6 +64,10 @@ TEST(ContractsDeathTest, DefaultHandlerReportsAndAborts) {
     EXPECT_DEATH(nx::expects(false, "map must be loaded"), "Precondition violated: map must be loaded");
 }
 
+TEST(ContractsDeathTest, DefaultHandlerPrintsTheCallStack) {
+    EXPECT_DEATH(nx::invariant(false, "chunk rows match the entity count"), "stack trace:");
+}
+
 TEST(Contracts, NullHandlerRestoresTheEnforcingDefault) {
     const auto previous = nx::setContractViolationHandler(nullptr);
     const auto installed = nx::setContractViolationHandler(previous);
