@@ -18,3 +18,11 @@ nxAddFuzzer(fuzzWav
         nx::assets
     CORPUS
         corpus/wav)
+
+nxAddFuzzer(fuzzBsp
+    SOURCES
+        bspFuzzer.cpp
+    DEPENDS
+        nx::assets
+    CORPUS
+        corpus/bsp)

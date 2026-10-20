@@ -225,7 +225,7 @@ Rules:
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 

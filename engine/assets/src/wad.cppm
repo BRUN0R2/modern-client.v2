@@ -68,17 +68,37 @@ private:
     std::vector<WadEntry> m_entries;
 };
 
-/// A mip texture: palette indices at four levels of detail, and the palette.
+/// A mip texture: palette indices at four levels of detail, and the palette. A map may name a
+/// texture without its pixels, which are in one of the WADs it lists: its levels and palette are
+/// then empty.
 struct MipTexture {
     std::string name;
     std::uint32_t width = 0;  ///< A nonzero multiple of kTextureSizeMultiple.
     std::uint32_t height = 0; ///< A nonzero multiple of kTextureSizeMultiple.
     /// Views of the palette indices, row by row: level `i` is (width >> i) by (height >> i).
     std::array<std::span<const std::byte>, kMipLevels> levels{};
-    std::span<const std::byte> palette; ///< A view of kPaletteColors RGB triples.
+    std::span<const std::byte> palette{}; ///< A view of kPaletteColors RGB triples.
+
+    /// Whether the pixels are here, rather than in a WAD.
+    [[nodiscard]] inline auto hasPixels() const noexcept -> bool { return !palette.empty(); }
 };
 
 /// The mip texture of `entry`, with views of the same bytes. Errors: NotATexture, BadTexture.
 [[nodiscard]] auto readTexture(const WadEntry& entry) -> Result<MipTexture, WadError>;
+
+} // namespace nx::assets
+
+namespace nx::assets {
+
+/// Whether a mip texture must carry its pixels (a WAD3 entry) or may leave them to a WAD (a map).
+enum class TexturePixels : std::uint8_t {
+    Required,
+    MayBeInWad,
+};
+
+/// The mip texture in `lump`; with MayBeInWad, every level offset 0 means only its name and size
+/// are here. For the readers of this module. Errors: BadTexture.
+[[nodiscard]] auto parseMipTexture(std::span<const std::byte> lump, TexturePixels pixels)
+    -> Result<MipTexture, WadError>;
 
 } // namespace nx::assets

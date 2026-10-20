@@ -155,6 +155,12 @@ Readers today:
   offsets of the cue points, where a looping sound loops. Other chunks are skipped, and the size
   in the RIFF header is not trusted.
 
+- BSP v30 (`nx.assets:bsp`), today its geometry: planes (unit normals, axis), vertices, edges,
+  surface edges, texture infos, faces and their lightmap offsets, the textures (embedded, or named
+  with their pixels in a WAD) and the RGB lighting. Every index a record holds is checked against
+  what it indexes, so readers index without checks; every float is finite. The tree (visibility,
+  nodes, leaves, clip nodes), the models and the entities are next.
+
 Every reader refuses malformed input with a typed error and is fuzzed
 ([18](18-testing-and-quality.md#sanitizers-and-analysis)). The other readers are planned (M2).
 

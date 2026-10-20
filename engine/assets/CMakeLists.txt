@@ -11,14 +11,17 @@ nxAddModuleLibrary(nxAssets
         src/steam.cppm
         src/wad.cppm
         src/wav.cppm
+        src/bsp.cppm
     SOURCES
         src/vfs.cpp
         src/content.cpp
         src/steam.cpp
         src/wad.cpp
         src/wav.cpp
+        src/bsp.cpp
     DEPENDS
         nx::core
+        nx::math
         nx::meta
         nx::data
         nx::platform)

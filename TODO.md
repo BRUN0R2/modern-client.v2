@@ -205,7 +205,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `--content`, `-basedir` and `--content-config` options
 - [ ] `content_list`, `content_scan`, `content_add`, `content_profile` commands
 - [ ] Code-generated `devContent`: grid textures, test map, capsule player, simple weapons, synthesized sounds
-- [ ] BSP v30 reader (all lumps) with fuzzing
+- [ ] BSP v30 reader (all lumps) with fuzzing: the geometry (planes, vertices, edges, surface edges, texture infos, faces, textures, lighting) is read and fuzzed (`nx.assets:bsp`, `fuzzBsp`); visibility, nodes, leaves, clip nodes, mark surfaces, models and entities are next
 - [x] WAD3 reader with fuzzing (`nx.assets:wad`, `fuzzWad`; fuzz infrastructure: `nxAddFuzzer`, the `fuzz-windows-msvc` preset and the nightly `fuzz` workflow)
 - [ ] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing
 - [ ] SPR v2 reader with fuzzing
