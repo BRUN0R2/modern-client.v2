@@ -15,6 +15,7 @@ import :button;
 
 export namespace nx::console {
 
+/// Why a command, a registration or a script failed.
 enum class ConsoleError : std::uint8_t {
     UnknownCommand,   ///< Not a command, alias or cvar; the detail suggests the closest name.
     UnknownCvar,      ///< A command that takes a cvar (toggle, incrementvar) got another name.
@@ -42,9 +43,11 @@ public:
 
     /// One line of reply.
     virtual void print(std::string_view line) = 0;
+    /// A command that failed; the run goes on with the next one.
     virtual void reportFailure(const Failure<ConsoleError>& failure) = 0;
 };
 
+/// Why `exec` could not read a file.
 enum class ConfigFileError : std::uint8_t {
     NotFound,
     InvalidPath, ///< A path the file source does not serve (outside the game directories).
@@ -113,15 +116,16 @@ public:
     auto operator=(Console&&) -> Console& = delete;
     ~Console() = default;
 
-    /// Registers a cvar with its default value. Errors: InvalidName, NameTaken, InvalidDefinition.
+    /// Whether a cvar can be registered as `name` now. Errors: InvalidName (a name the console
+    /// language cannot invoke), NameTaken (a cvar, command or alias already has it, in any case).
+    [[nodiscard]] auto checkCvarName(std::string_view name) const -> Result<void, CvarError>;
+
+    /// Registers a cvar with its default value. Errors: those of checkCvarName, InvalidDefinition.
     template <CvarType Type>
-    auto registerCvar(const CvarDesc<Type>& desc) -> Result<Cvar<Type>, CvarError> {
+    [[nodiscard]] auto registerCvar(const CvarDesc<Type>& desc) -> Result<Cvar<Type>, CvarError> {
         const std::string_view name = desc.name.text();
-        if (!isValidName(name)) {
-            return fail(CvarError::InvalidName, std::format("\"{}\"", name));
-        }
-        if (isNameTaken(name)) {
-            return fail(CvarError::NameTaken, std::string{name});
+        if (auto available = checkCvarName(name); !available) {
+            return std::unexpected(std::move(available.error()));
         }
         auto cvar = std::make_unique<TypedCvar<Type>>(desc);
         if (auto defined = cvar->checkDefinition(); !defined) {
@@ -133,11 +137,12 @@ public:
     }
 
     /// Errors: InvalidName, NameTaken.
-    auto registerCommand(const CommandDesc& desc, CommandHandler handler) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto registerCommand(const CommandDesc& desc, CommandHandler handler)
+        -> Result<void, ConsoleError>;
 
     /// Registers `+name` and `-name`, which press and release the returned button; both take the
     /// key as an optional argument. Errors: InvalidName, NameTaken.
-    auto registerButton(const CommandDesc& desc) -> Result<Button, ConsoleError>;
+    [[nodiscard]] auto registerButton(const CommandDesc& desc) -> Result<Button, ConsoleError>;
 
     /// The cvar called `name` (any case), or nullptr.
     [[nodiscard]] auto findCvar(std::string_view name) const -> const CvarBase*;
@@ -145,6 +150,7 @@ public:
     /// The body of the alias called `name` (any case).
     [[nodiscard]] auto findAlias(std::string_view name) const -> std::optional<std::string_view>;
 
+    /// Whether a command (built-in, registered or a button's `+`/`-`) is called `name` (any case).
     [[nodiscard]] auto hasCommand(std::string_view name) const -> bool;
 
     /// Queues `script` after what is already buffered. Its end is the end of a command.
@@ -159,7 +165,7 @@ public:
 
     /// Sets a cvar from text, as typing `name text` does: refused for ServerProtected cvars, for
     /// Cheat cvars while cheats are forbidden, and for text the cvar does not accept.
-    auto setCvar(std::string_view name, std::string_view text) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto setCvar(std::string_view name, std::string_view text) -> Result<void, ConsoleError>;
 
     void setCheats(Cheats cheats) noexcept { m_cheats = cheats; }
     [[nodiscard]] auto cheats() const noexcept -> Cheats { return m_cheats; }
@@ -200,17 +206,17 @@ private:
     void report(const Result<void, ConsoleError>& result);
 
     [[nodiscard]] auto requireCvar(std::string_view name) -> Result<CvarBase*, ConsoleError>;
-    auto changeCvar(CvarBase& cvar, std::string_view text) -> Result<void, ConsoleError>;
-    auto runCvar(CvarBase& cvar, const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto changeCvar(CvarBase& cvar, std::string_view text) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto runCvar(CvarBase& cvar, const CommandLine& line) -> Result<void, ConsoleError>;
 
-    auto alias(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto exec(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto echo(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto toggle(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto incrementVar(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto cvarList(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto commandList(const CommandLine& line) -> Result<void, ConsoleError>;
-    auto find(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto alias(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto exec(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto echo(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto toggle(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto incrementVar(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto cvarList(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto commandList(const CommandLine& line) -> Result<void, ConsoleError>;
+    [[nodiscard]] auto find(const CommandLine& line) -> Result<void, ConsoleError>;
 
     ConsoleOutput* m_output;
     ConfigFiles* m_files;

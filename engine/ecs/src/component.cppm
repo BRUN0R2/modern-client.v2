@@ -98,12 +98,13 @@ class ComponentRegistry {
 public:
     /// Registers a C++ component type under its declared name.
     template <Component Type>
-    auto add(std::string_view name) -> Result<ComponentTypeId, ComponentError> {
+    [[nodiscard]] auto add(std::string_view name) -> Result<ComponentTypeId, ComponentError> {
         return add(describeComponent<Type>(name), detail::typeKeyOf<Type>());
     }
 
     /// Registers a component described at run time. `typeKey` identifies the C++ type, if any.
-    auto add(ComponentInfo info, const void* typeKey = nullptr) -> Result<ComponentTypeId, ComponentError>;
+    [[nodiscard]] auto add(ComponentInfo info, const void* typeKey = nullptr)
+        -> Result<ComponentTypeId, ComponentError>;
 
     template <Component Type>
     [[nodiscard]] auto find() const -> std::optional<ComponentTypeId> {

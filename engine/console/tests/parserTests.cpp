@@ -87,6 +87,15 @@ TEST(ParserTest, CommentsStartOnlyAtTheStartOfAWord) {
               (Words{"sv_downloadurl", "http://example.com/cs"}));
     EXPECT_EQ(tokenize("sv_downloadurl http://example.com/cs").words,
               (Words{"sv_downloadurl", "http://example.com/cs"}));
+    // Regression: the splitter took the `//` inside the word for a comment and kept the `;`.
+    EXPECT_EQ(wordsOf(parseScript("sv_downloadurl http://example.com/cs; echo done")),
+              (std::vector<Words>{{"sv_downloadurl", "http://example.com/cs"}, {"echo", "done"}}));
+}
+
+TEST(ParserTest, ASemicolonInsideAnUnquotedWordEndsTheCommand) {
+    // A `"` inside a word is an ordinary character: it opens no quoted word, so the `;` splits.
+    EXPECT_EQ(wordsOf(parseScript(R"(echo ab"cd;echo ef)")),
+              (std::vector<Words>{{"echo", R"(ab"cd)"}, {"echo", "ef"}}));
 }
 
 TEST(ParserTest, AnUnterminatedQuoteRunsToTheEndOfTheCommand) {

@@ -139,10 +139,11 @@ views over an `nx::console::Console`, which writes replies and failures to a
 - **A single namespace**, case-insensitive, for cvars, commands and aliases
   (`SV_GRAVITY 600` changes `sv_gravity`). Registering a name already in use fails with
   `NameTaken`.
-- **`.cfg` syntax:** a command ends at a line ending or at a `;` outside quotes and outside
-  a comment. Quotes group words, without escape sequences, and unclosed quotes run to the
-  end of the command. `//` at the start of a word comments out the rest of the line, so an
-  unquoted `http://...` stays a single word. `\r` and tab are whitespace, and a UTF-8 BOM
+- **`.cfg` syntax:** a command ends at a line ending or at a `;` outside a quoted word and
+  outside a comment. A `"` at the start of a word opens a quoted word, without escape
+  sequences, that runs to the next `"` or to the end of the line; inside a word, `"` is an
+  ordinary character. `//` at the start of a word comments out the rest of the line, so an
+  unquoted `http://...` stays a single word and a `;` after it still ends the command. `\r` and tab are whitespace, and a UTF-8 BOM
   at the start of a file is ignored.
 - **Command buffer:** `addText` queues, `insertText` jumps ahead (aliases and `exec` run at
   the point where they are called) and `execute()` runs until the buffer is empty or until

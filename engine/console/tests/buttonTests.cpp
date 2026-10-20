@@ -28,7 +28,7 @@ protected:
 
     void run(std::string_view script) {
         console.addText(script);
-        std::ignore = console.execute();
+        std::ignore = console.execute(); // the scripts here have no wait
     }
 
     [[nodiscard]] auto edges() -> ButtonEdges { return jump->takeEdges(); }

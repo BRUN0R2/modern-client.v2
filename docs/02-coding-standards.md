@@ -373,8 +373,9 @@ auto MapLoader::load(MapName name) -> nx::Result<Map, MapLoadError> {
 
 ### 6.4 Rules
 
-- Every function that can fail returns `nx::Result` and is `[[nodiscard]]`. The `Result`
-  type is `[[nodiscard]]` by definition.
+- Every function that can fail returns `nx::Result` and is `[[nodiscard]]`. The attribute goes
+  on each function: `nx::Result` is an alias of `std::expected`, which the standard does not
+  mark `[[nodiscard]]`.
 - Ignoring a `Result` is **forbidden**. To discard one on purpose:
   `std::ignore = ...;` with a comment stating the reason.
 - Silent fallback is **forbidden**: if a resource is missing, the error propagates or

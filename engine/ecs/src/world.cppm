@@ -62,12 +62,12 @@ public:
 
     /// Registers the C++ component `Type` under its declared, qualified name ("cs::Transform").
     template <Component Type>
-    auto registerComponent(std::string_view name) -> Result<ComponentTypeId, ComponentError> {
+    [[nodiscard]] auto registerComponent(std::string_view name) -> Result<ComponentTypeId, ComponentError> {
         return m_components.add<Type>(name);
     }
 
     /// Registers a component described at run time (Rook components).
-    auto registerComponent(ComponentInfo info) -> Result<ComponentTypeId, ComponentError> {
+    [[nodiscard]] auto registerComponent(ComponentInfo info) -> Result<ComponentTypeId, ComponentError> {
         return m_components.add(std::move(info));
     }
 
