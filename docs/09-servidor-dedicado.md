@@ -23,7 +23,8 @@ nextds -game cstrike -port 27015 +maxplayers 32 +map de_dust2 +sv_lan 0
 | `+maxplayers <n>` | Slots (1–**1024**, padrão 32) | ✅ (1–32) |
 | `+map <nome>` | Mapa inicial | ✅ |
 | `+<cvar> <valor>` / `+<comando>` | Executar no boot | ✅ |
-| `-basedir <caminho>` | Instalação original do CS | novo |
+| `-basedir <caminho>` | Instalação original do CS (fonte `goldsrcInstall`, opcional) | ✅ (mesmo nome do HLDS) |
+| `--content <perfil>` | Perfil de conteúdo: `classic`, `open`, `dev` ou `custom` | novo |
 | `-console` / `-noconsole` | Console interativo | ✅ |
 | `-pidfile <arquivo>` | PID para supervisores | ✅ (ReHLDS) |
 | `-config <arquivo.toml>` | Configuração nova estruturada | novo |
@@ -80,6 +81,17 @@ inválida) aparecem no console com arquivo e linha. Não existe falha silenciosa
 - **Master server próprio**, de código aberto (`nextmaster`), com protocolo de heartbeat
   autenticado. Servidores anunciam para todos os masters de `masterServers.toml`.
 - **LAN:** descoberta por broadcast na porta padrão (`sv_lan 1` restringe a LAN).
+
+### 5.1 Conteúdo exigido pelo servidor
+
+- O servidor declara de quais fontes de conteúdo depende ([ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md))
+  no `content.toml` dele (`requires = ["cstrikeOriginal"]` com o perfil `classic`).
+- A exigência vai na regra A2S `content_requires` e no handshake. O server browser mostra
+  "requer CS 1.6 original" e se o jogador já tem a fonte configurada.
+- Arquivos dessas fontes **nunca** são enviados pelo servidor. O cliente precisa tê-los
+  localmente, com o mesmo hash. Se não tiver, recebe uma recusa clara
+  (`RejectReason::MissingLocalContent`), com a lista do que falta e como configurar.
+- Um servidor com perfil `open` não exige nada além do que ele mesmo pode enviar.
 
 ## 6. Cvars
 
@@ -174,7 +186,7 @@ Tentativas de senha incorretas sofrem bloqueio progressivo por IP (`rcon_ban_aft
   dos recursos novos.
 - **Hot reload de plugins** sem troca de mapa (`plugins reload <id>`).
 - **Métricas:** tick p50/p99, jogadores, banda, memória por plugin, filas de jobs.
-- **Docker:** imagem oficial do `nextds` Linux. A instalação original é montada como
+- **Docker:** imagem oficial do `nextds` Linux. Com o perfil `classic`, a instalação original é montada como
   volume somente leitura.
 
 ## 12. Erros tipados

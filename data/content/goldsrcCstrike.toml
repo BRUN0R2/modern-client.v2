@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# The Counter-Strike 1.6 installation as a content source (`classic` profile, ADR-0015).
+# Only file names live here: no Valve asset is part of this repository.
+
+[source]
+id = "cstrikeOriginal"
+kind = "goldsrcInstall"
+redistributable = false        # never sent to clients; they need their own copy
+steamAppId = 10                # Counter-Strike on Steam
+steamInstallFolder = "Half-Life"
+mounts = ["cstrike", "valve"]  # mounted in this order, highest priority first
+
+# Files that must exist, relative to the installation folder. A missing file stops the
+# `classic` profile with ContentError::MissingEssentialFiles and the full list.
+[essentialFiles]
+paths = [
+    "cstrike/liblist.gam",
+    "cstrike/cstrike.wad",
+    "valve/halflife.wad",
+    "cstrike/sprites/hud.txt",
+    "cstrike/models/player/gign/gign.mdl",
+    "cstrike/models/player/terror/terror.mdl",
+    "cstrike/models/v_ak47.mdl",
+    "cstrike/sound/weapons/ak47-1.wav",
+    "cstrike/maps/de_dust2.bsp",
+]

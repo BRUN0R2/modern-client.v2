@@ -90,7 +90,8 @@ Sem os limites históricos de canais de texto e tamanho de mensagem:
 
 | Tela | Requisitos |
 |------|------------|
-| Menu principal | Novo jogo (listen server), procurar servidores, opções, sair. Música de fundo (`media/gamestartup.mp3`) |
+| Assistente de primeiro start | Detecta a instalação do CS 1.6 e pergunta uma vez se o jogador quer usar os assets originais (perfil `classic`). Também permite escolher a pasta manualmente ou seguir sem eles ([06 §2.5](06-assets-e-recursos.md#25-configuração-local)) |
+| Menu principal | Novo jogo (listen server), procurar servidores, opções (inclusive **Conteúdo**: perfil e fontes), sair. Música de fundo do conteúdo ativo (`media/gamestartup.mp3` no perfil `classic`) |
 | Server browser | Internet (master servers), favoritos, histórico, LAN. Filtros por mapa, jogadores, ping, senha e plugins |
 | Opções | Teclado (binds), mouse, áudio, vídeo, voz, multiplayer (nome, spray, crosshair) |
 | Seleção de time e personagem | Teclas e layout originais |
@@ -106,6 +107,8 @@ Sem os limites históricos de canais de texto e tamanho de mensagem:
   `-comando`, `wait`, `exec`, `echo`, `toggle`, `incrementvar`.
 - **Erros explícitos:** comando ou cvar desconhecida, ou valor inválido, gera mensagem com
   sugestão ("did you mean...").
+- **Conteúdo:** `content_list`, `content_scan`, `content_add <caminho>` e
+  `content_profile <perfil>` ([06 §2.5](06-assets-e-recursos.md#25-configuração-local)).
 
 ### 5.1 Cvars de cliente preservadas (seleção)
 

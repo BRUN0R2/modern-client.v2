@@ -54,14 +54,20 @@ atingidas e teste de determinismo com número variável de workers passando.
 
 ## M2 — Assets e mundo visível
 
-**Objetivo:** abrir qualquer mapa oficial e navegar com câmera livre.
+**Objetivo:** abrir qualquer mapa e navegar com câmera livre, com ou sem os assets
+originais.
 
-- VFS, detecção da instalação, leitores BSP/WAD/MDL/SPR/WAV.
+- VFS com fontes de conteúdo e perfis (`classic`, `open`, `dev`), `content.toml`, detecção e
+  validação da instalação do CS 1.6, assistente de primeiro start.
+- `devContent` gerado por código, para a engine rodar e ser testada sem nenhum asset
+  externo.
+- Leitores BSP/WAD/MDL/SPR/WAV.
 - RHI + backend Vulkan, render graph, shaders Slang.
 - Mundo BSP com lightmaps, lightstyles, PVS, céu, água e transparências.
 - Modelos de estúdio estáticos e animados com GPU skinning (visualizador de modelos).
 
-**Saída:** todos os mapas oficiais renderizam sem erros. Imagens de referência no CI.
+**Saída:** com o perfil `classic`, todos os mapas oficiais renderizam sem erros. Com o
+perfil `dev`, um mapa de teste gerado roda no CI, com imagens de referência.
 
 ## M3 — Jogo local
 
@@ -83,7 +89,8 @@ atingidas e teste de determinismo com número variável de workers passando.
 - Predição, interpolação e compensação de lag.
 - `nextds`: linha de comando, configs, cvars, comandos, logs.
 - A2S, master server próprio, LAN, RCON seguro, identidade de jogador.
-- Download de recursos (embutido e HTTP).
+- Download de recursos (embutido e HTTP), com a regra de que conteúdo não redistribuível
+  nunca é enviado e a exigência de conteúdo declarada pelo servidor.
 
 **Saída:** teste com 32 jogadores reais na internet, teste de estresse inicial com 256
 clientes simulados e avaliação de sensação por jogadores veteranos.
@@ -124,7 +131,10 @@ do AMXX e API 1.0 congelada.
 - Plugins de cliente com sandbox e armas customizadas preditas.
 - Sprites `.nxspr`, modo `r_fidelity enhanced`, pacotes de alta resolução.
 - Estresse com 1024 jogadores e otimizações guiadas por profiling.
-- Formato de mapa estendido `.nxmap` (sem limites de BSP).
+- Formato de mapa estendido `.nxmap` (sem limites de BSP), compilado a partir de mapas do
+  TrenchBroom com ferramentas do projeto.
+- `openContent`: primeiro pacote livre (mapa próprio, jogador, armas, HUD e sons, todos
+  originais ou CC0/CC-BY), em repositório separado.
 
 ## M8 — Release 1.0 e futuro
 

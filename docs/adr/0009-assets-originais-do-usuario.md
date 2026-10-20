@@ -1,6 +1,8 @@
 # ADR-0009 — Assets originais lidos da instalação do usuário
 
-- **Status:** Aceito
+- **Status:** Substituído pelo [ADR-0015](0015-conteudo-livre-e-assets-originais-opcionais.md)
+  (2026-10-20). A instalação original deixou de ser obrigatória e virou uma fonte de conteúdo
+  opcional.
 - **Data:** 2026-10-20
 
 ## Contexto
@@ -31,3 +33,6 @@ que são propriedade da Valve e não podem ser redistribuídos.
 - ✅ Paridade visual e sonora total, legalmente.
 - ✅ Mapas da comunidade funcionam sem conversão.
 - ⚠️ Exige o jogo original instalado. Documentado no primeiro start com assistente.
+
+Todas as decisões acima, exceto a obrigatoriedade da instalação, continuam valendo no
+ADR-0015.

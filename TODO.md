@@ -18,6 +18,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Nome definitivo da linguagem de plugins (provisório: **Rook**)
 - [ ] Toolkit de menus: próprio ou RmlUi ([12 §2](docs/12-interface-hud-e-console.md#2-componentes-de-ui))
 - [ ] Definir hardware de referência para as metas de desempenho
+- [x] Conteúdo livre por padrão; assets originais opcionais e configurados localmente ([ADR-0015](docs/adr/0015-conteudo-livre-e-assets-originais-opcionais.md))
 - [ ] Revisão jurídica antes do primeiro release público, incluindo uma possível permissão adicional para plugins (seção 7 da GPL) ([20](docs/20-legal-e-licenciamento.md))
 
 ---
@@ -47,7 +48,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] 19 — Roadmap
 - [x] 20 — Legal e licenciamento
 - [x] Glossário
-- [x] ADRs 0001–0014
+- [x] ADRs 0001–0015
 - [x] Regra camelCase documentada ([02 §3.1](docs/02-padroes-de-codigo.md#31-regra-do-projeto-camelcase))
 - [x] Licenças no padrão REUSE: `LICENSES/`, `LICENSE`, `REUSE.toml` e cabeçalhos SPDX
 - [ ] `CONTRIBUTING.md` (fluxo de PR, DCO, padrões, licença das contribuições, como rodar testes)
@@ -161,7 +162,14 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Assets
 - [ ] VFS com montagens, prioridade, busca sem diferenciar maiúsculas e validação de caminho
-- [ ] Detecção da instalação Steam (Windows/Linux) e assistente de primeiro start
+- [ ] Fontes de conteúdo (`engine`, `devContent`, `openContent`, `goldsrcInstall`, mods) com flag de redistribuição
+- [ ] Perfis `classic`, `open`, `dev` e `custom`, e leitura do `content.toml` (ordem: `--content-config`, diretório de trabalho, perfil do usuário)
+- [ ] Detecção da instalação Steam (registro e `libraryfolders.vdf` no Windows; `~/.steam`, `~/.local/share/Steam` e Flatpak no Linux)
+- [ ] Validação contra `data/content/goldsrcCstrike.toml` com `ContentError::MissingEssentialFiles`
+- [ ] Assistente de primeiro start ("usar os assets originais?") que grava o `content.toml`
+- [ ] Opções `--content`, `-basedir` e `--content-config`
+- [ ] Comandos `content_list`, `content_scan`, `content_add`, `content_profile`
+- [ ] `devContent` gerado por código: texturas em grade, mapa de teste, jogador em cápsula, armas simples, sons sintetizados
 - [ ] Leitor BSP v30 (todos os lumps) com fuzzing
 - [ ] Leitor WAD3 com fuzzing
 - [ ] Leitor MDL v10 (incluindo `*T.mdl` e `*01.mdl`) com fuzzing
@@ -291,6 +299,9 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Endpoint de métricas
 - [ ] Imagem Docker
 - [ ] Download de recursos embutido e HTTP com verificação de hash
+- [ ] Recusar o envio de conteúdo não redistribuível (`ResourceError::NotRedistributable`) e anunciá-lo como requisito local
+- [ ] Exigência de conteúdo do servidor (`requires`) na regra A2S `content_requires`, no handshake e no server browser
+- [ ] `RejectReason::MissingLocalContent` com a lista do que falta e como configurar
 - [ ] Manifesto de recursos, `ResourceAdded` e política de recurso indisponível
 - [ ] Consistência de arquivos (`consistency = "exact"`)
 - [ ] Teste com 32 jogadores reais e estresse com 256 clientes simulados
@@ -440,7 +451,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Formato `.nxspr` (sprites RGBA de alta resolução) no `nxbake` e no renderer
 - [ ] Modo `r_fidelity enhanced`
 - [ ] Oclusão de servidor opcional (`sv_occlusion`)
-- [ ] Formato de mapa estendido `.nxmap`
+- [ ] Formato de mapa estendido `.nxmap`, compilado a partir de mapas do TrenchBroom
+- [ ] Repositório e primeiro pacote `openContent` (mapa próprio, jogador, armas, HUD e sons originais ou CC0/CC-BY)
 - [ ] Estresse com 1024 jogadores e otimizações guiadas por profiling
 - [ ] *Soak test* de 24 h
 

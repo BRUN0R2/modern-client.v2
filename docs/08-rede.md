@@ -52,7 +52,9 @@ sequenceDiagram
   pacotes no endereço declarado.
 - **Identidade:** chave Ed25519 do jogador ([09 §7](09-servidor-dedicado.md#7-identidade-de-jogadores)).
 - **Rejeição tipada** (`RejectReason`): `ServerFull`, `Banned{until}`, `BadPassword`,
-  `ProtocolMismatch{server, client}`, `SchemaMismatch`, `IdentityInvalid`, `RateLimited`.
+  `ProtocolMismatch{server, client}`, `SchemaMismatch`, `IdentityInvalid`, `RateLimited`,
+  `MissingLocalContent{source, files}` (o servidor exige uma fonte de conteúdo que o
+  cliente não tem e que não pode ser enviada, [ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md)).
 - Criptografia via libsodium. Cada pacote tem nonce de contador, e pacotes repetidos ou
   fora da janela são descartados.
 

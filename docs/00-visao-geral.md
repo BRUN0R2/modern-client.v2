@@ -60,8 +60,9 @@ O projeto tem três pilares:
   protocolo (ver [ADR-0008](adr/0008-protocolo-de-rede-proprio.md)).
 - **Carregar `.amxx`, `mp.dll`, `client.dll` ou plugins Metamod:** mods são migrados para
   Rook ([16](16-migracao-amxx.md)). Ferramentas de conversão assistida podem existir.
-- **Distribuir assets da Valve:** o jogo usa a instalação legítima do usuário
-  ([ADR-0009](adr/0009-assets-originais-do-usuario.md)).
+- **Distribuir assets da Valve:** o jogo funciona com conteúdo livre e, se o usuário tiver
+  o CS 1.6, usa a instalação local dele, configurada quase automaticamente
+  ([ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md)).
 - **Remasterização visual obrigatória:** o visual padrão é o original. Melhorias são
   opcionais, por cvar (`r_fidelity`).
 - **Anti-cheat em kernel.** A segurança se baseia em servidor autoritativo e validação.

@@ -16,9 +16,11 @@
 
 - O repositório e os binários distribuídos **não contêm** nenhum asset da Valve: mapas,
   modelos, texturas, sons, sprites, textos ou configs originais.
-- O jogo exige uma **cópia legítima** do Counter-Strike 1.6 instalada (Steam) e lê os
-  arquivos diretamente dela ([06](06-assets-e-recursos.md#23-localização-da-instalação-original)).
-- Testes automatizados usam assets **sintéticos** criados pelo projeto. A suíte de
+- O jogo **funciona sem nenhum asset da Valve** (conteúdo livre e gerado por código). Os
+  assets originais são opcionais: quem tem uma **cópia legítima** do Counter-Strike 1.6
+  pode configurá-la localmente ([ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md)), e a engine lê os
+  arquivos diretamente dela ([06](06-assets-e-recursos.md#23-localização-da-instalação-original-opcional)).
+- Testes automatizados usam assets **sintéticos** criados pelo projeto (`devContent`). A suíte de
   paridade roda em *runner* próprio com cópia licenciada, e o que é versionado são apenas
   **dados numéricos** de comportamento ([18](18-testes-e-qualidade.md#testes-de-paridade)).
 - No futuro, um pacote de assets livres feito pela comunidade poderá permitir jogar sem o

@@ -26,7 +26,9 @@ CMakeUserPresets.json
 *.ilk
 *.exp
 
-# Local game installation links and runtime output
+# Local content configuration and game installation links (ADR-0015). Only
+# content.example.toml is versioned; content.toml points at files of this machine.
+/content.toml
 /cstrike/
 /valve/
 *.dmp

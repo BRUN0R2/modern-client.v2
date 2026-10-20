@@ -11,8 +11,10 @@ jogabilidade e servidores idênticos ao original e **sem os limites históricos*
   vem do AMX Mod X, com compilador próprio, hot reload e LSP.
 - **Servidores como sempre:** mesmas cvars, configs, comandos, RCON e consultas A2S.
 
-> Requer uma cópia legítima do Counter-Strike 1.6 (Steam). Nenhum asset da Valve é
-> distribuído. Projeto sem afiliação com a Valve Corporation.
+> Funciona sem nenhum asset da Valve. Quem tem uma cópia legítima do Counter-Strike 1.6
+> (Steam) pode usar os assets originais: o jogo detecta a instalação e configura o perfil
+> `classic` localmente ([ADR-0015](docs/adr/0015-conteudo-livre-e-assets-originais-opcionais.md)).
+> Nenhum asset da Valve é distribuído. Projeto sem afiliação com a Valve Corporation.
 
 ## Status
 

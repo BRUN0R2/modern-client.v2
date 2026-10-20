@@ -7,6 +7,7 @@ modern-client.v2/
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── vcpkg.json                  # dependency manifest (pinned baseline)
+├── content.example.toml        # model of the per-user content configuration (ADR-0015)
 ├── .clang-format / .clang-tidy / .editorconfig
 ├── cmake/                      # toolchain helpers, warnings, sanitizers, module support
 ├── engine/
@@ -45,7 +46,8 @@ modern-client.v2/
 │   └── vscode/                 # VS Code extension (syntax, LSP client, DAP)
 ├── shaders/                    # Slang sources
 ├── data/
-│   └── cstrike/                # gameplay data (TOML)
+│   ├── cstrike/                # gameplay data (TOML)
+│   └── content/                # content source descriptions (essential files of each)
 ├── mods/                       # built-in mods written in Rook (admin, votes, maps, ...)
 ├── tools/
 │   ├── nxbake/                 # asset import/cook/pack

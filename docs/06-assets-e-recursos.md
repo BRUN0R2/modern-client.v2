@@ -1,11 +1,12 @@
 # 06 — Assets e recursos
 
-> Decisão sobre assets originais em [ADR-0009](adr/0009-assets-originais-do-usuario.md).
+> Decisão sobre fontes de conteúdo e assets originais em [ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md).
 
 ## 1. Objetivos
 
-- Carregar **diretamente** os arquivos originais do CS 1.6 da instalação do usuário (BSP,
-  MDL, WAD, SPR, WAV, configs), sem conversão manual.
+- **Funcionar sem nenhum asset da Valve** (conteúdo livre e gerado por código) e, quando o
+  usuário tiver o CS 1.6, carregar **diretamente** os arquivos originais da instalação
+  local (BSP, MDL, WAD, SPR, WAV, configs), sem conversão manual e quase sem configuração.
 - **Acabar com o precache:** recursos ilimitados, registrados a qualquer momento, com
   download incremental para os clientes.
 - Carregamento **assíncrono** em jobs, sem travar o frame.
@@ -16,16 +17,17 @@
 
 ### 2.1 Pontos de montagem
 
-Ordem de busca (maior prioridade primeiro), equivalente ao *search path* da GoldSrc:
+Ordem de busca (maior prioridade primeiro), equivalente ao *search path* da GoldSrc. Só
+`engine` está sempre presente. As fontes de jogo vêm do perfil de conteúdo ativo
+([§2.4](#24-fontes-de-conteúdo-e-perfis)):
 
-| Prioridade | Montagem | Conteúdo |
-|------------|----------|----------|
-| 1 | `mods/<mod>/` (na ordem de dependência) | Assets de mods habilitados |
-| 2 | `downloads/` | Cache de recursos baixados (endereçado por conteúdo) |
-| 3 | `addons/cstrike/` | Conteúdo customizado local do usuário (`cstrike_addon`) |
-| 4 | `<instalação>/cstrike/` | Arquivos originais do Counter-Strike |
-| 5 | `<instalação>/valve/` | Arquivos originais do Half-Life base |
-| 6 | `engine/` (embutido) | Mínimo da engine: fonte do console, shaders de fallback, tela de erro |
+| Prioridade | Montagem | Conteúdo | Redistribuível |
+|------------|----------|----------|----------------|
+| 1 | `mods/<mod>/` (na ordem de dependência) | Assets de mods habilitados | Conforme o mod |
+| 2 | `downloads/` | Cache de recursos baixados (endereçado por conteúdo) | Sim (só recebe conteúdo redistribuível) |
+| 3 | `addons/cstrike/` | Conteúdo customizado local do usuário (`cstrike_addon`) | Não (é do usuário) |
+| 4 | Fonte de jogo do perfil: `<instalação>/cstrike/` + `<instalação>/valve/` (`classic`), `openContent` (`open`) ou `devContent` (`dev`) | Conteúdo do jogo | `goldsrcInstall`: **não**. Os demais: sim |
+| 5 | `engine/` (embutido) | Mínimo da engine: fonte do console, shaders de fallback, tela de erro | Sim |
 
 ### 2.2 Regras de caminho
 
@@ -37,15 +39,57 @@ Ordem de busca (maior prioridade primeiro), equivalente ao *search path* da Gold
 - O índice de cada montagem é construído uma vez (com *watch* em desenvolvimento) e a
   busca é O(1) por hash do caminho normalizado.
 
-### 2.3 Localização da instalação original
+### 2.3 Localização da instalação original (opcional)
 
-1. Opção explícita: `-basedir <caminho>` ou `game.toml`.
-2. Steam no Windows: registro (`SteamPath`) mais `steamapps/libraryfolders.vdf`.
-3. Steam no Linux: `~/.steam/steam` e `~/.local/share/Steam` mais `libraryfolders.vdf`.
-4. Não encontrada: o primeiro start mostra um assistente para escolher a pasta.
+A instalação do CS 1.6 é **opcional** ([ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md)). Quando o perfil é `classic`, ela
+é procurada nesta ordem:
 
-A validação confirma a presença dos arquivos essenciais (`cstrike/liblist.gam`, WADs base,
-modelos de jogador). Falta de arquivo gera `InstallError::MissingFile` com a lista exata.
+1. Opção explícita: `-basedir <caminho>` na linha de comando ou `goldsrcInstall.path` no
+   `content.toml`.
+2. Steam no Windows: caminho do Steam no registro (`HKCU\Software\Valve\Steam`, valor
+   `SteamPath`), mais as bibliotecas listadas em `steamapps/libraryfolders.vdf`.
+3. Steam no Linux: `~/.steam/steam`, `~/.local/share/Steam` e a instalação Flatpak
+   (`~/.var/app/com.valvesoftware.Steam/.local/share/Steam`), mais `libraryfolders.vdf`.
+4. Em cada biblioteca: o manifesto do CS 1.6 (app 10 do Steam) e a pasta
+   `steamapps/common/Half-Life`, com `cstrike/` e `valve/`.
+
+A **validação** confere a lista de arquivos essenciais de `data/content/goldsrcCstrike.toml`
+(`cstrike/liblist.gam`, `valve/halflife.wad`, `cstrike/cstrike.wad`, modelos de jogador,
+`cstrike/sprites/hud.txt`, mapas oficiais). Falta de arquivo gera
+`ContentError::MissingEssentialFiles` com a lista exata.
+
+### 2.4 Fontes de conteúdo e perfis
+
+| Perfil | Fontes montadas | Quando |
+|--------|-----------------|--------|
+| `classic` | `goldsrcInstall` (`cstrike` e `valve`) | Quem tem o CS 1.6 e quer a experiência original |
+| `open` | `openContent` | Jogo sem nenhum asset da Valve |
+| `dev` | `devContent` | Desenvolvimento da engine e CI |
+| `custom` | Lista explícita no `content.toml` | Combinações próprias |
+
+- `devContent` é **gerado por código** (texturas em grade, jogador em cápsula, armas simples,
+  sons sintetizados) e permite rodar a engine de ponta a ponta sem nenhum arquivo externo.
+- `openContent` é o pacote livre da comunidade (`.nxpak`), com assets originais ou CC0/CC-BY.
+- No perfil `classic`, um arquivo essencial ausente é erro, **não** é completado com outra
+  fonte (sem fallback silencioso). `asset_stats` mostra de qual fonte veio cada recurso.
+- Sem configuração, o perfil inicial é decidido pelo assistente do primeiro start
+  ([§2.5](#25-configuração-local)). Na falta de qualquer pacote, o jogo abre com `dev`.
+
+### 2.5 Configuração local
+
+- **Primeiro start:** se a detecção encontrar uma instalação válida, o assistente pergunta
+  uma vez: *"Counter-Strike 1.6 encontrado em <caminho>. Usar os assets originais?"*. A
+  resposta é gravada no `content.toml` (perfil `classic` ou `open`/`dev`).
+- **Onde fica o `content.toml`:** no perfil do usuário, fora do repositório:
+  `%APPDATA%\Modern-Client.v2\content.toml` (Windows) e
+  `~/.config/modern-client.v2/content.toml` (Linux). Para desenvolvimento, um `content.toml`
+  no diretório de trabalho tem prioridade (e é ignorado pelo git). O repositório traz o
+  modelo comentado `content.example.toml`.
+- **Linha de comando:** `--content <perfil>`, `-basedir <caminho>`,
+  `--content-config <arquivo>`.
+- **Console:** `content_list` (fontes montadas, ordem e origem), `content_scan` (refaz a
+  detecção), `content_add <caminho>` (registra uma instalação e valida),
+  `content_profile <perfil>` (troca o perfil; vale na próxima carga de mapa).
 
 ## 3. Formatos suportados
 
@@ -239,6 +283,15 @@ inicialização do mapa. Isso obrigava os mods a cortar conteúdo.
 | Embutido (UDP, no canal confiável) | Padrão | Fragmentado, com taxa limitada por `sv_download_rate`, sem prejudicar o tráfego de jogo |
 | HTTP(S) rápido | Se `sv_downloadurl` estiver configurado | URL endereçada por conteúdo (`<url>/<hash>`), compatível com CDN e cache |
 
+**Conteúdo não redistribuível nunca sai da máquina** ([ADR-0015](adr/0015-conteudo-livre-e-assets-originais-opcionais.md)):
+
+- Cada entrada do manifesto de recursos carrega a fonte de origem. O servidor **recusa**
+  enviar arquivos vindos de fontes não redistribuíveis (`goldsrcInstall`,
+  `addons/`): `ResourceError::NotRedistributable`.
+- Esses recursos aparecem para o cliente como **requisito local**, com hash. O cliente os
+  procura nas próprias fontes. Se não encontrar, a conexão é recusada com
+  `RejectReason::MissingLocalContent{source, files}` e a instrução de como configurar.
+
 Regras de segurança do cliente:
 
 - O hash (BLAKE3) é verificado **antes** de o arquivo entrar no VFS.
@@ -263,10 +316,10 @@ Regras de segurança do cliente:
 | Enum | Exemplos |
 |------|----------|
 | `VfsError` | `InvalidPath`, `NotFound`, `MountFailed`, `ReadFailed` |
-| `InstallError` | `NotFound`, `MissingFile`, `UnsupportedVersion` |
+| `ContentError` | `InstallNotFound`, `MissingEssentialFiles{files}`, `UnknownProfile`, `SourceUnavailable{source}`, `ConfigInvalid{path, line}` |
 | `AssetError` | `DecodeFailed`, `DependencyFailed`, `BudgetExceeded`, `UnsupportedFormat` |
 | `BspError`, `MdlError`, `WadError`, `SprError`, `WavError` | Erros de formato com lump/offset |
-| `ResourceError` | `UnknownResource`, `HashMismatch`, `DownloadRejected`, `TooLarge`, `ExtensionNotAllowed` |
+| `ResourceError` | `UnknownResource`, `HashMismatch`, `DownloadRejected`, `TooLarge`, `ExtensionNotAllowed`, `NotRedistributable` |
 
 ## 10. Diagnóstico
 
