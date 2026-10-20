@@ -81,7 +81,7 @@ private:
         std::vector<SystemId> after;
         std::vector<SystemId> before;
         Version lastRun{0};
-        std::vector<SystemId> dependencies; // filled by build()
+        std::vector<SystemId> dependencies{}; // filled by build()
     };
 
     auto addSystem(const SystemDesc& desc, std::unique_ptr<System> system) -> SystemId;

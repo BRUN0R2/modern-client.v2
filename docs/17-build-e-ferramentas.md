@@ -103,6 +103,7 @@ O CMake ainda não conhece um switch `/std:c++26` para o MSVC, então o dialeto 
 | O MSVC desativa `std::println(std::ostream&, ...)` sem exceções (comportamento documentado da STL) | Saída via `std::println(stderr, ...)` ou `std::fputs` (`FILE*`) |
 | O GCC 16 tem *internal compiler error* (`module_state::mangle`) quando outra unidade usa um operador de comparação `friend` com `= default` de uma classe (não template) declarada em um módulo | Nessas classes, comparações *defaulted* são membros: `auto operator<=>(const T&) const = default` |
 | O módulo `std` do libstdc++ (GCC 16) anuncia `__cpp_lib_saturation_arithmetic`, mas não exporta `std::add_sat` e afins | O `nx.core` usa a própria aritmética saturada em todos os compiladores |
+| O GCC 16 aplica `-Wmissing-field-initializers` (de `-Wextra`) também a inicializadores designados que omitem um membro sem inicializador padrão; o MSVC não avisa | Todo membro de agregado que pode ser omitido tem inicializador padrão (`Entity entity{};`). Os obrigatórios, como `JobDesc::label`, são de tipos sem construtor padrão: omiti-los nem compila |
 
 ## 3. Presets
 

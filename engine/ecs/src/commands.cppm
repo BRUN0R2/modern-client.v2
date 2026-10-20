@@ -101,7 +101,7 @@ private:
 
     /// An existing entity, or the pending entity with index `pending` when `isPending` is set.
     struct Target {
-        Entity entity;
+        Entity entity{};
         std::uint32_t pending = 0;
         bool isPending = false;
     };
