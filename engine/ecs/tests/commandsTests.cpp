@@ -70,6 +70,24 @@ TEST_F(CommandsTest, NothingHappensUntilApply) {
     EXPECT_EQ(commands.resolve(pending), std::nullopt);
 }
 
+TEST_F(CommandsTest, ASpawnWithComponentsGoesStraightToItsArchetype) {
+    int destroyed = 0;
+    Commands commands{world};
+    const auto pending = commands.spawn(Position{.x = 3, .y = 4}, Owner{}, Tracked{destroyed});
+    const std::size_t archetypesBefore = world.stats().archetypeCount;
+    std::ignore = commands.apply(world);
+
+    EXPECT_EQ(world.stats().archetypeCount, archetypesBefore + 1) << "no archetype per added component";
+    const auto entity = commands.resolve(pending);
+    ASSERT_TRUE(entity.has_value());
+    ASSERT_NE(world.get<Position>(*entity), nullptr);
+    EXPECT_EQ(world.get<Position>(*entity)->y, 4.0F);
+    EXPECT_TRUE(world.has<Owner>(*entity));
+    EXPECT_EQ(destroyed, 0) << "the component moved into the world, it was not destroyed";
+    world.destroy(*entity);
+    EXPECT_EQ(destroyed, 1);
+}
+
 TEST_F(CommandsTest, AppliesInRecordingOrder) {
     const Entity existing = world.spawn(Position{.x = 0, .y = 0});
     Commands commands{world};
@@ -78,7 +96,7 @@ TEST_F(CommandsTest, AppliesInRecordingOrder) {
     commands.remove<Position>(existing);
 
     const auto stats = commands.apply(world);
-    EXPECT_EQ(stats.applied, 4U); // spawn, its Position, Owner, remove
+    EXPECT_EQ(stats.applied, 3U); // the spawn (with its Position), Owner, remove
     EXPECT_EQ(stats.skipped, 0U);
     EXPECT_TRUE(commands.isEmpty());
 
@@ -88,6 +106,44 @@ TEST_F(CommandsTest, AppliesInRecordingOrder) {
     EXPECT_EQ(world.get<Position>(*entity)->y, 2);
     EXPECT_FALSE(world.has<Position>(existing));
     EXPECT_EQ(world.get<Owner>(existing)->entity, existing);
+}
+
+TEST_F(CommandsTest, SpawnsOfDifferentTypesInterleaveInRecordingOrder) {
+    const Entity owner = world.spawn();
+    Commands commands{world};
+    const auto first = commands.spawn(Position{.x = 1, .y = 0});
+    const auto second = commands.spawn(Position{.x = 2, .y = 0});
+    const auto owned = commands.spawn(Owner{.entity = owner}, Position{.x = 3, .y = 0});
+    const auto bare = commands.spawn();
+    const auto last = commands.spawn(Position{.x = 4, .y = 0});
+
+    const auto stats = commands.apply(world);
+    EXPECT_EQ(stats.applied, 5U);
+    std::vector<Entity> entities;
+    for (const auto pending : {first, second, owned, bare, last}) {
+        const auto entity = commands.resolve(pending);
+        ASSERT_TRUE(entity.has_value());
+        entities.push_back(*entity);
+    }
+    EXPECT_TRUE(std::ranges::is_sorted(entities)) << "ids follow the recording order";
+    EXPECT_EQ(world.get<Position>(entities[1])->x, 2);
+    EXPECT_EQ(world.get<Position>(entities[2])->x, 3);
+    EXPECT_EQ(world.get<Owner>(entities[2])->entity, owner);
+    EXPECT_FALSE(world.has<Position>(entities[3]));
+    EXPECT_EQ(world.get<Position>(entities[4])->x, 4);
+    EXPECT_FALSE(world.has<Owner>(entities[4]));
+}
+
+TEST_F(CommandsTest, ComponentOrderInASpawnDoesNotMatter) {
+    const Entity owner = world.spawn();
+    Commands commands{world};
+    const auto first = commands.spawn(Position{.x = 1, .y = 0}, Owner{.entity = owner});
+    const auto second = commands.spawn(Owner{.entity = owner}, Position{.x = 2, .y = 0});
+    std::ignore = commands.apply(world); // every command applies: nothing targets a dead entity
+
+    EXPECT_EQ(world.get<Position>(*commands.resolve(first))->x, 1);
+    EXPECT_EQ(world.get<Position>(*commands.resolve(second))->x, 2);
+    EXPECT_EQ(world.get<Owner>(*commands.resolve(second))->entity, owner);
 }
 
 TEST_F(CommandsTest, CommandsCanTargetPendingEntities) {
@@ -118,13 +174,48 @@ TEST_F(CommandsTest, CommandsOnADeadEntityAreSkippedAndTheirComponentsDestroyed)
     EXPECT_EQ(destroyed, 1);
 }
 
+TEST_F(CommandsTest, ADestroyRunSkipsOnlyTheDeadEntities) {
+    const Entity first = world.spawn(Position{});
+    const Entity second = world.spawn(Position{});
+    Commands commands{world};
+    commands.destroy(first);
+    commands.destroy(first);
+    commands.destroy(second);
+
+    const auto stats = commands.apply(world);
+    EXPECT_EQ(stats.applied, 2U);
+    EXPECT_EQ(stats.skipped, 1U); // first, destroyed the line before
+    EXPECT_EQ(world.entityCount(), 0U);
+}
+
 TEST_F(CommandsTest, UnappliedComponentsAreDestroyedWithTheBuffer) {
     int destroyed = 0;
     {
         Commands commands{world};
         std::ignore = commands.spawn(Tracked{destroyed});
+        std::ignore = commands.spawn(Tracked{destroyed}, Position{});
+        std::ignore = commands.spawn(Tracked{destroyed}, Position{});
         commands.add(world.spawn(), Tracked{destroyed});
     }
+    EXPECT_EQ(destroyed, 4);
+}
+
+TEST_F(CommandsTest, AMovedBufferKeepsItsCommands) {
+    int destroyed = 0;
+    Commands source{world};
+    const auto pending = source.spawn(Tracked{destroyed}, Position{.x = 7, .y = 0});
+    Commands moved{std::move(source)};
+    Commands assigned{world};
+    std::ignore = assigned.spawn(Tracked{destroyed});
+    assigned = std::move(moved);
+    EXPECT_EQ(destroyed, 1) << "the overwritten buffer destroyed its own component";
+
+    std::ignore = assigned.apply(world); // a spawn always applies
+    const auto entity = assigned.resolve(pending);
+    ASSERT_TRUE(entity.has_value());
+    EXPECT_EQ(world.get<Position>(*entity)->x, 7);
+    EXPECT_EQ(destroyed, 1) << "the spawned component moved into the world";
+    world.destroy(*entity); // before `destroyed` goes out of scope, unlike the fixture's world
     EXPECT_EQ(destroyed, 2);
 }
 

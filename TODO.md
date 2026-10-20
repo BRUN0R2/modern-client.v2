@@ -176,7 +176,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] World determinism test with 0, 1, 3 and 15 workers
 - [ ] `ent_list`, `ent_dump`, `ecs_stats`
 - [x] Benchmarks with the targets of [03 §16](docs/03-ecs.md#16-performance-targets-reference-hardware-to-be-defined-in-m1) (`nxBenchEcs`)
-- [ ] Command buffers within the target of 03 §16: creating and destroying 10,000 entities takes about 6 ms against < 1 ms; profile and optimize `Commands::apply`
+- [x] Command buffers within the target of [03 §16](docs/03-ecs.md#16-performance-targets-reference-hardware-to-be-defined-in-m1): runs of spawns and destroys applied as batches
 
 ### Platform, math and console
 - [x] `nx.platform`: clocks (monotonic, wall, `Stopwatch`) and a precise deadline wait for tick and frame pacing (`SleepTimer`)

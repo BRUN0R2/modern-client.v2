@@ -63,14 +63,16 @@ void iterateTwoComponents(benchmark::State& state) {
 }
 BENCHMARK(iterateTwoComponents)->Unit(benchmark::kMicrosecond);
 
-/// 10,000 entities spawned and then destroyed through command buffers.
+/// 10,000 entities spawned and then destroyed through command buffers. The buffers are reused, as a
+/// system's buffer is from one run to the next.
 void spawnAndDestroyThroughCommands(benchmark::State& state) {
     World world;
     registerComponents(world);
+    Commands spawning{world};
+    Commands destroying{world};
     std::vector<Entity> spawned;
     spawned.reserve(kCommandEntities);
     for ([[maybe_unused]] auto iteration : state) {
-        Commands spawning{world};
         for (std::size_t index = 0; index < kCommandEntities; ++index) {
             std::ignore = spawning.spawn(Position{}, Velocity{});
         }
@@ -78,7 +80,6 @@ void spawnAndDestroyThroughCommands(benchmark::State& state) {
 
         spawned.clear();
         Query<Entity>{world}.forEach([&spawned](Entity entity) { spawned.push_back(entity); });
-        Commands destroying{world};
         for (const Entity entity : spawned) {
             destroying.destroy(entity);
         }

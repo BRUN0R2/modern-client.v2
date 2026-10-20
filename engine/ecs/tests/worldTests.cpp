@@ -170,6 +170,75 @@ TEST_F(WorldTest, AComponentLargerThanAChunkStillFits) {
     EXPECT_EQ(world.get<Big>(other)->payload.back(), std::byte{0});
 }
 
+TEST_F(WorldTest, AnUntypedSpawnPlacesABatchInOneArchetype) {
+    const auto position = *world.components().find<Position>();
+    const auto velocity = *world.components().find<Velocity>();
+    const auto onGround = *world.components().find<OnGround>();
+    std::array types{velocity, onGround, position}; // any order
+    std::array positions{Position{.x = 1, .y = 0}, Position{.x = 2, .y = 0}};
+    std::array velocities{Velocity{.dx = 3, .dy = 0}, Velocity{.dx = 4, .dy = 0}};
+    std::array<void*, types.size() * 2> sources{}; // the tag has no data: nullptr
+    for (std::size_t entity = 0; entity < 2; ++entity) {
+        for (std::size_t component = 0; component < types.size(); ++component) {
+            void*& source = sources[(entity * types.size()) + component];
+            if (types[component] == position) {
+                source = &positions[entity];
+            } else if (types[component] == velocity) {
+                source = &velocities[entity];
+            }
+        }
+    }
+    const std::size_t archetypesBefore = world.stats().archetypeCount;
+    std::array<Entity, 2> spawned{};
+    world.spawnRelocated(types, sources, spawned);
+
+    EXPECT_EQ(world.stats().archetypeCount, archetypesBefore + 1);
+    EXPECT_LT(spawned[0], spawned[1]);
+    EXPECT_EQ(world.get<Position>(spawned[0])->x, 1);
+    EXPECT_EQ(world.get<Velocity>(spawned[0])->dx, 3);
+    EXPECT_EQ(world.get<Position>(spawned[1])->x, 2);
+    EXPECT_EQ(world.get<Velocity>(spawned[1])->dx, 4);
+    EXPECT_TRUE(world.has<OnGround>(spawned[1]));
+}
+
+TEST_F(WorldTest, AnUntypedSpawnBatchFillsChunkAfterChunk) {
+    constexpr std::size_t kCount = 5'000; // several 16 KiB chunks of {Entity, Position}
+    const std::array types{*world.components().find<Position>()};
+    const Entity before = world.spawn(Position{.x = -1, .y = 0}); // the batch starts mid-chunk
+    std::vector<Position> positions(kCount);
+    std::vector<void*> sources(kCount);
+    for (std::size_t index = 0; index < kCount; ++index) {
+        positions[index] = Position{.x = static_cast<float>(index), .y = 0};
+        sources[index] = &positions[index];
+    }
+    std::vector<Entity> spawned(kCount);
+    world.spawnRelocated(types, sources, spawned);
+
+    EXPECT_GT(world.stats().chunkCount, 2U);
+    EXPECT_EQ(world.get<Position>(before)->x, -1);
+    for (std::size_t index = 0; index < kCount; ++index) {
+        ASSERT_EQ(world.get<Position>(spawned[index])->x, static_cast<float>(index)) << index;
+    }
+    std::size_t visited = 0;
+    nx::ecs::Query<Entity, const Position&>{world}.forEach(
+        [&visited](Entity, const Position&) { ++visited; });
+    EXPECT_EQ(visited, kCount + 1);
+}
+
+TEST_F(WorldTest, AnUntypedSpawnRejectsARepeatedType) {
+    const auto position = *world.components().find<Position>();
+    const std::array repeated{position, position};
+    Position first{};
+    Position second{};
+    const std::array<void*, 2> sources{&first, &second};
+    std::array<Entity, 1> spawned{};
+
+    const nx_test::ContractRecorder recorder;
+    world.spawnRelocated(repeated, sources, spawned);
+    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(world.entityCount(), 0U);
+}
+
 TEST_F(WorldTest, AStaleHandleNamesNothing) {
     const Entity entity = world.spawn(Position{.x = 1, .y = 1});
     world.destroy(entity);

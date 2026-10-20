@@ -7,6 +7,7 @@ export module nx.core:flags;
 
 import std;
 import :contracts;
+import :conversion;
 import :introspection;
 
 export namespace nx {
@@ -18,7 +19,7 @@ class Flags {
     using Word = std::uint64_t;
 
     static constexpr std::size_t kBitsPerWord = std::numeric_limits<Word>::digits;
-    static constexpr std::size_t kWordCount = (enumCount<Enum>() + kBitsPerWord - 1) / kBitsPerWord;
+    static constexpr std::size_t kWordCount = divideRoundingUp(enumCount<Enum>(), kBitsPerWord);
 
 public:
     static_assert(enumCount<Enum>() > 0, "Flags needs at least one enumerator before Count");

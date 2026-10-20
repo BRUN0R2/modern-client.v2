@@ -192,7 +192,7 @@ TEST_F(ScheduleTest, CommandBuffersApplyAtTheEndOfThePhaseInDeclarationOrder) {
 
     const auto stats = schedule.run(Phase::Simulation, *jobs);
     EXPECT_EQ(seenDuringPhase, 0U); // nothing exists until the sync point
-    EXPECT_EQ(stats.applied, 6U);
+    EXPECT_EQ(stats.applied, 3U);   // three spawns, each with its component
 
     std::vector<float> points;
     Query<const Health&>{world}.forEach([&points](const Health& health) { points.push_back(health.points); });

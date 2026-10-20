@@ -16,6 +16,12 @@ export namespace nx {
 /// its value may change between compiler versions, which would change the layout of exported types.
 inline constexpr std::size_t kCacheLineSize = 64;
 
+/// `offset` rounded up to the next multiple of `alignment`, which must be a power of two.
+[[nodiscard]] constexpr auto alignUp(std::size_t offset, std::size_t alignment) noexcept -> std::size_t {
+    expects(std::has_single_bit(alignment), "alignUp: the alignment must be a power of two");
+    return (offset + alignment - 1) & ~(alignment - 1);
+}
+
 /// Why an arena could not allocate.
 enum class ArenaError : std::uint8_t {
     Exhausted, ///< Not enough room left before the next reset.
