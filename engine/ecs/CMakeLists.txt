@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxEcs
     ALIAS nx::ecs
+    LAYER 2
     MODULES
         src/nx.ecs.cppm
         src/entity.cppm

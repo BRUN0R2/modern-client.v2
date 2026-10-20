@@ -39,16 +39,42 @@ function(nxTargetDefaults target)
     endif()
 endfunction()
 
+# Fails the configuration when `target`, in layer `layer`, depends on a project module that is
+# not in a lower layer (docs/01-architecture.md, section 1.1). Libraries that are not project
+# modules (third-party, generator expressions) have no layer and are not checked.
+function(nxCheckLayers target layer)
+    foreach(dependency IN LISTS ARGN)
+        if(NOT TARGET "${dependency}")
+            continue()
+        endif()
+        get_target_property(aliased "${dependency}" ALIASED_TARGET)
+        if(aliased)
+            set(dependency "${aliased}")
+        endif()
+        get_target_property(dependencyLayer "${dependency}" NX_LAYER)
+        if(NOT dependencyLayer)
+            continue()
+        endif()
+        if(NOT dependencyLayer LESS layer)
+            message(FATAL_ERROR
+                "nx: ${target} (layer ${layer}) depends on ${dependency} (layer ${dependencyLayer}); "
+                "a module depends only on lower layers (docs/01-architecture.md, section 1.1)")
+        endif()
+    endforeach()
+endfunction()
+
 # nxAddModuleLibrary(<target>
 #     ALIAS   <namespace::name>
+#     LAYER   <layer of docs/01-architecture.md, section 1.1>
 #     MODULES <module interface units (.cppm), relative to src/>...
 #     [SOURCES <implementation units (.cpp)>...]
 #     [DEPENDS <targets>...])
 #
 # Creates a static library whose public interface is a set of C++ named modules. Every
-# project module may `import std;` (nx::std is linked publicly).
+# project module may `import std;` (nx::std is linked publicly). The layer is checked against
+# the layers of the project modules in DEPENDS, which must be defined before.
 function(nxAddModuleLibrary target)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ALIAS" "MODULES;SOURCES;DEPENDS")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ALIAS;LAYER" "MODULES;SOURCES;DEPENDS")
 
     if(NOT arg_MODULES)
         message(FATAL_ERROR "nxAddModuleLibrary(${target}): MODULES is required")
@@ -56,6 +82,10 @@ function(nxAddModuleLibrary target)
     if(NOT arg_ALIAS)
         message(FATAL_ERROR "nxAddModuleLibrary(${target}): ALIAS is required")
     endif()
+    if(NOT arg_LAYER MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "nxAddModuleLibrary(${target}): LAYER must be a layer number, not '${arg_LAYER}'")
+    endif()
+    nxCheckLayers(${target} ${arg_LAYER} ${arg_DEPENDS})
 
     add_library(${target} STATIC)
     target_sources(${target}
@@ -70,6 +100,7 @@ function(nxAddModuleLibrary target)
     target_link_libraries(${target} PUBLIC nx::std ${arg_DEPENDS})
 
     target_compile_features(${target} PUBLIC cxx_std_${NX_CXX_STANDARD})
+    set_target_properties(${target} PROPERTIES NX_LAYER ${arg_LAYER})
     nxTargetDefaults(${target})
     add_library(${arg_ALIAS} ALIAS ${target})
 endfunction()

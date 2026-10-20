@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxData
     ALIAS nx::data
+    LAYER 2
     MODULES
         src/nx.data.cppm
         src/document.cppm

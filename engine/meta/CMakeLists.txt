@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxMeta
     ALIAS nx::meta
+    LAYER 1
     MODULES
         src/nx.meta.cppm
         src/description.cppm

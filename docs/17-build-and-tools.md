@@ -221,6 +221,10 @@ and on demand. **Running today:**
 | `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
 | `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests | Yes |
 
+Every job also checks the module layers when CMake configures
+([01 §1.1](01-architecture.md#11-module-catalog)): a dependency on the same or a higher layer fails
+the configuration.
+
 CMake and Ninja come from `pip` with a version range, and vcpkg is cloned on the fly, with
 a binary cache between runs. CI does not depend on what comes preinstalled on the runner
 image.
@@ -231,7 +235,6 @@ image.
 |-----|---------|----------|
 | `linux-clang` | Every PR | Clang on Linux, in addition to GCC |
 | `lint` | Every PR | `clang-tidy` (with modules), `rook fmt --check`, `rook lint` |
-| `layers` | Every PR | Check of the dependency graph between modules ([01 §1.1](01-architecture.md#11-module-catalog)) |
 | `sanitizers` | Every PR | ASan + UBSan on the tests, with Clang (TSan already runs with GCC) |
 | `api-compat` | Every PR | Diff of the `.rookd` files against the last release ([15 §10](15-mod-api.md#10-versioning-and-stability)) |
 | `determinism` | Every PR | The same demo with 0, 1, 3 and 15 workers and an identical hash |

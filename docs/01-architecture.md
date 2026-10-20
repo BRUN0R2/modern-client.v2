@@ -34,11 +34,11 @@ flowchart TB
         ECS[nx.ecs]
         RHI[nx.rhi + backends]
         PLAT[nx.platform]
+        DATA[nx.data · TOML schemas]
     end
     subgraph L1[Core]
         JOBS[nx.jobs]
         META[nx.meta · reflection]
-        DATA[nx.data · TOML schemas]
         MATH[nx.math]
         CONSOLE[nx.console · cvars, commands, .cfg]
     end
@@ -56,10 +56,10 @@ flowchart TB
 | `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes, SIMD | core |
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core |
-| `nx.data` | 1 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.jobs` | 1 | Job System, counters, graphs, `std::execution` scheduler | core |
 | `nx.platform` | 2 | Window, input, native file system, clocks, OS threads (SDL3) | core, math |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, meta, jobs |
+| `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math |
 | `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
@@ -76,8 +76,12 @@ flowchart TB
 | `cs.client` | 5 | HUD, menus, effects, prediction, interpolation | cs.shared, render, audio, ui |
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
 
-The dependency rules **MUST** be checked automatically in CI (the CMake target graph plus a
-script that fails on cycles or on undeclared edges).
+The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
+module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`, `cmake/nxTargets.cmake`),
+and a dependency on a project module of the same or of a higher layer fails the configuration,
+locally and in every CI job. A strict layer order also rules out cycles. The same-layer
+dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi`, `nx.render` on `nx.assets`, …)
+get their explicit declaration in that check together with the first of those modules.
 
 ## 2. Structural principles
 
