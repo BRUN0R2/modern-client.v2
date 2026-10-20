@@ -6,6 +6,7 @@ nxAddModuleLibrary(nxCore
     MODULES
         src/nx.core.cppm
         src/introspection.cppm
+        src/text.cppm
         src/source.cppm
         src/debugging.cppm
         src/contracts.cppm

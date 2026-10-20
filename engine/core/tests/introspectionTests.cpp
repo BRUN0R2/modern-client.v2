@@ -20,6 +20,14 @@ enum class Sparse : std::uint16_t {
     Tenth = 10,
 };
 
+/// A counted enum with a value left out: 1 has no enumerator.
+enum class Gapped : std::uint8_t {
+    Zero = 0,
+    Two = 2,
+    Three,
+    Count,
+};
+
 enum class Signed : std::int8_t {
     Negative = -1,
     Zero = 0,
@@ -60,6 +68,14 @@ TEST(Introspection, CountsEnumeratorsBeforeTheSentinel) {
     static_assert(nx::enumCount<sample::Weapon>() == 3);
     static_assert(nx::CountedEnum<sample::Weapon>);
     static_assert(!nx::CountedEnum<sample::Sparse>);
+    SUCCEED();
+}
+
+TEST(Introspection, ListsTheNamedEnumeratorsBeforeTheSentinel) {
+    static_assert(nx::enumerators<sample::Weapon>() ==
+                  std::array{sample::Weapon::Knife, sample::Weapon::Glock, sample::Weapon::Ak47});
+    static_assert(nx::enumerators<sample::Gapped>() ==
+                  std::array{sample::Gapped::Zero, sample::Gapped::Two, sample::Gapped::Three});
     SUCCEED();
 }
 
