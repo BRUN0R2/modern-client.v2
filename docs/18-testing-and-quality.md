@@ -96,11 +96,11 @@ The goal is to prove, with numbers, that the behavior is the same as in CS 1.6.
 
 | Metric | Where | Regression threshold |
 |--------|-------|----------------------|
-| Server tick time (p50/p99) with 32, 128 and 1024 players | `benchServer` | 5% |
-| Client frame time in `timedemo` | `benchClient` | 5% |
+| Server tick time (p50/p99) with 32, 128 and 1024 players | `nxBenchServer` | 5% |
+| Client frame time in `timedemo` | `nxBenchClient` | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
 | Job System throughput | `nxBenchJobs` | 5% |
-| Map loading (warm cache) | `benchAssets` | 10% |
+| Map loading (warm cache) | `nxBenchAssets` | 10% |
 | Rook compile time per 1000 lines | `rookBench` | 10% |
 
 Benchmarks run on a dedicated, stable machine. The results are published as a historical
@@ -110,10 +110,12 @@ dedicated machine exists they are run by hand from a release build:
 
 ## Sanitizers and analysis
 
-- TSan on every push and PR (GCC, `tsan-linux-gcc` preset). ASan + UBSan on every PR and a
-  nightly MSan when Clang joins CI.
-- `clang-tidy` as an error ([02 §12](02-coding-standards.md#12-formatting-and-static-analysis)).
-- Fuzzers with a versioned corpus. Every crash found becomes a test.
+- TSan on the tests of every pull request and every push to `main` (GCC, `tsan-linux-gcc`
+  preset). Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
+- Planned: `clang-tidy` as an error ([02 §12](02-coding-standards.md#12-formatting-and-static-analysis)),
+  with a Clang build with modules.
+- Planned, with the first parsers of external data (M2): fuzzers with a versioned corpus. Every
+  crash found becomes a test.
 
 ## Coverage targets
 
@@ -135,7 +137,7 @@ A [TODO](../TODO.md) task is only checked `[x]` when:
 - [ ] There are tests (unit, integration or parity, as the case requires) and CI is green.
 - [ ] Changed parity behavior has a parity test.
 - [ ] A new hot path has a benchmark.
-- [ ] Documentation is updated (this directory, `///` and the changelog).
+- [ ] Documentation is updated (this directory, `///`, `README.md` and `TODO.md`).
 - [ ] No `TODO` in the code without a reference.
 
 ## Bug policy

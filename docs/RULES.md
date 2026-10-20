@@ -91,7 +91,9 @@ inconsistency. The code stays understandable months later without historical con
 - No global state: dependencies arrive through constructors and composition happens in a
   single place (`app.*`). The two sanctioned exceptions are the contract handler and the
   default logger ([01 §2.1](01-architecture.md#21-no-global-state)).
-- A lower layer never calls a higher one through callbacks: the higher layer queries.
+- A lower layer never notifies a higher one through callbacks: the higher layer queries. Running
+  work a higher layer hands down to be run (a job, an ECS system, a console command's handler)
+  is not such a callback ([ADR-0018](adr/0018-work-handed-down-is-not-a-callback.md)).
 - Deterministic flows instead of "dynamic magic". Business rules live in their owning module,
   never scattered.
 

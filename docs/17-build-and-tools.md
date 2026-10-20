@@ -9,7 +9,7 @@ modern-client.v2/
 ├── vcpkg.json                  # dependency manifest (pinned baseline)
 ├── content.example.toml        # model of the per-user content configuration (ADR-0015)
 ├── .clang-format / .clang-tidy / .editorconfig
-├── cmake/                      # toolchain helpers, warnings, sanitizers, module support
+├── cmake/                      # compiler settings, the std module, target helpers, the layer check
 ├── engine/
 │   ├── core/                   # nx.core
 │   ├── math/                   # nx.math
@@ -17,7 +17,7 @@ modern-client.v2/
 │   ├── meta/                   # nx.meta (reflection facade + fallback)
 │   ├── data/                   # nx.data (TOML data and configuration files with schemas)
 │   ├── jobs/                   # nx.jobs
-│   ├── platform/               # nx.platform (SDL3)
+│   ├── platform/               # nx.platform (clocks; SDL3 window and input from M2)
 │   ├── ecs/                    # nx.ecs
 │   ├── rhi/                    # nx.rhi (interface)
 │   ├── rhiVulkan/             # nx.rhi.vulkan
@@ -29,7 +29,8 @@ modern-client.v2/
 │   ├── collision/              # nx.collision
 │   ├── ui/                     # nx.ui
 │   ├── game/                   # nx.game
-│   └── script/                 # nx.script (Rook VM host + bindings)
+│   ├── script/                 # nx.script (Rook VM host + bindings)
+│   └── testSupport/            # nx::testSupport: helpers shared by the tests (ContractRecorder)
 ├── game/
 │   ├── shared/                 # cs.shared (prediction-safe code)
 │   ├── server/                 # cs.server
@@ -66,7 +67,9 @@ modern-client.v2/
 └── TODO.md
 ```
 
-Each module of `engine/`, `game/` and `rook/` follows the organization of
+This is the target layout: a directory arrives with its first code, so the modules, games,
+applications and tools of later milestones are not in the repository yet. Each module of
+`engine/`, `game/` and `rook/` follows the organization of
 [02 §2](02-coding-standards.md#2-file-and-module-organization).
 
 ## 2. Toolchains
@@ -76,7 +79,7 @@ Each module of `engine/`, `game/` and `rook/` follows the organization of
 | CMake | 4.3+ (validated with 4.3.1 and 4.4.4) | Stable C++ modules. The `std` module is built by the project ([ADR-0014](adr/0014-std-module-built-by-the-project.md)) |
 | Ninja | 1.12+ (the one shipped with Visual Studio works) | Mandatory (module scanning) |
 | vcpkg | Manifest mode with a pinned *baseline* (the one shipped with Visual Studio works) | Reproducible builds, custom triplets without exceptions |
-| Slang | Pinned version | Shader compilation |
+| Slang | Pinned version, from M2 on | Shader compilation (planned, with the shader pipeline) |
 | Python | 3.12+ | Build and CI scripts only (not a runtime dependency) |
 
 ### 2.1 Compiler matrix
@@ -166,6 +169,9 @@ The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 
 ## 5. Dependencies
 
+In use today: toml++, xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive
+with their first consumer, in the milestone that needs them.
+
 | Library | Use | License |
 |---------|-----|---------|
 | SDL3 (from M2 on) | Window, input, device audio, voice capture | Zlib |
@@ -197,22 +203,23 @@ Rules:
   `x64-linux-nx`): static libraries, **without exceptions and without RTTI**, like our code.
   Libraries that require exceptions stay isolated behind a boundary that converts to
   `nx::Result`, or are not used.
-- `THIRD_PARTY_NOTICES.md` is generated from `vcpkg.json` in the release build.
+- `THIRD_PARTY_NOTICES.md` will be generated from `vcpkg.json` in the release build (planned,
+  before the first release).
 
 ## 6. Targets
 
 | Target | Description |
 |--------|-------------|
-| `next` | Client (includes the listen server) |
-| `nextds` | *Headless* dedicated server |
-| `nextmaster` | Master server |
-| `rookc`, `rook`, `rookLsp` | Rook toolchain |
-| `nxbake` | Asset tool |
+| `next` | Client (includes the listen server). Planned (M2–M3) |
+| `nextds` | *Headless* dedicated server. Planned (M4) |
+| `nextmaster` | Master server. Planned (M4) |
+| `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
+| `nxbake` | Asset tool. Planned (M2) |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzzing targets (libFuzzer) |
+| `fuzz*` | Fuzzing targets (libFuzzer). Planned, with the first parsers (M2) |
 
 ## 7. Continuous integration
 
@@ -264,14 +271,16 @@ image.
 - The squash commit takes the pull request title as its subject and an explicit message with
   the body and the trailers (`Signed-off-by`, `Co-Authored-By`), given at merge time:
   `gh pr merge --squash --subject "<title>" --body "<message>"`.
-- **Conventional Commits** (`feat(ecs): ...`, `fix(net): ...`) and a generated changelog.
+- **Conventional Commits** (`feat(ecs): ...`, `fix(net): ...`), from which a changelog will be
+  generated (planned, with the first release).
 - **SemVer** for the project and, separately, for the plugin API.
 - Commits with *Signed-off-by* (DCO), because of the clean room policy
   ([20](20-legal-and-licensing.md#3-clean-room)).
 
 ## 9. Development environment
 
-- **VS Code** with `clangd`, CMake Tools and the Rook extension (syntax, LSP, debugger). The
+- **VS Code** with `clangd` and CMake Tools, and the Rook extension (syntax, LSP, debugger) once
+  it exists ([TODO](../TODO.md)). The
   repository ships `.vscode/` with the recommended extensions and settings: CMake Tools uses
   the presets and copies the active preset's `compile_commands.json` to `build/`, where
   `clangd` reads it (with its module support on); formatting follows `.clang-format` on save.
@@ -279,4 +288,5 @@ image.
   with MSVC presets, Visual Studio is the IDE that understands them.
 - **Visual Studio** and **CLion** supported through CMake presets.
 - **RenderDoc** for frame capture and **Tracy** for profiling.
-- Optional *pre-commit* hooks: formatting and lint of the changed files.
+- Planned: optional *pre-commit* hooks for formatting and lint of the changed files; until
+  then, the local checks of [CONTRIBUTING.md](../CONTRIBUTING.md#local-checks).
