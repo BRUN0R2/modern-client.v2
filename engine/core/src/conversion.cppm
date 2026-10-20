@@ -1,13 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-module;
-
-// Library feature-test macros are not exported by `import std;`.
-#include <version>
-
 /// Explicit numeric conversions and overflow-aware integer arithmetic
 /// (docs/02-padroes-de-codigo.md, section 4.3). Nothing here converts implicitly or wraps silently.
+///
+/// The saturating functions are implemented here on every compiler instead of forwarding to
+/// std::add_sat and friends: GCC 16 announces them through <version> but its `std` module does
+/// not export them, and one tested implementation beats a per-compiler code path.
 export module nx.core:conversion;
 
 import std;
@@ -155,25 +154,18 @@ template <Integer Type>
     return static_cast<Type>(a * b);
 }
 
-/// `a + b` clamped to the range of `Type` (std::add_sat when the library provides it).
+/// `a + b` clamped to the range of `Type` (same results as C++26 std::add_sat).
 template <Integer Type>
 [[nodiscard]] constexpr auto addSaturated(Type a, Type b) noexcept -> Type {
-#if defined(__cpp_lib_saturation_arithmetic)
-    return std::add_sat(a, b);
-#else
     if (const auto sum = checkedAdd(a, b)) {
         return *sum;
     }
     return b > 0 ? std::numeric_limits<Type>::max() : std::numeric_limits<Type>::min();
-#endif
 }
 
-/// `a - b` clamped to the range of `Type` (std::sub_sat when the library provides it).
+/// `a - b` clamped to the range of `Type` (same results as C++26 std::sub_sat).
 template <Integer Type>
 [[nodiscard]] constexpr auto subSaturated(Type a, Type b) noexcept -> Type {
-#if defined(__cpp_lib_saturation_arithmetic)
-    return std::sub_sat(a, b);
-#else
     if (const auto difference = checkedSub(a, b)) {
         return *difference;
     }
@@ -182,15 +174,11 @@ template <Integer Type>
     } else {
         return std::numeric_limits<Type>::min();
     }
-#endif
 }
 
-/// `a * b` clamped to the range of `Type` (std::mul_sat when the library provides it).
+/// `a * b` clamped to the range of `Type` (same results as C++26 std::mul_sat).
 template <Integer Type>
 [[nodiscard]] constexpr auto mulSaturated(Type a, Type b) noexcept -> Type {
-#if defined(__cpp_lib_saturation_arithmetic)
-    return std::mul_sat(a, b);
-#else
     if (const auto product = checkedMul(a, b)) {
         return *product;
     }
@@ -199,7 +187,6 @@ template <Integer Type>
     } else {
         return std::numeric_limits<Type>::max();
     }
-#endif
 }
 
 } // namespace nx

@@ -25,7 +25,7 @@ usam a [lista de verificação](#13-lista-de-verificação-de-revisão) do final
 | `= delete("motivo")` | P2573 | Proibir conversões perigosas com mensagem clara | `= delete` simples |
 | Pack indexing (`Ts...[I]`) | P2662 | Metaprogramação de queries do ECS | `std::tuple_element` |
 | Variável placeholder `_` | P2169 | Ignorar valores em structured bindings | Nome descritivo |
-| Aritmética saturada (`std::add_sat` etc.) | P0543 | Dinheiro, contadores, acumuladores | Funções próprias em `nx.core` |
+| Aritmética saturada (`std::add_sat` etc.) | P0543 | Dinheiro, contadores, acumuladores | **Sempre** as funções próprias de `nx.core` (`addSaturated`…), com os mesmos resultados: o GCC 16 anuncia o recurso em `<version>`, mas seu módulo `std` não o exporta |
 | `std::function_ref` | P0792 | Callbacks sem alocação | Implementação própria |
 | `<debugging>` | P2546 | `breakpoint_if_debugging()` no handler de contratos | Intrínsecos por plataforma |
 | `std::optional<T&>` | P2988 | Referências opcionais sem ponteiros crus | `nx::OptionalRef<T>` |
