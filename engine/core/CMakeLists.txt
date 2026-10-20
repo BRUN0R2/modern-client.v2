@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxCore
     ALIAS nx::core
+    LAYER 0
     MODULES
         src/nx.core.cppm
         src/introspection.cppm

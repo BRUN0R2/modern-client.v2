@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxMath
     ALIAS nx::math
+    LAYER 1
     MODULES
         src/nx.math.cppm
         src/vector.cppm

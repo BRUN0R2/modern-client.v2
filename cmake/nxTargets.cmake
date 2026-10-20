@@ -5,6 +5,8 @@
 
 include_guard(GLOBAL)
 
+include(nxLayers)
+
 # Applies the project warning policy (docs/02, section 12) to a target we own.
 # Warnings are per-target so third-party code is never compiled with them.
 function(nxTargetDefaults target)
@@ -41,14 +43,16 @@ endfunction()
 
 # nxAddModuleLibrary(<target>
 #     ALIAS   <namespace::name>
+#     LAYER   <layer of docs/01-architecture.md, section 1.1>
 #     MODULES <module interface units (.cppm), relative to src/>...
 #     [SOURCES <implementation units (.cpp)>...]
 #     [DEPENDS <targets>...])
 #
 # Creates a static library whose public interface is a set of C++ named modules. Every
-# project module may `import std;` (nx::std is linked publicly).
+# project module may `import std;` (nx::std is linked publicly). The layer is checked against
+# the layers of the project modules in DEPENDS once every module exists (cmake/nxLayers.cmake).
 function(nxAddModuleLibrary target)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ALIAS" "MODULES;SOURCES;DEPENDS")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ALIAS;LAYER" "MODULES;SOURCES;DEPENDS")
 
     if(NOT arg_MODULES)
         message(FATAL_ERROR "nxAddModuleLibrary(${target}): MODULES is required")
@@ -58,6 +62,7 @@ function(nxAddModuleLibrary target)
     endif()
 
     add_library(${target} STATIC)
+    nxDeclareModuleLayer(${target} "${arg_LAYER}" DEPENDS ${arg_DEPENDS})
     target_sources(${target}
         PUBLIC
             FILE_SET CXX_MODULES

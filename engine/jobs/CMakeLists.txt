@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxJobs
     ALIAS nx::jobs
+    LAYER 1
     MODULES
         src/nx.jobs.cppm
         src/workStealingDeque.cppm

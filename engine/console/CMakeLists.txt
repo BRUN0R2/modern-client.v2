@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxConsole
     ALIAS nx::console
+    LAYER 1
     MODULES
         src/nx.console.cppm
         src/text.cppm

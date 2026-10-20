@@ -3,6 +3,7 @@
 
 nxAddModuleLibrary(nxPlatform
     ALIAS nx::platform
+    LAYER 2
     MODULES
         src/nx.platform.cppm
         src/clock.cppm
