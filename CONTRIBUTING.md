@@ -51,17 +51,33 @@ New files need an SPDX header (or a `REUSE.toml` annotation) and LF line endings
 
 ## Commits
 
-- One commit per finished logical change, with its tests, documentation and `TODO.md`
-  updated in the same commit.
+- Work on a short-lived branch; `main` accepts no direct pushes.
+- One pull request per finished logical change, with its tests, documentation and `TODO.md`
+  updated in the same change. Commits inside the branch may be as many as you need: the merge
+  squashes them into one commit.
 - Conventional Commits in English with a short imperative summary:
   `feat(console): add cvarlist, cmdlist and find`, `fix(ecs): ...`, `docs: ...`, `ci: ...`.
 - Sign off every commit (`git commit -s`). The `Signed-off-by` line is your statement, under
   the [Developer Certificate of Origin](https://developercertificate.org), that you have the
   right to submit the change under the project's licenses.
+- Sign every commit cryptographically: `main` refuses pull requests with unsigned commits. With
+  an SSH key used only for signing:
+
+  ```bash
+  ssh-keygen -t ed25519 -C "commit signing" -f ~/.ssh/commitSigning
+  git config gpg.format ssh
+  git config user.signingkey ~/.ssh/commitSigning
+  git config commit.gpgsign true
+  gh ssh-key add ~/.ssh/commitSigning.pub --type signing   # or GitHub → Settings → SSH and GPG keys
+  ```
 
 ## Pull requests
 
-- Open the pull request against `main`; it merges only with every required CI job green.
+- Open the pull request against `main`; its title is the Conventional Commit subject of the
+  final commit.
+- It merges only as a squash merge, with every required CI job green on the branch brought up
+  to date with `main`. GitHub signs the squash commit, so every commit on `main` is verified
+  ([docs/17 §8](docs/17-build-and-tools.md#8-workflow)).
 - Describe what changed and why, and link the `TODO.md` item or the issue.
 - Reviews use the checklist of [docs/02 §13](docs/02-coding-standards.md#13-review-checklist).
 - Keep the pull request to one logical change; split unrelated work.

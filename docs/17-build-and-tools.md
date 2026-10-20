@@ -241,8 +241,19 @@ image.
 
 ## 8. Workflow
 
-- **Trunk-based:** a protected `main`. Changes come in through PRs with review and a green
-  CI.
+- **Trunk-based:** a protected `main`. Every change comes in through a pull request from a
+  short-lived branch; it merges only when the five CI jobs of [§7](#7-continuous-integration)
+  pass on the branch brought up to date with `main`, and only as a **squash merge**, which
+  GitHub signs: every commit on `main` is a green, *Verified* commit, one per logical change.
+- **Branch protection of `main`** (repository settings, also binding administrators): pull
+  request required, the five CI jobs required and up to date, signed commits, linear
+  history, no force push and no deletion; merge commits and rebase merges are disabled, and
+  merged branches are deleted. GitHub applies the signature rule to the commits of the pull
+  request's branch too, so contributors sign every commit they make
+  ([CONTRIBUTING.md](../CONTRIBUTING.md#commits)); the squash commit is signed by GitHub.
+- The squash commit takes the pull request title as its subject and an explicit message with
+  the body and the trailers (`Signed-off-by`, `Co-Authored-By`), given at merge time:
+  `gh pr merge --squash --subject "<title>" --body "<message>"`.
 - **Conventional Commits** (`feat(ecs): ...`, `fix(net): ...`) and a generated changelog.
 - **SemVer** for the project and, separately, for the plugin API.
 - Commits with *Signed-off-by* (DCO), because of the clean room policy
