@@ -127,7 +127,7 @@ mesmo efeito**. Lista inicial (o catálogo completo vive em `data/cstrike/cvars.
 
 Cvars são **tipadas** (`bool`, inteiro com faixa, float com faixa, string, enum), mas
 aceitam a sintaxe textual clássica no console. Valor inválido é recusado com mensagem
-clara (`mp_freezetime: expected seconds in [0, 60], got "abc"`). Não há conversão
+clara (`mp_freezetime: expected a whole number in [0, 60], got "abc"`). Não há conversão
 silenciosa para 0.
 
 ## 7. Identidade de jogadores
@@ -194,6 +194,6 @@ Tentativas de senha incorretas sofrem bloqueio progressivo por IP (`rcon_ban_aft
 | Enum | Exemplos |
 |------|----------|
 | `ServerError` | `PortInUse`, `MapNotFound`, `InvalidMaxPlayers{value, range}`, `ConfigInvalid` |
-| `CvarError` | `Unknown`, `ReadOnly`, `OutOfRange`, `InvalidValue`, `CheatProtected` |
+| `CvarError` | `InvalidName`, `NameTaken`, `InvalidDefinition`, `InvalidValue`, `OutOfRange` (as proteções `CheatProtected` e `ServerProtected` são do console, [12 §9](12-interface-hud-e-console.md#9-erros-tipados)) |
 | `RconError` | `BadPassword`, `Locked{until}`, `Disabled` |
 | `MasterError` | `Unreachable`, `Rejected`, `HeartbeatTimeout` |

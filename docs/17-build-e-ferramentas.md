@@ -13,6 +13,7 @@ modern-client.v2/
 ├── engine/
 │   ├── core/                   # nx.core
 │   ├── math/                   # nx.math
+│   ├── console/                # nx.console (cvars, commands, .cfg)
 │   ├── meta/                   # nx.meta (reflection facade + fallback)
 │   ├── jobs/                   # nx.jobs
 │   ├── platform/               # nx.platform (SDL3)

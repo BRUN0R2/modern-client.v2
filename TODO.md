@@ -170,9 +170,11 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `nx.platform`: janela, eventos e entrada SDL3, mouse raw, relógios
 - [x] `nx.math`: vetores, matrizes (`Mat3`, `Mat3x4`, `Mat4`), quaternions, ângulos GoldSrc (`angleVectors`, `vectorAngles`), AABB e planos, com ponto flutuante determinístico ([07 §6](docs/07-simulacao-e-fisica.md#6-determinismo))
 - [ ] SIMD no `nx.math`, quando um benchmark mostrar ganho
-- [ ] Sistema de cvars tipadas (flags `Archive`, `Notify`, `Cheat`, `ServerProtected`)
-- [ ] Sistema de comandos (aliases, `+`/`-`, `wait`, `exec`, `;`, aspas)
-- [ ] Parser de `.cfg` compatível com o original
+- [x] Sistema de cvars tipadas (flags `Archive`, `Notify`, `Cheat`, `ServerProtected`) no `nx.console` ([12 §5.3](docs/12-interface-hud-e-console.md#53-módulo-nxconsole))
+- [x] Sistema de comandos (aliases, `+`/`-`, `wait`, `exec`, `;`, aspas, `echo`, `toggle`, `incrementvar`)
+- [x] Parser de `.cfg` compatível com o original
+- [ ] Comandos `cvarlist`, `cmdlist` e `find` ([09 §8](docs/09-servidor-dedicado.md#8-comandos-de-console-do-servidor))
+- [ ] Níveis de log por cvar (`log_level_<categoria>`, [02 §10](docs/02-padroes-de-codigo.md#10-log))
 - [x] Teste de determinismo com 0, 1, 3 e 15 workers (`nxIntegrationTests`: `nx.math` em sistemas paralelos do ECS, *hash* do mundo a cada tick)
 
 ---

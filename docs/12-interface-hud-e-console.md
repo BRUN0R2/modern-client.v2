@@ -130,6 +130,52 @@ Sem os limites históricos de canais de texto e tamanho de mensagem:
 | `userconfig.cfg` | Configuração pessoal do usuário |
 | `video.toml`, `audio.toml` | Dispositivo e modo de vídeo e áudio (novo, estruturado) |
 
+### 5.3 Módulo `nx.console`
+
+A linguagem do console é a mesma no cliente e no servidor e vive no `nx.console` (camada 1,
+só depende do `nx.core`). O console da UI (`nx.ui`) e o terminal do servidor são visões sobre
+um `nx::console::Console`, que escreve respostas e falhas num `ConsoleOutput` e lê os arquivos
+do `exec` por um `ConfigFiles` (o VFS, a partir do M2).
+
+- **Um só espaço de nomes**, sem diferenciar maiúsculas, para cvars, comandos e aliases
+  (`SV_GRAVITY 600` altera `sv_gravity`). Registrar um nome já usado falha com `NameTaken`.
+- **Sintaxe dos `.cfg`:** um comando termina numa quebra de linha ou num `;` fora de aspas e
+  fora de comentário. Aspas agrupam palavras, sem sequências de escape, e aspas sem fechamento
+  vão até o fim do comando. `//` no início de uma palavra comenta o resto da linha, então
+  `http://...` sem aspas continua uma palavra só. `
+` e tabulação são espaço, e o BOM UTF-8 no
+  início de um arquivo é ignorado.
+- **Buffer de comandos:** `addText` enfileira, `insertText` passa à frente (aliases e `exec`
+  rodam no ponto em que são chamados) e `execute()` roda até esvaziar ou até um `wait`, que
+  deixa o resto para o próximo frame. Mais de 65 536 expansões de alias e `exec` numa mesma
+  execução são um laço: o buffer é descartado e a falha `ExpansionLimit` é reportada.
+- **Aliases:** o corpo é o resto das palavras, unidas por espaço. Argumentos depois do nome de
+  um alias são ignorados, como no original. `alias nome` sozinho define um alias vazio, e
+  `alias` lista todos.
+- **Botões `+`/`-`:** `registerButton` cria `+nome` e `-nome`. Uma tecla (o número que o bind
+  passa, `+jump 32`) segura o botão até soltar. Sem tecla, quem segura é o console, e `-nome`
+  sem tecla solta tudo. As bordas (pressionado e solto desde a última leitura) não se perdem
+  quando `+` e `-` chegam no mesmo frame, como num bind na roda do mouse.
+- **Cvars tipadas:** `bool` (`0` ou `1`), inteiro de 32 bits (aceita `10.0` e `1e3`, recusa
+  `10.5`), `float` finito, texto (sem aspas duplas nem quebras de linha, para que o
+  `config.cfg` sempre releia o valor) e `enum` com `Count` (aceita o número ou o nome do
+  enumerador e grava o número). Números podem ter faixa. Texto recusado nunca vira 0:
+  `mp_freezetime: expected a whole number in [0, 60], got "abc"`.
+
+| Flag | Efeito |
+|------|--------|
+| `Archive` | Entra no `config.cfg`: `Console::archivedCvars()` gera as linhas `nome "valor"` |
+| `Notify` | Mudança anunciada aos jogadores e cvar listada no `A2S_RULES`. O console só marca; quem anuncia compara `revision()` |
+| `Cheat` | O console só altera com cheats liberados (`Console::setCheats`, que segue o `sv_cheats` do servidor). Fora disso, `CheatProtected` |
+| `ServerProtected` | O valor vem do servidor: o console nunca altera (`ServerProtected`), só o código. No cliente, é o caso das cvars de movimento replicadas para a predição |
+
+O código lê e escreve pela alça tipada (`Cvar<float>`), que valida tipo e faixa, mas não as
+flags. O `Console` pertence a uma thread (a principal, entre frames), e a simulação copia os
+valores de que precisa no início do tick (`MovementSettings`).
+
+Comandos embutidos: `alias`, `wait`, `exec`, `echo`, `toggle` (alterna entre 0 e 1 ou percorre
+os valores dados) e `incrementvar` (soma o passo e dá a volta na faixa).
+
 ## 6. Entrada
 
 - **SDL3** para teclado, mouse e gamepad.
@@ -161,6 +207,8 @@ Sem os limites históricos de canais de texto e tamanho de mensagem:
 
 | Enum | Exemplos |
 |------|----------|
-| `ConsoleError` | `UnknownCommand`, `UnknownCvar`, `InvalidValue`, `CheatProtected`, `ServerProtected` |
+| `ConsoleError` | `UnknownCommand` (com sugestão), `UnknownCvar`, `InvalidValue`, `CheatProtected`, `ServerProtected`, `InvalidArguments`, `InvalidName`, `NameTaken`, `ExecFailed`, `ExpansionLimit`, `CommandFailed` |
+| `CvarError` | `InvalidName`, `NameTaken`, `InvalidDefinition`, `InvalidValue`, `OutOfRange` |
+| `ConfigFileError` | `NotFound`, `InvalidPath`, `Unreadable` |
 | `UiError` | `LayoutInvalid`, `MissingSprite`, `UnknownLocaleKey` |
 | `InputError` | `UnknownKeyName`, `DeviceUnavailable` |

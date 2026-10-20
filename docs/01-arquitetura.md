@@ -39,6 +39,7 @@ flowchart TB
         JOBS[nx.jobs]
         META[nx.meta · reflexão]
         MATH[nx.math]
+        CONSOLE[nx.console · cvars, comandos, .cfg]
     end
     subgraph L0[Base]
         CORE[nx.core · memória, erros, tipos fortes, log, tempo]
@@ -52,6 +53,7 @@ flowchart TB
 |------------|--------|------------------|------------|
 | `nx.core` | 0 | `nx::Failure<E>`/`nx::Result`, contratos, tipos fortes e unidades, conversões explícitas, `EnumArray`/`Flags`, nomes de tipo e enum, alocadores, log, tempo, hashing, IDs | `std` |
 | `nx.math` | 1 | Vetores, matrizes, quaternions, ângulos GoldSrc, AABB, planos, SIMD | core |
+| `nx.console` | 1 | Cvars tipadas, comandos, aliases, botões `+`/`-`, buffer de comandos e parser de `.cfg`, compartilhados por cliente e servidor ([12 §5.3](12-interface-hud-e-console.md#53-módulo-nxconsole)) | core |
 | `nx.meta` | 1 | Fachada de reflexão estática (P2996 + anotações), com fallback | core |
 | `nx.jobs` | 1 | Job System, contadores, grafos, scheduler `std::execution` | core |
 | `nx.platform` | 2 | Janela, entrada, sistema de arquivos nativo, relógios, threads do SO (SDL3) | core, math |
@@ -64,7 +66,7 @@ flowchart TB
 | `nx.render` | 3 | Render graph, mundo BSP, modelos de estúdio, sprites, partículas, GPU skinning | rhi, ecs, assets, jobs |
 | `nx.audio` | 3 | Mixer, espacialização, DSP, streaming, voz | assets, jobs, platform |
 | `nx.net` | 3 | Transporte UDP, criptografia, canais, snapshots, replicação | core, meta, jobs, ecs |
-| `nx.ui` | 3 | HUD por sprites, toolkit de menus, console, fontes | render, assets, platform |
+| `nx.ui` | 3 | HUD por sprites, toolkit de menus, console (visão sobre o `nx.console`), fontes | render, assets, platform, console |
 | `nx.game` | 4 | Entidades de mapa, triggers, movers, spawn, regras genéricas | ecs, collision, assets, net |
 | `nx.script` | 4 | Rook VM host, bindings gerados, isolates, permissões | ecs, meta, jobs, game |
 | `cs.shared` | 5 | Movimento, armas e regras compartilhadas para predição | game, collision |
