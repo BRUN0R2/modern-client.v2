@@ -188,6 +188,12 @@ Incorrect password attempts face a progressive per-IP lockout (`rcon_ban_after`,
 - **Metrics:** tick p50/p99, players, bandwidth, memory per plugin, job queues.
 - **Docker:** an official Linux `nextds` image. With the `classic` profile, the original
   installation is mounted as a read-only volume.
+- **Automatic updates** (planned, M4): the server product updates independently of the client.
+  `nextds` applies a new release at start and, while running, switches to a downloaded one only
+  when `sv_update_policy` allows (`empty` by default, `mapchange`, `notify`, `off`), never
+  during a match; `sv_update_interval` sets how often it checks, and the `update` command
+  applies a pending release ([21 §3.2](21-launcher-and-updates.md#32-server-automatic-never-during-a-match)).
+  In the Docker image, the image is what updates.
 
 ## 12. Typed errors
 

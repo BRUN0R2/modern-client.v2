@@ -9,6 +9,7 @@ declared in this table.
 ```mermaid
 flowchart TB
     subgraph L6[Application]
+        APP_L[nextLauncher · updates the client, then starts it]
         APP_C[next · client]
         APP_S[nextds · dedicated server]
         TOOLS[nxbake · rook · tools]
@@ -74,7 +75,9 @@ flowchart TB
 | `cs.shared` | 5 | Movement, weapons and rules shared for prediction | game, collision |
 | `cs.server` | 5 | Server rules: rounds, economy, objectives, admin | cs.shared, script, net |
 | `cs.client` | 5 | HUD, menus, effects, prediction, interpolation | cs.shared, render, audio, ui |
+| `nx.update` | 3 | Updates of the client and the server products: signed release metadata, content-addressed chunks, atomic installs and rollback ([21](21-launcher-and-updates.md)). Planned (M4) | core, jobs, platform, net |
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
+| `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
 module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every
@@ -156,6 +159,7 @@ decides what runs, the lower one only when ([ADR-0018](adr/0018-work-handed-down
 | Connected client | `next` | cs.client, render, audio, UI, networking (client), prediction |
 | Listen server | `next` | Everything in the client **plus** a `cs.server` on its own thread, connected through a *loopback* transport without packet serialization |
 | Dedicated server | `nextds` | cs.server, networking (server), script host. **No** render, audio or UI (*headless* build) |
+| Launcher | `nextLauncher` | `nx.update`: updates the launcher and the client, then starts `next`; the dedicated server updates itself through `nx.update` too ([21](21-launcher-and-updates.md)) |
 | Tools | `nxbake`, `rook` | Only the libraries they need |
 
 The server of the listen server is **the same code** as the dedicated one. The loopback only

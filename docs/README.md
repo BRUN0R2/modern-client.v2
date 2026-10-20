@@ -42,6 +42,7 @@ only within them.
 | 18 | [Testing and quality](18-testing-and-quality.md) | Testing strategy, parity, determinism, performance |
 | 19 | [Roadmap](19-roadmap.md) | Milestones M0–M8 and exit criteria |
 | 20 | [Legal and licensing](20-legal-and-licensing.md) | Valve assets, clean room, trademarks, license |
+| 21 | [Launcher and updates](21-launcher-and-updates.md) | Automatic, independent updates of the client and the server: signed, delta, atomic |
 | — | [Glossary](glossary.md) | GoldSrc, engine and Rook terms |
 | — | [ADRs](adr/README.md) | Architecture decision records |
 
