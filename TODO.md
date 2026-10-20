@@ -168,11 +168,12 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Plataforma, matemática e console
 - [ ] `nx.platform`: janela, eventos e entrada SDL3, mouse raw, relógios
-- [ ] `nx.math`: vetores, matrizes, quaternions, ângulos GoldSrc (`AngleVectors`), AABB, planos
+- [x] `nx.math`: vetores, matrizes (`Mat3`, `Mat3x4`, `Mat4`), quaternions, ângulos GoldSrc (`angleVectors`, `vectorAngles`), AABB e planos, com ponto flutuante determinístico ([07 §6](docs/07-simulacao-e-fisica.md#6-determinismo))
+- [ ] SIMD no `nx.math`, quando um benchmark mostrar ganho
 - [ ] Sistema de cvars tipadas (flags `Archive`, `Notify`, `Cheat`, `ServerProtected`)
 - [ ] Sistema de comandos (aliases, `+`/`-`, `wait`, `exec`, `;`, aspas)
 - [ ] Parser de `.cfg` compatível com o original
-- [ ] Teste de determinismo com 0, 1, 3 e 15 workers
+- [x] Teste de determinismo com 0, 1, 3 e 15 workers (`nxIntegrationTests`: `nx.math` em sistemas paralelos do ECS, *hash* do mundo a cada tick)
 
 ---
 
@@ -212,6 +213,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Testes de conformidade da RHI
 
 ### Render
+- [ ] Matrizes de visão e projeção no `nx.math`, com as convenções de *clip space* e profundidade do renderer ([05](docs/05-renderizacao.md))
 - [ ] Render graph (barreiras, aliasing, eliminação de passes, gravação paralela)
 - [ ] Mundo BSP: PVS, frustum culling, agrupamento por textura e lightmap
 - [ ] Atlas de lightmaps e lightstyles combinados no shader

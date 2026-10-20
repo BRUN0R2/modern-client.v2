@@ -68,6 +68,9 @@ O objetivo é provar, com números, que o comportamento é igual ao do CS 1.6.
 - Teste obrigatório: o mesmo replay com `jobs_workers` 0, 1, 3 e 15 produz **hash de
   estado idêntico a cada tick** ([04 §8](04-job-system.md#8-determinismo)).
 - Bugs de gameplay são reportados com replay. O replay vira teste de regressão.
+- Até o replay existir (M3), o `DeterminismTest` (`nxIntegrationTests`) cobre a regra no
+  núcleo de runtime: um mundo movido pelo `nx.math` em sistemas paralelos do ECS produz o
+  mesmo *hash* a cada tick com 0, 1, 3 e 15 workers.
 
 ## Rede
 

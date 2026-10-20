@@ -7,5 +7,6 @@ endif()
 
 # Next Engine modules, in dependency order (docs/01-arquitetura.md, section 1.1).
 add_subdirectory(core)
+add_subdirectory(math)
 add_subdirectory(jobs)
 add_subdirectory(ecs)

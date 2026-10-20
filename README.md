@@ -21,10 +21,11 @@ jogabilidade e servidores idênticos ao original e **sem os limites históricos*
 
 ## Status
 
-Marco **M0 (Fundação)** em andamento: build com módulos C++ e `import std`, presets, vcpkg
-e o módulo `nx.core` (erros tipados, contratos, tipos fortes e unidades) com testes. A
-documentação de arquitetura está em [`docs/`](docs/README.md) e o backlog em
-[`TODO.md`](TODO.md).
+Marco **M1 (Núcleo de runtime)** em andamento, sobre a fundação do M0 (build com módulos
+C++ e `import std`, presets, vcpkg e CI): `nx.core` (erros tipados, contratos, tipos fortes
+e unidades), `nx.jobs` (Job System com *work stealing*), `nx.ecs` (ECS por arquétipos) e
+`nx.math` (vetores, matrizes, quaternions, ângulos GoldSrc), com testes. A documentação de
+arquitetura está em [`docs/`](docs/README.md) e o backlog em [`TODO.md`](TODO.md).
 
 ## Como compilar
 

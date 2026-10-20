@@ -33,3 +33,7 @@ if(NX_BUILD_TESTS)
 endif()
 
 add_subdirectory(engine)
+
+if(NX_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

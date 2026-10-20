@@ -191,6 +191,10 @@ Cada tipo é um sistema ECS próprio, com ordem de execução documentada no sch
   servidor, para que o código de predição seja literalmente o mesmo.
 - Flags de ponto flutuante fixas: sem `-ffast-math`, `-ffp-contract=off`, mesmo modo de
   arredondamento em todas as threads.
+- O `nx.math` segue essas regras: aritmética escalar em `float` sem contração em *fused
+  multiply-add*, e seno, cosseno e arcos avaliados em `double` e arredondados uma vez para
+  `float`, o que esconde diferenças de último bit entre bibliotecas C. O teste
+  `FloatingPointTest.MultiplyAddIsNeverFused` falha se uma flag de build reativar a contração.
 - Determinismo garantido **por binário e plataforma**. Entre plataformas diferentes
   (Windows × Linux), a predição corrige pequenas divergências como qualquer erro de
   predição.

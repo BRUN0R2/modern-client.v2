@@ -201,6 +201,7 @@ Regras:
 | `rookc`, `rook`, `rookLsp` | Toolchain Rook |
 | `nxbake` | Ferramenta de assets |
 | `<módulo>Tests` (ex.: `nxCoreTests`) | Testes por módulo, registrados no CTest um a um (`gtest_discover_tests`) |
+| `nxIntegrationTests` | Testes que atravessam módulos (`tests/integration`), como o de determinismo com 0, 1, 3 e 15 workers |
 | `nxBench*` | Benchmarks |
 | `fuzz*` | Alvos de fuzzing (libFuzzer) |
 
