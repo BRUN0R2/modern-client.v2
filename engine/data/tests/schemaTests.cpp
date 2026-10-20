@@ -37,7 +37,20 @@ struct Settings {
     std::vector<Mount> mounts;
 };
 
+struct Counter {
+    std::int64_t value = 0;
+};
+
 } // namespace nx_test
+
+template <>
+struct nx::meta::Description<nx_test::Counter> {
+    static constexpr std::string_view kName = "nx_test::Counter";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx_test::Counter::value>("value",
+                                                  nx::data::Range{.maximum = 9'007'199'254'740'992.0}),
+    };
+};
 
 template <>
 struct nx::meta::Description<nx_test::Mount> {
@@ -159,9 +172,9 @@ TEST(Schema, EveryProblemIsATypedFailureWithItsPlace) {
         {"fraction in an integer", withLine("maxPlayers", "maxPlayers = 3.5"), DataError::WrongType,
          "server.toml:3:14: maxPlayers: expected a whole number, got a number with a fraction"},
         {"type limit", withLine("maxPlayers", "maxPlayers = 300"), DataError::OutOfRange,
-         "server.toml:3:14: maxPlayers: 300 does not fit in [0, 255]"},
+         "server.toml:3:14: maxPlayers: expected a whole number in [0, 255], got 300"},
         {"range annotation", withLine("maxPlayers", "maxPlayers = 65"), DataError::OutOfRange,
-         "server.toml:3:14: maxPlayers: expected a number in [1, 64], got 65"},
+         "server.toml:3:14: maxPlayers: expected a whole number in [1, 64], got 65"},
         {"float range", withLine("volume", "volume = 1.5"), DataError::OutOfRange,
          "server.toml:4:10: volume: expected a number in [0, 1], got 1.5"},
         {"not finite", withLine("gravity", "gravity = inf"), DataError::OutOfRange,
@@ -170,7 +183,7 @@ TEST(Schema, EveryProblemIsATypedFailureWithItsPlace) {
          R"(server.toml:6:8: kind: expected one of "engine", "devContent", "goldsrcInstall", got "GoldsrcInstall")"},
         {"nested table", withLine("primary", R"(primary = { directory = "cstrike", priority = -1 })"),
          DataError::OutOfRange,
-         "server.toml:10:47: primary.priority: expected a number of at least 0, got -1"},
+         "server.toml:10:47: primary.priority: expected a whole number of at least 0, got -1"},
         {"array element", withLine("tags", R"(tags = ["classic", 3])"), DataError::WrongType,
          "server.toml:9:20: tags[1]: expected text, got a whole number"},
         {"array of tables", withLine("directory = \"valve\"", "directory = 7"), DataError::WrongType,
@@ -184,6 +197,22 @@ TEST(Schema, EveryProblemIsATypedFailureWithItsPlace) {
         EXPECT_EQ(settings.error().code, problem.code);
         EXPECT_TRUE(settings.error().detail.starts_with(problem.detail)) << settings.error().detail;
     }
+}
+
+TEST(Schema, ATypeLimitFailureKeepsTheConversionAsItsCause) {
+    const auto settings = parse(withLine("maxPlayers", "maxPlayers = 300"));
+    ASSERT_FALSE(settings.has_value());
+    ASSERT_EQ(settings.error().cause.size(), 1U);
+    EXPECT_EQ(settings.error().cause.records().front().domain, "ConversionError");
+}
+
+TEST(Schema, WholeNumberRangesCompareExactly) {
+    // 2^53 + 1 is no double: compared as doubles, it would equal the bound 2^53 and pass.
+    const auto exact = nx::data::parseToml<nx_test::Counter>("value = 9007199254740993", "counter.toml");
+    ASSERT_FALSE(exact.has_value());
+    EXPECT_EQ(exact.error().code, DataError::OutOfRange);
+    EXPECT_TRUE(
+        nx::data::parseToml<nx_test::Counter>("value = 9007199254740992", "counter.toml").has_value());
 }
 
 } // namespace

@@ -160,6 +160,7 @@ auto Document::operator=(Document&& other) noexcept -> Document& = default;
 Document::~Document() = default;
 
 auto Document::root() const noexcept -> TableView {
+    expects(m_tree != nullptr, "Document::root: the document was moved from");
     return NodeAccess::view(m_tree->table);
 }
 

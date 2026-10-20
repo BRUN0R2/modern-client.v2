@@ -14,11 +14,15 @@ export namespace nx::data {
 
 /// Inclusive bounds of a numeric field, as an annotation of its description:
 /// `nx::meta::field<&Weapon::damage>("damage", nx::data::Range{.minimum = 0.0, .maximum = 500.0})`.
+/// An infinite bound is no bound. A Range goes only on fields that hold numbers (also through a
+/// quantity, a duration, an array or an optional), with minimum <= maximum; on whole numbers its
+/// bounds are whole and within 2^53 of zero, so they compare exactly. A description that breaks this does
+/// not compile.
 struct Range {
     double minimum = -std::numeric_limits<double>::infinity();
     double maximum = std::numeric_limits<double>::infinity();
 
-    auto operator==(const Range&) const -> bool = default;
+    auto operator==(const Range&) const noexcept -> bool = default;
 };
 
 namespace detail {
@@ -49,13 +53,13 @@ inline constexpr bool kIsDuration<std::chrono::duration<Representation, Period>>
 
 } // namespace detail
 
-/// A single value of a data file: a boolean, an integer, a floating-point number, a quantity or a
+/// A single value of a data file: a boolean, an integer, a float or a double, a quantity or a
 /// duration (written as its number), text, or an enum with Count (written as the enumerator's
 /// name with a lowercase first letter: `GoldsrcInstall` is "goldsrcInstall").
 template <class Type>
-concept DataScalar = std::same_as<Type, bool> || Integer<Type> || std::floating_point<Type> ||
-                     std::same_as<Type, std::string> || CountedEnum<Type> || detail::kIsQuantity<Type> ||
-                     detail::kIsDuration<Type>;
+concept DataScalar = std::same_as<Type, bool> || Integer<Type> || std::same_as<Type, float> ||
+                     std::same_as<Type, double> || std::same_as<Type, std::string> || CountedEnum<Type> ||
+                     detail::kIsQuantity<Type> || detail::kIsDuration<Type>;
 
 /// A described struct that data files hold as a table.
 template <class Type>
@@ -96,24 +100,104 @@ struct Location {
     [[nodiscard]] auto element(std::size_t index) const -> Location;
 };
 
-/// `code` with "<source>:<line>:<column>: <path>: <message>" as the detail.
+/// "<source>:<line>:<column>: <path>: <message>", the detail of every failure.
+[[nodiscard]] auto describeAt(const Location& at, SourcePosition position, std::string_view message)
+    -> std::string;
+
+/// `code` with the place and `message` as the detail.
 [[nodiscard]] auto failAt(DataError code, const Location& at, SourcePosition position,
                           std::string_view message) -> std::unexpected<Failure<DataError>>;
+
+/// As above, with the failure that caused it chained as the cause.
+template <class CauseCode>
+[[nodiscard]] auto failAt(DataError code, const Location& at, SourcePosition position,
+                          std::string_view message, Failure<CauseCode> cause)
+    -> std::unexpected<Failure<DataError>> {
+    return fail(code, describeAt(at, position, message), std::move(cause));
+}
 
 /// WrongType: "expected <expected>, got <what the node is>".
 [[nodiscard]] auto wrongType(NodeView node, const Location& at, std::string_view expected)
     -> std::unexpected<Failure<DataError>>;
 
-/// OutOfRange when `value` (shown as `text`) is outside `range`.
-[[nodiscard]] auto checkRange(double value, std::string_view text, const std::optional<Range>& range,
-                              const Location& at, SourcePosition position) -> Result<void, DataError>;
+/// `"a", "b", "c"`: how failures list what they expected.
+template <std::ranges::input_range Items>
+[[nodiscard]] auto quotedList(const Items& items) -> std::string {
+    std::string list;
+    for (const auto& item : items) {
+        list += std::format("{}\"{}\"", list.empty() ? "" : ", ", item);
+    }
+    return list;
+}
 
 /// UnknownKey for the first key of `table`, in file order, that is not one of `names`.
 [[nodiscard]] auto checkKeys(TableView table, const Location& at, std::span<const std::string_view> names)
     -> Result<void, DataError>;
 
+/// OutOfRange when the whole number `value` is outside `range`, compared exactly.
+[[nodiscard]] auto checkWholeRange(std::int64_t value, const std::optional<Range>& range, const Location& at,
+                                   SourcePosition position) -> Result<void, DataError>;
+
+[[nodiscard]] auto readBoolean(NodeView node, const Location& at) -> Result<bool, DataError>;
+[[nodiscard]] auto readText(NodeView node, const Location& at) -> Result<std::string, DataError>;
+
+/// A finite number, whole or not, of magnitude up to `largest` and within `range`.
+[[nodiscard]] auto readNumber(NodeView node, const Location& at, double largest,
+                              const std::optional<Range>& range) -> Result<double, DataError>;
+
 /// How data files write an enumerator: its name with a lowercase first letter.
 [[nodiscard]] auto dataSpelling(std::string_view enumeratorName) -> std::string;
+
+/// Whether `text` is the data spelling of `enumeratorName`.
+[[nodiscard]] auto isDataSpelling(std::string_view enumeratorName, std::string_view text) noexcept -> bool;
+
+/// Every integer up to 2^53 in magnitude is exactly a double.
+inline constexpr double kExactWholeLimit = 9'007'199'254'740'992.0;
+
+/// Whether `bound` is infinite (no bound) or a whole number a double holds exactly.
+[[nodiscard]] constexpr auto isWholeBound(double bound) noexcept -> bool {
+    if (bound == std::numeric_limits<double>::infinity() ||
+        bound == -std::numeric_limits<double>::infinity()) {
+        return true;
+    }
+    return bound >= -kExactWholeLimit && bound <= kExactWholeLimit &&
+           static_cast<double>(static_cast<std::int64_t>(bound)) == bound;
+}
+
+/// The number type a field holds: itself, or a quantity's or duration's representation, through
+/// arrays and optionals.
+template <class Value>
+[[nodiscard]] consteval auto numberTypeOf() noexcept {
+    if constexpr (kIsVector<Value> || kIsOptional<Value>) {
+        return numberTypeOf<typename Value::value_type>();
+    } else if constexpr (kIsQuantity<Value>) {
+        return std::type_identity<typename Value::Representation>{};
+    } else if constexpr (kIsDuration<Value>) {
+        return std::type_identity<typename Value::rep>{};
+    } else {
+        return std::type_identity<Value>{};
+    }
+}
+
+template <class Value>
+using NumberType = typename decltype(numberTypeOf<Value>())::type;
+
+/// The Range of a field, checked when its description compiles. constexpr, not consteval: MSVC
+/// cannot materialize a std::optional returned by a consteval call inside a template.
+template <class Field>
+[[nodiscard]] constexpr auto rangeOf() noexcept -> std::optional<Range> {
+    constexpr std::optional<Range> kRange = Field::template annotation<Range>();
+    if constexpr (kRange.has_value()) {
+        using Number = NumberType<typename Field::ValueType>;
+        static_assert(Integer<Number> || std::floating_point<Number>,
+                      "nx::data: a Range bounds a number; this field holds none");
+        static_assert(kRange->minimum <= kRange->maximum,
+                      "nx::data: a Range needs minimum <= maximum, neither NaN");
+        static_assert(!Integer<Number> || (isWholeBound(kRange->minimum) && isWholeBound(kRange->maximum)),
+                      "nx::data: the Range of a whole-number field needs whole bounds within 2^53 of zero");
+    }
+    return kRange;
+}
 
 template <DataTable Type>
 [[nodiscard]] consteval auto fieldNames() noexcept {
@@ -124,72 +208,91 @@ template <DataTable Type>
     return names;
 }
 
+template <DataValue Value>
+[[nodiscard]] auto readValue(NodeView node, const Location& at, const std::optional<Range>& range)
+    -> Result<Value, DataError>;
+
 template <DataTable Type>
 [[nodiscard]] auto readTable(TableView table, const Location& at) -> Result<Type, DataError>;
 
+template <Integer Value>
+[[nodiscard]] auto readInteger(NodeView node, const Location& at, const std::optional<Range>& range)
+    -> Result<Value, DataError> {
+    const auto number = node.asInteger();
+    if (!number) {
+        return wrongType(node, at, "a whole number");
+    }
+    auto value = tryNarrow<Value>(*number);
+    if (!value) {
+        constexpr std::optional<Value> kLowest = std::numeric_limits<Value>::min();
+        constexpr std::optional<Value> kHighest = std::numeric_limits<Value>::max();
+        return failAt(
+            DataError::OutOfRange, at, node.position(),
+            std::format("expected a whole number {}, got {}", boundsText(kLowest, kHighest), *number),
+            std::move(value.error()));
+    }
+    return checkWholeRange(*number, range, at, node.position()).transform([&value] { return *value; });
+}
+
 template <CountedEnum Enum>
 [[nodiscard]] auto readEnum(NodeView node, const Location& at) -> Result<Enum, DataError> {
+    static constexpr auto kValues = enumerators<Enum>();
     const auto text = node.asString();
     if (!text) {
         return wrongType(node, at, "the name of a value");
     }
-    std::string choices;
-    for (std::size_t index = 0; index < enumCount<Enum>(); ++index) {
-        const auto value = static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(index));
-        const std::string_view name = enumName(value);
-        if (name.empty()) {
-            continue;
-        }
-        const std::string spelling = dataSpelling(name);
-        if (spelling == *text) {
-            return value;
-        }
-        choices += std::format("{}\"{}\"", choices.empty() ? "" : ", ", spelling);
+    const auto found =
+        std::ranges::find_if(kValues, [&text](Enum value) { return isDataSpelling(enumName(value), *text); });
+    if (found != kValues.end()) {
+        return *found;
     }
+    const auto spellings =
+        kValues | std::views::transform([](Enum value) { return dataSpelling(enumName(value)); });
     return failAt(DataError::UnknownName, at, node.position(),
-                  std::format("expected one of {}, got \"{}\"", choices, *text));
+                  std::format("expected one of {}, got \"{}\"", quotedList(spellings), *text));
+}
+
+template <class Value>
+    requires kIsVector<Value>
+[[nodiscard]] auto readArray(NodeView node, const Location& at, const std::optional<Range>& range)
+    -> Result<Value, DataError> {
+    const auto array = node.asArray();
+    if (!array) {
+        return wrongType(node, at, "an array");
+    }
+    Value values;
+    std::size_t index = 0;
+    for (const NodeView element : array->elements()) {
+        auto value = readValue<typename Value::value_type>(element, at.element(index++), range);
+        if (!value) {
+            return std::unexpected(std::move(value.error()));
+        }
+        values.push_back(std::move(*value));
+    }
+    return values;
+}
+
+template <DataTable Type>
+[[nodiscard]] auto readNestedTable(NodeView node, const Location& at) -> Result<Type, DataError> {
+    const auto table = node.asTable();
+    if (!table) {
+        return wrongType(node, at, "a table");
+    }
+    return readTable<Type>(*table, at);
 }
 
 template <DataValue Value>
 [[nodiscard]] auto readValue(NodeView node, const Location& at, const std::optional<Range>& range)
     -> Result<Value, DataError> {
     if constexpr (std::same_as<Value, bool>) {
-        if (const auto value = node.asBool()) {
-            return *value;
-        }
-        return wrongType(node, at, "a boolean");
+        return readBoolean(node, at);
     } else if constexpr (Integer<Value>) {
-        const auto number = node.asInteger();
-        if (!number) {
-            return wrongType(node, at, "a whole number");
-        }
-        auto value = tryNarrow<Value>(*number);
-        if (!value) {
-            return failAt(DataError::OutOfRange, at, node.position(), value.error().detail);
-        }
-        return checkRange(static_cast<double>(*number), std::format("{}", *number), range, at,
-                          node.position())
-            .transform([&value] { return *value; });
+        return readInteger<Value>(node, at, range);
     } else if constexpr (std::floating_point<Value>) {
-        std::optional<double> number = node.asFloat();
-        if (const auto whole = node.asInteger(); !number && whole) {
-            number = static_cast<double>(*whole);
-        }
-        if (!number) {
-            return wrongType(node, at, "a number");
-        }
-        if (!std::isfinite(*number) ||
-            std::abs(*number) > static_cast<double>(std::numeric_limits<Value>::max())) {
-            return failAt(DataError::OutOfRange, at, node.position(),
-                          std::format("{} is not a finite number of the field's precision", *number));
-        }
-        return checkRange(*number, std::format("{}", *number), range, at, node.position())
-            .transform([&number] { return static_cast<Value>(*number); });
+        return readNumber(node, at, static_cast<double>(std::numeric_limits<Value>::max()), range)
+            .transform([](double number) { return static_cast<Value>(number); });
     } else if constexpr (std::same_as<Value, std::string>) {
-        if (const auto text = node.asString()) {
-            return std::string{*text};
-        }
-        return wrongType(node, at, "text");
+        return readText(node, at);
     } else if constexpr (CountedEnum<Value>) {
         return readEnum<Value>(node, at);
     } else if constexpr (kIsQuantity<Value>) {
@@ -200,26 +303,9 @@ template <DataValue Value>
             return Value{count};
         });
     } else if constexpr (kIsVector<Value>) {
-        const auto array = node.asArray();
-        if (!array) {
-            return wrongType(node, at, "an array");
-        }
-        Value values;
-        std::size_t index = 0;
-        for (const NodeView element : array->elements()) {
-            auto value = readValue<typename Value::value_type>(element, at.element(index++), range);
-            if (!value) {
-                return std::unexpected(std::move(value.error()));
-            }
-            values.push_back(std::move(*value));
-        }
-        return values;
+        return readArray<Value>(node, at, range);
     } else {
-        const auto table = node.asTable();
-        if (!table) {
-            return wrongType(node, at, "a table");
-        }
-        return readTable<Value>(*table, at);
+        return readNestedTable<Value>(node, at);
     }
 }
 
@@ -256,7 +342,7 @@ template <DataTable Type>
         if (failure) {
             return;
         }
-        auto read = readField<FieldValue>(table, at, Field::kName, Field::template annotation<Range>());
+        auto read = readField<FieldValue>(table, at, Field::kName, rangeOf<Field>());
         if (!read) {
             failure = std::move(read.error());
             return;
