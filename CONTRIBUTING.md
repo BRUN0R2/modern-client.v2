@@ -60,6 +60,16 @@ New files need an SPDX header (or a `REUSE.toml` annotation) and LF line endings
 - Sign off every commit (`git commit -s`). The `Signed-off-by` line is your statement, under
   the [Developer Certificate of Origin](https://developercertificate.org), that you have the
   right to submit the change under the project's licenses.
+- Sign every commit cryptographically: `main` refuses pull requests with unsigned commits. With
+  an SSH key used only for signing:
+
+  ```bash
+  ssh-keygen -t ed25519 -C "commit signing" -f ~/.ssh/commitSigning
+  git config gpg.format ssh
+  git config user.signingkey ~/.ssh/commitSigning
+  git config commit.gpgsign true
+  gh ssh-key add ~/.ssh/commitSigning.pub --type signing   # or GitHub → Settings → SSH and GPG keys
+  ```
 
 ## Pull requests
 
