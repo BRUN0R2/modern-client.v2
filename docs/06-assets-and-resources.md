@@ -164,9 +164,13 @@ Readers today:
   parent, so no walk can cycle or blow up on a hostile map. Entity text is taken without escapes
   (the `wad` key holds Windows paths), and a repeated key resolves to its last value, as the
   original assigns them in order.
+- SPR v2 (`nx.assets:spr`): the orientation, the rendering (normal, additive, index-alpha,
+  alpha-test), the sync type, the 256-color palette, and the frames: single images, or groups whose
+  intervals rise from above zero. Each image has its origin, size and pixels as a view of the
+  file's bytes, every pixel a palette index.
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The other readers are planned (M2).
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The MDL reader is planned (M2).
 
 ### 3.2 Modern (for mods)
 

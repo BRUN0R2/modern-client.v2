@@ -26,3 +26,11 @@ nxAddFuzzer(fuzzBsp
         nx::assets
     CORPUS
         corpus/bsp)
+
+nxAddFuzzer(fuzzSpr
+    SOURCES
+        sprFuzzer.cpp
+    DEPENDS
+        nx::assets
+    CORPUS
+        corpus/spr)

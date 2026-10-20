@@ -225,7 +225,7 @@ Rules:
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 
@@ -264,7 +264,7 @@ image.
 | `render-golden` | Every PR | Reference images with a software renderer (lavapipe) |
 | `parity` | Nightly | Parity suite on a dedicated *runner* with a legitimate copy of the game ([18](18-testing-and-quality.md#parity-tests)) |
 | `bench` | Nightly | Benchmarks on a dedicated machine. A regression above the threshold fails |
-| `fuzz` (more targets) | Nightly | The other parsers (MDL, SPR), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
+| `fuzz` (more targets) | Nightly | The other parsers (MDL), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
 | `stress` | Weekly | Server with 1024 simulated clients |
 | `package` | Release tag | Binaries, `THIRD_PARTY_NOTICES.md`, symbols, Docker image of `nextds` |
 

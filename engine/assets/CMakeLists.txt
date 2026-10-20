@@ -12,6 +12,7 @@ nxAddModuleLibrary(nxAssets
         src/wad.cppm
         src/wav.cppm
         src/bsp.cppm
+        src/spr.cppm
     SOURCES
         src/vfs.cpp
         src/content.cpp
@@ -19,6 +20,7 @@ nxAddModuleLibrary(nxAssets
         src/wad.cpp
         src/wav.cpp
         src/bsp.cpp
+        src/spr.cpp
     DEPENDS
         nx::core
         nx::math
