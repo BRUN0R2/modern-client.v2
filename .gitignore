@@ -1,0 +1,37 @@
+# Build trees (CMake presets write to build/<preset>)
+/build/
+/out/
+/install/
+
+# vcpkg manifest-mode output
+/vcpkg_installed/
+
+# Local, per-developer CMake presets
+CMakeUserPresets.json
+
+# IDEs and editor caches
+/.vs/
+/.idea/
+/.cache/
+*.user
+*.suo
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Compiler, linker and debugger artifacts that may land outside build/
+*.ifc
+*.obj
+*.pdb
+*.ilk
+*.exp
+
+# Local game installation links and runtime output
+/cstrike/
+/valve/
+*.dmp
+*.log
+
+# OS noise
+Thumbs.db
+.DS_Store

@@ -1,0 +1,163 @@
+# 12 — Interface, HUD, console e entrada
+
+## 1. Objetivos
+
+- **HUD e menus visualmente idênticos** ao CS 1.6 por padrão: sprites de `hud.txt`,
+  fontes, cores, posições, crosshair dinâmico, kill feed, radar, scoreboard e menus.
+- **Console e configs 100% familiares:** `~`, `bind`, `alias`, `exec`, `config.cfg`,
+  `autoexec.cfg`, `userconfig.cfg`, cvars de cliente clássicas.
+- **Extensível por plugins** com API tipada para HUD, menus e telas, sem as limitações das
+  mensagens de HUD do original.
+
+## 2. Componentes de UI
+
+| Camada | Tecnologia | Uso |
+|--------|------------|-----|
+| HUD clássico | Renderer próprio de sprites (SPR) e fontes bitmap | Vida, colete, dinheiro, munição, timer, radar, ícones de status, crosshair, kill feed |
+| Menus e telas | Toolkit de UI retido próprio sobre `nx.render`, com layout declarativo e skins | Menu principal, opções, server browser, seleção de time e personagem, compra VGUI, scoreboard, MOTD |
+| Menus de texto | Renderer do HUD | Menus clássicos de teclas (rádio, compra antiga, `showMenu` de plugins) |
+| Console | Toolkit próprio | Console do jogo e do servidor de listen |
+| Ferramentas de dev | Dear ImGui | Inspetores, profiler, editor de navegação (somente builds de desenvolvimento) |
+
+> A escolha do toolkit de menus está registrada como pendente de validação no
+> [TODO](../TODO.md). A alternativa avaliada é o RmlUi (HTML/CSS-like). O critério é
+> fidelidade visual, desempenho e facilidade para plugins.
+
+## 3. HUD
+
+### 3.1 Elementos clássicos
+
+| Elemento | Detalhe |
+|----------|---------|
+| Vida e colete | Ícones e números com as cores e o "flash" de dano do original |
+| Dinheiro | Animação de ganho e perda |
+| Munição | Clip e reserva por tipo de munição |
+| Timer de round | Com ícone de bomba plantada |
+| Ícones de status | Zona de compra, zona de bomba, kit de defuse, C4, zona de resgate, VIP |
+| Radar | Pontos de aliados, bomba e reféns |
+| Crosshair | `cl_crosshair_color`, `cl_crosshair_size`, `cl_crosshair_translucent`, `cl_dynamiccrosshair` |
+| Kill feed | Ícone da arma e de headshot |
+| Mensagens | Texto central, hints, `titles.txt`, `game_text`, mensagens de plugins |
+| Barra de progresso | Plantio, defuse |
+| Indicador de dano | Direção do dano recebido |
+| Efeitos de tela | Flashbang, fade, NVG, zoom de sniper (overlay de mira) |
+
+### 3.2 Escala e resolução
+
+- O layout original (por resolução, via `hud.txt`) é reproduzido. Em resoluções altas,
+  `hud_scale` aplica escala inteira, ou fracionária em `r_fidelity enhanced`, sem borrar
+  sprites.
+- Proporções largas (16:9, 21:9) mantêm a posição relativa original dos elementos.
+
+### 3.3 Paridade visual de números
+
+Valores dentro da faixa do original (vida até 100, colete até 100, dinheiro até 16000)
+são desenhados **exatamente** como no CS 1.6: mesmos sprites de dígitos, espaçamento e
+posição.
+
+### 3.4 Sem truncamento de valores
+
+No original, várias mensagens de HUD usavam campos de 1 byte: vida acima de 255 aparecia
+errada, assim como munição de reserva e clip grandes. No Modern-Client.v2:
+
+- Todo valor exibido no HUD usa o **mesmo tipo de domínio** do jogo da simulação até a
+  tela: `Health` e `Armor` em ponto flutuante (como no original, exibidos como inteiro
+  pela regra original), `Money` e `AmmoCount` em inteiros de 32 bits. Não existe campo
+  "de HUD" menor que o dado.
+- Na rede, esses campos são codificados como **varint**, então valores pequenos continuam
+  ocupando poucos bits sem impor teto.
+- Os contadores numéricos do HUD **crescem em dígitos** conforme necessário. Para manter
+  a composição visual com números grandes, o layout empurra os elementos vizinhos, e
+  `hud_number_style compact` (opcional) abrevia (`12.5k`).
+- Teste de regressão obrigatório: vida 5000, 100000 e o máximo do tipo, colete acima de
+  100, munição de reserva acima de 255 e dinheiro acima de 16000 (permitido por plugins).
+  Todos desenhados corretamente, sem *wrap*.
+
+### 3.5 HUD para plugins
+
+Sem os limites históricos de canais de texto e tamanho de mensagem:
+
+- **Textos de HUD** (`showHudText`), com posição, cor, efeito e duração tipados e quantos
+  canais forem necessários.
+- **Elementos persistentes:** barras, ícones e contadores que o plugin cria e atualiza
+  por handle.
+- **Menus de texto** (`showMenu`), com itens tipados e callback com o item escolhido como
+  enum ou valor, nunca como número de tecla cru.
+- **Telas completas** (layouts declarativos) para plugins de cliente
+  ([13 §7](13-sistema-de-mods.md#7-plugins-no-cliente)).
+
+## 4. Menus e telas do jogo
+
+| Tela | Requisitos |
+|------|------------|
+| Menu principal | Novo jogo (listen server), procurar servidores, opções, sair. Música de fundo (`media/gamestartup.mp3`) |
+| Server browser | Internet (master servers), favoritos, histórico, LAN. Filtros por mapa, jogadores, ping, senha e plugins |
+| Opções | Teclado (binds), mouse, áudio, vídeo, voz, multiplayer (nome, spray, crosshair) |
+| Seleção de time e personagem | Teclas e layout originais |
+| Compra (VGUI e por teclas) | [10 §8](10-gameplay-counter-strike.md#8-compra) |
+| Scoreboard | Nome, frags, mortes, ping, status (morto, bomba, VIP), *mute* |
+| MOTD | Texto ou HTML **restrito e seguro** (subconjunto renderizado pela UI, sem scripts). Links externos abrem no navegador do sistema após confirmação |
+
+## 5. Console
+
+- Abre com `~` (`toggleconsole`), com histórico, autocompletar de comandos e cvars (com
+  descrição e faixa), cores por nível de log e busca.
+- Mesma linguagem de comandos do original: separador `;`, aspas, `alias`, `+comando`/
+  `-comando`, `wait`, `exec`, `echo`, `toggle`, `incrementvar`.
+- **Erros explícitos:** comando ou cvar desconhecida, ou valor inválido, gera mensagem com
+  sugestão ("did you mean...").
+
+### 5.1 Cvars de cliente preservadas (seleção)
+
+| Grupo | Cvars |
+|-------|-------|
+| Rede | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
+| Vídeo | `fps_max`, `gamma`, `brightness`, `gl_vsync` (alias de `vid_vsync`), `fov` (com regras do original), `hud_draw`, `r_drawviewmodel` |
+| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `net_graph` |
+| Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (desligado) |
+| Áudio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
+| Jogador | `name`, `_cl_autowepswitch`, `cl_autobuy`, `cl_rebuy`, `cl_minmodels` (respeitando o servidor) |
+
+### 5.2 Arquivos de configuração do cliente
+
+| Arquivo | Função |
+|---------|--------|
+| `config.cfg` | Gravado automaticamente (binds e cvars arquivadas) |
+| `autoexec.cfg` | Executado no início |
+| `userconfig.cfg` | Configuração pessoal do usuário |
+| `video.toml`, `audio.toml` | Dispositivo e modo de vídeo e áudio (novo, estruturado) |
+
+## 6. Entrada
+
+- **SDL3** para teclado, mouse e gamepad.
+- **Mouse raw** por padrão (`m_rawinput 1`), sem aceleração do SO. A sensibilidade é
+  calibrada para que `sensitivity` tenha **o mesmo efeito em graus por contagem** que no
+  original (validado por teste de paridade).
+- Amostragem de entrada o mais tarde possível no frame ([05 §12](05-renderizacao.md#12-latência-e-ritmo-de-frame)).
+- **Binds:** mesmos nomes de tecla do original (`MOUSE1`, `MWHEELUP`, `KP_END`, `SPACE`…),
+  inclusive *bunny hop* com `MWHEELDOWN` em `+jump` (com o comportamento de comando
+  instantâneo do original).
+- Layouts de teclado não-QWERTY: binds por **posição física** opcional (`in_keymap scancode`).
+
+## 7. Localização
+
+- Strings da UI em arquivos por idioma (`locale/pt-BR.toml`, `locale/en.toml`), com chaves
+  tipadas geradas para C++ e Rook. Uma chave inexistente é erro de build, não texto vazio.
+- `titles.txt` e textos originais continuam sendo lidos e podem ser sobrepostos por
+  tradução.
+- Plugins têm os próprios arquivos de locale ([14](14-linguagem-rook.md#12-strings-formatação-e-tradução)).
+
+## 8. Acessibilidade
+
+- Escala de UI e de fonte do console independentes.
+- Paletas de crosshair e de destaque para daltonismo (opcional, desligado por padrão para
+  não alterar a paridade).
+- Legendas opcionais para falas de rádio.
+
+## 9. Erros tipados
+
+| Enum | Exemplos |
+|------|----------|
+| `ConsoleError` | `UnknownCommand`, `UnknownCvar`, `InvalidValue`, `CheatProtected`, `ServerProtected` |
+| `UiError` | `LayoutInvalid`, `MissingSprite`, `UnknownLocaleKey` |
+| `InputError` | `UnknownKeyName`, `DeviceUnavailable` |

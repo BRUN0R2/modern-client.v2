@@ -1,0 +1,12 @@
+nxAddTest(nxCoreTests
+    SOURCES
+        introspectionTests.cpp
+        contractsTests.cpp
+        failureTests.cpp
+        conversionTests.cpp
+        quantityTests.cpp
+        unitsTests.cpp
+        enumArrayTests.cpp
+        flagsTests.cpp
+    DEPENDS
+        nx::core)

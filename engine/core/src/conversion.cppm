@@ -1,0 +1,202 @@
+module;
+
+// Library feature-test macros are not exported by `import std;`.
+#include <version>
+
+/// Explicit numeric conversions and overflow-aware integer arithmetic
+/// (docs/02-padroes-de-codigo.md, section 4.3). Nothing here converts implicitly or wraps silently.
+export module nx.core:conversion;
+
+import std;
+import :contracts;
+import :failure;
+
+export namespace nx {
+
+namespace detail {
+
+template <class Type>
+concept CharacterType =
+    std::same_as<std::remove_cv_t<Type>, char> || std::same_as<std::remove_cv_t<Type>, wchar_t> ||
+    std::same_as<std::remove_cv_t<Type>, char8_t> || std::same_as<std::remove_cv_t<Type>, char16_t> ||
+    std::same_as<std::remove_cv_t<Type>, char32_t>;
+
+} // namespace detail
+
+/// Standard integer type. `bool` and character types are not numbers here.
+template <class Type>
+concept Integer =
+    std::integral<Type> && !std::same_as<std::remove_cv_t<Type>, bool> && !detail::CharacterType<Type>;
+
+enum class ConversionError : std::uint8_t {
+    OutOfRange,
+    NotFinite,
+};
+
+/// Integer conversion that must not lose information; a value that does not fit is a
+/// contract violation (a bug in the caller).
+template <Integer To, Integer From>
+[[nodiscard]] constexpr auto narrow(From value,
+                                    std::source_location where = std::source_location::current()) noexcept
+    -> To {
+    expects(std::in_range<To>(value), "narrow: value does not fit the destination type", where);
+    return static_cast<To>(value);
+}
+
+/// Integer conversion of external data; a value that does not fit is a typed failure.
+template <Integer To, Integer From>
+[[nodiscard]] auto tryNarrow(From value, std::source_location where = std::source_location::current())
+    -> Result<To, ConversionError> {
+    if (!std::in_range<To>(value)) {
+        return fail(ConversionError::OutOfRange,
+                    std::format("{} does not fit in [{}, {}]", value, std::numeric_limits<To>::min(),
+                                std::numeric_limits<To>::max()),
+                    where);
+    }
+    return static_cast<To>(value);
+}
+
+/// Intentional modular conversion that keeps the low bits of `value`. The caller documents why
+/// losing the high bits is correct (wire formats, hashes).
+template <Integer To, Integer From>
+[[nodiscard]] constexpr auto truncate(From value) noexcept -> To {
+    return static_cast<To>(value);
+}
+
+namespace detail {
+
+/// Smallest power of two above the range of `To`, as `From` (exactly representable).
+template <Integer To, std::floating_point From>
+[[nodiscard]] consteval auto upperBoundAs() noexcept -> From {
+    const auto radix = static_cast<From>(std::numeric_limits<From>::radix);
+    From bound = 1;
+    for (int bit = 0; bit < std::numeric_limits<To>::digits; ++bit) {
+        bound *= radix;
+    }
+    return bound;
+}
+
+} // namespace detail
+
+/// Rounds to the nearest integer (halfway cases away from zero) and checks the range.
+template <Integer To, std::floating_point From>
+[[nodiscard]] auto tryRound(From value, std::source_location where = std::source_location::current())
+    -> Result<To, ConversionError> {
+    if (!std::isfinite(value)) {
+        return fail(ConversionError::NotFinite, std::format("{}", value), where);
+    }
+    const From rounded = std::round(value);
+    constexpr auto lowest = static_cast<From>(std::numeric_limits<To>::min());
+    constexpr auto upperBound = detail::upperBoundAs<To, From>();
+    if (rounded < lowest || rounded >= upperBound) {
+        return fail(ConversionError::OutOfRange,
+                    std::format("{} does not fit in [{}, {}]", value, std::numeric_limits<To>::min(),
+                                std::numeric_limits<To>::max()),
+                    where);
+    }
+    return static_cast<To>(rounded);
+}
+
+/// `a + b`, or nullopt when the exact result does not fit in `Type`.
+template <Integer Type>
+[[nodiscard]] constexpr auto checkedAdd(Type a, Type b) noexcept -> std::optional<Type> {
+    constexpr auto max = std::numeric_limits<Type>::max();
+    constexpr auto min = std::numeric_limits<Type>::min();
+    if constexpr (std::is_signed_v<Type>) {
+        if ((b > 0 && a > max - b) || (b < 0 && a < min - b)) {
+            return std::nullopt;
+        }
+    } else {
+        if (a > max - b) {
+            return std::nullopt;
+        }
+    }
+    return static_cast<Type>(a + b);
+}
+
+/// `a - b`, or nullopt when the exact result does not fit in `Type`.
+template <Integer Type>
+[[nodiscard]] constexpr auto checkedSub(Type a, Type b) noexcept -> std::optional<Type> {
+    constexpr auto max = std::numeric_limits<Type>::max();
+    constexpr auto min = std::numeric_limits<Type>::min();
+    if constexpr (std::is_signed_v<Type>) {
+        if ((b < 0 && a > max + b) || (b > 0 && a < min + b)) {
+            return std::nullopt;
+        }
+    } else {
+        if (a < b) {
+            return std::nullopt;
+        }
+    }
+    return static_cast<Type>(a - b);
+}
+
+/// `a * b`, or nullopt when the exact result does not fit in `Type`.
+template <Integer Type>
+[[nodiscard]] constexpr auto checkedMul(Type a, Type b) noexcept -> std::optional<Type> {
+    constexpr auto max = std::numeric_limits<Type>::max();
+    constexpr auto min = std::numeric_limits<Type>::min();
+    if constexpr (std::is_signed_v<Type>) {
+        if (a > 0) {
+            if ((b > 0 && a > max / b) || (b <= 0 && b < min / a)) {
+                return std::nullopt;
+            }
+        } else if ((b > 0 && a < min / b) || (b <= 0 && a != 0 && b < max / a)) {
+            return std::nullopt;
+        }
+    } else {
+        if (b != 0 && a > max / b) {
+            return std::nullopt;
+        }
+    }
+    return static_cast<Type>(a * b);
+}
+
+/// `a + b` clamped to the range of `Type` (std::add_sat when the library provides it).
+template <Integer Type>
+[[nodiscard]] constexpr auto addSaturated(Type a, Type b) noexcept -> Type {
+#if defined(__cpp_lib_saturation_arithmetic)
+    return std::add_sat(a, b);
+#else
+    if (const auto sum = checkedAdd(a, b)) {
+        return *sum;
+    }
+    return b > 0 ? std::numeric_limits<Type>::max() : std::numeric_limits<Type>::min();
+#endif
+}
+
+/// `a - b` clamped to the range of `Type` (std::sub_sat when the library provides it).
+template <Integer Type>
+[[nodiscard]] constexpr auto subSaturated(Type a, Type b) noexcept -> Type {
+#if defined(__cpp_lib_saturation_arithmetic)
+    return std::sub_sat(a, b);
+#else
+    if (const auto difference = checkedSub(a, b)) {
+        return *difference;
+    }
+    if constexpr (std::is_signed_v<Type>) {
+        return b < 0 ? std::numeric_limits<Type>::max() : std::numeric_limits<Type>::min();
+    } else {
+        return std::numeric_limits<Type>::min();
+    }
+#endif
+}
+
+/// `a * b` clamped to the range of `Type` (std::mul_sat when the library provides it).
+template <Integer Type>
+[[nodiscard]] constexpr auto mulSaturated(Type a, Type b) noexcept -> Type {
+#if defined(__cpp_lib_saturation_arithmetic)
+    return std::mul_sat(a, b);
+#else
+    if (const auto product = checkedMul(a, b)) {
+        return *product;
+    }
+    if constexpr (std::is_signed_v<Type>) {
+        return (a < 0) != (b < 0) ? std::numeric_limits<Type>::min() : std::numeric_limits<Type>::max();
+    } else {
+        return std::numeric_limits<Type>::max();
+    }
+#endif
+}
+
+} // namespace nx

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "modern-client-v2",
+  "version-semver": "0.1.0",
+  "description": "Open-source recreation of Counter-Strike 1.6 on a modern C++26 engine",
+  "builtin-baseline": "469a0504e4a6ebf6173d1c0f51a7fa34c382fd43",
+  "dependencies": [],
+  "features": {
+    "tests": {
+      "description": "Unit tests (GoogleTest)",
+      "dependencies": [
+        "gtest"
+      ]
+    }
+  }
+}

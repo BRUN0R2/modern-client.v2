@@ -1,0 +1,54 @@
+---
+# Static analysis profile (docs/02-padroes-de-codigo.md, section 12).
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  concurrency-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  misc-*,
+  -misc-include-cleaner,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -readability-identifier-length
+
+# "Nada de números mágicos" is enforced, not suggested.
+WarningsAsErrors: >
+  bugprone-*,
+  concurrency-*,
+  cppcoreguidelines-avoid-magic-numbers,
+  readability-magic-numbers,
+  readability-identifier-naming
+
+HeaderFilterRegex: '(engine|game|apps|rook|tools)/'
+
+CheckOptions:
+  # Literals allowed without a name (docs/02, section 5).
+  - { key: readability-magic-numbers.IgnoredIntegerValues,         value: '0;1' }
+  - { key: readability-magic-numbers.IgnoredFloatingPointValues,   value: '0.0;1.0' }
+  - { key: readability-magic-numbers.IgnorePowersOf2IntegerValues, value: false }
+
+  # Naming (docs/02, section 3).
+  - { key: readability-identifier-naming.NamespaceCase,          value: lower_case }
+  - { key: readability-identifier-naming.ClassCase,              value: CamelCase }
+  - { key: readability-identifier-naming.StructCase,             value: CamelCase }
+  - { key: readability-identifier-naming.UnionCase,              value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase,               value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase,       value: CamelCase }
+  - { key: readability-identifier-naming.ConceptCase,            value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase,          value: CamelCase }
+  - { key: readability-identifier-naming.TypeTemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.ValueTemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.FunctionCase,           value: camelBack }
+  - { key: readability-identifier-naming.MethodCase,             value: camelBack }
+  - { key: readability-identifier-naming.VariableCase,           value: camelBack }
+  - { key: readability-identifier-naming.ParameterCase,          value: camelBack }
+  - { key: readability-identifier-naming.PublicMemberCase,       value: camelBack }
+  - { key: readability-identifier-naming.PrivateMemberCase,      value: camelBack }
+  - { key: readability-identifier-naming.PrivateMemberPrefix,    value: m_ }
+  - { key: readability-identifier-naming.ConstexprVariableCase,  value: CamelCase }
+  - { key: readability-identifier-naming.ConstexprVariablePrefix, value: k }
+  - { key: readability-identifier-naming.MacroDefinitionCase,    value: UPPER_CASE }
+  - { key: readability-identifier-naming.MacroDefinitionPrefix,  value: NX_ }

@@ -1,0 +1,109 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": { "major": 4, "minor": 3, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "NX_BUILD_TESTS": "ON",
+        "NX_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "hidden": true,
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "architecture": { "value": "x64", "strategy": "external" },
+      "toolset": { "value": "host=x64", "strategy": "external" },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-nx"
+      }
+    },
+    {
+      "name": "dev-windows-msvc",
+      "displayName": "Windows · MSVC · Debug",
+      "inherits": "windows-msvc",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release-windows-msvc",
+      "displayName": "Windows · MSVC · Release",
+      "inherits": "windows-msvc",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux",
+      "hidden": true,
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-linux-nx" }
+    },
+    {
+      "name": "dev-linux-gcc",
+      "displayName": "Linux · GCC · Debug",
+      "inherits": "linux",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++", "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release-linux-gcc",
+      "displayName": "Linux · GCC · Release",
+      "inherits": "linux",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++", "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "dev-linux-clang",
+      "displayName": "Linux · Clang · Debug",
+      "inherits": "linux",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "clang++", "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "asan-linux-clang",
+      "displayName": "Linux · Clang · AddressSanitizer + UBSan",
+      "inherits": "dev-linux-clang",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "tsan-linux-clang",
+      "displayName": "Linux · Clang · ThreadSanitizer",
+      "inherits": "dev-linux-clang",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev-windows-msvc", "configurePreset": "dev-windows-msvc" },
+    { "name": "release-windows-msvc", "configurePreset": "release-windows-msvc" },
+    { "name": "dev-linux-gcc", "configurePreset": "dev-linux-gcc" },
+    { "name": "release-linux-gcc", "configurePreset": "release-linux-gcc" },
+    { "name": "dev-linux-clang", "configurePreset": "dev-linux-clang" },
+    { "name": "asan-linux-clang", "configurePreset": "asan-linux-clang" },
+    { "name": "tsan-linux-clang", "configurePreset": "tsan-linux-clang" }
+  ],
+  "testPresets": [
+    {
+      "name": "test-base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "dev-windows-msvc", "inherits": "test-base", "configurePreset": "dev-windows-msvc" },
+    { "name": "release-windows-msvc", "inherits": "test-base", "configurePreset": "release-windows-msvc" },
+    { "name": "dev-linux-gcc", "inherits": "test-base", "configurePreset": "dev-linux-gcc" },
+    { "name": "release-linux-gcc", "inherits": "test-base", "configurePreset": "release-linux-gcc" },
+    { "name": "dev-linux-clang", "inherits": "test-base", "configurePreset": "dev-linux-clang" },
+    { "name": "asan-linux-clang", "inherits": "test-base", "configurePreset": "asan-linux-clang" },
+    { "name": "tsan-linux-clang", "inherits": "test-base", "configurePreset": "tsan-linux-clang" }
+  ]
+}
