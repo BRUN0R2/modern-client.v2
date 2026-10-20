@@ -24,6 +24,7 @@ class Stopwatch {
 public:
     Stopwatch() noexcept : m_start{MonotonicClock::now()} {}
 
+    /// The time elapsed since the start.
     [[nodiscard]] auto elapsed() const noexcept -> MonotonicClock::duration {
         return MonotonicClock::now() - m_start;
     }
@@ -38,6 +39,7 @@ private:
     Instant m_start;
 };
 
+/// Why a SleepTimer could not be created.
 enum class ClockError : std::uint8_t {
     TimerUnavailable, ///< The OS has no high-resolution timer (Windows before 10 1803).
 };

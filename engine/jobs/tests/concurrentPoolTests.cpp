@@ -10,7 +10,7 @@ import nx.jobs;
 namespace {
 
 struct TestNode {
-    std::atomic<std::uint32_t> nextFree{0};
+    std::atomic<nx::jobs::PoolLink> nextFree{nx::jobs::PoolLink::None};
     std::atomic<int> holder{-1};
 };
 
@@ -19,7 +19,7 @@ using Pool = nx::jobs::ConcurrentPool<TestNode>;
 TEST(ConcurrentPoolTest, AcquiresDistinctNodes) {
     constexpr std::size_t kCount = 1000; // spans several chunks
     Pool pool;
-    std::set<Pool::Index> indices;
+    std::set<nx::jobs::PoolIndex> indices;
     std::set<const TestNode*> addresses;
     for (std::size_t acquired = 0; acquired < kCount; ++acquired) {
         const auto index = pool.acquire();
@@ -63,7 +63,7 @@ TEST(ConcurrentPoolTest, NoNodeIsHeldByTwoThreadsAtOnce) {
     std::vector<std::thread> threads;
     for (int thread = 0; thread < kThreadCount; ++thread) {
         threads.emplace_back([&pool, &conflicts, thread] {
-            std::vector<Pool::Index> held;
+            std::vector<nx::jobs::PoolIndex> held;
             for (int round = 0; round < kRounds; ++round) {
                 const auto index = pool.acquire();
                 if (pool[index].holder.exchange(thread, std::memory_order_relaxed) != -1) {
@@ -87,7 +87,7 @@ TEST(ConcurrentPoolTest, NoNodeIsHeldByTwoThreadsAtOnce) {
     for (auto& thread : threads) {
         thread.join();
     }
-    EXPECT_EQ(conflicts.load(), 0);
+    EXPECT_EQ(conflicts.load(std::memory_order_seq_cst), 0);
     EXPECT_LE(pool.createdCount(), std::size_t{kThreadCount} * kHeldAtOnce);
 }
 

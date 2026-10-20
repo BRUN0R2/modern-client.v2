@@ -93,3 +93,13 @@ TEST(Conversion, IntegerConceptExcludesBoolAndCharacters) {
     static_assert(!nx::Integer<char8_t>);
     SUCCEED();
 }
+
+TEST(Arithmetic, DivideRoundingUpCountsWholeGroups) {
+    static_assert(nx::divideRoundingUp(0U, 4U) == 0U);
+    static_assert(nx::divideRoundingUp(8U, 4U) == 2U);
+    static_assert(nx::divideRoundingUp(9U, 4U) == 3U);
+    // No overflow at the top of the range, unlike (dividend + divisor - 1) / divisor.
+    static_assert(nx::divideRoundingUp(std::numeric_limits<std::uint64_t>::max(), std::uint64_t{2}) ==
+                  std::uint64_t{1} << 63U);
+    SUCCEED();
+}

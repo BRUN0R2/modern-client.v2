@@ -80,7 +80,7 @@ TEST_P(JobSystemTest, RunsDependentsAfterTheirDependencies) {
         std::array<int, 4> finishedAt{};
         auto record = [&clock, &finishedAt](std::size_t job) {
             return [&clock, &finishedAt, job] {
-                finishedAt[job] = clock.fetch_add(1);
+                finishedAt[job] = clock.fetch_add(1, std::memory_order_seq_cst);
             };
         };
 
@@ -137,6 +137,28 @@ TEST_P(JobSystemTest, ParallelForOnAnEmptyRangeIsAlreadyComplete) {
     jobs().wait(handle);
 }
 
+TEST_P(JobSystemTest, AnEmptyParallelForCompletesAfterItsDependencies) {
+    // Regression: an empty range completed at once, so work chained on it could run before the
+    // dependencies had. The urgent job after the loop would then run before the low-priority one.
+    std::atomic<bool> dependencyRan{false};
+    const JobHandle dependency =
+        jobs().submit({.label = "dependency", .priority = Priority::Low},
+                      [&dependencyRan] { dependencyRan.store(true, std::memory_order_seq_cst); });
+    std::vector<int> empty;
+    const std::array beforeLoop{dependency};
+    const JobHandle loop = jobs().parallelFor({.label = "empty", .dependsOn = beforeLoop}, empty,
+                                              Grain::automatic(), [](int&) {});
+    std::atomic<bool> sawDependency{false};
+    const std::array afterLoop{loop};
+    jobs().wait(jobs().submit({.label = "after", .priority = Priority::Critical, .dependsOn = afterLoop},
+                              [&dependencyRan, &sawDependency] {
+                                  sawDependency.store(dependencyRan.load(std::memory_order_seq_cst),
+                                                      std::memory_order_seq_cst);
+                              }));
+    EXPECT_TRUE(sawDependency.load(std::memory_order_seq_cst));
+    EXPECT_TRUE(jobs().isComplete(loop));
+}
+
 TEST_P(JobSystemTest, JobsCanSubmitAndWaitOnMoreJobs) {
     constexpr std::size_t kCount = 512;
     std::vector<std::uint64_t> values(kCount, 0);
@@ -161,7 +183,7 @@ public:
     auto operator=(DestructionFlag&&) -> DestructionFlag& = delete;
     ~DestructionFlag() {
         if (m_destroyed != nullptr) {
-            m_destroyed->store(true);
+            m_destroyed->store(true, std::memory_order_seq_cst);
         }
     }
 
@@ -173,7 +195,7 @@ TEST_P(JobSystemTest, DestroysTheCapturesBeforeTheHandleCompletes) {
     std::atomic<bool> destroyed{false};
     const JobHandle handle = jobs().submit({.label = "captures"}, [flag = DestructionFlag{destroyed}] {});
     jobs().wait(handle);
-    EXPECT_TRUE(destroyed.load());
+    EXPECT_TRUE(destroyed.load(std::memory_order_seq_cst));
 }
 
 TEST_P(JobSystemTest, StatsCountEveryExecutedJob) {
@@ -217,8 +239,9 @@ TEST_P(JobSystemTest, ManyJobsWithRandomDependencies) {
             }
         }
         handles.push_back(
-            jobs().submit({.label = "random", .dependsOn = dependencies},
-                          [&clock, &finishedAt, job] { finishedAt[job] = clock.fetch_add(1); }));
+            jobs().submit({.label = "random", .dependsOn = dependencies}, [&clock, &finishedAt, job] {
+                finishedAt[job] = clock.fetch_add(1, std::memory_order_seq_cst);
+            }));
     }
     for (const JobHandle handle : handles) {
         jobs().wait(handle);
@@ -240,11 +263,12 @@ TEST_P(JobSystemTest, DestructionRunsTheJobsNobodyWaitedFor) {
         auto system = makeJobSystem(GetParam());
         ASSERT_NE(system, nullptr);
         for (int job = 0; job < kJobCount; ++job) {
-            std::ignore =
-                system->submit({.label = "unwaited"}, [&ran] { ran.fetch_add(1); }); // never waited on
+            std::ignore = system->submit({.label = "unwaited"}, [&ran] {
+                ran.fetch_add(1, std::memory_order_seq_cst);
+            }); // never waited on
         }
     }
-    EXPECT_EQ(ran.load(), kJobCount);
+    EXPECT_EQ(ran.load(std::memory_order_seq_cst), kJobCount);
 }
 
 TEST(JobSystemSerialTest, WithoutWorkersJobsRunInsideWaitOnTheWaitingThread) {
@@ -271,6 +295,7 @@ TEST(JobSystemSerialTest, MoreUrgentJobsRunFirst) {
 
     const JobHandle background =
         jobs->submit({.label = "background", .priority = Priority::Background}, record(Priority::Background));
+    // Waiting on the background job is enough: the serial system runs the more urgent ones first.
     std::ignore = jobs->submit({.label = "low", .priority = Priority::Low}, record(Priority::Low));
     std::ignore = jobs->submit({.label = "normal", .priority = Priority::Normal}, record(Priority::Normal));
     std::ignore =

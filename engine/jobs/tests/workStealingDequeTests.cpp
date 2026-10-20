@@ -105,8 +105,8 @@ TEST(WorkStealingDequeTest, EveryElementIsTakenExactlyOnceUnderContention) {
         thief.join();
     }
 
-    const auto wrong =
-        std::ranges::count_if(taken, [](const std::atomic<int>& count) { return count.load() != 1; });
+    const auto wrong = std::ranges::count_if(
+        taken, [](const std::atomic<int>& count) { return count.load(std::memory_order_seq_cst) != 1; });
     EXPECT_EQ(wrong, 0);
 }
 

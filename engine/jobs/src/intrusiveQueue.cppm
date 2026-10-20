@@ -19,6 +19,7 @@ struct QueueLink {
     std::atomic<QueueLink*> next{nullptr};
 };
 
+/// The queue itself: nodes in push order, linked through their QueueLink.
 template <class Node>
     requires std::derived_from<Node, QueueLink>
 class IntrusiveQueue {
@@ -37,6 +38,7 @@ public:
     /// or the next node is still being linked by its producer. The last two cases end on their own,
     /// so callers that find hasVisibleNodes() true simply try again later.
     [[nodiscard]] auto tryPop() noexcept -> Node* {
+        // acquire/release: the try-lock that gives m_tail one user at a time.
         if (m_consuming.exchange(true, std::memory_order_acquire)) {
             return nullptr;
         }
@@ -46,21 +48,31 @@ public:
         return link != nullptr ? static_cast<Node*>(link) : nullptr;
     }
 
-    /// True when at least one node was pushed and not yet popped, at some recent moment.
+    /// Whether the newest link is a node rather than the internal stub: true while nodes wait,
+    /// except during the moment a consumer takes the last node and puts the stub back, when a node
+    /// pushed meanwhile stays queued behind the stub unseen. A scheduler may treat false as "no
+    /// work" only because every push is followed by a wake-up its sleepers watch (docs/04-job-system.md,
+    /// section 2), so that node is never missed, only noticed one wake-up later.
     [[nodiscard]] auto hasVisibleNodes() const noexcept -> bool {
+        // acquire: pairs with the producers' exchange, as any reader of the head does.
         return m_head.load(std::memory_order_acquire) != &m_stub;
     }
 
 private:
     void pushLink(QueueLink& link) noexcept {
+        // relaxed: the acq_rel exchange below orders it before the node becomes reachable.
         link.next.store(nullptr, std::memory_order_relaxed);
+        // acq_rel: release publishes `link` (and its node) to the next producer, which links after
+        // it; acquire makes `previous` safe to write through.
         QueueLink* const previous = m_head.exchange(&link, std::memory_order_acq_rel);
         // Between the exchange and this store the queue is briefly cut: consumers see the nodes
-        // before `link` but not `link` itself until the producer finishes.
+        // before `link` but not `link` itself until the producer finishes. release: pairs with the
+        // consumer's acquire load of `next`, which then sees the whole node.
         previous->next.store(&link, std::memory_order_release);
     }
 
-    /// Runs with m_consuming held, so m_tail has a single user at a time.
+    /// Runs with m_consuming held, so m_tail has a single user at a time. Its acquire loads pair
+    /// with the release stores of pushLink.
     auto popExclusive() noexcept -> QueueLink* {
         QueueLink* tail = m_tail;
         QueueLink* next = tail->next.load(std::memory_order_acquire);

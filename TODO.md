@@ -142,7 +142,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### `nx.jobs`
 - [x] Workers and Chase-Lev deques (one per priority in each worker)
-- [ ] CPU affinity for the workers (with `nx.platform`, if a benchmark shows a gain)
+- [ ] CPU affinity for the workers, if a benchmark shows a gain (OS thread control in `nx.jobs` or `nx.core`, which `nx.jobs` may use; [04 §2](docs/04-job-system.md#2-model))
 - [x] Global queue per priority (`Critical`, `Normal`, `Low`, `Background`), producers never wait
 - [x] Counters with generation, dependencies and continuations
 - [x] Lock-free pools for descriptors, counters and continuations

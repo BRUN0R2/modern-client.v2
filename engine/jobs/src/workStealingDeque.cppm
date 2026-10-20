@@ -20,10 +20,14 @@ export namespace nx::jobs {
 template <class Type>
 concept DequeElement = std::is_trivially_copyable_v<Type> && std::atomic<Type>::is_always_lock_free;
 
+/// The deque of one worker: unbounded, growing by kGrowthFactor whenever a push finds it full.
 template <DequeElement Element>
 class WorkStealingDeque {
 public:
+    /// Elements a deque holds before its first growth.
     static constexpr std::int64_t kDefaultCapacity = 256;
+    /// How much a full ring grows; a power of two, so the capacity stays one.
+    static constexpr std::int64_t kGrowthFactor = 2;
 
     WorkStealingDeque() : WorkStealingDeque{kDefaultCapacity} {}
 
@@ -34,6 +38,7 @@ public:
         expects(isPowerOfTwo, "WorkStealingDeque: the initial capacity must be a power of two");
         // If the handler lets execution continue ("observe"), the deque stays usable.
         m_rings.push_back(std::make_unique<Ring>(isPowerOfTwo ? initialCapacity : kDefaultCapacity));
+        // relaxed: other threads reach the deque only after something publishes it (a thread start).
         m_ring.store(m_rings.back().get(), std::memory_order_relaxed);
     }
 
@@ -82,7 +87,7 @@ public:
     }
 
     /// Any thread. The oldest element, or nullopt when the deque is empty. Lock-free: a retry only
-    /// happens after another thread took an element.
+    /// happens after another thread took an element (a strong exchange fails for no other reason).
     [[nodiscard]] auto steal() noexcept -> std::optional<Element> {
         auto top = m_top.load(std::memory_order_seq_cst);
         while (true) {
@@ -93,8 +98,8 @@ public:
             // The slot is read before claiming it: once `top` moves, the owner may reuse the slot.
             const Ring* const ring = m_ring.load(std::memory_order_acquire);
             const Element element = ring->load(top);
-            if (m_top.compare_exchange_weak(top, top + 1, std::memory_order_seq_cst,
-                                            std::memory_order_seq_cst)) {
+            if (m_top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst,
+                                              std::memory_order_seq_cst)) {
                 return element;
             }
             // `top` now holds the value another thread left: try the next element.
@@ -123,6 +128,8 @@ private:
 
         [[nodiscard]] auto capacity() const noexcept -> std::int64_t { return m_mask + 1; }
 
+        // relaxed: a slot is published by the seq_cst store to `bottom` after it, and read before
+        // the seq_cst claim of `top` (Lê et al.); the slots themselves order nothing.
         void store(std::int64_t index, Element element) noexcept {
             m_slots[slotOf(index)].store(element, std::memory_order_relaxed);
         }
@@ -141,15 +148,16 @@ private:
     };
 
     auto grow(const Ring& ring, std::int64_t top, std::int64_t bottom) -> Ring* {
-        invariant(ring.capacity() <= std::numeric_limits<std::int64_t>::max() / 2,
+        invariant(ring.capacity() <= std::numeric_limits<std::int64_t>::max() / kGrowthFactor,
                   "WorkStealingDeque: capacity overflow");
-        auto bigger = std::make_unique<Ring>(ring.capacity() * 2);
+        auto bigger = std::make_unique<Ring>(ring.capacity() * kGrowthFactor);
         for (auto index = top; index < bottom; ++index) {
             bigger->store(index, ring.load(index));
         }
         Ring* const published = bigger.get();
         // The old ring stays alive until the deque dies: a thief may still be reading it.
         m_rings.push_back(std::move(bigger));
+        // release: pairs with the thieves' acquire load, which then see the copied slots.
         m_ring.store(published, std::memory_order_release);
         return published;
     }

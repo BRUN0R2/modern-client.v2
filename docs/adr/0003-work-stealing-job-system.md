@@ -32,3 +32,6 @@ asset streaming, without creating ad-hoc threads and without blocking.
 - ✅ Modern integration with senders/receivers where it makes sense.
 - ⚠️ Jobs cannot wait midway. Code has to be structured in phases and continuations.
   Reevaluate fibers if the profiler shows a relevant loss.
+- ✅ A worker thread knows which worker it is through a `thread_local` set once when it
+  starts, so a job's `submit` reaches its own deque without passing the worker around; the
+  value is the thread's identity, not shared state ([04 §7](../04-job-system.md#7-usage-rules)).
