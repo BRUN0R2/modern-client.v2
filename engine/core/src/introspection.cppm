@@ -5,8 +5,8 @@
 ///
 /// Until static reflection (P2996) is available on every supported compiler, names are parsed
 /// from the signature the compiler gives to a template instantiation. The parsing is isolated
-/// here: the rest of the engine only sees typeName, shortTypeName and enumName, and the native
-/// reflection path can replace this file without touching any caller.
+/// here: the rest of the engine only sees typeName, shortTypeName, enumName and enumerators, and
+/// the native reflection path can replace this file without touching any caller.
 export module nx.core:introspection;
 
 import std;
@@ -187,6 +187,42 @@ template <ScopedEnum Enum>
         return {};
     }
     return names[static_cast<std::size_t>(raw)];
+}
+
+namespace detail {
+
+/// Every index below Count fits in the underlying type, since Count itself does.
+template <CountedEnum Enum>
+[[nodiscard]] consteval auto enumeratorAt(std::size_t index) noexcept -> Enum {
+    return static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(index));
+}
+
+template <CountedEnum Enum>
+[[nodiscard]] consteval auto namedEnumeratorCount() noexcept -> std::size_t {
+    std::size_t named = 0;
+    for (std::size_t index = 0; index < enumCount<Enum>(); ++index) {
+        if (!enumName(enumeratorAt<Enum>(index)).empty()) {
+            ++named;
+        }
+    }
+    return named;
+}
+
+} // namespace detail
+
+/// The named enumerators of `Enum` before Count, in value order: the values text can name. Values
+/// left out between enumerators have no name and are not listed.
+template <CountedEnum Enum>
+[[nodiscard]] consteval auto enumerators() noexcept
+    -> std::array<Enum, detail::namedEnumeratorCount<Enum>()> {
+    std::array<Enum, detail::namedEnumeratorCount<Enum>()> values{};
+    std::size_t next = 0;
+    for (std::size_t index = 0; index < enumCount<Enum>(); ++index) {
+        if (const Enum value = detail::enumeratorAt<Enum>(index); !enumName(value).empty()) {
+            values[next++] = value;
+        }
+    }
+    return values;
 }
 
 } // namespace nx

@@ -51,7 +51,7 @@ flowchart TB
 
 | C++ module | Layer | Responsibility | Depends on |
 |------------|--------|------------------|------------|
-| `nx.core` | 0 | `nx::Failure<E>`/`nx::Result`, contracts, strong types and units, explicit conversions, `EnumArray`/`Flags`, type and enum names, allocators, log, time, hashing, IDs | `std` |
+| `nx.core` | 0 | `nx::Failure<E>`/`nx::Result`, contracts, strong types and units, explicit conversions, `EnumArray`/`Flags`, type and enum names, the text of diagnostics, allocators, log, time, hashing, IDs | `std` |
 | `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes, SIMD | core |
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core |

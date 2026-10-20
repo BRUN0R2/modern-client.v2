@@ -30,10 +30,6 @@ private:
     return static_cast<unsigned char>(character) <= static_cast<unsigned char>(' ');
 }
 
-[[nodiscard]] constexpr auto toLowerAscii(char character) noexcept -> char {
-    return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
-}
-
 [[nodiscard]] constexpr auto equalsIgnoringCase(std::string_view a, std::string_view b) noexcept -> bool {
     return std::ranges::equal(a, b, [](char x, char y) { return toLowerAscii(x) == toLowerAscii(y); });
 }

@@ -87,48 +87,30 @@ namespace detail {
 template <NumericCvarType Type>
 [[nodiscard]] auto rangeExpectation(std::string_view noun, std::optional<Type> minimum,
                                     std::optional<Type> maximum) -> std::string {
-    if (minimum && maximum) {
-        return std::format("{} in [{}, {}]", noun, *minimum, *maximum);
-    }
-    if (minimum) {
-        return std::format("{} of at least {}", noun, *minimum);
-    }
-    if (maximum) {
-        return std::format("{} of at most {}", noun, *maximum);
-    }
-    return std::string{noun};
-}
-
-template <CountedEnum Enum>
-[[nodiscard]] constexpr auto enumAt(std::size_t index) noexcept -> Enum {
-    return static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(index));
-}
-
-/// A named enumerator before Count.
-template <CountedEnum Enum>
-[[nodiscard]] constexpr auto isEnumerator(Enum value) noexcept -> bool {
-    return std::cmp_less(std::to_underlying(value), enumCount<Enum>()) && !enumName(value).empty();
-}
-
-template <CountedEnum Enum>
-[[nodiscard]] auto parseEnum(std::string_view text) -> std::optional<Enum> {
-    if (const auto number = parseInteger(text);
-        number && *number >= 0 && std::cmp_less(*number, enumCount<Enum>())) {
-        const auto value = enumAt<Enum>(static_cast<std::size_t>(*number));
-        return isEnumerator(value) ? std::optional{value} : std::nullopt;
-    }
-    for (std::size_t index = 0; index < enumCount<Enum>(); ++index) {
-        const auto value = enumAt<Enum>(index);
-        if (isEnumerator(value) && equalsIgnoringCase(enumName(value), trimmed(text))) {
-            return value;
-        }
-    }
-    return std::nullopt;
+    const std::string bounds = boundsText(minimum, maximum);
+    return bounds.empty() ? std::string{noun} : std::format("{} {}", noun, bounds);
 }
 
 template <CountedEnum Enum>
 [[nodiscard]] auto enumNumber(Enum value) -> std::int64_t {
     return static_cast<std::int64_t>(std::to_underlying(value));
+}
+
+/// A named enumerator before Count.
+template <CountedEnum Enum>
+[[nodiscard]] constexpr auto isEnumerator(Enum value) noexcept -> bool {
+    return std::ranges::contains(enumerators<Enum>(), value);
+}
+
+/// The enumerator `text` names, by number or by name (ignoring case).
+template <CountedEnum Enum>
+[[nodiscard]] auto parseEnum(std::string_view text) -> std::optional<Enum> {
+    static constexpr auto kValues = enumerators<Enum>();
+    const auto number = parseInteger(text);
+    const auto found = std::ranges::find_if(kValues, [number, name = trimmed(text)](Enum value) {
+        return number ? enumNumber(value) == *number : equalsIgnoringCase(enumName(value), name);
+    });
+    return found != kValues.end() ? std::optional{*found} : std::nullopt;
 }
 
 } // namespace detail
@@ -252,13 +234,10 @@ public:
         } else {
             std::string choices = "one of";
             std::string_view separator = " ";
-            for (std::size_t index = 0; index < enumCount<Type>(); ++index) {
-                const auto enumerator = detail::enumAt<Type>(index);
-                if (detail::isEnumerator(enumerator)) {
-                    choices += std::format("{}{} ({})", separator, detail::enumNumber(enumerator),
-                                           enumName(enumerator));
-                    separator = ", ";
-                }
+            for (const Type enumerator : enumerators<Type>()) {
+                choices +=
+                    std::format("{}{} ({})", separator, detail::enumNumber(enumerator), enumName(enumerator));
+                separator = ", ";
             }
             return choices;
         }

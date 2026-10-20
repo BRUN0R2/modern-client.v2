@@ -4,6 +4,7 @@
 nxAddTest(nxCoreTests
     SOURCES
         introspectionTests.cpp
+        textTests.cpp
         sourceTests.cpp
         debuggingTests.cpp
         contractsTests.cpp

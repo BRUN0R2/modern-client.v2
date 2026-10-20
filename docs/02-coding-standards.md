@@ -215,8 +215,9 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 ### 4.2 Enums
 
 - Always `enum class` with an explicit underlying type (`: std::uint8_t`).
-- The `enum ↔ string` conversion comes from reflection (`nx::enumName(value)`), never from
-  hand-written tables.
+- The `enum ↔ string` conversion comes from reflection (`nx::enumName(value)`, and
+  `nx::enumerators<E>()` for the named values of a counted enum), never from hand-written
+  tables or loops over raw indices.
 - Enums used as array indices have a `Count` sentinel and `nx::EnumArray<E, T>`.
 
 ```cpp

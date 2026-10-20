@@ -109,7 +109,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Contracts `nx::expects`, `nx::ensures`, `nx::invariant` with an *enforce*/*observe* handler
 - [x] Contract handler: stack trace and `breakpoint_if_debugging` (`nx.core:debugging`)
 - [ ] Crash report (minidump and the last log lines) when the contract handler or a crash aborts, in `nx.platform`, with the first application
-- [x] Introspection: `typeName`, `shortTypeName`, `enumName`, `enumCount` (signature-based fallback)
+- [x] Introspection: `typeName`, `shortTypeName`, `enumName`, `enumCount`, `enumerators` (signature-based fallback)
+- [x] Text of diagnostics shared by the modules that read values: `toLowerAscii`, `boundsText`
 - [ ] Introspection through the native path (P2996) when a supported compiler offers it
 - [x] `nx::Quantity` and units (`HammerUnits`, `UnitsPerSecond`, `HitPoints`, `ArmorPoints`, `Damage`, `Money`, `Scale`, angles, time) with literals
 - [x] `nx::narrow`, `nx::tryNarrow`, `nx::truncate`, `nx::tryRound`, checked and saturating arithmetic

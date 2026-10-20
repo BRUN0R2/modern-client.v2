@@ -29,8 +29,7 @@ constexpr std::string_view kUtf8ByteOrderMark = "\xEF\xBB\xBF";
 [[nodiscard]] auto cvarLine(const CvarBase& cvar) -> std::string {
     std::string line = std::format("{} \"{}\"", cvar.name(), cvar.text());
     std::string_view separator = " (";
-    for (std::size_t index = 0; index < enumCount<CvarFlag>(); ++index) {
-        const auto flag = static_cast<CvarFlag>(index);
+    for (const CvarFlag flag : enumerators<CvarFlag>()) {
         if (cvar.flags().test(flag)) {
             line += std::format("{}{}", separator, enumName(flag));
             separator = ", ";
