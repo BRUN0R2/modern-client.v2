@@ -73,11 +73,13 @@ void breakpointIfDebugging() noexcept {
 
 auto currentStackTrace() -> std::string {
 #if defined(__cpp_lib_stacktrace)
-    constexpr std::size_t kThisFunction = 1;
-    const auto trace = std::stacktrace::current(kThisFunction);
+    // The frame count type is the library's (unsigned short in libstdc++), so frames are visited,
+    // not indexed.
+    constexpr std::stacktrace::size_type kThisFunction = 1;
     std::string text;
-    for (std::size_t index = 0; index < trace.size(); ++index) {
-        std::format_to(std::back_inserter(text), "    #{} {}\n", index, std::to_string(trace[index]));
+    std::size_t frame = 0;
+    for (const std::stacktrace_entry& entry : std::stacktrace::current(kThisFunction)) {
+        std::format_to(std::back_inserter(text), "    #{} {}\n", frame++, std::to_string(entry));
     }
     return text;
 #else
