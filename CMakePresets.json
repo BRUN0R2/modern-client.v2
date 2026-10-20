@@ -47,7 +47,8 @@
         "NX_BUILD_TESTS": "OFF",
         "NX_BUILD_BENCHMARKS": "OFF",
         "NX_FUZZ": "ON",
-        "CMAKE_CXX_FLAGS": "/fsanitize=address /fsanitize=fuzzer /D_DISABLE_VECTOR_ANNOTATION /D_DISABLE_STRING_ANNOTATION"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-nx-asan",
+        "CMAKE_CXX_FLAGS": "/fsanitize=address /fsanitize=fuzzer"
       }
     },
     {

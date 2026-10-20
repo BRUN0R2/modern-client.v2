@@ -10,3 +10,11 @@ nxAddFuzzer(fuzzWad
         nx::assets
     CORPUS
         corpus/wad)
+
+nxAddFuzzer(fuzzWav
+    SOURCES
+        wavFuzzer.cpp
+    DEPENDS
+        nx::assets
+    CORPUS
+        corpus/wav)
