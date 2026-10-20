@@ -10,6 +10,7 @@
 export module nx.core:introspection;
 
 import std;
+import :contracts;
 
 export namespace nx {
 
@@ -71,24 +72,43 @@ inline constexpr std::string_view kTypeArgumentPrefix = "typeSignature<";
 inline constexpr std::string_view kValueArgumentPrefix = "valueSignature<";
 #endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+/// GCC ends the argument at the next binding (';') or at the ']' closing the list, outside the
+/// brackets of an array type ("int [3]").
+[[nodiscard]] consteval auto argumentEnd(std::string_view signature, std::size_t first) noexcept
+    -> std::size_t {
+    std::size_t depth = 0;
+    for (std::size_t index = first; index < signature.size(); ++index) {
+        const char character = signature[index];
+        if (character == '[') {
+            ++depth;
+        } else if ((character == ']' && depth == 0) || (character == ';' && depth == 0)) {
+            return index;
+        } else if (character == ']') {
+            --depth;
+        }
+    }
+    return std::string_view::npos;
+}
+#endif
+
+/// The template argument a compiler signature spells after `prefix`. A signature in a format this
+/// file does not know stops the build: names are never silently empty.
 [[nodiscard]] consteval auto templateArgument(std::string_view signature, std::string_view prefix) noexcept
     -> std::string_view {
     const auto prefixAt = signature.find(prefix);
-    if (prefixAt == std::string_view::npos) {
-        return {};
-    }
-    const auto first = prefixAt + prefix.size();
+    const auto first = prefixAt == std::string_view::npos ? prefixAt : prefixAt + prefix.size();
 #if defined(__clang__)
     const auto last = signature.rfind(']');
 #elif defined(__GNUC__)
-    const auto last = signature.find_first_of(";]", first);
+    const auto last = first == std::string_view::npos ? first : argumentEnd(signature, first);
 #else
     const auto last = signature.rfind(">(void)");
 #endif
-    if (last == std::string_view::npos || last < first) {
-        return {};
-    }
-    return signature.substr(first, last - first);
+    const bool isRecognized =
+        first != std::string_view::npos && last != std::string_view::npos && last >= first;
+    expects(isRecognized, "nx.core:introspection: this compiler's signature format is not recognized");
+    return isRecognized ? signature.substr(first, last - first) : std::string_view{};
 }
 
 /// MSVC spells type arguments with their class-key ("enum ns::Name").
@@ -125,6 +145,47 @@ inline constexpr std::string_view kValueArgumentPrefix = "valueSignature<";
 [[nodiscard]] consteval auto isDecimalDigit(char character) noexcept -> bool {
     return character >= '0' && character <= '9';
 }
+
+/// Characters of a module name ("nx.core", a partition "nx.core:text"); "::" ends it.
+[[nodiscard]] constexpr auto moduleNameEnd(std::string_view name, std::size_t first) noexcept -> std::size_t {
+    std::size_t index = first;
+    while (index < name.size() && !name.substr(index).starts_with(kScopeSeparator)) {
+        const char character = name[index];
+        const bool isLetter =
+            (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
+        const bool isDigit = character >= '0' && character <= '9';
+        if (!isLetter && !isDigit && character != '_' && character != '.' && character != ':') {
+            break;
+        }
+        ++index;
+    }
+    return index;
+}
+
+/// `name` without the module GCC writes after every type attached to a named one
+/// ("nx::BspError@nx.assets"), so names read the same on every compiler.
+[[nodiscard]] constexpr auto withoutModuleAttachment(std::string_view name) -> std::string {
+    std::string plain;
+    std::size_t index = 0;
+    while (index < name.size()) {
+        if (name[index] == '@') {
+            index = moduleNameEnd(name, index + 1);
+        } else {
+            plain += name[index++];
+        }
+    }
+    return plain;
+}
+
+/// The name of `Type`, stored for the program's lifetime.
+template <class Type>
+inline constexpr auto kTypeName = [] {
+    constexpr std::string_view kSpelled =
+        withoutClassKey(templateArgument(typeSignature<Type>(), kTypeArgumentPrefix));
+    std::array<char, withoutModuleAttachment(kSpelled).size()> name{};
+    std::ranges::copy(withoutModuleAttachment(kSpelled), name.begin());
+    return name;
+}();
 
 template <auto Value>
 [[nodiscard]] consteval auto enumeratorName() noexcept -> std::string_view {
@@ -167,8 +228,7 @@ inline constexpr auto kEnumNameTable =
 /// Fully qualified name of `Type`, e.g. "nx::assets::BspError".
 template <class Type>
 [[nodiscard]] consteval auto typeName() noexcept -> std::string_view {
-    return detail::withoutClassKey(
-        detail::templateArgument(detail::typeSignature<Type>(), detail::kTypeArgumentPrefix));
+    return std::string_view{detail::kTypeName<Type>.data(), detail::kTypeName<Type>.size()};
 }
 
 /// Unqualified name of `Type`, e.g. "BspError".

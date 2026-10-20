@@ -106,6 +106,7 @@ dialect is `/std:c++latest`.
 | libstdc++'s `std` module (GCC 16) advertises `__cpp_lib_saturation_arithmetic` but does not export `std::add_sat` and friends | `nx.core` uses its own saturated arithmetic on every compiler |
 | libstdc++ keeps `std::stacktrace` in a separate library, `libstdc++exp` | `nx.core` links `stdc++exp` on GCC (`nx::currentStackTrace`) |
 | GCC 16 also applies `-Wmissing-field-initializers` (from `-Wextra`) to designated initializers that omit a member without a default initializer; MSVC does not warn | Every aggregate member that can be omitted has a default initializer (`Entity entity{};`). The required ones, such as `JobDesc::label`, have types without a default constructor: omitting them does not even compile |
+| GCC 16 spells a type imported from a named module with the module after it (`nx::ConversionError@nx.core`) in `__PRETTY_FUNCTION__`, where `nx.core:introspection` reads type names | `nx::typeName` drops every `@<module>`, so names read the same on every compiler (`Introspection.NamesTypesAttachedToAModuleWithoutTheModule`) |
 
 ## 3. Presets
 
