@@ -52,7 +52,8 @@ private:
 ///
 /// Freed slots are reused in FIFO order, so an index stays unused for as long as possible. A slot
 /// whose generation reaches the limit is retired instead of wrapping around, so a stale handle can
-/// never name another entity.
+/// never name another entity. The free slots form a queue threaded through the slots themselves:
+/// creating and destroying never allocate once the table has grown.
 class EntityTable {
 public:
     /// Generations run from 0 to kGenerationLimit - 1.
@@ -69,19 +70,33 @@ public:
     /// `entity` must be alive.
     void destroy(Entity entity);
 
-    [[nodiscard]] auto isAlive(Entity entity) const noexcept -> bool;
+    [[nodiscard]] inline auto isAlive(Entity entity) const noexcept -> bool {
+        // A freed or retired slot already holds a generation no issued handle carries.
+        const std::uint32_t slot = std::to_underlying(entity.index());
+        return slot < m_slots.size() && m_slots[slot].generation == entity.generation();
+    }
 
     /// Slots ever used, alive or not; slot indices are below this.
-    [[nodiscard]] inline auto slotCount() const noexcept -> std::size_t { return m_generations.size(); }
+    [[nodiscard]] inline auto slotCount() const noexcept -> std::size_t { return m_slots.size(); }
     [[nodiscard]] inline auto aliveCount() const noexcept -> std::size_t {
-        return m_generations.size() - m_freeSlots.size() - m_retiredCount;
+        return m_slots.size() - m_freeCount - m_retiredCount;
     }
     /// Slots whose generations ran out (reported by ecs_stats).
     [[nodiscard]] inline auto retiredCount() const noexcept -> std::size_t { return m_retiredCount; }
 
 private:
-    std::vector<Generation> m_generations; // current generation of each slot
-    std::deque<std::uint32_t> m_freeSlots; // oldest freed first
+    /// Ends the queue of free slots; no slot has this index (it is the null entity's).
+    static constexpr std::uint32_t kNoSlot = std::to_underlying(Entity::kNullIndex);
+
+    struct Slot {
+        Generation generation{};          // current generation: the alive handle carries it
+        std::uint32_t nextFree = kNoSlot; // while free: the slot freed after this one
+    };
+
+    std::vector<Slot> m_slots;
+    std::uint32_t m_firstFree = kNoSlot; // oldest freed: the next to reuse
+    std::uint32_t m_lastFree = kNoSlot;  // newest freed
+    std::size_t m_freeCount = 0;
     std::size_t m_retiredCount = 0;
     std::uint32_t m_generationLimit = kGenerationLimit;
 };

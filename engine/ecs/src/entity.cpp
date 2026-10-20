@@ -16,16 +16,19 @@ EntityTable::EntityTable(std::uint32_t generationLimit) noexcept : m_generationL
 }
 
 auto EntityTable::create() -> Entity {
-    if (!m_freeSlots.empty()) {
-        const std::uint32_t slot = m_freeSlots.front();
-        m_freeSlots.pop_front();
-        return Entity{EntityIndex{slot}, m_generations[slot]};
+    if (m_firstFree != kNoSlot) {
+        const std::uint32_t slot = m_firstFree;
+        m_firstFree = m_slots[slot].nextFree;
+        if (m_firstFree == kNoSlot) {
+            m_lastFree = kNoSlot;
+        }
+        --m_freeCount;
+        return Entity{EntityIndex{slot}, m_slots[slot].generation};
     }
     // Index max() is the null entity; memory runs out long before this does.
-    invariant(m_generations.size() < std::to_underlying(Entity::kNullIndex),
-              "EntityTable: the 32-bit index space is exhausted");
-    const auto slot = static_cast<std::uint32_t>(m_generations.size());
-    m_generations.push_back(Generation{0});
+    invariant(m_slots.size() < kNoSlot, "EntityTable: the 32-bit index space is exhausted");
+    const auto slot = static_cast<std::uint32_t>(m_slots.size());
+    m_slots.emplace_back();
     return Entity{EntityIndex{slot}, Generation{0}};
 }
 
@@ -37,18 +40,19 @@ void EntityTable::destroy(Entity entity) {
     const std::uint32_t slot = std::to_underlying(entity.index());
     const std::uint32_t next = std::to_underlying(entity.generation()) + 1;
     // The slot moves on to the next generation right away, so the destroyed handle stops matching.
-    m_generations[slot] = Generation{next};
+    m_slots[slot].generation = Generation{next};
     if (next >= m_generationLimit) {
         ++m_retiredCount;
-    } else {
-        m_freeSlots.push_back(slot);
+        return;
     }
-}
-
-auto EntityTable::isAlive(Entity entity) const noexcept -> bool {
-    // A freed or retired slot already holds a generation no issued handle carries.
-    const std::uint32_t slot = std::to_underlying(entity.index());
-    return slot < m_generations.size() && m_generations[slot] == entity.generation();
+    m_slots[slot].nextFree = kNoSlot;
+    if (m_lastFree == kNoSlot) {
+        m_firstFree = slot;
+    } else {
+        m_slots[m_lastFree].nextFree = slot;
+    }
+    m_lastFree = slot;
+    ++m_freeCount;
 }
 
 } // namespace nx::ecs

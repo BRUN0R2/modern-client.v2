@@ -8,23 +8,7 @@ import nx.core;
 
 namespace nx::ecs {
 
-namespace {
-
-[[nodiscard]] constexpr auto alignUp(std::size_t value, std::size_t alignment) noexcept -> std::size_t {
-    return (value + alignment - 1) & ~(alignment - 1);
-}
-
-} // namespace
-
 namespace detail {
-
-void relocateComponent(const ComponentInfo& info, void* destination, void* source) noexcept {
-    if (info.relocate != nullptr) {
-        info.relocate(destination, source);
-    } else {
-        std::memcpy(destination, source, info.size);
-    }
-}
 
 auto ChunkPool::acquire(std::size_t blockCount) -> ChunkStorage {
     if (blockCount == 1 && !m_free.empty()) {
@@ -59,9 +43,13 @@ Archetype::Archetype(ArchetypeId id, std::vector<ComponentTypeId> types, const C
             "Archetype: component types must be sorted and unique");
     for (const ComponentTypeId type : m_types) {
         const ComponentInfo& info = registry.info(type);
-        if (!info.isTag()) {
-            m_columns.push_back(Column{.type = type, .offset = 0, .info = &info});
+        if (info.isTag()) {
+            continue;
         }
+        if (info.destroy != nullptr) {
+            m_destructedColumns.push_back(m_columns.size());
+        }
+        m_columns.push_back(Column{.type = type, .offset = 0, .info = &info});
     }
     computeLayout();
 }
@@ -101,19 +89,34 @@ auto Archetype::entityAt(EntityLocation location) const noexcept -> Entity {
 }
 
 auto Archetype::appendRow(Entity entity, detail::ChunkPool& pool, Version now) -> EntityLocation {
+    return appendRows(std::span{&entity, 1}, pool, now);
+}
+
+auto Archetype::appendRows(std::span<const Entity> entities, detail::ChunkPool& pool, Version now)
+    -> EntityLocation {
+    expects(!entities.empty(), "Archetype::appendRows: at least one entity");
     if (m_chunks.empty() || m_chunks.back().rowCount() == m_chunkCapacity) {
         m_chunks.emplace_back(pool.acquire(m_blocksPerChunk), m_columns.size());
     }
-    Chunk& chunk = m_chunks.back();
-    const EntityLocation location{
+    const EntityLocation first{
         .archetype = m_id,
         .chunk = narrow<std::uint32_t>(m_chunks.size() - 1),
-        .row = chunk.m_rowCount,
+        .row = m_chunks.back().m_rowCount,
     };
-    std::memcpy(chunk.data() + (std::size_t{location.row} * sizeof(Entity)), &entity, sizeof(Entity));
-    ++chunk.m_rowCount;
-    chunk.markAllChanged(now);
-    return location;
+    for (std::size_t appended = 0;;) {
+        Chunk& chunk = m_chunks.back();
+        const std::size_t count =
+            std::min(entities.size() - appended, std::size_t{m_chunkCapacity - chunk.m_rowCount});
+        std::memcpy(chunk.data() + (std::size_t{chunk.m_rowCount} * sizeof(Entity)), &entities[appended],
+                    count * sizeof(Entity));
+        chunk.m_rowCount += narrow<std::uint32_t>(count);
+        chunk.markAllChanged(now);
+        appended += count;
+        if (appended == entities.size()) {
+            return first;
+        }
+        m_chunks.emplace_back(pool.acquire(m_blocksPerChunk), m_columns.size());
+    }
 }
 
 auto Archetype::removeRow(EntityLocation location, RowContents contents, detail::ChunkPool& pool, Version now)
@@ -192,10 +195,8 @@ auto Archetype::layOut(std::size_t capacity) -> std::size_t {
 }
 
 void Archetype::destroyRow(EntityLocation location) noexcept {
-    for (std::size_t column = 0; column < m_columns.size(); ++column) {
-        if (const auto destroy = m_columns[column].info->destroy; destroy != nullptr) {
-            destroy(componentAt(location, column));
-        }
+    for (const std::size_t column : m_destructedColumns) {
+        m_columns[column].info->destroy(componentAt(location, column));
     }
 }
 

@@ -91,6 +91,19 @@ template <class Type>
     return &kTypeKey<Type>;
 }
 
+/// Hash of a type key, for the maps every typed operation looks up: one multiplication by 2^64/phi
+/// (Fibonacci hashing), folded so the low bits mix as well as the high ones. std::hash of a pointer
+/// is not built for this: MSVC runs FNV-1a over its bytes, several times slower.
+struct TypeKeyHash {
+    [[nodiscard]] inline auto operator()(const void* typeKey) const noexcept -> std::size_t {
+        constexpr std::uint64_t kFibonacciMultiplier = 0x9E37'79B9'7F4A'7C15ULL;
+        constexpr unsigned kFoldShift = 32;
+        const std::uint64_t mixed =
+            std::uint64_t{std::bit_cast<std::uintptr_t>(typeKey)} * kFibonacciMultiplier;
+        return static_cast<std::size_t>(mixed ^ (mixed >> kFoldShift));
+    }
+};
+
 } // namespace detail
 
 /// Component types known to one world, in registration order.
@@ -120,7 +133,7 @@ public:
 
 private:
     std::deque<ComponentInfo> m_infos; // a deque keeps references stable as it grows
-    std::unordered_map<const void*, ComponentTypeId> m_byTypeKey;
+    std::unordered_map<const void*, ComponentTypeId, detail::TypeKeyHash> m_byTypeKey;
     std::unordered_map<StableId, ComponentTypeId> m_byStableId;
 };
 

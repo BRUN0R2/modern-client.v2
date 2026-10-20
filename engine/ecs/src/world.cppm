@@ -94,13 +94,16 @@ public:
         static_assert(detail::areDistinct<std::remove_cvref_t<Types>...>(),
                       "spawn: each component type at most once");
         const std::array ids{requireComponentId<std::remove_cvref_t<Types>>()...};
-        std::vector<ComponentTypeId> types;
+        std::array<ComponentTypeId, sizeof...(Types)> types{};
+        std::size_t count = 0;
         for (const auto& id : ids) {
             if (id.has_value()) {
-                types.push_back(*id);
+                types[count++] = *id;
             }
         }
-        const auto [entity, location] = spawnUninitialized(std::move(types));
+        const auto sorted = std::span{types}.first(count);
+        std::ranges::sort(sorted);
+        const auto [entity, location] = spawnUninitialized(sorted);
         std::size_t index = 0;
         (constructComponent(location, ids[index++], std::forward<Types>(components)), ...);
         return entity;
@@ -146,6 +149,14 @@ public:
             std::ignore = moveEntity(entity, *location, archetypeWithout(location->archetype, *id));
         }
     }
+
+    /// Untyped spawn, for command buffers and run-time components: one entity per element of
+    /// `spawned`, written there, each with the component types `types` (each at most once, in any
+    /// order), placed straight in their archetype as one batch of rows. `sources` holds the
+    /// components to move in, entity after entity and in `types` order (nullptr for tags); each one
+    /// ends destroyed. An empty `spawned` spawns nothing.
+    void spawnRelocated(std::span<const ComponentTypeId> types, std::span<void* const> sources,
+                        std::span<Entity> spawned);
 
     /// Untyped add, for command buffers and run-time components: moves the component of type
     /// `type` at `source` (nullptr for tags) into the entity, replacing the one it has. The source
@@ -286,9 +297,22 @@ private:
         const std::unique_ptr<Type> owned{static_cast<Type*>(object)};
     }
 
-    [[nodiscard]] auto spawnUninitialized(std::vector<ComponentTypeId> types) -> SpawnedRow;
+    /// Orders sorted type lists; transparent, so a span finds a stored list without a copy.
+    struct TypeListLess {
+        using is_transparent = void;
+
+        [[nodiscard]] inline auto operator()(std::span<const ComponentTypeId> a,
+                                             std::span<const ComponentTypeId> b) const noexcept -> bool {
+            return std::ranges::lexicographical_compare(a, b);
+        }
+    };
+
+    [[nodiscard]] auto spawnUninitialized(std::span<const ComponentTypeId> sortedTypes) -> SpawnedRow;
+    /// A new entity in a new row of `owner`, whose components the caller constructs.
+    [[nodiscard]] auto appendEntity(Archetype& owner) -> SpawnedRow;
+    void setLocation(Entity entity, EntityLocation location);
     [[nodiscard]] auto requireLocation(Entity entity) const -> std::optional<EntityLocation>;
-    [[nodiscard]] auto archetypeFor(std::vector<ComponentTypeId> sortedTypes) -> ArchetypeId;
+    [[nodiscard]] auto archetypeFor(std::span<const ComponentTypeId> sortedTypes) -> ArchetypeId;
     [[nodiscard]] auto archetypeWith(ArchetypeId from, ComponentTypeId added) -> ArchetypeId;
     [[nodiscard]] auto archetypeWithout(ArchetypeId from, ComponentTypeId removed) -> ArchetypeId;
     /// Moves the entity's row to `target`, keeping the components both archetypes have and
@@ -322,8 +346,11 @@ private:
     std::vector<EntityLocation> m_locations; // by entity slot
     detail::ChunkPool m_chunkPool;
     std::vector<std::unique_ptr<Archetype>> m_archetypes;
-    std::map<std::vector<ComponentTypeId>, ArchetypeId> m_archetypeByTypes;
-    std::unordered_map<const void*, ResourceObject> m_resources;
+    std::map<std::vector<ComponentTypeId>, ArchetypeId, TypeListLess> m_archetypeByTypes;
+    // Scratch of spawnRelocated, kept to spare allocations.
+    std::vector<ComponentTypeId> m_spawnTypes;              // sorted
+    std::vector<std::optional<std::size_t>> m_spawnColumns; // column of each type; nullopt for tags
+    std::unordered_map<const void*, ResourceObject, detail::TypeKeyHash> m_resources;
     std::vector<EventQueue> m_eventQueues;
     Version m_version{1};
     mutable std::atomic<int> m_activeIterations{0};

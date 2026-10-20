@@ -42,7 +42,13 @@ struct alignas(kMaxComponentAlignment) ChunkBlock {
 using ChunkStorage = std::unique_ptr<ChunkBlock[]>;
 
 /// Moves a component from `source` to the uninitialized `destination`; the source ends destroyed.
-void relocateComponent(const ComponentInfo& info, void* destination, void* source) noexcept;
+inline void relocateComponent(const ComponentInfo& info, void* destination, void* source) noexcept {
+    if (info.relocate != nullptr) {
+        info.relocate(destination, source);
+    } else {
+        std::memcpy(destination, source, info.size);
+    }
+}
 
 /// Keeps the storage of emptied single-block chunks for the next chunk of any archetype.
 class ChunkPool {
@@ -147,6 +153,19 @@ public:
     /// every column. The chunk's versions become `now`, since its contents changed.
     [[nodiscard]] auto appendRow(Entity entity, detail::ChunkPool& pool, Version now) -> EntityLocation;
 
+    /// appendRow for each of `entities` (at least one), in order and a chunk at a time. Returns the
+    /// first row; each next one is nextRow() of the one before.
+    [[nodiscard]] auto appendRows(std::span<const Entity> entities, detail::ChunkPool& pool, Version now)
+        -> EntityLocation;
+
+    /// The row after `location` in this archetype: the next in its chunk, or the first of the next.
+    [[nodiscard]] inline auto nextRow(EntityLocation location) const noexcept -> EntityLocation {
+        if (location.row + 1 < m_chunkCapacity) {
+            return EntityLocation{.archetype = m_id, .chunk = location.chunk, .row = location.row + 1};
+        }
+        return EntityLocation{.archetype = m_id, .chunk = location.chunk + 1, .row = 0};
+    }
+
     /// Removes a row, moving the archetype's last row into the hole. Returns the entity that moved,
     /// whose location the caller updates.
     auto removeRow(EntityLocation location, RowContents contents, detail::ChunkPool& pool, Version now)
@@ -169,7 +188,8 @@ private:
 
     ArchetypeId m_id;
     std::vector<ComponentTypeId> m_types;
-    std::vector<Column> m_columns; // stored components, in type order
+    std::vector<Column> m_columns;                // stored components, in type order
+    std::vector<std::size_t> m_destructedColumns; // the columns whose type has a destructor to run
     std::vector<Chunk> m_chunks;
     std::uint32_t m_chunkCapacity = 0;
     std::size_t m_blocksPerChunk = 1;

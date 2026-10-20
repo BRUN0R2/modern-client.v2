@@ -292,10 +292,17 @@ schedule.add({.name = "integrateProjectiles", .phase = nx::ecs::Phase::Simulatio
 - **Entities created in a command buffer** receive a local `PendingEntity`, which other
   commands in the same buffer can use as a target. The real `Entity` is allocated at
   application, in deterministic order, and `commands.resolve(pending)` returns it after
-  `apply`.
-- Commands whose target died before application (a grenade's owner died before the grenade
-  spawned) are ignored and counted in `CommandStats::skipped`; the recorded component is
-  destroyed.
+  `apply`. `spawn(components...)` records the components with the spawn, so `apply` creates
+  the entity directly in its final archetype instead of moving it through one archetype per
+  component.
+- **Runs:** spawns recorded one after another with the same component types form one command,
+  which `apply` places as one batch of rows in their archetype (`World::spawnRelocated`: one
+  archetype lookup per batch, not per entity); destroys recorded one after another form one
+  command too. A run changes nothing observable: entities and ids come out exactly as from the
+  same commands applied one by one.
+- `CommandStats` counts recorded commands: a spawn counts once, with its components. Commands
+  whose target died before application (a grenade's owner died before the grenade spawned)
+  are ignored and counted in `CommandStats::skipped`; the recorded component is destroyed.
 
 ## 9. Events
 
@@ -383,6 +390,6 @@ Destroying an entity removes the relations that point to it at the same sync poi
 | Scheduler overhead per empty system | < 2 µs |
 
 `nxBenchEcs` measures the three (`iterateTwoComponents`, `spawnAndDestroyThroughCommands`,
-`emptySystems`); run it from a release build. On a 14-core development machine (2026-10-20),
-iteration and the scheduler meet their targets, and the command buffers do not yet: about 6 ms
-for 10,000 spawns and destroys, an item of the `TODO.md`.
+`emptySystems`); run it from a release build. On a 14-core development machine (2026-10-20), the
+three meet their targets: about 0.16 ms for the iteration, 0.86 ms to create and destroy 10,000
+entities through reused command buffers, and 0.18 µs per empty system on one thread.
