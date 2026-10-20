@@ -98,7 +98,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Linux job with Clang
 - [x] Formatting (`clang-format --dry-run --Werror`) in the `checks` job
 - [ ] `clang-tidy` in CI (requires a Clang build and modules)
-- [x] Dependency graph check: every module declares its layer and CMake refuses a dependency on the same or a higher layer, in every build and CI job ([01 §1.1](docs/01-architecture.md#11-module-catalog))
+- [x] Dependency graph check: every module declares its layer and CMake refuses a dependency on the same or a higher layer once every module exists, in every build ([01 §1.1](docs/01-architecture.md#11-module-catalog)), with `LayerCheck.*` regression tests
 - [x] ThreadSanitizer on all tests (`tsan-linux-gcc` preset in the `linux-gcc` job)
 - [ ] ASan + UBSan jobs (with Clang)
 - [x] Line endings (`git ls-files --eol`) in the `checks` job

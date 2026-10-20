@@ -77,9 +77,11 @@ flowchart TB
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
-module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`, `cmake/nxTargets.cmake`),
-and a dependency on a project module of the same or of a higher layer fails the configuration,
-locally and in every CI job. A strict layer order also rules out cycles. The same-layer
+module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every
+module exists (`cmake/nxLayers.cmake`, at the end of the configuration, whatever order the
+modules are added in) a dependency on a project module of the same or of a higher layer fails
+the configuration, locally and in every CI build. The `LayerCheck.*` tests run that check on a
+fixture of empty modules. A strict layer order also rules out cycles. The same-layer
 dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi`, `nx.render` on `nx.assets`, …)
 get their explicit declaration in that check together with the first of those modules.
 

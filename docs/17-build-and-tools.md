@@ -57,6 +57,7 @@ modern-client.v2/
 ├── tests/
 │   ├── parity/                 # parity fixtures and tests
 │   ├── integration/
+│   ├── cmake/                  # fixtures of the build's own checks (layerCheck)
 │   ├── fuzz/
 │   └── bench/
 ├── scripts/
@@ -207,6 +208,7 @@ Rules:
 | `nxbake` | Asset tool |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
+| `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks |
 | `fuzz*` | Fuzzing targets (libFuzzer) |
 
@@ -221,7 +223,7 @@ and on demand. **Running today:**
 | `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
 | `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests | Yes |
 
-Every job also checks the module layers when CMake configures
+Every build job also checks the module layers when CMake configures
 ([01 §1.1](01-architecture.md#11-module-catalog)): a dependency on the same or a higher layer fails
 the configuration.
 
