@@ -73,10 +73,10 @@ TEST(AabbTest, ExpandedIsTheMinkowskiSum) {
 }
 
 TEST(AabbTest, NegativeSizesAreViolations) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = kPlayer.expanded(Vec3{.x = -1});
     std::ignore = Aabb::around(Vec3{}, Vec3{.z = -1});
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 2);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 2);
 }
 
 } // namespace

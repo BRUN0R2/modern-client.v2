@@ -233,9 +233,9 @@ TEST_F(WorldTest, AnUntypedSpawnRejectsARepeatedType) {
     const std::array<void*, 2> sources{&first, &second};
     std::array<Entity, 1> spawned{};
 
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     world.spawnRelocated(repeated, sources, spawned);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
     EXPECT_EQ(world.entityCount(), 0U);
 }
 
@@ -259,9 +259,9 @@ TEST_F(WorldTest, ConstAccessReadsTheComponent) {
 
 TEST_F(WorldTest, AnUnregisteredComponentIsAViolation) {
     const Entity entity = world.spawn(Position{});
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     world.add(entity, Unregistered{});
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
     EXPECT_FALSE(world.has<Unregistered>(entity));
     EXPECT_TRUE(world.has<Position>(entity));
 }
@@ -269,10 +269,10 @@ TEST_F(WorldTest, AnUnregisteredComponentIsAViolation) {
 TEST_F(WorldTest, ChangingADeadEntityIsAViolation) {
     const Entity entity = world.spawn();
     world.destroy(entity);
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     world.add(entity, Position{});
     world.destroy(entity);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 2);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 2);
 }
 
 TEST_F(WorldTest, VersionsStartAtOneAndAdvance) {

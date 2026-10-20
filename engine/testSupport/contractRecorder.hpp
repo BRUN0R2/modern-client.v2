@@ -7,7 +7,7 @@
 // returns ("observe"), so tests can assert that a check fired without aborting the process.
 // Include after `import nx.core;`.
 
-namespace nx_test {
+namespace nx::test {
 
 struct RecordedViolations {
     int count = 0;
@@ -48,4 +48,4 @@ private:
     nx::ContractViolationHandler m_previous;
 };
 
-} // namespace nx_test
+} // namespace nx::test

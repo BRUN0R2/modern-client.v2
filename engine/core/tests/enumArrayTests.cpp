@@ -53,7 +53,7 @@ TEST(EnumArray, ComparesByValue) {
 }
 
 TEST(EnumArray, OutOfRangeKeysAreReportedAndStayInBounds) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     nx::EnumArray<HitGroup, int> values{nx::EnumArray<HitGroup, int>::Storage{1, 2, 3, 4}};
 
     const auto value = values[HitGroup::Count];

@@ -16,7 +16,7 @@ using nx::Mat3x4;
 using nx::Mat4;
 using nx::Vec3;
 using nx::Vec4;
-using nx_test::isNear;
+using nx::test::isNear;
 
 /// Quarter turn about +Z: +X becomes +Y.
 constexpr Mat3 kQuarterTurnAboutZ{

@@ -27,8 +27,8 @@ enum class ForceCamera : std::uint8_t {
 
 class CvarRegistrationTest : public testing::Test {
 protected:
-    nx_test::RecordingOutput output;
-    nx_test::MemoryFiles files;
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
     Console console{output, files};
 };
 

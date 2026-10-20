@@ -86,7 +86,7 @@ TEST(FrameArena, EmptyRequestsAllocateNothing) {
 }
 
 TEST(FrameArena, RejectsAlignmentsThatAreNotPowersOfTwo) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     nx::FrameArena arena{kArenaBytes};
 
     const auto result = arena.allocateBytes(8, 3);

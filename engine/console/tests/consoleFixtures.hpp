@@ -6,7 +6,7 @@
 // Test doubles for the console: an output that records what it gets and in-memory config files.
 // Include after `import nx.console;`.
 
-namespace nx_test {
+namespace nx::test {
 
 class RecordingOutput final : public nx::console::ConsoleOutput {
 public:
@@ -47,4 +47,4 @@ public:
     std::map<std::string, std::string> files;
 };
 
-} // namespace nx_test
+} // namespace nx::test

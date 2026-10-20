@@ -193,11 +193,11 @@ TEST_F(QueryTest, SeesArchetypesCreatedAfterIt) {
 
 TEST_F(QueryTest, AStructuralChangeDuringIterationIsAViolation) {
     std::ignore = world.spawn(Position{});
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     Query<const Position&>{world}.forEach([this](const Position&) {
         std::ignore = world.spawn(); // goes to another archetype, so the iteration itself stays valid
     });
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 } // namespace

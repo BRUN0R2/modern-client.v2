@@ -18,7 +18,7 @@ namespace {
 } // namespace
 
 TEST(Contracts, SatisfiedConditionsReportNothing) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     nx::expects(true, "always holds");
     nx::ensures(true, "always holds");
@@ -29,7 +29,7 @@ TEST(Contracts, SatisfiedConditionsReportNothing) {
 }
 
 TEST(Contracts, ViolationReachesTheHandlerWithKindDescriptionAndLocation) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     std::ignore = halve(3); // only the report matters
 
@@ -40,7 +40,7 @@ TEST(Contracts, ViolationReachesTheHandlerWithKindDescriptionAndLocation) {
 }
 
 TEST(Contracts, EachCheckReportsItsOwnKind) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     nx::ensures(false, "postcondition");
     EXPECT_EQ(recorder.last().kind, nx::ContractKind::Postcondition);
@@ -52,7 +52,7 @@ TEST(Contracts, EachCheckReportsItsOwnKind) {
 }
 
 TEST(Contracts, ObservingHandlerLetsExecutionContinue) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     const auto result = halve(5);
 

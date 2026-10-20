@@ -253,17 +253,17 @@ TEST_F(ScheduleTest, AMissingResourceIsAViolationAndSkipsTheSystem) {
     std::ignore = schedule.add({.name = "needsMissing"}, [&ran](Res<const Missing>) { ran = true; });
     ASSERT_TRUE(schedule.build().has_value());
 
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = schedule.run(Phase::Simulation, *jobs);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
     EXPECT_FALSE(ran);
 }
 
 TEST_F(ScheduleTest, RunningWithoutBuildingIsAViolation) {
     std::ignore = schedule.add({.name = "unbuilt"}, [] {});
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = schedule.run(Phase::Simulation, *jobs);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 /// A small simulation: spawning, parallel movement, events and destruction through commands.

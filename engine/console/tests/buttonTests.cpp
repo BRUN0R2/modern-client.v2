@@ -33,8 +33,8 @@ protected:
 
     [[nodiscard]] auto edges() -> ButtonEdges { return jump->takeEdges(); }
 
-    nx_test::RecordingOutput output;
-    nx_test::MemoryFiles files;
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
     Console console{output, files};
     std::optional<Button> jump;
 };
