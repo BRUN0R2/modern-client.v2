@@ -11,6 +11,7 @@ export module nx.ecs:query;
 import std;
 import nx.core;
 import nx.jobs;
+import :access;
 import :archetype;
 import :component;
 import :entity;
@@ -248,6 +249,34 @@ public:
     Query(World& world, Version lastRun, Version thisRun)
         : m_world{&world}, m_lastRun{lastRun}, m_thisRun{thisRun} {
         resolveComponentIds(std::make_index_sequence<kTermCount>{});
+    }
+
+    /// Versions of the next iteration; the scheduler sets them before each run of a system.
+    void setRunVersions(Version lastRun, Version thisRun) noexcept {
+        m_lastRun = lastRun;
+        m_thisRun = thisRun;
+    }
+
+    /// Adds what this query reads and writes. Changed<T> reads T's change versions, which writers
+    /// of T stamp, so it counts as a read; With and Without only look at archetypes.
+    void declareAccess(SystemAccess& access) const {
+        for (std::size_t term = 0; term < kTermCount; ++term) {
+            switch (kKinds[term]) {
+            case detail::TermKind::Read:
+            case detail::TermKind::OptionalRead:
+            case detail::TermKind::Changed:
+                access.componentReads.push_back(m_ids[term]);
+                break;
+            case detail::TermKind::Write:
+            case detail::TermKind::OptionalWrite:
+                access.componentWrites.push_back(m_ids[term]);
+                break;
+            case detail::TermKind::EntityHandle:
+            case detail::TermKind::With:
+            case detail::TermKind::Without:
+                break;
+            }
+        }
     }
 
     /// Calls `function` with the accessed values of every matching entity, chunk after chunk.

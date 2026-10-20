@@ -199,22 +199,45 @@ using MovingBodies = nx::ecs::Query<
 ### 7.1 Declaração
 
 ```cpp
-void integrateProjectiles(MovingBodies bodies,
+void integrateProjectiles(MovingBodies& bodies,
                           nx::ecs::Res<const cs::MovementSettings> settings,
-                          nx::ecs::Res<const nx::TickTime> time)
+                          nx::ecs::Res<const nx::TickTime> time,
+                          nx::jobs::JobSystem& jobs)
 {
-    bodies.parallelForEachChunk([&](std::span<const cs::Transform> transforms,
-                                    std::span<cs::Velocity> velocities) {
+    bodies.parallelForEachChunk(jobs, [&](std::span<const cs::Transform> transforms,
+                                          std::span<cs::Velocity> velocities) {
         for (auto& velocity : velocities) {
             velocity.linear.z -= settings->gravity.value() * time->delta.count();
         }
     });
 }
 
-schedule.add(integrateProjectiles)
-        .in(nx::ecs::Phase::Simulation)
-        .after(applyUserCommands);
+const nx::ecs::SystemId gravity =
+    schedule.add({.name = "applyGravity", .phase = nx::ecs::Phase::Simulation}, applyGravity);
+const std::array afterGravity{gravity};
+schedule.add({.name = "integrateProjectiles", .phase = nx::ecs::Phase::Simulation, .after = afterGravity},
+             integrateProjectiles);
 ```
+
+- Um sistema é uma função ou lambda (não genérica) que retorna `void` e só recebe
+  parâmetros de sistema. Cada tipo de parâmetro declara o próprio acesso:
+
+| Parâmetro | Acesso declarado |
+|-----------|------------------|
+| `Query<...>&` | Leitura/escrita por termo; `Changed<T>` conta como leitura de `T`. Por valor também funciona, mas copia a query a cada execução |
+| `Res<const T>` / `Res<T>` | Leitura / escrita do recurso `T` |
+| `EventReader<E>` / `EventWriter<E>` | Leitura / escrita da fila `Events<E>` |
+| `Commands&` | Nenhum: cada sistema tem o próprio buffer |
+| `World&` | Exclusivo: conflita com todos |
+| `nx::jobs::JobSystem&` | Nenhum |
+
+- O registro usa um `SystemDesc` com inicialização designada, como as outras opções da
+  engine ([02 §9](02-padroes-de-codigo.md#9-funções-e-classes)): `name` (um `JobLabel`,
+  também usado como rótulo do job), `phase`, `after` e `before` (com os `SystemId` que
+  `add` retorna).
+- Recursos são valores únicos por mundo: `world.insertResource(GameRules{...})`,
+  `world.resource<GameRules>()`. Um sistema cujo recurso não existe viola contrato e não
+  roda.
 
 ### 7.2 Fases
 
@@ -236,7 +259,15 @@ schedule.add(integrateProjectiles)
 - Sistemas sem conflito executam em paralelo. Os que conflitam executam na **ordem de
   declaração**, ajustada por `.before()`/`.after()`.
 - Ciclos de ordenação são erro de construção do schedule (`ScheduleError::Cycle`), com o
-  ciclo impresso.
+  ciclo impresso (`alpha -> beta -> alpha`). Restrição que cita um sistema inexistente é
+  `ScheduleError::UnknownSystem`, e restrição que contradiz a ordem das fases é
+  `ScheduleError::OrderAcrossPhases`.
+- `schedule.build()` monta os grafos; `schedule.run(phase, jobs)` executa uma fase, com
+  cada sistema como um job que depende dos seus predecessores no grafo.
+  `schedule.dependenciesOf(id)` expõe o grafo para diagnóstico.
+- As **versões de mudança** de cada execução são distribuídas antes de qualquer sistema
+  rodar, na ordem do schedule. Assim, o que `Changed<T>` enxerga não depende de tempo nem da
+  quantidade de workers.
 - **Sistemas exclusivos** (`nx::ecs::World&` mutável) rodam sozinhos e servem para
   operações que tocam o mundo inteiro (carregar mapa, reset de round).
 - **Regras de gameplay** que dependem de ordem (dano, morte, compra, round) vivem na fase
@@ -246,14 +277,20 @@ schedule.add(integrateProjectiles)
 ## 8. Mudanças estruturais
 
 - Durante a execução de sistemas, criar/destruir entidades e adicionar/remover componentes
-  só pode ser feito via `nx::ecs::Commands` (command buffer por job).
-- Os command buffers são aplicados em *sync points* definidos pelo schedule (fim de cada
-  fase, por padrão).
-- **Ordem de aplicação determinística:** por ordem do sistema no schedule e, dentro de um
-  sistema paralelo, por índice do chunk de origem. Não depende da thread que executou.
-- **Entidades criadas em command buffer** recebem um `PendingEntity` local. O `Entity` real
-  é alocado na aplicação, em ordem determinística, e o mapeamento fica disponível para os
-  sistemas seguintes.
+  só pode ser feito via `nx::ecs::Commands` (`spawn`, `destroy`, `add`, `remove`). Cada
+  sistema que recebe `Commands&` tem o próprio buffer. Sistemas exclusivos (`World&`)
+  mudam o mundo diretamente.
+- Os command buffers são aplicados no *sync point* do fim de cada fase.
+- **Ordem de aplicação determinística:** por ordem de declaração do sistema no schedule e,
+  dentro de um buffer, por ordem de gravação. Não depende da thread que executou.
+  Buffers por chunk dentro de `parallelForEachChunk` (aplicados por índice do chunk de
+  origem) entram com o primeiro sistema que precisar deles.
+- **Entidades criadas em command buffer** recebem um `PendingEntity` local, que outros
+  comandos do mesmo buffer podem usar como alvo. O `Entity` real é alocado na aplicação,
+  em ordem determinística, e `commands.resolve(pending)` o devolve depois do `apply`.
+- Comandos cujo alvo morreu antes da aplicação (o dono de uma granada morreu antes de ela
+  nascer) são ignorados e contados em `CommandStats::skipped`; o componente gravado é
+  destruído.
 
 ## 9. Eventos
 
@@ -263,7 +300,12 @@ void applyDamage(..., nx::ecs::EventWriter<cs::PlayerKilled> kills);
 ```
 
 - Os eventos são *double-buffered*: escritos no tick N, legíveis até o fim do tick N+1.
-- Escritores em jobs paralelos usam buffers por job, concatenados em ordem determinística.
+  `world.addEvents<E>()` cria a fila (`Events<E>`, um recurso) e o laço do tick chama
+  `world.advanceEvents()` uma vez por tick.
+- Cada evento recebe um número de sequência, e cada `EventReader` guarda até onde leu:
+  um sistema nunca lê o mesmo evento duas vezes (`reader.forEach(fn)`).
+- Escritores em jobs paralelos usarão buffers por job, concatenados em ordem
+  determinística, junto com os command buffers por chunk.
 - A fase `Script` consome os eventos marcados `[[=nx::script::Expose{}]]` e os despacha
   para os mods inscritos ([13](13-sistema-de-mods.md)).
 
@@ -274,6 +316,9 @@ void applyDamage(..., nx::ecs::EventWriter<cs::PlayerKilled> kills);
 | Pai/filho | `Parent{Entity}` + `Children{inplace_vector/handle}` | Anexos: arma no modelo do jogador (`MOVETYPE_FOLLOW`), sprites anexados |
 | Dono | `Owner{Entity}` | Granadas, armas no chão, projéteis (não colidir com o dono) |
 | Alvo | `Target{Entity}` | Entidades de mapa com `target`/`targetname` resolvidos na carga |
+
+> **Status:** as relações entram com os primeiros sistemas de gameplay (M3). `Entity{}` (a
+> entidade nula) já serve para "sem dono".
 
 Destruir uma entidade remove as relações que apontam para ela no mesmo sync point
 (sem handles pendurados em `Children`).

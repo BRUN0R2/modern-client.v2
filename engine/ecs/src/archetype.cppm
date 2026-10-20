@@ -41,6 +41,9 @@ struct alignas(kMaxComponentAlignment) ChunkBlock {
 
 using ChunkStorage = std::unique_ptr<ChunkBlock[]>;
 
+/// Moves a component from `source` to the uninitialized `destination`; the source ends destroyed.
+void relocateComponent(const ComponentInfo& info, void* destination, void* source) noexcept;
+
 /// Keeps the storage of emptied single-block chunks for the next chunk of any archetype.
 class ChunkPool {
 public:

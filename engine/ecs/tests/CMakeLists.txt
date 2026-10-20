@@ -7,5 +7,9 @@ nxAddTest(nxEcsTests
         componentTests.cpp
         worldTests.cpp
         queryTests.cpp
+        resourceTests.cpp
+        eventTests.cpp
+        commandsTests.cpp
+        scheduleTests.cpp
     DEPENDS
         nx::ecs)

@@ -156,10 +156,13 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Queries tipadas (`With`, `Without`, `Changed`, `Optional`, `Entity`)
 - [ ] `Added<T>` com versão por linha, quando o primeiro consumidor existir
 - [x] `forEach`, `forEachChunk`, `parallelForEachChunk`, `get`
-- [ ] Agendador por fases com DAG de conflitos, `before`/`after`, detecção de ciclos
-- [ ] Command buffers com aplicação determinística e `PendingEntity`
-- [ ] Eventos *double-buffered*
-- [ ] Recursos (singletons) e relações (pai/filho, dono)
+- [x] Agendador por fases com DAG de conflitos, `before`/`after`, detecção de ciclos
+- [x] Command buffers com aplicação determinística e `PendingEntity`
+- [ ] Command buffers e escritores de eventos por chunk dentro de `parallelForEachChunk`
+- [x] Eventos *double-buffered*
+- [x] Recursos (singletons)
+- [ ] Relações (pai/filho, dono) com limpeza no *sync point* (com o gameplay, M3)
+- [x] Teste de determinismo do mundo com 0, 1, 3 e 15 workers
 - [ ] `ent_list`, `ent_dump`, `ecs_stats`
 - [ ] Benchmarks com as metas de [03 §16](docs/03-ecs.md#16-metas-de-desempenho-hardware-de-referência-a-definir-no-m1)
 

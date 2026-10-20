@@ -9,6 +9,7 @@ import nx.core;
 import :archetype;
 import :component;
 import :entity;
+import :event;
 
 export namespace nx::ecs {
 
@@ -37,6 +38,11 @@ template <class... Types>
 }
 
 } // namespace detail
+
+/// A resource is a single value of its type per world (`GameRules`, `TickTime`, `MapInfo`).
+template <class Type>
+concept Resource = std::is_object_v<Type> && !std::is_const_v<Type> && std::is_nothrow_destructible_v<Type> &&
+                   std::move_constructible<Type>;
 
 /// Owns entities and components.
 ///
@@ -138,6 +144,14 @@ public:
         }
     }
 
+    /// Untyped add, for command buffers and run-time components: moves the component of type
+    /// `type` at `source` (nullptr for tags) into the entity, replacing the one it has. The source
+    /// ends destroyed, even when the entity is dead (a contract violation).
+    void insertRelocated(Entity entity, ComponentTypeId type, void* source);
+
+    /// Untyped remove: removes the component of type `type` if the entity has it.
+    void removeComponent(Entity entity, ComponentTypeId type);
+
     template <Component Type>
     [[nodiscard]] auto has(Entity entity) const -> bool {
         const auto id = m_components.find<Type>();
@@ -170,6 +184,51 @@ public:
         const Archetype& owner = archetype(location->archetype);
         return std::launder(static_cast<const Type*>(owner.componentAt(*location, *owner.columnOf(*id))));
     }
+
+    // --- Resources and events ----------------------------------------------------------------
+
+    /// Stores `value` as the world's `Type`, replacing any previous one. Like structural changes,
+    /// only outside system execution.
+    template <Resource Type>
+    void insertResource(Type value) {
+        auto owned = std::make_unique<Type>(std::move(value));
+        m_resources.insert_or_assign(detail::typeKeyOf<Type>(),
+                                     ResourceObject{owned.release(), &destroyResource<Type>});
+    }
+
+    /// The world's `Type`, or nullptr when there is none.
+    template <Resource Type>
+    [[nodiscard]] auto resource() noexcept -> Type* {
+        const auto found = m_resources.find(detail::typeKeyOf<Type>());
+        return found != m_resources.end() ? static_cast<Type*>(found->second.get()) : nullptr;
+    }
+
+    template <Resource Type>
+    [[nodiscard]] auto resource() const noexcept -> const Type* {
+        const auto found = m_resources.find(detail::typeKeyOf<Type>());
+        return found != m_resources.end() ? static_cast<const Type*>(found->second.get()) : nullptr;
+    }
+
+    template <Resource Type>
+    void removeResource() {
+        m_resources.erase(detail::typeKeyOf<Type>());
+    }
+
+    /// Creates the Events<Type> resource (if needed) and lets advanceEvents() move it along.
+    template <Event Type>
+    void addEvents() {
+        if (resource<Events<Type>>() != nullptr) {
+            return;
+        }
+        insertResource(Events<Type>{});
+        m_eventQueues.push_back(EventQueue{
+            .typeKey = detail::typeKeyOf<Events<Type>>(),
+            .advance = [](void* events) noexcept { static_cast<Events<Type>*>(events)->advance(); },
+        });
+    }
+
+    /// The tick boundary for events: called once per tick by the tick loop.
+    void advanceEvents() noexcept;
 
     // --- Change versions ---------------------------------------------------------------------
 
@@ -212,6 +271,18 @@ private:
         EntityLocation location;
     };
 
+    using ResourceObject = std::unique_ptr<void, void (*)(void*) noexcept>;
+
+    struct EventQueue {
+        const void* typeKey = nullptr; // of the Events<T> resource
+        void (*advance)(void* events) noexcept = nullptr;
+    };
+
+    template <class Type>
+    static void destroyResource(void* object) noexcept {
+        const std::unique_ptr<Type> owned{static_cast<Type*>(object)};
+    }
+
     [[nodiscard]] auto spawnUninitialized(std::vector<ComponentTypeId> types) -> SpawnedRow;
     [[nodiscard]] auto requireLocation(Entity entity) const -> std::optional<EntityLocation>;
     [[nodiscard]] auto archetypeFor(std::vector<ComponentTypeId> sortedTypes) -> ArchetypeId;
@@ -249,6 +320,8 @@ private:
     detail::ChunkPool m_chunkPool;
     std::vector<std::unique_ptr<Archetype>> m_archetypes;
     std::map<std::vector<ComponentTypeId>, ArchetypeId> m_archetypeByTypes;
+    std::unordered_map<const void*, ResourceObject> m_resources;
+    std::vector<EventQueue> m_eventQueues;
     Version m_version{1};
     mutable std::atomic<int> m_activeIterations{0};
 };

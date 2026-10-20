@@ -47,6 +47,49 @@ void World::destroy(Entity entity) {
     m_entities.destroy(entity);
 }
 
+void World::insertRelocated(Entity entity, ComponentTypeId type, void* source) {
+    const ComponentInfo& info = m_components.info(type);
+    const auto location = requireLocation(entity);
+    if (!location) {
+        if (source != nullptr && info.destroy != nullptr) {
+            info.destroy(source);
+        }
+        return;
+    }
+    Archetype& owner = archetype(location->archetype);
+    if (owner.contains(type)) {
+        if (const auto column = owner.columnOf(type)) {
+            void* const existing = owner.componentAt(*location, *column);
+            if (info.destroy != nullptr) {
+                info.destroy(existing);
+            }
+            detail::relocateComponent(info, existing, source);
+            markChanged(*location, type);
+        }
+        return;
+    }
+    const EntityLocation moved = moveEntity(entity, *location, archetypeWith(location->archetype, type));
+    Archetype& target = archetype(moved.archetype);
+    if (const auto column = target.columnOf(type)) {
+        detail::relocateComponent(info, target.componentAt(moved, *column), source);
+    }
+}
+
+void World::removeComponent(Entity entity, ComponentTypeId type) {
+    const auto location = requireLocation(entity);
+    if (location && archetype(location->archetype).contains(type)) {
+        std::ignore = moveEntity(entity, *location, archetypeWithout(location->archetype, type));
+    }
+}
+
+void World::advanceEvents() noexcept {
+    for (const EventQueue& queue : m_eventQueues) {
+        if (const auto found = m_resources.find(queue.typeKey); found != m_resources.end()) {
+            queue.advance(found->second.get());
+        }
+    }
+}
+
 auto World::advanceVersion() noexcept -> Version {
     m_version = Version{std::to_underlying(m_version) + 1};
     return m_version;
@@ -125,11 +168,7 @@ auto World::moveEntity(Entity entity, EntityLocation from, ArchetypeId target) -
         const ComponentInfo& info = *sourceColumns[column].info;
         void* const value = source.componentAt(from, column);
         if (const auto kept = destination.columnOf(sourceColumns[column].type)) {
-            if (info.relocate != nullptr) {
-                info.relocate(destination.componentAt(to, *kept), value);
-            } else {
-                std::memcpy(destination.componentAt(to, *kept), value, info.size);
-            }
+            detail::relocateComponent(info, destination.componentAt(to, *kept), value);
         } else if (info.destroy != nullptr) {
             info.destroy(value);
         }

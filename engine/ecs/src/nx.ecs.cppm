@@ -5,12 +5,17 @@
 /// docs/01-arquitetura.md).
 ///
 /// Generational entity handles, components stored by archetype in 16 KiB SoA chunks, change
-/// versions per chunk and column, and typed queries that iterate sequentially, by chunk or over
-/// jobs.
+/// versions per chunk and column, typed queries, resources, events, command buffers, and a
+/// scheduler that runs systems in parallel when their declared access allows it.
 export module nx.ecs;
 
 export import :entity;
 export import :component;
 export import :archetype;
+export import :event;
 export import :world;
+export import :access;
 export import :query;
+export import :commands;
+export import :system;
+export import :schedule;

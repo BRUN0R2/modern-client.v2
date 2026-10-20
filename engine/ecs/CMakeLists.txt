@@ -8,13 +8,20 @@ nxAddModuleLibrary(nxEcs
         src/entity.cppm
         src/component.cppm
         src/archetype.cppm
+        src/event.cppm
         src/world.cppm
+        src/access.cppm
         src/query.cppm
+        src/commands.cppm
+        src/system.cppm
+        src/schedule.cppm
     SOURCES
         src/entity.cpp
         src/component.cpp
         src/archetype.cpp
         src/world.cpp
+        src/commands.cpp
+        src/schedule.cpp
     DEPENDS
         nx::core
         nx::jobs)

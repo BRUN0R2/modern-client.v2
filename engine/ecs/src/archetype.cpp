@@ -14,17 +14,17 @@ namespace {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
-void relocate(const ComponentInfo& info, void* destination, void* source) noexcept {
+} // namespace
+
+namespace detail {
+
+void relocateComponent(const ComponentInfo& info, void* destination, void* source) noexcept {
     if (info.relocate != nullptr) {
         info.relocate(destination, source);
     } else {
         std::memcpy(destination, source, info.size);
     }
 }
-
-} // namespace
-
-namespace detail {
 
 auto ChunkPool::acquire(std::size_t blockCount) -> ChunkStorage {
     if (blockCount == 1 && !m_free.empty()) {
@@ -130,7 +130,8 @@ auto Archetype::removeRow(EntityLocation location, RowContents contents, detail:
     std::optional<Entity> moved;
     if (location.chunk != last.chunk || location.row != last.row) {
         for (std::size_t column = 0; column < m_columns.size(); ++column) {
-            relocate(*m_columns[column].info, componentAt(location, column), componentAt(last, column));
+            detail::relocateComponent(*m_columns[column].info, componentAt(location, column),
+                                      componentAt(last, column));
         }
         moved = entityAt(last);
         std::memcpy(m_chunks[location.chunk].data() + (std::size_t{location.row} * sizeof(Entity)), &*moved,
