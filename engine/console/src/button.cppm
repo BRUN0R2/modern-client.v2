@@ -24,7 +24,7 @@ struct ButtonEdges {
 class ButtonState {
 public:
     /// `+name`: `key` starts holding the button; without a key, the console holds it.
-    void press(std::optional<KeyId> key) {
+    inline void press(std::optional<KeyId> key) {
         const bool wasDown = isDown();
         if (key) {
             if (std::ranges::contains(m_keys, *key)) {
@@ -39,7 +39,7 @@ public:
 
     /// `-name`: `key` stops holding the button; without a key, every holder lets go, which unsticks
     /// a button from the console.
-    void release(std::optional<KeyId> key) {
+    inline void release(std::optional<KeyId> key) {
         const bool wasDown = isDown();
         if (key) {
             std::erase(m_keys, *key);
@@ -50,11 +50,13 @@ public:
         m_edges.released = m_edges.released || (wasDown && !isDown());
     }
 
-    [[nodiscard]] auto isDown() const noexcept -> bool { return m_heldByConsole || !m_keys.empty(); }
+    [[nodiscard]] inline auto isDown() const noexcept -> bool { return m_heldByConsole || !m_keys.empty(); }
 
     /// The edges since the previous call, which clears them. Taken once per user command, they
     /// keep a press and release within one frame (a bind on the mouse wheel) from being lost.
-    [[nodiscard]] auto takeEdges() noexcept -> ButtonEdges { return std::exchange(m_edges, ButtonEdges{}); }
+    [[nodiscard]] inline auto takeEdges() noexcept -> ButtonEdges {
+        return std::exchange(m_edges, ButtonEdges{});
+    }
 
 private:
     std::vector<KeyId> m_keys;
@@ -65,10 +67,10 @@ private:
 /// Handle to a button registered with Console::registerButton; valid as long as that Console.
 class Button {
 public:
-    explicit Button(ButtonState& state) noexcept : m_state{&state} {}
+    inline explicit Button(ButtonState& state) noexcept : m_state{&state} {}
 
-    [[nodiscard]] auto isDown() const noexcept -> bool { return m_state->isDown(); }
-    [[nodiscard]] auto takeEdges() const noexcept -> ButtonEdges { return m_state->takeEdges(); }
+    [[nodiscard]] inline auto isDown() const noexcept -> bool { return m_state->isDown(); }
+    [[nodiscard]] inline auto takeEdges() const noexcept -> ButtonEdges { return m_state->takeEdges(); }
 
 private:
     ButtonState* m_state;

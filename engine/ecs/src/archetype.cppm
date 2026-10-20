@@ -49,7 +49,7 @@ class ChunkPool {
 public:
     [[nodiscard]] auto acquire(std::size_t blockCount) -> ChunkStorage;
     void release(ChunkStorage storage, std::size_t blockCount);
-    [[nodiscard]] auto pooledCount() const noexcept -> std::size_t { return m_free.size(); }
+    [[nodiscard]] inline auto pooledCount() const noexcept -> std::size_t { return m_free.size(); }
 
 private:
     std::vector<ChunkStorage> m_free;
@@ -68,15 +68,15 @@ class Chunk {
 public:
     Chunk(detail::ChunkStorage storage, std::size_t columnCount);
 
-    [[nodiscard]] auto rowCount() const noexcept -> std::uint32_t { return m_rowCount; }
-    [[nodiscard]] auto data() noexcept -> std::byte* { return m_storage[0].bytes.data(); }
-    [[nodiscard]] auto data() const noexcept -> const std::byte* { return m_storage[0].bytes.data(); }
+    [[nodiscard]] inline auto rowCount() const noexcept -> std::uint32_t { return m_rowCount; }
+    [[nodiscard]] inline auto data() noexcept -> std::byte* { return m_storage[0].bytes.data(); }
+    [[nodiscard]] inline auto data() const noexcept -> const std::byte* { return m_storage[0].bytes.data(); }
 
-    [[nodiscard]] auto changedVersion(std::size_t column) const noexcept -> Version {
+    [[nodiscard]] inline auto changedVersion(std::size_t column) const noexcept -> Version {
         return m_changed[column];
     }
     /// Raises the column's version to `version` (versions never go back).
-    void markChanged(std::size_t column, Version version) noexcept {
+    inline void markChanged(std::size_t column, Version version) noexcept {
         m_changed[column] = std::max(m_changed[column], version);
     }
 
@@ -104,34 +104,39 @@ public:
     auto operator=(Archetype&&) -> Archetype& = delete;
     ~Archetype();
 
-    [[nodiscard]] auto id() const noexcept -> ArchetypeId { return m_id; }
-    [[nodiscard]] auto types() const noexcept -> std::span<const ComponentTypeId> { return m_types; }
+    [[nodiscard]] inline auto id() const noexcept -> ArchetypeId { return m_id; }
+    [[nodiscard]] inline auto types() const noexcept -> std::span<const ComponentTypeId> { return m_types; }
     [[nodiscard]] auto contains(ComponentTypeId type) const noexcept -> bool;
     /// Column index of a stored component; nullopt for tags and absent components.
     [[nodiscard]] auto columnOf(ComponentTypeId type) const noexcept -> std::optional<std::size_t>;
-    [[nodiscard]] auto columns() const noexcept -> std::span<const Column> { return m_columns; }
+    [[nodiscard]] inline auto columns() const noexcept -> std::span<const Column> { return m_columns; }
 
-    [[nodiscard]] auto chunkCapacity() const noexcept -> std::uint32_t { return m_chunkCapacity; }
-    [[nodiscard]] auto chunkCount() const noexcept -> std::size_t { return m_chunks.size(); }
-    [[nodiscard]] auto chunk(std::size_t index) noexcept -> Chunk& { return m_chunks[index]; }
-    [[nodiscard]] auto chunk(std::size_t index) const noexcept -> const Chunk& { return m_chunks[index]; }
+    [[nodiscard]] inline auto chunkCapacity() const noexcept -> std::uint32_t { return m_chunkCapacity; }
+    [[nodiscard]] inline auto chunkCount() const noexcept -> std::size_t { return m_chunks.size(); }
+    [[nodiscard]] inline auto chunk(std::size_t index) noexcept -> Chunk& { return m_chunks[index]; }
+    [[nodiscard]] inline auto chunk(std::size_t index) const noexcept -> const Chunk& {
+        return m_chunks[index];
+    }
     [[nodiscard]] auto entityCount() const noexcept -> std::size_t;
 
     /// Start of the entity array of a chunk.
-    [[nodiscard]] auto entities(std::size_t chunk) noexcept -> std::byte* { return m_chunks[chunk].data(); }
+    [[nodiscard]] inline auto entities(std::size_t chunk) noexcept -> std::byte* {
+        return m_chunks[chunk].data();
+    }
     /// Start of a column's array in a chunk.
-    [[nodiscard]] auto columnData(std::size_t chunk, std::size_t column) noexcept -> std::byte* {
+    [[nodiscard]] inline auto columnData(std::size_t chunk, std::size_t column) noexcept -> std::byte* {
         return m_chunks[chunk].data() + m_columns[column].offset;
     }
-    [[nodiscard]] auto columnData(std::size_t chunk, std::size_t column) const noexcept -> const std::byte* {
+    [[nodiscard]] inline auto columnData(std::size_t chunk, std::size_t column) const noexcept
+        -> const std::byte* {
         return m_chunks[chunk].data() + m_columns[column].offset;
     }
     /// One component of one row.
-    [[nodiscard]] auto componentAt(EntityLocation location, std::size_t column) noexcept -> void* {
+    [[nodiscard]] inline auto componentAt(EntityLocation location, std::size_t column) noexcept -> void* {
         return columnData(location.chunk, column) +
                (std::size_t{location.row} * m_columns[column].info->size);
     }
-    [[nodiscard]] auto componentAt(EntityLocation location, std::size_t column) const noexcept -> const
+    [[nodiscard]] inline auto componentAt(EntityLocation location, std::size_t column) const noexcept -> const
         void* {
         return columnData(location.chunk, column) +
                (std::size_t{location.row} * m_columns[column].info->size);
@@ -150,8 +155,10 @@ public:
     /// Archetype graph: the archetype reached by adding or removing one component type.
     [[nodiscard]] auto findAddEdge(ComponentTypeId type) const -> std::optional<ArchetypeId>;
     [[nodiscard]] auto findRemoveEdge(ComponentTypeId type) const -> std::optional<ArchetypeId>;
-    void setAddEdge(ComponentTypeId type, ArchetypeId target) { m_addEdges.insert_or_assign(type, target); }
-    void setRemoveEdge(ComponentTypeId type, ArchetypeId target) {
+    inline void setAddEdge(ComponentTypeId type, ArchetypeId target) {
+        m_addEdges.insert_or_assign(type, target);
+    }
+    inline void setRemoveEdge(ComponentTypeId type, ArchetypeId target) {
         m_removeEdges.insert_or_assign(type, target);
     }
 

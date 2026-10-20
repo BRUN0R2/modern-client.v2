@@ -142,15 +142,16 @@ public:
     ~JobContext() = default;
 
     /// The system running the job, to submit and wait on further jobs.
-    [[nodiscard]] auto jobSystem() const noexcept -> JobSystem& { return *m_system; }
+    [[nodiscard]] inline auto jobSystem() const noexcept -> JobSystem& { return *m_system; }
 
     /// The label the job was submitted with.
-    [[nodiscard]] auto label() const noexcept -> std::string_view { return m_label; }
+    [[nodiscard]] inline auto label() const noexcept -> std::string_view { return m_label; }
 
 private:
     friend class JobSystem;
 
-    JobContext(JobSystem& system, std::string_view label) noexcept : m_system{&system}, m_label{label} {}
+    inline JobContext(JobSystem& system, std::string_view label) noexcept
+        : m_system{&system}, m_label{label} {}
 
     JobSystem* m_system;
     std::string_view m_label;
@@ -218,10 +219,10 @@ public:
         };
     }
 
-    void operator()(JobContext& context) { m_invoke(m_storage.data(), context); }
+    inline void operator()(JobContext& context) { m_invoke(m_storage.data(), context); }
 
     /// Destroys the captures. Called right after the body returns, before the job counts as done.
-    void reset() noexcept {
+    inline void reset() noexcept {
         if (m_destroy != nullptr) {
             m_destroy(m_storage.data());
         }

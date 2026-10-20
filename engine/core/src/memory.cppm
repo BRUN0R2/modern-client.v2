@@ -64,11 +64,11 @@ public:
     }
 
     /// Releases every allocation. Spans handed out before the reset must not be used afterwards.
-    void reset() noexcept { m_used = 0; }
+    inline void reset() noexcept { m_used = 0; }
 
-    [[nodiscard]] auto capacity() const noexcept -> std::size_t { return m_capacity; }
-    [[nodiscard]] auto used() const noexcept -> std::size_t { return m_used; }
-    [[nodiscard]] auto remaining() const noexcept -> std::size_t { return m_capacity - m_used; }
+    [[nodiscard]] inline auto capacity() const noexcept -> std::size_t { return m_capacity; }
+    [[nodiscard]] inline auto used() const noexcept -> std::size_t { return m_used; }
+    [[nodiscard]] inline auto remaining() const noexcept -> std::size_t { return m_capacity - m_used; }
 
 private:
     std::unique_ptr<std::byte[]> m_storage;

@@ -67,11 +67,12 @@ public:
     }
 
     /// Registers a component described at run time (Rook components).
-    [[nodiscard]] auto registerComponent(ComponentInfo info) -> Result<ComponentTypeId, ComponentError> {
+    [[nodiscard]] inline auto registerComponent(ComponentInfo info)
+        -> Result<ComponentTypeId, ComponentError> {
         return m_components.add(std::move(info));
     }
 
-    [[nodiscard]] auto components() const noexcept -> const ComponentRegistry& { return m_components; }
+    [[nodiscard]] inline auto components() const noexcept -> const ComponentRegistry& { return m_components; }
 
     /// Id of a registered type. An unregistered type is a contract violation and yields nullopt.
     template <Component Type>
@@ -108,8 +109,10 @@ public:
     /// `entity` must be alive. Destroys its components and frees its slot.
     void destroy(Entity entity);
 
-    [[nodiscard]] auto isAlive(Entity entity) const noexcept -> bool { return m_entities.isAlive(entity); }
-    [[nodiscard]] auto entityCount() const noexcept -> std::size_t { return m_entities.aliveCount(); }
+    [[nodiscard]] inline auto isAlive(Entity entity) const noexcept -> bool {
+        return m_entities.isAlive(entity);
+    }
+    [[nodiscard]] inline auto entityCount() const noexcept -> std::size_t { return m_entities.aliveCount(); }
 
     // --- Components of one entity -----------------------------------------------------------
 
@@ -233,17 +236,17 @@ public:
     // --- Change versions ---------------------------------------------------------------------
 
     /// Starts at 1, so the version 0 of "never ran" is older than every write.
-    [[nodiscard]] auto version() const noexcept -> Version { return m_version; }
+    [[nodiscard]] inline auto version() const noexcept -> Version { return m_version; }
     /// Moves to the next version and returns it (the scheduler does this before each system).
     auto advanceVersion() noexcept -> Version;
 
     // --- Storage, for queries and diagnostics ------------------------------------------------
 
-    [[nodiscard]] auto archetypeCount() const noexcept -> std::size_t { return m_archetypes.size(); }
-    [[nodiscard]] auto archetype(ArchetypeId id) noexcept -> Archetype& {
+    [[nodiscard]] inline auto archetypeCount() const noexcept -> std::size_t { return m_archetypes.size(); }
+    [[nodiscard]] inline auto archetype(ArchetypeId id) noexcept -> Archetype& {
         return *m_archetypes[std::to_underlying(id)];
     }
-    [[nodiscard]] auto archetype(ArchetypeId id) const noexcept -> const Archetype& {
+    [[nodiscard]] inline auto archetype(ArchetypeId id) const noexcept -> const Archetype& {
         return *m_archetypes[std::to_underlying(id)];
     }
     [[nodiscard]] auto findLocation(Entity entity) const noexcept -> std::optional<EntityLocation>;
@@ -252,14 +255,14 @@ public:
     /// Held while a query iterates; structural changes check that none is active.
     class IterationScope {
     public:
-        explicit IterationScope(const World& world) noexcept : m_world{&world} {
+        inline explicit IterationScope(const World& world) noexcept : m_world{&world} {
             m_world->m_activeIterations.fetch_add(1, std::memory_order_relaxed);
         }
         IterationScope(const IterationScope&) = delete;
         auto operator=(const IterationScope&) -> IterationScope& = delete;
         IterationScope(IterationScope&&) = delete;
         auto operator=(IterationScope&&) -> IterationScope& = delete;
-        ~IterationScope() { m_world->m_activeIterations.fetch_sub(1, std::memory_order_relaxed); }
+        inline ~IterationScope() { m_world->m_activeIterations.fetch_sub(1, std::memory_order_relaxed); }
 
     private:
         const World* m_world;

@@ -38,7 +38,7 @@ private:
         std::uint64_t appliedRevision = 0;
     };
 
-    LogLevelCvars(log::Logger& logger, std::vector<Binding> bindings) noexcept
+    inline LogLevelCvars(log::Logger& logger, std::vector<Binding> bindings) noexcept
         : m_logger{&logger}, m_bindings{std::move(bindings)} {}
 
     log::Logger* m_logger;

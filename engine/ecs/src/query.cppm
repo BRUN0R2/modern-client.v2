@@ -126,10 +126,10 @@ template <>
 struct QueryTerm<Entity> {
     using ComponentType = void;
     static constexpr TermKind kKind = TermKind::EntityHandle;
-    static auto row(std::byte* base, std::uint32_t row) noexcept -> Entity {
+    static inline auto row(std::byte* base, std::uint32_t row) noexcept -> Entity {
         return *elementAt<const Entity>(base, row);
     }
-    static auto column(std::byte* base, std::uint32_t count) noexcept -> std::span<const Entity> {
+    static inline auto column(std::byte* base, std::uint32_t count) noexcept -> std::span<const Entity> {
         return arrayAt<const Entity>(base, count);
     }
 };

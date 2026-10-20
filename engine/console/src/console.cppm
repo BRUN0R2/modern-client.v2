@@ -167,8 +167,8 @@ public:
     /// Cheat cvars while cheats are forbidden, and for text the cvar does not accept.
     [[nodiscard]] auto setCvar(std::string_view name, std::string_view text) -> Result<void, ConsoleError>;
 
-    void setCheats(Cheats cheats) noexcept { m_cheats = cheats; }
-    [[nodiscard]] auto cheats() const noexcept -> Cheats { return m_cheats; }
+    inline void setCheats(Cheats cheats) noexcept { m_cheats = cheats; }
+    [[nodiscard]] inline auto cheats() const noexcept -> Cheats { return m_cheats; }
 
     /// Writes one line of reply to the output.
     void print(std::string_view line);

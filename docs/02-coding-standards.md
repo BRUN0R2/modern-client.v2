@@ -70,6 +70,13 @@ engine/ecs/
 
 - One module per library. Partitions (`:world`, `:query`) organize the inside.
 - Module interfaces: `.cppm`. Implementation units: `.cpp`.
+- **A function defined in a module interface is `inline`.** Unlike in a header, a function
+  attached to a named module is not implicitly inline when it is defined in its interface,
+  not even inside its class ([dcl.inline]): every importer calls it out of line, and a hot
+  accessor costs a call each time. So such definitions are declared `inline`
+  (`[[nodiscard]] inline auto rowCount() const noexcept -> std::uint32_t { ... }`); templates,
+  `constexpr` and `consteval` functions already are. A function that importers need not
+  inline is declared in the interface and defined in the implementation unit.
 - Files and directories in `camelCase` (`jobSystem.cppm`, `worldTests.cpp`, `rhiVulkan/`).
   The primary interface is named after the module (`nx.ecs.cppm`). Module names follow
   `nx.<area>[.<subarea>]`.
@@ -536,3 +543,5 @@ if (m_budgetWarnings.allow()) {
 - [ ] Are there unit tests for new logic and a benchmark for a new hot path?
 - [ ] Does the exported public API have `///` documentation?
 - [ ] Has any third-party type leaked into the exported interface?
+- [ ] Is every function defined in a module interface `inline` (or a template, `constexpr` or
+      `consteval`)?

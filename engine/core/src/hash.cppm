@@ -150,7 +150,7 @@ private:
 
 template <>
 struct std::hash<nx::StableId> {
-    [[nodiscard]] auto operator()(nx::StableId id) const noexcept -> std::size_t {
+    [[nodiscard]] inline auto operator()(nx::StableId id) const noexcept -> std::size_t {
         return static_cast<std::size_t>(id.value());
     }
 };

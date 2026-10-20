@@ -72,12 +72,12 @@ public:
     [[nodiscard]] auto isAlive(Entity entity) const noexcept -> bool;
 
     /// Slots ever used, alive or not; slot indices are below this.
-    [[nodiscard]] auto slotCount() const noexcept -> std::size_t { return m_generations.size(); }
-    [[nodiscard]] auto aliveCount() const noexcept -> std::size_t {
+    [[nodiscard]] inline auto slotCount() const noexcept -> std::size_t { return m_generations.size(); }
+    [[nodiscard]] inline auto aliveCount() const noexcept -> std::size_t {
         return m_generations.size() - m_freeSlots.size() - m_retiredCount;
     }
     /// Slots whose generations ran out (reported by ecs_stats).
-    [[nodiscard]] auto retiredCount() const noexcept -> std::size_t { return m_retiredCount; }
+    [[nodiscard]] inline auto retiredCount() const noexcept -> std::size_t { return m_retiredCount; }
 
 private:
     std::vector<Generation> m_generations; // current generation of each slot
@@ -90,7 +90,7 @@ private:
 
 template <>
 struct std::hash<nx::ecs::Entity> {
-    [[nodiscard]] auto operator()(nx::ecs::Entity entity) const noexcept -> std::size_t {
+    [[nodiscard]] inline auto operator()(nx::ecs::Entity entity) const noexcept -> std::size_t {
         constexpr unsigned kGenerationShift = 32;
         const std::uint64_t packed =
             (std::uint64_t{std::to_underlying(entity.generation())} << kGenerationShift) |

@@ -28,12 +28,12 @@ struct CommandLine {
     std::string argumentText;       ///< What followed the name, as written, trimmed (`say` takes it whole).
 
     /// Empty for a command without words (a blank line or a comment).
-    [[nodiscard]] auto name() const noexcept -> std::string_view {
+    [[nodiscard]] inline auto name() const noexcept -> std::string_view {
         return words.empty() ? std::string_view{} : std::string_view{words.front()};
     }
 
     /// The words after the name.
-    [[nodiscard]] auto arguments() const noexcept -> std::span<const std::string> {
+    [[nodiscard]] inline auto arguments() const noexcept -> std::span<const std::string> {
         return words.empty() ? std::span<const std::string>{} : std::span{words}.subspan(1);
     }
 };

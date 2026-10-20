@@ -22,15 +22,15 @@ using WallClock = std::chrono::system_clock;
 /// Measures real time from its start.
 class Stopwatch {
 public:
-    Stopwatch() noexcept : m_start{MonotonicClock::now()} {}
+    inline Stopwatch() noexcept : m_start{MonotonicClock::now()} {}
 
     /// The time elapsed since the start.
-    [[nodiscard]] auto elapsed() const noexcept -> MonotonicClock::duration {
+    [[nodiscard]] inline auto elapsed() const noexcept -> MonotonicClock::duration {
         return MonotonicClock::now() - m_start;
     }
 
     /// The time elapsed until now, which becomes the new start.
-    auto restart() noexcept -> MonotonicClock::duration {
+    inline auto restart() noexcept -> MonotonicClock::duration {
         const Instant now = MonotonicClock::now();
         return now - std::exchange(m_start, now);
     }
@@ -56,8 +56,8 @@ public:
     /// Errors: TimerUnavailable.
     [[nodiscard]] static auto create() -> Result<SleepTimer, ClockError>;
 
-    SleepTimer(SleepTimer&& other) noexcept : m_timer{std::exchange(other.m_timer, nullptr)} {}
-    auto operator=(SleepTimer&& other) noexcept -> SleepTimer& {
+    inline SleepTimer(SleepTimer&& other) noexcept : m_timer{std::exchange(other.m_timer, nullptr)} {}
+    inline auto operator=(SleepTimer&& other) noexcept -> SleepTimer& {
         if (this != &other) {
             close();
             m_timer = std::exchange(other.m_timer, nullptr);
@@ -66,14 +66,14 @@ public:
     }
     SleepTimer(const SleepTimer&) = delete;
     auto operator=(const SleepTimer&) -> SleepTimer& = delete;
-    ~SleepTimer() { close(); }
+    inline ~SleepTimer() { close(); }
 
     /// Returns at `deadline` or after it, never before; late by the wake-up latency of the OS
     /// (typically well under a millisecond). Returns at once for a deadline that has passed.
     void sleepUntil(Instant deadline) const noexcept;
 
 private:
-    explicit SleepTimer(void* timer) noexcept : m_timer{timer} {}
+    inline explicit SleepTimer(void* timer) noexcept : m_timer{timer} {}
     void close() noexcept;
 
     void* m_timer = nullptr; // Windows: the waitable timer handle; null elsewhere

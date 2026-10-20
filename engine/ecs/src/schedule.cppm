@@ -51,7 +51,7 @@ struct SystemDesc {
 /// on the number of workers.
 class Schedule {
 public:
-    explicit Schedule(World& world) noexcept : m_world{&world} {}
+    inline explicit Schedule(World& world) noexcept : m_world{&world} {}
 
     /// Adds a system (a function or a non-generic lambda; see :system). Invalidates the build.
     template <class Function>
@@ -71,7 +71,7 @@ public:
     /// After build(): the systems `id` waits for in its phase.
     [[nodiscard]] auto dependenciesOf(SystemId id) const noexcept -> std::span<const SystemId>;
     [[nodiscard]] auto nameOf(SystemId id) const noexcept -> std::string_view;
-    [[nodiscard]] auto systemCount() const noexcept -> std::size_t { return m_entries.size(); }
+    [[nodiscard]] inline auto systemCount() const noexcept -> std::size_t { return m_entries.size(); }
 
 private:
     struct Entry {

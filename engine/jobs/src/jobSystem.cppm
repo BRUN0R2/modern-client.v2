@@ -139,14 +139,16 @@ public:
     [[nodiscard]] auto isComplete(JobHandle handle) const noexcept -> bool;
 
     /// Worker threads, besides the threads that wait.
-    [[nodiscard]] auto workerCount() const noexcept -> std::uint32_t { return m_workerCount; }
+    [[nodiscard]] inline auto workerCount() const noexcept -> std::uint32_t { return m_workerCount; }
 
     /// What every worker has done so far: for jobs_stats.
     [[nodiscard]] auto stats() const -> JobSystemStats;
 
 private:
     /// Threads that run jobs during a frame: the workers plus the thread that waits.
-    [[nodiscard]] auto threadCount() const noexcept -> std::size_t { return std::size_t{m_workerCount} + 1; }
+    [[nodiscard]] inline auto threadCount() const noexcept -> std::size_t {
+        return std::size_t{m_workerCount} + 1;
+    }
 
     [[nodiscard]] auto allocateCounter(std::uint64_t pendingJobs) -> JobHandle;
     [[nodiscard]] auto allocateJob(const JobDesc& desc, JobHandle handle) -> detail::Job&;
