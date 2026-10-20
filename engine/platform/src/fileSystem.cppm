@@ -43,4 +43,8 @@ enum class FileError : std::uint8_t {
 /// read).
 [[nodiscard]] auto readFile(const std::filesystem::path& path) -> Result<std::vector<std::byte>, FileError>;
 
+/// Same as readFile, for a text file (TOML, KeyValues, `.cfg`): its bytes as they are, without
+/// any decoding.
+[[nodiscard]] auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError>;
+
 } // namespace nx::platform

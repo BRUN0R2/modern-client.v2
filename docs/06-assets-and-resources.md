@@ -66,10 +66,18 @@ is searched for in this order:
    `SteamPath`), plus the libraries listed in `steamapps/libraryfolders.vdf`.
 3. Steam on Linux: `~/.steam/steam`, `~/.local/share/Steam` and the Flatpak installation
    (`~/.var/app/com.valvesoftware.Steam/.local/share/Steam`), plus `libraryfolders.vdf`.
-4. In each library: the CS 1.6 manifest (Steam app 10) and the
-   `steamapps/common/Half-Life` folder, with `cstrike/` and `valve/`. Steam names the folder
-   after Half-Life, the base game of CS 1.6; only CS 1.6's files are read from it
+4. In each library: the CS 1.6 manifest (`steamapps/appmanifest_10.acf`, Steam app 10) and
+   the `steamapps/common/Half-Life` folder, with `cstrike/` and `valve/`. Steam names the
+   folder after Half-Life, the base game of CS 1.6; only CS 1.6's files are read from it
    ([ADR-0017](adr/0017-counter-strike-only.md)).
+
+`nx::platform::steamFolders` finds the Steam folders of steps 2 and 3 (each once: `~/.steam/steam`
+is usually a link to `~/.local/share/Steam`). `nx::assets::detectGoldsrcInstall` reads each
+`libraryfolders.vdf` (Valve KeyValues, both layouts Steam has written) and takes, in library
+order, the first installation that passes validation. An installation that exists but fails
+validation is reported with its failure, never skipped in silence; with none, the result is
+`ContentError::InstallNotFound`. The app number and the folder name come from
+`data/content/goldsrcCstrike.toml` (`steamAppId`, `steamInstallFolder`).
 
 **Validation** (`nx::assets::GoldsrcInstall::open`) checks the installation against
 `data/content/goldsrcCstrike.toml`: its mounts (`cstrike`, then `valve`) and its essential

@@ -20,14 +20,6 @@ struct EssentialFile {
     VfsPath path;
 };
 
-/// Whether `name` is one directory name: not empty, not `.` or `..`, and without a separator, a
-/// `:` or a control byte.
-[[nodiscard]] auto isDirectoryName(std::string_view name) noexcept -> bool {
-    return !name.empty() && name != "." && name != ".." && std::ranges::none_of(name, [](char character) {
-        return character == '/' || character == '\\' || character == ':' || isAsciiControl(character);
-    });
-}
-
 /// The directories `desc` mounts, in `folder`. Errors: ConfigInvalid.
 [[nodiscard]] auto mountsOf(const GoldsrcInstallDesc& desc, const std::filesystem::path& folder)
     -> Result<std::vector<std::filesystem::path>, ContentError> {
@@ -69,6 +61,12 @@ struct EssentialFile {
 }
 
 } // namespace
+
+auto isDirectoryName(std::string_view name) noexcept -> bool {
+    return !name.empty() && name != "." && name != ".." && std::ranges::none_of(name, [](char character) {
+        return character == '/' || character == '\\' || character == ':' || isAsciiControl(character);
+    });
+}
 
 auto readGoldsrcInstallDesc(std::string_view text, std::string_view sourceName)
     -> Result<GoldsrcInstallDesc, ContentError> {

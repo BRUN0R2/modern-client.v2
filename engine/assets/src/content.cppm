@@ -64,6 +64,14 @@ private:
 
 } // namespace nx::assets
 
+namespace nx::assets {
+
+/// Whether `name` is one directory name: not empty, not `.` or `..`, and without a separator, a
+/// `:` or a control byte. For the content sources of this module.
+[[nodiscard]] auto isDirectoryName(std::string_view name) noexcept -> bool;
+
+} // namespace nx::assets
+
 template <>
 struct nx::meta::Description<nx::assets::GoldsrcInstallDesc> {
     static constexpr std::string_view kName = "nx::assets::GoldsrcInstallDesc";
