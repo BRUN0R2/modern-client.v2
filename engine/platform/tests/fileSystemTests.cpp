@@ -92,6 +92,14 @@ TEST(FileSystemTest, ReadsATextFileAsItIs) {
     EXPECT_EQ(missing.error().code, FileError::NotFound);
 }
 
+TEST(FileSystemTest, TheExecutablePathIsThisTestProgram) {
+    const auto path = nx::platform::executablePath();
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_TRUE(path->is_absolute());
+    EXPECT_TRUE(std::filesystem::is_regular_file(*path));
+    EXPECT_EQ(path->stem(), "nxPlatformTests");
+}
+
 TEST(FileSystemTest, ReadingSomethingOtherThanAFileFails) {
     const nx::test::TemporaryDirectory directory;
     directory.makeDirectory("maps");

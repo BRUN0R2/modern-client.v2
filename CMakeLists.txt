@@ -7,6 +7,7 @@ cmake_minimum_required(VERSION 4.3)
 option(NX_BUILD_TESTS "Build the unit tests (installs the vcpkg 'tests' feature)" ON)
 option(NX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(NX_BUILD_BENCHMARKS "Build the benchmarks (installs the vcpkg 'benchmarks' feature)" ON)
+option(NX_BUILD_TOOLS "Build the tools (tools/)" ON)
 option(NX_FUZZ "Link the fuzz targets with libFuzzer (the fuzz presets); off, they replay their corpus" OFF)
 set(NX_FUZZ_SECONDS 60 CACHE STRING "How long each fuzz target runs with NX_FUZZ (the nightly job runs longer)")
 
@@ -50,6 +51,10 @@ if(NX_FUZZ)
 endif()
 
 add_subdirectory(engine)
+
+if(NX_BUILD_TOOLS)
+    add_subdirectory(tools)
+endif()
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

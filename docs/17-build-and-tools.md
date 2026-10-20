@@ -9,7 +9,7 @@ modern-client.v2/
 ├── vcpkg.json                  # dependency manifest (pinned baseline)
 ├── content.example.toml        # model of the per-user content configuration (ADR-0015)
 ├── .clang-format / .clang-tidy / .editorconfig
-├── cmake/                      # compiler settings, the std module, target helpers, the layer check
+├── cmake/                      # compiler settings, the std module, target helpers, the layer check, the programs' manifest
 ├── engine/
 │   ├── core/                   # nx.core
 │   ├── math/                   # nx.math
@@ -55,6 +55,7 @@ modern-client.v2/
 ├── mods/                       # built-in mods written in Rook (admin, votes, maps, ...)
 ├── tools/
 │   ├── nxbake/                 # asset import/cook/pack
+│   ├── nxcheck/                # reads the CS 1.6 installation with every reader (tool.nxcheck)
 │   └── parityRecorder/        # reference data capture from the original game
 ├── tests/
 │   ├── parity/                 # parity fixtures and tests
@@ -108,6 +109,7 @@ dialect is `/std:c++latest`.
 | Out-of-tree sources get object directories with a long *hash* and could exceed 260 characters | **Fixed at the cause:** the `std` module source is copied to `build/<preset>/nxStd/` and compiled from there, with short paths |
 | Flags that change the ABI (exceptions, RTTI) must be the same in every unit, including the `std` module | They live in the global `CMAKE_CXX_FLAGS`. Warnings are per target and do not apply to `nx::std` |
 | MSVC disables `std::println(std::ostream&, ...)` without exceptions (documented STL behavior) | Output through `std::println(stderr, ...)` or `std::fputs` (`FILE*`) |
+| Windows gives a program its `char` command line, and runs the narrow-character functions, in the ANSI code page, which loses the characters of other languages (a folder named `Usuários`, `Пользователи`) | **Fixed at the cause:** every program (`nxAddProgram`) embeds `cmake/nxProgram.manifest`, which makes UTF-8 its code page (Windows 10 1903 and later) and allows paths longer than `MAX_PATH` |
 | GCC 16 hits an *internal compiler error* (`module_state::mangle`) when another unit uses a `friend` comparison operator with `= default` of a (non-template) class declared in a module | In those classes, *defaulted* comparisons are members: `auto operator<=>(const T&) const = default` |
 | libstdc++'s `std` module (GCC 16) advertises `__cpp_lib_saturation_arithmetic` but does not export `std::add_sat` and friends | `nx.core` uses its own saturated arithmetic on every compiler |
 | MSVC 14.51 cannot materialize a `std::optional` returned by a `consteval` call inside a template (C2440, "too many initializers") | The `nx.meta` functions that return class types (`typeAnnotation`, `Field::annotation`) are `constexpr`: pure, still evaluated at compile time where a constant is required |
@@ -167,7 +169,8 @@ ctest --preset dev-linux-gcc
 | `NX_CONTRACT_SEMANTIC` | per module | `enforce` or `observe` ([02 §6.5](02-coding-standards.md#65-contracts)) |
 
 The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
-`NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS` and `NX_REFLECTION_BACKEND` exist.
+`NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS`, `NX_BUILD_TOOLS` and
+`NX_REFLECTION_BACKEND` exist, with `NX_FUZZ` and `NX_FUZZ_SECONDS`, which the fuzz preset sets.
 
 ## 5. Dependencies
 
@@ -221,6 +224,7 @@ Rules:
 | `nextmaster` | Master server. Planned (M4) |
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
 | `nxbake` | Asset tool. Planned (M2) |
+| `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |

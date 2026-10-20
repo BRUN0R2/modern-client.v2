@@ -58,7 +58,7 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core |
 | `nx.jobs` | 1 | Job System, counters, graphs, `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window, input, native file system, the user's Steam folders, clocks, OS threads (SDL3) | core (math with the window and input, M2) |
+| `nx.platform` | 2 | Window, input, native file system, the path of the running program, the user's Steam folders, clocks, OS threads (SDL3) | core (math with the window and input, M2) |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math |
@@ -78,6 +78,7 @@ flowchart TB
 | `nx.update` | 3 | Updates of the client and the server products: signed release metadata, content-addressed chunks, atomic installs and rollback ([21](21-launcher-and-updates.md)). Planned (M4) | core, jobs, platform, net |
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
 | `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
+| `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, jobs, assets (platform in the program) |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
 module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every

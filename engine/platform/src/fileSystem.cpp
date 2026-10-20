@@ -237,4 +237,38 @@ auto readTextFile(const std::filesystem::path& path) -> Result<std::string, File
     return readWholeFile<std::string>(path);
 }
 
+#if defined(_WIN32)
+
+auto executablePath() -> Result<std::filesystem::path, FileError> {
+    std::wstring path(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD length = GetModuleFileNameW(nullptr, path.data(), narrow<DWORD>(path.size()));
+        if (length == 0) {
+            const std::error_code error = lastError();
+            return fail(FileError::ReadFailed,
+                        std::format("the path of the running executable: {} (error {})", error.message(),
+                                    error.value()));
+        }
+        if (length < path.size()) {
+            path.resize(length);
+            return std::filesystem::path{std::move(path)};
+        }
+        path.resize(path.size() * 2); // GetModuleFileNameW cut it to the buffer
+    }
+}
+
+#else
+
+auto executablePath() -> Result<std::filesystem::path, FileError> {
+    const std::filesystem::path link{"/proc/self/exe"};
+    std::error_code error;
+    std::filesystem::path path = std::filesystem::read_symlink(link, error);
+    if (error) {
+        return fail(FileError::ReadFailed, osFailureText(link, error));
+    }
+    return path;
+}
+
+#endif
+
 } // namespace nx::platform

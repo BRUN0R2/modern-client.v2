@@ -79,6 +79,36 @@ function(nxAddModuleLibrary target)
     add_library(${arg_ALIAS} ALIAS ${target})
 endfunction()
 
+# nxAddProgram(<target> SOURCES <files>... [DEPENDS <targets>...])
+#
+# Creates a program of the project (an application or a tool) in bin/, next to the data/ it reads:
+# a copy of the repository's data/ that every build refreshes. With MSVC its manifest
+# (cmake/nxProgram.manifest) makes UTF-8 the code page of its command line and of the Windows
+# narrow-character functions, and lets it use paths longer than MAX_PATH where Windows allows them.
+function(nxAddProgram target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
+
+    if(NOT arg_SOURCES)
+        message(FATAL_ERROR "nxAddProgram(${target}): SOURCES is required")
+    endif()
+
+    add_executable(${target} ${arg_SOURCES})
+    if(MSVC)
+        target_sources(${target} PRIVATE "${PROJECT_SOURCE_DIR}/cmake/nxProgram.manifest")
+    endif()
+    target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS})
+    nxTargetDefaults(${target})
+
+    if(NOT TARGET nxProgramData)
+        add_custom_target(nxProgramData
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different
+                "${PROJECT_SOURCE_DIR}/data" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/data"
+            COMMENT "Copying data/ next to the programs"
+            VERBATIM)
+    endif()
+    add_dependencies(${target} nxProgramData)
+endfunction()
+
 # nxAddBenchmark(<target> SOURCES <files>... DEPENDS <targets>...)
 #
 # Creates a Google Benchmark executable. Benchmarks are not CTest tests: they are run by hand, on

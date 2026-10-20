@@ -374,13 +374,41 @@ TEST(MdlTest, ReadsTexturesSkinsAndGeometry) {
     EXPECT_EQ(run.corners[2].s, 8);
 }
 
-TEST(MdlTest, AModelWhoseTexturesAreInItsTFileHasNone) {
+TEST(MdlTest, AModelWhoseTexturesAreInItsTFileJoinsThem) {
     TriangleModel model;
     model.put(180, std::int32_t{0}); // no textures
     const auto view = MdlView::parse(model.bytes);
     ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
     EXPECT_TRUE(view->textures().empty());
     EXPECT_TRUE(view->skins().empty());
+
+    const TriangleModel textures; // one texture and one skin reference, as a *T.mdl has
+    const auto texturesFile = MdlView::parse(textures.bytes);
+    ASSERT_TRUE(texturesFile.has_value()) << nx::describe(texturesFile.error());
+    const auto joined = view->checkTextures(*texturesFile);
+    EXPECT_TRUE(joined.has_value()) << nx::describe(joined.error());
+
+    EXPECT_EQ(view->checkTextures(*view).error().code, MdlError::BadValue)
+        << "a textures file without textures";
+
+    TriangleModel farReference = model;
+    farReference.put(farReference.mesh + 8, std::int32_t{1});
+    const auto far = MdlView::parse(farReference.bytes);
+    ASSERT_TRUE(far.has_value()) << nx::describe(far.error());
+    EXPECT_EQ(far->checkTextures(*texturesFile).error().code, MdlError::BadIndex) << "skin reference 1 of 1";
+}
+
+TEST(MdlTest, TheTexturesFileIsNamedAfterTheModel) {
+    const auto pathOf = [](std::string_view model) -> std::string {
+        const auto path = nx::assets::VfsPath::parse(model).and_then(nx::assets::texturesFilePath);
+        return path ? std::string{path->text()} : nx::describe(path.error());
+    };
+    EXPECT_EQ(pathOf("models/player/gign/gign.mdl"), "models/player/gign/gignT.mdl");
+    EXPECT_EQ(pathOf("models/V_AK47.MDL"), "models/V_AK47T.MDL");
+
+    const auto map = nx::assets::VfsPath::parse("maps/de_dust2.bsp");
+    ASSERT_TRUE(map.has_value());
+    EXPECT_EQ(nx::assets::texturesFilePath(*map).error().code, nx::assets::VfsError::InvalidPath);
 }
 
 TEST(MdlTest, ReadsTheSequences) {

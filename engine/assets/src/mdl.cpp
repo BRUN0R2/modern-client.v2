@@ -777,6 +777,14 @@ auto MdlView::decodeSequences(std::span<const std::byte> bytes) -> std::optional
     return std::nullopt;
 }
 
+auto MdlView::checkTextures(const MdlView& texturesFile) const -> Result<void, MdlError> {
+    if (texturesFile.m_textures.empty()) {
+        return fail(MdlError::BadValue,
+                    std::format("{:?}, the textures of {:?}, has no texture", texturesFile.m_name, m_name));
+    }
+    return checkSkinReferences(m_bodyParts, texturesFile.m_skins.front().size());
+}
+
 auto MdlView::decodeAnimation(SequenceIndex index, std::span<const std::byte> groupFile) const
     -> Result<AnimationFrames, MdlError> {
     if (index.value >= m_sequences.size()) {
@@ -830,6 +838,17 @@ auto MdlView::decodeAnimation(SequenceIndex index, std::span<const std::byte> gr
         }
     }
     return frames;
+}
+
+auto texturesFilePath(const VfsPath& model) -> Result<VfsPath, VfsError> {
+    constexpr std::string_view kExtension = ".mdl";
+    const std::string_view text = model.text();
+    if (text.size() < kExtension.size() ||
+        !equalsIgnoringCase(text.substr(text.size() - kExtension.size()), kExtension)) {
+        return fail(VfsError::InvalidPath, std::format("{:?} is not a model", text));
+    }
+    return VfsPath::parse(std::format("{}T{}", text.substr(0, text.size() - kExtension.size()),
+                                      text.substr(text.size() - kExtension.size())));
 }
 
 auto AnimationFrames::value(std::uint32_t blend, std::uint32_t frame, BoneIndex bone,

@@ -78,6 +78,11 @@ auto VfsPath::parse(std::string_view text) -> Result<VfsPath, VfsError> {
     return VfsPath{std::string{text}, lookupKey(text)};
 }
 
+auto VfsPath::parseGoldsrc(std::string_view text) -> Result<VfsPath, VfsError> {
+    return parse(text | std::views::transform([](char c) { return c == '\\' ? '/' : c; }) |
+                 std::ranges::to<std::string>());
+}
+
 auto Vfs::create(std::span<const std::filesystem::path> mounts) -> Result<Vfs, VfsError> {
     Vfs vfs;
     for (std::size_t mount = 0; mount < mounts.size(); ++mount) {
@@ -91,8 +96,8 @@ auto Vfs::create(std::span<const std::filesystem::path> mounts) -> Result<Vfs, V
             if (brokenRule(text)) {
                 continue; // not content
             }
-            const auto [entry, isNew] =
-                vfs.m_files.try_emplace(lookupKey(text), File{.native = root / relative, .mount = mount});
+            const auto [entry, isNew] = vfs.m_files.try_emplace(
+                lookupKey(text), File{.text = text, .native = root / relative, .mount = mount});
             // A higher mount's file shadows these; two of this mount's would make a path ambiguous.
             if (!isNew && entry->second.mount == mount) {
                 return fail(VfsError::MountFailed, std::format("{} and {} differ only in case",
@@ -118,6 +123,23 @@ auto Vfs::readAll(const VfsPath& path) const -> Result<std::vector<std::byte>, V
         return fail(VfsError::ReadFailed, std::format("{:?}", path.text()), std::move(bytes.error()));
     }
     return std::move(*bytes);
+}
+
+auto Vfs::nativePath(const VfsPath& path) const -> Result<std::filesystem::path, VfsError> {
+    const auto found = m_files.find(path.m_key);
+    if (found == m_files.end()) {
+        return fail(VfsError::NotFound, std::format("{:?}", path.text()));
+    }
+    return found->second.native;
+}
+
+auto Vfs::paths() const -> std::vector<VfsPath> {
+    auto paths =
+        m_files |
+        std::views::transform([](const auto& file) { return VfsPath{file.second.text, file.first}; }) |
+        std::ranges::to<std::vector>();
+    std::ranges::sort(paths, {}, [](const VfsPath& path) -> const std::string& { return path.m_key; });
+    return paths;
 }
 
 } // namespace nx::assets
