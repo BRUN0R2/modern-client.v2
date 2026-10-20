@@ -9,8 +9,10 @@ id = "cstrikeOriginal"
 kind = "goldsrcInstall"
 redistributable = false        # never sent to clients; they need their own copy
 steamAppId = 10                # Counter-Strike on Steam
-steamInstallFolder = "Half-Life"
-mounts = ["cstrike", "valve"]  # mounted in this order, highest priority first
+steamInstallFolder = "Half-Life" # Steam names the folder after the base game of CS 1.6
+# Mounted in this order, highest priority first: valve/ holds the base files CS 1.6 itself
+# loads (halflife.wad, decals.wad), nothing of Half-Life as a game (ADR-0017).
+mounts = ["cstrike", "valve"]
 
 # Files that must exist, relative to the installation folder. A missing file stops the
 # `classic` profile with ContentError::MissingEssentialFiles and the full list.

@@ -26,7 +26,7 @@ Search order (highest priority first), equivalent to the GoldSrc *search path*. 
 | 1 | `mods/<mod>/` (in dependency order) | Assets of enabled mods | Depends on the mod |
 | 2 | `downloads/` | Cache of downloaded resources (content-addressed) | Yes (only receives redistributable content) |
 | 3 | `addons/cstrike/` | The user's local custom content (`cstrike_addon`) | No (it belongs to the user) |
-| 4 | The profile's game source: `<install>/cstrike/` + `<install>/valve/` (`classic`), `openContent` (`open`) or `devContent` (`dev`) | Game content | `goldsrcInstall`: **no**. The others: yes |
+| 4 | The profile's game source: `<install>/cstrike/` + the base files Counter-Strike 1.6 loads from `<install>/valve/` (`classic`), `openContent` (`open`) or `devContent` (`dev`) | Game content | `goldsrcInstall`: **no**. The others: yes |
 | 5 | `engine/` (embedded) | Engine minimum: console font, fallback shaders, error screen | Yes |
 
 ### 2.2 Path rules
@@ -51,7 +51,9 @@ is searched for in this order:
 3. Steam on Linux: `~/.steam/steam`, `~/.local/share/Steam` and the Flatpak installation
    (`~/.var/app/com.valvesoftware.Steam/.local/share/Steam`), plus `libraryfolders.vdf`.
 4. In each library: the CS 1.6 manifest (Steam app 10) and the
-   `steamapps/common/Half-Life` folder, with `cstrike/` and `valve/`.
+   `steamapps/common/Half-Life` folder, with `cstrike/` and `valve/`. Steam names the folder
+   after Half-Life, the base game of CS 1.6; only CS 1.6's files are read from it
+   ([ADR-0017](adr/0017-counter-strike-only.md)).
 
 **Validation** checks the list of essential files in `data/content/goldsrcCstrike.toml`
 (`cstrike/liblist.gam`, `valve/halflife.wad`, `cstrike/cstrike.wad`, player models,

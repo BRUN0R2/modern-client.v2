@@ -24,6 +24,7 @@ one, without erasing the history.
 | [0014](0014-std-module-built-by-the-project.md) | `std` module built by the project, without CMake's experimental `import std` | Accepted |
 | [0015](0015-free-content-and-optional-original-assets.md) | Free content by default; original assets optional and configured locally | Accepted |
 | [0016](0016-english-documentation.md) | English as the default language of the documentation | Accepted |
+| [0017](0017-counter-strike-only.md) | Counter-Strike 1.6 only: no Half-Life and no other GoldSrc games | Accepted |
 
 ## Template
 
