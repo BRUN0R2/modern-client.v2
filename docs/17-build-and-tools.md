@@ -202,7 +202,10 @@ Rules:
 - Every new dependency goes through a review of its license (compatible with the project's
   license, [20](20-legal-and-licensing.md)), active maintenance and security surface.
 - Dependencies are built by the project triplets (`cmake/triplets/x64-windows-nx`,
-  `x64-linux-nx`): static libraries, **without exceptions and without RTTI**, like our code.
+  `x64-linux-nx`): static libraries, **without exceptions and without RTTI**, like our code. The
+  fuzz preset uses `x64-windows-nx-asan`, the same with the standard library's AddressSanitizer
+  annotations compiled in (`_ANNOTATE_STL`), which MSVC requires of every library an ASan binary
+  links.
   Libraries that require exceptions stay isolated behind a boundary that converts to
   `nx::Result`, or are not used.
 - `THIRD_PARTY_NOTICES.md` will be generated from `vcpkg.json` in the release build (planned,
@@ -222,7 +225,7 @@ Rules:
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 
@@ -236,8 +239,10 @@ and on demand. **Running today:**
 | `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
-`fuzz-windows-msvc` and fuzzes each target for 10 minutes. A crash fails the run, and the input
-that caused it is kept as an artifact, to join the target's corpus as a test.
+`fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the
+fuzzing itself (`tests/fuzz`, the triplets, the presets, `nxTargets.cmake` or the workflow) runs
+it too, for a minute per target, so the nightly job never meets a broken build. A crash fails the
+run, and the input that caused it is kept as an artifact, to join the target's corpus as a test.
 
 Every build job also checks the module layers when CMake configures
 ([01 §1.1](01-architecture.md#11-module-catalog)): a dependency on the same or a higher layer fails
@@ -259,7 +264,7 @@ image.
 | `render-golden` | Every PR | Reference images with a software renderer (lavapipe) |
 | `parity` | Nightly | Parity suite on a dedicated *runner* with a legitimate copy of the game ([18](18-testing-and-quality.md#parity-tests)) |
 | `bench` | Nightly | Benchmarks on a dedicated machine. A regression above the threshold fails |
-| `fuzz` (more targets) | Nightly | The other parsers (BSP, MDL, SPR, WAV), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
+| `fuzz` (more targets) | Nightly | The other parsers (BSP, MDL, SPR), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
 | `stress` | Weekly | Server with 1024 simulated clients |
 | `package` | Release tag | Binaries, `THIRD_PARTY_NOTICES.md`, symbols, Docker image of `nextds` |
 

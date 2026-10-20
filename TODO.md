@@ -209,7 +209,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] WAD3 reader with fuzzing (`nx.assets:wad`, `fuzzWad`; fuzz infrastructure: `nxAddFuzzer`, the `fuzz-windows-msvc` preset and the nightly `fuzz` workflow)
 - [ ] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing
 - [ ] SPR v2 reader with fuzzing
-- [ ] WAV reader (PCM 8/16, cue points) with fuzzing
+- [x] WAV reader (PCM 8/16, cue points) with fuzzing (`nx.assets:wav`, `fuzzWav`), and every other uncompressed layout (24/32-bit PCM, 32/64-bit float, extensible) at any rate and channel count
 - [ ] Internal representation without fixed caps (attachments, body parts, bones, controllers, blends) ([06 §3.4](docs/06-assets-and-resources.md#34-removed-content-limits))
 - [ ] Generational `AssetHandle<T>`, states and typed errors
 - [ ] Asynchronous pipeline (I/O → decoding → dependencies → upload)
@@ -279,13 +279,15 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Penetration by material (`materials.txt`)
 
 ### Audio
-- [ ] Mixer on a real-time thread with a command queue
+- [ ] Mixer on a real-time thread with a command queue, 32-bit float mixing with headroom and a limiter, and a high-quality resampler from any rate ([11 §2.1](docs/11-audio.md#21-the-originals-audio-problems-and-their-causes))
+- [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
+- [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device
 - [ ] Per-entity channels with replacement as in the original
 - [ ] Attenuation, pitch and volume with parity
 - [ ] `room_type` DSP
 - [ ] Sentences (`sentences.txt`)
 - [ ] Footsteps by material
-- [ ] Music (`mp3`)
+- [ ] Music (`mp3`): `media/*.mp3` streamed as a voice of the mixer (no second player), `bgmvolume` as its gain; the MP3 decoder fuzzed
 - [ ] Voice pool with priority and documented stealing
 
 ### Basic HUD

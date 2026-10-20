@@ -7,6 +7,7 @@ nxAddTest(nxAssetsTests
         contentTests.cpp
         steamTests.cpp
         wadTests.cpp
+        wavTests.cpp
     DEPENDS
         nx::assets)
 

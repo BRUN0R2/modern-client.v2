@@ -4,11 +4,12 @@
 /// nx.assets — content as the engine loads it (docs/06-assets-and-resources.md, layer 3).
 ///
 /// Today: the VFS over mounted directories, the Counter-Strike 1.6 installation as a content
-/// source, detected in the Steam libraries, and the WAD3 reader. Profiles, the other GoldSrc
-/// readers, asset handles and the loading pipeline come next, in the order of TODO.md (M2).
+/// source, detected in the Steam libraries, and the WAD3 and WAV readers. Profiles, the other
+/// GoldSrc readers, asset handles and the loading pipeline come next, in the order of TODO.md (M2).
 export module nx.assets;
 
 export import :vfs;
 export import :content;
 export import :steam;
 export import :wad;
+export import :wav;

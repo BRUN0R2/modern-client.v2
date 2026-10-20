@@ -2,13 +2,25 @@
 # SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 # Nightly fuzzing of the parsers of external data (docs/17-build-and-tools.md, section 7). A crash
-# fails the run; its input is kept as an artifact, to join the corpus as a test.
+# fails the run; its input is kept as an artifact, to join the corpus as a test. A pull request
+# that changes the fuzzing itself runs it too, for a minute per target, before it merges.
 name: Fuzz
 
 on:
   schedule:
     - cron: "17 3 * * *"
+  pull_request:
+    paths:
+      - ".github/workflows/fuzz.yml"
+      - "tests/fuzz/**"
+      - "cmake/triplets/**"
+      - "cmake/nxTargets.cmake"
+      - "CMakePresets.json"
   workflow_dispatch:
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -20,6 +32,7 @@ jobs:
     timeout-minutes: 90
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+      FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '60' || '600' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -46,7 +59,7 @@ jobs:
           key: vcpkg-windows-fuzz-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
           restore-keys: vcpkg-windows-fuzz-
 
-      - name: Configure, build and fuzz (10 minutes per target)
+      - name: Configure, build and fuzz (10 minutes per target; 1 on pull requests)
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -55,7 +68,7 @@ jobs:
           $cmakeDirectory = Split-Path (Get-Command cmake).Source
           . ./scripts/devShell.ps1
           $env:PATH = "$cmakeDirectory;$env:PATH"
-          cmake --preset fuzz-windows-msvc -DNX_FUZZ_SECONDS=600
+          cmake --preset fuzz-windows-msvc "-DNX_FUZZ_SECONDS=$env:FUZZ_SECONDS"
           cmake --build --preset fuzz-windows-msvc
           ctest --preset fuzz-windows-msvc
 

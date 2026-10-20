@@ -10,6 +10,8 @@
 - **No fixed voice ceiling:** a configurable pool with priority and documented voice
   stealing.
 - **Extensible:** modern formats, streaming and new effects for plugins, all optional.
+- **Quality and reliability fixed at the cause:** none of the original's audio limits and
+  failures ([§2.1](#21-the-originals-audio-problems-and-their-causes)).
 
 ## 2. Architecture
 
@@ -24,7 +26,22 @@ flowchart LR
 - The game never calls the mixer directly: it sends **commands** (`PlaySound`, `StopSound`,
   `UpdateListener`, `SetRoom`) through a lock-free queue.
 - The audio thread mixes in small blocks (configurable size, low-latency default),
-  resampling from 11/22/44 kHz to the device rate.
+  resampling every source, whatever its rate, to the device rate.
+
+### 2.1 The original's audio problems and their causes
+
+| Problem in the original | Cause | Here |
+|-------------------------|-------|------|
+| Sounds limited to 8/16-bit PCM, mostly mono, at 11/22/44 kHz; other files rejected or played at the wrong speed | Fixed formats in the loader and the mixer | WAV of any common PCM layout (8, 16, 24 and 32-bit integer, 32-bit float, extensible) at any rate, plus FLAC, Vorbis and Opus ([§6](#6-formats)); every source resampled with a high-quality resampler; mixing in 32-bit float with headroom and a limiter, never clipping |
+| MP3 music that stops by itself, after a map change, an alt-tab or a device change, with its own volume | Music played by a second player (Miles), outside the mixer, with its own device and state | **One mixer for everything:** effects, sentences, voice and music (`media/*.mp3` included) are voices of the same mixer on the same device; music is a streamed voice and `bgmvolume` a gain of the mixer |
+| A stream that stalls or ends early | Decoding on demand, with no margin, and failures without a report | Streams decode ahead in `Low` jobs into a ring of blocks with a prefetch margin. An underrun plays silence for the missing block, is counted (`snd_stats`) and reported once, and the stream goes on; only its end or a command stops it. A decoding failure is a typed `SoundError` in the log, never a silent stop |
+| Sound that depends on the frame, the loading screen or the window focus | Mixing driven by the game loop | The audio thread runs on its own clock: frame rate, map loads and losing the focus do not touch it (`s_play_unfocused` decides whether an unfocused window is heard) |
+| Audio gone after unplugging headphones | The device opened once | Losing or changing the device reopens the system default and resumes every voice and stream where it was |
+
+Every decoder refuses malformed input with a typed error and is fuzzed
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). Streaming is tested with slow,
+simulated I/O (underruns are survived and counted), and the device with a fake one that
+disappears and returns.
 
 ## 3. Original semantics to preserve
 
@@ -63,8 +80,8 @@ the competitive information relative to the original.
 
 | Format | Use | Decoder |
 |--------|-----|---------|
-| 8/16-bit PCM WAV | Original content | In-house |
-| MP3 | Original music (`media/`) | `minimp3` |
+| PCM WAV: 8, 16, 24 and 32-bit integer, 32-bit float, extensible | Original content and mods | In-house (`nx.assets:wav`) |
+| MP3 | Original music (`media/`), streamed through the mixer like any other source | `minimp3` |
 | OGG Vorbis | Mods | `stb_vorbis` |
 | Opus | Voice and mods | `libopus` |
 | FLAC | Mods | `dr_flac` |
@@ -91,6 +108,7 @@ streamed.
 | `s_max_voices` | new | Voice pool size |
 | `s_spatial`, `s_occlusion` | new | Spatialization and occlusion |
 | `s_device` | new | Output device |
+| `s_play_unfocused` | new | Whether the game is heard while its window is not focused |
 
 ## 9. Typed errors
 
