@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// BSP v30, the maps of GoldSrc (docs/06-assets-and-resources.md, section 3.1): every lump, every
-/// index checked against what it indexes and every tree checked to be one, so readers index and
-/// walk without checks.
+/// index checked against what it indexes, the visible tree checked to be a tree and the collision
+/// hulls to be free of cycles, so readers index and walk without checks.
 export module nx.assets:bsp;
 
 import std;
@@ -68,8 +68,8 @@ enum class BspError : std::uint8_t {
     BadIndex,           ///< A record names a record that does not exist.
     BadValue,           ///< A value outside its domain: a float that is not finite, a normal that is
                         ///< not unit length, an unknown plane type or contents, a face of fewer than
-                        ///< three edges, a child that is not after its parent or has two parents (a
-                        ///< tree must neither cycle nor share a subtree).
+                        ///< three edges, a node that is not after its parent or has two parents (the
+                        ///< visible tree must neither cycle nor share a subtree), clip nodes in a cycle.
     BadTexture,         ///< An embedded texture breaks its format (cause: the WadError).
     BadEntities,        ///< The entity text breaks its syntax; the detail has the line.
 };
@@ -143,7 +143,9 @@ struct BspFace {
 /// A side of a node: a node after it, or a leaf.
 using NodeChild = std::variant<NodeIndex, LeafIndex>;
 
-/// A side of a clip node: a clip node after it, or what the space there holds.
+/// A side of a clip node: a clip node, or what the space there holds. Compilers write a subtree
+/// that several nodes have once (VHLT shares them), so a clip node may have several parents and
+/// come before them; the hulls have no cycle.
 using ClipNodeChild = std::variant<ClipNodeIndex, Contents>;
 
 /// A node of the visible tree: its plane splits its bounds; children[0] is in front.
