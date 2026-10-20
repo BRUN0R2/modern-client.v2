@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Helpers for source locations shown to people (failures, logs, contract reports).
+/// Helpers for source locations shown to people (failures and logs; contract reports keep the
+/// full path, which debuggers and editors open).
 export module nx.core:source;
 
 import std;

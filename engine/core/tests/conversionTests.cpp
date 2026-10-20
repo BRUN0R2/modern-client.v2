@@ -19,6 +19,7 @@ TEST(Conversion, NarrowKeepsValuesThatFit) {
 TEST(Conversion, NarrowReportsValuesThatDoNotFit) {
     const nx_test::ContractRecorder recorder;
 
+    // Only the reports matter, not the values the handler let through.
     std::ignore = nx::narrow<std::uint8_t>(256);
     std::ignore = nx::narrow<std::uint32_t>(-1);
 

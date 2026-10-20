@@ -147,3 +147,50 @@ TEST(RateLimit, AllowsOneEventPerInterval) {
     EXPECT_EQ(limit.takeSuppressed(), 2U);
     EXPECT_EQ(limit.takeSuppressed(), 0U);
 }
+
+// The thread-safety the logger and RateLimit promise, checked under ThreadSanitizer in CI.
+
+TEST(RateLimit, ConcurrentCallersShareOneEventPerInterval) {
+    constexpr int kThreads = 8;
+    constexpr int kCallsPerThread = 1'000;
+    nx::log::RateLimit limit{std::chrono::hours{1}}; // one interval for the whole test
+    const auto now = nx::log::RateLimit::Clock::now();
+    std::atomic<int> allowed{0};
+    {
+        std::vector<std::jthread> threads;
+        for (int thread = 0; thread < kThreads; ++thread) {
+            threads.emplace_back([&limit, &allowed, now] {
+                for (int call = 0; call < kCallsPerThread; ++call) {
+                    if (limit.allow(now)) {
+                        allowed.fetch_add(1, std::memory_order_seq_cst);
+                    }
+                }
+            });
+        }
+    }
+    EXPECT_EQ(allowed.load(std::memory_order_seq_cst), 1);
+    EXPECT_EQ(limit.takeSuppressed(), std::uint64_t{(kThreads * kCallsPerThread) - 1});
+}
+
+TEST(Log, ConcurrentWritersReachTheSinksWhole) {
+    constexpr int kThreads = 8;
+    constexpr int kRecordsPerThread = 200;
+    std::vector<CapturedRecord> records;
+    nx::log::Logger logger;
+    logger.addSink(std::make_unique<RecordingSink>(records)); // the logger serializes its sinks
+    {
+        std::vector<std::jthread> threads;
+        for (int thread = 0; thread < kThreads; ++thread) {
+            threads.emplace_back([&logger, thread] {
+                for (int record = 0; record < kRecordsPerThread; ++record) {
+                    logger.write(nx::log::Level::Info, kTestLog, std::format("{}:{}", thread, record),
+                                 std::source_location::current());
+                }
+            });
+        }
+    }
+    ASSERT_EQ(records.size(), std::size_t{kThreads * kRecordsPerThread});
+    EXPECT_TRUE(std::ranges::all_of(records, [](const CapturedRecord& record) {
+        return record.message.contains(':') && record.category == "test";
+    }));
+}

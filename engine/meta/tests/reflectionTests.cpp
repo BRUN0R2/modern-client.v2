@@ -126,6 +126,9 @@ struct OtherMember {
 struct[[= Replicated{.audience = 3}]] OtherAnnotation {
     int value = 0;
 };
+struct[[ = Replicated{.audience = 1}, = Range{.minimum = 0.0F, .maximum = 1.0F} ]] RepeatedAnnotation {
+    int value = 0;
+};
 
 } // namespace nx_test
 
@@ -177,6 +180,15 @@ struct nx::meta::Description<nx_test::OtherAnnotation> {
     static constexpr std::tuple kFields{nx::meta::field<&nx_test::OtherAnnotation::value>("value")};
 };
 
+template <>
+struct nx::meta::Description<nx_test::RepeatedAnnotation> {
+    static constexpr std::string_view kName = "nx_test::RepeatedAnnotation";
+    // As many annotations as the type has, but one of them twice instead of the Range.
+    static constexpr std::tuple kAnnotations{nx_test::Replicated{.audience = 1},
+                                             nx_test::Replicated{.audience = 1}};
+    static constexpr std::tuple kFields{nx::meta::field<&nx_test::RepeatedAnnotation::value>("value")};
+};
+
 namespace {
 
 TEST(NativeReflection, MatchingDescriptionsPass) {
@@ -201,6 +213,9 @@ TEST(NativeReflection, EveryKindOfDriftIsReported) {
     EXPECT_EQ(mismatch<nx_test::OtherMember>(), R"(field "first" names another member of the type)");
     EXPECT_EQ(mismatch<nx_test::OtherAnnotation>(),
               R"("nx_test::OtherAnnotation" has other annotations in the type)");
+    // Regression: a repeated declaration passed against a type with another annotation.
+    EXPECT_EQ(mismatch<nx_test::RepeatedAnnotation>(),
+              R"("nx_test::RepeatedAnnotation" has other annotations in the type)");
 }
 
 } // namespace

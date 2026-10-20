@@ -45,7 +45,11 @@ void ConsoleSink::flush() noexcept {
     std::fflush(stderr);
 }
 
-Logger::Logger(std::vector<std::unique_ptr<Sink>> sinks) : m_sinks{std::move(sinks)} {}
+Logger::Logger(std::vector<std::unique_ptr<Sink>> sinks) : m_sinks{std::move(sinks)} {
+    expects(std::ranges::none_of(m_sinks, [](const auto& sink) { return sink == nullptr; }),
+            "Logger: sinks must not be null");
+    std::erase(m_sinks, nullptr); // the handler let execution continue ("observe")
+}
 
 void Logger::addSink(std::unique_ptr<Sink> sink) {
     expects(sink != nullptr, "Logger::addSink: sink must not be null");
@@ -127,11 +131,13 @@ auto RateLimit::allow(Clock::time_point now) noexcept -> bool {
             return true;
         }
     }
+    // relaxed: a count only; it publishes no other data.
     m_suppressed.fetch_add(1, std::memory_order_relaxed);
     return false;
 }
 
 auto RateLimit::takeSuppressed() noexcept -> std::uint64_t {
+    // relaxed: as above.
     return m_suppressed.exchange(0, std::memory_order_relaxed);
 }
 

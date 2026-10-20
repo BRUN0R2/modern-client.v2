@@ -7,7 +7,7 @@ import std;
 import nx.core;
 
 TEST(Debugging, BreakpointIfDebuggingReturnsWithoutADebugger) {
-    // Under a debugger this stops once and resumes; under ctest nothing happens.
+    // Only without a debugger, where it must return at once; under one it would stop the test.
     if (!nx::isDebuggerPresent()) {
         nx::breakpointIfDebugging();
     }

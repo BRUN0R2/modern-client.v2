@@ -23,10 +23,9 @@ auto FrameArena::operator=(FrameArena&& other) noexcept -> FrameArena& {
 
 auto FrameArena::allocateBytes(std::size_t size, std::size_t alignment, std::source_location where)
     -> Result<std::span<std::byte>, ArenaError> {
+    expects(std::has_single_bit(alignment), "FrameArena: alignment must be a power of two", where);
     if (!std::has_single_bit(alignment)) {
-        // A bug in the caller: report it, then fail safely if the handler lets execution continue.
-        expects(false, "FrameArena: alignment must be a power of two", where);
-        return fail(ArenaError::InvalidAlignment, std::format("alignment {}", alignment), where);
+        alignment = std::bit_ceil(alignment); // the handler let execution continue ("observe")
     }
 
     if (size == 0) {

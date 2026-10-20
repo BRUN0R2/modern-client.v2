@@ -13,6 +13,7 @@ import std;
 
 export namespace nx {
 
+/// Which kind of contract a violation broke.
 enum class ContractKind : std::uint8_t {
     Precondition,
     Postcondition,
@@ -20,12 +21,15 @@ enum class ContractKind : std::uint8_t {
     Count,
 };
 
+/// What a handler receives: the kind, the description written at the check, and where it is.
 struct ContractViolation {
     ContractKind kind = ContractKind::Invariant;
     std::string_view description;
     std::source_location where;
 };
 
+/// The process-wide reaction to violations. Returning lets execution continue ("observe"): the
+/// code then takes the defined path written next to each check (docs/02, section 6.5).
 using ContractViolationHandler = void (*)(const ContractViolation& violation) noexcept;
 
 /// Default handler ("enforce"): writes the violation and the call stack to stderr, stops in the
@@ -33,8 +37,9 @@ using ContractViolationHandler = void (*)(const ContractViolation& violation) no
 void enforceContract(const ContractViolation& violation) noexcept;
 
 /// Installs `handler` for the whole process and returns the previous one; `nullptr` restores
-/// enforceContract. This is the one sanctioned piece of mutable global state in the engine,
-/// mirroring the process-wide C++26 contract violation handler.
+/// enforceContract. One of the two sanctioned pieces of mutable global state in the engine, with
+/// the default logger (docs/01-architecture.md, section 2.1), mirroring the process-wide C++26
+/// contract violation handler.
 auto setContractViolationHandler(ContractViolationHandler handler) noexcept -> ContractViolationHandler;
 
 namespace detail {

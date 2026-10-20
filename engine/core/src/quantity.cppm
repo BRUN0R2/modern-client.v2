@@ -92,15 +92,19 @@ template <QuantityRepresentation Rep>
 
 } // namespace detail
 
+/// A value in the unit `Tag`, stored as `Rep` (see the module documentation). The operators keep
+/// the unit; for integer representations, a result outside `Rep` and a division by zero are
+/// contract violations (the result then saturates, or is zero for a division by zero).
 template <QuantityRepresentation Rep, class Tag>
 class Quantity {
 public:
     using Representation = Rep;
-    using UnitTag = Tag;
 
+    /// Zero.
     constexpr Quantity() noexcept = default;
     constexpr explicit Quantity(Rep value) noexcept : m_value{value} {}
 
+    /// The number of units.
     [[nodiscard]] constexpr auto value() const noexcept -> Rep { return m_value; }
     [[nodiscard]] static constexpr auto zero() noexcept -> Quantity { return Quantity{}; }
 

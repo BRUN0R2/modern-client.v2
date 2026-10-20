@@ -15,6 +15,7 @@ import std;
 
 export namespace nx::log {
 
+/// Severity of a record, from the most verbose to the most severe.
 enum class Level : std::uint8_t {
     Trace,
     Debug,
@@ -24,10 +25,13 @@ enum class Level : std::uint8_t {
     Count,
 };
 
+/// The subsystem a record comes from, a constant of the module that logs ("assets", "net"). Its
+/// name also names the `log_level_<name>` cvar.
 struct Category {
     std::string_view name;
 };
 
+/// One logged event, as sinks receive it. The views live only during Sink::write.
 struct Record {
     Level level = Level::Info;
     std::string_view category;
@@ -46,7 +50,9 @@ public:
     auto operator=(Sink&&) -> Sink& = delete;
     virtual ~Sink() = default;
 
+    /// Writes one record; called under the logger's lock, one record at a time.
     virtual void write(const Record& record) noexcept = 0;
+    /// Pushes what write() buffered to its destination.
     virtual void flush() noexcept {}
 };
 
@@ -66,8 +72,10 @@ public:
 class Logger {
 public:
     Logger() = default;
+    /// `sinks` must not hold nullptr.
     explicit Logger(std::vector<std::unique_ptr<Sink>> sinks);
 
+    /// Adds a sink, which must not be null.
     void addSink(std::unique_ptr<Sink> sink);
 
     /// Threshold for categories without their own level. Default: Level::Info.
@@ -79,9 +87,13 @@ public:
     /// The threshold that applies to `category`: its own level, or the minimum level.
     [[nodiscard]] auto categoryLevel(Category category) const -> Level;
 
+    /// Whether a record of `level` in `category` would be written: the cheap test the logging
+    /// functions make before formatting.
     [[nodiscard]] auto isEnabled(Category category, Level level) const -> bool;
 
+    /// Hands a record to every sink, stamped with the time of the call.
     void write(Level level, Category category, std::string_view message, std::source_location where) noexcept;
+    /// Flushes every sink.
     void flush() noexcept;
 
 private:
@@ -98,8 +110,10 @@ private:
 /// is process-wide by nature; DefaultLoggerScope installs one for a limited time.
 [[nodiscard]] auto defaultLogger() noexcept -> Logger&;
 
-/// Installs `logger` (not owned; must outlive its installation) and returns the previous one.
-/// `nullptr` restores the built-in console logger.
+/// Installs `logger` (not owned) and returns the previous one; `nullptr` restores the built-in
+/// console logger. A thread that called defaultLogger() may still be writing through the previous
+/// logger after the swap, so a logger must outlive every thread that may log while it is
+/// installed: swap loggers at start-up, at shutdown and in tests, while no other thread logs.
 auto setDefaultLogger(Logger* logger) noexcept -> Logger*;
 
 /// Installs a logger for the lifetime of this object and restores the previous one afterwards.
@@ -129,6 +143,8 @@ struct FormatAt {
         : format{text}, where{location} {}
 };
 
+/// Logs through the default logger, formatting the message only when `level` is enabled for
+/// `category`. trace, debug, info, warning and error below name the level.
 template <class... Args>
 void write(Level level, Category category, FormatAt<std::type_identity_t<Args>...> format, Args&&... args) {
     auto& logger = defaultLogger();
@@ -162,10 +178,12 @@ void error(Category category, FormatAt<std::type_identity_t<Args>...> format, Ar
     write(Level::Error, category, format, std::forward<Args>(args)...);
 }
 
-/// Lets through at most one event per interval, for logging from code that runs every frame:
+/// Lets through at most one event per interval, for logging from code that runs every frame. It is
+/// state of the system that logs, a member like any other (no static, no global):
 ///
-///     static nx::log::RateLimit budgetWarnings{std::chrono::seconds{1}};
-///     if (budgetWarnings.allow()) { nx::log::warning(kNetLog, "..."); }
+///     if (m_budgetWarnings.allow()) {
+///         nx::log::warning(kNetLog, "budget exceeded ({} suppressed)", m_budgetWarnings.takeSuppressed());
+///     }
 ///
 /// Thread-safe: concurrent callers never both pass within the same interval.
 class RateLimit {
@@ -174,6 +192,8 @@ public:
 
     explicit RateLimit(Clock::duration interval) noexcept : m_interval{interval} {}
 
+    /// Whether the event at `now` may pass: the first one, and then one per interval. A rejected
+    /// event is counted as suppressed.
     [[nodiscard]] auto allow(Clock::time_point now = Clock::now()) noexcept -> bool;
 
     /// Events rejected since the last call; resets the count.

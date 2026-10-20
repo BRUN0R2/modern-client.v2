@@ -11,6 +11,8 @@ import :introspection;
 
 export namespace nx {
 
+/// One `Value` per enumerator of a counted enum, indexed by the enumerator (docs/02, section 4.2).
+/// A key outside [0, Count) is a contract violation.
 template <CountedEnum Enum, class Value>
 class EnumArray {
 public:

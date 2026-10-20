@@ -16,9 +16,9 @@ export namespace nx {
 /// its value may change between compiler versions, which would change the layout of exported types.
 inline constexpr std::size_t kCacheLineSize = 64;
 
+/// Why an arena could not allocate.
 enum class ArenaError : std::uint8_t {
-    Exhausted,
-    InvalidAlignment,
+    Exhausted, ///< Not enough room left before the next reset.
 };
 
 /// Linear allocator for data that lives until the next reset (one frame, one job, one load
@@ -35,12 +35,12 @@ public:
     auto operator=(FrameArena&& other) noexcept -> FrameArena&;
     ~FrameArena() = default;
 
-    /// `size` bytes aligned to `alignment`, which must be a power of two.
+    /// `size` bytes aligned to `alignment`, which must be a power of two. Error: Exhausted.
     [[nodiscard]] auto allocateBytes(std::size_t size, std::size_t alignment,
                                      std::source_location where = std::source_location::current())
         -> Result<std::span<std::byte>, ArenaError>;
 
-    /// `count` value-initialized objects of type T.
+    /// `count` value-initialized objects of type T. Error: Exhausted.
     template <class T>
         requires std::is_trivially_destructible_v<T> && std::is_default_constructible_v<T>
     [[nodiscard]] auto allocate(std::size_t count,

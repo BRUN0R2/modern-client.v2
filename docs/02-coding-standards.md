@@ -206,8 +206,10 @@ consteval auto operator""_ups(long double v) -> UnitsPerSecond { return UnitsPer
 } // namespace nx
 ```
 
-- Simulation time: `nx::GameTime` (ticks + fraction) and `nx::Seconds`/`nx::Milliseconds`
-  (`std::chrono::duration<float>`). Wall clock only through `nx.platform`.
+- Simulation time: `nx::Seconds`/`nx::Milliseconds` (`std::chrono::duration<float>`), and
+  `nx::GameTime` (ticks + fraction) from M3 on. Wall clock only through `nx.platform`; the
+  one exception is the time stamped on log records, which `nx.core` takes itself because it
+  sits below `nx.platform`.
 - Angles: `nx::Degrees` and `nx::Radians`, with no implicit conversion between them.
 - IDs and handles: dedicated types (`Entity`, `AssetHandle<Model>`, `ClientSlot`),
   **never** raw indices.
@@ -405,9 +407,15 @@ auto JobSystem::submit(JobDesc desc) -> JobHandle
   the debugger when one is attached (`nx::breakpointIfDebugging`) and aborts; the crash
   report on that abort comes from the application's crash reporter (`nx.platform`, with the
   first application).
-- In release, the default semantic is `enforce` in the networking, assets and script modules
-  (the boundaries with external data) and `observe` on the hot paths measured by benchmarks.
-  The choice is per module, documented in the `CMakeLists.txt`.
+- The handler is one for the whole process: `enforce` by default, and tests install one that
+  records violations and returns (`observe`, `ContractRecorder`). A semantic chosen per module
+  (`enforce` at the boundaries with external data, `observe` on hot paths measured by
+  benchmarks) is planned, with native C++26 contracts.
+- **After a violation under `observe`,** execution continues on a defined path written next to
+  the check, never into undefined behavior: an out-of-range key is clamped, a bad alignment
+  becomes the next power of two, an invalid handle reads as complete, a dead entity is left
+  alone. That path is not an error the caller handles: a violation is a bug, reported once,
+  and never also an expected failure (`Result`).
 
 ## 7. Memory and ownership
 
@@ -419,8 +427,9 @@ auto JobSystem::submit(JobDesc desc) -> JobHandle
   prefer `std::optional<T&>`.
 - Specialized allocators (in `nx.core`):
   - `FrameArena`: linear per frame, reset at the end of the frame. For temporary job data.
-  - `PoolAllocator<T>`: fixed-size blocks (ECS chunks, graph nodes).
-  - `TrackedHeapAllocator`: accounts for memory per category (assets, scripts, networking).
+  - Planned, with their first consumers: `PoolAllocator<T>` (fixed-size blocks; the ECS chunks
+    and the job pools have their own today) and `TrackedHeapAllocator` (memory accounted per
+    category: assets, scripts, networking).
 - Engine containers receive the allocator explicitly when the memory is short-lived. Do not
   use `std::pmr` on hot paths without measuring.
 
@@ -481,12 +490,13 @@ nx::log::warning(kNetLog, "client {} exceeded snapshot budget by {} bytes", slot
   the `log_level_<category>` cvars in the console (`log_level_net debug`,
   [12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)).
 - Sinks are `nx::log::Sink` (console today; file and JSON lines next).
-- Logs on hot paths go through `nx::log::RateLimit`, which is *thread-safe*:
+- Logs on hot paths go through `nx::log::RateLimit`, which is *thread-safe*. It is state of
+  the system that logs, a member like any other, never a `static`:
 
 ```cpp
-static nx::log::RateLimit budgetWarnings{std::chrono::seconds{1}};
-if (budgetWarnings.allow()) {
-    nx::log::warning(kNetLog, "snapshot budget exceeded ({} suppressed)", budgetWarnings.takeSuppressed());
+// In the class: nx::log::RateLimit m_budgetWarnings{std::chrono::seconds{1}};
+if (m_budgetWarnings.allow()) {
+    nx::log::warning(kNetLog, "snapshot budget exceeded ({} suppressed)", m_budgetWarnings.takeSuppressed());
 }
 ```
 

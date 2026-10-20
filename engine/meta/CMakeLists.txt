@@ -8,9 +8,7 @@ nxAddModuleLibrary(nxMeta
         src/nx.meta.cppm
         src/description.cppm
         src/native.cppm
-        src/reflection.cppm
-    DEPENDS
-        nx::core)
+        src/reflection.cppm)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

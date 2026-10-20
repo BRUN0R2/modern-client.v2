@@ -11,6 +11,8 @@ import :introspection;
 
 export namespace nx {
 
+/// A set of the enumerators of a counted enum, one bit each, for any number of enumerators. A flag
+/// outside [0, Count) is a contract violation.
 template <CountedEnum Enum>
 class Flags {
     using Word = std::uint64_t;

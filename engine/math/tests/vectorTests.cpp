@@ -83,6 +83,16 @@ TEST(VectorTest, NormalizedHasUnitLength) {
     EXPECT_TRUE(isNear(nx::cross(direction, Vec3{.x = 1, .y = 2, .z = 3}), Vec3{}));
 }
 
+TEST(VectorTest, EveryFiniteNonZeroVectorHasADirection) {
+    // Regression: the squares of large components overflowed to infinity (and the result was the
+    // zero vector), and those of tiny ones vanished (and the result was a false violation).
+    const nx_test::ContractRecorder recorder;
+    EXPECT_TRUE(isNear(nx::normalized(Vec3{.x = 4e30F, .y = 3e30F}), Vec3{.x = 0.8F, .y = 0.6F}));
+    EXPECT_TRUE(isNear(nx::normalized(Vec3{.x = 3e-30F, .z = -4e-30F}), Vec3{.x = 0.6F, .z = -0.8F}));
+    EXPECT_EQ(nx::normalized(Vec3{.z = std::numeric_limits<float>::max()}), (Vec3{.z = 1}));
+    EXPECT_EQ(nx_test::ContractRecorder::count(), 0);
+}
+
 TEST(VectorTest, NormalizingTheZeroVectorIsAViolation) {
     const nx_test::ContractRecorder recorder;
     EXPECT_EQ(nx::normalized(Vec3{}), Vec3{});

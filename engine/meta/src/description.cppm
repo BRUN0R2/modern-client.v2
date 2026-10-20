@@ -43,8 +43,9 @@ template <auto Member, Annotation... Annotations>
 ///         };
 ///     };
 ///
-/// kName is the namespace-qualified name of the type as declared ("cs::Ammo"): stable identities
-/// (nx::StableId) derive from it, never from a compiler-generated name.
+/// kName is the namespace-qualified name of the type as declared ("cs::Ammo"), never a
+/// compiler-generated name: the stable identities of described types (nx::StableId, for the
+/// network, saves and mods) are to derive from it once ECS registration goes through nx.meta.
 template <class Type>
 struct Description;
 
