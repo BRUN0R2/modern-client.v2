@@ -68,7 +68,7 @@ TEST_F(ListingTest, CommandListShowsDescriptions) {
     EXPECT_EQ(lines, (Lines{"kick : kick <player>: removes a player", R"(1 command starting with "k")"}));
 
     const Lines all = printed("cmdlist");
-    EXPECT_TRUE(std::ranges::contains(all, "echo : echo <text>: prints the text"));
+    EXPECT_TRUE(std::ranges::contains(all, std::string_view{"echo : echo <text>: prints the text"}));
     EXPECT_TRUE(all.back().ends_with(" commands"));
 }
 
