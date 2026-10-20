@@ -27,6 +27,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ## Documentação
 
+- [x] Regras do projeto (`docs/RULES.md`): prioridades, princípios e padrões proibidos
 - [x] Índice da documentação (`docs/README.md`)
 - [x] 00 — Visão geral e limites removidos
 - [x] 01 — Arquitetura em camadas, threads e ciclo de frame

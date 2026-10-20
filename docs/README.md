@@ -11,6 +11,12 @@ paridade de jogabilidade com o original e **sem os limites históricos** da Gold
 thread única, teto de entidades, teto de precache, teto de 32 jogadores e um ecossistema de
 mods preso ao AMX Mod X/Pawn.
 
+## Regras do projeto
+
+[RULES.md](RULES.md) é a constituição do projeto: prioridades, princípios e regras que valem
+para todo contribuidor, humano ou IA. Os documentos abaixo detalham essas regras e prevalecem
+apenas dentro delas.
+
 ## Ordem de leitura recomendada
 
 | # | Documento | Conteúdo |

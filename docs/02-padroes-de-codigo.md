@@ -1,7 +1,8 @@
 # 02 — Padrões de código (C++26)
 
-Este documento é **normativo** para todo código C++ do repositório. Revisões de código
-usam a [lista de verificação](#13-lista-de-verificação-de-revisão) do final.
+Este documento é **normativo** para todo código C++ do repositório, dentro dos princípios de
+[RULES.md](RULES.md). Revisões de código usam a
+[lista de verificação](#13-lista-de-verificação-de-revisão) do final.
 
 ## 1. Versão da linguagem e recursos
 
@@ -138,7 +139,7 @@ Exceções, porque o nome vem de fora do código ou é exigido por uma ferrament
   e hífens) e as variáveis de configuração do CMake (`NX_BUILD_TESTS`, em maiúsculas como as
   do próprio CMake).
 - **Arquivos convencionais de repositório:** `README.md`, `TODO.md`, `LICENSE`,
-  `CONTRIBUTING.md`, `SECURITY.md`, `THIRD_PARTY_NOTICES.md`.
+  `CONTRIBUTING.md`, `SECURITY.md`, `THIRD_PARTY_NOTICES.md` e `docs/RULES.md`.
 - **Documentação em `docs/`:** prefixo numérico e kebab-case (`02-padroes-de-codigo.md`),
   para manter a ordem de leitura.
 - **Arquivos do jogo original:** `server.cfg`, `listenserver.cfg`, `mapcycle.txt`,

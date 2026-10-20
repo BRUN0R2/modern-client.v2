@@ -26,7 +26,8 @@ C++ e `import std`, presets, vcpkg e CI): `nx.core` (erros tipados, contratos, t
 e unidades), `nx.jobs` (Job System com *work stealing*), `nx.ecs` (ECS por arquétipos) e
 `nx.math` (vetores, matrizes, quaternions, ângulos GoldSrc), `nx.console` (cvars tipadas,
 comandos e `.cfg`) e `nx.platform` (relógios), com testes. A documentação de
-arquitetura está em [`docs/`](docs/README.md) e o backlog em [`TODO.md`](TODO.md).
+arquitetura está em [`docs/`](docs/README.md), as regras do projeto em
+[`docs/RULES.md`](docs/RULES.md) e o backlog em [`TODO.md`](TODO.md).
 
 ## Como compilar
 

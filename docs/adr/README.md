@@ -23,6 +23,7 @@ sem apagar o histórico.
 | [0013](0013-convencao-camelcase.md) | Convenção camelCase em todo o projeto (C++ e Rook) | Aceito |
 | [0014](0014-modulo-std-compilado-pelo-projeto.md) | Módulo `std` compilado pelo projeto, sem o `import std` experimental do CMake | Aceito |
 | [0015](0015-conteudo-livre-e-assets-originais-opcionais.md) | Conteúdo livre por padrão; assets originais opcionais e configurados localmente | Aceito |
+| [0016](0016-english-documentation.md) | English as the default language of the documentation | Aceito |
 
 ## Modelo
 
