@@ -21,9 +21,11 @@ constexpr std::size_t kChainLength = 256;
 constexpr std::size_t kElements = std::size_t{1} << 20U;
 constexpr float kScale = 2.0F;
 
+/// The job system of a benchmark, with `state.range(0)` workers.
 [[nodiscard]] auto makeJobs(const benchmark::State& state) -> std::unique_ptr<JobSystem> {
-    auto created = JobSystem::create({.workerCount = static_cast<std::uint32_t>(state.range(0))});
-    return created.has_value() ? std::move(*created) : nullptr;
+    auto created = JobSystem::create({.workerCount = nx::narrow<std::uint32_t>(state.range(0))});
+    nx::invariant(created.has_value(), "jobsBench: the job system starts");
+    return std::move(*created);
 }
 
 void workerCounts(benchmark::Benchmark* benchmark) {
@@ -46,7 +48,7 @@ void submitEmptyJobs(benchmark::State& state) {
             jobs->wait(handle);
         }
     }
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(kBatchJobs));
+    state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(kBatchJobs));
 }
 BENCHMARK(submitEmptyJobs)->Apply(workerCounts);
 
@@ -61,7 +63,7 @@ void dependencyChain(benchmark::State& state) {
         }
         jobs->wait(previous);
     }
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(kChainLength));
+    state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(kChainLength));
 }
 BENCHMARK(dependencyChain)->Apply(workerCounts);
 
@@ -79,7 +81,7 @@ void parallelForScale(benchmark::State& state) {
         benchmark::DoNotOptimize(output.data());
         benchmark::ClobberMemory();
     }
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(kElements));
+    state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(kElements));
 }
 BENCHMARK(parallelForScale)->Apply(workerCounts);
 

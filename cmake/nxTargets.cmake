@@ -81,8 +81,8 @@ endfunction()
 
 # nxAddBenchmark(<target> SOURCES <files>... DEPENDS <targets>...)
 #
-# Creates a Google Benchmark executable. Benchmarks are not CTest tests: they are run by hand or by
-# the nightly bench job, on release builds.
+# Creates a Google Benchmark executable. Benchmarks are not CTest tests: they are run by hand, on
+# release builds (the nightly bench job is planned, docs/17-build-and-tools.md, section 7).
 function(nxAddBenchmark target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
 

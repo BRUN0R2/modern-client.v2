@@ -59,7 +59,7 @@ void iterateTwoComponents(benchmark::State& state) {
         });
         benchmark::ClobberMemory();
     }
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(kIteratedEntities));
+    state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(kIteratedEntities));
 }
 BENCHMARK(iterateTwoComponents)->Unit(benchmark::kMicrosecond);
 
@@ -84,13 +84,13 @@ void spawnAndDestroyThroughCommands(benchmark::State& state) {
         }
         std::ignore = destroying.apply(world);
     }
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(kCommandEntities));
+    state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(kCommandEntities));
 }
 BENCHMARK(spawnAndDestroyThroughCommands)->Unit(benchmark::kMicrosecond);
 
 /// A phase of empty systems: what the scheduler costs per system. The counter is the time per system.
 void emptySystems(benchmark::State& state) {
-    auto jobs = nx::jobs::JobSystem::create({.workerCount = static_cast<std::uint32_t>(state.range(0))});
+    auto jobs = nx::jobs::JobSystem::create({.workerCount = nx::narrow<std::uint32_t>(state.range(0))});
     nx::invariant(jobs.has_value(), "ecsBench: the job system starts");
     World world;
     Schedule schedule{world};
