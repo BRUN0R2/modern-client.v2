@@ -26,73 +26,115 @@ flowchart LR
     W1 <-->|steal| Wn
 ```
 
-- **Workers:** `N = hardware_concurrency − 1` por padrão (`jobs_workers`), fixados por
-  afinidade quando o SO permite.
-- **Deques locais** (Chase-Lev): o worker empilha e desempilha no fundo, ladrões roubam
-  do topo.
-- **Fila global** por prioridade, para submissões externas (thread principal, rede, E/S).
+- **Workers:** `N = hardware_concurrency − 1` por padrão (`jobs_workers`,
+  `JobSystemConfig::workerCount`, no máximo `kMaxWorkerCount`). A afinidade de CPU entra
+  com o `nx.platform`, se um benchmark mostrar ganho.
+- **Deques locais** (Chase-Lev, `WorkStealingDeque`): um por prioridade em cada worker. O
+  dono empilha e desempilha no fundo, ladrões roubam do topo. O deque cresce sob demanda,
+  então um *push* nunca falha.
+- **Fila global** por prioridade (`IntrusiveQueue`), para submissões de threads que não são
+  workers (thread principal, rede, E/S). Produtores nunca esperam: um *push* é uma troca
+  atômica (fila MPSC intrusiva de Vyukov). Consumidores se revezam por *try-lock*; quem
+  encontra outro consumindo procura trabalho em outro lugar em vez de esperar.
 - **Prioridades:** `Critical` (frame atual), `Normal`, `Low` (streaming, compressão) e
   `Background` (pré-cálculo, cache). Um worker só pega `Low` se não houver `Critical` ou
   `Normal` visível.
+- **Ociosidade:** uma thread sem trabalho faz algumas rodadas de busca
+  (`kIdleRoundsBeforeSleep`) e depois dorme em `std::atomic::wait` sobre um sinal que muda
+  a cada job enfileirado. Nada de *sleep* com tempo fixo nem *busy-wait* sem fim.
 
 ## 3. API
 
 ```cpp
 export namespace nx::jobs {
 
-enum class Priority : std::uint8_t { Critical, Normal, Low, Background };
+enum class Priority : std::uint8_t { Critical, Normal, Low, Background, Count };
 
 struct JobDesc {
-    std::function_ref<void(JobContext&)> function;
-    Priority         priority = Priority::Normal;
-    std::string_view label;            // Tracy zone name and debugging
+    JobLabel                   label;      // required; built only from constant expressions
+    Priority                   priority = Priority::Normal;
+    std::span<const JobHandle> dependsOn = {};
 };
 
 class JobSystem {
 public:
-    [[nodiscard]] static auto create(const JobSystemConfig& config)
+    [[nodiscard]] static auto create(const JobSystemConfig& config = {})
         -> nx::Result<std::unique_ptr<JobSystem>, JobSystemError>;
 
-    [[nodiscard]] auto submit(JobDesc desc, std::span<const JobHandle> dependsOn = {}) -> JobHandle;
+    template <JobFunction Function>  // void(JobContext&) or void()
+    [[nodiscard]] auto submit(const JobDesc& desc, Function&& function) -> JobHandle;
 
-    template <std::ranges::random_access_range Range, class Fn>
-    [[nodiscard]] auto parallelFor(Range&& range, Grain grain, Fn&& fn, Priority = Priority::Critical) -> JobHandle;
+    template <std::ranges::random_access_range Range, class Function>  // sized and borrowed
+    [[nodiscard]] auto parallelFor(const JobDesc& desc, Range&& range, Grain grain, Function&& function)
+        -> JobHandle;
 
-    /// Executes other jobs while waiting; never parks a worker while work is available.
+    /// Runs other jobs while waiting; sleeps only while no job is visible.
     void wait(JobHandle handle);
-
-    [[nodiscard]] auto scheduler(Priority priority = Priority::Normal) noexcept -> Scheduler;
+    [[nodiscard]] auto isComplete(JobHandle handle) const noexcept -> bool;
+    [[nodiscard]] auto stats() const -> JobSystemStats;
 };
 
 } // namespace nx::jobs
 ```
 
+```cpp
+const nx::jobs::JobHandle animate =
+    jobs.parallelFor({.label = "animate", .priority = nx::jobs::Priority::Critical}, visibleModels,
+                     nx::jobs::Grain::automatic(), [&](ModelInstance& model) { model.evaluatePose(now); });
+
+const std::array afterAnimation{animate};
+const nx::jobs::JobHandle hitboxes = jobs.submit({.label = "hitboxes", .dependsOn = afterAnimation},
+                                                 [&] { lagCompensation.recordHitboxes(visibleModels); });
+jobs.wait(hitboxes);
+```
+
 ### 3.1 Contadores e handles
 
-- Cada `JobHandle` aponta para um **contador atômico** de jobs pendentes, com geração
-  para detectar uso após conclusão.
-- Um job com dependências só entra na fila quando o contador de todas elas chega a zero:
-  as continuações são enfileiradas pelo último job a terminar, sem polling.
-- `wait(handle)` executa outros jobs enquanto espera (*help-while-waiting*). Na thread
-  principal ele é usado apenas nos pontos de sincronização do frame.
+- Um `JobHandle` é o índice de um **contador atômico** de jobs pendentes mais a sua
+  **geração**. A geração e a lista de continuações ficam na mesma palavra atômica de
+  64 bits: registrar uma continuação falha atomicamente se o contador já terminou ou foi
+  reaproveitado, e um handle antigo lê como concluído. Guardar handles depois da conclusão
+  é inofensivo; esperar um handle inválido (`JobHandle{}`) viola contrato.
+- Um job com dependências só entra na fila quando todas terminam: cada dependência ainda
+  pendente recebe um elo de continuação, e o último job de cada contador enfileira as
+  continuações que ficaram prontas, sem polling.
+- `parallelFor` usa um contador para todos os lotes: o handle conclui quando o último lote
+  termina.
+- `wait(handle)` executa outros jobs enquanto espera (*help-while-waiting*) e só dorme
+  quando não há trabalho visível. A conclusão de um contador que alguém espera acorda quem
+  dorme. Na thread principal, `wait` é usado apenas nos pontos de sincronização do frame.
 
 ### 3.2 Granularidade
 
-- `Grain::automatic()` divide o range em cerca de `4 × workers` lotes, com mínimo de
+- `Grain::automatic(minimo)` divide o range em cerca de `kBatchesPerThread × threads`
+  lotes (4 por thread; as threads são os workers mais a que espera), com mínimo de
   elementos por lote ajustável por tipo de carga.
-- `Grain::fixed(n)` existe para quando o custo por item é conhecido (ex.: 1 chunk do ECS
-  por job).
-- Jobs muito pequenos (< 5 µs) são agrupados. O profiler marca jobs abaixo do limiar.
+- `Grain::fixed(n)` gera lotes de exatamente `n` elementos, para quando o custo por item é
+  conhecido (ex.: 1 chunk do ECS por job). É a escolha para reduções, porque a divisão do
+  `automatic` depende da quantidade de workers (§8).
+- Agrupar jobs muito pequenos (< 5 µs) e marcá-los no profiler depende de medição: entra
+  com o Tracy e os benchmarks. Até lá, o mínimo por lote do `automatic` faz esse papel.
 
 ### 3.3 Memória dos jobs
 
-- Jobs recebem um `JobContext` com acesso à `FrameArena` da thread. Memória temporária
-  do job vem dela, sem `malloc` no caminho quente.
-- Descritores de job vêm de um pool sem lock, reciclado por frame.
-- Capturas de lambda que excedem o buffer inline do descritor são erro de compilação
-  (`static_assert` com mensagem), forçando a passagem de dados por arena.
+- Descritores de job, contadores e elos de continuação vêm de pools sem lock
+  (`ConcurrentPool`): blocos que nunca mudam de endereço, lista livre de Treiber com *tag*
+  contra ABA e reciclagem assim que o job termina. Depois do aquecimento, submeter um job
+  não chama `malloc`.
+- As capturas da lambda ficam dentro do descritor (`kJobCaptureCapacity`, 96 bytes).
+  Captura maior é erro de compilação (`static_assert` com mensagem), o que força a passagem
+  de dados grandes por referência ou por arena. As capturas são destruídas logo depois que
+  o job roda, antes de o handle concluir.
+- O `label` é um `JobLabel`, que só se constrói a partir de expressão constante (literal,
+  nome de tipo) e por isso nunca aponta para memória já liberada.
+- O `JobContext` dá acesso ao `JobSystem` (para submeter e esperar mais jobs) e ao
+  `label`. A arena de rascunho por job (`FrameArena` da thread) entra quando o primeiro
+  consumidor precisar dela.
 
 ## 4. Integração com `std::execution`
+
+> **Status:** ainda não implementado. O primeiro consumidor é o streaming de assets (M2), e
+> o scheduler entra junto com ele, com a dependência do `stdexec`.
 
 `JobSystem::scheduler()` modela `std::execution::scheduler`, o que permite compor
 pipelines assíncronos com senders:
@@ -165,7 +207,7 @@ Toda comunicação entre essas threads e os jobs usa **filas sem lock** (SPSC/MP
   por cliente, por índice). Reduções usam acumuladores por job, combinados depois.
 - `thread_local` só para caches sem semântica (ex.: buffers de scratch), nunca para
   estado que o código espera reencontrar.
-- Todo job tem `label` para o profiler.
+- Todo job tem `label` para o profiler: o `JobDesc` não compila sem ele.
 
 ## 8. Determinismo
 
@@ -173,16 +215,24 @@ Toda comunicação entre essas threads e os jobs usa **filas sem lock** (SPSC/MP
   que os jobs rodaram.
 - Por isso, as saídas de jobs paralelos são escritas em posições determinadas pelo índice
   do item, e as reduções combinam os parciais em ordem de índice.
+- `Grain::automatic()` divide o range conforme a quantidade de threads, então só serve
+  quando cada elemento escreve a própria saída. Reduções usam `Grain::fixed(n)`, para que
+  os parciais sejam os mesmos em qualquer máquina. O teste `JobSystemDeterminismTest`
+  compara o *hash* do resultado com 0, 1, 3 e 15 workers.
 - Teste obrigatório: a mesma demo de entrada roda com `jobs_workers 0`, `1`, `3` e `15` e
   produz *hash* de estado idêntico a cada tick
   ([18](18-testes-e-qualidade.md#determinismo)).
 
 ## 9. Diagnóstico
 
-- Zonas Tracy por job (`label`) e por espera (`wait`), com *fibers view* dos workers.
-- Comando `jobs_stats`: jobs/s, tempo médio por prioridade, roubos e ociosidade por worker.
-- Modo `jobs_serial 1` (desenvolvimento): executa tudo na thread que submete, útil para
-  isolar bugs de concorrência.
+- Zonas Tracy por job (`label`) e por espera (`wait`), com *fibers view* dos workers,
+  quando o Tracy entrar como dependência.
+- `JobSystem::stats()`: jobs executados, roubos e vezes que dormiu, por worker, e jobs
+  executados por threads dentro de `wait`. O comando `jobs_stats` mostra esses números
+  quando o console existir; o tempo médio por prioridade vem com o Tracy.
+- Modo `jobs_serial 1` (desenvolvimento) equivale a `jobs_workers 0`: sem workers, cada
+  job roda dentro de `wait` na thread que espera, em ordem de prioridade e de submissão.
+  Útil para isolar bugs de concorrência.
 
 ## 10. Fora do escopo da v1
 

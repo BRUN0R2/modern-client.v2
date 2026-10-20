@@ -499,7 +499,7 @@ if (budgetWarnings.allow()) {
   `cppcoreguidelines-*`, `modernize-*`, `performance-*`, `readability-*`, `concurrency-*`.
   Exceções ficam listadas no `.clang-tidy` com justificativa.
 - Warnings como erro (`-Werror` / `/WX`) em todos os alvos próprios.
-- Sanitizers no CI: ASan + UBSan, TSan e MSan (Linux/Clang).
+- Sanitizers no CI: TSan (GCC, em todo push e PR), ASan + UBSan e MSan (Linux/Clang).
 
 ## 13. Lista de verificação de revisão
 

@@ -95,9 +95,14 @@ jobs:
           ctest --preset ${{ matrix.preset }}
 
   linux-gcc:
-    name: Linux · GCC 16
+    name: Linux · GCC 16 · ${{ matrix.preset }}
     runs-on: ubuntu-latest
     container: gcc:16
+    strategy:
+      fail-fast: false
+      matrix:
+        # tsan-linux-gcc runs every test under ThreadSanitizer (docs/02, section 8).
+        preset: [dev-linux-gcc, tsan-linux-gcc]
     defaults:
       run:
         shell: bash
@@ -132,11 +137,11 @@ jobs:
         run: |
           g++ --version | head -n 1
           cmake --version | head -n 1
-          cmake --preset dev-linux-gcc
+          cmake --preset ${{ matrix.preset }}
 
       - name: Build
         # -k 0: keep going after the first error so one run reports every problem.
-        run: cmake --build --preset dev-linux-gcc -- -k 0
+        run: cmake --build --preset ${{ matrix.preset }} -- -k 0
 
       - name: Test
-        run: ctest --preset dev-linux-gcc
+        run: ctest --preset ${{ matrix.preset }}

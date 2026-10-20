@@ -105,7 +105,8 @@ histórica.
 
 ## Sanitizers e análise
 
-- ASan + UBSan e TSan em todo PR. MSan noturno.
+- TSan em todo push e PR (GCC, preset `tsan-linux-gcc`). ASan + UBSan em todo PR e MSan
+  noturno quando o Clang entrar no CI.
 - `clang-tidy` como erro ([02 §12](02-padroes-de-codigo.md#12-formatação-e-análise-estática)).
 - Fuzzers com corpus versionado. Todo crash encontrado vira teste.
 

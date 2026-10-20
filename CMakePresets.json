@@ -58,6 +58,15 @@
       "cacheVariables": { "CMAKE_CXX_COMPILER": "g++", "CMAKE_BUILD_TYPE": "Release" }
     },
     {
+      "name": "tsan-linux-gcc",
+      "displayName": "Linux · GCC · ThreadSanitizer",
+      "inherits": "dev-linux-gcc",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    },
+    {
       "name": "dev-linux-clang",
       "displayName": "Linux · Clang · Debug",
       "inherits": "linux",
@@ -77,7 +86,7 @@
       "displayName": "Linux · Clang · ThreadSanitizer",
       "inherits": "dev-linux-clang",
       "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-fsanitize=thread",
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
       }
     }
@@ -87,6 +96,7 @@
     { "name": "release-windows-msvc", "configurePreset": "release-windows-msvc" },
     { "name": "dev-linux-gcc", "configurePreset": "dev-linux-gcc" },
     { "name": "release-linux-gcc", "configurePreset": "release-linux-gcc" },
+    { "name": "tsan-linux-gcc", "configurePreset": "tsan-linux-gcc" },
     { "name": "dev-linux-clang", "configurePreset": "dev-linux-clang" },
     { "name": "asan-linux-clang", "configurePreset": "asan-linux-clang" },
     { "name": "tsan-linux-clang", "configurePreset": "tsan-linux-clang" }
@@ -98,12 +108,19 @@
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error" }
     },
+    {
+      "name": "test-tsan",
+      "hidden": true,
+      "inherits": "test-base",
+      "environment": { "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1" }
+    },
     { "name": "dev-windows-msvc", "inherits": "test-base", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "inherits": "test-base", "configurePreset": "release-windows-msvc" },
     { "name": "dev-linux-gcc", "inherits": "test-base", "configurePreset": "dev-linux-gcc" },
     { "name": "release-linux-gcc", "inherits": "test-base", "configurePreset": "release-linux-gcc" },
+    { "name": "tsan-linux-gcc", "inherits": "test-tsan", "configurePreset": "tsan-linux-gcc" },
     { "name": "dev-linux-clang", "inherits": "test-base", "configurePreset": "dev-linux-clang" },
     { "name": "asan-linux-clang", "inherits": "test-base", "configurePreset": "asan-linux-clang" },
-    { "name": "tsan-linux-clang", "inherits": "test-base", "configurePreset": "tsan-linux-clang" }
+    { "name": "tsan-linux-clang", "inherits": "test-tsan", "configurePreset": "tsan-linux-clang" }
   ]
 }

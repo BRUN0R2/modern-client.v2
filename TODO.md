@@ -96,7 +96,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Formatação (`clang-format --dry-run --Werror`) no job `checks`
 - [ ] `clang-tidy` no CI (exige build com Clang e módulos)
 - [ ] Job `layers` (verificação do grafo de dependências)
-- [ ] Jobs de sanitizers (ASan + UBSan, TSan)
+- [x] ThreadSanitizer em todos os testes (preset `tsan-linux-gcc` no job `linux-gcc`)
+- [ ] Jobs de ASan + UBSan (com o Clang)
 - [x] Quebras de linha (`git ls-files --eol`) no job `checks`
 - [x] `reuse lint` no job `checks`
 
@@ -131,14 +132,20 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ## M1 — Núcleo de runtime
 
 ### `nx.jobs`
-- [ ] Workers com afinidade e deques Chase-Lev
-- [ ] Fila global por prioridade (`Critical`, `Normal`, `Low`, `Background`)
-- [ ] Contadores, dependências e continuações
-- [ ] `wait` com *help-while-waiting*
-- [ ] `parallelFor` com granularidade automática e fixa
-- [ ] Scheduler compatível com `std::execution` (stdexec)
-- [ ] Zonas Tracy, `jobs_stats`, `jobs_serial`
-- [ ] Testes com TSan e benchmarks
+- [x] Workers e deques Chase-Lev (um por prioridade em cada worker)
+- [ ] Afinidade de CPU dos workers (com o `nx.platform`, se um benchmark mostrar ganho)
+- [x] Fila global por prioridade (`Critical`, `Normal`, `Low`, `Background`), sem espera para produtores
+- [x] Contadores com geração, dependências e continuações
+- [x] Pools sem lock para descritores, contadores e continuações
+- [x] `wait` com *help-while-waiting*
+- [x] `parallelFor` com granularidade automática e fixa
+- [x] `JobSystem::stats()` e modo serial (`workerCount = 0`)
+- [ ] Comandos `jobs_stats` e `jobs_serial` (com o console)
+- [ ] Zonas Tracy (com a dependência do Tracy)
+- [ ] Scheduler compatível com `std::execution` (stdexec), com o streaming de assets (M2)
+- [ ] Arena de rascunho por job no `JobContext`, quando o primeiro consumidor precisar
+- [x] Testes, inclusive resultado idêntico com 0, 1, 3 e 15 workers, sob ThreadSanitizer no CI
+- [ ] Benchmarks (`nxBenchJobs`)
 
 ### `nx.ecs`
 - [ ] `Entity` geracional, slots FIFO, aposentadoria por esgotamento de geração

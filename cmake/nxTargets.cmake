@@ -26,6 +26,7 @@ function(nxTargetDefaults target)
             /w14826       # sign-extending conversion
             /w14905 /w14906  # string literal cast to a different character type
             /w14928       # illegal copy-initialization
+            /wd4324       # structure padded due to alignas: intentional (cache-line separation)
             $<$<BOOL:${NX_WARNINGS_AS_ERRORS}>:/WX>)
     else()
         target_compile_options(${target} PRIVATE
@@ -75,7 +76,8 @@ endfunction()
 
 # nxAddTest(<target> SOURCES <files>... DEPENDS <targets>...)
 #
-# Creates a GoogleTest executable and registers each test case with CTest.
+# Creates a GoogleTest executable and registers each test case with CTest. The helpers shared by
+# all tests (engine/testSupport, nx::testSupport) are always linked.
 function(nxAddTest target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
 
@@ -84,7 +86,7 @@ function(nxAddTest target)
     endif()
 
     add_executable(${target} ${arg_SOURCES})
-    target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} GTest::gtest GTest::gtest_main)
+    target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} nx::testSupport GTest::gtest GTest::gtest_main)
     nxTargetDefaults(${target})
     gtest_discover_tests(${target} DISCOVERY_MODE PRE_TEST)
 endfunction()

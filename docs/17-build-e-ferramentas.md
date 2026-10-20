@@ -109,7 +109,8 @@ O CMake ainda não conhece um switch `/std:c++26` para o MSVC, então o dialeto 
 | `dev-windows-msvc` / `release-windows-msvc` | Desenvolvimento e release no Windows (Ninja + MSVC) | Validado |
 | `dev-linux-gcc` / `release-linux-gcc` | Desenvolvimento e release no Linux com GCC | `dev-linux-gcc` validado no CI. `release-linux-gcc` a validar |
 | `dev-linux-clang` | Desenvolvimento com `clangd`/`clang-tidy` | A validar |
-| `asan-linux-clang`, `tsan-linux-clang` | Sanitizers (ASan + UBSan, TSan) | A validar |
+| `tsan-linux-gcc` | Todos os testes sob ThreadSanitizer, com GCC | No CI (job `linux-gcc`) |
+| `asan-linux-clang`, `tsan-linux-clang` | Sanitizers com Clang (ASan + UBSan, TSan) | A validar |
 | `server-headless`, `tools` | Só `nextds` ou só ferramentas | Quando esses alvos existirem |
 
 Cada preset de configuração tem um preset de build e um de teste com o mesmo nome. O
@@ -209,7 +210,7 @@ sob demanda. **Em funcionamento hoje:**
 |-----|----------|-----------|
 | `checks` | `reuse lint` (licença e copyright em todo arquivo), `clang-format --dry-run --Werror` e quebras de linha (nada fora de LF no repositório) | Sim |
 | `windows-msvc` | `dev-windows-msvc` e `release-windows-msvc`: configure, build e testes, pelo mesmo `scripts/devShell.ps1` do desenvolvimento | Sim |
-| `linux-gcc` | `dev-linux-gcc` no container `gcc:16`: configure, build e testes | Sim |
+| `linux-gcc` | `dev-linux-gcc` e `tsan-linux-gcc` (todos os testes sob ThreadSanitizer) no container `gcc:16`: configure, build e testes | Sim |
 
 CMake e Ninja vêm do `pip` com faixa de versão, e o vcpkg é clonado na hora, com cache
 binário entre execuções. O CI não depende do que vem pré-instalado na imagem do runner.
@@ -221,7 +222,7 @@ binário entre execuções. O CI não depende do que vem pré-instalado na image
 | `linux-clang` | Todo PR | Clang no Linux, além do GCC |
 | `lint` | Todo PR | `clang-tidy` (com módulos), `rook fmt --check`, `rook lint` |
 | `layers` | Todo PR | Verificação do grafo de dependências entre módulos ([01 §1.1](01-arquitetura.md#11-catálogo-de-módulos)) |
-| `sanitizers` | Todo PR | ASan + UBSan e TSan nos testes |
+| `sanitizers` | Todo PR | ASan + UBSan nos testes, com o Clang (o TSan já roda com o GCC) |
 | `api-compat` | Todo PR | Diff dos `.rookd` contra a última release ([15 §10](15-api-de-mods.md#10-versionamento-e-estabilidade)) |
 | `determinism` | Todo PR | Mesma demo com 0, 1, 3 e 15 workers e hash idêntico |
 | `render-golden` | Todo PR | Imagens de referência com renderer de software (lavapipe) |

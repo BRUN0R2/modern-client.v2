@@ -10,6 +10,12 @@ import :failure;
 
 export namespace nx {
 
+/// Alignment that keeps data written by different threads on different cache lines (no false
+/// sharing). 64 bytes on x86-64 and on the common ARM64 cores. The value affects performance only,
+/// never correctness. std::hardware_destructive_interference_size is not used because GCC warns that
+/// its value may change between compiler versions, which would change the layout of exported types.
+inline constexpr std::size_t kCacheLineSize = 64;
+
 enum class ArenaError : std::uint8_t {
     Exhausted,
     InvalidAlignment,
