@@ -246,9 +246,11 @@ image.
   pass on the branch brought up to date with `main`, and only as a **squash merge**, which
   GitHub signs: every commit on `main` is a green, *Verified* commit, one per logical change.
 - **Branch protection of `main`** (repository settings, also binding administrators): pull
-  request required, the five CI jobs required and up to date, signed commits, linear history,
-  no force push and no deletion; merge commits and rebase merges are disabled, and merged
-  branches are deleted.
+  request required, the five CI jobs required and up to date, linear history, no force push
+  and no deletion; merge commits and rebase merges are disabled, and merged branches are
+  deleted. Signatures come from the squash merge itself, the only way into `main`; the
+  "require signed commits" rule stays off, because GitHub applies it to the commits of the
+  pull request's branch too, and those are not signed locally.
 - The squash commit takes the pull request title as its subject and an explicit message with
   the body and the trailers (`Signed-off-by`, `Co-Authored-By`), given at merge time:
   `gh pr merge --squash --subject "<title>" --body "<message>"`.
