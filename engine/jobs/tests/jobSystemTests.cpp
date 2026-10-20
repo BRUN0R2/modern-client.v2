@@ -42,10 +42,13 @@ private:
     std::unique_ptr<JobSystem> m_jobs;
 };
 
-INSTANTIATE_TEST_SUITE_P(WorkerCounts, JobSystemTest, testing::ValuesIn(kWorkerCounts),
-                         [](const testing::TestParamInfo<std::uint32_t>& info) {
-                             return std::format("{}Workers", info.param);
-                         });
+/// Test names such as "RunsASubmittedJob/3Workers". A named function, because the macro below
+/// declares its own parameter called `info`, which a lambda parameter would shadow.
+[[nodiscard]] auto workerCountName(const testing::TestParamInfo<std::uint32_t>& parameter) -> std::string {
+    return std::format("{}Workers", parameter.param);
+}
+
+INSTANTIATE_TEST_SUITE_P(WorkerCounts, JobSystemTest, testing::ValuesIn(kWorkerCounts), workerCountName);
 
 TEST_P(JobSystemTest, RunsASubmittedJob) {
     int value = 0;
