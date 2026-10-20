@@ -10,6 +10,7 @@ nxAddTest(nxCoreTests
         contractsTests.cpp
         failureTests.cpp
         conversionTests.cpp
+        byteOrderTests.cpp
         quantityTests.cpp
         unitsTests.cpp
         enumArrayTests.cpp

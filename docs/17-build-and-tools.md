@@ -23,7 +23,7 @@ modern-client.v2/
 │   ├── rhiVulkan/             # nx.rhi.vulkan
 │   ├── rhiD3d11/              # nx.rhi.d3d11 (future)
 │   ├── render/                 # nx.render
-│   ├── assets/                 # nx.assets (VFS; goldsrc importers from M2)
+│   ├── assets/                 # nx.assets (VFS, content sources, GoldSrc readers)
 │   ├── audio/                  # nx.audio
 │   ├── net/                    # nx.net
 │   ├── collision/              # nx.collision
@@ -124,6 +124,7 @@ dialect is `/std:c++latest`.
 | `dev-linux-clang` | Development with `clangd`/`clang-tidy` | To be validated |
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers with Clang (ASan + UBSan, TSan) | To be validated |
+| `fuzz-windows-msvc` | Only the fuzz targets, with libFuzzer and AddressSanitizer: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus | Validated; nightly in CI (`fuzz`) |
 | `server-headless`, `tools` | Only `nextds` or only the tools | When those targets exist |
 
 Each configure preset has a build preset and a test preset with the same name. The build
@@ -221,7 +222,7 @@ Rules:
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzzing targets (libFuzzer). Planned, with the first parsers (M2) |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 
@@ -233,6 +234,10 @@ and on demand. **Running today:**
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
 | `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
 | `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests | Yes |
+
+The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
+`fuzz-windows-msvc` and fuzzes each target for 10 minutes. A crash fails the run, and the input
+that caused it is kept as an artifact, to join the target's corpus as a test.
 
 Every build job also checks the module layers when CMake configures
 ([01 §1.1](01-architecture.md#11-module-catalog)): a dependency on the same or a higher layer fails
@@ -254,7 +259,7 @@ image.
 | `render-golden` | Every PR | Reference images with a software renderer (lavapipe) |
 | `parity` | Nightly | Parity suite on a dedicated *runner* with a legitimate copy of the game ([18](18-testing-and-quality.md#parity-tests)) |
 | `bench` | Nightly | Benchmarks on a dedicated machine. A regression above the threshold fails |
-| `fuzz` | Nightly | Parsers (BSP, MDL, WAD, SPR, WAV), network decoder and `rookc` |
+| `fuzz` (more targets) | Nightly | The other parsers (BSP, MDL, SPR, WAV), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
 | `stress` | Weekly | Server with 1024 simulated clients |
 | `package` | Release tag | Binaries, `THIRD_PARTY_NOTICES.md`, symbols, Docker image of `nextds` |
 

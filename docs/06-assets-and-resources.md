@@ -142,6 +142,12 @@ yield `ContentError::MissingEssentialFiles` with the full list.
 | `gfx/env/*.tga` | Sky box | Six faces per `skyname` of `worldspawn` |
 | `liblist.gam`, `*.cfg`, `mapcycle.txt`, `motd.txt` | Configuration | See [09](09-dedicated-server.md) and [12](12-ui-hud-and-console.md) |
 
+Readers today: WAD3 (`nx.assets:wad`): the directory, looked up by name ignoring ASCII case with
+the first entry of a name winning, as in GoldSrc, and the mip textures, with their four levels and
+palette, as views of the file's bytes. Pictures and fonts are listed but not decoded yet. Every
+reader refuses malformed input with a typed error and is fuzzed
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The other readers are planned (M2).
+
 ### 3.2 Modern (for mods)
 
 | Format | Use |

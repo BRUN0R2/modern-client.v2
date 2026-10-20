@@ -13,6 +13,7 @@ nxAddModuleLibrary(nxCore
         src/contracts.cppm
         src/failure.cppm
         src/conversion.cppm
+        src/byteOrder.cppm
         src/quantity.cppm
         src/units.cppm
         src/enumArray.cppm

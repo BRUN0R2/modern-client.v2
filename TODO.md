@@ -206,7 +206,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `content_list`, `content_scan`, `content_add`, `content_profile` commands
 - [ ] Code-generated `devContent`: grid textures, test map, capsule player, simple weapons, synthesized sounds
 - [ ] BSP v30 reader (all lumps) with fuzzing
-- [ ] WAD3 reader with fuzzing
+- [x] WAD3 reader with fuzzing (`nx.assets:wad`, `fuzzWad`; fuzz infrastructure: `nxAddFuzzer`, the `fuzz-windows-msvc` preset and the nightly `fuzz` workflow)
 - [ ] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing
 - [ ] SPR v2 reader with fuzzing
 - [ ] WAV reader (PCM 8/16, cue points) with fuzzing

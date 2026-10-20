@@ -118,8 +118,10 @@ dedicated machine exists they are run by hand from a release build:
   preset). Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
 - Planned: `clang-tidy` as an error ([02 §12](02-coding-standards.md#12-formatting-and-static-analysis)),
   with a Clang build with modules.
-- Planned, with the first parsers of external data (M2): fuzzers with a versioned corpus. Every
-  crash found becomes a test.
+- Fuzzing of the parsers of external data (`tests/fuzz`, libFuzzer with AddressSanitizer): every
+  night, and locally with the `fuzz-windows-msvc` preset. Each target has a versioned corpus of
+  synthetic seeds that every build replays as a test (`fuzzWad.corpus`); every crash found joins
+  the corpus, so it stays a test.
 
 ## Coverage targets
 

@@ -39,6 +39,18 @@
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
+      "name": "fuzz-windows-msvc",
+      "displayName": "Windows · MSVC · libFuzzer + AddressSanitizer",
+      "inherits": "windows-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "NX_BUILD_TESTS": "OFF",
+        "NX_BUILD_BENCHMARKS": "OFF",
+        "NX_FUZZ": "ON",
+        "CMAKE_CXX_FLAGS": "/fsanitize=address /fsanitize=fuzzer /D_DISABLE_VECTOR_ANNOTATION /D_DISABLE_STRING_ANNOTATION"
+      }
+    },
+    {
       "name": "linux",
       "hidden": true,
       "inherits": "base",
@@ -94,6 +106,7 @@
   "buildPresets": [
     { "name": "dev-windows-msvc", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "configurePreset": "release-windows-msvc" },
+    { "name": "fuzz-windows-msvc", "configurePreset": "fuzz-windows-msvc" },
     { "name": "dev-linux-gcc", "configurePreset": "dev-linux-gcc" },
     { "name": "release-linux-gcc", "configurePreset": "release-linux-gcc" },
     { "name": "tsan-linux-gcc", "configurePreset": "tsan-linux-gcc" },
@@ -116,6 +129,7 @@
     },
     { "name": "dev-windows-msvc", "inherits": "test-base", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "inherits": "test-base", "configurePreset": "release-windows-msvc" },
+    { "name": "fuzz-windows-msvc", "inherits": "test-base", "configurePreset": "fuzz-windows-msvc" },
     { "name": "dev-linux-gcc", "inherits": "test-base", "configurePreset": "dev-linux-gcc" },
     { "name": "release-linux-gcc", "inherits": "test-base", "configurePreset": "release-linux-gcc" },
     { "name": "tsan-linux-gcc", "inherits": "test-tsan", "configurePreset": "tsan-linux-gcc" },
