@@ -71,10 +71,12 @@ is searched for in this order:
    after Half-Life, the base game of CS 1.6; only CS 1.6's files are read from it
    ([ADR-0017](adr/0017-counter-strike-only.md)).
 
-**Validation** checks the list of essential files in `data/content/goldsrcCstrike.toml`
-(`cstrike/liblist.gam`, `valve/halflife.wad`, `cstrike/cstrike.wad`, player models,
-`cstrike/sprites/hud.txt`, official maps). A missing file yields
-`ContentError::MissingEssentialFiles` with the exact list.
+**Validation** (`nx::assets::GoldsrcInstall::open`) checks the installation against
+`data/content/goldsrcCstrike.toml`: its mounts (`cstrike`, then `valve`) and its essential
+files, written `<mount>/<logical path>` (`cstrike/liblist.gam`, `valve/halflife.wad`, player
+models, `cstrike/sprites/hud.txt`, official maps), each found in the mount it names whatever
+the case of its letters. A missing mount yields `ContentError::InstallNotFound`; missing files
+yield `ContentError::MissingEssentialFiles` with the full list.
 
 ### 2.4 Content sources and profiles
 

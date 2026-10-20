@@ -14,6 +14,14 @@ export namespace nx {
     return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
 }
 
+/// Whether `character` is an ASCII control byte: below the space, or DEL.
+[[nodiscard]] constexpr auto isAsciiControl(char character) noexcept -> bool {
+    constexpr unsigned char kFirstPrintable = 0x20; // the space
+    constexpr unsigned char kDelete = 0x7F;
+    const auto byte = static_cast<unsigned char>(character);
+    return byte < kFirstPrintable || byte == kDelete;
+}
+
 /// Whether `a` and `b` are the same text, ignoring ASCII case.
 [[nodiscard]] constexpr auto equalsIgnoringCase(std::string_view a, std::string_view b) noexcept -> bool {
     return std::ranges::equal(a, b, [](char x, char y) { return toLowerAscii(x) == toLowerAscii(y); });

@@ -12,6 +12,7 @@ import nx.platform;
 namespace {
 
 using nx::platform::FileError;
+using nx::platform::fromUtf8;
 using nx::platform::listFiles;
 using nx::platform::readFile;
 using nx::platform::toUtf8;
@@ -24,6 +25,12 @@ using nx::platform::toUtf8;
 TEST(FileSystemTest, ToUtf8UsesSlashesAndKeepsTheText) {
     const std::filesystem::path path = std::filesystem::path{u8"sound"} / u8"ação.wav";
     EXPECT_EQ(toUtf8(path), "sound/a\xC3\xA7\xC3\xA3o.wav");
+}
+
+TEST(FileSystemTest, FromUtf8IsTheInverseOfToUtf8) {
+    const std::string text = "sound/a\xC3\xA7\xC3\xA3o.wav";
+    EXPECT_EQ(fromUtf8(text), std::filesystem::path{u8"sound"} / u8"a\u00e7\u00e3o.wav");
+    EXPECT_EQ(toUtf8(fromUtf8(text)), text);
 }
 
 TEST(FileSystemTest, ListsTheFilesOfEverySubdirectorySorted) {

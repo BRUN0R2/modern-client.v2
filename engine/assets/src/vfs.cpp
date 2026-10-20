@@ -11,15 +11,6 @@ namespace nx::assets {
 
 namespace {
 
-/// The first byte after the ASCII control characters, and DEL, the one control byte after it.
-constexpr unsigned char kFirstPrintableByte = 0x20;
-constexpr unsigned char kDeleteByte = 0x7F;
-
-[[nodiscard]] auto isControlByte(char character) noexcept -> bool {
-    const auto byte = static_cast<unsigned char>(character);
-    return byte < kFirstPrintableByte || byte == kDeleteByte;
-}
-
 /// The text after the last `.` of the last component of `path`; empty when there is none.
 [[nodiscard]] auto extensionOf(std::string_view path) noexcept -> std::string_view {
     const std::string_view name = path.substr(path.rfind('/') + 1); // npos + 1 is 0: no `/`
@@ -36,7 +27,7 @@ constexpr unsigned char kDeleteByte = 0x7F;
     if (text.size() > kMaxResourcePathBytes) {
         return "exceeds kMaxResourcePathBytes";
     }
-    if (std::ranges::any_of(text, isControlByte)) {
+    if (std::ranges::any_of(text, isAsciiControl)) {
         return "contains a control byte";
     }
     if (text.contains('\\')) {
@@ -111,6 +102,10 @@ auto Vfs::create(std::span<const std::filesystem::path> mounts) -> Result<Vfs, V
         }
     }
     return vfs;
+}
+
+auto Vfs::contains(const VfsPath& path) const -> bool {
+    return m_files.contains(path.m_key);
 }
 
 auto Vfs::readAll(const VfsPath& path) const -> Result<std::vector<std::byte>, VfsError> {

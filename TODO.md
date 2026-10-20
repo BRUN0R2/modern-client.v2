@@ -200,7 +200,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Content sources (`engine`, `devContent`, `openContent`, `goldsrcInstall`, mods) with a redistribution flag
 - [ ] `classic`, `open`, `dev` and `custom` profiles, and reading of `content.toml` (order: `--content-config`, working directory, user profile)
 - [ ] Steam installation detection (registry and `libraryfolders.vdf` on Windows; `~/.steam`, `~/.local/share/Steam` and Flatpak on Linux)
-- [ ] Validation against `data/content/goldsrcCstrike.toml` with `ContentError::MissingEssentialFiles`
+- [x] Validation against `data/content/goldsrcCstrike.toml` with `ContentError::MissingEssentialFiles` (`GoldsrcInstall::open`)
 - [ ] First-start wizard ("use the original assets?") that writes `content.toml`
 - [ ] `--content`, `-basedir` and `--content-config` options
 - [ ] `content_list`, `content_scan`, `content_add`, `content_profile` commands
