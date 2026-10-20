@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Stable 64-bit hashing and identifiers derived from explicit names.
 ///
 /// hash64 implements the XXH64 algorithm bit for bit (verified against the reference library in

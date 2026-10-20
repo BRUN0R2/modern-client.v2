@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 cmake_minimum_required(VERSION 4.3)
 
 # Declared before project() because the vcpkg toolchain installs manifest features there.

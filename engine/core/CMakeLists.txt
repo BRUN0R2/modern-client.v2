@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 nxAddModuleLibrary(nxCore
     ALIAS nx::core
     MODULES

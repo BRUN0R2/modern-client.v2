@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Fixed-size array indexed by the enumerators of a counted enum
 /// (docs/02-padroes-de-codigo.md, section 4.2): no raw indices, no hand-sized arrays.
 export module nx.core:enumArray;

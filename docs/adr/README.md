@@ -17,7 +17,7 @@ sem apagar o histórico.
 | [0007](0007-vm-propria-bytecode-tipado.md) | VM própria com bytecode tipado e verificado | Aceito |
 | [0008](0008-protocolo-de-rede-proprio.md) | Protocolo de rede próprio, sem compatibilidade com o protocolo 48 | Aceito |
 | [0009](0009-assets-originais-do-usuario.md) | Assets originais lidos da instalação do usuário | Aceito |
-| [0010](0010-licenca.md) | Licença do projeto | **Proposto** |
+| [0010](0010-licenca.md) | Licença: GPL-3.0-or-later, MIT (Rook e SDK) e CC BY 4.0 (docs) | Aceito |
 | [0011](0011-limite-de-jogadores-1024.md) | `maxplayers` de 1 a 1024 como limite de política | Aceito |
 | [0012](0012-padrao-get-set-vars-tipado.md) | Padrão `get*Var`/`set*Var` com chaves verificadas em compilação | Aceito |
 | [0013](0013-convencao-camelcase.md) | Convenção camelCase em todo o projeto (C++ e Rook) | Aceito |

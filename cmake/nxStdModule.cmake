@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Builds the C++ standard library module (`import std;`) as the project target nx::std.
 #
 # The standard library ships a manifest of its module sources (modules.json): Microsoft STL

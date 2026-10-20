@@ -43,19 +43,22 @@ O código é **escrito do zero**. Regras para contribuições:
 
 ## 4. Licença do projeto
 
-> **Decisão pendente**, registrada em [ADR-0010](adr/0010-licenca.md).
+> **Decidido** em [ADR-0010](adr/0010-licenca.md) (opção A). Licenças aplicadas no padrão
+> [REUSE](https://reuse.software): textos em `LICENSES/`, mapa por diretório em `REUSE.toml`.
 
-Proposta inicial:
+| Componente | Licença | Motivo |
+|------------|---------|--------|
+| Engine, jogo, servidor, ferramentas e build | **GPL-3.0-or-later** | Garantir que melhorias na engine voltem para a comunidade |
+| Toolchain Rook (`rookc`, VM, LSP) e SDK de plugins (`.rookd`, `std`) | **MIT** | Permitir plugins e mods com **qualquer licença**, inclusive fechada |
+| Documentação (`docs/`, `README.md`, `TODO.md`) | **CC BY 4.0** | Reuso com atribuição |
+| Dados de jogo (`data/`) | GPL-3.0-or-later, como a engine | Os valores numéricos de comportamento são fatos medidos |
 
-| Componente | Licença proposta | Motivo |
-|------------|------------------|--------|
-| Engine, jogo e servidor | GPL-3.0-or-later **ou** MPL-2.0 | Garantir que melhorias na engine voltem para a comunidade |
-| Toolchain Rook (`rookc`, VM, LSP) e SDK de plugins (`.rookd`, `std`) | MIT ou Apache-2.0 | Permitir mods com **qualquer licença**, inclusive fechada |
-| Documentação | CC BY 4.0 | Reuso com atribuição |
-| Dados de jogo (`data/`) | Mesma licença da engine | Os valores numéricos de comportamento são fatos medidos |
+Todo arquivo de código começa com o cabeçalho SPDX da sua licença
+([02 §2](02-padroes-de-codigo.md#2-organização-de-arquivos-e-módulos)).
 
 A fronteira da API de plugins (bytecode + `.rookd`) é desenhada para que mods **não sejam
-obra derivada** da engine. Isso precisa ser confirmado na revisão jurídica.
+obra derivada** da engine. A revisão jurídica deve confirmar isso e avaliar uma permissão
+adicional explícita para plugins (seção 7 da GPL-3.0).
 
 ## 5. Mods
 

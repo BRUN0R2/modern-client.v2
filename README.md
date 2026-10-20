@@ -35,3 +35,15 @@ ctest --preset dev-windows-msvc
 ```
 
 No Linux, use os presets `dev-linux-gcc` ou `dev-linux-clang`.
+
+## Licença
+
+| Parte | Licença |
+|-------|---------|
+| Engine, jogo, servidor, ferramentas e dados | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) |
+| Toolchain Rook e SDK de plugins (`rook/`) | [MIT](LICENSES/MIT.txt). Plugins e mods podem usar qualquer licença |
+| Documentação (`docs/`, `README.md`, `TODO.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
+
+A licença de cada arquivo está no cabeçalho SPDX e em [`REUSE.toml`](REUSE.toml)
+([REUSE](https://reuse.software)). Decisão e motivos: [ADR-0010](docs/adr/0010-licenca.md).
+Contribuições usam *Signed-off-by* (DCO).

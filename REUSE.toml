@@ -1,0 +1,23 @@
+# Licensing of every file in the repository (REUSE specification, https://reuse.software).
+# Decision and rationale: docs/adr/0010-licenca.md. License texts: LICENSES/.
+# When several annotations match a file, the last one applies.
+version = 1
+
+# Engine, game, server, tools, data and build files.
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 Modern-Client.v2 contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Rook toolchain (compiler, VM, LSP, CLI) and the plugin SDK (std library, generated .rookd
+# declarations): permissive, so plugins and mods can use any license.
+[[annotations]]
+path = "rook/**"
+SPDX-FileCopyrightText = "2026 Modern-Client.v2 contributors"
+SPDX-License-Identifier = "MIT"
+
+# Documentation.
+[[annotations]]
+path = ["docs/**", "README.md", "TODO.md"]
+SPDX-FileCopyrightText = "2026 Modern-Client.v2 contributors"
+SPDX-License-Identifier = "CC-BY-4.0"

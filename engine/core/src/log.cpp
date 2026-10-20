@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 module;
 
 // stderr and fputs: macros and C stdio are not exported by `import std;`.

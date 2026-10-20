@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Structured logging (docs/02-padroes-de-codigo.md, section 10).
 ///
 /// Messages are std::format strings checked at compile time. Every record carries its level,

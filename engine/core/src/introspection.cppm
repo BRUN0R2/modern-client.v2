@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Compile-time names of types and enumerators.
 ///
 /// Until static reflection (P2996) is available on every supported compiler, names are parsed

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Helpers for source locations shown to people (failures, logs, contract reports).
 export module nx.core:source;
 

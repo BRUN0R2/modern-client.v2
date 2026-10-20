@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Contract checks: the portable stand-in for C++26 `pre`, `post` and `contract_assert`
 /// (docs/02-padroes-de-codigo.md, section 6.5).
 ///

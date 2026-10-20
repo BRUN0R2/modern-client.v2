@@ -67,6 +67,15 @@ engine/ecs/
 - Arquivos e diretórios em `camelCase` (`jobSystem.cppm`, `worldTests.cpp`, `rhiVulkan/`).
   A interface primária leva o nome do módulo (`nx.ecs.cppm`). Nomes de módulo
   `nx.<área>[.<subárea>]`.
+- Todo arquivo de código (C++, CMake, scripts) começa com o **cabeçalho SPDX** da licença do
+  seu diretório ([ADR-0010](adr/0010-licenca.md), `REUSE.toml`). `MIT` em `rook/`,
+  `GPL-3.0-or-later` no resto:
+
+```cpp
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+```
+
 - **Headers de terceiros** apenas no *global module fragment*:
 
 ```cpp

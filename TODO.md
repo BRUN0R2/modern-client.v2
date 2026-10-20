@@ -13,11 +13,12 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Convenção camelCase em todo o projeto, C++ e Rook ([ADR-0013](docs/adr/0013-convencao-camelcase.md))
 - [x] Arquivos, diretórios, alvos de build e scripts também em camelCase (`contractsTests.cpp`)
 - [x] Framework de testes C++: GoogleTest (suporte oficial a builds sem exceções)
-- [ ] Licença do projeto: opção A (GPL-3.0) ou B (MPL-2.0) ([ADR-0010](docs/adr/0010-licenca.md))
+- [x] Licença do projeto: opção A, GPL-3.0-or-later + MIT (Rook e SDK) + CC BY 4.0 (docs) ([ADR-0010](docs/adr/0010-licenca.md))
+- [x] Repositório público: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Nome definitivo da linguagem de plugins (provisório: **Rook**)
 - [ ] Toolkit de menus: próprio ou RmlUi ([12 §2](docs/12-interface-hud-e-console.md#2-componentes-de-ui))
 - [ ] Definir hardware de referência para as metas de desempenho
-- [ ] Revisão jurídica antes do primeiro release público ([20](docs/20-legal-e-licenciamento.md))
+- [ ] Revisão jurídica antes do primeiro release público, incluindo uma possível permissão adicional para plugins (seção 7 da GPL) ([20](docs/20-legal-e-licenciamento.md))
 
 ---
 
@@ -48,7 +49,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Glossário
 - [x] ADRs 0001–0014
 - [x] Regra camelCase documentada ([02 §3.1](docs/02-padroes-de-codigo.md#31-regra-do-projeto-camelcase))
-- [ ] `CONTRIBUTING.md` (fluxo de PR, DCO, padrões, como rodar testes)
+- [x] Licenças no padrão REUSE: `LICENSES/`, `LICENSE`, `REUSE.toml` e cabeçalhos SPDX
+- [ ] `CONTRIBUTING.md` (fluxo de PR, DCO, padrões, licença das contribuições, como rodar testes)
 - [ ] `SECURITY.md` (como reportar vulnerabilidades)
 - [ ] Especificação completa da gramática Rook (`rook/spec/grammar.ebnf`)
 - [ ] Catálogo completo de cvars em `data/cstrike/cvars.toml`
@@ -89,6 +91,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Job `layers` (verificação do grafo de dependências)
 - [ ] Jobs de sanitizers (ASan + UBSan, TSan)
 - [ ] Job que falha com quebras de linha fora do `.gitattributes` (`git ls-files --eol`)
+- [ ] Job `reuse lint` (licença e cabeçalho SPDX em todo arquivo)
 
 ### `nx.core`
 - [x] `nx::Failure<E>`, `nx::Result<T, E>`, `nx::fail`, causa encadeada, `nx::describe` e `std::formatter`
@@ -448,7 +451,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Backend DirectX 11 (`nx.rhi.d3d11`) com Slang → HLSL → DXBC
 - [ ] Testes de conformidade da RHI no D3D11
 - [ ] Servidor dedicado Linux ARM64
-- [ ] Revisão jurídica, licença definida e `THIRD_PARTY_NOTICES.md`
+- [ ] Revisão jurídica e `THIRD_PARTY_NOTICES.md`
 - [ ] Site de documentação
 - [ ] Portal de mods
 - [ ] Release 1.0

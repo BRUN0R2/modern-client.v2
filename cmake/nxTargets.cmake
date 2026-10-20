@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Helpers that give every project target the same structure and warning policy.
 
 include_guard(GLOBAL)
