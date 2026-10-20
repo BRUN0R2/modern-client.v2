@@ -3,7 +3,8 @@
 
 // MDL v10 studio models (nx.assets:mdl). A model that parses is posed and drawn as a renderer
 // would, without checks: every bone's parent comes before it, every index is in range, and every
-// skin reference of a model with textures names one of its textures.
+// skin reference of a model with textures names one of its textures. Its animations decode, or fail
+// with a typed error.
 
 import std;
 import nx.math;
@@ -48,6 +49,22 @@ void nx::test::fuzz(std::span<const std::byte> input) {
                     }
                 }
             }
+        }
+    }
+    // Every animation in this file, read back through value() as a pose would.
+    for (std::uint32_t sequence = 0; sequence < model->sequences().size(); ++sequence) {
+        if (model->sequences()[sequence].group.value != 0) {
+            continue; // in another file
+        }
+        const auto frames = model->decodeAnimation(nx::assets::SequenceIndex{.value = sequence}, input);
+        if (!frames) {
+            continue;
+        }
+        for (std::uint32_t bone = 0; bone < frames->boneCount; ++bone) {
+            sum += static_cast<float>(frames->value(frames->blendCount - 1, frames->frameCount - 1,
+                                                    nx::assets::BoneIndex{.value = bone},
+                                                    nx::assets::BoneAxis::RotationZ)) *
+                   model->bones()[bone].scales.back();
         }
     }
     std::ignore = sum; // the reads are the test

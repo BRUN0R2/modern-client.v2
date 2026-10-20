@@ -14,6 +14,7 @@ using nx::assets::BoneAxis;
 using nx::assets::BoneIndex;
 using nx::assets::MdlError;
 using nx::assets::MdlView;
+using nx::assets::SequenceIndex;
 using nx::assets::StudioTextureFlag;
 using nx::assets::Winding;
 
@@ -51,6 +52,9 @@ struct TriangleModel {
     std::size_t mesh = 0;
     std::size_t commands = 0;
     std::size_t vertexBones = 0;
+    std::size_t sequences = 0;
+    std::size_t animation = 0;
+    Bytes groupFile; ///< models/triangle01.mdl, the animation of sequence 1
 
     TriangleModel() {
         const std::array kMagic{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}, std::byte{'T'}};
@@ -124,6 +128,7 @@ struct TriangleModel {
         put(200, static_cast<std::int32_t>(skins));
 
         addBodyPart();
+        addSequences();
     }
 
     template <class Value>
@@ -153,6 +158,99 @@ struct TriangleModel {
     }
 
 private:
+    /// "idle" (group 0, here): two frames, an event; bone 0 rises along Z from 5 to 7 and bone 1
+    /// holds 100 about Y. "wave" (group 1, in groupFile): one frame, bone 1 at -3 about Y.
+    void addSequences() {
+        Bytes groups;
+        appendName(groups, "default", 32);
+        appendName(groups, "", 64);
+        append(groups, std::int32_t{0});
+        append(groups, std::int32_t{0});
+        appendName(groups, "wave", 32);
+        appendName(groups, "models/triangle01.mdl", 64);
+        append(groups, std::int32_t{0});
+        append(groups, std::int32_t{0});
+        table(172, 2, groups);
+
+        // Two bone records of six offsets from their own start, then the streams.
+        Bytes idle;
+        for (const std::uint16_t offset :
+             std::to_array<std::uint16_t>({0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 18, 0})) {
+            append(idle, offset);
+        }
+        idle.push_back(std::byte{2}); // two values
+        idle.push_back(std::byte{2}); // over two frames
+        append(idle, std::int16_t{5});
+        append(idle, std::int16_t{7});
+        idle.push_back(std::byte{1}); // one value
+        idle.push_back(std::byte{2}); // over two frames
+        append(idle, std::int16_t{100});
+        animation = add(idle);
+        const std::size_t event = add(eventRecord());
+
+        groupFile = Bytes{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}, std::byte{'Q'}};
+        append(groupFile, std::int32_t{10});
+        appendName(groupFile, "triangle01", 64);
+        append(groupFile, std::int32_t{0});
+        const auto waveAnimation = static_cast<std::int32_t>(groupFile.size());
+        for (const std::uint16_t offset :
+             std::to_array<std::uint16_t>({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0})) {
+            append(groupFile, offset);
+        }
+        groupFile.push_back(std::byte{1});
+        groupFile.push_back(std::byte{1});
+        append(groupFile, std::int16_t{-3});
+
+        Bytes records = sequenceRecord("idle", 2, 1, static_cast<std::int32_t>(event), 0,
+                                       static_cast<std::int32_t>(animation));
+        const Bytes wave = sequenceRecord("wave", 1, 0, 0, 1, waveAnimation);
+        records.insert(records.end(), wave.begin(), wave.end());
+        sequences = table(164, 2, records);
+    }
+
+    [[nodiscard]] static auto eventRecord() -> Bytes {
+        Bytes record;
+        append(record, std::int32_t{1});    // frame
+        append(record, std::int32_t{5004}); // a sound
+        append(record, std::int32_t{0});
+        appendName(record, "player/pl_step1.wav", 64);
+        return record;
+    }
+
+    [[nodiscard]] static auto sequenceRecord(std::string_view label, std::int32_t frames, std::int32_t events,
+                                             std::int32_t eventOffset, std::int32_t group,
+                                             std::int32_t animationOffset) -> Bytes {
+        Bytes record;
+        appendName(record, label, 32);
+        append(record, 30.0F);           // fps
+        append(record, std::int32_t{1}); // looping
+        append(record, std::int32_t{1}); // activity
+        append(record, std::int32_t{1}); // its weight
+        append(record, events);
+        append(record, eventOffset);
+        append(record, frames);
+        append(record, std::int32_t{0}); // pivots
+        append(record, std::int32_t{0});
+        append(record, std::int32_t{0}); // motion type
+        append(record, std::int32_t{0}); // motion bone
+        appendVec3(record, {});          // linear movement
+        append(record, std::int32_t{0});
+        append(record, std::int32_t{0});
+        appendVec3(record, {.x = -16.0F, .y = -16.0F, .z = 0.0F});
+        appendVec3(record, {.x = 16.0F, .y = 16.0F, .z = 72.0F});
+        append(record, std::int32_t{1}); // blends
+        append(record, animationOffset);
+        for (std::size_t field = 0; field < 6; ++field) { // blend types, starts and ends
+            append(record, std::int32_t{0});
+        }
+        append(record, std::int32_t{0}); // blend parent
+        append(record, group);
+        for (std::size_t field = 0; field < 4; ++field) { // entry and exit nodes, node flags, next
+            append(record, std::int32_t{0});
+        }
+        return record;
+    }
+
     void addBodyPart() {
         Bytes vertexBoneTable{std::byte{0}, std::byte{1}, std::byte{1}};
         vertexBones = add(vertexBoneTable);
@@ -283,6 +381,105 @@ TEST(MdlTest, AModelWhoseTexturesAreInItsTFileHasNone) {
     ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
     EXPECT_TRUE(view->textures().empty());
     EXPECT_TRUE(view->skins().empty());
+}
+
+TEST(MdlTest, ReadsTheSequences) {
+    const TriangleModel model;
+    const auto view = MdlView::parse(model.bytes);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    ASSERT_EQ(view->sequenceGroups().size(), 2U);
+    EXPECT_EQ(view->sequenceGroups()[1].fileName, "models/triangle01.mdl");
+    ASSERT_EQ(view->sequences().size(), 2U);
+    const auto& idle = view->sequences()[0];
+    EXPECT_EQ(idle.label, "idle");
+    EXPECT_EQ(idle.fps, 30.0F);
+    EXPECT_TRUE(idle.loops);
+    EXPECT_EQ(idle.frameCount, 2U);
+    EXPECT_EQ(idle.blendCount, 1U);
+    EXPECT_EQ(idle.group.value, 0U);
+    ASSERT_EQ(idle.events.size(), 1U);
+    EXPECT_EQ(idle.events[0].frame, 1);
+    EXPECT_EQ(idle.events[0].event, 5004);
+    EXPECT_EQ(idle.events[0].options, "player/pl_step1.wav");
+    EXPECT_EQ(view->sequences()[1].group.value, 1U);
+}
+
+TEST(MdlTest, DecodesAnimationsHereAndInSequenceGroups) {
+    const TriangleModel model;
+    const auto view = MdlView::parse(model.bytes);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+
+    const auto idle = view->decodeAnimation(SequenceIndex{.value = 0}, model.bytes);
+    ASSERT_TRUE(idle.has_value()) << nx::describe(idle.error());
+    EXPECT_EQ(idle->values.size(), 2U * 2U * 6U);
+    const BoneIndex root{.value = 0};
+    const BoneIndex head{.value = 1};
+    EXPECT_EQ(idle->value(0, 0, root, BoneAxis::Z), 5);
+    EXPECT_EQ(idle->value(0, 1, root, BoneAxis::Z), 7);
+    EXPECT_EQ(idle->value(0, 0, head, BoneAxis::RotationY), 100);
+    EXPECT_EQ(idle->value(0, 1, head, BoneAxis::RotationY), 100) << "past its values, a run repeats the last";
+    EXPECT_EQ(idle->value(0, 1, head, BoneAxis::X), 0) << "an axis without a stream stays at 0";
+
+    const auto wave = view->decodeAnimation(SequenceIndex{.value = 1}, model.groupFile);
+    ASSERT_TRUE(wave.has_value()) << nx::describe(wave.error());
+    EXPECT_EQ(wave->value(0, 0, head, BoneAxis::RotationY), -3);
+}
+
+TEST(MdlTest, RejectsABrokenAnimation) {
+    const auto animationError = [](auto change, std::uint32_t sequence = 0) {
+        TriangleModel model;
+        change(model);
+        const auto view = MdlView::parse(model.bytes);
+        EXPECT_TRUE(view.has_value()) << nx::describe(view.error());
+        if (!view) {
+            return MdlError{};
+        }
+        const auto frames = view->decodeAnimation(SequenceIndex{.value = sequence},
+                                                  sequence == 0 ? model.bytes : model.groupFile);
+        EXPECT_FALSE(frames.has_value());
+        return frames ? MdlError{} : frames.error().code;
+    };
+    EXPECT_EQ(animationError([](TriangleModel&) {}, 2), MdlError::BadIndex) << "sequence 2 of 2";
+    EXPECT_EQ(animationError([](TriangleModel& model) { model.bytes[model.animation + 24] = std::byte{0}; }),
+              MdlError::BadValue)
+        << "a run of no value";
+    EXPECT_EQ(
+        animationError([](TriangleModel& model) { model.put(model.animation + 4, std::uint16_t{60000}); }),
+        MdlError::OutOfBounds);
+    EXPECT_EQ(animationError([](TriangleModel& model) { model.groupFile[3] = std::byte{'T'}; }, 1),
+              MdlError::NotSequenceGroup);
+    EXPECT_EQ(
+        animationError([](TriangleModel& model) { model.put(model.sequences + 56, std::int32_t{1 << 30}); }),
+        MdlError::BadValue)
+        << "more than kMaxAnimationValues";
+}
+
+TEST(MdlTest, RejectsABrokenSequence) {
+    const auto withChange = [](auto change) {
+        TriangleModel model;
+        change(model);
+        return parseError(model);
+    };
+    EXPECT_EQ(withChange([](TriangleModel& model) { model.put(model.sequences + 56, std::int32_t{0}); }),
+              MdlError::BadValue)
+        << "no frame";
+    EXPECT_EQ(withChange([](TriangleModel& model) { model.put(model.sequences + 120, std::int32_t{0}); }),
+              MdlError::BadValue)
+        << "no blend";
+    EXPECT_EQ(withChange([](TriangleModel& model) {
+                  model.put(model.sequences + 32, std::numeric_limits<float>::quiet_NaN());
+              }),
+              MdlError::BadValue);
+    EXPECT_EQ(withChange([](TriangleModel& model) { model.put(model.sequences + 156, std::int32_t{2}); }),
+              MdlError::BadIndex)
+        << "group 2 of 2";
+    EXPECT_EQ(withChange([](TriangleModel& model) { model.put(model.sequences + 72, std::int32_t{2}); }),
+              MdlError::BadIndex)
+        << "motion bone 2 of 2";
+    EXPECT_EQ(
+        withChange([](TriangleModel& model) { model.put(model.sequences + 52, std::int32_t{1 << 24}); }),
+        MdlError::OutOfBounds)
+        << "events past the file";
 }
 
 TEST(MdlTest, RejectsABrokenHeader) {

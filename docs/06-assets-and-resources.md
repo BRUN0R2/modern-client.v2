@@ -168,17 +168,21 @@ Readers today:
   alpha-test), the sync type, the 256-color palette, and the frames: single images, or groups whose
   intervals rise from above zero. Each image has its origin, size and pixels as a view of the
   file's bytes, every pixel a palette index.
-- MDL v10 (`nx.assets:mdl`), today its structure: the skeleton (each bone after its parent, so it
-  is posed in one pass and cannot cycle), the bone controllers (one axis each, looping or not), the
-  hitboxes, the attachments, the body parts and their models (vertices and normals with their
-  bones, meshes as triangle strips and fans of checked corners), the textures (pixels and palette
-  as views, flags) and the skin families. A model whose textures are in its `*T.mdl` has none, and
-  its meshes' skin references are checked against that file's skins when the two are joined
-  (planned, with the asset handles). Every list is a vector: no count has a ceiling
-  ([§3.4](#34-removed-content-limits)). The sequences and animations are next.
+- MDL v10 (`nx.assets:mdl`): the skeleton (each bone after its parent, so it is posed in one
+  pass and cannot cycle), the bone controllers (one axis each, looping or not), the hitboxes, the
+  attachments, the body parts and their models (vertices and normals with their bones, meshes as
+  triangle strips and fans of checked corners), the textures (pixels and palette as views, flags),
+  the skin families, the sequences (frames, fps, events, blends, motion, transition nodes), the
+  sequence groups and the transition table. `decodeAnimation` decodes a sequence's run-length
+  animation, from the model or from its sequence group's file (`*01.mdl`), into every value of
+  every blend, frame, bone and axis, checking each run to the last frame; a safety ceiling,
+  `kMaxAnimationValues`, bounds what it allocates, since a constant axis costs the file nothing. A
+  model whose textures are in its `*T.mdl` has none, and its meshes' skin references are checked
+  against that file's skins when the two are joined (planned, with the asset handles). Every list
+  is a vector: no count has a ceiling ([§3.4](#34-removed-content-limits)).
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The sequences and animations of MDL models are planned (M2).
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above all have their readers; the text formats (`sentences.txt`, `materials.txt`, `hud.txt`...) are planned with their consumers (M3).
 
 ### 3.2 Modern (for mods)
 

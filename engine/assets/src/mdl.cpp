@@ -95,6 +95,58 @@ constexpr std::size_t kMinimumCorners = 3;
 
 constexpr std::size_t kVectorBytes = 12;
 
+constexpr TableField kSequences{.countOffset = 164, .recordBytes = 176, .name = "Sequences"};
+constexpr TableField kSequenceGroups{.countOffset = 172, .recordBytes = 104, .name = "SequenceGroups"};
+
+// The transitions: a node count, then the offset of a square table of bytes.
+constexpr std::size_t kTransitionsOffset = 236;
+
+// A sequence: label, fps, flags, activity and its weight, events (count and offset), frame count,
+// pivots (count and offset, unused by the original), motion type and bone, linear movement, two
+// unused offsets, bounds, blends (count and the animation's offset), blend types, starts and ends,
+// blend parent (unused), group, entry and exit nodes, node flags, next sequence (unused).
+constexpr std::size_t kSequenceLabelBytes = 32;
+constexpr std::size_t kSequenceFpsOffset = 32;
+constexpr std::size_t kSequenceFlagsOffset = 36;
+constexpr std::size_t kSequenceActivityOffset = 40;
+constexpr std::size_t kSequenceActivityWeightOffset = 44;
+constexpr std::size_t kSequenceEventsOffset = 48;
+constexpr std::size_t kSequenceFramesOffset = 56;
+constexpr std::size_t kSequenceMotionTypeOffset = 68;
+constexpr std::size_t kSequenceMotionBoneOffset = 72;
+constexpr std::size_t kSequenceMovementOffset = 76;
+constexpr std::size_t kSequenceBoundsOffset = 96;
+constexpr std::size_t kSequenceBlendsOffset = 120;
+constexpr std::size_t kSequenceAnimationOffset = 124;
+constexpr std::size_t kSequenceBlendTypesOffset = 128;
+constexpr std::size_t kSequenceBlendStartsOffset = 136;
+constexpr std::size_t kSequenceBlendEndsOffset = 144;
+constexpr std::size_t kSequenceGroupOffset = 156;
+constexpr std::size_t kSequenceEntryNodeOffset = 160;
+constexpr std::size_t kSequenceExitNodeOffset = 164;
+constexpr std::size_t kSequenceNodeFlagsOffset = 168;
+constexpr std::uint32_t kLoopingSequence = 0x1;
+constexpr std::size_t kSequenceBlendAxes = 2;
+
+// An event: frame, event, type (unused), options. A sequence group: label, file name, two unused
+// fields. A sequence group's file: "IDSQ", the version, a name and a length.
+constexpr std::size_t kEventBytes = 76;
+constexpr std::size_t kEventIdOffset = 4;
+constexpr std::size_t kEventOptionsOffset = 12;
+constexpr std::size_t kEventOptionsBytes = 64;
+constexpr std::size_t kGroupLabelBytes = 32;
+constexpr std::size_t kGroupFileNameOffset = 32;
+constexpr std::size_t kGroupFileNameBytes = 64;
+constexpr std::array kSequenceGroupMagic{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}, std::byte{'Q'}};
+constexpr std::size_t kSequenceGroupHeaderBytes = 76;
+
+// An animation: for every blend, every bone's six 16-bit offsets, from that bone's record, to the
+// run-length stream of each axis (0 for an axis that stays at 0). A stream is runs: a byte of how
+// many values follow, a byte of how many frames the run covers, then the 16-bit values; a frame past
+// the values repeats the last.
+constexpr std::size_t kBoneAnimationBytes = kBoneAxes * sizeof(std::uint16_t);
+constexpr std::size_t kRunHeaderBytes = 2;
+
 /// "<table> <record>": where a failure is.
 [[nodiscard]] auto where(std::string_view table, std::size_t record) -> std::string {
     return std::format("{} {}", table, record);
@@ -457,6 +509,128 @@ decodeAll(std::span<const std::byte> table, std::size_t recordBytes, Decode deco
     return skins;
 }
 
+/// The events of a sequence. Errors: OutOfBounds.
+[[nodiscard]] auto decodeEvents(std::span<const std::byte> bytes, std::span<const std::byte> record,
+                                std::string_view what) -> Result<std::vector<StudioEvent>, MdlError> {
+    const auto table = region(
+        bytes, loadLittleEndian<std::uint32_t>(record.subspan(kSequenceEventsOffset + sizeof(std::uint32_t))),
+        loadLittleEndian<std::uint32_t>(record.subspan(kSequenceEventsOffset)), kEventBytes, what);
+    if (!table) {
+        return std::unexpected(table.error());
+    }
+    std::vector<StudioEvent> events;
+    for (std::size_t event = 0; event < table->size() / kEventBytes; ++event) {
+        const auto eventRecord = table->subspan(event * kEventBytes, kEventBytes);
+        events.push_back(
+            StudioEvent{.frame = loadLittleEndian<std::int32_t>(eventRecord),
+                        .event = loadLittleEndian<std::int32_t>(eventRecord.subspan(kEventIdOffset)),
+                        .options = nameOf(eventRecord.subspan(kEventOptionsOffset, kEventOptionsBytes))});
+    }
+    return events;
+}
+
+/// What the sequences index: the sizes of the lists.
+struct SequenceTargets {
+    std::size_t bones = 0;
+    std::size_t groups = 0;
+};
+
+[[nodiscard]] auto decodeSequence(std::span<const std::byte> bytes, std::span<const std::byte> record,
+                                  std::size_t index, const SequenceTargets& targets)
+    -> Result<StudioSequence, MdlError> {
+    StudioSequence sequence{
+        .label = nameOf(record.first(kSequenceLabelBytes)),
+        .fps = loadLittleEndian<float>(record.subspan(kSequenceFpsOffset)),
+        .loops =
+            (loadLittleEndian<std::uint32_t>(record.subspan(kSequenceFlagsOffset)) & kLoopingSequence) != 0,
+        .activity = loadLittleEndian<std::int32_t>(record.subspan(kSequenceActivityOffset)),
+        .activityWeight = loadLittleEndian<std::int32_t>(record.subspan(kSequenceActivityWeightOffset)),
+        .events = {},
+        .frameCount = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceFramesOffset)),
+        .motionType = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceMotionTypeOffset)),
+        .motionBone = {},
+        .linearMovement = readVec3(record.subspan(kSequenceMovementOffset)),
+        .bounds = Aabb{.min = readVec3(record.subspan(kSequenceBoundsOffset)),
+                       .max = readVec3(record.subspan(kSequenceBoundsOffset + kVectorBytes))},
+        .blendCount = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceBlendsOffset)),
+        .blendTypes = {},
+        .blendStarts = {},
+        .blendEnds = {},
+        .group = {},
+        .entryNode = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceEntryNodeOffset)),
+        .exitNode = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceExitNodeOffset)),
+        .nodeFlags = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceNodeFlagsOffset)),
+        .animationOffset = loadLittleEndian<std::uint32_t>(record.subspan(kSequenceAnimationOffset)),
+    };
+    const std::string what = std::format("{} {:?}", where("Sequences", index), sequence.label);
+    for (std::size_t axis = 0; axis < kSequenceBlendAxes; ++axis) {
+        sequence.blendTypes.at(axis) = loadLittleEndian<std::uint32_t>(
+            record.subspan(kSequenceBlendTypesOffset + (axis * sizeof(std::uint32_t))));
+        sequence.blendStarts.at(axis) =
+            loadLittleEndian<float>(record.subspan(kSequenceBlendStartsOffset + (axis * sizeof(float))));
+        sequence.blendEnds.at(axis) =
+            loadLittleEndian<float>(record.subspan(kSequenceBlendEndsOffset + (axis * sizeof(float))));
+    }
+    const bool isFiniteBlend =
+        std::ranges::all_of(sequence.blendStarts, [](float value) { return std::isfinite(value); }) &&
+        std::ranges::all_of(sequence.blendEnds, [](float value) { return std::isfinite(value); });
+    if (!std::isfinite(sequence.fps) || !isFinite(sequence.linearMovement) ||
+        !isFinite(sequence.bounds.min) || !isFinite(sequence.bounds.max) || !isFiniteBlend ||
+        sequence.frameCount == 0 || sequence.blendCount == 0) {
+        return fail(MdlError::BadValue, std::format("{}: {} frames, {} blends, and every float finite", what,
+                                                    sequence.frameCount, sequence.blendCount));
+    }
+    const auto motionBone =
+        indexInto<BoneTag>(loadLittleEndian<std::int32_t>(record.subspan(kSequenceMotionBoneOffset)),
+                           targets.bones, "Sequences", index, "motion bone");
+    const auto group =
+        indexInto<SequenceGroupTag>(loadLittleEndian<std::int32_t>(record.subspan(kSequenceGroupOffset)),
+                                    targets.groups, "Sequences", index, "group");
+    if (!motionBone || !group) {
+        return std::unexpected(!motionBone ? motionBone.error() : group.error());
+    }
+    sequence.motionBone = *motionBone;
+    sequence.group = *group;
+    auto events = decodeEvents(bytes, record, what);
+    if (!events) {
+        return std::unexpected(std::move(events.error()));
+    }
+    sequence.events = std::move(*events);
+    return sequence;
+}
+
+/// Decodes the run-length stream at `start` into one value per frame, `stride` apart in `out`.
+/// Errors: OutOfBounds, BadValue.
+[[nodiscard]] auto decodeStream(std::span<const std::byte> file, std::uint64_t start,
+                                std::span<std::int16_t> out, std::size_t stride, std::string_view what)
+    -> Result<void, MdlError> {
+    const std::size_t frames = (out.size() + stride - 1) / stride;
+    std::uint64_t at = start;
+    for (std::size_t frame = 0; frame < frames;) {
+        const auto header = region(file, at, 1, kRunHeaderBytes, what);
+        if (!header) {
+            return std::unexpected(header.error());
+        }
+        const auto valid = std::to_integer<std::uint32_t>((*header)[0]);
+        const auto total = std::to_integer<std::uint32_t>((*header)[1]);
+        if (valid == 0 || total == 0) {
+            return fail(MdlError::BadValue,
+                        std::format("{}: a run of {} frames with {} values", what, total, valid));
+        }
+        const auto values = region(file, at + kRunHeaderBytes, valid, sizeof(std::int16_t), what);
+        if (!values) {
+            return std::unexpected(values.error());
+        }
+        for (std::uint32_t covered = 0; covered < total && frame < frames; ++covered, ++frame) {
+            const std::uint32_t value = std::min(covered, valid - 1); // past the values, the last repeats
+            out[frame * stride] =
+                loadLittleEndian<std::int16_t>(values->subspan(value * sizeof(std::int16_t)));
+        }
+        at += kRunHeaderBytes + values->size();
+    }
+    return {};
+}
+
 /// Moves what `decoded` holds into `destination`; its failure, when it holds one.
 template <class Records>
 [[nodiscard]] auto store(Result<Records, MdlError>&& decoded, Records& destination)
@@ -557,6 +731,9 @@ auto MdlView::parse(std::span<const std::byte> bytes) -> Result<MdlView, MdlErro
             store(decodeAll(*bodyParts, kBodyParts.recordBytes, decodeBodyPartOf), view.m_bodyParts)) {
         return std::unexpected(std::move(*failure));
     }
+    if (auto failure = view.decodeSequences(bytes)) {
+        return std::unexpected(std::move(*failure));
+    }
     // With its textures, a model's skins map its meshes' references to them; without, its *T.mdl does.
     if (!view.m_textures.empty()) {
         if (auto failure = store(decodeSkins(bytes, view.m_textures.size()), view.m_skins)) {
@@ -568,6 +745,101 @@ auto MdlView::parse(std::span<const std::byte> bytes) -> Result<MdlView, MdlErro
         }
     }
     return view;
+}
+
+auto MdlView::decodeSequences(std::span<const std::byte> bytes) -> std::optional<Failure<MdlError>> {
+    const auto groups = tableOf(bytes, kSequenceGroups);
+    const auto sequences = tableOf(bytes, kSequences);
+    if (!groups || !sequences) {
+        return !groups ? groups.error() : sequences.error();
+    }
+    for (std::size_t group = 0; group < groups->size() / kSequenceGroups.recordBytes; ++group) {
+        const auto record = groups->subspan(group * kSequenceGroups.recordBytes, kSequenceGroups.recordBytes);
+        m_sequenceGroups.push_back(
+            SequenceGroup{.label = nameOf(record.first(kGroupLabelBytes)),
+                          .fileName = nameOf(record.subspan(kGroupFileNameOffset, kGroupFileNameBytes))});
+    }
+    const SequenceTargets targets{.bones = m_bones.size(), .groups = m_sequenceGroups.size()};
+    const auto decodeSequenceOf = [bytes, &targets](std::span<const std::byte> record, std::size_t index) {
+        return decodeSequence(bytes, record, index, targets);
+    };
+    if (auto failure = store(decodeAll(*sequences, kSequences.recordBytes, decodeSequenceOf), m_sequences)) {
+        return failure;
+    }
+    const auto nodes = loadLittleEndian<std::uint32_t>(bytes.subspan(kTransitionsOffset));
+    const auto transitions = region(
+        bytes, loadLittleEndian<std::uint32_t>(bytes.subspan(kTransitionsOffset + sizeof(std::uint32_t))),
+        std::uint64_t{nodes} * nodes, 1, "Transitions");
+    if (!transitions) {
+        return transitions.error();
+    }
+    m_transitions = *transitions;
+    return std::nullopt;
+}
+
+auto MdlView::decodeAnimation(SequenceIndex index, std::span<const std::byte> groupFile) const
+    -> Result<AnimationFrames, MdlError> {
+    if (index.value >= m_sequences.size()) {
+        return fail(MdlError::BadIndex, std::format("sequence {} of {}", index.value, m_sequences.size()));
+    }
+    const StudioSequence& sequence = m_sequences[index.value];
+    const std::string what = std::format("{} {:?}", where("Sequences", index.value), sequence.label);
+    if (sequence.group.value != 0 &&
+        (groupFile.size() < kSequenceGroupHeaderBytes ||
+         !std::ranges::equal(groupFile.first(kSequenceGroupMagic.size()), kSequenceGroupMagic) ||
+         loadLittleEndian<std::int32_t>(groupFile.subspan(kStudioVersionOffset)) != kStudioVersion)) {
+        return fail(
+            MdlError::NotSequenceGroup,
+            std::format("{}: its group's file is not an \"IDSQ\" file of version {}", what, kStudioVersion));
+    }
+    AnimationFrames frames{.blendCount = sequence.blendCount,
+                           .frameCount = sequence.frameCount,
+                           .boneCount = static_cast<std::uint32_t>(m_bones.size()),
+                           .values = {}};
+    const std::uint64_t count =
+        std::uint64_t{frames.blendCount} * frames.frameCount * frames.boneCount * kBoneAxes;
+    if (count > kMaxAnimationValues) {
+        return fail(MdlError::BadValue, std::format("{}: {} values, more than kMaxAnimationValues ({})", what,
+                                                    count, kMaxAnimationValues));
+    }
+    const auto animations =
+        region(groupFile, sequence.animationOffset, std::uint64_t{frames.blendCount} * frames.boneCount,
+               kBoneAnimationBytes, what);
+    if (!animations) {
+        return std::unexpected(animations.error());
+    }
+    frames.values.assign(static_cast<std::size_t>(count), 0);
+    const std::size_t stride = frames.boneCount * kBoneAxes; // from one frame to the next
+    for (std::size_t blend = 0; blend < frames.blendCount; ++blend) {
+        for (std::size_t bone = 0; bone < frames.boneCount; ++bone) {
+            const std::size_t recordOffset = ((blend * frames.boneCount) + bone) * kBoneAnimationBytes;
+            for (std::size_t axis = 0; axis < kBoneAxes; ++axis) {
+                const auto offset = loadLittleEndian<std::uint16_t>(
+                    animations->subspan(recordOffset + (axis * sizeof(std::uint16_t))));
+                if (offset == 0) {
+                    continue; // the axis stays at 0
+                }
+                const std::size_t first = (blend * frames.frameCount * stride) + (bone * kBoneAxes) + axis;
+                const auto out =
+                    std::span{frames.values}.subspan(first, ((frames.frameCount - 1) * stride) + 1);
+                const std::uint64_t start = std::uint64_t{sequence.animationOffset} + recordOffset + offset;
+                if (auto stream = decodeStream(groupFile, start, out, stride, what); !stream) {
+                    return std::unexpected(std::move(stream.error()));
+                }
+            }
+        }
+    }
+    return frames;
+}
+
+auto AnimationFrames::value(std::uint32_t blend, std::uint32_t frame, BoneIndex bone,
+                            BoneAxis axis) const noexcept -> std::int16_t {
+    const std::size_t index =
+        ((((std::size_t{blend} * frameCount) + frame) * boneCount + bone.value) * kBoneAxes) +
+        std::to_underlying(axis);
+    expects(blend < blendCount && frame < frameCount && bone.value < boneCount && index < values.size(),
+            "AnimationFrames::value: the blend, frame or bone is past the animation");
+    return index < values.size() ? values[index] : std::int16_t{0}; // 0 after a violation ("observe")
 }
 
 } // namespace nx::assets
