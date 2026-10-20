@@ -46,7 +46,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] 19 — Roadmap
 - [x] 20 — Legal e licenciamento
 - [x] Glossário
-- [x] ADRs 0001–0013
+- [x] ADRs 0001–0014
 - [x] Regra camelCase documentada ([02 §3.1](docs/02-padroes-de-codigo.md#31-regra-do-projeto-camelcase))
 - [ ] `CONTRIBUTING.md` (fluxo de PR, DCO, padrões, como rodar testes)
 - [ ] `SECURITY.md` (como reportar vulnerabilidades)
@@ -61,7 +61,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### Repositório e build
 - [x] Inicializar repositório git (`main`), `.gitignore`, `.gitattributes`, `.editorconfig`
 - [x] Estrutura de pastas ([17 §1](docs/17-build-e-ferramentas.md#1-layout-do-repositório))
-- [x] `CMakeLists.txt` raiz com módulos C++ e `import std` (tabela de *gates* para CMake 4.3 e 4.4)
+- [x] `CMakeLists.txt` raiz com módulos C++ e `import std`
+- [x] Módulo `std` compilado pelo projeto (`nx::std`) a partir do `modules.json`, sem recursos experimentais do CMake ([ADR-0014](docs/adr/0014-modulo-std-compilado-pelo-projeto.md))
 - [x] Helpers CMake: `nxAddModuleLibrary`, `nxAddTest`, política de warnings por alvo
 - [x] `CMakePresets.json`: dev/release MSVC, dev/release GCC, dev Clang, ASan + UBSan, TSan
 - [ ] Presets `server-headless` e `tools` (quando os alvos existirem)
@@ -73,7 +74,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `scripts/devShell.ps1` para builds de linha de comando no Windows
 - [ ] Rodar `clang-tidy` com módulos (exige build com Clang e `compile_commands.json`)
 - [ ] Configurações recomendadas de editor em `.vscode/`
-- [ ] Remover o contorno de `lib/@cmake_cxx_std.lib` quando o CMake corrigir o nome ([17 §2.2](docs/17-build-e-ferramentas.md#22-particularidades-conhecidas))
+- [x] Eliminar a dependência do `import std` experimental e do contorno de `@cmake_cxx_std.lib`
+- [x] Normalizar quebras de linha da árvore conforme o `.gitattributes`
 
 ### Toolchain
 - [x] Validar MSVC 14.51 (VS 2026) com CMake 4.3.1 e 4.4.4, Debug e Release
@@ -86,6 +88,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Job `format-lint`
 - [ ] Job `layers` (verificação do grafo de dependências)
 - [ ] Jobs de sanitizers (ASan + UBSan, TSan)
+- [ ] Job que falha com quebras de linha fora do `.gitattributes` (`git ls-files --eol`)
 
 ### `nx.core`
 - [x] `nx::Failure<E>`, `nx::Result<T, E>`, `nx::fail`, causa encadeada, `nx::describe` e `std::formatter`
@@ -96,12 +99,15 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `nx::Quantity` e unidades (`HammerUnits`, `UnitsPerSecond`, `HitPoints`, `ArmorPoints`, `Damage`, `Money`, `Scale`, ângulos, tempo) com literais
 - [x] `nx::narrow`, `nx::tryNarrow`, `nx::truncate`, `nx::tryRound`, aritmética verificada e saturada
 - [x] `EnumArray` e `Flags<E>`
-- [ ] `inplace_vector` (fachada)
-- [ ] Alocadores: `FrameArena`, `PoolAllocator`, `TrackedHeapAllocator`
-- [ ] Filas SPSC/MPSC sem lock com erro tipado de fila cheia
-- [ ] Log estruturado com categorias, níveis e *rate limiting*
-- [ ] Hashing (xxHash, BLAKE3) e `StableTypeId`
-- [x] Testes unitários do que já existe no `nx.core` (61 testes, incluindo teste de morte do handler padrão)
+- [ ] `inplace_vector` (fachada), quando o primeiro consumidor existir (ECS ou jobs)
+- [x] `FrameArena` com falhas tipadas (`Exhausted`, `InvalidAlignment`)
+- [ ] `PoolAllocator` (chunks do ECS, M1) e `TrackedHeapAllocator`
+- [ ] Filas SPSC/MPSC sem lock com erro tipado de fila cheia, quando o primeiro consumidor existir (rede, áudio)
+- [x] Log estruturado: níveis, categorias por módulo, formatação verificada em compilação, `ConsoleSink`, `RateLimit` *thread-safe*
+- [ ] Sinks de arquivo e JSON lines
+- [x] `nx::hash64` (XXH64 `constexpr`, verificado contra a implementação de referência) e `nx::StableId`
+- [ ] BLAKE3 para hash de conteúdo (com o VFS, M2)
+- [x] Testes unitários do que já existe no `nx.core` (84 testes, incluindo teste de morte do handler padrão)
 
 ### `nx.meta`
 - [ ] Fachada de reflexão: membros, anotações, `enumName`

@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 4.3)
 
-# Must run before project(): enables `import std;` (see the file for details).
-include(cmake/nxImportStd.cmake)
-
 # Declared before project() because the vcpkg toolchain installs manifest features there.
 option(NX_BUILD_TESTS "Build the unit tests (installs the vcpkg 'tests' feature)" ON)
 option(NX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
@@ -19,11 +16,16 @@ project(ModernClientV2
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(nxCompilerSettings)
+include(nxStdModule)
 include(nxTargets)
+
+# `import std;` for every project target (see cmake/nxStdModule.cmake).
+nxAddStdModuleLibrary()
 
 if(NX_BUILD_TESTS)
     enable_testing()
     find_package(GTest CONFIG REQUIRED)
+    find_package(xxHash CONFIG REQUIRED) # reference implementation for nx::hash64 tests
     include(GoogleTest)
 endif()
 

@@ -68,7 +68,7 @@ Cada módulo de `engine/`, `game/` e `rook/` segue a organização de
 
 | Ferramenta | Versão | Observação |
 |------------|--------|------------|
-| CMake | **4.3 ou 4.4** (as versões da tabela de *gates* em `cmake/nxImportStd.cmake`) | Suporte a módulos C++ e `import std` |
+| CMake | 4.3+ (validado com 4.3.1 e 4.4.4) | Módulos C++ estáveis. O módulo `std` é compilado pelo projeto ([ADR-0014](adr/0014-modulo-std-compilado-pelo-projeto.md)) |
 | Ninja | 1.12+ (o do Visual Studio serve) | Obrigatório (scanning de módulos) |
 | vcpkg | Modo manifesto com *baseline* fixa (o do Visual Studio serve) | Builds reproduzíveis, triplets próprios sem exceções |
 | Slang | Versão fixada | Compilação de shaders |
@@ -81,7 +81,7 @@ com fallbacks atrás de fachadas.
 
 | Compilador | Plataformas | Papel | Status (2026-10-20) |
 |------------|-------------|-------|---------------------|
-| MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Toolchain de desenvolvimento no Windows | **Validado**: CMake 4.3.1 e 4.4.4, Ninja, Debug e Release, 61 testes passando |
+| MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Toolchain de desenvolvimento no Windows | **Validado**: CMake 4.3.1 e 4.4.4, Ninja, Debug e Release, 84 testes passando |
 | GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Referência para reflexão estática e contratos | A validar (presets prontos) |
 | Clang (versão estável mais recente) | Linux, Windows | Sanitizers (ASan, TSan, MSan, UBSan), `clang-tidy`, `clangd` | A validar (presets prontos) |
 
@@ -95,11 +95,10 @@ O CMake ainda não conhece um switch `/std:c++26` para o MSVC, então o dialeto 
 
 | Problema | Contorno no projeto |
 |----------|---------------------|
-| `import std` ainda é experimental no CMake e o UUID do *gate* muda a cada versão | Tabela de UUIDs validados em `cmake/nxImportStd.cmake`. Versão desconhecida falha com instrução clara |
-| O CMake 4.4 chama a biblioteca do módulo `std` de `@cmake_cxx_std.lib`, e o `link.exe` lê argumentos iniciados por `@` como arquivo de resposta, então a biblioteca nunca é linkada | Bibliotecas geradas em `lib/` (`lib/@cmake_cxx_std.lib` vira um caminho comum) |
-| Flags que mudam o ABI (exceções, RTTI) precisam ser iguais em todas as unidades, inclusive no módulo `std` que o CMake compila | Ficam em `CMAKE_CXX_FLAGS` globais. Warnings ficam por alvo |
-| O MSVC desativa `std::println(std::ostream&, ...)` sem exceções | Saída via `std::println(stderr, ...)` (`FILE*`) |
-| Diretórios intermediários do CMake usam hashes longos e podem passar de 260 caracteres | Clonar o repositório em um caminho curto ou habilitar *long paths* no Windows |
+| O suporte a `import std` do CMake ainda é experimental (*gate* com UUID que muda a cada versão) e, no MSVC, gera `@cmake_cxx_std.lib`, que o `link.exe` lê como arquivo de resposta | **Resolvido na causa:** o projeto não usa esse suporte. `cmake/nxStdModule.cmake` lê o manifesto `modules.json` da biblioteca padrão e compila o módulo `std` como o alvo comum `nx::std` ([ADR-0014](adr/0014-modulo-std-compilado-pelo-projeto.md)) |
+| Fontes fora da árvore ganham diretórios de objeto com *hash* longo e podiam passar de 260 caracteres | **Resolvido na causa:** o fonte do módulo `std` é copiado para `build/<preset>/nxStd/` e compilado de lá, com caminhos curtos |
+| Flags que mudam o ABI (exceções, RTTI) precisam ser iguais em todas as unidades, inclusive no módulo `std` | Ficam em `CMAKE_CXX_FLAGS` globais. Warnings ficam por alvo e não se aplicam ao `nx::std` |
+| O MSVC desativa `std::println(std::ostream&, ...)` sem exceções (comportamento documentado da STL) | Saída via `std::println(stderr, ...)` ou `std::fputs` (`FILE*`) |
 
 ## 3. Presets
 
@@ -164,7 +163,7 @@ existem só `NX_BUILD_TESTS` e `NX_WARNINGS_AS_ERRORS`.
 | libsodium | Criptografia de rede, assinaturas | ISC |
 | zstd | Compressão de pacotes e rede | BSD-3-Clause |
 | BLAKE3 | Hash de conteúdo | CC0 / Apache-2.0 |
-| xxHash | Hash rápido não criptográfico | BSD-2-Clause |
+| xxHash | Implementação de referência usada nos testes do `nx::hash64` (o hash do projeto é um XXH64 `constexpr` próprio) | BSD-2-Clause |
 | Opus | Voz e áudio | BSD-3-Clause |
 | minimp3, stb_vorbis, dr_flac | Decodificação de áudio | CC0 / domínio público / MIT-0 |
 | fastgltf | Importação glTF | MIT |

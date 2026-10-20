@@ -21,6 +21,7 @@ sem apagar o histórico.
 | [0011](0011-limite-de-jogadores-1024.md) | `maxplayers` de 1 a 1024 como limite de política | Aceito |
 | [0012](0012-padrao-get-set-vars-tipado.md) | Padrão `get*Var`/`set*Var` com chaves verificadas em compilação | Aceito |
 | [0013](0013-convencao-camelcase.md) | Convenção camelCase em todo o projeto (C++ e Rook) | Aceito |
+| [0014](0014-modulo-std-compilado-pelo-projeto.md) | Módulo `std` compilado pelo projeto, sem o `import std` experimental do CMake | Aceito |
 
 ## Modelo
 

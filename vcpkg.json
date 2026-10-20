@@ -7,9 +7,10 @@
   "dependencies": [],
   "features": {
     "tests": {
-      "description": "Unit tests (GoogleTest)",
+      "description": "Unit tests (GoogleTest) and reference implementations used to verify ours",
       "dependencies": [
-        "gtest"
+        "gtest",
+        "xxhash"
       ]
     }
   }

@@ -1,6 +1,7 @@
 nxAddTest(nxCoreTests
     SOURCES
         introspectionTests.cpp
+        sourceTests.cpp
         contractsTests.cpp
         failureTests.cpp
         conversionTests.cpp
@@ -8,5 +9,9 @@ nxAddTest(nxCoreTests
         unitsTests.cpp
         enumArrayTests.cpp
         flagsTests.cpp
+        hashTests.cpp
+        memoryTests.cpp
+        logTests.cpp
     DEPENDS
-        nx::core)
+        nx::core
+        xxHash::xxhash)

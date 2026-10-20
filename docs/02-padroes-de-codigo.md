@@ -445,14 +445,29 @@ auto hit = collision.trace(TraceQuery{
 ## 10. Log
 
 ```cpp
-nx::log::info(LogCategory::Assets, "loaded map {} in {}", map.name(), elapsed);
-nx::log::warn(LogCategory::Net, "client {} exceeded snapshot budget by {} bytes", slot, overflow);
+inline constexpr nx::log::Category kAssetsLog{"assets"};
+inline constexpr nx::log::Category kNetLog{"net"};
+
+nx::log::info(kAssetsLog, "loaded map {} in {}", map.name(), elapsed);
+nx::log::warning(kNetLog, "client {} exceeded snapshot budget by {} bytes", slot, overflow);
 ```
 
-- Formatação verificada em compilação (`std::format_string`).
-- Categorias são `enum class`. Nível mínimo por categoria configurável por cvar
-  (`log_level_net debug`).
-- Logs em caminhos quentes usam *rate limiting* (`nx::log::warnEvery(...)`).
+- Formatação verificada em compilação (`std::format_string`). Mensagens de um nível
+  desligado não são formatadas.
+- Cada registro leva nível (`Trace`, `Debug`, `Info`, `Warning`, `Error`), categoria, local
+  da chamada e horário (UTC).
+- Categorias são constantes do **módulo que registra**. O `nx.core` não conhece os
+  subsistemas. O nível por categoria é ajustável (`Logger::setCategoryLevel`; por cvar,
+  ex.: `log_level_net debug`, quando o console existir).
+- Destinos são `nx::log::Sink` (console hoje; arquivo e JSON lines a seguir).
+- Logs em caminhos quentes passam por `nx::log::RateLimit`, que é *thread-safe*:
+
+```cpp
+static nx::log::RateLimit budgetWarnings{std::chrono::seconds{1}};
+if (budgetWarnings.allow()) {
+    nx::log::warning(kNetLog, "snapshot budget exceeded ({} suppressed)", budgetWarnings.takeSuppressed());
+}
+```
 
 ## 11. Comentários e documentação
 

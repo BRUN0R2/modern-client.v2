@@ -102,7 +102,8 @@ struct [[=nx::ecs::TagComponent{}]] OnGround {};
 ### 4.2 Registro e identidade de tipo
 
 - `ComponentTypeId` local: índice denso atribuído no registro, usado em máscaras e arquétipos.
-- `StableTypeId`: hash de 64 bits do nome totalmente qualificado (`cs::Transform`). É
+- `StableTypeId`: `nx::StableId::fromName("cs::Transform")`, o XXH64 de um nome **declarado**
+  no registro (nunca o nome gerado pelo compilador, que muda entre compiladores). É
   usado em rede, saves, replays e mods, e não muda entre builds enquanto o nome não mudar.
 - O registro coleta por reflexão: tamanho, alinhamento, se é trivialmente
   copiável/realocável, construtor padrão, destrutor, nome, campos e anotações.

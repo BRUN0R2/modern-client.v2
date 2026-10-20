@@ -41,7 +41,8 @@ endfunction()
 #     [SOURCES <implementation units (.cpp)>...]
 #     [DEPENDS <targets>...])
 #
-# Creates a static library whose public interface is a set of C++ named modules.
+# Creates a static library whose public interface is a set of C++ named modules. Every
+# project module may `import std;` (nx::std is linked publicly).
 function(nxAddModuleLibrary target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "ALIAS" "MODULES;SOURCES;DEPENDS")
 
@@ -62,9 +63,7 @@ function(nxAddModuleLibrary target)
     if(arg_SOURCES)
         target_sources(${target} PRIVATE ${arg_SOURCES})
     endif()
-    if(arg_DEPENDS)
-        target_link_libraries(${target} PUBLIC ${arg_DEPENDS})
-    endif()
+    target_link_libraries(${target} PUBLIC nx::std ${arg_DEPENDS})
 
     target_compile_features(${target} PUBLIC cxx_std_${NX_CXX_STANDARD})
     nxTargetDefaults(${target})
@@ -82,7 +81,7 @@ function(nxAddTest target)
     endif()
 
     add_executable(${target} ${arg_SOURCES})
-    target_link_libraries(${target} PRIVATE ${arg_DEPENDS} GTest::gtest GTest::gtest_main)
+    target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} GTest::gtest GTest::gtest_main)
     nxTargetDefaults(${target})
     gtest_discover_tests(${target} DISCOVERY_MODE PRE_TEST)
 endfunction()

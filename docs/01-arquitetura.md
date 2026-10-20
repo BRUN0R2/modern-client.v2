@@ -83,6 +83,11 @@ Nada de singletons nem `extern` globais. Cada subsistema recebe as dependências
 construtor. O ponto de composição é único: `app.*` cria um `EngineContext` com referências
 explícitas.
 
+Há duas exceções sancionadas, por serem serviços de processo por natureza: o **handler de
+violação de contrato** (`nx::setContractViolationHandler`, espelhando o handler global do
+C++26) e o **logger padrão** (`nx::log::setDefaultLogger`). As duas têm valor padrão seguro
+(abortar / escrever no console), são trocadas só pela aplicação e têm escopo RAII para testes.
+
 ```cpp
 export module app.server;
 

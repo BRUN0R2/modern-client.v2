@@ -22,16 +22,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Output layout ------------------------------------------------------------------------
-# Archives go to lib/ on purpose: CMake names the synthesized standard library module target
-# "@cmake_cxx_std", and link.exe reads any argument that starts with '@' as a response file,
-# so "@cmake_cxx_std.lib" would never be linked. A directory prefix keeps it a plain path.
+# Libraries in lib/, programs in bin/: one runnable directory per build tree.
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 # --- ABI-affecting flags (global) ---------------------------------------------------------
-# These must be identical for every translation unit, including the std module CMake builds
-# for us, so they live in CMAKE_CXX_FLAGS instead of per-target options. Policy:
+# These must be identical for every translation unit, including the std module (nx::std,
+# cmake/nxStdModule.cmake), so they live in CMAKE_CXX_FLAGS instead of per-target options. Policy:
 #   * no exceptions and no RTTI (ADR-0005), matching the vcpkg triplets in cmake/triplets;
 #   * deterministic floating point: no contraction, no fast-math (docs/07, section 6);
 #   * strict conformance and UTF-8 sources.

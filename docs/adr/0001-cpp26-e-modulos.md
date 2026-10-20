@@ -36,4 +36,5 @@ implementação. O suporte dos compiladores a esses recursos ainda varia.
 - ✅ Interfaces de módulo limpas e builds incrementais rápidos.
 - ⚠️ Risco de bugs de compilador com módulos + reflexão. Mitigação: fallback testado,
   CI com dois compiladores e conversão mecânica para headers possível em último caso.
-- ⚠️ Exige CMake recente e Ninja.
+- ⚠️ Exige CMake recente e Ninja. O módulo `std` é compilado pelo próprio projeto
+  ([ADR-0014](0014-modulo-std-compilado-pelo-projeto.md)).
