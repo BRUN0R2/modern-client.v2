@@ -5,7 +5,7 @@
 /// transforms. A default-constructed matrix is the identity.
 ///
 /// View and projection matrices come with the renderer (nx.render, M2): their clip-space and depth
-/// conventions are decisions of docs/05-renderizacao.md, not of this module.
+/// conventions are decisions of docs/05-rendering.md, not of this module.
 export module nx.math:matrix;
 
 import std;
@@ -24,7 +24,7 @@ struct Mat3 {
 };
 
 /// Affine transform: a Mat3 in the first three columns and the translation in the last one. Rows of
-/// Vec4, 48 bytes: the bone palette entry of docs/05-renderizacao.md, section 9.1.
+/// Vec4, 48 bytes: the bone palette entry of docs/05-rendering.md, section 9.1.
 struct Mat3x4 {
     static constexpr std::size_t kRowCount = 3;
 

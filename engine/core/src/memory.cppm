@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Allocators for memory with a known, short lifetime (docs/02-padroes-de-codigo.md, section 7).
+/// Allocators for memory with a known, short lifetime (docs/02-coding-standards.md, section 7).
 export module nx.core:memory;
 
 import std;

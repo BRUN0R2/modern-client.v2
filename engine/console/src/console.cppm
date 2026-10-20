@@ -3,7 +3,7 @@
 
 /// The console: cvars, commands, aliases and buttons in one case-insensitive namespace, and the
 /// command buffer that runs scripts with `wait` and `exec`, as the original does
-/// (docs/12-interface-hud-e-console.md, section 5).
+/// (docs/12-ui-hud-and-console.md, section 5).
 export module nx.console:console;
 
 import std;

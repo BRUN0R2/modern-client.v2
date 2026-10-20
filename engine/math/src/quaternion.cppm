@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Rotation quaternions, for interpolating orientations (bone animation, docs/05-renderizacao.md,
+/// Rotation quaternions, for interpolating orientations (bone animation, docs/05-rendering.md,
 /// section 9).
 export module nx.math:quaternion;
 

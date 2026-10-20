@@ -16,7 +16,7 @@ elseif(MSVC)
 else()
     message(FATAL_ERROR
         "nx: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} has no C++26 support "
-        "(see the toolchain matrix in docs/17-build-e-ferramentas.md)")
+        "(see the toolchain matrix in docs/17-build-and-tools.md)")
 endif()
 
 set(CMAKE_CXX_STANDARD ${NX_CXX_STANDARD})

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The determinism rule of the M1 runtime (docs/04-job-system.md, section 8, and
-// docs/07-simulacao-e-fisica.md, section 6): a world moved by nx.math inside parallel ECS systems
+// docs/07-simulation-and-physics.md, section 6): a world moved by nx.math inside parallel ECS systems
 // reaches the same bits, tick after tick, with 0, 1, 3 and 15 workers.
 
 #include <gtest/gtest.h>

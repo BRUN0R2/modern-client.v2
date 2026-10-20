@@ -1,47 +1,47 @@
-# Registro de decisões de arquitetura (ADR)
+# Architecture decision records (ADR)
 
-Cada decisão estrutural relevante é registrada aqui. Um ADR **aceito** prevalece sobre os
-demais documentos. Para mudar uma decisão, cria-se um ADR novo que *substitui* o anterior,
-sem apagar o histórico.
+Every relevant structural decision is recorded here. An **accepted** ADR prevails over the
+other documents. To change a decision, a new ADR is created that *supersedes* the previous
+one, without erasing the history.
 
-## Índice
+## Index
 
-| ADR | Título | Status |
-|-----|--------|--------|
-| [0001](0001-cpp26-e-modulos.md) | C++26 com módulos nomeados | Aceito |
-| [0002](0002-ecs-por-arquetipos.md) | ECS próprio por arquétipos | Aceito |
-| [0003](0003-job-system-work-stealing.md) | Job System com work-stealing, sem fibers na v1 | Aceito |
-| [0004](0004-vulkan-primeiro-rhi-abstrata.md) | Vulkan primeiro, RHI compatível com DirectX 11, shaders em Slang | Aceito |
-| [0005](0005-erros-tipados-sem-excecoes.md) | Erros tipados com `std::expected` e contratos, sem exceções | Aceito |
-| [0006](0006-linguagem-de-plugins-propria-rook.md) | Linguagem de plugins própria (Rook) com compilador próprio | Aceito |
-| [0007](0007-vm-propria-bytecode-tipado.md) | VM própria com bytecode tipado e verificado | Aceito |
-| [0008](0008-protocolo-de-rede-proprio.md) | Protocolo de rede próprio, sem compatibilidade com o protocolo 48 | Aceito |
-| [0009](0009-assets-originais-do-usuario.md) | Assets originais lidos da instalação do usuário | Substituído pelo 0015 |
-| [0010](0010-licenca.md) | Licença: GPL-3.0-or-later, MIT (Rook e SDK) e CC BY 4.0 (docs) | Aceito |
-| [0011](0011-limite-de-jogadores-1024.md) | `maxplayers` de 1 a 1024 como limite de política | Aceito |
-| [0012](0012-padrao-get-set-vars-tipado.md) | Padrão `get*Var`/`set*Var` com chaves verificadas em compilação | Aceito |
-| [0013](0013-convencao-camelcase.md) | Convenção camelCase em todo o projeto (C++ e Rook) | Aceito |
-| [0014](0014-modulo-std-compilado-pelo-projeto.md) | Módulo `std` compilado pelo projeto, sem o `import std` experimental do CMake | Aceito |
-| [0015](0015-conteudo-livre-e-assets-originais-opcionais.md) | Conteúdo livre por padrão; assets originais opcionais e configurados localmente | Aceito |
-| [0016](0016-english-documentation.md) | English as the default language of the documentation | Aceito |
+| ADR | Title | Status |
+|-----|-------|--------|
+| [0001](0001-cpp26-and-modules.md) | C++26 with named modules | Accepted |
+| [0002](0002-archetype-ecs.md) | Own archetype-based ECS | Accepted |
+| [0003](0003-work-stealing-job-system.md) | Work-stealing Job System, no fibers in v1 | Accepted |
+| [0004](0004-vulkan-first-abstract-rhi.md) | Vulkan first, DirectX 11-compatible RHI, shaders in Slang | Accepted |
+| [0005](0005-typed-errors-without-exceptions.md) | Typed errors with `std::expected` and contracts, without exceptions | Accepted |
+| [0006](0006-own-plugin-language-rook.md) | Own plugin language (Rook) with its own compiler | Accepted |
+| [0007](0007-own-vm-typed-bytecode.md) | Own VM with typed, verified bytecode | Accepted |
+| [0008](0008-own-network-protocol.md) | Own network protocol, not compatible with protocol 48 | Accepted |
+| [0009](0009-original-assets-from-the-user.md) | Original assets read from the user's installation | Superseded by 0015 |
+| [0010](0010-license.md) | License: GPL-3.0-or-later, MIT (Rook and SDK) and CC BY 4.0 (docs) | Accepted |
+| [0011](0011-player-limit-1024.md) | `maxplayers` from 1 to 1024 as a policy limit | Accepted |
+| [0012](0012-typed-get-set-vars-pattern.md) | `get*Var`/`set*Var` pattern with compile-time checked keys | Accepted |
+| [0013](0013-camelcase-convention.md) | camelCase convention across the project (C++ and Rook) | Accepted |
+| [0014](0014-std-module-built-by-the-project.md) | `std` module built by the project, without CMake's experimental `import std` | Accepted |
+| [0015](0015-free-content-and-optional-original-assets.md) | Free content by default; original assets optional and configured locally | Accepted |
+| [0016](0016-english-documentation.md) | English as the default language of the documentation | Accepted |
 
-## Modelo
+## Template
 
 ```markdown
-# ADR-NNNN — Título
+# ADR-NNNN — Title
 
-- **Status:** Proposto | Aceito | Substituído por ADR-XXXX | Rejeitado
-- **Data:** AAAA-MM-DD
+- **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Rejected
+- **Date:** YYYY-MM-DD
 
-## Contexto
-O problema, as forças e as restrições.
+## Context
+The problem, the forces and the constraints.
 
-## Decisão
-O que foi decidido, de forma direta.
+## Decision
+What was decided, stated directly.
 
-## Alternativas consideradas
-Cada alternativa e por que não foi escolhida.
+## Alternatives considered
+Each alternative and why it was not chosen.
 
-## Consequências
-O que fica mais fácil, o que fica mais difícil e os riscos e como mitigá-los.
+## Consequences
+What becomes easier, what becomes harder, and the risks and how to mitigate them.
 ```

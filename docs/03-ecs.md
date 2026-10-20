@@ -1,34 +1,34 @@
 # 03 — Entity Component System (ECS)
 
-> Decisão registrada em [ADR-0002](adr/0002-ecs-por-arquetipos.md).
+> Decision recorded in [ADR-0002](adr/0002-archetype-ecs.md).
 
-## 1. Objetivos
+## 1. Goals
 
-| Objetivo | Como é atendido |
-|----------|-----------------|
-| Sem teto de entidades | Handle de 64 bits (índice de 32 + geração de 32). O limite prático é a memória |
-| Cache-friendly | Armazenamento por **arquétipo** em **chunks** SoA |
-| Paralelo | Iteração por chunk em jobs. O agendador paraleliza sistemas sem conflito |
-| Determinístico | Ordem de sistemas fixa, command buffers aplicados em ordem estável, IDs alocados em ordem estável |
-| Pronto para rede | Versões de mudança por chunk e coluna alimentam a replicação delta |
-| Extensível por mods | Componentes Rook registrados em tempo de execução com layout conhecido |
+| Goal | How it is met |
+|------|---------------|
+| No entity ceiling | 64-bit handle (32-bit index + 32-bit generation). The practical limit is memory |
+| Cache-friendly | Storage by **archetype** in SoA **chunks** |
+| Parallel | Per-chunk iteration in jobs. The scheduler parallelizes systems that do not conflict |
+| Deterministic | Fixed system order, command buffers applied in a stable order, IDs allocated in a stable order |
+| Network-ready | Per-chunk and per-column change versions feed delta replication |
+| Extensible by mods | Rook components registered at runtime with a known layout |
 
-## 2. Conceitos
+## 2. Concepts
 
-| Conceito | Definição |
-|----------|-----------|
-| **Entity** | Handle opaco `{index: u32, generation: u32}`. Não carrega dados |
-| **Component** | Struct de dados sem comportamento (`Transform`, `Health`, `WeaponState`) |
-| **Tag** | Componente de tamanho zero (`Player`, `Dead`, `OnGround`). Só afeta o arquétipo |
-| **Archetype** | Conjunto ordenado de tipos de componente. Todas as entidades com exatamente esse conjunto vivem nele |
-| **Chunk** | Bloco de 16 KiB de um arquétipo, com colunas SoA (um array por componente) |
-| **Query** | Filtro tipado de arquétipos (`with`, `without`, `changed`) mais acesso (leitura/escrita) |
-| **System** | Função que recebe queries e recursos. O acesso que ela declara define o paralelismo |
-| **Resource** | Dado único do mundo (`GameRules`, `TickTime`, `MapInfo`) |
-| **Event** | Mensagem tipada com vida de um tick (`PlayerKilled`) |
-| **Command buffer** | Fila de mudanças estruturais (criar/destruir/adicionar/remover) aplicada em *sync points* |
+| Concept | Definition |
+|---------|------------|
+| **Entity** | Opaque handle `{index: u32, generation: u32}`. Carries no data |
+| **Component** | Data struct without behavior (`Transform`, `Health`, `WeaponState`) |
+| **Tag** | Zero-size component (`Player`, `Dead`, `OnGround`). Only affects the archetype |
+| **Archetype** | Ordered set of component types. Every entity with exactly that set lives in it |
+| **Chunk** | 16 KiB block of an archetype, with SoA columns (one array per component) |
+| **Query** | Typed archetype filter (`with`, `without`, `changed`) plus access (read/write) |
+| **System** | Function that receives queries and resources. The access it declares defines the parallelism |
+| **Resource** | Unique world data (`GameRules`, `TickTime`, `MapInfo`) |
+| **Event** | Typed message that lives for one tick (`PlayerKilled`) |
+| **Command buffer** | Queue of structural changes (create/destroy/add/remove) applied at *sync points* |
 
-## 3. Entidades
+## 3. Entities
 
 ```cpp
 export namespace nx::ecs {
@@ -56,27 +56,27 @@ private:
 } // namespace nx::ecs
 ```
 
-- **Validação:** `world.isAlive(entity)` compara a geração do handle com a do slot. Um
-  handle antigo **nunca** identifica outra entidade. Destruir avança a geração do slot na
-  hora, então um slot livre já guarda uma geração que nenhum handle emitido carrega.
-- **Entidade nula:** `Entity{}` usa o índice `2³² − 1`, que nenhum slot recebe, e nunca está
-  viva. Representa "nenhuma entidade" em componentes (`Owner{}`).
-- **Reuso de slots:** fila FIFO de slots livres, para que um índice demore o máximo
-  possível para ser reutilizado.
-- **Esgotamento de geração:** quando a geração de um slot chega ao máximo, o slot é
-  **aposentado** (nunca mais reutilizado), em vez de dar a volta. Isso é registrado em
-  métricas.
-- **Registro de entidade:** `{archetype, chunk, row}` em um array denso indexado por
-  `EntityIndex`. A tabela de handles é a `EntityTable`; o `World` guarda os registros.
-- **Sem limite estrutural:** até 2³² − 1 slots. Limites operacionais (ex.: entidades
-  criáveis por plugin) são cotas configuráveis, com erro tipado
+- **Validation:** `world.isAlive(entity)` compares the handle's generation with the slot's. An
+  old handle **never** identifies another entity. Destroying advances the slot's generation
+  immediately, so a free slot already holds a generation that no issued handle carries.
+- **Null entity:** `Entity{}` uses the index `2³² − 1`, which no slot receives, and is never
+  alive. It represents "no entity" in components (`Owner{}`).
+- **Slot reuse:** a FIFO queue of free slots, so that an index takes as long as possible to
+  be reused.
+- **Generation exhaustion:** when a slot's generation reaches the maximum, the slot is
+  **retired** (never reused again) instead of wrapping around. This is recorded in
+  metrics.
+- **Entity record:** `{archetype, chunk, row}` in a dense array indexed by
+  `EntityIndex`. The handle table is the `EntityTable`; the `World` keeps the records.
+- **No structural limit:** up to 2³² − 1 slots. Operational limits (e.g. entities a plugin
+  can create) are configurable quotas, with the typed error
   `EntityError::QuotaExceeded`.
 
-## 4. Componentes
+## 4. Components
 
-### 4.1 Declaração
+### 4.1 Declaration
 
-Componentes são structs agregadas. Metadados vêm de anotações lidas por reflexão:
+Components are aggregate structs. Metadata comes from annotations read through reflection:
 
 ```cpp
 export module cs.shared:components;
@@ -107,36 +107,39 @@ struct [[=nx::ecs::TagComponent{}]] OnGround {};
 } // namespace cs
 ```
 
-### 4.2 Registro e identidade de tipo
+### 4.2 Registration and type identity
 
-- `ComponentTypeId` local: índice denso atribuído no registro, usado em máscaras e arquétipos.
-- Enquanto a fachada de reflexão (`nx.meta`) não existe, o registro é **explícito**, o
-  caminho de fallback de [02 §1.2](02-padroes-de-codigo.md#12-política-de-toolchain-e-fallbacks):
-  `world.registerComponent<cs::Transform>("cs::Transform")`. Componentes definidos em tempo
-  de execução (Rook) entram pelo mesmo registro, com um `ComponentInfo` (nome, tamanho,
-  alinhamento e funções de realocação e destruição). Usar um tipo não registrado viola
-  contrato.
-- `StableTypeId`: `nx::StableId::fromName("cs::Transform")`, o XXH64 de um nome **declarado**
-  no registro (nunca o nome gerado pelo compilador, que muda entre compiladores). É
-  usado em rede, saves, replays e mods, e não muda entre builds enquanto o nome não mudar.
-- O registro coleta por reflexão: tamanho, alinhamento, se é trivialmente
-  copiável/realocável, construtor padrão, destrutor, nome, campos e anotações.
-- Colisão de `StableTypeId` gera erro de registro (`ComponentError::StableIdCollision`)
-  já na inicialização. Os outros erros de registro são `TypeAlreadyRegistered`,
-  `NameAlreadyRegistered`, `InvalidAlignment` (acima do alinhamento do chunk, 64 bytes) e
-  `InvalidName`.
-- Componentes vazios (`std::is_empty_v`) são **tags**: entram no arquétipo, sem coluna.
+- Local `ComponentTypeId`: a dense index assigned at registration, used in masks and
+  archetypes.
+- While the reflection facade (`nx.meta`) does not exist, registration is **explicit**, the
+  fallback path of [02 §1.2](02-coding-standards.md#12-toolchain-and-fallback-policy):
+  `world.registerComponent<cs::Transform>("cs::Transform")`. Components defined at runtime
+  (Rook) come in through the same registry, with a `ComponentInfo` (name, size, alignment,
+  and relocation and destruction functions). Using an unregistered type is a contract
+  violation.
+- `StableTypeId`: `nx::StableId::fromName("cs::Transform")`, the XXH64 of a name **declared**
+  at registration (never the compiler-generated name, which changes between compilers). It
+  is used in networking, saves, replays and mods, and does not change between builds as long
+  as the name does not change.
+- Registration collects through reflection: size, alignment, whether the type is trivially
+  copyable/relocatable, default constructor, destructor, name, fields and annotations.
+- A `StableTypeId` collision produces a registration error
+  (`ComponentError::StableIdCollision`) right at initialization. The other registration
+  errors are `TypeAlreadyRegistered`, `NameAlreadyRegistered`, `InvalidAlignment` (above the
+  chunk alignment, 64 bytes) and `InvalidName`.
+- Empty components (`std::is_empty_v`) are **tags**: they enter the archetype, without a
+  column.
 
-### 4.3 Regras para componentes
+### 4.3 Rules for components
 
-- Sem ponteiros crus para outras entidades: use `Entity`.
-- Sem `std::string` em componentes quentes: use `nx::Name` (string interna) ou um handle.
-- Componentes trivialmente copiáveis são movidos com `memcpy` entre chunks. Os demais
-  usam operações refletidas.
-- Um componente representa **um** conceito. Componentes "deus" (todo o estado do
-  jogador em uma struct) são proibidos.
+- No raw pointers to other entities: use `Entity`.
+- No `std::string` in hot components: use `nx::Name` (interned string) or a handle.
+- Trivially copyable components are moved between chunks with `memcpy`. The others use
+  reflected operations.
+- A component represents **one** concept. "God" components (all of the player's state in
+  one struct) are forbidden.
 
-## 5. Armazenamento
+## 5. Storage
 
 ```
 Archetype {Transform, Velocity, Player, OnGround}
@@ -148,20 +151,20 @@ Archetype {Transform, Velocity, Player, OnGround}
 ├── Chunk 1 ...
 ```
 
-- Capacidade do chunk: o máximo de linhas que cabem em 16 KiB com cada array alinhado,
-  calculada por arquétipo. O cabeçalho (contagem de linhas, versões) fica fora do bloco.
-  Uma linha maior que 16 KiB ganha chunks de vários blocos contíguos, em vez de um limite
-  de tamanho de componente.
-- **Versões de mudança:** cada coluna de cada chunk guarda a versão da última escrita
-  (acesso mutável). Queries com `Changed<T>` pulam chunks não alterados. Replicação e
-  extract de render usam o mesmo mecanismo. A marcação é conservadora: o acesso mutável
-  conta como escrita, e uma mudança estrutural no chunk (linha que entra ou é movida para
-  ele) também.
-- **Grafo de arquétipos:** cada arquétipo guarda as arestas "adicionar T"/"remover T"
-  para transições O(1) amortizadas.
-- Remoção usa *swap-and-pop* com a **última linha do arquétipo**, atualizando o registro
-  da entidade movida. Assim todos os chunks ficam cheios, menos o último.
-- Chunks vazios voltam para um pool do mundo.
+- Chunk capacity: the maximum number of rows that fit in 16 KiB with each array aligned,
+  computed per archetype. The header (row count, versions) stays outside the block. A row
+  larger than 16 KiB gets chunks made of several contiguous blocks, instead of a component
+  size limit.
+- **Change versions:** each column of each chunk keeps the version of its last write
+  (mutable access). Queries with `Changed<T>` skip unchanged chunks. Replication and the
+  render extract use the same mechanism. The marking is conservative: mutable access counts
+  as a write, and so does a structural change in the chunk (a row that enters it or is moved
+  into it).
+- **Archetype graph:** each archetype keeps the "add T"/"remove T" edges for amortized O(1)
+  transitions.
+- Removal uses *swap-and-pop* with the **archetype's last row**, updating the record of the
+  moved entity. This way every chunk stays full except the last one.
+- Empty chunks return to a world pool.
 
 ## 6. Queries
 
@@ -173,30 +176,30 @@ using MovingBodies = nx::ecs::Query<
     nx::ecs::Without<cs::Frozen>>;
 ```
 
-- Os parâmetros de acesso definem leitura (`const T&`), escrita (`T&`) e presença
-  opcional (`Optional<const T>` e `Optional<T>`, que entregam `const T*`/`T*`, nulo se a
-  entidade não tem o componente). O termo `Entity` entrega o handle. `std::optional<T&>`
-  (C++26) substitui os ponteiros quando os compiladores suportados o oferecerem.
-- Os filtros `With<T>`, `Without<T>` e `Changed<T>` não dão acesso. `Added<T>` precisa de
-  versão por linha (a de chunk não diz quais linhas são novas) e entra com o primeiro
-  consumidor.
-- Uma query recebe duas versões: `lastRun`, com que `Changed<T>` compara, e `thisRun`, que
-  as escritas marcam nos chunks. O agendador dá a cada execução de sistema a sua.
-- O cache de arquétipos compatíveis é atualizado incrementalmente quando um arquétipo novo
-  aparece.
-- Formas de iteração:
-  - `query.forEach(fn)`: sequencial.
-  - `query.forEachChunk(fn)`: recebe `std::span`s das colunas, ideal para SIMD.
-  - `query.parallelForEachChunk(jobs, fn)`: um job por lote de chunks, com granularidade
-    automática. Retorna quando todos os chunks terminaram.
-- Acesso aleatório: `query.get(entity)` retorna `std::optional<Tuple>`, `nullopt` se a
-  entidade não casa.
-- Mudança estrutural direta no `World` (criar, destruir, adicionar, remover) durante uma
-  iteração viola contrato: dentro de sistemas, isso passa pelos command buffers (§8).
+- The access parameters define read (`const T&`), write (`T&`) and optional presence
+  (`Optional<const T>` and `Optional<T>`, which yield `const T*`/`T*`, null if the entity
+  does not have the component). The `Entity` term yields the handle. `std::optional<T&>`
+  (C++26) replaces the pointers once the supported compilers offer it.
+- The filters `With<T>`, `Without<T>` and `Changed<T>` give no access. `Added<T>` needs a
+  per-row version (the chunk version does not say which rows are new) and comes with its
+  first consumer.
+- A query receives two versions: `lastRun`, which `Changed<T>` compares against, and
+  `thisRun`, which writes mark on the chunks. The scheduler gives each system run its own.
+- The cache of matching archetypes is updated incrementally when a new archetype
+  appears.
+- Iteration forms:
+  - `query.forEach(fn)`: sequential.
+  - `query.forEachChunk(fn)`: receives `std::span`s of the columns, ideal for SIMD.
+  - `query.parallelForEachChunk(jobs, fn)`: one job per batch of chunks, with automatic
+    granularity. Returns when every chunk has finished.
+- Random access: `query.get(entity)` returns `std::optional<Tuple>`, `nullopt` if the
+  entity does not match.
+- A direct structural change on the `World` (create, destroy, add, remove) during an
+  iteration is a contract violation: inside systems, it goes through the command buffers (§8).
 
-## 7. Sistemas e agendamento
+## 7. Systems and scheduling
 
-### 7.1 Declaração
+### 7.1 Declaration
 
 ```cpp
 void integrateProjectiles(MovingBodies& bodies,
@@ -219,160 +222,161 @@ schedule.add({.name = "integrateProjectiles", .phase = nx::ecs::Phase::Simulatio
              integrateProjectiles);
 ```
 
-- Um sistema é uma função ou lambda (não genérica) que retorna `void` e só recebe
-  parâmetros de sistema. Cada tipo de parâmetro declara o próprio acesso:
+- A system is a (non-generic) function or lambda that returns `void` and only receives
+  system parameters. Each parameter type declares its own access:
 
-| Parâmetro | Acesso declarado |
-|-----------|------------------|
-| `Query<...>&` | Leitura/escrita por termo; `Changed<T>` conta como leitura de `T`. Por valor também funciona, mas copia a query a cada execução |
-| `Res<const T>` / `Res<T>` | Leitura / escrita do recurso `T` |
-| `EventReader<E>` / `EventWriter<E>` | Leitura / escrita da fila `Events<E>` |
-| `Commands&` | Nenhum: cada sistema tem o próprio buffer |
-| `World&` | Exclusivo: conflita com todos |
-| `nx::jobs::JobSystem&` | Nenhum |
+| Parameter | Declared access |
+|-----------|-----------------|
+| `Query<...>&` | Read/write per term; `Changed<T>` counts as a read of `T`. By value also works, but copies the query on every run |
+| `Res<const T>` / `Res<T>` | Read / write of the resource `T` |
+| `EventReader<E>` / `EventWriter<E>` | Read / write of the `Events<E>` queue |
+| `Commands&` | None: each system has its own buffer |
+| `World&` | Exclusive: conflicts with all |
+| `nx::jobs::JobSystem&` | None |
 
-- O registro usa um `SystemDesc` com inicialização designada, como as outras opções da
-  engine ([02 §9](02-padroes-de-codigo.md#9-funções-e-classes)): `name` (um `JobLabel`,
-  também usado como rótulo do job), `phase`, `after` e `before` (com os `SystemId` que
-  `add` retorna).
-- Recursos são valores únicos por mundo: `world.insertResource(GameRules{...})`,
-  `world.resource<GameRules>()`. Um sistema cujo recurso não existe viola contrato e não
-  roda.
+- Registration uses a `SystemDesc` with designated initialization, like the other engine
+  options ([02 §9](02-coding-standards.md#9-functions-and-classes)): `name` (a `JobLabel`,
+  also used as the job label), `phase`, `after` and `before` (with the `SystemId`s that
+  `add` returns).
+- Resources are unique values per world: `world.insertResource(GameRules{...})`,
+  `world.resource<GameRules>()`. A system whose resource does not exist violates the
+  contract and does not run.
 
-### 7.2 Fases
+### 7.2 Phases
 
-| Fase | Frequência | Conteúdo típico |
-|------|------------|-----------------|
-| `Input` | por tick | Aplicar usercmds recebidos |
-| `PreSimulation` | por tick | Timers, think de entidades, triggers |
-| `Simulation` | por tick | Movimento, física, armas, dano |
-| `Rules` | por tick | Regras de jogo seriais (round, economia, objetivos) e hooks Rook síncronos |
-| `Script` | por tick | Despacho de eventos Rook em ordem determinística |
-| `PostSimulation` | por tick | Limpeza, aplicação final de command buffers |
-| `Replication` | por snapshot | Montagem de snapshots por cliente (servidor) |
-| `Presentation` | por frame | Interpolação, animação visual, extract (cliente) |
+| Phase | Frequency | Typical content |
+|-------|-----------|-----------------|
+| `Input` | per tick | Apply received usercmds |
+| `PreSimulation` | per tick | Timers, entity think, triggers |
+| `Simulation` | per tick | Movement, physics, weapons, damage |
+| `Rules` | per tick | Serial game rules (round, economy, objectives) and synchronous Rook hooks |
+| `Script` | per tick | Rook event dispatch in deterministic order |
+| `PostSimulation` | per tick | Cleanup, final application of command buffers |
+| `Replication` | per snapshot | Per-client snapshot assembly (server) |
+| `Presentation` | per frame | Interpolation, visual animation, extract (client) |
 
-### 7.3 Paralelismo e determinismo
+### 7.3 Parallelism and determinism
 
-- O agendador monta, por fase, um **DAG** em que dois sistemas conflitam se um escreve um
-  componente ou recurso que o outro lê ou escreve.
-- Sistemas sem conflito executam em paralelo. Os que conflitam executam na **ordem de
-  declaração**, ajustada por `.before()`/`.after()`.
-- Ciclos de ordenação são erro de construção do schedule (`ScheduleError::Cycle`), com o
-  ciclo impresso (`alpha -> beta -> alpha`). Restrição que cita um sistema inexistente é
-  `ScheduleError::UnknownSystem`, e restrição que contradiz a ordem das fases é
+- For each phase, the scheduler builds a **DAG** in which two systems conflict if one writes
+  a component or resource that the other reads or writes.
+- Systems that do not conflict run in parallel. Those that conflict run in **declaration
+  order**, adjusted by `.before()`/`.after()`.
+- Ordering cycles are a schedule build error (`ScheduleError::Cycle`), with the cycle
+  printed (`alpha -> beta -> alpha`). A constraint that names a nonexistent system is
+  `ScheduleError::UnknownSystem`, and a constraint that contradicts the phase order is
   `ScheduleError::OrderAcrossPhases`.
-- `schedule.build()` monta os grafos; `schedule.run(phase, jobs)` executa uma fase, com
-  cada sistema como um job que depende dos seus predecessores no grafo.
-  `schedule.dependenciesOf(id)` expõe o grafo para diagnóstico.
-- As **versões de mudança** de cada execução são distribuídas antes de qualquer sistema
-  rodar, na ordem do schedule. Assim, o que `Changed<T>` enxerga não depende de tempo nem da
-  quantidade de workers.
-- **Sistemas exclusivos** (`nx::ecs::World&` mutável) rodam sozinhos e servem para
-  operações que tocam o mundo inteiro (carregar mapa, reset de round).
-- **Regras de gameplay** que dependem de ordem (dano, morte, compra, round) vivem na fase
-  `Rules` e são seriais por desenho. O ganho de paralelismo vem dos sistemas em lote, não
-  de paralelizar regras com efeitos cruzados.
+- `schedule.build()` builds the graphs; `schedule.run(phase, jobs)` runs a phase, with
+  each system as a job that depends on its predecessors in the graph.
+  `schedule.dependenciesOf(id)` exposes the graph for diagnostics.
+- The **change versions** of each run are handed out before any system runs, in schedule
+  order. So what `Changed<T>` sees depends neither on timing nor on the number of
+  workers.
+- **Exclusive systems** (mutable `nx::ecs::World&`) run alone and serve operations that
+  touch the whole world (map load, round reset).
+- **Gameplay rules** that depend on order (damage, death, purchase, round) live in the
+  `Rules` phase and are serial by design. The parallelism gain comes from batch systems, not
+  from parallelizing rules with cross effects.
 
-## 8. Mudanças estruturais
+## 8. Structural changes
 
-- Durante a execução de sistemas, criar/destruir entidades e adicionar/remover componentes
-  só pode ser feito via `nx::ecs::Commands` (`spawn`, `destroy`, `add`, `remove`). Cada
-  sistema que recebe `Commands&` tem o próprio buffer. Sistemas exclusivos (`World&`)
-  mudam o mundo diretamente.
-- Os command buffers são aplicados no *sync point* do fim de cada fase.
-- **Ordem de aplicação determinística:** por ordem de declaração do sistema no schedule e,
-  dentro de um buffer, por ordem de gravação. Não depende da thread que executou.
-  Buffers por chunk dentro de `parallelForEachChunk` (aplicados por índice do chunk de
-  origem) entram com o primeiro sistema que precisar deles.
-- **Entidades criadas em command buffer** recebem um `PendingEntity` local, que outros
-  comandos do mesmo buffer podem usar como alvo. O `Entity` real é alocado na aplicação,
-  em ordem determinística, e `commands.resolve(pending)` o devolve depois do `apply`.
-- Comandos cujo alvo morreu antes da aplicação (o dono de uma granada morreu antes de ela
-  nascer) são ignorados e contados em `CommandStats::skipped`; o componente gravado é
-  destruído.
+- While systems run, creating/destroying entities and adding/removing components can only
+  be done through `nx::ecs::Commands` (`spawn`, `destroy`, `add`, `remove`). Each system
+  that receives `Commands&` has its own buffer. Exclusive systems (`World&`) change the
+  world directly.
+- Command buffers are applied at the *sync point* at the end of each phase.
+- **Deterministic application order:** by the system's declaration order in the schedule
+  and, within a buffer, by recording order. It does not depend on the thread that ran it.
+  Per-chunk buffers inside `parallelForEachChunk` (applied by source chunk index) come with
+  the first system that needs them.
+- **Entities created in a command buffer** receive a local `PendingEntity`, which other
+  commands in the same buffer can use as a target. The real `Entity` is allocated at
+  application, in deterministic order, and `commands.resolve(pending)` returns it after
+  `apply`.
+- Commands whose target died before application (a grenade's owner died before the grenade
+  spawned) are ignored and counted in `CommandStats::skipped`; the recorded component is
+  destroyed.
 
-## 9. Eventos
+## 9. Events
 
 ```cpp
 void announceKills(nx::ecs::EventReader<cs::PlayerKilled> kills, nx::ecs::Res<cs::KillFeed> feed);
 void applyDamage(..., nx::ecs::EventWriter<cs::PlayerKilled> kills);
 ```
 
-- Os eventos são *double-buffered*: escritos no tick N, legíveis até o fim do tick N+1.
-  `world.addEvents<E>()` cria a fila (`Events<E>`, um recurso) e o laço do tick chama
-  `world.advanceEvents()` uma vez por tick.
-- Cada evento recebe um número de sequência, e cada `EventReader` guarda até onde leu:
-  um sistema nunca lê o mesmo evento duas vezes (`reader.forEach(fn)`).
-- Escritores em jobs paralelos usarão buffers por job, concatenados em ordem
-  determinística, junto com os command buffers por chunk.
-- A fase `Script` consome os eventos marcados `[[=nx::script::Expose{}]]` e os despacha
-  para os mods inscritos ([13](13-sistema-de-mods.md)).
+- Events are *double-buffered*: written in tick N, readable until the end of tick N+1.
+  `world.addEvents<E>()` creates the queue (`Events<E>`, a resource) and the tick loop calls
+  `world.advanceEvents()` once per tick.
+- Each event receives a sequence number, and each `EventReader` keeps track of how far it
+  has read: a system never reads the same event twice (`reader.forEach(fn)`).
+- Writers in parallel jobs will use per-job buffers, concatenated in deterministic order,
+  together with the per-chunk command buffers.
+- The `Script` phase consumes the events marked `[[=nx::script::Expose{}]]` and dispatches
+  them to the subscribed mods ([13](13-mod-system.md)).
 
-## 10. Relações
+## 10. Relations
 
-| Relação | Representação | Uso |
-|---------|---------------|-----|
-| Pai/filho | `Parent{Entity}` + `Children{inplace_vector/handle}` | Anexos: arma no modelo do jogador (`MOVETYPE_FOLLOW`), sprites anexados |
-| Dono | `Owner{Entity}` | Granadas, armas no chão, projéteis (não colidir com o dono) |
-| Alvo | `Target{Entity}` | Entidades de mapa com `target`/`targetname` resolvidos na carga |
+| Relation | Representation | Use |
+|----------|----------------|-----|
+| Parent/child | `Parent{Entity}` + `Children{inplace_vector/handle}` | Attachments: weapon on the player model (`MOVETYPE_FOLLOW`), attached sprites |
+| Owner | `Owner{Entity}` | Grenades, weapons on the ground, projectiles (do not collide with the owner) |
+| Target | `Target{Entity}` | Map entities with `target`/`targetname` resolved at load |
 
-> **Status:** as relações entram com os primeiros sistemas de gameplay (M3). `Entity{}` (a
-> entidade nula) já serve para "sem dono".
+> **Status:** relations come with the first gameplay systems (M3). `Entity{}` (the null
+> entity) already serves as "no owner".
 
-Destruir uma entidade remove as relações que apontam para ela no mesmo sync point
-(sem handles pendurados em `Children`).
+Destroying an entity removes the relations that point to it at the same sync point
+(no dangling handles in `Children`).
 
-## 11. Prefabs e entidades de mapa
+## 11. Prefabs and map entities
 
-- Cada `classname` do BSP (`info_player_start`, `func_buyzone`, `armoury_entity`…) é
-  mapeado para um **prefab**: lista de componentes com valores padrão, definida em dados.
-- As *keyvalues* do lump de entidades são convertidas por esquema refletido. Chave
-  desconhecida gera aviso com nome do mapa e índice da entidade, e chave obrigatória
-  ausente gera erro tipado.
-- Mods registram prefabs e `classname`s novos pela API ([15](15-api-de-mods.md)).
+- Each BSP `classname` (`info_player_start`, `func_buyzone`, `armoury_entity`…) is
+  mapped to a **prefab**: a list of components with default values, defined in data.
+- The *keyvalues* of the entities lump are converted through a reflected schema. An unknown
+  key produces a warning with the map name and the entity index, and a missing required key
+  produces a typed error.
+- Mods register new prefabs and `classname`s through the API ([15](15-mod-api.md)).
 
-## 12. Integração com rede
+## 12. Networking integration
 
-- Componentes `[[=nx::net::Replicated{}]]` participam de snapshots. O `StableTypeId` e o
-  layout de campos refletido geram o codificador delta.
-- Cada entidade replicada recebe um `NetId` (varint) independente do `Entity` local.
-- O cliente mantém um mapeamento `NetId → Entity` do seu próprio mundo.
-- Detalhes em [08-rede.md](08-rede.md).
+- `[[=nx::net::Replicated{}]]` components take part in snapshots. The `StableTypeId` and the
+  reflected field layout generate the delta encoder.
+- Each replicated entity receives a `NetId` (varint) independent of the local `Entity`.
+- The client keeps a `NetId → Entity` mapping of its own world.
+- Details in [08-networking.md](08-networking.md).
 
-## 13. Integração com plugins Rook
+## 13. Rook plugin integration
 
-- Componentes declarados em Rook (`component Frozen { until: GameTime }`) são registrados
-  em tempo de execução com layout calculado pelo compilador `rookc`. Eles têm
-  `StableTypeId` derivado de `"<mod-id>.<plugin-id>::<NomeDoComponente>"`.
-- Plugins declaram sistemas com queries tipadas. O agendador trata um sistema de plugin
-  como qualquer outro: o acesso declarado define o paralelismo. Sistemas do **mesmo**
-  plugin são serializados entre si, porque cada plugin tem um único heap (isolate).
-  Plugins diferentes sem conflito de acesso rodam em paralelo.
-- Plugins nunca recebem ponteiros para chunks: a VM acessa colunas por meio de views
-  verificadas.
+- Components declared in Rook (`component Frozen { until: GameTime }`) are registered at
+  runtime with a layout computed by the `rookc` compiler. Their `StableTypeId` is derived
+  from `"<mod-id>.<plugin-id>::<ComponentName>"`.
+- Plugins declare systems with typed queries. The scheduler treats a plugin system like any
+  other: the declared access defines the parallelism. Systems of the **same** plugin are
+  serialized among themselves, because each plugin has a single heap (isolate). Different
+  plugins without access conflicts run in parallel.
+- Plugins never receive pointers to chunks: the VM accesses columns through checked
+  views.
 
-## 14. Mundos
+## 14. Worlds
 
-| Mundo | Onde | Conteúdo |
-|-------|------|----------|
-| Mundo do servidor | `nextds` / listen server | Estado autoritativo |
-| Mundo do cliente | `next` | Entidades replicadas (interpoladas) e o jogador local (predito) |
-| Mundo de render | `next` | Estrutura plana (não-ECS) preenchida por extract a cada frame |
+| World | Where | Content |
+|-------|-------|---------|
+| Server world | `nextds` / listen server | Authoritative state |
+| Client world | `next` | Replicated entities (interpolated) and the local player (predicted) |
+| Render world | `next` | Flat (non-ECS) structure filled by extract every frame |
 
-## 15. Ferramentas de depuração
+## 15. Debugging tools
 
-- `ent_list [filtro]`, `ent_dump <netid>` e `ecs_stats` (arquétipos, chunks, ocupação,
-  memória por componente). Os números já vêm de `World::stats()`; os comandos chegam com o
-  console.
-- Inspetor ImGui em builds de desenvolvimento: árvore de arquétipos, edição de
-  componentes e visualização do DAG do schedule com tempos por sistema.
-- Zonas Tracy por sistema e por lote de chunks.
+- `ent_list [filter]`, `ent_dump <netid>` and `ecs_stats` (archetypes, chunks, occupancy,
+  memory per component). The numbers already come from `World::stats()`; the commands arrive
+  with the console.
+- ImGui inspector in development builds: archetype tree, component editing and a view of
+  the schedule DAG with per-system timings.
+- Tracy zones per system and per batch of chunks.
 
-## 16. Metas de desempenho (hardware de referência a definir no M1)
+## 16. Performance targets (reference hardware to be defined in M1)
 
-| Operação | Meta |
-|----------|------|
-| Iterar 100 mil entidades com 2 componentes (1 thread) | < 0,2 ms |
-| Criar/destruir 10 mil entidades via command buffer | < 1 ms |
-| Overhead do agendador por sistema vazio | < 2 µs |
+| Operation | Target |
+|-----------|--------|
+| Iterate 100,000 entities with 2 components (1 thread) | < 0.2 ms |
+| Create/destroy 10,000 entities through a command buffer | < 1 ms |
+| Scheduler overhead per empty system | < 2 µs |

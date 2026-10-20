@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Strong types for domain quantities (docs/02-padroes-de-codigo.md, section 4.1).
+/// Strong types for domain quantities (docs/02-coding-standards.md, section 4.1).
 ///
 /// A Quantity<Rep, Tag> never converts implicitly from or to Rep, nor to a quantity with
 /// another tag: HitPoints + ArmorPoints does not compile. Integer quantities never wrap: an

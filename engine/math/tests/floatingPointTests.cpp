@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// Guards of the deterministic floating point policy (docs/07-simulacao-e-fisica.md, section 6).
+// Guards of the deterministic floating point policy (docs/07-simulation-and-physics.md, section 6).
 // The worker-count side of determinism is covered by tests/integration/determinismTests.cpp.
 
 #include <gtest/gtest.h>

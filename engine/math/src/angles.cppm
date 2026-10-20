@@ -3,7 +3,7 @@
 
 /// GoldSrc angles: view and entity orientation as pitch, yaw and roll in degrees, and the axes they
 /// produce (the original's AngleVectors). Implemented from the definition of the rotation, not from
-/// the original code (docs/20-legal-e-licenciamento.md, section 3).
+/// the original code (docs/20-legal-and-licensing.md, section 3).
 export module nx.math:angles;
 
 import std;

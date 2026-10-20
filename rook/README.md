@@ -1,22 +1,22 @@
 # Rook
 
-Toolchain e SDK da linguagem de plugins **Rook**
-([docs/14-linguagem-rook.md](../docs/14-linguagem-rook.md)):
+Toolchain and SDK of the **Rook** plugin language
+([docs/14-rook-language.md](../docs/14-rook-language.md)):
 
-| Diretório | Conteúdo |
+| Directory | Contents |
 |-----------|----------|
-| `spec/` | Gramática e suíte de conformidade da linguagem |
-| `compiler/` | `rookc`: parser, checagem de tipos, RIR e geração de bytecode |
-| `vm/` | Interpretador, verificador de bytecode e GC por isolate |
-| `stdlib/` | Biblioteca padrão `std` |
+| `spec/` | Grammar and conformance suite of the language |
+| `compiler/` | `rookc`: parser, type checking, RIR and bytecode generation |
+| `vm/` | Interpreter, bytecode verifier and per-isolate GC |
+| `stdlib/` | `std` standard library |
 | `lsp/` | `rookLsp`: language server |
 | `cli/` | `rook`: build, test, fmt, lint, doc, pack, migrate |
-| `vscode/` | Extensão do VS Code |
+| `vscode/` | VS Code extension |
 
-## Licença
+## License
 
-Tudo neste diretório está sob a **[licença MIT](../LICENSES/MIT.txt)**, assim como as
-declarações `.rookd` que o build gera para a API de plugins. A engine e o jogo estão sob a
-GPL-3.0-or-later com a [Rook Plugin Exception](../LICENSES/LicenseRef-Rook-Plugin-Exception.txt).
-Plugins e mods que usam apenas a interface de plugins podem adotar **qualquer licença**
-([ADR-0010](../docs/adr/0010-licenca.md)).
+Everything in this directory is under the **[MIT license](../LICENSES/MIT.txt)**, as are the
+`.rookd` declarations that the build generates for the plugin API. The engine and the game
+are under the GPL-3.0-or-later with the [Rook Plugin Exception](../LICENSES/LicenseRef-Rook-Plugin-Exception.txt).
+Plugins and mods that use only the plugin interface may adopt **any license**
+([ADR-0010](../docs/adr/0010-license.md)).

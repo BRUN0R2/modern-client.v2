@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Typed cvars (docs/09-servidor-dedicado.md, section 6.3): every cvar has a type (bool, whole
+/// Typed cvars (docs/09-dedicated-server.md, section 6.3): every cvar has a type (bool, whole
 /// number, number, text or enum) and numbers may have a range, but the console still reads and
 /// writes them as text, with the classic syntax. Text that is not a value of the type is refused,
 /// never turned into 0.
@@ -13,7 +13,7 @@ import :text;
 
 export namespace nx::console {
 
-/// What a cvar allows and how it is treated (docs/12-interface-hud-e-console.md, section 5).
+/// What a cvar allows and how it is treated (docs/12-ui-hud-and-console.md, section 5).
 enum class CvarFlag : std::uint8_t {
     Archive,         ///< Saved to config.cfg (Console::archivedCvars).
     Notify,          ///< Changes are announced to the players; listed in A2S_RULES.

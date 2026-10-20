@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Contract checks: the portable stand-in for C++26 `pre`, `post` and `contract_assert`
-/// (docs/02-padroes-de-codigo.md, section 6.5).
+/// (docs/02-coding-standards.md, section 6.5).
 ///
 /// A violated contract is a programming error, never an expected failure (those are
 /// nx::Result). The installed handler decides the semantic: returning from it continues

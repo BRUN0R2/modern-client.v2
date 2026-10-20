@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Typed failures (docs/02-padroes-de-codigo.md, section 6; ADR-0005).
+/// Typed failures (docs/02-coding-standards.md, section 6; ADR-0005).
 ///
 /// Expected failures are values: nx::Result<T, Code> is std::expected<T, nx::Failure<Code>>,
 /// where Code is the reporting module's own `enum class`. There is no generic error code and

@@ -5,7 +5,7 @@
 ///
 /// The operators are namespace-scope functions rather than hidden friends, and the comparisons are
 /// defaulted members: GCC 16 crashes on defaulted friend comparisons of classes declared in modules
-/// (docs/17-build-e-ferramentas.md, section 2.2).
+/// (docs/17-build-and-tools.md, section 2.2).
 export module nx.math:vector;
 
 import std;

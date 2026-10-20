@@ -1,146 +1,146 @@
 # 19 — Roadmap
 
-O projeto evolui por **marcos** (M0–M8). Cada marco entrega algo executável e testado e
-tem critérios de saída verificáveis. A lista de tarefas detalhada de cada marco está em
-[`../TODO.md`](../TODO.md).
+The project evolves through **milestones** (M0–M8). Each milestone delivers something
+runnable and tested and has verifiable exit criteria. The detailed task list of each
+milestone is in [`../TODO.md`](../TODO.md).
 
 ```mermaid
 gantt
     dateFormat  X
     axisFormat  %s
     section Engine
-    M0 Fundação              :m0, 0, 1
-    M1 Núcleo de runtime     :m1, after m0, 2
-    M2 Assets e mundo        :m2, after m1, 2
-    section Jogo
-    M3 Jogo local            :m3, after m2, 2
-    M4 Rede e servidor       :m4, after m3, 3
-    M5 Counter-Strike completo :m5, after m4, 3
+    M0 Foundation            :m0, 0, 1
+    M1 Runtime core          :m1, after m0, 2
+    M2 Assets and world      :m2, after m1, 2
+    section Game
+    M3 Local game            :m3, after m2, 2
+    M4 Networking and server :m4, after m3, 3
+    M5 Complete Counter-Strike :m5, after m4, 3
     section Rook
-    M6 Rook e plugins        :m6, after m2, 6
+    M6 Rook and plugins      :m6, after m2, 6
     section Release
-    M7 Paridade fina e ecossistema :m7, after m5, 3
-    M8 Release 1.0 e futuro  :m8, after m7, 2
+    M7 Fine parity and ecosystem :m7, after m5, 3
+    M8 Release 1.0 and future :m8, after m7, 2
 ```
 
-> O gráfico mostra **dependências e ordem relativa**, não datas. O M6 (Rook) começa em
-> paralelo após o M2: o compilador não depende da engine, e a API se estabiliza junto com
-> o M5.
+> The chart shows **dependencies and relative order**, not dates. M6 (Rook) starts in
+> parallel after M2: the compiler does not depend on the engine, and the API stabilizes
+> together with M5.
 
-## M0 — Fundação
+## M0 — Foundation
 
-**Objetivo:** repositório, build e base de código prontos para crescer com qualidade.
+**Goal:** repository, build and codebase ready to grow with quality.
 
-- Estrutura de repositório, CMake + presets, vcpkg, CI Windows/Linux.
-- Validação da matriz de compiladores para o subconjunto C++26 e fallbacks.
-- `nx.core`: `Result`/`Failure`, tipos fortes e unidades, log, alocadores, contêineres.
-- `nx.meta`: fachada de reflexão com caminhos nativo e fallback idênticos.
-- Documentação inicial (este diretório).
+- Repository structure, CMake + presets, vcpkg, Windows/Linux CI.
+- Validation of the compiler matrix for the C++26 subset and fallbacks.
+- `nx.core`: `Result`/`Failure`, strong types and units, log, allocators, containers.
+- `nx.meta`: reflection facade with identical native and fallback paths.
+- Initial documentation (this directory).
 
-**Saída:** CI verde nas duas plataformas, testes do `nx.core` e `nx.meta`, matriz de
-toolchain documentada.
+**Exit:** green CI on both platforms, `nx.core` and `nx.meta` tests, documented toolchain
+matrix.
 
-## M1 — Núcleo de runtime
+## M1 — Runtime core
 
-**Objetivo:** paralelismo e ECS prontos e medidos.
+**Goal:** parallelism and ECS ready and measured.
 
-- `nx.jobs` (work-stealing, contadores, prioridades, scheduler `std::execution`).
-- `nx.ecs` (arquétipos, chunks, queries, agendador, command buffers, eventos).
-- `nx.platform` (relógios e espera precisa para o ritmo de tick e de frame) e `nx.math`.
-- Console, cvars e comandos (base compartilhada por cliente e servidor).
+- `nx.jobs` (work-stealing, counters, priorities, `std::execution` scheduler).
+- `nx.ecs` (archetypes, chunks, queries, scheduler, command buffers, events).
+- `nx.platform` (clocks and a precise wait for the tick and frame pacing) and `nx.math`.
+- Console, cvars and commands (a base shared by client and server).
 
-**Saída:** metas de desempenho de [03 §16](03-ecs.md#16-metas-de-desempenho-hardware-de-referência-a-definir-no-m1)
-atingidas e teste de determinismo com número variável de workers passando.
+**Exit:** performance targets of [03 §16](03-ecs.md#16-performance-targets-reference-hardware-to-be-defined-in-m1)
+met and the determinism test with a variable number of workers passing.
 
-## M2 — Assets e mundo visível
+## M2 — Assets and visible world
 
-**Objetivo:** abrir qualquer mapa e navegar com câmera livre, com ou sem os assets
-originais.
+**Goal:** open any map and navigate with a free camera, with or without the original
+assets.
 
-- VFS com fontes de conteúdo e perfis (`classic`, `open`, `dev`), `content.toml`, detecção e
-  validação da instalação do CS 1.6, assistente de primeiro start.
-- `devContent` gerado por código, para a engine rodar e ser testada sem nenhum asset
-  externo.
-- Leitores BSP/WAD/MDL/SPR/WAV.
-- Janela e entrada SDL3 no `nx.platform`, junto com o swapchain: o M2 é o primeiro consumidor.
-- RHI + backend Vulkan, render graph, shaders Slang.
-- Mundo BSP com lightmaps, lightstyles, PVS, céu, água e transparências.
-- Modelos de estúdio estáticos e animados com GPU skinning (visualizador de modelos).
+- VFS with content sources and profiles (`classic`, `open`, `dev`), `content.toml`, detection
+  and validation of the CS 1.6 installation, first-start wizard.
+- `devContent` generated by code, so the engine runs and is tested without any external
+  asset.
+- BSP/WAD/MDL/SPR/WAV readers.
+- SDL3 window and input in `nx.platform`, together with the swapchain: M2 is the first consumer.
+- RHI + Vulkan backend, render graph, Slang shaders.
+- BSP world with lightmaps, lightstyles, PVS, sky, water and transparencies.
+- Static and animated studio models with GPU skinning (model viewer).
 
-**Saída:** com o perfil `classic`, todos os mapas oficiais renderizam sem erros. Com o
-perfil `dev`, um mapa de teste gerado roda no CI, com imagens de referência.
+**Exit:** with the `classic` profile, every official map renders without errors. With the
+`dev` profile, a generated test map runs in CI, with reference images.
 
-## M3 — Jogo local
+## M3 — Local game
 
-**Objetivo:** andar e atirar com a sensação do original, em servidor local.
+**Goal:** walk and shoot with the feel of the original, on a local server.
 
-- Colisão por hulls, pmove com suíte de paridade de movimento.
-- Jogador, viewmodel, animação de jogador (gait + blends).
-- Armas iniciais (faca, Glock, USP, AK-47, M4A1) com spread, recoil e dano.
-- Áudio (mixer, canais, DSP de sala, passos).
-- HUD básico (vida, colete, munição, crosshair).
+- Hull collision, pmove with a movement parity suite.
+- Player, viewmodel, player animation (gait + blends).
+- Initial weapons (knife, Glock, USP, AK-47, M4A1) with spread, recoil and damage.
+- Audio (mixer, channels, room DSP, footsteps).
+- Basic HUD (health, armor, ammo, crosshair).
 
-**Saída:** suíte de paridade de movimento 100% verde e armas iniciais validadas.
+**Exit:** movement parity suite 100% green and initial weapons validated.
 
-## M4 — Rede e servidor
+## M4 — Networking and server
 
-**Objetivo:** partidas online com servidores que funcionam como o original.
+**Goal:** online matches with servers that work like the original.
 
-- Transporte, handshake seguro, canais, snapshots delta, interesse e orçamento.
-- Predição, interpolação e compensação de lag.
-- `nextds`: linha de comando, configs, cvars, comandos, logs.
-- A2S, master server próprio, LAN, RCON seguro, identidade de jogador.
-- Download de recursos (embutido e HTTP), com a regra de que conteúdo não redistribuível
-  nunca é enviado e a exigência de conteúdo declarada pelo servidor.
+- Transport, secure handshake, channels, delta snapshots, interest and budget.
+- Prediction, interpolation and lag compensation.
+- `nextds`: command line, configs, cvars, commands, logs.
+- A2S, own master server, LAN, secure RCON, player identity.
+- Resource download (built-in and HTTP), with the rule that non-redistributable content is
+  never sent and the content requirement declared by the server.
 
-**Saída:** teste com 32 jogadores reais na internet, teste de estresse inicial com 256
-clientes simulados e avaliação de sensação por jogadores veteranos.
+**Exit:** a test with 32 real players over the internet, an initial stress test with 256
+simulated clients and a feel assessment by veteran players.
 
-## M5 — Counter-Strike completo
+## M5 — Complete Counter-Strike
 
-**Objetivo:** uma partida de CS 1.6 completa, em todos os tipos de mapa.
+**Goal:** a complete CS 1.6 match, on every map type.
 
-- Rounds, economia, todos os motivos de fim.
-- Todas as armas, granadas e equipamentos. C4, reféns, VIP, escape.
-- Compra (menus clássico e VGUI, autobuy/rebuy), rádio, chat, voz, sprays.
-- HUD completo, scoreboard, menus de time e personagem, espectador.
-- Todas as entidades de mapa.
+- Rounds, economy, every end reason.
+- Every weapon, grenade and piece of equipment. C4, hostages, VIP, escape.
+- Buying (classic and VGUI menus, autobuy/rebuy), radio, chat, voice, sprays.
+- Full HUD, scoreboard, team and character menus, spectator.
+- Every map entity.
 
-**Saída:** todos os mapas oficiais carregam sem avisos, suíte de paridade de gameplay
-verde e partida competitiva completa jogada e avaliada.
+**Exit:** every official map loads without warnings, gameplay parity suite green and a
+complete competitive match played and assessed.
 
-## M6 — Rook e plugins
+## M6 — Rook and plugins
 
-**Objetivo:** ecossistema de plugins completo, começando em paralelo após o M2.
+**Goal:** a complete plugin ecosystem, starting in parallel after M2.
 
-- `rookc`: parser, checker (tipos, unidades, efêmeros, exaustividade), RIR e bytecode.
-- VM: interpretador, verificador, GC por isolate, orçamentos.
-- Geração de bindings e `.rookd` a partir do C++.
-- `mod.toml`, `plugins.toml`, ordem por dependências, capabilities.
-- Forwards, hooks, `vars`, comandos tipados, cvars, tarefas e coroutines.
-- Hot reload, `rookLsp`, depurador DAP, `rook test`, `rook fmt`/`lint`/`doc`/`pack`.
-- Mods embutidos (admin, votes, maps, chat, stats) e `rook migrate`.
-- **Porte do ReZombie** como mod de referência.
+- `rookc`: parser, checker (types, units, ephemerals, exhaustiveness), RIR and bytecode.
+- VM: interpreter, verifier, per-isolate GC, budgets.
+- Generation of bindings and `.rookd` from C++.
+- `mod.toml`, `plugins.toml`, dependency ordering, capabilities.
+- Forwards, hooks, `vars`, typed commands, cvars, tasks and coroutines.
+- Hot reload, `rookLsp`, DAP debugger, `rook test`, `rook fmt`/`lint`/`doc`/`pack`.
+- Built-in mods (admin, votes, maps, chat, stats) and `rook migrate`.
+- **Port of ReZombie** as the reference mod.
 
-**Saída:** ReZombie portado e funcional, mods embutidos substituindo os plugins padrão
-do AMXX e API 1.0 congelada.
+**Exit:** ReZombie ported and working, built-in mods replacing the default AMXX plugins and
+API 1.0 frozen.
 
-## M7 — Paridade fina e ecossistema
+## M7 — Fine parity and ecosystem
 
-- Bots com navegação (importação de `.nav`).
-- Demos, `timedemo` e relay de espectadores.
-- Plugins de cliente com sandbox e armas customizadas preditas.
-- Sprites `.nxspr`, modo `r_fidelity enhanced`, pacotes de alta resolução.
-- Estresse com 1024 jogadores e otimizações guiadas por profiling.
-- Formato de mapa estendido `.nxmap` (sem limites de BSP), compilado a partir de mapas do
-  TrenchBroom com ferramentas do projeto.
-- `openContent`: primeiro pacote livre (mapa próprio, jogador, armas, HUD e sons, todos
-  originais ou CC0/CC-BY), em repositório separado.
+- Bots with navigation (`.nav` import).
+- Demos, `timedemo` and spectator relay.
+- Sandboxed client plugins and predicted custom weapons.
+- `.nxspr` sprites, `r_fidelity enhanced` mode, high-resolution packages.
+- Stress with 1024 players and profiling-guided optimizations.
+- Extended `.nxmap` map format (without BSP limits), compiled from TrenchBroom maps with the
+  project's tools.
+- `openContent`: the first free package (own map, player, weapons, HUD and sounds, all
+  original or CC0/CC-BY), in a separate repository.
 
-## M8 — Release 1.0 e futuro
+## M8 — Release 1.0 and future
 
-- Revisão legal (nome público, licença, avisos de terceiros).
-- Backend DirectX 11.
-- Servidor dedicado Linux ARM64.
-- Site de documentação e portal de mods.
+- Legal review (public name, license, third-party notices).
+- DirectX 11 backend.
+- Linux ARM64 dedicated server.
+- Documentation site and mod portal.
 - Release 1.0.

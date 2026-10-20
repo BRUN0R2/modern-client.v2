@@ -34,7 +34,7 @@ public:
     [[nodiscard]] constexpr auto isNull() const noexcept -> bool { return m_index == kNullIndex; }
 
     // Members, not hidden friends: GCC 16 crashes on defaulted friend comparisons from modules
-    // (docs/17-build-e-ferramentas.md, section 2.2).
+    // (docs/17-build-and-tools.md, section 2.2).
     [[nodiscard]] constexpr auto operator==(const Entity&) const noexcept -> bool = default;
     [[nodiscard]] constexpr auto operator<=>(const Entity&) const noexcept = default;
 

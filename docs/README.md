@@ -1,73 +1,73 @@
-# Documentação — Modern-Client.v2
+# Documentation — Modern-Client.v2
 
-> **Status:** rascunho v0.1 · **Idioma:** pt-BR (identificadores e comentários de código em inglês)
+> **Status:** draft v0.1 · **Language:** English (as are code identifiers and comments)
 >
-> **Modern-Client.v2** é o nome do projeto. Ele não usa marcas registradas da Valve.
-> "Counter-Strike" aparece nesta documentação só para descrever o jogo que está sendo
-> recriado (ver [20-legal-e-licenciamento.md](20-legal-e-licenciamento.md)).
+> **Modern-Client.v2** is the name of the project. It does not use Valve trademarks.
+> "Counter-Strike" appears in this documentation only to describe the game being
+> recreated (see [20-legal-and-licensing.md](20-legal-and-licensing.md)).
 
-Recriação de código aberto do Counter-Strike 1.6, escrita do zero em **C++26**, com
-paridade de jogabilidade com o original e **sem os limites históricos** da GoldSrc:
-thread única, teto de entidades, teto de precache, teto de 32 jogadores e um ecossistema de
-mods preso ao AMX Mod X/Pawn.
+An open-source recreation of Counter-Strike 1.6, written from scratch in **C++26**, with
+gameplay parity with the original and **without the historical limits** of GoldSrc:
+a single thread, an entity cap, a precache cap, a 32-player cap and a mod ecosystem
+tied to AMX Mod X/Pawn.
 
-## Regras do projeto
+## Project rules
 
-[RULES.md](RULES.md) é a constituição do projeto: prioridades, princípios e regras que valem
-para todo contribuidor, humano ou IA. Os documentos abaixo detalham essas regras e prevalecem
-apenas dentro delas.
+[RULES.md](RULES.md) is the constitution of the project: priorities, principles and rules that
+apply to every contributor, human or AI. The documents below detail those rules and prevail
+only within them.
 
-## Ordem de leitura recomendada
+## Recommended reading order
 
-| # | Documento | Conteúdo |
-|---|-----------|----------|
-| 00 | [Visão geral](00-visao-geral.md) | Objetivos, não-objetivos, limites removidos, princípios |
-| 01 | [Arquitetura](01-arquitetura.md) | Camadas, módulos, threads, ciclo de frame, regras de dependência |
-| 02 | [Padrões de código](02-padroes-de-codigo.md) | C++26, nomenclatura, erros tipados, contratos, proibição de números mágicos |
-| 03 | [ECS](03-ecs.md) | Entidades, componentes por arquétipo, queries, sistemas, agendamento |
-| 04 | [Job System](04-job-system.md) | Multithreading, work-stealing, grafos de dependência, `std::execution` |
-| 05 | [Renderização](05-renderizacao.md) | RHI, Vulkan, DirectX 11 (futuro), render graph, GPU skinning |
-| 06 | [Assets e recursos](06-assets-e-recursos.md) | VFS, formatos GoldSrc, fim do precache, download de recursos |
-| 07 | [Simulação e física](07-simulacao-e-fisica.md) | Tick, usercmd, movimento (pmove), colisão por hulls, entidades de mapa |
-| 08 | [Rede](08-rede.md) | Protocolo, snapshots delta, predição, compensação de lag, interesse |
-| 09 | [Servidor dedicado](09-servidor-dedicado.md) | `nextds`, cvars, comandos, RCON, A2S, master server, identidade |
-| 10 | [Gameplay Counter-Strike](10-gameplay-counter-strike.md) | Rounds, economia, armas, objetivos, dados de jogo |
-| 11 | [Áudio](11-audio.md) | Mixer, espacialização, DSP de salas, voz |
-| 12 | [Interface, HUD e console](12-interface-hud-e-console.md) | HUD, menus, console, cvars, binds, entrada |
-| 13 | [Sistema de mods](13-sistema-de-mods.md) | Runtime, isolamento, pacotes, permissões, hot reload, mods no cliente |
-| 14 | [Linguagem Rook](14-linguagem-rook.md) | Especificação da linguagem de mods |
-| 15 | [API de mods](15-api-de-mods.md) | Módulos `std`, `nx` e `cs`, eventos, hooks, catálogo de erros |
-| 16 | [Migração AMXX → Rook](16-migracao-amxx.md) | Equivalências Pawn/AMXX e exemplos convertidos |
-| 17 | [Build e ferramentas](17-build-e-ferramentas.md) | Toolchain, CMake, dependências, layout do repositório, CI |
-| 18 | [Testes e qualidade](18-testes-e-qualidade.md) | Estratégia de testes, paridade, determinismo, desempenho |
-| 19 | [Roadmap](19-roadmap.md) | Marcos M0–M8 e critérios de saída |
-| 20 | [Legal e licenciamento](20-legal-e-licenciamento.md) | Assets da Valve, clean room, marcas, licença |
-| — | [Glossário](glossario.md) | Termos GoldSrc, engine e Rook |
-| — | [ADRs](adr/README.md) | Registro de decisões de arquitetura |
+| # | Document | Contents |
+|---|----------|----------|
+| 00 | [Overview](00-overview.md) | Goals, non-goals, removed limits, principles |
+| 01 | [Architecture](01-architecture.md) | Layers, modules, threads, frame cycle, dependency rules |
+| 02 | [Coding standards](02-coding-standards.md) | C++26, naming, typed errors, contracts, ban on magic numbers |
+| 03 | [ECS](03-ecs.md) | Entities, archetype-based components, queries, systems, scheduling |
+| 04 | [Job System](04-job-system.md) | Multithreading, work-stealing, dependency graphs, `std::execution` |
+| 05 | [Rendering](05-rendering.md) | RHI, Vulkan, DirectX 11 (future), render graph, GPU skinning |
+| 06 | [Assets and resources](06-assets-and-resources.md) | VFS, GoldSrc formats, end of precache, resource download |
+| 07 | [Simulation and physics](07-simulation-and-physics.md) | Tick, usercmd, movement (pmove), hull collision, map entities |
+| 08 | [Networking](08-networking.md) | Protocol, delta snapshots, prediction, lag compensation, interest |
+| 09 | [Dedicated server](09-dedicated-server.md) | `nextds`, cvars, commands, RCON, A2S, master server, identity |
+| 10 | [Counter-Strike gameplay](10-counter-strike-gameplay.md) | Rounds, economy, weapons, objectives, game data |
+| 11 | [Audio](11-audio.md) | Mixer, spatialization, room DSP, voice |
+| 12 | [UI, HUD and console](12-ui-hud-and-console.md) | HUD, menus, console, cvars, binds, input |
+| 13 | [Mod system](13-mod-system.md) | Runtime, isolation, packages, permissions, hot reload, client-side mods |
+| 14 | [Rook language](14-rook-language.md) | Specification of the mod language |
+| 15 | [Mod API](15-mod-api.md) | `std`, `nx` and `cs` modules, events, hooks, error catalog |
+| 16 | [AMXX → Rook migration](16-amxx-migration.md) | Pawn/AMXX equivalences and converted examples |
+| 17 | [Build and tools](17-build-and-tools.md) | Toolchain, CMake, dependencies, repository layout, CI |
+| 18 | [Testing and quality](18-testing-and-quality.md) | Testing strategy, parity, determinism, performance |
+| 19 | [Roadmap](19-roadmap.md) | Milestones M0–M8 and exit criteria |
+| 20 | [Legal and licensing](20-legal-and-licensing.md) | Valve assets, clean room, trademarks, license |
+| — | [Glossary](glossary.md) | GoldSrc, engine and Rook terms |
+| — | [ADRs](adr/README.md) | Architecture decision records |
 
-O backlog executável do projeto fica em [`../TODO.md`](../TODO.md).
+The project's actionable backlog lives in [`../TODO.md`](../TODO.md).
 
-## Convenções desta documentação
+## Conventions of this documentation
 
-- **DEVE / NÃO DEVE / PODE** indicam requisitos normativos (no espírito da RFC 2119).
-- Exemplos de código C++ e Rook são **ilustrativos**: mostram a intenção da API, não um
-  contrato congelado. O contrato oficial é o código e os ADRs aceitos.
-- Valores numéricos de gameplay citados como "referência" precisam ser **validados contra o
-  jogo original** antes de virarem dados oficiais (ver
-  [18-testes-e-qualidade.md](18-testes-e-qualidade.md#testes-de-paridade)).
-- Toda decisão estrutural relevante vira um ADR em [`adr/`](adr/README.md). Se um documento
-  contradisser um ADR aceito, o ADR vale e o documento precisa ser corrigido.
+- **MUST / MUST NOT / MAY** indicate normative requirements (in the spirit of RFC 2119).
+- C++ and Rook code examples are **illustrative**: they show the intent of the API, not a
+  frozen contract. The official contract is the code and the accepted ADRs.
+- Gameplay numeric values cited as a "reference" must be **validated against the
+  original game** before they become official data (see
+  [18-testing-and-quality.md](18-testing-and-quality.md#parity-tests)).
+- Every relevant structural decision becomes an ADR in [`adr/`](adr/README.md). If a document
+  contradicts an accepted ADR, the ADR prevails and the document must be fixed.
 
-## Nomes usados no projeto
+## Names used in the project
 
-| Nome | O que é |
-|------|---------|
-| **Modern-Client.v2** | O projeto como um todo (cliente, servidor, engine, linguagem e ferramentas) |
-| **Next Engine** (`nx`) | A engine: núcleo, ECS, jobs, RHI, render, áudio, rede, assets, scripting host |
-| **cstrike** (`cs`) | O jogo Counter-Strike implementado sobre a engine |
-| **Rook** | Linguagem de plugins ("a peça que vem depois do Pawn"). Extensão `.rook` |
-| **Plugin** | Menor unidade carregável, compilada pelo `rookc`. Equivale a um `.amxx` |
-| **Mod** | Pacote distribuível com plugins, assets, traduções e configs (ex.: ReZombie) |
-| `next` / `nextds` | Executáveis do cliente e do servidor dedicado |
-| `rookc` / `rook` | Compilador próprio e CLI da linguagem Rook |
-| `nxbake` | Ferramenta de importação e cozimento de assets |
+| Name | What it is |
+|------|------------|
+| **Modern-Client.v2** | The project as a whole (client, server, engine, language and tools) |
+| **Next Engine** (`nx`) | The engine: core, ECS, jobs, RHI, render, audio, networking, assets, scripting host |
+| **cstrike** (`cs`) | The Counter-Strike game implemented on top of the engine |
+| **Rook** | Plugin language ("the piece that comes after the Pawn"). Extension `.rook` |
+| **Plugin** | Smallest loadable unit, compiled by `rookc`. Equivalent to an `.amxx` |
+| **Mod** | Distributable package with plugins, assets, translations and configs (e.g. ReZombie) |
+| `next` / `nextds` | Client and dedicated server executables |
+| `rookc` / `rook` | The Rook language's own compiler and CLI |
+| `nxbake` | Asset import and baking tool |

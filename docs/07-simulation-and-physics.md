@@ -1,0 +1,211 @@
+# 07 — Simulation, movement and physics
+
+## 1. Time and tick
+
+| Concept | Definition |
+|---------|------------|
+| `sv_tickrate` | Fixed frequency of the server simulation. Default **100 Hz** (parity with classic servers) |
+| `GameTime` | Integer tick counter plus a fraction. No precision loss with long uptime (GoldSrc used `float` seconds, which degrades after hours) |
+| `TickTime::delta` | Duration of one tick (`1 / sv_tickrate`) as `nx::Seconds` |
+| Usercmd | Client input command with its own duration (`msec`), applied individually |
+
+The server advances "world" entities (grenades, doors, triggers, timers) per tick.
+**Players advance per usercmd**, as in the original, with the duration of each command. This
+preserves the original movement behavior.
+
+## 2. User commands
+
+### 2.1 Structure
+
+```cpp
+export namespace cs {
+
+struct UserCommand {
+    CommandNumber     number;        // monotonically increasing per client
+    nx::Milliseconds  duration;      // "msec" in GoldSrc
+    nx::EulerAngles   viewAngles;
+    MoveIntent        move;          // forward, side, up (named, quantized)
+    nx::Flags<Button> buttons;       // Attack, Jump, Duck, Use, Attack2, Reload, Score, ...
+    Impulse           impulse;       // flashlight, spray, ...
+    WeaponSelection   weaponSelect;
+    nx::Milliseconds  interpolation; // client lerp, used by lag compensation
+};
+
+} // namespace cs
+```
+
+### 2.2 Generation on the client
+
+- **Fixed generation rate:** the client generates usercmds at `cl_movement_rate` Hz (default
+  **100**, that is, `msec = 10`), **regardless of the render FPS**. This reproduces the
+  classic competitive configuration (`fps_max 100`) on any machine and eliminates
+  FPS-dependent physics differences.
+- For compatibility with those who want the old behavior, `cl_movement_rate 0` generates one
+  usercmd per render frame with the frame's `msec`. It is marked as a legacy mode and is not
+  recommended.
+- `cl_cmdrate` controls how many command packets are sent per second. Each packet
+  carries the new commands plus `cl_cmdbackup` previous commands (redundancy against
+  loss), as in the original.
+- The server validates the sum of `duration` per time window, against *speedhack*
+  (`sv_max_command_time_drift`). The excess is discarded, with a per-client metric.
+
+### 2.3 Shared seed
+
+Spread and other weapon randomness use a **seed derived from the command number**,
+the same on the client and the server. This way the client's spread prediction matches the
+server, as in the original.
+
+## 3. Player movement (pmove)
+
+Movement is the most sensitive part of parity. It lives in `cs.shared` and is **the same
+code** on the server (authoritative) and on the client (prediction).
+
+### 3.1 Purity requirements
+
+```cpp
+[[nodiscard]] auto simulateMovement(const MovementState& state,
+                                    const UserCommand& command,
+                                    const MovementSettings& settings,
+                                    const CollisionWorld& collision) -> MovementResult;
+```
+
+- Pure function: the result depends only on the arguments. No access to global state,
+  the clock or server-only state.
+- `MovementSettings` contains every movement cvar (`sv_gravity`, `sv_friction`,
+  `sv_accelerate`, `sv_airaccelerate`, `sv_stopspeed`, `sv_maxspeed`, `sv_stepsize`,
+  `edgefriction`, `sv_bounce`, `sv_maxvelocity`, `sv_wateraccelerate`, `sv_waterfriction`),
+  replicated to the client.
+
+### 3.2 Behaviors that MUST be preserved
+
+Each item below has a dedicated parity test ([18](18-testing-and-quality.md#parity-tests)):
+
+| Behavior | Note |
+|----------|------|
+| Ground acceleration and friction | Including `edgefriction` near edges and `stopspeed` |
+| Air acceleration with a cap on the desired speed | Basis of *air strafe*, *strafe jump* and *surf* |
+| Jump and jump height | Initial velocity derived from gravity and height, not a literal |
+| Speed penalty after a jump (stamina) | A CS 1.6 trait that limits *bunny hop* |
+| The original's *bunny hop* limiters | Reproduce the original exactly, as the test reveals |
+| Ducking on the ground (transition) and in the air (instant) | *Duck jump*, *ducktap* |
+| Step climbing (`sv_stepsize`) | Includes interaction with ramps |
+| Steep ramps | Threshold normal for "ground". Below it the player slides (surf) |
+| Ladders (`func_ladder`) | Speed, exit, jumping off the ladder |
+| Water (levels 0–3) | Swimming, sinking, leaving the water |
+| Fall damage | The original's damage thresholds and scale |
+| Maximum speed per weapon | Weapon data (knife, pistols, zoomed AWP etc.) |
+| Pushing and being pushed by movers | Doors and platforms (`MOVETYPE_PUSH`) |
+| *Edgebug* and collision quirks | A natural consequence of reproducing traces and clipping faithfully |
+| *Noclip*, *spectator* | For debugging and observers |
+
+**Policy:** when in doubt between "fixing" an odd behavior and reproducing it,
+**reproduce it** and document it with `// Parity:`. Fixes sit behind explicit cvars that
+default to off.
+
+### 3.3 Hulls
+
+| Hull | Use | Dimensions |
+|------|-----|------------|
+| 0 — point | Bullets, line traces | Point |
+| 1 — standing | Standing player | Standard GoldSrc player box |
+| 2 — large | Large entities | GoldSrc large box |
+| 3 — ducked | Ducked player | GoldSrc ducked player box |
+
+The exact dimensions live in `data/cstrike/hulls.toml` and **MUST** match the hulls
+compiled into the BSP, because each hull's clipnode trees come from the map compiler.
+
+## 4. Collision
+
+### 4.1 World
+
+- Traces against the BSP's **clipnode trees** per hull, with the same `fraction`, `endpos`,
+  plane, `startsolid`/`allsolid` and contents (water, lava, solid) results as the
+  original.
+- Brush entity submodels (doors, elevators) use their own hulls with the entity's
+  transform.
+
+### 4.2 Entities
+
+- Dynamic spatial partitioning (AABB tree) for moving entities, plus links to BSP leafs
+  for PVS/PAS.
+- Players collide with each other using the hull box.
+- Bullet traces test the studio model's **hitboxes** (animated bones) to get the
+  *hitgroup*.
+
+### 4.3 API
+
+```cpp
+auto hit = collision.trace(nx::collision::TraceQuery{
+    .start  = muzzle,
+    .end    = muzzle + direction * weapon.range,
+    .hull   = nx::collision::Hull::Point,
+    .mask   = nx::collision::ContentMask::shot(),
+    .filter = nx::collision::TraceFilter::ignoring(shooter),
+    .detail = nx::collision::TraceDetail::Hitboxes,
+});
+
+if (hit.entity) {
+    applyBulletDamage(*hit.entity, hit.hitGroup, hit.position, hit.surfaceMaterial);
+}
+```
+
+- `TraceResult` always has `fraction`, `position`, `normal` and `contents`. The optional
+  fields (`entity`, `hitGroup`, `surfaceMaterial`) are `std::optional`.
+- Traces are *thread-safe* against an **immutable collision snapshot** of the tick. This
+  allows traces in parallel jobs (e.g. lag compensation, bot AI).
+
+## 5. Non-player entity physics
+
+### 5.1 Movement types
+
+| Type (GoldSrc) | Use in CS | Component |
+|----------------|-----------|-----------|
+| `NONE` | Static entities | — |
+| `TOSS` | Dropped weapons, C4 on the ground | `Ballistic{gravity}` |
+| `BOUNCE` | Grenades | `Ballistic{gravity, elasticity}` |
+| `PUSH` | Doors, platforms, trains | `Mover{path, speed, blockedPolicy}` |
+| `FOLLOW` | Weapons on the player model | `Parent` + attachment |
+| `FLY`, `FLYMISSILE` | Mod projectiles | `Ballistic{gravity = 0}` |
+| `STEP` | Hostages/NPCs | `Stepper` |
+| `NOCLIP` | Spectator, debugging | `Noclip` |
+
+Each type is its own ECS system, with its execution order documented in the schedule.
+
+### 5.2 Think, touch and triggers
+
+- **Think:** a `NextThink{time}` component. A system selects the entities that are due in
+  the tick and runs them in deterministic order (time, then `NetId`).
+- **Touch:** contact pairs generated by physics in the tick, dispatched in a stable order.
+- **Triggers:** `trigger_multiple`, `trigger_once`, `trigger_hurt`, `trigger_push`,
+  `trigger_teleport`, `trigger_gravity`, `trigger_camera` and the CS zones
+  ([10](10-counter-strike-gameplay.md#5-map-entities)) are volume components
+  with overlap systems.
+- **Blocked movers:** a door blocked by a player deals damage or reverses, according to
+  the map's *keyvalues*, as in the original.
+- **Destructible entities:** `func_breakable` (glass, wood, metal) with the original's
+  materials, gibs and sounds. `func_pushable`.
+
+## 6. Determinism
+
+- `cs.shared` is compiled **once** into a static library linked by the client and the
+  server, so that the prediction code is literally the same.
+- Fixed floating-point flags: no `-ffast-math`, `-ffp-contract=off`, the same rounding
+  mode on every thread.
+- `nx.math` follows these rules: scalar `float` arithmetic without contraction into *fused
+  multiply-add*, and sine, cosine and the arc functions evaluated in `double` and rounded
+  once to `float`, which hides last-bit differences between C libraries. The
+  `FloatingPointTest.MultiplyAddIsNeverFused` test fails if a build flag re-enables
+  contraction.
+- Determinism is guaranteed **per binary and platform**. Across different platforms
+  (Windows × Linux), prediction corrects small divergences like any other prediction
+  error.
+- Gameplay randomness comes only from `nx::Random` with named, seeded streams
+  (spread by command seed, gibs, spawn choice).
+
+## 7. Typed errors
+
+| Enum | Examples |
+|------|----------|
+| `CommandError` | `DurationOutOfRange`, `TimeDriftExceeded`, `StaleCommand`, `InvalidAngles` |
+| `CollisionError` | `InvalidHull`, `MissingClipnodes` (map compiled without the required hull) |
+| `MoverError` | `InvalidPath` (missing `path_corner`), `TargetNotFound` |

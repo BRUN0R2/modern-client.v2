@@ -16,7 +16,7 @@ using MonotonicClock = std::chrono::steady_clock;
 using Instant = MonotonicClock::time_point;
 
 /// Date and time (UTC): logs, demos, ban expiry. The one wall clock game code reads
-/// (docs/02-padroes-de-codigo.md, section 4.1).
+/// (docs/02-coding-standards.md, section 4.1).
 using WallClock = std::chrono::system_clock;
 
 /// Measures real time from its start.
@@ -47,7 +47,7 @@ enum class ClockError : std::uint8_t {
 /// rounds to the scheduler period (15.6 ms by default), so this owns a high-resolution waitable
 /// timer there; on Linux the standard absolute sleep is already precise.
 ///
-/// For the threads that pace a loop, never for jobs (docs/02-padroes-de-codigo.md, section 8). One
+/// For the threads that pace a loop, never for jobs (docs/02-coding-standards.md, section 8). One
 /// per thread: sleepUntil is not meant to be called by two threads at once.
 class SleepTimer {
 public:

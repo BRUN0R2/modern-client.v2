@@ -3,37 +3,37 @@
 [![CI](https://github.com/BRUN0R2/modern-client.v2/actions/workflows/ci.yml/badge.svg)](https://github.com/BRUN0R2/modern-client.v2/actions/workflows/ci.yml)
 [![REUSE](https://img.shields.io/badge/REUSE-3.3-green)](https://reuse.software)
 
-Recriação de código aberto do Counter-Strike 1.6, escrita do zero em **C++26**, com
-jogabilidade e servidores idênticos ao original e **sem os limites históricos** da GoldSrc.
+An open-source recreation of Counter-Strike 1.6, written from scratch in **C++26**, with
+gameplay and servers identical to the original and **without the historical limits** of GoldSrc.
 
-- **Engine moderna:** ECS por arquétipos, Job System multithread, Vulkan (DirectX 11 no
-  futuro) e GPU skinning.
-- **Sem limites:** entidades, precache, jogadores (até 1024), mensagens, attachments,
-  body groups, sprites e valores de HUD.
-- **Plugins e mods nativos:** linguagem **Rook**, fortemente tipada e familiar para quem
-  vem do AMX Mod X, com compilador próprio, hot reload e LSP.
-- **Servidores como sempre:** mesmas cvars, configs, comandos, RCON e consultas A2S.
+- **Modern engine:** archetype ECS, multithreaded Job System, Vulkan (DirectX 11 in the
+  future) and GPU skinning.
+- **No limits:** entities, precache, players (up to 1024), messages, attachments,
+  body groups, sprites and HUD values.
+- **Native plugins and mods:** the **Rook** language, strongly typed and familiar to anyone
+  coming from AMX Mod X, with its own compiler, hot reload and LSP.
+- **Servers as always:** the same cvars, configs, commands, RCON and A2S queries.
 
-> Funciona sem nenhum asset da Valve. Quem tem uma cópia legítima do Counter-Strike 1.6
-> (Steam) pode usar os assets originais: o jogo detecta a instalação e configura o perfil
-> `classic` localmente ([ADR-0015](docs/adr/0015-conteudo-livre-e-assets-originais-opcionais.md)).
-> Nenhum asset da Valve é distribuído. Projeto sem afiliação com a Valve Corporation.
+> Works without any Valve asset. Anyone who owns a legitimate copy of Counter-Strike 1.6
+> (Steam) can use the original assets: the game detects the installation and configures the
+> `classic` profile locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md)).
+> No Valve asset is distributed. This project is not affiliated with Valve Corporation.
 
 ## Status
 
-Marco **M1 (Núcleo de runtime)** em andamento, sobre a fundação do M0 (build com módulos
-C++ e `import std`, presets, vcpkg e CI): `nx.core` (erros tipados, contratos, tipos fortes
-e unidades), `nx.jobs` (Job System com *work stealing*), `nx.ecs` (ECS por arquétipos) e
-`nx.math` (vetores, matrizes, quaternions, ângulos GoldSrc), `nx.console` (cvars tipadas,
-comandos e `.cfg`) e `nx.platform` (relógios), com testes. A documentação de
-arquitetura está em [`docs/`](docs/README.md), as regras do projeto em
-[`docs/RULES.md`](docs/RULES.md) e o backlog em [`TODO.md`](TODO.md).
+Milestone **M1 (Runtime core)** in progress, on top of the M0 foundation (build with C++
+modules and `import std`, presets, vcpkg and CI): `nx.core` (typed errors, contracts, strong
+types and units), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
+`nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars,
+commands and `.cfg`) and `nx.platform` (clocks), with tests. The architecture documentation
+is in [`docs/`](docs/README.md), the project rules in [`docs/RULES.md`](docs/RULES.md) and
+the backlog in [`TODO.md`](TODO.md).
 
-## Como compilar
+## Building
 
-Requisitos no Windows: Visual Studio 2026 com a carga "Desenvolvimento para desktop com
-C++" (traz MSVC, Ninja, CMake e vcpkg). Detalhes e a matriz de toolchains estão em
-[docs/17-build-e-ferramentas.md](docs/17-build-e-ferramentas.md).
+Requirements on Windows: Visual Studio 2026 with the "Desktop development with C++" workload
+(it brings MSVC, Ninja, CMake and vcpkg). Details and the toolchain matrix are in
+[docs/17-build-and-tools.md](docs/17-build-and-tools.md).
 
 ```powershell
 . .\scripts\devShell.ps1
@@ -42,19 +42,19 @@ cmake --build --preset dev-windows-msvc
 ctest --preset dev-windows-msvc
 ```
 
-No Linux, use os presets `dev-linux-gcc` ou `dev-linux-clang`.
+On Linux, use the `dev-linux-gcc` or `dev-linux-clang` presets.
 
-## Licença
+## License
 
-| Parte | Licença |
-|-------|---------|
-| Engine, jogo, servidor, ferramentas e dados | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) com a [Rook Plugin Exception](LICENSES/LicenseRef-Rook-Plugin-Exception.txt) |
-| Toolchain Rook e SDK de plugins (`rook/`) | [MIT](LICENSES/MIT.txt) |
-| Documentação (`docs/`, `README.md`, `TODO.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
+| Part | License |
+|------|---------|
+| Engine, game, server, tools and data | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) with the [Rook Plugin Exception](LICENSES/LicenseRef-Rook-Plugin-Exception.txt) |
+| Rook toolchain and plugin SDK (`rook/`) | [MIT](LICENSES/MIT.txt) |
+| Documentation (`docs/`, `README.md`, `TODO.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
 
-**Plugins e mods** que usam apenas a interface de plugins podem adotar **qualquer licença**,
-inclusive fechada. Isso está garantido pela exceção, não só pela intenção.
+**Plugins and mods** that use only the plugin interface may adopt **any license**,
+including proprietary ones. This is guaranteed by the exception, not just by intent.
 
-A licença de cada arquivo está no cabeçalho SPDX e em [`REUSE.toml`](REUSE.toml)
-([REUSE](https://reuse.software)). Decisão e motivos: [ADR-0010](docs/adr/0010-licenca.md).
-Contribuições usam *Signed-off-by* (DCO).
+Each file's license is in its SPDX header and in [`REUSE.toml`](REUSE.toml)
+([REUSE](https://reuse.software)). Decision and rationale: [ADR-0010](docs/adr/0010-license.md).
+Contributions use *Signed-off-by* (DCO).

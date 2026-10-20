@@ -1,5 +1,5 @@
 ---
-# Static analysis profile (docs/02-padroes-de-codigo.md, section 12).
+# Static analysis profile (docs/02-coding-standards.md, section 12).
 Checks: >
   -*,
   bugprone-*,

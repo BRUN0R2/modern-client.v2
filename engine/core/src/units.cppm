@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Units of the game domain. The Rook counterparts (5000hp, 320ups, 64hu...) are listed in
-/// docs/14-linguagem-rook.md, section 6.
+/// docs/14-rook-language.md, section 6.
 export module nx.core:units;
 
 import std;

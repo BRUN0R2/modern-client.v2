@@ -22,9 +22,9 @@ When priorities conflict, the order is always:
 Speed never justifies degrading the architecture.
 
 This document sets the principles. The normative details live in the documents it cites:
-[01](01-arquitetura.md) (layers and modules), [02](02-padroes-de-codigo.md) (C++ code),
-[18](18-testes-e-qualidade.md) (testing and the definition of done) and
-[20](20-legal-e-licenciamento.md) (clean room and licenses). A contradiction between this
+[01](01-architecture.md) (layers and modules), [02](02-coding-standards.md) (C++ code),
+[18](18-testing-and-quality.md) (testing and the definition of done) and
+[20](20-legal-and-licensing.md) (clean room and licenses). A contradiction between this
 document and an ADR is a defect: a new ADR resolves it **before** any implementation, never
 silently.
 
@@ -42,7 +42,7 @@ inconsistency. The code stays understandable months later without historical con
 ## 3. Repository
 
 - Trunk-based development on `main`, which only receives commits with every required CI job
-  green ([17 §7](17-build-e-ferramentas.md#7-integração-contínua)).
+  green ([17 §7](17-build-and-tools.md#7-continuous-integration)).
 - One commit per finished logical change, with its tests, documentation and
   [`TODO.md`](../TODO.md) updated **in the same commit**.
 - Messages in English, as Conventional Commits, with a short imperative summary of the real
@@ -50,7 +50,7 @@ inconsistency. The code stays understandable months later without historical con
 - Every commit carries a Signed-off-by line (DCO), because of the clean room
   ([§12](#12-legal-and-clean-room)).
 - The root [`TODO.md`](../TODO.md) is the backlog: minimal, current and actionable. An item is
-  checked `[x]` only by the [definition of done](18-testes-e-qualidade.md#definição-de-pronto).
+  checked `[x]` only by the [definition of done](18-testing-and-quality.md#definition-of-done).
 - Every file has a license and a copyright notice in the REUSE format (SPDX header or
   `REUSE.toml`) and is stored with LF line endings.
 - Never commit secrets, credentials, tokens, private data or Valve assets.
@@ -77,14 +77,14 @@ inconsistency. The code stays understandable months later without historical con
 
 ### 5.1 Structure
 
-- The layers of [01 §1](01-arquitetura.md#1-visão-em-camadas): a module depends only on layers
+- The layers of [01 §1](01-architecture.md#1-layered-view): a module depends only on layers
   below its own. Same-layer dependencies only when declared in the module catalog.
 - Small, cohesive modules with one clear responsibility. No giant objects, no centralized
   accumulation of logic.
 - Composition over inheritance; inheritance only for interfaces.
 - No global state: dependencies arrive through constructors and composition happens in a
   single place (`app.*`). The two sanctioned exceptions are the contract handler and the
-  default logger ([01 §2.1](01-arquitetura.md#21-sem-estado-global)).
+  default logger ([01 §2.1](01-architecture.md#21-no-global-state)).
 - A lower layer never calls a higher one through callbacks: the higher layer queries.
 - Deterministic flows instead of "dynamic magic". Business rules live in their owning module,
   never scattered.
@@ -95,7 +95,7 @@ inconsistency. The code stays understandable months later without historical con
   signature.
 - An expected failure is an `nx::Result` with the module's own error code; a bug is a
   contract violation; an unrecoverable state is a controlled termination
-  ([02 §6](02-padroes-de-codigo.md#6-erros-tipados)).
+  ([02 §6](02-coding-standards.md#6-typed-errors)).
 - No silent fallback, no hidden recovery path at startup and no false resilience that hides
   a real failure. Errors surface clearly and predictably.
 - State transitions are traceable: named states (`enum class`), typed events and a log entry
@@ -113,7 +113,7 @@ inconsistency. The code stays understandable months later without historical con
 
 ## 6. Code
 
-[02-padroes-de-codigo.md](02-padroes-de-codigo.md) is the detailed standard. In short:
+[02-coding-standards.md](02-coding-standards.md) is the detailed standard. In short:
 
 ### 6.1 Style
 
@@ -127,7 +127,7 @@ inconsistency. The code stays understandable months later without historical con
 ### 6.2 Names
 
 - camelCase across the project, including files and directories
-  ([ADR-0013](adr/0013-convencao-camelcase.md)); `PascalCase` for types and enumerators,
+  ([ADR-0013](adr/0013-camelcase-convention.md)); `PascalCase` for types and enumerators,
   `kPascalCase` for constants and `m_camelCase` for private members.
 - Clear, descriptive names, without obscure abbreviations or artificial prefixes and
   suffixes. `snake_case` only where imposed from outside (cvars, commands, map classnames).
@@ -137,13 +137,13 @@ inconsistency. The code stays understandable months later without historical con
 - Single responsibility, DRY, explicit ownership and lifetime (RAII; `new`/`delete` only
   inside allocators).
 - **No magic numbers:** a value lives in game data, in a cvar or in a named constant, with a
-  meaning, an explicit type and context ([02 §5](02-padroes-de-codigo.md#5-sem-números-mágicos)).
+  meaning, an explicit type and context ([02 §5](02-coding-standards.md#5-no-magic-numbers)).
 - Forbidden: dead code, commented-out code, hidden state mutation, implicit ownership and
   unsafe resource handling. A `TODO` in code always references `TODO.md`.
 
 ## 7. Testing and reliability
 
-- The [definition of done](18-testes-e-qualidade.md#definição-de-pronto) applies to every
+- The [definition of done](18-testing-and-quality.md#definition-of-done) applies to every
   item: tests and a green CI are mandatory.
 - Every test delivers real, measurable value: observable behavior, a bug's regression, a
   contract, determinism or parity. No noisy, redundant or expensive-to-maintain tests.
@@ -160,14 +160,14 @@ inconsistency. The code stays understandable months later without historical con
 - Avoid needless allocations and runtime overhead; short-lived memory uses the `nx.core`
   allocators.
 - Stable, predictable tick and frame times. Deterministic simulation: the same result with
-  any number of workers ([04 §8](04-job-system.md#8-determinismo)).
+  any number of workers ([04 §8](04-job-system.md#8-determinism)).
 
 Performance is intentional, never accidental.
 
 ## 9. Dependencies
 
 - Every dependency justifies its existence and passes a review of license, maintenance and
-  security surface ([17 §5](17-build-e-ferramentas.md#5-dependências)).
+  security surface ([17 §5](17-build-and-tools.md#5-dependencies)).
 - In-house solutions when the complexity is low; no excess dependencies.
 - External integrations stay isolated: headers only in the global module fragment, no
   third-party types in exported interfaces, built by the project triplets (no exceptions, no
@@ -180,7 +180,7 @@ Performance is intentional, never accidental.
   commands, configs, HUD).
 - Clean, direct, functional interfaces, without visual complexity, states or options of no
   real use, and without truncated values
-  ([12 §3.4](12-interface-hud-e-console.md#34-sem-truncamento-de-valores)).
+  ([12 §3.4](12-ui-hud-and-console.md#34-no-value-truncation)).
 - Menus and flows minimize friction; information density is organized and intentional.
 
 ## 11. How the AI and every contributor operate
@@ -199,7 +199,7 @@ Performance is intentional, never accidental.
 
 ## 12. Legal and clean room
 
-[20-legal-e-licenciamento.md](20-legal-e-licenciamento.md) is the standard. In short:
+[20-legal-and-licensing.md](20-legal-and-licensing.md) is the standard. In short:
 
 - No Valve asset in the repository or in the binaries; tests use synthetic content
   (`devContent`).

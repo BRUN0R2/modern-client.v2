@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Explicit numeric conversions and overflow-aware integer arithmetic
-/// (docs/02-padroes-de-codigo.md, section 4.3). Nothing here converts implicitly or wraps silently.
+/// (docs/02-coding-standards.md, section 4.3). Nothing here converts implicitly or wraps silently.
 ///
 /// The saturating functions are implemented here on every compiler instead of forwarding to
 /// std::add_sat and friends: GCC 16 announces them through <version> but its `std` module does

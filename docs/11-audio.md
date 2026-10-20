@@ -1,103 +1,104 @@
-# 11 — Áudio
+# 11 — Audio
 
-## 1. Objetivos
+## 1. Goals
 
-- **Paridade auditiva:** canais por entidade, atenuação, pitch, volume, DSP de salas
-  (`env_sound`/`room_type`), frases (`sentences.txt`) e passos por material iguais aos do
-  original. Som é informação competitiva no CS.
-- **Tempo real robusto:** mixagem em thread dedicada, sem alocações nem locks no callback.
-- **Sem teto fixo de vozes:** pool configurável com prioridade e roubo de voz documentado.
-- **Extensível:** formatos modernos, streaming e efeitos novos para plugins, todos
-  opcionais.
+- **Auditory parity:** per-entity channels, attenuation, pitch, volume, room DSP
+  (`env_sound`/`room_type`), sentences (`sentences.txt`) and per-material footsteps identical
+  to the original. Sound is competitive information in CS.
+- **Robust real time:** mixing on a dedicated thread, with no allocations or locks in the
+  callback.
+- **No fixed voice ceiling:** a configurable pool with priority and documented voice
+  stealing.
+- **Extensible:** modern formats, streaming and new effects for plugins, all optional.
 
-## 2. Arquitetura
+## 2. Architecture
 
 ```mermaid
 flowchart LR
-    G[Simulação / plugins] -->|comandos de som<br/>fila SPSC| A[Thread de áudio · mixer]
-    V[Decodificação de voz<br/>jobs Opus] -->|buffers PCM| A
-    S[Streaming<br/>E/S + decodificação] -->|blocos| A
-    A --> D[Dispositivo SDL3<br/>48 kHz estéreo ou surround]
+    G[Simulation / plugins] -->|sound commands<br/>SPSC queue| A[Audio thread · mixer]
+    V[Voice decoding<br/>Opus jobs] -->|PCM buffers| A
+    S[Streaming<br/>I/O + decoding] -->|blocks| A
+    A --> D[SDL3 device<br/>48 kHz stereo or surround]
 ```
 
-- O jogo nunca chama o mixer direto: ele envia **comandos** (`PlaySound`, `StopSound`,
-  `UpdateListener`, `SetRoom`) por uma fila sem lock.
-- A thread de áudio mixa em blocos pequenos (tamanho configurável, padrão de baixa
-  latência), reamostrando de 11/22/44 kHz para a taxa do dispositivo.
+- The game never calls the mixer directly: it sends **commands** (`PlaySound`, `StopSound`,
+  `UpdateListener`, `SetRoom`) through a lock-free queue.
+- The audio thread mixes in small blocks (configurable size, low-latency default),
+  resampling from 11/22/44 kHz to the device rate.
 
-## 3. Semântica do original a preservar
+## 3. Original semantics to preserve
 
-| Conceito | Comportamento |
-|----------|---------------|
-| Canais por entidade | `Auto`, `Weapon`, `Voice`, `Item`, `Body`, `Stream`, `Static`. Um som novo no mesmo canal e entidade **substitui** o anterior (exceto `Auto`) |
-| Atenuação | `None`, `Normal`, `Idle`, `Static`, com as curvas do original |
-| Pitch e volume | Por evento, com os mesmos intervalos |
-| Sons posicionais | Seguem a entidade emissora enquanto ela existe |
-| PAS | Só toca o que o servidor enviou (relevância por PAS, [08](08-rede.md#62-gerenciamento-de-interesse)) |
-| DSP de sala | Presets de `room_type` (reverb e eco) ativados por `env_sound` ou pela água |
-| Frases | Composição de palavras de `sentences.txt` com parâmetros de pitch, volume e corte |
-| Passos | Som por material (`materials.txt`) e por superfície (escada, água, grade) com `mp_footsteps` |
-| Música | Comando `mp3`/`cd` para `media/*.mp3` (menu e mapas) |
+| Concept | Behavior |
+|---------|----------|
+| Per-entity channels | `Auto`, `Weapon`, `Voice`, `Item`, `Body`, `Stream`, `Static`. A new sound on the same channel and entity **replaces** the previous one (except `Auto`) |
+| Attenuation | `None`, `Normal`, `Idle`, `Static`, with the original curves |
+| Pitch and volume | Per event, with the same ranges |
+| Positional sounds | Follow the emitting entity while it exists |
+| PAS | Only plays what the server sent (PAS relevance, [08](08-networking.md#62-interest-management)) |
+| Room DSP | `room_type` presets (reverb and echo) triggered by `env_sound` or by water |
+| Sentences | Word composition from `sentences.txt` with pitch, volume and cut parameters |
+| Footsteps | Sound per material (`materials.txt`) and per surface (ladder, water, grate) with `mp_footsteps` |
+| Music | The `mp3`/`cd` command for `media/*.mp3` (menu and maps) |
 
-## 4. Vozes e prioridades
+## 4. Voices and priorities
 
-- Pool de vozes com tamanho configurável (`s_max_voices`), sem teto de formato.
-- Ao esgotar, uma voz nova rouba a voz de **menor prioridade efetiva** (prioridade do
-  canal × volume percebido). O roubo gera métrica, nunca falha silenciosa.
-- Sons de jogabilidade crítica (passos, tiros, bomba, rádio) têm prioridade alta por
-  dados.
+- A voice pool with a configurable size (`s_max_voices`), with no format ceiling.
+- When it runs out, a new voice steals the voice with the **lowest effective priority**
+  (channel priority × perceived volume). Stealing produces a metric, never a silent failure.
+- Gameplay-critical sounds (footsteps, gunshots, bomb, radio) have high priority through
+  data.
 
-## 5. Espacialização
+## 5. Spatialization
 
-| Modo | Descrição |
-|------|-----------|
-| `s_spatial legacy` (padrão) | Pan estéreo e atenuação como no original |
-| `s_spatial hrtf` | HRTF binaural opcional para fones |
-| `s_spatial surround` | Saída 5.1/7.1 quando o dispositivo suporta |
+| Mode | Description |
+|------|-------------|
+| `s_spatial legacy` (default) | Stereo panning and attenuation as in the original |
+| `s_spatial hrtf` | Optional binaural HRTF for headphones |
+| `s_spatial surround` | 5.1/7.1 output when the device supports it |
 
-Oclusão por geometria (`s_occlusion 1`) é **opcional e desligada por padrão**, porque altera
-a informação competitiva em relação ao original.
+Geometry occlusion (`s_occlusion 1`) is **optional and off by default**, because it changes
+the competitive information relative to the original.
 
-## 6. Formatos
+## 6. Formats
 
-| Formato | Uso | Decodificador |
-|---------|-----|---------------|
-| WAV PCM 8/16 bits | Conteúdo original | Próprio |
-| MP3 | Música original (`media/`) | `minimp3` |
+| Format | Use | Decoder |
+|--------|-----|---------|
+| 8/16-bit PCM WAV | Original content | In-house |
+| MP3 | Original music (`media/`) | `minimp3` |
 | OGG Vorbis | Mods | `stb_vorbis` |
-| Opus | Voz e mods | `libopus` |
+| Opus | Voice and mods | `libopus` |
 | FLAC | Mods | `dr_flac` |
 
-Sons curtos ficam decodificados em memória. Música e sons longos (acima de
-`s_stream_threshold`) usam streaming.
+Short sounds stay decoded in memory. Music and long sounds (above `s_stream_threshold`) are
+streamed.
 
-## 7. Voz
+## 7. Voice
 
-- Captura via SDL3, codificação Opus em job e envio no canal não confiável.
-- Decodificação por remetente em jobs e mixagem como voz posicional ou não posicional,
-  conforme as regras do servidor e dos plugins.
-- `voice_enable`, `voice_scale`, `voice_loopback`, *mute* por jogador no scoreboard.
+- Capture via SDL3, Opus encoding in a job and sending on the unreliable channel.
+- Per-sender decoding in jobs and mixing as positional or non-positional voice, according
+  to the server and plugin rules.
+- `voice_enable`, `voice_scale`, `voice_loopback`, per-player *mute* in the scoreboard.
 
 ## 8. Cvars
 
-| Cvar | Original | Função |
-|------|----------|--------|
-| `volume` | ✅ | Volume geral |
-| `bgmvolume` | ✅ | Música |
-| `suitvolume` | ✅ | Falas de HUD |
-| `voice_scale` | ✅ | Volume da voz recebida |
-| `room_type`, `room_off` | ✅ | Depuração e desligamento do DSP |
-| `s_max_voices` | novo | Tamanho do pool de vozes |
-| `s_spatial`, `s_occlusion` | novo | Espacialização e oclusão |
-| `s_device` | novo | Dispositivo de saída |
+| Cvar | Original | Role |
+|------|----------|------|
+| `volume` | ✅ | Master volume |
+| `bgmvolume` | ✅ | Music |
+| `suitvolume` | ✅ | HUD speech |
+| `voice_scale` | ✅ | Volume of received voice |
+| `room_type`, `room_off` | ✅ | DSP debugging and disabling |
+| `s_max_voices` | new | Voice pool size |
+| `s_spatial`, `s_occlusion` | new | Spatialization and occlusion |
+| `s_device` | new | Output device |
 
-## 9. Erros tipados
+## 9. Typed errors
 
-| Enum | Exemplos |
+| Enum | Examples |
 |------|----------|
 | `AudioDeviceError` | `NoDevice`, `FormatUnsupported`, `DeviceLost` |
 | `SoundError` | `DecodeFailed`, `UnsupportedEncoding`, `CuePointInvalid` |
 | `SentenceError` | `UnknownSentence`, `MissingWord` |
 
-Perder o dispositivo (ex.: fone desconectado) faz o mixer tentar reabrir o padrão do
-sistema e emite um evento de diagnóstico. O jogo continua rodando sem áudio enquanto isso.
+Losing the device (e.g. headphones unplugged) makes the mixer try to reopen the system
+default and emits a diagnostic event. The game keeps running without audio meanwhile.

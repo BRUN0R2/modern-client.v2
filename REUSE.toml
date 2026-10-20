@@ -1,5 +1,5 @@
 # Licensing of every file in the repository (REUSE specification, https://reuse.software).
-# Decision and rationale: docs/adr/0010-licenca.md. License texts: LICENSES/.
+# Decision and rationale: docs/adr/0010-license.md. License texts: LICENSES/.
 # When several annotations match a file, the last one applies.
 version = 1
 
