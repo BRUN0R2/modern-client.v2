@@ -20,7 +20,7 @@ struct SystemAccess {
     bool isExclusive = false;
 
     /// Two systems conflict when one writes a component or resource the other reads or writes.
-    [[nodiscard]] auto conflictsWith(const SystemAccess& other) const noexcept -> bool {
+    [[nodiscard]] inline auto conflictsWith(const SystemAccess& other) const noexcept -> bool {
         if (isExclusive || other.isExclusive) {
             return true;
         }

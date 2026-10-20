@@ -53,7 +53,7 @@ public:
     /// Writes one record; called under the logger's lock, one record at a time.
     virtual void write(const Record& record) noexcept = 0;
     /// Pushes what write() buffered to its destination.
-    virtual void flush() noexcept {}
+    inline virtual void flush() noexcept {}
 };
 
 /// One human-readable line per record:
@@ -119,8 +119,8 @@ auto setDefaultLogger(Logger* logger) noexcept -> Logger*;
 /// Installs a logger for the lifetime of this object and restores the previous one afterwards.
 class DefaultLoggerScope {
 public:
-    explicit DefaultLoggerScope(Logger& logger) noexcept : m_previous{setDefaultLogger(&logger)} {}
-    ~DefaultLoggerScope() { setDefaultLogger(m_previous); }
+    inline explicit DefaultLoggerScope(Logger& logger) noexcept : m_previous{setDefaultLogger(&logger)} {}
+    inline ~DefaultLoggerScope() { setDefaultLogger(m_previous); }
 
     DefaultLoggerScope(const DefaultLoggerScope&) = delete;
     DefaultLoggerScope(DefaultLoggerScope&&) = delete;
@@ -190,7 +190,7 @@ class RateLimit {
 public:
     using Clock = std::chrono::steady_clock;
 
-    explicit RateLimit(Clock::duration interval) noexcept : m_interval{interval} {}
+    inline explicit RateLimit(Clock::duration interval) noexcept : m_interval{interval} {}
 
     /// Whether the event at `now` may pass: the first one, and then one per interval. A rejected
     /// event is counted as suppressed.

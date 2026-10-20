@@ -154,28 +154,39 @@ struct SystemParam<EventReader<Type>> {
 template <>
 struct SystemParam<Commands&> {
     using State = Commands;
-    static auto makeState(World& world) noexcept -> State { return Commands{world}; }
-    static void declare(const State& /*state*/, SystemAccess& /*access*/) noexcept {} // a buffer per system
-    static auto isAvailable(const State& /*state*/, const World& /*world*/) noexcept -> bool { return true; }
-    static auto fetch(State& state, SystemRun& /*run*/) noexcept -> Commands& { return state; }
+    static inline auto makeState(World& world) noexcept -> State { return Commands{world}; }
+    static inline void declare(const State& /*state*/, SystemAccess& /*access*/) noexcept {
+    } // a buffer per system
+    static inline auto isAvailable(const State& /*state*/, const World& /*world*/) noexcept -> bool {
+        return true;
+    }
+    static inline auto fetch(State& state, SystemRun& /*run*/) noexcept -> Commands& { return state; }
 };
 
 template <>
 struct SystemParam<World&> {
     using State = NoState;
-    static auto makeState(World& /*world*/) noexcept -> State { return {}; }
-    static void declare(const State& /*state*/, SystemAccess& access) noexcept { access.isExclusive = true; }
-    static auto isAvailable(const State& /*state*/, const World& /*world*/) noexcept -> bool { return true; }
-    static auto fetch(State& /*state*/, SystemRun& run) noexcept -> World& { return run.world; }
+    static inline auto makeState(World& /*world*/) noexcept -> State { return {}; }
+    static inline void declare(const State& /*state*/, SystemAccess& access) noexcept {
+        access.isExclusive = true;
+    }
+    static inline auto isAvailable(const State& /*state*/, const World& /*world*/) noexcept -> bool {
+        return true;
+    }
+    static inline auto fetch(State& /*state*/, SystemRun& run) noexcept -> World& { return run.world; }
 };
 
 template <>
 struct SystemParam<jobs::JobSystem&> {
     using State = NoState;
-    static auto makeState(World& /*world*/) noexcept -> State { return {}; }
-    static void declare(const State& /*state*/, SystemAccess& /*access*/) noexcept {}
-    static auto isAvailable(const State& /*state*/, const World& /*world*/) noexcept -> bool { return true; }
-    static auto fetch(State& /*state*/, SystemRun& run) noexcept -> jobs::JobSystem& { return run.jobs; }
+    static inline auto makeState(World& /*world*/) noexcept -> State { return {}; }
+    static inline void declare(const State& /*state*/, SystemAccess& /*access*/) noexcept {}
+    static inline auto isAvailable(const State& /*state*/, const World& /*world*/) noexcept -> bool {
+        return true;
+    }
+    static inline auto fetch(State& /*state*/, SystemRun& run) noexcept -> jobs::JobSystem& {
+        return run.jobs;
+    }
 };
 
 template <class... Params>

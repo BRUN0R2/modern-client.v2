@@ -29,12 +29,12 @@ struct CauseRecord {
 /// Underlying causes of a failure, outermost first. Allocates only on error paths.
 class Cause {
 public:
-    [[nodiscard]] auto empty() const noexcept -> bool { return m_records.empty(); }
-    [[nodiscard]] auto size() const noexcept -> std::size_t { return m_records.size(); }
-    [[nodiscard]] auto records() const noexcept -> std::span<const CauseRecord> { return m_records; }
+    [[nodiscard]] inline auto empty() const noexcept -> bool { return m_records.empty(); }
+    [[nodiscard]] inline auto size() const noexcept -> std::size_t { return m_records.size(); }
+    [[nodiscard]] inline auto records() const noexcept -> std::span<const CauseRecord> { return m_records; }
 
-    void push(CauseRecord record) { m_records.push_back(std::move(record)); }
-    void append(const Cause& other) {
+    inline void push(CauseRecord record) { m_records.push_back(std::move(record)); }
+    inline void append(const Cause& other) {
         m_records.insert(m_records.end(), other.m_records.begin(), other.m_records.end());
     }
 

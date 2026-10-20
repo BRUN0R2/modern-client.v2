@@ -126,13 +126,13 @@ public:
     auto operator=(CvarBase&&) -> CvarBase& = delete;
     virtual ~CvarBase() = default;
 
-    [[nodiscard]] auto name() const noexcept -> std::string_view { return m_name; }
-    [[nodiscard]] auto description() const noexcept -> std::string_view { return m_description; }
-    [[nodiscard]] auto flags() const noexcept -> CvarFlags { return m_flags; }
+    [[nodiscard]] inline auto name() const noexcept -> std::string_view { return m_name; }
+    [[nodiscard]] inline auto description() const noexcept -> std::string_view { return m_description; }
+    [[nodiscard]] inline auto flags() const noexcept -> CvarFlags { return m_flags; }
 
     /// 0 after registration, plus one for every assignment that changed the value: consumers of
     /// Notify cvars compare revisions to see changes without callbacks.
-    [[nodiscard]] auto revision() const noexcept -> std::uint64_t { return m_revision; }
+    [[nodiscard]] inline auto revision() const noexcept -> std::uint64_t { return m_revision; }
 
     [[nodiscard]] virtual auto kind() const noexcept -> CvarKind = 0;
 
@@ -148,14 +148,14 @@ public:
     [[nodiscard]] virtual auto assign(std::string_view input) -> Result<void, CvarError> = 0;
 
 protected:
-    CvarBase(std::string_view cvarName, std::string_view cvarDescription, CvarFlags cvarFlags)
+    inline CvarBase(std::string_view cvarName, std::string_view cvarDescription, CvarFlags cvarFlags)
         : m_name{cvarName}, m_description{cvarDescription}, m_flags{cvarFlags} {}
 
-    void countChange() noexcept { ++m_revision; }
+    inline void countChange() noexcept { ++m_revision; }
 
     /// `code` with the detail "<name>: expected <expectation>, got "<input>"".
-    [[nodiscard]] auto refuse(CvarError code, std::string_view input,
-                              std::source_location where = std::source_location::current()) const
+    [[nodiscard]] inline auto refuse(CvarError code, std::string_view input,
+                                     std::source_location where = std::source_location::current()) const
         -> std::unexpected<Failure<CvarError>> {
         return fail(code, std::format("{}: expected {}, got \"{}\"", m_name, expectation(), input), where);
     }

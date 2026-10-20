@@ -71,7 +71,7 @@ public:
 
 private:
     friend struct detail::NodeAccess;
-    explicit NodeView(const void* node) noexcept : m_node{node} {}
+    inline explicit NodeView(const void* node) noexcept : m_node{node} {}
 
     const void* m_node; // the library's node, never null
 };
@@ -94,7 +94,7 @@ public:
 
 private:
     friend struct detail::NodeAccess;
-    explicit TableView(const void* table) noexcept : m_table{table} {}
+    inline explicit TableView(const void* table) noexcept : m_table{table} {}
 
     const void* m_table; // the library's table, never null
 };
@@ -109,7 +109,7 @@ public:
 
 private:
     friend struct detail::NodeAccess;
-    explicit ArrayView(const void* array) noexcept : m_array{array} {}
+    inline explicit ArrayView(const void* array) noexcept : m_array{array} {}
 
     const void* m_array; // the library's array, never null
 };
@@ -130,7 +130,7 @@ public:
 
     /// The top-level table. The document must not be a moved-from one.
     [[nodiscard]] auto root() const noexcept -> TableView;
-    [[nodiscard]] auto sourceName() const noexcept -> std::string_view { return m_sourceName; }
+    [[nodiscard]] inline auto sourceName() const noexcept -> std::string_view { return m_sourceName; }
 
 private:
     struct Tree; // the library's root table

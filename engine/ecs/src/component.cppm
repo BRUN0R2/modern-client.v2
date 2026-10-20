@@ -45,7 +45,7 @@ struct ComponentInfo {
     /// nullptr when the type is trivially destructible.
     void (*destroy)(void* object) noexcept = nullptr;
 
-    [[nodiscard]] auto isTag() const noexcept -> bool { return size == 0; }
+    [[nodiscard]] inline auto isTag() const noexcept -> bool { return size == 0; }
 };
 
 /// ComponentInfo for the C++ type `Type`, registered under the declared `name`.
@@ -116,7 +116,7 @@ public:
 
     /// `id` must come from this registry.
     [[nodiscard]] auto info(ComponentTypeId id) const noexcept -> const ComponentInfo&;
-    [[nodiscard]] auto count() const noexcept -> std::size_t { return m_infos.size(); }
+    [[nodiscard]] inline auto count() const noexcept -> std::size_t { return m_infos.size(); }
 
 private:
     std::deque<ComponentInfo> m_infos; // a deque keeps references stable as it grows

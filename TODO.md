@@ -79,6 +79,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `x64-windows-nx` and `x64-linux-nx` triplets (dependencies without exceptions and without RTTI)
 - [x] `.clang-format` and `.clang-tidy` with `readability-magic-numbers` and naming as errors
 - [x] Warnings as errors, deterministic floating point, no exceptions and no RTTI
+- [x] Functions defined in module interfaces are `inline`, so importers can inline them ([02 §2](docs/02-coding-standards.md#2-file-and-module-organization))
 - [x] `scripts/devShell.ps1` for command-line builds on Windows
 - [ ] Run `clang-tidy` with modules (requires a Clang build and `compile_commands.json`)
 - [x] Recommended editor settings in `.vscode/`

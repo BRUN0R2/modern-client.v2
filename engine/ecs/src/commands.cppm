@@ -41,7 +41,7 @@ struct CommandStats {
 /// from one thread at a time.
 class Commands {
 public:
-    explicit Commands(const World& world) noexcept : m_world{&world} {}
+    inline explicit Commands(const World& world) noexcept : m_world{&world} {}
 
     Commands(const Commands&) = delete;
     auto operator=(const Commands&) -> Commands& = delete;
@@ -82,7 +82,7 @@ public:
         recordRemove(pendingTarget(entity), m_world->requireComponentId<Type>());
     }
 
-    [[nodiscard]] auto isEmpty() const noexcept -> bool { return m_commands.empty(); }
+    [[nodiscard]] inline auto isEmpty() const noexcept -> bool { return m_commands.empty(); }
 
     /// Applies the commands in recording order and empties the buffer. Must run outside query
     /// iteration (at a sync point).
