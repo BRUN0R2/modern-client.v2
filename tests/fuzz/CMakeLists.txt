@@ -34,3 +34,11 @@ nxAddFuzzer(fuzzSpr
         nx::assets
     CORPUS
         corpus/spr)
+
+nxAddFuzzer(fuzzMdl
+    SOURCES
+        mdlFuzzer.cpp
+    DEPENDS
+        nx::assets
+    CORPUS
+        corpus/mdl)

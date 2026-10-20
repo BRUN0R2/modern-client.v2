@@ -38,14 +38,6 @@ constexpr std::size_t kPaletteCountBytes = sizeof(std::uint16_t);
     return offset <= bytes.size() && length <= bytes.size() - offset;
 }
 
-/// The text of a name field: up to its first terminator, or all of it.
-[[nodiscard]] auto nameOf(std::span<const std::byte> field) -> std::string {
-    const auto end = std::ranges::find(field, std::byte{0});
-    return std::ranges::subrange(field.begin(), end) |
-           std::views::transform([](std::byte byte) { return static_cast<char>(byte); }) |
-           std::ranges::to<std::string>();
-}
-
 } // namespace
 
 auto WadView::parse(std::span<const std::byte> bytes) -> Result<WadView, WadError> {

@@ -10,6 +10,7 @@ nxAddTest(nxAssetsTests
         wavTests.cpp
         bspTests.cpp
         sprTests.cpp
+        mdlTests.cpp
     DEPENDS
         nx::assets)
 

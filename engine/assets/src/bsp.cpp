@@ -112,26 +112,6 @@ constexpr float kUnitLengthTolerance = 1.0e-3F;
 
 constexpr std::size_t kRgbBytes = 3;
 
-[[nodiscard]] auto readVec3(std::span<const std::byte> bytes) noexcept -> Vec3 {
-    return Vec3{.x = loadLittleEndian<float>(bytes),
-                .y = loadLittleEndian<float>(bytes.subspan(sizeof(float))),
-                .z = loadLittleEndian<float>(bytes.subspan(2 * sizeof(float)))};
-}
-
-[[nodiscard]] auto readVec4(std::span<const std::byte> bytes) noexcept -> Vec4 {
-    const Vec3 xyz = readVec3(bytes);
-    return Vec4{
-        .x = xyz.x, .y = xyz.y, .z = xyz.z, .w = loadLittleEndian<float>(bytes.subspan(3 * sizeof(float)))};
-}
-
-[[nodiscard]] auto isFinite(Vec3 vector) noexcept -> bool {
-    return std::isfinite(vector.x) && std::isfinite(vector.y) && std::isfinite(vector.z);
-}
-
-[[nodiscard]] auto isFinite(Vec4 vector) noexcept -> bool {
-    return isFinite(Vec3{.x = vector.x, .y = vector.y, .z = vector.z}) && std::isfinite(vector.w);
-}
-
 /// "<lump> <record>": where a failure is.
 [[nodiscard]] auto where(Lump lump, std::size_t record) -> std::string {
     return std::format("{} {}", enumName(lump), record);
