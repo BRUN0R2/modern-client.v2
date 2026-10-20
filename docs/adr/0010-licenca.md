@@ -56,7 +56,8 @@ compiladores (GCC Runtime Library Exception, Classpath Exception):
   `MIT.txt` e `CC-BY-4.0.txt`.
 - `LICENSE` na raiz com o texto da GPL, para que o GitHub e outras ferramentas reconheçam a
   licença principal.
-- `REUSE.toml` com a licença de cada diretório. `reuse lint` passa (REUSE 3.3) e roda no CI.
+- `REUSE.toml` com a licença de cada diretório. `reuse lint` passa (REUSE 3.3) e roda no CI
+  (job `checks`).
 - Cabeçalho SPDX em todo arquivo de código:
 
 ```cpp

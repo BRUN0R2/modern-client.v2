@@ -1,0 +1,143 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# Continuous integration (docs/17-build-e-ferramentas.md, section 7).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Licenses, formatting and line endings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install tools
+        run: python -m pip install --disable-pip-version-check "reuse[charset-normalizer]>=6,<7" "clang-format>=22,<23"
+
+      - name: REUSE compliance (every file has a license and a copyright notice)
+        run: reuse lint
+
+      - name: Formatting
+        run: git ls-files -z -- '*.cpp' '*.cppm' '*.hpp' | xargs -0 clang-format --dry-run --Werror
+
+      - name: Line endings (the repository stores text with LF only)
+        run: |
+          bad="$(git ls-files --eol | grep -Ev '^i/(lf|none|-text)[[:space:]]' || true)"
+          if [ -n "$bad" ]; then
+            echo "Files stored without LF line endings:"
+            echo "$bad"
+            exit 1
+          fi
+
+  windows-msvc:
+    name: Windows · MSVC · ${{ matrix.preset }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [dev-windows-msvc, release-windows-msvc]
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install CMake and Ninja
+        run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\..\vcpkg-cache
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          restore-keys: vcpkg-windows-
+
+      - name: Configure, build and test
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          # The developer shell puts Visual Studio's own CMake first; keep the pinned one.
+          $cmakeDirectory = Split-Path (Get-Command cmake).Source
+          . ./scripts/devShell.ps1
+          $env:PATH = "$cmakeDirectory;$env:PATH"
+          cmake --version
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }}
+          ctest --preset ${{ matrix.preset }}
+
+  linux-gcc:
+    name: Linux · GCC 16 (experimental)
+    runs-on: ubuntu-latest
+    container: gcc:16
+    # The Linux presets are not validated yet (docs/17, section 2.1); this job reports, it does not gate.
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: /tmp/vcpkg-cache
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip
+          python3 -m venv /opt/tools
+          /opt/tools/bin/pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
+          echo /opt/tools/bin >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git /opt/vcpkg
+          /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          echo VCPKG_ROOT=/opt/vcpkg >> "$GITHUB_ENV"
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: /tmp/vcpkg-cache
+          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          restore-keys: vcpkg-linux-gcc-
+
+      - name: Configure
+        run: |
+          g++ --version | head -n 1
+          cmake --version | head -n 1
+          cmake --preset dev-linux-gcc
+
+      - name: Build
+        run: cmake --build --preset dev-linux-gcc
+
+      - name: Test
+        run: ctest --preset dev-linux-gcc

@@ -1,5 +1,8 @@
 # Modern-Client.v2
 
+[![CI](https://github.com/BRUN0R2/modern-client.v2/actions/workflows/ci.yml/badge.svg)](https://github.com/BRUN0R2/modern-client.v2/actions/workflows/ci.yml)
+[![REUSE](https://img.shields.io/badge/REUSE-3.3-green)](https://reuse.software)
+
 Recriação de código aberto do Counter-Strike 1.6, escrita do zero em **C++26**, com
 jogabilidade e servidores idênticos ao original e **sem os limites históricos** da GoldSrc.
 

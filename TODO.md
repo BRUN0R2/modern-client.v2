@@ -88,12 +88,16 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Documentar recursos nativos e com fallback do MSVC ([17 §2.1](docs/17-build-e-ferramentas.md#21-matriz-de-compiladores))
 
 ### CI
-- [ ] Jobs `build-test` (Windows + Linux, GCC + Clang)
-- [ ] Job `format-lint`
+- [x] Workflow `.github/workflows/ci.yml` (push no `main`, pull requests, sob demanda)
+- [x] Job `windows-msvc`: Debug e Release com build e testes
+- [ ] Job `linux-gcc` (GCC 16, experimental): estabilizar e torná-lo obrigatório
+- [ ] Job Linux com Clang
+- [x] Formatação (`clang-format --dry-run --Werror`) no job `checks`
+- [ ] `clang-tidy` no CI (exige build com Clang e módulos)
 - [ ] Job `layers` (verificação do grafo de dependências)
 - [ ] Jobs de sanitizers (ASan + UBSan, TSan)
-- [ ] Job que falha com quebras de linha fora do `.gitattributes` (`git ls-files --eol`)
-- [ ] Job `reuse lint` (licença e cabeçalho SPDX em todo arquivo)
+- [x] Quebras de linha (`git ls-files --eol`) no job `checks`
+- [x] `reuse lint` no job `checks`
 
 ### `nx.core`
 - [x] `nx::Failure<E>`, `nx::Result<T, E>`, `nx::fail`, causa encadeada, `nx::describe` e `std::formatter`

@@ -202,10 +202,24 @@ Regras:
 
 ## 7. Integração contínua
 
+O workflow `.github/workflows/ci.yml` roda a cada push no `main`, em todo pull request e
+sob demanda. **Em funcionamento hoje:**
+
+| Job | Conteúdo | Bloqueia? |
+|-----|----------|-----------|
+| `checks` | `reuse lint` (licença e copyright em todo arquivo), `clang-format --dry-run --Werror` e quebras de linha (nada fora de LF no repositório) | Sim |
+| `windows-msvc` | `dev-windows-msvc` e `release-windows-msvc`: configure, build e testes, pelo mesmo `scripts/devShell.ps1` do desenvolvimento | Sim |
+| `linux-gcc` | `dev-linux-gcc` no container `gcc:16`: configure, build e testes | Não: *experimental* até os presets Linux serem validados |
+
+CMake e Ninja vêm do `pip` com faixa de versão, e o vcpkg é clonado na hora, com cache
+binário entre execuções. O CI não depende do que vem pré-instalado na imagem do runner.
+
+**Planejado:**
+
 | Job | Gatilho | Conteúdo |
 |-----|---------|----------|
-| `build-test` | Todo PR | Windows + Linux, GCC + Clang, testes unitários e de integração |
-| `format-lint` | Todo PR | `clang-format --dry-run`, `clang-tidy`, `rook fmt --check`, `rook lint` |
+| `linux-clang` | Todo PR | Clang no Linux, além do GCC |
+| `lint` | Todo PR | `clang-tidy` (com módulos), `rook fmt --check`, `rook lint` |
 | `layers` | Todo PR | Verificação do grafo de dependências entre módulos ([01 §1.1](01-arquitetura.md#11-catálogo-de-módulos)) |
 | `sanitizers` | Todo PR | ASan + UBSan e TSan nos testes |
 | `api-compat` | Todo PR | Diff dos `.rookd` contra a última release ([15 §10](15-api-de-mods.md#10-versionamento-e-estabilidade)) |
