@@ -23,7 +23,7 @@ gameplay and servers identical to the original and **without the historical limi
 
 Milestone **M1 (Runtime core)** in progress, on top of the M0 foundation (build with C++
 modules and `import std`, presets, vcpkg and CI): `nx.core` (typed errors, contracts, strong
-types and units), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
+types and units), `nx.meta` (reflection facade), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
 `nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars,
 commands and `.cfg`) and `nx.platform` (clocks), with tests. The architecture documentation
 is in [`docs/`](docs/README.md), the project rules in [`docs/RULES.md`](docs/RULES.md) and

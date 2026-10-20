@@ -111,8 +111,9 @@ struct [[=nx::ecs::TagComponent{}]] OnGround {};
 
 - Local `ComponentTypeId`: a dense index assigned at registration, used in masks and
   archetypes.
-- While the reflection facade (`nx.meta`) does not exist, registration is **explicit**, the
-  fallback path of [02 §1.2](02-coding-standards.md#12-toolchain-and-fallback-policy):
+- Until registration goes through the reflection facade (`nx.meta`, an item of the
+  `TODO.md`), it takes the name explicitly, as the fallback path of
+  [02 §1.2](02-coding-standards.md#12-toolchain-and-fallback-policy) does:
   `world.registerComponent<cs::Transform>("cs::Transform")`. Components defined at runtime
   (Rook) come in through the same registry, with a `ComponentInfo` (name, size, alignment,
   and relocation and destruction functions). Using an unregistered type is a contract

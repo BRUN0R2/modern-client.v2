@@ -84,8 +84,8 @@ with fallbacks behind facades.
 
 | Compiler | Platforms | Role | Status (2026-10-20) |
 |----------|-----------|------|---------------------|
-| MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, 84 tests passing |
-| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module, 84 tests passing. Windows (MinGW) to be validated |
+| MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, every test passing |
+| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module, every test passing, C++26 reflection (`-freflection`) checking the `nx.meta` descriptions. Windows (MinGW) to be validated |
 | Clang (latest stable version) | Linux, Windows | Sanitizers (ASan, TSan, MSan, UBSan), `clang-tidy`, `clangd` | To be validated (presets ready) |
 
 C++26 features available in MSVC 14.51 (according to the *feature-test macros*): **none**
@@ -153,11 +153,11 @@ ctest --preset dev-linux-gcc
 | `NX_RHI_VULKAN` | `ON` | Vulkan backend |
 | `NX_RHI_D3D11` | `OFF` | DirectX 11 backend (future) |
 | `NX_ENABLE_TRACY` | `ON` in dev | Profiler |
-| `NX_REFLECTION_BACKEND` | `auto` | `native` (P2996) or `fallback` |
+| `NX_REFLECTION_BACKEND` | `auto` | `native` (P2996: adds `-freflection` and checks every `nx.meta` description against its type), `fallback` (descriptions as written) or `auto` (native where the compiler has it). `native` on a compiler without P2996 fails the configuration |
 | `NX_CONTRACT_SEMANTIC` | per module | `enforce` or `observe` ([02 §6.5](02-coding-standards.md#65-contracts)) |
 
-The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today only
-`NX_BUILD_TESTS` and `NX_WARNINGS_AS_ERRORS` exist.
+The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
+`NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS` and `NX_REFLECTION_BACKEND` exist.
 
 ## 5. Dependencies
 

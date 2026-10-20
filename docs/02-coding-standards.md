@@ -16,7 +16,7 @@ This document is **normative** for all C++ code in the repository, within the pr
 
 | Feature | Proposal | Use in the project | Without compiler support |
 |---------|----------|----------------|---------------------------|
-| Static reflection | P2996 | Component metadata, serialization, TOML schemas, replication, Rook bindings, `enum` ↔ string | Type and enum names: `nx.core:introspection` (through compiler function signatures). Members and annotations: explicit registration in `nx.meta` ([§1.2](#12-toolchain-and-fallback-policy)) |
+| Static reflection | P2996 | Component metadata, serialization, TOML schemas, replication, Rook bindings, `enum` ↔ string | Type and enum names: `nx.core:introspection` (through compiler function signatures). Members and annotations: an explicit description per type in `nx.meta` (`nx::meta::Description<T>`), verified against the type where P2996 exists ([§1.2](#12-toolchain-and-fallback-policy)) |
 | Annotations for reflection | P3394 | `[[=nx::net::Replicated{}]]`, `[[=nx::script::Expose{}]]`, `[[=nx::data::Range{...}]]` | Same fallback |
 | Expansion statements (`template for`) | P1306 | Iterate over reflected members | Same fallback |
 | Contracts | P2900 | `pre`, `post`, `contract_assert` for invariants | The `nx::expects`, `nx::ensures` and `nx::invariant` functions, with the same handler ([§6.5](#65-contracts)) |
@@ -46,7 +46,12 @@ C++20/23 features used freely: modules, concepts, ranges, `std::expected`,
 - Detection through *feature-test macros* (`__cpp_impl_reflection`, `__cpp_contracts` etc.),
   never through the compiler version.
 - CI compiles both paths (native and fallback), and a test ensures that the generated
-  metadata is **identical**.
+  metadata is **identical**. For reflection, the metadata comes from the explicit
+  descriptions on every compiler; GCC 16 (`-freflection`, `NX_REFLECTION_BACKEND`) compares
+  each description with its type at compile time (name, fields in declaration order, members
+  and the annotations written on the type), so a description that drifts from its struct
+  stops the build. Annotations stay in the descriptions while a supported compiler (MSVC)
+  rejects the `[[=...]]` syntax.
 
 ## 2. File and module organization
 

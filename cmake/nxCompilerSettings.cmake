@@ -47,3 +47,36 @@ if(MSVC)
 else()
     string(APPEND CMAKE_CXX_FLAGS " -fno-exceptions -fno-rtti -ffp-contract=off")
 endif()
+
+# --- Static reflection (docs/02, section 1.2) ---------------------------------------------
+# nx.meta describes reflected types explicitly on every compiler. Where the compiler implements
+# C++26 reflection (P2996: GCC 16 with -freflection), the native backend also checks each
+# description against its type at compile time. auto picks native when the compiler has it;
+# native fails the configuration when it does not. The flag is global: every module unit, the
+# std module included, must be compiled in the same language dialect.
+set(NX_REFLECTION_BACKEND "auto" CACHE STRING "Static reflection: auto, native (P2996) or fallback")
+set_property(CACHE NX_REFLECTION_BACKEND PROPERTY STRINGS auto native fallback)
+if(NOT NX_REFLECTION_BACKEND MATCHES "^(auto|native|fallback)$")
+    message(FATAL_ERROR "nx: NX_REFLECTION_BACKEND must be auto, native or fallback, not '${NX_REFLECTION_BACKEND}'")
+endif()
+
+set(NX_NATIVE_REFLECTION OFF)
+if(NOT NX_REFLECTION_BACKEND STREQUAL "fallback" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_FLAGS "-freflection")
+    check_cxx_source_compiles("int main() { constexpr auto type = ^^int; return type == ^^int ? 0 : 1; }"
+        NX_COMPILER_HAS_REFLECTION)
+    unset(CMAKE_REQUIRED_FLAGS)
+    set(NX_NATIVE_REFLECTION ${NX_COMPILER_HAS_REFLECTION})
+endif()
+
+if(NX_NATIVE_REFLECTION)
+    string(APPEND CMAKE_CXX_FLAGS " -freflection")
+    message(STATUS "nx: static reflection backend: native (P2996)")
+elseif(NX_REFLECTION_BACKEND STREQUAL "native")
+    message(FATAL_ERROR
+        "nx: NX_REFLECTION_BACKEND=native, but ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} "
+        "does not implement C++26 reflection (see docs/17-build-and-tools.md, section 2.1)")
+else()
+    message(STATUS "nx: static reflection backend: fallback (descriptions as written)")
+endif()

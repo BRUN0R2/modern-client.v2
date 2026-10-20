@@ -86,7 +86,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Toolchain
 - [x] Validate MSVC 14.51 (VS 2026) with CMake 4.3.1 and 4.4.4, Debug and Release
-- [x] Validate GCC 16 on Linux (GCC 16.2.0 in CI, 84 tests)
+- [x] Validate GCC 16 on Linux (GCC 16.2.0 in CI)
 - [ ] Validate Clang on Linux
 - [ ] Validate GCC (MinGW-w64) and Clang on Windows
 - [x] Document MSVC's native and fallback features ([17 §2.1](docs/17-build-and-tools.md#21-compiler-matrix))
@@ -122,13 +122,14 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] File and JSON lines sinks
 - [x] `nx::hash64` (`constexpr` XXH64, verified against the reference implementation) and `nx::StableId`
 - [ ] BLAKE3 for content hashing (with the VFS, M2)
-- [x] Unit tests for what already exists in `nx.core` (84 tests, including a death test of the default handler)
+- [x] Unit tests for what already exists in `nx.core` (including death tests of the default handler)
 
 ### `nx.meta`
-- [ ] Reflection facade: members, annotations, `enumName`
-- [ ] Native path (P2996 + P3394)
-- [ ] Fallback path (explicit registration)
-- [ ] Test that guarantees identical metadata on both paths
+- [x] Reflection facade: names, fields and annotations (`nx::meta::qualifiedName`, `forEachField`, `typeAnnotation`); `enumName` stays in `nx.core:introspection`
+- [x] Native path (P2996 + P3394): GCC 16 with `-freflection` checks every description against its type, including annotations written on it (`NX_REFLECTION_BACKEND`)
+- [x] Fallback path (explicit registration: `nx::meta::Description<T>`)
+- [x] Test that guarantees identical metadata on both paths (`nxMetaTests`: matching descriptions and every kind of drift)
+- [ ] Annotations on the types themselves (`[[=...]]`) instead of the descriptions, when every supported compiler accepts the syntax (MSVC does not)
 - [ ] TOML schemas derived from structs (toml++ without exceptions) with per-file/line errors
 
 ---
