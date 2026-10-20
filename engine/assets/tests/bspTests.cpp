@@ -331,6 +331,38 @@ TEST(BspTest, ReadsTheTreeTheModelsAndTheEntities) {
     EXPECT_FALSE(worldspawn.find("message").has_value());
 }
 
+TEST(BspTest, HullsMayShareClipNodes) {
+    QuadMap map;
+    Bytes& clipNodes = map.lumps[Lump::ClipNodes];
+    for (const auto [front, back] : std::to_array<std::array<std::int16_t, 2>>({{0, 0}, {0, 1}})) {
+        append(clipNodes, std::int32_t{0}); // plane
+        append(clipNodes, front);
+        append(clipNodes, back);
+    }
+    map.set(Lump::Models, 44, std::int32_t{2}); // hull 2: node 2, over node 1, both over node 0
+
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    EXPECT_EQ(view->clipNodes()[1].children[0], ClipNodeChild{ClipNodeIndex{.value = 0}})
+        << "a child before its parent";
+    EXPECT_EQ(view->models()[0].hulls[1], ClipNodeChild{ClipNodeIndex{.value = 2}});
+
+    QuadMap cycle = map;
+    cycle.set(Lump::ClipNodes, 4, std::int16_t{2}); // node 0 under node 2, which is over it
+    EXPECT_EQ(parseError(cycle), BspError::BadValue);
+}
+
+TEST(BspTest, AHullHeadAtTheClipNodeCountHoldsNothing) {
+    QuadMap map;
+    map.set(Lump::Models, 40, std::int32_t{1}); // hull 1: what hlbsp writes for a hull without clip nodes
+
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    EXPECT_EQ(view->models()[0].hulls[0], ClipNodeChild{Contents::Empty});
+}
+
 TEST(BspTest, AKeyThatRepeatsHasItsLastValue) {
     QuadMap map;
     map.setEntities(R"({ "classname" "worldspawn" "skyname" "desert" "skyname" "night" }
@@ -388,9 +420,9 @@ TEST(BspTest, RejectsABrokenTree) {
     EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 36, std::int32_t{1}); }),
               BspError::BadIndex)
         << "head node 1 of 1";
-    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 40, std::int32_t{1}); }),
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 40, std::int32_t{2}); }),
               BspError::BadIndex)
-        << "hull clip node 1 of 1";
+        << "hull clip node 2 of 1";
     EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 52, std::int32_t{2}); }),
               BspError::BadIndex)
         << "two visible leaves after leaf 0, of two";

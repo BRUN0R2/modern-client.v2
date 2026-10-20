@@ -205,7 +205,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `--content`, `-basedir` and `--content-config` options
 - [ ] `content_list`, `content_scan`, `content_add`, `content_profile` commands
 - [ ] Code-generated `devContent`: grid textures, test map, capsule player, simple weapons, synthesized sounds
-- [x] BSP v30 reader (all lumps) with fuzzing (`nx.assets:bsp`, `fuzzBsp`): every index checked, the node and clip node trees checked to be trees
+- [x] BSP v30 reader (all lumps) with fuzzing (`nx.assets:bsp`, `fuzzBsp`): every index checked, the visible tree checked to be a tree, the collision hulls to have no cycle (clip nodes shared as VHLT writes them)
 - [x] WAD3 reader with fuzzing (`nx.assets:wad`, `fuzzWad`; fuzz infrastructure: `nxAddFuzzer`, the `fuzz-windows-msvc` preset and the nightly `fuzz` workflow)
 - [x] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing (`nx.assets:mdl`, `fuzzMdl`): structure, geometry, textures, skins, sequences and animations decoded from the model or its sequence groups
 - [x] SPR v2 reader with fuzzing (`nx.assets:spr`, `fuzzSpr`)

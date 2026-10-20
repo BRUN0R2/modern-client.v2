@@ -223,24 +223,54 @@ TEST(WavTest, RejectsAFormatThatContradictsItselfOrTheData) {
         << "half a frame";
 
     const std::array<std::uint32_t, 1> pastTheEnd{3};
-    EXPECT_EQ(
-        parseError(wavFile({{"fmt ", formatChunk({})}, {"data", Bytes(2)}, {"cue ", cueChunk(pastTheEnd)}})),
-        WavError::BadFormat);
-
     Bytes cutCue = cueChunk(pastTheEnd);
     cutCue.resize(cutCue.size() - 1);
     EXPECT_EQ(parseError(wavFile({{"fmt ", formatChunk({})}, {"data", Bytes(4)}, {"cue ", cutCue}})),
               WavError::BadFormat);
 }
 
-TEST(WavTest, RejectsAChunkOutsideTheFile) {
+TEST(WavTest, LeavesOutCuePointsPastTheEnd) {
+    const std::array<std::uint32_t, 4> cues{0, 3, 2,
+                                            135345}; // 135345: a marker of the sound before resampling
+    const auto sound =
+        parseWav(wavFile({{"fmt ", formatChunk({})}, {"data", Bytes(2)}, {"cue ", cueChunk(cues)}}));
+    ASSERT_TRUE(sound.has_value()) << nx::describe(sound.error());
+    EXPECT_EQ(sound->cuePoints, (std::vector<SampleFrames>{SampleFrames{0}, SampleFrames{2}}));
+}
+
+TEST(WavTest, RejectsAChunkOutsideTheFileBeforeTheSound) {
     Bytes file = wavFile({{"fmt ", formatChunk({})}, {"data", Bytes(4)}});
     file.resize(file.size() - 1); // the data chunk claims one byte more than is left
     EXPECT_EQ(parseError(file), WavError::ChunkOutOfBounds);
 
-    Bytes cutHeader = wavFile({{"fmt ", formatChunk({})}, {"data", Bytes(2)}});
-    appendId(cutHeader, "LI");
+    Bytes cutHeader = wavFile({{"fmt ", formatChunk({})}});
+    appendId(cutHeader, "da");
     EXPECT_EQ(parseError(cutHeader), WavError::ChunkOutOfBounds);
+}
+
+TEST(WavTest, StopsAtMetadataThatDoesNotFitAfterTheSound) {
+    const Bytes samples{std::byte{1}, std::byte{2}, std::byte{3}};
+    const Bytes list(6, std::byte{'x'});
+    const std::array<std::uint32_t, 1> cues{1};
+
+    // Cool Edit: no pad byte after the odd data chunk, so the LIST starts where the pad would be.
+    Bytes withoutPad = wavFile({{"fmt ", formatChunk({})}});
+    appendId(withoutPad, "data");
+    append(withoutPad, static_cast<std::uint32_t>(samples.size()));
+    withoutPad.insert(withoutPad.end(), samples.begin(), samples.end());
+    appendChunk(withoutPad, "LIST", list);
+    appendChunk(withoutPad, "cue ", cueChunk(cues)); // after the misplaced chunk: not read
+    const auto coolEdit = parseWav(withoutPad);
+    ASSERT_TRUE(coolEdit.has_value()) << nx::describe(coolEdit.error());
+    EXPECT_TRUE(std::ranges::equal(coolEdit->samples, samples));
+    EXPECT_TRUE(coolEdit->cuePoints.empty());
+
+    // A few bytes after the sound, too few for a chunk header.
+    Bytes trailing = wavFile({{"fmt ", formatChunk({})}, {"data", samples}});
+    appendId(trailing, "LI");
+    const auto cut = parseWav(trailing);
+    ASSERT_TRUE(cut.has_value()) << nx::describe(cut.error());
+    EXPECT_EQ(cut->length, SampleFrames{3});
 }
 
 } // namespace

@@ -156,17 +156,25 @@ Readers today:
   the original's limits ([11 §2.1](11-audio.md#21-the-originals-audio-problems-and-their-causes)).
   It gives the length (`SampleFrames`), the samples as a view of the file's bytes and the sample
   offsets of the cue points, where a looping sound loops. Other chunks are skipped, and the size
-  in the RIFF header is not trusted.
+  in the RIFF header is not trusted. Old editors misplaced the metadata after the samples (Cool
+  Edit left out the pad byte of an odd `data` chunk; GoldWave appended a `LIST` past the end of
+  the RIFF form), so once `fmt ` and `data` are read, a chunk that does not fit ends the reading,
+  as it ends the original's: the chat beep, a grenade's pin, the defused bomb and a death sound of
+  CS 1.6 are such files. A cue point past the end of the samples, a marker that resampling left
+  behind, is left out.
 
 - BSP v30 (`nx.assets:bsp`), every lump: planes (unit normals, axis), vertices, edges, surface
   edges, texture infos, faces and their lightmap offsets, the textures (embedded, or named with
   their pixels in a WAD), the RGB lighting, the run-length visibility, the nodes, leaves and mark
   surfaces, the clip nodes of the collision hulls, the models and the entities. Every index a
   record holds is checked against what it indexes, so readers index without checks; every float
-  is finite; and the node and clip node trees are trees, each child after its parent and with one
-  parent, so no walk can cycle or blow up on a hostile map. Entity text is taken without escapes
-  (the `wad` key holds Windows paths), and a repeated key resolves to its last value, as the
-  original assigns them in order.
+  is finite; the visible tree is a tree, each node after its parent and with one parent, so no
+  walk can cycle or blow up on a hostile map; and the collision hulls have no cycle. Their clip
+  nodes may be shared: VHLT, the compiler of most community maps, writes a subtree that several
+  nodes have once, and a trace still visits each node at most once per piece of its segment. A
+  hull head equal to the clip node count, which hlbsp writes for a hull without clip nodes, holds
+  nothing. Entity text is taken without escapes (the `wad` key holds Windows paths), and a
+  repeated key resolves to its last value, as the original assigns them in order.
 - SPR v2 (`nx.assets:spr`): the orientation, the rendering (normal, additive, index-alpha,
   alpha-test), the sync type, the 256-color palette, and the frames: single images, or groups whose
   intervals rise from above zero. Each image has its origin, size and pixels as a view of the

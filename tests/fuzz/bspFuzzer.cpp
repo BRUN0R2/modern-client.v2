@@ -55,14 +55,17 @@ using nx::assets::BspView;
     return sum;
 }
 
-/// Every clip node under `root`.
+/// Every clip node under `root`, once: hulls share subtrees.
 [[nodiscard]] auto walkHull(const BspView& map, nx::assets::ClipNodeChild root) -> float {
     float sum = 0.0F;
+    std::vector<bool> isVisited(map.clipNodes().size());
     std::vector<nx::assets::ClipNodeChild> pending{root};
     while (!pending.empty()) {
         const nx::assets::ClipNodeChild child = pending.back();
         pending.pop_back();
-        if (const auto* node = std::get_if<nx::assets::ClipNodeIndex>(&child)) {
+        if (const auto* node = std::get_if<nx::assets::ClipNodeIndex>(&child);
+            node != nullptr && !isVisited[node->value]) {
+            isVisited[node->value] = true;
             const nx::assets::ClipNode& visited = map.clipNodes()[node->value];
             sum += map.planes()[visited.plane.value].plane.distance;
             pending.insert(pending.end(), visited.children.begin(), visited.children.end());

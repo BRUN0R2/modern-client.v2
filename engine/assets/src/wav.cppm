@@ -35,7 +35,7 @@ using ChannelCount = Quantity<std::uint16_t, ChannelsTag>;
 enum class WavError : std::uint8_t {
     TooSmall,          ///< Smaller than the RIFF header.
     NotRiffWave,       ///< The file does not start with "RIFF" and "WAVE".
-    ChunkOutOfBounds,  ///< A chunk does not fit in the file.
+    ChunkOutOfBounds,  ///< A chunk before the "fmt " and "data" chunks does not fit in the file.
     MissingChunk,      ///< The "fmt " or the "data" chunk is missing.
     DuplicateChunk,    ///< Two "fmt ", "data" or "cue " chunks.
     UnsupportedFormat, ///< A compressed encoding (ADPCM, A-law...) or a sample size PCM and IEEE
@@ -66,7 +66,12 @@ struct WavSound {
 
 /// Reads a WAV file: its "fmt " (PCM, IEEE float or extensible), "data" and "cue " chunks; other
 /// chunks are skipped. The size in the RIFF header is not trusted: chunks are read up to the end of
-/// the bytes. Errors: every WavError.
+/// the bytes. Once the "fmt " and "data" chunks are read, what follows is metadata, which old
+/// editors wrote wrongly: Cool Edit left out the pad byte of an odd "data" chunk, which puts the
+/// next chunk a byte early, and GoldWave appended a "LIST" chunk past the end of the RIFF form. A
+/// chunk that does not fit then ends the reading, as it ends the original's, and the chunks after
+/// it are not read. A cue point past the end of the samples (a marker that resampling left behind)
+/// marks no sample and is left out. Errors: every WavError.
 [[nodiscard]] auto parseWav(std::span<const std::byte> bytes) -> Result<WavSound, WavError>;
 
 } // namespace nx::assets

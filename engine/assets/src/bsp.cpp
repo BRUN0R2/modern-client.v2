@@ -456,19 +456,13 @@ struct TreeTargets {
     return leaf;
 }
 
-/// A child of clip node `parent` (or a hull root, with no parent): a clip node after it, or
-/// contents. Errors: BadIndex, BadValue.
-[[nodiscard]] auto decodeClipNodeChild(std::int32_t child, std::optional<std::size_t> parent, Lump lump,
-                                       std::size_t record, std::size_t clipNodes)
-    -> Result<ClipNodeChild, BspError> {
+/// A child of a clip node, or a hull root: a clip node, or contents. Errors: BadIndex, BadValue.
+[[nodiscard]] auto decodeClipNodeChild(std::int32_t child, Lump lump, std::size_t record,
+                                       std::size_t clipNodes) -> Result<ClipNodeChild, BspError> {
     if (child < 0) {
         return contentsOf(child, lump, record).transform([](Contents contents) {
             return ClipNodeChild{contents};
         });
-    }
-    if (parent && std::cmp_less_equal(child, *parent)) {
-        return fail(BspError::BadValue, std::format("{}: child clip node {} is not after its parent",
-                                                    where(lump, record), child));
     }
     return indexInto<ClipNodeTag>(static_cast<std::uint64_t>(child), clipNodes, lump, record, "clip node")
         .transform([](ClipNodeIndex node) { return ClipNodeChild{node}; });
@@ -479,10 +473,10 @@ struct TreeTargets {
     const auto plane = indexInto<PlaneTag>(loadLittleEndian<std::uint32_t>(record), targets.planes,
                                            Lump::ClipNodes, index, "plane");
     const auto front =
-        decodeClipNodeChild(loadLittleEndian<std::int16_t>(record.subspan(kClipNodeChildrenOffset)), index,
+        decodeClipNodeChild(loadLittleEndian<std::int16_t>(record.subspan(kClipNodeChildrenOffset)),
                             Lump::ClipNodes, index, targets.clipNodes);
     const auto back = decodeClipNodeChild(
-        loadLittleEndian<std::int16_t>(record.subspan(kClipNodeChildrenOffset + kChildBytes)), index,
+        loadLittleEndian<std::int16_t>(record.subspan(kClipNodeChildrenOffset + kChildBytes)),
         Lump::ClipNodes, index, targets.clipNodes);
     if (!plane || !front || !back) {
         return std::unexpected(!plane ? plane.error() : !front ? front.error() : back.error());
@@ -516,7 +510,13 @@ struct TreeTargets {
     for (std::size_t hull = 0; hull < kClipHulls; ++hull) {
         const auto head = loadLittleEndian<std::int32_t>(
             record.subspan(kModelHeadsOffset + ((hull + 1) * sizeof(std::int32_t))));
-        auto root = decodeClipNodeChild(head, std::nullopt, Lump::Models, index, targets.clipNodes);
+        // For a hull it writes no clip node of, hlbsp writes the count of clip nodes written so far:
+        // in the last models, the count of them all. Such a hull holds nothing.
+        if (std::cmp_equal(head, targets.clipNodes)) {
+            model.hulls.at(hull) = Contents::Empty;
+            continue;
+        }
+        auto root = decodeClipNodeChild(head, Lump::Models, index, targets.clipNodes);
         if (!root) {
             return std::unexpected(std::move(root.error()));
         }
@@ -604,25 +604,63 @@ template <class Records>
     return std::nullopt;
 }
 
-/// Fails unless every record of `records` (nodes or clip nodes) is the child of at most one other:
-/// with children after parents, that makes a tree, whose every walk is linear. Two parents would
-/// make a graph whose full walk, the renderer's, doubles with every level. Errors: BadValue.
-template <class Index, class Record>
-[[nodiscard]] auto checkSingleParents(const std::vector<Record>& records, Lump lump)
-    -> Result<void, BspError> {
-    std::vector<bool> hasParent(records.size());
-    for (std::size_t parent = 0; parent < records.size(); ++parent) {
-        for (const auto& child : records[parent].children) {
-            const auto* node = std::get_if<Index>(&child);
+/// Fails unless every node is the child of at most one other: with children after parents, that
+/// makes a tree, whose every walk is linear. Two parents would make a graph whose full walk, the
+/// renderer's, doubles with every level. Errors: BadValue.
+[[nodiscard]] auto checkSingleParents(const std::vector<BspNode>& nodes) -> Result<void, BspError> {
+    std::vector<bool> hasParent(nodes.size());
+    for (std::size_t parent = 0; parent < nodes.size(); ++parent) {
+        for (const NodeChild& child : nodes[parent].children) {
+            const auto* node = std::get_if<NodeIndex>(&child);
             if (node == nullptr) {
                 continue;
             }
             if (hasParent[node->value]) {
-                return fail(BspError::BadValue, std::format("{}: {} has a second parent", where(lump, parent),
-                                                            where(lump, node->value)));
+                return fail(BspError::BadValue,
+                            std::format("{}: {} has a second parent", where(Lump::Nodes, parent),
+                                        where(Lump::Nodes, node->value)));
             }
             hasParent[node->value] = true;
         }
+    }
+    return {};
+}
+
+/// Fails when clip nodes form a cycle, which would make a trace through them endless. Shared
+/// subtrees are fine: a trace splits its segment at each plane, so the pieces that reach a node by
+/// different paths are disjoint, and it visits a node at most once per crossing. Errors: BadValue.
+[[nodiscard]] auto checkAcyclic(const std::vector<ClipNode>& clipNodes) -> Result<void, BspError> {
+    // Kahn's algorithm: taking away, again and again, the nodes that no node left points to takes
+    // away every node, unless some are in a cycle or under one.
+    std::vector<std::size_t> parents(clipNodes.size());
+    for (const ClipNode& node : clipNodes) {
+        for (const ClipNodeChild& child : node.children) {
+            if (const auto* index = std::get_if<ClipNodeIndex>(&child)) {
+                ++parents[index->value];
+            }
+        }
+    }
+    std::vector<std::size_t> unparented =
+        std::views::iota(std::size_t{0}, clipNodes.size()) |
+        std::views::filter([&parents](std::size_t node) { return parents[node] == 0; }) |
+        std::ranges::to<std::vector>();
+    std::size_t takenAway = 0;
+    while (!unparented.empty()) {
+        const std::size_t node = unparented.back();
+        unparented.pop_back();
+        ++takenAway;
+        for (const ClipNodeChild& child : clipNodes[node].children) {
+            const auto* index = std::get_if<ClipNodeIndex>(&child);
+            if (index != nullptr && --parents[index->value] == 0) {
+                unparented.push_back(index->value);
+            }
+        }
+    }
+    if (takenAway != clipNodes.size()) {
+        const auto left = std::ranges::find_if(parents, [](std::size_t count) { return count != 0; });
+        return fail(BspError::BadValue,
+                    std::format("{} is in a cycle of clip nodes, or under one",
+                                where(Lump::ClipNodes, narrow<std::size_t>(left - parents.begin()))));
     }
     return {};
 }
@@ -674,9 +712,8 @@ struct Tree {
                              tree.clipNodes)) {
         return std::unexpected(std::move(*failure));
     }
-    if (auto trees = checkSingleParents<NodeIndex>(tree.nodes, Lump::Nodes).and_then([&tree] {
-            return checkSingleParents<ClipNodeIndex>(tree.clipNodes, Lump::ClipNodes);
-        });
+    if (auto trees =
+            checkSingleParents(tree.nodes).and_then([&tree] { return checkAcyclic(tree.clipNodes); });
         !trees) {
         return std::unexpected(std::move(trees.error()));
     }

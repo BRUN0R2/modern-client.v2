@@ -88,22 +88,28 @@ struct Format {
     std::size_t frameBytes = 0;
 };
 
-/// The chunks after the RIFF header. Errors: ChunkOutOfBounds, DuplicateChunk.
+/// The chunks after the RIFF header, up to the first one that does not fit once the format and the
+/// data are found (parseWav). Errors: ChunkOutOfBounds, DuplicateChunk.
 [[nodiscard]] auto findChunks(std::span<const std::byte> bytes) -> Result<Chunks, WavError> {
     Chunks chunks;
     std::size_t offset = kRiffHeaderBytes;
     while (offset < bytes.size()) {
-        if (bytes.size() - offset < kChunkHeaderBytes) {
+        const std::size_t left = bytes.size() - offset;
+        const bool hasHeader = left >= kChunkHeaderBytes;
+        const auto size = hasHeader
+                              ? loadLittleEndian<std::uint32_t>(bytes.subspan(offset + kChunkSizeOffset))
+                              : std::uint32_t{0};
+        if (!hasHeader || size > left - kChunkHeaderBytes) {
+            if (chunks.format && chunks.data) {
+                break; // metadata after the sound that cannot be placed
+            }
             return fail(WavError::ChunkOutOfBounds,
-                        std::format("a chunk header at {} is cut by the end of the file", offset));
+                        hasHeader
+                            ? std::format("a chunk of {} bytes at {} is outside the file's {}", size, offset,
+                                          bytes.size())
+                            : std::format("a chunk header at {} is cut by the end of the file", offset));
         }
         const auto id = bytes.subspan(offset, FourCc{}.size());
-        const auto size = loadLittleEndian<std::uint32_t>(bytes.subspan(offset + kChunkSizeOffset));
-        if (size > bytes.size() - offset - kChunkHeaderBytes) {
-            return fail(WavError::ChunkOutOfBounds,
-                        std::format("a chunk of {} bytes at {} is outside the file's {}", size, offset,
-                                    bytes.size()));
-        }
         const auto body = bytes.subspan(offset + kChunkHeaderBytes, size);
         for (const auto& [chunkId, slot] :
              {std::pair{kFormatChunk, &chunks.format}, std::pair{kDataChunk, &chunks.data},
@@ -181,7 +187,7 @@ struct Format {
     };
 }
 
-/// The sample offsets of the cue chunk, each at most `length`. Errors: BadFormat.
+/// The sample offsets of the cue chunk that are at most `length`. Errors: BadFormat.
 [[nodiscard]] auto readCuePoints(std::span<const std::byte> chunk, SampleFrames length)
     -> Result<std::vector<SampleFrames>, WavError> {
     if (chunk.size() < kCueCountBytes) {
@@ -197,11 +203,9 @@ struct Format {
     for (std::size_t index = 0; index < count; ++index) {
         const SampleFrames offset{loadLittleEndian<std::uint32_t>(
             chunk.subspan(kCueCountBytes + (index * kCuePointBytes) + kCueSampleOffsetOffset))};
-        if (offset > length) {
-            return fail(WavError::BadFormat,
-                        std::format("cue point {} at {} is past the end, {}", index, offset, length));
+        if (offset <= length) {
+            cuePoints.push_back(offset);
         }
-        cuePoints.push_back(offset);
     }
     return cuePoints;
 }
