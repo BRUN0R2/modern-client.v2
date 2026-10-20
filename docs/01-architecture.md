@@ -38,6 +38,7 @@ flowchart TB
     subgraph L1[Core]
         JOBS[nx.jobs]
         META[nx.meta · reflection]
+        DATA[nx.data · TOML schemas]
         MATH[nx.math]
         CONSOLE[nx.console · cvars, commands, .cfg]
     end
@@ -55,6 +56,7 @@ flowchart TB
 | `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes, SIMD | core |
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core |
+| `nx.data` | 1 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.jobs` | 1 | Job System, counters, graphs, `std::execution` scheduler | core |
 | `nx.platform` | 2 | Window, input, native file system, clocks, OS threads (SDL3) | core, math |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, meta, jobs |
@@ -242,6 +244,21 @@ flowchart LR
 
 Every TOML file has a **schema** derived by reflection from a C++ struct. An unknown key, a
 wrong type or an out-of-range value produces a typed error with the file, line and column.
+
+`nx.data` implements it: `nx::data::parseToml<T>(text, fileName)` reads a TOML file into a
+struct with an `nx.meta` description. The keys of a table are the fields of its struct
+(nested tables are described structs too), every field that is not `std::optional` is
+required, and a value must have the field's type: booleans, integers, `float` and `double`,
+quantities and durations (as their number), text, enums (the enumerator's name with a
+lowercase first letter, `GoldsrcInstall` → `"goldsrcInstall"`), tables and arrays of them. A
+`nx::data::Range` annotation bounds a number; a Range on a field without numbers, with its
+minimum above its maximum, or with inexact bounds on a whole-number field does not compile, and
+whole numbers compare against it exactly. The first problem is the failure
+(`DataError::Syntax`, `UnknownKey`, `MissingKey`, `WrongType`, `OutOfRange`, `UnknownName`), with
+the detail `"<file>:<line>:<column>: <key path>: <problem>"`, for example
+`server.toml:3:14: maxPlayers: expected a whole number in [1, 64], got 65`; a number beyond its
+field's type keeps the conversion failure as its cause. The TOML library (toml++, built without
+exceptions) stays behind `nx::data::Document` and its views.
 
 ## 9. Observability
 

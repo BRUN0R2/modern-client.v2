@@ -95,7 +95,7 @@ namespace detail {
 
 /// The type's annotations; a description without kAnnotations has none.
 template <Described Type>
-[[nodiscard]] consteval auto typeAnnotations() noexcept {
+[[nodiscard]] constexpr auto typeAnnotations() noexcept {
     if constexpr (requires { Description<Type>::kAnnotations; }) {
         static_assert(kIsAnnotationTuple<std::remove_cvref_t<decltype(Description<Type>::kAnnotations)>>,
                       "nx::meta: kAnnotations must be a std::tuple of annotations");
@@ -107,7 +107,7 @@ template <Described Type>
 
 /// The first element of `values` whose type is `Wanted`.
 template <class Wanted, class... Values>
-[[nodiscard]] consteval auto firstOfType(const std::tuple<Values...>& values) noexcept
+[[nodiscard]] constexpr auto firstOfType(const std::tuple<Values...>& values) noexcept
     -> std::optional<Wanted> {
     std::optional<Wanted> found;
     std::apply(

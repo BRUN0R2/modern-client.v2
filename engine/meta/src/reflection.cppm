@@ -26,7 +26,7 @@ template <Described Type>
 
 /// The first annotation of type `Wanted` on `Type`.
 template <Annotation Wanted, Described Type>
-[[nodiscard]] consteval auto typeAnnotation() noexcept -> std::optional<Wanted> {
+[[nodiscard]] constexpr auto typeAnnotation() noexcept -> std::optional<Wanted> {
     static_assert(native::verify<Type>());
     return detail::firstOfType<Wanted>(detail::typeAnnotations<Type>());
 }
@@ -55,7 +55,7 @@ public:
 
     /// The first annotation of type `Wanted` on this field.
     template <Annotation Wanted>
-    [[nodiscard]] static consteval auto annotation() noexcept -> std::optional<Wanted> {
+    [[nodiscard]] static constexpr auto annotation() noexcept -> std::optional<Wanted> {
         return detail::firstOfType<Wanted>(kDesc.annotations);
     }
 };
