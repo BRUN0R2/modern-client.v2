@@ -112,7 +112,7 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `EnumArray` e `Flags<E>`
 - [ ] `inplace_vector` (fachada), quando o primeiro consumidor existir (ECS ou jobs)
 - [x] `FrameArena` com falhas tipadas (`Exhausted`, `InvalidAlignment`)
-- [ ] `PoolAllocator` (chunks do ECS, M1) e `TrackedHeapAllocator`
+- [ ] `PoolAllocator<T>` genérico (os chunks do ECS usam o pool de blocos do próprio `World`) e `TrackedHeapAllocator`
 - [ ] Filas SPSC/MPSC sem lock com erro tipado de fila cheia, quando o primeiro consumidor existir (rede, áudio)
 - [x] Log estruturado: níveis, categorias por módulo, formatação verificada em compilação, `ConsoleSink`, `RateLimit` *thread-safe*
 - [ ] Sinks de arquivo e JSON lines
@@ -148,12 +148,14 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Benchmarks (`nxBenchJobs`)
 
 ### `nx.ecs`
-- [ ] `Entity` geracional, slots FIFO, aposentadoria por esgotamento de geração
-- [ ] Registro de componentes por reflexão (`ComponentTypeId`, `StableTypeId`)
-- [ ] Arquétipos, chunks de 16 KiB SoA, grafo de arquétipos
-- [ ] Versões de mudança por chunk e coluna
-- [ ] Queries tipadas (`With`, `Without`, `Changed`, `Added`, opcionais)
-- [ ] `forEach`, `forEachChunk`, `parallelForEachChunk`
+- [x] `Entity` geracional, slots FIFO, aposentadoria por esgotamento de geração
+- [x] Registro de componentes explícito com nome declarado (`ComponentTypeId`, `StableTypeId`), também para componentes de tempo de execução
+- [ ] Registro de componentes por reflexão (com o `nx.meta`)
+- [x] Arquétipos, chunks de 16 KiB SoA (blocos maiores para linhas maiores), grafo de arquétipos
+- [x] Versões de mudança por chunk e coluna
+- [x] Queries tipadas (`With`, `Without`, `Changed`, `Optional`, `Entity`)
+- [ ] `Added<T>` com versão por linha, quando o primeiro consumidor existir
+- [x] `forEach`, `forEachChunk`, `parallelForEachChunk`, `get`
 - [ ] Agendador por fases com DAG de conflitos, `before`/`after`, detecção de ciclos
 - [ ] Command buffers com aplicação determinística e `PendingEntity`
 - [ ] Eventos *double-buffered*

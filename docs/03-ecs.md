@@ -33,33 +33,41 @@
 ```cpp
 export namespace nx::ecs {
 
+enum class EntityIndex : std::uint32_t {};
+enum class Generation : std::uint32_t {};
+
 class Entity {
 public:
+    constexpr Entity() noexcept = default;  // the null entity, never alive
+    Entity(std::uint32_t rawIndex) = delete; // raw indices are not handles
+
     [[nodiscard]] constexpr auto index() const noexcept -> EntityIndex;
     [[nodiscard]] constexpr auto generation() const noexcept -> Generation;
-    constexpr auto operator<=>(const Entity&) const = default;
-
-    Entity(std::uint32_t) = delete("entities are issued by World; raw indices are not handles");
+    [[nodiscard]] constexpr auto isNull() const noexcept -> bool;
+    friend constexpr auto operator<=>(Entity, Entity) noexcept = default;
 
 private:
-    friend class World;
+    friend class EntityTable;
     constexpr Entity(EntityIndex index, Generation generation) noexcept;
-    EntityIndex m_index;
-    Generation  m_generation;
+    EntityIndex m_index = kNullIndex;
+    Generation  m_generation{};
 };
 
 } // namespace nx::ecs
 ```
 
 - **Validação:** `world.isAlive(entity)` compara a geração do handle com a do slot. Um
-  handle antigo **nunca** identifica outra entidade.
+  handle antigo **nunca** identifica outra entidade. Destruir avança a geração do slot na
+  hora, então um slot livre já guarda uma geração que nenhum handle emitido carrega.
+- **Entidade nula:** `Entity{}` usa o índice `2³² − 1`, que nenhum slot recebe, e nunca está
+  viva. Representa "nenhuma entidade" em componentes (`Owner{}`).
 - **Reuso de slots:** fila FIFO de slots livres, para que um índice demore o máximo
   possível para ser reutilizado.
 - **Esgotamento de geração:** quando a geração de um slot chega ao máximo, o slot é
   **aposentado** (nunca mais reutilizado), em vez de dar a volta. Isso é registrado em
   métricas.
 - **Registro de entidade:** `{archetype, chunk, row}` em um array denso indexado por
-  `EntityIndex`.
+  `EntityIndex`. A tabela de handles é a `EntityTable`; o `World` guarda os registros.
 - **Sem limite estrutural:** até 2³² − 1 slots. Limites operacionais (ex.: entidades
   criáveis por plugin) são cotas configuráveis, com erro tipado
   `EntityError::QuotaExceeded`.
@@ -102,13 +110,22 @@ struct [[=nx::ecs::TagComponent{}]] OnGround {};
 ### 4.2 Registro e identidade de tipo
 
 - `ComponentTypeId` local: índice denso atribuído no registro, usado em máscaras e arquétipos.
+- Enquanto a fachada de reflexão (`nx.meta`) não existe, o registro é **explícito**, o
+  caminho de fallback de [02 §1.2](02-padroes-de-codigo.md#12-política-de-toolchain-e-fallbacks):
+  `world.registerComponent<cs::Transform>("cs::Transform")`. Componentes definidos em tempo
+  de execução (Rook) entram pelo mesmo registro, com um `ComponentInfo` (nome, tamanho,
+  alinhamento e funções de realocação e destruição). Usar um tipo não registrado viola
+  contrato.
 - `StableTypeId`: `nx::StableId::fromName("cs::Transform")`, o XXH64 de um nome **declarado**
   no registro (nunca o nome gerado pelo compilador, que muda entre compiladores). É
   usado em rede, saves, replays e mods, e não muda entre builds enquanto o nome não mudar.
 - O registro coleta por reflexão: tamanho, alinhamento, se é trivialmente
   copiável/realocável, construtor padrão, destrutor, nome, campos e anotações.
 - Colisão de `StableTypeId` gera erro de registro (`ComponentError::StableIdCollision`)
-  já na inicialização.
+  já na inicialização. Os outros erros de registro são `TypeAlreadyRegistered`,
+  `NameAlreadyRegistered`, `InvalidAlignment` (acima do alinhamento do chunk, 64 bytes) e
+  `InvalidName`.
+- Componentes vazios (`std::is_empty_v`) são **tags**: entram no arquétipo, sem coluna.
 
 ### 4.3 Regras para componentes
 
@@ -131,13 +148,19 @@ Archetype {Transform, Velocity, Player, OnGround}
 ├── Chunk 1 ...
 ```
 
-- Capacidade do chunk = `(16 KiB − cabeçalho) / Σ tamanhos`, calculada por arquétipo.
-- **Versões de mudança:** cada coluna de cada chunk guarda a versão do mundo na última
-  escrita (acesso mutável). Queries com `Changed<T>` pulam chunks não alterados.
-  Replicação e extract de render usam o mesmo mecanismo.
+- Capacidade do chunk: o máximo de linhas que cabem em 16 KiB com cada array alinhado,
+  calculada por arquétipo. O cabeçalho (contagem de linhas, versões) fica fora do bloco.
+  Uma linha maior que 16 KiB ganha chunks de vários blocos contíguos, em vez de um limite
+  de tamanho de componente.
+- **Versões de mudança:** cada coluna de cada chunk guarda a versão da última escrita
+  (acesso mutável). Queries com `Changed<T>` pulam chunks não alterados. Replicação e
+  extract de render usam o mesmo mecanismo. A marcação é conservadora: o acesso mutável
+  conta como escrita, e uma mudança estrutural no chunk (linha que entra ou é movida para
+  ele) também.
 - **Grafo de arquétipos:** cada arquétipo guarda as arestas "adicionar T"/"remover T"
   para transições O(1) amortizadas.
-- Remoção usa *swap-and-pop* dentro do chunk, atualizando o registro da entidade movida.
+- Remoção usa *swap-and-pop* com a **última linha do arquétipo**, atualizando o registro
+  da entidade movida. Assim todos os chunks ficam cheios, menos o último.
 - Chunks vazios voltam para um pool do mundo.
 
 ## 6. Queries
@@ -151,17 +174,25 @@ using MovingBodies = nx::ecs::Query<
 ```
 
 - Os parâmetros de acesso definem leitura (`const T&`), escrita (`T&`) e presença
-  opcional (`std::optional<const T&>`).
-- Os filtros `With<T>`, `Without<T>`, `Changed<T>` e `Added<T>` não dão acesso.
+  opcional (`Optional<const T>` e `Optional<T>`, que entregam `const T*`/`T*`, nulo se a
+  entidade não tem o componente). O termo `Entity` entrega o handle. `std::optional<T&>`
+  (C++26) substitui os ponteiros quando os compiladores suportados o oferecerem.
+- Os filtros `With<T>`, `Without<T>` e `Changed<T>` não dão acesso. `Added<T>` precisa de
+  versão por linha (a de chunk não diz quais linhas são novas) e entra com o primeiro
+  consumidor.
+- Uma query recebe duas versões: `lastRun`, com que `Changed<T>` compara, e `thisRun`, que
+  as escritas marcam nos chunks. O agendador dá a cada execução de sistema a sua.
 - O cache de arquétipos compatíveis é atualizado incrementalmente quando um arquétipo novo
   aparece.
 - Formas de iteração:
   - `query.forEach(fn)`: sequencial.
   - `query.forEachChunk(fn)`: recebe `std::span`s das colunas, ideal para SIMD.
   - `query.parallelForEachChunk(jobs, fn)`: um job por lote de chunks, com granularidade
-    automática.
+    automática. Retorna quando todos os chunks terminaram.
 - Acesso aleatório: `query.get(entity)` retorna `std::optional<Tuple>`, `nullopt` se a
   entidade não casa.
+- Mudança estrutural direta no `World` (criar, destruir, adicionar, remover) durante uma
+  iteração viola contrato: dentro de sistemas, isso passa pelos command buffers (§8).
 
 ## 7. Sistemas e agendamento
 
@@ -287,7 +318,8 @@ Destruir uma entidade remove as relações que apontam para ela no mesmo sync po
 ## 15. Ferramentas de depuração
 
 - `ent_list [filtro]`, `ent_dump <netid>` e `ecs_stats` (arquétipos, chunks, ocupação,
-  memória por componente).
+  memória por componente). Os números já vêm de `World::stats()`; os comandos chegam com o
+  console.
 - Inspetor ImGui em builds de desenvolvimento: árvore de arquétipos, edição de
   componentes e visualização do DAG do schedule com tempos por sistema.
 - Zonas Tracy por sistema e por lote de chunks.
