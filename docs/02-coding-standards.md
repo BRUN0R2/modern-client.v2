@@ -323,13 +323,15 @@ template <class Code, class InnerCode>
 
 ### 6.3 Example
 
+A shortened `nx.assets:bsp`, the reader of GoldSrc maps:
+
 ```cpp
-export module nx.assets.goldsrc:bsp;
+export module nx.assets:bsp;
 
 import std;
 import nx.core;
 
-export namespace nx::assets::goldsrc {
+export namespace nx::assets {
 
 inline constexpr std::int32_t kBspVersion = 30;
 
@@ -338,32 +340,34 @@ enum class BspError : std::uint8_t {
     UnsupportedVersion,
     LumpOutOfBounds,
     MisalignedLump,
+    // ...
 };
 
-[[nodiscard]] auto parseBsp(std::span<const std::byte> bytes) -> nx::Result<BspView, BspError>;
+class BspView {
+public:
+    [[nodiscard]] static auto parse(std::span<const std::byte> bytes) -> nx::Result<BspView, BspError>;
+    // ...
+};
 
-} // namespace nx::assets::goldsrc
+} // namespace nx::assets
 ```
 
 ```cpp
-module nx.assets.goldsrc;
+module nx.assets;
 
-namespace nx::assets::goldsrc {
+namespace nx::assets {
 
-auto parseBsp(std::span<const std::byte> bytes) -> nx::Result<BspView, BspError> {
-    if (bytes.size() < sizeof(BspHeader)) {
-        return nx::fail(BspError::TooSmall, std::format("{} bytes", bytes.size()));
+auto BspView::parse(std::span<const std::byte> bytes) -> nx::Result<BspView, BspError> {
+    if (bytes.size() < kHeaderBytes) {
+        return nx::fail(BspError::TooSmall, std::format("{} bytes, less than {}", bytes.size(), kHeaderBytes));
     }
-
-    const auto header = readHeader(bytes);
-    if (header.version != kBspVersion) {
-        return nx::fail(BspError::UnsupportedVersion, std::format("version {}", header.version));
+    if (const auto version = loadLittleEndian<std::int32_t>(bytes); version != kBspVersion) {
+        return nx::fail(BspError::UnsupportedVersion, std::format("version {}, not {}", version, kBspVersion));
     }
-
-    return validateLumps(header, bytes).transform([&] { return BspView{header, bytes}; });
+    // ... every lump, every record and every index it holds
 }
 
-} // namespace nx::assets::goldsrc
+} // namespace nx::assets
 ```
 
 When crossing layers, the error is **translated** into the vocabulary of the layer above,
@@ -375,7 +379,7 @@ auto MapLoader::load(MapName name) -> nx::Result<Map, MapLoadError> {
     if (!bytes) {
         return nx::fail(MapLoadError::NotFound, std::move(bytes.error()));
     }
-    auto bsp = goldsrc::parseBsp(*bytes);
+    auto bsp = assets::BspView::parse(*bytes);
     if (!bsp) {
         return nx::fail(MapLoadError::CorruptBsp, std::move(bsp.error()));
     }

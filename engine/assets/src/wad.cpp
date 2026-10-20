@@ -46,53 +46,6 @@ constexpr std::size_t kPaletteCountBytes = sizeof(std::uint16_t);
            std::ranges::to<std::string>();
 }
 
-/// The mip texture in `lump`. Errors: BadTexture.
-[[nodiscard]] auto parseMipTexture(std::span<const std::byte> lump) -> Result<MipTexture, WadError> {
-    if (lump.size() < kTextureHeaderBytes) {
-        return fail(WadError::BadTexture, std::format("{} bytes, less than the {} of a mip texture header",
-                                                      lump.size(), kTextureHeaderBytes));
-    }
-    MipTexture texture{
-        .name = nameOf(lump.first(kTextureNameBytes)),
-        .width = loadLittleEndian<std::uint32_t>(lump.subspan(kTextureWidthOffset)),
-        .height = loadLittleEndian<std::uint32_t>(lump.subspan(kTextureHeightOffset)),
-        .levels = {},
-        .palette = {},
-    };
-    if (texture.width == 0 || texture.height == 0 || texture.width % kTextureSizeMultiple != 0 ||
-        texture.height % kTextureSizeMultiple != 0) {
-        return fail(WadError::BadTexture,
-                    std::format("{:?}: {}x{} is not a nonzero multiple of {}", texture.name, texture.width,
-                                texture.height, kTextureSizeMultiple));
-    }
-    std::uint64_t levelsEnd = 0;
-    for (std::size_t level = 0; level < kMipLevels; ++level) {
-        const std::uint64_t offset = loadLittleEndian<std::uint32_t>(
-            lump.subspan(kTextureLevelsOffset + (level * sizeof(std::uint32_t))));
-        const std::uint64_t size = std::uint64_t{texture.width >> level} * (texture.height >> level);
-        if (!fits(lump, offset, size)) {
-            return fail(WadError::BadTexture,
-                        std::format("{:?}: level {} ({} bytes at {}) is outside its {} bytes", texture.name,
-                                    level, size, offset, lump.size()));
-        }
-        texture.levels.at(level) = lump.subspan(narrow<std::size_t>(offset), narrow<std::size_t>(size));
-        levelsEnd = offset + size;
-    }
-    if (!fits(lump, levelsEnd, kPaletteCountBytes + kPaletteBytes)) {
-        return fail(WadError::BadTexture,
-                    std::format("{:?}: the palette after the last level is outside its {} bytes",
-                                texture.name, lump.size()));
-    }
-    const auto paletteStart = narrow<std::size_t>(levelsEnd);
-    const auto colors = loadLittleEndian<std::uint16_t>(lump.subspan(paletteStart));
-    if (colors != kPaletteColors) {
-        return fail(WadError::BadTexture,
-                    std::format("{:?}: {} palette colors, not {}", texture.name, colors, kPaletteColors));
-    }
-    texture.palette = lump.subspan(paletteStart + kPaletteCountBytes, kPaletteBytes);
-    return texture;
-}
-
 } // namespace
 
 auto WadView::parse(std::span<const std::byte> bytes) -> Result<WadView, WadError> {
@@ -136,6 +89,61 @@ auto WadView::parse(std::span<const std::byte> bytes) -> Result<WadView, WadErro
     return WadView{std::move(entries)};
 }
 
+auto parseMipTexture(std::span<const std::byte> lump, TexturePixels pixels) -> Result<MipTexture, WadError> {
+    if (lump.size() < kTextureHeaderBytes) {
+        return fail(WadError::BadTexture, std::format("{} bytes, less than the {} of a mip texture header",
+                                                      lump.size(), kTextureHeaderBytes));
+    }
+    MipTexture texture{
+        .name = nameOf(lump.first(kTextureNameBytes)),
+        .width = loadLittleEndian<std::uint32_t>(lump.subspan(kTextureWidthOffset)),
+        .height = loadLittleEndian<std::uint32_t>(lump.subspan(kTextureHeightOffset)),
+        .levels = {},
+        .palette = {},
+    };
+    if (texture.width == 0 || texture.height == 0 || texture.width % kTextureSizeMultiple != 0 ||
+        texture.height % kTextureSizeMultiple != 0) {
+        return fail(WadError::BadTexture,
+                    std::format("{:?}: {}x{} is not a nonzero multiple of {}", texture.name, texture.width,
+                                texture.height, kTextureSizeMultiple));
+    }
+    const auto levelOffset = [lump](std::size_t level) {
+        return loadLittleEndian<std::uint32_t>(
+            lump.subspan(kTextureLevelsOffset + (level * sizeof(std::uint32_t))));
+    };
+    const bool isInWad =
+        std::ranges::all_of(std::views::iota(std::size_t{0}, kMipLevels),
+                            [&levelOffset](std::size_t level) { return levelOffset(level) == 0; });
+    if (isInWad && pixels == TexturePixels::MayBeInWad) {
+        return texture;
+    }
+    std::uint64_t levelsEnd = 0;
+    for (std::size_t level = 0; level < kMipLevels; ++level) {
+        const std::uint64_t offset = levelOffset(level);
+        const std::uint64_t size = std::uint64_t{texture.width >> level} * (texture.height >> level);
+        if (!fits(lump, offset, size)) {
+            return fail(WadError::BadTexture,
+                        std::format("{:?}: level {} ({} bytes at {}) is outside its {} bytes", texture.name,
+                                    level, size, offset, lump.size()));
+        }
+        texture.levels.at(level) = lump.subspan(narrow<std::size_t>(offset), narrow<std::size_t>(size));
+        levelsEnd = offset + size;
+    }
+    if (!fits(lump, levelsEnd, kPaletteCountBytes + kPaletteBytes)) {
+        return fail(WadError::BadTexture,
+                    std::format("{:?}: the palette after the last level is outside its {} bytes",
+                                texture.name, lump.size()));
+    }
+    const auto paletteStart = narrow<std::size_t>(levelsEnd);
+    const auto colors = loadLittleEndian<std::uint16_t>(lump.subspan(paletteStart));
+    if (colors != kPaletteColors) {
+        return fail(WadError::BadTexture,
+                    std::format("{:?}: {} palette colors, not {}", texture.name, colors, kPaletteColors));
+    }
+    texture.palette = lump.subspan(paletteStart + kPaletteCountBytes, kPaletteBytes);
+    return texture;
+}
+
 auto WadView::find(std::string_view name) const noexcept -> const WadEntry* {
     const auto found = std::ranges::find_if(
         m_entries, [name](const WadEntry& entry) { return equalsIgnoringCase(entry.name, name); });
@@ -147,7 +155,7 @@ auto readTexture(const WadEntry& entry) -> Result<MipTexture, WadError> {
         return fail(WadError::NotATexture,
                     std::format("{:?} has type {:#04x}", entry.name, std::to_underlying(entry.type)));
     }
-    return parseMipTexture(entry.data);
+    return parseMipTexture(entry.data, TexturePixels::Required);
 }
 
 } // namespace nx::assets
