@@ -16,7 +16,7 @@ using nx::AngleVectors;
 using nx::Degrees;
 using nx::EulerAngles;
 using nx::Vec3;
-using nx_test::isNear;
+using nx::test::isNear;
 
 using namespace nx::literals;
 
@@ -125,9 +125,9 @@ TEST(AnglesTest, VectorAnglesOfTheAxes) {
 }
 
 TEST(AnglesTest, VectorAnglesOfTheZeroVectorIsAViolation) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = nx::vectorAngles(Vec3{});
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 TEST(AnglesTest, NormalizeAngleWrapsIntoTheHalfOpenRange) {
@@ -143,9 +143,9 @@ TEST(AnglesTest, NormalizeAngleWrapsIntoTheHalfOpenRange) {
 }
 
 TEST(AnglesTest, NormalizingAnInfiniteAngleIsAViolation) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = nx::normalizeAngle(Degrees{std::numeric_limits<float>::infinity()});
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 } // namespace

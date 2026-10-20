@@ -9,7 +9,7 @@ import nx.core;
 #include "contractRecorder.hpp"
 
 TEST(Conversion, NarrowKeepsValuesThatFit) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     EXPECT_EQ(nx::narrow<std::uint8_t>(200), 200U);
     EXPECT_EQ(nx::narrow<std::int16_t>(-300), -300);
@@ -17,7 +17,7 @@ TEST(Conversion, NarrowKeepsValuesThatFit) {
 }
 
 TEST(Conversion, NarrowReportsValuesThatDoNotFit) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     // Only the reports matter, not the values the handler let through.
     std::ignore = nx::narrow<std::uint8_t>(256);

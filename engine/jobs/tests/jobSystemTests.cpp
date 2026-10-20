@@ -356,20 +356,20 @@ TEST(JobSystemCreateTest, DefaultWorkerCountLeavesOneHardwareThreadToTheCaller) 
 TEST(JobSystemContractTest, WaitingOnAnInvalidHandleIsAViolation) {
     auto jobs = makeJobSystem(0);
     ASSERT_NE(jobs, nullptr);
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     jobs->wait(JobHandle{});
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
-    EXPECT_EQ(nx_test::ContractRecorder::last().kind, nx::ContractKind::Precondition);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::last().kind, nx::ContractKind::Precondition);
 }
 
 TEST(JobSystemContractTest, DependingOnAnInvalidHandleIsAViolation) {
     auto jobs = makeJobSystem(0);
     ASSERT_NE(jobs, nullptr);
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     bool ran = false;
     const std::array dependencies{JobHandle{}};
     jobs->wait(jobs->submit({.label = "invalid", .dependsOn = dependencies}, [&ran] { ran = true; }));
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
     EXPECT_TRUE(ran); // the invalid dependency is ignored after the report
 }
 
@@ -386,9 +386,9 @@ TEST(GrainTest, AutomaticAimsAtAFewBatchesPerThread) {
 }
 
 TEST(GrainTest, AFixedGrainOfZeroIsAViolation) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     const Grain grain = Grain::fixed(0);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
     EXPECT_EQ(grain.batchSize(10, 1), 1U);
 }
 

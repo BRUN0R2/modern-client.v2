@@ -90,9 +90,9 @@ TEST(EntityTableTest, DestroyingADeadEntityIsAViolation) {
     const Entity entity = table.create();
     table.destroy(entity);
 
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     table.destroy(entity);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
     EXPECT_EQ(table.aliveCount(), 0U);
 }
 

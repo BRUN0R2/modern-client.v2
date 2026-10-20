@@ -40,7 +40,7 @@ CheckOptions:
   - { key: readability-magic-numbers.IgnorePowersOf2IntegerValues, value: false }
 
   # Naming (docs/02, section 3).
-  - { key: readability-identifier-naming.NamespaceCase,          value: lower_case }
+  - { key: readability-identifier-naming.NamespaceCase,          value: camelBack }
   - { key: readability-identifier-naming.ClassCase,              value: CamelCase }
   - { key: readability-identifier-naming.StructCase,             value: CamelCase }
   - { key: readability-identifier-naming.UnionCase,              value: CamelCase }

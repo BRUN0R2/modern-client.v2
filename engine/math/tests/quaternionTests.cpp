@@ -16,8 +16,8 @@ using nx::EulerAngles;
 using nx::Quat;
 using nx::Radians;
 using nx::Vec3;
-using nx_test::isNear;
-using nx_test::isSameRotation;
+using nx::test::isNear;
+using nx::test::isSameRotation;
 
 using namespace nx::literals;
 
@@ -43,9 +43,9 @@ TEST(QuaternionTest, FromAxisAngleRotatesCounterClockwiseAboutTheAxis) {
 }
 
 TEST(QuaternionTest, FromAxisAngleNeedsAUnitAxis) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = Quat::fromAxisAngle(Vec3{.z = 2}, quarterTurn());
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 TEST(QuaternionTest, FromEulerAnglesIsTheRotationOfTheAngles) {
@@ -83,19 +83,19 @@ TEST(QuaternionTest, Normalized) {
     const Quat scaled{.x = 0, .y = 0, .z = 3, .w = 4};
     EXPECT_EQ(nx::normalized(scaled), (Quat{.x = 0, .y = 0, .z = 0.6F, .w = 0.8F}));
 
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = nx::normalized(Quat{.w = 0});
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 TEST(QuaternionTest, NormalizesLargeAndTinyComponents) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     // 3e30 and 4e30 are not exact floats: the results are near 0.6 and 0.8, not equal.
     EXPECT_TRUE(isSameRotation(nx::normalized(Quat{.x = 0, .y = 0, .z = 3e30F, .w = 4e30F}),
                                Quat{.x = 0, .y = 0, .z = 0.6F, .w = 0.8F}));
     EXPECT_TRUE(isSameRotation(nx::normalized(Quat{.x = 0, .y = 0, .z = 3e-30F, .w = 4e-30F}),
                                Quat{.x = 0, .y = 0, .z = 0.6F, .w = 0.8F}));
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 0);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 0);
 }
 
 TEST(QuaternionTest, SlerpMovesAtConstantAngularSpeed) {
@@ -127,9 +127,9 @@ TEST(QuaternionTest, SlerpOfNearlyEqualRotationsStaysUnit) {
 }
 
 TEST(QuaternionTest, SlerpOutsideTheUnitIntervalIsAViolation) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     std::ignore = nx::slerp(Quat{}, Quat{}, 1.5F);
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
 } // namespace

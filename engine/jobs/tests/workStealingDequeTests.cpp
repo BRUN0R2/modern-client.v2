@@ -58,10 +58,10 @@ TEST(WorkStealingDequeTest, GrowsInsteadOfRejectingAPush) {
 }
 
 TEST(WorkStealingDequeTest, CapacityMustBeAPowerOfTwo) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     Deque deque{3};
-    EXPECT_EQ(nx_test::ContractRecorder::count(), 1);
-    EXPECT_EQ(nx_test::ContractRecorder::last().kind, nx::ContractKind::Precondition);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
+    EXPECT_EQ(nx::test::ContractRecorder::last().kind, nx::ContractKind::Precondition);
 
     // The deque stays usable if the handler lets execution continue.
     deque.push(7);

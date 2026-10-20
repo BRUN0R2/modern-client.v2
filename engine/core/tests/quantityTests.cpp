@@ -67,7 +67,7 @@ TEST(Quantity, OrdersLikeItsRepresentation) {
 }
 
 TEST(Quantity, IntegerOverflowIsReportedAndSaturates) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     constexpr Count largest{std::numeric_limits<std::int32_t>::max()};
 
     const auto sum = largest + Count{1};
@@ -78,7 +78,7 @@ TEST(Quantity, IntegerOverflowIsReportedAndSaturates) {
 }
 
 TEST(Quantity, IntegerDivisionByZeroIsReported) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
 
     std::ignore = Count{10} / 0; // only the report matters
 
@@ -86,7 +86,7 @@ TEST(Quantity, IntegerDivisionByZeroIsReported) {
 }
 
 TEST(Quantity, SaturatedOperationsClampOnPurpose) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     constexpr nx::Money limit{std::numeric_limits<std::int32_t>::max()};
 
     EXPECT_EQ(nx::addSaturated(limit, nx::Money{100}), limit);

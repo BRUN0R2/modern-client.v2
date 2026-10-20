@@ -7,7 +7,7 @@ import std;
 import nx.meta;
 
 // Described types live in a named namespace: their qualified names are part of what is checked.
-namespace nx_test {
+namespace nx::test {
 
 struct Replicated {
     std::uint8_t audience = 0;
@@ -29,38 +29,38 @@ struct Health {
     float value = 0.0F;
 };
 
-} // namespace nx_test
+} // namespace nx::test
 
 template <>
-struct nx::meta::Description<nx_test::Ammo> {
-    static constexpr std::string_view kName = "nx_test::Ammo";
-    static constexpr std::tuple kAnnotations{nx_test::Replicated{.audience = 1}};
+struct nx::meta::Description<nx::test::Ammo> {
+    static constexpr std::string_view kName = "nx::test::Ammo";
+    static constexpr std::tuple kAnnotations{nx::test::Replicated{.audience = 1}};
     static constexpr std::tuple kFields{
-        nx::meta::field<&nx_test::Ammo::clip>("clip", nx_test::Range{.minimum = 0.0F, .maximum = 100.0F}),
-        nx::meta::field<&nx_test::Ammo::reserve>("reserve"),
+        nx::meta::field<&nx::test::Ammo::clip>("clip", nx::test::Range{.minimum = 0.0F, .maximum = 100.0F}),
+        nx::meta::field<&nx::test::Ammo::reserve>("reserve"),
     };
 };
 
 template <>
-struct nx::meta::Description<nx_test::Health> {
-    static constexpr std::string_view kName = "nx_test::Health";
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::Health::value>("value")};
+struct nx::meta::Description<nx::test::Health> {
+    static constexpr std::string_view kName = "nx::test::Health";
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::Health::value>("value")};
 };
 
 namespace {
 
-using nx_test::Ammo;
-using nx_test::Range;
-using nx_test::Replicated;
+using nx::test::Ammo;
+using nx::test::Range;
+using nx::test::Replicated;
 
 static_assert(nx::meta::Described<Ammo>);
 static_assert(!nx::meta::Described<int>);
 static_assert(!nx::meta::Described<Replicated>, "a type without a Description is not described");
 
 TEST(Reflection, NamesAndCountsComeFromTheDescription) {
-    EXPECT_EQ(nx::meta::qualifiedName<Ammo>(), "nx_test::Ammo");
+    EXPECT_EQ(nx::meta::qualifiedName<Ammo>(), "nx::test::Ammo");
     EXPECT_EQ(nx::meta::fieldCount<Ammo>(), 2U);
-    EXPECT_EQ(nx::meta::fieldCount<nx_test::Health>(), 1U);
+    EXPECT_EQ(nx::meta::fieldCount<nx::test::Health>(), 1U);
 }
 
 TEST(Reflection, ForEachFieldVisitsTheFieldsInDeclarationOrder) {
@@ -82,7 +82,7 @@ TEST(Reflection, ForEachFieldVisitsTheFieldsInDeclarationOrder) {
 TEST(Reflection, AnnotationsOfTypesAndFields) {
     static_assert(nx::meta::typeAnnotation<Replicated, Ammo>() == Replicated{.audience = 1});
     static_assert(!nx::meta::typeAnnotation<Range, Ammo>().has_value());
-    static_assert(!nx::meta::typeAnnotation<Replicated, nx_test::Health>().has_value());
+    static_assert(!nx::meta::typeAnnotation<Replicated, nx::test::Health>().has_value());
 
     using Clip = nx::meta::Field<Ammo, 0>;
     using Reserve = nx::meta::Field<Ammo, 1>;
@@ -97,7 +97,7 @@ TEST(Reflection, AnnotationsOfTypesAndFields) {
 // The native path: GCC 16 with -freflection compares every description with its type.
 #if defined(__cpp_impl_reflection)
 
-namespace nx_test {
+namespace nx::test {
 
 struct[[= Replicated{.audience = 2}]] Annotated {
     [[= Range{.minimum = 1.0F, .maximum = 5.0F}]] float scale = 1.0F;
@@ -130,92 +130,92 @@ struct[[ = Replicated{.audience = 1}, = Range{.minimum = 0.0F, .maximum = 1.0F} 
     int value = 0;
 };
 
-} // namespace nx_test
+} // namespace nx::test
 
 template <>
-struct nx::meta::Description<nx_test::Annotated> {
-    static constexpr std::string_view kName = "nx_test::Annotated";
-    static constexpr std::tuple kAnnotations{nx_test::Replicated{.audience = 2}};
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::Annotated::scale>(
-        "scale", nx_test::Range{.minimum = 1.0F, .maximum = 5.0F})};
+struct nx::meta::Description<nx::test::Annotated> {
+    static constexpr std::string_view kName = "nx::test::Annotated";
+    static constexpr std::tuple kAnnotations{nx::test::Replicated{.audience = 2}};
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::Annotated::scale>(
+        "scale", nx::test::Range{.minimum = 1.0F, .maximum = 5.0F})};
 };
 
 template <>
-struct nx::meta::Description<nx_test::Pair> {
-    static constexpr std::string_view kName = "nx_test::Pair";
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::Pair::first>("first"),
-                                        nx::meta::field<&nx_test::Pair::second>("second")};
+struct nx::meta::Description<nx::test::Pair> {
+    static constexpr std::string_view kName = "nx::test::Pair";
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::Pair::first>("first"),
+                                        nx::meta::field<&nx::test::Pair::second>("second")};
 };
 
 template <>
-struct nx::meta::Description<nx_test::Renamed> {
+struct nx::meta::Description<nx::test::Renamed> {
     static constexpr std::string_view kName = "Renamed";
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::Renamed::value>("value")};
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::Renamed::value>("value")};
 };
 
 template <>
-struct nx::meta::Description<nx_test::Missing> {
-    static constexpr std::string_view kName = "nx_test::Missing";
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::Missing::first>("first")};
+struct nx::meta::Description<nx::test::Missing> {
+    static constexpr std::string_view kName = "nx::test::Missing";
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::Missing::first>("first")};
 };
 
 template <>
-struct nx::meta::Description<nx_test::Reordered> {
-    static constexpr std::string_view kName = "nx_test::Reordered";
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::Reordered::second>("second"),
-                                        nx::meta::field<&nx_test::Reordered::first>("first")};
+struct nx::meta::Description<nx::test::Reordered> {
+    static constexpr std::string_view kName = "nx::test::Reordered";
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::Reordered::second>("second"),
+                                        nx::meta::field<&nx::test::Reordered::first>("first")};
 };
 
 template <>
-struct nx::meta::Description<nx_test::OtherMember> {
-    static constexpr std::string_view kName = "nx_test::OtherMember";
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::OtherMember::second>("first"),
-                                        nx::meta::field<&nx_test::OtherMember::second>("second")};
+struct nx::meta::Description<nx::test::OtherMember> {
+    static constexpr std::string_view kName = "nx::test::OtherMember";
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::OtherMember::second>("first"),
+                                        nx::meta::field<&nx::test::OtherMember::second>("second")};
 };
 
 template <>
-struct nx::meta::Description<nx_test::OtherAnnotation> {
-    static constexpr std::string_view kName = "nx_test::OtherAnnotation";
-    static constexpr std::tuple kAnnotations{nx_test::Replicated{.audience = 1}};
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::OtherAnnotation::value>("value")};
+struct nx::meta::Description<nx::test::OtherAnnotation> {
+    static constexpr std::string_view kName = "nx::test::OtherAnnotation";
+    static constexpr std::tuple kAnnotations{nx::test::Replicated{.audience = 1}};
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::OtherAnnotation::value>("value")};
 };
 
 template <>
-struct nx::meta::Description<nx_test::RepeatedAnnotation> {
-    static constexpr std::string_view kName = "nx_test::RepeatedAnnotation";
+struct nx::meta::Description<nx::test::RepeatedAnnotation> {
+    static constexpr std::string_view kName = "nx::test::RepeatedAnnotation";
     // As many annotations as the type has, but one of them twice instead of the Range.
-    static constexpr std::tuple kAnnotations{nx_test::Replicated{.audience = 1},
-                                             nx_test::Replicated{.audience = 1}};
-    static constexpr std::tuple kFields{nx::meta::field<&nx_test::RepeatedAnnotation::value>("value")};
+    static constexpr std::tuple kAnnotations{nx::test::Replicated{.audience = 1},
+                                             nx::test::Replicated{.audience = 1}};
+    static constexpr std::tuple kFields{nx::meta::field<&nx::test::RepeatedAnnotation::value>("value")};
 };
 
 namespace {
 
 TEST(NativeReflection, MatchingDescriptionsPass) {
     static_assert(nx::meta::native::kAvailable);
-    static_assert(nx::meta::native::mismatch<nx_test::Ammo>().empty());
-    static_assert(nx::meta::native::mismatch<nx_test::Pair>().empty());
-    static_assert(nx::meta::native::mismatch<nx_test::Annotated>().empty(),
+    static_assert(nx::meta::native::mismatch<nx::test::Ammo>().empty());
+    static_assert(nx::meta::native::mismatch<nx::test::Pair>().empty());
+    static_assert(nx::meta::native::mismatch<nx::test::Annotated>().empty(),
                   "annotations written on the type (P3394) agree with the description");
-    static_assert(nx::meta::fieldCount<nx_test::Annotated>() == 1);
+    static_assert(nx::meta::fieldCount<nx::test::Annotated>() == 1);
     SUCCEED();
 }
 
 TEST(NativeReflection, EveryKindOfDriftIsReported) {
     using nx::meta::native::mismatch;
-    EXPECT_EQ(mismatch<nx_test::Renamed>(),
-              R"(the description is named "Renamed", the type "nx_test::Renamed")");
+    EXPECT_EQ(mismatch<nx::test::Renamed>(),
+              R"(the description is named "Renamed", the type "nx::test::Renamed")");
     EXPECT_EQ(
-        mismatch<nx_test::Missing>(),
-        R"(the description of "nx_test::Missing" lists a different number of fields than the type declares)");
-    EXPECT_EQ(mismatch<nx_test::Reordered>(),
+        mismatch<nx::test::Missing>(),
+        R"(the description of "nx::test::Missing" lists a different number of fields than the type declares)");
+    EXPECT_EQ(mismatch<nx::test::Reordered>(),
               R"(field "second" is "first" in the type; fields are listed in declaration order)");
-    EXPECT_EQ(mismatch<nx_test::OtherMember>(), R"(field "first" names another member of the type)");
-    EXPECT_EQ(mismatch<nx_test::OtherAnnotation>(),
-              R"("nx_test::OtherAnnotation" has other annotations in the type)");
+    EXPECT_EQ(mismatch<nx::test::OtherMember>(), R"(field "first" names another member of the type)");
+    EXPECT_EQ(mismatch<nx::test::OtherAnnotation>(),
+              R"("nx::test::OtherAnnotation" has other annotations in the type)");
     // Regression: a repeated declaration passed against a type with another annotation.
-    EXPECT_EQ(mismatch<nx_test::RepeatedAnnotation>(),
-              R"("nx_test::RepeatedAnnotation" has other annotations in the type)");
+    EXPECT_EQ(mismatch<nx::test::RepeatedAnnotation>(),
+              R"("nx::test::RepeatedAnnotation" has other annotations in the type)");
 }
 
 } // namespace

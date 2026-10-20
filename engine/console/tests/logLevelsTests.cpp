@@ -28,8 +28,8 @@ protected:
         std::ignore = console.execute(); // the scripts here have no wait
     }
 
-    nx_test::RecordingOutput output;
-    nx_test::MemoryFiles files;
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
     Console console{output, files};
     nx::log::Logger logger;
 };

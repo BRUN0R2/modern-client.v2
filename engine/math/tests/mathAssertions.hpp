@@ -6,7 +6,7 @@
 // Approximate comparisons for the nx.math tests: EXPECT_TRUE(isNear(actual, expected)) reports
 // both values at the call site. Include after `import nx.math;`.
 
-namespace nx_test {
+namespace nx::test {
 
 /// Default tolerance: a few float ulps around 1, enough for one trigonometric round trip.
 inline constexpr float kTolerance = 1e-5F;
@@ -55,4 +55,4 @@ inline constexpr float kTolerance = 1e-5F;
                           actual.w, expected.x, expected.y, expected.z, expected.w);
 }
 
-} // namespace nx_test
+} // namespace nx::test

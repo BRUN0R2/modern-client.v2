@@ -86,7 +86,7 @@ TEST(Flags, SpansSeveralWords) {
 }
 
 TEST(Flags, OutOfRangeFlagsAreReportedAndIgnored) {
-    const nx_test::ContractRecorder recorder;
+    const nx::test::ContractRecorder recorder;
     nx::Flags<Button> buttons;
 
     buttons.set(Button::Count);

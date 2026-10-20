@@ -42,8 +42,8 @@ protected:
         return console.execute();
     }
 
-    nx_test::RecordingOutput output;
-    nx_test::MemoryFiles files;
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
     Console console{output, files};
     Result<Cvar<float>, nx::console::CvarError> gravity = nx::fail(nx::console::CvarError::InvalidName);
     Result<Cvar<float>, nx::console::CvarError> roundTime = nx::fail(nx::console::CvarError::InvalidName);
@@ -127,8 +127,8 @@ TEST_F(ConsoleTest, ArchivedCvarsAreTheConfigFile) {
     EXPECT_EQ(console.archivedCvars(), "hostname \"My Server; really\"\nsv_gravity \"600\"\n");
 
     // config.cfg runs back into the same values.
-    nx_test::RecordingOutput otherOutput;
-    nx_test::MemoryFiles otherFiles;
+    nx::test::RecordingOutput otherOutput;
+    nx::test::MemoryFiles otherFiles;
     Console other{otherOutput, otherFiles};
     const auto otherGravity =
         other.registerCvar(CvarDesc<float>{.name = "sv_gravity", .flags = {CvarFlag::Archive}});
