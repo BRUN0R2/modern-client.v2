@@ -6,6 +6,7 @@ nxAddModuleLibrary(nxAssets
     LAYER 3
     MODULES
         src/nx.assets.cppm
+        src/binary.cppm
         src/vfs.cppm
         src/content.cppm
         src/steam.cppm
@@ -13,7 +14,9 @@ nxAddModuleLibrary(nxAssets
         src/wav.cppm
         src/bsp.cppm
         src/spr.cppm
+        src/mdl.cppm
     SOURCES
+        src/binary.cpp
         src/vfs.cpp
         src/content.cpp
         src/steam.cpp
@@ -21,6 +24,7 @@ nxAddModuleLibrary(nxAssets
         src/wav.cpp
         src/bsp.cpp
         src/spr.cpp
+        src/mdl.cpp
     DEPENDS
         nx::core
         nx::math

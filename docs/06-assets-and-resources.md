@@ -168,9 +168,17 @@ Readers today:
   alpha-test), the sync type, the 256-color palette, and the frames: single images, or groups whose
   intervals rise from above zero. Each image has its origin, size and pixels as a view of the
   file's bytes, every pixel a palette index.
+- MDL v10 (`nx.assets:mdl`), today its structure: the skeleton (each bone after its parent, so it
+  is posed in one pass and cannot cycle), the bone controllers (one axis each, looping or not), the
+  hitboxes, the attachments, the body parts and their models (vertices and normals with their
+  bones, meshes as triangle strips and fans of checked corners), the textures (pixels and palette
+  as views, flags) and the skin families. A model whose textures are in its `*T.mdl` has none, and
+  its meshes' skin references are checked against that file's skins when the two are joined
+  (planned, with the asset handles). Every list is a vector: no count has a ceiling
+  ([§3.4](#34-removed-content-limits)). The sequences and animations are next.
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The MDL reader is planned (M2).
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The sequences and animations of MDL models are planned (M2).
 
 ### 3.2 Modern (for mods)
 
