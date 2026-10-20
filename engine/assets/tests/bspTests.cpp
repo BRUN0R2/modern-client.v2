@@ -12,6 +12,11 @@ namespace {
 
 using nx::assets::BspError;
 using nx::assets::BspView;
+using nx::assets::ClipNodeChild;
+using nx::assets::ClipNodeIndex;
+using nx::assets::Contents;
+using nx::assets::LeafIndex;
+using nx::assets::NodeChild;
 using nx::assets::PlaneAxis;
 
 using Bytes = std::vector<std::byte>;
@@ -70,7 +75,15 @@ void appendVec3(Bytes& bytes, nx::Vec3 vector) {
     return lump;
 }
 
-/// A map of one 64-unit square face on the plane z = 0, textured and lit: what each test breaks.
+void appendShortBounds(Bytes& bytes, std::array<std::int16_t, 6> bounds) {
+    for (const std::int16_t bound : bounds) {
+        append(bytes, bound);
+    }
+}
+
+/// A map of one 64-unit square face on the plane z = 0, textured and lit, with its tree: a node
+/// whose front is the empty leaf 1 (the face) and whose back is the solid leaf 0, the same split as
+/// a collision hull, the world model and its entity. What each test breaks.
 struct QuadMap {
     nx::EnumArray<Lump, Bytes> lumps;
 
@@ -124,6 +137,60 @@ struct QuadMap {
             faces.push_back(static_cast<std::byte>(style));
         }
         append(faces, std::int32_t{0}); // lightmap offset
+
+        append(lumps[Lump::MarkSurfaces], std::uint16_t{0});
+        lumps[Lump::Visibility] = Bytes{std::byte{0xFF}};
+
+        Bytes& nodes = lumps[Lump::Nodes];
+        append(nodes, std::int32_t{0});  // plane
+        append(nodes, std::int16_t{-2}); // front: leaf 1
+        append(nodes, std::int16_t{-1}); // back: leaf 0
+        appendShortBounds(nodes, {0, 0, -1, 64, 64, 1});
+        append(nodes, std::uint16_t{0}); // first face
+        append(nodes, std::uint16_t{1}); // face count
+
+        Bytes& leaves = lumps[Lump::Leaves];
+        for (const auto [contents, visibility, markSurfaces] :
+             std::to_array<std::array<std::int32_t, 3>>({{-2, -1, 0}, {-1, 0, 1}})) {
+            append(leaves, contents);
+            append(leaves, visibility);
+            appendShortBounds(leaves, {0, 0, 0, 64, 64, 64});
+            append(leaves, std::uint16_t{0});
+            append(leaves, static_cast<std::uint16_t>(markSurfaces));
+            for (const std::uint8_t level : std::to_array<std::uint8_t>({0, 10, 0, 0})) {
+                leaves.push_back(static_cast<std::byte>(level));
+            }
+        }
+
+        Bytes& clipNodes = lumps[Lump::ClipNodes];
+        append(clipNodes, std::int32_t{0});
+        append(clipNodes, std::int16_t{-1}); // front: empty
+        append(clipNodes, std::int16_t{-2}); // back: solid
+
+        Bytes& models = lumps[Lump::Models];
+        appendVec3(models, {.x = 0.0F, .y = 0.0F, .z = -1.0F});
+        appendVec3(models, {.x = 64.0F, .y = 64.0F, .z = 1.0F});
+        appendVec3(models, {});
+        for (const std::int32_t head : {0, 0, 0, -1}) { // the node, two hulls, an empty third hull
+            append(models, head);
+        }
+        append(models, std::int32_t{1}); // visible leaves
+        append(models, std::int32_t{0}); // first face
+        append(models, std::int32_t{1}); // face count
+
+        setEntities(R"({
+"classname" "worldspawn"
+"wad" "\half-life\valve\halflife.wad;\half-life\cstrike\cstrike.wad"
+"skyname" "desert"
+}
+)");
+    }
+
+    void setEntities(std::string_view entities) {
+        lumps[Lump::Entities] = entities |
+                                std::views::transform([](char c) { return static_cast<std::byte>(c); }) |
+                                std::ranges::to<Bytes>();
+        lumps[Lump::Entities].push_back(std::byte{0}); // compilers end the text with a zero byte
     }
 
     [[nodiscard]] auto file() const -> Bytes {
@@ -217,6 +284,134 @@ TEST(BspTest, AnUnlitFaceHasNoLightmap) {
     const auto view = BspView::parse(file);
     ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
     EXPECT_FALSE(view->faces()[0].lightmapOffset.has_value());
+}
+
+TEST(BspTest, ReadsTheTreeTheModelsAndTheEntities) {
+    const QuadMap map;
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+
+    ASSERT_EQ(view->nodes().size(), 1U);
+    EXPECT_EQ(view->nodes()[0].children[0], (NodeChild{LeafIndex{.value = 1}}));
+    EXPECT_EQ(view->nodes()[0].children[1], (NodeChild{LeafIndex{.value = 0}}));
+    EXPECT_EQ(view->nodes()[0].bounds.max, (nx::Vec3{.x = 64.0F, .y = 64.0F, .z = 1.0F}));
+    EXPECT_EQ(view->nodes()[0].faceCount, 1U);
+
+    ASSERT_EQ(view->leaves().size(), 2U);
+    EXPECT_EQ(view->leaves()[0].contents, Contents::Solid);
+    EXPECT_FALSE(view->leaves()[0].visibilityOffset.has_value());
+    EXPECT_EQ(view->leaves()[1].contents, Contents::Empty);
+    EXPECT_EQ(view->leaves()[1].visibilityOffset, std::optional<std::uint32_t>{0});
+    EXPECT_EQ(view->leaves()[1].markSurfaceCount, 1U);
+    EXPECT_EQ(view->leaves()[1].ambientLevels[1], 10) << "sky";
+    ASSERT_EQ(view->markSurfaces().size(), 1U);
+    EXPECT_EQ(view->markSurfaces()[0].value, 0U);
+    EXPECT_EQ(view->visibility().size(), 1U);
+
+    ASSERT_EQ(view->clipNodes().size(), 1U);
+    EXPECT_EQ(view->clipNodes()[0].children[0], ClipNodeChild{Contents::Empty});
+    EXPECT_EQ(view->clipNodes()[0].children[1], ClipNodeChild{Contents::Solid});
+
+    ASSERT_EQ(view->models().size(), 1U);
+    const auto& world = view->models()[0];
+    EXPECT_EQ(world.headNode.value, 0U);
+    EXPECT_EQ(world.hulls[0], ClipNodeChild{ClipNodeIndex{.value = 0}});
+    EXPECT_EQ(world.hulls[2], ClipNodeChild{Contents::Empty});
+    EXPECT_EQ(world.visibleLeafCount, 1U);
+    EXPECT_EQ(world.faceCount, 1U);
+
+    ASSERT_EQ(view->entities().size(), 1U);
+    const auto& worldspawn = view->entities()[0];
+    EXPECT_EQ(worldspawn.find("classname"), std::optional<std::string_view>{"worldspawn"});
+    EXPECT_EQ(
+        worldspawn.find("wad"),
+        std::optional<std::string_view>{R"(\half-life\valve\halflife.wad;\half-life\cstrike\cstrike.wad)"})
+        << "backslashes are text, not escapes";
+    EXPECT_FALSE(worldspawn.find("message").has_value());
+}
+
+TEST(BspTest, AKeyThatRepeatsHasItsLastValue) {
+    QuadMap map;
+    map.setEntities(R"({ "classname" "worldspawn" "skyname" "desert" "skyname" "night" }
+{ "classname" "info_player_start" "origin" "0 0 36" })");
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    ASSERT_EQ(view->entities().size(), 2U);
+    EXPECT_EQ(view->entities()[0].find("skyname"), std::optional<std::string_view>{"night"});
+    EXPECT_EQ(view->entities()[1].find("origin"), std::optional<std::string_view>{"0 0 36"});
+}
+
+TEST(BspTest, RejectsABrokenTree) {
+    const auto withChange = [](auto change) {
+        QuadMap map;
+        change(map);
+        return parseError(map);
+    };
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Nodes, 4, std::int16_t{0}); }), BspError::BadValue)
+        << "a node that is its own child would cycle";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Nodes, 4, std::int16_t{-3}); }), BspError::BadIndex)
+        << "leaf 2 of 2";
+    EXPECT_EQ(withChange([](QuadMap& map) {
+                  // Node 0 points twice at node 1, whose sides are the two leaves: a shared subtree.
+                  Bytes second(map.lumps[Lump::Nodes]);
+                  map.lumps[Lump::Nodes].insert(map.lumps[Lump::Nodes].end(), second.begin(), second.end());
+                  map.set(Lump::Nodes, 4, std::int16_t{1});
+                  map.set(Lump::Nodes, 6, std::int16_t{1});
+              }),
+              BspError::BadValue)
+        << "a node with two parents";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Nodes, 0, std::int32_t{1}); }), BspError::BadIndex)
+        << "plane 1 of 1";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Nodes, 22, std::uint16_t{2}); }),
+              BspError::BadIndex)
+        << "faces 0 to 2 of 1";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Leaves, 28, std::int32_t{3}); }),
+              BspError::BadValue)
+        << "contents 3";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Leaves, 28 + 4, std::int32_t{1}); }),
+              BspError::BadIndex)
+        << "visibility past its lump";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Leaves, 28 + 22, std::uint16_t{2}); }),
+              BspError::BadIndex)
+        << "mark surfaces 0 to 2 of 1";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::MarkSurfaces, 0, std::uint16_t{1}); }),
+              BspError::BadIndex)
+        << "face 1 of 1";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::ClipNodes, 4, std::int16_t{0}); }),
+              BspError::BadValue)
+        << "a clip node that is its own child would cycle";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::ClipNodes, 6, std::int16_t{-16}); }),
+              BspError::BadValue)
+        << "contents -16";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 36, std::int32_t{1}); }),
+              BspError::BadIndex)
+        << "head node 1 of 1";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 40, std::int32_t{1}); }),
+              BspError::BadIndex)
+        << "hull clip node 1 of 1";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 52, std::int32_t{2}); }),
+              BspError::BadIndex)
+        << "two visible leaves after leaf 0, of two";
+    EXPECT_EQ(
+        withChange([](QuadMap& map) { map.set(Lump::Models, 0, std::numeric_limits<float>::quiet_NaN()); }),
+        BspError::BadValue);
+}
+
+TEST(BspTest, RejectsBrokenEntityText) {
+    for (const std::string_view entities :
+         {std::string_view{R"("classname" "worldspawn")"},
+          std::string_view{"{\n\"classname\" \"worldspawn\"\n"}, std::string_view{"{\n\"classname\"\n}"},
+          std::string_view{"{ \"classname\" \"worldspawn }"}}) {
+        QuadMap map;
+        map.setEntities(entities);
+        const Bytes file = map.file();
+        const auto view = BspView::parse(file);
+        ASSERT_FALSE(view.has_value()) << entities;
+        EXPECT_EQ(view.error().code, BspError::BadEntities);
+        EXPECT_TRUE(view.error().detail.starts_with("Entities: line ")) << view.error().detail;
+    }
 }
 
 TEST(BspTest, RejectsABrokenFile) {

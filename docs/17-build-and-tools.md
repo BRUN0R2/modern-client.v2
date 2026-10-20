@@ -264,7 +264,7 @@ image.
 | `render-golden` | Every PR | Reference images with a software renderer (lavapipe) |
 | `parity` | Nightly | Parity suite on a dedicated *runner* with a legitimate copy of the game ([18](18-testing-and-quality.md#parity-tests)) |
 | `bench` | Nightly | Benchmarks on a dedicated machine. A regression above the threshold fails |
-| `fuzz` (more targets) | Nightly | The other parsers (BSP, MDL, SPR), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
+| `fuzz` (more targets) | Nightly | The other parsers (MDL, SPR), the network decoder and `rookc`, as they arrive; a Linux job with Clang |
 | `stress` | Weekly | Server with 1024 simulated clients |
 | `package` | Release tag | Binaries, `THIRD_PARTY_NOTICES.md`, symbols, Docker image of `nextds` |
 

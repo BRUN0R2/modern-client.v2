@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// BSP v30, the maps of GoldSrc (docs/06-assets-and-resources.md, section 3.1). Today: the geometry
-/// a renderer draws, every index checked against what it indexes, so its readers index without
-/// checks. The tree (visibility, nodes, leaves, clip nodes), the models and the entities come next.
+/// BSP v30, the maps of GoldSrc (docs/06-assets-and-resources.md, section 3.1): every lump, every
+/// index checked against what it indexes and every tree checked to be one, so readers index and
+/// walk without checks.
 export module nx.assets:bsp;
 
 import std;
@@ -20,6 +20,13 @@ inline constexpr std::int32_t kBspVersion = 30;
 inline constexpr std::size_t kFaceLightStyles = 4;
 inline constexpr std::uint8_t kNoLightStyle = 255;
 
+/// The ambient sounds a leaf sets levels for: water, sky, slime and lava.
+inline constexpr std::size_t kAmbientSounds = 4;
+
+/// The collision hulls a model has besides its node tree: player standing, large (monsters),
+/// player ducking.
+inline constexpr std::size_t kClipHulls = 3;
+
 /// An index into one array of a BspView, named by `Tag`; parse() checks every one it reads.
 template <class Tag>
 struct BspIndex {
@@ -34,6 +41,11 @@ struct EdgeTag;
 struct SurfaceEdgeTag;
 struct TextureInfoTag;
 struct TextureTag;
+struct FaceTag;
+struct MarkSurfaceTag;
+struct NodeTag;
+struct LeafTag;
+struct ClipNodeTag;
 
 using PlaneIndex = BspIndex<PlaneTag>;
 using VertexIndex = BspIndex<VertexTag>;
@@ -41,6 +53,11 @@ using EdgeIndex = BspIndex<EdgeTag>;
 using SurfaceEdgeIndex = BspIndex<SurfaceEdgeTag>;
 using TextureInfoIndex = BspIndex<TextureInfoTag>;
 using TextureIndex = BspIndex<TextureTag>;
+using FaceIndex = BspIndex<FaceTag>;
+using MarkSurfaceIndex = BspIndex<MarkSurfaceTag>;
+using NodeIndex = BspIndex<NodeTag>;
+using LeafIndex = BspIndex<LeafTag>;
+using ClipNodeIndex = BspIndex<ClipNodeTag>;
 
 /// What can be wrong with a BSP file; the detail names the lump, the record and the value.
 enum class BspError : std::uint8_t {
@@ -50,8 +67,30 @@ enum class BspError : std::uint8_t {
     MisalignedLump,     ///< A lump is not a whole number of its records.
     BadIndex,           ///< A record names a record that does not exist.
     BadValue,           ///< A value outside its domain: a float that is not finite, a normal that is
-                        ///< not unit length, an unknown plane type, a face of fewer than three edges.
+                        ///< not unit length, an unknown plane type or contents, a face of fewer than
+                        ///< three edges, a child that is not after its parent or has two parents (a
+                        ///< tree must neither cycle nor share a subtree).
     BadTexture,         ///< An embedded texture breaks its format (cause: the WadError).
+    BadEntities,        ///< The entity text breaks its syntax; the detail has the line.
+};
+
+/// What a leaf or a side of a clip node holds.
+enum class Contents : std::int8_t {
+    Empty = -1,
+    Solid = -2,
+    Water = -3,
+    Slime = -4,
+    Lava = -5,
+    Sky = -6,
+    Origin = -7,
+    Clip = -8,
+    Current0 = -9,
+    Current90 = -10,
+    Current180 = -11,
+    Current270 = -12,
+    CurrentUp = -13,
+    CurrentDown = -14,
+    Translucent = -15,
 };
 
 /// The axis a plane faces: one of the three exactly, or the nearest of them.
@@ -101,12 +140,60 @@ struct BspFace {
     std::optional<std::uint32_t> lightmapOffset{}; ///< In BspView::lighting(); none when unlit.
 };
 
-/// A BSP v30 file: decoded records, and views of the bytes it was parsed from (textures, lighting),
-/// which must outlive it.
+/// A side of a node: a node after it, or a leaf.
+using NodeChild = std::variant<NodeIndex, LeafIndex>;
+
+/// A side of a clip node: a clip node after it, or what the space there holds.
+using ClipNodeChild = std::variant<ClipNodeIndex, Contents>;
+
+/// A node of the visible tree: its plane splits its bounds; children[0] is in front.
+struct BspNode {
+    PlaneIndex plane{};
+    std::array<NodeChild, 2> children{};
+    Aabb bounds{};
+    FaceIndex firstFace{};
+    std::uint32_t faceCount = 0;
+};
+
+struct BspLeaf {
+    Contents contents = Contents::Empty;
+    std::optional<std::uint32_t> visibilityOffset{}; ///< In BspView::visibility(); none sees everything.
+    Aabb bounds{};
+    MarkSurfaceIndex firstMarkSurface{};
+    std::uint32_t markSurfaceCount = 0;
+    std::array<std::uint8_t, kAmbientSounds> ambientLevels{};
+};
+
+/// A node of a collision hull: its plane splits space; children[0] is in front.
+struct ClipNode {
+    PlaneIndex plane{};
+    std::array<ClipNodeChild, 2> children{};
+};
+
+/// The world (model 0) or a brush entity's model ("*1", "*2"...).
+struct BspModel {
+    Aabb bounds{};
+    Vec3 origin{};
+    NodeIndex headNode{};                          ///< The root of its visible tree.
+    std::array<ClipNodeChild, kClipHulls> hulls{}; ///< The roots of its collision hulls.
+    std::uint32_t visibleLeafCount = 0;            ///< Leaves 1 to visibleLeafCount have visibility.
+    FaceIndex firstFace{};
+    std::uint32_t faceCount = 0;
+};
+
+/// An entity of the map: its keys and values, in file order.
+struct BspEntity {
+    std::vector<std::pair<std::string, std::string>> keyValues{};
+
+    /// The value of `key`; the last when it repeats, as the original assigns them in order.
+    [[nodiscard]] auto find(std::string_view key) const noexcept -> std::optional<std::string_view>;
+};
+
+/// A BSP v30 file: decoded records, and views of the bytes it was parsed from (textures, lighting,
+/// visibility), which must outlive it.
 class BspView {
 public:
-    /// Errors: TooSmall, UnsupportedVersion, LumpOutOfBounds, MisalignedLump, BadIndex, BadValue,
-    /// BadTexture.
+    /// Errors: every BspError.
     [[nodiscard]] static auto parse(std::span<const std::byte> bytes) -> Result<BspView, BspError>;
 
     [[nodiscard]] inline auto planes() const noexcept -> std::span<const BspPlane> { return m_planes; }
@@ -125,6 +212,22 @@ public:
     [[nodiscard]] inline auto faces() const noexcept -> std::span<const BspFace> { return m_faces; }
     /// RGB lightmaps, three bytes per sample.
     [[nodiscard]] inline auto lighting() const noexcept -> std::span<const std::byte> { return m_lighting; }
+    /// The faces of each leaf, by FaceIndex.
+    [[nodiscard]] inline auto markSurfaces() const noexcept -> std::span<const FaceIndex> {
+        return m_markSurfaces;
+    }
+    /// The potentially visible sets of the leaves, run-length compressed as the compiler wrote them.
+    [[nodiscard]] inline auto visibility() const noexcept -> std::span<const std::byte> {
+        return m_visibility;
+    }
+    [[nodiscard]] inline auto nodes() const noexcept -> std::span<const BspNode> { return m_nodes; }
+    /// Leaf 0 is the solid leaf every outside points to.
+    [[nodiscard]] inline auto leaves() const noexcept -> std::span<const BspLeaf> { return m_leaves; }
+    [[nodiscard]] inline auto clipNodes() const noexcept -> std::span<const ClipNode> { return m_clipNodes; }
+    /// The world first, then the brush models.
+    [[nodiscard]] inline auto models() const noexcept -> std::span<const BspModel> { return m_models; }
+    /// The entities, the world's first.
+    [[nodiscard]] inline auto entities() const noexcept -> std::span<const BspEntity> { return m_entities; }
 
 private:
     BspView() = default;
@@ -137,6 +240,13 @@ private:
     std::vector<std::optional<MipTexture>> m_textures;
     std::vector<BspFace> m_faces;
     std::span<const std::byte> m_lighting;
+    std::vector<FaceIndex> m_markSurfaces;
+    std::span<const std::byte> m_visibility;
+    std::vector<BspNode> m_nodes;
+    std::vector<BspLeaf> m_leaves;
+    std::vector<ClipNode> m_clipNodes;
+    std::vector<BspModel> m_models;
+    std::vector<BspEntity> m_entities;
 };
 
 } // namespace nx::assets

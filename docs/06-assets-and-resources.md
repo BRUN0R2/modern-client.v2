@@ -155,11 +155,15 @@ Readers today:
   offsets of the cue points, where a looping sound loops. Other chunks are skipped, and the size
   in the RIFF header is not trusted.
 
-- BSP v30 (`nx.assets:bsp`), today its geometry: planes (unit normals, axis), vertices, edges,
-  surface edges, texture infos, faces and their lightmap offsets, the textures (embedded, or named
-  with their pixels in a WAD) and the RGB lighting. Every index a record holds is checked against
-  what it indexes, so readers index without checks; every float is finite. The tree (visibility,
-  nodes, leaves, clip nodes), the models and the entities are next.
+- BSP v30 (`nx.assets:bsp`), every lump: planes (unit normals, axis), vertices, edges, surface
+  edges, texture infos, faces and their lightmap offsets, the textures (embedded, or named with
+  their pixels in a WAD), the RGB lighting, the run-length visibility, the nodes, leaves and mark
+  surfaces, the clip nodes of the collision hulls, the models and the entities. Every index a
+  record holds is checked against what it indexes, so readers index without checks; every float
+  is finite; and the node and clip node trees are trees, each child after its parent and with one
+  parent, so no walk can cycle or blow up on a hostile map. Entity text is taken without escapes
+  (the `wad` key holds Windows paths), and a repeated key resolves to its last value, as the
+  original assigns them in order.
 
 Every reader refuses malformed input with a typed error and is fuzzed
 ([18](18-testing-and-quality.md#sanitizers-and-analysis)). The other readers are planned (M2).

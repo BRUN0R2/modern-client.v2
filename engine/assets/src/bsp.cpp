@@ -69,6 +69,44 @@ constexpr std::int32_t kNoLightmap = -1;
 // then the mip textures.
 constexpr std::int32_t kEmptyTextureSlot = -1;
 
+// A node: plane (32 bits), two children (16 bits each: a later node, or ~leaf), bounds (six 16-bit
+// integers), first face and face count (16 bits each).
+constexpr std::size_t kNodeBytes = 24;
+constexpr std::size_t kNodeChildrenOffset = 4;
+constexpr std::size_t kNodeBoundsOffset = 8;
+constexpr std::size_t kNodeFirstFaceOffset = 20;
+constexpr std::size_t kNodeFaceCountOffset = 22;
+
+// A leaf: contents and visibility offset (32 bits each, -1 for none), bounds (six 16-bit integers),
+// first mark surface and count (16 bits each), and the ambient sound levels.
+constexpr std::size_t kLeafBytes = 28;
+constexpr std::size_t kLeafVisibilityOffset = 4;
+constexpr std::size_t kLeafBoundsOffset = 8;
+constexpr std::size_t kLeafFirstMarkSurfaceOffset = 20;
+constexpr std::size_t kLeafMarkSurfaceCountOffset = 22;
+constexpr std::size_t kLeafAmbientOffset = 24;
+constexpr std::int32_t kNoVisibility = -1;
+
+// A clip node: plane (32 bits) and two children (16 bits each: a later clip node, or contents).
+constexpr std::size_t kClipNodeBytes = 8;
+constexpr std::size_t kClipNodeChildrenOffset = 4;
+
+constexpr std::size_t kMarkSurfaceBytes = 2;
+
+// A model: bounds and origin (nine floats), the roots of its node tree and of its three hulls, the
+// leaves that have visibility, its first face and face count (32 bits each).
+constexpr std::size_t kModelBytes = 64;
+constexpr std::size_t kModelMaxOffset = 12;
+constexpr std::size_t kModelOriginOffset = 24;
+constexpr std::size_t kModelHeadsOffset = 36;
+constexpr std::size_t kModelVisibleLeavesOffset = 52;
+constexpr std::size_t kModelFirstFaceOffset = 56;
+constexpr std::size_t kModelFaceCountOffset = 60;
+
+/// The bytes of a child, and of a 16-bit bound.
+constexpr std::size_t kChildBytes = sizeof(std::int16_t);
+constexpr std::size_t kAxes = 3;
+
 /// How far from 1 the length of a stored normal may be: compilers write unit normals in floats.
 constexpr float kUnitLengthTolerance = 1.0e-3F;
 
@@ -322,6 +360,259 @@ struct FaceTargets {
     return face;
 }
 
+/// The box of six 16-bit integers: the minimum, then the maximum.
+[[nodiscard]] auto readShortBounds(std::span<const std::byte> bytes) noexcept -> Aabb {
+    const auto axis = [bytes](std::size_t index) {
+        return static_cast<float>(
+            loadLittleEndian<std::int16_t>(bytes.subspan(index * sizeof(std::int16_t))));
+    };
+    return Aabb{.min = {.x = axis(0), .y = axis(1), .z = axis(2)},
+                .max = {.x = axis(kAxes), .y = axis(kAxes + 1), .z = axis(kAxes + 2)}};
+}
+
+/// `value` as contents. Errors: BadValue.
+[[nodiscard]] auto contentsOf(std::int32_t value, Lump lump, std::size_t record)
+    -> Result<Contents, BspError> {
+    if (value > std::to_underlying(Contents::Empty) || value < std::to_underlying(Contents::Translucent)) {
+        return fail(BspError::BadValue, std::format("{}: unknown contents {}", where(lump, record), value));
+    }
+    return static_cast<Contents>(value);
+}
+
+/// `count` records from `first` lie within `available`. Errors: BadIndex.
+[[nodiscard]] auto checkRange(std::uint64_t first, std::uint64_t count, std::size_t available, Lump lump,
+                              std::size_t record, std::string_view what) -> Result<void, BspError> {
+    if (first + count > available) {
+        return fail(BspError::BadIndex, std::format("{}: {} {} to {} are not below {}", where(lump, record),
+                                                    what, first, first + count, available));
+    }
+    return {};
+}
+
+/// What the tree records index: the sizes of the arrays.
+struct TreeTargets {
+    std::size_t planes = 0;
+    std::size_t faces = 0;
+    std::size_t nodes = 0;
+    std::size_t leaves = 0;
+    std::size_t clipNodes = 0;
+    std::size_t markSurfaces = 0;
+    std::size_t visibilityBytes = 0;
+};
+
+/// A child of node `parent`: a node after it, or the leaf ~child. Errors: BadIndex, BadValue.
+[[nodiscard]] auto decodeNodeChild(std::int16_t child, std::size_t parent, const TreeTargets& targets)
+    -> Result<NodeChild, BspError> {
+    if (child < 0) {
+        return indexInto<LeafTag>(static_cast<std::uint64_t>(-1 - std::int32_t{child}), targets.leaves,
+                                  Lump::Nodes, parent, "leaf")
+            .transform([](LeafIndex leaf) { return NodeChild{leaf}; });
+    }
+    if (std::cmp_less_equal(child, parent)) {
+        return fail(BspError::BadValue, std::format("{}: child node {} is not after its parent",
+                                                    where(Lump::Nodes, parent), child));
+    }
+    return indexInto<NodeTag>(static_cast<std::uint64_t>(child), targets.nodes, Lump::Nodes, parent,
+                              "child node")
+        .transform([](NodeIndex node) { return NodeChild{node}; });
+}
+
+[[nodiscard]] auto decodeNode(std::span<const std::byte> record, std::size_t index,
+                              const TreeTargets& targets) -> Result<BspNode, BspError> {
+    const auto plane = indexInto<PlaneTag>(loadLittleEndian<std::uint32_t>(record), targets.planes,
+                                           Lump::Nodes, index, "plane");
+    const auto front =
+        decodeNodeChild(loadLittleEndian<std::int16_t>(record.subspan(kNodeChildrenOffset)), index, targets);
+    const auto back = decodeNodeChild(
+        loadLittleEndian<std::int16_t>(record.subspan(kNodeChildrenOffset + kChildBytes)), index, targets);
+    if (!plane || !front || !back) {
+        return std::unexpected(!plane ? plane.error() : !front ? front.error() : back.error());
+    }
+    const std::uint32_t firstFace = loadLittleEndian<std::uint16_t>(record.subspan(kNodeFirstFaceOffset));
+    const std::uint32_t faceCount = loadLittleEndian<std::uint16_t>(record.subspan(kNodeFaceCountOffset));
+    if (auto range = checkRange(firstFace, faceCount, targets.faces, Lump::Nodes, index, "faces"); !range) {
+        return std::unexpected(std::move(range.error()));
+    }
+    return BspNode{.plane = *plane,
+                   .children = {*front, *back},
+                   .bounds = readShortBounds(record.subspan(kNodeBoundsOffset)),
+                   .firstFace = FaceIndex{.value = firstFace},
+                   .faceCount = faceCount};
+}
+
+[[nodiscard]] auto decodeLeaf(std::span<const std::byte> record, std::size_t index,
+                              const TreeTargets& targets) -> Result<BspLeaf, BspError> {
+    const auto contents = contentsOf(loadLittleEndian<std::int32_t>(record), Lump::Leaves, index);
+    if (!contents) {
+        return std::unexpected(contents.error());
+    }
+    const std::uint32_t firstMarkSurface =
+        loadLittleEndian<std::uint16_t>(record.subspan(kLeafFirstMarkSurfaceOffset));
+    const std::uint32_t markSurfaceCount =
+        loadLittleEndian<std::uint16_t>(record.subspan(kLeafMarkSurfaceCountOffset));
+    if (auto range = checkRange(firstMarkSurface, markSurfaceCount, targets.markSurfaces, Lump::Leaves, index,
+                                "mark surfaces");
+        !range) {
+        return std::unexpected(std::move(range.error()));
+    }
+    BspLeaf leaf{.contents = *contents,
+                 .visibilityOffset = std::nullopt,
+                 .bounds = readShortBounds(record.subspan(kLeafBoundsOffset)),
+                 .firstMarkSurface = MarkSurfaceIndex{.value = firstMarkSurface},
+                 .markSurfaceCount = markSurfaceCount,
+                 .ambientLevels = {}};
+    for (std::size_t sound = 0; sound < kAmbientSounds; ++sound) {
+        leaf.ambientLevels.at(sound) = std::to_integer<std::uint8_t>(record[kLeafAmbientOffset + sound]);
+    }
+    const auto visibility = loadLittleEndian<std::int32_t>(record.subspan(kLeafVisibilityOffset));
+    if (visibility != kNoVisibility) {
+        if (visibility < 0 || std::cmp_greater_equal(visibility, targets.visibilityBytes)) {
+            return fail(BspError::BadIndex,
+                        std::format("{}: visibility offset {} is not below {}", where(Lump::Leaves, index),
+                                    visibility, targets.visibilityBytes));
+        }
+        leaf.visibilityOffset = static_cast<std::uint32_t>(visibility);
+    }
+    return leaf;
+}
+
+/// A child of clip node `parent` (or a hull root, with no parent): a clip node after it, or
+/// contents. Errors: BadIndex, BadValue.
+[[nodiscard]] auto decodeClipNodeChild(std::int32_t child, std::optional<std::size_t> parent, Lump lump,
+                                       std::size_t record, std::size_t clipNodes)
+    -> Result<ClipNodeChild, BspError> {
+    if (child < 0) {
+        return contentsOf(child, lump, record).transform([](Contents contents) {
+            return ClipNodeChild{contents};
+        });
+    }
+    if (parent && std::cmp_less_equal(child, *parent)) {
+        return fail(BspError::BadValue, std::format("{}: child clip node {} is not after its parent",
+                                                    where(lump, record), child));
+    }
+    return indexInto<ClipNodeTag>(static_cast<std::uint64_t>(child), clipNodes, lump, record, "clip node")
+        .transform([](ClipNodeIndex node) { return ClipNodeChild{node}; });
+}
+
+[[nodiscard]] auto decodeClipNode(std::span<const std::byte> record, std::size_t index,
+                                  const TreeTargets& targets) -> Result<ClipNode, BspError> {
+    const auto plane = indexInto<PlaneTag>(loadLittleEndian<std::uint32_t>(record), targets.planes,
+                                           Lump::ClipNodes, index, "plane");
+    const auto front =
+        decodeClipNodeChild(loadLittleEndian<std::int16_t>(record.subspan(kClipNodeChildrenOffset)), index,
+                            Lump::ClipNodes, index, targets.clipNodes);
+    const auto back = decodeClipNodeChild(
+        loadLittleEndian<std::int16_t>(record.subspan(kClipNodeChildrenOffset + kChildBytes)), index,
+        Lump::ClipNodes, index, targets.clipNodes);
+    if (!plane || !front || !back) {
+        return std::unexpected(!plane ? plane.error() : !front ? front.error() : back.error());
+    }
+    return ClipNode{.plane = *plane, .children = {*front, *back}};
+}
+
+[[nodiscard]] auto decodeModel(std::span<const std::byte> record, std::size_t index,
+                               const TreeTargets& targets) -> Result<BspModel, BspError> {
+    const Aabb bounds{.min = readVec3(record), .max = readVec3(record.subspan(kModelMaxOffset))};
+    const Vec3 origin = readVec3(record.subspan(kModelOriginOffset));
+    if (!isFinite(bounds.min) || !isFinite(bounds.max) || !isFinite(origin)) {
+        return fail(BspError::BadValue,
+                    std::format("{}: bounds and origin must be finite", where(Lump::Models, index)));
+    }
+    const auto headNode =
+        indexInto<NodeTag>(loadLittleEndian<std::uint32_t>(record.subspan(kModelHeadsOffset)), targets.nodes,
+                           Lump::Models, index, "head node");
+    if (!headNode) {
+        return std::unexpected(headNode.error());
+    }
+    BspModel model{
+        .bounds = bounds,
+        .origin = origin,
+        .headNode = *headNode,
+        .hulls = {},
+        .visibleLeafCount = loadLittleEndian<std::uint32_t>(record.subspan(kModelVisibleLeavesOffset)),
+        .firstFace =
+            FaceIndex{.value = loadLittleEndian<std::uint32_t>(record.subspan(kModelFirstFaceOffset))},
+        .faceCount = loadLittleEndian<std::uint32_t>(record.subspan(kModelFaceCountOffset))};
+    for (std::size_t hull = 0; hull < kClipHulls; ++hull) {
+        const auto head = loadLittleEndian<std::int32_t>(
+            record.subspan(kModelHeadsOffset + ((hull + 1) * sizeof(std::int32_t))));
+        auto root = decodeClipNodeChild(head, std::nullopt, Lump::Models, index, targets.clipNodes);
+        if (!root) {
+            return std::unexpected(std::move(root.error()));
+        }
+        model.hulls.at(hull) = *root;
+    }
+    if (std::uint64_t{model.visibleLeafCount} >= std::max<std::uint64_t>(targets.leaves, 1)) {
+        return fail(BspError::BadIndex,
+                    std::format("{}: {} visible leaves after leaf 0, of {} leaves",
+                                where(Lump::Models, index), model.visibleLeafCount, targets.leaves));
+    }
+    if (auto range =
+            checkRange(model.firstFace.value, model.faceCount, targets.faces, Lump::Models, index, "faces");
+        !range) {
+        return std::unexpected(std::move(range.error()));
+    }
+    return model;
+}
+
+/// The entity text: `{ "key" "value" ... }` blocks. A quoted word is taken as it is, without escapes:
+/// the wad key holds Windows paths. The text ends at the end of the lump or at its first zero byte.
+/// Errors: BadEntities.
+[[nodiscard]] auto parseEntities(std::span<const std::byte> lump)
+    -> Result<std::vector<BspEntity>, BspError> {
+    const std::string text = std::ranges::subrange(lump.begin(), std::ranges::find(lump, std::byte{0})) |
+                             std::views::transform([](std::byte byte) { return static_cast<char>(byte); }) |
+                             std::ranges::to<std::string>();
+    std::size_t offset = 0;
+    std::uint32_t line = 1;
+    const auto failure = [&line](std::string_view problem) {
+        return fail(BspError::BadEntities, std::format("Entities: line {}: {}", line, problem));
+    };
+    const auto skipSpace = [&] {
+        while (offset < text.size() && (text[offset] == ' ' || text[offset] == '\t' || text[offset] == '\r' ||
+                                        text[offset] == '\n')) {
+            line += text[offset] == '\n' ? 1U : 0U;
+            ++offset;
+        }
+    };
+    const auto readQuoted = [&]() -> std::optional<std::string> {
+        if (offset == text.size() || text[offset] != '"') {
+            return std::nullopt;
+        }
+        const std::size_t end = text.find('"', offset + 1);
+        if (end == std::string::npos) {
+            return std::nullopt;
+        }
+        std::string word = text.substr(offset + 1, end - offset - 1);
+        line += static_cast<std::uint32_t>(std::ranges::count(word, '\n'));
+        offset = end + 1;
+        return word;
+    };
+    std::vector<BspEntity> entities;
+    for (skipSpace(); offset < text.size(); skipSpace()) {
+        if (text[offset] != '{') {
+            return failure("an entity does not start with '{'");
+        }
+        ++offset;
+        BspEntity entity;
+        for (skipSpace(); offset < text.size() && text[offset] != '}'; skipSpace()) {
+            auto key = readQuoted();
+            skipSpace();
+            auto value = readQuoted();
+            if (!key || !value) {
+                return failure("a key and its value must be two quoted words");
+            }
+            entity.keyValues.emplace_back(std::move(*key), std::move(*value));
+        }
+        if (offset == text.size()) {
+            return failure("an entity is not closed with '}'");
+        }
+        ++offset;
+        entities.push_back(std::move(entity));
+    }
+    return entities;
+}
+
 /// Moves what `decoded` holds into `destination`; its failure, when it holds one.
 template <class Records>
 [[nodiscard]] auto store(Result<Records, BspError>&& decoded, Records& destination)
@@ -331,6 +622,92 @@ template <class Records>
     }
     destination = std::move(*decoded);
     return std::nullopt;
+}
+
+/// Fails unless every record of `records` (nodes or clip nodes) is the child of at most one other:
+/// with children after parents, that makes a tree, whose every walk is linear. Two parents would
+/// make a graph whose full walk, the renderer's, doubles with every level. Errors: BadValue.
+template <class Index, class Record>
+[[nodiscard]] auto checkSingleParents(const std::vector<Record>& records, Lump lump)
+    -> Result<void, BspError> {
+    std::vector<bool> hasParent(records.size());
+    for (std::size_t parent = 0; parent < records.size(); ++parent) {
+        for (const auto& child : records[parent].children) {
+            const auto* node = std::get_if<Index>(&child);
+            if (node == nullptr) {
+                continue;
+            }
+            if (hasParent[node->value]) {
+                return fail(BspError::BadValue, std::format("{}: {} has a second parent", where(lump, parent),
+                                                            where(lump, node->value)));
+            }
+            hasParent[node->value] = true;
+        }
+    }
+    return {};
+}
+
+/// The tree, the models and the entities.
+struct Tree {
+    std::vector<FaceIndex> markSurfaces;
+    std::span<const std::byte> visibility;
+    std::vector<BspNode> nodes;
+    std::vector<BspLeaf> leaves;
+    std::vector<ClipNode> clipNodes;
+    std::vector<BspModel> models;
+    std::vector<BspEntity> entities;
+};
+
+/// Errors: MisalignedLump, BadIndex, BadValue, BadEntities.
+[[nodiscard]] auto decodeTree(const Lumps& lumps, std::size_t planes, std::size_t faces)
+    -> Result<Tree, BspError> {
+    Tree tree;
+    const auto decodeMarkSurfaceOf = [faces](std::span<const std::byte> record, std::size_t index) {
+        return indexInto<FaceTag>(loadLittleEndian<std::uint16_t>(record), faces, Lump::MarkSurfaces, index,
+                                  "face");
+    };
+    if (auto failure = store(decodeRecords(lumps, Lump::MarkSurfaces, kMarkSurfaceBytes, decodeMarkSurfaceOf),
+                             tree.markSurfaces)) {
+        return std::unexpected(std::move(*failure));
+    }
+    tree.visibility = lumps[Lump::Visibility];
+    // Every array's size first: a node indexes the nodes after it, and the leaves.
+    const TreeTargets targets{.planes = planes,
+                              .faces = faces,
+                              .nodes = lumps[Lump::Nodes].size() / kNodeBytes,
+                              .leaves = lumps[Lump::Leaves].size() / kLeafBytes,
+                              .clipNodes = lumps[Lump::ClipNodes].size() / kClipNodeBytes,
+                              .markSurfaces = tree.markSurfaces.size(),
+                              .visibilityBytes = tree.visibility.size()};
+    const auto with = [&targets](auto decode) {
+        return [&targets, decode](std::span<const std::byte> record, std::size_t index) {
+            return decode(record, index, targets);
+        };
+    };
+    if (auto failure = store(decodeRecords(lumps, Lump::Leaves, kLeafBytes, with(decodeLeaf)), tree.leaves)) {
+        return std::unexpected(std::move(*failure));
+    }
+    if (auto failure = store(decodeRecords(lumps, Lump::Nodes, kNodeBytes, with(decodeNode)), tree.nodes)) {
+        return std::unexpected(std::move(*failure));
+    }
+    if (auto failure = store(decodeRecords(lumps, Lump::ClipNodes, kClipNodeBytes, with(decodeClipNode)),
+                             tree.clipNodes)) {
+        return std::unexpected(std::move(*failure));
+    }
+    if (auto trees = checkSingleParents<NodeIndex>(tree.nodes, Lump::Nodes).and_then([&tree] {
+            return checkSingleParents<ClipNodeIndex>(tree.clipNodes, Lump::ClipNodes);
+        });
+        !trees) {
+        return std::unexpected(std::move(trees.error()));
+    }
+    if (auto failure =
+            store(decodeRecords(lumps, Lump::Models, kModelBytes, with(decodeModel)), tree.models)) {
+        return std::unexpected(std::move(*failure));
+    }
+    if (auto failure = store(parseEntities(lumps[Lump::Entities]), tree.entities)) {
+        return std::unexpected(std::move(*failure));
+    }
+    return tree;
 }
 
 } // namespace
@@ -391,7 +768,28 @@ auto BspView::parse(std::span<const std::byte> bytes) -> Result<BspView, BspErro
     if (auto failure = store(decodeRecords(*lumps, Lump::Faces, kFaceBytes, decodeFaceOf), view.m_faces)) {
         return std::unexpected(std::move(*failure));
     }
+    auto tree = decodeTree(*lumps, view.m_planes.size(), view.m_faces.size());
+    if (!tree) {
+        return std::unexpected(std::move(tree.error()));
+    }
+    view.m_markSurfaces = std::move(tree->markSurfaces);
+    view.m_visibility = tree->visibility;
+    view.m_nodes = std::move(tree->nodes);
+    view.m_leaves = std::move(tree->leaves);
+    view.m_clipNodes = std::move(tree->clipNodes);
+    view.m_models = std::move(tree->models);
+    view.m_entities = std::move(tree->entities);
     return view;
+}
+
+auto BspEntity::find(std::string_view key) const noexcept -> std::optional<std::string_view> {
+    const auto reversed = keyValues | std::views::reverse;
+    const auto found =
+        std::ranges::find_if(reversed, [key](const auto& keyValue) { return keyValue.first == key; });
+    if (found == reversed.end()) {
+        return std::nullopt;
+    }
+    return found->second;
 }
 
 } // namespace nx::assets
