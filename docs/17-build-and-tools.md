@@ -17,20 +17,20 @@ modern-client.v2/
 │   ├── meta/                   # nx.meta (reflection facade + fallback)
 │   ├── data/                   # nx.data (TOML data and configuration files with schemas)
 │   ├── jobs/                   # nx.jobs
-│   ├── platform/               # nx.platform (clocks; SDL3 window and input from M2)
+│   ├── platform/               # nx.platform (clocks, native file system; SDL3 window and input from M2)
 │   ├── ecs/                    # nx.ecs
 │   ├── rhi/                    # nx.rhi (interface)
 │   ├── rhiVulkan/             # nx.rhi.vulkan
 │   ├── rhiD3d11/              # nx.rhi.d3d11 (future)
 │   ├── render/                 # nx.render
-│   ├── assets/                 # nx.assets (+ goldsrc importers)
+│   ├── assets/                 # nx.assets (VFS; goldsrc importers from M2)
 │   ├── audio/                  # nx.audio
 │   ├── net/                    # nx.net
 │   ├── collision/              # nx.collision
 │   ├── ui/                     # nx.ui
 │   ├── game/                   # nx.game
 │   ├── script/                 # nx.script (Rook VM host + bindings)
-│   └── testSupport/            # nx::testSupport: helpers shared by the tests (ContractRecorder)
+│   └── testSupport/            # nx::testSupport: helpers shared by the tests (ContractRecorder, TemporaryDirectory)
 ├── game/
 │   ├── shared/                 # cs.shared (prediction-safe code)
 │   ├── server/                 # cs.server

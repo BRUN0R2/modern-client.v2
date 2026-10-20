@@ -3,9 +3,11 @@
 
 /// nx.platform — the operating system as the engine sees it (docs/01-architecture.md, layer 2).
 ///
-/// Today: real-time clocks and the precise wait that paces frames and ticks. The window, events,
-/// input and raw mouse (SDL3) come with the swapchain of the Vulkan backend (M2), their first
-/// consumer; OS threads (names, affinity, priority) with theirs. The decision is in TODO.md.
+/// Today: real-time clocks and the precise wait that paces frames and ticks, and the native file
+/// system under the VFS. The window, events, input and raw mouse (SDL3) come with the swapchain
+/// of the Vulkan backend (M2), their first consumer; OS threads (names, affinity, priority) with
+/// theirs. The decision is in TODO.md.
 export module nx.platform;
 
 export import :clock;
+export import :fileSystem;

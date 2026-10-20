@@ -14,6 +14,11 @@ export namespace nx {
     return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
 }
 
+/// Whether `a` and `b` are the same text, ignoring ASCII case.
+[[nodiscard]] constexpr auto equalsIgnoringCase(std::string_view a, std::string_view b) noexcept -> bool {
+    return std::ranges::equal(a, b, [](char x, char y) { return toLowerAscii(x) == toLowerAscii(y); });
+}
+
 /// How diagnostics word inclusive bounds: "in [0, 100]", "of at least 0" or "of at most 100"; empty
 /// when there is neither bound.
 template <class Number>

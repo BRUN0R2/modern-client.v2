@@ -18,6 +18,12 @@ TEST(Text, LowersOnlyAsciiCapitals) {
     EXPECT_EQ(nx::toLowerAscii('\xC9'), '\xC9') << "bytes beyond ASCII stay as they are";
 }
 
+TEST(Text, ComparesIgnoringAsciiCase) {
+    static_assert(nx::equalsIgnoringCase("SV_Gravity", "sv_gravity"));
+    static_assert(!nx::equalsIgnoringCase("sv_gravity", "sv_gravit"));
+    EXPECT_FALSE(nx::equalsIgnoringCase("\xC9", "\xE9")) << "case beyond ASCII is not folded";
+}
+
 TEST(Text, WordsBounds) {
     EXPECT_EQ(nx::boundsText<int>(0, 100), "in [0, 100]");
     EXPECT_EQ(nx::boundsText<double>(0.5, std::nullopt), "of at least 0.5");

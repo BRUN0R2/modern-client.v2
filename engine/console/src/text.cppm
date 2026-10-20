@@ -30,11 +30,6 @@ private:
     return static_cast<unsigned char>(character) <= static_cast<unsigned char>(' ');
 }
 
-/// Whether `a` and `b` are the same text, ignoring ASCII case.
-[[nodiscard]] constexpr auto equalsIgnoringCase(std::string_view a, std::string_view b) noexcept -> bool {
-    return std::ranges::equal(a, b, [](char x, char y) { return toLowerAscii(x) == toLowerAscii(y); });
-}
-
 /// Whether `text` starts with `prefix`, ignoring ASCII case.
 [[nodiscard]] constexpr auto startsWithIgnoringCase(std::string_view text, std::string_view prefix) noexcept
     -> bool {

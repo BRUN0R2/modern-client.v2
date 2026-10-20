@@ -29,15 +29,31 @@ Search order (highest priority first), equivalent to the GoldSrc *search path*. 
 | 4 | The profile's game source: `<install>/cstrike/` + the base files Counter-Strike 1.6 loads from `<install>/valve/` (`classic`), `openContent` (`open`) or `devContent` (`dev`) | Game content | `goldsrcInstall`: **no**. The others: yes |
 | 5 | `engine/` (embedded) | Engine minimum: console font, fallback shaders, error screen | Yes |
 
+Today the VFS (`nx::assets::Vfs`) mounts directories, in the order it is given. The content
+sources and profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) and
+the embedded `engine/` mount are planned (M2, [TODO](../TODO.md)).
+
 ### 2.2 Path rules
 
-- Logical paths are relative, use `/` as the separator and are looked up
-  **case-insensitively** (as on Windows, where the maps were made), but the canonical
-  spelling is preserved for logging.
-- **Forbidden:** `..`, absolute paths, drive letters, `\\`, control bytes and extensions
-  outside the allow list. A violation yields `VfsError::InvalidPath`.
-- Each mount's index is built once (with a *watch* in development) and lookup is O(1) by
-  hash of the normalized path.
+- Logical paths (`nx::assets::VfsPath`) are relative, use `/` as the separator and are looked
+  up **case-insensitively** for ASCII letters (as on Windows, where the maps were made); other
+  bytes compare exactly. A path keeps the spelling it was written with, for diagnostics.
+- **Forbidden:** an empty path, empty components (`a//b`, a trailing `/`), `.` and `..`
+  components, absolute paths, `\`, `:` (drive letters and NTFS streams), control bytes, more
+  than `kMaxResourcePathBytes` (1024 bytes) and extensions outside `kAllowedExtensions`: those
+  of the formats of [§3](#3-supported-formats). A violation yields `VfsError::InvalidPath`,
+  whose detail names the rule; text over the ceiling is reported by its size, never repeated.
+- Creating the VFS indexes the regular files of every mount (symbolic links to directories are
+  not followed: they can lead into a cycle). Lookup is O(1), by hash of the lowercased path, and
+  never hands the caller's text to the operating system. Files whose relative paths are not
+  valid logical paths (another extension, a `:` in a name) are not content and stay out of the
+  index.
+- Two files of one mount whose paths differ only in case (possible on Linux) would make a path
+  ambiguous: creating the VFS fails with `VfsError::MountFailed`, naming both, unless a higher
+  mount has that path. The VFS never picks one silently.
+- The VFS is immutable, so any thread reads through it. Another set of mounts (a content
+  profile, an enabled mod) is a new VFS. A *watch* that refreshes the index in development
+  comes with hot reload ([§4.4](#44-hot-reload-development)).
 
 ### 2.3 Locating the original installation (optional)
 
@@ -112,7 +128,8 @@ is searched for in this order:
 | `hud.txt` and `sprites/*.txt` | HUD sprite layout | Per resolution |
 | `*.res` | Per-map resource list | Become manifest dependencies ([§6](#6-end-of-precache-resource-registry)) |
 | `*_detail.txt` | Per-map detail textures | Optional support, as in CS 1.6 |
-| `overviews/*.txt` + image | Spectator overview map | |
+| `overviews/*.txt` + BMP image | Spectator overview map | |
+| `gfx/env/*.tga` | Sky box | Six faces per `skyname` of `worldspawn` |
 | `liblist.gam`, `*.cfg`, `mapcycle.txt`, `motd.txt` | Configuration | See [09](09-dedicated-server.md) and [12](12-ui-hud-and-console.md) |
 
 ### 3.2 Modern (for mods)

@@ -25,9 +25,6 @@ using Words = std::vector<std::string>;
 }
 
 TEST(NamesTest, CaseInsensitive) {
-    using nx::console::equalsIgnoringCase;
-    EXPECT_TRUE(equalsIgnoringCase("SV_Gravity", "sv_gravity"));
-    EXPECT_FALSE(equalsIgnoringCase("sv_gravity", "sv_gravit"));
     constexpr nx::console::CaseInsensitiveLess less;
     EXPECT_TRUE(less("Alpha", "beta"));
     EXPECT_FALSE(less("BETA", "beta"));

@@ -7,8 +7,10 @@ nxAddModuleLibrary(nxPlatform
     MODULES
         src/nx.platform.cppm
         src/clock.cppm
+        src/fileSystem.cppm
     SOURCES
         src/clock.cpp
+        src/fileSystem.cpp
     DEPENDS
         nx::core)
 

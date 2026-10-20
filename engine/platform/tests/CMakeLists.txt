@@ -4,5 +4,6 @@
 nxAddTest(nxPlatformTests
     SOURCES
         clockTests.cpp
+        fileSystemTests.cpp
     DEPENDS
         nx::platform)
