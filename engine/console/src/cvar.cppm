@@ -32,6 +32,7 @@ enum class CvarError : std::uint8_t {
     OutOfRange,        ///< A number outside the cvar's range.
 };
 
+/// The type of a cvar's value, as the console lists it.
 enum class CvarKind : std::uint8_t {
     Bool,
     Integer,
@@ -143,7 +144,8 @@ public:
     [[nodiscard]] virtual auto expectation() const -> std::string = 0;
 
     /// Parses `input` and assigns it. Flags are the console's policy and are not checked here.
-    virtual auto assign(std::string_view input) -> Result<void, CvarError> = 0;
+    /// Errors: InvalidValue, OutOfRange.
+    [[nodiscard]] virtual auto assign(std::string_view input) -> Result<void, CvarError> = 0;
 
 protected:
     CvarBase(std::string_view cvarName, std::string_view cvarDescription, CvarFlags cvarFlags)
@@ -193,8 +195,9 @@ public:
 
     [[nodiscard]] auto value() const noexcept -> const Type& { return m_value; }
 
-    /// Assigns `newValue` when the cvar accepts it (range, representable text).
-    auto set(Type newValue) -> Result<void, CvarError> {
+    /// Assigns `newValue` when the cvar accepts it (range, representable text). Errors:
+    /// InvalidValue, OutOfRange.
+    [[nodiscard]] auto set(Type newValue) -> Result<void, CvarError> {
         if (auto valid = validate(newValue); !valid) {
             return valid;
         }
@@ -243,7 +246,7 @@ public:
         }
     }
 
-    auto assign(std::string_view input) -> Result<void, CvarError> override {
+    [[nodiscard]] auto assign(std::string_view input) -> Result<void, CvarError> override {
         const std::optional<Type> parsed = parse(input);
         if (!parsed) {
             return refuse(CvarError::InvalidValue, input);
@@ -321,7 +324,10 @@ public:
     explicit Cvar(TypedCvar<Type>& cvar) noexcept : m_cvar{&cvar} {}
 
     [[nodiscard]] auto value() const noexcept -> const Type& { return m_cvar->value(); }
-    auto set(Type newValue) const -> Result<void, CvarError> { return m_cvar->set(std::move(newValue)); }
+    /// Errors: those of TypedCvar::set.
+    [[nodiscard]] auto set(Type newValue) const -> Result<void, CvarError> {
+        return m_cvar->set(std::move(newValue));
+    }
 
     [[nodiscard]] auto name() const noexcept -> std::string_view { return m_cvar->name(); }
     [[nodiscard]] auto flags() const noexcept -> CvarFlags { return m_cvar->flags(); }

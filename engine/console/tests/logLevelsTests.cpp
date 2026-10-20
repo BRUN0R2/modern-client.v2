@@ -67,6 +67,18 @@ TEST_F(LogLevelsTest, UnknownLevelsAreRefused) {
     EXPECT_EQ(logger.categoryLevel(kNetLog), Level::Info);
 }
 
+TEST_F(LogLevelsTest, AFailureRegistersNoCvar) {
+    // Regression: the categories before a bad one used to stay registered, bound to nothing.
+    constexpr std::array kOneBad{kNetLog, nx::log::Category{"bad name"}};
+    EXPECT_EQ(LogLevelCvars::registerIn(console, logger, kOneBad).error().code, CvarError::InvalidName);
+    EXPECT_EQ(console.findCvar("log_level_net"), nullptr);
+
+    constexpr std::array kTwice{kNetLog, kAssetsLog, nx::log::Category{"NET"}};
+    EXPECT_EQ(LogLevelCvars::registerIn(console, logger, kTwice).error().code, CvarError::NameTaken);
+    EXPECT_EQ(console.findCvar("log_level_net"), nullptr);
+    EXPECT_EQ(console.findCvar("log_level_assets"), nullptr);
+}
+
 TEST_F(LogLevelsTest, CategoriesNeedNamesTheConsoleCanInvoke) {
     constexpr std::array kBadCategories{nx::log::Category{"bad name"}};
     EXPECT_EQ(LogLevelCvars::registerIn(console, logger, kBadCategories).error().code,

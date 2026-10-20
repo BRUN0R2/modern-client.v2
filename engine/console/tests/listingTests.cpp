@@ -81,7 +81,7 @@ TEST_F(ListingTest, FindSearchesNamesAndDescriptions) {
 }
 
 TEST_F(ListingTest, WrongArgumentsShowTheUsage) {
-    std::ignore = printed(R"(cvarlist a b; cmdlist a b; find; find "")");
+    std::ignore = printed(R"(cvarlist a b; cmdlist a b; find; find "")"); // only the failures matter
     EXPECT_EQ(output.failureCodes(), (Codes{ConsoleError::InvalidArguments, ConsoleError::InvalidArguments,
                                             ConsoleError::InvalidArguments, ConsoleError::InvalidArguments}));
     EXPECT_EQ(output.failures.front().detail, "usage: cvarlist [prefix]");

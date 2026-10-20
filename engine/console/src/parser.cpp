@@ -12,55 +12,67 @@ namespace {
 
 constexpr std::string_view kCommentStart = "//";
 
+/// A word of a command: its text, without quotes, and where it starts in the script.
+struct ScannedWord {
+    std::string_view text;
+    std::size_t start = 0;
+};
+
+/// The one definition of the words of the language, shared by splitFirstCommand and tokenize: hands
+/// each word of the first command of `script` to `onWord`, in order, and returns where the command
+/// ends (its `\n` or `;`, or the end of the script).
+template <class OnWord>
+auto scanFirstCommand(std::string_view script, OnWord&& onWord) -> std::size_t {
+    std::size_t position = 0;
+    while (position < script.size()) {
+        const char character = script[position];
+        if (character == '\n' || character == ';') {
+            return position;
+        }
+        if (isWhitespace(character)) {
+            ++position;
+        } else if (script.substr(position).starts_with(kCommentStart)) {
+            // A comment runs to the end of the line, any `;` in it included.
+            position = std::min(script.find('\n', position), script.size());
+        } else if (character == '"') {
+            // A quoted word runs to its closing quote, or to the end of the line without one.
+            const std::size_t first = position + 1;
+            const std::size_t last = std::min(script.find_first_of("\"\n", first), script.size());
+            onWord(ScannedWord{.text = script.substr(first, last - first), .start = position});
+            position = last < script.size() && script[last] == '"' ? last + 1 : last;
+        } else {
+            // Any other word runs to whitespace or a `;`; a `"` in it is an ordinary character.
+            const std::size_t first = position;
+            while (position < script.size() && !isWhitespace(script[position]) && script[position] != ';') {
+                ++position;
+            }
+            onWord(ScannedWord{.text = script.substr(first, position - first), .start = first});
+        }
+    }
+    return position;
+}
+
 } // namespace
 
 auto splitFirstCommand(std::string_view script) noexcept -> SplitScript {
-    bool insideQuotes = false;
-    bool insideComment = false;
-    for (std::size_t index = 0; index < script.size(); ++index) {
-        const char character = script[index];
-        if (character == '\n' || (character == ';' && !insideQuotes && !insideComment)) {
-            return SplitScript{.command = script.substr(0, index), .remainder = script.substr(index + 1)};
-        }
-        if (character == '"') {
-            insideQuotes = !insideQuotes;
-        } else if (!insideQuotes && script.substr(index).starts_with(kCommentStart)) {
-            insideComment = true;
-        }
+    const std::size_t end = scanFirstCommand(script, [](const ScannedWord& /*word*/) noexcept {});
+    if (end == script.size()) {
+        return SplitScript{.command = script, .remainder = script.substr(end)};
     }
-    return SplitScript{.command = script, .remainder = script.substr(script.size())};
+    return SplitScript{.command = script.substr(0, end), .remainder = script.substr(end + 1)};
 }
 
 auto tokenize(std::string_view command) -> CommandLine {
     CommandLine line;
-    std::size_t position = 0;
-    const auto skipWhitespace = [&] {
-        while (position < command.size() && isWhitespace(command[position])) {
-            ++position;
-        }
-    };
-
-    while (true) {
-        skipWhitespace();
-        if (position == command.size() || command.substr(position).starts_with(kCommentStart)) {
-            break;
-        }
+    std::optional<std::size_t> argumentsStart;
+    const std::size_t end = scanFirstCommand(command, [&line, &argumentsStart](const ScannedWord& word) {
         if (line.words.size() == 1) {
-            line.argumentText = std::string{trimmed(command.substr(position))};
+            argumentsStart = word.start;
         }
-        if (command[position] == '"') {
-            // A quoted word runs to the closing quote, or to the end of the command without one.
-            const std::size_t start = position + 1;
-            const std::size_t closing = std::min(command.find('"', start), command.size());
-            line.words.emplace_back(command.substr(start, closing - start));
-            position = std::min(closing + 1, command.size());
-        } else {
-            const std::size_t start = position;
-            while (position < command.size() && !isWhitespace(command[position])) {
-                ++position;
-            }
-            line.words.emplace_back(command.substr(start, position - start));
-        }
+        line.words.emplace_back(word.text);
+    });
+    if (argumentsStart) {
+        line.argumentText = std::string{trimmed(command.substr(*argumentsStart, end - *argumentsStart))};
     }
     return line;
 }

@@ -3,13 +3,15 @@
 
 /// The console language of the original, as configs (.cfg), the console and binds write it.
 ///
-/// A script is a sequence of commands. A command ends at a line break, or at a `;` that is outside
-/// double quotes and not after a `//` on the same line. A command is a sequence of words separated
-/// by whitespace; a word that starts with `"` runs to the next `"` (or to the end of the command)
-/// and may hold whitespace and `;`. `//` at the start of a word comments out the rest of the
-/// command. There are no escape sequences. So:
+/// A script is a sequence of commands, and a command a sequence of words. A word that starts with
+/// `"` runs to the next `"`, or to the end of the line without one, and may hold whitespace and
+/// `;`. Any other word runs to whitespace or to a `;`, and a `"` inside it is an ordinary
+/// character. `//` at the start of a word comments out the rest of the line. A command ends at a
+/// line break, or at a `;` outside a quoted word and outside a comment. There are no escape
+/// sequences. So:
 ///
 ///     sv_downloadurl "http://example.com/cs"   // one word, the URL; the comment is ignored
+///     sv_downloadurl http://example.com/cs; echo done   // `//` inside a word: two commands
 ///     alias jump "+jump; wait; -jump"          // three words; the alias body has three commands
 ///     echo one; echo two                       // two commands
 export module nx.console:parser;

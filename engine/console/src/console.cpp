@@ -179,6 +179,16 @@ auto Console::hasCommand(std::string_view name) const -> bool {
     return m_commands.contains(name);
 }
 
+auto Console::checkCvarName(std::string_view name) const -> Result<void, CvarError> {
+    if (!isValidName(name)) {
+        return fail(CvarError::InvalidName, std::format("\"{}\"", name));
+    }
+    if (isNameTaken(name)) {
+        return fail(CvarError::NameTaken, std::string{name});
+    }
+    return {};
+}
+
 auto Console::isNameTaken(std::string_view name) const -> bool {
     return m_commands.contains(name) || m_aliases.contains(name) || m_cvars.contains(name);
 }

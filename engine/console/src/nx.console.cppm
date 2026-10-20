@@ -7,7 +7,7 @@
 /// Typed cvars with the classic names and syntax, commands, aliases, `+`/`-` buttons and the
 /// command buffer that runs configs (.cfg) with `;`, quotes, comments, `wait` and `exec`, as the
 /// original does, plus the `log_level_<category>` cvars. The console UI (nx.ui) and the server
-/// terminal are views over a Console.
+/// terminal will be views over a Console (planned: docs/12-ui-hud-and-console.md, section 5.3).
 export module nx.console;
 
 export import :text;

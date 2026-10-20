@@ -21,8 +21,9 @@ inline constexpr std::string_view kLogLevelCvarPrefix = "log_level_";
 class LogLevelCvars {
 public:
     /// Registers one cvar per category in `console`, defaulting to the level `logger` applies to the
-    /// category now. Both must outlive the result. Errors: those of Console::registerCvar (a category
-    /// whose cvar name the console cannot invoke, a name already taken).
+    /// category now. Both must outlive the result. Every name is checked before any cvar is
+    /// registered, so a failure registers none. Errors: those of Console::checkCvarName (a category
+    /// whose cvar name the console cannot invoke, a name already taken or given twice).
     [[nodiscard]] static auto registerIn(Console& console, log::Logger& logger,
                                          std::span<const log::Category> categories)
         -> Result<LogLevelCvars, CvarError>;
