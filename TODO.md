@@ -55,8 +55,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] ADRs 0001–0016
 - [x] camelCase rule documented ([02 §3.1](docs/02-coding-standards.md#31-project-rule-camelcase))
 - [x] Licenses in the REUSE format: `LICENSES/`, `LICENSE`, `REUSE.toml` and SPDX headers
-- [ ] `CONTRIBUTING.md` (PR flow, DCO, standards, license of contributions, how to run the tests)
-- [ ] `SECURITY.md` (how to report vulnerabilities)
+- [x] `CONTRIBUTING.md` (PR flow, DCO, standards, license of contributions, how to run the tests)
+- [x] `SECURITY.md` (how to report vulnerabilities)
 - [ ] Complete specification of the Rook grammar (`rook/spec/grammar.ebnf`)
 - [ ] Complete cvar catalog in `data/cstrike/cvars.toml`
 - [ ] Survey of the original's economy and weapon values for the official data
@@ -80,7 +80,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Warnings as errors, deterministic floating point, no exceptions and no RTTI
 - [x] `scripts/devShell.ps1` for command-line builds on Windows
 - [ ] Run `clang-tidy` with modules (requires a Clang build and `compile_commands.json`)
-- [ ] Recommended editor settings in `.vscode/`
+- [x] Recommended editor settings in `.vscode/`
 - [x] Remove the dependency on the experimental `import std` and the `@cmake_cxx_std.lib` workaround
 - [x] Normalize the tree's line endings according to `.gitattributes`
 

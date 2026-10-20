@@ -52,7 +52,7 @@ The code is **written from scratch**. Rules for contributions:
 |-----------|---------|--------|
 | Engine, game, server, tools and build | **GPL-3.0-or-later** with the **Rook Plugin Exception** | Ensure that engine improvements go back to the community, without tying plugins to the GPL |
 | Rook toolchain (`rookc`, VM, LSP) and plugin SDK (`.rookd`, `std`) | **MIT** | Allow plugins and mods under **any license**, including closed ones |
-| Documentation (`docs/`, `README.md`, `TODO.md`) | **CC BY 4.0** | Reuse with attribution |
+| Documentation (`docs/`, `README.md`, `TODO.md`, `CONTRIBUTING.md`, `SECURITY.md`) | **CC BY 4.0** | Reuse with attribution |
 | Game data (`data/`) | GPL-3.0-or-later, like the engine | The numeric behavior values are measured facts |
 
 Every code file starts with the SPDX header of its license

@@ -50,11 +50,12 @@ On Linux, use the `dev-linux-gcc` or `dev-linux-clang` presets.
 |------|---------|
 | Engine, game, server, tools and data | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) with the [Rook Plugin Exception](LICENSES/LicenseRef-Rook-Plugin-Exception.txt) |
 | Rook toolchain and plugin SDK (`rook/`) | [MIT](LICENSES/MIT.txt) |
-| Documentation (`docs/`, `README.md`, `TODO.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
+| Documentation (`docs/`, `README.md`, `TODO.md`, `CONTRIBUTING.md`, `SECURITY.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
 
 **Plugins and mods** that use only the plugin interface may adopt **any license**,
 including proprietary ones. This is guaranteed by the exception, not just by intent.
 
 Each file's license is in its SPDX header and in [`REUSE.toml`](REUSE.toml)
 ([REUSE](https://reuse.software)). Decision and rationale: [ADR-0010](docs/adr/0010-license.md).
-Contributions use *Signed-off-by* (DCO).
+Contributions use *Signed-off-by* (DCO); see [CONTRIBUTING.md](CONTRIBUTING.md) and, for
+vulnerabilities, [SECURITY.md](SECURITY.md).

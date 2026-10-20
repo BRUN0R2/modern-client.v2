@@ -1,0 +1,26 @@
+{
+  "cmake.useCMakePresets": "always",
+  "cmake.copyCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build",
+    "--experimental-modules-support",
+    "--background-index",
+    "--header-insertion=never",
+    "--clang-tidy"
+  ],
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "editor.rulers": [110],
+  "editor.formatOnSave": true,
+  "[cpp]": {
+    "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+  },
+  "files.associations": {
+    "*.cppm": "cpp"
+  },
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "[markdown]": {
+    "files.trimTrailingWhitespace": false
+  }
+}

@@ -250,7 +250,11 @@ image.
 ## 9. Development environment
 
 - **VS Code** with `clangd`, CMake Tools and the Rook extension (syntax, LSP, debugger). The
-  repository ships `.vscode/` with recommended settings.
+  repository ships `.vscode/` with the recommended extensions and settings: CMake Tools uses
+  the presets and copies the active preset's `compile_commands.json` to `build/`, where
+  `clangd` reads it (with its module support on); formatting follows `.clang-format` on save.
+  `clangd` understands the project's modules only when the active preset builds with Clang;
+  with MSVC presets, Visual Studio is the IDE that understands them.
 - **Visual Studio** and **CLion** supported through CMake presets.
 - **RenderDoc** for frame capture and **Tracy** for profiling.
 - Optional *pre-commit* hooks: formatting and lint of the changed files.
