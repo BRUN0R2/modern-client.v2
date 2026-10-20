@@ -112,9 +112,13 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: /tmp/vcpkg-cache
     steps:
       - name: Install build tools
+        # The X11 (XInput2 for the raw mouse), Wayland and IBus headers are what the sdl3 port
+        # builds its window and input backends from; SDL loads those libraries at run time.
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip
+          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxft-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev libegl-dev libdecor-0-dev libibus-1.0-dev
           python3 -m venv /opt/tools
           /opt/tools/bin/pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
           echo /opt/tools/bin >> "$GITHUB_PATH"

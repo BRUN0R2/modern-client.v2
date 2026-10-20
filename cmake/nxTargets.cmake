@@ -168,12 +168,12 @@ function(nxAddFuzzer target)
     endif()
 endfunction()
 
-# nxAddTest(<target> SOURCES <files>... DEPENDS <targets>...)
+# nxAddTest(<target> SOURCES <files>... DEPENDS <targets>... [ENVIRONMENT <NAME=value>...])
 #
-# Creates a GoogleTest executable and registers each test case with CTest. The helpers shared by
-# all tests (engine/testSupport, nx::testSupport) are always linked.
+# Creates a GoogleTest executable and registers each test case with CTest, run with ENVIRONMENT.
+# The helpers shared by all tests (engine/testSupport, nx::testSupport) are always linked.
 function(nxAddTest target)
-    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS;ENVIRONMENT")
 
     if(NOT arg_SOURCES)
         message(FATAL_ERROR "nxAddTest(${target}): SOURCES is required")
@@ -182,5 +182,5 @@ function(nxAddTest target)
     add_executable(${target} ${arg_SOURCES})
     target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} nx::testSupport GTest::gtest GTest::gtest_main)
     nxTargetDefaults(${target})
-    gtest_discover_tests(${target} DISCOVERY_MODE PRE_TEST)
+    gtest_discover_tests(${target} DISCOVERY_MODE PRE_TEST PROPERTIES ENVIRONMENT "${arg_ENVIRONMENT}")
 endfunction()

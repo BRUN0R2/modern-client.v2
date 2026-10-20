@@ -83,6 +83,8 @@ readers expected, and the readers now follow them
 - **Contracts:** to verify that a check fired without aborting, the test installs a handler
   that records and returns (`ContractRecorder`, *observe* mode). The default handler
   (*enforce*) is covered by death tests (`EXPECT_DEATH`).
+- **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
+  `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
 - **Files:** a test that reads the file system writes its input into a
   `TemporaryDirectory`, removed at the end of the test. A test whose subject depends on a
   property of the file system (case sensitivity) checks the property at run time and skips

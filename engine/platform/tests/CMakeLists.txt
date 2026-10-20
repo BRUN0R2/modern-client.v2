@@ -5,5 +5,9 @@ nxAddTest(nxPlatformTests
     SOURCES
         clockTests.cpp
         fileSystemTests.cpp
+        windowTests.cpp
     DEPENDS
-        nx::platform)
+        nx::platform
+    # Windows without a display, in CI and on a developer's desktop alike.
+    ENVIRONMENT
+        SDL_VIDEODRIVER=offscreen)

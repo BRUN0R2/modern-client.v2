@@ -30,13 +30,13 @@ Milestone **M2 (Assets and visible world)** in progress, on top of the M0 founda
 with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime core: `nx.core`
 (typed errors, contracts, strong types and units), `nx.meta` (reflection facade), `nx.data`
 (TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
-`nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars,
-commands and `.cfg`), `nx.platform` (clocks and the native file system) and `nx.assets` (the
-VFS, the Counter-Strike 1.6 installation and its detection in Steam, and fuzzed readers of every
-binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and `nxcheck`, which reads every
-file of a Counter-Strike 1.6 installation with those readers. The architecture documentation
-is in [`docs/`](docs/README.md), the project rules in [`docs/RULES.md`](docs/RULES.md) and
-the backlog in [`TODO.md`](TODO.md).
+`nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars, commands
+and `.cfg`), `nx.platform` (clocks, the native file system, the window and its input) and
+`nx.assets` (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and
+fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and
+`nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. The
+architecture documentation is in [`docs/`](docs/README.md), the project rules in
+[`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
 
 ## Building
 
