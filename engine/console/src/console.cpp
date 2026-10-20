@@ -25,6 +25,54 @@ constexpr std::string_view kUtf8ByteOrderMark = "\xEF\xBB\xBF";
     return text;
 }
 
+/// `name "value"` and the cvar's flags: one line of cvarlist and find.
+[[nodiscard]] auto cvarLine(const CvarBase& cvar) -> std::string {
+    std::string line = std::format("{} \"{}\"", cvar.name(), cvar.text());
+    std::string_view separator = " (";
+    for (std::size_t index = 0; index < enumCount<CvarFlag>(); ++index) {
+        const auto flag = static_cast<CvarFlag>(index);
+        if (cvar.flags().test(flag)) {
+            line += std::format("{}{}", separator, enumName(flag));
+            separator = ", ";
+        }
+    }
+    if (cvar.flags().any()) {
+        line += ')';
+    }
+    return line;
+}
+
+/// `line` followed by ` : description`, when there is a description.
+[[nodiscard]] auto withDescription(std::string line, std::string_view description) -> std::string {
+    if (!description.empty()) {
+        line += std::format(" : {}", description);
+    }
+    return line;
+}
+
+struct Noun {
+    std::string_view singular;
+    std::string_view plural;
+};
+
+/// The last line of a listing: "3 cvars", "1 command starting with \"sv_\"".
+[[nodiscard]] auto listingSummary(std::size_t count, Noun noun, std::string_view prefix) -> std::string {
+    const std::string_view word = count == 1 ? noun.singular : noun.plural;
+    if (prefix.empty()) {
+        return std::format("{} {}", count, word);
+    }
+    return std::format("{} {} starting with \"{}\"", count, word, prefix);
+}
+
+/// The optional prefix argument of cvarlist and cmdlist.
+[[nodiscard]] auto listingPrefix(const CommandLine& line) -> Result<std::string_view, ConsoleError> {
+    const auto arguments = line.arguments();
+    if (arguments.size() > 1) {
+        return fail(ConsoleError::InvalidArguments, std::format("usage: {} [prefix]", line.name()));
+    }
+    return arguments.empty() ? std::string_view{} : std::string_view{arguments.front()};
+}
+
 /// The key argument of `+name [key]` and `-name [key]`.
 [[nodiscard]] auto buttonKey(const CommandLine& line) -> Result<std::optional<KeyId>, ConsoleError> {
     const auto arguments = line.arguments();
@@ -67,6 +115,14 @@ void Console::registerBuiltins() {
          .description =
              "incrementvar <cvar> <minimum> <maximum> <step>: adds the step, wrapping around the range"},
         [](Console& console, const CommandLine& line) { return console.incrementVar(line); });
+    add({.name = "cvarlist", .description = "cvarlist [prefix]: lists the cvars and their values"},
+        [](Console& console, const CommandLine& line) { return console.cvarList(line); });
+    add({.name = "cmdlist", .description = "cmdlist [prefix]: lists the commands"},
+        [](Console& console, const CommandLine& line) { return console.commandList(line); });
+    add({.name = "find",
+         .description = "find <text>: lists the cvars and commands whose name or description "
+                        "contains the text"},
+        [](Console& console, const CommandLine& line) { return console.find(line); });
 }
 
 auto Console::registerCommand(const CommandDesc& desc, CommandHandler handler) -> Result<void, ConsoleError> {
@@ -379,6 +435,58 @@ auto Console::incrementVar(const CommandLine& line) -> Result<void, ConsoleError
         next = *maximum;
     }
     return changeCvar(cvar, std::format("{}", next));
+}
+
+auto Console::cvarList(const CommandLine& line) -> Result<void, ConsoleError> {
+    return listingPrefix(line).transform([this](std::string_view prefix) {
+        std::size_t count = 0;
+        for (const auto& [name, cvar] : m_cvars) {
+            if (startsWithIgnoringCase(name, prefix)) {
+                print(cvarLine(*cvar));
+                ++count;
+            }
+        }
+        print(listingSummary(count, {.singular = "cvar", .plural = "cvars"}, prefix));
+    });
+}
+
+auto Console::commandList(const CommandLine& line) -> Result<void, ConsoleError> {
+    return listingPrefix(line).transform([this](std::string_view prefix) {
+        std::size_t count = 0;
+        for (const auto& [name, command] : m_commands) {
+            if (startsWithIgnoringCase(name, prefix)) {
+                print(withDescription(name, command.description));
+                ++count;
+            }
+        }
+        print(listingSummary(count, {.singular = "command", .plural = "commands"}, prefix));
+    });
+}
+
+auto Console::find(const CommandLine& line) -> Result<void, ConsoleError> {
+    const auto arguments = line.arguments();
+    if (arguments.size() != 1 || arguments.front().empty()) {
+        return fail(ConsoleError::InvalidArguments, "usage: find <text>");
+    }
+    const std::string_view text = arguments.front();
+    const auto matches = [text](std::string_view name, std::string_view description) {
+        return containsIgnoringCase(name, text) || containsIgnoringCase(description, text);
+    };
+    std::size_t count = 0;
+    for (const auto& [name, cvar] : m_cvars) {
+        if (matches(name, cvar->description())) {
+            print(withDescription(cvarLine(*cvar), cvar->description()));
+            ++count;
+        }
+    }
+    for (const auto& [name, command] : m_commands) {
+        if (matches(name, command.description)) {
+            print(withDescription(name, command.description));
+            ++count;
+        }
+    }
+    print(std::format("{} {} for \"{}\"", count, count == 1 ? "match" : "matches", text));
+    return {};
 }
 
 } // namespace nx::console

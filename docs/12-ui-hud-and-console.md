@@ -176,8 +176,16 @@ between frames), and the simulation copies the values it needs at the start of t
 (`MovementSettings`).
 
 Built-in commands: `alias`, `wait`, `exec`, `echo`, `toggle` (switches between 0 and 1 or
-cycles through the given values) and `incrementvar` (adds the step and wraps around the
-range).
+cycles through the given values), `incrementvar` (adds the step and wraps around the
+range), `cvarlist [prefix]` (cvars with their values and flags), `cmdlist [prefix]`
+(commands with their descriptions) and `find <text>` (cvars and commands whose name or
+description contains the text). Prefixes and searches ignore case, and every listing ends
+with its count (`2 cvars starting with "sv_"`).
+
+Log levels are cvars too: `LogLevelCvars` registers one `log_level_<category>` per log
+category the application passes in (`log_level_net debug`, or the level's number), and its
+`apply()`, called once a frame after `Console::execute`, copies the changed levels to the
+`Logger` ([02 §10](02-coding-standards.md#10-logging)).
 
 ## 6. Input
 

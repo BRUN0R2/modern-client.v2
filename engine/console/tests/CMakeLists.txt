@@ -7,5 +7,7 @@ nxAddTest(nxConsoleTests
         cvarTests.cpp
         consoleTests.cpp
         buttonTests.cpp
+        listingTests.cpp
+        logLevelsTests.cpp
     DEPENDS
         nx::console)

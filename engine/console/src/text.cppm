@@ -38,6 +38,20 @@ private:
     return std::ranges::equal(a, b, [](char x, char y) { return toLowerAscii(x) == toLowerAscii(y); });
 }
 
+/// Whether `text` starts with `prefix`, ignoring ASCII case.
+[[nodiscard]] constexpr auto startsWithIgnoringCase(std::string_view text, std::string_view prefix) noexcept
+    -> bool {
+    return text.size() >= prefix.size() && equalsIgnoringCase(text.substr(0, prefix.size()), prefix);
+}
+
+/// Whether `text` contains `part`, ignoring ASCII case. An empty `part` is in every text.
+[[nodiscard]] constexpr auto containsIgnoringCase(std::string_view text, std::string_view part) noexcept
+    -> bool {
+    return !std::ranges::search(text, part, [](char x, char y) { return toLowerAscii(x) == toLowerAscii(y); })
+                .empty() ||
+           part.empty();
+}
+
 /// Orders names without regard to ASCII case; transparent, so maps keyed by std::string are
 /// searched with a std::string_view.
 struct CaseInsensitiveLess {

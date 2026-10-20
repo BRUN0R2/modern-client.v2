@@ -76,6 +76,9 @@ public:
     /// Threshold for one category, overriding the minimum level.
     void setCategoryLevel(Category category, Level level);
 
+    /// The threshold that applies to `category`: its own level, or the minimum level.
+    [[nodiscard]] auto categoryLevel(Category category) const -> Level;
+
     [[nodiscard]] auto isEnabled(Category category, Level level) const -> bool;
 
     void write(Level level, Category category, std::string_view message, std::source_location where) noexcept;

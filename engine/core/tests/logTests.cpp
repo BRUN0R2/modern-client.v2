@@ -91,6 +91,9 @@ TEST_F(LogTest, CategoryLevelsOverrideTheMinimum) {
     ASSERT_EQ(records.size(), 1U);
     EXPECT_EQ(records[0].message, "detail");
     EXPECT_TRUE(m_logger.isEnabled(kNoisyLog, nx::log::Level::Error));
+    EXPECT_EQ(m_logger.categoryLevel(kNoisyLog), nx::log::Level::Error);
+    EXPECT_EQ(m_logger.categoryLevel(nx::log::Category{"other"}), nx::log::Level::Info)
+        << "a category without its own level follows the minimum";
 }
 
 TEST_F(LogTest, DoesNotFormatDisabledRecords) {

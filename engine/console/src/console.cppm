@@ -101,8 +101,8 @@ inline constexpr std::size_t kMaxSuggestionDistance = 2;
 /// needs at the start of a tick. Cvar, Button and the CvarBase pointers it hands out stay valid
 /// for its whole life.
 ///
-/// Built-in commands: alias, wait, exec, echo, toggle and incrementvar. Typing a cvar's name prints
-/// its value; the name and one value set it.
+/// Built-in commands: alias, wait, exec, echo, toggle, incrementvar, cvarlist, cmdlist and find.
+/// Typing a cvar's name prints its value; the name and one value set it.
 class Console {
 public:
     Console(ConsoleOutput& output, ConfigFiles& files);
@@ -208,6 +208,9 @@ private:
     auto echo(const CommandLine& line) -> Result<void, ConsoleError>;
     auto toggle(const CommandLine& line) -> Result<void, ConsoleError>;
     auto incrementVar(const CommandLine& line) -> Result<void, ConsoleError>;
+    auto cvarList(const CommandLine& line) -> Result<void, ConsoleError>;
+    auto commandList(const CommandLine& line) -> Result<void, ConsoleError>;
+    auto find(const CommandLine& line) -> Result<void, ConsoleError>;
 
     ConsoleOutput* m_output;
     ConfigFiles* m_files;

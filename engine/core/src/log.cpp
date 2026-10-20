@@ -69,6 +69,11 @@ void Logger::setCategoryLevel(Category category, Level level) {
     }
 }
 
+auto Logger::categoryLevel(Category category) const -> Level {
+    const std::scoped_lock lock{m_mutex};
+    return thresholdFor(category.name);
+}
+
 auto Logger::isEnabled(Category category, Level level) const -> bool {
     const std::scoped_lock lock{m_mutex};
     return level >= thresholdFor(category.name);

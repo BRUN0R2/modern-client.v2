@@ -467,8 +467,9 @@ nx::log::warning(kNetLog, "client {} exceeded snapshot budget by {} bytes", slot
 - Each record carries the level (`Trace`, `Debug`, `Info`, `Warning`, `Error`), category,
   call site and time (UTC).
 - Categories are constants of the **module that logs**. `nx.core` does not know the
-  subsystems. The level per category is adjustable (`Logger::setCategoryLevel`; through a
-  cvar, e.g. `log_level_net debug`, once the console exists).
+  subsystems. The level per category is adjustable: `Logger::setCategoryLevel` in code and
+  the `log_level_<category>` cvars in the console (`log_level_net debug`,
+  [12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)).
 - Sinks are `nx::log::Sink` (console today; file and JSON lines next).
 - Logs on hot paths go through `nx::log::RateLimit`, which is *thread-safe*:
 
