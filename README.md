@@ -42,9 +42,12 @@ No Linux, use os presets `dev-linux-gcc` ou `dev-linux-clang`.
 
 | Parte | Licença |
 |-------|---------|
-| Engine, jogo, servidor, ferramentas e dados | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) |
-| Toolchain Rook e SDK de plugins (`rook/`) | [MIT](LICENSES/MIT.txt). Plugins e mods podem usar qualquer licença |
+| Engine, jogo, servidor, ferramentas e dados | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) com a [Rook Plugin Exception](LICENSES/LicenseRef-Rook-Plugin-Exception.txt) |
+| Toolchain Rook e SDK de plugins (`rook/`) | [MIT](LICENSES/MIT.txt) |
 | Documentação (`docs/`, `README.md`, `TODO.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
+
+**Plugins e mods** que usam apenas a interface de plugins podem adotar **qualquer licença**,
+inclusive fechada. Isso está garantido pela exceção, não só pela intenção.
 
 A licença de cada arquivo está no cabeçalho SPDX e em [`REUSE.toml`](REUSE.toml)
 ([REUSE](https://reuse.software)). Decisão e motivos: [ADR-0010](docs/adr/0010-licenca.md).

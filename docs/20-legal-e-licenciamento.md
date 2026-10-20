@@ -50,7 +50,7 @@ O código é **escrito do zero**. Regras para contribuições:
 
 | Componente | Licença | Motivo |
 |------------|---------|--------|
-| Engine, jogo, servidor, ferramentas e build | **GPL-3.0-or-later** | Garantir que melhorias na engine voltem para a comunidade |
+| Engine, jogo, servidor, ferramentas e build | **GPL-3.0-or-later** com a **Rook Plugin Exception** | Garantir que melhorias na engine voltem para a comunidade, sem prender plugins à GPL |
 | Toolchain Rook (`rookc`, VM, LSP) e SDK de plugins (`.rookd`, `std`) | **MIT** | Permitir plugins e mods com **qualquer licença**, inclusive fechada |
 | Documentação (`docs/`, `README.md`, `TODO.md`) | **CC BY 4.0** | Reuso com atribuição |
 | Dados de jogo (`data/`) | GPL-3.0-or-later, como a engine | Os valores numéricos de comportamento são fatos medidos |
@@ -59,8 +59,10 @@ Todo arquivo de código começa com o cabeçalho SPDX da sua licença
 ([02 §2](02-padroes-de-codigo.md#2-organização-de-arquivos-e-módulos)).
 
 A fronteira da API de plugins (bytecode + `.rookd`) é desenhada para que mods **não sejam
-obra derivada** da engine. A revisão jurídica deve confirmar isso e avaliar uma permissão
-adicional explícita para plugins (seção 7 da GPL-3.0).
+obra derivada** da engine, e a **Rook Plugin Exception** (permissão adicional da seção 7 da
+GPL-3.0, [`LICENSES/LicenseRef-Rook-Plugin-Exception.txt`](../LICENSES/LicenseRef-Rook-Plugin-Exception.txt)) declara isso na própria licença. Ela não cobre versões
+modificadas da engine nem extensões nativas. A revisão jurídica do texto continua pendente
+([ADR-0010](adr/0010-licenca.md)).
 
 ## 5. Mods
 

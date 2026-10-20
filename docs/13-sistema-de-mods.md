@@ -11,6 +11,15 @@ plugins**, plugins conversam por **natives e forwards**, e conjuntos de plugins 
 moderno, isolamento por plugin, API nativa da engine (sem fakemeta, offsets ou Orpheu),
 hot reload e plugins no cliente.
 
+### 1.1 Licença dos plugins
+
+Plugins e mods que usam apenas a interface de plugins (bytecode Rook, manifestos,
+declarações `.rookd` e biblioteca `std`) podem usar **qualquer licença**, inclusive
+fechada. A engine é GPL-3.0-or-later com a
+[Rook Plugin Exception](../LICENSES/LicenseRef-Rook-Plugin-Exception.txt), e o SDK é MIT
+([ADR-0010](adr/0010-licenca.md)). Extensões nativas em C++ ([§9](#9-extensões-nativas-futuro))
+não são cobertas pela exceção.
+
 ## 2. Vocabulário e equivalências
 
 | AMX Mod X | Modern-Client.v2 | Observação |

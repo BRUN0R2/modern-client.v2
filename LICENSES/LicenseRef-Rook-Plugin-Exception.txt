@@ -1,0 +1,62 @@
+Rook Plugin Exception, version 1.0
+
+This Rook Plugin Exception ("Exception") is an additional permission under
+section 7 of the GNU General Public License, version 3 ("GPLv3"). It applies to
+every file of Modern-Client.v2 that bears a notice, placed by its copyright
+holders, stating that the file is governed by the GPLv3 (or a later version)
+along with this Exception, for example:
+
+    SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+0. Definitions.
+
+"Engine" means Modern-Client.v2, or any work based on it, distributed under the
+GPLv3 (or a later version) along with this Exception.
+
+"Plugin Interface" means the means by which the Engine loads and runs plugins:
+the Rook bytecode format, the plugin and mod manifest formats, the API
+declarations the Engine publishes for plugins (".rookd" files), the Rook
+standard library, and the messages the Engine exchanges with plugins at run
+time through these interfaces.
+
+"Plugin" means a work, in source or compiled form, together with its data,
+assets and configuration, that is designed to be loaded and run by the Engine
+and that interacts with the Engine only through the Plugin Interface. A mod
+made of Plugins and assets is a Plugin for the purpose of this Exception.
+
+"Native Extension" means code that interacts with the Engine by any means other
+than the Plugin Interface, including native code loaded into the Engine's
+process through its native extension interface.
+
+1. Grant of Additional Permission.
+
+You have permission to create, run, propagate and convey Plugins under terms of
+your choice, and to have the Engine load and run them, even though the Engine
+runs a Plugin inside its own process and exchanges data with it through the
+Plugin Interface. A Plugin does not become a work based on the Engine, and is
+not subject to the terms of the GPLv3, merely because it is loaded and run by
+the Engine or written against the Plugin Interface.
+
+You may also convey the Engine together with Plugins, provided that the Engine
+itself, including any modification of it, remains under the GPLv3 along with
+this Exception.
+
+2. Limits.
+
+This Exception does not grant any permission for:
+
+  a) a modified version of the Engine, or any work based on the Engine other
+     than a Plugin, which remains subject to all terms of the GPLv3;
+
+  b) a Native Extension, which remains subject to all terms of the GPLv3 as far
+     as it is a work based on the Engine;
+
+  c) code of the Engine copied into a Plugin, which remains subject to the
+     terms of its own license.
+
+3. Modified versions.
+
+If you modify the Engine, you may extend this Exception to your version, but you
+are not obligated to do so. As permitted by section 7 of the GPLv3, you may
+remove this Exception from your copies of the Engine or of a modified version;
+if you do, delete the corresponding notices.

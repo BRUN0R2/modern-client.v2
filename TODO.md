@@ -19,7 +19,8 @@ Backlog do projeto, por marco ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Toolkit de menus: próprio ou RmlUi ([12 §2](docs/12-interface-hud-e-console.md#2-componentes-de-ui))
 - [ ] Definir hardware de referência para as metas de desempenho
 - [x] Conteúdo livre por padrão; assets originais opcionais e configurados localmente ([ADR-0015](docs/adr/0015-conteudo-livre-e-assets-originais-opcionais.md))
-- [ ] Revisão jurídica antes do primeiro release público, incluindo uma possível permissão adicional para plugins (seção 7 da GPL) ([20](docs/20-legal-e-licenciamento.md))
+- [x] Rook Plugin Exception: permissão adicional da seção 7 da GPL para plugins e mods ([ADR-0010](docs/adr/0010-licenca.md))
+- [ ] Revisão jurídica antes do primeiro release público, incluindo o texto da Rook Plugin Exception ([20](docs/20-legal-e-licenciamento.md))
 
 ---
 
