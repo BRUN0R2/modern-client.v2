@@ -82,6 +82,10 @@ void use(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity enti
         useDoor(world, hulls, entity, activator);
     } else if (world.has<Button>(entity)) {
         useButton(world, hulls, entity, activator);
+    } else if (AlternateTextures* textures = world.get<AlternateTextures>(entity);
+               textures != nullptr && world.has<Wall>(entity)) {
+        // CFuncWall::Use: every use is a toggle (USE_TOGGLE) today.
+        textures->isShown = !textures->isShown;
     }
 }
 

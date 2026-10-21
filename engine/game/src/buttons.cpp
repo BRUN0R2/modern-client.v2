@@ -13,6 +13,13 @@ namespace nx::game {
 
 namespace {
 
+/// Button `entity` shows its alternate textures, or its usual ones (pev->frame 1 or 0).
+void showAlternateTextures(ecs::World& world, ecs::Entity entity, bool isShown) {
+    if (AlternateTextures* textures = world.get<AlternateTextures>(entity)) {
+        textures->isShown = isShown;
+    }
+}
+
 /// Button `entity` starts going in (CBaseButton::ButtonActivate).
 void pressButton(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
     Button& button = *world.get<Button>(entity);
@@ -63,6 +70,7 @@ void buttonArrived(ecs::World& world, const collision::BrushHulls& hulls, ecs::E
     Button& button = *world.get<Button>(entity);
     if (button.state == ButtonState::GoingIn) {
         button.state = ButtonState::In;
+        showAlternateTextures(world, entity, true);
         if (button.staysIn || button.isToggle) {
             button.isTouchable = button.isTouchOnly;
         } else {
@@ -80,6 +88,7 @@ void buttonArrived(ecs::World& world, const collision::BrushHulls& hulls, ecs::E
 }
 
 void returnButton(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
+    showAlternateTextures(world, entity, false);
     Button& button = *world.get<Button>(entity);
     button.state = ButtonState::GoingOut;
     moveTo(world, hulls, entity, button.out, button.speed);

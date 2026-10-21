@@ -276,17 +276,19 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     return true;
 }
 
-/// Where the game puts its brush entities now, and how high their waves rise.
+/// Where the game puts its brush entities now, how high their waves rise, and which textures they show.
 [[nodiscard]] auto placementsOf(nx::ecs::World& game) -> std::vector<nx::render::ModelPlacement> {
     std::vector<nx::render::ModelPlacement> placements;
     nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&,
-                   nx::ecs::Optional<const nx::game::Waves>>{game}
+                   nx::ecs::Optional<const nx::game::Waves>,
+                   nx::ecs::Optional<const nx::game::AlternateTextures>>{game}
         .forEach([&placements](const nx::game::BrushModel& model, const nx::game::Transform& transform,
-                               const nx::game::Waves* waves) {
+                               const nx::game::Waves* waves, const nx::game::AlternateTextures* textures) {
             placements.push_back({.model = model.index,
                                   .origin = transform.origin,
                                   .angles = transform.angles,
-                                  .waveHeight = waves != nullptr ? waves->height : 0.0F});
+                                  .waveHeight = waves != nullptr ? waves->height : 0.0F,
+                                  .showsAlternateTextures = textures != nullptr && textures->isShown});
         });
     return placements;
 }

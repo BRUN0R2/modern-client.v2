@@ -198,7 +198,10 @@ four mips, a checkerboard for a name no WAD has, or whose first WAD that has it 
 with its failure); masked textures; animated textures (`+0name` to
 `+9name`, and `+aname` to `+jname`, of any case, in a sequence of their own), whose faces all show the
 same frame, ten a second (`R_TextureAnimation`), where the original would refuse a sequence with a
-missing number the frames it has play in order; turbulent faces (water and lasers: `!`, Quake's `*`,
+missing number the frames it has play in order; the faces of a brush entity whose frame is not 0
+(`ModelPlacement::showsAlternateTextures`: a button in, a `func_wall` used) show their sequence's
+alternate instead, `+a` for `+0` and back, when it has one (the original's `alternate_anims`);
+turbulent faces (water and lasers: `!`, Quake's `*`,
 and names that start with `water` or `laser`), unlit, cut along the axial planes every 64 units
 (`GL_SubdivideSurface`), their texture coordinates in texels without the texture's shift and warped
 at each corner of the pieces, a cell of 64 texels a texture, as `EmitWaterPolys` warps them, and

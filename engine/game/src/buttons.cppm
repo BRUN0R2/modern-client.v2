@@ -52,11 +52,11 @@ void useButton(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entit
 void touchButton(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
                  ecs::Entity toucher);
 
-/// Button `entity` reached where it was going: in, it fires its targets and waits, or stays
-/// (TriggerAndWait); out, it rests, a toggle firing its targets (ButtonBackHome).
+/// Button `entity` reached where it was going: in, it shows its alternate textures, fires its targets
+/// and waits, or stays (TriggerAndWait); out, it rests, a toggle firing its targets (ButtonBackHome).
 void buttonArrived(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);
 
-/// Button `entity`, in, comes back out (CBaseButton::ButtonReturn).
+/// Button `entity`, in, comes back out, its usual textures shown again (CBaseButton::ButtonReturn).
 void returnButton(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);
 
 } // namespace nx::game

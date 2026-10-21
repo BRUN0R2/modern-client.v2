@@ -370,6 +370,45 @@ TEST(BspWorldTest, ABrushEntityIsDrawnWhereTheGamePutsAndTurnsIt) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+TEST(BspWorldTest, ABrushEntityWhoseFrameIsNotZeroShowsItsAlternateTextures) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // The square of the seed's func_wall, drawn normally, covers the view: CRATE01 renamed the first
+    // frame of a sequence whose alternate is {BLUE, renamed, which no WAD has: a checkerboard.
+    std::vector<std::byte> file = readSeed("boxWithEntity.bsp");
+    replaceText(file, R"("rendermode" "1")", R"("rendermode" "0")");
+    renameTexture(file, "CRATE01", "+0crate");
+    renameTexture(file, "{BLUE", "+acrate");
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value());
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value());
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    const auto drawnWith = [&](bool showsAlternates) {
+        const std::array placements{
+            nx::render::ModelPlacement{.model = {1}, .showsAlternateTextures = showsAlternates}};
+        return drawWorld(target, *world, camera, normalStyles(), nx::Seconds{0.0F}, placements);
+    };
+
+    const std::vector<std::byte> usual = drawnWith(false);
+    const std::vector<std::byte> alternate = drawnWith(true);
+    EXPECT_NE(alternate, usual);
+    // The checkerboard's magenta, which the crate has nowhere.
+    EXPECT_TRUE(
+        std::ranges::any_of(std::views::iota(std::size_t{0}, alternate.size() / 4), [&](std::size_t pixel) {
+            const Pixel color = pixelAt(alternate, static_cast<std::uint32_t>(pixel % kExtent.width),
+                                        static_cast<std::uint32_t>(pixel / kExtent.width));
+            return color[1] == 0 && color[0] > 0 && color[0] == color[2];
+        }));
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 TEST(BspWorldTest, TheWaterOfABrushEntityRisesAndFallsInWaves) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});

@@ -261,6 +261,9 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
                 world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity, Pusher{},
                             buttonOf(entity, models[model->value].bounds, origin, flags), targetsOf(entity));
             break;
+        case BrushBehavior::Wall:
+            made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity, Wall{});
+            break;
         case BrushBehavior::Trigger:
         case BrushBehavior::TriggerOnce:
             made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity,
@@ -270,6 +273,7 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
             made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
             break;
         }
+        world.add(made, AlternateTextures{.isShown = entity.findNumber("frame").value_or(0.0F) != 0.0F});
         if (const std::string_view name = entity.find("targetname").value_or(""); !name.empty()) {
             world.add(made, Named{.name = std::string{name}});
         }
