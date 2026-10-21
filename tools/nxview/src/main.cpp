@@ -21,7 +21,7 @@ namespace {
 constexpr int kExitUnusable = 2; // the arguments, the content, the window or the GPU
 constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <folder>] [--data <folder>]
               [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
-              [--screenshot <file.bmp>] [--validation]
+              [--screenshot <file.bmp> [--time <seconds>]] [--validation]
 
 Opens a map of the Counter-Strike 1.6 installation and flies through it: the mouse looks, W A S D
 move, Space and Ctrl rise and sink, Shift is faster, Escape ends it.
@@ -36,6 +36,8 @@ move, Space and Ctrl rise and sink, Shift is faster, Escape ends it.
                           the spawn's yaw)
   --screenshot <file.bmp> renders one 1280x720 frame from the camera's start into the file, without
                           a window, and ends
+  --time <seconds>        when the frame of --screenshot is, after the map starts (default: 0):
+                          what animates (light styles, textures, water) is drawn as it is then
   --validation            the Khronos validation layer, when it is installed: its messages are
                           logged and nxview exits with 1 when it reported an error
 )";
@@ -62,6 +64,7 @@ struct Options {
     std::optional<std::filesystem::path> screenshot;
     std::optional<nx::Vec3> position;
     std::optional<nx::Vec3> angles; ///< Pitch, yaw and roll.
+    nx::Seconds time{};             ///< Of the screenshot, after the map starts.
     bool isValidationEnabled = false;
 };
 
@@ -109,6 +112,13 @@ struct Options {
             options.data = nx::platform::fromUtf8(value);
         } else if (option == "--screenshot") {
             options.screenshot = nx::platform::fromUtf8(value);
+        } else if (option == "--time") {
+            float seconds = 0.0F;
+            if (std::from_chars(value.data(), value.data() + value.size(), seconds).ec != std::errc{} ||
+                seconds < 0.0F) {
+                return std::nullopt;
+            }
+            options.time = nx::Seconds{seconds};
         } else if (option == "--position" || option == "--angles") {
             const std::optional<nx::Vec3> numbers = vectorOf(value);
             if (!numbers) {
@@ -428,9 +438,10 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                          .area = kScreenshotExtent});
-    world->draw(
-        list,
-        {.camera = camera, .aspect = aspect, .lightStyles = content.lightStyles.valuesAt(nx::Seconds{0.0F})});
+    world->draw(list, {.camera = camera,
+                       .aspect = aspect,
+                       .time = options.time,
+                       .lightStyles = content.lightStyles.valuesAt(options.time)});
     list.endRendering();
     list.transition(*target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
     list.transition(*readback, nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);

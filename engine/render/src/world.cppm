@@ -134,9 +134,9 @@ private:
 
     /// A face of the map: its triangle fan in the vertex buffer, and where its triangles go.
     struct FaceDraw {
-        std::uint32_t firstVertex = 0;
-        std::uint32_t vertexCount = 0; ///< 0: never drawn (triggers and tool textures).
-        std::uint32_t bucket = 0;      ///< Its texture's in m_bucketFrames, or kSkyBucket.
+        std::uint32_t firstIndex = 0; ///< Its triangles, in m_faceIndices.
+        std::uint32_t indexCount = 0; ///< 0: never drawn (triggers and tool textures).
+        std::uint32_t bucket = 0;     ///< Its texture's in m_bucketFrames, or kSkyBucket.
         Plane plane{};
         bool isBackSide = false; ///< Drawn from behind its plane.
         Vec3 middle{};           ///< Of its bounds, where its entity puts it.
@@ -204,7 +204,8 @@ private:
     /// For each bucket of faces, a bind group for each texture it shows in turn: one, unless animated.
     std::vector<std::vector<rhi::BindGroupHandle>> m_bucketFrames;
     std::vector<FrameSlot> m_frameSlots;
-    std::vector<FaceDraw> m_faces; ///< Every face of the map, by its index.
+    std::vector<FaceDraw> m_faces;            ///< Every face of the map, by its index.
+    std::vector<std::uint32_t> m_faceIndices; ///< The triangles of every face, in the vertex buffer.
     std::vector<ModelDraw> m_models;
     Vec4 m_lighting{}; ///< The lightScale of the settings it was made with, and the lightmaps' size.
     WorldStats m_stats;
