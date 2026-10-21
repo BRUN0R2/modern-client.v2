@@ -42,6 +42,9 @@ constexpr std::size_t kRgbBytes = 3;
 constexpr std::size_t kRgbaBytes = 4;
 /// A channel at its brightest, and an opaque alpha.
 constexpr std::byte kFull{255};
+/// A channel at its brightest, as `renderamt` counts it.
+constexpr float kChannelTop = 255.0F;
+
 /// The depths of the view's own model: the nearest share of them (the original's
 /// VIEWMODEL_DEPTH_RANGE), reversed depth being 1 at the near plane.
 constexpr float kViewModelDepthShare = 0.3F;
@@ -104,7 +107,9 @@ struct InstanceUniform {
     float depthScale = 1.0F; ///< Clip depth becomes depth * depthScale + w * depthOffset.
     float depthOffset = 0.0F;
     std::uint32_t firstBone = 0;
-    std::array<std::uint32_t, 3> reserved{};
+    float blend = 1.0F;        ///< How opaque it is drawn, from 0 to 1.
+    std::uint32_t isUnlit = 0; ///< 1: its vertices' light is its blend (an added model).
+    std::uint32_t reserved = 0;
 };
 
 /// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
@@ -209,6 +214,30 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     return uniform;
 }
 
+/// How `mode` blends a model (GL_StudioSetRenderMode): any mode but Normal and TransAdd as blended.
+[[nodiscard]] auto blendingOf(RenderMode mode) noexcept -> StudioBlending {
+    switch (mode) {
+    case RenderMode::Normal:
+        return StudioBlending::Solid;
+    case RenderMode::TransAdd:
+        return StudioBlending::Added;
+    case RenderMode::TransColor:
+    case RenderMode::TransTexture:
+    case RenderMode::Glow:
+    case RenderMode::TransAlpha:
+    case RenderMode::Count:
+        break;
+    }
+    return StudioBlending::Blended;
+}
+
+/// How opaque `instance` is drawn: a solid model wholly, another as its `renderamt` says.
+[[nodiscard]] auto blendOf(const StudioInstance& instance) noexcept -> float {
+    return blendingOf(instance.mode) == StudioBlending::Solid
+               ? 1.0F
+               : static_cast<float>(instance.amount) / kChannelTop;
+}
+
 /// The uniform of `instance`, its bones from `firstBone` on.
 [[nodiscard]] auto instanceUniformOf(const StudioInstance& instance, std::size_t firstBone)
     -> InstanceUniform {
@@ -216,7 +245,9 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
                             .lightColor = extend(instance.light.color, 0.0F),
                             .ambient = instance.light.ambient,
                             .shade = instance.light.shade,
-                            .firstBone = narrow<std::uint32_t>(firstBone)};
+                            .firstBone = narrow<std::uint32_t>(firstBone),
+                            .blend = blendOf(instance),
+                            .isUnlit = blendingOf(instance.mode) == StudioBlending::Added ? 1U : 0U};
     if (instance.depth == StudioDepth::ViewModel) {
         uniform.depthScale = kViewModelDepthShare;
         uniform.depthOffset = 1.0F - kViewModelDepthShare;
@@ -295,39 +326,63 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     m_sampler = std::move(*sampler);
 
     // The original culls the triangles that face the viewer in GL's sense (GL_FRONT): a model's
-    // triangles face away from it. An additive mesh adds itself, its depth tested but not written.
+    // triangles face away from it. Each render mode's blending, and in it each kind of mesh, as
+    // GL_StudioSetRenderMode and R_StudioDrawPoints set them: an additive mesh adds itself, as
+    // its texture's alpha says unless the model is solid; a masked one is cut at an alpha of 0.5.
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(StudioVertex), .attributes = kStudioVertexAttributes}};
     const std::array layouts{m_frameLayout.get(), m_skinLayout.get(), m_instanceLayout.get()};
-    const rhi::BlendState additiveBlend{.sourceColor = rhi::BlendFactor::One,
-                                        .destinationColor = rhi::BlendFactor::One,
-                                        .sourceAlpha = rhi::BlendFactor::One,
-                                        .destinationAlpha = rhi::BlendFactor::One};
-    const auto pipeline = [&](std::string_view label, std::string_view fragment,
-                              std::optional<rhi::BlendState> blend) {
-        const std::array targets{rhi::ColorTarget{.format = colorFormat, .blend = blend}};
-        return device.createRenderPipeline(
-            {.label = label,
-             .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
-             .fragment = {.shader = m_shader.get(), .entryPoint = fragment},
-             .vertexBuffers = vertexBuffers,
-             .cullMode = rhi::CullMode::Front,
-             .frontFace = rhi::FrontFace::CounterClockwise,
-             .colorTargets = targets,
-             .depth = rhi::DepthState{.isWriteEnabled = !blend, .compare = rhi::CompareOp::Greater},
-             .bindGroupLayouts = layouts});
+    const auto blendOf = [](rhi::BlendFactor source, rhi::BlendFactor destination) {
+        return rhi::BlendState{.sourceColor = source,
+                               .destinationColor = destination,
+                               .sourceAlpha = source,
+                               .destinationAlpha = destination};
     };
-    auto opaque = pipeline("studio", "fragmentMain", std::nullopt);
-    auto masked = pipeline("studio.masked", "maskedFragmentMain", std::nullopt);
-    auto additive = pipeline("studio.additive", "fragmentMain", additiveBlend);
-    for (auto* const created : {&opaque, &masked, &additive}) {
-        if (!*created) {
-            return std::unexpected{std::move(created->error())};
+    const rhi::BlendState overBehind =
+        blendOf(rhi::BlendFactor::SourceAlpha, rhi::BlendFactor::OneMinusSourceAlpha);
+    const rhi::BlendState added = blendOf(rhi::BlendFactor::One, rhi::BlendFactor::One);
+    const rhi::BlendState addedByAlpha = blendOf(rhi::BlendFactor::SourceAlpha, rhi::BlendFactor::One);
+    /// How a pipeline draws: its fragments, its blend, and whether it writes its depth.
+    struct Way {
+        std::string_view fragment;
+        std::optional<rhi::BlendState> blend;
+        bool writesDepth = true;
+    };
+    constexpr std::string_view kWhole = "fragmentMain";
+    constexpr std::string_view kCut = "maskedFragmentMain";
+    using WaysOfMeshes = EnumArray<MeshKind, Way>;
+    const EnumArray<StudioBlending, WaysOfMeshes> ways{{
+        WaysOfMeshes{{Way{.fragment = kWhole, .blend = std::nullopt},
+                      Way{.fragment = kCut, .blend = std::nullopt},
+                      Way{.fragment = kWhole, .blend = added, .writesDepth = false}}},
+        WaysOfMeshes{{Way{.fragment = kWhole, .blend = overBehind},
+                      Way{.fragment = kCut, .blend = overBehind},
+                      Way{.fragment = kWhole, .blend = addedByAlpha}}},
+        WaysOfMeshes{{Way{.fragment = kWhole, .blend = added, .writesDepth = false},
+                      Way{.fragment = kCut, .blend = added, .writesDepth = false},
+                      Way{.fragment = kWhole, .blend = addedByAlpha, .writesDepth = false}}},
+    }};
+    for (const StudioBlending blending : EnumArray<StudioBlending, WaysOfMeshes>::keys()) {
+        for (const MeshKind kind : WaysOfMeshes::keys()) {
+            const Way& way = ways[blending][kind];
+            const std::array targets{rhi::ColorTarget{.format = colorFormat, .blend = way.blend}};
+            auto pipeline = device.createRenderPipeline(
+                {.label = std::format("studio.{}.{}", std::to_underlying(blending), std::to_underlying(kind)),
+                 .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
+                 .fragment = {.shader = m_shader.get(), .entryPoint = way.fragment},
+                 .vertexBuffers = vertexBuffers,
+                 .cullMode = rhi::CullMode::Front,
+                 .frontFace = rhi::FrontFace::CounterClockwise,
+                 .colorTargets = targets,
+                 .depth =
+                     rhi::DepthState{.isWriteEnabled = way.writesDepth, .compare = rhi::CompareOp::Greater},
+                 .bindGroupLayouts = layouts});
+            if (!pipeline) {
+                return std::unexpected{std::move(pipeline.error())};
+            }
+            m_pipelines[blending][kind] = std::move(*pipeline);
         }
     }
-    m_opaquePipeline = std::move(*opaque);
-    m_maskedPipeline = std::move(*masked);
-    m_additivePipeline = std::move(*additive);
     return {};
 }
 
@@ -421,6 +476,7 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     model.m_indices = std::move(*indices);
     model.m_bodyParts = std::move(geometry.bodyParts);
     model.m_boneCount = desc.model.bones().size();
+    model.m_middle = (desc.model.bounds().min + desc.model.bounds().max) * (1.0F / 2.0F);
     model.m_skins.assign(desc.textures.skins().begin(), desc.textures.skins().end());
     for (const assets::StudioTexture& texture : desc.textures.textures()) {
         const MipChain texels = skinTexelsOf(texture, m_textureGamma);
@@ -451,18 +507,6 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     return model;
 }
 
-auto StudioRenderer::pipelineOf(MeshKind kind) const noexcept -> rhi::RenderPipelineHandle {
-    switch (kind) {
-    case MeshKind::Masked:
-        return m_maskedPipeline.get();
-    case MeshKind::Additive:
-        return m_additivePipeline.get();
-    case MeshKind::Opaque:
-        break;
-    }
-    return m_opaquePipeline.get();
-}
-
 auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) -> Result<void, StudioError> {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     StudioFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
@@ -479,11 +523,37 @@ auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) 
                                .eye = extend(frame.camera.position, 1.0F),
                                .right = extend(angleVectors(frame.camera.angles).right, 0.0F)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
+
+    // The solid models first, in their order; then the others but the invisible ones (R_AddEntity),
+    // from the farthest middle of their bounds (R_TransEntityCompare).
+    std::vector<const StudioInstance*> order;
+    order.reserve(frame.instances.size());
+    for (const StudioInstance& instance : frame.instances) {
+        if (blendingOf(instance.mode) == StudioBlending::Solid || instance.amount > 0) {
+            order.push_back(&instance);
+        }
+    }
+    const auto distanceOf = [&frame](const StudioInstance* instance) {
+        return lengthSquared(frame.camera.position - (instance->origin + instance->model.m_middle));
+    };
+    std::ranges::stable_sort(order, [&](const StudioInstance* a, const StudioInstance* b) {
+        const bool isSolid = blendingOf(a->mode) == StudioBlending::Solid;
+        if (isSolid != (blendingOf(b->mode) == StudioBlending::Solid)) {
+            return isSolid;
+        }
+        if (isSolid) {
+            return false;
+        }
+        const float first = distanceOf(a);
+        const float second = distanceOf(b);
+        return first != second ? first > second : blendedRankOf(a->mode) < blendedRankOf(b->mode);
+    });
+
     const std::span<std::byte> boneBytes = m_device->mappedBytes(slot.bones.get());
     const std::span<std::byte> instanceBytes = m_device->mappedBytes(slot.instances.get());
     std::size_t firstBone = 0;
-    for (std::size_t index = 0; index < frame.instances.size(); ++index) {
-        const StudioInstance& instance = frame.instances[index];
+    for (std::size_t index = 0; index < order.size(); ++index) {
+        const StudioInstance& instance = *order[index];
         std::ranges::copy(std::as_bytes(instance.bones),
                           boneBytes.subspan(firstBone * sizeof(Mat3x4)).begin());
         const InstanceUniform instanceUniform = instanceUniformOf(instance, firstBone);
@@ -491,16 +561,19 @@ auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) 
                           instanceBytes.subspan(index * kInstanceUniformStride).begin());
         firstBone += instance.bones.size();
     }
-    for (std::size_t index = 0; index < frame.instances.size(); ++index) {
-        commands.setPipeline(m_opaquePipeline.get()); // the frame's group binds with a pipeline set
+    for (std::size_t index = 0; index < order.size(); ++index) {
+        const StudioBlending blending = blendingOf(order[index]->mode);
+        // The frame's group binds with a pipeline set.
+        commands.setPipeline(m_pipelines[blending][MeshKind::Opaque].get());
         commands.setBindGroup(kFrameGroup, slot.group.get());
         commands.setBindGroup(kInstanceGroup, slot.instanceGroups[index].get());
-        drawMeshes(commands, frame.instances[index]);
+        drawMeshes(commands, *order[index], blending);
     }
     return {};
 }
 
-void StudioRenderer::drawMeshes(rhi::CommandList& commands, const StudioInstance& instance) {
+void StudioRenderer::drawMeshes(rhi::CommandList& commands, const StudioInstance& instance,
+                                StudioBlending blending) {
     const StudioModel& model = instance.model;
     if (model.m_skins.empty()) {
         return; // no mesh: the reader checked that every mesh has its skin
@@ -521,7 +594,7 @@ void StudioRenderer::drawMeshes(rhi::CommandList& commands, const StudioInstance
         for (const StudioMeshDraw& mesh : choices[choice]) {
             const StudioSkinDraw& texture = model.m_textures[skin[mesh.skinReference].value];
             if (bound != texture.kind) {
-                commands.setPipeline(pipelineOf(texture.kind));
+                commands.setPipeline(m_pipelines[blending][texture.kind].get());
                 bound = texture.kind;
             }
             commands.setBindGroup(kSkinGroup, texture.group.get());
