@@ -33,6 +33,19 @@ constexpr float kWaveHeightShare = 1.0F / 8.0F;
 /// door's size.
 constexpr float kDoorSizeTrim = 2.0F;
 
+// The spawnflags of a button the game reads.
+constexpr std::int32_t kStaysPut = 1;         ///< SF_BUTTON_DONTMOVE.
+constexpr std::int32_t kButtonToggles = 32;   ///< SF_BUTTON_TOGGLE.
+constexpr std::int32_t kPressedByTouch = 256; ///< SF_BUTTON_TOUCH_ONLY.
+/// A button's "speed", "wait" and "lip" when it gives none (CBaseButton::Spawn); a "wait" of -1 keeps
+/// it in for good.
+constexpr float kButtonSpeed = 40.0F;
+constexpr Seconds kButtonWait{1.0F};
+constexpr float kButtonLip = 4.0F;
+constexpr Seconds kStaysInWait{-1.0F};
+/// A button that would move less than this does not move.
+constexpr float kLeastButtonTravel = 1.0F;
+
 /// The spawnflag that keeps players from firing a trigger (SF_TRIGGER_NOCLIENTS).
 constexpr std::int32_t kNotByPlayers = 2;
 /// A trigger_multiple's "wait" when it gives none (CTriggerMultiple::Spawn), and a trigger_once's
@@ -54,10 +67,6 @@ constexpr Seconds kFiresOnce{-1.0F};
     }
     // Parity: the original compares the angle cut to a whole number.
     return Vec3{.x = std::trunc(angle) == kUp ? -kQuarterTurn : kQuarterTurn};
-}
-
-[[nodiscard]] auto eulerOf(Vec3 angles) -> EulerAngles {
-    return EulerAngles{.pitch = Degrees{angles.x}, .yaw = Degrees{angles.y}, .roll = Degrees{angles.z}};
 }
 
 /// The way a mover goes for `angles` (the original's SetMovedir): (0 -1 0) up, (0 -2 0) down, else
@@ -96,21 +105,25 @@ struct MadeDoor {
     return speed == 0.0F ? kDoorSpeed : speed;
 }
 
+/// How far a mover of a model of `bounds` goes along `direction` (CBaseDoor::Spawn,
+/// CBaseButton::Spawn): its loaded size along the way it goes, less 2 and its `lip`.
+[[nodiscard]] auto travelOf(Vec3 direction, const Aabb& bounds, float lip) -> float {
+    const Vec3 growth{kLoadedBoundsGrowth, kLoadedBoundsGrowth, kLoadedBoundsGrowth};
+    const Vec3 size = (bounds.max + growth) - (bounds.min - growth);
+    const double travel = std::abs(double{direction.x * (size.x - kDoorSizeTrim)}) +
+                          std::abs(double{direction.y * (size.y - kDoorSizeTrim)}) +
+                          std::abs(double{direction.z * (size.z - kDoorSizeTrim)}) - double{lip};
+    return static_cast<float>(travel);
+}
+
 /// A sliding door of `entity`, its model's bounds `bounds`, at `origin`, as CBaseDoor::Spawn makes it.
 [[nodiscard]] auto slidingDoorOf(const assets::BspEntity& entity, const Aabb& bounds, Vec3 origin)
     -> MadeDoor {
     const std::int32_t flags = entity.findInteger("spawnflags").value_or(0);
     const Vec3 direction = moveDirectionOf(anglesOf(entity));
-    const Vec3 growth{kLoadedBoundsGrowth, kLoadedBoundsGrowth, kLoadedBoundsGrowth};
-    const Vec3 size = (bounds.max + growth) - (bounds.min - growth);
-    const float lip = entity.findNumber("lip").value_or(0.0F);
-    // How far it goes: its size along the way it goes, less its lip.
-    const double travel = std::abs(double{direction.x * (size.x - kDoorSizeTrim)}) +
-                          std::abs(double{direction.y * (size.y - kDoorSizeTrim)}) +
-                          std::abs(double{direction.z * (size.z - kDoorSizeTrim)}) - double{lip};
-    DoorSlide slide{.closed = origin,
-                    .open = origin + (direction * static_cast<float>(travel)),
-                    .speed = UnitsPerSecond{speedOf(entity)}};
+    const float travel = travelOf(direction, bounds, entity.findNumber("lip").value_or(0.0F));
+    DoorSlide slide{
+        .closed = origin, .open = origin + (direction * travel), .speed = UnitsPerSecond{speedOf(entity)}};
     Vec3 start = origin;
     if ((flags & kStartsOpen) != 0) {
         // It starts where it would open to, and opens back to where the map put it.
@@ -148,6 +161,29 @@ struct MadeDoor {
     MadeDoor made{.door = doorOf(entity, flags), .origin = origin, .angles = eulerOf(start)};
     made.door.motion = turn;
     return made;
+}
+
+/// The button of `entity`, its model's bounds `bounds`, at `origin`, as CBaseButton::Spawn makes it.
+[[nodiscard]] auto buttonOf(const assets::BspEntity& entity, const Aabb& bounds, Vec3 origin,
+                            std::int32_t flags) -> Button {
+    const float speed = entity.findNumber("speed").value_or(0.0F);
+    const Seconds wait{entity.findNumber("wait").value_or(0.0F)};
+    const float lip = entity.findNumber("lip").value_or(0.0F);
+    const Vec3 direction = moveDirectionOf(anglesOf(entity));
+    Vec3 in = origin + (direction * travelOf(direction, bounds, lip == 0.0F ? kButtonLip : lip));
+    if (length(in - origin) < kLeastButtonTravel || (flags & kStaysPut) != 0) {
+        in = origin;
+    }
+    const bool isTouchOnly = (flags & kPressedByTouch) != 0;
+    return Button{.out = origin,
+                  .in = in,
+                  .speed = UnitsPerSecond{speed == 0.0F ? kButtonSpeed : speed},
+                  .wait = wait == Seconds{} ? kButtonWait : wait,
+                  .staysIn = wait == kStaysInWait,
+                  .isToggle = (flags & kButtonToggles) != 0,
+                  .isTouchOnly = isTouchOnly,
+                  .isUsable = entity.findNumber("health").value_or(0.0F) <= 0.0F,
+                  .isTouchable = isTouchOnly};
 }
 
 /// What `entity` fires (CBaseDelay::KeyValue): its "target", "killtarget" and "delay".
@@ -220,6 +256,11 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
                 Waves{.height = entity.findNumber("WaveHeight").value_or(0.0F) * kWaveHeightShare});
             break;
         }
+        case BrushBehavior::Button:
+            made =
+                world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity, Pusher{},
+                            buttonOf(entity, models[model->value].bounds, origin, flags), targetsOf(entity));
+            break;
         case BrushBehavior::Trigger:
         case BrushBehavior::TriggerOnce:
             made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity,

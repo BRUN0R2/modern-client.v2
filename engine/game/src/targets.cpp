@@ -80,6 +80,8 @@ void fireTargets(ecs::World& world, const collision::BrushHulls& hulls, std::str
 void use(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, ecs::Entity activator) {
     if (world.has<Door>(entity)) {
         useDoor(world, hulls, entity, activator);
+    } else if (world.has<Button>(entity)) {
+        useButton(world, hulls, entity, activator);
     }
 }
 

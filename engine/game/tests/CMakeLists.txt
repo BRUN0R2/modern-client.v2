@@ -4,6 +4,7 @@
 nxAddTest(nxGameTests
     SOURCES
         brushEntitiesTests.cpp
+        buttonTests.cpp
         doorTests.cpp
         placementTests.cpp
         triggerTests.cpp

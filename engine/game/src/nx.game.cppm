@@ -7,8 +7,9 @@
 /// Today: the game's clock, in ticks; the map's brush entities, made in an ECS world when the map
 /// starts, each with its brush model, its place and how solid it is, by the classes
 /// data/cstrike/entities.toml describes; doors, which a player's touch opens and the engine's pusher
-/// physics moves; triggers a player walks into, firing the entities named by their targets, at once
-/// or after a delay, as the entities' think runs; and an entity dropped to the floor.
+/// physics moves; buttons a player presses by use or touch; triggers a player walks into, firing the
+/// entities named by their targets, at once or after a delay, as the entities' think runs; what a
+/// player uses; and an entity dropped to the floor.
 export module nx.game;
 
 export import :clock;
@@ -18,6 +19,10 @@ export import :solids;
 export import :thinking;
 export import :targets;
 export import :triggers;
+export import :toggles;
+export import :doors;
+export import :buttons;
+export import :use;
 export import :brushEntities;
 export import :movers;
 export import :placement;

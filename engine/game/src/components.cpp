@@ -21,7 +21,8 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<Named>("nx::game::Named"),
                                 world.registerComponent<Targets>("nx::game::Targets"),
                                 world.registerComponent<DelayedUse>("nx::game::DelayedUse"),
-                                world.registerComponent<Trigger>("nx::game::Trigger")};
+                                world.registerComponent<Trigger>("nx::game::Trigger"),
+                                world.registerComponent<Button>("nx::game::Button")};
     for (const auto& component : registered) {
         if (!component) {
             return std::unexpected{component.error()};

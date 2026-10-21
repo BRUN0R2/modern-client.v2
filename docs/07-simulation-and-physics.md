@@ -261,8 +261,22 @@ the original's mistake, kept. `runPushers` advances each pusher a tick as the or
 clock; carrying each `Body` it runs into, or that stands on it, along with it, or around its origin
 as it turns, through the world and the other solid brush entities by the server's traces; when one
 cannot go, everything goes back and the door goes back the way it came (`CBaseDoor::Blocked`, no
-sooner than 0.25 s after the last time). `nxview` ticks the game at 100 Hz: the player's command,
-the doors it touched, then the pushers, the player's body among the bodies, then the clock.
+sooner than 0.25 s after the last time). A pusher moves a tick, or up to when it acts within it,
+and its clock lands there exactly (`GameTime`), never a float tick short of it.
+
+**Today** (`nx.game:buttons`): a `Button` (`func_button`, `CBaseButton`) moves as a sliding door
+does, along its `angles`, its loaded size less 2 and its `lip` (4 when it gives none), at its `speed`
+(40 when it gives none), or not at all when it would move less than a unit or is flagged "don't
+move". Used (`ButtonUse`), one that is out and not moving goes in; one that is in comes back out when
+it is a toggle (spawnflag 32), firing nothing then, as the original. One flagged "touch only"
+(spawnflag 256) ignores use and is pressed by a player's touch instead (`ButtonTouch`), untouchable
+until its move is done; touched in, a toggle fires its targets and comes back out. In, a button
+fires its targets (`TriggerAndWait`) and comes back out after its `wait` (1 s when it gives none), or
+stays in until used again (a toggle), or for good (a `wait` of -1); back out, a toggle fires its
+targets again (`ButtonBackHome`). The moves of doors and buttons are those of the original's
+`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `nxview` ticks the game at 100 Hz:
+the player's use (E), the player's command, the doors and buttons it touched, the triggers it is in,
+what is due, then the pushers, the player's body among the bodies, then the clock.
 
 **Today** (`nx.game:placement`): an entity the game drops to the floor as it makes it, as the
 engine's `DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's rules through the
@@ -302,7 +316,11 @@ the body's origin (`SV_TouchLinks`, the model not turned); one not flagged "no c
 waiting (its `NextThink` after now) fires its targets for the body, then waits its `wait` (0.2 s when
 it gives none) or, a `trigger_once`, is spent and goes 0.1 s later. `nxview` touches the triggers the
 player is in after each command, then runs what is due before the pushers: cs_747's curtains open as
-the player walks to them.
+the player walks to them. A player's use (`playerUse`, `CBasePlayer::PlayerUse`) uses, of the brush
+entities it reaches (a button that takes no damage, a door flagged "use only"), whose linked box
+comes within 64 units of its origin (`FindEntityInSphere`), the one whose middle is most straight
+ahead from its eye, more than 0.7 of the way; as the original, through walls. In cs_office, the
+button by the garage door raises it.
 
 ## 6. Determinism
 

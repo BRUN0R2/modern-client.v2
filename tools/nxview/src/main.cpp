@@ -30,8 +30,9 @@ constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <
               [--screenshot <file.bmp> [--time <seconds>]] [--validation]
 
 Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife:
-the mouse looks, W A S D move, Space jumps, Ctrl ducks, Shift walks slowly. F flies instead, and
-back: W A S D move, Space and Ctrl rise and sink, Shift is faster. Escape ends it.
+the mouse looks, W A S D move, Space jumps, Ctrl ducks, Shift walks slowly, E uses what is in front
+(a button). F flies instead, and back: W A S D move, Space and Ctrl rise and sink, Shift is faster.
+Escape ends it.
 
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
@@ -730,6 +731,7 @@ struct Walker {
 struct LocalGame {
     nx::ecs::Entity body{};
     nx::Seconds pending{}; ///< Of the time given to the game, what no tick has taken yet.
+    bool isUsing = false;  ///< The use key went down since the last tick.
 };
 
 /// The command of what `keys` and `view` ask for.
@@ -762,6 +764,13 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     while (local.pending >= kCommandInterval) {
         if (walker != nullptr) {
             walker->previousEye = eyeOf(walker->player);
+            if (local.isUsing) {
+                // Before the command moves the player, as the original's PreThink uses.
+                std::ignore = nx::game::playerUse(
+                    game, hulls, local.body,
+                    {.eye = walker->previousEye, .forward = nx::angleVectors(view).forward});
+                local.isUsing = false;
+            }
             const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
             const cs::MovementResult moved = cs::simulateMovement(walker->player, commandOf(keys, view),
                                                                   cs::MovementSettings{}, hulls, entities);
@@ -848,6 +857,9 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             } else if (const auto* key = std::get_if<nx::platform::KeyChanged>(&event)) {
                 if (key->key == nx::platform::Key::Escape && key->isDown) {
                     isRunning = false;
+                }
+                if (key->key == nx::platform::Key::E && key->isDown && !key->isRepeat) {
+                    local.isUsing = true;
                 }
                 if (key->key == nx::platform::Key::F && key->isDown && !key->isRepeat) {
                     isFlying = !isFlying;
