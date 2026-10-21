@@ -128,7 +128,9 @@
       "name": "test-tsan",
       "hidden": true,
       "inherits": "test-base",
-      "environment": { "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1" }
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1:suppressions=${sourceDir}/tests/tsan.supp"
+      }
     },
     { "name": "dev-windows-msvc", "inherits": "test-base", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "inherits": "test-base", "configurePreset": "release-windows-msvc" },
