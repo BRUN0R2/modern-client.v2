@@ -221,6 +221,7 @@ auto World::moveEntity(Entity entity, EntityLocation from, ArchetypeId target) -
 }
 
 void World::expectNoIteration() const noexcept {
+    // relaxed: a contract check that orders nothing; the schedule orders the iterations (IterationScope).
     expects(m_activeIterations.load(std::memory_order_relaxed) == 0,
             "World: structural change while a query is iterating (use Commands)");
 }

@@ -125,7 +125,10 @@ void Console::registerBuiltins() {
 }
 
 auto Console::registerCommand(const CommandDesc& desc, CommandHandler handler) -> Result<void, ConsoleError> {
-    expects(static_cast<bool>(handler), "Console::registerCommand: the handler is empty");
+    if (!handler) {
+        expects(false, "Console::registerCommand: the handler is empty");
+        return {}; // the handler let execution continue ("observe"): nothing is registered
+    }
     const std::string_view name = desc.name.text();
     if (!isValidName(name)) {
         return fail(ConsoleError::InvalidName, std::format("\"{}\"", name));

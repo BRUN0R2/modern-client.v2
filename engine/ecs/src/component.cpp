@@ -56,7 +56,12 @@ auto ComponentRegistry::findByStableId(StableId stableId) const -> std::optional
 }
 
 auto ComponentRegistry::info(ComponentTypeId id) const noexcept -> const ComponentInfo& {
-    expects(std::to_underlying(id) < m_infos.size(), "ComponentRegistry::info: unknown component type");
+    if (std::to_underlying(id) >= m_infos.size()) {
+        expects(false, "ComponentRegistry::info: unknown component type");
+        static const ComponentInfo kUnknown{.name = "unknown",
+                                            .stableId = StableId::fromName("unknown")}; // a tag
+        return kUnknown;
+    }
     return m_infos[std::to_underlying(id)];
 }
 

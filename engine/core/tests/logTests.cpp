@@ -6,6 +6,8 @@
 import std;
 import nx.core;
 
+#include "contractRecorder.hpp"
+
 namespace {
 
 constexpr nx::log::Category kTestLog{"test"};
@@ -123,6 +125,15 @@ TEST(Log, LinesCarryTimeLevelCategoryMessageAndLocation) {
     EXPECT_TRUE(line.starts_with(
         "2026-10-20T21:03:11.123Z Warning [net] client 3 exceeded its budget (logTests.cpp:"))
         << line;
+}
+
+TEST_F(LogTest, ANullSinkBreaksTheContractAndIsNotAdded) {
+    const nx::test::ContractRecorder recorder;
+    m_logger.addSink(nullptr);
+    EXPECT_EQ(recorder.count(), 1);
+
+    nx::log::info(kTestLog, "still written");
+    ASSERT_EQ(records.size(), 1U) << "observed: the logger writes to its other sinks";
 }
 
 TEST(Log, DefaultLoggerScopeRestoresThePreviousLogger) {
