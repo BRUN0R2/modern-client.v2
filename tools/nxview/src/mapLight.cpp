@@ -23,10 +23,6 @@ constexpr double kBrightest = 255.0;
 constexpr double kCompilerLevel = 114.0;
 constexpr double kLightExponent = 0.6;
 constexpr double kEngineLevel = 264.0;
-/// The `angle` that aims up, and the pitch of an aim straight up or down.
-constexpr int kAngleUp = -1;
-constexpr float kStraightPitch = 90.0F;
-
 /// The integers at the start of `text`, each after spaces, as many as `_light` may have, as sscanf's
 /// "%d"s read them.
 [[nodiscard]] auto leadingIntegers(std::string_view text) -> std::vector<int> {
@@ -128,13 +124,8 @@ auto skyLightOf(const nx::assets::BspView& map) -> nx::render::SkyLight {
         // (ED_ParseEdict), the game `pitch` and `_light`.
         nx::Vec3 angles{};
         for (const auto& [key, value] : entity.keyValues) {
-            if (key == "angles") {
-                angles = nx::assets::vectorOfValue(value).value_or(angles);
-            } else if (key == "angle") {
-                const float yaw = nx::assets::numberOfValue(value).value_or(0.0F);
-                angles = yaw >= 0.0F ? nx::Vec3{.x = angles.x, .y = yaw, .z = angles.z}
-                         : static_cast<int>(yaw) == kAngleUp ? nx::Vec3{.x = -kStraightPitch}
-                                                             : nx::Vec3{.x = kStraightPitch};
+            if (const std::optional<nx::Vec3> turned = anglesAfter(angles, key, value)) {
+                angles = *turned;
             } else if (key == "pitch") {
                 angles.x = nx::assets::numberOfValue(value).value_or(0.0F);
             } else if (key == "_light") {

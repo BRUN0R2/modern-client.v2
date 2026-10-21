@@ -299,6 +299,8 @@ struct StateAccess {
 
 [[nodiscard]] auto vertexFormatOf(VertexFormat format) noexcept -> VkFormat {
     switch (format) {
+    case VertexFormat::Float:
+        return VK_FORMAT_R32_SFLOAT;
     case VertexFormat::Float2:
         return VK_FORMAT_R32G32_SFLOAT;
     case VertexFormat::Float3:

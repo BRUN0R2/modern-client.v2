@@ -66,7 +66,7 @@ flowchart TB
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform (today: core, math, meta, data, platform) |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
-| `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera, the BSP world, the light it gives models, and studio models | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
+| `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera, the BSP world, the light it gives models, studio models and sprites | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts | render, assets, platform, console |
@@ -79,7 +79,7 @@ flowchart TB
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
 | `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
 | `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, jobs, assets, collision, cs.shared (platform in the program) |
-| `tool.nxview` | 6 | `nxview`: what the map viewer sets up as the game would, the light of the map and the knife in hand ([05](05-rendering.md)) | core, math, assets, rhi, render, cs.shared (platform, rhi.vulkan, ecs, collision and game in the program) |
+| `tool.nxview` | 6 | `nxview`: what the map viewer sets up as the game would, the light of the map, the sprites of its entities and the knife in hand ([05](05-rendering.md)) | core, math, assets, rhi, render, collision, cs.shared (platform, rhi.vulkan, ecs and game in the program) |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
 module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every

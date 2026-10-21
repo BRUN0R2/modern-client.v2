@@ -355,6 +355,32 @@ same model become one draw call per submesh.
 | Dynamic lights | *dlights* and *elights* without a fixed ceiling, with a per-frame budget |
 | Grenade smoke | Visual parity with the original (smoke sprites), with configurable density |
 
+**Today** (`nx.render:sprite`, `shaders/sprite.slang`): sprites drawn as the original's
+`R_DrawSpriteModel` draws them, as Xash3D-FWGS reconstructs it. Each image of a sprite is a texture
+with its mip levels (`GL_MipMap`), its palette as its format makes it (`Mod_LoadSpriteModel`): normal
+and additive ones through `texgamma`, index-alpha ones the last color with the index as alpha,
+alpha-tested ones their own palette with index 255 transparent. Each sprite is a quad the CPU turns as
+its orientation says (`R_DrawSpriteModel`: parallel, parallel upright and not drawn within a degree of
+looking straight up or down, facing upright, oriented and nudged 0.01 toward its viewer, parallel
+oriented by its roll, which a parallel sprite with a roll becomes), the image of its frame (the frame
+cut to a whole number and held to the sprite's; a group's image by its loop's time,
+`R_GetSpriteFrame`) times `rendercolor` (black is white), as opaque as `renderamt` makes it, its
+fragments not above the alpha test discarded. The render modes blend as `R_DrawSpriteModel` sets
+them: Normal opaque, TransColor and TransTexture blended and writing their depth, TransAlpha blended
+without it, TransAdd added, Glow added over everything; a glow off the screen or hidden by the game is
+not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squared distance (held from
+0.05 to 1) and grows by its distance over 200. An alpha-tested sprite drawn opaque enough (`renderamt`
+above 127, Normal, TransAlpha or TransTexture) is cut at an alpha of a third and lit: drawn again where
+it was, its light from the world under it (`R_LightPoint`) multiplying what is there. The solid sprites
+are drawn first, the others from the farthest (`R_TransEntityCompare`), after the world and before the
+view's own model. `nxview` shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
+sprite as the game makes them (ReGameDLL's `CSprite`, `CGlow`, `CCyclerSprite`): an `env_sprite`'s yaw
+alone is its roll, a named one that does not start on is off, and each animates ten times a second,
+its last frame index the end of its loop (one that plays once turning off past it); a glow the
+player's line of sight stops 8 units or more short of, through glass and models, is hidden
+(`R_SpriteGlowBlend`). The other render effects, the interleaving of blended sprites with blended brush
+entities and models, sprites that follow an entity and the HUD's come with their consumers.
+
 ## 11. Visual fidelity
 
 | Aspect | `r_fidelity legacy` (default) | `r_fidelity enhanced` |

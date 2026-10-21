@@ -22,19 +22,9 @@ import nx.assets;
 import :camera;
 import :gamma;
 import :lightStyle;
+import :renderMode;
 
 namespace nx::render {
-
-/// How a brush entity is drawn, its `rendermode`, numbered as the original numbers them.
-enum class RenderMode : std::uint8_t {
-    Normal,       ///< Lit and opaque, as the world.
-    TransColor,   ///< Its `rendercolor` instead of its textures, unlit, as opaque as `renderamt` says.
-    TransTexture, ///< Its textures, unlit, as opaque as `renderamt` says, its faces back to front.
-    Glow,         ///< As TransTexture, its faces unsorted (meant for sprites; any unknown mode too).
-    TransAlpha,   ///< "Solid": lit and opaque, its masked textures cut where their alpha is 0.25 or less.
-    TransAdd,     ///< Its textures times `renderamt`, unlit, added to what is behind.
-    Count,
-};
 
 // What the world keeps of the map to draw it, which world.cpp builds; not exported.
 

@@ -259,6 +259,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Studio models: animation evaluated in jobs, and the transitions between sequences
 - [x] GPU skinning (vertex shader) with per-vertex and per-normal bone indices (`nx.render:studio`: every bone in a storage buffer a frame, each model lit as the original lights its vertices, chrome, masked, additive, flat shaded and fullbright textures, skins and body parts)
 - [x] The view's own model kept out of walls, and `nxview` holding the knife as Counter-Strike deploys it
+- [x] Sprites (`nx.render:sprite`: every orientation and format, groups, the render modes, glows hidden, dimmed and grown, alpha-tested sprites lit by the world), and `nxview` showing the maps' `env_sprite`, `env_glow` and `cycler_sprite` as the game animates them
+- [ ] Blended sprites, brush entities and models sorted together, as the original's one list of blended entities
 - [ ] The render modes and effects of studio entities (`rendermode`, `renderfx`), the players' colors, the bob of the view's model
 - [ ] Optional compute skinning
 - [ ] Model instancing

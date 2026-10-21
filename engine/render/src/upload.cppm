@@ -14,6 +14,18 @@ namespace nx::render {
 /// Where the texels of a texture of one level and one layer start.
 inline constexpr std::array<std::size_t, 1> kOneLevel{0};
 
+/// The RGBA texels of a texture and of its mip levels, one level after another, and where each starts.
+struct MipChain {
+    std::vector<std::byte> texels{};
+    std::vector<std::size_t> offsets{};
+};
+
+/// `texels`, the RGBA rows of a `width` x `height` texture, and its mip levels down to one texel, each
+/// texel the mean of the two by two above it, cut as the original's GL_MipMap cuts it, the last row or
+/// column of an odd size taken twice.
+[[nodiscard]] auto mipChainOf(std::vector<std::byte> texels, std::uint32_t width, std::uint32_t height)
+    -> MipChain;
+
 /// What is uploaded while something is made, recorded in one command list: each upload's staging
 /// buffer is let go when the uploader ends, and the device keeps it until the copies are done.
 class Uploader {
