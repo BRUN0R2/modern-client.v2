@@ -22,6 +22,7 @@ enum class Format : std::uint8_t {
                    ///< and the animation of every sequence, from its sequence group file too.
     SequenceGroup, ///< The `*0N.mdl` of a model's animations: checked through the models that use it.
     Spr,           ///< A sprite: SpriteView.
+    Tga,           ///< An image (the skies, the VGUI menus): readTga.
     Wav,           ///< A sound: parseWav.
     Count,
 };

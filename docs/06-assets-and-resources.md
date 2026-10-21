@@ -193,9 +193,17 @@ Readers today:
   meshes' skin references against its skins. A sequence group names its file as the original
   loads it, with `\` (`VfsPath::parseGoldsrc`). Every list is a vector: no count has a ceiling
   ([§3.4](#34-removed-content-limits)).
+- TGA (`nx.assets:tga`), the sky (`gfx/env/*.tga`) and the VGUI menus of the original, and a
+  texture format of mods (§3.2): color-mapped (8-bit indices into 24- or 32-bit colors), true-color
+  (24 or 32 bits) and grayscale (8 bits, or 16 with alpha) images, raw or run-length encoded,
+  stored from any corner, decoded to RGBA rows from the top-left corner (`RgbaImage`). As the
+  original reads them, the fourth byte of a 32-bit pixel is its alpha even when the descriptor
+  declares none (the VGUI fonts), a run-length packet may continue on the next row, and what a
+  packet holds past the last pixel is ignored. A file with fewer bytes than its pixels need, even as
+  runs of 128, is refused before anything is allocated.
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above all have their readers; the text formats (`sentences.txt`, `materials.txt`, `hud.txt`...) are planned with their consumers (M3).
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`, `materials.txt`, `hud.txt`...) are planned with their consumers (M3).
 
 ### 3.2 Modern (for mods)
 

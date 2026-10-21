@@ -15,6 +15,7 @@ nxAddModuleLibrary(nxAssets
         src/bsp.cppm
         src/spr.cppm
         src/mdl.cppm
+        src/tga.cppm
     SOURCES
         src/binary.cpp
         src/vfs.cpp
@@ -25,6 +26,7 @@ nxAddModuleLibrary(nxAssets
         src/bsp.cpp
         src/spr.cpp
         src/mdl.cpp
+        src/tga.cpp
     DEPENDS
         nx::core
         nx::math

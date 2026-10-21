@@ -118,6 +118,13 @@ constexpr std::array kSequenceGroupMagic{std::byte{'I'}, std::byte{'D'}, std::by
     return {};
 }
 
+[[nodiscard]] auto checkTga(std::span<const std::byte> bytes) -> Result<void, CheckError> {
+    if (auto image = nx::assets::readTga(bytes); !image) {
+        return fail(CheckError::Invalid, std::move(image.error()));
+    }
+    return {};
+}
+
 [[nodiscard]] auto checkWav(std::span<const std::byte> bytes) -> Result<void, CheckError> {
     if (auto sound = nx::assets::parseWav(bytes); !sound) {
         return fail(CheckError::Invalid, std::move(sound.error()));
@@ -144,6 +151,9 @@ constexpr auto kReaders = std::to_array<Reader>({
     {.extension = "spr",
      .format = Format::Spr,
      .check = [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) { return checkSpr(bytes); }},
+    {.extension = "tga",
+     .format = Format::Tga,
+     .check = [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) { return checkTga(bytes); }},
     {.extension = "wav",
      .format = Format::Wav,
      .check = [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) { return checkWav(bytes); }},

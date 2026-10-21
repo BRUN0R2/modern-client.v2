@@ -75,25 +75,27 @@ TEST(CheckContentTest, ReadsEveryFormatInPathOrder) {
     writeSeed(directory, "mdl/triangle.mdl", "models/triangle.mdl");
     writeSeed(directory, "spr/additiveSingle.spr", "sprites/additiveSingle.spr");
     writeSeed(directory, "wav/stereo16Cue.wav", "sound/stereo16Cue.wav");
+    writeSeed(directory, "tga/trueColorRunLength.tga", "gfx/env/trueColorRunLength.tga");
     directory.write("readme.txt", "no reader reads text yet");
 
     const std::vector<FileResult> results = checkDirectory(directory);
 
     const auto paths = results | std::views::transform(&FileResult::path) | std::ranges::to<std::vector>();
-    EXPECT_EQ(paths, (std::vector<std::string>{"maps/boxEmbedded.bsp", "maps/boxInWad.bsp",
-                                               "models/triangle.mdl", "readme.txt", "sound/stereo16Cue.wav",
-                                               "sprites/additiveSingle.spr", "textures.wad"}));
+    EXPECT_EQ(paths, (std::vector<std::string>{"gfx/env/trueColorRunLength.tga", "maps/boxEmbedded.bsp",
+                                               "maps/boxInWad.bsp", "models/triangle.mdl", "readme.txt",
+                                               "sound/stereo16Cue.wav", "sprites/additiveSingle.spr",
+                                               "textures.wad"}));
     for (const FileResult& result : results) {
         EXPECT_FALSE(result.failure.has_value()) << result.path << ": " << nx::describe(*result.failure);
     }
     const auto formats =
         results | std::views::transform(&FileResult::format) | std::ranges::to<std::vector>();
     EXPECT_EQ(formats,
-              (std::vector<std::optional<Format>>{Format::Bsp, Format::Bsp, Format::Mdl, std::nullopt,
-                                                  Format::Wav, Format::Spr, Format::Wad}));
-    ASSERT_EQ(results.size(), 7U);
-    EXPECT_EQ(results[0].bytes, readSeed("bsp/boxEmbedded.bsp").size());
-    EXPECT_EQ(results[3].bytes, 0U); // read by no reader
+              (std::vector<std::optional<Format>>{Format::Tga, Format::Bsp, Format::Bsp, Format::Mdl,
+                                                  std::nullopt, Format::Wav, Format::Spr, Format::Wad}));
+    ASSERT_EQ(results.size(), 8U);
+    EXPECT_EQ(results[1].bytes, readSeed("bsp/boxEmbedded.bsp").size());
+    EXPECT_EQ(results[4].bytes, 0U); // read by no reader
 }
 
 TEST(CheckContentTest, ARejectedFileCarriesItsReadersFailure) {

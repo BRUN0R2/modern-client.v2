@@ -210,6 +210,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing (`nx.assets:mdl`, `fuzzMdl`): structure, geometry, textures, skins, sequences and animations decoded from the model or its sequence groups
 - [x] SPR v2 reader with fuzzing (`nx.assets:spr`, `fuzzSpr`)
 - [x] WAV reader (PCM 8/16, cue points) with fuzzing (`nx.assets:wav`, `fuzzWav`), and every other uncompressed layout (24/32-bit PCM, 32/64-bit float, extensible) at any rate and channel count
+- [x] TGA reader with fuzzing (`nx.assets:tga`, `fuzzTga`): color-mapped, true-color and grayscale, raw or run-length encoded, from any corner, to RGBA
 - [x] `nxcheck`: every file of the Counter-Strike 1.6 installation through the VFS and the readers, joins included (`*T.mdl`, sequence groups), on the Job System ([18](docs/18-testing-and-quality.md#real-content))
 - [ ] Internal representation without fixed caps (attachments, body parts, bones, controllers, blends) ([06 §3.4](docs/06-assets-and-resources.md#34-removed-content-limits))
 - [ ] Generational `AssetHandle<T>`, states and typed errors

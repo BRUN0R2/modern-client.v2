@@ -11,6 +11,7 @@ nxAddTest(nxAssetsTests
         bspTests.cpp
         sprTests.cpp
         mdlTests.cpp
+        tgaTests.cpp
     DEPENDS
         nx::assets)
 
