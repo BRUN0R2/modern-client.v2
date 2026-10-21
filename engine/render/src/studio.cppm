@@ -8,9 +8,13 @@
 /// lit as the original lights them (nx.render:light, R_StudioLighting), mesh after mesh, each as its
 /// texture says: masked, additive, chrome, flat shaded or fullbright.
 ///
-/// Today: the skins and body parts of models, a draw call for each mesh, and the view's own model
-/// kept out of walls. The render modes and effects of entities (rendermode, renderfx), the players'
-/// colors, the dynamic lights and instancing come with their consumers.
+/// A model drawn other than normally blends as its render mode makes it (GL_StudioSetRenderMode): added,
+/// unlit; or blended, lit, as opaque as `renderamt` says. The solid models are drawn first, the others
+/// from the farthest (R_TransEntityCompare).
+///
+/// Today: the skins and body parts of models, a draw call for each mesh, the render modes, and the
+/// view's own model kept out of walls. The render effects (renderfx), the players' colors, the dynamic
+/// lights and instancing come with their consumers.
 export module nx.render:studio;
 
 import std;
@@ -21,6 +25,7 @@ import nx.assets;
 import :camera;
 import :gamma;
 import :light;
+import :renderMode;
 
 namespace nx::render {
 
@@ -30,7 +35,16 @@ namespace nx::render {
 enum class MeshKind : std::uint8_t {
     Opaque,
     Masked,   ///< Cut where its texture's alpha is 0.5 or less.
-    Additive, ///< Added to what is behind, its depth not written.
+    Additive, ///< Added to what is behind.
+    Count,
+};
+
+/// How a model's render mode blends it (GL_StudioSetRenderMode).
+enum class StudioBlending : std::uint8_t {
+    Solid,   ///< Normal: opaque; its additive meshes added, their depth not written.
+    Blended, ///< Over what is behind, as opaque as `renderamt` says, its depth written.
+    Added,   ///< Unlit, added to what is behind, its depth not written.
+    Count,
 };
 
 /// A mesh of a choice of a body part: its triangles in its model's index buffer, and its texture's
@@ -113,6 +127,7 @@ private:
     /// The meshes of each choice of each body part.
     std::vector<std::vector<std::vector<StudioMeshDraw>>> m_bodyParts;
     std::size_t m_boneCount = 0;
+    Vec3 m_middle{}; ///< Of the bounds its header gives, in its entity's space.
 };
 
 /// A model drawn in a frame.
@@ -125,6 +140,10 @@ struct StudioInstance {
     /// The choice of each body part, by its index; those it leaves out are their first.
     std::span<const std::uint32_t> bodyChoices{};
     StudioDepth depth = StudioDepth::World;
+    /// Where its entity is: a blended model is sorted by the middle of its bounds there.
+    Vec3 origin{};
+    RenderMode mode = RenderMode::Normal;
+    std::uint8_t amount = 0; ///< `renderamt`: how opaque a mode other than Normal draws it.
 };
 
 /// What a draw shows.
@@ -168,9 +187,8 @@ private:
     /// Makes room in `slot` for `bones` bones and `instances` models, at least.
     [[nodiscard]] auto reserve(StudioFrameSlot& slot, std::size_t bones, std::size_t instances)
         -> Result<void, rhi::RhiError>;
-    [[nodiscard]] auto pipelineOf(MeshKind kind) const noexcept -> rhi::RenderPipelineHandle;
-    /// Records the meshes of `instance`, whose uniform is bound.
-    void drawMeshes(rhi::CommandList& commands, const StudioInstance& instance);
+    /// Records the meshes of `instance`, whose uniform is bound, blended as `blending` says.
+    void drawMeshes(rhi::CommandList& commands, const StudioInstance& instance, StudioBlending blending);
 
     rhi::Device* m_device;
     ChannelTable m_textureGamma{};
@@ -179,9 +197,7 @@ private:
     rhi::OwnedBindGroupLayout m_skinLayout;
     rhi::OwnedBindGroupLayout m_instanceLayout;
     rhi::OwnedSampler m_sampler;
-    rhi::OwnedRenderPipeline m_opaquePipeline;
-    rhi::OwnedRenderPipeline m_maskedPipeline;
-    rhi::OwnedRenderPipeline m_additivePipeline;
+    EnumArray<StudioBlending, EnumArray<MeshKind, rhi::OwnedRenderPipeline>> m_pipelines;
     rhi::OwnedBuffer m_lightGamma;
     std::vector<StudioFrameSlot> m_frameSlots;
     std::uint64_t m_drawCount = 0;
