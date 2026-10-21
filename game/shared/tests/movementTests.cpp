@@ -28,6 +28,8 @@ using nx::collision::Contents;
 using nx::collision::HullChild;
 using nx::collision::HullNode;
 using nx::collision::HullNodeIndex;
+using nx::collision::HullRoots;
+using nx::collision::ModelIndex;
 
 constexpr float kTolerance = 1.0e-3F;
 /// Where a trace stops before a plane: a player on a floor at z = 0 stands this high.
@@ -78,7 +80,8 @@ struct ModelTrees {
         const HullChild duckedRoot = append(desc.clipNodes, std::move(model.ducked));
         const HullChild pointRoot = append(desc.pointNodes, std::move(model.point));
         desc.models.push_back(nx::collision::BrushModel{
-            .hulls = {pointRoot, standingRoot, Contents::Empty, duckedRoot}, .bounds = model.bounds});
+            .hulls = HullRoots{{pointRoot, standingRoot, Contents::Empty, duckedRoot}},
+            .bounds = model.bounds});
     }
     const HullNode spare{.plane = 0, .children = {Contents::Empty, Contents::Empty}};
     desc.clipNodes.push_back(spare);
@@ -101,8 +104,8 @@ struct ModelTrees {
 /// that both boxes' feet stand on.
 [[nodiscard]] auto floorWorld() -> BrushHulls {
     return world({facingUp(0.0F), facingUp(-18.0F)},
-                 {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}, {},
-                 {HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}});
+                 {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}}, {},
+                 {HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}}});
 }
 
 /// Nothing at all.
@@ -113,15 +116,15 @@ struct ModelTrees {
 /// The floor up to x = 10, and a stair of `height` from there on.
 [[nodiscard]] auto stairWorld(float height) -> BrushHulls {
     return world({facingX(10.0F), facingUp(height), facingUp(0.0F)},
-                 {HullNode{.plane = 0, .children = {HullNodeIndex{1}, HullNodeIndex{2}}},
-                  HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}},
-                  HullNode{.plane = 2, .children = {Contents::Empty, Contents::Solid}}});
+                 {HullNode{.plane = {0}, .children = {HullNodeIndex{1}, HullNodeIndex{2}}},
+                  HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}},
+                  HullNode{.plane = {2}, .children = {Contents::Empty, Contents::Solid}}});
 }
 
 /// Water up to `surface`, in a world without a floor.
 [[nodiscard]] auto waterWorld(float surface) -> BrushHulls {
     return world({facingUp(surface)}, {},
-                 {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Water}}});
+                 {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Water}}});
 }
 
 /// The player after one command, as cs::simulateMovement leaves it.
@@ -202,8 +205,8 @@ TEST(MovementTest, FrictionSlowsAndEdgeFrictionMoreNearADrop) {
     const MovementState onTheFloor = simulate(sliding, command(), {}, floorWorld());
     // The floor up to x = 10 only: a drop 16 units ahead of the player.
     const BrushHulls edge = world({facingX(10.0F), facingUp(0.0F)},
-                                  {HullNode{.plane = 0, .children = {Contents::Empty, HullNodeIndex{1}}},
-                                   HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}});
+                                  {HullNode{.plane = {0}, .children = {Contents::Empty, HullNodeIndex{1}}},
+                                   HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}}});
     const MovementState nearTheEdge = simulate(sliding, command(), {}, edge);
 
     EXPECT_NEAR(onTheFloor.velocity.x, 96.0F, kTolerance);  // sv_friction 4 over a hundredth of a second
@@ -276,8 +279,8 @@ TEST(MovementTest, APlayerWalksUpAStairButNotAWall) {
 TEST(MovementTest, AMoveIntoAWallSlidesAlongIt) {
     // A wall from x = 10 on, over the floor.
     const BrushHulls walled = world({facingX(10.0F), facingUp(0.0F)},
-                                    {HullNode{.plane = 0, .children = {Contents::Solid, HullNodeIndex{1}}},
-                                     HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}});
+                                    {HullNode{.plane = {0}, .children = {Contents::Solid, HullNodeIndex{1}}},
+                                     HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}}});
     MovementState diagonal = standingOnTheFloor();
     diagonal.origin.x = 9.0F;
     diagonal.velocity = Vec3{.x = 200.0F, .y = 200.0F};
@@ -292,7 +295,7 @@ TEST(MovementTest, AMoveIntoAWallSlidesAlongIt) {
 TEST(MovementTest, ASteepSlopeIsNotGround) {
     const auto slope = [](Vec3 normal) {
         return world({Plane{.normal = normal}},
-                     {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}});
+                     {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}});
     };
     const MovementState above{.origin = {.z = 1.0F}, .maxSpeed = kKnifeSpeed};
 
@@ -350,9 +353,9 @@ TEST(MovementTest, JumpSwimsUpAndNothingHeldSinks) {
 TEST(MovementTest, AWallAtTheSurfaceStartsAJumpOutOfTheWater) {
     // Water up to z = 10; from x = 20 on, a ledge up to z = 12.
     const BrushHulls pool = world({facingX(20.0F), facingUp(12.0F), facingUp(10.0F)}, {},
-                                  {HullNode{.plane = 0, .children = {HullNodeIndex{1}, HullNodeIndex{2}}},
-                                   HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}},
-                                   HullNode{.plane = 2, .children = {Contents::Empty, Contents::Water}}});
+                                  {HullNode{.plane = {0}, .children = {HullNodeIndex{1}, HullNodeIndex{2}}},
+                                   HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}},
+                                   HullNode{.plane = {2}, .children = {Contents::Empty, Contents::Water}}});
     const MovementState swimmer{.origin = {.x = 5.0F}, .maxSpeed = kKnifeSpeed};
 
     const MovementState starting = simulate(swimmer, command(), {}, pool);
@@ -420,8 +423,8 @@ TEST(MovementTest, StandingUpNeedsRoom) {
 
     // No room to stand anywhere, the floor of the ducked box as in floorWorld.
     const BrushHulls tunnel =
-        world({facingUp(-18.0F)}, {HullNode{.plane = 0, .children = {Contents::Solid, Contents::Solid}}}, {},
-              {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}});
+        world({facingUp(-18.0F)}, {HullNode{.plane = {0}, .children = {Contents::Solid, Contents::Solid}}},
+              {}, {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}});
     const MovementState stuck = simulate(duckedOnTheFloor(), command(), {}, tunnel);
     EXPECT_TRUE(stuck.isDucked);
     EXPECT_NEAR(stuck.origin.z, kOnTheFloor - 18.0F, kTolerance);
@@ -442,9 +445,9 @@ TEST(MovementTest, ASolidEntityStopsThePlayerWhereItIsPlaced) {
     // The world's floor; model 1, a wall from x = 10 on in its own space, placed 20 units further.
     const BrushHulls hulls = modelsOf(
         {facingUp(0.0F), facingX(10.0F)},
-        {ModelTrees{.standing = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}},
-         ModelTrees{.standing = {HullNode{.plane = 1, .children = {Contents::Solid, Contents::Empty}}}}});
-    const std::array wall{cs::BrushEntity{.model = 1, .origin = {.x = 20.0F}}};
+        {ModelTrees{.standing = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}}},
+         ModelTrees{.standing = {HullNode{.plane = {1}, .children = {Contents::Solid, Contents::Empty}}}}});
+    const std::array wall{cs::BrushEntity{.model = {1}, .origin = {.x = 20.0F}}};
     MovementState walking = standingOnTheFloor();
     walking.origin.x = 5.0F;
     walking.velocity = Vec3{.x = kKnifeSpeed.value()};
@@ -459,17 +462,17 @@ TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
     const BrushHulls hulls = modelsOf(
         {facingUp(0.0F), facingX(10.0F)},
         {ModelTrees{},
-         ModelTrees{.standing = {HullNode{.plane = 1, .children = {Contents::Solid, Contents::Empty}}}},
-         ModelTrees{.standing = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}}});
-    const std::array entities{cs::BrushEntity{.model = 1}, cs::BrushEntity{.model = 2}};
+         ModelTrees{.standing = {HullNode{.plane = {1}, .children = {Contents::Solid, Contents::Empty}}}},
+         ModelTrees{.standing = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}}}});
+    const std::array entities{cs::BrushEntity{.model = {1}}, cs::BrushEntity{.model = {2}}};
     MovementState running = standingOnTheFloor();
     running.origin.x = 9.0F;
     running.velocity = Vec3{.x = 200.0F};
 
     const cs::MovementResult result = cs::simulateMovement(running, command(), {}, hulls, entities);
     EXPECT_TRUE(result.state.isOnGround);
-    EXPECT_EQ(result.state.groundModel, std::optional<std::uint32_t>{2});
-    EXPECT_EQ(result.touchedModels, (std::vector<std::uint32_t>{2, 1}))
+    EXPECT_EQ(result.state.groundModel, std::optional{ModelIndex{2}});
+    EXPECT_EQ(result.touchedModels, (std::vector{ModelIndex{2}, ModelIndex{1}}))
         << "the floor, then the wall, each once";
 
     const cs::MovementResult onTheWorld =
@@ -484,9 +487,9 @@ TEST(MovementTest, AVolumeEntityHoldsWhatItSays) {
     const BrushHulls hulls = modelsOf(
         {facingUp(30.0F)},
         {ModelTrees{},
-         ModelTrees{.point = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}}});
+         ModelTrees{.point = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}}}});
     const std::array slime{
-        cs::BrushEntity{.model = 1, .role = cs::BrushRole::Volume, .contents = Contents::Slime}};
+        cs::BrushEntity{.model = {1}, .role = cs::BrushRole::Volume, .contents = Contents::Slime}};
     const MovementState swimmer{.maxSpeed = kKnifeSpeed};
     const MovementState after = simulate(swimmer, command({}, {Button::Jump}), {}, hulls, slime);
 
@@ -501,15 +504,15 @@ TEST(MovementTest, AVolumeEntityHoldsWhatItSays) {
 [[nodiscard]] auto ladderWorld() -> BrushHulls {
     return modelsOf(
         {facingUp(0.0F), facingUp(-36.0F), facingX(9.0F), facingX(25.0F)},
-        {ModelTrees{.standing = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}},
-                    .point = {HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}}},
+        {ModelTrees{.standing = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}},
+                    .point = {HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}}}},
          ModelTrees{
-             .standing = {HullNode{.plane = 2, .children = {Contents::Solid, Contents::Empty}}},
-             .point = {HullNode{.plane = 3, .children = {Contents::Solid, Contents::Empty}}},
+             .standing = {HullNode{.plane = {2}, .children = {Contents::Solid, Contents::Empty}}},
+             .point = {HullNode{.plane = {3}, .children = {Contents::Solid, Contents::Empty}}},
              .bounds = {.min = {.x = 25.0F, .y = -32.0F}, .max = {.x = 33.0F, .y = 32.0F, .z = 200.0F}}}});
 }
 
-constexpr std::array kLadder{cs::BrushEntity{.model = 1, .role = cs::BrushRole::Ladder}};
+constexpr std::array kLadder{cs::BrushEntity{.model = {1}, .role = cs::BrushRole::Ladder}};
 
 TEST(MovementTest, OnALadderForwardClimbsAndBackOnTheFloorStepsOff) {
     const BrushHulls hulls = ladderWorld();
@@ -538,28 +541,41 @@ TEST(MovementTest, JumpLeavesALadder) {
     EXPECT_NEAR(after.velocity.z, -8.0F, kTolerance);
 }
 
+TEST(MovementTest, APlayersBodyIsItsBoxAndWhatItStandsOn) {
+    const nx::game::Body standing =
+        cs::bodyOf(MovementState{.isOnGround = true, .groundModel = ModelIndex{3}});
+    EXPECT_EQ(standing.hull, nx::collision::Hull::Standing);
+    EXPECT_EQ(standing.box.min, (Vec3{.x = -16.0F, .y = -16.0F, .z = -36.0F}));
+    EXPECT_EQ(standing.box.max, (Vec3{.x = 16.0F, .y = 16.0F, .z = 36.0F}));
+    EXPECT_EQ(standing.groundModel, std::optional{ModelIndex{3}});
+
+    const nx::game::Body ducked = cs::bodyOf(MovementState{.isDucked = true, .groundModel = ModelIndex{3}});
+    EXPECT_EQ(ducked.hull, nx::collision::Hull::Ducked);
+    EXPECT_EQ(ducked.box.max.z, 18.0F);
+    EXPECT_FALSE(ducked.groundModel.has_value()) << "in the air, it stands on nothing";
+}
+
 TEST(MovementTest, TheGamesBrushEntitiesAreMetAsTheEngineListsThem) {
     nx::ecs::World world;
     ASSERT_TRUE(nx::game::registerComponents(world).has_value());
-    const auto spawn = [&](std::uint32_t model, nx::game::Solid solid, std::int32_t contents) {
-        std::ignore = world.spawn(nx::game::BrushModel{.index = model},
-                                  nx::game::Transform{.origin = {.x = static_cast<float>(model)}},
-                                  nx::game::BrushSolidity{.solid = solid, .contents = contents});
+    const auto spawn = [&](std::uint32_t model, nx::game::Solid solid, std::optional<Contents> contents) {
+        world.spawn(nx::game::BrushModel{.index = {model}},
+                    nx::game::Transform{.origin = {.x = static_cast<float>(model)}},
+                    nx::game::BrushSolidity{.solid = solid, .contents = contents});
     };
-    spawn(1, nx::game::Solid::Bsp, -3);  // solid, whatever its skin
-    spawn(2, nx::game::Solid::Not, 0);   // nothing to meet
-    spawn(3, nx::game::Solid::Not, -16); // a ladder
-    spawn(4, nx::game::Solid::Not, -4);  // slime
-    spawn(5, nx::game::Solid::Not, -20); // contents movement does not know
+    spawn(1, nx::game::Solid::Bsp, Contents::Water);  // solid, whatever its skin
+    spawn(2, nx::game::Solid::Not, std::nullopt);     // nothing to meet
+    spawn(3, nx::game::Solid::Not, Contents::Ladder); // a ladder
+    spawn(4, nx::game::Solid::Not, Contents::Slime);  // a volume
 
     const std::vector<cs::BrushEntity> met = cs::brushEntitiesOf(world);
     ASSERT_EQ(met.size(), 3U);
-    EXPECT_EQ(met[0].model, 1U);
+    EXPECT_EQ(met[0].model, ModelIndex{1});
     EXPECT_EQ(met[0].role, cs::BrushRole::Solid);
     EXPECT_EQ(met[0].origin, (Vec3{.x = 1.0F}));
-    EXPECT_EQ(met[1].model, 3U);
+    EXPECT_EQ(met[1].model, ModelIndex{3});
     EXPECT_EQ(met[1].role, cs::BrushRole::Ladder);
-    EXPECT_EQ(met[2].model, 4U);
+    EXPECT_EQ(met[2].model, ModelIndex{4});
     EXPECT_EQ(met[2].role, cs::BrushRole::Volume);
     EXPECT_EQ(met[2].contents, Contents::Slime);
 }

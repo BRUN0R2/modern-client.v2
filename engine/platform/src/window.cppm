@@ -17,6 +17,13 @@ enum class WindowError : std::uint8_t {
     CreateFailed,             ///< The window could not be created.
     NoNativeWindow,           ///< The video driver has no window a GPU can draw to (offscreen).
     RelativeMouseUnavailable, ///< The mouse could not be captured for relative motion.
+    SizeUnavailable,          ///< The video driver did not tell the size of the window.
+};
+
+/// How the mouse reports itself to the window.
+enum class MouseMode : std::uint8_t {
+    Absolute, ///< The cursor shows and leaves the window.
+    Relative, ///< The cursor hides and stays in the window, which gets its raw motion (MouseMoved).
 };
 
 /// A size in pixels.
@@ -211,9 +218,12 @@ struct WaylandWindow {
 /// What a GPU backend makes its surface from; the backend creates the surface itself.
 using NativeWindow = std::variant<Win32Window, XlibWindow, WaylandWindow>;
 
+/// The drawable area of a window that asks for no other.
+inline constexpr PixelSize kDefaultWindowSize{.width = 1280, .height = 720};
+
 struct WindowDesc {
     std::string_view title;
-    PixelSize size{.width = 1280, .height = 720}; ///< Of the drawable area, before the desktop's scaling.
+    PixelSize size = kDefaultWindowSize; ///< Of the drawable area, before the desktop's scaling.
     bool isResizable = true;
 };
 
@@ -237,15 +247,14 @@ public:
     auto operator=(const Window&) -> Window& = delete;
     inline ~Window() { close(); }
 
-    /// The size of the drawable area in pixels; zero while minimized.
-    [[nodiscard]] auto pixelSize() const -> PixelSize;
+    /// The size of the drawable area in pixels; zero while minimized. Errors: SizeUnavailable.
+    [[nodiscard]] auto pixelSize() const -> Result<PixelSize, WindowError>;
 
     /// The handles a GPU backend makes its surface from. Errors: NoNativeWindow.
     [[nodiscard]] auto nativeWindow() const -> Result<NativeWindow, WindowError>;
 
-    /// Hides the cursor, keeps it in the window and reports raw motion (MouseMoved), or gives the
-    /// cursor back. Errors: RelativeMouseUnavailable.
-    [[nodiscard]] auto setRelativeMouse(bool isRelative) -> Result<void, WindowError>;
+    /// Puts the mouse in `mode`. Errors: RelativeMouseUnavailable.
+    [[nodiscard]] auto setMouseMode(MouseMode mode) -> Result<void, WindowError>;
 
     /// Appends the events that arrived since the last call, in order, to `events`.
     void pollEvents(std::vector<WindowEvent>& events);

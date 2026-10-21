@@ -25,9 +25,11 @@ enum class PoolLink : std::uint32_t {
     return PoolLink{std::to_underlying(index) + 1};
 }
 
-/// The node a link names; `link` must not be None.
-[[nodiscard]] constexpr auto indexOf(PoolLink link) noexcept -> PoolIndex {
-    expects(link != PoolLink::None, "indexOf: the link names no node");
+/// The node a link names; none for PoolLink::None.
+[[nodiscard]] constexpr auto nodeOf(PoolLink link) noexcept -> std::optional<PoolIndex> {
+    if (link == PoolLink::None) {
+        return std::nullopt;
+    }
     return PoolIndex{std::to_underlying(link) - 1};
 }
 
@@ -89,16 +91,15 @@ public:
     [[nodiscard]] auto acquire() -> PoolIndex {
         // acquire: pairs with the release in release(), so the free node's nextFree is visible.
         auto head = TaggedLink::unpack(m_freeHead.load(std::memory_order_acquire));
-        while (head.link != PoolLink::None) {
-            const PoolIndex index = indexOf(head.link);
+        while (const std::optional<PoolIndex> index = nodeOf(head.link)) {
             // The node may be taken by another thread right now; the tag makes the exchange fail then.
             // relaxed: the acquire on the head already ordered the release that wrote it.
-            const PoolLink next = (*this)[index].nextFree.load(std::memory_order_relaxed);
+            const PoolLink next = (*this)[*index].nextFree.load(std::memory_order_relaxed);
             std::uint64_t expected = head.pack();
             if (m_freeHead.compare_exchange_weak(expected,
                                                  TaggedLink{.tag = head.tag + 1, .link = next}.pack(),
                                                  std::memory_order_acquire, std::memory_order_acquire)) {
-                return index;
+                return *index;
             }
             head = TaggedLink::unpack(expected);
         }

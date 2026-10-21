@@ -96,16 +96,17 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     std::map<std::uint32_t, std::pair<nx::Vec3, BrushSolidity>> made;
     nx::ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
         [&](const BrushModel& model, const Transform& transform, const BrushSolidity& solidity) {
-            made.emplace(model.index, std::pair{transform.origin, solidity});
+            made.emplace(model.index.value, std::pair{transform.origin, solidity});
         });
     ASSERT_EQ(made.size(), 4U);
     EXPECT_EQ(made.at(1).first, (nx::Vec3{.x = 8.0F, .y = 16.0F, .z = 32.0F}));
     EXPECT_EQ(made.at(1).second.solid, Solid::Bsp);
     EXPECT_EQ(made.at(2).second.solid, Solid::Not) << "a passable door";
     EXPECT_EQ(made.at(3).second.solid, Solid::Not) << "water: a door with a skin";
-    EXPECT_EQ(made.at(3).second.contents, -3);
+    EXPECT_EQ(made.at(3).second.contents, nx::assets::Contents::Water);
     EXPECT_EQ(made.at(4).second.solid, Solid::Not);
-    EXPECT_EQ(made.at(4).second.contents, -16) << "a ladder whatever its skin";
+    EXPECT_EQ(made.at(4).second.contents, nx::assets::Contents::Ladder) << "a ladder whatever its skin";
+    EXPECT_FALSE(made.at(1).second.contents.has_value()) << "no skin, no contents";
 }
 
 TEST(BrushEntityTest, ABrushModelTheMapLacksIsAnError) {

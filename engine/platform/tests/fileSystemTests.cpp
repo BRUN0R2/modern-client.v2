@@ -16,6 +16,7 @@ using nx::platform::fromUtf8;
 using nx::platform::listFiles;
 using nx::platform::readFile;
 using nx::platform::toUtf8;
+using nx::platform::writeFile;
 
 [[nodiscard]] auto bytesOf(std::string_view text) -> std::vector<std::byte> {
     return text | std::views::transform([](char character) { return static_cast<std::byte>(character); }) |
@@ -90,6 +91,33 @@ TEST(FileSystemTest, ReadsATextFileAsItIs) {
     const auto missing = nx::platform::readTextFile(directory.path() / "missing.toml");
     ASSERT_FALSE(missing.has_value());
     EXPECT_EQ(missing.error().code, FileError::NotFound);
+}
+
+TEST(FileSystemTest, WritesAWholeFileAndReplacesOne) {
+    const nx::test::TemporaryDirectory directory;
+    const std::filesystem::path path = directory.path() / "screenshot.bmp";
+
+    const auto created = writeFile(path, bytesOf("the first content"));
+    ASSERT_TRUE(created.has_value()) << nx::describe(created.error());
+    const auto replaced = writeFile(path, bytesOf("second"));
+    ASSERT_TRUE(replaced.has_value()) << nx::describe(replaced.error());
+
+    const auto bytes = readFile(path);
+    ASSERT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
+    EXPECT_EQ(*bytes, bytesOf("second")) << "nothing of the longer content is left";
+}
+
+TEST(FileSystemTest, WritingWhereNoFileCanBeFails) {
+    const nx::test::TemporaryDirectory directory;
+    directory.makeDirectory("maps");
+
+    const auto inMissingDirectory = writeFile(directory.path() / "missing" / "file.txt", bytesOf("x"));
+    ASSERT_FALSE(inMissingDirectory.has_value());
+    EXPECT_EQ(inMissingDirectory.error().code, FileError::NotFound);
+
+    const auto folder = writeFile(directory.path() / "maps", bytesOf("x"));
+    ASSERT_FALSE(folder.has_value());
+    EXPECT_EQ(folder.error().code, FileError::NotAFile);
 }
 
 TEST(FileSystemTest, TheExecutablePathIsThisTestProgram) {

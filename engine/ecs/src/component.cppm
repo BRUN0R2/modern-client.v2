@@ -3,9 +3,10 @@
 
 /// Component types and their registry (docs/03-ecs.md, section 4).
 ///
-/// Until the reflection facade (nx.meta) exists, components are registered explicitly with their
-/// declared name, the documented fallback path (docs/02-coding-standards.md, section 1.2). The
-/// registry works from a ComponentInfo, so components defined at run time (Rook) use the same path.
+/// Components are registered explicitly with their declared name, the documented fallback path
+/// (docs/02-coding-standards.md, section 1.2), until registration through the reflection facade of
+/// nx.meta arrives (TODO.md, nx.ecs). The registry works from a ComponentInfo, so components defined
+/// at run time (Rook) use the same path.
 export module nx.ecs:component;
 
 import std;

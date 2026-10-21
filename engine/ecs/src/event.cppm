@@ -5,7 +5,6 @@
 export module nx.ecs:event;
 
 import std;
-import nx.core;
 
 export namespace nx::ecs {
 

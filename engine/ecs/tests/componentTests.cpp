@@ -7,6 +7,8 @@ import std;
 import nx.core;
 import nx.ecs;
 
+#include "contractRecorder.hpp"
+
 namespace {
 
 using nx::ecs::ComponentError;
@@ -57,6 +59,16 @@ TEST(ComponentRegistryTest, AssignsDenseIdsInRegistrationOrder) {
     EXPECT_EQ(registry.findByStableId(nx::StableId::fromName("test::Name")), *name);
     EXPECT_EQ(registry.info(*name).name, "test::Name");
     EXPECT_EQ(registry.find<OnGround>(), std::nullopt);
+}
+
+TEST(ComponentRegistryTest, AnUnknownTypeBreaksTheContractAndReadsAsATag) {
+    const nx::test::ContractRecorder recorder;
+    ComponentRegistry registry;
+    ASSERT_TRUE(registry.add<Position>("test::Position").has_value());
+
+    const nx::ecs::ComponentInfo& unknown = registry.info(nx::ecs::ComponentTypeId{1});
+    EXPECT_EQ(recorder.count(), 1);
+    EXPECT_TRUE(unknown.isTag()) << "observed: no storage is touched";
 }
 
 TEST(ComponentRegistryTest, RejectsATypeRegisteredTwice) {

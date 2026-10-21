@@ -17,7 +17,6 @@
 export module nx.console:parser;
 
 import std;
-import nx.core;
 import :text;
 
 export namespace nx::console {

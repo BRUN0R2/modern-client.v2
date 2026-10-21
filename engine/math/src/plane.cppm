@@ -5,7 +5,6 @@
 export module nx.math:plane;
 
 import std;
-import nx.core;
 import :vector;
 import :bounds;
 

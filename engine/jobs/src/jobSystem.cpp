@@ -29,7 +29,7 @@ namespace {
 
 /// The worker running on this thread, if any. It is the identity of the thread itself, set once
 /// when a worker starts; jobs never keep state here (docs/04-job-system.md, section 7).
-thread_local detail::Worker* tCurrentWorker = nullptr;
+thread_local detail::Worker* thisThreadWorker = nullptr;
 
 /// Declaration order of Priority is the order of urgency.
 constexpr std::array kPrioritiesByUrgency{Priority::Critical, Priority::Normal, Priority::Low,
@@ -202,7 +202,7 @@ void JobSystem::enqueue(detail::Job& job) {
 }
 
 auto JobSystem::currentWorker() const noexcept -> detail::Worker* {
-    return tCurrentWorker != nullptr && tCurrentWorker->system == this ? tCurrentWorker : nullptr;
+    return thisThreadWorker != nullptr && thisThreadWorker->system == this ? thisThreadWorker : nullptr;
 }
 
 auto JobSystem::findJob(detail::Worker* self) noexcept -> detail::Job* {
@@ -294,12 +294,11 @@ void JobSystem::finishCounter(PoolIndex counterIndex) {
     // isComplete() sees the counter closed and it does not sleep.
     const bool hasWaiter = counter.hasWaiter.load(std::memory_order_seq_cst);
 
-    for (PoolLink link = closed.link; link != PoolLink::None;) {
-        const PoolIndex linkIndex = indexOf(link);
-        const detail::ContinuationLink& continuation = m_links[linkIndex];
+    for (PoolLink link = closed.link; const std::optional<PoolIndex> linkIndex = nodeOf(link);) {
+        const detail::ContinuationLink& continuation = m_links[*linkIndex];
         detail::Job& job = *continuation.job;
         link = continuation.next;
-        m_links.release(linkIndex);
+        m_links.release(*linkIndex);
         // acq_rel: as in schedule(); this completion is one of the dependencies it counts.
         if (job.unresolvedDependencies.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             enqueue(job);
@@ -373,14 +372,14 @@ void JobSystem::wakeAll() noexcept {
 }
 
 void JobSystem::workerMain(detail::Worker& worker) {
-    tCurrentWorker = &worker;
+    thisThreadWorker = &worker;
     helpUntil(
         [this] {
             return m_stopping.load(std::memory_order_seq_cst) &&
                    m_jobsInFlight.load(std::memory_order_seq_cst) == 0;
         },
         [] {});
-    tCurrentWorker = nullptr;
+    thisThreadWorker = nullptr;
 }
 
 } // namespace nx::jobs

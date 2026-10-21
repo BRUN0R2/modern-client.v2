@@ -266,6 +266,9 @@ public:
     /// Held while a query iterates; structural changes check that none is active.
     class IterationScope {
     public:
+        // relaxed: queries on several workers count at once, and the schedule's sync points (job
+        // counters) already order every iteration before a structural change; the count only feeds
+        // that contract check.
         inline explicit IterationScope(const World& world) noexcept : m_world{&world} {
             m_world->m_activeIterations.fetch_add(1, std::memory_order_relaxed);
         }
@@ -273,7 +276,9 @@ public:
         auto operator=(const IterationScope&) -> IterationScope& = delete;
         IterationScope(IterationScope&&) = delete;
         auto operator=(IterationScope&&) -> IterationScope& = delete;
-        inline ~IterationScope() { m_world->m_activeIterations.fetch_sub(1, std::memory_order_relaxed); }
+        inline ~IterationScope() {
+            m_world->m_activeIterations.fetch_sub(1, std::memory_order_relaxed); // relaxed: as above
+        }
 
     private:
         const World* m_world;

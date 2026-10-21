@@ -19,6 +19,9 @@ constexpr float kStopDistance = 0.03125F;
 constexpr float kServerBackup = 0.1F;
 constexpr double kMovementBackup = 0.05;
 
+/// The hulls of a map's clip nodes, in the order its models list their roots.
+constexpr std::array<Hull, assets::kClipHulls> kClipNodeHulls{Hull::Standing, Hull::Large, Hull::Ducked};
+
 /// The rules a trace follows: the server's or player movement's.
 enum class Rules : std::uint8_t {
     Server,
@@ -31,9 +34,9 @@ enum class Rules : std::uint8_t {
     -> Result<void, CollisionError> {
     std::vector<std::uint32_t> parents(nodes.size());
     for (std::size_t index = 0; index < nodes.size(); ++index) {
-        if (nodes[index].plane >= planes) {
-            return fail(CollisionError::BadIndex,
-                        std::format("{} node {}: plane {} of {}", tree, index, nodes[index].plane, planes));
+        if (nodes[index].plane.value >= planes) {
+            return fail(CollisionError::BadIndex, std::format("{} node {}: plane {} of {}", tree, index,
+                                                              nodes[index].plane.value, planes));
         }
         for (const HullChild& child : nodes[index].children) {
             if (const auto* node = std::get_if<HullNodeIndex>(&child)) {
@@ -86,7 +89,7 @@ enum class Rules : std::uint8_t {
                                  HullChild child, Vec3 point) noexcept -> Contents {
     while (const auto* index = std::get_if<HullNodeIndex>(&child)) {
         const HullNode& node = nodes[index->value];
-        child = node.children[planes[node.plane].signedDistance(point) < 0.0F ? 1 : 0];
+        child = node.children[planes[node.plane.value].signedDistance(point) < 0.0F ? 1 : 0];
     }
     return std::get<Contents>(child);
 }
@@ -115,7 +118,7 @@ public:
             return true;
         }
         const HullNode& node = m_nodes[std::get<HullNodeIndex>(child).value];
-        const Plane& plane = m_planes[node.plane];
+        const Plane& plane = m_planes[node.plane.value];
         const float startDistance = plane.signedDistance(start);
         const float endDistance = plane.signedDistance(end);
         if (startDistance >= 0.0F && endDistance >= 0.0F) {
@@ -235,12 +238,12 @@ auto BrushHulls::create(BrushHullsDesc desc) -> Result<BrushHulls, CollisionErro
         }
     }
     for (std::size_t model = 0; model < desc.models.size(); ++model) {
-        for (std::size_t hull = 0; hull < kHullCount; ++hull) {
-            const std::size_t nodes = hull == 0 ? desc.pointNodes.size() : desc.clipNodes.size();
+        for (const Hull hull : HullRoots::keys()) {
+            const std::size_t nodes = hull == Hull::Point ? desc.pointNodes.size() : desc.clipNodes.size();
             if (const auto* root = std::get_if<HullNodeIndex>(&desc.models[model].hulls[hull]);
                 root != nullptr && root->value >= nodes) {
                 return fail(CollisionError::BadIndex, std::format("model {}, hull {}: root {} of {} nodes",
-                                                                  model, hull, root->value, nodes));
+                                                                  model, enumName(hull), root->value, nodes));
             }
         }
     }
@@ -258,25 +261,26 @@ auto BrushHulls::create(const assets::BspView& map) -> Result<BrushHulls, Collis
         map.planes() | std::views::transform(&assets::BspPlane::plane) | std::ranges::to<std::vector>();
     for (const assets::BspNode& node : map.nodes()) {
         desc.pointNodes.push_back(HullNode{
-            .plane = node.plane.value,
+            .plane = node.plane,
             .children = {childOf(node.children[0], map.leaves()), childOf(node.children[1], map.leaves())}});
     }
     for (const assets::ClipNode& node : map.clipNodes()) {
         desc.clipNodes.push_back(HullNode{
-            .plane = node.plane.value, .children = {childOf(node.children[0]), childOf(node.children[1])}});
+            .plane = node.plane, .children = {childOf(node.children[0]), childOf(node.children[1])}});
     }
     for (const assets::BspModel& model : map.models()) {
-        desc.models.push_back(
-            BrushModel{.hulls = {HullNodeIndex{model.headNode.value}, childOf(model.hulls[0]),
-                                 childOf(model.hulls[1]), childOf(model.hulls[2])},
-                       .bounds = model.bounds});
+        BrushModel& brush = desc.models.emplace_back(BrushModel{.bounds = model.bounds});
+        brush.hulls[Hull::Point] = HullNodeIndex{model.headNode.value};
+        for (std::size_t clip = 0; clip < assets::kClipHulls; ++clip) {
+            brush.hulls[kClipNodeHulls[clip]] = childOf(model.hulls[clip]);
+        }
     }
     return create(std::move(desc));
 }
 
-auto BrushHulls::boundsOf(std::uint32_t model) const noexcept -> Aabb {
-    expects(model < m_models.size(), "BrushHulls::boundsOf: a model");
-    return m_models[model].bounds;
+auto BrushHulls::boundsOf(ModelIndex model) const noexcept -> Aabb {
+    expects(model.value < m_models.size(), "BrushHulls::boundsOf: a model");
+    return m_models[model.value].bounds;
 }
 
 namespace {
@@ -289,27 +293,28 @@ namespace {
 
 } // namespace
 
-auto BrushHulls::contentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+auto BrushHulls::contentsAt(ModelIndex model, Hull hull, Vec3 point, Vec3 offset,
                             EulerAngles angles) const noexcept -> Contents {
     return contentsAt(model, hull, inModelSpace(point, offset, angles));
 }
 
-auto BrushHulls::movementContentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+auto BrushHulls::movementContentsAt(ModelIndex model, Hull hull, Vec3 point, Vec3 offset,
                                     EulerAngles angles) const noexcept -> Contents {
     return movementContentsAt(model, hull, inModelSpace(point, offset, angles));
 }
 
-auto BrushHulls::contentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents {
-    expects(model < m_models.size() && hull != Hull::Count, "BrushHulls::contentsAt: a model and a hull");
+auto BrushHulls::contentsAt(ModelIndex model, Hull hull, Vec3 point) const noexcept -> Contents {
+    expects(model.value < m_models.size() && hull != Hull::Count,
+            "BrushHulls::contentsAt: a model and a hull");
     return contentsUnder(m_planes, hull == Hull::Point ? m_pointNodes : m_clipNodes,
-                         m_models[model].hulls[std::to_underlying(hull)], point);
+                         m_models[model.value].hulls[hull], point);
 }
 
-auto BrushHulls::movementContentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents {
-    expects(model < m_models.size() && hull != Hull::Count,
+auto BrushHulls::movementContentsAt(ModelIndex model, Hull hull, Vec3 point) const noexcept -> Contents {
+    expects(model.value < m_models.size() && hull != Hull::Count,
             "BrushHulls::movementContentsAt: a model and a hull");
     const std::span<const HullNode> nodes = hull == Hull::Point ? m_pointNodes : m_clipNodes;
-    const HullChild root = m_models[model].hulls[std::to_underlying(hull)];
+    const HullChild root = m_models[model.value].hulls[hull];
     if (isTheLastNode(root, nodes)) {
         return Contents::Empty; // Parity: movement takes such a hull for an empty one
     }
@@ -317,12 +322,13 @@ auto BrushHulls::movementContentsAt(std::uint32_t model, Hull hull, Vec3 point) 
 }
 
 auto BrushHulls::trace(const HullTraceQuery& query) const noexcept -> Trace {
-    expects(query.model < m_models.size() && query.hull != Hull::Count,
+    expects(query.model.value < m_models.size() && query.hull != Hull::Count,
             "BrushHulls::trace: a model and a hull");
     Trace result{.fraction = 1.0F, .end = query.end, .isAllSolid = true};
-    const HullChild root = m_models[query.model].hulls[std::to_underlying(query.hull)];
+    const HullChild root = m_models[query.model.value].hulls[query.hull];
     Tracer<Rules::Server> tracer{m_planes, query.hull == Hull::Point ? m_pointNodes : m_clipNodes, root,
                                  result};
+    // Where it stopped, if it did, is in the result already.
     std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
                                 inModelSpace(query.end, query.offset, query.angles));
     if (result.fraction != 1.0F) {
@@ -341,15 +347,16 @@ auto BrushHulls::trace(const HullTraceQuery& query) const noexcept -> Trace {
 }
 
 auto BrushHulls::traceMovement(const HullTraceQuery& query) const noexcept -> Trace {
-    expects(query.model < m_models.size() && query.hull != Hull::Count,
+    expects(query.model.value < m_models.size() && query.hull != Hull::Count,
             "BrushHulls::traceMovement: a model and a hull");
     Trace result{.fraction = 1.0F, .end = query.end, .isAllSolid = true};
     const std::span<const HullNode> nodes = query.hull == Hull::Point ? m_pointNodes : m_clipNodes;
-    HullChild root = m_models[query.model].hulls[std::to_underlying(query.hull)];
+    HullChild root = m_models[query.model.value].hulls[query.hull];
     if (isTheLastNode(root, nodes)) {
         root = Contents::Empty; // Parity: movement takes such a hull for an empty one
     }
     Tracer<Rules::Movement> tracer{m_planes, nodes, root, result};
+    // Where it stopped, if it did, is in the result already.
     std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
                                 inModelSpace(query.end, query.offset, query.angles));
     if (result.isAllSolid) {

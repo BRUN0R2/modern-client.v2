@@ -26,10 +26,15 @@ enum class Hull : std::uint8_t {
     Count,
 };
 
-inline constexpr std::size_t kHullCount = 4;
-
 /// What a point of a hull is in: the contents of the map's leaves, as the original numbers them.
 using Contents = assets::Contents;
+
+/// A brush model of the map, and the world, model 0, which every map has.
+using ModelIndex = assets::ModelIndex;
+using assets::kWorldModel;
+
+/// A plane of the map.
+using PlaneIndex = assets::PlaneIndex;
 
 /// A node of a hull's tree, by its index.
 struct HullNodeIndex {
@@ -43,13 +48,16 @@ using HullChild = std::variant<HullNodeIndex, Contents>;
 
 /// A node: its plane splits space; children[0] is in front of it, the plane itself included.
 struct HullNode {
-    std::uint32_t plane = 0;
+    PlaneIndex plane{};
     std::array<HullChild, 2> children{};
 };
 
+/// The root of each hull of a brush model.
+using HullRoots = EnumArray<Hull, HullChild>;
+
 /// A brush model: the root of each of its hulls, and the box of its faces, in its own space.
 struct BrushModel {
-    std::array<HullChild, kHullCount> hulls{};
+    HullRoots hulls{};
     Aabb bounds{};
 };
 
@@ -59,7 +67,7 @@ struct BrushHullsDesc {
     std::vector<Plane> planes{};
     std::vector<HullNode> pointNodes{}; ///< Hull 0's.
     std::vector<HullNode> clipNodes{};  ///< Hulls 1 to 3's.
-    std::vector<BrushModel> models{};   ///< Model 0 is the world.
+    std::vector<BrushModel> models{};   ///< By their ModelIndex: the world first.
 };
 
 /// No tree is deeper: the compilers' deepest (hldemo3 of Half-Life) is 146 nodes deep, and the
@@ -76,7 +84,7 @@ enum class CollisionError : std::uint8_t {
 /// Where a trace goes: from `start` to `end` through `hull` of brush model `model`, placed at
 /// `offset` (its entity's origin; the world's is 0) and turned by `angles` about it (its entity's).
 struct HullTraceQuery {
-    std::uint32_t model = 0;
+    ModelIndex model = kWorldModel;
     Hull hull = Hull::Point;
     Vec3 offset{};
     EulerAngles angles{};
@@ -108,20 +116,19 @@ public:
 
     [[nodiscard]] inline auto modelCount() const noexcept -> std::size_t { return m_models.size(); }
     /// The box of the faces of `model`, in its own space.
-    [[nodiscard]] auto boundsOf(std::uint32_t model) const noexcept -> Aabb;
+    [[nodiscard]] auto boundsOf(ModelIndex model) const noexcept -> Aabb;
 
     /// What `point`, in the model's space, is in, in `hull` of `model` (SV_HullPointContents).
-    [[nodiscard]] auto contentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents;
+    [[nodiscard]] auto contentsAt(ModelIndex model, Hull hull, Vec3 point) const noexcept -> Contents;
     /// What `point` is in, in `hull` of `model` placed at `offset` and turned by `angles` about it.
-    [[nodiscard]] auto contentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+    [[nodiscard]] auto contentsAt(ModelIndex model, Hull hull, Vec3 point, Vec3 offset,
                                   EulerAngles angles) const noexcept -> Contents;
 
     /// The same, as player movement reads it (PM_HullPointContents): a hull whose root is the last
     /// node of its tree, or none, is empty, a quirk of the original kept for parity.
-    [[nodiscard]] auto movementContentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept
-        -> Contents;
+    [[nodiscard]] auto movementContentsAt(ModelIndex model, Hull hull, Vec3 point) const noexcept -> Contents;
     /// The same of `model` placed at `offset` and turned by `angles` about it (PM_TestPlayerPosition).
-    [[nodiscard]] auto movementContentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+    [[nodiscard]] auto movementContentsAt(ModelIndex model, Hull hull, Vec3 point, Vec3 offset,
                                           EulerAngles angles) const noexcept -> Contents;
 
     /// The way of `query`, by the server's rules: stopped 1/32 unit before the plane it would cross

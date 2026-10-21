@@ -16,6 +16,12 @@ struct TestNode {
 
 using Pool = nx::jobs::ConcurrentPool<TestNode>;
 
+TEST(ConcurrentPoolTest, ALinkNamesTheNodeItLinksToAndNoneNamesNone) {
+    static_assert(!nx::jobs::nodeOf(nx::jobs::PoolLink::None).has_value());
+    static_assert(nx::jobs::nodeOf(nx::jobs::linkTo(nx::jobs::PoolIndex{0})) == nx::jobs::PoolIndex{0});
+    static_assert(nx::jobs::nodeOf(nx::jobs::linkTo(nx::jobs::PoolIndex{7})) == nx::jobs::PoolIndex{7});
+}
+
 TEST(ConcurrentPoolTest, AcquiresDistinctNodes) {
     constexpr std::size_t kCount = 1000; // spans several chunks
     Pool pool;

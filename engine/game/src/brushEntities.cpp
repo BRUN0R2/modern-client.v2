@@ -43,7 +43,8 @@ constexpr float kDoorSizeTrim = 2.0F;
     if (angle >= 0.0F) {
         return Vec3{.y = angle};
     }
-    return Vec3{.x = static_cast<int>(angle) == static_cast<int>(kUp) ? -kQuarterTurn : kQuarterTurn};
+    // Parity: the original compares the angle cut to a whole number.
+    return Vec3{.x = std::trunc(angle) == kUp ? -kQuarterTurn : kQuarterTurn};
 }
 
 [[nodiscard]] auto eulerOf(Vec3 angles) -> EulerAngles {
@@ -163,32 +164,31 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
     -> Result<std::size_t, GameError> {
     std::size_t spawned = 0;
     for (const assets::BspEntity& entity : entities) {
-        const std::optional<std::uint32_t> model = entity.findBrushModel();
+        const std::optional<assets::ModelIndex> model = entity.findBrushModel();
         const std::string_view classname = entity.find("classname").value_or("");
         const auto brushClass = std::ranges::find(classes.brushClasses, classname, &BrushClass::classname);
         if (!model || brushClass == classes.brushClasses.end()) {
             continue;
         }
-        if (*model == 0 || *model >= models.size()) {
+        if (*model == assets::kWorldModel || model->value >= models.size()) {
             return fail(GameError::UnknownModel,
-                        std::format("{} \"*{}\" of {} brush models", classname, *model, models.size()));
+                        std::format("{} \"*{}\" of {} brush models", classname, model->value, models.size()));
         }
-        const std::int32_t contents = brushClass->contents.value_or(entity.findInteger("skin").value_or(0));
+        const std::int32_t skin = brushClass->contents.value_or(entity.findInteger("skin").value_or(0));
         const std::int32_t flags = entity.findInteger("spawnflags").value_or(0);
         const bool isNotSolid = (flags & brushClass->notSolidFlags.value_or(0)) != 0 ||
-                                (brushClass->skinMakesNotSolid.value_or(false) && contents != 0);
+                                (brushClass->skinMakesNotSolid.value_or(false) && skin != 0);
         const BrushSolidity solidity{.solid = isNotSolid ? Solid::Not : brushClass->solid,
-                                     .contents = contents};
+                                     .contents = assets::contentsNumbered(skin)};
         const Vec3 origin = entity.findVector("origin").value_or(Vec3{});
         if (brushClass->behavior) {
             const MadeDoor made = *brushClass->behavior == BrushBehavior::SlidingDoor
-                                      ? slidingDoorOf(entity, models[*model].bounds, origin)
+                                      ? slidingDoorOf(entity, models[model->value].bounds, origin)
                                       : rotatingDoorOf(entity, origin);
-            std::ignore = world.spawn(BrushModel{.index = *model},
-                                      Transform{.origin = made.origin, .angles = made.angles}, solidity,
-                                      Pusher{}, made.door);
+            world.spawn(BrushModel{.index = *model}, Transform{.origin = made.origin, .angles = made.angles},
+                        solidity, Pusher{}, made.door);
         } else {
-            std::ignore = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
+            world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
         }
         ++spawned;
     }
