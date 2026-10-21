@@ -219,7 +219,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `nxbake`: content-addressed cache
 
 ### RHI and Vulkan
-- [ ] `nx.platform`: SDL3 window, events and input (vcpkg `sdl3` port), raw mouse, together with the swapchain ([decision](#pending-decisions))
+- [x] `nx.platform`: SDL3 window, events and input (vcpkg `sdl3` port), keys by physical position, raw mouse, and the native handles the swapchain is made from ([decision](#pending-decisions))
 - [ ] `nx.rhi` interface (device, queue, command list, buffers, textures, samplers, bind groups, pipelines, queries)
 - [ ] Vulkan 1.3 backend with volk and VMA
 - [ ] Swapchain, present modes, recreation and *device lost*

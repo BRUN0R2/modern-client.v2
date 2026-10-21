@@ -174,7 +174,9 @@ The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 
 ## 5. Dependencies
 
-In use today: toml++, xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive
+In use today: toml++, SDL3 (on Linux with its X11 and Wayland backends only: its default IBus
+support would build D-Bus and its dependencies from source, for an input method nothing uses yet),
+xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive
 with their first consumer, in the milestone that needs them.
 
 | Library | Use | License |
@@ -240,7 +242,7 @@ and on demand. **Running today:**
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
 | `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
-| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests | Yes |
+| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the

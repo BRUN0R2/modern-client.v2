@@ -5,6 +5,20 @@
   "description": "Open-source recreation of Counter-Strike 1.6 on a modern C++26 engine",
   "builtin-baseline": "469a0504e4a6ebf6173d1c0f51a7fa34c382fd43",
   "dependencies": [
+    {
+      "name": "sdl3",
+      "default-features": false,
+      "features": [
+        {
+          "name": "wayland",
+          "platform": "linux"
+        },
+        {
+          "name": "x11",
+          "platform": "linux"
+        }
+      ]
+    },
     "tomlplusplus"
   ],
   "features": {

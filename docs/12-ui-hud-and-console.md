@@ -190,7 +190,9 @@ category the application passes in (`log_level_net debug`, or the level's number
 
 ## 6. Input
 
-- **SDL3** for keyboard, mouse and gamepad.
+- **SDL3** for keyboard, mouse and gamepad, behind `nx::platform::Window`: keys arrive by
+  physical position (`Key`, the USB HID usage code), the mouse as relative motion in its own
+  counts (`MouseMoved`), and the window gives a GPU backend its native handles.
 - **Raw mouse** by default (`m_rawinput 1`), without OS acceleration. Sensitivity is
   calibrated so that `sensitivity` has **the same effect in degrees per count** as in the
   original (validated by a parity test).
