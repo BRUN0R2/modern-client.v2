@@ -299,6 +299,22 @@ flowchart LR
   light), *elights* and *dlights*. The sample is computed in a per-entity job and passed
   as instance data.
 
+**Today** (`nx.render:light`, `WorldLight`): the light a model is drawn with, as the original finds it
+(`R_LightVec`, `R_StudioDynamicLight`) and as Xash3D-FWGS reconstructs it, without that project's
+extensions (`r_lighting_extended`: the light of brush entities and of the ceiling). A segment walks the
+world's tree, the nearer side of each node first, on a stack of its own rather than in recursion
+however deep a file's tree; at each node it crosses, the first face that is not special (sky, water)
+and whose extent has the crossing point gives the light of its luxel nearest that point: each lightmap's
+sample times its style's brightness, summed, divided by 256 and held to 255; a face without samples
+is black, and a map without light fully bright. A model's light comes from 8 units above its origin:
+the sky's when the sky has a color (the game sets it from the map's `light_environment`) and the first
+face met against its way, 8192 units, is the sky's (`SurfaceAtPoint`, whose coordinates are whole
+texels); else the light 2048 units down, going the way it grows dimmer across four points 16 units
+about the origin, and down. Its brightest channel is its whole light, `direct` (0.9, held from 0.75 to
+1) of it shade and the rest ambient, ambient held to 128 and the two to 255; its color is the light
+over its brightest channel. On de_dust2, a terrorist spawn in the sun is 191 under a model, a
+counter-terrorist one indoors 15 to 37. The *elights* and *dlights* come with the effects.
+
 ### 9.3 Instancing
 
 Instances are grouped by (model, submesh, skin, render mode). Twenty players with the
