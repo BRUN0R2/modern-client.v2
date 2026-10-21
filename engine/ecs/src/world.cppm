@@ -13,7 +13,7 @@ import :event;
 
 export namespace nx::ecs {
 
-/// Numbers for `ecs_stats`.
+/// Numbers for `ecs_stats` (planned, TODO.md).
 struct WorldStats {
     std::size_t entityCount = 0;
     std::size_t archetypeCount = 0;

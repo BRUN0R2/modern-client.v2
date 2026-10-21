@@ -59,10 +59,12 @@ runtime exceptions (GCC Runtime Library Exception, Classpath Exception):
   CI (the `checks` job).
 - An SPDX header in every code file:
 
+<!-- REUSE-IgnoreStart -->
 ```cpp
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 ```
+<!-- REUSE-IgnoreEnd -->
 
 - Contributions come in under the license of the changed file, with *Signed-off-by* (DCO,
   [20 §3](../20-legal-and-licensing.md#3-clean-room)). The holder is "Modern-Client.v2
