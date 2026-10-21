@@ -249,7 +249,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Water (turbulent faces: cut along the 64-unit grid and warped at each corner as the original warps them, unlit)
 - [ ] The alternate animations of brush entities (`+a`..`+j` when their frame is not 0) and the waves of `func_water`
 - [x] Brush entities with render modes (`rendermode`, `renderamt`, `rendercolor`: solid, color, texture, glow, additive, blended back to front as the original sorts them)
-- [ ] Brush entities with moving transforms and `renderfx` (today: placed at their `origin`)
+- [x] Brush entities drawn where the game puts them each frame (`WorldFrame::placements`)
+- [ ] Brush entities turned by the game (rotating doors, `func_rotating`) and `renderfx`
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [ ] Studio models: animation evaluation on the CPU in jobs
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices

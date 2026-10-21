@@ -80,12 +80,14 @@ public:
         m_readback = readback.value_or(nx::rhi::BufferHandle{});
     }
 
-    /// Draws `world` as `camera` sees it with `styles`, `time` after the map started, in a frame of its
-    /// own, on a target cleared to an alpha of 0, which the world never writes; then the pixels, RGBA
-    /// rows from the top.
+    /// Draws `world` as `camera` sees it with `styles`, `time` after the map started and its brush
+    /// models where `placements` puts them, in a frame of its own, on a target cleared to an alpha of
+    /// 0, which the world never writes; then the pixels, RGBA rows from the top.
     [[nodiscard]] auto draw(nx::render::BspWorld& world, const nx::render::Camera& camera,
                             const nx::render::LightStyleValues& styles = normalStyles(),
-                            nx::Seconds time = nx::Seconds{0.0F}) -> std::vector<std::byte> {
+                            nx::Seconds time = nx::Seconds{0.0F},
+                            std::span<const nx::render::ModelPlacement> placements = {})
+        -> std::vector<std::byte> {
         auto commands = m_device->beginFrame();
         EXPECT_TRUE(commands.has_value());
         if (!commands) {
@@ -98,7 +100,11 @@ public:
         list.beginRendering({.colors = colors,
                              .depth = nx::rhi::DepthAttachment{.texture = m_depth, .clear = 0.0F},
                              .area = kExtent});
-        world.draw(list, {.camera = camera, .aspect = 1.0F, .time = time, .lightStyles = styles});
+        world.draw(list, {.camera = camera,
+                          .aspect = 1.0F,
+                          .time = time,
+                          .lightStyles = styles,
+                          .placements = placements});
         list.endRendering();
         list.transition(m_color, TextureState::RenderTarget, TextureState::CopySource);
         list.transition(m_readback, BufferState::Undefined, BufferState::CopyDestination);
@@ -378,6 +384,37 @@ TEST(BspWorldTest, ABrushEntityIsDrawnAsItsRenderModeSays) {
         std::ranges::all_of(std::views::iota(std::size_t{0}, added.pixels.size()),
                             [&](std::size_t byte) { return added.pixels[byte] >= hidden.pixels[byte]; }));
     EXPECT_GT(brightnessOf(added.pixels), brightnessOf(hidden.pixels));
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(BspWorldTest, ABrushEntityIsDrawnWhereTheGamePutsIt) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // The square of the seed's func_wall, TransColor red at a renderamt of 255, covers the view.
+    const std::vector<std::byte> file = readSeed("boxWithEntity.bsp");
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value());
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value());
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+
+    const std::vector<std::byte> inPlace = target.draw(*world, camera);
+    EXPECT_EQ(pixelAt(inPlace, 16, 16), (Pixel{255, 0, 0, 255}));
+
+    const std::array away{nx::render::ModelPlacement{.model = 1, .origin = {.z = 1000.0F}}};
+    const std::vector<std::byte> moved = target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, away);
+    EXPECT_NE(pixelAt(moved, 16, 16), (Pixel{255, 0, 0, 255}));
+    EXPECT_EQ(world->lastFrame().faces, 6U) << "moved out of view: the walls alone";
+
+    const std::array back{nx::render::ModelPlacement{.model = 1}};
+    EXPECT_EQ(pixelAt(target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, back), 16, 16),
+              (Pixel{255, 0, 0, 255}));
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 /// The color of quadrant `quadrant` (top-left, top-right, bottom-left, bottom-right) of sky side
