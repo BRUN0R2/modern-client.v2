@@ -110,6 +110,8 @@ dialect is `/std:c++latest`.
 | Out-of-tree sources get object directories with a long *hash* and could exceed 260 characters | **Fixed at the cause:** the `std` module source is copied to `build/<preset>/nxStd/` and compiled from there, with short paths |
 | Flags that change the ABI (exceptions, RTTI) must be the same in every unit, including the `std` module | They live in the global `CMAKE_CXX_FLAGS`. Warnings are per target and do not apply to `nx::std` |
 | MSVC disables `std::println(std::ostream&, ...)` without exceptions (documented STL behavior) | Output through `std::println(stderr, ...)` or `std::fputs` (`FILE*`) |
+| The vcpkg toolchain puts the host triplet's tools (such as `slangc`) on `CMAKE_PROGRAM_PATH` only when `VCPKG_HOST_TRIPLET` is set; otherwise it searches the target triplet's, where host tools are not | The presets set `VCPKG_HOST_TRIPLET` (`x64-windows`, `x64-linux`: the defaults vcpkg uses anyway) |
+| The Vulkan loader ignores the layer paths of the environment (`VK_LAYER_PATH`, `VK_ADD_LAYER_PATH`) in an elevated process | Validation in an elevated shell needs the layers registered by the Vulkan SDK; CI runs unelevated |
 | Windows gives a program its `char` command line, and runs the narrow-character functions, in the ANSI code page, which loses the characters of other languages (a folder named `Usuários`, `Пользователи`) | **Fixed at the cause:** every program (`nxAddProgram`) embeds `cmake/nxProgram.manifest`, which makes UTF-8 its code page (Windows 10 1903 and later) and allows paths longer than `MAX_PATH` |
 | GCC 16 hits an *internal compiler error* (`module_state::mangle`) when another unit uses a `friend` comparison operator with `= default` of a (non-template) class declared in a module | In those classes, *defaulted* comparisons are members: `auto operator<=>(const T&) const = default` |
 | libstdc++'s `std` module (GCC 16) advertises `__cpp_lib_saturation_arithmetic` but does not export `std::add_sat` and friends | `nx.core` uses its own saturated arithmetic on every compiler |
@@ -177,8 +179,9 @@ The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 
 In use today: toml++, SDL3 (on Linux with its X11 and Wayland backends only: its default IBus
 support would build D-Bus and its dependencies from source, for an input method nothing uses yet),
-Vulkan Headers and volk, xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others
-arrive with their first consumer, in the milestone that needs them.
+Vulkan Headers, volk, Vulkan Memory Allocator, Slang (its compiler, as a host tool), xxHash,
+GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive with their first consumer, in the
+milestone that needs them.
 
 | Library | Use | License |
 |---------|-----|---------|

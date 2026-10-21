@@ -33,8 +33,20 @@ private:
     std::uint32_t m_generation = 0;
 };
 
+struct BufferTag;
 struct TextureTag;
+struct SamplerTag;
+struct ShaderTag;
+struct BindGroupLayoutTag;
+struct BindGroupTag;
+struct RenderPipelineTag;
+using BufferHandle = Handle<BufferTag>;
 using TextureHandle = Handle<TextureTag>;
+using SamplerHandle = Handle<SamplerTag>;
+using ShaderHandle = Handle<ShaderTag>;
+using BindGroupLayoutHandle = Handle<BindGroupLayoutTag>;
+using BindGroupHandle = Handle<BindGroupTag>;
+using RenderPipelineHandle = Handle<RenderPipelineTag>;
 
 /// The resources of one kind a backend issues handles for. Freed slots are reused with a new
 /// generation; a slot whose generation reaches its limit is retired, so a stale handle never names
@@ -87,6 +99,22 @@ public:
             ++m_retired;
         }
         return value;
+    }
+
+    /// Takes every resource out of the pool, for its owner to destroy at its own end: the pool then
+    /// starts over, and the handles it issued must not be used again.
+    [[nodiscard]] inline auto drain() -> std::vector<Value> {
+        std::vector<Value> values;
+        values.reserve(size());
+        for (Slot& slot : m_slots) {
+            if (slot.value) {
+                values.push_back(std::move(*slot.value));
+            }
+        }
+        m_slots.clear();
+        m_free.clear();
+        m_retired = 0;
+        return values;
     }
 
     /// The number of resources in the pool.

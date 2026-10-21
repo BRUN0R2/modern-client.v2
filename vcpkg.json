@@ -21,7 +21,12 @@
     },
     "tomlplusplus",
     "volk",
-    "vulkan-headers"
+    "vulkan-headers",
+    {
+      "name": "shader-slang",
+      "host": true
+    },
+    "vulkan-memory-allocator"
   ],
   "features": {
     "tests": {

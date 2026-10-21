@@ -221,17 +221,19 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### RHI and Vulkan
 - [x] `nx.platform`: SDL3 window, events and input (vcpkg `sdl3` port), keys by physical position, raw mouse, and the native handles the swapchain is made from ([decision](#pending-decisions))
 - [x] `nx.rhi` interface: device and frames, command list, swapchain, generational texture handles, transitions, render passes
-- [ ] `nx.rhi`: buffers, textures, samplers, bind groups, pipelines, queries
+- [x] `nx.rhi`: buffers, textures, samplers, shaders, bind groups, render pipelines, copies and draws, with deferred destruction
+- [ ] `nx.rhi`: queries, compute pipelines, dynamic uniform offsets
 - [x] Vulkan 1.3 backend with volk: instance and adapter choice, device, frames in flight on a timeline semaphore, validation counted
-- [ ] VMA in the Vulkan backend (with buffers and textures)
+- [x] VMA in the Vulkan backend (with buffers and textures)
 - [x] Swapchain, present modes and recreation (resize, minimized, out of date)
 - [ ] *Device lost*: recreate the device and its resources once, then a crash report
 - [ ] Parallel recording (one command pool per worker per frame)
 - [ ] Persistent staging ring
 - [ ] On-disk pipeline cache
-- [ ] Slang shader pipeline (SPIR-V) in the build, layout reflection and hot reload
+- [x] Slang shaders compiled to SPIR-V in the build (`nxAddShaders`, `bin/shaders/`)
+- [ ] Slang layout reflection checked against the C++ bind group layouts, and shader hot reload
 - [ ] Built-in fallback shaders with `#embed`
-- [ ] RHI conformance tests
+- [ ] RHI conformance tests (today: offscreen draws read back, on lavapipe in CI)
 
 ### Rendering
 - [ ] View and projection matrices in `nx.math`, with the renderer's *clip space* and depth conventions ([05](docs/05-rendering.md))

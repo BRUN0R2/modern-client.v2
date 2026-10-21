@@ -37,6 +37,7 @@ find_package(tomlplusplus CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 
 if(NX_BUILD_TESTS)
     enable_testing()
@@ -53,6 +54,7 @@ if(NX_FUZZ)
     enable_testing()
 endif()
 
+add_subdirectory(shaders)
 add_subdirectory(engine)
 
 if(NX_BUILD_TOOLS)

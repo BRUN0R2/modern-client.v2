@@ -110,6 +110,40 @@ function(nxAddProgram target)
     add_dependencies(${target} nxProgramData)
 endfunction()
 
+# nxAddShaders(<target> SOURCES <Slang sources>...)
+#
+# Compiles each Slang source to one SPIR-V module with every entry point of the file, under its own
+# name, into bin/shaders/<path of the source under shaders/>.spv, next to the programs that load
+# them (docs/05-rendering.md, section 6). slangc is the host tool of the vcpkg shader-slang port,
+# which the toolchain finds among the host triplet's tools (VCPKG_HOST_TRIPLET, set by the presets);
+# its dependency file makes a change to an imported module recompile the sources that import it.
+function(nxAddShaders target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES")
+
+    if(NOT arg_SOURCES)
+        message(FATAL_ERROR "nxAddShaders(${target}): SOURCES is required")
+    endif()
+
+    find_program(NX_SLANGC slangc REQUIRED)
+    set(outputs "")
+    foreach(source IN LISTS arg_SOURCES)
+        cmake_path(ABSOLUTE_PATH source NORMALIZE OUTPUT_VARIABLE sourcePath)
+        cmake_path(RELATIVE_PATH sourcePath BASE_DIRECTORY "${PROJECT_SOURCE_DIR}/shaders" OUTPUT_VARIABLE relative)
+        cmake_path(REPLACE_EXTENSION relative ".spv" OUTPUT_VARIABLE relative)
+        set(output "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/${relative}")
+        add_custom_command(
+            OUTPUT "${output}"
+            COMMAND "${NX_SLANGC}" "${sourcePath}" -target spirv -fvk-use-entrypoint-name
+                -o "${output}" -depfile "${output}.d"
+            DEPENDS "${sourcePath}"
+            DEPFILE "${output}.d"
+            COMMENT "Compiling the shader ${relative}"
+            VERBATIM)
+        list(APPEND outputs "${output}")
+    endforeach()
+    add_custom_target(${target} ALL DEPENDS ${outputs})
+endfunction()
+
 # nxAddBenchmark(<target> SOURCES <files>... DEPENDS <targets>...)
 #
 # Creates a Google Benchmark executable. Benchmarks are not CTest tests: they are run by hand, on
