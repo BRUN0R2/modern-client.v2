@@ -11,7 +11,9 @@ nxAddProgram(nxview
         nx::assets
         nx::rhi
         nx::rhiVulkan
-        nx::render)
+        nx::render
+        nx::collision
+        cs::shared)
 
 # The world shader, in bin/shaders/.
 add_dependencies(nxview nxShaders)

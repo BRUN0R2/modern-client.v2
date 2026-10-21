@@ -72,7 +72,7 @@ flowchart TB
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts | render, assets, platform, console |
 | `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules | ecs, collision, assets, net |
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |
-| `cs.shared` | 5 | Movement, weapons and rules shared for prediction | game, collision |
+| `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement in the world | game, collision (today: core, math, collision) |
 | `cs.server` | 5 | Server rules: rounds, economy, objectives, admin | cs.shared, script, net |
 | `cs.client` | 5 | HUD, menus, effects, prediction, interpolation | cs.shared, render, audio, ui |
 | `nx.update` | 3 | Updates of the client and the server products: signed release metadata, content-addressed chunks, atomic installs and rollback ([21](21-launcher-and-updates.md)). Planned (M4) | core, jobs, platform, net |

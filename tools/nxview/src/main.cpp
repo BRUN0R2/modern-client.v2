@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // nxview: the map viewer (TODO.md, M2). It opens a map of the Counter-Strike 1.6 installation and
-// flies a free camera through its world, or renders one frame of it to a BMP file.
+// walks a player through its world, moved by the game's own movement, or flies a free camera
+// through it; or it renders one frame of it to a BMP file.
 
 #include <cstdio>
 #include <cstdlib>
@@ -15,6 +16,8 @@ import nx.assets;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
+import nx.collision;
+import cs.shared;
 
 namespace {
 
@@ -23,15 +26,16 @@ constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <
               [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
               [--screenshot <file.bmp> [--time <seconds>]] [--validation]
 
-Opens a map of the Counter-Strike 1.6 installation and flies through it: the mouse looks, W A S D
-move, Space and Ctrl rise and sink, Shift is faster, Escape ends it.
+Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife:
+the mouse looks, W A S D move, Space jumps, Shift walks slowly. F flies instead, and back: W A S D
+move, Space and Ctrl rise and sink, Shift is faster. Escape ends it.
 
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
                           Steam installed)
   --data <folder>         the data/ folder of the project (default: the one next to nxview)
-  --position "<x> <y> <z>" where the camera starts (default: a standing player's eye at the first
-                          spawn)
+  --position "<x> <y> <z>" where the camera starts, the eye of the player (default: a standing
+                          player's eye at the first spawn)
   --angles "<p> <y> <r>"  where it looks, in degrees: pitch (down is positive), yaw, roll (default:
                           the spawn's yaw)
   --screenshot <file.bmp> renders one 1280x720 frame from the camera's start into the file, without
@@ -46,11 +50,19 @@ constexpr std::string_view kDefaultMap = "de_dust2";
 constexpr nx::rhi::Extent2d kScreenshotExtent{.width = 1280, .height = 720};
 /// What no face covers: the void outside a map, seen through its leaks.
 constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
-/// A standing player's eye above the spawn's origin (the middle of the player's box), as in CS 1.6.
-constexpr float kEyeHeight = 17.0F;
-/// The camera's speed in map units per second, and how much faster it goes with Shift.
+/// The flying camera's speed in map units per second, and how much faster it goes with Shift.
 constexpr float kSpeed = 320.0F;
 constexpr float kFastFactor = 3.0F;
+/// The speed a movement key asks for, CS 1.6's cl_forwardspeed, cl_backspeed and cl_sidespeed; and
+/// the share of it Shift walks at, its cl_movespeedkey.
+constexpr float kKeySpeed = 400.0F;
+constexpr float kWalkFactor = 0.52F;
+/// The speed limit of a player holding a knife.
+constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
+/// A user command each this long, the classic rate of 100 a second (docs/07, section 2.2); a frame
+/// catches up on this much time at most, so that a stalled one does not run away.
+constexpr nx::Milliseconds kCommandInterval{10.0F};
+constexpr nx::Seconds kMaxCatchUp{0.25F};
 /// Degrees per mouse count: the original's m_yaw and m_pitch, 0.022, at its default sensitivity, 3.
 constexpr float kDegreesPerCount = 0.022F * 3.0F;
 constexpr float kMaxPitch = 89.0F;
@@ -167,7 +179,7 @@ struct Content {
             if (!origin) {
                 continue;
             }
-            return nx::render::Camera{.position = *origin + nx::Vec3{.z = kEyeHeight},
+            return nx::render::Camera{.position = *origin + nx::Vec3{.z = cs::kStandingViewHeight.value()},
                                       .angles = {.yaw = nx::Degrees{angles ? angles->y : 0.0F}}};
         }
     }
@@ -461,15 +473,15 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     return (*device)->validationErrors() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-/// The keys the camera flies with.
+/// The keys a player walks with and the camera flies with.
 struct HeldKeys {
     bool forward = false;
     bool back = false;
     bool left = false;
     bool right = false;
-    bool rise = false;
-    bool sink = false;
-    bool fast = false;
+    bool space = false;   ///< Jumps; rises in flight.
+    bool control = false; ///< Sinks in flight.
+    bool shift = false;   ///< Walks slowly; flies faster.
 
     void set(nx::platform::Key key, bool isDown) noexcept {
         using nx::platform::Key;
@@ -487,13 +499,13 @@ struct HeldKeys {
             right = isDown;
             break;
         case Key::Space:
-            rise = isDown;
+            space = isDown;
             break;
         case Key::LeftControl:
-            sink = isDown;
+            control = isDown;
             break;
         case Key::LeftShift:
-            fast = isDown;
+            shift = isDown;
             break;
         default:
             break;
@@ -501,28 +513,68 @@ struct HeldKeys {
     }
 };
 
+/// 1 when only the positive key of an axis is held, -1 when only the negative one is, else 0.
+[[nodiscard]] constexpr auto axisOf(bool positive, bool negative) noexcept -> float {
+    return (positive ? 1.0F : 0.0F) - (negative ? 1.0F : 0.0F);
+}
+
 /// Moves `camera` by what the held keys ask for over `seconds`.
 void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexcept {
     const nx::AngleVectors axes = nx::angleVectors(camera.angles);
-    const auto axis = [](bool positive, bool negative) {
-        return (positive ? 1.0F : 0.0F) - (negative ? 1.0F : 0.0F);
-    };
-    const nx::Vec3 direction = (axes.forward * axis(keys.forward, keys.back)) +
-                               (axes.right * axis(keys.right, keys.left)) +
-                               (nx::Vec3{.z = 1.0F} * axis(keys.rise, keys.sink));
+    const nx::Vec3 direction = (axes.forward * axisOf(keys.forward, keys.back)) +
+                               (axes.right * axisOf(keys.right, keys.left)) +
+                               (nx::Vec3{.z = 1.0F} * axisOf(keys.space, keys.control));
     if (nx::lengthSquared(direction) == 0.0F) {
         return;
     }
-    camera.position =
-        camera.position + (nx::normalized(direction) * (kSpeed * (keys.fast ? kFastFactor : 1.0F) * seconds));
+    camera.position = camera.position +
+                      (nx::normalized(direction) * (kSpeed * (keys.shift ? kFastFactor : 1.0F) * seconds));
+}
+
+/// A player walking through the map, moved one user command at a time by the game's movement.
+struct Walker {
+    cs::MovementState player{};
+    nx::Vec3 previousOrigin{}; ///< Before the last command.
+    nx::Seconds pending{};     ///< Of the time given to the walk, what no command has taken yet.
+};
+
+/// A player whose eye is at `eye`.
+[[nodiscard]] auto walkerAt(nx::Vec3 eye) -> Walker {
+    const nx::Vec3 origin = eye - nx::Vec3{.z = cs::kStandingViewHeight.value()};
+    return Walker{.player = {.origin = origin, .maxSpeed = kKnifeSpeed}, .previousOrigin = origin};
+}
+
+/// Gives `elapsed` to commands of what `keys` and `view` ask for, one each kCommandInterval, in
+/// `world`; returns the player's eye, between where the last two commands left it by the time left.
+[[nodiscard]] auto walk(Walker& walker, const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed,
+                        const nx::collision::BrushHulls& world) -> nx::Vec3 {
+    const float speed = kKeySpeed * (keys.shift ? kWalkFactor : 1.0F);
+    const cs::UserCommand command{
+        .duration = kCommandInterval,
+        .viewAngles = view,
+        .move = {.forward = nx::UnitsPerSecond{speed * axisOf(keys.forward, keys.back)},
+                 .side = nx::UnitsPerSecond{speed * axisOf(keys.right, keys.left)}},
+        .buttons = keys.space ? nx::Flags<cs::Button>{cs::Button::Jump} : nx::Flags<cs::Button>{}};
+    walker.pending = std::min(walker.pending + elapsed, kMaxCatchUp);
+    while (walker.pending >= kCommandInterval) {
+        walker.previousOrigin = walker.player.origin;
+        walker.player = cs::simulateMovement(walker.player, command, cs::MovementSettings{}, world);
+        walker.pending -= kCommandInterval;
+    }
+    return nx::lerp(walker.previousOrigin, walker.player.origin, walker.pending / kCommandInterval) +
+           nx::Vec3{.z = cs::kStandingViewHeight.value()};
 }
 
 [[nodiscard]] auto extentOf(nx::platform::PixelSize size) noexcept -> nx::rhi::Extent2d {
     return {.width = size.width, .height = size.height};
 }
 
-/// Flies through the map in a window until it is closed.
+/// Walks or flies through the map in a window until it is closed.
 [[nodiscard]] auto view(const Options& options, const Content& content) -> int {
+    auto hulls = nx::collision::BrushHulls::create(*content.map);
+    if (!hulls) {
+        return unusable(hulls.error());
+    }
     auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
     if (!window) {
         return unusable(window.error());
@@ -549,6 +601,8 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
     }
 
     nx::render::Camera camera = startCamera(options, *content.map);
+    Walker walker = walkerAt(camera.position);
+    bool isFlying = false;
     std::optional<nx::render::BspWorld> world; // made with the first image, which gives the format
     std::optional<nx::rhi::TextureHandle> depth;
     nx::rhi::Extent2d depthExtent;
@@ -567,6 +621,12 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
                 if (key->key == nx::platform::Key::Escape && key->isDown) {
                     isRunning = false;
                 }
+                if (key->key == nx::platform::Key::F && key->isDown && !key->isRepeat) {
+                    isFlying = !isFlying;
+                    if (!isFlying) {
+                        walker = walkerAt(camera.position); // the player lands where the camera flew
+                    }
+                }
                 keys.set(key->key, key->isDown);
             } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
                 camera.angles.yaw =
@@ -579,8 +639,12 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
                 }
             }
         }
-        const std::chrono::duration<float> elapsed = frameClock.restart();
-        fly(camera, keys, elapsed.count());
+        const nx::Seconds elapsed = frameClock.restart();
+        if (isFlying) {
+            fly(camera, keys, elapsed.count());
+        } else {
+            camera.position = walk(walker, keys, camera.angles, elapsed, *hulls);
+        }
 
         auto commands = (*device)->beginFrame();
         if (!commands) {

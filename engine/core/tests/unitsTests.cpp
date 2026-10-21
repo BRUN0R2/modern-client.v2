@@ -63,6 +63,13 @@ TEST(Units, ScalesApplyToDamageAndSpeed) {
     EXPECT_EQ(0.5_x * 250_ups, 125_ups);
 }
 
+TEST(Units, AccelerationAndRatesPrintTheirUnits) {
+    static_assert(!std::is_convertible_v<nx::PerSecond, nx::Scale>);
+
+    EXPECT_EQ(std::format("{}", nx::UnitsPerSecondSquared{800.0F}), "800ups/s");
+    EXPECT_EQ(std::format("{}", nx::PerSecond{4.0F}), "4/s");
+}
+
 TEST(Units, DegreesAndRadiansConvertExplicitly) {
     static_assert(!std::is_convertible_v<nx::Degrees, nx::Radians>);
 

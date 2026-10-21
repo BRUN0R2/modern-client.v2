@@ -35,7 +35,9 @@ and `.cfg`), `nx.platform` (clocks, the native file system, the window and its i
 (the GPU interface, with its Vulkan backend), `nx.render` (the camera and the BSP world) and
 `nx.assets` (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and
 fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and
-`nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. The
+`nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. M3
+has begun: `nx.collision` (traces through the hulls of a map) and `cs.shared` (player movement:
+walking, the air, jumps, stairs and water), with which `nxview` walks through the maps. The
 architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
 
@@ -57,8 +59,9 @@ On Linux, use the `dev-linux-gcc` preset; the other presets and their status are
 
 With Counter-Strike 1.6 installed through Steam, `nxcheck` reads every file of the installation
 with the engine's readers and reports any it cannot read
-([docs/18](docs/18-testing-and-quality.md#real-content)), and `nxview` flies through one of its
-maps (the mouse looks; W A S D, Space, Ctrl and Shift move; Escape ends):
+([docs/18](docs/18-testing-and-quality.md#real-content)), and `nxview` walks through one of its
+maps as a player (the mouse looks; W A S D move, Space jumps, Shift walks; F flies instead, with
+Space and Ctrl to rise and sink; Escape ends):
 
 ```powershell
 .\build\dev-windows-msvc\bin\nxcheck.exe
