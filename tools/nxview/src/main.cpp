@@ -200,8 +200,10 @@ struct Content {
     return camera;
 }
 
-/// The light styles the game sets for the map, as CS 1.6's game sets them: the world's patterns (the
-/// Half-Life SDK's CWorld::Precache) and those of the switchable lights, from their entities.
+/// The light styles the game sets for the map: the world's patterns, as Quake's world.qc sets them
+/// (GPL, consulted for behavior: docs/20 section 3), under the names the Half-Life FGDs give the
+/// styles of a light; and those of the switchable lights, from their entities. Style 12, the FGDs'
+/// underwater mutation, has no public pattern: it stays unset.
 [[nodiscard]] auto mapLightStyles(const nx::assets::BspView& map) -> nx::render::LightStyles {
     nx::render::LightStyles styles;
     for (const auto [style, pattern] : std::to_array<std::pair<std::size_t, std::string_view>>({
@@ -217,19 +219,17 @@ struct Content {
              {9, "aaaaaaaazzzzzzzz"},                                    // slow strobe
              {10, "mmamammmmammamamaaamammma"},                          // fluorescent flicker
              {11, "abcdefghijklmnopqrrqponmlkjihgfedcba"},               // slow pulse, not to black
-             {12, "mmnnmmnnnmmnn"},                                      // underwater
              {63, "a"},
          })) {
         styles.set(style, pattern);
     }
-    // A light with a name and a style from 32 on can be switched: 'a' when it starts off, else its
-    // pattern, else 'm' (CLight::Spawn).
+    // A light with a name and a style from 32 on can be switched: 'a' when it starts off, else 'm', as
+    // Quake's light.qc sets them, or the `pattern` the FGDs document.
     constexpr std::size_t kFirstSwitchableStyle = 32;
     constexpr int kStartsOff = 1;
     for (const nx::assets::BspEntity& entity : map.entities()) {
         const std::string_view classname = entity.find("classname").value_or("");
-        if ((classname != "light" && classname != "light_spot" && classname != "light_environment") ||
-            !entity.find("targetname")) {
+        if ((classname != "light" && classname != "light_spot") || !entity.find("targetname")) {
             continue;
         }
         std::size_t style = 0;
