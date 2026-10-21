@@ -26,9 +26,11 @@ constexpr std::size_t kMaxColorAttachments = 8;
 constexpr std::uint32_t kSpirvMagic = 0x07230203;
 /// The bind groups one descriptor pool holds; a full pool is followed by another.
 constexpr std::uint32_t kBindGroupsPerPool = 1024;
-
-/// Whether a device is open: volk keeps one device's functions.
-constinit std::atomic<bool> isDeviceOpen{false};
+/// The descriptors of each type a pool has room for, for each of its groups at most.
+constexpr std::uint32_t kUniformBuffersPerGroup = 2;
+constexpr std::uint32_t kStorageBuffersPerGroup = 1;
+constexpr std::uint32_t kSampledImagesPerGroup = 4;
+constexpr std::uint32_t kSamplersPerGroup = 2;
 
 [[nodiscard]] auto resultName(VkResult result) -> std::string {
     switch (result) {
@@ -400,21 +402,14 @@ template <class Object>
     }
 }
 
+/// The kinds of adapter, the one that wins first; any other kind comes after them all.
+constexpr std::array kAdapterPreference{AdapterKind::Discrete, AdapterKind::Integrated, AdapterKind::Virtual,
+                                        AdapterKind::Cpu};
+
 /// Which adapter wins: the higher rank.
-[[nodiscard]] auto rankOf(AdapterKind kind) noexcept -> int {
-    switch (kind) {
-    case AdapterKind::Discrete:
-        return 4;
-    case AdapterKind::Integrated:
-        return 3;
-    case AdapterKind::Virtual:
-        return 2;
-    case AdapterKind::Cpu:
-        return 1;
-    case AdapterKind::Other:
-        break;
-    }
-    return 0;
+[[nodiscard]] auto rankOf(AdapterKind kind) noexcept -> std::size_t {
+    return narrow<std::size_t>(
+        std::ranges::distance(std::ranges::find(kAdapterPreference, kind), kAdapterPreference.end()));
 }
 
 /// The text of a fixed-size name field of the API: up to its first zero.
@@ -459,6 +454,235 @@ template <class Value, class Enumerate>
             }
         },
         window);
+}
+
+// --- Pipeline states -----------------------------------------------------------------------------
+
+/// The stage of `module` that runs `entryPoint`, which must outlive the pipeline's creation.
+[[nodiscard]] auto stageOf(VkShaderStageFlagBits stage, VkShaderModule module,
+                           const std::string& entryPoint) noexcept -> VkPipelineShaderStageCreateInfo {
+    return VkPipelineShaderStageCreateInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                           .pNext = nullptr,
+                                           .flags = 0,
+                                           .stage = stage,
+                                           .module = module,
+                                           .pName = entryPoint.c_str(),
+                                           .pSpecializationInfo = nullptr};
+}
+
+/// The vertex buffers of a pipeline and their attributes, as Vulkan describes them.
+struct VertexInput {
+    std::vector<VkVertexInputBindingDescription> bindings;
+    std::vector<VkVertexInputAttributeDescription> attributes;
+
+    /// The state that points into this, which must outlive it.
+    [[nodiscard]] auto state() const noexcept -> VkPipelineVertexInputStateCreateInfo {
+        return VkPipelineVertexInputStateCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .vertexBindingDescriptionCount = narrow<std::uint32_t>(bindings.size()),
+            .pVertexBindingDescriptions = bindings.data(),
+            .vertexAttributeDescriptionCount = narrow<std::uint32_t>(attributes.size()),
+            .pVertexAttributeDescriptions = attributes.data()};
+    }
+};
+
+/// The vertex input of `buffers`, each bound at its slot, a vertex at a time.
+[[nodiscard]] auto vertexInputOf(std::span<const VertexBufferLayout> buffers) -> VertexInput {
+    VertexInput input;
+    for (std::uint32_t slot = 0; slot < buffers.size(); ++slot) {
+        const VertexBufferLayout& layout = buffers[slot];
+        input.bindings.push_back(VkVertexInputBindingDescription{
+            .binding = slot, .stride = layout.stride, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX});
+        for (const VertexAttribute& attribute : layout.attributes) {
+            input.attributes.push_back(
+                VkVertexInputAttributeDescription{.location = attribute.location,
+                                                  .binding = slot,
+                                                  .format = vertexFormatOf(attribute.format),
+                                                  .offset = attribute.offset});
+        }
+    }
+    return input;
+}
+
+[[nodiscard]] auto inputAssemblyOf(PrimitiveTopology topology) noexcept
+    -> VkPipelineInputAssemblyStateCreateInfo {
+    return VkPipelineInputAssemblyStateCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .topology = topology == PrimitiveTopology::TriangleList ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+                                                                : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+        .primitiveRestartEnable = VK_FALSE};
+}
+
+/// Filled triangles, culled and facing as `desc` says.
+[[nodiscard]] auto rasterizationOf(const RenderPipelineDesc& desc) noexcept
+    -> VkPipelineRasterizationStateCreateInfo {
+    return VkPipelineRasterizationStateCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .depthClampEnable = VK_FALSE,
+        .rasterizerDiscardEnable = VK_FALSE,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = cullModeOf(desc.cullMode),
+        .frontFace = desc.frontFace == FrontFace::CounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE
+                                                                   : VK_FRONT_FACE_CLOCKWISE,
+        .depthBiasEnable = VK_FALSE,
+        .depthBiasConstantFactor = 0.0F,
+        .depthBiasClamp = 0.0F,
+        .depthBiasSlopeFactor = 0.0F,
+        .lineWidth = 1.0F};
+}
+
+/// The depth test of `depth`; none without one. No stencil.
+[[nodiscard]] auto depthStencilOf(const std::optional<DepthState>& depth) noexcept
+    -> VkPipelineDepthStencilStateCreateInfo {
+    return VkPipelineDepthStencilStateCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .depthTestEnable = depth ? VK_TRUE : VK_FALSE,
+        .depthWriteEnable = depth && depth->isWriteEnabled ? VK_TRUE : VK_FALSE,
+        .depthCompareOp = depth ? compareOpOf(depth->compare) : VK_COMPARE_OP_ALWAYS,
+        .depthBoundsTestEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE,
+        .front = {},
+        .back = {},
+        .minDepthBounds = 0.0F,
+        .maxDepthBounds = 1.0F};
+}
+
+/// How a color target blends: as its BlendState, adding; or not at all. Every channel is written.
+[[nodiscard]] auto colorBlendOf(const ColorTarget& target) noexcept -> VkPipelineColorBlendAttachmentState {
+    const BlendState blend = target.blend.value_or(BlendState{});
+    return VkPipelineColorBlendAttachmentState{.blendEnable = target.blend ? VK_TRUE : VK_FALSE,
+                                               .srcColorBlendFactor = blendFactorOf(blend.sourceColor),
+                                               .dstColorBlendFactor = blendFactorOf(blend.destinationColor),
+                                               .colorBlendOp = VK_BLEND_OP_ADD,
+                                               .srcAlphaBlendFactor = blendFactorOf(blend.sourceAlpha),
+                                               .dstAlphaBlendFactor = blendFactorOf(blend.destinationAlpha),
+                                               .alphaBlendOp = VK_BLEND_OP_ADD,
+                                               .colorWriteMask =
+                                                   VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                                   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+}
+
+/// One viewport and one scissor, set while recording (kViewportAndScissorState).
+constexpr VkPipelineViewportStateCreateInfo kDynamicViewportState{
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = 0,
+    .viewportCount = 1,
+    .pViewports = nullptr,
+    .scissorCount = 1,
+    .pScissors = nullptr};
+
+/// One sample a pixel.
+constexpr VkPipelineMultisampleStateCreateInfo kSingleSampleState{
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = 0,
+    .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    .sampleShadingEnable = VK_FALSE,
+    .minSampleShading = 0.0F,
+    .pSampleMask = nullptr,
+    .alphaToCoverageEnable = VK_FALSE,
+    .alphaToOneEnable = VK_FALSE};
+
+constexpr std::array kDynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
+/// The viewport and the scissor, set while recording.
+constexpr VkPipelineDynamicStateCreateInfo kViewportAndScissorState{
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = 0,
+    .dynamicStateCount = narrow<std::uint32_t>(kDynamicStates.size()),
+    .pDynamicStates = kDynamicStates.data()};
+
+// --- Adapters -------------------------------------------------------------------------------------
+
+/// What an adapter offers, as Vulkan reports it: its properties and the features the engine
+/// requires. Its structures chain to one another, so it is neither copied nor moved.
+class AdapterProbe {
+public:
+    explicit AdapterProbe(VkPhysicalDevice adapter) noexcept {
+        m_properties12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
+        m_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        m_properties.pNext = &m_properties12;
+        vkGetPhysicalDeviceProperties2(adapter, &m_properties);
+        m_features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+        m_features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        m_features12.pNext = &m_features11;
+        m_features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        m_features13.pNext = &m_features12;
+        m_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        m_features.pNext = &m_features13;
+        vkGetPhysicalDeviceFeatures2(adapter, &m_features);
+    }
+    AdapterProbe(const AdapterProbe&) = delete;
+    AdapterProbe(AdapterProbe&&) = delete;
+    auto operator=(const AdapterProbe&) -> AdapterProbe& = delete;
+    auto operator=(AdapterProbe&&) -> AdapterProbe& = delete;
+    ~AdapterProbe() = default;
+
+    [[nodiscard]] auto name() const noexcept -> std::string_view {
+        return textOf(m_properties.properties.deviceName, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+    }
+    [[nodiscard]] auto kind() const noexcept -> AdapterKind {
+        return adapterKindOf(m_properties.properties.deviceType);
+    }
+
+    /// What the adapter lacks of what the engine requires: Vulkan 1.3 with dynamic rendering,
+    /// synchronization2, timeline semaphores and shader draw parameters; nullopt when nothing.
+    [[nodiscard]] auto missingRequirement() const -> std::optional<std::string> {
+        if (const std::uint32_t version = m_properties.properties.apiVersion; version < kRequiredApiVersion) {
+            return std::format("Vulkan {}.{}", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version));
+        }
+        if (m_features13.dynamicRendering == VK_FALSE || m_features13.synchronization2 == VK_FALSE ||
+            m_features12.timelineSemaphore == VK_FALSE || m_features11.shaderDrawParameters == VK_FALSE) {
+            return "no dynamic rendering, synchronization2, timeline semaphores or shader draw parameters";
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] auto hasAnisotropy() const noexcept -> bool {
+        return m_features.features.samplerAnisotropy == VK_TRUE;
+    }
+    [[nodiscard]] auto maxAnisotropy() const noexcept -> float {
+        return m_properties.properties.limits.maxSamplerAnisotropy;
+    }
+
+    [[nodiscard]] auto info() const -> AdapterInfo {
+        return AdapterInfo{
+            .name = std::string{name()},
+            .kind = kind(),
+            .driver = std::format("{} {}", textOf(m_properties12.driverName, VK_MAX_DRIVER_NAME_SIZE),
+                                  textOf(m_properties12.driverInfo, VK_MAX_DRIVER_INFO_SIZE)),
+        };
+    }
+
+private:
+    VkPhysicalDeviceVulkan12Properties m_properties12{};
+    VkPhysicalDeviceProperties2 m_properties{};
+    VkPhysicalDeviceVulkan11Features m_features11{};
+    VkPhysicalDeviceVulkan12Features m_features12{};
+    VkPhysicalDeviceVulkan13Features m_features13{};
+    VkPhysicalDeviceFeatures2 m_features{};
+};
+
+/// Whether `adapter` can make a swapchain. Errors: those of the enumeration.
+[[nodiscard]] auto hasSwapchainExtension(VkPhysicalDevice adapter) -> Result<bool, RhiError> {
+    auto extensions =
+        enumerate<VkExtensionProperties>([adapter](std::uint32_t* count, VkExtensionProperties* values) {
+            return vkEnumerateDeviceExtensionProperties(adapter, nullptr, count, values);
+        });
+    if (!extensions) {
+        return std::unexpected{std::move(extensions.error())};
+    }
+    return hasName(*extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 }
 
 class VulkanDevice;
@@ -629,10 +853,18 @@ private:
     [[nodiscard]] auto createInstance(const DeviceDesc& desc) -> Result<void, RhiError>;
     [[nodiscard]] auto createSurface(const platform::NativeWindow& window) -> Result<void, RhiError>;
     [[nodiscard]] auto chooseAdapter() -> Result<void, RhiError>;
+    /// The first queue family of `candidate` that draws and, with a surface, presents to it; nullopt
+    /// when none does. Errors: those of the surface query.
+    [[nodiscard]] auto graphicsFamilyOf(VkPhysicalDevice candidate) const
+        -> Result<std::optional<std::uint32_t>, RhiError>;
     [[nodiscard]] auto createLogicalDevice() -> Result<void, RhiError>;
     [[nodiscard]] auto createFrames(std::uint32_t count) -> Result<void, RhiError>;
     [[nodiscard]] auto createAllocator() -> Result<void, RhiError>;
     [[nodiscard]] auto submit(VulkanSwapchain* presentTo) -> Result<void, RhiError>;
+
+    /// The layout of the bind groups of `desc`.
+    [[nodiscard]] auto createPipelineLayout(const RenderPipelineDesc& desc)
+        -> Result<VkPipelineLayout, RhiError>;
 
     /// Names `object` for the debug tools, when the validation layers listen.
     void name(VkObjectType type, std::uint64_t object, std::string_view label) const;
@@ -645,7 +877,6 @@ private:
     void destroyFinished() noexcept;
     void destroyNow(RetiredResource::Resource& resource) noexcept;
 
-    bool m_ownsDeviceSlot = false;
     VkInstance m_instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_messenger = VK_NULL_HANDLE;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;
@@ -676,6 +907,68 @@ private:
     std::atomic<std::uint64_t> m_validationErrors{0};
 };
 
+// --- Swapchains -----------------------------------------------------------------------------------
+
+/// The size of a swapchain's images: the surface's, or `requested` held to its limits when the
+/// surface lets the swapchain choose (a current extent of 0xFFFFFFFF).
+[[nodiscard]] auto extentFor(const VkSurfaceCapabilitiesKHR& capabilities, Extent2d requested) noexcept
+    -> Extent2d {
+    if (capabilities.currentExtent.width != std::numeric_limits<std::uint32_t>::max()) {
+        return Extent2d{.width = capabilities.currentExtent.width,
+                        .height = capabilities.currentExtent.height};
+    }
+    return Extent2d{.width = std::clamp(requested.width, capabilities.minImageExtent.width,
+                                        capabilities.maxImageExtent.width),
+                    .height = std::clamp(requested.height, capabilities.minImageExtent.height,
+                                         capabilities.maxImageExtent.height)};
+}
+
+/// How many images a swapchain asks for: one more than the fewest the surface takes, so that a frame
+/// need not wait for the presentation of the one before; no more than the surface allows.
+[[nodiscard]] auto imageCountFor(const VkSurfaceCapabilitiesKHR& capabilities) noexcept -> std::uint32_t {
+    constexpr std::uint32_t kExtraImages = 1;
+    const std::uint32_t count = capabilities.minImageCount + kExtraImages;
+    return capabilities.maxImageCount != 0 ? std::min(count, capabilities.maxImageCount) : count;
+}
+
+/// The format a swapchain draws in, and how it presents.
+struct SurfaceUse {
+    VkSurfaceFormatKHR format{};
+    VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
+};
+
+/// An 8-bit UNORM format of the sRGB color space, which `surface` must have: the gamma pass writes
+/// the GoldSrc curves' values as they are (docs/05 section 11); and `wanted`, else Fifo, which every
+/// surface has, with a warning. Errors: DriverRefused (no such format), and those of the queries.
+[[nodiscard]] auto chooseSurfaceUse(VkPhysicalDevice physical, VkSurfaceKHR surface, PresentMode wanted)
+    -> Result<SurfaceUse, RhiError> {
+    auto formats =
+        enumerate<VkSurfaceFormatKHR>([physical, surface](std::uint32_t* count, VkSurfaceFormatKHR* values) {
+            return vkGetPhysicalDeviceSurfaceFormatsKHR(physical, surface, count, values);
+        });
+    auto modes =
+        enumerate<VkPresentModeKHR>([physical, surface](std::uint32_t* count, VkPresentModeKHR* values) {
+            return vkGetPhysicalDeviceSurfacePresentModesKHR(physical, surface, count, values);
+        });
+    if (!formats || !modes) {
+        return std::unexpected{!formats ? std::move(formats.error()) : std::move(modes.error())};
+    }
+    const auto format = std::ranges::find_if(*formats, [](const VkSurfaceFormatKHR& candidate) {
+        return (candidate.format == VK_FORMAT_B8G8R8A8_UNORM ||
+                candidate.format == VK_FORMAT_R8G8B8A8_UNORM) &&
+               candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    });
+    if (format == formats->end()) {
+        return fail(RhiError::DriverRefused, "the surface has no 8-bit UNORM format in the sRGB color space");
+    }
+    SurfaceUse use{.format = *format, .mode = presentModeOf(wanted)};
+    if (!std::ranges::contains(*modes, use.mode)) {
+        log::warning(kLog, "the surface cannot present in {} mode: presenting in Fifo", enumName(wanted));
+        use.mode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+    return use;
+}
+
 class VulkanSwapchain final : public Swapchain {
 public:
     explicit VulkanSwapchain(VulkanDevice& device) noexcept : m_device{&device} { device.swapchainOpened(); }
@@ -703,6 +996,8 @@ public:
 
 private:
     [[nodiscard]] auto rebuild() -> Result<void, RhiError>;
+    /// The images of the swapchain just made, in `format`: a texture and a semaphore for each.
+    [[nodiscard]] auto createImages(VkFormat format) -> Result<void, RhiError>;
     void destroyImages() noexcept;
 
     VulkanDevice* m_device;
@@ -722,15 +1017,114 @@ VKAPI_ATTR auto VKAPI_CALL onValidationMessage(VkDebugUtilsMessageSeverityFlagBi
                                                const VkDebugUtilsMessengerCallbackDataEXT* data, void* device)
     -> VkBool32 {
     const std::string_view message = data != nullptr && data->pMessage != nullptr ? data->pMessage : "";
+    // The messenger hears warnings and errors only.
     if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
         static_cast<VulkanDevice*>(device)->countValidationError();
         log::error(kLog, "Vulkan validation: {}", message);
-    } else if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0) {
-        log::warning(kLog, "Vulkan validation: {}", message);
     } else {
-        log::debug(kLog, "Vulkan validation: {}", message);
+        log::warning(kLog, "Vulkan validation: {}", message);
     }
     return VK_FALSE; // the call goes on, as without validation
+}
+
+// --- The instance ---------------------------------------------------------------------------------
+
+/// Starts the Vulkan loader, which must offer version 1.3. Errors: BackendUnavailable.
+[[nodiscard]] auto startLoader() -> Result<void, RhiError> {
+    if (const VkResult loaded = volkInitialize(); loaded != VK_SUCCESS) {
+        return fail(RhiError::BackendUnavailable,
+                    "no Vulkan loader: no driver installs one (vulkan-1.dll, libvulkan.so.1)");
+    }
+    if (const std::uint32_t version = volkGetInstanceVersion(); version < kRequiredApiVersion) {
+        return fail(RhiError::BackendUnavailable,
+                    std::format("the Vulkan loader offers {}.{}; 1.3 is required",
+                                VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version)));
+    }
+    return {};
+}
+
+/// The instance extensions that present to `window`, which `available` must have.
+/// Errors: SurfaceUnavailable.
+[[nodiscard]] auto surfaceExtensionsFor(const platform::NativeWindow& window,
+                                        std::span<const VkExtensionProperties> available)
+    -> Result<std::vector<const char*>, RhiError> {
+    std::vector<const char*> extensions;
+    for (const std::string_view needed : {std::string_view{"VK_KHR_surface"}, surfaceExtensionOf(window)}) {
+        if (!hasName(available, needed)) {
+            return fail(RhiError::SurfaceUnavailable, std::format("the Vulkan loader has no {}", needed));
+        }
+        extensions.push_back(needed.data()); // the literals above are zero-terminated
+    }
+    return extensions;
+}
+
+/// What an instance asks for to be validated: the layer, the extension of its messenger and, when
+/// the layer has it, the extension of its features (synchronization validation).
+struct Validation {
+    std::vector<const char*> layers;
+    std::vector<const char*> extensions;
+    bool hasFeatures = false;
+};
+
+/// The validation of the Khronos layer, when it is installed and `available` has its messenger;
+/// none, with a warning, when it is not. Errors: those of the loader's enumerations.
+[[nodiscard]] auto validationOf(std::span<const VkExtensionProperties> available)
+    -> Result<Validation, RhiError> {
+    auto installed = enumerate<VkLayerProperties>([](std::uint32_t* count, VkLayerProperties* values) {
+        return vkEnumerateInstanceLayerProperties(count, values);
+    });
+    if (!installed) {
+        return std::unexpected{std::move(installed.error())};
+    }
+    const bool hasLayer = std::ranges::any_of(*installed, [](const VkLayerProperties& layer) {
+        return textOf(layer.layerName, VK_MAX_EXTENSION_NAME_SIZE) == kValidationLayer;
+    });
+    if (!hasLayer || !hasName(available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+        log::warning(kLog, "Vulkan validation was asked for, but {} is not installed", kValidationLayer);
+        return Validation{};
+    }
+    auto layerExtensions =
+        enumerate<VkExtensionProperties>([](std::uint32_t* count, VkExtensionProperties* values) {
+            return vkEnumerateInstanceExtensionProperties(kValidationLayer.data(), count, values);
+        });
+    if (!layerExtensions) {
+        return std::unexpected{std::move(layerExtensions.error())};
+    }
+    Validation validation{.layers = {kValidationLayer.data()},
+                          .extensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME}};
+    validation.hasFeatures = hasName(*layerExtensions, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+    if (validation.hasFeatures) {
+        validation.extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+    }
+    return validation;
+}
+
+constexpr std::array kValidationFeatures{VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
+
+/// Synchronization validation, beside the layer's default checks.
+constexpr VkValidationFeaturesEXT kSynchronizationValidation{
+    .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+    .pNext = nullptr,
+    .enabledValidationFeatureCount = narrow<std::uint32_t>(kValidationFeatures.size()),
+    .pEnabledValidationFeatures = kValidationFeatures.data(),
+    .disabledValidationFeatureCount = 0,
+    .pDisabledValidationFeatures = nullptr,
+};
+
+/// A messenger that hands the warnings and errors of validation to onValidationMessage, for `device`.
+[[nodiscard]] auto messengerInfoFor(VulkanDevice& device) noexcept -> VkDebugUtilsMessengerCreateInfoEXT {
+    return VkDebugUtilsMessengerCreateInfoEXT{
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .pNext = nullptr,
+        .flags = 0,
+        .messageSeverity =
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = &onValidationMessage,
+        .pUserData = &device,
+    };
 }
 
 // --- VulkanCommandList ---------------------------------------------------------------------------
@@ -948,11 +1342,9 @@ void VulkanCommandList::drawIndexed(std::uint32_t indexCount, std::uint32_t inst
 // --- VulkanDevice --------------------------------------------------------------------------------
 
 auto VulkanDevice::create(const DeviceDesc& desc) -> Result<std::unique_ptr<VulkanDevice>, RhiError> {
-    expects(desc.framesInFlight >= 2 && desc.framesInFlight <= kMaxFramesInFlight,
+    expects(desc.framesInFlight >= kMinFramesInFlight && desc.framesInFlight <= kMaxFramesInFlight,
             "vulkan::createDevice: 2 or 3 frames in flight");
-    expects(!isDeviceOpen.exchange(true), "vulkan::createDevice: one device at a time");
     auto device = std::make_unique<VulkanDevice>();
-    device->m_ownsDeviceSlot = true;
 
     if (auto instance = device->createInstance(desc); !instance) {
         return std::unexpected{std::move(instance.error())};
@@ -981,16 +1373,9 @@ auto VulkanDevice::create(const DeviceDesc& desc) -> Result<std::unique_ptr<Vulk
 }
 
 auto VulkanDevice::createInstance(const DeviceDesc& desc) -> Result<void, RhiError> {
-    if (const VkResult loaded = volkInitialize(); loaded != VK_SUCCESS) {
-        return fail(RhiError::BackendUnavailable,
-                    "no Vulkan loader: no driver installs one (vulkan-1.dll, libvulkan.so.1)");
+    if (auto started = startLoader(); !started) {
+        return started;
     }
-    if (const std::uint32_t version = volkGetInstanceVersion(); version < kRequiredApiVersion) {
-        return fail(RhiError::BackendUnavailable,
-                    std::format("the Vulkan loader offers {}.{}; 1.3 is required",
-                                VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version)));
-    }
-
     auto available =
         enumerate<VkExtensionProperties>([](std::uint32_t* count, VkExtensionProperties* values) {
             return vkEnumerateInstanceExtensionProperties(nullptr, count, values);
@@ -1000,43 +1385,21 @@ auto VulkanDevice::createInstance(const DeviceDesc& desc) -> Result<void, RhiErr
     }
     std::vector<const char*> extensions;
     if (desc.window) {
-        for (const std::string_view needed :
-             {std::string_view{"VK_KHR_surface"}, surfaceExtensionOf(*desc.window)}) {
-            if (!hasName(*available, needed)) {
-                return fail(RhiError::SurfaceUnavailable, std::format("the Vulkan loader has no {}", needed));
-            }
-            extensions.push_back(needed.data()); // the literals above are zero-terminated
+        auto surface = surfaceExtensionsFor(*desc.window, *available);
+        if (!surface) {
+            return std::unexpected{std::move(surface.error())};
         }
+        extensions = std::move(*surface);
     }
-
-    std::vector<const char*> layers;
-    bool hasValidationFeatures = false;
+    Validation validation;
     if (desc.isValidationEnabled) {
-        auto installed = enumerate<VkLayerProperties>([](std::uint32_t* count, VkLayerProperties* values) {
-            return vkEnumerateInstanceLayerProperties(count, values);
-        });
-        if (!installed) {
-            return std::unexpected{std::move(installed.error())};
+        auto found = validationOf(*available);
+        if (!found) {
+            return std::unexpected{std::move(found.error())};
         }
-        const bool hasLayer = std::ranges::any_of(*installed, [](const VkLayerProperties& layer) {
-            return textOf(layer.layerName, VK_MAX_EXTENSION_NAME_SIZE) == kValidationLayer;
-        });
-        if (hasLayer && hasName(*available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
-            layers.push_back(kValidationLayer.data());
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-            auto layerExtensions =
-                enumerate<VkExtensionProperties>([](std::uint32_t* count, VkExtensionProperties* values) {
-                    return vkEnumerateInstanceExtensionProperties(kValidationLayer.data(), count, values);
-                });
-            hasValidationFeatures =
-                layerExtensions && hasName(*layerExtensions, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
-            if (hasValidationFeatures) {
-                extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
-            }
-        } else {
-            log::warning(kLog, "Vulkan validation was asked for, but {} is not installed", kValidationLayer);
-        }
+        validation = std::move(*found);
     }
+    extensions.insert(extensions.end(), validation.extensions.begin(), validation.extensions.end());
 
     const std::string applicationName{desc.applicationName};
     const VkApplicationInfo application{
@@ -1048,45 +1411,26 @@ auto VulkanDevice::createInstance(const DeviceDesc& desc) -> Result<void, RhiErr
         .engineVersion = 0,
         .apiVersion = kRequiredApiVersion,
     };
-    VkDebugUtilsMessengerCreateInfoEXT messenger{
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        .pNext = nullptr,
-        .flags = 0,
-        .messageSeverity =
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-        .pfnUserCallback = &onValidationMessage,
-        .pUserData = this,
-    };
-    constexpr std::array kValidationFeatures{VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
-    const VkValidationFeaturesEXT validationFeatures{
-        .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-        .pNext = nullptr,
-        .enabledValidationFeatureCount = narrow<std::uint32_t>(kValidationFeatures.size()),
-        .pEnabledValidationFeatures = kValidationFeatures.data(),
-        .disabledValidationFeatureCount = 0,
-        .pDisabledValidationFeatures = nullptr,
-    };
-    if (hasValidationFeatures) {
-        messenger.pNext = &validationFeatures;
+    VkDebugUtilsMessengerCreateInfoEXT messenger = messengerInfoFor(*this);
+    if (validation.hasFeatures) {
+        messenger.pNext = &kSynchronizationValidation;
     }
     const VkInstanceCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = layers.empty() ? nullptr : &messenger, // also reports what instance creation says
+        .pNext = validation.layers.empty() ? nullptr : &messenger, // also reports what instance creation says
         .flags = 0,
         .pApplicationInfo = &application,
-        .enabledLayerCount = narrow<std::uint32_t>(layers.size()),
-        .ppEnabledLayerNames = layers.data(),
+        .enabledLayerCount = narrow<std::uint32_t>(validation.layers.size()),
+        .ppEnabledLayerNames = validation.layers.data(),
         .enabledExtensionCount = narrow<std::uint32_t>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
     };
     if (const VkResult result = vkCreateInstance(&createInfo, nullptr, &m_instance); result != VK_SUCCESS) {
         return vulkanFailure(result, "vkCreateInstance");
     }
-    volkLoadInstanceOnly(m_instance);
-    if (!layers.empty()) {
+    // Every function, the device's too, through the loader's dispatch: right for any device.
+    volkLoadInstance(m_instance);
+    if (!validation.layers.empty()) {
         messenger.pNext = nullptr;
         if (const VkResult result =
                 vkCreateDebugUtilsMessengerEXT(m_instance, &messenger, nullptr, &m_messenger);
@@ -1167,92 +1511,40 @@ auto VulkanDevice::chooseAdapter() -> Result<void, RhiError> {
         return std::unexpected{std::move(adapters.error())};
     }
     std::vector<std::string> refusals;
-    int bestRank = -1;
+    std::optional<std::size_t> bestRank;
     for (VkPhysicalDevice candidate : *adapters) {
-        VkPhysicalDeviceVulkan12Properties properties12{};
-        properties12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
-        VkPhysicalDeviceProperties2 properties{};
-        properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        properties.pNext = &properties12;
-        vkGetPhysicalDeviceProperties2(candidate, &properties);
-        const std::string_view name =
-            textOf(properties.properties.deviceName, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
-
-        VkPhysicalDeviceVulkan11Features features11{};
-        features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-        VkPhysicalDeviceVulkan12Features features12{};
-        features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-        features12.pNext = &features11;
-        VkPhysicalDeviceVulkan13Features features13{};
-        features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-        features13.pNext = &features12;
-        VkPhysicalDeviceFeatures2 features{};
-        features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        features.pNext = &features13;
-        vkGetPhysicalDeviceFeatures2(candidate, &features);
-
-        const std::uint32_t version = properties.properties.apiVersion;
-        if (version < kRequiredApiVersion) {
-            refusals.push_back(std::format("{}: Vulkan {}.{}", name, VK_API_VERSION_MAJOR(version),
-                                           VK_API_VERSION_MINOR(version)));
-            continue;
-        }
-        if (features13.dynamicRendering == VK_FALSE || features13.synchronization2 == VK_FALSE ||
-            features12.timelineSemaphore == VK_FALSE || features11.shaderDrawParameters == VK_FALSE) {
-            refusals.push_back(std::format(
-                "{}: no dynamic rendering, synchronization2, timeline semaphores or shader draw parameters",
-                name));
+        const AdapterProbe probe{candidate};
+        if (const std::optional<std::string> missing = probe.missingRequirement()) {
+            refusals.push_back(std::format("{}: {}", probe.name(), *missing));
             continue;
         }
         if (m_surface != VK_NULL_HANDLE) {
-            auto extensions = enumerate<VkExtensionProperties>(
-                [candidate](std::uint32_t* count, VkExtensionProperties* values) {
-                    return vkEnumerateDeviceExtensionProperties(candidate, nullptr, count, values);
-                });
-            if (!extensions || !hasName(*extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
-                refusals.push_back(std::format("{}: no swapchain", name));
+            auto hasSwapchain = hasSwapchainExtension(candidate);
+            if (!hasSwapchain) {
+                return std::unexpected{std::move(hasSwapchain.error())};
+            }
+            if (!*hasSwapchain) {
+                refusals.push_back(std::format("{}: no swapchain", probe.name()));
                 continue;
             }
         }
-
-        std::uint32_t familyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, nullptr);
-        std::vector<VkQueueFamilyProperties> families(familyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, families.data());
-        std::optional<std::uint32_t> family;
-        for (std::uint32_t index = 0; index < familyCount && !family; ++index) {
-            if ((families[index].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
-                continue;
-            }
-            VkBool32 canPresent = VK_TRUE;
-            if (m_surface != VK_NULL_HANDLE && vkGetPhysicalDeviceSurfaceSupportKHR(
-                                                   candidate, index, m_surface, &canPresent) != VK_SUCCESS) {
-                canPresent = VK_FALSE;
-            }
-            if (canPresent == VK_TRUE) {
-                family = index;
-            }
-        }
+        auto family = graphicsFamilyOf(candidate);
         if (!family) {
+            return std::unexpected{std::move(family.error())};
+        }
+        if (!*family) {
             refusals.push_back(
-                std::format("{}: no graphics queue{}", name,
+                std::format("{}: no graphics queue{}", probe.name(),
                             m_surface != VK_NULL_HANDLE ? " that presents to the window" : ""));
             continue;
         }
-
-        const AdapterKind kind = adapterKindOf(properties.properties.deviceType);
-        if (rankOf(kind) > bestRank) {
-            bestRank = rankOf(kind);
+        if (!bestRank || rankOf(probe.kind()) > *bestRank) {
+            bestRank = rankOf(probe.kind());
             m_physicalDevice = candidate;
-            m_queueFamily = *family;
-            m_hasAnisotropy = features.features.samplerAnisotropy == VK_TRUE;
-            m_maxAnisotropy = properties.properties.limits.maxSamplerAnisotropy;
-            m_adapter = AdapterInfo{
-                .name = std::string{name},
-                .kind = kind,
-                .driver = std::format("{} {}", textOf(properties12.driverName, VK_MAX_DRIVER_NAME_SIZE),
-                                      textOf(properties12.driverInfo, VK_MAX_DRIVER_INFO_SIZE)),
-            };
+            m_queueFamily = **family;
+            m_hasAnisotropy = probe.hasAnisotropy();
+            m_maxAnisotropy = probe.maxAnisotropy();
+            m_adapter = probe.info();
         }
     }
     if (m_physicalDevice == VK_NULL_HANDLE) {
@@ -1262,6 +1554,31 @@ auto VulkanDevice::chooseAdapter() -> Result<void, RhiError> {
                                            std::ranges::to<std::string>());
     }
     return {};
+}
+
+auto VulkanDevice::graphicsFamilyOf(VkPhysicalDevice candidate) const
+    -> Result<std::optional<std::uint32_t>, RhiError> {
+    std::uint32_t familyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> families(familyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(candidate, &familyCount, families.data());
+    for (std::uint32_t index = 0; index < familyCount; ++index) {
+        if ((families[index].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+            continue;
+        }
+        VkBool32 canPresent = VK_TRUE;
+        if (m_surface != VK_NULL_HANDLE) {
+            if (const VkResult result =
+                    vkGetPhysicalDeviceSurfaceSupportKHR(candidate, index, m_surface, &canPresent);
+                result != VK_SUCCESS) {
+                return vulkanFailure(result, "vkGetPhysicalDeviceSurfaceSupportKHR");
+            }
+        }
+        if (canPresent == VK_TRUE) {
+            return index;
+        }
+    }
+    return std::nullopt;
 }
 
 auto VulkanDevice::createLogicalDevice() -> Result<void, RhiError> {
@@ -1309,7 +1626,6 @@ auto VulkanDevice::createLogicalDevice() -> Result<void, RhiError> {
         result != VK_SUCCESS) {
         return vulkanFailure(result, "vkCreateDevice");
     }
-    volkLoadDevice(m_device);
     vkGetDeviceQueue(m_device, m_queueFamily, 0, &m_queue);
 
     VkSemaphoreTypeCreateInfo timelineType{
@@ -1402,9 +1718,6 @@ VulkanDevice::~VulkanDevice() {
     }
     if (m_instance != VK_NULL_HANDLE) {
         vkDestroyInstance(m_instance, nullptr);
-    }
-    if (m_ownsDeviceSlot) {
-        isDeviceOpen.store(false);
     }
 }
 
@@ -1578,12 +1891,13 @@ auto VulkanDevice::allocateDescriptorSet(VkDescriptorSetLayout layout) -> Result
     // Every pool is full: one more, with room for kBindGroupsPerPool groups of a few bindings each.
     const std::array sizes{
         VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                             .descriptorCount = kBindGroupsPerPool * 2},
+                             .descriptorCount = kBindGroupsPerPool * kUniformBuffersPerGroup},
         VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                             .descriptorCount = kBindGroupsPerPool},
+                             .descriptorCount = kBindGroupsPerPool * kStorageBuffersPerGroup},
         VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                             .descriptorCount = kBindGroupsPerPool * 4},
-        VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = kBindGroupsPerPool * 2},
+                             .descriptorCount = kBindGroupsPerPool * kSampledImagesPerGroup},
+        VkDescriptorPoolSize{.type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                             .descriptorCount = kBindGroupsPerPool * kSamplersPerGroup},
     };
     const VkDescriptorPoolCreateInfo poolInfo{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
                                               .pNext = nullptr,
@@ -1906,133 +2220,28 @@ auto VulkanDevice::createRenderPipeline(const RenderPipelineDesc& desc)
     -> Result<RenderPipelineHandle, RhiError> {
     expects(desc.colorTargets.size() <= kMaxColorAttachments,
             "rhi::Device::createRenderPipeline: at most 8 targets");
-    std::vector<VkDescriptorSetLayout> setLayouts;
-    for (const BindGroupLayoutHandle layout : desc.bindGroupLayouts) {
-        setLayouts.push_back(m_bindGroupLayouts.get(layout).layout);
-    }
-    const VkPipelineLayoutCreateInfo layoutInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                                                .pNext = nullptr,
-                                                .flags = 0,
-                                                .setLayoutCount = narrow<std::uint32_t>(setLayouts.size()),
-                                                .pSetLayouts = setLayouts.data(),
-                                                .pushConstantRangeCount = 0,
-                                                .pPushConstantRanges = nullptr};
     VulkanPipeline pipeline;
-    if (const VkResult result = vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &pipeline.layout);
-        result != VK_SUCCESS) {
-        return vulkanFailure(result, std::format("vkCreatePipelineLayout({:?})", desc.label));
+    if (auto layout = createPipelineLayout(desc); !layout) {
+        return std::unexpected{std::move(layout.error())};
+    } else {
+        pipeline.layout = *layout;
     }
-
     const std::string vertexEntry{desc.vertex.entryPoint};
     const std::string fragmentEntry{desc.fragment.entryPoint};
     const std::array stages{
-        VkPipelineShaderStageCreateInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                                        .pNext = nullptr,
-                                        .flags = 0,
-                                        .stage = VK_SHADER_STAGE_VERTEX_BIT,
-                                        .module = m_shaders.get(desc.vertex.shader).module,
-                                        .pName = vertexEntry.c_str(),
-                                        .pSpecializationInfo = nullptr},
-        VkPipelineShaderStageCreateInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                                        .pNext = nullptr,
-                                        .flags = 0,
-                                        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-                                        .module = m_shaders.get(desc.fragment.shader).module,
-                                        .pName = fragmentEntry.c_str(),
-                                        .pSpecializationInfo = nullptr},
-    };
-
-    std::vector<VkVertexInputBindingDescription> vertexBindings;
-    std::vector<VkVertexInputAttributeDescription> vertexAttributes;
-    for (std::uint32_t slot = 0; slot < desc.vertexBuffers.size(); ++slot) {
-        const VertexBufferLayout& layout = desc.vertexBuffers[slot];
-        vertexBindings.push_back(VkVertexInputBindingDescription{
-            .binding = slot, .stride = layout.stride, .inputRate = VK_VERTEX_INPUT_RATE_VERTEX});
-        for (const VertexAttribute& attribute : layout.attributes) {
-            vertexAttributes.push_back(
-                VkVertexInputAttributeDescription{.location = attribute.location,
-                                                  .binding = slot,
-                                                  .format = vertexFormatOf(attribute.format),
-                                                  .offset = attribute.offset});
-        }
-    }
-    const VkPipelineVertexInputStateCreateInfo vertexInput{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .vertexBindingDescriptionCount = narrow<std::uint32_t>(vertexBindings.size()),
-        .pVertexBindingDescriptions = vertexBindings.data(),
-        .vertexAttributeDescriptionCount = narrow<std::uint32_t>(vertexAttributes.size()),
-        .pVertexAttributeDescriptions = vertexAttributes.data()};
-    const VkPipelineInputAssemblyStateCreateInfo inputAssembly{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .topology = desc.topology == PrimitiveTopology::TriangleList ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-                                                                     : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-        .primitiveRestartEnable = VK_FALSE};
-    const VkPipelineViewportStateCreateInfo viewport{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .viewportCount = 1,
-        .pViewports = nullptr, // dynamic
-        .scissorCount = 1,
-        .pScissors = nullptr};
-    const VkPipelineRasterizationStateCreateInfo rasterization{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .depthClampEnable = VK_FALSE,
-        .rasterizerDiscardEnable = VK_FALSE,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = cullModeOf(desc.cullMode),
-        .frontFace = desc.frontFace == FrontFace::CounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE
-                                                                   : VK_FRONT_FACE_CLOCKWISE,
-        .depthBiasEnable = VK_FALSE,
-        .depthBiasConstantFactor = 0.0F,
-        .depthBiasClamp = 0.0F,
-        .depthBiasSlopeFactor = 0.0F,
-        .lineWidth = 1.0F};
-    const VkPipelineMultisampleStateCreateInfo multisample{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        .sampleShadingEnable = VK_FALSE,
-        .minSampleShading = 0.0F,
-        .pSampleMask = nullptr,
-        .alphaToCoverageEnable = VK_FALSE,
-        .alphaToOneEnable = VK_FALSE};
-    const VkPipelineDepthStencilStateCreateInfo depthStencil{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .depthTestEnable = desc.depth ? VK_TRUE : VK_FALSE,
-        .depthWriteEnable = desc.depth && desc.depth->isWriteEnabled ? VK_TRUE : VK_FALSE,
-        .depthCompareOp = desc.depth ? compareOpOf(desc.depth->compare) : VK_COMPARE_OP_ALWAYS,
-        .depthBoundsTestEnable = VK_FALSE,
-        .stencilTestEnable = VK_FALSE,
-        .front = {},
-        .back = {},
-        .minDepthBounds = 0.0F,
-        .maxDepthBounds = 1.0F};
-    std::vector<VkPipelineColorBlendAttachmentState> blends;
-    std::vector<VkFormat> colorFormats;
-    for (const ColorTarget& target : desc.colorTargets) {
-        colorFormats.push_back(vulkanFormatOf(target.format));
-        const BlendState blend = target.blend.value_or(BlendState{});
-        blends.push_back(VkPipelineColorBlendAttachmentState{
-            .blendEnable = target.blend ? VK_TRUE : VK_FALSE,
-            .srcColorBlendFactor = blendFactorOf(blend.sourceColor),
-            .dstColorBlendFactor = blendFactorOf(blend.destinationColor),
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = blendFactorOf(blend.sourceAlpha),
-            .dstAlphaBlendFactor = blendFactorOf(blend.destinationAlpha),
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-                              VK_COLOR_COMPONENT_A_BIT});
-    }
+        stageOf(VK_SHADER_STAGE_VERTEX_BIT, m_shaders.get(desc.vertex.shader).module, vertexEntry),
+        stageOf(VK_SHADER_STAGE_FRAGMENT_BIT, m_shaders.get(desc.fragment.shader).module, fragmentEntry)};
+    const VertexInput vertexInput = vertexInputOf(desc.vertexBuffers);
+    const VkPipelineVertexInputStateCreateInfo vertexInputState = vertexInput.state();
+    const VkPipelineInputAssemblyStateCreateInfo inputAssembly = inputAssemblyOf(desc.topology);
+    const VkPipelineRasterizationStateCreateInfo rasterization = rasterizationOf(desc);
+    const VkPipelineDepthStencilStateCreateInfo depthStencil = depthStencilOf(desc.depth);
+    const std::vector<VkPipelineColorBlendAttachmentState> blends =
+        desc.colorTargets | std::views::transform(colorBlendOf) | std::ranges::to<std::vector>();
+    const std::vector<VkFormat> colorFormats =
+        desc.colorTargets |
+        std::views::transform([](const ColorTarget& target) { return vulkanFormatOf(target.format); }) |
+        std::ranges::to<std::vector>();
     const VkPipelineColorBlendStateCreateInfo colorBlend{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .pNext = nullptr,
@@ -2042,13 +2251,6 @@ auto VulkanDevice::createRenderPipeline(const RenderPipelineDesc& desc)
         .attachmentCount = narrow<std::uint32_t>(blends.size()),
         .pAttachments = blends.data(),
         .blendConstants = {0.0F, 0.0F, 0.0F, 0.0F}};
-    constexpr std::array kDynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    const VkPipelineDynamicStateCreateInfo dynamic{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .dynamicStateCount = narrow<std::uint32_t>(kDynamicStates.size()),
-        .pDynamicStates = kDynamicStates.data()};
     const VkPipelineRenderingCreateInfo rendering{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .pNext = nullptr,
@@ -2062,15 +2264,15 @@ auto VulkanDevice::createRenderPipeline(const RenderPipelineDesc& desc)
                                             .flags = 0,
                                             .stageCount = narrow<std::uint32_t>(stages.size()),
                                             .pStages = stages.data(),
-                                            .pVertexInputState = &vertexInput,
+                                            .pVertexInputState = &vertexInputState,
                                             .pInputAssemblyState = &inputAssembly,
                                             .pTessellationState = nullptr,
-                                            .pViewportState = &viewport,
+                                            .pViewportState = &kDynamicViewportState,
                                             .pRasterizationState = &rasterization,
-                                            .pMultisampleState = &multisample,
+                                            .pMultisampleState = &kSingleSampleState,
                                             .pDepthStencilState = &depthStencil,
                                             .pColorBlendState = &colorBlend,
-                                            .pDynamicState = &dynamic,
+                                            .pDynamicState = &kViewportAndScissorState,
                                             .layout = pipeline.layout,
                                             .renderPass = VK_NULL_HANDLE,
                                             .subpass = 0,
@@ -2084,6 +2286,28 @@ auto VulkanDevice::createRenderPipeline(const RenderPipelineDesc& desc)
     }
     name(VK_OBJECT_TYPE_PIPELINE, objectHandleOf(pipeline.pipeline), desc.label);
     return m_pipelines.insert(pipeline);
+}
+
+auto VulkanDevice::createPipelineLayout(const RenderPipelineDesc& desc)
+    -> Result<VkPipelineLayout, RhiError> {
+    const std::vector<VkDescriptorSetLayout> setLayouts =
+        desc.bindGroupLayouts | std::views::transform([this](BindGroupLayoutHandle layout) {
+            return m_bindGroupLayouts.get(layout).layout;
+        }) |
+        std::ranges::to<std::vector>();
+    const VkPipelineLayoutCreateInfo layoutInfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                                .pNext = nullptr,
+                                                .flags = 0,
+                                                .setLayoutCount = narrow<std::uint32_t>(setLayouts.size()),
+                                                .pSetLayouts = setLayouts.data(),
+                                                .pushConstantRangeCount = 0,
+                                                .pPushConstantRanges = nullptr};
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    if (const VkResult result = vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &layout);
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, std::format("vkCreatePipelineLayout({:?})", desc.label));
+    }
+    return layout;
 }
 
 void VulkanDevice::destroy(BufferHandle buffer) {
@@ -2157,16 +2381,7 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
         result != VK_SUCCESS) {
         return vulkanFailure(result, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
     }
-    // A current extent of 0xFFFFFFFF lets the swapchain choose; otherwise the surface decides.
-    const bool isChosenBySwapchain =
-        capabilities.currentExtent.width == std::numeric_limits<std::uint32_t>::max();
-    m_extent = isChosenBySwapchain
-                   ? Extent2d{.width = std::clamp(m_requestedSize.width, capabilities.minImageExtent.width,
-                                                  capabilities.maxImageExtent.width),
-                              .height = std::clamp(m_requestedSize.height, capabilities.minImageExtent.height,
-                                                   capabilities.maxImageExtent.height)}
-                   : Extent2d{.width = capabilities.currentExtent.width,
-                              .height = capabilities.currentExtent.height};
+    m_extent = extentFor(capabilities, m_requestedSize);
     if (m_extent.width == 0 || m_extent.height == 0) {
         // Minimized: no swapchain until the window is restored and resized.
         if (m_swapchain != VK_NULL_HANDLE) {
@@ -2174,42 +2389,11 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
         }
         return {};
     }
-
-    auto formats =
-        enumerate<VkSurfaceFormatKHR>([physical, surface](std::uint32_t* count, VkSurfaceFormatKHR* values) {
-            return vkGetPhysicalDeviceSurfaceFormatsKHR(physical, surface, count, values);
-        });
-    auto modes =
-        enumerate<VkPresentModeKHR>([physical, surface](std::uint32_t* count, VkPresentModeKHR* values) {
-            return vkGetPhysicalDeviceSurfacePresentModesKHR(physical, surface, count, values);
-        });
-    if (!formats || !modes) {
-        return std::unexpected{!formats ? std::move(formats.error()) : std::move(modes.error())};
+    auto choice = chooseSurfaceUse(physical, surface, m_presentMode);
+    if (!choice) {
+        return std::unexpected{std::move(choice.error())};
     }
-    // UNORM, not sRGB: the gamma pass writes the GoldSrc curves' values as they are (docs/05 §11).
-    const auto surfaceFormat = std::ranges::find_if(*formats, [](const VkSurfaceFormatKHR& candidate) {
-        return (candidate.format == VK_FORMAT_B8G8R8A8_UNORM ||
-                candidate.format == VK_FORMAT_R8G8B8A8_UNORM) &&
-               candidate.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    });
-    if (surfaceFormat == formats->end()) {
-        return fail(RhiError::DriverRefused, "the surface has no 8-bit UNORM format in the sRGB color space");
-    }
-    m_format = formatOf(surfaceFormat->format);
-    const VkPresentModeKHR wanted = presentModeOf(m_presentMode);
-    const VkPresentModeKHR mode = std::ranges::contains(*modes, wanted) ? wanted : VK_PRESENT_MODE_FIFO_KHR;
-    if (mode != wanted) {
-        log::warning(kLog, "the surface cannot present in {} mode: presenting in Fifo",
-                     enumName(m_presentMode));
-    }
-    std::uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount != 0) {
-        imageCount = std::min(imageCount, capabilities.maxImageCount);
-    }
-    const VkCompositeAlphaFlagBitsKHR compositeAlpha =
-        (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0
-            ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR
-            : VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+    m_format = formatOf(choice->format.format);
 
     const VkSwapchainKHR old = m_swapchain;
     const VkSwapchainCreateInfoKHR createInfo{
@@ -2217,9 +2401,9 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
         .pNext = nullptr,
         .flags = 0,
         .surface = surface,
-        .minImageCount = imageCount,
-        .imageFormat = surfaceFormat->format,
-        .imageColorSpace = surfaceFormat->colorSpace,
+        .minImageCount = imageCountFor(capabilities),
+        .imageFormat = choice->format.format,
+        .imageColorSpace = choice->format.colorSpace,
         .imageExtent = {.width = m_extent.width, .height = m_extent.height},
         .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -2227,8 +2411,10 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
         .preTransform = capabilities.currentTransform,
-        .compositeAlpha = compositeAlpha,
-        .presentMode = mode,
+        .compositeAlpha = (capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0
+                              ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR
+                              : VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+        .presentMode = choice->mode,
         .clipped = VK_TRUE,
         .oldSwapchain = old,
     };
@@ -2240,7 +2426,16 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
         m_swapchain = VK_NULL_HANDLE;
         return vulkanFailure(created, "vkCreateSwapchainKHR");
     }
+    if (auto images = createImages(choice->format.format); !images) {
+        return images;
+    }
+    log::debug(kLog, "swapchain: {} images of {}x{}, {}", m_textures.size(), m_extent.width, m_extent.height,
+               enumName(m_format));
+    return {};
+}
 
+auto VulkanSwapchain::createImages(VkFormat format) -> Result<void, RhiError> {
+    const VkDevice device = m_device->handle();
     auto images = enumerate<VkImage>([device, this](std::uint32_t* count, VkImage* values) {
         return vkGetSwapchainImagesKHR(device, m_swapchain, count, values);
     });
@@ -2254,7 +2449,7 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
             .flags = 0,
             .image = image,
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = surfaceFormat->format,
+            .format = format,
             .components = {},
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                  .baseMipLevel = 0,
@@ -2278,8 +2473,6 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
         }
         m_renderFinished.push_back(semaphore);
     }
-    log::debug(kLog, "swapchain: {} images of {}x{}, {}", m_textures.size(), m_extent.width, m_extent.height,
-               enumName(m_format));
     return {};
 }
 

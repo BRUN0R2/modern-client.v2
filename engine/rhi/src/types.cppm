@@ -24,8 +24,9 @@ enum class RhiError : std::uint8_t {
     DriverRefused,     ///< The driver refused an operation for another reason; the detail has its result.
 };
 
-/// The most frames a device records while the GPU runs the ones before (r_frames_in_flight), on
-/// every backend: what a ring of per-frame resources needs.
+/// The fewest and the most frames a device records while the GPU runs the ones before
+/// (r_frames_in_flight), on every backend: the most is what a ring of per-frame resources needs.
+inline constexpr std::uint32_t kMinFramesInFlight = 2;
 inline constexpr std::uint32_t kMaxFramesInFlight = 3;
 
 /// A size in texels.
@@ -46,9 +47,11 @@ enum class Format : std::uint8_t {
     Depth32Float,
 };
 
-/// The bytes of one texel of `format`; 0 for Undefined.
+/// The bytes of one texel of `format`; 0 for Undefined. Every defined format has four channels of a
+/// byte, or one float.
 [[nodiscard]] constexpr auto bytesPerTexel(Format format) noexcept -> std::uint32_t {
-    return format == Format::Undefined ? 0 : 4;
+    constexpr std::uint32_t kFourBytes = 4;
+    return format == Format::Undefined ? 0 : kFourBytes;
 }
 
 /// What a texture is used for at a point of the frame. Moving a texture from one state to another
@@ -93,9 +96,10 @@ enum class MemoryLocation : std::uint8_t {
     Readback, ///< CPU memory the GPU writes, mapped for reading.
 };
 
+/// A buffer to create (Device::createBuffer).
 struct BufferDesc {
     std::string_view label{}; ///< Required: it names the buffer to the debug tools.
-    std::uint64_t size = 0;
+    std::uint64_t size = 0;   ///< In bytes.
     Flags<BufferUsage> usage{};
     MemoryLocation location = MemoryLocation::Device;
 };
@@ -110,6 +114,7 @@ enum class TextureUsage : std::uint8_t {
     Count,
 };
 
+/// A texture to create (Device::createTexture).
 struct TextureDesc {
     std::string_view label{}; ///< Required: it names the texture to the debug tools.
     Format format = Format::Undefined;
@@ -121,18 +126,21 @@ struct TextureDesc {
     Flags<TextureUsage> usage{};
 };
 
+/// How a sampler reads between texels, or between mip levels.
 enum class Filter : std::uint8_t {
-    Nearest,
-    Linear,
+    Nearest, ///< The nearest one.
+    Linear,  ///< A blend of the nearest ones.
 };
 
+/// What a sampler reads outside a texture's 0 to 1.
 enum class AddressMode : std::uint8_t {
-    Repeat,
-    ClampToEdge,
+    Repeat,      ///< The texture again.
+    ClampToEdge, ///< Its nearest edge.
 };
 
+/// A sampler to create (Device::createSampler).
 struct SamplerDesc {
-    std::string_view label{};
+    std::string_view label{}; ///< Names the sampler to the debug tools.
     Filter magnify = Filter::Linear;
     Filter minify = Filter::Linear;
     Filter mipmap = Filter::Linear;
@@ -146,14 +154,16 @@ enum class ShaderFormat : std::uint8_t {
     Dxbc,  ///< DirectX 11 (future).
 };
 
+/// A stage of a render pipeline that runs a shader's entry point.
 enum class ShaderStage : std::uint8_t {
     Vertex,
     Fragment,
     Count,
 };
 
+/// A shader to create (Device::createShader): a module of entry points that pipelines run.
 struct ShaderDesc {
-    std::string_view label{};
+    std::string_view label{};          ///< Names the shader to the debug tools.
     std::span<const std::byte> code{}; ///< In the device's ShaderFormat; copied by the device.
 };
 
@@ -165,26 +175,32 @@ enum class BindingType : std::uint8_t {
     Sampler,
 };
 
+/// A binding of a bind group layout: its number in the shaders, what it holds, the stages that read it.
 struct BindingLayout {
     std::uint32_t binding = 0;
     BindingType type = BindingType::UniformBuffer;
     Flags<ShaderStage> stages{};
 };
 
+/// A bind group layout to create (Device::createBindGroupLayout): the bindings of a set of the
+/// shaders, which the bind groups of the layout fill.
 struct BindGroupLayoutDesc {
-    std::string_view label{};
+    std::string_view label{}; ///< Names the layout to the debug tools.
     std::span<const BindingLayout> bindings{};
 };
 
+/// How a vertex attribute is stored in its buffer.
 enum class VertexFormat : std::uint8_t {
-    Float2,
-    Float3,
-    Float4,
+    Float2,   ///< Two floats (a float2 in shaders).
+    Float3,   ///< Three floats.
+    Float4,   ///< Four floats.
     Unorm8x4, ///< Four bytes read as values from 0 to 1.
     Uint8x4,  ///< Four bytes read as unsigned integers (a uint4 in shaders).
     Uint32,   ///< An unsigned integer (a uint in shaders).
 };
 
+/// An attribute of a vertex: the shader's input `location`, read in `format` at `offset` bytes from the
+/// vertex's start.
 struct VertexAttribute {
     std::uint32_t location = 0;
     VertexFormat format = VertexFormat::Float3;
@@ -193,19 +209,21 @@ struct VertexAttribute {
 
 /// The vertices of one vertex buffer slot.
 struct VertexBufferLayout {
-    std::uint32_t stride = 0;
+    std::uint32_t stride = 0; ///< In bytes, from a vertex to the next.
     std::span<const VertexAttribute> attributes{};
 };
 
+/// How a render pipeline joins its vertices into triangles.
 enum class PrimitiveTopology : std::uint8_t {
-    TriangleList,
-    TriangleStrip,
+    TriangleList,  ///< Every three vertices a triangle.
+    TriangleStrip, ///< Each vertex a triangle with the two before it.
 };
 
+/// Which triangles a render pipeline leaves out.
 enum class CullMode : std::uint8_t {
-    None,
-    Front,
-    Back,
+    None,  ///< None.
+    Front, ///< Those facing the viewer (FrontFace).
+    Back,  ///< Those facing away.
 };
 
 /// Which winding faces the viewer.
@@ -214,6 +232,7 @@ enum class FrontFace : std::uint8_t {
     Clockwise,
 };
 
+/// When a depth test passes: the fragment's depth compared to the one stored.
 enum class CompareOp : std::uint8_t {
     Never,
     Less,
@@ -225,6 +244,7 @@ enum class CompareOp : std::uint8_t {
     Always,
 };
 
+/// What a color is multiplied by when it blends (BlendState).
 enum class BlendFactor : std::uint8_t {
     Zero,
     One,
@@ -242,17 +262,20 @@ struct BlendState {
     BlendFactor destinationAlpha = BlendFactor::Zero;
 };
 
+/// A color attachment a render pipeline draws to: its format, and how it blends.
 struct ColorTarget {
     Format format = Format::Undefined;
     std::optional<BlendState> blend{}; ///< None: the fragment replaces what is there.
 };
 
+/// The depth attachment of a render pipeline and its test.
 struct DepthState {
     Format format = Format::Depth32Float;
-    bool isWriteEnabled = true;
+    bool isWriteEnabled = true; ///< A fragment that passes stores its depth.
     CompareOp compare = CompareOp::Less;
 };
 
+/// What an index buffer's indices are.
 enum class IndexFormat : std::uint8_t {
     Uint16,
     Uint32,
@@ -278,6 +301,7 @@ enum class StoreOp : std::uint8_t {
     DontCare,
 };
 
+/// The color a render pass clears a color attachment to, each channel from 0 to 1.
 struct ClearColor {
     float red = 0.0F;
     float green = 0.0F;
@@ -301,8 +325,9 @@ enum class AdapterKind : std::uint8_t {
     Other,
 };
 
+/// What a device runs on.
 struct AdapterInfo {
-    std::string name{};
+    std::string name{}; ///< The GPU's, as its driver reports it.
     AdapterKind kind = AdapterKind::Other;
     std::string driver{}; ///< The driver's name and version, as it reports them.
 };

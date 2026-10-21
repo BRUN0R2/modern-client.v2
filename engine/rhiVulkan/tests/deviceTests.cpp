@@ -58,13 +58,26 @@ TEST(VulkanDeviceTest, RunsMoreFramesThanItHasInFlight) {
     }
 }
 
-TEST(VulkanDeviceTest, AnotherDeviceOpensOnceTheFirstIsClosed) {
-    if (!openTestDevice()) {
+TEST(VulkanDeviceTest, TwoDevicesWorkAtOnce) {
+    const auto first = openTestDevice();
+    if (!first) {
         GTEST_SKIP() << kNoVulkan;
     }
     const auto second = openTestDevice();
     ASSERT_NE(second, nullptr);
-    EXPECT_EQ(second->validationErrors(), 0U);
+    for (nx::rhi::Device* const device : {first.get(), second.get()}) {
+        const auto buffer = device->createBuffer({.label = "test.twoDevices",
+                                                  .size = 256,
+                                                  .usage = {nx::rhi::BufferUsage::CopyDestination},
+                                                  .location = nx::rhi::MemoryLocation::Device});
+        ASSERT_TRUE(buffer.has_value()) << nx::describe(buffer.error());
+        ASSERT_TRUE(device->beginFrame().has_value());
+        ASSERT_TRUE(device->submitFrame().has_value());
+    }
+    for (nx::rhi::Device* const device : {first.get(), second.get()}) {
+        device->waitIdle();
+        EXPECT_EQ(device->validationErrors(), 0U);
+    }
 }
 
 TEST(VulkanDeviceTest, ADestroyedResourceLivesUntilItsFramesAreDone) {
