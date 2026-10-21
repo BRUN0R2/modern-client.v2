@@ -12,6 +12,7 @@
 *.wad  binary
 *.spr  binary
 *.wav  binary
+*.tga  binary
 *.png  binary
 *.ktx2 binary
 *.nxpak binary
