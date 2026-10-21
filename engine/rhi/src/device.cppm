@@ -15,7 +15,6 @@ import :handles;
 
 export namespace nx::rhi {
 
-/// A range of a buffer bound to a binding.
 /// A range of a buffer bound to a binding of a bind group.
 struct BufferBinding {
     BufferHandle buffer{};
@@ -23,7 +22,6 @@ struct BufferBinding {
     std::uint64_t size = 0; ///< 0: from the offset to the end of the buffer.
 };
 
-/// What a binding of a bind group holds: as its layout's BindingType says.
 /// What a binding of a bind group holds: as its BindingType says.
 using BindingResource = std::variant<BufferBinding, TextureHandle, SamplerHandle>;
 
@@ -40,7 +38,6 @@ struct BindGroupDesc {
     std::span<const Binding> bindings{}; ///< One per binding of the layout.
 };
 
-/// A shader's entry point: the function of the stage in the shader's code.
 /// An entry point of a shader, which a stage of a pipeline runs.
 struct ShaderEntry {
     ShaderHandle shader{};
@@ -62,7 +59,6 @@ struct RenderPipelineDesc {
     std::span<const BindGroupLayoutHandle> bindGroupLayouts{}; ///< Bind group 0, 1...
 };
 
-/// A color attachment of a render pass.
 /// A color attachment of a render pass: its texture, and what the pass does with its content.
 struct ColorAttachment {
     TextureHandle texture{};
@@ -71,7 +67,6 @@ struct ColorAttachment {
     ClearColor clear{};
 };
 
-/// The depth attachment of a render pass.
 /// The depth attachment of a render pass, as ColorAttachment.
 struct DepthAttachment {
     TextureHandle texture{};
@@ -80,7 +75,6 @@ struct DepthAttachment {
     float clear = 1.0F; ///< The far plane.
 };
 
-/// The attachments a render pass draws to, and the area it draws in.
 /// A render pass (CommandList::beginRendering): its attachments and the area it draws.
 struct RenderingDesc {
     std::span<const ColorAttachment> colors{};
@@ -88,7 +82,6 @@ struct RenderingDesc {
     Extent2d area{};
 };
 
-/// A copy between a buffer and a mip level of a layer of a texture.
 /// A copy between a buffer and a mip level of a layer of a texture.
 struct TextureCopy {
     BufferHandle buffer{};
@@ -100,7 +93,6 @@ struct TextureCopy {
     Extent2d extent{};
 };
 
-/// The commands of a frame, recorded in order and run by the GPU when the frame is submitted.
 /// The commands of a frame (Device::beginFrame), which the GPU runs in order once submitted.
 class CommandList {
 public:
