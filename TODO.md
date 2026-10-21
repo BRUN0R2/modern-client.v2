@@ -257,7 +257,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`
 - [ ] Studio models: animation evaluated in jobs, and the transitions between sequences
-- [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
+- [x] GPU skinning (vertex shader) with per-vertex and per-normal bone indices (`nx.render:studio`: every bone in a storage buffer a frame, each model lit as the original lights its vertices, chrome, masked, additive, flat shaded and fullbright textures, skins and body parts)
+- [x] The view's own model kept out of walls, and `nxview` holding the knife as Counter-Strike deploys it
+- [ ] The render modes and effects of studio entities (`rendermode`, `renderfx`), the players' colors, the bob of the view's model
 - [ ] Optional compute skinning
 - [ ] Model instancing
 - [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)

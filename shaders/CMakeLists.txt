@@ -5,6 +5,7 @@
 nxAddShaders(nxShaders
     SOURCES
         world.slang
+        studio.slang
         test/fill.slang
         test/sample.slang
         test/sampleLayer.slang)

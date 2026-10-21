@@ -7,13 +7,14 @@ nxAddTest(nxRenderTests
         gammaTests.cpp
         lightStyleTests.cpp
         lightTests.cpp
+        studioTests.cpp
         worldTests.cpp
     DEPENDS
         nx::render
         nx::rhiVulkan
         nx::platform)
 
-# The world test draws the BSP seed of the fuzz corpus with the build's world shader; the light test
-# reads its lightmaps.
+# The world test draws the BSP seed of the fuzz corpus with the build's world shader, the light test
+# reads its lightmaps, and the studio test draws its MDL seed with the studio shader.
 target_compile_definitions(nxRenderTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")
 add_dependencies(nxRenderTests nxShaders)

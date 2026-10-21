@@ -32,8 +32,13 @@ using ChannelTable = std::array<std::uint8_t, kChannelValues>;
 /// `texgamma`: what each palette value of a texture becomes.
 [[nodiscard]] auto textureGammaTable(const GammaSettings& settings) -> ChannelTable;
 
-/// `lightgamma`, `brightness` and `gamma`: the light, from 0 to 255, of each summed light from 0 to
-/// 1023 (the original keeps 10 bits and draws the upper 8).
+/// `lightgamma`, `brightness` and `gamma`: the light, from 0 to 1023, of each summed light from 0 to
+/// 1023, the original's lightgammatable. Studio models read it whole (R_StudioLighting).
+[[nodiscard]] auto lightGammaTable(const GammaSettings& settings)
+    -> std::array<std::uint16_t, kLightTableSize>;
+
+/// The light, from 0 to 255, of each summed light from 0 to 1023: the upper 8 bits of
+/// lightGammaTable, which the world's lightmaps draw.
 [[nodiscard]] auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLightTableSize>;
 
 /// The bits the original shifts out of a summed light times lightScale, to index lightTable.
