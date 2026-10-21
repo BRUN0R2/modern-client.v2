@@ -542,6 +542,98 @@ struct Walker {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
 }
 
+/// The integer at the start of an entity's value, after spaces, as the original's atoi reads it.
+[[nodiscard]] auto integerOf(std::string_view text) -> std::optional<int> {
+    const std::size_t start = std::min(text.find_first_not_of(' '), text.size());
+    int value = 0;
+    if (std::from_chars(text.data() + start, text.data() + text.size(), value).ec != std::errc{}) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+/// How CS 1.6's game makes a brush entity of a class when the map starts: solid when `isSolid`,
+/// unless a spawnflag of `notSolid` is set; and, when `takesContents`, a volume or a ladder instead
+/// when its "skin" names contents.
+struct BrushClass {
+    std::string_view classname{};
+    bool isSolid = true;
+    int notSolid = 0;
+    bool takesContents = false;
+};
+
+constexpr auto kBrushClasses = std::to_array<BrushClass>({
+    {.classname = "func_wall"},
+    {.classname = "func_wall_toggle", .notSolid = 1}, // starts off
+    {.classname = "func_breakable"},
+    {.classname = "func_door", .notSolid = 8, .takesContents = true},  // passable
+    {.classname = "func_water", .notSolid = 8, .takesContents = true}, // a door
+    {.classname = "func_door_rotating", .notSolid = 8},                // passable
+    {.classname = "func_illusionary", .isSolid = false, .takesContents = true},
+    {.classname = "func_button"},
+    {.classname = "func_rot_button", .notSolid = 1}, // not solid
+    {.classname = "func_rotating", .notSolid = 64},  // not solid
+    {.classname = "func_plat"},
+    {.classname = "func_platrot"},
+    {.classname = "func_train", .notSolid = 8},      // passable
+    {.classname = "func_tracktrain", .notSolid = 8}, // passable
+    {.classname = "func_vehicle", .notSolid = 8},    // passable
+    {.classname = "func_conveyor", .notSolid = 2},   // not solid
+    {.classname = "func_guntarget"},
+    {.classname = "func_tank"},
+    {.classname = "func_tanklaser"},
+    {.classname = "func_tankrocket"},
+    {.classname = "func_tankmortar"},
+    {.classname = "func_healthcharger"},
+    {.classname = "func_recharge"},
+    {.classname = "momentary_door"},
+    {.classname = "momentary_rot_button"},
+});
+
+/// The contents of a ladder, which the game gives func_ladder and the original's movement climbs.
+constexpr int kLadderContents = -16;
+
+/// The brush entities a player moves among, as the map starts: those the game makes solid, the
+/// volumes of water, slime or lava and the ladders, at their origins (until the game spawns the
+/// map's entities, TODO.md). Doors are closed and nothing is broken yet; pushables, which the game
+/// makes boxes, are not among them.
+[[nodiscard]] auto movementEntities(const nx::assets::BspView& map) -> std::vector<cs::BrushEntity> {
+    std::vector<cs::BrushEntity> entities;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::string_view model = entity.find("model").value_or("");
+        std::uint32_t index = 0;
+        if (!model.starts_with('*') ||
+            std::from_chars(model.data() + 1, model.data() + model.size(), index).ec != std::errc{} ||
+            index == 0 || index >= map.models().size()) {
+            continue;
+        }
+        const nx::Vec3 origin = vectorOf(entity.find("origin").value_or("")).value_or(nx::Vec3{});
+        const std::string_view classname = entity.find("classname").value_or("");
+        if (classname == "func_ladder") {
+            entities.push_back({.model = index, .origin = origin, .role = cs::BrushRole::Ladder});
+            continue;
+        }
+        const auto rule = std::ranges::find(kBrushClasses, classname, &BrushClass::classname);
+        if (rule == kBrushClasses.end()) {
+            continue;
+        }
+        const int skin = rule->takesContents ? integerOf(entity.find("skin").value_or("0")).value_or(0) : 0;
+        if (skin == kLadderContents) {
+            entities.push_back({.model = index, .origin = origin, .role = cs::BrushRole::Ladder});
+        } else if (skin <= std::to_underlying(nx::collision::Contents::Empty) &&
+                   skin >= std::to_underlying(nx::collision::Contents::Translucent)) {
+            entities.push_back({.model = index,
+                                .origin = origin,
+                                .role = cs::BrushRole::Volume,
+                                .contents = static_cast<nx::collision::Contents>(skin)});
+        } else if (rule->isSolid &&
+                   (integerOf(entity.find("spawnflags").value_or("0")).value_or(0) & rule->notSolid) == 0) {
+            entities.push_back({.model = index, .origin = origin});
+        }
+    }
+    return entities;
+}
+
 /// A standing player whose eye is at `eye`.
 [[nodiscard]] auto walkerAt(nx::Vec3 eye) -> Walker {
     return Walker{
@@ -549,17 +641,21 @@ struct Walker {
         .previousEye = eye};
 }
 
-/// Gives `elapsed` to commands of what `keys` and `view` ask for, one each kCommandInterval, in
-/// `world`; returns the player's eye, between where the last two commands left it by the time left.
+/// Gives `elapsed` to commands of what `keys` and `view` ask for, one each kCommandInterval, among
+/// the world of `hulls` and `entities`; returns the player's eye, between where the last two commands
+/// left it by the time left.
 [[nodiscard]] auto walk(Walker& walker, const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed,
-                        const nx::collision::BrushHulls& world) -> nx::Vec3 {
+                        const nx::collision::BrushHulls& hulls, std::span<const cs::BrushEntity> entities)
+    -> nx::Vec3 {
     const float speed = kKeySpeed * (keys.shift ? kWalkFactor : 1.0F);
     nx::Flags<cs::Button> buttons;
-    if (keys.space) {
-        buttons.set(cs::Button::Jump);
-    }
-    if (keys.control) {
-        buttons.set(cs::Button::Duck);
+    for (const auto& [isHeld, button] :
+         {std::pair{keys.space, cs::Button::Jump}, std::pair{keys.control, cs::Button::Duck},
+          std::pair{keys.forward, cs::Button::Forward}, std::pair{keys.back, cs::Button::Back},
+          std::pair{keys.left, cs::Button::MoveLeft}, std::pair{keys.right, cs::Button::MoveRight}}) {
+        if (isHeld) {
+            buttons.set(button);
+        }
     }
     const cs::UserCommand command{
         .duration = kCommandInterval,
@@ -570,7 +666,7 @@ struct Walker {
     walker.pending = std::min(walker.pending + elapsed, kMaxCatchUp);
     while (walker.pending >= kCommandInterval) {
         walker.previousEye = eyeOf(walker.player);
-        walker.player = cs::simulateMovement(walker.player, command, cs::MovementSettings{}, world);
+        walker.player = cs::simulateMovement(walker.player, command, cs::MovementSettings{}, hulls, entities);
         walker.pending -= kCommandInterval;
     }
     return nx::lerp(walker.previousEye, eyeOf(walker.player), walker.pending / kCommandInterval);
@@ -586,6 +682,7 @@ struct Walker {
     if (!hulls) {
         return unusable(hulls.error());
     }
+    const std::vector<cs::BrushEntity> entities = movementEntities(*content.map);
     auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
     if (!window) {
         return unusable(window.error());
@@ -654,7 +751,7 @@ struct Walker {
         if (isFlying) {
             fly(camera, keys, elapsed.count());
         } else {
-            camera.position = walk(walker, keys, camera.angles, elapsed, *hulls);
+            camera.position = walk(walker, keys, camera.angles, elapsed, *hulls, entities);
         }
 
         auto commands = (*device)->beginFrame();

@@ -237,7 +237,7 @@ auto BrushHulls::create(BrushHullsDesc desc) -> Result<BrushHulls, CollisionErro
     for (std::size_t model = 0; model < desc.models.size(); ++model) {
         for (std::size_t hull = 0; hull < kHullCount; ++hull) {
             const std::size_t nodes = hull == 0 ? desc.pointNodes.size() : desc.clipNodes.size();
-            if (const auto* root = std::get_if<HullNodeIndex>(&desc.models[model][hull]);
+            if (const auto* root = std::get_if<HullNodeIndex>(&desc.models[model].hulls[hull]);
                 root != nullptr && root->value >= nodes) {
                 return fail(CollisionError::BadIndex, std::format("model {}, hull {}: root {} of {} nodes",
                                                                   model, hull, root->value, nodes));
@@ -266,23 +266,30 @@ auto BrushHulls::create(const assets::BspView& map) -> Result<BrushHulls, Collis
             .plane = node.plane.value, .children = {childOf(node.children[0]), childOf(node.children[1])}});
     }
     for (const assets::BspModel& model : map.models()) {
-        desc.models.push_back({HullNodeIndex{model.headNode.value}, childOf(model.hulls[0]),
-                               childOf(model.hulls[1]), childOf(model.hulls[2])});
+        desc.models.push_back(
+            BrushModel{.hulls = {HullNodeIndex{model.headNode.value}, childOf(model.hulls[0]),
+                                 childOf(model.hulls[1]), childOf(model.hulls[2])},
+                       .bounds = model.bounds});
     }
     return create(std::move(desc));
+}
+
+auto BrushHulls::boundsOf(std::uint32_t model) const noexcept -> Aabb {
+    expects(model < m_models.size(), "BrushHulls::boundsOf: a model");
+    return m_models[model].bounds;
 }
 
 auto BrushHulls::contentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents {
     expects(model < m_models.size() && hull != Hull::Count, "BrushHulls::contentsAt: a model and a hull");
     return contentsUnder(m_planes, hull == Hull::Point ? m_pointNodes : m_clipNodes,
-                         m_models[model][std::to_underlying(hull)], point);
+                         m_models[model].hulls[std::to_underlying(hull)], point);
 }
 
 auto BrushHulls::movementContentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents {
     expects(model < m_models.size() && hull != Hull::Count,
             "BrushHulls::movementContentsAt: a model and a hull");
     const std::span<const HullNode> nodes = hull == Hull::Point ? m_pointNodes : m_clipNodes;
-    const HullChild root = m_models[model][std::to_underlying(hull)];
+    const HullChild root = m_models[model].hulls[std::to_underlying(hull)];
     if (isTheLastNode(root, nodes)) {
         return Contents::Empty; // Parity: movement takes such a hull for an empty one
     }
@@ -293,7 +300,7 @@ auto BrushHulls::trace(const HullTraceQuery& query) const noexcept -> Trace {
     expects(query.model < m_models.size() && query.hull != Hull::Count,
             "BrushHulls::trace: a model and a hull");
     Trace result{.fraction = 1.0F, .end = query.end, .isAllSolid = true};
-    const HullChild root = m_models[query.model][std::to_underlying(query.hull)];
+    const HullChild root = m_models[query.model].hulls[std::to_underlying(query.hull)];
     Tracer<Rules::Server> tracer{m_planes, query.hull == Hull::Point ? m_pointNodes : m_clipNodes, root,
                                  result};
     std::ignore = tracer.follow(root, 0.0F, 1.0F, query.start - query.offset, query.end - query.offset);
@@ -314,7 +321,7 @@ auto BrushHulls::traceMovement(const HullTraceQuery& query) const noexcept -> Tr
             "BrushHulls::traceMovement: a model and a hull");
     Trace result{.fraction = 1.0F, .end = query.end, .isAllSolid = true};
     const std::span<const HullNode> nodes = query.hull == Hull::Point ? m_pointNodes : m_clipNodes;
-    HullChild root = m_models[query.model][std::to_underlying(query.hull)];
+    HullChild root = m_models[query.model].hulls[std::to_underlying(query.hull)];
     if (isTheLastNode(root, nodes)) {
         root = Contents::Empty; // Parity: movement takes such a hull for an empty one
     }

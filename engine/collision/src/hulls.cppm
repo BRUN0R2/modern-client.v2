@@ -47,14 +47,19 @@ struct HullNode {
     std::array<HullChild, 2> children{};
 };
 
+/// A brush model: the root of each of its hulls, and the box of its faces, in its own space.
+struct BrushModel {
+    std::array<HullChild, kHullCount> hulls{};
+    Aabb bounds{};
+};
+
 /// The trees of a map's hulls. Hull 0 grows from the visible tree's nodes, a leaf as its
 /// contents; hulls 1 to 3 from the clip nodes, which they may share.
 struct BrushHullsDesc {
     std::vector<Plane> planes{};
     std::vector<HullNode> pointNodes{}; ///< Hull 0's.
     std::vector<HullNode> clipNodes{};  ///< Hulls 1 to 3's.
-    /// The root of each hull of each brush model; model 0 is the world.
-    std::vector<std::array<HullChild, kHullCount>> models{};
+    std::vector<BrushModel> models{};   ///< Model 0 is the world.
 };
 
 /// No tree is deeper: the compilers' deepest (hldemo3 of Half-Life) is 146 nodes deep, and the
@@ -99,6 +104,8 @@ public:
     [[nodiscard]] static auto create(const assets::BspView& map) -> Result<BrushHulls, CollisionError>;
 
     [[nodiscard]] inline auto modelCount() const noexcept -> std::size_t { return m_models.size(); }
+    /// The box of the faces of `model`, in its own space.
+    [[nodiscard]] auto boundsOf(std::uint32_t model) const noexcept -> Aabb;
 
     /// What `point`, in the model's space, is in, in `hull` of `model` (SV_HullPointContents).
     [[nodiscard]] auto contentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents;
@@ -126,7 +133,7 @@ private:
     std::vector<Plane> m_planes;
     std::vector<HullNode> m_pointNodes;
     std::vector<HullNode> m_clipNodes;
-    std::vector<std::array<HullChild, kHullCount>> m_models;
+    std::vector<BrushModel> m_models;
 };
 
 } // namespace nx::collision
