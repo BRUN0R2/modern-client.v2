@@ -12,6 +12,7 @@ nxAddModuleLibrary(nxRender
         src/gamma.cppm
         src/lightStyle.cppm
         src/renderMode.cppm
+        src/blendedOrder.cppm
         src/surface.cppm
         src/upload.cppm
         src/light.cppm
@@ -22,7 +23,7 @@ nxAddModuleLibrary(nxRender
         src/camera.cpp
         src/gamma.cpp
         src/lightStyle.cpp
-        src/renderMode.cpp
+        src/blendedOrder.cpp
         src/surface.cpp
         src/upload.cpp
         src/light.cpp

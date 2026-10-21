@@ -412,62 +412,40 @@ auto SpriteRenderer::load(rhi::CommandList& commands, const assets::SpriteView& 
     return model;
 }
 
-auto SpriteRenderer::draw(rhi::CommandList& commands, const SpriteDraw& draw, const WorldLight& light)
-    -> Result<void, SpriteError> {
+auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) -> Result<void, SpriteError> {
+    m_quadCalls.clear();
+    m_spriteCalls.clear();
+    m_blendedDraws.clear();
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     SpriteFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 
-    // The solid sprites first, in their order; then the others, from the farthest (R_TransEntityCompare).
-    std::vector<const SpriteInstance*> order;
-    order.reserve(draw.instances.size());
-    for (const SpriteInstance& instance : draw.instances) {
-        order.push_back(&instance);
-    }
-    const auto distanceOf = [&draw](const SpriteInstance* instance) {
-        return lengthSquared(draw.camera.position - instance->origin);
-    };
-    std::ranges::stable_sort(order, [&](const SpriteInstance* a, const SpriteInstance* b) {
-        if (isSolid(a->mode) != isSolid(b->mode)) {
-            return isSolid(a->mode);
-        }
-        if (isSolid(a->mode)) {
-            return false;
-        }
-        const float first = distanceOf(a);
-        const float second = distanceOf(b);
-        return first != second ? first > second : blendedRankOf(a->mode) < blendedRankOf(b->mode);
-    });
-
-    // Each sprite's quad, and its light's after it when the world lights it.
-    struct Quad {
-        rhi::RenderPipelineHandle pipeline{};
-        rhi::BindGroupHandle image{};
-    };
+    // Each sprite's quad, and its light's after it when the world lights it: the solid ones drawn with
+    // the solid things of the frame, after the models (R_DrawEntitiesOnList); the others among
+    // everything drawn blended, by their origin, the middle of their bounds (R_TransEntityCompare).
     std::vector<SpriteVertex> vertices;
-    std::vector<Quad> quads;
     const auto frustum = frustumPlanes(draw.camera, draw.aspect);
     const Mat4 toClip = viewProjectionMatrix(draw.camera, draw.aspect);
-    for (const SpriteInstance* instance : order) {
-        const SpriteModel& model = instance->model;
+    for (const SpriteInstance& instance : draw.instances) {
+        const SpriteModel& model = instance.model;
         if (model.m_frames.empty()) {
             continue;
         }
-        float scale = instance->scale > 0.0F ? instance->scale : 1.0F;
-        float blend = isSolid(instance->mode) ? 1.0F : static_cast<float>(instance->amount) / kChannelTop;
-        if (!isSolid(instance->mode) && instance->amount == 0) {
+        float scale = instance.scale > 0.0F ? instance.scale : 1.0F;
+        float blend = isSolid(instance.mode) ? 1.0F : static_cast<float>(instance.amount) / kChannelTop;
+        if (!isSolid(instance.mode) && instance.amount == 0) {
             continue; // invisible (R_AddEntity)
         }
-        if (instance->mode == RenderMode::Glow) {
+        if (instance.mode == RenderMode::Glow) {
             // R_SpriteOccluded: on the screen, seen by the game, and dimmer and larger with distance.
-            const Vec4 clip = toClip * extend(instance->origin, 1.0F);
+            const Vec4 clip = toClip * extend(instance.origin, 1.0F);
             if (clip.w <= 0.0F || std::abs(clip.x) > clip.w || std::abs(clip.y) > clip.w ||
-                instance->isHidden) {
+                instance.isHidden) {
                 continue;
             }
-            if (instance->effect != RenderEffect::NoDissipation) {
-                const float distance = length(instance->origin - draw.camera.position);
+            if (instance.effect != RenderEffect::NoDissipation) {
+                const float distance = length(instance.origin - draw.camera.position);
                 blend *= std::clamp(kGlareFalloff / (distance * distance), kLeastGlare, 1.0F);
                 scale *= distance * (1.0F / kGlowScaleDistance);
             }
@@ -478,56 +456,105 @@ auto SpriteRenderer::draw(rhi::CommandList& commands, const SpriteDraw& draw, co
             const Vec3 half{.x = model.m_halfWidth * scale,
                             .y = model.m_halfWidth * scale,
                             .z = model.m_halfHeight * scale};
-            const Aabb box = Aabb::around(instance->origin, half);
+            const Aabb box = Aabb::around(instance.origin, half);
             if (std::ranges::any_of(
                     frustum, [&box](const Plane& plane) { return plane.sideOf(box) == PlaneSide::Back; })) {
                 continue;
             }
         }
-        const std::optional<QuadAxes> axes = axesOf(model.m_orientation, *instance, draw.camera);
+        const std::optional<QuadAxes> axes = axesOf(model.m_orientation, instance, draw.camera);
         if (!axes) {
             continue;
         }
-        const bool isLit =
-            model.m_rendering == assets::SpriteRendering::AlphaTest && instance->amount > kMostUnlitAmount &&
-            (instance->mode == RenderMode::Normal || instance->mode == RenderMode::TransAlpha ||
-             instance->mode == RenderMode::TransTexture);
-        const RenderColor& color = instance->color;
+        const bool isLit = model.m_rendering == assets::SpriteRendering::AlphaTest &&
+                           instance.amount > kMostUnlitAmount &&
+                           (instance.mode == RenderMode::Normal || instance.mode == RenderMode::TransAlpha ||
+                            instance.mode == RenderMode::TransTexture);
+        const RenderColor& color = instance.color;
         const Vec4 tint = color == RenderColor{} ? Vec4{.x = 1.0F, .y = 1.0F, .z = 1.0F, .w = blend}
                                                  : Vec4{.x = static_cast<float>(color.red) / kChannelTop,
                                                         .y = static_cast<float>(color.green) / kChannelTop,
                                                         .z = static_cast<float>(color.blue) / kChannelTop,
                                                         .w = blend};
-        const SpriteImageDraw& image = model.m_images[imageOf(model.m_frames, instance->frame, draw.time)];
+        const SpriteImageDraw& image = model.m_images[imageOf(model.m_frames, instance.frame, draw.time)];
+        const auto firstQuad = narrow<std::uint32_t>(m_quadCalls.size());
         addQuad(vertices, image, *axes, scale, tint, isLit ? kLitAlphaTest : kDefaultAlphaTest);
-        quads.push_back(Quad{.pipeline = pipelineOf(instance->mode), .image = image.group.get()});
+        m_quadCalls.push_back(
+            SpriteQuadCall{.pipeline = pipelineOf(instance.mode), .image = image.group.get()});
         if (isLit) {
-            const LightColor lit = light.lightAlong(
-                instance->origin, instance->origin - Vec3{.z = kLightReach}, draw.lightStyles);
+            const LightColor lit =
+                light.lightAlong(instance.origin, instance.origin - Vec3{.z = kLightReach}, draw.lightStyles);
             addQuad(vertices, image, *axes, scale,
                     Vec4{.x = static_cast<float>(lit.red) / kChannelTop,
                          .y = static_cast<float>(lit.green) / kChannelTop,
                          .z = static_cast<float>(lit.blue) / kChannelTop,
                          .w = blend},
                     kDefaultAlphaTest);
-            quads.push_back(Quad{.pipeline = m_lightPipeline.get(), .image = image.group.get()});
+            m_quadCalls.push_back(
+                SpriteQuadCall{.pipeline = m_lightPipeline.get(), .image = image.group.get()});
         }
+        if (!isSolid(instance.mode)) {
+            m_blendedDraws.push_back(
+                BlendedDraw{.distance = lengthSquared(draw.camera.position - instance.origin),
+                            .mode = instance.mode,
+                            .index = narrow<std::uint32_t>(m_spriteCalls.size())});
+        }
+        m_spriteCalls.push_back(SpriteCall{.firstQuad = firstQuad,
+                                           .quadCount = narrow<std::uint32_t>(m_quadCalls.size()) - firstQuad,
+                                           .isSolid = isSolid(instance.mode)});
     }
-    if (quads.empty()) {
+    if (m_quadCalls.empty()) {
         return {};
     }
-    if (auto reserved = reserve(slot, quads.size()); !reserved) {
+    if (auto reserved = reserve(slot, m_quadCalls.size()); !reserved) {
+        m_quadCalls.clear();
+        m_spriteCalls.clear();
+        m_blendedDraws.clear();
         return fail(SpriteError::GpuFailed, std::move(reserved.error()));
     }
     std::ranges::copy(std::as_bytes(std::span{vertices}), m_device->mappedBytes(slot.vertices.get()).begin());
-    commands.setVertexBuffer(0, slot.vertices.get(), 0);
-    for (std::size_t index = 0; index < quads.size(); ++index) {
-        commands.setPipeline(quads[index].pipeline);
-        commands.setBindGroup(kFrameGroup, slot.group.get());
-        commands.setBindGroup(kImageGroup, quads[index].image);
-        commands.draw(kQuadVertices, 1, narrow<std::uint32_t>(index) * kQuadVertices, 0);
-    }
     return {};
+}
+
+auto SpriteRenderer::draw(rhi::CommandList& commands, const SpriteDraw& draw, const WorldLight& light)
+    -> Result<void, SpriteError> {
+    if (auto prepared = prepare(draw, light); !prepared) {
+        return std::unexpected{std::move(prepared.error())};
+    }
+    drawInOrder(commands, *this);
+    return {};
+}
+
+void SpriteRenderer::drawSolid(rhi::CommandList& commands) const {
+    for (const SpriteCall& sprite : m_spriteCalls) {
+        if (sprite.isSolid) {
+            drawSprite(commands, sprite);
+        }
+    }
+}
+
+void SpriteRenderer::drawBlended(rhi::CommandList& commands, std::uint32_t index) const {
+    if (index >= m_spriteCalls.size()) {
+        expects(false, "SpriteRenderer::drawBlended: one of blendedDraws()'s");
+        return;
+    }
+    drawSprite(commands, m_spriteCalls[index]);
+}
+
+auto SpriteRenderer::preparedSlot() const noexcept -> const SpriteFrameSlot& {
+    expects(m_drawCount > 0, "SpriteRenderer: prepared before it is drawn");
+    return m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
+}
+
+void SpriteRenderer::drawSprite(rhi::CommandList& commands, const SpriteCall& sprite) const {
+    const SpriteFrameSlot& slot = preparedSlot();
+    commands.setVertexBuffer(0, slot.vertices.get(), 0);
+    for (std::uint32_t quad = sprite.firstQuad; quad < sprite.firstQuad + sprite.quadCount; ++quad) {
+        commands.setPipeline(m_quadCalls[quad].pipeline);
+        commands.setBindGroup(kFrameGroup, slot.group.get());
+        commands.setBindGroup(kImageGroup, m_quadCalls[quad].image);
+        commands.draw(kQuadVertices, 1, quad * kQuadVertices, 0);
+    }
 }
 
 } // namespace nx::render

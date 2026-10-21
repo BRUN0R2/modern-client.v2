@@ -455,24 +455,24 @@ struct SceneView {
     std::optional<nx::Seconds> sinceDeploy{}; ///< Since the knife came out; none without a player.
 };
 
-/// Draws `view` of `scene`: the world; the studio models of its entities, each lit where it is; the
-/// sprites of its entities, a glow the player's line of sight does not reach hidden; then the knife in
-/// the player's hand, lit where the player's eye is, as the original lights the view's own model.
-/// Errors: DrawFailed.
+/// Draws `view` of `scene`: the world, the studio models of its entities, each lit where it is, and the
+/// sprites of its entities, a glow the player's line of sight does not reach hidden, the blended ones of
+/// them all in one order (nx.render:blendedOrder); then the knife in the player's hand, lit where the
+/// player's eye is, as the original lights the view's own model. Errors: DrawFailed.
 [[nodiscard]] auto drawScene(nx::rhi::CommandList& list, Scene& scene, const Content& content,
                              const SceneView& view) -> nx::Result<void, SceneError> {
     const nx::render::LightStyleValues styles = content.lightStyles.valuesAt(view.time);
-    scene.world.draw(list, {.camera = view.camera,
-                            .aspect = view.aspect,
-                            .time = view.time,
-                            .lightStyles = styles,
-                            .placements = view.placements});
+    scene.world.prepare({.camera = view.camera,
+                         .aspect = view.aspect,
+                         .time = view.time,
+                         .lightStyles = styles,
+                         .placements = view.placements});
     const nxview::PosedModels models =
         content.models->posed(scene.models, view.time, scene.light, content.skyLight, styles);
-    if (auto drawn = scene.studio.draw(
-            list, {.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
-        !drawn) {
-        return nx::fail(SceneError::DrawFailed, "the map's models", std::move(drawn.error()));
+    if (auto prepared = scene.studio.prepare(
+            {.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
+        !prepared) {
+        return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }
     std::vector<nx::render::SpriteInstance> sprites =
         content.sprites->instances(scene.spriteModels, view.time);
@@ -482,16 +482,16 @@ struct SceneView {
                                                           view.camera.position, sprite.origin);
         }
     }
-    if (auto drawn = scene.sprites.draw(list,
-                                        {.camera = view.camera,
-                                         .aspect = view.aspect,
-                                         .time = view.time,
-                                         .lightStyles = styles,
-                                         .instances = sprites},
-                                        scene.light);
-        !drawn) {
-        return nx::fail(SceneError::DrawFailed, "the sprites", std::move(drawn.error()));
+    if (auto prepared = scene.sprites.prepare({.camera = view.camera,
+                                               .aspect = view.aspect,
+                                               .time = view.time,
+                                               .lightStyles = styles,
+                                               .instances = sprites},
+                                              scene.light);
+        !prepared) {
+        return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
     }
+    nx::render::drawInOrder(list, scene.world, scene.studio, scene.sprites);
     if (!view.sinceDeploy) {
         return {};
     }

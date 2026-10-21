@@ -9,9 +9,9 @@
 /// everything, dimmer and larger the farther they are, unless the game hid them; alpha-tested ones
 /// drawn opaque enough are lit by the world's light at their origin.
 ///
-/// Today: the sprites of the map's entities, drawn after the world and the studio models, the solid
-/// ones first and the others from the farthest. The render effects but NoDissipation, sprites that
-/// follow an entity and the HUD's come with their consumers.
+/// Today: the sprites of the map's entities, the solid ones drawn with the solid things of the frame,
+/// the others among everything it draws blended (nx.render:blendedOrder). The render effects but
+/// NoDissipation, sprites that follow an entity and the HUD's come with their consumers.
 export module nx.render:sprite;
 
 import std;
@@ -24,6 +24,7 @@ import :gamma;
 import :light;
 import :lightStyle;
 import :renderMode;
+import :blendedOrder;
 
 namespace nx::render {
 
@@ -46,6 +47,20 @@ struct SpriteFrameDraw {
     std::uint32_t firstImage = 0;
     std::uint32_t imageCount = 0;
     std::vector<float> intervals{}; ///< In seconds, rising; empty for one image.
+};
+
+/// A quad a frame draws, the next in its vertices: how, and with its image's bind group.
+struct SpriteQuadCall {
+    rhi::RenderPipelineHandle pipeline{};
+    rhi::BindGroupHandle image{};
+};
+
+/// A sprite a frame draws: its quads, a range of the frame's SpriteQuadCalls, its own and its light's
+/// when the world lights it.
+struct SpriteCall {
+    std::uint32_t firstQuad = 0;
+    std::uint32_t quadCount = 0;
+    bool isSolid = false;
 };
 
 /// What one frame in flight writes its view and its sprites' quads to.
@@ -142,11 +157,25 @@ public:
     [[nodiscard]] auto load(rhi::CommandList& commands, const assets::SpriteView& sprite,
                             std::string_view label) -> Result<SpriteModel, SpriteError>;
 
-    /// Draws `draw`'s sprites inside a render pass with a color target of desc.colorFormat and a
-    /// Depth32Float depth target (reversed depth), after the world, lit by `light`. Errors: GpuFailed
-    /// (room for more sprites).
+    /// Writes `draw`'s sprites, lit by `light`, for the frame in flight, for drawInOrder to record with
+    /// the other renderers of the frame before the next prepare; the sprites must last until then.
+    /// Errors: GpuFailed (room for more sprites).
+    [[nodiscard]] auto prepare(const SpriteDraw& draw, const WorldLight& light) -> Result<void, SpriteError>;
+    /// Draws `draw`'s sprites alone: prepares them, then records them (drawInOrder). Errors: those of
+    /// prepare.
     [[nodiscard]] auto draw(rhi::CommandList& commands, const SpriteDraw& draw, const WorldLight& light)
         -> Result<void, SpriteError>;
+
+    /// The sprites the last prepare found that are drawn blended, the index of each its own.
+    [[nodiscard]] inline auto blendedDraws() const noexcept -> std::span<const BlendedDraw> {
+        return m_blendedDraws;
+    }
+    /// Records the solid sprites of the last prepare in their order, inside a render pass with a color
+    /// target of desc.colorFormat and a Depth32Float depth target (reversed depth), after the world and
+    /// the solid models.
+    void drawSolid(rhi::CommandList& commands) const;
+    /// Records the sprite of `index`, one of blendedDraws()'s, in the same render pass.
+    void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
 private:
     inline explicit SpriteRenderer(rhi::Device& device) noexcept : m_device{&device} {}
@@ -156,6 +185,10 @@ private:
     /// Makes room in `slot` for `quads` quads, at least.
     [[nodiscard]] auto reserve(SpriteFrameSlot& slot, std::size_t quads) -> Result<void, rhi::RhiError>;
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
+    /// The frame slot the last prepare wrote.
+    [[nodiscard]] auto preparedSlot() const noexcept -> const SpriteFrameSlot&;
+    /// Records the quads of `sprite`.
+    void drawSprite(rhi::CommandList& commands, const SpriteCall& sprite) const;
 
     rhi::Device* m_device;
     ChannelTable m_textureGamma{};
@@ -167,6 +200,11 @@ private:
     rhi::OwnedRenderPipeline m_lightPipeline; ///< Multiplies what is there by the light.
     std::vector<SpriteFrameSlot> m_frameSlots;
     std::uint64_t m_drawCount = 0;
+
+    // What the last prepare found, kept to reuse the memory.
+    std::vector<SpriteQuadCall> m_quadCalls;
+    std::vector<SpriteCall> m_spriteCalls;
+    std::vector<BlendedDraw> m_blendedDraws; ///< Of m_spriteCalls, by their index.
 };
 
 } // namespace nx::render

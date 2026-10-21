@@ -4,7 +4,8 @@
 /// nx.render — what the engine draws, over nx.rhi (docs/05-rendering.md): no GPU API crosses it.
 ///
 /// Today: the camera and its matrices, the original's picture (its gamma curves and light styles),
-/// the BSP world, the light it gives where things are, studio models and sprites.
+/// the BSP world, the light it gives where things are, studio models and sprites, and the order a
+/// frame draws them in.
 /// The render graph, effects and the HUD come with their consumers.
 export module nx.render;
 
@@ -12,6 +13,7 @@ export import :camera;
 export import :gamma;
 export import :lightStyle;
 export import :renderMode;
+export import :blendedOrder;
 export import :surface;
 export import :upload;
 export import :light;

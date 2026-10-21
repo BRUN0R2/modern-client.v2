@@ -872,6 +872,7 @@ void BspWorld::gather(const Camera& camera, float aspect) {
     }
     m_skyIndices.clear();
     m_entityDraws.clear();
+    m_blendedDraws.clear();
     m_entityFaces.clear();
     m_entityIndices.clear();
     m_entityRanges.clear();
@@ -912,25 +913,20 @@ void BspWorld::gather(const Camera& camera, float aspect) {
         }
     }
 
-    // R_TransEntityCompare: the solid entities first, then the farthest; at one distance, by mode.
-    const auto distanceOf = [this](const EntityDraw& draw) {
-        const RenderMode mode = m_models[draw.model].mode;
-        return mode == RenderMode::Normal || mode == RenderMode::TransAlpha
-                   ? std::numeric_limits<float>::max()
-                   : draw.distance;
-    };
-    const auto rankOf = [this](const EntityDraw& draw) {
-        return blendedRankOf(m_models[draw.model].mode);
-    };
-    std::ranges::stable_sort(m_entityDraws, [&](const EntityDraw& first, const EntityDraw& second) {
-        if (distanceOf(first) != distanceOf(second)) {
-            return distanceOf(first) > distanceOf(second);
+    // The solid entities are drawn with the world; the others among everything drawn blended, a
+    // TransAlpha one before all of them (R_TransEntityCompare).
+    for (std::uint32_t index = 0; index < m_entityDraws.size(); ++index) {
+        const RenderMode mode = m_models[m_entityDraws[index].model].mode;
+        if (mode != RenderMode::Normal) {
+            m_blendedDraws.push_back(BlendedDraw{
+                .distance = mode == RenderMode::TransAlpha ? kFarthest : m_entityDraws[index].distance,
+                .mode = mode,
+                .index = index});
         }
-        return rankOf(first) < rankOf(second);
-    });
+    }
 }
 
-void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
+void BspWorld::prepare(const WorldFrame& view) {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     const FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     FrameUniform frame{.viewProjection = viewProjectionMatrix(view.camera, view.aspect),
@@ -964,7 +960,7 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
     // The indices of what the camera sees, a batch for each texture that has some, then the sky's.
     // An animated texture shows its frames ten a second, as the original's R_TextureAnimation.
     gather(view.camera, view.aspect);
-    const auto step = static_cast<std::size_t>(std::max(view.time.count(), 0.0F) * kAnimationFramesPerSecond);
+    m_animationStep = static_cast<std::size_t>(std::max(view.time.count(), 0.0F) * kAnimationFramesPerSecond);
     const std::span<std::byte> indexBytes = m_device->mappedBytes(slot.indices.get());
     std::uint32_t written = 0;
     const auto write = [&indexBytes, &written](std::span<const std::uint32_t> indices) {
@@ -979,13 +975,21 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
         if (!m_bucketIndices[bucket].empty()) {
             const std::vector<rhi::OwnedBindGroup>& frames = m_bucketFrames[bucket];
             m_batches.push_back(Batch{.indices = write(m_bucketIndices[bucket]),
-                                      .textures = frames[step % frames.size()].get()});
+                                      .textures = frames[m_animationStep % frames.size()].get()});
         }
     }
-    const IndexRange sky = write(m_skyIndices);
-    const IndexRange entities = write(m_entityIndices);
+    m_sky = write(m_skyIndices);
+    m_firstEntityIndex = write(m_entityIndices).firstIndex;
     m_lastFrame.triangles = written / kTriangleCorners;
+}
 
+void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
+    prepare(view);
+    drawInOrder(commands, *this);
+}
+
+void BspWorld::drawSolid(rhi::CommandList& commands) const {
+    const FrameSlot& slot = preparedSlot();
     commands.setPipeline(m_pipeline.get());
     commands.setVertexBuffer(0, m_vertices.get(), 0);
     commands.setIndexBuffer(slot.indices.get(), 0, rhi::IndexFormat::Uint32);
@@ -995,28 +999,51 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
         commands.setBindGroup(kTextureGroup, batch.textures);
         commands.drawIndexed(batch.indices.indexCount, 1, batch.indices.firstIndex, 0, 0);
     }
-    if (sky.indexCount != 0) {
+    if (m_sky.indexCount != 0) {
         // Last, so that what the world hides of them fails the depth test before it is shaded.
         commands.setPipeline(m_skyPipeline.get());
         commands.setBindGroup(kFrameGroup, slot.group.get());
-        commands.drawIndexed(sky.indexCount, 1, sky.firstIndex, 0, 0);
+        commands.drawIndexed(m_sky.indexCount, 1, m_sky.firstIndex, 0, 0);
     }
-    // Then the brush entities drawn apart, in their order, each face with its texture's frame.
+    // Then the solid brush entities, in their order.
     for (const EntityDraw& entity : m_entityDraws) {
-        const RenderMode mode = m_models[entity.model].mode;
-        commands.setPipeline(pipelineOf(mode));
-        commands.setBindGroup(kFrameGroup, slot.group.get());
-        commands.setBindGroup(kEntityGroup, slot.entityGroups[std::size_t{entity.model} + 1].get());
-        for (std::uint32_t face = entity.firstFace; face < entity.firstFace + entity.faceCount; ++face) {
-            if (mode != RenderMode::TransColor) {
-                const std::vector<rhi::OwnedBindGroup>& frames =
-                    m_bucketFrames[m_faces[m_entityFaces[face]].bucket];
-                commands.setBindGroup(kTextureGroup, frames[step % frames.size()].get());
-            }
-            const IndexRange& range = m_entityRanges[face];
-            commands.drawIndexed(range.indexCount, 1, entities.firstIndex + range.firstIndex, 0, 0);
+        if (m_models[entity.model].mode == RenderMode::Normal) {
+            drawEntity(commands, entity);
         }
     }
+}
+
+void BspWorld::drawBlended(rhi::CommandList& commands, std::uint32_t index) const {
+    if (index >= m_entityDraws.size()) {
+        expects(false, "BspWorld::drawBlended: one of blendedDraws()'s");
+        return;
+    }
+    // Another renderer may have drawn since the world's buffers were bound.
+    commands.setVertexBuffer(0, m_vertices.get(), 0);
+    commands.setIndexBuffer(preparedSlot().indices.get(), 0, rhi::IndexFormat::Uint32);
+    drawEntity(commands, m_entityDraws[index]);
+}
+
+void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) const {
+    const FrameSlot& slot = preparedSlot();
+    const RenderMode mode = m_models[entity.model].mode;
+    commands.setPipeline(pipelineOf(mode));
+    commands.setBindGroup(kFrameGroup, slot.group.get());
+    commands.setBindGroup(kEntityGroup, slot.entityGroups[std::size_t{entity.model} + 1].get());
+    for (std::uint32_t face = entity.firstFace; face < entity.firstFace + entity.faceCount; ++face) {
+        if (mode != RenderMode::TransColor) {
+            const std::vector<rhi::OwnedBindGroup>& frames =
+                m_bucketFrames[m_faces[m_entityFaces[face]].bucket];
+            commands.setBindGroup(kTextureGroup, frames[m_animationStep % frames.size()].get());
+        }
+        const IndexRange& range = m_entityRanges[face];
+        commands.drawIndexed(range.indexCount, 1, m_firstEntityIndex + range.firstIndex, 0, 0);
+    }
+}
+
+auto BspWorld::preparedSlot() const noexcept -> const FrameSlot& {
+    expects(m_drawCount > 0, "BspWorld: prepared before it is drawn");
+    return m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
 }
 
 auto BspWorld::pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle {

@@ -507,13 +507,16 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     return model;
 }
 
-auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) -> Result<void, StudioError> {
+auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioError> {
+    m_modelCalls.clear();
+    m_meshCalls.clear();
+    m_blendedDraws.clear();
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     StudioFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     std::size_t boneCount = 0;
     for (const StudioInstance& instance : frame.instances) {
         expects(instance.bones.size() == instance.model.boneCount(),
-                "StudioRenderer::draw: every bone of a model");
+                "StudioRenderer::prepare: every bone of a model");
         boneCount += instance.bones.size();
     }
     if (auto reserved = reserve(slot, boneCount, frame.instances.size()); !reserved) {
@@ -524,82 +527,118 @@ auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) 
                                .right = extend(angleVectors(frame.camera.angles).right, 0.0F)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 
-    // The solid models first, in their order; then the others but the invisible ones (R_AddEntity),
-    // from the farthest middle of their bounds (R_TransEntityCompare).
-    std::vector<const StudioInstance*> order;
-    order.reserve(frame.instances.size());
-    for (const StudioInstance& instance : frame.instances) {
-        if (blendingOf(instance.mode) == StudioBlending::Solid || instance.amount > 0) {
-            order.push_back(&instance);
-        }
-    }
-    const auto distanceOf = [&frame](const StudioInstance* instance) {
-        return lengthSquared(frame.camera.position - (instance->origin + instance->model.m_middle));
-    };
-    std::ranges::stable_sort(order, [&](const StudioInstance* a, const StudioInstance* b) {
-        const bool isSolid = blendingOf(a->mode) == StudioBlending::Solid;
-        if (isSolid != (blendingOf(b->mode) == StudioBlending::Solid)) {
-            return isSolid;
-        }
-        if (isSolid) {
-            return false;
-        }
-        const float first = distanceOf(a);
-        const float second = distanceOf(b);
-        return first != second ? first > second : blendedRankOf(a->mode) < blendedRankOf(b->mode);
-    });
-
+    // Every model but the invisible ones (R_AddEntity): the solid ones drawn with the solid things of
+    // the frame, the others among everything drawn blended, by the middle of their bounds
+    // (R_TransEntityCompare).
     const std::span<std::byte> boneBytes = m_device->mappedBytes(slot.bones.get());
     const std::span<std::byte> instanceBytes = m_device->mappedBytes(slot.instances.get());
     std::size_t firstBone = 0;
-    for (std::size_t index = 0; index < order.size(); ++index) {
-        const StudioInstance& instance = *order[index];
+    for (const StudioInstance& instance : frame.instances) {
+        const StudioBlending blending = blendingOf(instance.mode);
+        if (blending != StudioBlending::Solid && instance.amount == 0) {
+            continue;
+        }
+        const std::size_t index = m_modelCalls.size();
         std::ranges::copy(std::as_bytes(instance.bones),
                           boneBytes.subspan(firstBone * sizeof(Mat3x4)).begin());
         const InstanceUniform instanceUniform = instanceUniformOf(instance, firstBone);
         std::ranges::copy(std::as_bytes(std::span{&instanceUniform, 1}),
                           instanceBytes.subspan(index * kInstanceUniformStride).begin());
         firstBone += instance.bones.size();
-    }
-    for (std::size_t index = 0; index < order.size(); ++index) {
-        const StudioBlending blending = blendingOf(order[index]->mode);
-        // The frame's group binds with a pipeline set.
-        commands.setPipeline(m_pipelines[blending][MeshKind::Opaque].get());
-        commands.setBindGroup(kFrameGroup, slot.group.get());
-        commands.setBindGroup(kInstanceGroup, slot.instanceGroups[index].get());
-        drawMeshes(commands, *order[index], blending);
+        if (blending != StudioBlending::Solid) {
+            m_blendedDraws.push_back(BlendedDraw{
+                .distance =
+                    lengthSquared(frame.camera.position - (instance.origin + instance.model.m_middle)),
+                .mode = instance.mode,
+                .index = narrow<std::uint32_t>(index)});
+        }
+        m_modelCalls.push_back(callOf(instance, blending));
     }
     return {};
 }
 
-void StudioRenderer::drawMeshes(rhi::CommandList& commands, const StudioInstance& instance,
-                                StudioBlending blending) {
-    const StudioModel& model = instance.model;
-    if (model.m_skins.empty()) {
-        return; // no mesh: the reader checked that every mesh has its skin
+auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) -> Result<void, StudioError> {
+    if (auto prepared = prepare(frame); !prepared) {
+        return std::unexpected{std::move(prepared.error())};
     }
-    commands.setVertexBuffer(0, model.m_vertices.get(), 0);
-    commands.setIndexBuffer(model.m_indices.get(), 0, rhi::IndexFormat::Uint32);
+    drawInOrder(commands, *this);
+    return {};
+}
+
+void StudioRenderer::drawSolid(rhi::CommandList& commands) const {
+    for (std::size_t index = 0; index < m_modelCalls.size(); ++index) {
+        if (m_modelCalls[index].blending == StudioBlending::Solid) {
+            drawModel(commands, index);
+        }
+    }
+}
+
+void StudioRenderer::drawBlended(rhi::CommandList& commands, std::uint32_t index) const {
+    if (index >= m_modelCalls.size()) {
+        expects(false, "StudioRenderer::drawBlended: one of blendedDraws()'s");
+        return;
+    }
+    drawModel(commands, index);
+}
+
+auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blending) -> StudioModelCall {
+    const StudioModel& model = instance.model;
+    StudioModelCall call{.vertices = model.m_vertices.get(),
+                         .indices = model.m_indices.get(),
+                         .blending = blending,
+                         .firstMesh = narrow<std::uint32_t>(m_meshCalls.size())};
+    if (model.m_skins.empty()) {
+        return call; // no mesh: the reader checked that every mesh has its skin
+    }
     // A skin the model does not have is its first, as the original's R_StudioDrawPoints takes it.
     const std::vector<assets::StudioTextureIndex>& skin =
         model.m_skins[instance.skin < model.m_skins.size() ? instance.skin : 0];
-    std::optional<MeshKind> bound;
     for (std::size_t part = 0; part < model.m_bodyParts.size(); ++part) {
         const auto& choices = model.m_bodyParts[part];
         std::uint32_t choice = part < instance.bodyChoices.size() ? instance.bodyChoices[part] : 0;
         if (choice >= choices.size()) {
-            expects(false, "StudioRenderer::draw: a choice its body part has");
+            expects(false, "StudioRenderer::prepare: a choice its body part has");
             choice = 0;
         }
         for (const StudioMeshDraw& mesh : choices[choice]) {
             const StudioSkinDraw& texture = model.m_textures[skin[mesh.skinReference].value];
-            if (bound != texture.kind) {
-                commands.setPipeline(m_pipelines[blending][texture.kind].get());
-                bound = texture.kind;
-            }
-            commands.setBindGroup(kSkinGroup, texture.group.get());
-            commands.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
+            m_meshCalls.push_back(StudioMeshCall{.firstIndex = mesh.firstIndex,
+                                                 .indexCount = mesh.indexCount,
+                                                 .kind = texture.kind,
+                                                 .texture = texture.group.get()});
         }
+    }
+    call.meshCount = narrow<std::uint32_t>(m_meshCalls.size()) - call.firstMesh;
+    return call;
+}
+
+auto StudioRenderer::preparedSlot() const noexcept -> const StudioFrameSlot& {
+    expects(m_drawCount > 0, "StudioRenderer: prepared before it is drawn");
+    return m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
+}
+
+void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) const {
+    const StudioModelCall& call = m_modelCalls[index];
+    const std::span<const StudioMeshCall> meshes =
+        std::span{m_meshCalls}.subspan(call.firstMesh, call.meshCount);
+    if (meshes.empty()) {
+        return;
+    }
+    const StudioFrameSlot& slot = preparedSlot();
+    // The frame's group binds with a pipeline set.
+    MeshKind bound = meshes.front().kind;
+    commands.setPipeline(m_pipelines[call.blending][bound].get());
+    commands.setBindGroup(kFrameGroup, slot.group.get());
+    commands.setBindGroup(kInstanceGroup, slot.instanceGroups[index].get());
+    commands.setVertexBuffer(0, call.vertices, 0);
+    commands.setIndexBuffer(call.indices, 0, rhi::IndexFormat::Uint32);
+    for (const StudioMeshCall& mesh : meshes) {
+        if (mesh.kind != bound) {
+            bound = mesh.kind;
+            commands.setPipeline(m_pipelines[call.blending][bound].get());
+        }
+        commands.setBindGroup(kSkinGroup, mesh.texture);
+        commands.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
     }
 }
 
