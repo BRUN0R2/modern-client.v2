@@ -16,13 +16,16 @@ import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
 
+#include "offscreenTarget.hpp"
+
 namespace {
 
-using nx::rhi::BufferState;
 using nx::rhi::Format;
-using nx::rhi::TextureState;
+using nx::test::OffscreenTarget;
+using nx::test::Pixel;
+using nx::test::pixelAt;
 
-constexpr nx::rhi::Extent2d kExtent{.width = 32, .height = 32};
+constexpr nx::rhi::Extent2d kExtent = nx::test::kTargetExtent;
 /// The middle of the box.
 constexpr nx::Vec3 kMiddle{.x = 32.0F, .y = 32.0F, .z = 32.0F};
 
@@ -57,72 +60,20 @@ void renameTexture(std::vector<std::byte>& file, std::string_view name, std::str
     return styles.valuesAt(nx::Seconds{0.0F});
 }
 
-/// An offscreen target, its depth and the buffer it is read back to.
-class OffscreenTarget {
-public:
-    explicit OffscreenTarget(nx::rhi::Device& device) : m_device{&device} {
-        auto color = device.createTexture(
-            {.label = "test.target",
-             .format = Format::Rgba8Unorm,
-             .extent = kExtent,
-             .usage = {nx::rhi::TextureUsage::RenderTarget, nx::rhi::TextureUsage::CopySource}});
-        auto depth = device.createTexture({.label = "test.depth",
-                                           .format = Format::Depth32Float,
-                                           .extent = kExtent,
-                                           .usage = {nx::rhi::TextureUsage::DepthTarget}});
-        auto readback = device.createBuffer({.label = "test.readback",
-                                             .size = std::uint64_t{kExtent.width} * kExtent.height * 4,
-                                             .usage = {nx::rhi::BufferUsage::CopyDestination},
-                                             .location = nx::rhi::MemoryLocation::Readback});
-        EXPECT_TRUE(color && depth && readback);
-        if (color && depth && readback) {
-            m_color = std::move(*color);
-            m_depth = std::move(*depth);
-            m_readback = std::move(*readback);
-        }
-    }
-
-    /// Draws `world` as `camera` sees it with `styles`, `time` after the map started and its brush
-    /// models where `placements` puts them, in a frame of its own, on a target cleared to an alpha of
-    /// 0, which the world never writes; then the pixels, RGBA rows from the top.
-    [[nodiscard]] auto draw(nx::render::BspWorld& world, const nx::render::Camera& camera,
-                            const nx::render::LightStyleValues& styles = normalStyles(),
-                            nx::Seconds time = nx::Seconds{0.0F},
-                            std::span<const nx::render::ModelPlacement> placements = {})
-        -> std::vector<std::byte> {
-        auto commands = m_device->beginFrame();
-        EXPECT_TRUE(commands.has_value());
-        if (!commands) {
-            return {};
-        }
-        nx::rhi::CommandList& list = commands->get();
-        list.transition(m_color.get(), TextureState::Undefined, TextureState::RenderTarget);
-        list.transition(m_depth.get(), TextureState::Undefined, TextureState::DepthTarget);
-        const std::array colors{nx::rhi::ColorAttachment{.texture = m_color.get(), .clear = {.alpha = 0.0F}}};
-        list.beginRendering({.colors = colors,
-                             .depth = nx::rhi::DepthAttachment{.texture = m_depth.get(), .clear = 0.0F},
-                             .area = kExtent});
+/// Draws `world` as `camera` sees it with `styles`, `time` after the map started and its brush models
+/// where `placements` puts them, on `target`, an alpha of 0 where it draws nothing.
+[[nodiscard]] auto
+drawWorld(OffscreenTarget& target, nx::render::BspWorld& world, const nx::render::Camera& camera,
+          const nx::render::LightStyleValues& styles = normalStyles(), nx::Seconds time = nx::Seconds{0.0F},
+          std::span<const nx::render::ModelPlacement> placements = {}) -> std::vector<std::byte> {
+    return target.draw([&](nx::rhi::CommandList& list) {
         world.draw(list, {.camera = camera,
                           .aspect = 1.0F,
                           .time = time,
                           .lightStyles = styles,
                           .placements = placements});
-        list.endRendering();
-        list.transition(m_color.get(), TextureState::RenderTarget, TextureState::CopySource);
-        list.transition(m_readback.get(), BufferState::Undefined, BufferState::CopyDestination);
-        list.copyTextureToBuffer({.buffer = m_readback.get(), .texture = m_color.get(), .extent = kExtent});
-        list.transition(m_readback.get(), BufferState::CopyDestination, BufferState::HostRead);
-        EXPECT_TRUE(m_device->submitFrame().has_value());
-        m_device->waitIdle();
-        return m_device->mappedBytes(m_readback.get()) | std::ranges::to<std::vector>();
-    }
-
-private:
-    nx::rhi::Device* m_device;
-    nx::rhi::OwnedTexture m_color;
-    nx::rhi::OwnedTexture m_depth;
-    nx::rhi::OwnedBuffer m_readback;
-};
+    });
+}
 
 /// Builds the world of `desc` in a frame of its own.
 [[nodiscard]] auto createWorld(nx::rhi::Device& device, const nx::render::BspWorldDesc& desc)
@@ -135,14 +86,6 @@ private:
     EXPECT_TRUE(device.submitFrame().has_value());
     device.waitIdle();
     return world;
-}
-
-using Pixel = std::array<int, 4>;
-
-[[nodiscard]] auto pixelAt(std::span<const std::byte> pixels, std::uint32_t x, std::uint32_t y) -> Pixel {
-    const std::size_t offset = ((std::size_t{y} * kExtent.width) + x) * 4;
-    return {std::to_integer<int>(pixels[offset]), std::to_integer<int>(pixels[offset + 1]),
-            std::to_integer<int>(pixels[offset + 2]), std::to_integer<int>(pixels[offset + 3])};
 }
 
 TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
@@ -166,7 +109,7 @@ TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
 
     // Looking along -X at a wall of CRATE01.
     const std::vector<std::byte> pixels =
-        target.draw(*world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
+        drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
     ASSERT_EQ(pixels.size(), std::size_t{kExtent.width} * kExtent.height * 4);
     const auto drawn = static_cast<std::size_t>(std::ranges::count_if(
         std::views::iota(std::size_t{0}, pixels.size() / 4),
@@ -213,7 +156,7 @@ TEST(BspWorldTest, AFacesLightIsAsBrightAsItsStyle) {
     nx::render::LightStyles styles;
     const auto drawnAt = [&](std::string_view pattern) {
         styles.set(0, pattern);
-        return brightnessOf(target.draw(*world, camera, styles.valuesAt(nx::Seconds{0.0F})));
+        return brightnessOf(drawWorld(target, *world, camera, styles.valuesAt(nx::Seconds{0.0F})));
     };
     EXPECT_EQ(drawnAt("a"), 0U) << "dark";
     const std::uint64_t normal = drawnAt("m");
@@ -236,16 +179,17 @@ TEST(BspWorldTest, DrawsOnlyWhatTheCameraSees) {
         createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
     ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
 
-    std::ignore = target.draw(*world, {.position = kMiddle});
+    std::ignore = drawWorld(target, *world, {.position = kMiddle});
     EXPECT_EQ(world->lastFrame().faces, 6U) << "inside: every wall faces the camera";
     EXPECT_EQ(world->lastFrame().triangles, 12U);
 
     // Outside, past the -X wall: it turns its back, the five others face this way.
-    std::ignore = target.draw(*world, {.position = {.x = -100.0F, .y = 32.0F, .z = 32.0F}});
+    std::ignore = drawWorld(target, *world, {.position = {.x = -100.0F, .y = 32.0F, .z = 32.0F}});
     EXPECT_EQ(world->lastFrame().faces, 5U);
 
-    const std::vector<std::byte> away = target.draw(
-        *world, {.position = {.x = -100.0F, .y = 32.0F, .z = 32.0F}, .angles = {.yaw = nx::Degrees{180.0F}}});
+    const std::vector<std::byte> away = drawWorld(
+        target, *world,
+        {.position = {.x = -100.0F, .y = 32.0F, .z = 32.0F}, .angles = {.yaw = nx::Degrees{180.0F}}});
     EXPECT_EQ(world->lastFrame().leaves, 0U) << "the box is behind the camera";
     EXPECT_EQ(world->lastFrame().faces, 0U);
     EXPECT_TRUE(
@@ -275,8 +219,8 @@ TEST(BspWorldTest, AnAnimatedTextureShowsItsFramesTenASecond) {
 
     const auto greenPixelsAt = [&](float seconds) {
         const std::vector<std::byte> pixels =
-            target.draw(*world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}}, normalStyles(),
-                        nx::Seconds{seconds});
+            drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}},
+                      normalStyles(), nx::Seconds{seconds});
         return std::ranges::count_if(
             std::views::iota(std::size_t{0}, pixels.size() / 4),
             [&pixels](std::size_t pixel) { return pixels[(pixel * 4) + 1] != std::byte{0}; });
@@ -307,9 +251,9 @@ TEST(BspWorldTest, AWaterFaceWarpsAndIsNotLit) {
     const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
     nx::render::LightStyles dark;
     dark.set(0, "a");
-    const std::vector<std::byte> atStart = target.draw(*world, camera);
-    EXPECT_EQ(target.draw(*world, camera, dark.valuesAt(nx::Seconds{0.0F})), atStart) << "unlit";
-    EXPECT_NE(target.draw(*world, camera, normalStyles(), nx::Seconds{0.5F}), atStart) << "warped";
+    const std::vector<std::byte> atStart = drawWorld(target, *world, camera);
+    EXPECT_EQ(drawWorld(target, *world, camera, dark.valuesAt(nx::Seconds{0.0F})), atStart) << "unlit";
+    EXPECT_NE(drawWorld(target, *world, camera, normalStyles(), nx::Seconds{0.5F}), atStart) << "warped";
     EXPECT_TRUE(std::ranges::all_of(
         std::views::iota(std::size_t{0}, atStart.size() / 4),
         [&atStart](std::size_t pixel) { return atStart[(pixel * 4) + 3] == std::byte{255}; }))
@@ -351,7 +295,7 @@ TEST(BspWorldTest, ABrushEntityIsDrawnAsItsRenderModeSays) {
             return {};
         }
         std::vector<std::byte> pixels =
-            target.draw(*world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
+            drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
         return {.pixels = std::move(pixels), .faces = world->lastFrame().faces};
     };
 
@@ -406,21 +350,22 @@ TEST(BspWorldTest, ABrushEntityIsDrawnWhereTheGamePutsAndTurnsIt) {
     ASSERT_TRUE(world.has_value());
     const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
 
-    const std::vector<std::byte> inPlace = target.draw(*world, camera);
+    const std::vector<std::byte> inPlace = drawWorld(target, *world, camera);
     EXPECT_EQ(pixelAt(inPlace, 16, 16), (Pixel{255, 0, 0, 255}));
 
     const std::array away{nx::render::ModelPlacement{.model = {1}, .origin = {.z = 1000.0F}}};
-    const std::vector<std::byte> moved = target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, away);
+    const std::vector<std::byte> moved =
+        drawWorld(target, *world, camera, normalStyles(), nx::Seconds{0.0F}, away);
     EXPECT_NE(pixelAt(moved, 16, 16), (Pixel{255, 0, 0, 255}));
     EXPECT_EQ(world->lastFrame().faces, 6U) << "moved out of view: the walls alone";
 
     // Turned half a turn about its origin, at the corner of the box, it is behind the walls.
     const std::array turned{nx::render::ModelPlacement{.model = {1}, .angles = {.yaw = nx::Degrees{180.0F}}}};
-    EXPECT_NE(pixelAt(target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, turned), 16, 16),
+    EXPECT_NE(pixelAt(drawWorld(target, *world, camera, normalStyles(), nx::Seconds{0.0F}, turned), 16, 16),
               (Pixel{255, 0, 0, 255}));
 
     const std::array back{nx::render::ModelPlacement{.model = {1}}};
-    EXPECT_EQ(pixelAt(target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, back), 16, 16),
+    EXPECT_EQ(pixelAt(drawWorld(target, *world, camera, normalStyles(), nx::Seconds{0.0F}, back), 16, 16),
               (Pixel{255, 0, 0, 255}));
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
@@ -475,7 +420,7 @@ TEST(BspWorldTest, EachSideOfTheSkyIsSeenUprightTowardItsAxis) {
     };
     for (const View& view : views) {
         const std::vector<std::byte> pixels =
-            target.draw(*world, {.position = kMiddle, .angles = view.angles});
+            drawWorld(target, *world, {.position = kMiddle, .angles = view.angles});
         ASSERT_EQ(pixels.size(), std::size_t{kExtent.width} * kExtent.height * 4);
         const std::uint32_t last = kExtent.width - 1;
         EXPECT_EQ(pixelAt(pixels, 0, 0), skyColor(view.side, 0)) << "side " << view.side << ", top-left";
