@@ -40,6 +40,9 @@ constexpr float kBlendingTop = 255.0F;
 /// original interpolates their quaternions linearly instead.
 constexpr double kNearlyParallel = 0.000001;
 
+/// How far short of its last frame a sequence that does not loop stops.
+constexpr double kShortOfTheLastFrame = 1.001;
+
 /// The position and the rotation of every bone of a pose, in its parent's space.
 struct LocalPose {
     std::vector<Vec3> positions;
@@ -207,6 +210,21 @@ void blendPoses(LocalPose& pose, const LocalPose& other, float share) {
 
 auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton {
     return Skeleton{.bones = model.bones(), .controllers = model.boneControllers()};
+}
+
+auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed) noexcept
+    -> SequenceFrame {
+    if (sequence.frameCount <= 1) {
+        return SequenceFrame{0.0F};
+    }
+    const auto last = static_cast<double>(sequence.frameCount - 1);
+    double frame = std::max(static_cast<double>(elapsed.count()), 0.0) * static_cast<double>(sequence.fps);
+    if (sequence.isLooping) {
+        frame -= std::trunc(frame / last) * last;
+    } else {
+        frame = std::min(frame, static_cast<double>(sequence.frameCount) - kShortOfTheLastFrame);
+    }
+    return SequenceFrame{static_cast<float>(frame)};
 }
 
 auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
