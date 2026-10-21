@@ -11,20 +11,24 @@ nxAddModuleLibrary(nxRender
         src/camera.cppm
         src/gamma.cppm
         src/lightStyle.cppm
+        src/renderMode.cppm
         src/surface.cppm
         src/upload.cppm
         src/light.cppm
         src/world.cppm
         src/studio.cppm
+        src/sprite.cppm
     SOURCES
         src/camera.cpp
         src/gamma.cpp
         src/lightStyle.cpp
+        src/renderMode.cpp
         src/surface.cpp
         src/upload.cpp
         src/light.cpp
         src/world.cpp
         src/studio.cpp
+        src/sprite.cpp
     DEPENDS
         nx::core
         nx::math

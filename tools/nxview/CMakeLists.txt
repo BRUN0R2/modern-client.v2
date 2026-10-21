@@ -6,10 +6,14 @@ nxAddModuleLibrary(toolNxview
     LAYER 6
     MODULES
         src/tool.nxview.cppm
+        src/entityKeys.cppm
         src/mapLight.cppm
+        src/mapSprites.cppm
         src/viewModel.cppm
     SOURCES
+        src/entityKeys.cpp
         src/mapLight.cpp
+        src/mapSprites.cpp
         src/viewModel.cpp
     DEPENDS
         nx::core
@@ -17,6 +21,7 @@ nxAddModuleLibrary(toolNxview
         nx::assets
         nx::rhi
         nx::render
+        nx::collision
         cs::shared)
 
 nxAddProgram(nxview
@@ -36,5 +41,9 @@ nxAddProgram(nxview
         nx::game
         cs::shared)
 
-# The world and studio shaders, in bin/shaders/.
+# The world, studio and sprite shaders, in bin/shaders/.
 add_dependencies(nxview nxShaders)
+
+if(NX_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
