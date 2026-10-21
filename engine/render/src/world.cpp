@@ -122,9 +122,6 @@ constexpr float kAnimationFramesPerSecond = 10.0F;
 /// How far past a brush entity's face the eye must be for it to be drawn: the original's
 /// BACKFACE_EPSILON.
 constexpr float kBackfaceEpsilon = 0.01F;
-/// The blended render modes in the order the original draws them at one distance, after the others
-/// (R_TransEntityCompare).
-constexpr std::array kBlendedDrawOrder{RenderMode::TransTexture, RenderMode::TransAdd, RenderMode::Glow};
 
 /// A texture of an animation: '+', its frame ('0' to '9' in the main sequence, 'a' to 'j', of any
 /// case, in the alternate one), then the name its frames share.
@@ -922,11 +919,8 @@ void BspWorld::gather(const Camera& camera, float aspect) {
                    ? std::numeric_limits<float>::max()
                    : draw.distance;
     };
-    const auto rankOf = [this](const EntityDraw& draw) -> std::ptrdiff_t {
-        // The others first, then the blended ones in their order.
-        const auto found = std::ranges::find(kBlendedDrawOrder, m_models[draw.model].mode);
-        return found == kBlendedDrawOrder.end() ? 0
-                                                : std::ranges::distance(kBlendedDrawOrder.begin(), found) + 1;
+    const auto rankOf = [this](const EntityDraw& draw) {
+        return blendedRankOf(m_models[draw.model].mode);
     };
     std::ranges::stable_sort(m_entityDraws, [&](const EntityDraw& first, const EntityDraw& second) {
         if (distanceOf(first) != distanceOf(second)) {

@@ -191,6 +191,7 @@ struct BindGroupLayoutDesc {
 
 /// How a vertex attribute is stored in its buffer.
 enum class VertexFormat : std::uint8_t {
+    Float,    ///< One float (a float in shaders).
     Float2,   ///< Two floats (a float2 in shaders).
     Float3,   ///< Three floats.
     Float4,   ///< Four floats.

@@ -42,11 +42,6 @@ constexpr std::size_t kRgbBytes = 3;
 constexpr std::size_t kRgbaBytes = 4;
 /// A channel at its brightest, and an opaque alpha.
 constexpr std::byte kFull{255};
-/// The texels a texel of the next mip level is the mean of, two by two, and the bits that divide by
-/// them.
-constexpr std::uint32_t kMipStep = 2;
-constexpr std::uint32_t kMipMeanShift = 2;
-
 /// The depths of the view's own model: the nearest share of them (the original's
 /// VIEWMODEL_DEPTH_RANGE), reversed depth being 1 at the near plane.
 constexpr float kViewModelDepthShare = 0.3F;
@@ -172,61 +167,26 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     return geometry;
 }
 
-/// The texels of a texture's levels, and where each starts.
-struct SkinTexels {
-    std::vector<std::byte> bytes{};
-    std::vector<std::size_t> offsets{};
-};
-
-/// The level below the `width` x `height` one at `from` of `texels`, appended to them: each texel the
-/// mean of the two by two above it, cut as the original's GL_MipMap cuts it, the last row or column
-/// of an odd size taken twice.
-void addMipLevel(SkinTexels& texels, std::size_t from, std::uint32_t width, std::uint32_t height) {
-    const std::uint32_t lowerWidth = std::max(width / kMipStep, 1U);
-    const std::uint32_t lowerHeight = std::max(height / kMipStep, 1U);
-    texels.offsets.push_back(texels.bytes.size());
-    const auto at = [&](std::uint32_t x, std::uint32_t y, std::size_t channel) {
-        const std::size_t texel = (std::size_t{std::min(y, height - 1)} * width) + std::min(x, width - 1);
-        return std::to_integer<std::uint32_t>(texels.bytes[from + (texel * kRgbaBytes) + channel]);
-    };
-    for (std::uint32_t y = 0; y < lowerHeight; ++y) {
-        for (std::uint32_t x = 0; x < lowerWidth; ++x) {
-            for (std::size_t channel = 0; channel < kRgbaBytes; ++channel) {
-                const std::uint32_t sum = at(x * kMipStep, y * kMipStep, channel) +
-                                          at((x * kMipStep) + 1, y * kMipStep, channel) +
-                                          at(x * kMipStep, (y * kMipStep) + 1, channel) +
-                                          at((x * kMipStep) + 1, (y * kMipStep) + 1, channel);
-                texels.bytes.push_back(std::byte{narrow<std::uint8_t>(sum >> kMipMeanShift)});
-            }
-        }
-    }
-}
-
 /// The texels of `texture` through `textureGamma`, a masked one's palette index 255 transparent, and
-/// its mip levels down to one texel, unless it has none.
+/// its mip levels, unless it has none.
 [[nodiscard]] auto skinTexelsOf(const assets::StudioTexture& texture, const ChannelTable& textureGamma)
-    -> SkinTexels {
+    -> MipChain {
     const bool isMasked = texture.flags.test(assets::StudioTextureFlag::Masked);
-    SkinTexels texels{.offsets = {0}};
-    texels.bytes.reserve(texture.pixels.size() * kRgbaBytes * 2);
+    std::vector<std::byte> texels;
+    texels.reserve(texture.pixels.size() * kRgbaBytes);
     for (const std::byte index : texture.pixels) {
         const auto entry = std::to_integer<std::size_t>(index);
         const bool isTransparent = isMasked && entry == kTransparentIndex;
         for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
             const auto value = std::to_integer<std::size_t>(texture.palette[(entry * kRgbBytes) + channel]);
-            texels.bytes.push_back(isTransparent ? std::byte{0} : std::byte{textureGamma[value]});
+            texels.push_back(isTransparent ? std::byte{0} : std::byte{textureGamma[value]});
         }
-        texels.bytes.push_back(isTransparent ? std::byte{0} : kFull);
+        texels.push_back(isTransparent ? std::byte{0} : kFull);
     }
-    if (!texture.flags.test(assets::StudioTextureFlag::NoMipmaps)) {
-        const auto levels =
-            static_cast<std::uint32_t>(std::bit_width(std::max(texture.width, texture.height)));
-        for (std::uint32_t level = 1; level < levels; ++level) {
-            addMipLevel(texels, texels.offsets.back(), std::max(texture.width >> (level - 1), 1U),
-                        std::max(texture.height >> (level - 1), 1U));
-        }
+    if (texture.flags.test(assets::StudioTextureFlag::NoMipmaps)) {
+        return MipChain{.texels = std::move(texels), .offsets = {0}};
     }
-    return texels;
+    return mipChainOf(std::move(texels), texture.width, texture.height);
 }
 
 [[nodiscard]] auto meshKindOf(const assets::StudioTexture& texture) noexcept -> MeshKind {
@@ -463,11 +423,11 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     model.m_boneCount = desc.model.bones().size();
     model.m_skins.assign(desc.textures.skins().begin(), desc.textures.skins().end());
     for (const assets::StudioTexture& texture : desc.textures.textures()) {
-        const SkinTexels texels = skinTexelsOf(texture, m_textureGamma);
+        const MipChain texels = skinTexelsOf(texture, m_textureGamma);
         const std::string label = std::format("studio.{}", texture.name);
         auto uploaded =
             uploader.texture(label, {.width = texture.width, .height = texture.height},
-                             narrow<std::uint32_t>(texels.offsets.size()), 1, texels.bytes, texels.offsets);
+                             narrow<std::uint32_t>(texels.offsets.size()), 1, texels.texels, texels.offsets);
         const SkinUniform skin = skinUniformOf(texture);
         auto uniform = uploader.buffer(label, rhi::BufferUsage::Uniform, rhi::BufferState::Uniform,
                                        std::as_bytes(std::span{&skin, 1}));
