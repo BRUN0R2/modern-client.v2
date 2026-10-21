@@ -474,6 +474,7 @@ struct VulkanTexture {
     Format format = Format::Undefined;
     Extent2d extent;
     std::uint32_t mipLevels = 1;
+    std::uint32_t arrayLayers = 1;
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 };
 
@@ -860,13 +861,15 @@ auto VulkanCommandList::copyRegionOf(const TextureCopy& copy) -> VkBufferImageCo
     const VulkanTexture& texture = m_device->textures().get(copy.texture);
     const std::uint32_t texelBytes = bytesPerTexel(texture.format);
     expects(copy.bytesPerRow % texelBytes == 0, "CommandList: a row of a texture copy is whole texels");
+    expects(copy.mipLevel < texture.mipLevels && copy.arrayLayer < texture.arrayLayers,
+            "CommandList: a texture copy names one of the texture's mip levels and layers");
     return VkBufferImageCopy{
         .bufferOffset = copy.bufferOffset,
         .bufferRowLength = copy.bytesPerRow / texelBytes, // 0: packed rows
         .bufferImageHeight = 0,
         .imageSubresource = {.aspectMask = texture.aspect,
                              .mipLevel = copy.mipLevel,
-                             .baseArrayLayer = 0,
+                             .baseArrayLayer = copy.arrayLayer,
                              .layerCount = 1},
         .imageOffset = {.x = 0, .y = 0, .z = 0},
         .imageExtent = {.width = copy.extent.width, .height = copy.extent.height, .depth = 1},
@@ -1686,8 +1689,12 @@ auto VulkanDevice::createBuffer(const BufferDesc& desc) -> Result<BufferHandle, 
 }
 
 auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> {
-    expects(!desc.label.empty() && desc.extent.width > 0 && desc.extent.height > 0 && desc.mipLevels > 0,
-            "rhi::Device::createTexture: a label, a size and a mip level");
+    expects(!desc.label.empty() && desc.extent.width > 0 && desc.extent.height > 0 && desc.mipLevels > 0 &&
+                desc.arrayLayers > 0,
+            "rhi::Device::createTexture: a label, a size, a mip level and a layer");
+    expects(desc.arrayLayers == 1 ||
+                !(desc.usage.test(TextureUsage::RenderTarget) || desc.usage.test(TextureUsage::DepthTarget)),
+            "rhi::Device::createTexture: a render or depth target has one layer");
     const VkFormat format = vulkanFormatOf(desc.format);
     const VkImageUsageFlags usage = imageUsageOf(desc.usage);
     VkImageFormatProperties supported{};
@@ -1696,11 +1703,11 @@ auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandl
                                                  VK_IMAGE_TILING_OPTIMAL, usage, 0,
                                                  &supported) != VK_SUCCESS ||
         desc.extent.width > supported.maxExtent.width || desc.extent.height > supported.maxExtent.height ||
-        desc.mipLevels > supported.maxMipLevels) {
+        desc.mipLevels > supported.maxMipLevels || desc.arrayLayers > supported.maxArrayLayers) {
         return fail(RhiError::UnsupportedFormat,
-                    std::format("{:?}: {} at {}x{} with {} mip levels for its usage", desc.label,
-                                enumName(desc.format), desc.extent.width, desc.extent.height,
-                                desc.mipLevels));
+                    std::format("{:?}: {} at {}x{} with {} mip levels and {} layers for its usage",
+                                desc.label, enumName(desc.format), desc.extent.width, desc.extent.height,
+                                desc.mipLevels, desc.arrayLayers));
     }
     const VkImageCreateInfo info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1710,7 +1717,7 @@ auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandl
         .format = format,
         .extent = {.width = desc.extent.width, .height = desc.extent.height, .depth = 1},
         .mipLevels = desc.mipLevels,
-        .arrayLayers = 1,
+        .arrayLayers = desc.arrayLayers,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage,
@@ -1723,6 +1730,7 @@ auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandl
     VulkanTexture texture{.format = desc.format,
                           .extent = desc.extent,
                           .mipLevels = desc.mipLevels,
+                          .arrayLayers = desc.arrayLayers,
                           .aspect = aspectOf(desc.format)};
     if (const VkResult result =
             vmaCreateImage(m_allocator, &info, &allocation, &texture.image, &texture.allocation, nullptr);
@@ -1733,14 +1741,15 @@ auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandl
                                          .pNext = nullptr,
                                          .flags = 0,
                                          .image = texture.image,
-                                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                         .viewType = desc.arrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+                                                                          : VK_IMAGE_VIEW_TYPE_2D,
                                          .format = format,
                                          .components = {},
                                          .subresourceRange = {.aspectMask = texture.aspect,
                                                               .baseMipLevel = 0,
                                                               .levelCount = desc.mipLevels,
                                                               .baseArrayLayer = 0,
-                                                              .layerCount = 1}};
+                                                              .layerCount = desc.arrayLayers}};
     if (const VkResult result = vkCreateImageView(m_device, &viewInfo, nullptr, &texture.view);
         result != VK_SUCCESS) {
         vmaDestroyImage(m_allocator, texture.image, texture.allocation);

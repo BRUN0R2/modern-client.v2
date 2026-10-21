@@ -222,7 +222,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### RHI and Vulkan
 - [x] `nx.platform`: SDL3 window, events and input (vcpkg `sdl3` port), keys by physical position, raw mouse, and the native handles the swapchain is made from ([decision](#pending-decisions))
 - [x] `nx.rhi` interface: device and frames, command list, swapchain, generational texture handles, transitions, render passes
-- [x] `nx.rhi`: buffers, textures, samplers, shaders, bind groups, render pipelines, copies and draws, with deferred destruction
+- [x] `nx.rhi`: buffers, textures (and texture arrays), samplers, shaders, bind groups, render pipelines, copies and draws, with deferred destruction
 - [ ] `nx.rhi`: queries, compute pipelines, dynamic uniform offsets
 - [x] Vulkan 1.3 backend with volk: instance and adapter choice, device, frames in flight on a timeline semaphore, validation counted
 - [x] VMA in the Vulkan backend (with buffers and textures)
@@ -244,14 +244,15 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Lightmap atlas (lightstyle 0 of each face, extents computed as the compilers compute them)
 - [ ] Lightstyles combined in the shader
 - [x] Masked transparency (`{` textures)
-- [ ] Sky, water, animated textures
+- [x] Sky: the faces of `sky` show the sides of `gfx/env/<skyname>*.tga` as the original projects them (texture arrays in `nx.rhi`)
+- [ ] Water, animated textures
 - [ ] Brush entities with render modes and moving transforms (today: placed at their `origin`)
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [ ] Studio models: animation evaluation on the CPU in jobs
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
 - [ ] Optional compute skinning
 - [ ] Model instancing
-- [x] Map viewer with a free camera (`nxview --map`), and a frame of a map to a file without a window (`--screenshot`)
+- [x] Map viewer with a free camera (`nxview --map`, placed with `--position` and `--angles`), and a frame of a map to a file without a window (`--screenshot`)
 - [ ] Model viewer
 - [ ] Reference images in CI (lavapipe)
 - [ ] All official maps rendering without errors
