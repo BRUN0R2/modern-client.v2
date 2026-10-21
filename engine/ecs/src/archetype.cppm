@@ -168,8 +168,8 @@ public:
 
     /// Removes a row, moving the archetype's last row into the hole. Returns the entity that moved,
     /// whose location the caller updates.
-    auto removeRow(EntityLocation location, RowContents contents, detail::ChunkPool& pool, Version now)
-        -> std::optional<Entity>;
+    [[nodiscard]] auto removeRow(EntityLocation location, RowContents contents, detail::ChunkPool& pool,
+                                 Version now) -> std::optional<Entity>;
 
     /// Archetype graph: the archetype reached by adding or removing one component type.
     [[nodiscard]] auto findAddEdge(ComponentTypeId type) const -> std::optional<ArchetypeId>;

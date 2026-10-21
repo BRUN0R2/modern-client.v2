@@ -8,6 +8,7 @@ import nx.core;
 import nx.console;
 
 #include "consoleFixtures.hpp"
+#include "contractRecorder.hpp"
 
 namespace {
 
@@ -173,6 +174,13 @@ TEST_F(ConsoleTest, CommandNamesAreChecked) {
     EXPECT_EQ(console.registerCommand({.name = "bad name"}, handler).error().code, ConsoleError::InvalidName);
     EXPECT_EQ(console.registerCommand({.name = "SV_GRAVITY"}, handler).error().code, ConsoleError::NameTaken);
     EXPECT_EQ(console.registerCommand({.name = "alias"}, handler).error().code, ConsoleError::NameTaken);
+}
+
+TEST_F(ConsoleTest, ACommandWithoutAHandlerBreaksTheContractAndIsNotRegistered) {
+    const nx::test::ContractRecorder recorder;
+    EXPECT_TRUE(console.registerCommand({.name = "kick"}, nx::console::CommandHandler{}).has_value());
+    EXPECT_EQ(recorder.count(), 1);
+    EXPECT_FALSE(console.hasCommand("kick")) << "observed: nothing is registered";
 }
 
 TEST_F(ConsoleTest, AliasesRunTheirBodyInPlace) {

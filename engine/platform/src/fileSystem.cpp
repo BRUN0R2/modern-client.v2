@@ -253,7 +253,8 @@ auto executablePath() -> Result<std::filesystem::path, FileError> {
             path.resize(length);
             return std::filesystem::path{std::move(path)};
         }
-        path.resize(path.size() * 2); // GetModuleFileNameW cut it to the buffer
+        constexpr std::size_t kGrowth = 2;
+        path.resize(path.size() * kGrowth); // GetModuleFileNameW cut it to the buffer
     }
 }
 

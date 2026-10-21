@@ -160,7 +160,11 @@ auto Document::operator=(Document&& other) noexcept -> Document& = default;
 Document::~Document() = default;
 
 auto Document::root() const noexcept -> TableView {
-    expects(m_tree != nullptr, "Document::root: the document was moved from");
+    if (m_tree == nullptr) {
+        expects(false, "Document::root: the document was moved from");
+        static const toml::table kEmpty; // read as an empty document
+        return NodeAccess::view(kEmpty);
+    }
     return NodeAccess::view(m_tree->table);
 }
 

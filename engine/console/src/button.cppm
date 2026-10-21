@@ -6,7 +6,6 @@
 export module nx.console:button;
 
 import std;
-import nx.core;
 
 export namespace nx::console {
 
