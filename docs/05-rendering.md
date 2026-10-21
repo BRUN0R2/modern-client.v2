@@ -260,6 +260,16 @@ flowchart LR
    sequences, *blend controllers* (aim pitch), *bone controllers*, *gait sequence*
    (player legs) and *attachments*. The code is the same one the server uses for hitboxes
    (`cs.shared`), and the GPU is **never** authoritative.
+   **Today** (`cs.shared:studio`, `cs::poseBones`): the bones posed at a frame of a sequence as the
+   original's engine poses them: each axis's rest value plus its animation value times its scale,
+   interpolated towards the next frame (a position on the raw values, the angles through the
+   quaternions of the original's `AngleQuaternion` and its `QuaternionSlerp`, unnormalized), plus
+   what its bone controller adds (its setting mapped onto its range, a cyclic one turning past it,
+   the mouth's from 0 to 64); the first two blends mixed by the first blending; the motion bone's
+   motion kept (the server's hitboxes) or removed (the client's drawing); each bone placed in its
+   parent, the roots in the entity's transform. `nxcheck` poses every sequence of every model of the
+   installation ([18](18-testing-and-quality.md#real-content)). The nine aim blends and the gait of
+   the players' models, the transitions between sequences and the jobs come with player animation.
 2. **Bone palette:** `Mat3x4` (48 bytes) per bone, written straight into the persistent
    mapped upload ring. Each instance keeps a `paletteOffset`.
 3. **Vertex shader:** fetches `bones[paletteOffset + vertex.boneIndex]`. The MDL v10 format

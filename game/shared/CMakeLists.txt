@@ -9,12 +9,15 @@ nxAddModuleLibrary(csShared
     MODULES
         src/cs.shared.cppm
         src/movement.cppm
+        src/studio.cppm
     SOURCES
         src/movement.cpp
+        src/studio.cpp
     DEPENDS
         nx::core
         nx::math
         nx::ecs
+        nx::assets
         nx::collision
         nx::game)
 

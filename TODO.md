@@ -253,7 +253,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Brush entities turned by the game (`ModelPlacement::angles`), culled as the original culls them
 - [ ] `renderfx` of brush entities
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
-- [ ] Studio models: animation evaluation on the CPU in jobs
+- [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`
+- [ ] Studio models: animation evaluated in jobs, and the transitions between sequences
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
 - [ ] Optional compute skinning
 - [ ] Model instancing
