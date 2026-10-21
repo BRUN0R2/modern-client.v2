@@ -598,12 +598,12 @@ struct TreeTargets {
 /// Moves what `decoded` holds into `destination`; its failure, when it holds one.
 template <class Records>
 [[nodiscard]] auto store(Result<Records, BspError>&& decoded, Records& destination)
-    -> std::optional<Failure<BspError>> {
+    -> Result<void, BspError> {
     if (!decoded) {
-        return std::move(decoded.error());
+        return std::unexpected{std::move(decoded.error())};
     }
     destination = std::move(*decoded);
-    return std::nullopt;
+    return {};
 }
 
 /// Fails unless every node is the child of at most one other: with children after parents, that
@@ -669,7 +669,7 @@ template <class Records>
 
 /// The bytes of a potentially visible set of `leafCount` leaves: a bit for each.
 [[nodiscard]] auto visibilityRowBytes(std::uint32_t leafCount) noexcept -> std::size_t {
-    return (std::size_t{leafCount} + 7) / 8;
+    return bytesForBits(leafCount);
 }
 
 /// Decompresses the potentially visible set of `leaf`, at `offset` of `visibility`, into `row`: the
@@ -726,9 +726,10 @@ struct Tree {
         return indexInto<FaceTag>(loadLittleEndian<std::uint16_t>(record), faces, Lump::MarkSurfaces, index,
                                   "face");
     };
-    if (auto failure = store(decodeRecords(lumps, Lump::MarkSurfaces, kMarkSurfaceBytes, decodeMarkSurfaceOf),
-                             tree.markSurfaces)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(lumps, Lump::MarkSurfaces, kMarkSurfaceBytes, decodeMarkSurfaceOf),
+                            tree.markSurfaces);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     tree.visibility = lumps[Lump::Visibility];
     // Every array's size first: a node indexes the nodes after it, and the leaves.
@@ -744,27 +745,30 @@ struct Tree {
             return decode(record, index, targets);
         };
     };
-    if (auto failure = store(decodeRecords(lumps, Lump::Leaves, kLeafBytes, with(decodeLeaf)), tree.leaves)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(lumps, Lump::Leaves, kLeafBytes, with(decodeLeaf)), tree.leaves);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure = store(decodeRecords(lumps, Lump::Nodes, kNodeBytes, with(decodeNode)), tree.nodes)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(lumps, Lump::Nodes, kNodeBytes, with(decodeNode)), tree.nodes);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure = store(decodeRecords(lumps, Lump::ClipNodes, kClipNodeBytes, with(decodeClipNode)),
-                             tree.clipNodes)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(lumps, Lump::ClipNodes, kClipNodeBytes, with(decodeClipNode)),
+                            tree.clipNodes);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     if (auto trees =
             checkSingleParents(tree.nodes).and_then([&tree] { return checkAcyclic(tree.clipNodes); });
         !trees) {
         return std::unexpected(std::move(trees.error()));
     }
-    if (auto failure =
-            store(decodeRecords(lumps, Lump::Models, kModelBytes, with(decodeModel)), tree.models)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(lumps, Lump::Models, kModelBytes, with(decodeModel)), tree.models);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure = store(parseEntities(lumps[Lump::Entities]), tree.entities)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(parseEntities(lumps[Lump::Entities]), tree.entities); !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     // The set of every leaf of the world, so that potentiallyVisible() decompresses without checks.
     if (!tree.models.empty()) {
@@ -790,40 +794,43 @@ auto BspView::parse(std::span<const std::byte> bytes) -> Result<BspView, BspErro
         return std::unexpected(lumps.error());
     }
     BspView view;
-    if (auto failure = store(decodeRecords(*lumps, Lump::Planes, kPlaneBytes, decodePlane), view.m_planes)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(*lumps, Lump::Planes, kPlaneBytes, decodePlane), view.m_planes);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure =
-            store(decodeRecords(*lumps, Lump::Vertices, kVertexBytes, decodeVertex), view.m_vertices)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored =
+            store(decodeRecords(*lumps, Lump::Vertices, kVertexBytes, decodeVertex), view.m_vertices);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     const auto decodeEdgeOf = [vertices = view.m_vertices.size()](std::span<const std::byte> record,
                                                                   std::size_t index) {
         return decodeEdge(record, index, vertices);
     };
-    if (auto failure = store(decodeRecords(*lumps, Lump::Edges, kEdgeBytes, decodeEdgeOf), view.m_edges)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(*lumps, Lump::Edges, kEdgeBytes, decodeEdgeOf), view.m_edges);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     const auto decodeSurfaceEdgeOf = [edges = view.m_edges.size()](std::span<const std::byte> record,
                                                                    std::size_t index) {
         return decodeSurfaceEdge(record, index, edges);
     };
-    if (auto failure =
-            store(decodeRecords(*lumps, Lump::SurfaceEdges, kSurfaceEdgeBytes, decodeSurfaceEdgeOf),
-                  view.m_surfaceEdges)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(*lumps, Lump::SurfaceEdges, kSurfaceEdgeBytes, decodeSurfaceEdgeOf),
+                            view.m_surfaceEdges);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure = store(decodeTextures((*lumps)[Lump::Textures]), view.m_textures)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeTextures((*lumps)[Lump::Textures]), view.m_textures); !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     const auto decodeTextureInfoOf = [textures = view.m_textures.size()](std::span<const std::byte> record,
                                                                          std::size_t index) {
         return decodeTextureInfo(record, index, textures);
     };
-    if (auto failure =
-            store(decodeRecords(*lumps, Lump::TextureInfos, kTextureInfoBytes, decodeTextureInfoOf),
-                  view.m_textureInfos)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(*lumps, Lump::TextureInfos, kTextureInfoBytes, decodeTextureInfoOf),
+                            view.m_textureInfos);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     view.m_lighting = (*lumps)[Lump::Lighting];
     if (view.m_lighting.size() % kRgbBytes != 0) {
@@ -837,8 +844,9 @@ auto BspView::parse(std::span<const std::byte> bytes) -> Result<BspView, BspErro
                                   std::span<const std::byte> record, std::size_t index) {
         return decodeFace(record, index, targets);
     };
-    if (auto failure = store(decodeRecords(*lumps, Lump::Faces, kFaceBytes, decodeFaceOf), view.m_faces)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeRecords(*lumps, Lump::Faces, kFaceBytes, decodeFaceOf), view.m_faces);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     auto tree = decodeTree(*lumps, view.m_planes.size(), view.m_faces.size());
     if (!tree) {
@@ -886,7 +894,7 @@ auto LeafSet::contains(LeafIndex leaf) const noexcept -> bool {
         return false;
     }
     const std::uint32_t bit = leaf.value - 1;
-    return ((static_cast<std::uint32_t>(m_bits[bit / 8]) >> (bit % 8)) & 1U) != 0;
+    return ((static_cast<std::uint32_t>(m_bits[bit / kBitsPerByte]) >> (bit % kBitsPerByte)) & 1U) != 0;
 }
 
 auto integerOfValue(std::string_view value) noexcept -> std::optional<int> {

@@ -23,6 +23,13 @@ inline constexpr std::int32_t kStudioVersion = 10;
 /// The degrees of freedom of a bone: three translations, then three rotations.
 inline constexpr std::size_t kBoneAxes = 6;
 
+/// The axes a sequence blends its animations along, at most, as the format stores them.
+inline constexpr std::size_t kSequenceBlendAxes = 2;
+
+/// What the file of a model's sequence group (its `*01.mdl`) starts with.
+inline constexpr std::array kSequenceGroupMagic{std::byte{'I'}, std::byte{'D'}, std::byte{'S'},
+                                                std::byte{'Q'}};
+
 /// The most values decodeAnimation decodes for one sequence: a safety ceiling, not a content limit
 /// (a player's sequence with nine blends decodes to under half a million). A constant axis costs no
 /// byte in the file, so without it a hostile frame count could ask for any amount of memory.
@@ -89,7 +96,7 @@ struct StudioBone {
 struct BoneController {
     BoneIndex bone{};
     BoneAxis axis = BoneAxis::X;
-    bool wraps = false; ///< The range loops, as an angle that turns past its end.
+    bool isCyclic = false; ///< The range loops, as an angle that turns past its end.
     float start = 0.0F;
     float end = 0.0F;
     std::int32_t rest = 0;     ///< The setting it starts at.
@@ -191,7 +198,7 @@ struct StudioEvent {
 struct StudioSequence {
     std::string label;
     float fps = 0.0F;
-    bool loops = false;
+    bool isLooping = false;
     std::int32_t activity = 0;       ///< The game's activity it plays for.
     std::int32_t activityWeight = 0; ///< How likely it is chosen among the activity's sequences.
     std::vector<StudioEvent> events{};
@@ -200,10 +207,11 @@ struct StudioSequence {
     BoneIndex motionBone{};       ///< The bone its root motion is taken from.
     Vec3 linearMovement{};        ///< How far the whole sequence moves the model.
     Aabb bounds{};
-    std::uint32_t blendCount = 0;              ///< At least one: the animations it interpolates between.
-    std::array<std::uint32_t, 2> blendTypes{}; ///< What drives each blend, as the controllers' axis bits.
-    std::array<float, 2> blendStarts{};
-    std::array<float, 2> blendEnds{};
+    std::uint32_t blendCount = 0; ///< At least one: the animations it interpolates between.
+    /// What drives each blend, as the controllers' axis bits.
+    std::array<std::uint32_t, kSequenceBlendAxes> blendTypes{};
+    std::array<float, kSequenceBlendAxes> blendStarts{};
+    std::array<float, kSequenceBlendAxes> blendEnds{};
     SequenceGroupIndex group{};  ///< The file its animation is in: 0 for this one.
     std::uint32_t entryNode = 0; ///< Where it starts and ends in the transition graph.
     std::uint32_t exitNode = 0;
@@ -285,7 +293,7 @@ private:
     MdlView() = default;
 
     /// Reads the sequence groups, the sequences and the transitions.
-    [[nodiscard]] auto decodeSequences(std::span<const std::byte> bytes) -> std::optional<Failure<MdlError>>;
+    [[nodiscard]] auto decodeSequences(std::span<const std::byte> bytes) -> Result<void, MdlError>;
 
     std::string m_name;
     Vec3 m_eyePosition{};

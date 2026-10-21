@@ -27,12 +27,31 @@ constexpr std::size_t kDescriptorOffset = 17;
 constexpr std::uint8_t kNoColorMap = 0;
 constexpr std::uint8_t kHasColorMap = 1;
 
-// The image types; each plus 8 is the same, run-length encoded.
-constexpr std::uint8_t kNoImage = 0;
-constexpr std::uint8_t kColorMapped = 1;
-constexpr std::uint8_t kTrueColor = 2;
-constexpr std::uint8_t kGrayscale = 3;
+/// The kinds of image, as the file numbers them; each plus kRunLength is the same, run-length
+/// encoded.
+enum class ImageKind : std::uint8_t {
+    None,
+    ColorMapped,
+    TrueColor,
+    Grayscale,
+};
 constexpr std::uint8_t kRunLength = 8;
+
+// The depths the reader decodes, in bits per pixel: a color map's index; true color without and
+// with alpha, which are also the depths of a color map's entries; gray without and with alpha.
+constexpr std::uint8_t kIndexDepth = 8;
+constexpr std::uint8_t kRgbDepth = 24;
+constexpr std::uint8_t kRgbaDepth = 32;
+constexpr std::uint8_t kGrayDepth = 8;
+constexpr std::uint8_t kGrayAlphaDepth = 16;
+
+// Where each channel of a stored true color is: blue, green, red, then alpha when it has one; and
+// the alpha of a gray pixel that has one, after its gray.
+constexpr std::size_t kStoredBlue = 0;
+constexpr std::size_t kStoredGreen = 1;
+constexpr std::size_t kStoredRed = 2;
+constexpr std::size_t kStoredAlpha = 3;
+constexpr std::size_t kStoredGrayAlpha = 1;
 
 // The descriptor: the alpha depth (bits 0-3), pixels from the right (bit 4), rows from the top
 // (bit 5), and an interleaving of the rows (bits 6-7) of 1989, which no writer uses.
@@ -53,39 +72,45 @@ using Rgba = std::array<std::byte, kRgbaBytes>;
 
 /// How the pixels of an image are stored.
 struct PixelFormat {
-    std::uint8_t kind = kTrueColor; ///< kColorMapped, kTrueColor or kGrayscale.
+    ImageKind kind = ImageKind::TrueColor;
     bool isRunLength = false;
     std::size_t bytesPerPixel = 0;
 };
 
 /// The pixel format of image type `type` at `depth` bits per pixel. Errors: BadValue, Unsupported.
 [[nodiscard]] auto pixelFormatOf(std::uint8_t type, std::uint8_t depth) -> Result<PixelFormat, TgaError> {
-    if (type == kNoImage) {
+    if (type == std::to_underlying(ImageKind::None)) {
         return fail(TgaError::BadValue, "image type 0: no image");
     }
     const bool isRunLength = type > kRunLength;
-    const auto kind = static_cast<std::uint8_t>(isRunLength ? type - kRunLength : type);
-    const bool isDecoded = (kind == kColorMapped && depth == 8) ||
-                           (kind == kTrueColor && (depth == 24 || depth == 32)) ||
-                           (kind == kGrayscale && (depth == 8 || depth == 16));
-    if (kind > kGrayscale || !isDecoded) {
+    const auto kind = static_cast<ImageKind>(isRunLength ? type - kRunLength : type);
+    const bool isDecoded =
+        (kind == ImageKind::ColorMapped && depth == kIndexDepth) ||
+        (kind == ImageKind::TrueColor && (depth == kRgbDepth || depth == kRgbaDepth)) ||
+        (kind == ImageKind::Grayscale && (depth == kGrayDepth || depth == kGrayAlphaDepth));
+    if (!isDecoded) {
         return fail(TgaError::Unsupported, std::format("image type {} at {} bits per pixel", type, depth));
     }
-    return PixelFormat{.kind = kind, .isRunLength = isRunLength, .bytesPerPixel = std::size_t{depth} / 8};
+    return PixelFormat{.kind = kind, .isRunLength = isRunLength, .bytesPerPixel = bytesForBits(depth)};
+}
+
+/// The color of true color pixel `stored`: blue, green, red and, at its full depth, alpha.
+[[nodiscard]] auto trueColorOf(std::span<const std::byte> stored) noexcept -> Rgba {
+    return Rgba{stored[kStoredRed], stored[kStoredGreen], stored[kStoredBlue],
+                stored.size() == bytesForBits(kRgbaDepth) ? stored[kStoredAlpha] : kOpaque};
 }
 
 /// The colors of a color map: entries of 24 or 32 bits. Errors: Unsupported.
 [[nodiscard]] auto colorsOf(std::span<const std::byte> map, std::uint8_t entrySize)
     -> Result<std::vector<Rgba>, TgaError> {
-    if (entrySize != 24 && entrySize != 32) {
+    if (entrySize != kRgbDepth && entrySize != kRgbaDepth) {
         return fail(TgaError::Unsupported, std::format("color map entries of {} bits", entrySize));
     }
-    const std::size_t entryBytes = std::size_t{entrySize} / 8;
+    const std::size_t entryBytes = bytesForBits(entrySize);
     std::vector<Rgba> colors;
     colors.reserve(map.size() / entryBytes);
     for (std::size_t offset = 0; offset < map.size(); offset += entryBytes) {
-        colors.push_back(
-            {map[offset + 2], map[offset + 1], map[offset], entryBytes == 4 ? map[offset + 3] : kOpaque});
+        colors.push_back(trueColorOf(map.subspan(offset, entryBytes)));
     }
     return colors;
 }
@@ -142,7 +167,7 @@ private:
     [[nodiscard]] auto colorOf(std::span<const std::byte> stored, std::size_t pixel) const
         -> Result<Rgba, TgaError> {
         switch (m_format.kind) {
-        case kColorMapped: {
+        case ImageKind::ColorMapped: {
             const auto index = std::to_integer<std::size_t>(stored[0]);
             if (index < m_firstColor || index - m_firstColor >= m_colors.size()) {
                 return fail(TgaError::BadValue,
@@ -151,11 +176,14 @@ private:
             }
             return m_colors[index - m_firstColor];
         }
-        case kTrueColor:
-            return Rgba{stored[2], stored[1], stored[0], m_format.bytesPerPixel == 4 ? stored[3] : kOpaque};
-        default: // kGrayscale
-            return Rgba{stored[0], stored[0], stored[0], m_format.bytesPerPixel == 2 ? stored[1] : kOpaque};
+        case ImageKind::TrueColor:
+            return trueColorOf(stored);
+        case ImageKind::Grayscale:
+        case ImageKind::None: // pixelFormatOf refuses it
+            break;
         }
+        const bool hasAlpha = m_format.bytesPerPixel == bytesForBits(kGrayAlphaDepth);
+        return Rgba{stored[0], stored[0], stored[0], hasAlpha ? stored[kStoredGrayAlpha] : kOpaque};
     }
 
     PixelFormat m_format;
@@ -170,16 +198,18 @@ void orient(RgbaImage& image, std::uint8_t descriptor) {
         return std::span{image.pixels}.subspan(index * rowBytes, rowBytes);
     };
     if ((descriptor & kFromTheTop) == 0) {
-        for (std::size_t index = 0; index < image.height / 2; ++index) {
-            std::ranges::swap_ranges(row(index), row(image.height - 1 - index));
+        for (std::size_t top = 0, bottom = image.height - 1; top < bottom; ++top, --bottom) {
+            std::ranges::swap_ranges(row(top), row(bottom));
         }
     }
     if ((descriptor & kFromTheRight) != 0) {
         for (std::size_t index = 0; index < image.height; ++index) {
             const std::span<std::byte> pixels = row(index);
-            for (std::size_t left = 0; left < image.width / 2; ++left) {
-                std::ranges::swap_ranges(pixels.subspan(left * kRgbaBytes, kRgbaBytes),
-                                         pixels.subspan((image.width - 1 - left) * kRgbaBytes, kRgbaBytes));
+            const auto pixel = [pixels](std::size_t at) {
+                return pixels.subspan(at * kRgbaBytes, kRgbaBytes);
+            };
+            for (std::size_t left = 0, right = image.width - 1; left < right; ++left, --right) {
+                std::ranges::swap_ranges(pixel(left), pixel(right));
             }
         }
     }
@@ -208,7 +238,7 @@ auto readTga(std::span<const std::byte> bytes) -> Result<RgbaImage, TgaError> {
     }
     const bool hasColorMap = colorMapType == kHasColorMap;
     if ((colorMapType != kNoColorMap && !hasColorMap) || width == 0 || height == 0 ||
-        (format->kind == kColorMapped && (!hasColorMap || colorCount == 0))) {
+        (format->kind == ImageKind::ColorMapped && (!hasColorMap || colorCount == 0))) {
         return fail(TgaError::BadValue,
                     std::format("color map type {} of {} colors, image type {}, an image of {}x{}",
                                 colorMapType, colorCount, imageType, width, height));
@@ -218,15 +248,14 @@ auto readTga(std::span<const std::byte> bytes) -> Result<RgbaImage, TgaError> {
     }
 
     const std::size_t mapOffset = kHeaderBytes + idLength;
-    const std::size_t mapBytes =
-        hasColorMap ? std::size_t{colorCount} * ((std::size_t{entrySize} + 7) / 8) : 0;
+    const std::size_t mapBytes = hasColorMap ? std::size_t{colorCount} * bytesForBits(entrySize) : 0;
     if (bytes.size() < mapOffset + mapBytes) {
         return fail(TgaError::TooSmall,
                     std::format("{} bytes, less than the {} of the header, ID and color map", bytes.size(),
                                 mapOffset + mapBytes));
     }
     std::vector<Rgba> colors;
-    if (format->kind == kColorMapped) {
+    if (format->kind == ImageKind::ColorMapped) {
         auto read = colorsOf(bytes.subspan(mapOffset, mapBytes), entrySize);
         if (!read) {
             return std::unexpected{read.error()};
