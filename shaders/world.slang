@@ -12,7 +12,8 @@ struct Frame
 {
     // The rows of the view-projection matrix: clip = (dot(row0, p), dot(row1, p), ...).
     float4 rows[4];
-    // x: the original's lightscale; yz: the size of the lightmaps, in luxels.
+    // x: the original's lightscale; yz: the size of the lightmaps, in luxels; w: the time since the map
+    // started, in seconds, which turbulent faces warp with.
     float4 lighting;
     // xyz: the camera's position, where the directions to the sky start.
     float4 eye;
@@ -63,6 +64,8 @@ struct VertexInput
     // In luxels of the lightmaps; negative for a face without lightmaps.
     [[vk::location(2)]] float2 lightmapPosition : TEXCOORD1;
     [[vk::location(3)]] uint4 styles : TEXCOORD2;
+    // 1 on a turbulent face (water, lasers): uv is in texels, and warps.
+    [[vk::location(4)]] uint flags : TEXCOORD3;
 };
 
 struct VertexOutput
@@ -80,12 +83,37 @@ float4 clipPositionOf(float3 position)
                   dot(frame.rows[3], point));
 }
 
+static const uint kTurbulent = 1;
+static const float kTurbulentCell = 64.0;
+
+/// The original's r_turbsin: 8 sin(2 pi i / 256), the values of its warpsin table.
+float turbulentSine(float position)
+{
+    const int index = int(position * (256.0 / (2.0 * 3.14159265358979))) & 255;
+    return 8.0 * sin(float(index) * (2.0 * 3.14159265358979 / 256.0));
+}
+
+/// The texture coordinates of a vertex; on a turbulent face, its texels warped as the original's
+/// EmitWaterPolys warps them at every corner of the pieces it cuts the face into, a cell of 64 texels
+/// a texture.
+float2 textureCoordinatesOf(VertexInput input)
+{
+    if (input.flags != kTurbulent)
+    {
+        return input.uv;
+    }
+    const float time = frame.lighting.w;
+    const float s = input.uv.x + turbulentSine((input.uv.y * 0.125) + time);
+    const float t = input.uv.y + turbulentSine((input.uv.x * 0.125) + time);
+    return float2(s, t) / kTurbulentCell;
+}
+
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
     output.position = clipPositionOf(input.position);
-    output.uv = input.uv;
+    output.uv = textureCoordinatesOf(input);
     output.lightmapPosition = input.lightmapPosition;
     output.styles = input.styles;
     return output;

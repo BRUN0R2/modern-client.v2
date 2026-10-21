@@ -184,8 +184,12 @@ its `wad` key names, by file name at the root of the VFS as the original looks t
 four mips, a checkerboard for a name no WAD has; masked textures; animated textures (`+0name` to
 `+9name`, and `+aname` to `+jname`, of any case, in a sequence of their own), whose faces all show the
 same frame, ten a second (`R_TextureAnimation`), where the original would refuse a sequence with a
-missing number the frames it has play in order; triggers and the compiler's tool textures
-(`AAATRIGGER`, `CLIP`...) not drawn. The lightmaps are packed into one atlas of four
+missing number the frames it has play in order; turbulent faces (water and lasers: `!`, Quake's `*`,
+and names that start with `water` or `laser`), unlit, cut along the axial planes every 64 units
+(`GL_SubdivideSurface`), their texture coordinates in texels without the texture's shift and warped
+at each corner of the pieces, a cell of 64 texels a texture, as `EmitWaterPolys` warps them
+(the waves of a `func_water`'s `scale` come with moving entities); triggers and the compiler's tool
+textures (`AAATRIGGER`, `CLIP`...) not drawn. The lightmaps are packed into one atlas of four
 layers, each face's lightmaps (one per light style, up to its first unused one) at the same place
 of each layer; a face's extent in luxels of 16 units is computed in double precision, as the
 compilers compute it.

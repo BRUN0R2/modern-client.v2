@@ -37,16 +37,21 @@ constexpr auto kInvisibleTextures =
 /// The light styles of a face without a lightmap, and after the last of a face's lightmaps.
 constexpr std::uint8_t kNoStyle = assets::kNoLightStyle;
 
+/// A vertex of a turbulent face (water, lasers): its texture coordinates are in texels and warp.
+constexpr std::uint32_t kTurbulent = 1;
+
 struct WorldVertex {
     Vec3 position{};
+    /// From 0 to 1 across the texture; in texels on a turbulent face, which warps them.
     float u = 0.0F;
     float v = 0.0F;
     /// In luxels of the lightmaps, their centers at halves; negative without lightmaps.
     float lightmapX = -1.0F;
     float lightmapY = -1.0F;
     std::array<std::uint8_t, assets::kFaceLightStyles> styles{kNoStyle, kNoStyle, kNoStyle, kNoStyle};
+    std::uint32_t flags = 0; ///< kTurbulent, or 0.
 };
-static_assert(sizeof(WorldVertex) == 8 * sizeof(float), "the vertex layout of the world pipeline");
+static_assert(sizeof(WorldVertex) == 9 * sizeof(float), "the vertex layout of the world pipeline");
 
 /// A brush entity's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1.
 struct EntityUniform {
@@ -54,7 +59,8 @@ struct EntityUniform {
 };
 
 /// The frame's uniform: the rows of the view-projection matrix; in `lighting`, the original's
-/// lightscale and the size of the lightmaps; the camera's position; the light styles' brightness.
+/// lightscale, the size of the lightmaps and the time; the camera's position; the light styles'
+/// brightness.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 lighting{};
@@ -78,6 +84,7 @@ enum class SurfaceKind : std::uint8_t {
     Opaque,
     Masked,    ///< `{`: palette index 255 is transparent.
     Sky,       ///< Shows the side of the sky it is seen toward.
+    Turbulent, ///< Water and lasers: unlit, its texture warping.
     Invisible, ///< Triggers and tool textures.
 };
 
@@ -89,6 +96,11 @@ enum class SurfaceKind : std::uint8_t {
             return equalsIgnoringCase(name, invisible);
         })) {
         return SurfaceKind::Invisible;
+    }
+    // Mod_LooksLikeWaterTexture: '!' and Quake's '*', and the names that start with "water" or "laser".
+    if (name.starts_with('!') || name.starts_with('*') || equalsIgnoringCase(name.substr(0, 5), "water") ||
+        equalsIgnoringCase(name.substr(0, 5), "laser")) {
+        return SurfaceKind::Turbulent;
     }
     return name.starts_with('{') ? SurfaceKind::Masked : SurfaceKind::Opaque;
 }
@@ -227,6 +239,56 @@ private:
         next = stop;
     }
     return Vec3{.x = values[0], .y = values[1], .z = values[2]};
+}
+
+/// The cell of the grid the original cuts turbulent faces along, its warp computed at their corners.
+constexpr float kTurbulentCell = 64.0F;
+/// What a cut leaves on either side, at least, for the original to make it.
+constexpr float kLeastCut = 8.0F;
+/// A turbulent face wider than any map the original loads is not cut (it would make millions).
+constexpr float kWidestCutFace = 16384.0F;
+
+/// The pieces of `polygon` along the axial planes every 64 units, as the original's
+/// SubdividePolygon_r cuts a turbulent face: on each axis, at the plane of the grid nearest the
+/// middle, unless that leaves less than 8 units on a side.
+void cutAlongTheGrid(const std::vector<Vec3>& polygon, std::vector<std::vector<Vec3>>& pieces) {
+    Aabb bounds{.min = polygon.front(), .max = polygon.front()};
+    for (const Vec3 point : polygon) {
+        bounds = bounds.including(point);
+    }
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        const auto along = [axis](Vec3 point) {
+            return axis == 0 ? point.x : axis == 1 ? point.y : point.z;
+        };
+        const float middle = (along(bounds.min) + along(bounds.max)) * 0.5F;
+        const float cut = kTurbulentCell * std::floor((middle / kTurbulentCell) + 0.5F);
+        if (along(bounds.max) - cut < kLeastCut || cut - along(bounds.min) < kLeastCut) {
+            continue;
+        }
+        std::vector<Vec3> front;
+        std::vector<Vec3> back;
+        for (std::size_t corner = 0; corner < polygon.size(); ++corner) {
+            const Vec3 point = polygon[corner];
+            const Vec3 next = polygon[(corner + 1) % polygon.size()];
+            const float distance = along(point) - cut;
+            const float nextDistance = along(next) - cut;
+            if (distance >= 0.0F) {
+                front.push_back(point);
+            }
+            if (distance <= 0.0F) {
+                back.push_back(point);
+            }
+            if (distance != 0.0F && nextDistance != 0.0F && (distance > 0.0F) != (nextDistance > 0.0F)) {
+                const Vec3 crossing = point + ((next - point) * (distance / (distance - nextDistance)));
+                front.push_back(crossing);
+                back.push_back(crossing);
+            }
+        }
+        cutAlongTheGrid(front, pieces);
+        cutAlongTheGrid(back, pieces);
+        return;
+    }
+    pieces.push_back(polygon);
 }
 
 /// The integer at the start of an entity's value, after spaces, as the original's atoi reads it.
@@ -445,6 +507,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         Vec3 origin{};
         std::size_t texture = 0;
         bool isSky = false;
+        bool isTurbulent = false;
         std::optional<LightmapExtent> lightmap{};
     };
     std::vector<FaceToDraw> faces;
@@ -463,7 +526,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
                                        .index = bspModel.firstFace.value + offset,
                                        .origin = entities[model].origin,
                                        .texture = texture,
-                                       .isSky = kind == SurfaceKind::Sky});
+                                       .isSky = kind == SurfaceKind::Sky,
+                                       .isTurbulent = kind == SurfaceKind::Turbulent});
         }
     }
 
@@ -483,7 +547,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     for (std::size_t index = 0; index < faces.size(); ++index) {
         FaceToDraw& entry = faces[index];
         const assets::TextureInfo& info = map.textureInfos()[entry.face->textureInfo.value];
-        if (entry.isSky || info.isSpecial || !entry.face->lightmapOffset) {
+        if (entry.isSky || entry.isTurbulent || info.isSpecial || !entry.face->lightmapOffset) {
             continue;
         }
         double minS = std::numeric_limits<double>::max();
@@ -582,36 +646,63 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         return gpuFailure(std::move(skyTexture.error()));
     }
 
-    // The geometry: each face a triangle fan, whose triangles each frame puts in its texture's bucket
-    // (the checkerboard's last), or the sky's, when the camera sees it.
+    // The geometry: each face triangle fans, whose triangles each frame puts in its texture's bucket
+    // (the checkerboard's last), or the sky's, when the camera sees it. A turbulent face is cut along
+    // the grid first, its texture coordinates in texels and without the texture's shift
+    // (R_TextureCoord), unlit.
     std::vector<WorldVertex> vertices;
     std::vector<std::optional<std::uint32_t>> bucketOfTexture(textureUses.size() + 1);
     std::vector<std::vector<rhi::TextureHandle>> bucketFrames; // the textures each bucket shows in turn
-    std::size_t mostIndices = 0;
     world.m_faces.resize(map.faces().size());
+    std::vector<std::vector<Vec3>> pieces;
     for (std::size_t index = 0; index < faces.size(); ++index) {
         const FaceToDraw& entry = faces[index];
         const assets::TextureInfo& info = map.textureInfos()[entry.face->textureInfo.value];
         const TextureUse& use = entry.texture < textureUses.size() ? textureUses[entry.texture] : missing;
-        const auto first = narrow<std::uint32_t>(vertices.size());
-        Aabb faceBounds{.min = pointOf(*entry.face, 0), .max = pointOf(*entry.face, 0)};
+        std::vector<Vec3> outline;
         for (std::uint32_t edge = 0; edge < entry.face->edgeCount; ++edge) {
-            const Vec3 point = pointOf(*entry.face, edge);
+            outline.push_back(pointOf(*entry.face, edge));
+        }
+        Aabb faceBounds{.min = outline.front(), .max = outline.front()};
+        for (const Vec3 point : outline) {
             faceBounds = faceBounds.including(point);
-            const double s = coordinateOf(point, info.s);
-            const double t = coordinateOf(point, info.t);
-            WorldVertex vertex{.position = point + entry.origin,
-                               .u = static_cast<float>(s / double{use.width}),
-                               .v = static_cast<float>(t / double{use.height})};
-            if (entry.lightmap) {
-                // Luxel centers: the first luxel's s is minS, 16 texels apart.
-                vertex.lightmapX =
-                    static_cast<float>(((s - entry.lightmap->minS) / kLuxelUnits) + 0.5 + corners[index][0]);
-                vertex.lightmapY =
-                    static_cast<float>(((t - entry.lightmap->minT) / kLuxelUnits) + 0.5 + corners[index][1]);
-                vertex.styles = entry.face->lightStyles;
+        }
+        pieces.clear();
+        const Vec3 extent = faceBounds.size();
+        if (entry.isTurbulent && std::max({extent.x, extent.y, extent.z}) <= kWidestCutFace) {
+            cutAlongTheGrid(outline, pieces);
+        } else {
+            pieces.push_back(std::move(outline));
+        }
+        const auto firstIndex = narrow<std::uint32_t>(world.m_faceIndices.size());
+        for (const std::vector<Vec3>& piece : pieces) {
+            const auto first = narrow<std::uint32_t>(vertices.size());
+            for (const Vec3 point : piece) {
+                WorldVertex vertex{.position = point + entry.origin};
+                if (entry.isTurbulent) {
+                    vertex.u = dot(point, Vec3{.x = info.s.x, .y = info.s.y, .z = info.s.z});
+                    vertex.v = dot(point, Vec3{.x = info.t.x, .y = info.t.y, .z = info.t.z});
+                    vertex.flags = kTurbulent;
+                } else {
+                    const double s = coordinateOf(point, info.s);
+                    const double t = coordinateOf(point, info.t);
+                    vertex.u = static_cast<float>(s / double{use.width});
+                    vertex.v = static_cast<float>(t / double{use.height});
+                    if (entry.lightmap) {
+                        // Luxel centers: the first luxel's s is minS, 16 texels apart.
+                        vertex.lightmapX = static_cast<float>(((s - entry.lightmap->minS) / kLuxelUnits) +
+                                                              0.5 + corners[index][0]);
+                        vertex.lightmapY = static_cast<float>(((t - entry.lightmap->minT) / kLuxelUnits) +
+                                                              0.5 + corners[index][1]);
+                        vertex.styles = entry.face->lightStyles;
+                    }
+                }
+                vertices.push_back(vertex);
             }
-            vertices.push_back(vertex);
+            for (std::uint32_t corner = 2; corner < piece.size(); ++corner) {
+                world.m_faceIndices.insert(world.m_faceIndices.end(),
+                                           {first, first + corner - 1, first + corner});
+            }
         }
         std::uint32_t bucket = kSkyBucket;
         if (!entry.isSky) {
@@ -628,13 +719,13 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
             bucket = *slot;
         }
-        world.m_faces[entry.index] = FaceDraw{.firstVertex = first,
-                                              .vertexCount = entry.face->edgeCount,
-                                              .bucket = bucket,
-                                              .plane = map.planes()[entry.face->plane.value].plane,
-                                              .isBackSide = entry.face->isBackSide,
-                                              .middle = faceBounds.center() + entry.origin};
-        mostIndices += (std::size_t{entry.face->edgeCount} - 2) * 3;
+        world.m_faces[entry.index] =
+            FaceDraw{.firstIndex = firstIndex,
+                     .indexCount = narrow<std::uint32_t>(world.m_faceIndices.size()) - firstIndex,
+                     .bucket = bucket,
+                     .plane = map.planes()[entry.face->plane.value].plane,
+                     .isBackSide = entry.face->isBackSide,
+                     .middle = faceBounds.center() + entry.origin};
         ++world.m_stats.faces;
     }
     for (std::size_t model = 1; model < map.models().size(); ++model) {
@@ -679,11 +770,11 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             return gpuFailure(std::move(group.error()));
         }
         // As many indices as every face has: what a frame gathers is never more.
-        auto indices =
-            device.createBuffer({.label = "world.indices",
-                                 .size = std::max<std::uint64_t>(mostIndices, 1) * sizeof(std::uint32_t),
-                                 .usage = {rhi::BufferUsage::Index},
-                                 .location = rhi::MemoryLocation::Upload});
+        auto indices = device.createBuffer(
+            {.label = "world.indices",
+             .size = std::max<std::uint64_t>(world.m_faceIndices.size(), 1) * sizeof(std::uint32_t),
+             .usage = {rhi::BufferUsage::Index},
+             .location = rhi::MemoryLocation::Upload});
         if (!indices) {
             device.destroy(*group);
             device.destroy(*buffer);
@@ -731,7 +822,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         }
         drawn.entityGroup = *group;
     }
-    world.m_stats.triangles = mostIndices / 3;
+    world.m_stats.triangles = world.m_faceIndices.size() / 3;
     world.m_stats.lightmapAtlas = atlasExtent;
 
     const auto uploadBuffer =
@@ -784,14 +875,14 @@ BspWorld::BspWorld(BspWorld&& other) noexcept
       m_colorPipeline{std::exchange(other.m_colorPipeline, {})},
       m_additivePipeline{std::exchange(other.m_additivePipeline, {})},
       m_bucketFrames{std::move(other.m_bucketFrames)}, m_frameSlots{std::move(other.m_frameSlots)},
-      m_faces{std::move(other.m_faces)}, m_models{std::move(other.m_models)}, m_lighting{other.m_lighting},
-      m_stats{std::move(other.m_stats)}, m_drawCount{other.m_drawCount},
-      m_faceGathered{std::move(other.m_faceGathered)}, m_visibleFrom{other.m_visibleFrom},
-      m_visibleLeaves{std::move(other.m_visibleLeaves)}, m_bucketIndices{std::move(other.m_bucketIndices)},
-      m_skyIndices{std::move(other.m_skyIndices)}, m_batches{std::move(other.m_batches)},
-      m_entityDraws{std::move(other.m_entityDraws)}, m_entityFaces{std::move(other.m_entityFaces)},
-      m_entityIndices{std::move(other.m_entityIndices)}, m_entityRanges{std::move(other.m_entityRanges)},
-      m_lastFrame{other.m_lastFrame} {
+      m_faces{std::move(other.m_faces)}, m_faceIndices{std::move(other.m_faceIndices)},
+      m_models{std::move(other.m_models)}, m_lighting{other.m_lighting}, m_stats{std::move(other.m_stats)},
+      m_drawCount{other.m_drawCount}, m_faceGathered{std::move(other.m_faceGathered)},
+      m_visibleFrom{other.m_visibleFrom}, m_visibleLeaves{std::move(other.m_visibleLeaves)},
+      m_bucketIndices{std::move(other.m_bucketIndices)}, m_skyIndices{std::move(other.m_skyIndices)},
+      m_batches{std::move(other.m_batches)}, m_entityDraws{std::move(other.m_entityDraws)},
+      m_entityFaces{std::move(other.m_entityFaces)}, m_entityIndices{std::move(other.m_entityIndices)},
+      m_entityRanges{std::move(other.m_entityRanges)}, m_lastFrame{other.m_lastFrame} {
     other.m_textures.clear();
     other.m_bucketFrames.clear();
     other.m_frameSlots.clear();
@@ -843,7 +934,7 @@ auto BspWorld::isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noe
     const bool isFacing = isOfAnEntity
                               ? (draw.isBackSide ? distance < -kBackfaceEpsilon : distance > kBackfaceEpsilon)
                               : (distance < 0.0F) == draw.isBackSide;
-    return draw.vertexCount != 0 && isFacing;
+    return draw.indexCount != 0 && isFacing;
 }
 
 void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
@@ -857,10 +948,8 @@ void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
     const FaceDraw& draw = m_faces[face];
     std::vector<std::uint32_t>& indices =
         draw.bucket == kSkyBucket ? m_skyIndices : m_bucketIndices[draw.bucket];
-    for (std::uint32_t corner = 2; corner < draw.vertexCount; ++corner) {
-        const std::uint32_t first = draw.firstVertex;
-        indices.insert(indices.end(), {first, first + corner - 1, first + corner});
-    }
+    const auto triangles = std::span{m_faceIndices}.subspan(draw.firstIndex, draw.indexCount);
+    indices.insert(indices.end(), triangles.begin(), triangles.end());
     ++m_lastFrame.faces;
 }
 
@@ -887,11 +976,8 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera) {
     for (const std::uint32_t face : std::span{m_entityFaces}.subspan(first, count)) {
         const FaceDraw& draw = m_faces[face];
         const auto firstIndex = narrow<std::uint32_t>(m_entityIndices.size());
-        for (std::uint32_t corner = 2; corner < draw.vertexCount; ++corner) {
-            const std::uint32_t firstVertex = draw.firstVertex;
-            m_entityIndices.insert(m_entityIndices.end(),
-                                   {firstVertex, firstVertex + corner - 1, firstVertex + corner});
-        }
+        const auto triangles = std::span{m_faceIndices}.subspan(draw.firstIndex, draw.indexCount);
+        m_entityIndices.insert(m_entityIndices.end(), triangles.begin(), triangles.end());
         m_entityRanges.push_back(
             IndexRange{.firstIndex = firstIndex,
                        .indexCount = narrow<std::uint32_t>(m_entityIndices.size()) - firstIndex});
@@ -990,6 +1076,7 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
                        .eye = extend(view.camera.position, 1.0F)};
     std::ranges::transform(view.lightStyles, frame.styles.begin(),
                            [](std::uint16_t value) { return static_cast<float>(value); });
+    frame.lighting.w = view.time.count(); // what turbulent faces warp with
     std::ranges::copy(std::as_bytes(std::span{&frame, 1}), m_device->mappedBytes(slot.buffer).begin());
 
     // The indices of what the camera sees, a batch for each texture that has some, then the sky's.
@@ -1121,7 +1208,10 @@ auto BspWorld::createPipelines(std::span<const std::byte> shaderCode, rhi::Forma
                              .offset = offsetof(WorldVertex, lightmapX)}, // NOLINT
         rhi::VertexAttribute{.location = 3,
                              .format = rhi::VertexFormat::Uint8x4,
-                             .offset = offsetof(WorldVertex, styles)}}; // NOLINT
+                             .offset = offsetof(WorldVertex, styles)}, // NOLINT
+        rhi::VertexAttribute{.location = 4,
+                             .format = rhi::VertexFormat::Uint32,
+                             .offset = offsetof(WorldVertex, flags)}}; // NOLINT
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = attributes}};
     const std::array targets{rhi::ColorTarget{.format = colorFormat}};

@@ -278,6 +278,36 @@ TEST(BspWorldTest, AnAnimatedTextureShowsItsFramesTenASecond) {
     EXPECT_GT(greenPixelsAt(0.25F), 0) << "frame 0 again";
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
+TEST(BspWorldTest, AWaterFaceWarpsAndIsNotLit) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    std::vector<std::byte> file = readSeed();
+    renameTexture(file, "CRATE01", "!crate");
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+
+    // The -X wall, now water: its light, unlike the lightmap of the crate it was, is the same at
+    // every style's brightness, and its texture moves.
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    nx::render::LightStyles dark;
+    dark.set(0, "a");
+    const std::vector<std::byte> atStart = target.draw(*world, camera);
+    EXPECT_EQ(target.draw(*world, camera, dark.valuesAt(nx::Seconds{0.0F})), atStart) << "unlit";
+    EXPECT_NE(target.draw(*world, camera, normalStyles(), nx::Seconds{0.5F}), atStart) << "warped";
+    EXPECT_TRUE(std::ranges::all_of(
+        std::views::iota(std::size_t{0}, atStart.size() / 4),
+        [&atStart](std::size_t pixel) { return atStart[(pixel * 4) + 3] == std::byte{255}; }))
+        << "the whole wall drawn";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
 /// Overwrites the first `from` in the entity text of `file` with `to`, of the same length.
 void replaceText(std::vector<std::byte>& file, std::string_view from, std::string_view to) {
     ASSERT_EQ(from.size(), to.size());
