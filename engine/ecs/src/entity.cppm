@@ -80,7 +80,7 @@ public:
     [[nodiscard]] inline auto aliveCount() const noexcept -> std::size_t {
         return m_slots.size() - m_freeCount - m_retiredCount;
     }
-    /// Slots whose generations ran out (reported by ecs_stats).
+    /// Slots whose generations ran out (for ecs_stats, planned in TODO.md).
     [[nodiscard]] inline auto retiredCount() const noexcept -> std::size_t { return m_retiredCount; }
 
 private:

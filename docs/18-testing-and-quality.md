@@ -2,18 +2,29 @@
 
 ## Test pyramid
 
+**Running today:**
+
 | Level | Tool | Scope | When it runs |
 |-------|------|-------|--------------|
 | Unit | GoogleTest | Isolated functions and types (`nx.core`, parsers, ECS, math) | Every PR |
+| Integration | GoogleTest (`nxIntegrationTests`) | Modules together: a world moved by parallel ECS systems, the same with any number of workers ([below](#determinism)) | Every PR |
+| Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
+| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`) | ECS and Job System hot paths | Built on every PR, run by hand ([below](#performance)) |
+| Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
+| Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
+
+**Planned:**
+
+| Level | Tool | Scope | When it runs |
+|-------|------|-------|--------------|
 | Integration | GoogleTest + *headless* server | Subsystems together (load a map, connect a client, a full round with test bots) | Every PR |
 | Rook plugins | `rook test` | Built-in plugins and examples | Every PR |
 | Rook conformance | Suite in `rook/spec/` | Every language rule and every diagnostic (`R0xxx`) | Every PR |
 | Determinism | Replays | State hash per tick | Every PR |
 | Render | Reference images | Renderer passes with tolerance | Every PR |
 | Parity | Fixtures from the original | Movement, weapons, economy, rules | Nightly |
-| Performance | Benchmarks | Hot paths and the full frame | Nightly |
-| Fuzzing | libFuzzer | Parsers, network decoder, `rookc` | Nightly |
-| Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
+| Performance | Benchmarks on a dedicated machine | Hot paths and the full frame | Nightly |
+| Fuzzing (more targets) | libFuzzer | Network decoder, `rookc` | Nightly |
 | Stress | Simulated clients | 1024 players, mass entities | Weekly |
 | *Soak* | Long-running server | 24 h+ with bots: stable memory, no timing degradation | Per release |
 
@@ -133,17 +144,18 @@ readers expected, and the readers now follow them
 
 | Metric | Where | Regression threshold |
 |--------|-------|----------------------|
-| Server tick time (p50/p99) with 32, 128 and 1024 players | `nxBenchServer` | 5% |
-| Client frame time in `timedemo` | `nxBenchClient` | 5% |
+| Server tick time (p50/p99) with 32, 128 and 1024 players | `nxBenchServer` (planned) | 5% |
+| Client frame time in `timedemo` | `nxBenchClient` (planned) | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
 | Job System throughput | `nxBenchJobs` | 5% |
-| Map loading (warm cache) | `nxBenchAssets` | 10% |
-| Rook compile time per 1000 lines | `rookBench` | 10% |
+| Map loading (warm cache) | `nxBenchAssets` (planned) | 10% |
+| Rook compile time per 1000 lines | `rookBench` (planned) | 10% |
 
-Benchmarks run on a dedicated, stable machine. The results are published as a historical
-series. Every preset builds them (`NX_BUILD_BENCHMARKS`), so the CI keeps them compiling; until the
-dedicated machine exists they are run by hand from a release build:
-`build/release-windows-msvc/bin/nxBenchEcs`.
+Planned: the benchmarks run every night on a dedicated, stable machine, which fails a regression
+above the threshold and publishes the results as a historical series
+([17 §7](17-build-and-tools.md#7-continuous-integration)). Today every preset but
+`fuzz-windows-msvc` builds them (`NX_BUILD_BENCHMARKS`), so the CI keeps them compiling, and they
+are run by hand from a release build: `build/release-windows-msvc/bin/nxBenchEcs`.
 
 ## Sanitizers and analysis
 
@@ -159,6 +171,8 @@ dedicated machine exists they are run by hand from a release build:
   the corpus, so it stays a test.
 
 ## Coverage targets
+
+Planned: no CI job measures coverage yet. These targets, and the rule below, apply once one does.
 
 | Area | Line target |
 |------|-------------|

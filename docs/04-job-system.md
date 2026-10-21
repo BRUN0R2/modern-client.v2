@@ -26,8 +26,8 @@ flowchart LR
     W1 <-->|steal| Wn
 ```
 
-- **Workers:** `N = hardware_concurrency − 1` by default (`jobs_workers`,
-  `JobSystemConfig::workerCount`, at most `kMaxWorkerCount`). CPU affinity, if a benchmark
+- **Workers:** `N = hardware_concurrency − 1` by default (`JobSystemConfig::workerCount`, at
+  most `kMaxWorkerCount`; a `jobs_workers` cvar is planned). CPU affinity, if a benchmark
   shows a gain, needs control over OS threads in a layer `nx.jobs` may use (its own or
   `nx.core`): `nx.platform` is in layer 2, above it ([01 §1.1](01-architecture.md#11-module-catalog)).
 - **Local deques** (Chase-Lev, `WorkStealingDeque`): one per priority in each worker. The
@@ -245,11 +245,12 @@ from `nx.core`, with a named capacity and a typed error if they fill up
 - Tracy zones per job (`label`) and per wait (`wait`), with the workers' *fibers view*,
   once Tracy comes in as a dependency.
 - `JobSystem::stats()`: jobs executed, steals and times slept, per worker, and jobs
-  executed by threads inside `wait`. The `jobs_stats` command shows these numbers
-  once the console exists; the average time per priority comes with Tracy.
-- `jobs_serial 1` mode (development) is equivalent to `jobs_workers 0`: without workers, each
-  job runs inside `wait` on the waiting thread, in priority and submission order.
-  Useful to isolate concurrency bugs.
+  executed by threads inside `wait`. A `jobs_stats` command that shows these numbers is
+  planned in `nx.console` ([TODO](../TODO.md)); the average time per priority comes with Tracy.
+- `jobs_serial 1` mode (development, planned with `jobs_stats`) is equivalent to
+  `jobs_workers 0`: without workers, each job runs inside `wait` on the waiting thread, in
+  priority and submission order. Useful to isolate concurrency bugs. Today the same mode is
+  `JobSystemConfig::workerCount = 0`.
 
 ## 10. Out of scope for v1
 

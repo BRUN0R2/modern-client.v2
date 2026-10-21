@@ -322,7 +322,8 @@ Loading a map involves:
 1. Reading the BSP and validating the lumps.
 2. Building the **collision hulls** (clipnodes) and the render BSP tree.
 3. Resolving textures: embedded in the BSP or in the WADs listed in `worldspawn`.
-   A missing texture yields a load error with the texture name and the list of WADs tried.
+   A missing texture is drawn as a checkerboard and listed by name, and the map still loads
+   ([05 §8](05-rendering.md#8-bsp-world)).
 4. Packing lightmaps into atlases.
 5. Reading the entity lump and instantiating prefabs ([03 §11](03-ecs.md#11-prefabs-and-map-entities)).
 6. Reading the map's `.res` and building the resource manifest.
@@ -419,10 +420,10 @@ Client security rules:
 | Enum | Examples |
 |------|----------|
 | `VfsError` | `InvalidPath`, `NotFound`, `MountFailed`, `ReadFailed` |
-| `ContentError` | `InstallNotFound`, `MissingEssentialFiles{files}`, `UnknownProfile`, `SourceUnavailable{source}`, `ConfigInvalid{path, line}` |
-| `AssetError` | `DecodeFailed`, `DependencyFailed`, `BudgetExceeded`, `UnsupportedFormat` |
-| `BspError`, `MdlError`, `WadError`, `SprError`, `WavError` | Format errors with lump/offset |
-| `ResourceError` | `UnknownResource`, `HashMismatch`, `DownloadRejected`, `TooLarge`, `ExtensionNotAllowed`, `NotRedistributable` |
+| `ContentError` | `ConfigInvalid`, `InstallNotFound`, `MissingEssentialFiles` (the detail names the file, the folder or every missing file). Planned, with the content sources and profiles: `UnknownProfile`, `SourceUnavailable` |
+| `AssetError` (planned, with `AssetHandle<T>`) | `DecodeFailed`, `DependencyFailed`, `BudgetExceeded`, `UnsupportedFormat` |
+| `BspError`, `MdlError`, `WadError`, `SprError`, `WavError`, `TgaError` | Format errors; the detail names the lump, record or offset |
+| `ResourceError` (planned, with the resource registry) | `UnknownResource`, `HashMismatch`, `DownloadRejected`, `TooLarge`, `ExtensionNotAllowed`, `NotRedistributable` |
 
 ## 10. Diagnostics
 

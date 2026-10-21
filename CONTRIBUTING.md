@@ -27,7 +27,7 @@ ctest --preset dev-windows-msvc
 ```
 
 ```bash
-# Linux (GCC 16, CMake 4.3+, Ninja, vcpkg with VCPKG_ROOT set)
+# Linux (GCC 16, CMake 4.3+, Ninja, vcpkg with VCPKG_ROOT set, the system packages of docs/17 §3)
 cmake --preset dev-linux-gcc
 cmake --build --preset dev-linux-gcc
 ctest --preset dev-linux-gcc

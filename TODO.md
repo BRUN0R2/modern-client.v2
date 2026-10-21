@@ -21,7 +21,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Free content by default; original assets optional and configured locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md))
 - [x] Rook Plugin Exception: additional permission under section 7 of the GPL for plugins and mods ([ADR-0010](docs/adr/0010-license.md))
 - [x] Counter-Strike 1.6 only: no Half-Life, no other GoldSrc games, no game-module abstraction ([ADR-0017](docs/adr/0017-counter-strike-only.md))
-- [x] SDL3 (window, events, input, raw mouse) arrives in M2, together with the Vulkan swapchain, its first consumer. In M1 nothing uses a window or input, and the vcpkg `sdl3` port pulls X11, Wayland and D-Bus into the CI Linux with nothing to test; the M1 `nx.platform` has only the clocks (2026-10-20)
+- [x] SDL3 (window, events, input, raw mouse) arrives in M2, together with the Vulkan swapchain, its first consumer. In M1 nothing uses a window or input, and the vcpkg `sdl3` port pulls X11, Wayland and D-Bus into the CI Linux with nothing to test (2026-10-20)
 - [ ] Legal review before the first public release, including the text of the Rook Plugin Exception ([20](docs/20-legal-and-licensing.md))
 
 ---
@@ -74,7 +74,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `std` module built by the project (`nx::std`) from `modules.json`, without experimental CMake features ([ADR-0014](docs/adr/0014-std-module-built-by-the-project.md))
 - [x] CMake helpers: `nxAddModuleLibrary`, `nxAddTest`, per-target warning policy
 - [x] `CMakePresets.json`: dev/release MSVC, dev/release GCC, dev Clang, ASan + UBSan, TSan
-- [ ] `server-headless` and `tools` presets (once the targets exist)
+- [ ] `tools` preset (its targets, `nxcheck` and `nxview`, exist) and `server-headless` preset (once `nextds` exists)
 - [ ] Windows presets with GCC (MinGW-w64) and Clang
 - [x] `vcpkg.json` with a pinned baseline and a `tests` feature
 - [x] `x64-windows-nx` and `x64-linux-nx` triplets (dependencies without exceptions and without RTTI)
@@ -119,6 +119,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `nx::narrow`, `nx::tryNarrow`, `nx::truncate`, `nx::tryRound`, checked and saturating arithmetic
 - [x] `EnumArray` and `Flags<E>`
 - [ ] `inplace_vector` (facade), when the first consumer exists (ECS or jobs)
+- [ ] `function_ref` (own implementation of `std::function_ref`), when the first consumer exists
+- [ ] `OptionalRef<T>` (facade for `std::optional<T&>`), when the first consumer exists
 - [x] `FrameArena` with a typed failure (`Exhausted`); a bad alignment is a contract violation
 - [ ] Generic `PoolAllocator<T>` (the ECS chunks use the `World`'s own block pool) and `TrackedHeapAllocator`
 - [ ] Lock-free SPSC/MPSC queues with a typed queue-full error, when the first consumer exists (networking, audio)
@@ -152,7 +154,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `wait` with *help-while-waiting*
 - [x] `parallelFor` with automatic and fixed granularity
 - [x] `JobSystem::stats()` and serial mode (`workerCount = 0`)
-- [ ] `jobs_stats` and `jobs_serial` commands (with the console)
+- [ ] `jobs_workers` cvar, `jobs_stats` and `jobs_serial` commands (with the console)
 - [ ] Tracy zones (with the Tracy dependency)
 - [ ] `std::execution`-compatible scheduler (stdexec), with asset streaming (M2)
 - [ ] Per-job scratch arena in `JobContext`, when the first consumer needs it

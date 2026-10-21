@@ -25,7 +25,7 @@
 | **Query** | Typed archetype filter (`with`, `without`, `changed`) plus access (read/write) |
 | **System** | Function that receives queries and resources. The access it declares defines the parallelism |
 | **Resource** | Unique world data (`GameRules`, `TickTime`, `MapInfo`) |
-| **Event** | Typed message that lives for one tick (`PlayerKilled`) |
+| **Event** | Typed message that lives for two ticks: written in one, readable until the end of the next (`PlayerKilled`, [§9](#9-events)) |
 | **Command buffer** | Queue of structural changes (create/destroy/add/remove) applied at *sync points* |
 
 ## 3. Entities
@@ -44,7 +44,8 @@ public:
     [[nodiscard]] constexpr auto index() const noexcept -> EntityIndex;
     [[nodiscard]] constexpr auto generation() const noexcept -> Generation;
     [[nodiscard]] constexpr auto isNull() const noexcept -> bool;
-    friend constexpr auto operator<=>(Entity, Entity) noexcept = default;
+    // A member, not a hidden friend: GCC 16 crashes on defaulted friend comparisons (17 §2.2).
+    [[nodiscard]] constexpr auto operator<=>(const Entity&) const noexcept = default;
 
 private:
     friend class EntityTable;
@@ -69,7 +70,7 @@ private:
 - **Entity record:** `{archetype, chunk, row}` in a dense array indexed by
   `EntityIndex`. The handle table is the `EntityTable`; the `World` keeps the records.
 - **No structural limit:** up to 2³² − 1 slots. Operational limits (e.g. entities a plugin
-  can create) are configurable quotas, with the typed error
+  can create) are planned as configurable quotas, with the typed error
   `EntityError::QuotaExceeded`.
 
 ## 4. Components
@@ -165,7 +166,8 @@ Archetype {Transform, Velocity, Player, OnGround}
   transitions.
 - Removal uses *swap-and-pop* with the **archetype's last row**, updating the record of the
   moved entity. This way every chunk stays full except the last one.
-- Empty chunks return to a world pool.
+- Empty chunks of a single 16 KiB block return to a world pool, for any archetype to reuse;
+  the storage of a chunk made of several blocks is freed.
 
 ## 6. Queries
 
@@ -387,8 +389,8 @@ the original does (`BspEntity::findInteger`, `findVector`, `findBrushModel`).
 ## 15. Debugging tools
 
 - `ent_list [filter]`, `ent_dump <netid>` and `ecs_stats` (archetypes, chunks, occupancy,
-  memory per component). The numbers already come from `World::stats()`; the commands arrive
-  with the console.
+  memory per component). The numbers already come from `World::stats()`; the commands are
+  planned in `nx.console` ([TODO](../TODO.md)).
 - ImGui inspector in development builds: archetype tree, component editing and a view of
   the schedule DAG with per-system timings.
 - Tracy zones per system and per batch of chunks.
