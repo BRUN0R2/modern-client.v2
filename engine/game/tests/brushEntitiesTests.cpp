@@ -20,8 +20,11 @@ using nx::game::BrushModel;
 using nx::game::BrushSolidity;
 using nx::game::EntityClasses;
 using nx::game::GameError;
+using nx::game::Named;
 using nx::game::Solid;
+using nx::game::Targets;
 using nx::game::Transform;
+using nx::game::Trigger;
 using nx::game::Waves;
 
 [[nodiscard]] auto repositoryClasses() -> EntityClasses {
@@ -56,7 +59,13 @@ TEST(BrushEntityTest, TheRepositoryDescribesTheBrushClasses) {
     EXPECT_EQ(find("func_ladder")->contents, -16);
     ASSERT_NE(find("func_water"), classes.brushClasses.end());
     EXPECT_EQ(find("func_water")->skinMakesNotSolid, true);
-    EXPECT_EQ(find("trigger_multiple"), classes.brushClasses.end()) << "triggers make no brush entity yet";
+    ASSERT_NE(find("trigger_multiple"), classes.brushClasses.end());
+    EXPECT_EQ(find("trigger_multiple")->solid, Solid::Not);
+    EXPECT_EQ(find("trigger_multiple")->behavior, nx::game::BrushBehavior::Trigger);
+    ASSERT_NE(find("trigger_once"), classes.brushClasses.end());
+    EXPECT_EQ(find("trigger_once")->behavior, nx::game::BrushBehavior::TriggerOnce);
+    EXPECT_EQ(find("trigger_hurt"), classes.brushClasses.end())
+        << "the other triggers make no brush entity yet";
 }
 
 TEST(BrushEntityTest, RefusesBrokenClasses) {
@@ -83,23 +92,24 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     const std::vector entities{
         entity({{"classname", "worldspawn"}}),
         entity({{"classname", "func_wall"}, {"model", "*1"}, {"origin", "8 16 32"}}),
-        entity({{"classname", "func_door"}, {"model", "*2"}, {"spawnflags", "8"}}),
+        entity({{"classname", "func_door"}, {"model", "*2"}, {"spawnflags", "8"}, {"targetname", "gate"}}),
         entity({{"classname", "func_water"}, {"model", "*3"}, {"skin", "-3"}, {"WaveHeight", "3.2"}}),
         entity({{"classname", "func_ladder"}, {"model", "*4"}, {"skin", "-3"}}),
-        entity({{"classname", "trigger_multiple"}, {"model", "*5"}}),
+        entity({{"classname", "trigger_multiple"}, {"model", "*5"}, {"target", "gate"}, {"delay", "1.5"}}),
+        entity({{"classname", "trigger_once"}, {"model", "*6"}, {"spawnflags", "2"}}),
         entity({{"classname", "info_player_start"}, {"origin", "0 0 0"}}),
     };
 
-    const auto spawned = nx::game::spawnBrushEntities(world, entities, models(6), repositoryClasses());
+    const auto spawned = nx::game::spawnBrushEntities(world, entities, models(7), repositoryClasses());
     ASSERT_TRUE(spawned.has_value()) << nx::describe(spawned.error());
-    EXPECT_EQ(*spawned, 4U);
+    EXPECT_EQ(*spawned, 6U);
 
     std::map<std::uint32_t, std::pair<nx::Vec3, BrushSolidity>> made;
     nx::ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
         [&](const BrushModel& model, const Transform& transform, const BrushSolidity& solidity) {
             made.emplace(model.index.value, std::pair{transform.origin, solidity});
         });
-    ASSERT_EQ(made.size(), 4U);
+    ASSERT_EQ(made.size(), 6U);
     EXPECT_EQ(made.at(1).first, (nx::Vec3{.x = 8.0F, .y = 16.0F, .z = 32.0F}));
     EXPECT_EQ(made.at(1).second.solid, Solid::Bsp);
     EXPECT_EQ(made.at(2).second.solid, Solid::Not) << "a passable door";
@@ -118,6 +128,34 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
             }
         });
     EXPECT_EQ(waves, (std::map<std::uint32_t, float>{{2, 0.0F}, {3, 3.2F / 8.0F}}));
+
+    // Names, what doors and triggers fire, and how triggers wait.
+    std::map<std::uint32_t, std::string> names;
+    std::map<std::uint32_t, Targets> targets;
+    std::map<std::uint32_t, Trigger> triggers;
+    nx::ecs::Query<const BrushModel&, nx::ecs::Optional<const Named>, nx::ecs::Optional<const Targets>,
+                   nx::ecs::Optional<const Trigger>>{world}
+        .forEach(
+            [&](const BrushModel& model, const Named* name, const Targets* fired, const Trigger* trigger) {
+                if (name != nullptr) {
+                    names.emplace(model.index.value, name->name);
+                }
+                if (fired != nullptr) {
+                    targets.emplace(model.index.value, *fired);
+                }
+                if (trigger != nullptr) {
+                    triggers.emplace(model.index.value, *trigger);
+                }
+            });
+    EXPECT_EQ(names, (std::map<std::uint32_t, std::string>{{2, "gate"}}));
+    EXPECT_EQ(targets.size(), 4U) << "the doors' and the triggers'";
+    EXPECT_EQ(targets.at(5).target, "gate");
+    EXPECT_FLOAT_EQ(targets.at(5).delay.count(), 1.5F);
+    ASSERT_EQ(triggers.size(), 2U);
+    EXPECT_FLOAT_EQ(triggers.at(5).wait.count(), 0.2F) << "a trigger_multiple's wait when it gives none";
+    EXPECT_TRUE(triggers.at(5).isTouchedByPlayers);
+    EXPECT_LT(triggers.at(6).wait, nx::Seconds{}) << "a trigger_once fires once";
+    EXPECT_FALSE(triggers.at(6).isTouchedByPlayers) << "flagged no clients";
 }
 
 TEST(BrushEntityTest, ABrushModelTheMapLacksIsAnError) {

@@ -6,6 +6,7 @@ nxAddTest(nxGameTests
         brushEntitiesTests.cpp
         doorTests.cpp
         placementTests.cpp
+        triggerTests.cpp
     DEPENDS
         nx::game
         nx::platform)

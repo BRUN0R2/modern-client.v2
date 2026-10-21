@@ -29,10 +29,16 @@ constexpr float kDoorSpeed = 100.0F;
 /// A door's waves rise by this share of its "WaveHeight" (CBaseDoor::KeyValue).
 constexpr float kWaveHeightShare = 1.0F / 8.0F;
 
-/// The engine grows a brush model's bounds by a unit on every side when it loads them, and the
-/// game takes it back from a door's size.
-constexpr float kLoadedBoundsGrowth = 1.0F;
+/// The game takes the engine's growth of a brush model's bounds (kLoadedBoundsGrowth) back from a
+/// door's size.
 constexpr float kDoorSizeTrim = 2.0F;
+
+/// The spawnflag that keeps players from firing a trigger (SF_TRIGGER_NOCLIENTS).
+constexpr std::int32_t kNotByPlayers = 2;
+/// A trigger_multiple's "wait" when it gives none (CTriggerMultiple::Spawn), and a trigger_once's
+/// (CTriggerOnce::Spawn): it fires once.
+constexpr Seconds kDefaultTriggerWait{0.2F};
+constexpr Seconds kFiresOnce{-1.0F};
 
 /// The "angles" of an entity; else its "angle", which the original's engine turns into angles:
 /// a yaw, -1 for up, any other negative for down.
@@ -144,6 +150,23 @@ struct MadeDoor {
     return made;
 }
 
+/// What `entity` fires (CBaseDelay::KeyValue): its "target", "killtarget" and "delay".
+[[nodiscard]] auto targetsOf(const assets::BspEntity& entity) -> Targets {
+    return Targets{.target = std::string{entity.find("target").value_or("")},
+                   .killTarget = std::string{entity.find("killtarget").value_or("")},
+                   .delay = Seconds{entity.findNumber("delay").value_or(0.0F)}};
+}
+
+/// The trigger of `entity`, of `behavior` (CTriggerMultiple::Spawn, CTriggerOnce::Spawn).
+[[nodiscard]] auto triggerOf(const assets::BspEntity& entity, BrushBehavior behavior, std::int32_t flags)
+    -> Trigger {
+    const Seconds wait{entity.findNumber("wait").value_or(0.0F)};
+    return Trigger{.wait = behavior == BrushBehavior::TriggerOnce ? kFiresOnce
+                           : wait == Seconds{}                    ? kDefaultTriggerWait
+                                                                  : wait,
+                   .isTouchedByPlayers = (flags & kNotByPlayers) == 0};
+}
+
 } // namespace
 
 auto readEntityClasses(std::string_view text, std::string_view sourceName)
@@ -184,15 +207,30 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
         const BrushSolidity solidity{.solid = isNotSolid ? Solid::Not : brushClass->solid,
                                      .contents = assets::contentsNumbered(skin)};
         const Vec3 origin = entity.findVector("origin").value_or(Vec3{});
-        if (brushClass->behavior) {
-            const MadeDoor made = *brushClass->behavior == BrushBehavior::SlidingDoor
+        ecs::Entity made{};
+        switch (brushClass->behavior.value_or(BrushBehavior::Count)) {
+        case BrushBehavior::SlidingDoor:
+        case BrushBehavior::RotatingDoor: {
+            const MadeDoor door = *brushClass->behavior == BrushBehavior::SlidingDoor
                                       ? slidingDoorOf(entity, models[model->value].bounds, origin)
                                       : rotatingDoorOf(entity, origin);
-            world.spawn(BrushModel{.index = *model}, Transform{.origin = made.origin, .angles = made.angles},
-                        solidity, Pusher{}, made.door,
-                        Waves{.height = entity.findNumber("WaveHeight").value_or(0.0F) * kWaveHeightShare});
-        } else {
-            world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
+            made = world.spawn(
+                BrushModel{.index = *model}, Transform{.origin = door.origin, .angles = door.angles},
+                solidity, Pusher{}, door.door, targetsOf(entity),
+                Waves{.height = entity.findNumber("WaveHeight").value_or(0.0F) * kWaveHeightShare});
+            break;
+        }
+        case BrushBehavior::Trigger:
+        case BrushBehavior::TriggerOnce:
+            made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity,
+                               triggerOf(entity, *brushClass->behavior, flags), targetsOf(entity));
+            break;
+        case BrushBehavior::Count:
+            made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
+            break;
+        }
+        if (const std::string_view name = entity.find("targetname").value_or(""); !name.empty()) {
+            world.add(made, Named{.name = std::string{name}});
         }
         ++spawned;
     }

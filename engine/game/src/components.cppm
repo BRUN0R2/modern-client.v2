@@ -102,8 +102,9 @@ struct Body {
     std::optional<assets::ModelIndex> groundModel{}; ///< The brush model of the entity it stands on.
 };
 
-/// Registers the components above in `world`, and gives it a clock at the start of its map
-/// (TickTime, at the default rate). Errors: those of ecs::World::registerComponent.
+/// Registers the components of nx.game in `world` (those above, NextThink, Named, Targets,
+/// DelayedUse and Trigger), and gives it a clock at the start of its map (TickTime, at the default
+/// rate) and a TargetChain. Errors: those of ecs::World::registerComponent.
 [[nodiscard]] auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError>;
 
 } // namespace nx::game

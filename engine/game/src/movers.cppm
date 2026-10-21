@@ -23,6 +23,11 @@ export namespace nx::game {
 void touchBrushEntities(ecs::World& world, const collision::BrushHulls& hulls,
                         std::span<const collision::ModelIndex> models, ecs::Entity toucher);
 
+/// `activator` uses door `entity` (CBaseDoor::Use): closed, it opens, a turning one away from the
+/// activator; open for good until used again ("toggle"), it closes; else nothing.
+void useDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+             ecs::Entity activator);
+
 /// Advances each pusher of `world`, in the world's order, by a tick of the world's clock (TickTime),
 /// at its time (SV_Physics_Pusher): it moves at its velocity, and turns at its angular one, while it
 /// has something to do by its clock, carrying each Body it runs into, or that stands on it, along
