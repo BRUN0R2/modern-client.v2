@@ -132,4 +132,16 @@ TEST(QuaternionTest, SlerpOutsideTheUnitIntervalIsAViolation) {
     EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
 }
 
+TEST(QuaternionTest, RotationsAboutTheAxesAreTheEulerAnglesInRadians) {
+    // A bone's X, Y and Z angles are the roll, the pitch and the yaw of EulerAngles.
+    const Quat bone =
+        Quat::fromRotations(nx::toRadians(5_deg), nx::toRadians(20_deg), nx::toRadians(-35_deg));
+    const Quat euler = Quat::fromEulerAngles(EulerAngles{.pitch = 20_deg, .yaw = -35_deg, .roll = 5_deg});
+    EXPECT_NEAR(bone.x, euler.x, 1e-6F);
+    EXPECT_NEAR(bone.y, euler.y, 1e-6F);
+    EXPECT_NEAR(bone.z, euler.z, 1e-6F);
+    EXPECT_NEAR(bone.w, euler.w, 1e-6F);
+    EXPECT_EQ(Quat::fromRotations(nx::Radians{0.0F}, nx::Radians{0.0F}, nx::Radians{0.0F}), Quat{});
+}
+
 } // namespace
