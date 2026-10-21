@@ -231,7 +231,7 @@ Rules:
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
-| `nxview` | The map and model viewer: `--map de_dust2` flies a free camera through a map of the Counter-Strike 1.6 installation; `--screenshot <file.bmp>` renders one frame from the first spawn without a window; `--validation` |
+| `nxview` | The map and model viewer: `--map de_dust2` flies a free camera through a map of the Counter-Strike 1.6 installation; `--position` and `--angles` place the camera (default: the first spawn); `--screenshot <file.bmp>` renders one frame without a window; `--validation` |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |

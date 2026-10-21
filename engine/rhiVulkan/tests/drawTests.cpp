@@ -139,6 +139,67 @@ protected:
         return pixels;
     }
 
+    /// Uploads `texels`, row after row from the top, to `layer` of `texture`, and makes the texture
+    /// ready to sample. Transitions cover every layer: the texture is undefined before its first upload.
+    void uploadTexels(TextureHandle texture, std::uint32_t layer, Extent2d extent,
+                      std::span<const Pixel> texels) {
+        auto staging = upload("test.staging", {BufferUsage::CopySource}, bytesOf(texels));
+        ASSERT_TRUE(staging.has_value()) << nx::describe(staging.error());
+        runFrame([&](CommandList& commands) {
+            commands.transition(texture, layer == 0 ? TextureState::Undefined : TextureState::ShaderRead,
+                                TextureState::CopyDestination);
+            commands.copyBufferToTexture(
+                {.buffer = *staging, .texture = texture, .arrayLayer = layer, .extent = extent});
+            commands.transition(texture, TextureState::CopyDestination, TextureState::ShaderRead);
+        });
+        device().destroy(*staging);
+    }
+
+    /// Draws a covering triangle with the entry points of `shaderFile`, which samples `texture`
+    /// (binding 0) with a point sampler (binding 1), into a target of `extent`, and reads it back.
+    [[nodiscard]] auto drawSampled(std::string_view shaderFile, TextureHandle texture, Extent2d extent)
+        -> std::vector<Pixel> {
+        auto sampler = device().createSampler({.label = "test.point",
+                                               .magnify = nx::rhi::Filter::Nearest,
+                                               .minify = nx::rhi::Filter::Nearest,
+                                               .mipmap = nx::rhi::Filter::Nearest,
+                                               .address = nx::rhi::AddressMode::ClampToEdge});
+        const std::vector<std::byte> code = shaderCode(shaderFile);
+        auto shader = device().createShader({.label = "test.sample", .code = code});
+        const std::array bindings{nx::rhi::BindingLayout{.binding = 0,
+                                                         .type = nx::rhi::BindingType::SampledTexture,
+                                                         .stages = {nx::rhi::ShaderStage::Fragment}},
+                                  nx::rhi::BindingLayout{.binding = 1,
+                                                         .type = nx::rhi::BindingType::Sampler,
+                                                         .stages = {nx::rhi::ShaderStage::Fragment}}};
+        auto layout = device().createBindGroupLayout({.label = "test.sample", .bindings = bindings});
+        if (!sampler || !shader || !layout) {
+            ADD_FAILURE() << "cannot create the sampler, the shader or the layout";
+            return {};
+        }
+        const std::array resources{nx::rhi::Binding{.binding = 0, .resource = texture},
+                                   nx::rhi::Binding{.binding = 1, .resource = *sampler}};
+        auto group =
+            device().createBindGroup({.label = "test.sample", .layout = *layout, .bindings = resources});
+        const std::array targets{nx::rhi::ColorTarget{.format = Format::Rgba8Unorm}};
+        const std::array layouts{*layout};
+        auto pipeline =
+            device().createRenderPipeline({.label = "test.sample",
+                                           .vertex = {.shader = *shader, .entryPoint = "vertexMain"},
+                                           .fragment = {.shader = *shader, .entryPoint = "fragmentMain"},
+                                           .colorTargets = targets,
+                                           .bindGroupLayouts = layouts});
+        if (!group || !pipeline) {
+            ADD_FAILURE() << "cannot create the bind group or the pipeline";
+            return {};
+        }
+        return drawAndRead(extent, [&](CommandList& commands) {
+            commands.setPipeline(*pipeline);
+            commands.setBindGroup(0, *group);
+            commands.draw(3, 1, 0, 0);
+        });
+    }
+
 private:
     std::unique_ptr<Device> m_device;
 };
@@ -260,48 +321,30 @@ TEST_F(DrawTest, SamplesAnUploadedTexture) {
                                            .format = Format::Rgba8Unorm,
                                            .extent = kExtent,
                                            .usage = {TextureUsage::Sampled, TextureUsage::CopyDestination}});
-    auto staging = upload("test.staging", {BufferUsage::CopySource}, bytesOf(texels));
-    auto sampler = device().createSampler({.label = "test.point",
-                                           .magnify = nx::rhi::Filter::Nearest,
-                                           .minify = nx::rhi::Filter::Nearest,
-                                           .mipmap = nx::rhi::Filter::Nearest,
-                                           .address = nx::rhi::AddressMode::ClampToEdge});
-    const std::vector<std::byte> code = shaderCode("sample.spv");
-    auto shader = device().createShader({.label = "test.sample", .code = code});
-    const std::array bindings{nx::rhi::BindingLayout{.binding = 0,
-                                                     .type = nx::rhi::BindingType::SampledTexture,
-                                                     .stages = {nx::rhi::ShaderStage::Fragment}},
-                              nx::rhi::BindingLayout{.binding = 1,
-                                                     .type = nx::rhi::BindingType::Sampler,
-                                                     .stages = {nx::rhi::ShaderStage::Fragment}}};
-    auto layout = device().createBindGroupLayout({.label = "test.sample", .bindings = bindings});
-    ASSERT_TRUE(texture && staging && sampler && shader && layout);
+    ASSERT_TRUE(texture.has_value()) << nx::describe(texture.error());
+    uploadTexels(*texture, 0, kExtent, texels);
 
-    const std::array resources{nx::rhi::Binding{.binding = 0, .resource = *texture},
-                               nx::rhi::Binding{.binding = 1, .resource = *sampler}};
-    auto group = device().createBindGroup({.label = "test.sample", .layout = *layout, .bindings = resources});
-    const std::array targets{nx::rhi::ColorTarget{.format = Format::Rgba8Unorm}};
-    const std::array layouts{*layout};
-    auto pipeline =
-        device().createRenderPipeline({.label = "test.sample",
-                                       .vertex = {.shader = *shader, .entryPoint = "vertexMain"},
-                                       .fragment = {.shader = *shader, .entryPoint = "fragmentMain"},
-                                       .colorTargets = targets,
-                                       .bindGroupLayouts = layouts});
-    ASSERT_TRUE(group && pipeline);
-
-    runFrame([&](CommandList& commands) {
-        commands.transition(*texture, TextureState::Undefined, TextureState::CopyDestination);
-        commands.copyBufferToTexture({.buffer = *staging, .texture = *texture, .extent = kExtent});
-        commands.transition(*texture, TextureState::CopyDestination, TextureState::ShaderRead);
-    });
-    const auto pixels = drawAndRead(kExtent, [&](CommandList& commands) {
-        commands.setPipeline(*pipeline);
-        commands.setBindGroup(0, *group);
-        commands.draw(3, 1, 0, 0);
-    });
-    EXPECT_EQ(pixels, (std::vector<Pixel>{texels.begin(), texels.end()}))
+    EXPECT_EQ(drawSampled("sample.spv", *texture, kExtent),
+              (std::vector<Pixel>{texels.begin(), texels.end()}))
         << "one texel per pixel, top row first";
+}
+
+TEST_F(DrawTest, SamplesALayerOfATextureArray) {
+    constexpr Extent2d kExtent{.width = 2, .height = 2};
+    const std::array firstLayer{kRed, kRed, kRed, kRed};
+    const std::array secondLayer{kGreen, kBlue, kWhite, kBlack};
+    auto texture = device().createTexture({.label = "test.layers",
+                                           .format = Format::Rgba8Unorm,
+                                           .extent = kExtent,
+                                           .arrayLayers = 2,
+                                           .usage = {TextureUsage::Sampled, TextureUsage::CopyDestination}});
+    ASSERT_TRUE(texture.has_value()) << nx::describe(texture.error());
+    uploadTexels(*texture, 0, kExtent, firstLayer);
+    uploadTexels(*texture, 1, kExtent, secondLayer);
+
+    EXPECT_EQ(drawSampled("sampleLayer.spv", *texture, kExtent),
+              (std::vector<Pixel>{secondLayer.begin(), secondLayer.end()}))
+        << "layer 1, one texel per pixel";
 }
 
 TEST_F(DrawTest, TheDepthTestKeepsTheFirstOfTwoEqualDepths) {

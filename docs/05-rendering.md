@@ -69,7 +69,8 @@ express**. The vocabulary is close to WebGPU's.
 (`beginFrame` waits for the frame's slot and gives its `CommandList`, `submitFrame` submits and
 presents), the swapchain with its recreation on resize and while minimized, and generational
 handles (`HandlePool`: a stale handle is a contract violation) to buffers (device memory, or mapped
-memory to upload and read back, through VMA), textures, samplers, shaders, bind group layouts and
+memory to upload and read back, through VMA), textures (with mip levels, and arrays of layers that
+shaders sample as `Texture2DArray`), samplers, shaders, bind group layouts and
 bind groups (descriptor pools added as they fill, so their number has no ceiling) and render
 pipelines (dynamic rendering, dynamic viewport and scissor). A destroyed resource lives until the
 GPU has finished every frame that may use it. The command list transitions textures and buffers,
@@ -181,13 +182,26 @@ if (!lightmapAtlas) {
 entities (placed at their `origin`) in one vertex and one index buffer, drawn in batches by
 texture; the textures of the map and of the WADs its `wad` key names, by file name at the root of
 the VFS as the original looks them up, with their four mips, a checkerboard for a name no WAD has;
-masked textures; triggers and the compiler's tool textures (`AAATRIGGER`, `CLIP`...) and the sky not
-drawn. The lightmaps are packed into one atlas: each face's extent in luxels of 16 units is computed
-in double precision, as the compilers compute it, and lightstyle 0 is drawn through the original's
-light curve (§11). The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0
-at infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
-original's horizontal angle of a 4:3 view, kept vertical on wider screens (Hor+). On the Steam
-installation, de_dust2 is 4002 faces in 41 textures and a 1024x404 atlas, built in half a second.
+masked textures; triggers and the compiler's tool textures (`AAATRIGGER`, `CLIP`...) not drawn. The
+lightmaps are packed into one atlas: each face's extent in luxels of 16 units is computed in double
+precision, as the compilers compute it, and lightstyle 0 is drawn through the original's light
+curve (§11). The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
+infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
+original's horizontal angle of a 4:3 view, kept vertical on wider screens (Hor+).
+
+The faces of the `sky` texture are drawn last, with their depth, each pixel showing the side of
+the sky its direction from the camera points at, as the original projects it: the side of the
+largest axis (ties broken as the original breaks them), at the point that direction reaches, each
+side clamped at its edges. The sides are the six layers of one texture, `gfx/env/<skyname>` with
+the suffixes `rt`, `bk`, `lf`, `ft`, `up`, `dn` toward +X, +Y, -X, -Y, up and down; from the
+middle of the sky each is seen upright and unmirrored, the top and bottom ones facing +X. They are
+drawn as their files have them, through no gamma curve, as in the original, which falls back to
+`desert` when the worldspawn's `skyname` names a sky the installation lacks; without any, the
+sky is gray. Drawing the sky's own faces rather than a box behind the world gives the same picture
+for the world and hides what lies behind them, as the sky's brushes seal the map.
+
+On the Steam installation, de_dust2 is 5358 faces (1356 of them sky) in 41 textures and a 1024x404
+atlas, built in half a second.
 
 ## 9. Studio models and GPU skinning
 

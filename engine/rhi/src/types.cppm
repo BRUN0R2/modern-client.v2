@@ -115,6 +115,9 @@ struct TextureDesc {
     Format format = Format::Undefined;
     Extent2d extent{};
     std::uint32_t mipLevels = 1;
+    /// More than 1: layers of one size, each with its mip levels, sampled as a Texture2DArray. A
+    /// render or depth target has 1.
+    std::uint32_t arrayLayers = 1;
     Flags<TextureUsage> usage{};
 };
 

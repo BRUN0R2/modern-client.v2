@@ -43,18 +43,25 @@ struct WorldVertex {
 };
 static_assert(sizeof(WorldVertex) == 7 * sizeof(float), "the vertex layout of the world pipeline");
 
-/// The frame's uniform: the rows of the view-projection matrix, and in `lighting.x` what a
-/// lightmap sample is multiplied by to index the light table (lightTableScale).
+/// The frame's uniform: the rows of the view-projection matrix, in `lighting.x` what a lightmap
+/// sample is multiplied by to index the light table (lightTableScale), and the camera's position.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 lighting{};
+    Vec4 eye{};
 };
+
+/// The side of the sky the original draws toward +X, -X, +Y, -Y, +Z and -Z, by its place in
+/// kSkySuffixes (r_skyTexOrder): the layers of the sky's texture are in this order.
+constexpr std::array<std::size_t, kSkySuffixes.size()> kSkySideOfAxis{0, 2, 1, 3, 4, 5};
+/// The sky of a world without one: the original's stand-in, gray.
+constexpr std::byte kNoSkyLevel{128};
 
 /// How a face is drawn, from its texture's name.
 enum class SurfaceKind : std::uint8_t {
     Opaque,
     Masked,    ///< `{`: palette index 255 is transparent.
-    Sky,       ///< Drawn by the sky pass (to come), not here.
+    Sky,       ///< Shows the side of the sky it is seen toward.
     Invisible, ///< Triggers and tool textures.
 };
 
@@ -178,6 +185,44 @@ private:
     return origins;
 }
 
+/// The layers of the sky's texture, in the order of kSkySideOfAxis.
+struct SkyLayers {
+    rhi::Extent2d extent{};
+    std::vector<std::byte> texels{};
+    std::array<std::size_t, kSkySuffixes.size()> offsets{}; ///< Where each layer starts in texels.
+};
+
+/// The layers of `sky`, its sides in the order of kSkySuffixes; without sides, a gray texel each.
+/// Errors: BadSky.
+[[nodiscard]] auto skyLayersOf(std::span<const assets::RgbaImage> sky) -> Result<SkyLayers, WorldError> {
+    SkyLayers layers;
+    if (sky.empty()) {
+        layers.extent = {.width = 1, .height = 1};
+        for (std::size_t& offset : layers.offsets) {
+            offset = layers.texels.size();
+            layers.texels.insert(layers.texels.end(),
+                                 {kNoSkyLevel, kNoSkyLevel, kNoSkyLevel, std::byte{255}});
+        }
+        return layers;
+    }
+    const auto isOfTheFirstsSize = [&sky](const assets::RgbaImage& side) {
+        return side.width == sky.front().width && side.height == sky.front().height &&
+               side.pixels.size() == std::size_t{side.width} * side.height * 4;
+    };
+    if (sky.size() != kSkySuffixes.size() || sky.front().width == 0 || sky.front().height == 0 ||
+        !std::ranges::all_of(sky, isOfTheFirstsSize)) {
+        return fail(WorldError::BadSky, std::format("{} sides, the first of {}x{}", sky.size(),
+                                                    sky.front().width, sky.front().height));
+    }
+    layers.extent = {.width = sky.front().width, .height = sky.front().height};
+    for (std::size_t axis = 0; axis < kSkySideOfAxis.size(); ++axis) {
+        layers.offsets.at(axis) = layers.texels.size();
+        const std::vector<std::byte>& pixels = sky[kSkySideOfAxis.at(axis)].pixels;
+        layers.texels.insert(layers.texels.end(), pixels.begin(), pixels.end());
+    }
+    return layers;
+}
+
 /// Writes `bytes` into a new Upload buffer, to copy from in this frame.
 [[nodiscard]] auto stage(rhi::Device& device, std::string_view label, std::span<const std::byte> bytes)
     -> Result<rhi::BufferHandle, rhi::RhiError> {
@@ -196,20 +241,27 @@ private:
 auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const BspWorldDesc& desc)
     -> Result<BspWorld, WorldError> {
     const assets::BspView& map = desc.map;
+    auto skyLayers = skyLayersOf(desc.sky);
+    if (!skyLayers) {
+        return std::unexpected{std::move(skyLayers.error())};
+    }
     BspWorld world{device};
     const auto gpuFailure = [](Failure<rhi::RhiError> failure) {
         return fail(WorldError::GpuFailed, std::move(failure));
     };
     std::vector<rhi::BufferHandle> staging; // destroyed once recorded; the device keeps them for the copies
+    // A texture of `layers` layers of `mipLevels` levels; `offsets` has where each level of each layer
+    // starts in `texels`, layer after layer.
     const auto uploadTexture =
-        [&](std::string_view label, rhi::Extent2d extent, std::uint32_t mipLevels,
+        [&](std::string_view label, rhi::Extent2d extent, std::uint32_t mipLevels, std::uint32_t layers,
             std::span<const std::byte> texels,
-            std::span<const std::size_t> levelOffsets) -> Result<rhi::TextureHandle, rhi::RhiError> {
+            std::span<const std::size_t> offsets) -> Result<rhi::TextureHandle, rhi::RhiError> {
         auto texture =
             device.createTexture({.label = label,
                                   .format = rhi::Format::Rgba8Unorm,
                                   .extent = extent,
                                   .mipLevels = mipLevels,
+                                  .arrayLayers = layers,
                                   .usage = {rhi::TextureUsage::Sampled, rhi::TextureUsage::CopyDestination}});
         if (!texture) {
             return texture;
@@ -221,13 +273,17 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         }
         staging.push_back(*source);
         commands.transition(*texture, rhi::TextureState::Undefined, rhi::TextureState::CopyDestination);
-        for (std::uint32_t level = 0; level < mipLevels; ++level) {
-            commands.copyBufferToTexture({.buffer = *source,
-                                          .bufferOffset = levelOffsets[level],
-                                          .texture = *texture,
-                                          .mipLevel = level,
-                                          .extent = {.width = std::max(extent.width >> level, 1U),
-                                                     .height = std::max(extent.height >> level, 1U)}});
+        for (std::uint32_t layer = 0; layer < layers; ++layer) {
+            for (std::uint32_t level = 0; level < mipLevels; ++level) {
+                commands.copyBufferToTexture(
+                    {.buffer = *source,
+                     .bufferOffset = offsets[(std::size_t{layer} * mipLevels) + level],
+                     .texture = *texture,
+                     .mipLevel = level,
+                     .arrayLayer = layer,
+                     .extent = {.width = std::max(extent.width >> level, 1U),
+                                .height = std::max(extent.height >> level, 1U)}});
+            }
         }
         commands.transition(*texture, rhi::TextureState::CopyDestination, rhi::TextureState::ShaderRead);
         world.m_textures.push_back(*texture);
@@ -239,8 +295,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     const std::array<std::uint8_t, 256> textureGamma = textureGammaTable(desc.gamma);
     const std::vector<std::byte> checker = checkerTexels();
     const std::array<std::size_t, 1> oneLevel{0}; // the level offsets of a texture without mips
-    auto checkerTexture =
-        uploadTexture("world.missing", {.width = kCheckerSize, .height = kCheckerSize}, 1, checker, oneLevel);
+    auto checkerTexture = uploadTexture("world.missing", {.width = kCheckerSize, .height = kCheckerSize}, 1,
+                                        1, checker, oneLevel);
     if (!checkerTexture) {
         return gpuFailure(std::move(checkerTexture.error()));
     }
@@ -279,9 +335,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             continue;
         }
         const TexelLevels texels = texelsOf(*pixels, use.kind == SurfaceKind::Masked, textureGamma);
-        auto texture = uploadTexture(std::format("world.texture.{}", slot->name),
-                                     {.width = pixels->width, .height = pixels->height},
-                                     narrow<std::uint32_t>(assets::kMipLevels), texels.bytes, texels.offsets);
+        auto texture = uploadTexture(
+            std::format("world.texture.{}", slot->name), {.width = pixels->width, .height = pixels->height},
+            narrow<std::uint32_t>(assets::kMipLevels), 1, texels.bytes, texels.offsets);
         if (!texture) {
             return gpuFailure(std::move(texture.error()));
         }
@@ -295,6 +351,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         const assets::BspFace* face = nullptr;
         Vec3 origin{};
         std::size_t texture = 0;
+        bool isSky = false;
         std::optional<LightmapExtent> lightmap{};
     };
     std::vector<FaceToDraw> faces;
@@ -306,10 +363,13 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             const std::size_t texture = info.texture.value;
             const SurfaceKind kind =
                 texture < textureUses.size() ? textureUses[texture].kind : SurfaceKind::Opaque;
-            if (kind == SurfaceKind::Sky || kind == SurfaceKind::Invisible) {
+            if (kind == SurfaceKind::Invisible) {
                 continue;
             }
-            faces.push_back(FaceToDraw{.face = &face, .origin = origins[model], .texture = texture});
+            faces.push_back(FaceToDraw{.face = &face,
+                                       .origin = origins[model],
+                                       .texture = texture,
+                                       .isSky = kind == SurfaceKind::Sky});
         }
     }
 
@@ -330,7 +390,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     for (std::size_t index = 0; index < faces.size(); ++index) {
         FaceToDraw& entry = faces[index];
         const assets::TextureInfo& info = map.textureInfos()[entry.face->textureInfo.value];
-        if (info.isSpecial || !entry.face->lightmapOffset) {
+        if (entry.isSky || info.isSpecial || !entry.face->lightmapOffset) {
             continue;
         }
         double minS = std::numeric_limits<double>::max();
@@ -381,7 +441,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
         }
     }
-    auto atlasTexture = uploadTexture("world.lightmaps", atlasExtent, 1, atlas, oneLevel);
+    auto atlasTexture = uploadTexture("world.lightmaps", atlasExtent, 1, 1, atlas, oneLevel);
     if (!atlasTexture) {
         return gpuFailure(std::move(atlasTexture.error()));
     }
@@ -396,15 +456,24 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     }
     auto lightTableTexture =
         uploadTexture("world.lightTable", {.width = narrow<std::uint32_t>(kLightTableSize), .height = 1}, 1,
-                      lightTexels, oneLevel);
+                      1, lightTexels, oneLevel);
     if (!lightTableTexture) {
         return gpuFailure(std::move(lightTableTexture.error()));
     }
     world.m_lightScale = lightTableScale(desc.gamma);
 
-    // The geometry: each face a triangle fan, its triangles grouped by texture.
+    // The sky: its sides, the layers of one texture, in the order the shader picks them.
+    auto skyTexture =
+        uploadTexture("world.sky", skyLayers->extent, 1, narrow<std::uint32_t>(kSkySuffixes.size()),
+                      skyLayers->texels, skyLayers->offsets);
+    if (!skyTexture) {
+        return gpuFailure(std::move(skyTexture.error()));
+    }
+
+    // The geometry: each face a triangle fan, its triangles grouped by texture, the sky's apart.
     std::vector<WorldVertex> vertices;
     std::vector<std::vector<std::uint32_t>> indicesByTexture(textureUses.size() + 1);
+    std::vector<std::uint32_t> skyIndices;
     for (std::size_t index = 0; index < faces.size(); ++index) {
         const FaceToDraw& entry = faces[index];
         const assets::TextureInfo& info = map.textureInfos()[entry.face->textureInfo.value];
@@ -429,15 +498,16 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
             vertices.push_back(vertex);
         }
-        std::vector<std::uint32_t>& indices = indicesByTexture[std::min(entry.texture, textureUses.size())];
+        std::vector<std::uint32_t>& indices =
+            entry.isSky ? skyIndices : indicesByTexture[std::min(entry.texture, textureUses.size())];
         for (std::uint32_t corner = 2; corner < entry.face->edgeCount; ++corner) {
             indices.insert(indices.end(), {first, first + corner - 1, first + corner});
         }
         ++world.m_stats.faces;
     }
 
-    // The pipeline and its bind groups: per frame, the camera, the lightmaps and the light table; per
-    // batch, its texture.
+    // The pipelines and their bind groups: per frame, the camera, the lightmaps, the light table and
+    // the sky; per batch, its texture.
     auto shader = device.createShader({.label = "world", .code = desc.shaderCode});
     if (!shader) {
         return gpuFailure(std::move(shader.error()));
@@ -453,7 +523,11 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         rhi::BindingLayout{
             .binding = 2, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}},
         rhi::BindingLayout{
-            .binding = 3, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}}};
+            .binding = 3, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 4, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 5, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
     const std::array textureBindings{
         rhi::BindingLayout{
             .binding = 0, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
@@ -466,16 +540,21 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     auto lightmapSampler = device.createSampler({.label = "world.lightmap",
                                                  .mipmap = rhi::Filter::Nearest,
                                                  .address = rhi::AddressMode::ClampToEdge});
-    if (!frameLayout || !textureLayout || !textureSampler || !lightmapSampler) {
-        return gpuFailure(!frameLayout      ? std::move(frameLayout.error())
-                          : !textureLayout  ? std::move(textureLayout.error())
-                          : !textureSampler ? std::move(textureSampler.error())
-                                            : std::move(lightmapSampler.error()));
+    // Each side clamped at its edges, as the original draws them.
+    auto skySampler = device.createSampler(
+        {.label = "world.sky", .mipmap = rhi::Filter::Nearest, .address = rhi::AddressMode::ClampToEdge});
+    if (!frameLayout || !textureLayout || !textureSampler || !lightmapSampler || !skySampler) {
+        return gpuFailure(!frameLayout       ? std::move(frameLayout.error())
+                          : !textureLayout   ? std::move(textureLayout.error())
+                          : !textureSampler  ? std::move(textureSampler.error())
+                          : !lightmapSampler ? std::move(lightmapSampler.error())
+                                             : std::move(skySampler.error()));
     }
     world.m_frameLayout = *frameLayout;
     world.m_textureLayout = *textureLayout;
     world.m_textureSampler = *textureSampler;
     world.m_lightmapSampler = *lightmapSampler;
+    world.m_skySampler = *skySampler;
 
     const std::array attributes{
         rhi::VertexAttribute{.location = 0, .format = rhi::VertexFormat::Float3, .offset = 0},
@@ -487,19 +566,30 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = attributes}};
     const std::array targets{rhi::ColorTarget{.format = desc.colorFormat}};
+    const rhi::DepthState depth{.isWriteEnabled = true, .compare = rhi::CompareOp::Greater};
     const std::array layouts{world.m_frameLayout, world.m_textureLayout};
-    auto pipeline = device.createRenderPipeline(
-        {.label = "world",
-         .vertex = {.shader = world.m_shader, .entryPoint = "vertexMain"},
-         .fragment = {.shader = world.m_shader, .entryPoint = "fragmentMain"},
-         .vertexBuffers = vertexBuffers,
-         .colorTargets = targets,
-         .depth = rhi::DepthState{.isWriteEnabled = true, .compare = rhi::CompareOp::Greater},
-         .bindGroupLayouts = layouts});
-    if (!pipeline) {
-        return gpuFailure(std::move(pipeline.error()));
+    auto pipeline =
+        device.createRenderPipeline({.label = "world",
+                                     .vertex = {.shader = world.m_shader, .entryPoint = "vertexMain"},
+                                     .fragment = {.shader = world.m_shader, .entryPoint = "fragmentMain"},
+                                     .vertexBuffers = vertexBuffers,
+                                     .colorTargets = targets,
+                                     .depth = depth,
+                                     .bindGroupLayouts = layouts});
+    const std::array skyLayouts{world.m_frameLayout};
+    auto skyPipeline =
+        device.createRenderPipeline({.label = "world.sky",
+                                     .vertex = {.shader = world.m_shader, .entryPoint = "skyVertexMain"},
+                                     .fragment = {.shader = world.m_shader, .entryPoint = "skyFragmentMain"},
+                                     .vertexBuffers = vertexBuffers,
+                                     .colorTargets = targets,
+                                     .depth = depth,
+                                     .bindGroupLayouts = skyLayouts});
+    if (!pipeline || !skyPipeline) {
+        return gpuFailure(!pipeline ? std::move(pipeline.error()) : std::move(skyPipeline.error()));
     }
     world.m_pipeline = *pipeline;
+    world.m_skyPipeline = *skyPipeline;
 
     for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
         auto buffer = device.createBuffer({.label = "world.frame",
@@ -513,7 +603,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             rhi::Binding{.binding = 0, .resource = rhi::BufferBinding{.buffer = *buffer}},
             rhi::Binding{.binding = 1, .resource = *atlasTexture},
             rhi::Binding{.binding = 2, .resource = world.m_lightmapSampler},
-            rhi::Binding{.binding = 3, .resource = *lightTableTexture}};
+            rhi::Binding{.binding = 3, .resource = *lightTableTexture},
+            rhi::Binding{.binding = 4, .resource = *skyTexture},
+            rhi::Binding{.binding = 5, .resource = world.m_skySampler}};
         auto group = device.createBindGroup(
             {.label = "world.frame", .layout = world.m_frameLayout, .bindings = bindings});
         if (!group) {
@@ -523,7 +615,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         world.m_frameSlots.push_back(FrameSlot{.buffer = *buffer, .group = *group});
     }
 
-    // The buffers, and a batch for each texture that has triangles.
+    // The buffers: a batch for each texture that has triangles, then the sky's faces.
     std::vector<std::uint32_t> indices;
     for (std::size_t texture = 0; texture < indicesByTexture.size(); ++texture) {
         if (indicesByTexture[texture].empty()) {
@@ -539,11 +631,15 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             return gpuFailure(std::move(group.error()));
         }
         world.m_textureGroups.push_back(*group);
-        world.m_batches.push_back(Batch{.firstIndex = narrow<std::uint32_t>(indices.size()),
-                                        .indexCount = narrow<std::uint32_t>(indicesByTexture[texture].size()),
-                                        .textures = *group});
+        world.m_batches.push_back(
+            Batch{.indices = {.firstIndex = narrow<std::uint32_t>(indices.size()),
+                              .indexCount = narrow<std::uint32_t>(indicesByTexture[texture].size())},
+                  .textures = *group});
         indices.insert(indices.end(), indicesByTexture[texture].begin(), indicesByTexture[texture].end());
     }
+    world.m_skyFaces = {.firstIndex = narrow<std::uint32_t>(indices.size()),
+                        .indexCount = narrow<std::uint32_t>(skyIndices.size())};
+    indices.insert(indices.end(), skyIndices.begin(), skyIndices.end());
     world.m_stats.triangles = indices.size() / 3;
     world.m_stats.lightmapAtlas = atlasExtent;
 
@@ -595,11 +691,13 @@ BspWorld::BspWorld(BspWorld&& other) noexcept
       m_indices{std::exchange(other.m_indices, {})}, m_textures{std::move(other.m_textures)},
       m_textureSampler{std::exchange(other.m_textureSampler, {})},
       m_lightmapSampler{std::exchange(other.m_lightmapSampler, {})},
-      m_shader{std::exchange(other.m_shader, {})}, m_frameLayout{std::exchange(other.m_frameLayout, {})},
+      m_skySampler{std::exchange(other.m_skySampler, {})}, m_shader{std::exchange(other.m_shader, {})},
+      m_frameLayout{std::exchange(other.m_frameLayout, {})},
       m_textureLayout{std::exchange(other.m_textureLayout, {})},
-      m_pipeline{std::exchange(other.m_pipeline, {})}, m_textureGroups{std::move(other.m_textureGroups)},
-      m_frameSlots{std::move(other.m_frameSlots)}, m_batches{std::move(other.m_batches)},
-      m_drawCount{other.m_drawCount}, m_lightScale{other.m_lightScale}, m_stats{std::move(other.m_stats)} {
+      m_pipeline{std::exchange(other.m_pipeline, {})}, m_skyPipeline{std::exchange(other.m_skyPipeline, {})},
+      m_textureGroups{std::move(other.m_textureGroups)}, m_frameSlots{std::move(other.m_frameSlots)},
+      m_batches{std::move(other.m_batches)}, m_skyFaces{other.m_skyFaces}, m_drawCount{other.m_drawCount},
+      m_lightScale{other.m_lightScale}, m_stats{std::move(other.m_stats)} {
     other.m_textures.clear();
     other.m_textureGroups.clear();
     other.m_frameSlots.clear();
@@ -621,11 +719,13 @@ void BspWorld::release() noexcept {
         m_device->destroy(texture);
     }
     m_device->destroy(m_pipeline);
+    m_device->destroy(m_skyPipeline);
     m_device->destroy(m_frameLayout);
     m_device->destroy(m_textureLayout);
     m_device->destroy(m_shader);
     m_device->destroy(m_textureSampler);
     m_device->destroy(m_lightmapSampler);
+    m_device->destroy(m_skySampler);
     m_device->destroy(m_vertices);
     m_device->destroy(m_indices);
     m_frameSlots.clear();
@@ -633,10 +733,12 @@ void BspWorld::release() noexcept {
     m_textures.clear();
 }
 
-void BspWorld::draw(rhi::CommandList& commands, const Mat4& viewProjection) {
+void BspWorld::draw(rhi::CommandList& commands, const Camera& camera, float aspect) {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     const FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
-    const FrameUniform frame{.viewProjection = viewProjection, .lighting = {.x = m_lightScale}};
+    const FrameUniform frame{.viewProjection = viewProjectionMatrix(camera, aspect),
+                             .lighting = {.x = m_lightScale},
+                             .eye = extend(camera.position, 1.0F)};
     std::ranges::copy(std::as_bytes(std::span{&frame, 1}), m_device->mappedBytes(slot.buffer).begin());
 
     commands.setPipeline(m_pipeline);
@@ -645,7 +747,13 @@ void BspWorld::draw(rhi::CommandList& commands, const Mat4& viewProjection) {
     commands.setBindGroup(0, slot.group);
     for (const Batch& batch : m_batches) {
         commands.setBindGroup(1, batch.textures);
-        commands.drawIndexed(batch.indexCount, 1, batch.firstIndex, 0, 0);
+        commands.drawIndexed(batch.indices.indexCount, 1, batch.indices.firstIndex, 0, 0);
+    }
+    if (m_skyFaces.indexCount != 0) {
+        // Last, so that what the world hides of them fails the depth test before it is shaded.
+        commands.setPipeline(m_skyPipeline);
+        commands.setBindGroup(0, slot.group);
+        commands.drawIndexed(m_skyFaces.indexCount, 1, m_skyFaces.firstIndex, 0, 0);
     }
 }
 

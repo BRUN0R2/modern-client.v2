@@ -78,13 +78,14 @@ struct RenderingDesc {
     Extent2d area{};
 };
 
-/// A copy between a buffer and a mip level of a texture.
+/// A copy between a buffer and a mip level of a layer of a texture.
 struct TextureCopy {
     BufferHandle buffer{};
     std::uint64_t bufferOffset = 0;
     std::uint32_t bytesPerRow = 0; ///< 0: the rows are packed, extent.width texels each.
     TextureHandle texture{};
     std::uint32_t mipLevel = 0;
+    std::uint32_t arrayLayer = 0;
     Extent2d extent{};
 };
 

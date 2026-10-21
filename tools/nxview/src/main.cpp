@@ -20,6 +20,7 @@ namespace {
 
 constexpr int kExitUnusable = 2; // the arguments, the content, the window or the GPU
 constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <folder>] [--data <folder>]
+              [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
               [--screenshot <file.bmp>] [--validation]
 
 Opens a map of the Counter-Strike 1.6 installation and flies through it: the mouse looks, W A S D
@@ -29,16 +30,20 @@ move, Space and Ctrl rise and sink, Shift is faster, Escape ends it.
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
                           Steam installed)
   --data <folder>         the data/ folder of the project (default: the one next to nxview)
-  --screenshot <file.bmp> renders one 1280x720 frame from the first spawn into the file, without a
-                          window, and ends
+  --position "<x> <y> <z>" where the camera starts (default: a standing player's eye at the first
+                          spawn)
+  --angles "<p> <y> <r>"  where it looks, in degrees: pitch (down is positive), yaw, roll (default:
+                          the spawn's yaw)
+  --screenshot <file.bmp> renders one 1280x720 frame from the camera's start into the file, without
+                          a window, and ends
   --validation            the Khronos validation layer, when it is installed: its messages are
                           logged and nxview exits with 1 when it reported an error
 )";
 
 constexpr std::string_view kDefaultMap = "de_dust2";
 constexpr nx::rhi::Extent2d kScreenshotExtent{.width = 1280, .height = 720};
-/// Where the sky will be: a sky-like color until the sky pass draws it.
-constexpr nx::rhi::ClearColor kSkyColor{.red = 0.45F, .green = 0.55F, .blue = 0.65F, .alpha = 1.0F};
+/// What no face covers: the void outside a map, seen through its leaks.
+constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
 /// A standing player's eye above the spawn's origin (the middle of the player's box), as in CS 1.6.
 constexpr float kEyeHeight = 17.0F;
 /// The camera's speed in map units per second, and how much faster it goes with Shift.
@@ -55,8 +60,28 @@ struct Options {
     std::optional<std::filesystem::path> install;
     std::optional<std::filesystem::path> data;
     std::optional<std::filesystem::path> screenshot;
+    std::optional<nx::Vec3> position;
+    std::optional<nx::Vec3> angles; ///< Pitch, yaw and roll.
     bool isValidationEnabled = false;
 };
+
+/// The three numbers of an entity's vector value ("-512 1024 36"); nullopt for other text.
+[[nodiscard]] auto vectorOf(std::string_view text) -> std::optional<nx::Vec3> {
+    std::array<float, 3> values{};
+    const char* next = text.data();
+    const char* const end = text.data() + text.size();
+    for (float& value : values) {
+        while (next != end && *next == ' ') {
+            ++next;
+        }
+        const auto [stop, error] = std::from_chars(next, end, value);
+        if (error != std::errc{}) {
+            return std::nullopt;
+        }
+        next = stop;
+    }
+    return nx::Vec3{.x = values[0], .y = values[1], .z = values[2]};
+}
 
 /// The options in `arguments`, the command line without the program; nullopt when they are not
 /// valid options.
@@ -84,6 +109,12 @@ struct Options {
             options.data = nx::platform::fromUtf8(value);
         } else if (option == "--screenshot") {
             options.screenshot = nx::platform::fromUtf8(value);
+        } else if (option == "--position" || option == "--angles") {
+            const std::optional<nx::Vec3> numbers = vectorOf(value);
+            if (!numbers) {
+                return std::nullopt;
+            }
+            (option == "--position" ? options.position : options.angles) = numbers;
         } else {
             return std::nullopt;
         }
@@ -103,32 +134,15 @@ template <class Code>
     return kExitUnusable;
 }
 
-/// The map, its WADs and the shader, read once: the views point into these bytes.
+/// The map, its WADs, its sky and the shader, read once: the views point into these bytes.
 struct Content {
     std::vector<std::byte> mapBytes;
     std::optional<nx::assets::BspView> map;
     std::vector<std::vector<std::byte>> wadBytes;
     std::vector<nx::assets::WadView> wads;
+    std::vector<nx::assets::RgbaImage> sky; ///< Its sides, in the order of nx::render::kSkySuffixes.
     std::vector<std::byte> shader;
 };
-
-/// The three numbers of an entity's vector value ("-512 1024 36"); nullopt for other text.
-[[nodiscard]] auto vectorOf(std::string_view text) -> std::optional<nx::Vec3> {
-    std::array<float, 3> values{};
-    const char* next = text.data();
-    const char* const end = text.data() + text.size();
-    for (float& value : values) {
-        while (next != end && *next == ' ') {
-            ++next;
-        }
-        const auto [stop, error] = std::from_chars(next, end, value);
-        if (error != std::errc{}) {
-            return std::nullopt;
-        }
-        next = stop;
-    }
-    return nx::Vec3{.x = values[0], .y = values[1], .z = values[2]};
-}
 
 /// Where a player first stands: the first counter-terrorist spawn, else the first terrorist one.
 [[nodiscard]] auto spawnCamera(const nx::assets::BspView& map) -> nx::render::Camera {
@@ -147,6 +161,20 @@ struct Content {
         }
     }
     return nx::render::Camera{};
+}
+
+/// Where the camera starts: at the first spawn, but where the options put it.
+[[nodiscard]] auto startCamera(const Options& options, const nx::assets::BspView& map) -> nx::render::Camera {
+    nx::render::Camera camera = spawnCamera(map);
+    if (options.position) {
+        camera.position = *options.position;
+    }
+    if (options.angles) {
+        camera.angles = {.pitch = nx::Degrees{options.angles->x},
+                         .yaw = nx::Degrees{options.angles->y},
+                         .roll = nx::Degrees{options.angles->z}};
+    }
+    return camera;
 }
 
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names
@@ -183,7 +211,41 @@ void readWads(const nx::assets::Vfs& vfs, Content& content) {
     }
 }
 
-/// Reads the map `options.map` of the installation, its WADs and the world shader.
+/// The sides of the sky `name`, gfx/env/<name><suffix>.tga; nullopt when one is missing or unreadable.
+[[nodiscard]] auto readSkySides(const nx::assets::Vfs& vfs, std::string_view name)
+    -> std::optional<std::vector<nx::assets::RgbaImage>> {
+    std::vector<nx::assets::RgbaImage> sides;
+    for (const std::string_view suffix : nx::render::kSkySuffixes) {
+        const auto path = nx::assets::VfsPath::parse(std::format("gfx/env/{}{}.tga", name, suffix));
+        auto bytes = path ? vfs.readAll(*path) : nx::Result<std::vector<std::byte>, nx::assets::VfsError>{};
+        auto side =
+            bytes ? nx::assets::readTga(*bytes) : nx::Result<nx::assets::RgbaImage, nx::assets::TgaError>{};
+        if (!path || !bytes || !side) {
+            return std::nullopt;
+        }
+        sides.push_back(std::move(*side));
+    }
+    return sides;
+}
+
+/// The sky the worldspawn's `skyname` names, or the default one when the installation lacks it, as
+/// the original falls back; none when neither can be read: the world draws its sky gray.
+void readSky(const nx::assets::Vfs& vfs, Content& content) {
+    const std::string_view name =
+        content.map->entities().empty()
+            ? nx::render::kDefaultSkyName
+            : content.map->entities()[0].find("skyname").value_or(nx::render::kDefaultSkyName);
+    const std::array candidates{name, nx::render::kDefaultSkyName};
+    for (const std::string_view candidate : std::span{candidates}.first(name == candidates[1] ? 1 : 2)) {
+        if (auto sides = readSkySides(vfs, candidate)) {
+            content.sky = std::move(*sides);
+            return;
+        }
+        std::println("nxview: the sky {:?} is missing or unreadable", candidate);
+    }
+}
+
+/// Reads the map `options.map` of the installation, its WADs, its sky and the world shader.
 [[nodiscard]] auto readContent(const Options& options, Content& content) -> int {
     auto executable = nx::platform::executablePath();
     if (!executable) {
@@ -224,6 +286,7 @@ void readWads(const nx::assets::Vfs& vfs, Content& content) {
     }
     content.map = std::move(*map);
     readWads(*vfs, content);
+    readSky(*vfs, content);
     auto shader = nx::platform::readFile(executable->parent_path() / "shaders" / "world.spv");
     if (!shader) {
         return unusable(shader.error());
@@ -271,7 +334,7 @@ void readWads(const nx::assets::Vfs& vfs, Content& content) {
     return stream.good();
 }
 
-/// Renders one frame from the first spawn into options.screenshot, without a window.
+/// Renders one frame from the camera's start into options.screenshot, without a window.
 [[nodiscard]] auto takeScreenshot(const Options& options, const Content& content) -> int {
     auto device = nx::rhi::vulkan::createDevice(
         {.applicationName = "nxview", .isValidationEnabled = options.isValidationEnabled});
@@ -304,20 +367,21 @@ void readWads(const nx::assets::Vfs& vfs, Content& content) {
                                               {.map = *content.map,
                                                .wads = content.wads,
                                                .shaderCode = content.shader,
-                                               .colorFormat = nx::rhi::Format::Rgba8Unorm});
+                                               .colorFormat = nx::rhi::Format::Rgba8Unorm,
+                                               .sky = content.sky});
     if (!world) {
         return unusable(world.error());
     }
-    const nx::render::Camera camera = spawnCamera(*content.map);
+    const nx::render::Camera camera = startCamera(options, *content.map);
     const float aspect =
         static_cast<float>(kScreenshotExtent.width) / static_cast<float>(kScreenshotExtent.height);
     list.transition(*target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(*depth, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = *target, .clear = kSkyColor}};
+    const std::array colors{nx::rhi::ColorAttachment{.texture = *target, .clear = kVoidColor}};
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                          .area = kScreenshotExtent});
-    world->draw(list, nx::render::viewProjectionMatrix(camera, aspect));
+    world->draw(list, camera, aspect);
     list.endRendering();
     list.transition(*target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
     list.transition(*readback, nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
@@ -422,7 +486,7 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
         std::println(stderr, "nxview: {}", nx::describe(captured.error())); // the keys still fly
     }
 
-    nx::render::Camera camera = spawnCamera(*content.map);
+    nx::render::Camera camera = startCamera(options, *content.map);
     std::optional<nx::render::BspWorld> world; // made with the first image, which gives the format
     std::optional<nx::rhi::TextureHandle> depth;
     nx::rhi::Extent2d depthExtent;
@@ -477,7 +541,8 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
                                                         {.map = *content.map,
                                                          .wads = content.wads,
                                                          .shaderCode = content.shader,
-                                                         .colorFormat = frame.format});
+                                                         .colorFormat = frame.format,
+                                                         .sky = content.sky});
             if (!created) {
                 return unusable(created.error());
             }
@@ -499,12 +564,12 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
         }
         list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
         list.transition(*depth, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-        const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kSkyColor}};
+        const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
         list.beginRendering({.colors = colors,
                              .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                              .area = frame.size});
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
-        world->draw(list, nx::render::viewProjectionMatrix(camera, aspect));
+        world->draw(list, camera, aspect);
         list.endRendering();
         list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
         if (auto submitted = (*device)->submitFrame(**swapchain); !submitted) {
