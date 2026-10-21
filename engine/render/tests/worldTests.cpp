@@ -26,9 +26,8 @@ constexpr nx::rhi::Extent2d kExtent{.width = 32, .height = 32};
 /// The middle of the box.
 constexpr nx::Vec3 kMiddle{.x = 32.0F, .y = 32.0F, .z = 32.0F};
 
-[[nodiscard]] auto readSeed() -> std::vector<std::byte> {
-    auto bytes =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+[[nodiscard]] auto readSeed(std::string_view name = "boxEmbedded.bsp") -> std::vector<std::byte> {
+    auto bytes = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / name);
     EXPECT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
     return bytes.value_or(std::vector<std::byte>{});
 }
@@ -277,6 +276,78 @@ TEST(BspWorldTest, AnAnimatedTextureShowsItsFramesTenASecond) {
     EXPECT_GT(greenPixelsAt(0.05F), 0) << "frame 0: the crate";
     EXPECT_EQ(greenPixelsAt(0.15F), 0) << "frame 1: the checkerboard has no green";
     EXPECT_GT(greenPixelsAt(0.25F), 0) << "frame 0 again";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+/// Overwrites the first `from` in the entity text of `file` with `to`, of the same length.
+void replaceText(std::vector<std::byte>& file, std::string_view from, std::string_view to) {
+    ASSERT_EQ(from.size(), to.size());
+    const auto found = std::ranges::search(file, std::as_bytes(std::span{from}));
+    ASSERT_FALSE(found.empty()) << from;
+    std::ranges::copy(std::as_bytes(std::span{to}), found.begin());
+}
+
+TEST(BspWorldTest, ABrushEntityIsDrawnAsItsRenderModeSays) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // The CRATE01 wall, through a square of CRATE01 that covers the view: a func_wall drawn as its
+    // rendermode says, at a renderamt of 255 but where a test says otherwise.
+    struct Drawn {
+        std::vector<std::byte> pixels;
+        std::size_t faces = 0;
+    };
+    const auto drawnAs = [&](std::string_view mode, std::string_view amount) -> Drawn {
+        std::vector<std::byte> file = readSeed("boxWithEntity.bsp");
+        replaceText(file, R"("rendermode" "1")", std::format(R"("rendermode" "{}")", mode));
+        replaceText(file, R"("renderamt" "255")", std::format(R"("renderamt" "{}")", amount));
+        const auto map = nx::assets::BspView::parse(file);
+        EXPECT_TRUE(map.has_value());
+        auto world =
+            createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+        EXPECT_TRUE(world.has_value());
+        if (!map || !world) {
+            return {};
+        }
+        std::vector<std::byte> pixels =
+            target.draw(*world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
+        return {.pixels = std::move(pixels), .faces = world->lastFrame().faces};
+    };
+
+    const Drawn hidden = drawnAs("2", "000");
+    EXPECT_EQ(hidden.faces, 6U) << "a blended entity at a renderamt of 0 is not drawn: the walls";
+    EXPECT_EQ(drawnAs("0", "000").faces, 7U) << "a normal one is, whatever its renderamt";
+
+    const Drawn red = drawnAs("1", "255");
+    ASSERT_EQ(red.pixels.size(), hidden.pixels.size());
+    EXPECT_TRUE(std::ranges::all_of(std::views::iota(std::size_t{0}, red.pixels.size() / 4),
+                                    [&red](std::size_t pixel) {
+                                        return pixelAt(red.pixels,
+                                                       static_cast<std::uint32_t>(pixel % kExtent.width),
+                                                       static_cast<std::uint32_t>(pixel / kExtent.width)) ==
+                                               Pixel{255, 0, 0, 255};
+                                    }))
+        << "TransColor: rendercolor, opaque at 255";
+
+    // Half its color over the wall, as alpha blending gives it.
+    const Drawn halfRed = drawnAs("1", "128");
+    for (const std::uint32_t y : {0U, 16U, 31U}) {
+        const Pixel wall = pixelAt(hidden.pixels, 16, y);
+        const Pixel blended = pixelAt(halfRed.pixels, 16, y);
+        const float alpha = 128.0F / 255.0F;
+        EXPECT_NEAR(blended[0], (255.0F * alpha) + (static_cast<float>(wall[0]) * (1.0F - alpha)), 2.0F);
+        EXPECT_NEAR(blended[1], static_cast<float>(wall[1]) * (1.0F - alpha), 2.0F);
+    }
+
+    // TransAdd: the square's texture added to the wall: nowhere darker, and brighter overall.
+    const Drawn added = drawnAs("5", "255");
+    EXPECT_TRUE(
+        std::ranges::all_of(std::views::iota(std::size_t{0}, added.pixels.size()),
+                            [&](std::size_t byte) { return added.pixels[byte] >= hidden.pixels[byte]; }));
+    EXPECT_GT(brightnessOf(added.pixels), brightnessOf(hidden.pixels));
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 /// The color of quadrant `quadrant` (top-left, top-right, bottom-left, bottom-right) of sky side

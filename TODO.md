@@ -247,7 +247,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Sky: the faces of `sky` show the sides of `gfx/env/<skyname>*.tga` as the original projects them (texture arrays in `nx.rhi`)
 - [x] Animated textures (`+0`..`+9`, `+a`..`+j`: every face of a sequence on the same frame, ten a second)
 - [ ] Water (`!` textures: the original's warp) and the alternate animations of brush entities (`+a`..`+j` when their frame is not 0)
-- [ ] Brush entities with render modes and moving transforms (today: placed at their `origin`)
+- [x] Brush entities with render modes (`rendermode`, `renderamt`, `rendercolor`: solid, color, texture, glow, additive, blended back to front as the original sorts them)
+- [ ] Brush entities with moving transforms and `renderfx` (today: placed at their `origin`)
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [ ] Studio models: animation evaluation on the CPU in jobs
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices

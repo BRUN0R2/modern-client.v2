@@ -48,6 +48,11 @@ struct WorldVertex {
 };
 static_assert(sizeof(WorldVertex) == 8 * sizeof(float), "the vertex layout of the world pipeline");
 
+/// A brush entity's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1.
+struct EntityUniform {
+    Vec4 color{};
+};
+
 /// The frame's uniform: the rows of the view-projection matrix; in `lighting`, the original's
 /// lightscale and the size of the lightmaps; the camera's position; the light styles' brightness.
 struct FrameUniform {
@@ -224,24 +229,52 @@ private:
     return Vec3{.x = values[0], .y = values[1], .z = values[2]};
 }
 
-/// The translation of each model, from the `origin` of the entity that uses it ("model" "*3").
-[[nodiscard]] auto modelOrigins(const assets::BspView& map) -> std::vector<Vec3> {
-    std::vector<Vec3> origins(map.models().size());
+/// The integer at the start of an entity's value, after spaces, as the original's atoi reads it.
+[[nodiscard]] auto integerOf(std::string_view text) -> std::optional<int> {
+    const std::size_t first = std::min(text.find_first_not_of(' '), text.size());
+    int value = 0;
+    const auto [stop, error] = std::from_chars(text.data() + first, text.data() + text.size(), value);
+    return error == std::errc{} ? std::optional{value} : std::nullopt;
+}
+
+/// What the entity of a brush model says of it.
+struct ModelEntity {
+    Vec3 origin{};
+    RenderMode mode = RenderMode::Normal;
+    float amount = 0.0F; ///< `renderamt`, from 0 to 1.
+    Vec3 color{};        ///< `rendercolor`, from 0 to 1.
+};
+
+/// The entity of each model ("model" "*3"): where it puts it (`origin`) and how it draws it
+/// (`rendermode`, `renderamt`, `rendercolor`, each value held to 0 to 255). A mode the original does
+/// not know draws as its default does, as Glow. The world, model 0, draws normally where it is.
+[[nodiscard]] auto modelEntities(const assets::BspView& map) -> std::vector<ModelEntity> {
+    constexpr int kModes = 6;
+    constexpr float kFull = 255.0F;
+    std::vector<ModelEntity> models(map.models().size());
     for (const assets::BspEntity& entity : map.entities()) {
         const auto model = entity.find("model");
-        const auto origin = entity.find("origin");
-        if (!model || !origin || !model->starts_with('*')) {
+        if (!model || !model->starts_with('*')) {
             continue;
         }
         std::size_t index = 0;
         const auto [stop, error] = std::from_chars(model->data() + 1, model->data() + model->size(), index);
-        const std::optional<Vec3> position = vectorOf(*origin);
-        if (error != std::errc{} || index >= origins.size() || !position) {
+        if (error != std::errc{} || index == 0 || index >= models.size()) {
             continue;
         }
-        origins[index] = *position;
+        ModelEntity& drawn = models[index];
+        drawn.origin = vectorOf(entity.find("origin").value_or("")).value_or(Vec3{});
+        const int mode = integerOf(entity.find("rendermode").value_or("0")).value_or(0);
+        drawn.mode = mode >= 0 && mode < kModes ? static_cast<RenderMode>(mode) : RenderMode::Glow;
+        drawn.amount = static_cast<float>(std::clamp(
+                           integerOf(entity.find("renderamt").value_or("0")).value_or(0), 0, 255)) /
+                       kFull;
+        const Vec3 color = vectorOf(entity.find("rendercolor").value_or("0 0 0")).value_or(Vec3{});
+        drawn.color = Vec3{.x = std::clamp(color.x, 0.0F, kFull) / kFull,
+                           .y = std::clamp(color.y, 0.0F, kFull) / kFull,
+                           .z = std::clamp(color.z, 0.0F, kFull) / kFull};
     }
-    return origins;
+    return models;
 }
 
 /// The layers of the sky's texture, in the order of kSkySideOfAxis.
@@ -405,7 +438,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     }
 
     // The faces to draw: the world's, and those of the brush entities where their entities put them.
-    const std::vector<Vec3> origins = modelOrigins(map);
+    const std::vector<ModelEntity> entities = modelEntities(map);
     struct FaceToDraw {
         const assets::BspFace* face = nullptr;
         std::uint32_t index = 0; ///< In map.faces().
@@ -428,7 +461,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
             faces.push_back(FaceToDraw{.face = &face,
                                        .index = bspModel.firstFace.value + offset,
-                                       .origin = origins[model],
+                                       .origin = entities[model].origin,
                                        .texture = texture,
                                        .isSky = kind == SurfaceKind::Sky});
         }
@@ -561,8 +594,10 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         const assets::TextureInfo& info = map.textureInfos()[entry.face->textureInfo.value];
         const TextureUse& use = entry.texture < textureUses.size() ? textureUses[entry.texture] : missing;
         const auto first = narrow<std::uint32_t>(vertices.size());
+        Aabb faceBounds{.min = pointOf(*entry.face, 0), .max = pointOf(*entry.face, 0)};
         for (std::uint32_t edge = 0; edge < entry.face->edgeCount; ++edge) {
             const Vec3 point = pointOf(*entry.face, edge);
+            faceBounds = faceBounds.including(point);
             const double s = coordinateOf(point, info.s);
             const double t = coordinateOf(point, info.t);
             WorldVertex vertex{.position = point + entry.origin,
@@ -597,100 +632,31 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
                                               .vertexCount = entry.face->edgeCount,
                                               .bucket = bucket,
                                               .plane = map.planes()[entry.face->plane.value].plane,
-                                              .isBackSide = entry.face->isBackSide};
+                                              .isBackSide = entry.face->isBackSide,
+                                              .middle = faceBounds.center() + entry.origin};
         mostIndices += (std::size_t{entry.face->edgeCount} - 2) * 3;
         ++world.m_stats.faces;
     }
     for (std::size_t model = 1; model < map.models().size(); ++model) {
         const assets::BspModel& bspModel = map.models()[model];
-        world.m_models.push_back(ModelDraw{.firstFace = bspModel.firstFace.value,
-                                           .faceCount = bspModel.faceCount,
-                                           .bounds = bspModel.bounds.translated(origins[model]),
-                                           .origin = origins[model]});
+        const ModelEntity& entity = entities[model];
+        world.m_models.push_back(
+            ModelDraw{.firstFace = bspModel.firstFace.value,
+                      .faceCount = bspModel.faceCount,
+                      .bounds = bspModel.bounds.translated(entity.origin),
+                      .origin = entity.origin,
+                      .mode = entity.mode,
+                      // R_AddEntity: drawn other than normally, nothing at a renderamt of 0.
+                      .isDrawn = entity.mode == RenderMode::Normal || entity.amount > 0.0F});
     }
     world.m_faceGathered.resize(world.m_faces.size());
     world.m_bucketIndices.resize(bucketFrames.size());
 
-    // The pipelines and their bind groups: per frame, the camera, the lightmaps, the light table and
-    // the sky; per batch, its texture.
-    auto shader = device.createShader({.label = "world", .code = desc.shaderCode});
-    if (!shader) {
-        return gpuFailure(std::move(shader.error()));
+    // The pipelines; their bind groups: per frame, the camera, the lightmaps, the light table and the
+    // sky; per batch, its texture; per brush entity drawn blended, its rendercolor and renderamt.
+    if (auto created = world.createPipelines(desc.shaderCode, desc.colorFormat); !created) {
+        return gpuFailure(std::move(created.error()));
     }
-    world.m_shader = *shader;
-    const std::array frameBindings{
-        rhi::BindingLayout{
-            .binding = 0,
-            .type = rhi::BindingType::UniformBuffer,
-            .stages = {rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment}}, // the matrix; the lighting
-        rhi::BindingLayout{
-            .binding = 1, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
-        rhi::BindingLayout{
-            .binding = 2, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
-        rhi::BindingLayout{
-            .binding = 3, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
-        rhi::BindingLayout{
-            .binding = 4, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
-    const std::array textureBindings{
-        rhi::BindingLayout{
-            .binding = 0, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
-        rhi::BindingLayout{
-            .binding = 1, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
-    auto frameLayout = device.createBindGroupLayout({.label = "world.frame", .bindings = frameBindings});
-    auto textureLayout =
-        device.createBindGroupLayout({.label = "world.texture", .bindings = textureBindings});
-    auto textureSampler = device.createSampler({.label = "world.texture"});
-    // Each side clamped at its edges, as the original draws them.
-    auto skySampler = device.createSampler(
-        {.label = "world.sky", .mipmap = rhi::Filter::Nearest, .address = rhi::AddressMode::ClampToEdge});
-    if (!frameLayout || !textureLayout || !textureSampler || !skySampler) {
-        return gpuFailure(!frameLayout      ? std::move(frameLayout.error())
-                          : !textureLayout  ? std::move(textureLayout.error())
-                          : !textureSampler ? std::move(textureSampler.error())
-                                            : std::move(skySampler.error()));
-    }
-    world.m_frameLayout = *frameLayout;
-    world.m_textureLayout = *textureLayout;
-    world.m_textureSampler = *textureSampler;
-    world.m_skySampler = *skySampler;
-
-    const std::array attributes{
-        rhi::VertexAttribute{.location = 0, .format = rhi::VertexFormat::Float3, .offset = 0},
-        rhi::VertexAttribute{
-            .location = 1, .format = rhi::VertexFormat::Float2, .offset = offsetof(WorldVertex, u)}, // NOLINT
-        rhi::VertexAttribute{.location = 2,
-                             .format = rhi::VertexFormat::Float2,
-                             .offset = offsetof(WorldVertex, lightmapX)}, // NOLINT
-        rhi::VertexAttribute{.location = 3,
-                             .format = rhi::VertexFormat::Uint8x4,
-                             .offset = offsetof(WorldVertex, styles)}}; // NOLINT
-    const std::array vertexBuffers{
-        rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = attributes}};
-    const std::array targets{rhi::ColorTarget{.format = desc.colorFormat}};
-    const rhi::DepthState depth{.isWriteEnabled = true, .compare = rhi::CompareOp::Greater};
-    const std::array layouts{world.m_frameLayout, world.m_textureLayout};
-    auto pipeline =
-        device.createRenderPipeline({.label = "world",
-                                     .vertex = {.shader = world.m_shader, .entryPoint = "vertexMain"},
-                                     .fragment = {.shader = world.m_shader, .entryPoint = "fragmentMain"},
-                                     .vertexBuffers = vertexBuffers,
-                                     .colorTargets = targets,
-                                     .depth = depth,
-                                     .bindGroupLayouts = layouts});
-    const std::array skyLayouts{world.m_frameLayout};
-    auto skyPipeline =
-        device.createRenderPipeline({.label = "world.sky",
-                                     .vertex = {.shader = world.m_shader, .entryPoint = "skyVertexMain"},
-                                     .fragment = {.shader = world.m_shader, .entryPoint = "skyFragmentMain"},
-                                     .vertexBuffers = vertexBuffers,
-                                     .colorTargets = targets,
-                                     .depth = depth,
-                                     .bindGroupLayouts = skyLayouts});
-    if (!pipeline || !skyPipeline) {
-        return gpuFailure(!pipeline ? std::move(pipeline.error()) : std::move(skyPipeline.error()));
-    }
-    world.m_pipeline = *pipeline;
-    world.m_skyPipeline = *skyPipeline;
 
     for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
         auto buffer = device.createBuffer({.label = "world.frame",
@@ -740,6 +706,31 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             groups.push_back(*group);
         }
     }
+    // The rendercolor and renderamt of each brush entity drawn blended.
+    for (std::size_t model = 1; model < map.models().size(); ++model) {
+        ModelDraw& drawn = world.m_models[model - 1];
+        if (drawn.mode == RenderMode::Normal || drawn.mode == RenderMode::TransAlpha || !drawn.isDrawn) {
+            continue;
+        }
+        const EntityUniform uniform{.color = extend(entities[model].color, entities[model].amount)};
+        auto buffer = device.createBuffer({.label = "world.entity",
+                                           .size = sizeof(EntityUniform),
+                                           .usage = {rhi::BufferUsage::Uniform},
+                                           .location = rhi::MemoryLocation::Upload});
+        if (!buffer) {
+            return gpuFailure(std::move(buffer.error()));
+        }
+        drawn.entityBuffer = *buffer;
+        std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), device.mappedBytes(*buffer).begin());
+        const std::array bindings{
+            rhi::Binding{.binding = 0, .resource = rhi::BufferBinding{.buffer = *buffer}}};
+        auto group = device.createBindGroup(
+            {.label = "world.entity", .layout = world.m_entityLayout, .bindings = bindings});
+        if (!group) {
+            return gpuFailure(std::move(group.error()));
+        }
+        drawn.entityGroup = *group;
+    }
     world.m_stats.triangles = mostIndices / 3;
     world.m_stats.lightmapAtlas = atlasExtent;
 
@@ -787,16 +778,24 @@ BspWorld::BspWorld(BspWorld&& other) noexcept
       m_frameLayout{std::exchange(other.m_frameLayout, {})},
       m_textureLayout{std::exchange(other.m_textureLayout, {})},
       m_pipeline{std::exchange(other.m_pipeline, {})}, m_skyPipeline{std::exchange(other.m_skyPipeline, {})},
+      m_entityLayout{std::exchange(other.m_entityLayout, {})},
+      m_solidPipeline{std::exchange(other.m_solidPipeline, {})},
+      m_texturePipeline{std::exchange(other.m_texturePipeline, {})},
+      m_colorPipeline{std::exchange(other.m_colorPipeline, {})},
+      m_additivePipeline{std::exchange(other.m_additivePipeline, {})},
       m_bucketFrames{std::move(other.m_bucketFrames)}, m_frameSlots{std::move(other.m_frameSlots)},
       m_faces{std::move(other.m_faces)}, m_models{std::move(other.m_models)}, m_lighting{other.m_lighting},
       m_stats{std::move(other.m_stats)}, m_drawCount{other.m_drawCount},
       m_faceGathered{std::move(other.m_faceGathered)}, m_visibleFrom{other.m_visibleFrom},
       m_visibleLeaves{std::move(other.m_visibleLeaves)}, m_bucketIndices{std::move(other.m_bucketIndices)},
       m_skyIndices{std::move(other.m_skyIndices)}, m_batches{std::move(other.m_batches)},
+      m_entityDraws{std::move(other.m_entityDraws)}, m_entityFaces{std::move(other.m_entityFaces)},
+      m_entityIndices{std::move(other.m_entityIndices)}, m_entityRanges{std::move(other.m_entityRanges)},
       m_lastFrame{other.m_lastFrame} {
     other.m_textures.clear();
     other.m_bucketFrames.clear();
     other.m_frameSlots.clear();
+    other.m_models.clear();
 }
 
 BspWorld::~BspWorld() {
@@ -815,8 +814,17 @@ void BspWorld::release() noexcept {
     for (const rhi::TextureHandle texture : m_textures) {
         m_device->destroy(texture);
     }
+    for (const ModelDraw& model : m_models) {
+        m_device->destroy(model.entityGroup);
+        m_device->destroy(model.entityBuffer);
+    }
     m_device->destroy(m_pipeline);
     m_device->destroy(m_skyPipeline);
+    m_device->destroy(m_solidPipeline);
+    m_device->destroy(m_texturePipeline);
+    m_device->destroy(m_colorPipeline);
+    m_device->destroy(m_additivePipeline);
+    m_device->destroy(m_entityLayout);
     m_device->destroy(m_frameLayout);
     m_device->destroy(m_textureLayout);
     m_device->destroy(m_shader);
@@ -826,6 +834,16 @@ void BspWorld::release() noexcept {
     m_frameSlots.clear();
     m_bucketFrames.clear();
     m_textures.clear();
+    m_models.clear();
+}
+
+auto BspWorld::isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noexcept -> bool {
+    const FaceDraw& draw = m_faces[face];
+    const float distance = draw.plane.signedDistance(eye);
+    const bool isFacing = isOfAnEntity
+                              ? (draw.isBackSide ? distance < -kBackfaceEpsilon : distance > kBackfaceEpsilon)
+                              : (distance < 0.0F) == draw.isBackSide;
+    return draw.vertexCount != 0 && isFacing;
 }
 
 void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
@@ -833,14 +851,10 @@ void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
         return; // in another leaf already
     }
     m_faceGathered[face] = m_drawCount;
-    const FaceDraw& draw = m_faces[face];
-    const float distance = draw.plane.signedDistance(eye);
-    const bool isFacing = isOfAnEntity
-                              ? (draw.isBackSide ? distance < -kBackfaceEpsilon : distance > kBackfaceEpsilon)
-                              : (distance < 0.0F) == draw.isBackSide;
-    if (draw.vertexCount == 0 || !isFacing) {
+    if (!isSeen(face, eye, isOfAnEntity)) {
         return;
     }
+    const FaceDraw& draw = m_faces[face];
     std::vector<std::uint32_t>& indices =
         draw.bucket == kSkyBucket ? m_skyIndices : m_bucketIndices[draw.bucket];
     for (std::uint32_t corner = 2; corner < draw.vertexCount; ++corner) {
@@ -850,12 +864,55 @@ void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
     ++m_lastFrame.faces;
 }
 
+void BspWorld::addEntity(std::uint32_t model, const Camera& camera) {
+    const ModelDraw& drawn = m_models[model];
+    const Vec3 eye = camera.position - drawn.origin;
+    const auto first = narrow<std::uint32_t>(m_entityFaces.size());
+    for (std::uint32_t face = drawn.firstFace; face < drawn.firstFace + drawn.faceCount; ++face) {
+        if (m_faces[face].bucket != kSkyBucket && isSeen(face, eye, true)) {
+            m_entityFaces.push_back(face);
+        }
+    }
+    const auto count = narrow<std::uint32_t>(m_entityFaces.size()) - first;
+    if (count == 0) {
+        return;
+    }
+    if (drawn.mode == RenderMode::TransTexture) {
+        // R_SurfaceCompare: the farthest along the view first.
+        const Vec3 forward = angleVectors(camera.angles).forward;
+        std::ranges::stable_sort(
+            std::span{m_entityFaces}.subspan(first, count), std::ranges::greater{},
+            [this, forward](std::uint32_t face) { return dot(m_faces[face].middle, forward); });
+    }
+    for (const std::uint32_t face : std::span{m_entityFaces}.subspan(first, count)) {
+        const FaceDraw& draw = m_faces[face];
+        const auto firstIndex = narrow<std::uint32_t>(m_entityIndices.size());
+        for (std::uint32_t corner = 2; corner < draw.vertexCount; ++corner) {
+            const std::uint32_t firstVertex = draw.firstVertex;
+            m_entityIndices.insert(m_entityIndices.end(),
+                                   {firstVertex, firstVertex + corner - 1, firstVertex + corner});
+        }
+        m_entityRanges.push_back(
+            IndexRange{.firstIndex = firstIndex,
+                       .indexCount = narrow<std::uint32_t>(m_entityIndices.size()) - firstIndex});
+    }
+    m_entityDraws.push_back(EntityDraw{.model = model,
+                                       .distance = lengthSquared(drawn.bounds.center() - camera.position),
+                                       .firstFace = first,
+                                       .faceCount = count});
+    m_lastFrame.faces += count;
+}
+
 void BspWorld::gather(const Camera& camera, float aspect) {
     m_lastFrame = {};
     for (std::vector<std::uint32_t>& indices : m_bucketIndices) {
         indices.clear();
     }
     m_skyIndices.clear();
+    m_entityDraws.clear();
+    m_entityFaces.clear();
+    m_entityIndices.clear();
+    m_entityRanges.clear();
 
     // The leaves the camera's leaf may see, found again when it moves to another leaf.
     const assets::LeafIndex leaf = m_map->leafAt(camera.position);
@@ -886,14 +943,43 @@ void BspWorld::gather(const Camera& camera, float aspect) {
                     false);
         }
     }
-    for (const ModelDraw& model : m_models) {
-        if (!isInView(model.bounds)) {
+    for (std::uint32_t index = 0; index < m_models.size(); ++index) {
+        const ModelDraw& model = m_models[index];
+        if (!model.isDrawn || !isInView(model.bounds)) {
+            continue;
+        }
+        if (model.mode != RenderMode::Normal) {
+            addEntity(index, camera);
             continue;
         }
         for (std::uint32_t face = model.firstFace; face < model.firstFace + model.faceCount; ++face) {
             addFace(face, camera.position - model.origin, true);
         }
     }
+
+    // R_TransEntityCompare: the solid entities first, then the farthest; at one distance, by mode.
+    const auto distanceOf = [this](const EntityDraw& draw) {
+        return m_models[draw.model].mode == RenderMode::TransAlpha ? std::numeric_limits<float>::max()
+                                                                   : draw.distance;
+    };
+    const auto rankOf = [this](const EntityDraw& draw) {
+        switch (m_models[draw.model].mode) {
+        case RenderMode::TransTexture:
+            return 1;
+        case RenderMode::TransAdd:
+            return 2;
+        case RenderMode::Glow:
+            return 3;
+        default:
+            return 0;
+        }
+    };
+    std::ranges::stable_sort(m_entityDraws, [&](const EntityDraw& first, const EntityDraw& second) {
+        if (distanceOf(first) != distanceOf(second)) {
+            return distanceOf(first) > distanceOf(second);
+        }
+        return rankOf(first) < rankOf(second);
+    });
 }
 
 void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
@@ -928,6 +1014,7 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
         }
     }
     const IndexRange sky = write(m_skyIndices);
+    const IndexRange entities = write(m_entityIndices);
     m_lastFrame.triangles = written / 3;
 
     commands.setPipeline(m_pipeline);
@@ -944,6 +1031,172 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
         commands.setBindGroup(0, slot.group);
         commands.drawIndexed(sky.indexCount, 1, sky.firstIndex, 0, 0);
     }
+    // Then the brush entities drawn apart, in their order, each face with its texture's frame.
+    for (const EntityDraw& entity : m_entityDraws) {
+        const RenderMode mode = m_models[entity.model].mode;
+        commands.setPipeline(pipelineOf(mode));
+        commands.setBindGroup(0, slot.group);
+        if (mode != RenderMode::TransAlpha) {
+            commands.setBindGroup(2, m_models[entity.model].entityGroup);
+        }
+        for (std::uint32_t face = entity.firstFace; face < entity.firstFace + entity.faceCount; ++face) {
+            if (mode != RenderMode::TransColor) {
+                const std::vector<rhi::BindGroupHandle>& frames =
+                    m_bucketFrames[m_faces[m_entityFaces[face]].bucket];
+                commands.setBindGroup(1, frames[step % frames.size()]);
+            }
+            const IndexRange& range = m_entityRanges[face];
+            commands.drawIndexed(range.indexCount, 1, entities.firstIndex + range.firstIndex, 0, 0);
+        }
+    }
+}
+
+auto BspWorld::pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle {
+    switch (mode) {
+    case RenderMode::Normal:
+        return m_pipeline;
+    case RenderMode::TransAlpha:
+        return m_solidPipeline;
+    case RenderMode::TransColor:
+        return m_colorPipeline;
+    case RenderMode::TransAdd:
+        return m_additivePipeline;
+    case RenderMode::TransTexture:
+    case RenderMode::Glow:
+        break;
+    }
+    return m_texturePipeline;
+}
+
+auto BspWorld::createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
+    -> Result<void, rhi::RhiError> {
+    rhi::Device& device = *m_device;
+    auto shader = device.createShader({.label = "world", .code = shaderCode});
+    if (!shader) {
+        return std::unexpected{std::move(shader.error())};
+    }
+    m_shader = *shader;
+    const std::array frameBindings{
+        rhi::BindingLayout{
+            .binding = 0,
+            .type = rhi::BindingType::UniformBuffer,
+            .stages = {rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment}}, // the matrix; the lighting
+        rhi::BindingLayout{
+            .binding = 1, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 2, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 3, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 4, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
+    const std::array textureBindings{
+        rhi::BindingLayout{
+            .binding = 0, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 1, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
+    auto frameLayout = device.createBindGroupLayout({.label = "world.frame", .bindings = frameBindings});
+    auto textureLayout =
+        device.createBindGroupLayout({.label = "world.texture", .bindings = textureBindings});
+    auto textureSampler = device.createSampler({.label = "world.texture"});
+    // Each side clamped at its edges, as the original draws them.
+    auto skySampler = device.createSampler(
+        {.label = "world.sky", .mipmap = rhi::Filter::Nearest, .address = rhi::AddressMode::ClampToEdge});
+    if (!frameLayout || !textureLayout || !textureSampler || !skySampler) {
+        return std::unexpected(!frameLayout      ? std::move(frameLayout.error())
+                               : !textureLayout  ? std::move(textureLayout.error())
+                               : !textureSampler ? std::move(textureSampler.error())
+                                                 : std::move(skySampler.error()));
+    }
+    m_frameLayout = *frameLayout;
+    m_textureLayout = *textureLayout;
+    m_textureSampler = *textureSampler;
+    m_skySampler = *skySampler;
+
+    const std::array attributes{
+        rhi::VertexAttribute{.location = 0, .format = rhi::VertexFormat::Float3, .offset = 0},
+        rhi::VertexAttribute{
+            .location = 1, .format = rhi::VertexFormat::Float2, .offset = offsetof(WorldVertex, u)}, // NOLINT
+        rhi::VertexAttribute{.location = 2,
+                             .format = rhi::VertexFormat::Float2,
+                             .offset = offsetof(WorldVertex, lightmapX)}, // NOLINT
+        rhi::VertexAttribute{.location = 3,
+                             .format = rhi::VertexFormat::Uint8x4,
+                             .offset = offsetof(WorldVertex, styles)}}; // NOLINT
+    const std::array vertexBuffers{
+        rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = attributes}};
+    const std::array targets{rhi::ColorTarget{.format = colorFormat}};
+    const rhi::DepthState depth{.isWriteEnabled = true, .compare = rhi::CompareOp::Greater};
+    const std::array layouts{m_frameLayout, m_textureLayout};
+    auto pipeline =
+        device.createRenderPipeline({.label = "world",
+                                     .vertex = {.shader = m_shader, .entryPoint = "vertexMain"},
+                                     .fragment = {.shader = m_shader, .entryPoint = "fragmentMain"},
+                                     .vertexBuffers = vertexBuffers,
+                                     .colorTargets = targets,
+                                     .depth = depth,
+                                     .bindGroupLayouts = layouts});
+    const std::array skyLayouts{m_frameLayout};
+    auto skyPipeline =
+        device.createRenderPipeline({.label = "world.sky",
+                                     .vertex = {.shader = m_shader, .entryPoint = "skyVertexMain"},
+                                     .fragment = {.shader = m_shader, .entryPoint = "skyFragmentMain"},
+                                     .vertexBuffers = vertexBuffers,
+                                     .colorTargets = targets,
+                                     .depth = depth,
+                                     .bindGroupLayouts = skyLayouts});
+    if (!pipeline || !skyPipeline) {
+        return std::unexpected(!pipeline ? std::move(pipeline.error()) : std::move(skyPipeline.error()));
+    }
+    m_pipeline = *pipeline;
+    m_skyPipeline = *skyPipeline;
+
+    // A brush entity drawn blended: its textures (but TransColor) blended over what is behind, as
+    // R_SetRenderMode blends them; TransColor and TransAlpha write their depth, the others do not.
+    const std::array entityBindings{rhi::BindingLayout{
+        .binding = 0, .type = rhi::BindingType::UniformBuffer, .stages = {rhi::ShaderStage::Fragment}}};
+    auto entityLayout = device.createBindGroupLayout({.label = "world.entity", .bindings = entityBindings});
+    if (!entityLayout) {
+        return std::unexpected{std::move(entityLayout.error())};
+    }
+    m_entityLayout = *entityLayout;
+    const std::array entityLayouts{m_frameLayout, m_textureLayout, m_entityLayout};
+    const rhi::BlendState alphaBlend{.sourceColor = rhi::BlendFactor::SourceAlpha,
+                                     .destinationColor = rhi::BlendFactor::OneMinusSourceAlpha,
+                                     .sourceAlpha = rhi::BlendFactor::SourceAlpha,
+                                     .destinationAlpha = rhi::BlendFactor::OneMinusSourceAlpha};
+    const rhi::BlendState additiveBlend{.sourceColor = rhi::BlendFactor::One,
+                                        .destinationColor = rhi::BlendFactor::One,
+                                        .sourceAlpha = rhi::BlendFactor::One,
+                                        .destinationAlpha = rhi::BlendFactor::One};
+    const auto entityPipeline = [&](std::string_view label, std::string_view fragment,
+                                    std::optional<rhi::BlendState> blend, bool isDepthWritten,
+                                    std::span<const rhi::BindGroupLayoutHandle> groupLayouts) {
+        const std::array blendedTargets{rhi::ColorTarget{.format = colorFormat, .blend = blend}};
+        return device.createRenderPipeline(
+            {.label = label,
+             .vertex = {.shader = m_shader, .entryPoint = "vertexMain"},
+             .fragment = {.shader = m_shader, .entryPoint = fragment},
+             .vertexBuffers = vertexBuffers,
+             .colorTargets = blendedTargets,
+             .depth = rhi::DepthState{.isWriteEnabled = isDepthWritten, .compare = rhi::CompareOp::Greater},
+             .bindGroupLayouts = groupLayouts});
+    };
+    auto solid = entityPipeline("world.solid", "solidFragmentMain", std::nullopt, true, layouts);
+    auto texture = entityPipeline("world.texture", "textureFragmentMain", alphaBlend, false, entityLayouts);
+    auto color = entityPipeline("world.color", "colorFragmentMain", alphaBlend, true, entityLayouts);
+    auto additive =
+        entityPipeline("world.additive", "additiveFragmentMain", additiveBlend, false, entityLayouts);
+    if (!solid || !texture || !color || !additive) {
+        return std::unexpected{!solid     ? std::move(solid.error())
+                               : !texture ? std::move(texture.error())
+                               : !color   ? std::move(color.error())
+                                          : std::move(additive.error())};
+    }
+    m_solidPipeline = *solid;
+    m_texturePipeline = *texture;
+    m_colorPipeline = *color;
+    m_additivePipeline = *additive;
+    return {};
 }
 
 } // namespace nx::render
