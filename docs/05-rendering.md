@@ -52,7 +52,9 @@ express**. The vocabulary is close to WebGPU's.
 - Resources are created with **typed descriptors** (structs with designated initialization).
   Formats, usages and states are `enum class`.
 - Resource handles are **generational** (`TextureHandle`), validated in development
-  builds. Destruction is deferred until the GPU finishes the frame that used the resource.
+  builds. Each resource has an owner (`rhi::Owned`: `OwnedBuffer`, `OwnedTexture`...), which the
+  device's create functions give and which destroys it when it lets it go or ends; destruction is
+  deferred until the GPU finishes the frame that used the resource.
 - Every creation error returns `nx::Result<T, RhiError>`
   (`OutOfDeviceMemory`, `UnsupportedFormat`, `DeviceLost`, `SurfaceLost`…).
 - Debug names are mandatory (`.label`), propagated to RenderDoc and the validation layers.
@@ -181,7 +183,8 @@ if (!lightmapAtlas) {
 **Today** (`nx.render:world`, `nxview --map`): every face of the world and of the brush
 entities (placed at their `origin`) in one vertex buffer; the textures of the map and of the WADs
 its `wad` key names, by file name at the root of the VFS as the original looks them up, with their
-four mips, a checkerboard for a name no WAD has; masked textures; animated textures (`+0name` to
+four mips, a checkerboard for a name no WAD has, or whose first WAD that has it cannot read it (logged
+with its failure); masked textures; animated textures (`+0name` to
 `+9name`, and `+aname` to `+jname`, of any case, in a sequence of their own), whose faces all show the
 same frame, ten a second (`R_TextureAnimation`), where the original would refuse a sequence with a
 missing number the frames it has play in order; turbulent faces (water and lasers: `!`, Quake's `*`,

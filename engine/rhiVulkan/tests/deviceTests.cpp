@@ -85,14 +85,14 @@ TEST(VulkanDeviceTest, ADestroyedResourceLivesUntilItsFramesAreDone) {
     if (!device) {
         GTEST_SKIP() << kNoVulkan;
     }
-    const auto buffer = device->createBuffer({.label = "test.retired",
-                                              .size = 256,
-                                              .usage = {nx::rhi::BufferUsage::CopyDestination},
-                                              .location = nx::rhi::MemoryLocation::Device});
+    auto buffer = device->createBuffer({.label = "test.retired",
+                                        .size = 256,
+                                        .usage = {nx::rhi::BufferUsage::CopyDestination},
+                                        .location = nx::rhi::MemoryLocation::Device});
     ASSERT_TRUE(buffer.has_value()) << nx::describe(buffer.error());
     const auto commands = device->beginFrame();
     ASSERT_TRUE(commands.has_value());
-    device->destroy(*buffer); // while the frame being recorded may still use it
+    buffer->reset(); // while the frame being recorded may still use it
     ASSERT_TRUE(device->submitFrame().has_value());
     for (int frame = 0; frame < 4; ++frame) { // the frames after it destroy it
         ASSERT_TRUE(device->beginFrame().has_value());
