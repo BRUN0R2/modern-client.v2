@@ -7,7 +7,8 @@
 // light's way, through the original's light curve and times the light's color. The texture, already
 // through `texgamma`, is drawn times that light. A chrome texture's coordinates come from the normal
 // against the viewer (R_StudioSetupChrome); a masked texture is cut where its alpha is 0.5 or less;
-// an additive one is added to what is behind.
+// an additive one is added to what is behind. A model drawn other than normally is as opaque as its
+// blend, an added one unlit, its light its blend; the pipelines blend it as its render mode says.
 
 struct Frame
 {
@@ -61,6 +62,10 @@ struct Instance
     float depthScale;
     float depthOffset;
     uint firstBone;
+    // How opaque the model is drawn, from 0 to 1.
+    float blend;
+    // 1: an added model, whose vertices' light is its blend.
+    uint isUnlit;
 };
 
 [[vk::binding(0, 2)]]
@@ -101,7 +106,9 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
-    float3 light : COLOR0;
+    // rgb the vertex's light, a how opaque the model is: each a byte, as the original stores a vertex's
+    // color.
+    float4 light : COLOR0;
 };
 
 float4 boneRow(uint bone, uint row)
@@ -177,17 +184,18 @@ VertexOutput vertexMain(VertexInput input)
     output.position = float4(clip.xy, (clip.z * instance.depthScale) + (clip.w * instance.depthOffset), clip.w);
     const float2 texel = (skin.flags & kChrome) != 0 ? chromeOf(input.normalBone, normal) : input.texel;
     output.uv = texel * skin.texelSize;
-    // A byte a channel, as the original stores a vertex's color.
-    output.light = floor(instance.lightColor.xyz * lightOf(normal, skin.flags) * kChannelTop) / kChannelTop;
+    // An added model is unlit: its light is its blend (R_StudioDrawPoints).
+    const float3 light =
+        instance.isUnlit != 0 ? float3(instance.blend) : instance.lightColor.xyz * lightOf(normal, skin.flags);
+    output.light = floor(float4(light, instance.blend) * kChannelTop) / kChannelTop;
     return output;
 }
 
-// Opaque and additive meshes: the texture times the light.
+// Opaque and additive meshes: the texture times the light, its alpha times how opaque the model is.
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
-    const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb * input.light, 1.0);
+    return albedo.Sample(albedoSampler, input.uv) * input.light;
 }
 
 // The original's alpha test of masked meshes: what has an alpha above it is drawn.
@@ -197,10 +205,10 @@ static const float kMaskedAlphaTest = 0.5;
 [shader("fragment")]
 float4 maskedFragmentMain(VertexOutput input) : SV_Target
 {
-    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    const float4 color = albedo.Sample(albedoSampler, input.uv) * input.light;
     if (color.a <= kMaskedAlphaTest)
     {
         discard;
     }
-    return float4(color.rgb * input.light, 1.0);
+    return color;
 }
