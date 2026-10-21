@@ -26,6 +26,9 @@ constexpr std::int32_t kUseOnly = 256;
 /// A door's speed when its "speed" is 0 or absent: units a second, or degrees when it turns.
 constexpr float kDoorSpeed = 100.0F;
 
+/// A door's waves rise by this share of its "WaveHeight" (CBaseDoor::KeyValue).
+constexpr float kWaveHeightShare = 1.0F / 8.0F;
+
 /// The engine grows a brush model's bounds by a unit on every side when it loads them, and the
 /// game takes it back from a door's size.
 constexpr float kLoadedBoundsGrowth = 1.0F;
@@ -186,7 +189,8 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
                                       ? slidingDoorOf(entity, models[model->value].bounds, origin)
                                       : rotatingDoorOf(entity, origin);
             world.spawn(BrushModel{.index = *model}, Transform{.origin = made.origin, .angles = made.angles},
-                        solidity, Pusher{}, made.door);
+                        solidity, Pusher{}, made.door,
+                        Waves{.height = entity.findNumber("WaveHeight").value_or(0.0F) * kWaveHeightShare});
         } else {
             world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
         }

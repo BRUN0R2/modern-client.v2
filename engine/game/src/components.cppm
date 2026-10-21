@@ -87,6 +87,13 @@ struct Door {
     Seconds lastBlocked{};    ///< When something last stopped it, by the game's time.
 };
 
+/// How high the waves of a brush entity's turbulent faces rise: the original's pev->scale of a brush
+/// entity, which its renderer raises them by (EmitWaterPolys). A door's is an eighth of its
+/// "WaveHeight" (CBaseDoor::KeyValue), the key func_water sets.
+struct Waves {
+    float height = 0.0F;
+};
+
 /// A body a pusher moves out of its way, and carries while it stands on it: a player's box (the
 /// original's MOVETYPE_WALK).
 struct Body {

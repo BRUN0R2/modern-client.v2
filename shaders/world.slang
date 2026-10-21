@@ -5,8 +5,9 @@
 // light, as the original draws it (nx.render:gamma): each luxel sums its lightmaps, each times its
 // style's brightness, goes through `lightgamma`, `brightness` and `gamma`, and the face blends the
 // four luxels around each point. Masked textures (`{`) discard their transparent texels; brush
-// entities are drawn as their render mode says. The sky's faces show the side of the sky they are
-// seen toward, projected as the original projects it.
+// entities are drawn as their render mode says, the water of those with waves rising and falling.
+// The sky's faces show the side of the sky they are seen toward, projected as the original projects
+// it.
 
 // The styles the frame sets, four to an element of Frame::styles; the ones above keep the normal
 // brightness, 'm'.
@@ -46,8 +47,9 @@ Texture2D albedo;
 SamplerState albedoSampler;
 
 // The brush model drawn: where the game puts it this frame, its turn (the rows of its rotation, in
-// xyz) and its origin (xyz; the world's are the identity and 0); and, drawn other than normally, rgb
-// its `rendercolor`, a its `renderamt`, from 0 to 1.
+// xyz) and its origin (xyz; the world's are the identity and 0), and in origin.w the height of its
+// waves (0 for none); and, drawn other than normally, rgb its `rendercolor`, a its `renderamt`, from
+// 0 to 1.
 struct Entity
 {
     float4 color;
@@ -82,6 +84,8 @@ struct VertexInput
     [[vk::location(3)]] uint4 styles : TEXCOORD2;
     // 1 on a turbulent face (water, lasers): uv is in texels, and warps.
     [[vk::location(4)]] uint flags : TEXCOORD3;
+    // On a turbulent face, the height of the corner that says which way its waves go.
+    [[vk::location(5)]] float waveBase : TEXCOORD4;
 };
 
 struct VertexOutput
@@ -108,12 +112,47 @@ static const float kTurbulentAmplitude = 8.0;
 static const float kTurbulentFrequency = 0.125;
 static const float kTurn = 2.0 * 3.14159265358979;
 
-/// The original's r_turbsin: kTurbulentAmplitude sin(2 pi i / kTurbulentSines), the values of its
-/// warpsin table, the index wrapping around the table.
+/// The original's r_turbsin at `index`: kTurbulentAmplitude sin(2 pi i / kTurbulentSines), the values
+/// of its warpsin table, the index wrapping around the table.
+float turbulentSineAt(int index)
+{
+    return kTurbulentAmplitude * sin(float(index & (kTurbulentSines - 1)) * (kTurn / float(kTurbulentSines)));
+}
+
+/// r_turbsin at `position` turns of the table, as the warp of the texels reads it.
 float turbulentSine(float position)
 {
-    const int index = int(position * (float(kTurbulentSines) / kTurn)) & (kTurbulentSines - 1);
-    return kTurbulentAmplitude * sin(float(index) * (kTurn / float(kTurbulentSines)));
+    return turbulentSineAt(int(position * (float(kTurbulentSines) / kTurn)));
+}
+
+// The waves of a brush entity's turbulent faces: two sines of the table, each lifted by its amplitude
+// above 0, the first along x + y kWaveSpeed entries a second, the second along kWaveStretch x - y
+// kSecondWaveSpeed entries a second, kSecondWaveShare of it.
+static const float kWaveSpeed = 160.0;
+static const float kSecondWaveSpeed = 171.0;
+static const float kWaveStretch = 5.0;
+static const float kSecondWaveShare = 0.8;
+
+/// How far the waves of the brush entity drawn raise a vertex of a turbulent face, in its model's
+/// space, as the original's EmitWaterPolys raises them: by the entity's wave height, the other way
+/// when the face's base is at or above the eye.
+float waveRiseOf(VertexInput input)
+{
+    const float height = entity.origin.w;
+    if (input.flags != kTurbulent || height == 0.0)
+    {
+        return 0.0;
+    }
+    const float time = frame.lighting.w;
+    const float3 position = input.position;
+    const float first =
+        turbulentSineAt(int((time * kWaveSpeed) + position.y + position.x)) + kTurbulentAmplitude;
+    const float second =
+        (turbulentSineAt(int((position.x * kWaveStretch) + (time * kSecondWaveSpeed) - position.y)) +
+         kTurbulentAmplitude) *
+        kSecondWaveShare;
+    const float way = input.waveBase >= frame.eye.z ? -1.0 : 1.0;
+    return (first + second) * height * way;
 }
 
 /// The texture coordinates of a vertex; on a turbulent face, its texels warped as the original's
@@ -135,7 +174,7 @@ float2 textureCoordinatesOf(VertexInput input)
 VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
-    output.position = clipPositionOf(placedPosition(input.position));
+    output.position = clipPositionOf(placedPosition(input.position + float3(0.0, 0.0, waveRiseOf(input))));
     output.uv = textureCoordinatesOf(input);
     output.lightmapPosition = input.lightmapPosition;
     output.styles = input.styles;

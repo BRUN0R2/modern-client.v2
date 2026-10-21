@@ -369,6 +369,41 @@ TEST(BspWorldTest, ABrushEntityIsDrawnWhereTheGamePutsAndTurnsIt) {
               (Pixel{255, 0, 0, 255}));
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
+
+TEST(BspWorldTest, TheWaterOfABrushEntityRisesAndFallsInWaves) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // The square of the seed's func_wall, drawn normally, covers the view: its corners raised by waves
+    // of `waveHeight`, its texture with them, when it is water.
+    const auto drawnWith = [&](bool isWater, float waveHeight) {
+        std::vector<std::byte> file = readSeed("boxWithEntity.bsp");
+        replaceText(file, R"("rendermode" "1")", R"("rendermode" "0")");
+        if (isWater) {
+            renameTexture(file, "CRATE01", "!crate");
+        }
+        const auto map = nx::assets::BspView::parse(file);
+        EXPECT_TRUE(map.has_value());
+        auto world =
+            createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+        EXPECT_TRUE(world.has_value());
+        if (!map || !world) {
+            return std::vector<std::byte>{};
+        }
+        const std::array placements{nx::render::ModelPlacement{.model = {1}, .waveHeight = waveHeight}};
+        return drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}},
+                         normalStyles(), nx::Seconds{0.0F}, placements);
+    };
+
+    constexpr float kWaveHeight = 0.25F;
+    EXPECT_NE(drawnWith(true, kWaveHeight), drawnWith(true, 0.0F)) << "water rises and falls";
+    EXPECT_EQ(drawnWith(false, kWaveHeight), drawnWith(false, 0.0F)) << "what is not water does not";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
 /// The color of quadrant `quadrant` (top-left, top-right, bottom-left, bottom-right) of sky side
 /// `side` (in the order of kSkySuffixes).
 [[nodiscard]] constexpr auto skyColor(std::size_t side, std::size_t quadrant) -> Pixel {
