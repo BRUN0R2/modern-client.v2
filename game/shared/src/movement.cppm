@@ -8,9 +8,9 @@
 /// precision of each sum, which change where a player ends up.
 ///
 /// Today: walking, the air, jumping and its penalties, ducking, stairs, sliding along walls and
-/// floors, water, and ladders, among the world and the brush entities near the player. Noclip,
-/// observers, unsticking, boxes (players, hostages), moving entities, conveyors and currents come
-/// next (TODO.md).
+/// floors, water, and ladders, among the world and the brush entities where the game puts and turns
+/// them. Noclip, observers, unsticking, boxes (players, hostages), conveyors and currents come next
+/// (TODO.md).
 export module cs.shared:movement;
 
 import std;

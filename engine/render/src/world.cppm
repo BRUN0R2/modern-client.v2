@@ -11,8 +11,7 @@
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
-/// the brush entities' render modes, water, and brush entities moved by the game. Turned entities
-/// come next (TODO.md, Rendering).
+/// the brush entities' render modes, water, and brush entities moved and turned by the game.
 export module nx.render:world;
 
 import std;

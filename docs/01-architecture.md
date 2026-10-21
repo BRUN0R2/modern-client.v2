@@ -70,7 +70,7 @@ flowchart TB
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts | render, assets, platform, console |
-| `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the map's brush entities, as the game makes them when a map starts, and sliding doors | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
+| `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the map's brush entities, as the game makes them when a map starts, and its doors, sliding and rotating | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |
 | `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement among the world and the brush entities | game, collision (today: core, math, ecs, collision, game) |
 | `cs.server` | 5 | Server rules: rounds, economy, objectives, admin | cs.shared, script, net |
