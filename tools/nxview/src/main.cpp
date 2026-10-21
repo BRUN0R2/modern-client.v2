@@ -752,9 +752,10 @@ struct LocalGame {
 }
 
 /// Gives `elapsed` to the game, tick by tick: the command of `keys` and `view` moves `walker`, when
-/// one walks, among the entities of `game` and the world of `hulls`, and what it meets is touched;
-/// then the pushers move, pushing the player's body. Returns the player's eye, between where the
-/// last two ticks left it by the time left; none without a walker.
+/// one walks, among the entities of `game` and the world of `hulls`, and the doors it meets and the
+/// triggers it is in are touched; then what is due acts, and the pushers move, pushing the player's
+/// body. Returns the player's eye, between where the last two ticks left it by the time left; none
+/// without a walker.
 auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHulls& hulls, Walker* walker,
           const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed) -> std::optional<nx::Vec3> {
     local.pending = std::min(local.pending + elapsed, kMaxCatchUp);
@@ -768,7 +769,9 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             nx::game::touchBrushEntities(game, hulls, moved.touchedModels, local.body);
             game.get<nx::game::Transform>(local.body)->origin = walker->player.origin;
             *game.get<nx::game::Body>(local.body) = cs::bodyOf(walker->player);
+            nx::game::touchTriggers(game, hulls, local.body);
         }
+        nx::game::runThinks(game, hulls);
         nx::game::runPushers(game, hulls);
         if (walker != nullptr) {
             walker->player.origin = game.get<nx::game::Transform>(local.body)->origin;

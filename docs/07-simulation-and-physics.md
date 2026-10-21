@@ -250,7 +250,8 @@ Each type is its own ECS system, with its execution order documented in the sche
 about its yaw axis, or roll or pitch as flagged, by its `distance`), moved by a `Pusher` (its
 velocity and angular velocity, its own clock and when it next acts by it), as the original's
 `CBaseDoor`, `CRotDoor` and `CBaseToggle::LinearMove` and `AngularMove`: a player's touch opens one
-nobody else opens (no `targetname` or `master`, not use-only), a turning one away from the player by
+nobody else opens (no `targetname` or `master`, not use-only; others use it, §5.2), a turning one
+away from the player by
 the side of its box the player is on (`DoorGoUp`, its arms compared cut to whole units, as the
 original; all of its open angles turned by the sign, its starting ones included, as the original
 does); it stays open its `wait` and closes, or stays open for good (a negative `wait`), or until it
@@ -284,6 +285,24 @@ nothing. `nxview` drops the hostages so.
   the map's *keyvalues*, as in the original.
 - **Destructible entities:** `func_breakable` (glass, wood, metal) with the original's
   materials, gibs and sounds. `func_pushable`.
+
+**Today** (`nx.game:thinking`, `nx.game:targets`, `nx.game:triggers`): an entity acts at its
+`NextThink`, a `GameTime` of its world's clock; `runThinks` runs, each tick, every entity due before
+the next tick starts (`SV_RunThink`), from the earliest, then by the entity, its `NextThink` taken off
+first. An entity's name is its `Named` (`targetname`); what it fires, its `Targets` (`target`,
+`killtarget`, `delay`, `CBaseDelay`). `useTargets` fires them as `SUB_UseTargets`: with a delay, through
+a `DelayedUse` entity that fires them at its `NextThink` and goes; at once, removing the entities named
+by the kill target, then using every entity named by the target, in the world's order, found by name
+when they fire as `FireTargets` finds them; a chain of targets firing targets stops 128 deep, as
+ReGameDLL stops one. Used, a door opens when closed, or closes when it stays open until used again
+(`CBaseDoor::Use`), a turning one away from what used it; a door fires its targets when it is open and
+when it is closed (`DoorHitTop`, `DoorHitBottom`). `trigger_multiple` and `trigger_once` are `Trigger`s:
+a body touches one when their linked boxes meet and the trigger model's hull for the body's size holds
+the body's origin (`SV_TouchLinks`, the model not turned); one not flagged "no clients" and not still
+waiting (its `NextThink` after now) fires its targets for the body, then waits its `wait` (0.2 s when
+it gives none) or, a `trigger_once`, is spent and goes 0.1 s later. `nxview` touches the triggers the
+player is in after each command, then runs what is due before the pushers: cs_747's curtains open as
+the player walks to them.
 
 ## 6. Determinism
 

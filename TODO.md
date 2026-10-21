@@ -300,9 +300,11 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Parity: fall damage
 - [x] Sliding doors (`func_door`, `func_water`): opened by a player's touch, moved by the pusher physics of the original (`SV_PushMove`), pushing bodies and blocked by them (`nx.game:movers`); `nxview` opens them
 - [x] Rotating doors (`func_door_rotating`): opened away from the player, turned by the pusher physics (`SV_PushRotate`), met turned by movement and the server's traces
-- [ ] Platforms, trains, buttons, `func_rotating`; doors opened by others (`targetname`, `master`); a blocked door's damage; the player's view turned with a door that carries it
+- [x] Doors opened by others: used by the targets that name them (`CBaseDoor::Use`), firing their own targets when they arrive
+- [ ] Platforms, trains, buttons, `func_rotating`; `master` (multisource); a blocked door's damage; the player's view turned with a door that carries it
 - [ ] Entity movement types (`TOSS`, `BOUNCE`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`; `PUSH` beyond doors)
-- [ ] Deterministic think, touch and triggers
+- [x] Deterministic think and targets (`nx.game:thinking`: `NextThink` on the game's clock, by time then entity; `nx.game:targets`: names, `FireTargets`, delays, kill targets) and `trigger_multiple` / `trigger_once` (`nx.game:triggers`, `SV_TouchLinks`)
+- [ ] The other triggers (`trigger_hurt`, `trigger_push`, `trigger_teleport`, `trigger_gravity`, `trigger_relay`, `multi_manager`...) and how a target is used (`USE_TYPE`)
 
 ### Player and weapons
 - [ ] Player animation (torso sequence, gait, aim blends)

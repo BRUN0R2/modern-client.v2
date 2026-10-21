@@ -13,10 +13,6 @@ namespace nx::game {
 
 namespace {
 
-/// The engine grows every box it links by a unit on every side, and a brush model's bounds by
-/// another when it loads them.
-constexpr float kLinkGrowth = 1.0F;
-constexpr float kLoadedBoundsGrowth = 1.0F;
 /// Something blocking a door again this soon after the last time is not felt (CBaseDoor::Blocked).
 constexpr Seconds kBlockedInterval{0.25F};
 /// The engine keeps a pusher's angles within ten turns.
@@ -36,33 +32,16 @@ constexpr float kAngleWrap = 3600.0F;
     return serverTrace(hulls, solids, std::nullopt, body.hull, origin, origin).startsSolid;
 }
 
-/// The box the engine links a brush entity by, about the world (SV_LinkEdict): its loaded bounds
-/// where it is; turned, a cube as wide as their farthest side; then a unit wider on every side.
-[[nodiscard]] auto linkedBoxOf(const Aabb& bounds, Vec3 origin, EulerAngles angles) -> Aabb {
-    const Vec3 growth{kLoadedBoundsGrowth, kLoadedBoundsGrowth, kLoadedBoundsGrowth};
-    const Vec3 link{kLinkGrowth, kLinkGrowth, kLinkGrowth};
-    const Vec3 low = bounds.min - growth;
-    const Vec3 high = bounds.max + growth;
-    if (angles == EulerAngles{}) {
-        return Aabb{.min = origin + low - link, .max = origin + high + link};
-    }
-    const float reach = std::max({std::abs(low.x), std::abs(high.x), std::abs(low.y), std::abs(high.y),
-                                  std::abs(low.z), std::abs(high.z)});
-    const Vec3 cube{reach, reach, reach};
-    return Aabb{.min = origin - cube - link, .max = origin + cube + link};
-}
-
-/// Whether a body's linked box, at `origin`, overlaps `box`.
+/// Whether a body's linked box, at `origin`, overlaps `box`, more than touching it (SV_PushMove).
 [[nodiscard]] auto overlaps(const Body& body, Vec3 origin, const Aabb& box) -> bool {
-    const Vec3 link{kLinkGrowth, kLinkGrowth, kLinkGrowth};
-    const Vec3 low = origin + body.box.min - link;
-    const Vec3 high = origin + body.box.max + link;
-    return low.x < box.max.x && low.y < box.max.y && low.z < box.max.z && high.x > box.min.x &&
-           high.y > box.min.y && high.z > box.min.z;
+    const Aabb linked = linkedBoxOf(body, origin);
+    return linked.min.x < box.max.x && linked.min.y < box.max.y && linked.min.z < box.max.z &&
+           linked.max.x > box.min.x && linked.max.y > box.min.y && linked.max.z > box.min.z;
 }
 
-/// A door reached where it was going (CBaseDoor::DoorHitTop and DoorHitBottom).
-void arrive(ecs::World& world, ecs::Entity entity) {
+/// A door reached where it was going (CBaseDoor::DoorHitTop and DoorHitBottom): it waits or rests,
+/// and fires its targets for what moved it.
+void arrive(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
     Door& door = *world.get<Door>(entity);
     Pusher& pusher = *world.get<Pusher>(entity);
     if (door.state == DoorState::Opening) {
@@ -72,14 +51,15 @@ void arrive(ecs::World& world, ecs::Entity entity) {
         } else if (door.wait >= Seconds{}) {
             pusher.nextThink = pusher.localTime.after(door.wait, tickTimeOf(world).rate);
         }
-        return;
+    } else {
+        door.state = DoorState::Closed;
+        door.isTouchable = !door.isUseOnly;
     }
-    door.state = DoorState::Closed;
-    door.isTouchable = !door.isUseOnly;
+    useTargets(world, hulls, entity, door.activator);
 }
 
 /// Where the move or the turn under way ends (CBaseToggle::LinearMoveDone and AngularMoveDone).
-void finishMove(ecs::World& world, ecs::Entity entity) {
+void finishMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
     Pusher& pusher = *world.get<Pusher>(entity);
     Transform& transform = *world.get<Transform>(entity);
     if (std::holds_alternative<DoorTurn>(world.get<Door>(entity)->motion)) {
@@ -90,17 +70,18 @@ void finishMove(ecs::World& world, ecs::Entity entity) {
         pusher.velocity = {};
     }
     pusher.nextThink = std::nullopt;
-    arrive(world, entity);
+    arrive(world, hulls, entity);
 }
 
 /// Moves a pusher towards `destination` at `speed` (CBaseToggle::LinearMove): arrives at once when
 /// it is there already, else moves at the velocity that brings it there by its clock.
-void moveTo(ecs::World& world, ecs::Entity entity, Vec3 destination, UnitsPerSecond speed) {
+void moveTo(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, Vec3 destination,
+            UnitsPerSecond speed) {
     Pusher& pusher = *world.get<Pusher>(entity);
     const Vec3 origin = world.get<Transform>(entity)->origin;
     pusher.destination = destination;
     if (destination == origin) {
-        finishMove(world, entity);
+        finishMove(world, hulls, entity);
         return;
     }
     const Vec3 way = destination - origin;
@@ -111,12 +92,13 @@ void moveTo(ecs::World& world, ecs::Entity entity, Vec3 destination, UnitsPerSec
 }
 
 /// Turns a pusher towards `destination` at `speed` (CBaseToggle::AngularMove), as moveTo moves it.
-void turnTo(ecs::World& world, ecs::Entity entity, EulerAngles destination, DegreesPerSecond speed) {
+void turnTo(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+            EulerAngles destination, DegreesPerSecond speed) {
     Pusher& pusher = *world.get<Pusher>(entity);
     const EulerAngles angles = world.get<Transform>(entity)->angles;
     pusher.destinationAngles = destination;
     if (destination == angles) {
-        finishMove(world, entity);
+        finishMove(world, hulls, entity);
         return;
     }
     const Vec3 turn = vectorOf(destination) - vectorOf(angles);
@@ -169,7 +151,7 @@ void open(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity ent
     const bool isReversing = door.state == DoorState::Closing;
     door.state = DoorState::Opening;
     if (const auto* slide = std::get_if<DoorSlide>(&door.motion)) {
-        moveTo(world, entity, slide->open, slide->speed);
+        moveTo(world, hulls, entity, slide->open, slide->speed);
         return;
     }
     const DoorTurn& turn = std::get<DoorTurn>(door.motion);
@@ -185,19 +167,19 @@ void open(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity ent
         }
     }
     // Parity: the original turns all of its open angles by the sign, its starting ones included.
-    turnTo(world, entity, eulerOf(vectorOf(turn.open) * sign), turn.speed);
+    turnTo(world, hulls, entity, eulerOf(vectorOf(turn.open) * sign), turn.speed);
 }
 
 /// A door starts closing (CBaseDoor::DoorGoDown).
-void close(ecs::World& world, ecs::Entity entity) {
+void close(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
     Door& door = *world.get<Door>(entity);
     door.state = DoorState::Closing;
     if (const auto* slide = std::get_if<DoorSlide>(&door.motion)) {
-        moveTo(world, entity, slide->closed, slide->speed);
+        moveTo(world, hulls, entity, slide->closed, slide->speed);
         return;
     }
     const DoorTurn& turn = std::get<DoorTurn>(door.motion);
-    turnTo(world, entity, turn.closed, turn.speed);
+    turnTo(world, hulls, entity, turn.closed, turn.speed);
 }
 
 /// Something the door could not push stopped it at `clock`'s time (CBaseDoor::Blocked): it goes back
@@ -212,7 +194,7 @@ void block(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity en
         if (door.state == DoorState::Closing) {
             open(world, hulls, entity);
         } else {
-            close(world, entity);
+            close(world, hulls, entity);
         }
     }
 }
@@ -382,9 +364,9 @@ void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entit
         after.nextThink = std::nullopt;
         if (const Door* door = world.get<Door>(entity)) {
             if (door->state == DoorState::Open) {
-                close(world, entity);
+                close(world, hulls, entity);
             } else {
-                finishMove(world, entity);
+                finishMove(world, hulls, entity);
             }
         }
     }
@@ -404,17 +386,28 @@ void touchBrushEntities(ecs::World& world, const collision::BrushHulls& hulls,
             });
     }
     for (const ecs::Entity entity : doors) {
-        Door& door = *world.get<Door>(entity);
-        if (!door.isTouchable || door.isNamed) {
-            continue; // moving, used only, or opened by others
+        Door* door = world.isAlive(entity) ? world.get<Door>(entity) : nullptr;
+        if (door == nullptr || !door->isTouchable || door->isNamed) {
+            continue; // gone, moving, used only, or opened by others
         }
-        door.isTouchable = false;
-        door.activator = toucher;
-        if (door.staysOpen && door.state == DoorState::Open) {
-            close(world, entity);
+        door->isTouchable = false;
+        door->activator = toucher;
+        if (door->staysOpen && door->state == DoorState::Open) {
+            close(world, hulls, entity);
         } else {
             open(world, hulls, entity);
         }
+    }
+}
+
+void useDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+             ecs::Entity activator) {
+    Door& door = *world.get<Door>(entity);
+    door.activator = activator;
+    if (door.state == DoorState::Closed) {
+        open(world, hulls, entity);
+    } else if (door.staysOpen && door.state == DoorState::Open) {
+        close(world, hulls, entity);
     }
 }
 
@@ -424,7 +417,9 @@ void runPushers(ecs::World& world, const collision::BrushHulls& hulls) {
     ecs::Query<ecs::Entity, const Pusher&>{world}.forEach(
         [&pushers](ecs::Entity entity, const Pusher&) { pushers.push_back(entity); });
     for (const ecs::Entity entity : pushers) {
-        runPusher(world, hulls, entity, clock);
+        if (world.isAlive(entity)) { // what another's targets removed is gone
+            runPusher(world, hulls, entity, clock);
+        }
     }
 }
 

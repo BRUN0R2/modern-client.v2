@@ -329,10 +329,12 @@ void applyDamage(..., nx::ecs::EventWriter<cs::PlayerKilled> kills);
 |----------|----------------|-----|
 | Parent/child | `Parent{Entity}` + `Children{inplace_vector/handle}` | Attachments: weapon on the player model (`MOVETYPE_FOLLOW`), attached sprites |
 | Owner | `Owner{Entity}` | Grenades, weapons on the ground, projectiles (do not collide with the owner) |
-| Target | `Target{Entity}` | Map entities with `target`/`targetname` resolved at load |
+| Target | `Named{name}` + `Targets{target, killTarget, delay}` | Map entities with `target`/`targetname`, found by name when they fire, as the original's `FireTargets` finds them |
 
-> **Status:** relations come with the first gameplay systems (M3). `Entity{}` (the null
-> entity) already serves as "no owner".
+> **Status:** the target relation is in `nx.game:targets` ([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers));
+> a name is looked up when it fires, so a name that changes or an entity made later is found.
+> The others come with the gameplay systems that use them. `Entity{}` (the null entity) already
+> serves as "no owner".
 
 Destroying an entity removes the relations that point to it at the same sync point
 (no dangling handles in `Children`).

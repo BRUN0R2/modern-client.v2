@@ -16,13 +16,19 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<Pusher>("nx::game::Pusher"),
                                 world.registerComponent<Door>("nx::game::Door"),
                                 world.registerComponent<Waves>("nx::game::Waves"),
-                                world.registerComponent<Body>("nx::game::Body")};
+                                world.registerComponent<Body>("nx::game::Body"),
+                                world.registerComponent<NextThink>("nx::game::NextThink"),
+                                world.registerComponent<Named>("nx::game::Named"),
+                                world.registerComponent<Targets>("nx::game::Targets"),
+                                world.registerComponent<DelayedUse>("nx::game::DelayedUse"),
+                                world.registerComponent<Trigger>("nx::game::Trigger")};
     for (const auto& component : registered) {
         if (!component) {
             return std::unexpected{component.error()};
         }
     }
     world.insertResource(TickTime{});
+    world.insertResource(TargetChain{});
     return {};
 }
 
