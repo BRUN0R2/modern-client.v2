@@ -240,7 +240,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] View and projection matrices with the renderer's *clip space* and depth conventions (`nx.render:camera`: reversed infinite depth, `fov` as the original's 4:3 angle, Hor+) ([05](docs/05-rendering.md))
 - [ ] Render graph (barriers, aliasing, pass culling, parallel recording)
 - [x] BSP world (`nx.render:world`): every face of the world and of the brush entities in one vertex and index buffer, batched by texture; textures of the map and of its WADs with their mips; triggers and tool textures not drawn
-- [ ] BSP world: PVS and frustum culling
+- [x] BSP world: PVS and frustum culling (`BspView::leafAt` and `potentiallyVisible`; leaves against the view's planes, faces facing the camera, as the original culls them; indices gathered each frame)
 - [x] Lightmap atlas (lightstyle 0 of each face, extents computed as the compilers compute them)
 - [ ] Lightstyles combined in the shader
 - [x] Masked transparency (`{` textures)

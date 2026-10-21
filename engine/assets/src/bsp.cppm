@@ -71,6 +71,7 @@ enum class BspError : std::uint8_t {
                         ///< three edges, a node that is not after its parent or has two parents (the
                         ///< visible tree must neither cycle nor share a subtree), clip nodes in a cycle.
     BadTexture,         ///< An embedded texture breaks its format (cause: the WadError).
+    BadVisibility,      ///< A leaf's potentially visible set runs past the visibility lump.
     BadEntities,        ///< The entity text breaks its syntax; the detail has the line.
 };
 
@@ -183,6 +184,23 @@ struct BspModel {
     std::uint32_t faceCount = 0;
 };
 
+/// Leaves of the world: the ones a leaf may see, its potentially visible set.
+class LeafSet {
+public:
+    LeafSet() = default;
+    /// The leaves of `bits`, bit n of byte n / 8 being leaf n + 1, as the compiler packs them, of
+    /// the world's `leafCount` leaves after leaf 0.
+    LeafSet(std::vector<std::uint8_t> bits, std::uint32_t leafCount) noexcept
+        : m_bits{std::move(bits)}, m_leafCount{leafCount} {}
+
+    /// Never the solid leaf 0, nor a leaf of a brush entity's model.
+    [[nodiscard]] auto contains(LeafIndex leaf) const noexcept -> bool;
+
+private:
+    std::vector<std::uint8_t> m_bits;
+    std::uint32_t m_leafCount = 0;
+};
+
 /// An entity of the map: its keys and values, in file order.
 struct BspEntity {
     std::vector<std::pair<std::string, std::string>> keyValues{};
@@ -230,6 +248,15 @@ public:
     [[nodiscard]] inline auto models() const noexcept -> std::span<const BspModel> { return m_models; }
     /// The entities, the world's first.
     [[nodiscard]] inline auto entities() const noexcept -> std::span<const BspEntity> { return m_entities; }
+
+    /// The leaf of the world that holds `point`: a point on a node's plane is behind it, as the
+    /// original's Mod_PointInLeaf puts it. The solid leaf 0 holds what is inside a wall or outside the
+    /// world.
+    [[nodiscard]] auto leafAt(Vec3 point) const noexcept -> LeafIndex;
+
+    /// The leaves of the world `leaf` may see. Every one from the solid leaf 0 and from a leaf the
+    /// compiler gave no set, as the original sees from inside a wall or without visibility.
+    [[nodiscard]] auto potentiallyVisible(LeafIndex leaf) const -> LeafSet;
 
 private:
     BspView() = default;

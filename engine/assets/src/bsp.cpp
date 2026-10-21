@@ -665,6 +665,46 @@ template <class Records>
     return {};
 }
 
+/// The bytes of a potentially visible set of `leafCount` leaves: a bit for each.
+[[nodiscard]] auto visibilityRowBytes(std::uint32_t leafCount) noexcept -> std::size_t {
+    return (std::size_t{leafCount} + 7) / 8;
+}
+
+/// Decompresses the potentially visible set of `leaf`, at `offset` of `visibility`, into `row`: the
+/// compiler writes each run of zero bytes as a zero and the run's length. Errors: BadVisibility (past
+/// the lump).
+[[nodiscard]] auto decompressVisibility(std::span<const std::byte> visibility, std::size_t offset,
+                                        std::span<std::uint8_t> row, std::uint32_t leaf)
+    -> Result<void, BspError> {
+    std::size_t in = offset;
+    std::size_t out = 0;
+    const auto pastTheLump = [&] {
+        return fail(BspError::BadVisibility,
+                    std::format("leaf {}: its set goes past the visibility lump at byte {} of {}", leaf, out,
+                                row.size()));
+    };
+    while (out < row.size()) {
+        if (in == visibility.size()) {
+            return pastTheLump();
+        }
+        const auto value = std::to_integer<std::uint8_t>(visibility[in++]);
+        if (value != 0) {
+            row[out++] = value;
+            continue;
+        }
+        if (in == visibility.size()) {
+            return pastTheLump();
+        }
+        // The vis tools pad each set to whole 64-leaf words, and some count the leaves of the brush
+        // entities' models too (de_dust2: 152 bytes for 1201 leaves; de_prodigy: 320 for 2022): the
+        // last run of zeros may go past the world's leaves. The set ends with them, as the original's.
+        const std::size_t zeros = std::min(std::to_integer<std::size_t>(visibility[in++]), row.size() - out);
+        std::ranges::fill(row.subspan(out, zeros), std::uint8_t{0});
+        out += zeros;
+    }
+    return {};
+}
+
 /// The tree, the models and the entities.
 struct Tree {
     std::vector<FaceIndex> markSurfaces;
@@ -676,7 +716,7 @@ struct Tree {
     std::vector<BspEntity> entities;
 };
 
-/// Errors: MisalignedLump, BadIndex, BadValue, BadEntities.
+/// Errors: MisalignedLump, BadIndex, BadValue, BadEntities, BadVisibility.
 [[nodiscard]] auto decodeTree(const Lumps& lumps, std::size_t planes, std::size_t faces)
     -> Result<Tree, BspError> {
     Tree tree;
@@ -723,6 +763,19 @@ struct Tree {
     }
     if (auto failure = store(parseEntities(lumps[Lump::Entities]), tree.entities)) {
         return std::unexpected(std::move(*failure));
+    }
+    // The set of every leaf of the world, so that potentiallyVisible() decompresses without checks.
+    if (!tree.models.empty()) {
+        const std::uint32_t leafCount = tree.models.front().visibleLeafCount;
+        std::vector<std::uint8_t> row(visibilityRowBytes(leafCount));
+        for (std::uint32_t leaf = 1; leaf <= leafCount; ++leaf) {
+            const std::optional<std::uint32_t> offset = tree.leaves[leaf].visibilityOffset;
+            if (auto decoded = offset ? decompressVisibility(tree.visibility, *offset, row, leaf)
+                                      : Result<void, BspError>{};
+                !decoded) {
+                return std::unexpected(std::move(decoded.error()));
+            }
+        }
     }
     return tree;
 }
@@ -797,6 +850,41 @@ auto BspView::parse(std::span<const std::byte> bytes) -> Result<BspView, BspErro
     view.m_models = std::move(tree->models);
     view.m_entities = std::move(tree->entities);
     return view;
+}
+
+auto BspView::leafAt(Vec3 point) const noexcept -> LeafIndex {
+    if (m_models.empty()) {
+        return LeafIndex{0};
+    }
+    NodeChild child = m_models.front().headNode;
+    while (const NodeIndex* node = std::get_if<NodeIndex>(&child)) {
+        const BspNode& record = m_nodes[node->value];
+        const bool isInFront = m_planes[record.plane.value].plane.signedDistance(point) > 0.0F;
+        child = record.children[isInFront ? 0 : 1];
+    }
+    return std::get<LeafIndex>(child);
+}
+
+auto BspView::potentiallyVisible(LeafIndex leaf) const -> LeafSet {
+    const std::uint32_t leafCount = m_models.empty() ? 0 : m_models.front().visibleLeafCount;
+    std::vector<std::uint8_t> bits(visibilityRowBytes(leafCount));
+    const std::optional<std::uint32_t> offset =
+        leaf.value == 0 || leaf.value > leafCount ? std::nullopt : m_leaves[leaf.value].visibilityOffset;
+    if (!offset) {
+        std::ranges::fill(bits, std::uint8_t{0xFF});
+        return LeafSet{std::move(bits), leafCount};
+    }
+    const auto decoded = decompressVisibility(m_visibility, *offset, bits, leaf.value);
+    expects(decoded.has_value(), "BspView::potentiallyVisible: parse() checked the set of every leaf");
+    return LeafSet{std::move(bits), leafCount};
+}
+
+auto LeafSet::contains(LeafIndex leaf) const noexcept -> bool {
+    if (leaf.value == 0 || leaf.value > m_leafCount) {
+        return false;
+    }
+    const std::uint32_t bit = leaf.value - 1;
+    return ((static_cast<std::uint32_t>(m_bits[bit / 8]) >> (bit % 8)) & 1U) != 0;
 }
 
 auto BspEntity::find(std::string_view key) const noexcept -> std::optional<std::string_view> {

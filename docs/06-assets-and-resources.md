@@ -174,7 +174,13 @@ Readers today:
   nodes have once, and a trace still visits each node at most once per piece of its segment. A
   hull head equal to the clip node count, which hlbsp writes for a hull without clip nodes, holds
   nothing. Entity text is taken without escapes (the `wad` key holds Windows paths), and a
-  repeated key resolves to its last value, as the original assigns them in order.
+  repeated key resolves to its last value, as the original assigns them in order. `leafAt` finds
+  the leaf of a point as the original's `Mod_PointInLeaf` does (on a plane is behind it), and
+  `potentiallyVisible` decompresses a leaf's set (`LeafSet`); parse() decompresses the set of every
+  leaf of the world once, so that one running past the lump is refused there. The vis tools pad
+  each set to whole 64-leaf words, and some count the leaves of the brush entities' models too
+  (de_dust2 writes 152 bytes for its 1201 leaves, de_prodigy 320 for 2022): the last run of zeros
+  may go past the world's leaves, and the set ends with them, as the original's does.
 - SPR v2 (`nx.assets:spr`): the orientation, the rendering (normal, additive, index-alpha,
   alpha-test), the sync type, the 256-color palette, and the frames: single images, or groups whose
   intervals rise from above zero. Each image has its origin, size and pixels as a view of the

@@ -179,8 +179,7 @@ if (!lightmapAtlas) {
   it.
 
 **Today** (`nx.render:world`, `nxview --map`): every face of the world and of the brush
-entities (placed at their `origin`) in one vertex and one index buffer, drawn in batches by
-texture; the textures of the map and of the WADs its `wad` key names, by file name at the root of
+entities (placed at their `origin`) in one vertex buffer; the textures of the map and of the WADs its `wad` key names, by file name at the root of
 the VFS as the original looks them up, with their four mips, a checkerboard for a name no WAD has;
 masked textures; triggers and the compiler's tool textures (`AAATRIGGER`, `CLIP`...) not drawn. The
 lightmaps are packed into one atlas: each face's extent in luxels of 16 units is computed in double
@@ -200,8 +199,16 @@ drawn as their files have them, through no gamma curve, as in the original, whic
 sky is gray. Drawing the sky's own faces rather than a box behind the world gives the same picture
 for the world and hides what lies behind them, as the sky's brushes seal the map.
 
+Each frame gathers what the camera sees, as the original culls it, into the index buffer of its
+frame in flight, in a batch per texture and then the sky's: the leaves the camera's leaf may see
+(its potentially visible set, decompressed again only when the camera enters another leaf; every
+leaf from inside a wall), those whose bounds are in front of the four side planes of the view, and
+their faces that face the camera: from the side of its plane the eye is on, the plane itself in
+front (`R_RecursiveWorldNode`). A brush entity is drawn when its bounds are in view, its faces
+from at least `BACKFACE_EPSILON` past their planes (`R_DrawBrushModel`).
+
 On the Steam installation, de_dust2 is 5358 faces (1356 of them sky) in 41 textures and a 1024x404
-atlas, built in half a second.
+atlas, built in half a second; from the terrorists' spawn a frame draws 382 of them, in 83 leaves.
 
 ## 9. Studio models and GPU skinning
 

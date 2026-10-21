@@ -166,6 +166,39 @@ TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+TEST(BspWorldTest, DrawsOnlyWhatTheCameraSees) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+
+    std::ignore = target.draw(*world, {.position = kMiddle});
+    EXPECT_EQ(world->lastFrame().faces, 6U) << "inside: every wall faces the camera";
+    EXPECT_EQ(world->lastFrame().triangles, 12U);
+
+    // Outside, past the -X wall: it turns its back, the five others face this way.
+    std::ignore = target.draw(*world, {.position = {.x = -100.0F, .y = 32.0F, .z = 32.0F}});
+    EXPECT_EQ(world->lastFrame().faces, 5U);
+
+    const std::vector<std::byte> away = target.draw(
+        *world, {.position = {.x = -100.0F, .y = 32.0F, .z = 32.0F}, .angles = {.yaw = nx::Degrees{180.0F}}});
+    EXPECT_EQ(world->lastFrame().leaves, 0U) << "the box is behind the camera";
+    EXPECT_EQ(world->lastFrame().faces, 0U);
+    EXPECT_TRUE(
+        std::ranges::all_of(std::views::iota(std::size_t{0}, away.size() / 4),
+                            [&away](std::size_t pixel) { return away[(pixel * 4) + 3] == std::byte{0}; }))
+        << "nothing drawn";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
 /// The color of quadrant `quadrant` (top-left, top-right, bottom-left, bottom-right) of sky side
 /// `side` (in the order of kSkySuffixes).
 [[nodiscard]] constexpr auto skyColor(std::size_t side, std::size_t quadrant) -> Pixel {

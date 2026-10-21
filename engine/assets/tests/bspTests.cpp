@@ -331,6 +331,71 @@ TEST(BspTest, ReadsTheTreeTheModelsAndTheEntities) {
     EXPECT_FALSE(worldspawn.find("message").has_value());
 }
 
+TEST(BspTest, APointIsInTheLeafOfItsSideOfEachPlane) {
+    const QuadMap map;
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    EXPECT_EQ(view->leafAt({.x = 32.0F, .y = 32.0F, .z = 1.0F}), LeafIndex{1}) << "in front";
+    EXPECT_EQ(view->leafAt({.x = 32.0F, .y = 32.0F, .z = -1.0F}), LeafIndex{0}) << "behind";
+    EXPECT_EQ(view->leafAt({.x = 32.0F, .y = 32.0F, .z = 0.0F}), LeafIndex{0})
+        << "on the plane: behind, as in the original";
+}
+
+/// The quad map with 19 leaves after leaf 0, all sharing one visible set: 3 bytes of `visibility`.
+[[nodiscard]] auto mapOfNineteenLeaves(Bytes visibility) -> QuadMap {
+    QuadMap map;
+    Bytes& leaves = map.lumps[Lump::Leaves];
+    const Bytes leaf(leaves.end() - 28, leaves.end()); // leaf 1
+    for (int copy = 0; copy < 18; ++copy) {
+        leaves.insert(leaves.end(), leaf.begin(), leaf.end());
+    }
+    map.set(Lump::Models, 52, std::int32_t{19}); // visible leaves
+    map.lumps[Lump::Visibility] = std::move(visibility);
+    return map;
+}
+
+TEST(BspTest, DecompressesThePotentiallyVisibleSetOfALeaf) {
+    // Leaves 1 and 3, a run of one zero byte, then leaf 19 (bit 18).
+    const QuadMap map =
+        mapOfNineteenLeaves(Bytes{std::byte{0x05}, std::byte{0}, std::byte{1}, std::byte{0x04}});
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+
+    const nx::assets::LeafSet set = view->potentiallyVisible(LeafIndex{1});
+    const auto visible =
+        std::views::iota(0U, 21U) |
+        std::views::filter([&set](std::uint32_t leaf) { return set.contains(LeafIndex{leaf}); }) |
+        std::ranges::to<std::vector>();
+    EXPECT_EQ(visible, (std::vector<std::uint32_t>{1, 3, 19})) << "never leaf 0, nor past the world's 19";
+
+    const nx::assets::LeafSet fromAWall = view->potentiallyVisible(LeafIndex{0});
+    EXPECT_TRUE(std::ranges::all_of(std::views::iota(1U, 20U), [&fromAWall](std::uint32_t leaf) {
+        return fromAWall.contains(LeafIndex{leaf});
+    })) << "the solid leaf sees everything";
+    EXPECT_FALSE(fromAWall.contains(LeafIndex{0}));
+}
+
+TEST(BspTest, RejectsAVisibleSetPastItsLump) {
+    EXPECT_EQ(parseError(mapOfNineteenLeaves(Bytes{std::byte{0x05}, std::byte{0}})), BspError::BadVisibility)
+        << "a run without its length";
+    EXPECT_EQ(parseError(mapOfNineteenLeaves(Bytes{std::byte{0x05}, std::byte{0x01}})),
+              BspError::BadVisibility)
+        << "a set of 2 of its 3 bytes";
+}
+
+TEST(BspTest, AVisibleSetMayRunPastTheWorldsLeaves) {
+    // The vis tools pad each set to whole 64-leaf words: 8 bytes, of which the world's 19 leaves use 3.
+    const QuadMap map = mapOfNineteenLeaves(Bytes{std::byte{0x05}, std::byte{0}, std::byte{7}});
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    const nx::assets::LeafSet set = view->potentiallyVisible(LeafIndex{1});
+    EXPECT_TRUE(set.contains(LeafIndex{1}));
+    EXPECT_FALSE(set.contains(LeafIndex{19}));
+}
+
 TEST(BspTest, HullsMayShareClipNodes) {
     QuadMap map;
     Bytes& clipNodes = map.lumps[Lump::ClipNodes];
