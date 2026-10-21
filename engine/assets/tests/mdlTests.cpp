@@ -329,7 +329,7 @@ TEST(MdlTest, ReadsTheSkeletonAndWhatHangsOnIt) {
     const auto& controller = view->boneControllers()[0];
     EXPECT_EQ(controller.bone.value, 1U);
     EXPECT_EQ(controller.axis, BoneAxis::RotationY);
-    EXPECT_TRUE(controller.wraps);
+    EXPECT_TRUE(controller.isCyclic);
     EXPECT_EQ(controller.end, 30.0F);
 
     ASSERT_EQ(view->hitboxes().size(), 1U);
@@ -421,7 +421,7 @@ TEST(MdlTest, ReadsTheSequences) {
     const auto& idle = view->sequences()[0];
     EXPECT_EQ(idle.label, "idle");
     EXPECT_EQ(idle.fps, 30.0F);
-    EXPECT_TRUE(idle.loops);
+    EXPECT_TRUE(idle.isLooping);
     EXPECT_EQ(idle.frameCount, 2U);
     EXPECT_EQ(idle.blendCount, 1U);
     EXPECT_EQ(idle.group.value, 0U);

@@ -9,6 +9,7 @@
 export module nx.core:hash;
 
 import std;
+import :byteOrder;
 
 export namespace nx {
 
@@ -24,7 +25,6 @@ inline constexpr std::size_t kLaneBytes = 8;
 inline constexpr std::size_t kHalfLaneBytes = 4;
 inline constexpr std::size_t kLaneCount = 4;
 inline constexpr std::size_t kStripeBytes = kLaneBytes * kLaneCount;
-inline constexpr std::size_t kBitsPerByte = 8;
 
 inline constexpr int kRoundRotation = 31;
 inline constexpr std::array<int, kLaneCount> kLaneMergeRotations{1, 7, 12, 18};

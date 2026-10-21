@@ -202,7 +202,7 @@ public:
     LeafSet() = default;
     /// The leaves of `bits`, bit n of byte n / 8 being leaf n + 1, as the compiler packs them, of
     /// the world's `leafCount` leaves after leaf 0.
-    LeafSet(std::vector<std::uint8_t> bits, std::uint32_t leafCount) noexcept
+    inline LeafSet(std::vector<std::uint8_t> bits, std::uint32_t leafCount) noexcept
         : m_bits{std::move(bits)}, m_leafCount{leafCount} {}
 
     /// Never the solid leaf 0, nor a leaf of a brush entity's model.

@@ -24,7 +24,7 @@ struct Mount {
 
 struct Settings {
     std::string name;
-    bool redistributable = false;
+    bool isRedistributable = false;
     std::uint8_t maxPlayers = 0;
     float volume = 0.0F;
     double gravity = 0.0;
@@ -66,7 +66,7 @@ struct nx::meta::Description<nx::test::Settings> {
     static constexpr std::string_view kName = "nx::test::Settings";
     static constexpr std::tuple kFields{
         nx::meta::field<&nx::test::Settings::name>("name"),
-        nx::meta::field<&nx::test::Settings::redistributable>("redistributable"),
+        nx::meta::field<&nx::test::Settings::isRedistributable>("isRedistributable"),
         nx::meta::field<&nx::test::Settings::maxPlayers>("maxPlayers",
                                                          nx::data::Range{.minimum = 1.0, .maximum = 64.0}),
         nx::meta::field<&nx::test::Settings::volume>("volume",
@@ -88,7 +88,7 @@ using nx::data::DataError;
 using nx::test::Settings;
 
 constexpr std::string_view kValid = R"(name = "Modern server"
-redistributable = true
+isRedistributable = true
 maxPlayers = 32
 volume = 0.75
 gravity = 800
@@ -133,7 +133,7 @@ TEST(Schema, ReadsEveryKindOfField) {
     ASSERT_TRUE(settings.has_value()) << nx::describe(settings.error());
 
     EXPECT_EQ(settings->name, "Modern server");
-    EXPECT_TRUE(settings->redistributable);
+    EXPECT_TRUE(settings->isRedistributable);
     EXPECT_EQ(settings->maxPlayers, 32);
     EXPECT_EQ(settings->volume, 0.75F);
     EXPECT_EQ(settings->gravity, 800.0) << "a whole number is a valid floating-point value";
@@ -164,7 +164,7 @@ TEST(Schema, EveryProblemIsATypedFailureWithItsPlace) {
     const std::vector<Case> cases{
         {"syntax", withLine("name", "name = "), DataError::Syntax, "server.toml:1:"},
         {"unknown key", withLine("gravity", "gravty = 800"), DataError::UnknownKey,
-         R"(server.toml:5:1: unknown key "gravty"; expected one of "name", "redistributable", )"},
+         R"(server.toml:5:1: unknown key "gravty"; expected one of "name", "isRedistributable", )"},
         {"missing key", withLine("name", ""), DataError::MissingKey,
          R"(server.toml:1:1: missing key "name")"},
         {"wrong type", withLine("maxPlayers", R"(maxPlayers = "32")"), DataError::WrongType,
