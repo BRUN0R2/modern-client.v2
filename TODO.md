@@ -259,6 +259,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
 - [ ] Optional compute skinning
 - [ ] Model instancing
+- [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)
+- [ ] The dynamic lights of studio models (*elights*, *dlights*)
 - [x] Map viewer with a free camera (`nxview --map`, placed with `--position` and `--angles`), and a frame of a map to a file without a window (`--screenshot`)
 - [ ] Model viewer
 - [ ] Reference images in CI (lavapipe)
