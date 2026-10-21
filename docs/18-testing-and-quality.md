@@ -71,9 +71,8 @@ the reader of its format, on the workers of the Job System: every lump of a map 
 hulls, every mip texture of a WAD, a model with its `*T.mdl` and the animation of each sequence from
 its sequence group file, its bones posed at every frame and halfway to the next at both ends of its
 first blending (`cs::poseBones`, each bone's transform rigid), every sprite, every TGA image and every
-sound. It prints what each format
-read and every failure with its causes, and exits with 1 when a file failed, 2 when the
-installation cannot be used.
+sound. It prints what each format read and every failure with its causes, and exits with 1 when a
+file failed, 2 when the installation cannot be used.
 
 It runs on a legitimate local copy, never in CI: no Valve file enters the repository or its
 runners ([20](20-legal-and-licensing.md)). Run it after changing a reader:
