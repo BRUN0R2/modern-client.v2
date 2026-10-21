@@ -25,9 +25,6 @@ struct GammaSettings {
 /// The entries of the light table: the summed light of a sample, from 0 to 1023.
 inline constexpr std::size_t kLightTableSize = 1024;
 
-/// The value of a lightstyle at its normal brightness ('m'): what a sample of style 0 is scaled by.
-inline constexpr std::uint32_t kNormalLightStyleValue = 264;
-
 /// `texgamma`: what each palette value of a texture becomes.
 [[nodiscard]] auto textureGammaTable(const GammaSettings& settings) -> std::array<std::uint8_t, 256>;
 
@@ -35,9 +32,12 @@ inline constexpr std::uint32_t kNormalLightStyleValue = 264;
 /// 1023 (the original keeps 10 bits and draws the upper 8).
 [[nodiscard]] auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLightTableSize>;
 
-/// What a lightmap sample, from 0 to 255, at the normal lightstyle value, is multiplied by to be its
-/// summed light, the index of lightTable: the original's `lightscale` of 2^(1/lightgamma) in 8.8
-/// fixed point, over the 14 bits it shifts out.
-[[nodiscard]] auto lightTableScale(const GammaSettings& settings) -> float;
+/// The bits the original shifts out of a summed light times lightScale, to index lightTable.
+inline constexpr std::uint32_t kLightScaleShift = 14;
+
+/// The original's `lightscale`, 2^(1/lightgamma) in 8.8 fixed point: a luxel's light, the sum over its
+/// lightmaps of each sample (0 to 255) times its style's brightness, times this and shifted right by
+/// kLightScaleShift, is its index in lightTable, held to 1023.
+[[nodiscard]] auto lightScale(const GammaSettings& settings) -> std::uint32_t;
 
 } // namespace nx::render

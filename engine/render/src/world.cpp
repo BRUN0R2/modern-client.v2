@@ -34,21 +34,27 @@ constexpr std::uint8_t kTransparentIndex = 255;
 constexpr auto kInvisibleTextures =
     std::to_array<std::string_view>({"aaatrigger", "clip", "origin", "null", "skip", "hint", "bevel"});
 
+/// The light styles of a face without a lightmap, and after the last of a face's lightmaps.
+constexpr std::uint8_t kNoStyle = assets::kNoLightStyle;
+
 struct WorldVertex {
     Vec3 position{};
     float u = 0.0F;
     float v = 0.0F;
-    float lightmapU = 0.0F;
-    float lightmapV = 0.0F;
+    /// In luxels of the lightmaps, their centers at halves; negative without lightmaps.
+    float lightmapX = -1.0F;
+    float lightmapY = -1.0F;
+    std::array<std::uint8_t, assets::kFaceLightStyles> styles{kNoStyle, kNoStyle, kNoStyle, kNoStyle};
 };
-static_assert(sizeof(WorldVertex) == 7 * sizeof(float), "the vertex layout of the world pipeline");
+static_assert(sizeof(WorldVertex) == 8 * sizeof(float), "the vertex layout of the world pipeline");
 
-/// The frame's uniform: the rows of the view-projection matrix, in `lighting.x` what a lightmap
-/// sample is multiplied by to index the light table (lightTableScale), and the camera's position.
+/// The frame's uniform: the rows of the view-projection matrix; in `lighting`, the original's
+/// lightscale and the size of the lightmaps; the camera's position; the light styles' brightness.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 lighting{};
     Vec4 eye{};
+    std::array<float, kLightStyleCount> styles{}; ///< Four to a float4 in the shader.
 };
 
 /// The side of the sky the original draws toward +X, -X, +Y, -Y, +Z and -Z, by its place in
@@ -117,10 +123,12 @@ struct TexelLevels {
     return texels;
 }
 
-/// The extent of a face's lightmap, in luxels, and the texture coordinates of its first luxel.
+/// The extent of a face's lightmaps, in luxels, the texture coordinates of their first luxel, and
+/// how many it has: one for each of its styles.
 struct LightmapExtent {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    std::uint32_t maps = 0;
     double minS = 0.0; ///< In texels: the first luxel's s is minS, the next minS + 16.
     double minT = 0.0;
 };
@@ -379,7 +387,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     }
 
     // The lightmaps: each lit face's extent in luxels, computed in double precision as the
-    // compilers compute it, packed into the atlas after a white luxel for the unlit faces.
+    // compilers compute it, packed into the atlas, its lightmaps at the same place of each layer.
     const auto pointOf = [&map](const assets::BspFace& face, std::uint32_t edge) -> Vec3 {
         const assets::SurfaceEdge& surfaceEdge = map.surfaceEdges()[face.firstEdge.value + edge];
         const assets::BspEdge& bspEdge = map.edges()[surfaceEdge.edge.value];
@@ -390,7 +398,6 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
                (double{point.z} * double{axis.z}) + double{axis.w};
     };
     ShelfPacker packer;
-    std::ignore = packer.place(1, 1); // the white luxel at (0, 0)
     std::vector<std::array<std::uint32_t, 2>> corners(faces.size());
     for (std::size_t index = 0; index < faces.size(); ++index) {
         FaceToDraw& entry = faces[index];
@@ -416,37 +423,54 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         if (!width || !height || *width > kAtlasWidth || *height > kAtlasWidth) {
             continue; // an extent no compiler writes: drawn unlit
         }
-        const LightmapExtent extent{
-            .width = *width, .height = *height, .minS = firstS * kLuxelUnits, .minT = firstT * kLuxelUnits};
+        // A lightmap for each style, until the first unused one, as the original counts them.
+        const auto maps = static_cast<std::uint32_t>(std::ranges::distance(
+            entry.face->lightStyles |
+            std::views::take_while([](std::uint8_t style) { return style != kNoStyle; })));
+        const LightmapExtent extent{.width = *width,
+                                    .height = *height,
+                                    .maps = maps,
+                                    .minS = firstS * kLuxelUnits,
+                                    .minT = firstT * kLuxelUnits};
         const std::size_t sampleBytes = std::size_t{extent.width} * extent.height * 3;
-        if (*entry.face->lightmapOffset + sampleBytes > map.lighting().size()) {
+        if (*entry.face->lightmapOffset + (sampleBytes * maps) > map.lighting().size()) {
             continue; // samples the file does not hold: drawn unlit
         }
         entry.lightmap = extent;
         corners[index] = packer.place(extent.width, extent.height);
     }
     const rhi::Extent2d atlasExtent{.width = kAtlasWidth, .height = std::max(packer.height(), 1U)};
-    std::vector<std::byte> atlas(std::size_t{atlasExtent.width} * atlasExtent.height * 4, std::byte{0});
-    std::ranges::fill(std::span{atlas}.first(4), std::byte{255});
+    const std::size_t layerBytes = std::size_t{atlasExtent.width} * atlasExtent.height * 4;
+    std::vector<std::byte> atlas(layerBytes * assets::kFaceLightStyles, std::byte{0});
     for (std::size_t index = 0; index < faces.size(); ++index) {
         const FaceToDraw& entry = faces[index];
         if (!entry.lightmap) {
             continue;
         }
+        // The lightmaps of a face follow one another in the file, a layer each here.
         const std::span<const std::byte> samples = map.lighting().subspan(*entry.face->lightmapOffset);
-        for (std::uint32_t y = 0; y < entry.lightmap->height; ++y) {
-            for (std::uint32_t x = 0; x < entry.lightmap->width; ++x) {
-                const std::size_t from = (std::size_t{y} * entry.lightmap->width + x) * 3;
-                const std::size_t to =
-                    ((std::size_t{corners[index][1] + y} * atlasExtent.width) + corners[index][0] + x) * 4;
-                atlas[to] = samples[from];
-                atlas[to + 1] = samples[from + 1];
-                atlas[to + 2] = samples[from + 2];
-                atlas[to + 3] = std::byte{255};
+        const std::size_t mapSamples = std::size_t{entry.lightmap->width} * entry.lightmap->height;
+        for (std::size_t lightmap = 0; lightmap < entry.lightmap->maps; ++lightmap) {
+            for (std::uint32_t y = 0; y < entry.lightmap->height; ++y) {
+                for (std::uint32_t x = 0; x < entry.lightmap->width; ++x) {
+                    const std::size_t from =
+                        ((lightmap * mapSamples) + (std::size_t{y} * entry.lightmap->width) + x) * 3;
+                    const std::size_t to =
+                        (lightmap * layerBytes) +
+                        (((std::size_t{corners[index][1] + y} * atlasExtent.width) + corners[index][0] + x) *
+                         4);
+                    atlas[to] = samples[from];
+                    atlas[to + 1] = samples[from + 1];
+                    atlas[to + 2] = samples[from + 2];
+                    atlas[to + 3] = std::byte{255};
+                }
             }
         }
     }
-    auto atlasTexture = uploadTexture("world.lightmaps", atlasExtent, 1, 1, atlas, oneLevel);
+    const std::array<std::size_t, assets::kFaceLightStyles> layerOffsets{0, layerBytes, layerBytes * 2,
+                                                                         layerBytes * 3};
+    auto atlasTexture = uploadTexture("world.lightmaps", atlasExtent, 1,
+                                      narrow<std::uint32_t>(assets::kFaceLightStyles), atlas, layerOffsets);
     if (!atlasTexture) {
         return gpuFailure(std::move(atlasTexture.error()));
     }
@@ -465,7 +489,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     if (!lightTableTexture) {
         return gpuFailure(std::move(lightTableTexture.error()));
     }
-    world.m_lightScale = lightTableScale(desc.gamma);
+    world.m_lighting = {.x = static_cast<float>(lightScale(desc.gamma)),
+                        .y = static_cast<float>(atlasExtent.width),
+                        .z = static_cast<float>(atlasExtent.height)};
 
     // The sky: its sides, the layers of one texture, in the order the shader picks them.
     auto skyTexture =
@@ -493,16 +519,14 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             const double t = coordinateOf(point, info.t);
             WorldVertex vertex{.position = point + entry.origin,
                                .u = static_cast<float>(s / double{use.width}),
-                               .v = static_cast<float>(t / double{use.height}),
-                               .lightmapU = 0.5F / static_cast<float>(atlasExtent.width),
-                               .lightmapV = 0.5F / static_cast<float>(atlasExtent.height)};
+                               .v = static_cast<float>(t / double{use.height})};
             if (entry.lightmap) {
                 // Luxel centers: the first luxel's s is minS, 16 texels apart.
-                vertex.lightmapU = static_cast<float>(
-                    ((s - entry.lightmap->minS) / kLuxelUnits + 0.5 + corners[index][0]) / atlasExtent.width);
-                vertex.lightmapV =
-                    static_cast<float>(((t - entry.lightmap->minT) / kLuxelUnits + 0.5 + corners[index][1]) /
-                                       atlasExtent.height);
+                vertex.lightmapX =
+                    static_cast<float>(((s - entry.lightmap->minS) / kLuxelUnits) + 0.5 + corners[index][0]);
+                vertex.lightmapY =
+                    static_cast<float>(((t - entry.lightmap->minT) / kLuxelUnits) + 0.5 + corners[index][1]);
+                vertex.styles = entry.face->lightStyles;
             }
             vertices.push_back(vertex);
         }
@@ -546,17 +570,15 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         rhi::BindingLayout{
             .binding = 0,
             .type = rhi::BindingType::UniformBuffer,
-            .stages = {rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment}}, // the matrix; the light scale
+            .stages = {rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment}}, // the matrix; the lighting
         rhi::BindingLayout{
             .binding = 1, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
         rhi::BindingLayout{
-            .binding = 2, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}},
+            .binding = 2, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
         rhi::BindingLayout{
             .binding = 3, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
         rhi::BindingLayout{
-            .binding = 4, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
-        rhi::BindingLayout{
-            .binding = 5, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
+            .binding = 4, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
     const std::array textureBindings{
         rhi::BindingLayout{
             .binding = 0, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
@@ -566,23 +588,18 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     auto textureLayout =
         device.createBindGroupLayout({.label = "world.texture", .bindings = textureBindings});
     auto textureSampler = device.createSampler({.label = "world.texture"});
-    auto lightmapSampler = device.createSampler({.label = "world.lightmap",
-                                                 .mipmap = rhi::Filter::Nearest,
-                                                 .address = rhi::AddressMode::ClampToEdge});
     // Each side clamped at its edges, as the original draws them.
     auto skySampler = device.createSampler(
         {.label = "world.sky", .mipmap = rhi::Filter::Nearest, .address = rhi::AddressMode::ClampToEdge});
-    if (!frameLayout || !textureLayout || !textureSampler || !lightmapSampler || !skySampler) {
-        return gpuFailure(!frameLayout       ? std::move(frameLayout.error())
-                          : !textureLayout   ? std::move(textureLayout.error())
-                          : !textureSampler  ? std::move(textureSampler.error())
-                          : !lightmapSampler ? std::move(lightmapSampler.error())
-                                             : std::move(skySampler.error()));
+    if (!frameLayout || !textureLayout || !textureSampler || !skySampler) {
+        return gpuFailure(!frameLayout      ? std::move(frameLayout.error())
+                          : !textureLayout  ? std::move(textureLayout.error())
+                          : !textureSampler ? std::move(textureSampler.error())
+                                            : std::move(skySampler.error()));
     }
     world.m_frameLayout = *frameLayout;
     world.m_textureLayout = *textureLayout;
     world.m_textureSampler = *textureSampler;
-    world.m_lightmapSampler = *lightmapSampler;
     world.m_skySampler = *skySampler;
 
     const std::array attributes{
@@ -591,7 +608,10 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             .location = 1, .format = rhi::VertexFormat::Float2, .offset = offsetof(WorldVertex, u)}, // NOLINT
         rhi::VertexAttribute{.location = 2,
                              .format = rhi::VertexFormat::Float2,
-                             .offset = offsetof(WorldVertex, lightmapU)}}; // NOLINT
+                             .offset = offsetof(WorldVertex, lightmapX)}, // NOLINT
+        rhi::VertexAttribute{.location = 3,
+                             .format = rhi::VertexFormat::Uint8x4,
+                             .offset = offsetof(WorldVertex, styles)}}; // NOLINT
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = attributes}};
     const std::array targets{rhi::ColorTarget{.format = desc.colorFormat}};
@@ -631,10 +651,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         const std::array bindings{
             rhi::Binding{.binding = 0, .resource = rhi::BufferBinding{.buffer = *buffer}},
             rhi::Binding{.binding = 1, .resource = *atlasTexture},
-            rhi::Binding{.binding = 2, .resource = world.m_lightmapSampler},
-            rhi::Binding{.binding = 3, .resource = *lightTableTexture},
-            rhi::Binding{.binding = 4, .resource = *skyTexture},
-            rhi::Binding{.binding = 5, .resource = world.m_skySampler}};
+            rhi::Binding{.binding = 2, .resource = *lightTableTexture},
+            rhi::Binding{.binding = 3, .resource = *skyTexture},
+            rhi::Binding{.binding = 4, .resource = world.m_skySampler}};
         auto group = device.createBindGroup(
             {.label = "world.frame", .layout = world.m_frameLayout, .bindings = bindings});
         if (!group) {
@@ -709,14 +728,13 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
 BspWorld::BspWorld(BspWorld&& other) noexcept
     : m_device{other.m_device}, m_map{other.m_map}, m_vertices{std::exchange(other.m_vertices, {})},
       m_textures{std::move(other.m_textures)}, m_textureSampler{std::exchange(other.m_textureSampler, {})},
-      m_lightmapSampler{std::exchange(other.m_lightmapSampler, {})},
       m_skySampler{std::exchange(other.m_skySampler, {})}, m_shader{std::exchange(other.m_shader, {})},
       m_frameLayout{std::exchange(other.m_frameLayout, {})},
       m_textureLayout{std::exchange(other.m_textureLayout, {})},
       m_pipeline{std::exchange(other.m_pipeline, {})}, m_skyPipeline{std::exchange(other.m_skyPipeline, {})},
       m_textureGroups{std::move(other.m_textureGroups)}, m_frameSlots{std::move(other.m_frameSlots)},
-      m_faces{std::move(other.m_faces)}, m_models{std::move(other.m_models)},
-      m_lightScale{other.m_lightScale}, m_stats{std::move(other.m_stats)}, m_drawCount{other.m_drawCount},
+      m_faces{std::move(other.m_faces)}, m_models{std::move(other.m_models)}, m_lighting{other.m_lighting},
+      m_stats{std::move(other.m_stats)}, m_drawCount{other.m_drawCount},
       m_faceGathered{std::move(other.m_faceGathered)}, m_visibleFrom{other.m_visibleFrom},
       m_visibleLeaves{std::move(other.m_visibleLeaves)}, m_bucketIndices{std::move(other.m_bucketIndices)},
       m_skyIndices{std::move(other.m_skyIndices)}, m_batches{std::move(other.m_batches)},
@@ -748,7 +766,6 @@ void BspWorld::release() noexcept {
     m_device->destroy(m_textureLayout);
     m_device->destroy(m_shader);
     m_device->destroy(m_textureSampler);
-    m_device->destroy(m_lightmapSampler);
     m_device->destroy(m_skySampler);
     m_device->destroy(m_vertices);
     m_frameSlots.clear();
@@ -824,12 +841,15 @@ void BspWorld::gather(const Camera& camera, float aspect) {
     }
 }
 
-void BspWorld::draw(rhi::CommandList& commands, const Camera& camera, float aspect) {
+void BspWorld::draw(rhi::CommandList& commands, const Camera& camera, float aspect,
+                    const LightStyleValues& lightStyles) {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     const FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
-    const FrameUniform frame{.viewProjection = viewProjectionMatrix(camera, aspect),
-                             .lighting = {.x = m_lightScale},
-                             .eye = extend(camera.position, 1.0F)};
+    FrameUniform frame{.viewProjection = viewProjectionMatrix(camera, aspect),
+                       .lighting = m_lighting,
+                       .eye = extend(camera.position, 1.0F)};
+    std::ranges::transform(lightStyles, frame.styles.begin(),
+                           [](std::uint16_t value) { return static_cast<float>(value); });
     std::ranges::copy(std::as_bytes(std::span{&frame, 1}), m_device->mappedBytes(slot.buffer).begin());
 
     // The indices of what the camera sees, a batch for each texture that has some, then the sky's.

@@ -1,34 +1,36 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// The BSP world (nx.render:world): each face's texture, already through `texgamma`, times the light
-// of its lightmap through `lightgamma`, `brightness` and `gamma`, as the original draws it
-// (nx.render:gamma). Masked textures (`{`) discard their transparent texels. The sky's faces show
-// the side of the sky they are seen toward, projected as the original projects it.
+// The BSP world (nx.render:world): each face's texture, already through `texgamma`, times its
+// light, as the original draws it (nx.render:gamma): each luxel sums its lightmaps, each times its
+// style's brightness, goes through `lightgamma`, `brightness` and `gamma`, and the face blends the
+// four luxels around each point. Masked textures (`{`) discard their transparent texels. The sky's
+// faces show the side of the sky they are seen toward, projected as the original projects it.
 
 struct Frame
 {
     // The rows of the view-projection matrix: clip = (dot(row0, p), dot(row1, p), ...).
     float4 rows[4];
-    // x: what a sample, from 0 to 255, is multiplied by to index the light table.
+    // x: the original's lightscale; yz: the size of the lightmaps, in luxels.
     float4 lighting;
     // xyz: the camera's position, where the directions to the sky start.
     float4 eye;
+    // The brightness of the 64 light styles, four to an element.
+    float4 styles[16];
 };
 
 [[vk::binding(0, 0)]]
 ConstantBuffer<Frame> frame;
+// A layer for each of a face's lightmaps, at the same place in each.
 [[vk::binding(1, 0)]]
-Texture2D lightmaps;
-[[vk::binding(2, 0)]]
-SamplerState lightmapSampler;
+Texture2DArray lightmaps;
 // 1024 x 1: the light of each summed light, from 0 to 1023.
-[[vk::binding(3, 0)]]
+[[vk::binding(2, 0)]]
 Texture2D lightTable;
 // The sides of the sky toward +X, -X, +Y, -Y, +Z and -Z, one layer each.
-[[vk::binding(4, 0)]]
+[[vk::binding(3, 0)]]
 Texture2DArray skySides;
-[[vk::binding(5, 0)]]
+[[vk::binding(4, 0)]]
 SamplerState skySampler;
 
 [[vk::binding(0, 1)]]
@@ -36,18 +38,30 @@ Texture2D albedo;
 [[vk::binding(1, 1)]]
 SamplerState albedoSampler;
 
+static const uint kLightmaps = 4;
+// The style of a lightmap the face does not have: its lightmaps end there.
+static const uint kNoStyle = 255;
+// The styles the frame sets; the ones above keep the normal brightness, 'm'.
+static const uint kSetStyles = 64;
+static const uint kNormalStyleValue = 264;
+static const uint kLightScaleShift = 14;
+static const uint kLightTableTop = 1023;
+
 struct VertexInput
 {
     [[vk::location(0)]] float3 position : POSITION;
     [[vk::location(1)]] float2 uv : TEXCOORD0;
-    [[vk::location(2)]] float2 lightmapUv : TEXCOORD1;
+    // In luxels of the lightmaps; negative for a face without lightmaps.
+    [[vk::location(2)]] float2 lightmapPosition : TEXCOORD1;
+    [[vk::location(3)]] uint4 styles : TEXCOORD2;
 };
 
 struct VertexOutput
 {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
-    float2 lightmapUv : TEXCOORD1;
+    float2 lightmapPosition : TEXCOORD1;
+    nointerpolation uint4 styles : TEXCOORD2;
 };
 
 float4 clipPositionOf(float3 position)
@@ -63,16 +77,50 @@ VertexOutput vertexMain(VertexInput input)
     VertexOutput output;
     output.position = clipPositionOf(input.position);
     output.uv = input.uv;
-    output.lightmapUv = input.lightmapUv;
+    output.lightmapPosition = input.lightmapPosition;
+    output.styles = input.styles;
     return output;
 }
 
-/// The light of `sample`, from 0 to 255: the original's summed light, truncated and held to 1023, read
-/// from the light table.
-float lightOf(float sample)
+uint styleValueOf(uint style)
 {
-    const int index = min(int(sample * frame.lighting.x), 1023);
-    return lightTable.Load(int3(index, 0, 0)).r;
+    return style < kSetStyles ? uint(frame.styles[style / 4][style % 4]) : kNormalStyleValue;
+}
+
+/// The light of `luxel`, from 0 to 1: the sum over the face's lightmaps of its sample times the
+/// lightmap's style brightness, times lightscale and shifted, held to 1023 and read from the light
+/// table, all in the original's integers (R_BuildLightMap).
+float3 luxelLight(int2 luxel, uint4 styles)
+{
+    const int2 last = int2(frame.lighting.yz) - 1;
+    const int2 inside = clamp(luxel, int2(0, 0), last);
+    uint3 summed = uint3(0, 0, 0);
+    for (uint map = 0; map < kLightmaps && styles[map] != kNoStyle; ++map)
+    {
+        const uint3 sample = uint3(round(lightmaps.Load(int4(inside, int(map), 0)).rgb * 255.0));
+        summed += sample * styleValueOf(styles[map]);
+    }
+    const uint3 index = min((summed * uint(frame.lighting.x)) >> kLightScaleShift, kLightTableTop);
+    return float3(lightTable.Load(int3(int(index.r), 0, 0)).r, lightTable.Load(int3(int(index.g), 0, 0)).r,
+                  lightTable.Load(int3(int(index.b), 0, 0)).r);
+}
+
+/// The light at `position` (in luxels, their centers at halves): the four luxels around it blended,
+/// as the original's bilinear filter blends its light texture. Fully bright without lightmaps, as the
+/// original draws a face without samples.
+float3 lightAt(float2 position, uint4 styles)
+{
+    if (position.x < 0.0)
+    {
+        return float3(1.0, 1.0, 1.0);
+    }
+    const float2 corner = position - 0.5;
+    const int2 first = int2(floor(corner));
+    const float2 weight = corner - float2(first);
+    const float3 top = lerp(luxelLight(first, styles), luxelLight(first + int2(1, 0), styles), weight.x);
+    const float3 bottom =
+        lerp(luxelLight(first + int2(0, 1), styles), luxelLight(first + int2(1, 1), styles), weight.x);
+    return lerp(top, bottom, weight.y);
 }
 
 [shader("fragment")]
@@ -83,11 +131,8 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     {
         discard;
     }
-    const float3 sample = lightmaps.Sample(lightmapSampler, input.lightmapUv).rgb * 255.0;
-    const float3 light = float3(lightOf(sample.r), lightOf(sample.g), lightOf(sample.b));
-    return float4(color.rgb * light, 1.0);
+    return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), 1.0);
 }
-
 struct SkyVertexOutput
 {
     float4 position : SV_Position;

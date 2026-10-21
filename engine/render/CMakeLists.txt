@@ -10,10 +10,12 @@ nxAddModuleLibrary(nxRender
         src/nx.render.cppm
         src/camera.cppm
         src/gamma.cppm
+        src/lightStyle.cppm
         src/world.cppm
     SOURCES
         src/camera.cpp
         src/gamma.cpp
+        src/lightStyle.cpp
         src/world.cpp
     DEPENDS
         nx::core

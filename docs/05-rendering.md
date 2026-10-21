@@ -179,12 +179,26 @@ if (!lightmapAtlas) {
   it.
 
 **Today** (`nx.render:world`, `nxview --map`): every face of the world and of the brush
-entities (placed at their `origin`) in one vertex buffer; the textures of the map and of the WADs its `wad` key names, by file name at the root of
-the VFS as the original looks them up, with their four mips, a checkerboard for a name no WAD has;
-masked textures; triggers and the compiler's tool textures (`AAATRIGGER`, `CLIP`...) not drawn. The
-lightmaps are packed into one atlas: each face's extent in luxels of 16 units is computed in double
-precision, as the compilers compute it, and lightstyle 0 is drawn through the original's light
-curve (§11). The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
+entities (placed at their `origin`) in one vertex buffer; the textures of the map and of the WADs
+its `wad` key names, by file name at the root of the VFS as the original looks them up, with their
+four mips, a checkerboard for a name no WAD has; masked textures; triggers and the compiler's tool
+textures (`AAATRIGGER`, `CLIP`...) not drawn. The lightmaps are packed into one atlas of four
+layers, each face's lightmaps (one per light style, up to its first unused one) at the same place
+of each layer; a face's extent in luxels of 16 units is computed in double precision, as the
+compilers compute it.
+
+The light is the original's to the bit (`R_BuildLightMap`): each luxel sums its samples times their
+style's brightness in the frame, in integers, multiplies by `lightscale` and shifts out 14 bits,
+holds the result to 1023 and reads it from the light table (§11); the face then blends the four
+luxels around each point, as the original's bilinear filter blends its light texture. A face
+without lightmaps is fully bright, as the original draws a face without samples. The styles'
+brightness comes with each draw (`nx.render:lightStyle`): 22 for each letter of a style's pattern
+after `a` (264 at `m`, the normal one), ten letters a second, 256 for a style the game left unset,
+and 264 for the styles above the 64 the game sets. `nxview` sets them as CS 1.6's game does: the
+world's patterns (flicker, candles, strobes, pulses...) and the switchable lights' from their
+entities, `a` for those that start off.
+
+The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
 infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
 original's horizontal angle of a 4:3 view, kept vertical on wider screens (Hor+).
 
@@ -286,8 +300,9 @@ smoke, for example, must be identical).
 
 **Today** (`nx.render:gamma`): the original's picture, each curve where the original applies it.
 `texgamma` maps the palette of a texture when it loads (`pow(value, texgamma / gamma)`, truncated);
-the light of a lightmap sample, scaled by its lightstyle value (264 at the normal `m`) and by
-`lightscale` (2^(1/`lightgamma`) in 8.8 fixed point) to the original's 10-bit summed light, indexes
+the light of a luxel, its lightmaps' samples each scaled by its style's brightness (264 at the
+normal `m`), summed, and scaled by `lightscale` (2^(1/`lightgamma`) in 8.8 fixed point, shifted
+right 14 bits) to the original's 10-bit light (§8), indexes
 a table of 1024 entries, built as the original builds `lightgammatable`: `lightgamma`, then
 `brightness` (a multiplier above 1, and the knee that lifts the shadows), then 1/`gamma`, of which
 the upper 8 bits are drawn. The color is the texture's times that light, never brighter
