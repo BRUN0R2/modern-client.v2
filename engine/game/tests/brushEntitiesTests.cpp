@@ -112,9 +112,9 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     // A door's waves, an eighth of its WaveHeight; none for what is not a door.
     std::map<std::uint32_t, float> waves;
     nx::ecs::Query<const BrushModel&, nx::ecs::Optional<const Waves>>{world}.forEach(
-        [&](const BrushModel& model, const Waves* made) {
-            if (made != nullptr) {
-                waves.emplace(model.index.value, made->height);
+        [&waves](const BrushModel& model, const Waves* entityWaves) {
+            if (entityWaves != nullptr) {
+                waves.emplace(model.index.value, entityWaves->height);
             }
         });
     EXPECT_EQ(waves, (std::map<std::uint32_t, float>{{2, 0.0F}, {3, 3.2F / 8.0F}}));
