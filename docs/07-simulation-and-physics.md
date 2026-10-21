@@ -5,8 +5,8 @@
 | Concept | Definition |
 |---------|------------|
 | `sv_tickrate` | Fixed frequency of the server simulation. Default **100 Hz** (parity with classic servers) |
-| `GameTime` | Integer tick counter plus a fraction. No precision loss with long uptime (GoldSrc used `float` seconds, which degrades after hours) |
-| `TickTime::delta` | Duration of one tick (`1 / sv_tickrate`) as `nx::Seconds` |
+| `GameTime` (planned) | Integer tick counter plus a fraction. No precision loss with long uptime (GoldSrc used `float` seconds, which degrades after hours) |
+| `TickTime::delta` (planned) | Duration of one tick (`1 / sv_tickrate`) as `nx::Seconds` |
 | Usercmd | Client input command with its own duration (`msec`), applied individually |
 
 The server advances "world" entities (grenades, doors, triggers, timers) per tick.
@@ -35,7 +35,8 @@ struct UserCommand {
 ```
 
 Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement reads: the duration, the
-view angles, the move and the buttons (Jump). The others arrive with what reads them.
+view angles, the move and the buttons (`Jump`, `Duck`, `Forward`, `Back`, `MoveLeft`,
+`MoveRight`). The others arrive with what reads them.
 
 ### 2.2 Generation on the client
 
@@ -190,6 +191,11 @@ from the original, to test these rules against, are pending
 
 ### 4.3 API
 
+The API below is planned, with entities and hitboxes. Today it is `BrushHulls::trace` and
+`traceMovement` (`nx.collision:hulls`), which take a `HullTraceQuery` (`model`, `hull`, `offset`,
+`angles`, `start`, `end`) and give a `Trace` (`fraction`, `end`, `plane`, `isAllSolid`,
+`startsSolid`, `isInOpen`, `isInWater`), against brush models only ([§4.1](#41-world)).
+
 ```cpp
 auto hit = collision.trace(nx::collision::TraceQuery{
     .start  = muzzle,
@@ -280,6 +286,6 @@ pushers, the player's body among the bodies.
 
 | Enum | Examples |
 |------|----------|
-| `CommandError` | `DurationOutOfRange`, `TimeDriftExceeded`, `StaleCommand`, `InvalidAngles` |
+| `CommandError` (planned, with the server's command validation) | `DurationOutOfRange`, `TimeDriftExceeded`, `StaleCommand`, `InvalidAngles` |
 | `CollisionError` | `BadIndex`, `Cycle`, `TooDeep` (hull trees a compiler does not write) |
-| `MoverError` | `InvalidPath` (missing `path_corner`), `TargetNotFound` |
+| `MoverError` (planned, with trains and platforms) | `InvalidPath` (missing `path_corner`), `TargetNotFound` |

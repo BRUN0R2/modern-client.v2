@@ -54,17 +54,17 @@ flowchart TB
 | C++ module | Layer | Responsibility | Depends on |
 |------------|--------|------------------|------------|
 | `nx.core` | 0 | `nx::Failure<E>`/`nx::Result`, contracts, strong types and units, explicit conversions, `EnumArray`/`Flags`, type and enum names, the text of diagnostics, numbers stored in bytes, allocators, log, time, hashing, IDs | `std` |
-| `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes, SIMD | core |
+| `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes. SIMD is planned, when a benchmark shows a gain | core |
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
-| `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core |
-| `nx.jobs` | 1 | Job System, counters, graphs, `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system, the path of the running program, the user's Steam folders, clocks, OS threads | core |
+| `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
+| `nx.jobs` | 1 | Job System, counters, dependency graphs. Planned: a `std::execution` scheduler | core |
+| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system, the path of the running program, the user's Steam folders, clocks. Planned: OS threads | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
-| `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math |
+| `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math (today: core) |
 | `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
-| `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform |
+| `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform (today: core, math, meta, data, platform) |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
 | `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera and the BSP world | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
@@ -78,7 +78,7 @@ flowchart TB
 | `nx.update` | 3 | Updates of the client and the server products: signed release metadata, content-addressed chunks, atomic installs and rollback ([21](21-launcher-and-updates.md)). Planned (M4) | core, jobs, platform, net |
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
 | `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
-| `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, jobs, assets (platform in the program) |
+| `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, jobs, assets, collision (platform in the program) |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
 module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every
@@ -174,7 +174,7 @@ snapshots) stays the same.
 | Thread | Count | Responsibility | Constraints |
 |--------|------------|------------------|------------|
 | Main | 1 | OS events, input, frame orchestration | Does no heavy work, only enqueues jobs |
-| Workers | `N = cores − 1` (cvar `jobs_workers`) | Run jobs | No blocking. Waits help run other jobs |
+| Workers | `N = cores − 1` (`JobSystemConfig::workerCount`; a `jobs_workers` cvar is planned) | Run jobs | No blocking. Waits help run other jobs |
 | I/O | 1–2 | Asynchronous file I/O and decompression | Low priority |
 | Network | 1 | `recv`/`send`, encryption, (de)fragmentation | Delivers messages through a lock-free queue |
 | Audio | 1 | Real-time mixing callback | No allocation, no lock, no I/O |
