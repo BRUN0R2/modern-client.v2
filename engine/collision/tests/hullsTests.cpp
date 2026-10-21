@@ -25,7 +25,9 @@ using nx::collision::Hull;
 using nx::collision::HullChild;
 using nx::collision::HullNode;
 using nx::collision::HullNodeIndex;
+using nx::collision::HullRoots;
 using nx::collision::HullTraceQuery;
+using nx::collision::kWorldModel;
 using nx::collision::Trace;
 
 constexpr float kTolerance = 1.0e-5F;
@@ -38,11 +40,12 @@ constexpr float kTolerance = 1.0e-5F;
 /// Hulls whose model 0 has `nodes` as hull 1 (standing), from node 0, and an empty hull 0. A last,
 /// unused node keeps the root from being the tree's last, which movement takes for an empty hull.
 [[nodiscard]] auto standingHull(std::vector<Plane> planes, std::vector<HullNode> nodes) -> BrushHulls {
-    nodes.push_back(HullNode{.plane = 0, .children = {Contents::Empty, Contents::Empty}});
+    nodes.push_back(HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Empty}});
     auto hulls = BrushHulls::create(BrushHullsDesc{
         .planes = std::move(planes),
         .clipNodes = std::move(nodes),
-        .models = {{.hulls = {Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}}});
+        .models = {
+            {.hulls = HullRoots{{Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}}}});
     EXPECT_TRUE(hulls.has_value());
     return std::move(hulls).value();
 }
@@ -50,7 +53,7 @@ constexpr float kTolerance = 1.0e-5F;
 /// A floor at z = 0: solid below.
 [[nodiscard]] auto floorHull() -> BrushHulls {
     return standingHull({Plane{.normal = {.z = 1.0F}, .distance = 0.0F}},
-                        {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}});
+                        {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}});
 }
 
 [[nodiscard]] auto standingQuery(Vec3 start, Vec3 end) -> HullTraceQuery {
@@ -80,13 +83,14 @@ TEST(HullTraceTest, AnOffsetPlacesTheModel) {
     const Trace trace = hulls.trace(query);
     EXPECT_FLOAT_EQ(trace.fraction, (10.0F - 0.03125F) / 20.0F);
     EXPECT_FLOAT_EQ(trace.end.z, 100.03125F);
-    EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, {.z = -1.0F}), Contents::Solid) << "in the model's space";
+    EXPECT_EQ(hulls.contentsAt(kWorldModel, Hull::Standing, {.z = -1.0F}), Contents::Solid)
+        << "in the model's space";
 }
 
 TEST(HullTraceTest, ATurnedModelIsWhereItsAnglesTurnIt) {
     // Solid in front of x = 0 in its own space; turned a quarter turn to the left, in front of y = 0.
     const BrushHulls hulls =
-        standingHull({atX(0.0F)}, {HullNode{.plane = 0, .children = {Contents::Solid, Contents::Empty}}});
+        standingHull({atX(0.0F)}, {HullNode{.plane = {0}, .children = {Contents::Solid, Contents::Empty}}});
     const nx::EulerAngles quarterLeft{.yaw = nx::Degrees{90.0F}};
     for (const bool isMovement : {false, true}) {
         HullTraceQuery query = standingQuery({.y = -10.0F}, {.y = 10.0F});
@@ -96,10 +100,12 @@ TEST(HullTraceTest, ATurnedModelIsWhereItsAnglesTurnIt) {
         EXPECT_NEAR(trace.plane.normal.x, 0.0F, kTolerance) << isMovement;
         EXPECT_NEAR(trace.plane.normal.y, -1.0F, kTolerance) << "facing the way it came, in the world";
     }
-    EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, {.y = 5.0F}, Vec3{}, quarterLeft), Contents::Solid);
-    EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, {.x = 5.0F, .y = -5.0F}, Vec3{}, quarterLeft),
+    EXPECT_EQ(hulls.contentsAt(kWorldModel, Hull::Standing, {.y = 5.0F}, Vec3{}, quarterLeft),
+              Contents::Solid);
+    EXPECT_EQ(hulls.contentsAt(kWorldModel, Hull::Standing, {.x = 5.0F, .y = -5.0F}, Vec3{}, quarterLeft),
               Contents::Empty);
-    EXPECT_EQ(hulls.movementContentsAt(0, Hull::Standing, {.y = 5.0F}, Vec3{}, quarterLeft), Contents::Solid);
+    EXPECT_EQ(hulls.movementContentsAt(kWorldModel, Hull::Standing, {.y = 5.0F}, Vec3{}, quarterLeft),
+              Contents::Solid);
 }
 
 TEST(HullTraceTest, ATraceInSolidStartsSolid) {
@@ -126,7 +132,7 @@ TEST(HullTraceTest, ATraceInSolidStartsSolid) {
 TEST(HullTraceTest, TranslucentContentsAreWaterToMovementOnly) {
     const BrushHulls hulls =
         standingHull({Plane{.normal = {.z = 1.0F}, .distance = 0.0F}},
-                     {HullNode{.plane = 0, .children = {Contents::Translucent, Contents::Water}}});
+                     {HullNode{.plane = {0}, .children = {Contents::Translucent, Contents::Water}}});
     const Trace server = hulls.trace(standingQuery({.z = 5.0F}, {.z = 10.0F}));
     EXPECT_FALSE(server.isInWater);
     EXPECT_FALSE(server.isInOpen);
@@ -137,13 +143,15 @@ TEST(HullTraceTest, TranslucentContentsAreWaterToMovementOnly) {
 TEST(HullTraceTest, MovementTakesAHullRootedAtItsLastNodeForAnEmptyOne) {
     auto hulls = BrushHulls::create(BrushHullsDesc{
         .planes = {Plane{.normal = {.z = 1.0F}, .distance = 0.0F}},
-        .clipNodes = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}},
-        .models = {{.hulls = {Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}}});
+        .clipNodes = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}},
+        .models = {
+            {.hulls = HullRoots{{Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}}}});
     ASSERT_TRUE(hulls.has_value());
     EXPECT_LT(hulls->trace(standingQuery({.z = 10.0F}, {.z = -10.0F})).fraction, 1.0F);
     EXPECT_EQ(hulls->traceMovement(standingQuery({.z = 10.0F}, {.z = -10.0F})).fraction, 1.0F) << "Parity";
-    EXPECT_EQ(hulls->contentsAt(0, Hull::Standing, {.z = -1.0F}), Contents::Solid);
-    EXPECT_EQ(hulls->movementContentsAt(0, Hull::Standing, {.z = -1.0F}), Contents::Empty) << "Parity";
+    EXPECT_EQ(hulls->contentsAt(kWorldModel, Hull::Standing, {.z = -1.0F}), Contents::Solid);
+    EXPECT_EQ(hulls->movementContentsAt(kWorldModel, Hull::Standing, {.z = -1.0F}), Contents::Empty)
+        << "Parity";
 }
 
 TEST(HullTraceTest, AStopInSolidBacksUpByEachRulesStep) {
@@ -153,9 +161,9 @@ TEST(HullTraceTest, AStopInSolidBacksUpByEachRulesStep) {
     // stops still in solid.
     const BrushHulls hulls =
         standingHull({atX(0.0F), atX(-0.031F), atX(0.01125F)},
-                     {HullNode{.plane = 0, .children = {HullNodeIndex{2}, HullNodeIndex{1}}},
-                      HullNode{.plane = 1, .children = {Contents::Solid, Contents::Empty}},
-                      HullNode{.plane = 2, .children = {Contents::Solid, Contents::Empty}}});
+                     {HullNode{.plane = {0}, .children = {HullNodeIndex{2}, HullNodeIndex{1}}},
+                      HullNode{.plane = {1}, .children = {Contents::Solid, Contents::Empty}},
+                      HullNode{.plane = {2}, .children = {Contents::Solid, Contents::Empty}}});
     const HullTraceQuery query = standingQuery({.x = -10.0F}, {.x = 0.1295F});
     const Trace server = hulls.trace(query);
     const Trace movement = hulls.traceMovement(query);
@@ -163,7 +171,7 @@ TEST(HullTraceTest, AStopInSolidBacksUpByEachRulesStep) {
     EXPECT_NEAR(movement.end.x, -0.028035F, 1.0e-4F);
     for (const Trace& trace : {server, movement}) {
         EXPECT_EQ(trace.plane, (Plane{.normal = {.x = -1.0F}, .distance = -0.01125F}));
-        EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, trace.end), Contents::Solid)
+        EXPECT_EQ(hulls.contentsAt(kWorldModel, Hull::Standing, trace.end), Contents::Solid)
             << "Parity: the stop stays in solid";
     }
     EXPECT_GT(server.fraction, movement.fraction);
@@ -175,16 +183,17 @@ TEST(HullTraceTest, RefusesBrokenTrees) {
         return hulls ? std::nullopt : std::optional{hulls.error().code};
     };
     const std::vector planes{atX(0.0F)};
-    EXPECT_EQ(errorOf({.planes = planes, .clipNodes = {HullNode{.plane = 1}}}), CollisionError::BadIndex)
+    EXPECT_EQ(errorOf({.planes = planes, .clipNodes = {HullNode{.plane = {1}}}}), CollisionError::BadIndex)
         << "plane";
-    EXPECT_EQ(errorOf({.planes = planes,
-                       .clipNodes = {HullNode{.plane = 0, .children = {HullNodeIndex{1}, Contents::Empty}}}}),
-              CollisionError::BadIndex)
+    EXPECT_EQ(
+        errorOf({.planes = planes,
+                 .clipNodes = {HullNode{.plane = {0}, .children = {HullNodeIndex{1}, Contents::Empty}}}}),
+        CollisionError::BadIndex)
         << "child";
     EXPECT_EQ(errorOf({.planes = planes,
                        .clipNodes = {HullNode{.children = {Contents::Empty, Contents::Empty}}},
-                       .models = {{.hulls = {Contents::Empty, HullNodeIndex{3}, Contents::Empty,
-                                             Contents::Empty}}}}),
+                       .models = {{.hulls = HullRoots{{Contents::Empty, HullNodeIndex{3}, Contents::Empty,
+                                                       Contents::Empty}}}}}),
               CollisionError::BadIndex)
         << "root";
     EXPECT_EQ(errorOf({.planes = planes,
@@ -209,8 +218,8 @@ TEST(HullTraceTest, ReadsTheHullsOfAMap) {
     const auto hulls = BrushHulls::create(*map);
     ASSERT_TRUE(hulls.has_value()) << nx::describe(hulls.error());
     EXPECT_EQ(hulls->modelCount(), 1U);
-    EXPECT_EQ(hulls->boundsOf(0).min, map->models()[0].bounds.min);
-    EXPECT_EQ(hulls->boundsOf(0).max, map->models()[0].bounds.max);
+    EXPECT_EQ(hulls->boundsOf(kWorldModel).min, map->models()[0].bounds.min);
+    EXPECT_EQ(hulls->boundsOf(kWorldModel).max, map->models()[0].bounds.max);
     for (const Hull hull : {Hull::Point, Hull::Standing}) {
         const Trace trace = hulls->trace(HullTraceQuery{.hull = hull,
                                                         .start = {.x = 32.0F, .y = 32.0F, .z = 32.0F},
@@ -218,8 +227,10 @@ TEST(HullTraceTest, ReadsTheHullsOfAMap) {
         EXPECT_FLOAT_EQ(trace.end.z, 0.03125F) << nx::enumName(hull);
         EXPECT_EQ(trace.plane.normal, (Vec3{.z = 1.0F})) << nx::enumName(hull);
     }
-    EXPECT_EQ(hulls->contentsAt(0, Hull::Point, {.x = 32.0F, .y = 32.0F, .z = 32.0F}), Contents::Empty);
-    EXPECT_EQ(hulls->contentsAt(0, Hull::Point, {.x = 32.0F, .y = 32.0F, .z = -1.0F}), Contents::Solid);
+    EXPECT_EQ(hulls->contentsAt(kWorldModel, Hull::Point, {.x = 32.0F, .y = 32.0F, .z = 32.0F}),
+              Contents::Empty);
+    EXPECT_EQ(hulls->contentsAt(kWorldModel, Hull::Point, {.x = 32.0F, .y = 32.0F, .z = -1.0F}),
+              Contents::Solid);
 }
 
 } // namespace

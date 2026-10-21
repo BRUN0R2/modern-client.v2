@@ -39,7 +39,8 @@ struct BrushClass {
     std::optional<std::int32_t> notSolidFlags{};
     /// A door: a "skin" other than 0 makes it not solid, holding those contents (func_water).
     std::optional<bool> skinMakesNotSolid{};
-    /// The contents the game gives each, whatever its "skin" (func_ladder: -16, a ladder).
+    /// The contents the game gives each, whatever its "skin", numbered as the original numbers them
+    /// (nx::assets::Contents; func_ladder: -16, a ladder).
     std::optional<std::int32_t> contents{};
     /// What they do; nothing when absent: they stay as they are.
     std::optional<BrushBehavior> behavior{};

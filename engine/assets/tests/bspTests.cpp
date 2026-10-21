@@ -448,7 +448,7 @@ TEST(BspTest, ValuesReadAsTheOriginalReadsThem) {
                                                    {"skin", "-3x"},
                                                    {"angles", "0 90"}}};
 
-    EXPECT_EQ(door.findBrushModel(), std::optional<std::uint32_t>{12});
+    EXPECT_EQ(door.findBrushModel(), std::optional{nx::assets::ModelIndex{12}});
     EXPECT_EQ(door.findVector("origin"), (nx::Vec3{.x = -512.0F, .y = 1024.5F, .z = 36.0F}));
     EXPECT_EQ(door.findInteger("spawnflags"), std::optional{256});
     EXPECT_EQ(door.findInteger("skin"), std::optional{-3}) << "atoi stops at what is not a digit";
@@ -460,6 +460,15 @@ TEST(BspTest, ValuesReadAsTheOriginalReadsThem) {
     const nx::assets::BspEntity soldier{.keyValues = {{"model", "models/player.mdl"}}};
     EXPECT_FALSE(soldier.findBrushModel().has_value());
     EXPECT_FALSE(nx::assets::BspEntity{}.findBrushModel().has_value());
+}
+
+TEST(BspTest, ContentsAreNumberedAsTheOriginalNumbersThem) {
+    EXPECT_EQ(nx::assets::contentsNumbered(-1), Contents::Empty);
+    EXPECT_EQ(nx::assets::contentsNumbered(-3), Contents::Water);
+    EXPECT_EQ(nx::assets::contentsNumbered(-16), Contents::Ladder);
+    EXPECT_FALSE(nx::assets::contentsNumbered(0).has_value()) << "a skin of 0 holds nothing";
+    EXPECT_FALSE(nx::assets::contentsNumbered(-17).has_value());
+    EXPECT_FALSE(nx::assets::contentsNumbered(3).has_value());
 }
 
 TEST(BspTest, RejectsABrokenTree) {
@@ -489,6 +498,9 @@ TEST(BspTest, RejectsABrokenTree) {
     EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Leaves, 28, std::int32_t{3}); }),
               BspError::BadValue)
         << "contents 3";
+    EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Leaves, 28, std::int32_t{-16}); }),
+              BspError::BadValue)
+        << "a ladder: only an entity holds one";
     EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Leaves, 28 + 4, std::int32_t{1}); }),
               BspError::BadIndex)
         << "visibility past its lump";
@@ -503,7 +515,7 @@ TEST(BspTest, RejectsABrokenTree) {
         << "a clip node that is its own child would cycle";
     EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::ClipNodes, 6, std::int16_t{-16}); }),
               BspError::BadValue)
-        << "contents -16";
+        << "a ladder: only an entity holds one";
     EXPECT_EQ(withChange([](QuadMap& map) { map.set(Lump::Models, 36, std::int32_t{1}); }),
               BspError::BadIndex)
         << "head node 1 of 1";

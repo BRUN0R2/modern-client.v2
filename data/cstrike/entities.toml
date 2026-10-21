@@ -7,8 +7,9 @@
 # Today: the brush entities, by how solid the game makes each class. `solid` is "bsp" (its brush
 # model stops what moves into it) or "not"; any spawnflag of `notSolidFlags` makes one not solid;
 # `skinMakesNotSolid` marks the doors a "skin" other than 0 makes a volume of those contents
-# (water, slime, lava); `contents` is what the game gives each whatever its "skin"; `behavior` is
-# what they do ("slidingDoor", "rotatingDoor": a touch opens them). A class not listed makes no
+# (water, slime, lava); `contents` is what the game gives each whatever its "skin", numbered as the
+# original numbers contents (nx::assets::Contents: -3 water, -16 a ladder); `behavior` is what
+# they do ("slidingDoor", "rotatingDoor": a touch opens them). A class not listed makes no
 # brush entity yet: triggers, zones, and func_pushable, which the game makes a box.
 
 [[brushClasses]]

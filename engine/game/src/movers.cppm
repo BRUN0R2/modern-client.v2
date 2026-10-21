@@ -20,7 +20,7 @@ export namespace nx::game {
 /// opening, a turning one away from the toucher, and one that stays open closes
 /// (CBaseDoor::DoorTouch); their models are those of `hulls`.
 void touchBrushEntities(ecs::World& world, const collision::BrushHulls& hulls,
-                        std::span<const std::uint32_t> models, ecs::Entity toucher);
+                        std::span<const collision::ModelIndex> models, ecs::Entity toucher);
 
 /// Advances each pusher of `world`, in the world's order, by `frameTime`, at `time` since the map
 /// started (SV_Physics_Pusher): it moves at its velocity, and turns at its angular one, while it

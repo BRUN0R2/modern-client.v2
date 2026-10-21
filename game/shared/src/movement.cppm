@@ -74,6 +74,13 @@ enum class WaterLevel : std::uint8_t {
     Eyes,
 };
 
+/// The box of a standing player about its origin, and of a ducked one: the boxes the map compilers
+/// grow hulls 1 and 3 by.
+inline constexpr nx::Aabb kStandingBox{.min = {.x = -16.0F, .y = -16.0F, .z = -36.0F},
+                                       .max = {.x = 16.0F, .y = 16.0F, .z = 36.0F}};
+inline constexpr nx::Aabb kDuckedBox{.min = {.x = -16.0F, .y = -16.0F, .z = -18.0F},
+                                     .max = {.x = 16.0F, .y = 16.0F, .z = 18.0F}};
+
 /// The height of a standing player's eyes above its origin, and of a ducked player's.
 inline constexpr nx::HammerUnits kStandingViewHeight{17.0F};
 inline constexpr nx::HammerUnits kDuckedViewHeight{12.0F};
@@ -94,7 +101,7 @@ struct MovementState {
     nx::UnitsPerSecond maxSpeed{};
     bool isOnGround = false;
     /// The brush model of the entity it stands on; none on the world or in the air.
-    std::optional<std::uint32_t> groundModel{};
+    std::optional<nx::collision::ModelIndex> groundModel{};
     WaterLevel waterLevel = WaterLevel::Dry;
     nx::collision::Contents waterType = nx::collision::Contents::Empty; ///< What it is in, when wet.
     /// Left of the slowdown a jump costs: the next jump is lower and walking slower while it lasts.
@@ -116,7 +123,7 @@ enum class BrushRole : std::uint8_t {
 /// A brush entity a player moves among (a physent of the original): brush model `model` of the map,
 /// placed at `origin`; a solid one turned by `angles` about it.
 struct BrushEntity {
-    std::uint32_t model = 0;
+    nx::collision::ModelIndex model{};
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
     BrushRole role = BrushRole::Solid;
@@ -125,14 +132,18 @@ struct BrushEntity {
 
 /// The brush entities of `world`, made by nx.game, that movement meets, in the world's order, as the
 /// original's engine lists them for it: the solid ones, and the others that hold contents, a ladder
-/// (-16) or a volume of nx::collision::Contents.
+/// or a volume.
 [[nodiscard]] auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity>;
+
+/// The body of a player in `state` that the game's pushers move: its box, standing or ducked, and the
+/// brush model it stands on.
+[[nodiscard]] auto bodyOf(const MovementState& state) -> nx::game::Body;
 
 /// What a command did: the player after it, and the brush entities it ran into or stood on, by their
 /// models, in the order it met them, each once (the original's touch list): the game has them touched.
 struct MovementResult {
     MovementState state{};
-    std::vector<std::uint32_t> touchedModels{};
+    std::vector<nx::collision::ModelIndex> touchedModels{};
 };
 
 /// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `hulls`, among

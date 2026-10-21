@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The native file system: listing the files of a directory and reading a file whole. Engine code
-/// reads content through the VFS of nx.assets (docs/06-assets-and-resources.md, section 2), which
-/// is built on these.
+/// The native file system: listing the files of a directory, and reading or writing a file whole.
+/// Engine code reads content through the VFS of nx.assets (docs/06-assets-and-resources.md,
+/// section 2), which is built on these.
 export module nx.platform:fileSystem;
 
 import std;
@@ -17,9 +17,10 @@ enum class FileError : std::uint8_t {
     NotFound,      ///< Nothing exists at the path.
     AccessDenied,  ///< The operating system refused access to the path.
     NotADirectory, ///< listFiles was given something other than a directory.
-    NotAFile,      ///< readFile was given something other than a regular file.
+    NotAFile,      ///< readFile or writeFile was given something other than a regular file.
     ListFailed,    ///< The operating system failed while listing a directory.
     ReadFailed,    ///< The operating system failed while opening or reading a file.
+    WriteFailed,   ///< The operating system failed while creating or writing a file.
 };
 
 /// `path` as UTF-8 text in the generic format, with `/` as the separator: for diagnostics, and
@@ -46,6 +47,12 @@ enum class FileError : std::uint8_t {
 /// Same as readFile, for a text file (TOML, KeyValues, `.cfg`): its bytes as they are, without
 /// any decoding.
 [[nodiscard]] auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError>;
+
+/// Makes `bytes` the whole content of the file at `path`, creating it or replacing what it held; its
+/// directory must exist. A failure may leave the file partly written.
+/// Errors: NotFound (the directory), AccessDenied, NotAFile, WriteFailed.
+[[nodiscard]] auto writeFile(const std::filesystem::path& path, std::span<const std::byte> bytes)
+    -> Result<void, FileError>;
 
 /// The path of the running executable: the programs find their `data/` next to it.
 /// Errors: ReadFailed (the operating system did not tell it).

@@ -298,11 +298,11 @@ struct ModelEntity {
     constexpr float kFull = 255.0F;
     std::vector<ModelEntity> models(map.models().size());
     for (const assets::BspEntity& entity : map.entities()) {
-        const std::optional<std::uint32_t> index = entity.findBrushModel();
-        if (!index || *index == 0 || *index >= models.size()) {
+        const std::optional<assets::ModelIndex> index = entity.findBrushModel();
+        if (!index || *index == assets::kWorldModel || index->value >= models.size()) {
             continue;
         }
-        ModelEntity& drawn = models[*index];
+        ModelEntity& drawn = models[index->value];
         drawn.origin = entity.findVector("origin").value_or(Vec3{});
         const int mode = entity.findInteger("rendermode").value_or(0);
         drawn.mode = mode >= 0 && mode < kModes ? static_cast<RenderMode>(mode) : RenderMode::Glow;
@@ -922,14 +922,15 @@ namespace {
 void BspWorld::place(std::span<const ModelPlacement> placements) {
     m_placements.resize(m_models.size());
     for (std::size_t index = 0; index < m_models.size(); ++index) {
-        m_placements[index] =
-            ModelPlacement{.model = narrow<std::uint32_t>(index + 1), .origin = m_models[index].origin};
+        m_placements[index] = ModelPlacement{.model = assets::ModelIndex{narrow<std::uint32_t>(index + 1)},
+                                             .origin = m_models[index].origin};
     }
     for (const ModelPlacement& placement : placements) {
-        expects(placement.model >= 1 && placement.model <= m_models.size(),
+        const std::uint32_t model = placement.model.value;
+        expects(model >= 1 && model <= m_models.size(),
                 "BspWorld::draw: a placement of a brush model of the map");
-        if (placement.model >= 1 && placement.model <= m_models.size()) {
-            m_placements[placement.model - 1] = placement; // m_models starts at model 1
+        if (model >= 1 && model <= m_models.size()) {
+            m_placements[model - 1] = placement; // m_models starts at model 1
         }
     }
 }

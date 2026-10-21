@@ -350,13 +350,15 @@ struct FaceTargets {
                 .max = {.x = axis(kAxes), .y = axis(kAxes + 1), .z = axis(kAxes + 2)}};
 }
 
-/// `value` as contents. Errors: BadValue.
+/// `value` as the contents of a leaf or of a side of a clip node. Errors: BadValue.
 [[nodiscard]] auto contentsOf(std::int32_t value, Lump lump, std::size_t record)
     -> Result<Contents, BspError> {
-    if (value > std::to_underlying(Contents::Empty) || value < std::to_underlying(Contents::Translucent)) {
-        return fail(BspError::BadValue, std::format("{}: unknown contents {}", where(lump, record), value));
+    const std::optional<Contents> contents = contentsNumbered(value);
+    if (!contents || *contents == Contents::Ladder) {
+        return fail(BspError::BadValue,
+                    std::format("{}: contents {}, not a leaf's", where(lump, record), value));
     }
-    return static_cast<Contents>(value);
+    return *contents;
 }
 
 /// `count` records from `first` lie within `available`. Errors: BadIndex.
@@ -940,11 +942,18 @@ auto BspEntity::findVector(std::string_view key) const noexcept -> std::optional
     return find(key).and_then(vectorOfValue);
 }
 
-auto BspEntity::findBrushModel() const noexcept -> std::optional<std::uint32_t> {
+auto contentsNumbered(std::int32_t value) noexcept -> std::optional<Contents> {
+    if (value > std::to_underlying(Contents::Empty) || value < std::to_underlying(Contents::Ladder)) {
+        return std::nullopt;
+    }
+    return static_cast<Contents>(value);
+}
+
+auto BspEntity::findBrushModel() const noexcept -> std::optional<ModelIndex> {
     const std::optional<std::string_view> model = find("model");
-    std::uint32_t index = 0;
+    ModelIndex index;
     if (!model || !model->starts_with('*') ||
-        std::from_chars(model->data() + 1, model->data() + model->size(), index).ec != std::errc{}) {
+        std::from_chars(model->data() + 1, model->data() + model->size(), index.value).ec != std::errc{}) {
         return std::nullopt;
     }
     return index;

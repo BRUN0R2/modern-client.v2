@@ -18,14 +18,13 @@ using nx::Vec3;
 using nx::collision::BrushHulls;
 using nx::collision::Contents;
 using nx::collision::Hull;
+using nx::collision::ModelIndex;
 
-// A player's boxes, about its origin: the sizes the map compilers grow hulls 1 and 3 by.
-
-/// From its origin to its feet, and to the top of its head, standing and ducked.
-constexpr float kStandingHalfHeight = 36.0F;
-constexpr float kDuckedHalfHeight = 18.0F;
+/// From a player's origin to its feet, and to the top of its head, standing and ducked.
+constexpr float kStandingHalfHeight = kStandingBox.max.z;
+constexpr float kDuckedHalfHeight = kDuckedBox.max.z;
 /// How far the origin moves when a player on the ground ducks or stands: the boxes' feet meet.
-constexpr double kDuckDrop = 18.0;
+constexpr double kDuckDrop = double{kStandingHalfHeight - kDuckedHalfHeight};
 
 // The thresholds of the original's movement, each a behavior a player feels.
 
@@ -111,7 +110,7 @@ struct PlayerTrace {
     Vec3 normal{};
     bool startsSolid = false;
     bool isAllSolid = false;
-    std::optional<std::uint32_t> model{}; ///< Of the entity that stopped it; none for the world.
+    std::optional<ModelIndex> model{}; ///< Of the entity that stopped it; none for the world.
 };
 
 /// Length as the original measures it: each square in single precision, their sum in double.
@@ -315,8 +314,8 @@ private:
     /// it soonest; all the way when none does.
     [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull) const -> PlayerTrace {
         PlayerTrace nearest{.end = end};
-        const auto meet = [&](std::uint32_t model, Vec3 offset, nx::EulerAngles angles,
-                              std::optional<std::uint32_t> entity) {
+        const auto meet = [&](ModelIndex model, Vec3 offset, nx::EulerAngles angles,
+                              std::optional<ModelIndex> entity) {
             const nx::collision::Trace hit =
                 m_world.traceMovement(nx::collision::HullTraceQuery{.model = model,
                                                                     .hull = hull,
@@ -333,7 +332,7 @@ private:
                                       .model = entity};
             }
         };
-        meet(0, Vec3{}, nx::EulerAngles{}, std::nullopt);
+        meet(nx::collision::kWorldModel, Vec3{}, nx::EulerAngles{}, std::nullopt);
         for (const BrushEntity& entity : m_entities) {
             if (entity.role == BrushRole::Solid) {
                 meet(entity.model, entity.origin, entity.angles, entity.model);
@@ -345,7 +344,7 @@ private:
     /// What `point` is in, as movement reads it: the world's contents, a current counted as water;
     /// where the world is not solid, the contents of the first volume the point is in.
     [[nodiscard]] auto contentsAt(Vec3 point) const -> Contents {
-        Contents contents = m_world.movementContentsAt(0, Hull::Point, point);
+        Contents contents = m_world.movementContentsAt(nx::collision::kWorldModel, Hull::Point, point);
         const auto value = std::to_underlying(contents);
         if (value <= std::to_underlying(Contents::Current0) &&
             value >= std::to_underlying(Contents::CurrentDown)) {
@@ -366,7 +365,7 @@ private:
 
     /// Whether the player's box at `origin` is in solid: the world's or a solid entity's.
     [[nodiscard]] auto isStuckAt(Vec3 origin) const -> bool {
-        if (m_world.movementContentsAt(0, m_hull, origin) == Contents::Solid) {
+        if (m_world.movementContentsAt(nx::collision::kWorldModel, m_hull, origin) == Contents::Solid) {
             return true;
         }
         return std::ranges::any_of(m_entities, [&](const BrushEntity& entity) {
@@ -483,7 +482,7 @@ private:
     }
 
     /// Remembers that the player met the entity of `model`, when there is one, once.
-    void touch(std::optional<std::uint32_t> model) {
+    void touch(std::optional<ModelIndex> model) {
         if (model && !std::ranges::contains(m_touched, *model)) {
             m_touched.push_back(*model);
         }
@@ -961,8 +960,8 @@ private:
     const MovementSettings& m_settings;
     const BrushHulls& m_world;
     std::span<const BrushEntity> m_entities;
-    std::vector<std::uint32_t> m_touched; ///< The models of the entities met, in order.
-    Hull m_hull = Hull::Standing;         ///< The player's box.
+    std::vector<ModelIndex> m_touched; ///< The models of the entities met, in order.
+    Hull m_hull = Hull::Standing;      ///< The player's box.
     float m_maxSpeed = 0.0F;
     float m_frameTime = 0.0F; ///< Seconds.
     nx::AngleVectors m_axes{};
@@ -971,7 +970,6 @@ private:
 } // namespace
 
 auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
-    constexpr std::int32_t kLadder = -16;
     std::vector<BrushEntity> entities;
     nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&, const nx::game::BrushSolidity&>
         brushes{world};
@@ -980,26 +978,32 @@ auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
         if (solidity.solid == nx::game::Solid::Bsp) {
             entities.push_back(
                 {.model = model.index, .origin = transform.origin, .angles = transform.angles});
-        } else if (solidity.contents == kLadder) {
+        } else if (solidity.contents == Contents::Ladder) {
             entities.push_back({.model = model.index, .origin = transform.origin, .role = BrushRole::Ladder});
-        } else if (solidity.contents <= std::to_underlying(Contents::Empty) &&
-                   solidity.contents >= std::to_underlying(Contents::Translucent)) {
+        } else if (solidity.contents) {
             entities.push_back({.model = model.index,
                                 .origin = transform.origin,
                                 .role = BrushRole::Volume,
-                                .contents = static_cast<Contents>(solidity.contents)});
+                                .contents = *solidity.contents});
         }
     });
     return entities;
+}
+
+auto bodyOf(const MovementState& state) -> nx::game::Body {
+    return nx::game::Body{.hull = state.isDucked ? Hull::Ducked : Hull::Standing,
+                          .box = state.isDucked ? kDuckedBox : kStandingBox,
+                          .groundModel = state.isOnGround ? state.groundModel : std::nullopt};
 }
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,
                       const MovementSettings& settings, const BrushHulls& hulls,
                       std::span<const BrushEntity> entities) -> MovementResult {
     nx::expects(hulls.modelCount() > 0, "simulateMovement: the world is model 0 of its hulls");
-    nx::expects(std::ranges::all_of(
-                    entities, [&](const BrushEntity& entity) { return entity.model < hulls.modelCount(); }),
-                "simulateMovement: every entity is a model of the hulls");
+    nx::expects(
+        std::ranges::all_of(
+            entities, [&](const BrushEntity& entity) { return entity.model.value < hulls.modelCount(); }),
+        "simulateMovement: every entity is a model of the hulls");
     return PlayerMove{state, command, settings, hulls, entities}.run();
 }
 
