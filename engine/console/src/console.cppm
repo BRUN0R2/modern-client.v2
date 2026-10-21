@@ -49,9 +49,9 @@ public:
 
 /// Why `exec` could not read a file.
 enum class ConfigFileError : std::uint8_t {
-    NotFound,
+    NotFound,    ///< No file at the path.
     InvalidPath, ///< A path the file source does not serve (outside the game directories).
-    Unreadable,
+    Unreadable,  ///< The file exists but could not be read.
 };
 
 /// The files `exec` reads: the VFS in the game (M2), in-memory files in tests. Implementations
@@ -65,6 +65,7 @@ public:
     auto operator=(ConfigFiles&&) -> ConfigFiles& = delete;
     virtual ~ConfigFiles() = default;
 
+    /// The whole text of the file at `path`. Errors: NotFound, InvalidPath, Unreadable.
     [[nodiscard]] virtual auto read(std::string_view path) -> Result<std::string, ConfigFileError> = 0;
 };
 
@@ -77,7 +78,7 @@ enum class Cheats : std::uint8_t {
 
 /// What is left after Console::execute.
 enum class BufferState : std::uint8_t {
-    Empty,
+    Empty,   ///< Every buffered command ran.
     Waiting, ///< A `wait` stopped the run; the rest runs on the next execute().
 };
 
@@ -87,9 +88,10 @@ class Console;
 using CommandHandler =
     std::move_only_function<Result<void, ConsoleError>(Console& console, const CommandLine& line)>;
 
+/// How to register a command or a button.
 struct CommandDesc {
-    ConsoleName name;
-    std::string_view description{};
+    ConsoleName name;               ///< For a button, the name without its `+` and `-`.
+    std::string_view description{}; ///< What cmdlist and find show.
 };
 
 /// Alias expansions and execs allowed in one execute(). Far above any real script, which expands a
@@ -108,6 +110,7 @@ inline constexpr std::size_t kMaxSuggestionDistance = 2;
 /// Typing a cvar's name prints its value; the name and one value set it.
 class Console {
 public:
+    /// A console that writes to `output` and reads exec'd files from `files`; both must outlive it.
     Console(ConsoleOutput& output, ConfigFiles& files);
 
     Console(const Console&) = delete;
@@ -136,7 +139,7 @@ public:
         return Cvar<Type>{registered};
     }
 
-    /// Errors: InvalidName, NameTaken.
+    /// Registers a command that runs `handler`, which must not be empty. Errors: InvalidName, NameTaken.
     [[nodiscard]] auto registerCommand(const CommandDesc& desc, CommandHandler handler)
         -> Result<void, ConsoleError>;
 
@@ -167,7 +170,9 @@ public:
     /// Cheat cvars while cheats are forbidden, and for text the cvar does not accept.
     [[nodiscard]] auto setCvar(std::string_view name, std::string_view text) -> Result<void, ConsoleError>;
 
+    /// Allows or forbids changing Cheat cvars from now on.
     inline void setCheats(Cheats cheats) noexcept { m_cheats = cheats; }
+    /// Whether Cheat cvars may change now.
     [[nodiscard]] inline auto cheats() const noexcept -> Cheats { return m_cheats; }
 
     /// Writes one line of reply to the output.

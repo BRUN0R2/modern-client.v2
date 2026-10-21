@@ -33,22 +33,27 @@ struct Vec4 {
     [[nodiscard]] constexpr auto operator==(const Vec4&) const noexcept -> bool = default;
 };
 
+/// Component-wise sum.
 [[nodiscard]] constexpr auto operator+(Vec3 a, Vec3 b) noexcept -> Vec3 {
     return Vec3{.x = a.x + b.x, .y = a.y + b.y, .z = a.z + b.z};
 }
 
+/// Component-wise difference: the displacement from `b` to `a`.
 [[nodiscard]] constexpr auto operator-(Vec3 a, Vec3 b) noexcept -> Vec3 {
     return Vec3{.x = a.x - b.x, .y = a.y - b.y, .z = a.z - b.z};
 }
 
+/// Every component negated: the opposite direction.
 [[nodiscard]] constexpr auto operator-(Vec3 v) noexcept -> Vec3 {
     return Vec3{.x = -v.x, .y = -v.y, .z = -v.z};
 }
 
+/// Every component multiplied by `scale`.
 [[nodiscard]] constexpr auto operator*(Vec3 v, float scale) noexcept -> Vec3 {
     return Vec3{.x = v.x * scale, .y = v.y * scale, .z = v.z * scale};
 }
 
+/// Same as `v * scale`.
 [[nodiscard]] constexpr auto operator*(float scale, Vec3 v) noexcept -> Vec3 {
     return v * scale;
 }
@@ -59,16 +64,19 @@ struct Vec4 {
     return Vec3{.x = v.x / divisor, .y = v.y / divisor, .z = v.z / divisor};
 }
 
+/// `a = a + b`.
 constexpr auto operator+=(Vec3& a, Vec3 b) noexcept -> Vec3& {
     a = a + b;
     return a;
 }
 
+/// `a = a - b`.
 constexpr auto operator-=(Vec3& a, Vec3 b) noexcept -> Vec3& {
     a = a - b;
     return a;
 }
 
+/// `v = v * scale`.
 constexpr auto operator*=(Vec3& v, float scale) noexcept -> Vec3& {
     v = v * scale;
     return v;
@@ -84,14 +92,17 @@ constexpr auto operator*=(Vec3& v, float scale) noexcept -> Vec3& {
     return Vec3{.x = a.y * b.z - a.z * b.y, .y = a.z * b.x - a.x * b.z, .z = a.x * b.y - a.y * b.x};
 }
 
+/// The square of length(v): enough to compare lengths, without a square root.
 [[nodiscard]] constexpr auto lengthSquared(Vec3 v) noexcept -> float {
     return dot(v, v);
 }
 
+/// The Euclidean length of `v`.
 [[nodiscard]] inline auto length(Vec3 v) noexcept -> float {
     return std::sqrt(lengthSquared(v));
 }
 
+/// The Euclidean distance between the points `a` and `b`.
 [[nodiscard]] inline auto distance(Vec3 a, Vec3 b) noexcept -> float {
     return length(a - b);
 }
@@ -114,10 +125,12 @@ constexpr auto operator*=(Vec3& v, float scale) noexcept -> Vec3& {
     return a + (b - a) * fraction;
 }
 
+/// The smaller of each pair of components.
 [[nodiscard]] constexpr auto componentMin(Vec3 a, Vec3 b) noexcept -> Vec3 {
     return Vec3{.x = std::min(a.x, b.x), .y = std::min(a.y, b.y), .z = std::min(a.z, b.z)};
 }
 
+/// The larger of each pair of components.
 [[nodiscard]] constexpr auto componentMax(Vec3 a, Vec3 b) noexcept -> Vec3 {
     return Vec3{.x = std::max(a.x, b.x), .y = std::max(a.y, b.y), .z = std::max(a.z, b.z)};
 }

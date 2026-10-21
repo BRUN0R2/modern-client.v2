@@ -18,9 +18,10 @@ enum class PoolIndex : std::uint32_t {};
 /// that None is 0. Pool indices stay below ConcurrentPool's kIndexLimit, which leaves the largest
 /// value free for a sentinel of a list's own (a closed list).
 enum class PoolLink : std::uint32_t {
-    None = 0,
+    None = 0, ///< No node.
 };
 
+/// The link that names the node at `index`.
 [[nodiscard]] constexpr auto linkTo(PoolIndex index) noexcept -> PoolLink {
     return PoolLink{std::to_underlying(index) + 1};
 }
@@ -36,13 +37,15 @@ enum class PoolLink : std::uint32_t {
 /// A link and the 32-bit tag that versions it, packed in the one 64-bit word an atomic
 /// compare-exchange replaces at once, so a change of either fails the exchange.
 struct TaggedLink {
-    std::uint32_t tag = 0;
-    PoolLink link = PoolLink::None;
+    std::uint32_t tag = 0;          ///< The version of the link.
+    PoolLink link = PoolLink::None; ///< The node linked to.
 
+    /// The one word: the tag in the high 32 bits, the link in the low ones.
     [[nodiscard]] constexpr auto pack() const noexcept -> std::uint64_t {
         return (std::uint64_t{tag} << kTagShift) | std::to_underlying(link);
     }
 
+    /// The TaggedLink that pack() turned into `word`.
     [[nodiscard]] static constexpr auto unpack(std::uint64_t word) noexcept -> TaggedLink {
         return TaggedLink{.tag = truncate<std::uint32_t>(word >> kTagShift),
                           .link = PoolLink{truncate<std::uint32_t>(word)}};

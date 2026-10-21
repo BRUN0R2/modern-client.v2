@@ -13,6 +13,7 @@ export namespace nx::platform {
 /// Real time that only moves forward, unaffected by changes of the system date: frame and tick
 /// pacing, timeouts, load times.
 using MonotonicClock = std::chrono::steady_clock;
+/// A point in MonotonicClock time.
 using Instant = MonotonicClock::time_point;
 
 /// Date and time (UTC): logs, demos, ban expiry. The one wall clock game code reads
@@ -22,6 +23,7 @@ using WallClock = std::chrono::system_clock;
 /// Measures real time from its start.
 class Stopwatch {
 public:
+    /// Starts now.
     inline Stopwatch() noexcept : m_start{MonotonicClock::now()} {}
 
     /// The time elapsed since the start.

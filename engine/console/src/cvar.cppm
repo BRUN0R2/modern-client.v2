@@ -22,8 +22,10 @@ enum class CvarFlag : std::uint8_t {
     Count,
 };
 
+/// A set of CvarFlag values.
 using CvarFlags = Flags<CvarFlag>;
 
+/// Why a cvar could not be registered, or refused a value.
 enum class CvarError : std::uint8_t {
     InvalidName,       ///< Registration: a name the console language cannot invoke.
     NameTaken,         ///< Registration: a cvar, command or alias already has the name.
@@ -34,14 +36,15 @@ enum class CvarError : std::uint8_t {
 
 /// The type of a cvar's value, as the console lists it.
 enum class CvarKind : std::uint8_t {
-    Bool,
-    Integer,
-    Float,
-    String,
-    Enum,
+    Bool,    ///< bool.
+    Integer, ///< std::int32_t.
+    Float,   ///< float.
+    String,  ///< std::string.
+    Enum,    ///< A CountedEnum.
     Count,
 };
 
+/// The cvar types that may have a range.
 template <class Type>
 concept NumericCvarType = std::same_as<Type, std::int32_t> || std::same_as<Type, float>;
 
@@ -54,21 +57,21 @@ concept CvarType =
 /// Definition of a cvar.
 template <CvarType Type>
 struct CvarDesc {
-    ConsoleName name;
-    Type defaultValue{};
-    std::string_view description{};
-    CvarFlags flags{};
+    ConsoleName name;               ///< Unique among cvars, commands and aliases, in any case.
+    Type defaultValue{};            ///< The value after registration; the cvar must accept it.
+    std::string_view description{}; ///< What find searches and shows.
+    CvarFlags flags{};              ///< How the console treats the cvar.
 };
 
 /// Definition of a numeric cvar: also an optional range, inclusive at both ends.
 template <NumericCvarType Type>
 struct CvarDesc<Type> {
-    ConsoleName name;
-    Type defaultValue{};
-    std::string_view description{};
-    CvarFlags flags{};
-    std::optional<Type> minimum{};
-    std::optional<Type> maximum{};
+    ConsoleName name;               ///< Unique among cvars, commands and aliases, in any case.
+    Type defaultValue{};            ///< The value after registration; the cvar must accept it.
+    std::string_view description{}; ///< What find searches and shows.
+    CvarFlags flags{};              ///< How the console treats the cvar.
+    std::optional<Type> minimum{};  ///< None for no lower bound.
+    std::optional<Type> maximum{};  ///< None for no upper bound.
 };
 
 namespace detail {
@@ -126,18 +129,23 @@ public:
     auto operator=(CvarBase&&) -> CvarBase& = delete;
     virtual ~CvarBase() = default;
 
+    /// The name it was registered under.
     [[nodiscard]] inline auto name() const noexcept -> std::string_view { return m_name; }
+    /// What find searches and shows.
     [[nodiscard]] inline auto description() const noexcept -> std::string_view { return m_description; }
+    /// How the console treats it.
     [[nodiscard]] inline auto flags() const noexcept -> CvarFlags { return m_flags; }
 
     /// 0 after registration, plus one for every assignment that changed the value: consumers of
     /// Notify cvars compare revisions to see changes without callbacks.
     [[nodiscard]] inline auto revision() const noexcept -> std::uint64_t { return m_revision; }
 
+    /// The type of its value.
     [[nodiscard]] virtual auto kind() const noexcept -> CvarKind = 0;
 
     /// The value as the console writes it; assign() reads it back.
     [[nodiscard]] virtual auto text() const -> std::string = 0;
+    /// The default value, written as text() writes the value.
     [[nodiscard]] virtual auto defaultText() const -> std::string = 0;
 
     /// What assign() accepts, for messages: "a whole number in [0, 60]".
@@ -151,6 +159,7 @@ protected:
     inline CvarBase(std::string_view cvarName, std::string_view cvarDescription, CvarFlags cvarFlags)
         : m_name{cvarName}, m_description{cvarDescription}, m_flags{cvarFlags} {}
 
+    /// Counts one assignment that changed the value: revision() goes up by one.
     inline void countChange() noexcept { ++m_revision; }
 
     /// `code` with the detail "<name>: expected <expectation>, got "<input>"".
@@ -171,6 +180,7 @@ private:
 template <CvarType Type>
 class TypedCvar final : public CvarBase {
 public:
+    /// The cvar `desc` defines, at its default value; checkDefinition() tells whether `desc` is valid.
     explicit TypedCvar(const CvarDesc<Type>& desc)
         : CvarBase{desc.name.text(), desc.description, desc.flags}, m_value{desc.defaultValue},
           m_default{desc.defaultValue} {
@@ -193,6 +203,7 @@ public:
         return {};
     }
 
+    /// The current value.
     [[nodiscard]] auto value() const noexcept -> const Type& { return m_value; }
 
     /// Assigns `newValue` when the cvar accepts it (range, representable text). Errors:
@@ -321,14 +332,17 @@ private:
 template <CvarType Type>
 class Cvar {
 public:
+    /// A handle to `cvar`.
     explicit Cvar(TypedCvar<Type>& cvar) noexcept : m_cvar{&cvar} {}
 
+    /// The current value.
     [[nodiscard]] auto value() const noexcept -> const Type& { return m_cvar->value(); }
     /// Errors: those of TypedCvar::set.
     [[nodiscard]] auto set(Type newValue) const -> Result<void, CvarError> {
         return m_cvar->set(std::move(newValue));
     }
 
+    /// The cvar's name, flags and revision, as CvarBase gives them.
     [[nodiscard]] auto name() const noexcept -> std::string_view { return m_cvar->name(); }
     [[nodiscard]] auto flags() const noexcept -> CvarFlags { return m_cvar->flags(); }
     [[nodiscard]] auto revision() const noexcept -> std::uint64_t { return m_cvar->revision(); }

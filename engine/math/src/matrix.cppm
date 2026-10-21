@@ -51,6 +51,7 @@ static_assert(sizeof(Mat3x4) == Mat3x4::kRowCount * sizeof(Vec4),
                          Vec3{.x = r0.z, .y = r1.z, .z = r2.z}}};
 }
 
+/// `m` applied to `v`: M v.
 [[nodiscard]] constexpr auto operator*(const Mat3& m, Vec3 v) noexcept -> Vec3 {
     const auto& [r0, r1, r2] = m.rows;
     return Vec3{.x = dot(r0, v), .y = dot(r1, v), .z = dot(r2, v)};
@@ -63,16 +64,19 @@ static_assert(sizeof(Mat3x4) == Mat3x4::kRowCount * sizeof(Vec4),
     return Mat3{.rows = {columnsOfB * r0, columnsOfB * r1, columnsOfB * r2}};
 }
 
+/// The transform that applies `linear`, then adds `translation`.
 [[nodiscard]] constexpr auto affine(const Mat3& linear, Vec3 translation) noexcept -> Mat3x4 {
     const auto& [r0, r1, r2] = linear.rows;
     return Mat3x4{.rows = {extend(r0, translation.x), extend(r1, translation.y), extend(r2, translation.z)}};
 }
 
+/// The first three columns: rotation and scale.
 [[nodiscard]] constexpr auto linearPart(const Mat3x4& m) noexcept -> Mat3 {
     const auto& [r0, r1, r2] = m.rows;
     return Mat3{.rows = {xyz(r0), xyz(r1), xyz(r2)}};
 }
 
+/// The last column: the translation.
 [[nodiscard]] constexpr auto translationPart(const Mat3x4& m) noexcept -> Vec3 {
     const auto& [r0, r1, r2] = m.rows;
     return Vec3{.x = r0.w, .y = r1.w, .z = r2.w};
@@ -118,6 +122,7 @@ static_assert(sizeof(Mat3x4) == Mat3x4::kRowCount * sizeof(Vec4),
                          Vec4{.x = r0.w, .y = r1.w, .z = r2.w, .w = r3.w}}};
 }
 
+/// `m` applied to `v`: M v.
 [[nodiscard]] constexpr auto operator*(const Mat4& m, Vec4 v) noexcept -> Vec4 {
     const auto& [r0, r1, r2, r3] = m.rows;
     return Vec4{.x = dot(r0, v), .y = dot(r1, v), .z = dot(r2, v), .w = dot(r3, v)};
