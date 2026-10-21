@@ -48,6 +48,7 @@ struct Pusher {
     std::optional<GameTime> nextThink{}; ///< When it acts next, by localTime; none while it rests.
     Vec3 destination{};                  ///< Of the move under way.
     EulerAngles destinationAngles{};     ///< Of the turn under way.
+    bool isTurning = false;              ///< The move under way turns it (AngularMove), not slides it.
 };
 
 /// How far a door has gone, as the original's toggle states.
@@ -103,7 +104,7 @@ struct Body {
 };
 
 /// Registers the components of nx.game in `world` (those above, NextThink, Named, Targets,
-/// DelayedUse and Trigger), and gives it a clock at the start of its map (TickTime, at the default
+/// DelayedUse, Trigger and Button), and gives it a clock at the start of its map (TickTime, at the default
 /// rate) and a TargetChain. Errors: those of ecs::World::registerComponent.
 [[nodiscard]] auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError>;
 

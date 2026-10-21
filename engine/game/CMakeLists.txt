@@ -12,6 +12,10 @@ nxAddModuleLibrary(nxGame
         src/thinking.cppm
         src/targets.cppm
         src/triggers.cppm
+        src/toggles.cppm
+        src/doors.cppm
+        src/buttons.cppm
+        src/use.cppm
         src/solids.cppm
         src/brushEntities.cppm
         src/movers.cppm
@@ -23,6 +27,10 @@ nxAddModuleLibrary(nxGame
         src/thinking.cpp
         src/targets.cpp
         src/triggers.cpp
+        src/toggles.cpp
+        src/doors.cpp
+        src/buttons.cpp
+        src/use.cpp
         src/solids.cpp
         src/brushEntities.cpp
         src/movers.cpp

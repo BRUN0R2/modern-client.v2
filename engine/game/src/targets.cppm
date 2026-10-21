@@ -52,8 +52,9 @@ void fireTargets(ecs::World& world, const collision::BrushHulls& hulls, std::str
                  ecs::Entity activator);
 
 /// `entity` is used by `activator`: a door ready for it opens, or closes when it stays open
-/// (CBaseDoor::Use), through the world of `hulls`; anything else does nothing yet. How it is used
-/// (USE_TYPE) comes with what reads it (trigger_relay, multi_manager).
+/// (CBaseDoor::Use); a button goes in, or a toggle comes back out (CBaseButton::ButtonUse), through
+/// the world of `hulls`; anything else does nothing yet. How it is used (USE_TYPE) comes with what
+/// reads it (trigger_relay, multi_manager).
 void use(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, ecs::Entity activator);
 
 } // namespace nx::game
