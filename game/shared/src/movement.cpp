@@ -17,10 +17,13 @@ using nx::collision::BrushHulls;
 using nx::collision::Contents;
 using nx::collision::Hull;
 
-// A standing player's box, about its origin: the size the map compilers grow hull 1 by.
+// A player's boxes, about its origin: the sizes the map compilers grow hulls 1 and 3 by.
 
-/// From its origin to its feet, and to the top of its head.
+/// From its origin to its feet, and to the top of its head, standing and ducked.
 constexpr float kStandingHalfHeight = 36.0F;
+constexpr float kDuckedHalfHeight = 18.0F;
+/// How far the origin moves when a player on the ground ducks or stands: the boxes' feet meet.
+constexpr double kDuckDrop = 18.0;
 
 // The thresholds of the original's movement, each a behavior a player feels.
 
@@ -59,6 +62,14 @@ constexpr float kBunnyHopSpeedFactor = 1.2F;
 constexpr double kBunnyHopSlowdown = 0.8;
 /// A command's view roll is this multiple of the roll its sideways speed asks for.
 constexpr float kRollScale = 4.0F;
+/// Ducking or ducked, a player's keys ask for this share of their speed.
+constexpr double kDuckSpeedShare = 0.333;
+/// A duck on the ground starts with this much time and ends when it is down to this share of it:
+/// it takes 0.4 s, the eyes easing down meanwhile. In the air it is at once.
+constexpr nx::Milliseconds kDuckTime{1000.0F};
+constexpr double kDuckLeftWhenDown = 0.6;
+/// A player stuck by ducking is raised a unit at a time, as far as this.
+constexpr int kMaxCrouchUnstick = 36;
 /// Water: the feet are this far above the bottom of the box.
 constexpr float kFeetProbeHeight = 1.0F;
 /// Without a key held, a swimmer drifts down at this speed.
@@ -147,6 +158,14 @@ auto normalize(Vec3& v) -> double {
            std::to_underlying(contents) > std::to_underlying(Contents::Translucent);
 }
 
+/// The original's ease-in, ease-out curve: 3t² - 2t³ of `value` times `scale`, the cube in double
+/// precision.
+[[nodiscard]] auto easeInOut(float value, float scale) -> float {
+    const float scaled = scale * value;
+    const double squared = double{scaled * scaled};
+    return static_cast<float>(3.0 * squared - 2.0 * squared * double{scaled});
+}
+
 /// The axes of a move along the ground or through the air: `axis` without its height, as the
 /// original normalizes it.
 [[nodiscard]] auto flattened(Vec3 axis) -> Vec3 {
@@ -166,6 +185,7 @@ public:
     [[nodiscard]] auto run() -> MovementState {
         prepare();
         categorizePosition();
+        duck();
         if (!isSwimming()) {
             startGravity();
         }
@@ -210,8 +230,10 @@ public:
     }
 
 private:
-    /// The speed limit, the command's moves capped by it, the frame time, the view and its axes.
+    /// The box, the speed limit, the command's moves capped by it, the frame time, the view and its
+    /// axes, and the timers.
     void prepare() {
+        m_hull = m_player.isDucked ? Hull::Ducked : Hull::Standing;
         MoveIntent& move = m_command.move;
         const float forward = move.forward.value();
         const float side = move.side.value();
@@ -237,8 +259,10 @@ private:
         m_axes = nx::angleVectors(view);
 
         m_frameTime = static_cast<float>(double{m_command.duration.count()} * kSecondsPerMillisecond);
-        if (m_player.jumpPenalty > nx::Milliseconds{}) {
-            m_player.jumpPenalty = std::max(m_player.jumpPenalty - m_command.duration, nx::Milliseconds{});
+        for (nx::Milliseconds* const timer : {&m_player.duckTime, &m_player.jumpPenalty}) {
+            if (*timer > nx::Milliseconds{}) {
+                *timer = std::max(*timer - m_command.duration, nx::Milliseconds{});
+            }
         }
     }
 
@@ -256,8 +280,16 @@ private:
 
     [[nodiscard]] auto isSwimming() const -> bool { return m_player.waterLevel > WaterLevel::Feet; }
 
-    /// The way from `start` to `end` in `hull` of the world, by player movement's rules.
-    [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull = Hull::Standing) const -> PlayerTrace {
+    /// From the origin to the feet, or to the top of the head, of the box the player is in.
+    [[nodiscard]] auto halfHeight() const -> float {
+        return m_hull == Hull::Ducked ? kDuckedHalfHeight : kStandingHalfHeight;
+    }
+
+    /// The way of the player's box from `start` to `end` in the world, by player movement's rules.
+    [[nodiscard]] auto trace(Vec3 start, Vec3 end) const -> PlayerTrace { return trace(start, end, m_hull); }
+
+    /// The same in `hull`.
+    [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull) const -> PlayerTrace {
         const nx::collision::Trace hit =
             m_world.traceMovement(nx::collision::HullTraceQuery{.hull = hull, .start = start, .end = end});
         if (hit.fraction < 1.0F) {
@@ -286,7 +318,7 @@ private:
         m_player.waterLevel = WaterLevel::Dry;
         m_player.waterType = Contents::Empty;
         const Vec3& origin = m_player.origin;
-        Vec3 point{.x = origin.x, .y = origin.y, .z = origin.z - kStandingHalfHeight + kFeetProbeHeight};
+        Vec3 point{.x = origin.x, .y = origin.y, .z = origin.z - halfHeight() + kFeetProbeHeight};
         const Contents feet = contentsAt(point);
         if (!isLiquid(feet)) {
             return;
@@ -296,7 +328,7 @@ private:
         point.z = origin.z;
         if (isLiquid(contentsAt(point))) {
             m_player.waterLevel = WaterLevel::Waist;
-            point.z = origin.z + kStandingViewHeight.value();
+            point.z = origin.z + m_player.viewHeight.value();
             if (isLiquid(contentsAt(point))) {
                 m_player.waterLevel = WaterLevel::Eyes;
             }
@@ -359,6 +391,96 @@ private:
         m_player.velocity.z = static_cast<float>(double{m_player.velocity.z} -
                                                  double{m_settings.gravity.value() * m_frameTime} * kHalf);
         checkVelocity();
+    }
+
+    /// The duck button: a press starts a duck, holding it goes on ducking, letting go stands up. A
+    /// duck on the ground takes its time, the eyes easing down, and then drops the origin into the
+    /// ducked box; in the air it is at once. Ducking or ducked, the keys ask for a third of their
+    /// speed.
+    void duck() {
+        const bool isHeld = m_command.buttons.test(Button::Duck);
+        const bool isPressed = isHeld && !m_player.isDuckHeld;
+        m_player.isDuckHeld = isHeld;
+        if (!isHeld && !m_player.isDucking && !m_player.isDucked) {
+            return;
+        }
+        MoveIntent& move = m_command.move;
+        for (nx::UnitsPerSecond* const speed : {&move.forward, &move.side, &move.up}) {
+            *speed = nx::UnitsPerSecond{static_cast<float>(double{speed->value()} * kDuckSpeedShare)};
+        }
+        if (!isHeld) {
+            standUp();
+            return;
+        }
+        if (isPressed && !m_player.isDucked) {
+            m_player.duckTime = kDuckTime;
+            m_player.isDucking = true;
+        }
+        if (!m_player.isDucking) {
+            return;
+        }
+        const double left = double{m_player.duckTime.count()} / double{kDuckTime.count()};
+        if (left > kDuckLeftWhenDown && m_player.isOnGround) {
+            // Going down: the eyes ease from the standing height towards the ducked one, where the
+            // ducked box will put them once the origin drops.
+            const auto fraction = double{easeInOut(static_cast<float>(1.0 - left),
+                                                   static_cast<float>(1.0 / (1.0 - kDuckLeftWhenDown)))};
+            const float duckedEyes = kDuckedViewHeight.value() - (kStandingHalfHeight - kDuckedHalfHeight);
+            m_player.viewHeight = nx::HammerUnits{static_cast<float>(
+                (double{duckedEyes} * fraction) + (double{kStandingViewHeight.value()} * (1.0 - fraction)))};
+            return;
+        }
+        m_hull = Hull::Ducked;
+        m_player.viewHeight = kDuckedViewHeight;
+        m_player.isDucked = true;
+        m_player.isDucking = false;
+        if (m_player.isOnGround) {
+            m_player.origin.z = static_cast<float>(double{m_player.origin.z} - kDuckDrop);
+            unstickCrouch();
+            categorizePosition();
+        }
+    }
+
+    /// Stands up where the standing box fits: as it is in the air, raised onto the feet on the
+    /// ground; else the player stays ducked.
+    void standUp() {
+        Vec3 standing = m_player.origin;
+        if (m_player.isOnGround) {
+            // Parity: a player still going down, its box standing already, is raised too: the ducktap
+            standing.z = static_cast<float>(double{standing.z} + kDuckDrop);
+        }
+        if (trace(standing, standing).startsSolid) {
+            return;
+        }
+        m_hull = Hull::Standing;
+        if (trace(standing, standing).startsSolid) {
+            m_hull = Hull::Ducked;
+            return;
+        }
+        m_player.isDucked = false;
+        m_player.isDucking = false;
+        m_player.viewHeight = kStandingViewHeight;
+        m_player.duckTime = {};
+        m_player.origin = standing;
+        categorizePosition();
+    }
+
+    /// A player that ducking put into solid is raised out of it, a unit at a time; or left as it is.
+    void unstickCrouch() {
+        const auto isStuck = [this](Vec3 point) {
+            return m_world.movementContentsAt(0, m_hull, point) == Contents::Solid;
+        };
+        if (!isStuck(m_player.origin)) {
+            return;
+        }
+        Vec3 raised = m_player.origin;
+        for (int step = 0; step < kMaxCrouchUnstick; ++step) {
+            raised.z += 1.0F;
+            if (!isStuck(raised)) {
+                m_player.origin = raised;
+                return;
+            }
+        }
     }
 
     /// Jumps when the button is pressed, and remembers whether it is held.
@@ -426,7 +548,7 @@ private:
         }
         Vec3 ahead{.x = m_player.origin.x + velocity.x / speed * kEdgeLookAhead,
                    .y = m_player.origin.y + velocity.y / speed * kEdgeLookAhead,
-                   .z = m_player.origin.z - kStandingHalfHeight};
+                   .z = m_player.origin.z - halfHeight()};
         const PlayerTrace drop =
             trace(ahead, Vec3{.x = ahead.x, .y = ahead.y, .z = ahead.z - kEdgeDropDepth});
         const float friction = m_settings.friction.value();
@@ -681,7 +803,7 @@ private:
         if (!(wall.fraction < 1.0F && std::abs(double{wall.normal.z}) < double{kWallNormalZ})) {
             return;
         }
-        start.z += kStandingHalfHeight - kWaterJumpProbeHeight;
+        start.z += halfHeight() - kWaterJumpProbeHeight;
         m_player.waterJumpVelocity = Vec3{} + wall.normal * -kWaterJumpPush;
         if (trace(start, start + forward * kWaterJumpReach, Hull::Point).fraction == 1.0F) {
             m_player.waterJumpTime = kWaterJumpDuration;
@@ -705,6 +827,7 @@ private:
     UserCommand m_command;
     const MovementSettings& m_settings;
     const BrushHulls& m_world;
+    Hull m_hull = Hull::Standing; ///< The player's box.
     float m_maxSpeed = 0.0F;
     float m_frameTime = 0.0F; ///< Seconds.
     nx::AngleVectors m_axes{};

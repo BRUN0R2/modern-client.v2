@@ -7,8 +7,8 @@
 /// (docs/20-legal-and-licensing.md, section 3): its order of steps, its thresholds and the
 /// precision of each sum, which change where a player ends up.
 ///
-/// Today: walking, the air, jumping and its penalties, stairs, sliding along walls and floors, and
-/// water. Ducking, ladders, noclip, observers, unsticking and what is not the world (entities,
+/// Today: walking, the air, jumping and its penalties, ducking, stairs, sliding along walls and
+/// floors, and water. Ladders, noclip, observers, unsticking and what is not the world (entities,
 /// conveyors, currents) come next (TODO.md).
 export module cs.shared:movement;
 
@@ -22,6 +22,7 @@ export namespace cs {
 /// The buttons of a user command that movement reads.
 enum class Button : std::uint8_t {
     Jump,
+    Duck,
     Count,
 };
 
@@ -66,13 +67,22 @@ enum class WaterLevel : std::uint8_t {
     Eyes,
 };
 
-/// The height of a standing player's eyes above its origin.
+/// The height of a standing player's eyes above its origin, and of a ducked player's.
 inline constexpr nx::HammerUnits kStandingViewHeight{17.0F};
+inline constexpr nx::HammerUnits kDuckedViewHeight{12.0F};
 
 /// A player between commands: what one command reads and leaves for the next.
 struct MovementState {
-    nx::Vec3 origin{}; ///< The center of its standing box.
+    nx::Vec3 origin{}; ///< The center of its box, the standing or the ducked one.
     nx::Vec3 velocity{};
+    /// Its eyes above its origin: they go down while it ducks.
+    nx::HammerUnits viewHeight = kStandingViewHeight;
+    bool isDucked = false;  ///< Its box is the ducked one.
+    bool isDucking = false; ///< Going down, in its standing box still.
+    /// Left of the time a duck takes on the ground, from a second: it ends with 0.6 left.
+    nx::Milliseconds duckTime{};
+    /// The duck button was held at the end of the last command: pressing it again starts a duck.
+    bool isDuckHeld = false;
     /// Its own speed limit, that of the weapon it holds; zero leaves the server's (sv_maxspeed).
     nx::UnitsPerSecond maxSpeed{};
     bool isOnGround = false;
