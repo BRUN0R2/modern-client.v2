@@ -43,31 +43,50 @@ constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
     return Plane{.normal = {.z = 1.0F}, .distance = z};
 }
 
-/// A world of `planes` whose standing hull is `standing` and whose point hull is `point`, each from
-/// its node 0, and empty where none is given. Each tree gets an unused last node, which keeps its
-/// root from being the tree's last: movement takes such a hull for an empty one.
+/// A world of `planes` whose standing, point and ducked hulls are the trees `standing`, `point` and
+/// `ducked`, each from its own node 0, and empty where none is given. Each list of nodes gets an
+/// unused last node, which keeps a root from being the list's last: movement takes such a hull for
+/// an empty one.
 [[nodiscard]] auto world(std::vector<Plane> planes, std::vector<HullNode> standing,
-                         std::vector<HullNode> point = {}) -> BrushHulls {
-    const auto rootOf = [](const std::vector<HullNode>& nodes) {
-        return nodes.empty() ? HullChild{Contents::Empty} : HullChild{HullNodeIndex{0}};
+                         std::vector<HullNode> point = {}, std::vector<HullNode> ducked = {}) -> BrushHulls {
+    const auto append = [](std::vector<HullNode>& nodes, std::vector<HullNode> tree) -> HullChild {
+        if (tree.empty()) {
+            return Contents::Empty;
+        }
+        const auto first = static_cast<std::uint32_t>(nodes.size());
+        for (HullNode& node : tree) {
+            for (HullChild& child : node.children) {
+                if (auto* index = std::get_if<HullNodeIndex>(&child)) {
+                    index->value += first;
+                }
+            }
+        }
+        nodes.insert(nodes.end(), tree.begin(), tree.end());
+        return HullNodeIndex{first};
     };
-    const HullChild standingRoot = rootOf(standing);
-    const HullChild pointRoot = rootOf(point);
+    std::vector<HullNode> clipNodes;
+    std::vector<HullNode> pointNodes;
+    const HullChild standingRoot = append(clipNodes, std::move(standing));
+    const HullChild duckedRoot = append(clipNodes, std::move(ducked));
+    const HullChild pointRoot = append(pointNodes, std::move(point));
     const HullNode spare{.plane = 0, .children = {Contents::Empty, Contents::Empty}};
-    standing.push_back(spare);
-    point.push_back(spare);
-    auto hulls = BrushHulls::create(nx::collision::BrushHullsDesc{
-        .planes = std::move(planes),
-        .pointNodes = std::move(point),
-        .clipNodes = std::move(standing),
-        .models = {{pointRoot, standingRoot, Contents::Empty, Contents::Empty}}});
+    clipNodes.push_back(spare);
+    pointNodes.push_back(spare);
+    auto hulls = BrushHulls::create(
+        nx::collision::BrushHullsDesc{.planes = std::move(planes),
+                                      .pointNodes = std::move(pointNodes),
+                                      .clipNodes = std::move(clipNodes),
+                                      .models = {{pointRoot, standingRoot, Contents::Empty, duckedRoot}}});
     EXPECT_TRUE(hulls.has_value());
     return std::move(hulls).value();
 }
 
-/// Solid below z = 0.
+/// Solid below z = 0 for a standing player's origin, and below z = -18 for a ducked one's: a floor
+/// that both boxes' feet stand on.
 [[nodiscard]] auto floorWorld() -> BrushHulls {
-    return world({facingUp(0.0F)}, {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}});
+    return world({facingUp(0.0F), facingUp(-18.0F)},
+                 {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}, {},
+                 {HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}});
 }
 
 /// Nothing at all.
@@ -324,6 +343,80 @@ TEST(MovementTest, AWallAtTheSurfaceStartsAJumpOutOfTheWater) {
     const MovementState climbing = cs::simulateMovement(starting, command(), {}, pool);
     EXPECT_EQ(climbing.waterJumpTime, nx::Milliseconds{1990.0F});
     EXPECT_EQ(climbing.velocity.x, 50.0F);
+}
+
+/// A ducked player on the floor of floorWorld.
+[[nodiscard]] auto duckedOnTheFloor() -> MovementState {
+    MovementState ducked = standingOnTheFloor();
+    ducked.origin.z = kOnTheFloor - 18.0F;
+    ducked.viewHeight = cs::kDuckedViewHeight;
+    ducked.isDucked = true;
+    ducked.isDuckHeld = true;
+    return ducked;
+}
+
+TEST(MovementTest, ADuckOnTheGroundTakesFourTenthsOfASecond) {
+    const BrushHulls hulls = floorWorld();
+    const UserCommand duck = command({}, {Button::Duck});
+
+    const MovementState started = repeat(standingOnTheFloor(), duck, 2, hulls);
+    EXPECT_TRUE(started.isDucking);
+    EXPECT_FALSE(started.isDucked);
+    EXPECT_LT(started.viewHeight, cs::kStandingViewHeight) << "the eyes ease down";
+    EXPECT_EQ(started.origin.z, kOnTheFloor);
+
+    EXPECT_FALSE(repeat(standingOnTheFloor(), duck, 40, hulls).isDucked);
+    const MovementState down = repeat(standingOnTheFloor(), duck, 41, hulls);
+    EXPECT_TRUE(down.isDucked);
+    EXPECT_FALSE(down.isDucking);
+    EXPECT_TRUE(down.isOnGround);
+    EXPECT_EQ(down.viewHeight, cs::kDuckedViewHeight);
+    EXPECT_NEAR(down.origin.z, kOnTheFloor - 18.0F, kTolerance) << "the feet stay on the floor";
+}
+
+TEST(MovementTest, ADuckInTheAirIsAtOnce) {
+    const MovementState falling{.origin = {.z = 100.0F}, .maxSpeed = kKnifeSpeed};
+    const MovementState after = cs::simulateMovement(falling, command({}, {Button::Duck}), {}, emptyWorld());
+
+    EXPECT_TRUE(after.isDucked);
+    EXPECT_EQ(after.viewHeight, cs::kDuckedViewHeight);
+    EXPECT_NEAR(after.origin.z, 100.0F - 0.04F, kTolerance) << "the feet rise into the ducked box";
+}
+
+TEST(MovementTest, ADuckedPlayerMovesAtAThirdOfTheSpeed) {
+    const MovementState walking =
+        repeat(duckedOnTheFloor(), command(forward(400.0F), {Button::Duck}), 200, floorWorld());
+
+    EXPECT_TRUE(walking.isDucked);
+    EXPECT_NEAR(walking.velocity.x, 250.0F * 0.333F, kTolerance);
+}
+
+TEST(MovementTest, StandingUpNeedsRoom) {
+    const MovementState standing = cs::simulateMovement(duckedOnTheFloor(), command(), {}, floorWorld());
+    EXPECT_FALSE(standing.isDucked);
+    EXPECT_EQ(standing.viewHeight, cs::kStandingViewHeight);
+    EXPECT_NEAR(standing.origin.z, kOnTheFloor, kTolerance);
+    EXPECT_TRUE(standing.isOnGround);
+
+    // No room to stand anywhere, the floor of the ducked box as in floorWorld.
+    const BrushHulls tunnel =
+        world({facingUp(-18.0F)}, {HullNode{.plane = 0, .children = {Contents::Solid, Contents::Solid}}}, {},
+              {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}});
+    const MovementState stuck = cs::simulateMovement(duckedOnTheFloor(), command(), {}, tunnel);
+    EXPECT_TRUE(stuck.isDucked);
+    EXPECT_NEAR(stuck.origin.z, kOnTheFloor - 18.0F, kTolerance);
+}
+
+TEST(MovementTest, LettingGoOfADuckBeforeItIsDownHops) {
+    const BrushHulls hulls = floorWorld();
+    const MovementState pressed =
+        cs::simulateMovement(standingOnTheFloor(), command({}, {Button::Duck}), {}, hulls);
+    const MovementState released = cs::simulateMovement(pressed, command(), {}, hulls);
+
+    // The ducktap: the standing box is raised as if it had been ducked, and falls from there.
+    EXPECT_FALSE(released.isDucking);
+    EXPECT_FALSE(released.isOnGround);
+    EXPECT_NEAR(released.origin.z, kOnTheFloor + 18.0F - 0.04F, kTolerance);
 }
 
 } // namespace

@@ -27,8 +27,8 @@ constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <
               [--screenshot <file.bmp> [--time <seconds>]] [--validation]
 
 Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife:
-the mouse looks, W A S D move, Space jumps, Shift walks slowly. F flies instead, and back: W A S D
-move, Space and Ctrl rise and sink, Shift is faster. Escape ends it.
+the mouse looks, W A S D move, Space jumps, Ctrl ducks, Shift walks slowly. F flies instead, and
+back: W A S D move, Space and Ctrl rise and sink, Shift is faster. Escape ends it.
 
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
@@ -480,7 +480,7 @@ struct HeldKeys {
     bool left = false;
     bool right = false;
     bool space = false;   ///< Jumps; rises in flight.
-    bool control = false; ///< Sinks in flight.
+    bool control = false; ///< Ducks; sinks in flight.
     bool shift = false;   ///< Walks slowly; flies faster.
 
     void set(nx::platform::Key key, bool isDown) noexcept {
@@ -534,14 +534,19 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
 /// A player walking through the map, moved one user command at a time by the game's movement.
 struct Walker {
     cs::MovementState player{};
-    nx::Vec3 previousOrigin{}; ///< Before the last command.
-    nx::Seconds pending{};     ///< Of the time given to the walk, what no command has taken yet.
+    nx::Vec3 previousEye{}; ///< Before the last command.
+    nx::Seconds pending{};  ///< Of the time given to the walk, what no command has taken yet.
 };
 
-/// A player whose eye is at `eye`.
+[[nodiscard]] auto eyeOf(const cs::MovementState& player) -> nx::Vec3 {
+    return player.origin + nx::Vec3{.z = player.viewHeight.value()};
+}
+
+/// A standing player whose eye is at `eye`.
 [[nodiscard]] auto walkerAt(nx::Vec3 eye) -> Walker {
-    const nx::Vec3 origin = eye - nx::Vec3{.z = cs::kStandingViewHeight.value()};
-    return Walker{.player = {.origin = origin, .maxSpeed = kKnifeSpeed}, .previousOrigin = origin};
+    return Walker{
+        .player = {.origin = eye - nx::Vec3{.z = cs::kStandingViewHeight.value()}, .maxSpeed = kKnifeSpeed},
+        .previousEye = eye};
 }
 
 /// Gives `elapsed` to commands of what `keys` and `view` ask for, one each kCommandInterval, in
@@ -549,20 +554,26 @@ struct Walker {
 [[nodiscard]] auto walk(Walker& walker, const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed,
                         const nx::collision::BrushHulls& world) -> nx::Vec3 {
     const float speed = kKeySpeed * (keys.shift ? kWalkFactor : 1.0F);
+    nx::Flags<cs::Button> buttons;
+    if (keys.space) {
+        buttons.set(cs::Button::Jump);
+    }
+    if (keys.control) {
+        buttons.set(cs::Button::Duck);
+    }
     const cs::UserCommand command{
         .duration = kCommandInterval,
         .viewAngles = view,
         .move = {.forward = nx::UnitsPerSecond{speed * axisOf(keys.forward, keys.back)},
                  .side = nx::UnitsPerSecond{speed * axisOf(keys.right, keys.left)}},
-        .buttons = keys.space ? nx::Flags<cs::Button>{cs::Button::Jump} : nx::Flags<cs::Button>{}};
+        .buttons = buttons};
     walker.pending = std::min(walker.pending + elapsed, kMaxCatchUp);
     while (walker.pending >= kCommandInterval) {
-        walker.previousOrigin = walker.player.origin;
+        walker.previousEye = eyeOf(walker.player);
         walker.player = cs::simulateMovement(walker.player, command, cs::MovementSettings{}, world);
         walker.pending -= kCommandInterval;
     }
-    return nx::lerp(walker.previousOrigin, walker.player.origin, walker.pending / kCommandInterval) +
-           nx::Vec3{.z = cs::kStandingViewHeight.value()};
+    return nx::lerp(walker.previousEye, eyeOf(walker.player), walker.pending / kCommandInterval);
 }
 
 [[nodiscard]] auto extentOf(nx::platform::PixelSize size) noexcept -> nx::rhi::Extent2d {

@@ -271,8 +271,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Trace parity tests against traces recorded from the original
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
 - [ ] Traces against animated hitboxes
-- [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, stairs, sliding and water, in the world; `nxview` walks through the maps with it
-- [ ] pmove: ducking, ladders, noclip, observers and unsticking
+- [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding and water, in the world; `nxview` walks through the maps with it
+- [ ] pmove: ladders, noclip, observers and unsticking
 - [ ] pmove among entities: brush entities and players as obstacles, base velocity (conveyors, `trigger_push`, water currents), the entities touched
 - [ ] Parity: ground acceleration and friction (including `edgefriction`)
 - [ ] Parity: air acceleration and strafing

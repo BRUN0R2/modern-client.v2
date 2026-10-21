@@ -74,7 +74,8 @@ code** on the server (authoritative) and on the client (prediction).
 
 - Pure function: the result depends only on the arguments. No access to global state,
   the clock or server-only state. The state carries what the original keeps between commands
-  (the jump penalty, the jump out of water and its push, the held jump button).
+  (the duck under way and the eyes' height, the jump penalty, the jump out of water and its push,
+  the held jump and duck buttons).
 - `MovementSettings` contains the movement cvars (`sv_gravity`, `sv_friction`, `edgefriction`,
   `sv_stopspeed`, `sv_accelerate`, `sv_airaccelerate`, `sv_maxspeed`, `sv_maxvelocity`,
   `sv_stepsize`, `sv_rollangle`, `sv_rollspeed`), replicated to the client, with the defaults
@@ -87,9 +88,10 @@ code** on the server (authoritative) and on the client (prediction).
   precision of each sum (the ones the original makes in double precision are made in double here),
   which over many commands decide where a player ends up.
 - Today (`cs.shared:movement`): walking, the air, jumping with its penalty and the bunny hop
-  limit, stairs, sliding along walls and floors, and water (its levels, swimming, jumping out), in
-  the world. `nxview` walks through the maps with it. Ducking, ladders, noclip, observers,
-  unsticking and entities (obstacles, conveyors, pushes, currents) come next
+  limit, ducking (0.4 s on the ground with the eyes easing down, at once in the air, the ducktap
+  of a duck let go before it is down), stairs, sliding along walls and floors, and water (its
+  levels, swimming, jumping out), in the world. `nxview` walks through the maps with it. Ladders,
+  noclip, observers, unsticking and entities (obstacles, conveyors, pushes, currents) come next
   ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
@@ -129,7 +131,8 @@ default to off.
 
 The dimensions **MUST** match the hulls compiled into the BSP, because each hull's clipnode
 trees come from the map compiler. They are not tunable: `cs.shared` holds them as constants
-(today the standing player's box, 32 by 32 by 72 about its origin, its eyes 17 above it).
+(the standing player's box, 32 by 32 by 72 about its origin, its eyes 17 above it; the ducked
+one, 32 by 32 by 36, its eyes 12 above it).
 
 ## 4. Collision
 
