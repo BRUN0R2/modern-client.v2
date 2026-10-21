@@ -135,11 +135,6 @@ template <class Code>
     return kExitUnusable;
 }
 
-[[nodiscard]] auto unusable(std::string_view problem) -> int {
-    std::println(stderr, "nxview: {}", problem);
-    return kExitUnusable;
-}
-
 /// The map, its WADs, its sky, the classes of its entities and the shader, read once: the views
 /// point into these bytes.
 struct Content {
