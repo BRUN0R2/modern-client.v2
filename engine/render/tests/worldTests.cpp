@@ -41,14 +41,14 @@ constexpr nx::Vec3 kMiddle{.x = 32.0F, .y = 32.0F, .z = 32.0F};
     return code.value_or(std::vector<std::byte>{});
 }
 
-/// Renames the texture `name` of the map in `file` to "sky": its 16-byte name field.
-void renameToSky(std::vector<std::byte>& file, std::string_view name) {
+/// Renames the texture `name` of the map in `file` to `to`: its 16-byte name field.
+void renameTexture(std::vector<std::byte>& file, std::string_view name, std::string_view to) {
     const auto bytes = std::as_bytes(std::span{name});
     const auto found = std::ranges::search(file, bytes);
     ASSERT_FALSE(found.empty()) << name;
     const auto field = std::span{file}.subspan(static_cast<std::size_t>(found.begin() - file.begin()), 16);
     std::ranges::fill(field, std::byte{0});
-    std::ranges::copy(std::as_bytes(std::span{std::string_view{"sky"}}), field.begin());
+    std::ranges::copy(std::as_bytes(std::span{to}), field.begin());
 }
 
 /// The styles as a map starts: the world's style 0 at 'm', the normal brightness.
@@ -81,11 +81,12 @@ public:
         m_readback = readback.value_or(nx::rhi::BufferHandle{});
     }
 
-    /// Draws `world` as `camera` sees it with `styles`, in a frame of its own, on a target cleared to an
-    /// alpha of 0, which the world never writes; then the pixels, RGBA rows from the top.
+    /// Draws `world` as `camera` sees it with `styles`, `time` after the map started, in a frame of its
+    /// own, on a target cleared to an alpha of 0, which the world never writes; then the pixels, RGBA
+    /// rows from the top.
     [[nodiscard]] auto draw(nx::render::BspWorld& world, const nx::render::Camera& camera,
-                            const nx::render::LightStyleValues& styles = normalStyles())
-        -> std::vector<std::byte> {
+                            const nx::render::LightStyleValues& styles = normalStyles(),
+                            nx::Seconds time = nx::Seconds{0.0F}) -> std::vector<std::byte> {
         auto commands = m_device->beginFrame();
         EXPECT_TRUE(commands.has_value());
         if (!commands) {
@@ -98,7 +99,7 @@ public:
         list.beginRendering({.colors = colors,
                              .depth = nx::rhi::DepthAttachment{.texture = m_depth, .clear = 0.0F},
                              .area = kExtent});
-        world.draw(list, camera, 1.0F, styles);
+        world.draw(list, {.camera = camera, .aspect = 1.0F, .time = time, .lightStyles = styles});
         list.endRendering();
         list.transition(m_color, TextureState::RenderTarget, TextureState::CopySource);
         list.transition(m_readback, BufferState::Undefined, BufferState::CopyDestination);
@@ -246,6 +247,38 @@ TEST(BspWorldTest, DrawsOnlyWhatTheCameraSees) {
         << "nothing drawn";
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
+TEST(BspWorldTest, AnAnimatedTextureShowsItsFramesTenASecond) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    // Frame 0 the crate, frame 1 a texture no WAD has: the checkerboard, magenta and black.
+    std::vector<std::byte> file = readSeed();
+    renameTexture(file, "CRATE01", "+0crate");
+    renameTexture(file, "{BLUE", "+1crate");
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    EXPECT_EQ(world->stats().missingTextures, std::vector<std::string>{"+1crate"});
+
+    const auto greenPixelsAt = [&](float seconds) {
+        const std::vector<std::byte> pixels =
+            target.draw(*world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}}, normalStyles(),
+                        nx::Seconds{seconds});
+        return std::ranges::count_if(
+            std::views::iota(std::size_t{0}, pixels.size() / 4),
+            [&pixels](std::size_t pixel) { return pixels[(pixel * 4) + 1] != std::byte{0}; });
+    };
+    EXPECT_GT(greenPixelsAt(0.05F), 0) << "frame 0: the crate";
+    EXPECT_EQ(greenPixelsAt(0.15F), 0) << "frame 1: the checkerboard has no green";
+    EXPECT_GT(greenPixelsAt(0.25F), 0) << "frame 0 again";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
 /// The color of quadrant `quadrant` (top-left, top-right, bottom-left, bottom-right) of sky side
 /// `side` (in the order of kSkySuffixes).
 [[nodiscard]] constexpr auto skyColor(std::size_t side, std::size_t quadrant) -> Pixel {
@@ -260,8 +293,8 @@ TEST(BspWorldTest, EachSideOfTheSkyIsSeenUprightTowardItsAxis) {
     }
     // Every wall of the box a face of the sky.
     std::vector<std::byte> file = readSeed();
-    renameToSky(file, "CRATE01");
-    renameToSky(file, "{BLUE");
+    renameTexture(file, "CRATE01", "sky");
+    renameTexture(file, "{BLUE", "sky");
     const auto map = nx::assets::BspView::parse(file);
     ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
     const std::vector<std::byte> shader = worldShader();

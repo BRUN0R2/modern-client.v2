@@ -428,7 +428,9 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                          .area = kScreenshotExtent});
-    world->draw(list, camera, aspect, content.lightStyles.valuesAt(nx::Seconds{0.0F}));
+    world->draw(
+        list,
+        {.camera = camera, .aspect = aspect, .lightStyles = content.lightStyles.valuesAt(nx::Seconds{0.0F})});
     list.endRendering();
     list.transition(*target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
     list.transition(*readback, nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
@@ -620,7 +622,11 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
                              .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                              .area = frame.size});
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
-        world->draw(list, camera, aspect, content.lightStyles.valuesAt(nx::Seconds{mapClock.elapsed()}));
+        const nx::Seconds time{mapClock.elapsed()};
+        world->draw(list, {.camera = camera,
+                           .aspect = aspect,
+                           .time = time,
+                           .lightStyles = content.lightStyles.valuesAt(time)});
         list.endRendering();
         list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
         if (auto submitted = (*device)->submitFrame(**swapchain); !submitted) {

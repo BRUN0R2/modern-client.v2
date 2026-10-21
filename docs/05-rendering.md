@@ -181,8 +181,11 @@ if (!lightmapAtlas) {
 **Today** (`nx.render:world`, `nxview --map`): every face of the world and of the brush
 entities (placed at their `origin`) in one vertex buffer; the textures of the map and of the WADs
 its `wad` key names, by file name at the root of the VFS as the original looks them up, with their
-four mips, a checkerboard for a name no WAD has; masked textures; triggers and the compiler's tool
-textures (`AAATRIGGER`, `CLIP`...) not drawn. The lightmaps are packed into one atlas of four
+four mips, a checkerboard for a name no WAD has; masked textures; animated textures (`+0name` to
+`+9name`, and `+aname` to `+jname`, of any case, in a sequence of their own), whose faces all show the
+same frame, ten a second (`R_TextureAnimation`), where the original would refuse a sequence with a
+missing number the frames it has play in order; triggers and the compiler's tool textures
+(`AAATRIGGER`, `CLIP`...) not drawn. The lightmaps are packed into one atlas of four
 layers, each face's lightmaps (one per light style, up to its first unused one) at the same place
 of each layer; a face's extent in luxels of 16 units is computed in double precision, as the
 compilers compute it.

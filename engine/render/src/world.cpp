@@ -62,6 +62,8 @@ struct FrameUniform {
 constexpr std::array<std::size_t, kSkySuffixes.size()> kSkySideOfAxis{0, 2, 1, 3, 4, 5};
 /// The sky of a world without one: the original's stand-in, gray.
 constexpr std::byte kNoSkyLevel{128};
+/// The frames an animated texture shows in a second.
+constexpr float kAnimationFramesPerSecond = 10.0F;
 /// How far past a brush entity's face the eye must be for it to be drawn: the original's
 /// BACKFACE_EPSILON.
 constexpr float kBackfaceEpsilon = 0.01F;
@@ -84,6 +86,52 @@ enum class SurfaceKind : std::uint8_t {
         return SurfaceKind::Invisible;
     }
     return name.starts_with('{') ? SurfaceKind::Masked : SurfaceKind::Opaque;
+}
+
+/// A texture of an animation: '+', its frame ('0' to '9' in the main sequence, 'a' to 'j', of any
+/// case, in the alternate one), then the name its frames share.
+struct AnimationFrame {
+    bool isAlternate = false;
+    std::uint32_t number = 0;
+    std::string_view sequence{};
+};
+
+[[nodiscard]] auto animationFrameOf(std::string_view name) noexcept -> std::optional<AnimationFrame> {
+    if (name.size() < 3 || name[0] != '+') {
+        return std::nullopt;
+    }
+    const auto frame = static_cast<char>(std::tolower(static_cast<unsigned char>(name[1])));
+    if (frame >= '0' && frame <= '9') {
+        return AnimationFrame{.number = static_cast<std::uint32_t>(frame - '0'), .sequence = name.substr(2)};
+    }
+    if (frame >= 'a' && frame <= 'j') {
+        return AnimationFrame{.isAlternate = true,
+                              .number = static_cast<std::uint32_t>(frame - 'a'),
+                              .sequence = name.substr(2)};
+    }
+    return std::nullopt;
+}
+
+/// The textures `texture` shows in turn: the frames of its sequence, by number, when it is one (the
+/// first texture of a number when the map repeats it); itself otherwise. The original refuses a
+/// sequence that misses a number; here the frames it has play in order.
+[[nodiscard]] auto framesOf(std::span<const std::optional<assets::MipTexture>> textures, std::size_t texture)
+    -> std::vector<std::size_t> {
+    const std::optional<AnimationFrame> self =
+        textures[texture] ? animationFrameOf(textures[texture]->name) : std::nullopt;
+    if (!self) {
+        return {texture};
+    }
+    std::map<std::uint32_t, std::size_t> frames;
+    for (std::size_t index = 0; index < textures.size(); ++index) {
+        const std::optional<AnimationFrame> frame =
+            textures[index] ? animationFrameOf(textures[index]->name) : std::nullopt;
+        if (frame && frame->isAlternate == self->isAlternate &&
+            equalsIgnoringCase(frame->sequence, self->sequence)) {
+            frames.try_emplace(frame->number, index);
+        }
+    }
+    return frames | std::views::values | std::ranges::to<std::vector>();
 }
 
 /// The RGBA texels of the mip levels of `texture`, level after level.
@@ -505,7 +553,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     // (the checkerboard's last), or the sky's, when the camera sees it.
     std::vector<WorldVertex> vertices;
     std::vector<std::optional<std::uint32_t>> bucketOfTexture(textureUses.size() + 1);
-    std::vector<rhi::TextureHandle> bucketTextures;
+    std::vector<std::vector<rhi::TextureHandle>> bucketFrames; // the textures each bucket shows in turn
     std::size_t mostIndices = 0;
     world.m_faces.resize(map.faces().size());
     for (std::size_t index = 0; index < faces.size(); ++index) {
@@ -534,10 +582,14 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         if (!entry.isSky) {
             std::optional<std::uint32_t>& slot = bucketOfTexture[std::min(entry.texture, textureUses.size())];
             if (!slot) {
-                slot = narrow<std::uint32_t>(bucketTextures.size());
-                bucketTextures.push_back(entry.texture < textureUses.size()
-                                             ? textureUses[entry.texture].texture
-                                             : *checkerTexture);
+                slot = narrow<std::uint32_t>(bucketFrames.size());
+                bucketFrames.push_back(entry.texture < textureUses.size()
+                                           ? framesOf(map.textures(), entry.texture) |
+                                                 std::views::transform([&textureUses](std::size_t frame) {
+                                                     return textureUses[frame].texture;
+                                                 }) |
+                                                 std::ranges::to<std::vector>()
+                                           : std::vector{*checkerTexture});
             }
             bucket = *slot;
         }
@@ -557,7 +609,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
                                            .origin = origins[model]});
     }
     world.m_faceGathered.resize(world.m_faces.size());
-    world.m_bucketIndices.resize(bucketTextures.size());
+    world.m_bucketIndices.resize(bucketFrames.size());
 
     // The pipelines and their bind groups: per frame, the camera, the lightmaps, the light table and
     // the sky; per batch, its texture.
@@ -674,16 +726,19 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         world.m_frameSlots.push_back(FrameSlot{.buffer = *buffer, .group = *group, .indices = *indices});
     }
 
-    // A bind group for each bucket's texture.
-    for (const rhi::TextureHandle texture : bucketTextures) {
-        const std::array bindings{rhi::Binding{.binding = 0, .resource = texture},
-                                  rhi::Binding{.binding = 1, .resource = world.m_textureSampler}};
-        auto group = device.createBindGroup(
-            {.label = "world.texture", .layout = world.m_textureLayout, .bindings = bindings});
-        if (!group) {
-            return gpuFailure(std::move(group.error()));
+    // A bind group for each texture each bucket shows.
+    for (const std::vector<rhi::TextureHandle>& frames : bucketFrames) {
+        std::vector<rhi::BindGroupHandle>& groups = world.m_bucketFrames.emplace_back();
+        for (const rhi::TextureHandle texture : frames) {
+            const std::array bindings{rhi::Binding{.binding = 0, .resource = texture},
+                                      rhi::Binding{.binding = 1, .resource = world.m_textureSampler}};
+            auto group = device.createBindGroup(
+                {.label = "world.texture", .layout = world.m_textureLayout, .bindings = bindings});
+            if (!group) {
+                return gpuFailure(std::move(group.error()));
+            }
+            groups.push_back(*group);
         }
-        world.m_textureGroups.push_back(*group);
     }
     world.m_stats.triangles = mostIndices / 3;
     world.m_stats.lightmapAtlas = atlasExtent;
@@ -732,7 +787,7 @@ BspWorld::BspWorld(BspWorld&& other) noexcept
       m_frameLayout{std::exchange(other.m_frameLayout, {})},
       m_textureLayout{std::exchange(other.m_textureLayout, {})},
       m_pipeline{std::exchange(other.m_pipeline, {})}, m_skyPipeline{std::exchange(other.m_skyPipeline, {})},
-      m_textureGroups{std::move(other.m_textureGroups)}, m_frameSlots{std::move(other.m_frameSlots)},
+      m_bucketFrames{std::move(other.m_bucketFrames)}, m_frameSlots{std::move(other.m_frameSlots)},
       m_faces{std::move(other.m_faces)}, m_models{std::move(other.m_models)}, m_lighting{other.m_lighting},
       m_stats{std::move(other.m_stats)}, m_drawCount{other.m_drawCount},
       m_faceGathered{std::move(other.m_faceGathered)}, m_visibleFrom{other.m_visibleFrom},
@@ -740,7 +795,7 @@ BspWorld::BspWorld(BspWorld&& other) noexcept
       m_skyIndices{std::move(other.m_skyIndices)}, m_batches{std::move(other.m_batches)},
       m_lastFrame{other.m_lastFrame} {
     other.m_textures.clear();
-    other.m_textureGroups.clear();
+    other.m_bucketFrames.clear();
     other.m_frameSlots.clear();
 }
 
@@ -754,7 +809,7 @@ void BspWorld::release() noexcept {
         m_device->destroy(slot.buffer);
         m_device->destroy(slot.indices);
     }
-    for (const rhi::BindGroupHandle group : m_textureGroups) {
+    for (const rhi::BindGroupHandle group : m_bucketFrames | std::views::join) {
         m_device->destroy(group);
     }
     for (const rhi::TextureHandle texture : m_textures) {
@@ -769,7 +824,7 @@ void BspWorld::release() noexcept {
     m_device->destroy(m_skySampler);
     m_device->destroy(m_vertices);
     m_frameSlots.clear();
-    m_textureGroups.clear();
+    m_bucketFrames.clear();
     m_textures.clear();
 }
 
@@ -841,19 +896,20 @@ void BspWorld::gather(const Camera& camera, float aspect) {
     }
 }
 
-void BspWorld::draw(rhi::CommandList& commands, const Camera& camera, float aspect,
-                    const LightStyleValues& lightStyles) {
+void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     const FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
-    FrameUniform frame{.viewProjection = viewProjectionMatrix(camera, aspect),
+    FrameUniform frame{.viewProjection = viewProjectionMatrix(view.camera, view.aspect),
                        .lighting = m_lighting,
-                       .eye = extend(camera.position, 1.0F)};
-    std::ranges::transform(lightStyles, frame.styles.begin(),
+                       .eye = extend(view.camera.position, 1.0F)};
+    std::ranges::transform(view.lightStyles, frame.styles.begin(),
                            [](std::uint16_t value) { return static_cast<float>(value); });
     std::ranges::copy(std::as_bytes(std::span{&frame, 1}), m_device->mappedBytes(slot.buffer).begin());
 
     // The indices of what the camera sees, a batch for each texture that has some, then the sky's.
-    gather(camera, aspect);
+    // An animated texture shows its frames ten a second, as the original's R_TextureAnimation.
+    gather(view.camera, view.aspect);
+    const auto step = static_cast<std::size_t>(std::max(view.time.count(), 0.0F) * kAnimationFramesPerSecond);
     const std::span<std::byte> indexBytes = m_device->mappedBytes(slot.indices);
     std::uint32_t written = 0;
     const auto write = [&indexBytes, &written](std::span<const std::uint32_t> indices) {
@@ -866,8 +922,9 @@ void BspWorld::draw(rhi::CommandList& commands, const Camera& camera, float aspe
     m_batches.clear();
     for (std::size_t bucket = 0; bucket < m_bucketIndices.size(); ++bucket) {
         if (!m_bucketIndices[bucket].empty()) {
+            const std::vector<rhi::BindGroupHandle>& frames = m_bucketFrames[bucket];
             m_batches.push_back(
-                Batch{.indices = write(m_bucketIndices[bucket]), .textures = m_textureGroups[bucket]});
+                Batch{.indices = write(m_bucketIndices[bucket]), .textures = frames[step % frames.size()]});
         }
     }
     const IndexRange sky = write(m_skyIndices);
