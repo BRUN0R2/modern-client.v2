@@ -98,8 +98,8 @@ code** on the server (authoritative) and on the client (prediction).
   of a duck let go before it is down), stairs, sliding along walls and floors, water (its levels,
   swimming, jumping out) and ladders (climbed by the movement buttons along their face, left by
   a jump or by backing off them on the floor), among the world and brush entities at rest.
-  `nxview` walks through the maps with it, the brush entities made as the game makes them when
-  the map starts. Noclip, observers, unsticking, boxes (players, hostages, pushables), moving and
+  `nxview` walks through the maps with it, among the brush entities `nx.game` makes as the game
+  does when the map starts, listed for movement by `cs::brushEntitiesOf`. Noclip, observers, unsticking, boxes (players, hostages, pushables), moving and
   turned entities, conveyors, pushes and currents come next ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved

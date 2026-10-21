@@ -1,0 +1,107 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+/// The brush entities of a map, as the game makes them when the map starts (docs/03-ecs.md,
+/// section 11): an entity of the ECS world for each one whose class data/cstrike/entities.toml
+/// describes, with its brush model, where it is, and how solid it is.
+export module nx.game:brushEntities;
+
+import std;
+import nx.core;
+import nx.math;
+import nx.meta;
+import nx.data;
+import nx.ecs;
+import nx.assets;
+
+export namespace nx::game {
+
+/// What can be wrong with the game's entities.
+enum class GameError : std::uint8_t {
+    ConfigInvalid, ///< The entity classes break their schema or their rules (cause: the DataError,
+                   ///< when there is one); the detail names the file or the class.
+    UnknownModel,  ///< An entity is a brush model the map does not have; the detail names it.
+};
+
+/// How solid an entity is, as the original's pev->solid.
+enum class Solid : std::uint8_t {
+    Not, ///< Nothing collides with it.
+    Bsp, ///< Its brush model stops what moves into it.
+    Count,
+};
+
+/// A class of the brush entities of maps ("func_wall"): how the game makes them when a map starts.
+struct BrushClass {
+    std::string classname{};
+    Solid solid = Solid::Bsp;
+    /// Spawnflags any of which makes one not solid ("passable", "starts off").
+    std::optional<std::int32_t> notSolidFlags{};
+    /// A door: a "skin" other than 0 makes it not solid, holding those contents (func_water).
+    std::optional<bool> skinMakesNotSolid{};
+    /// The contents the game gives each, whatever its "skin" (func_ladder: -16, a ladder).
+    std::optional<std::int32_t> contents{};
+};
+
+/// data/cstrike/entities.toml: the classes of the entities of Counter-Strike's maps.
+struct EntityClasses {
+    std::vector<BrushClass> brushClasses{};
+};
+
+/// Reads `text`, the file `sourceName`, in which each class appears once. Errors: ConfigInvalid.
+[[nodiscard]] auto readEntityClasses(std::string_view text, std::string_view sourceName)
+    -> Result<EntityClasses, GameError>;
+
+// The components of a brush entity.
+
+/// Its shape: brush model `index` of the map ("model" "*3").
+struct BrushModel {
+    std::uint32_t index = 0;
+};
+
+/// Where an entity is.
+struct Transform {
+    Vec3 origin{};
+    EulerAngles angles{};
+};
+
+/// How solid a brush entity is, and the contents a point inside it is in, as the original's
+/// pev->solid and pev->skin: 0 for none, -16 a ladder, else a value of nx::assets::Contents.
+struct BrushSolidity {
+    Solid solid = Solid::Not;
+    std::int32_t contents = 0;
+};
+
+/// Registers the components of brush entities in `world`. Errors: those of
+/// ecs::World::registerComponent.
+[[nodiscard]] auto registerBrushComponents(ecs::World& world) -> Result<void, ecs::ComponentError>;
+
+/// Makes in `world`, in their order, the brush entities of `entities`, a map's whose brush models
+/// number `modelCount`, that are of a class of `classes`; the others are left to what makes them.
+/// Returns how many it made. Errors: UnknownModel.
+[[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
+                                      std::size_t modelCount, const EntityClasses& classes)
+    -> Result<std::size_t, GameError>;
+
+} // namespace nx::game
+
+template <>
+struct nx::meta::Description<nx::game::BrushClass> {
+    static constexpr std::string_view kName = "nx::game::BrushClass";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::game::BrushClass::classname>("classname"),
+        nx::meta::field<&nx::game::BrushClass::solid>("solid"),
+        nx::meta::field<&nx::game::BrushClass::notSolidFlags>("notSolidFlags",
+                                                              nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&nx::game::BrushClass::skinMakesNotSolid>("skinMakesNotSolid"),
+        nx::meta::field<&nx::game::BrushClass::contents>("contents",
+                                                         nx::data::Range{.minimum = -16.0, .maximum = -1.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<nx::game::EntityClasses> {
+    static constexpr std::string_view kName = "nx::game::EntityClasses";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::game::EntityClasses::brushClasses>("brushClasses"),
+    };
+};

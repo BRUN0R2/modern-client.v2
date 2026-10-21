@@ -9,7 +9,9 @@
 import std;
 import nx.core;
 import nx.math;
+import nx.ecs;
 import nx.collision;
+import nx.game;
 import cs.shared;
 
 namespace {
@@ -510,6 +512,32 @@ TEST(MovementTest, JumpLeavesALadder) {
 
     EXPECT_EQ(after.velocity.x, -270.0F); // away from its face
     EXPECT_NEAR(after.velocity.z, -8.0F, kTolerance);
+}
+
+TEST(MovementTest, TheGamesBrushEntitiesAreMetAsTheEngineListsThem) {
+    nx::ecs::World world;
+    ASSERT_TRUE(nx::game::registerBrushComponents(world).has_value());
+    const auto spawn = [&](std::uint32_t model, nx::game::Solid solid, std::int32_t contents) {
+        std::ignore = world.spawn(nx::game::BrushModel{.index = model},
+                                  nx::game::Transform{.origin = {.x = static_cast<float>(model)}},
+                                  nx::game::BrushSolidity{.solid = solid, .contents = contents});
+    };
+    spawn(1, nx::game::Solid::Bsp, -3);  // solid, whatever its skin
+    spawn(2, nx::game::Solid::Not, 0);   // nothing to meet
+    spawn(3, nx::game::Solid::Not, -16); // a ladder
+    spawn(4, nx::game::Solid::Not, -4);  // slime
+    spawn(5, nx::game::Solid::Not, -20); // contents movement does not know
+
+    const std::vector<cs::BrushEntity> met = cs::brushEntitiesOf(world);
+    ASSERT_EQ(met.size(), 3U);
+    EXPECT_EQ(met[0].model, 1U);
+    EXPECT_EQ(met[0].role, cs::BrushRole::Solid);
+    EXPECT_EQ(met[0].origin, (Vec3{.x = 1.0F}));
+    EXPECT_EQ(met[1].model, 3U);
+    EXPECT_EQ(met[1].role, cs::BrushRole::Ladder);
+    EXPECT_EQ(met[2].model, 4U);
+    EXPECT_EQ(met[2].role, cs::BrushRole::Volume);
+    EXPECT_EQ(met[2].contents, Contents::Slime);
 }
 
 } // namespace

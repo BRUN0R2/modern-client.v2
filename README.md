@@ -36,8 +36,9 @@ and `.cfg`), `nx.platform` (clocks, the native file system, the window and its i
 `nx.assets` (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and
 fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and
 `nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. M3
-has begun: `nx.collision` (traces through the hulls of a map) and `cs.shared` (player movement:
-walking, the air, jumps, ducking, stairs and water), with which `nxview` walks through the maps.
+has begun: `nx.collision` (traces through the hulls of a map), `nx.game` (the map's brush
+entities, as the game makes them) and `cs.shared` (player movement: walking, the air, jumps,
+ducking, stairs, water and ladders), with which `nxview` walks through the maps.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
 

@@ -223,24 +223,6 @@ private:
     std::uint32_t m_rowHeight = 0;
 };
 
-/// The three numbers of an entity's vector value ("-512 1024 36"); nullopt for other text.
-[[nodiscard]] auto vectorOf(std::string_view text) -> std::optional<Vec3> {
-    std::array<float, 3> values{};
-    const char* next = text.data();
-    const char* const end = text.data() + text.size();
-    for (float& value : values) {
-        while (next != end && *next == ' ') {
-            ++next;
-        }
-        const auto [stop, error] = std::from_chars(next, end, value);
-        if (error != std::errc{}) {
-            return std::nullopt;
-        }
-        next = stop;
-    }
-    return Vec3{.x = values[0], .y = values[1], .z = values[2]};
-}
-
 /// The cell of the grid the original cuts turbulent faces along, its warp computed at their corners.
 constexpr float kTurbulentCell = 64.0F;
 /// What a cut leaves on either side, at least, for the original to make it.
@@ -291,14 +273,6 @@ void cutAlongTheGrid(const std::vector<Vec3>& polygon, std::vector<std::vector<V
     pieces.push_back(polygon);
 }
 
-/// The integer at the start of an entity's value, after spaces, as the original's atoi reads it.
-[[nodiscard]] auto integerOf(std::string_view text) -> std::optional<int> {
-    const std::size_t first = std::min(text.find_first_not_of(' '), text.size());
-    int value = 0;
-    const auto [stop, error] = std::from_chars(text.data() + first, text.data() + text.size(), value);
-    return error == std::errc{} ? std::optional{value} : std::nullopt;
-}
-
 /// What the entity of a brush model says of it.
 struct ModelEntity {
     Vec3 origin{};
@@ -315,23 +289,17 @@ struct ModelEntity {
     constexpr float kFull = 255.0F;
     std::vector<ModelEntity> models(map.models().size());
     for (const assets::BspEntity& entity : map.entities()) {
-        const auto model = entity.find("model");
-        if (!model || !model->starts_with('*')) {
+        const std::optional<std::uint32_t> index = entity.findBrushModel();
+        if (!index || *index == 0 || *index >= models.size()) {
             continue;
         }
-        std::size_t index = 0;
-        const auto [stop, error] = std::from_chars(model->data() + 1, model->data() + model->size(), index);
-        if (error != std::errc{} || index == 0 || index >= models.size()) {
-            continue;
-        }
-        ModelEntity& drawn = models[index];
-        drawn.origin = vectorOf(entity.find("origin").value_or("")).value_or(Vec3{});
-        const int mode = integerOf(entity.find("rendermode").value_or("0")).value_or(0);
+        ModelEntity& drawn = models[*index];
+        drawn.origin = entity.findVector("origin").value_or(Vec3{});
+        const int mode = entity.findInteger("rendermode").value_or(0);
         drawn.mode = mode >= 0 && mode < kModes ? static_cast<RenderMode>(mode) : RenderMode::Glow;
-        drawn.amount = static_cast<float>(std::clamp(
-                           integerOf(entity.find("renderamt").value_or("0")).value_or(0), 0, 255)) /
-                       kFull;
-        const Vec3 color = vectorOf(entity.find("rendercolor").value_or("0 0 0")).value_or(Vec3{});
+        drawn.amount =
+            static_cast<float>(std::clamp(entity.findInteger("renderamt").value_or(0), 0, 255)) / kFull;
+        const Vec3 color = entity.findVector("rendercolor").value_or(Vec3{});
         drawn.color = Vec3{.x = std::clamp(color.x, 0.0F, kFull) / kFull,
                            .y = std::clamp(color.y, 0.0F, kFull) / kFull,
                            .z = std::clamp(color.z, 0.0F, kFull) / kFull};

@@ -440,6 +440,27 @@ TEST(BspTest, AKeyThatRepeatsHasItsLastValue) {
     EXPECT_EQ(view->entities()[1].find("origin"), std::optional<std::string_view>{"0 0 36"});
 }
 
+TEST(BspTest, ValuesReadAsTheOriginalReadsThem) {
+    const nx::assets::BspEntity door{.keyValues = {{"classname", "func_door"},
+                                                   {"model", "*12"},
+                                                   {"origin", " -512 1024.5  36"},
+                                                   {"spawnflags", "  256 "},
+                                                   {"skin", "-3x"},
+                                                   {"angles", "0 90"}}};
+
+    EXPECT_EQ(door.findBrushModel(), std::optional<std::uint32_t>{12});
+    EXPECT_EQ(door.findVector("origin"), (nx::Vec3{.x = -512.0F, .y = 1024.5F, .z = 36.0F}));
+    EXPECT_EQ(door.findInteger("spawnflags"), std::optional{256});
+    EXPECT_EQ(door.findInteger("skin"), std::optional{-3}) << "atoi stops at what is not a digit";
+    EXPECT_FALSE(door.findVector("angles").has_value()) << "two numbers";
+    EXPECT_FALSE(door.findInteger("classname").has_value());
+    EXPECT_FALSE(door.findInteger("wait").has_value());
+
+    const nx::assets::BspEntity soldier{.keyValues = {{"model", "models/player.mdl"}}};
+    EXPECT_FALSE(soldier.findBrushModel().has_value());
+    EXPECT_FALSE(nx::assets::BspEntity{}.findBrushModel().has_value());
+}
+
 TEST(BspTest, RejectsABrokenTree) {
     const auto withChange = [](auto change) {
         QuadMap map;
