@@ -5,9 +5,9 @@
 /// but only what DirectX 11 can also express. No GPU API's header crosses it; the backends
 /// (nx.rhi.vulkan) implement it.
 ///
-/// Today: the device, its frames and swapchain, generational texture handles, transitions and
-/// render passes that clear. Buffers, textures of the renderer's own, bind groups and pipelines
-/// come with the first shaders.
+/// Today: the device, its frames and swapchain, generational handles of buffers, textures,
+/// samplers, shaders, bind groups and render pipelines, transitions, copies, render passes and
+/// draws. Queries, compute pipelines and dynamic uniform offsets come next (TODO.md).
 export module nx.rhi;
 
 export import :types;

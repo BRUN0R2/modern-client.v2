@@ -86,7 +86,7 @@ public:
 
     /// Takes the resource of `handle` out of the pool, for its owner to destroy; nullopt when the
     /// handle names none.
-    inline auto remove(Handle<Tag> handle) -> std::optional<Value> {
+    [[nodiscard]] inline auto remove(Handle<Tag> handle) -> std::optional<Value> {
         if (find(handle) == nullptr) {
             return std::nullopt;
         }
