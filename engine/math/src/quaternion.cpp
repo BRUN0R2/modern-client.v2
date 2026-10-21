@@ -33,15 +33,32 @@ auto Quat::fromAxisAngle(Vec3 axis, Radians angle) noexcept -> Quat {
                 .w = static_cast<float>(std::cos(halfAngle))};
 }
 
-auto Quat::fromEulerAngles(EulerAngles angles) noexcept -> Quat {
-    // Rz(yaw) * Ry(pitch) * Rx(roll), as rotationMatrix(EulerAngles), from the half angles.
-    const auto [sinPitch, cosPitch] = detail::sineCosine(angles.pitch * kHalfAngle);
-    const auto [sinYaw, cosYaw] = detail::sineCosine(angles.yaw * kHalfAngle);
-    const auto [sinRoll, cosRoll] = detail::sineCosine(angles.roll * kHalfAngle);
+namespace {
+
+/// Rz Ry Rx, from the sines and cosines of the half angles about X (roll), Y (pitch) and Z (yaw).
+[[nodiscard]] auto fromHalfAngles(detail::SineCosine roll, detail::SineCosine pitch,
+                                  detail::SineCosine yaw) noexcept -> Quat {
+    const auto [sinRoll, cosRoll] = roll;
+    const auto [sinPitch, cosPitch] = pitch;
+    const auto [sinYaw, cosYaw] = yaw;
     return Quat{.x = sinRoll * cosPitch * cosYaw - cosRoll * sinPitch * sinYaw,
                 .y = cosRoll * sinPitch * cosYaw + sinRoll * cosPitch * sinYaw,
                 .z = cosRoll * cosPitch * sinYaw - sinRoll * sinPitch * cosYaw,
                 .w = cosRoll * cosPitch * cosYaw + sinRoll * sinPitch * sinYaw};
+}
+
+} // namespace
+
+auto Quat::fromEulerAngles(EulerAngles angles) noexcept -> Quat {
+    // Rz(yaw) * Ry(pitch) * Rx(roll), as rotationMatrix(EulerAngles), from the half angles.
+    return fromHalfAngles(detail::sineCosine(angles.roll * kHalfAngle),
+                          detail::sineCosine(angles.pitch * kHalfAngle),
+                          detail::sineCosine(angles.yaw * kHalfAngle));
+}
+
+auto Quat::fromRotations(Radians x, Radians y, Radians z) noexcept -> Quat {
+    return fromHalfAngles(detail::sineCosine(x * kHalfAngle), detail::sineCosine(y * kHalfAngle),
+                          detail::sineCosine(z * kHalfAngle));
 }
 
 auto rotationMatrix(Quat q) noexcept -> Mat3 {

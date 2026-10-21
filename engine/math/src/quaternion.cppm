@@ -27,6 +27,10 @@ struct Quat {
     /// The rotation of rotationMatrix(angles).
     [[nodiscard]] static auto fromEulerAngles(EulerAngles angles) noexcept -> Quat;
 
+    /// The rotation of `x` about X, then `y` about Y, then `z` about Z (Rz Ry Rx): the angles of a
+    /// studio model's bone, as the original's AngleQuaternion turns them, from their halves in float.
+    [[nodiscard]] static auto fromRotations(Radians x, Radians y, Radians z) noexcept -> Quat;
+
     [[nodiscard]] constexpr auto operator==(const Quat&) const noexcept -> bool = default;
 };
 

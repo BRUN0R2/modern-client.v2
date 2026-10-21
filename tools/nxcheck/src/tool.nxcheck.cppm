@@ -20,7 +20,8 @@ enum class Format : std::uint8_t {
                    ///< collision hulls of its brush models.
     Wad,           ///< A WAD3: WadView, and readTexture on every mip texture.
     Mdl,           ///< A model: MdlView; the `*T.mdl` its textures are in, when they are not in it;
-                   ///< and the animation of every sequence, from its sequence group file too.
+                   ///< and the animation of every sequence, from its sequence group file too, its
+                   ///< bones posed at each frame (cs::poseBones).
     SequenceGroup, ///< The `*0N.mdl` of a model's animations: checked through the models that use it.
     Spr,           ///< A sprite: SpriteView.
     Tga,           ///< An image (the skies, the VGUI menus): readTga.

@@ -69,6 +69,7 @@ struct SineCosine {
 
 /// Sine and cosine of `angle`, evaluated in double and rounded once to float (see nx.math).
 [[nodiscard]] auto sineCosine(Degrees angle) noexcept -> SineCosine;
+[[nodiscard]] auto sineCosine(Radians angle) noexcept -> SineCosine;
 
 } // namespace detail
 

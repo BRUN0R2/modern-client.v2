@@ -69,9 +69,10 @@ real game. `nxcheck` (`tools/nxcheck`) mounts the user's own Counter-Strike 1.6 
 found through Steam or given with `--install <folder>`, and reads each file through the VFS with
 the reader of its format, on the workers of the Job System: every lump of a map and its collision
 hulls, every mip texture of a WAD, a model with its `*T.mdl` and the animation of each sequence from
-its sequence group file, every sprite, every TGA image and every sound. It prints what each format
-read and every failure with its causes, and exits with 1 when a file failed, 2 when the
-installation cannot be used.
+its sequence group file, its bones posed at every frame and halfway to the next at both ends of its
+first blending (`cs::poseBones`, each bone's transform rigid), every sprite, every TGA image and every
+sound. It prints what each format read and every failure with its causes, and exits with 1 when a
+file failed, 2 when the installation cannot be used.
 
 It runs on a legitimate local copy, never in CI: no Valve file enters the repository or its
 runners ([20](20-legal-and-licensing.md)). Run it after changing a reader:
@@ -80,9 +81,9 @@ runners ([20](20-legal-and-licensing.md)). Run it after changing a reader:
 .\build\dev-windows-msvc\bin\nxcheck.exe
 ```
 
-The Steam installation (2026-10-20: 5048 files, about 640 MB, read in under half a second by a
-release build once the system has cached them) reads whole except `valve/models/doctor.mdl`, an
-MDL v9 from Half-Life's development that the original refuses too.
+The Steam installation (2026-10-21: 5048 files, about 640 MB, read and every model posed in about
+three seconds by a release build once the system has cached them) reads whole except
+`valve/models/doctor.mdl`, an MDL v9 from Half-Life's development that the original refuses too.
 Its first run found 12 files that their editors and compilers wrote differently from what the
 readers expected, and the readers now follow them
 ([06 §3.1](06-assets-and-resources.md#31-goldsrc-direct-reading)).
