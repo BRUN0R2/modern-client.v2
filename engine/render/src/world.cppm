@@ -33,6 +33,43 @@ enum class RenderMode : std::uint8_t {
     Glow,         ///< As TransTexture, its faces unsorted (meant for sprites; any unknown mode too).
     TransAlpha,   ///< "Solid": lit and opaque, its masked textures cut where their alpha is 0.25 or less.
     TransAdd,     ///< Its textures times `renderamt`, unlit, added to what is behind.
+    Count,
+};
+
+// What the world keeps of the map to draw it, which world.cpp builds; not exported.
+
+/// The bucket of the sky's faces, which no texture's bucket is.
+inline constexpr std::uint32_t kSkyBucket = std::numeric_limits<std::uint32_t>::max();
+
+/// A face of the map: its triangle fan in the vertex buffer, and where its triangles go.
+struct FaceDraw {
+    std::uint32_t firstIndex = 0; ///< Its triangles, in BspWorld::m_faceIndices.
+    std::uint32_t indexCount = 0; ///< 0: never drawn (triggers and tool textures).
+    std::uint32_t bucket = 0;     ///< Its texture's in BspWorld::m_bucketFrames, or kSkyBucket.
+    Plane plane{};
+    bool isBackSide = false; ///< Drawn from behind its plane.
+    Vec3 middle{};           ///< Of its bounds, in its model's space.
+};
+
+/// A brush entity's model: its faces, its bounds in its own space, where the map's entity of it
+/// puts it, and how it is drawn.
+struct ModelDraw {
+    std::uint32_t firstFace = 0;
+    std::uint32_t faceCount = 0;
+    Aabb bounds{};
+    Vec3 origin{};
+    Vec4 color{}; ///< Its `rendercolor`, and its `renderamt` in w, from 0 to 1.
+    RenderMode mode = RenderMode::Normal;
+    bool isDrawn = true; ///< False for a mode other than Normal at a `renderamt` of 0.
+};
+
+/// What one frame in flight writes its uniform, its indices and its brush models' uniforms to.
+struct FrameSlot {
+    rhi::OwnedBuffer buffer{};
+    rhi::OwnedBindGroup group{};
+    rhi::OwnedBuffer indices{};
+    rhi::OwnedBuffer entities{};
+    std::vector<rhi::OwnedBindGroup> entityGroups{}; ///< Each model's uniform, by its index.
 };
 
 } // namespace nx::render
@@ -108,12 +145,12 @@ public:
     [[nodiscard]] static auto create(rhi::Device& device, rhi::CommandList& commands,
                                      const BspWorldDesc& desc) -> Result<BspWorld, WorldError>;
 
-    BspWorld(BspWorld&& other) noexcept;
+    BspWorld(BspWorld&& other) noexcept = default;
     auto operator=(BspWorld&& other) -> BspWorld& = delete;
     BspWorld(const BspWorld&) = delete;
     auto operator=(const BspWorld&) -> BspWorld& = delete;
-    /// Destroys its resources, which the device keeps until the GPU is done with them.
-    ~BspWorld();
+    /// Its resources go with it, which the device keeps until the GPU is done with them.
+    ~BspWorld() = default;
 
     /// Draws `view`, inside a render pass with a color target of desc.colorFormat and a Depth32Float
     /// depth target cleared to 0 (reversed depth).
@@ -135,37 +172,6 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// What one frame in flight writes its uniform, its indices and its brush models' uniforms to.
-    struct FrameSlot {
-        rhi::BufferHandle buffer{};
-        rhi::BindGroupHandle group{};
-        rhi::BufferHandle indices{};
-        rhi::BufferHandle entities{};
-        std::vector<rhi::BindGroupHandle> entityGroups{}; ///< Each model's uniform, by its index.
-    };
-
-    /// A face of the map: its triangle fan in the vertex buffer, and where its triangles go.
-    struct FaceDraw {
-        std::uint32_t firstIndex = 0; ///< Its triangles, in m_faceIndices.
-        std::uint32_t indexCount = 0; ///< 0: never drawn (triggers and tool textures).
-        std::uint32_t bucket = 0;     ///< Its texture's in m_bucketFrames, or kSkyBucket.
-        Plane plane{};
-        bool isBackSide = false; ///< Drawn from behind its plane.
-        Vec3 middle{};           ///< Of its bounds, in its model's space.
-    };
-
-    /// A brush entity's model: its faces, its bounds in its own space, where the map's entity of it
-    /// puts it, and how it is drawn.
-    struct ModelDraw {
-        std::uint32_t firstFace = 0;
-        std::uint32_t faceCount = 0;
-        Aabb bounds{};
-        Vec3 origin{};
-        Vec4 color{}; ///< Its `rendercolor`, and its `renderamt` in w, from 0 to 1.
-        RenderMode mode = RenderMode::Normal;
-        bool isDrawn = true; ///< False for a mode other than Normal at a `renderamt` of 0.
-    };
-
     /// A brush entity drawn this frame, after the world: its faces that face the camera, a range of
     /// m_entityFaces.
     struct EntityDraw {
@@ -175,11 +181,8 @@ private:
         std::uint32_t faceCount = 0;
     };
 
-    static constexpr std::uint32_t kSkyBucket = std::numeric_limits<std::uint32_t>::max();
-
-    explicit BspWorld(rhi::Device& device, const assets::BspView& map) noexcept
+    inline explicit BspWorld(rhi::Device& device, const assets::BspView& map) noexcept
         : m_device{&device}, m_map{&map} {}
-    void release() noexcept;
     /// Where each brush model is drawn this frame, in m_placements: where `placements` puts it, else
     /// where its entity puts it, unturned.
     void place(std::span<const ModelPlacement> placements);
@@ -198,28 +201,36 @@ private:
     /// `camera`, in the order the original draws them.
     void addEntity(std::uint32_t model, const Camera& camera, const ModelPlacement& placement);
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
-    /// The shader, the bind group layouts, the samplers and a pipeline for each way faces are drawn.
-    [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
+    /// The shader, the bind group layouts and the samplers, then a pipeline for each way faces are
+    /// drawn.
+    [[nodiscard]] auto createLayouts(std::span<const std::byte> shaderCode) -> Result<void, rhi::RhiError>;
+    [[nodiscard]] auto createPipelines(rhi::Format colorFormat) -> Result<void, rhi::RhiError>;
+    /// The frames in flight's buffers and bind groups: the frame's uniform, which binds `lightmaps`,
+    /// `lightTable` and `sky`; its indices; its brush models' uniforms.
+    [[nodiscard]] auto createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle lightTable,
+                                        rhi::TextureHandle sky) -> Result<void, rhi::RhiError>;
+    /// A bind group for each texture each bucket of `bucketTextures` shows.
+    [[nodiscard]] auto createBucketGroups(std::span<const std::vector<rhi::TextureHandle>> bucketTextures)
         -> Result<void, rhi::RhiError>;
 
     rhi::Device* m_device;
     const assets::BspView* m_map;
-    rhi::BufferHandle m_vertices;
-    std::vector<rhi::TextureHandle> m_textures; ///< Every texture, the atlas and the sky's included.
-    rhi::SamplerHandle m_textureSampler;
-    rhi::SamplerHandle m_skySampler;
-    rhi::ShaderHandle m_shader;
-    rhi::BindGroupLayoutHandle m_frameLayout;
-    rhi::BindGroupLayoutHandle m_textureLayout;
-    rhi::RenderPipelineHandle m_pipeline;
-    rhi::RenderPipelineHandle m_skyPipeline;
-    rhi::BindGroupLayoutHandle m_entityLayout;
-    rhi::RenderPipelineHandle m_solidPipeline;    ///< TransAlpha.
-    rhi::RenderPipelineHandle m_texturePipeline;  ///< TransTexture and Glow.
-    rhi::RenderPipelineHandle m_colorPipeline;    ///< TransColor.
-    rhi::RenderPipelineHandle m_additivePipeline; ///< TransAdd.
+    rhi::OwnedBuffer m_vertices;
+    std::vector<rhi::OwnedTexture> m_textures; ///< Every texture, the atlas and the sky's included.
+    rhi::OwnedSampler m_textureSampler;
+    rhi::OwnedSampler m_skySampler;
+    rhi::OwnedShader m_shader;
+    rhi::OwnedBindGroupLayout m_frameLayout;
+    rhi::OwnedBindGroupLayout m_textureLayout;
+    rhi::OwnedBindGroupLayout m_entityLayout;
+    rhi::OwnedRenderPipeline m_pipeline;
+    rhi::OwnedRenderPipeline m_skyPipeline;
+    rhi::OwnedRenderPipeline m_solidPipeline;    ///< TransAlpha.
+    rhi::OwnedRenderPipeline m_texturePipeline;  ///< TransTexture and Glow.
+    rhi::OwnedRenderPipeline m_colorPipeline;    ///< TransColor.
+    rhi::OwnedRenderPipeline m_additivePipeline; ///< TransAdd.
     /// For each bucket of faces, a bind group for each texture it shows in turn: one, unless animated.
-    std::vector<std::vector<rhi::BindGroupHandle>> m_bucketFrames;
+    std::vector<std::vector<rhi::OwnedBindGroup>> m_bucketFrames;
     std::vector<FrameSlot> m_frameSlots;
     std::vector<FaceDraw> m_faces;            ///< Every face of the map, by its index.
     std::vector<std::uint32_t> m_faceIndices; ///< The triangles of every face, in the vertex buffer.

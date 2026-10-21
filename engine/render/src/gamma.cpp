@@ -28,24 +28,39 @@ struct Bounded {
             .lightGamma = std::clamp(double{settings.lightGamma}, kLowestGamma, kHighestGamma)};
 }
 
+// The original's light curve bends at a knee: the light below it maps to the levels below
+// kKneeLevel, the light above it to the rest. `brightness` lowers the knee, lifting the shadows.
+constexpr double kKneeLevel = 0.125;
+/// The knee without `brightness`, how it falls with brightness squared up to 1, and where it stays
+/// above 1.
+constexpr double kDarkKnee = 0.125;
+constexpr double kKneeFall = 0.075;
+constexpr double kBrightKnee = 0.05;
+
 /// Below this light, `brightness` stretches the curve: the shadows it lifts.
 [[nodiscard]] auto shadowKnee(double brightness) noexcept -> double {
     if (brightness <= 0.0) {
-        return 0.125;
+        return kDarkKnee;
     }
-    return brightness <= 1.0 ? 0.125 - (brightness * brightness * 0.075) : 0.05;
+    return brightness <= 1.0 ? kDarkKnee - (brightness * brightness * kKneeFall) : kBrightKnee;
 }
+
+/// The highest value of a palette channel.
+constexpr double kChannelTop = static_cast<double>(kChannelValues - 1);
+/// The original keeps 10 bits of light and draws the upper 8.
+constexpr unsigned kDroppedLightBits = 2;
 
 } // namespace
 
-auto textureGammaTable(const GammaSettings& settings) -> std::array<std::uint8_t, 256> {
+auto textureGammaTable(const GammaSettings& settings) -> ChannelTable {
     const Bounded values = bounded(settings);
     const double exponent = values.textureGamma / values.gamma;
-    std::array<std::uint8_t, 256> table{};
+    ChannelTable table{};
     for (std::size_t index = 0; index < table.size(); ++index) {
         // Truncated, as the original converts.
-        const auto value = static_cast<int>(std::pow(static_cast<double>(index) / 255.0, exponent) * 255.0);
-        table[index] = narrow<std::uint8_t>(std::clamp(value, 0, 255));
+        const double value =
+            std::trunc(std::pow(static_cast<double>(index) / kChannelTop, exponent) * kChannelTop);
+        table[index] = static_cast<std::uint8_t>(std::clamp(value, 0.0, kChannelTop));
     }
     return table;
 }
@@ -60,9 +75,11 @@ auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLigh
         if (values.brightness > 1.0) {
             light *= values.brightness;
         }
-        light = light <= knee ? (light / knee) * 0.125 : (((light - knee) / (1.0 - knee)) * 0.875) + 0.125;
-        const auto level = static_cast<int>(std::pow(light, 1.0 / values.gamma) * kTop);
-        table[index] = narrow<std::uint8_t>(std::clamp(level, 0, static_cast<int>(kTop)) >> 2);
+        light = light <= knee ? (light / knee) * kKneeLevel
+                              : (((light - knee) / (1.0 - knee)) * (1.0 - kKneeLevel)) + kKneeLevel;
+        // Truncated, as the original converts.
+        const double level = std::clamp(std::trunc(std::pow(light, 1.0 / values.gamma) * kTop), 0.0, kTop);
+        table[index] = narrow<std::uint8_t>(static_cast<unsigned>(level) >> kDroppedLightBits);
     }
     return table;
 }
@@ -70,7 +87,8 @@ auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLigh
 auto lightScale(const GammaSettings& settings) -> std::uint32_t {
     const Bounded values = bounded(settings);
     constexpr double kFixedPointOne = 256.0;
-    return static_cast<std::uint32_t>((std::pow(2.0, 1.0 / values.lightGamma) * kFixedPointOne) + 0.5);
+    constexpr double kHalf = 0.5; // rounded as the original rounds: half up, then cut
+    return static_cast<std::uint32_t>((std::pow(2.0, 1.0 / values.lightGamma) * kFixedPointOne) + kHalf);
 }
 
 } // namespace nx::render
