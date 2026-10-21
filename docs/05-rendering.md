@@ -226,9 +226,10 @@ frame in flight, in a batch per texture and then the sky's: the leaves the camer
 (its potentially visible set, decompressed again only when the camera enters another leaf; every
 leaf from inside a wall), those whose bounds are in front of the four side planes of the view, and
 their faces that face the camera: from the side of its plane the eye is on, the plane itself in
-front (`R_RecursiveWorldNode`). A brush entity is drawn where the game puts it that frame
-(`WorldFrame::placements`; one the game does not place, where the map's entity of it says), its
-model's faces moved there by the vertex shader, when its bounds are in view, its faces from at
+front (`R_RecursiveWorldNode`). A brush entity is drawn where the game puts and turns it that
+frame (`WorldFrame::placements`; one the game does not place, where the map's entity of it says,
+unturned), its model's faces moved and turned there by the vertex shader, when its bounds are in
+view (turned, a cube as wide as its farthest corner about its origin), its faces from at
 least `BACKFACE_EPSILON` past their planes (`R_DrawBrushModel`), as its `rendermode` says
 (`R_SetRenderMode`): after the sky, first the opaque ones, normal (lit, masked textures cut where
 they have no alpha, the original's alpha test at 0) and solid (`kRenderTransAlpha`, lit, cut at an

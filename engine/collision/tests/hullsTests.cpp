@@ -83,6 +83,25 @@ TEST(HullTraceTest, AnOffsetPlacesTheModel) {
     EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, {.z = -1.0F}), Contents::Solid) << "in the model's space";
 }
 
+TEST(HullTraceTest, ATurnedModelIsWhereItsAnglesTurnIt) {
+    // Solid in front of x = 0 in its own space; turned a quarter turn to the left, in front of y = 0.
+    const BrushHulls hulls =
+        standingHull({atX(0.0F)}, {HullNode{.plane = 0, .children = {Contents::Solid, Contents::Empty}}});
+    const nx::EulerAngles quarterLeft{.yaw = nx::Degrees{90.0F}};
+    for (const bool isMovement : {false, true}) {
+        HullTraceQuery query = standingQuery({.y = -10.0F}, {.y = 10.0F});
+        query.angles = quarterLeft;
+        const Trace trace = isMovement ? hulls.traceMovement(query) : hulls.trace(query);
+        EXPECT_NEAR(trace.end.y, -0.03125F, kTolerance) << isMovement;
+        EXPECT_NEAR(trace.plane.normal.x, 0.0F, kTolerance) << isMovement;
+        EXPECT_NEAR(trace.plane.normal.y, -1.0F, kTolerance) << "facing the way it came, in the world";
+    }
+    EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, {.y = 5.0F}, Vec3{}, quarterLeft), Contents::Solid);
+    EXPECT_EQ(hulls.contentsAt(0, Hull::Standing, {.x = 5.0F, .y = -5.0F}, Vec3{}, quarterLeft),
+              Contents::Empty);
+    EXPECT_EQ(hulls.movementContentsAt(0, Hull::Standing, {.y = 5.0F}, Vec3{}, quarterLeft), Contents::Solid);
+}
+
 TEST(HullTraceTest, ATraceInSolidStartsSolid) {
     const BrushHulls hulls = floorHull();
     // Never out of solid: the server keeps the whole way, movement stops at the start.

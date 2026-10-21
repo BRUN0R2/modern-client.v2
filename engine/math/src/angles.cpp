@@ -46,6 +46,16 @@ auto angleVectors(EulerAngles angles) noexcept -> AngleVectors {
     return AngleVectors{.forward = forward, .right = -left, .up = up};
 }
 
+auto intoAxes(const AngleVectors& axes, Vec3 point) noexcept -> Vec3 {
+    return Vec3{.x = dot(axes.forward, point), .y = -dot(axes.right, point), .z = dot(axes.up, point)};
+}
+
+auto outOfAxes(const AngleVectors& axes, Vec3 direction) noexcept -> Vec3 {
+    return Vec3{.x = dot(direction, Vec3{.x = axes.forward.x, .y = -axes.right.x, .z = axes.up.x}),
+                .y = dot(direction, Vec3{.x = axes.forward.y, .y = -axes.right.y, .z = axes.up.y}),
+                .z = dot(direction, Vec3{.x = axes.forward.z, .y = -axes.right.z, .z = axes.up.z})};
+}
+
 auto vectorAngles(Vec3 direction) noexcept -> EulerAngles {
     expects(direction != Vec3{}, "vectorAngles: the zero vector has no direction");
     const auto x = static_cast<double>(direction.x);

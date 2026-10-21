@@ -58,6 +58,8 @@ static_assert(sizeof(WorldVertex) == 9 * sizeof(float), "the vertex layout of th
 struct EntityUniform {
     Vec4 color{};
     Vec4 origin{};
+    std::array<Vec4, 3> turn{Vec4{.x = 1.0F}, Vec4{.y = 1.0F},
+                             Vec4{.z = 1.0F}}; ///< The rows of its rotation.
 };
 
 /// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
@@ -899,14 +901,35 @@ void BspWorld::release() noexcept {
     m_models.clear();
 }
 
+namespace {
+
+/// What a brush model of bounds `bounds` covers, placed by `placement`: its bounds there; turned, a
+/// cube as wide as its farthest corner, as the original culls a turned brush entity.
+[[nodiscard]] auto boundsOf(const Aabb& bounds, const ModelPlacement& placement) -> Aabb {
+    if (placement.angles == EulerAngles{}) {
+        return bounds.translated(placement.origin);
+    }
+    const Vec3 corner =
+        componentMax(Vec3{std::abs(bounds.min.x), std::abs(bounds.min.y), std::abs(bounds.min.z)},
+                     Vec3{std::abs(bounds.max.x), std::abs(bounds.max.y), std::abs(bounds.max.z)});
+    const float radius = length(corner);
+    const Vec3 reach{radius, radius, radius};
+    return Aabb{.min = placement.origin - reach, .max = placement.origin + reach};
+}
+
+} // namespace
+
 void BspWorld::place(std::span<const ModelPlacement> placements) {
-    m_origins.resize(m_models.size());
-    std::ranges::transform(m_models, m_origins.begin(), &ModelDraw::origin);
+    m_placements.resize(m_models.size());
+    for (std::size_t index = 0; index < m_models.size(); ++index) {
+        m_placements[index] =
+            ModelPlacement{.model = narrow<std::uint32_t>(index + 1), .origin = m_models[index].origin};
+    }
     for (const ModelPlacement& placement : placements) {
         expects(placement.model >= 1 && placement.model <= m_models.size(),
                 "BspWorld::draw: a placement of a brush model of the map");
         if (placement.model >= 1 && placement.model <= m_models.size()) {
-            m_origins[placement.model - 1] = placement.origin; // m_models starts at model 1
+            m_placements[placement.model - 1] = placement; // m_models starts at model 1
         }
     }
 }
@@ -936,9 +959,16 @@ void BspWorld::addFace(std::uint32_t face, Vec3 eye) {
     ++m_lastFrame.faces;
 }
 
-void BspWorld::addEntity(std::uint32_t model, const Camera& camera, Vec3 origin) {
+void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelPlacement& placement) {
     const ModelDraw& drawn = m_models[model];
-    const Vec3 eye = camera.position - origin;
+    const bool isTurned = placement.angles != EulerAngles{};
+    const AngleVectors axes = angleVectors(placement.angles);
+    // The eye in the model's space, as the original's R_DrawBrushModel turns it.
+    const Vec3 eye =
+        isTurned ? intoAxes(axes, camera.position - placement.origin) : camera.position - placement.origin;
+    const auto placed = [&](Vec3 point) {
+        return placement.origin + (isTurned ? outOfAxes(axes, point) : point);
+    };
     const auto first = narrow<std::uint32_t>(m_entityFaces.size());
     for (std::uint32_t face = drawn.firstFace; face < drawn.firstFace + drawn.faceCount; ++face) {
         if (m_faces[face].bucket != kSkyBucket && isSeen(face, eye, true)) {
@@ -953,8 +983,8 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, Vec3 origin)
         // R_SurfaceCompare: the farthest along the view first.
         const Vec3 forward = angleVectors(camera.angles).forward;
         std::ranges::stable_sort(std::span{m_entityFaces}.subspan(first, count), std::ranges::greater{},
-                                 [this, forward, origin](std::uint32_t face) {
-                                     return dot(m_faces[face].middle + origin, forward);
+                                 [this, forward, &placed](std::uint32_t face) {
+                                     return dot(placed(m_faces[face].middle), forward);
                                  });
     }
     for (const std::uint32_t face : std::span{m_entityFaces}.subspan(first, count)) {
@@ -968,7 +998,7 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, Vec3 origin)
     }
     m_entityDraws.push_back(
         EntityDraw{.model = model,
-                   .distance = lengthSquared(drawn.bounds.center() + origin - camera.position),
+                   .distance = lengthSquared(drawn.bounds.center() + placement.origin - camera.position),
                    .firstFace = first,
                    .faceCount = count});
     m_lastFrame.faces += count;
@@ -1015,9 +1045,9 @@ void BspWorld::gather(const Camera& camera, float aspect) {
     }
     for (std::uint32_t index = 0; index < m_models.size(); ++index) {
         const ModelDraw& model = m_models[index];
-        const Vec3 origin = m_origins[index];
-        if (model.isDrawn && isInView(model.bounds.translated(origin))) {
-            addEntity(index, camera, origin);
+        const ModelPlacement& placement = m_placements[index];
+        if (model.isDrawn && isInView(boundsOf(model.bounds, placement))) {
+            addEntity(index, camera, placement);
         }
     }
 
@@ -1068,8 +1098,14 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
     };
     writeEntity(0, EntityUniform{});
     for (std::size_t index = 0; index < m_models.size(); ++index) {
-        writeEntity(index + 1,
-                    EntityUniform{.color = m_models[index].color, .origin = extend(m_origins[index], 0.0F)});
+        const ModelPlacement& placement = m_placements[index];
+        EntityUniform uniform{.color = m_models[index].color, .origin = extend(placement.origin, 0.0F)};
+        if (placement.angles != EulerAngles{}) {
+            const Mat3 turn = rotationMatrix(placement.angles);
+            uniform.turn = {extend(turn.rows[0], 0.0F), extend(turn.rows[1], 0.0F),
+                            extend(turn.rows[2], 0.0F)};
+        }
+        writeEntity(index + 1, uniform);
     }
 
     // The indices of what the camera sees, a batch for each texture that has some, then the sky's.

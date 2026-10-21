@@ -114,10 +114,11 @@ enum class BrushRole : std::uint8_t {
 };
 
 /// A brush entity a player moves among (a physent of the original): brush model `model` of the map,
-/// placed at `origin`.
+/// placed at `origin`; a solid one turned by `angles` about it.
 struct BrushEntity {
     std::uint32_t model = 0;
     nx::Vec3 origin{};
+    nx::EulerAngles angles{};
     BrushRole role = BrushRole::Solid;
     nx::collision::Contents contents = nx::collision::Contents::Water; ///< What a Volume holds.
 };

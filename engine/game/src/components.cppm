@@ -39,12 +39,14 @@ struct BrushSolidity {
 };
 
 /// A brush entity the game moves, as the original moves its pushers (MOVETYPE_PUSH): at its
-/// velocity, by a clock of its own that runs only while it moves or waits to act.
+/// velocity and its turning one, by a clock of its own that runs only while it moves or waits to act.
 struct Pusher {
     Vec3 velocity{};
+    Vec3 angularVelocity{}; ///< Degrees a second about the pitch, yaw and roll axes (avelocity).
     Seconds localTime{};
     std::optional<Seconds> nextThink{}; ///< When it acts next, by localTime; none while it rests.
     Vec3 destination{};                 ///< Of the move under way.
+    EulerAngles destinationAngles{};    ///< Of the turn under way.
 };
 
 /// How far a door has gone, as the original's toggle states.
@@ -56,16 +58,31 @@ enum class DoorState : std::uint8_t {
 };
 
 /// A door that slides between where it is closed and where it is open (func_door, func_water).
-struct SlidingDoor {
+struct DoorSlide {
     Vec3 closed{};
     Vec3 open{};
     UnitsPerSecond speed{};
+};
+
+/// A door that turns between the angles it has closed and open (func_door_rotating).
+struct DoorTurn {
+    EulerAngles closed{};
+    EulerAngles open{};
+    DegreesPerSecond speed{};
+    /// It opens away from the player that opens it: about the yaw axis, but one-way.
+    bool opensAway = false;
+};
+
+/// A door (CBaseDoor, CRotDoor): how it moves, how long it stays open, and what opens it.
+struct Door {
+    std::variant<DoorSlide, DoorTurn> motion{};
     Seconds wait{}; ///< Open, before it closes; negative: it stays open.
     DoorState state = DoorState::Closed;
     bool isNamed = false;     ///< Others open it ("targetname", "master"): a touch does not.
     bool isUseOnly = false;   ///< Only use opens it, never a touch.
     bool staysOpen = false;   ///< "Toggle": it closes when it is opened again.
     bool isTouchable = false; ///< A touch acts now: not while it moves.
+    ecs::Entity activator{};  ///< What opened it last.
     Seconds lastBlocked{};    ///< When something last stopped it, by the game's time.
 };
 

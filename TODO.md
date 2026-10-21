@@ -250,7 +250,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] The alternate animations of brush entities (`+a`..`+j` when their frame is not 0) and the waves of `func_water`
 - [x] Brush entities with render modes (`rendermode`, `renderamt`, `rendercolor`: solid, color, texture, glow, additive, blended back to front as the original sorts them)
 - [x] Brush entities drawn where the game puts them each frame (`WorldFrame::placements`)
-- [ ] Brush entities turned by the game (rotating doors, `func_rotating`) and `renderfx`
+- [x] Brush entities turned by the game (`ModelPlacement::angles`), culled as the original culls them
+- [ ] `renderfx` of brush entities
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [ ] Studio models: animation evaluation on the CPU in jobs
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
@@ -286,7 +287,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Parity: water
 - [ ] Parity: fall damage
 - [x] Sliding doors (`func_door`, `func_water`): opened by a player's touch, moved by the pusher physics of the original (`SV_PushMove`), pushing bodies and blocked by them (`nx.game:movers`); `nxview` opens them
-- [ ] Rotating doors, platforms, trains, buttons; doors opened by others (`targetname`, `master`); a blocked door's damage
+- [x] Rotating doors (`func_door_rotating`): opened away from the player, turned by the pusher physics (`SV_PushRotate`), met turned by movement and the server's traces
+- [ ] Platforms, trains, buttons, `func_rotating`; doors opened by others (`targetname`, `master`); a blocked door's damage; the player's view turned with a door that carries it
 - [ ] Entity movement types (`TOSS`, `BOUNCE`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`; `PUSH` beyond sliding doors)
 - [ ] Deterministic think, touch and triggers
 

@@ -26,7 +26,8 @@ enum class GameError : std::uint8_t {
 
 /// What the entities of a class of brush entities do.
 enum class BrushBehavior : std::uint8_t {
-    SlidingDoor, ///< Slide open when a player touches them, and back (CBaseDoor).
+    SlidingDoor,  ///< Slide open when a player touches them, and back (CBaseDoor).
+    RotatingDoor, ///< Turn open when a player touches them, away from it, and back (CRotDoor).
     Count,
 };
 
@@ -55,7 +56,7 @@ struct EntityClasses {
 
 /// Makes in `world`, in their order, the brush entities of `entities`, a map's whose brush models are
 /// `models`, that are of a class of `classes`, with their BrushModel, Transform and BrushSolidity, and
-/// what their class does (a SlidingDoor and its Pusher); the others are left to what makes them.
+/// what their class does (a Door and its Pusher); the others are left to what makes them.
 /// Returns how many it made. Errors: UnknownModel.
 [[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
                                       std::span<const assets::BspModel> models, const EntityClasses& classes)

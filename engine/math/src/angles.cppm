@@ -40,6 +40,14 @@ struct AngleVectors {
 /// (right is -left). Pitch 0, yaw 0 and roll 0 give +X, -Y and +Z.
 [[nodiscard]] auto angleVectors(EulerAngles angles) noexcept -> AngleVectors;
 
+/// `point` in the space of `axes`: along their forward, left and up axes, as the original carries a
+/// point into a turned brush entity's space.
+[[nodiscard]] auto intoAxes(const AngleVectors& axes, Vec3 point) noexcept -> Vec3;
+
+/// A direction of the space of `axes` in the world's, as the original carries one back (its
+/// AngleVectorsTranspose): the inverse of intoAxes.
+[[nodiscard]] auto outOfAxes(const AngleVectors& axes, Vec3 direction) noexcept -> Vec3;
+
 /// Pitch and yaw (roll 0) that face `direction`, which must not be the zero vector, so that
 /// angleVectors(vectorAngles(d)).forward is d normalized. Pitch is in [-90, 90] and yaw in
 /// [-180, 180]; straight up or down gives yaw 0.

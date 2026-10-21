@@ -8,8 +8,8 @@
 # model stops what moves into it) or "not"; any spawnflag of `notSolidFlags` makes one not solid;
 # `skinMakesNotSolid` marks the doors a "skin" other than 0 makes a volume of those contents
 # (water, slime, lava); `contents` is what the game gives each whatever its "skin"; `behavior` is
-# what they do ("slidingDoor": a touch opens them). A class not listed makes no brush entity yet:
-# triggers, zones, and func_pushable, which the game makes a box.
+# what they do ("slidingDoor", "rotatingDoor": a touch opens them). A class not listed makes no
+# brush entity yet: triggers, zones, and func_pushable, which the game makes a box.
 
 [[brushClasses]]
 classname = "func_wall"
@@ -42,6 +42,7 @@ behavior = "slidingDoor"
 classname = "func_door_rotating"
 solid = "bsp"
 notSolidFlags = 8 # passable
+behavior = "rotatingDoor"
 
 [[brushClasses]]
 classname = "func_illusionary" # its "skin" makes it a volume, or a ladder (-16)

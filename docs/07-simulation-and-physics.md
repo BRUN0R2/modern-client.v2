@@ -102,8 +102,9 @@ code** on the server (authoritative) and on the client (prediction).
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
   list), which the game touches, a door opening; the player keeps the entity it stands on
-  (`groundModel`), which a pusher carries. Noclip, observers, unsticking, boxes (players,
-  hostages, pushables), turned entities, conveyors, pushes and currents come next
+  (`groundModel`), which a pusher carries. A solid entity turned by its angles is met turned, as
+  the original turns a trace into its space and the plane it meets back out. Noclip, observers,
+  unsticking, boxes (players, hostages, pushables), conveyors, pushes and currents come next
   ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
@@ -173,8 +174,11 @@ are here, written anew from how the GPL engines that reconstruct it describe the
 | A hull rooted at its tree's last node | A tree | Empty (a quirk of the original, kept) |
 | After the trace | The end recomputed from the fraction | All-solid counted as starting solid, which stops it at its start (fraction 0); the end recomputed |
 
-`nxcheck` builds the hulls of every map of the installation. Traces recorded from the original, to
-test these rules against, are pending ([18](18-testing-and-quality.md#parity-tests)).
+A model is met where its entity is and turned as it is (`HullTraceQuery::offset` and `angles`), by
+both rules: the original turns the trace into the turned model's space, and the plane it meets back
+out to the world's. `nxcheck` builds the hulls of every map of the installation. Traces recorded
+from the original, to test these rules against, are pending
+([18](18-testing-and-quality.md#parity-tests)).
 
 ### 4.2 Entities
 
@@ -223,17 +227,22 @@ if (hit.entity) {
 
 Each type is its own ECS system, with its execution order documented in the schedule.
 
-**Today** (`nx.game:movers`): `PUSH`, for sliding doors (`func_door`, `func_water`). A door is a
-`SlidingDoor` (where it is closed and open, its speed, its wait, its state) moved by a `Pusher` (its
-velocity, its own clock and when it next acts by it), as the original's `CBaseDoor` and
-`CBaseToggle::LinearMove`: a player's touch opens one nobody else opens (no `targetname` or
-`master`, not use-only), it stays open its `wait` and closes, or stays open for good (a negative
-`wait`), or until it is touched again (toggle). `runPushers` advances each pusher a tick as the
-original's `SV_Physics_Pusher` and `SV_PushMove` do: only while it has something to do by its
-clock; pushing each `Body` it runs into, or that stands on it, along with it through the world and
-the other solid brush entities by the server's traces; when one cannot go, everything goes back and
-the door goes back the way it came (`CBaseDoor::Blocked`, no sooner than 0.25 s after the last
-time). `nxview` ticks the game at 100 Hz: the player's command, the doors it touched, then the
+**Today** (`nx.game:movers`): `PUSH`, for doors. A `Door` slides between where it is closed and open
+(`func_door`, `func_water`) or turns between its closed and open angles (`func_door_rotating`,
+about its yaw axis, or roll or pitch as flagged, by its `distance`), moved by a `Pusher` (its
+velocity and angular velocity, its own clock and when it next acts by it), as the original's
+`CBaseDoor`, `CRotDoor` and `CBaseToggle::LinearMove` and `AngularMove`: a player's touch opens one
+nobody else opens (no `targetname` or `master`, not use-only), a turning one away from the player by
+the side of its box the player is on (`DoorGoUp`, its arms compared cut to whole units, as the
+original; all of its open angles turned by the sign, its starting ones included, as the original
+does); it stays open its `wait` and closes, or stays open for good (a negative `wait`), or until it
+is touched again (toggle). A turning door flagged to start open starts open with both ends closed,
+the original's mistake, kept. `runPushers` advances each pusher a tick as the original's
+`SV_Physics_Pusher`, `SV_PushMove` and `SV_PushRotate` do: only while it has something to do by its
+clock; carrying each `Body` it runs into, or that stands on it, along with it, or around its origin
+as it turns, through the world and the other solid brush entities by the server's traces; when one
+cannot go, everything goes back and the door goes back the way it came (`CBaseDoor::Blocked`, no
+sooner than 0.25 s after the last time). `nxview` ticks the game at 100 Hz: the player's command, the doors it touched, then the
 pushers, the player's body among the bodies.
 
 ### 5.2 Think, touch and triggers

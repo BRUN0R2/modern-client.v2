@@ -74,20 +74,23 @@ enum class CollisionError : std::uint8_t {
 };
 
 /// Where a trace goes: from `start` to `end` through `hull` of brush model `model`, placed at
-/// `offset` (its entity's origin; the world's is 0).
+/// `offset` (its entity's origin; the world's is 0) and turned by `angles` about it (its entity's).
 struct HullTraceQuery {
     std::uint32_t model = 0;
     Hull hull = Hull::Point;
     Vec3 offset{};
+    EulerAngles angles{};
     Vec3 start{};
     Vec3 end{};
 };
 
 /// What a trace met.
 struct Trace {
-    float fraction = 1.0F;    ///< Of the way it went before it stopped; 1 when nothing stopped it.
-    Vec3 end{};               ///< Where it stopped.
-    Plane plane{};            ///< Of what stopped it, facing the way it came; none at a fraction of 1.
+    float fraction = 1.0F; ///< Of the way it went before it stopped; 1 when nothing stopped it.
+    Vec3 end{};            ///< Where it stopped.
+    /// Of what stopped it, facing the way it came, its normal in the world's space; none at a fraction
+    /// of 1.
+    Plane plane{};
     bool isAllSolid = false;  ///< It never left solid.
     bool startsSolid = false; ///< It started in solid.
     bool isInOpen = false;    ///< It went through empty space.
@@ -109,11 +112,17 @@ public:
 
     /// What `point`, in the model's space, is in, in `hull` of `model` (SV_HullPointContents).
     [[nodiscard]] auto contentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents;
+    /// What `point` is in, in `hull` of `model` placed at `offset` and turned by `angles` about it.
+    [[nodiscard]] auto contentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+                                  EulerAngles angles) const noexcept -> Contents;
 
     /// The same, as player movement reads it (PM_HullPointContents): a hull whose root is the last
     /// node of its tree, or none, is empty, a quirk of the original kept for parity.
     [[nodiscard]] auto movementContentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept
         -> Contents;
+    /// The same of `model` placed at `offset` and turned by `angles` about it (PM_TestPlayerPosition).
+    [[nodiscard]] auto movementContentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+                                          EulerAngles angles) const noexcept -> Contents;
 
     /// The way of `query`, by the server's rules: stopped 1/32 unit before the plane it would cross
     /// into solid, backed up a tenth of the way at a time while that is still solid; translucent
