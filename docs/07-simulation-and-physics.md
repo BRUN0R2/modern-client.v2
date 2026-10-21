@@ -124,6 +124,26 @@ compiled into the BSP, because each hull's clipnode trees come from the map comp
 - Brush entity submodels (doors, elevators) use their own hulls with the entity's
   transform.
 
+**Today** (`nx.collision`, `BrushHulls`): the hulls of a map's brush models, from its BSP (hull 0
+from the visible tree's nodes, a leaf as its contents; hulls 1 to 3 from the clip nodes they may
+share), checked when built: every index in range, no cycle, no tree deeper than 1024 nodes (the
+compilers' deepest, Half-Life's hldemo3, is 146). The original traces by two sets of rules, and both
+are here, written anew from how the GPL engines that reconstruct it describe them (the clean room,
+[20 §3](20-legal-and-licensing.md#3-clean-room)):
+
+| | `trace` (the server's: shots, entities) | `traceMovement` (player movement's) |
+|---|---|---|
+| The stop | 1/32 unit before the plane it would cross into solid | The same |
+| A stop still in solid | Backed up a tenth of the way at a time, to the way's start at most | A twentieth, subtracted in double precision |
+| Translucent contents | Neither open nor water | Water, as every content not empty nor solid |
+| The crossing point | Its sum in double precision, rounded once | In single precision |
+| A crossing that is not a number | Ends the trace | Is 0 |
+| A hull rooted at its tree's last node | A tree | Empty (a quirk of the original, kept) |
+| After the trace | The end recomputed from the fraction | All-solid counted as starting solid, which stops it at its start (fraction 0); the end recomputed |
+
+`nxcheck` builds the hulls of every map of the installation. Traces recorded from the original, to
+test these rules against, are pending ([18](18-testing-and-quality.md#parity-tests)).
+
 ### 4.2 Entities
 
 - Dynamic spatial partitioning (AABB tree) for moving entities, plus links to BSP leafs
@@ -207,5 +227,5 @@ Each type is its own ECS system, with its execution order documented in the sche
 | Enum | Examples |
 |------|----------|
 | `CommandError` | `DurationOutOfRange`, `TimeDriftExceeded`, `StaleCommand`, `InvalidAngles` |
-| `CollisionError` | `InvalidHull`, `MissingClipnodes` (map compiled without the required hull) |
+| `CollisionError` | `BadIndex`, `Cycle`, `TooDeep` (hull trees a compiler does not write) |
 | `MoverError` | `InvalidPath` (missing `path_corner`), `TargetNotFound` |

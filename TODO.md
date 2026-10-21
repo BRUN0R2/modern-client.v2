@@ -267,7 +267,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### Simulation
 - [ ] Tick-based `GameTime`, with no degradation over uptime
 - [ ] Usercmd generated at a fixed rate (`cl_movement_rate`)
-- [ ] Traces on per-hull clipnodes with result parity
+- [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)
+- [ ] Trace parity tests against traces recorded from the original
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
 - [ ] Traces against animated hitboxes
 - [ ] pmove in `cs.shared` as a pure function

@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.jobs;
 import nx.assets;
+import nx.collision;
 
 namespace nxcheck {
 
@@ -40,8 +41,12 @@ constexpr std::array kSequenceGroupMagic{std::byte{'I'}, std::byte{'D'}, std::by
 }
 
 [[nodiscard]] auto checkBsp(std::span<const std::byte> bytes) -> Result<void, CheckError> {
-    if (auto map = BspView::parse(bytes); !map) {
+    auto map = BspView::parse(bytes);
+    if (!map) {
         return fail(CheckError::Invalid, std::move(map.error()));
+    }
+    if (auto hulls = nx::collision::BrushHulls::create(*map); !hulls) {
+        return fail(CheckError::Invalid, "the collision hulls", std::move(hulls.error()));
     }
     return {};
 }

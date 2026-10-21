@@ -11,7 +11,8 @@ nxAddModuleLibrary(toolNxcheck
     DEPENDS
         nx::core
         nx::jobs
-        nx::assets)
+        nx::assets
+        nx::collision)
 
 nxAddProgram(nxcheck
     SOURCES
