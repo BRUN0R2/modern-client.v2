@@ -74,6 +74,21 @@ void expectNear(Vec3 actual, Vec3 expected, std::string_view what = {}) {
     EXPECT_NEAR(actual.z, expected.z, kTolerance) << what;
 }
 
+TEST(SequenceFrameTest, ALoopingSequenceWrapsAtItsLastFrame) {
+    const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}).value(), 3.0F);
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.5F}).value(), 5.0F) << "15 frames: past 10, 5";
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{-1.0F}).value(), 0.0F) << "not started";
+}
+
+TEST(SequenceFrameTest, ASequenceThatDoesNotLoopStopsShortOfItsLastFrame) {
+    const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(draw, nx::Seconds{0.2F}).value(), 6.0F);
+    EXPECT_NEAR(cs::sequenceFrameAt(draw, nx::Seconds{1.0F}).value(), 9.999F, kTolerance);
+    const StudioSequence still{.label = "still", .fps = 30.0F, .isLooping = true, .frameCount = 1};
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(still, nx::Seconds{2.0F}).value(), 0.0F) << "a single frame";
+}
+
 TEST(StudioPoseTest, ABoneAtRestIsWhereItsValuesPutIt) {
     std::vector bones{boneAt({.x = 1.0F, .y = 2.0F, .z = 3.0F})};
     bones[0].values[std::to_underlying(BoneAxis::RotationZ)] = kQuarterTurn;

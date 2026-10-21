@@ -25,12 +25,20 @@ TEST(GammaTest, TexgammaBrightensThePalettesAsTheOriginalDoes) {
 }
 
 TEST(GammaTest, LightgammaAndGammaCancelWithoutBrightness) {
-    // The recorded table, 10 bits, starts 0, 0, 1, 2, 3, 4 and ends at 1023; drawn, the upper 8.
-    const auto table = nx::render::lightTable(kRecorded);
-    EXPECT_EQ(table[0], 0);
-    EXPECT_EQ(table[4], 3 >> 2);
-    EXPECT_EQ(table[100], 99 >> 2);
-    EXPECT_EQ(table[1023], 1023 >> 2);
+    // The recorded table, 10 bits, starts 0, 0, 1, 2, 3, 4 and ends at 1023.
+    const auto table = nx::render::lightGammaTable(kRecorded);
+    const std::array<std::uint16_t, 6> recorded{0, 0, 1, 2, 3, 4};
+    EXPECT_TRUE(std::ranges::equal(std::span{table}.first(recorded.size()), recorded));
+    EXPECT_EQ(table[100], 99);
+    EXPECT_EQ(table[1023], 1023);
+}
+
+TEST(GammaTest, TheWorldsLightTableIsTheUpperEightBits) {
+    const auto whole = nx::render::lightGammaTable(kRecorded);
+    const auto drawn = nx::render::lightTable(kRecorded);
+    for (std::size_t index = 0; index < whole.size(); ++index) {
+        EXPECT_EQ(drawn[index], whole[index] >> 2) << index;
+    }
 }
 
 TEST(GammaTest, BrightnessLiftsTheShadows) {

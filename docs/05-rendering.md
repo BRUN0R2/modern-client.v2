@@ -278,6 +278,28 @@ flowchart LR
 3. **Vertex shader:** fetches `bones[paletteOffset + vertex.boneIndex]`. The MDL v10 format
    binds each vertex to **one** bone and each normal to its own bone, so both indices
    are preserved.
+   **Today** (`nx.render:studio`, `shaders/studio.slang`): a `StudioRenderer` loads a model's meshes,
+   of every choice of every body part, into one vertex and one index buffer, each corner a vertex
+   with its position's bone and its normal's, strips and fans made triangles as the original's GL
+   winds them; its textures through `texgamma`, a masked one's index 255 transparent, with mip levels
+   each the mean of the four texels above it (`GL_MipMap`), unless the texture has none. A frame's
+   models write their bones, every model's one after another, to a storage buffer of the frame in
+   flight, and each its light, its first bone and its depth mapping to a uniform of its own; each
+   mesh is a draw call, with the texture its skin gives it (the first skin when the model lacks the
+   one asked for). The vertex shader places each vertex by its bone, turns its normal by its own, and
+   lights it as `R_StudioLighting` does: fully bright, or the model's ambient light plus its shade
+   as far as the normal faces against the light's way (`SHADE_LAMBERT`, 1.4953241; 0.8 of the shade
+   when flat shaded), held to 255, read from the whole light curve at four times it, times the
+   light's color and stored a byte a channel. Chrome takes its coordinates from the normal against
+   the viewer and its right (`R_StudioSetupChrome`); a masked mesh is cut where its alpha is 0.5 or
+   less, an additive one adds itself without writing its depth; the triangles the original culls
+   (`GL_FRONT`) are culled. The view's own model is drawn in the nearest 0.3 of the depths, as the
+   original keeps it out of walls (`VIEWMODEL_DEPTH_RANGE`). `nxview` holds the knife
+   (`models/v_knife.mdl`) as Counter-Strike deploys it: `draw`, then `idle` 1.5 seconds later and
+   every 20 seconds, posed by `cs::poseBones` at the frame `cs::sequenceFrameAt` gives, where the
+   player looks from, lit by the world there and by the sky the map's `light_environment` sets. The
+   render modes and effects of entities, the players' colors, the bob of the view's model and
+   instancing come with their consumers.
 4. **Modern formats (glTF)** use up to 4 influences (`joints: u8x4/u16x4`,
    `weights: unorm8x4`), in the same pipeline with another permutation.
 5. **Compute skinning** (`r_skinning compute`): pre-transforms vertices once per frame

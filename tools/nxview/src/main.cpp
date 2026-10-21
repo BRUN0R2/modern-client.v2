@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // nxview: the map viewer (TODO.md, M2). It opens a map of the Counter-Strike 1.6 installation and
-// walks a player through its world, moved by the game's own movement, or flies a free camera
-// through it; or it renders one frame of it to a BMP file.
+// walks a player through its world, moved by the game's own movement, a knife in hand, or flies a
+// free camera through it; or it renders one frame of it to a BMP file.
 
 #include <cstdio>
 #include <cstdlib>
@@ -20,6 +20,7 @@ import nx.ecs;
 import nx.collision;
 import nx.game;
 import cs.shared;
+import tool.nxview;
 
 namespace {
 
@@ -43,7 +44,8 @@ back: W A S D move, Space and Ctrl rise and sink, Shift is faster. Escape ends i
   --screenshot <file.bmp> renders one 1280x720 frame from the camera's start into the file, without
                           a window, and ends
   --time <seconds>        when the frame of --screenshot is, after the map starts (default: 0):
-                          what animates (light styles, textures, water) is drawn as it is then
+                          what animates (light styles, textures, water, the knife) is drawn as it
+                          is then
   --validation            the Khronos validation layer, when it is installed: its messages are
                           logged and nxview exits with 1 when it reported an error
 )";
@@ -135,8 +137,8 @@ template <class Code>
     return kExitUnusable;
 }
 
-/// The map, its WADs, its sky, the classes of its entities and the shader, read once: the views
-/// point into these bytes.
+/// The map, its WADs, its sky, the classes of its entities, the knife and the shaders, read once: the
+/// views point into these bytes.
 struct Content {
     std::vector<std::byte> mapBytes;
     std::optional<nx::assets::BspView> map;
@@ -145,7 +147,10 @@ struct Content {
     std::vector<nx::assets::WadView> wads;
     std::vector<nx::assets::RgbaImage> sky; ///< Its sides, in the order of nx::render::kSkySuffixes.
     nx::render::LightStyles lightStyles;
-    std::vector<std::byte> shader;
+    nx::render::SkyLight skyLight;
+    std::optional<nxview::ViewModel> knife;
+    std::vector<std::byte> worldShader;
+    std::vector<std::byte> studioShader;
 };
 
 /// Where a player first stands: the first counter-terrorist spawn, else the first terrorist one.
@@ -181,49 +186,6 @@ struct Content {
     return camera;
 }
 
-/// The light styles the game sets for the map: the world's patterns, as Quake's world.qc sets them
-/// (GPL, consulted for behavior: docs/20 section 3), under the names the Half-Life FGDs give the
-/// styles of a light; and those of the switchable lights, from their entities. Style 12, the FGDs'
-/// underwater mutation, has no public pattern: it stays unset.
-[[nodiscard]] auto mapLightStyles(const nx::assets::BspView& map) -> nx::render::LightStyles {
-    nx::render::LightStyles styles;
-    for (const auto [style, pattern] : std::to_array<std::pair<std::size_t, std::string_view>>({
-             {0, "m"},                                                   // normal
-             {1, "mmnmmommommnonmmonqnmmo"},                             // flicker
-             {2, "abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba"}, // slow strong pulse
-             {3, "mmmmmaaaaammmmmaaaaaabcdefgabcdefg"},                  // candle
-             {4, "mamamamamama"},                                        // fast strobe
-             {5, "jklmnopqrstuvwxyzyxwvutsrqponmlkj"},                   // gentle pulse
-             {6, "nmonqnmomnmomomno"},                                   // flicker
-             {7, "mmmaaaabcdefgmmmmaaaammmaamm"},                        // candle
-             {8, "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa"},          // candle
-             {9, "aaaaaaaazzzzzzzz"},                                    // slow strobe
-             {10, "mmamammmmammamamaaamammma"},                          // fluorescent flicker
-             {11, "abcdefghijklmnopqrrqponmlkjihgfedcba"},               // slow pulse, not to black
-             {63, "a"},
-         })) {
-        styles.set(style, pattern);
-    }
-    // A light with a name and a style from 32 on can be switched: 'a' when it starts off, else 'm', as
-    // Quake's light.qc sets them, or the `pattern` the FGDs document.
-    constexpr std::size_t kFirstSwitchableStyle = 32;
-    constexpr int kStartsOff = 1;
-    for (const nx::assets::BspEntity& entity : map.entities()) {
-        const std::string_view classname = entity.find("classname").value_or("");
-        if ((classname != "light" && classname != "light_spot") || !entity.find("targetname")) {
-            continue;
-        }
-        const std::optional<int> style = entity.findInteger("style");
-        if (!style || std::cmp_less(*style, kFirstSwitchableStyle) ||
-            std::cmp_greater_equal(*style, nx::render::kLightStyleCount)) {
-            continue;
-        }
-        const int flags = entity.findInteger("spawnflags").value_or(0);
-        styles.set(nx::narrow<std::size_t>(*style),
-                   (flags & kStartsOff) != 0 ? "a" : entity.find("pattern").value_or("m"));
-    }
-    return styles;
-}
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names
 /// at the root of the VFS, as the original looks them up. Maps often name WADs of their author's
 /// computer that no texture of theirs needs; the ones the installation lacks are listed and left
@@ -292,7 +254,7 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     }
 }
 
-/// Reads the map `options.map` of the installation, its WADs, its sky and the world shader.
+/// Reads the map `options.map` of the installation, its WADs, its sky, the knife and the shaders.
 [[nodiscard]] auto readContent(const Options& options, Content& content) -> int {
     auto executable = nx::platform::executablePath();
     if (!executable) {
@@ -332,7 +294,8 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
         return unusable(map.error());
     }
     content.map = std::move(*map);
-    content.lightStyles = mapLightStyles(*content.map);
+    content.lightStyles = nxview::mapLightStyles(*content.map);
+    content.skyLight = nxview::skyLightOf(*content.map);
     const std::filesystem::path classesFile = data / "cstrike" / "entities.toml";
     auto classesText = nx::platform::readTextFile(classesFile);
     if (!classesText) {
@@ -345,12 +308,90 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     content.entityClasses = std::move(*classes);
     readWads(*vfs, content);
     readSky(*vfs, content);
-    auto shader = nx::platform::readFile(executable->parent_path() / "shaders" / "world.spv");
-    if (!shader) {
-        return unusable(shader.error());
+    auto knife = nxview::ViewModel::read(*vfs);
+    if (!knife) {
+        return unusable(knife.error());
     }
-    content.shader = std::move(*shader);
+    content.knife = std::move(*knife);
+    for (const auto& [file, shader] :
+         {std::pair{"world.spv", &content.worldShader}, std::pair{"studio.spv", &content.studioShader}}) {
+        auto code = nx::platform::readFile(executable->parent_path() / "shaders" / file);
+        if (!code) {
+            return unusable(code.error());
+        }
+        *shader = std::move(*code);
+    }
     return EXIT_SUCCESS;
+}
+
+/// What nxview draws: the world, the light it gives, and the knife on the GPU.
+struct Scene {
+    nx::render::BspWorld world;
+    nx::render::WorldLight light;
+    nx::render::StudioRenderer studio;
+    nx::render::StudioModel knife;
+};
+
+/// The scene of `content` for targets of `format`, its uploads recorded in `commands`; none when the
+/// GPU refused it, which is printed.
+[[nodiscard]] auto createScene(nx::rhi::Device& device, nx::rhi::CommandList& commands,
+                               const Content& content, nx::rhi::Format format) -> std::optional<Scene> {
+    auto world = nx::render::BspWorld::create(device, commands,
+                                              {.map = *content.map,
+                                               .wads = content.wads,
+                                               .shaderCode = content.worldShader,
+                                               .colorFormat = format,
+                                               .sky = content.sky});
+    if (!world) {
+        std::ignore = unusable(world.error());
+        return std::nullopt;
+    }
+    auto studio = nx::render::StudioRenderer::create(
+        device, commands, {.shaderCode = content.studioShader, .colorFormat = format});
+    if (!studio) {
+        std::ignore = unusable(studio.error());
+        return std::nullopt;
+    }
+    auto knife = content.knife->load(*studio, commands);
+    if (!knife) {
+        std::ignore = unusable(knife.error());
+        return std::nullopt;
+    }
+    return Scene{.world = std::move(*world),
+                 .light = nx::render::WorldLight{*content.map},
+                 .studio = std::move(*studio),
+                 .knife = std::move(*knife)};
+}
+
+/// What a frame of the scene shows.
+struct SceneView {
+    nx::render::Camera camera{};
+    float aspect = 1.0F;
+    nx::Seconds time{}; ///< Since the map started.
+    std::span<const nx::render::ModelPlacement> placements{};
+    std::optional<nx::Seconds> sinceDeploy{}; ///< Since the knife came out; none without a player.
+};
+
+/// Draws `view` of `scene`: the world, then the knife in the player's hand, lit where the player's
+/// eye is, as the original lights the view's own model. Errors: those of StudioRenderer::draw.
+[[nodiscard]] auto drawScene(nx::rhi::CommandList& list, Scene& scene, const Content& content,
+                             const SceneView& view) -> nx::Result<void, nx::render::StudioError> {
+    const nx::render::LightStyleValues styles = content.lightStyles.valuesAt(view.time);
+    scene.world.draw(list, {.camera = view.camera,
+                            .aspect = view.aspect,
+                            .time = view.time,
+                            .lightStyles = styles,
+                            .placements = view.placements});
+    if (!view.sinceDeploy) {
+        return {};
+    }
+    const std::vector<nx::Mat3x4> bones = content.knife->pose(view.camera, *view.sinceDeploy);
+    const std::array knife{nx::render::StudioInstance{
+        .model = scene.knife,
+        .bones = bones,
+        .light = scene.light.modelLightAt({.origin = view.camera.position, .sky = content.skyLight}, styles),
+        .depth = nx::render::StudioDepth::ViewModel}};
+    return scene.studio.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = knife});
 }
 
 // A BMP file of 24-bit pixels: its file header, its BITMAPINFOHEADER, then its rows of blue, green
@@ -438,14 +479,9 @@ constexpr std::size_t kBlue = 2;
         return unusable(commands.error());
     }
     nx::rhi::CommandList& list = commands->get();
-    auto world = nx::render::BspWorld::create(**device, list,
-                                              {.map = *content.map,
-                                               .wads = content.wads,
-                                               .shaderCode = content.shader,
-                                               .colorFormat = nx::rhi::Format::Rgba8Unorm,
-                                               .sky = content.sky});
-    if (!world) {
-        return unusable(world.error());
+    std::optional<Scene> scene = createScene(**device, list, content, nx::rhi::Format::Rgba8Unorm);
+    if (!scene) {
+        return kExitUnusable;
     }
     const nx::render::Camera camera = startCamera(options, *content.map);
     const float aspect =
@@ -456,10 +492,13 @@ constexpr std::size_t kBlue = 2;
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
                          .area = kScreenshotExtent});
-    world->draw(list, {.camera = camera,
-                       .aspect = aspect,
-                       .time = options.time,
-                       .lightStyles = content.lightStyles.valuesAt(options.time)});
+    // The player has held the knife since the map started.
+    if (auto drawn = drawScene(
+            list, *scene, content,
+            {.camera = camera, .aspect = aspect, .time = options.time, .sinceDeploy = options.time});
+        !drawn) {
+        return unusable(drawn.error());
+    }
     list.endRendering();
     list.transition(target->get(), nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
     list.transition(readback->get(), nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
@@ -475,10 +514,11 @@ constexpr std::size_t kBlue = 2;
         !written) {
         return unusable(written.error());
     }
-    const nx::render::FrameStats& drawn = world->lastFrame();
+    const nx::render::FrameStats& drawn = scene->world.lastFrame();
     std::println("nxview: {} from {} at {}x{}: {} of {} faces, {} triangles, in {} leaves",
                  nx::platform::toUtf8(*options.screenshot), options.map, kScreenshotExtent.width,
-                 kScreenshotExtent.height, drawn.faces, world->stats().faces, drawn.triangles, drawn.leaves);
+                 kScreenshotExtent.height, drawn.faces, scene->world.stats().faces, drawn.triangles,
+                 drawn.leaves);
     return (*device)->validationErrors() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
@@ -669,13 +709,14 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     LocalGame local{
         .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, cs::bodyOf(walker.player))};
     bool isFlying = false;
-    std::optional<nx::render::BspWorld> world; // made with the first image, which gives the format
+    std::optional<Scene> scene; // made with the first image, which gives the format
     std::optional<nx::rhi::OwnedTexture> depth;
     nx::rhi::Extent2d depthExtent;
     HeldKeys keys;
     std::vector<nx::platform::WindowEvent> events;
     nx::platform::Stopwatch frameClock;
     nx::platform::Stopwatch mapClock;
+    nx::platform::Stopwatch deployClock; ///< Since the player drew the knife.
     bool isRunning = true;
     while (isRunning) {
         events.clear();
@@ -690,7 +731,8 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
                 if (key->key == nx::platform::Key::F && key->isDown && !key->isRepeat) {
                     isFlying = !isFlying;
                     if (!isFlying) {
-                        walker = walkerAt(camera.position); // the player lands where the camera flew
+                        walker = walkerAt(camera.position);  // the player lands where the camera flew
+                        std::ignore = deployClock.restart(); // and draws the knife again
                     }
                 }
                 keys.set(key->key, key->isDown);
@@ -732,18 +774,14 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             continue;
         }
         const nx::rhi::SwapchainImage& frame = **image;
-        if (!world) {
-            auto created = nx::render::BspWorld::create(**device, list,
-                                                        {.map = *content.map,
-                                                         .wads = content.wads,
-                                                         .shaderCode = content.shader,
-                                                         .colorFormat = frame.format,
-                                                         .sky = content.sky});
+        if (!scene) {
+            std::optional<Scene> created = createScene(**device, list, content, frame.format);
             if (!created) {
-                return unusable(created.error());
+                return kExitUnusable;
             }
-            world.emplace(std::move(*created));
-            std::ignore = mapClock.restart(); // the light styles start with the map
+            scene.emplace(std::move(*created));
+            std::ignore = mapClock.restart();    // the light styles start with the map
+            std::ignore = deployClock.restart(); // and the player draws the knife
         }
         if (!depth || depthExtent != frame.size) {
             auto created = (*device)->createTexture({.label = "nxview.depth",
@@ -770,11 +808,17 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
                 placements.push_back(
                     {.model = model.index, .origin = transform.origin, .angles = transform.angles});
             });
-        world->draw(list, {.camera = camera,
-                           .aspect = aspect,
-                           .time = time,
-                           .lightStyles = content.lightStyles.valuesAt(time),
-                           .placements = placements});
+        const std::optional<nx::Seconds> sinceDeploy =
+            isFlying ? std::nullopt : std::optional{nx::Seconds{deployClock.elapsed()}};
+        if (auto drawn = drawScene(list, *scene, content,
+                                   {.camera = camera,
+                                    .aspect = aspect,
+                                    .time = time,
+                                    .placements = placements,
+                                    .sinceDeploy = sinceDeploy});
+            !drawn) {
+            return unusable(drawn.error());
+        }
         list.endRendering();
         list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
         if (auto submitted = (*device)->submitFrame(**swapchain); !submitted) {
@@ -784,7 +828,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
 
     (*device)->waitIdle();
     const std::uint64_t validationErrors = (*device)->validationErrors();
-    world.reset();
+    scene.reset();
     swapchain->reset(); // before its device
     if (validationErrors != 0) {
         std::println(stderr, "nxview: the validation layer reported {} errors", validationErrors);

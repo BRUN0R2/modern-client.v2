@@ -60,6 +60,13 @@ struct Skeleton {
 /// The skeleton of `model`, a view of it.
 [[nodiscard]] auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton;
 
+/// Where `sequence` is `elapsed` after it started at its own speed, as the original estimates it
+/// (R_StudioEstimateFrame, from its first frame), in double precision: a looping sequence wraps at its
+/// last frame, which is its first again; another stops 0.001 short of its last; one of a single
+/// frame stays at it, and so does any before it started.
+[[nodiscard]] auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed) noexcept
+    -> SequenceFrame;
+
 /// The bones of `skeleton` posed as `query` asks in `sequence`, whose decoded frames are `animation`:
 /// each bone's rest values plus its animation at the frame, interpolated towards the next one by the
 /// frame's fraction (the angles through quaternions), plus what its controllers add; the first two

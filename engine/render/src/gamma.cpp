@@ -65,11 +65,11 @@ auto textureGammaTable(const GammaSettings& settings) -> ChannelTable {
     return table;
 }
 
-auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLightTableSize> {
+auto lightGammaTable(const GammaSettings& settings) -> std::array<std::uint16_t, kLightTableSize> {
     const Bounded values = bounded(settings);
     const double knee = shadowKnee(values.brightness);
     constexpr double kTop = static_cast<double>(kLightTableSize - 1);
-    std::array<std::uint8_t, kLightTableSize> table{};
+    std::array<std::uint16_t, kLightTableSize> table{};
     for (std::size_t index = 0; index < table.size(); ++index) {
         double light = std::pow(static_cast<double>(index) / kTop, values.lightGamma);
         if (values.brightness > 1.0) {
@@ -79,8 +79,16 @@ auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLigh
                               : (((light - knee) / (1.0 - knee)) * (1.0 - kKneeLevel)) + kKneeLevel;
         // Truncated, as the original converts.
         const double level = std::clamp(std::trunc(std::pow(light, 1.0 / values.gamma) * kTop), 0.0, kTop);
-        table[index] = narrow<std::uint8_t>(static_cast<unsigned>(level) >> kDroppedLightBits);
+        table[index] = static_cast<std::uint16_t>(level);
     }
+    return table;
+}
+
+auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLightTableSize> {
+    std::array<std::uint8_t, kLightTableSize> table{};
+    std::ranges::transform(lightGammaTable(settings), table.begin(), [](std::uint16_t level) {
+        return narrow<std::uint8_t>(static_cast<unsigned>(level) >> kDroppedLightBits);
+    });
     return table;
 }
 
