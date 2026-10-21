@@ -20,16 +20,16 @@ This document is **normative** for all C++ code in the repository, within the pr
 | Annotations for reflection | P3394 | `[[=nx::net::Replicated{}]]`, `[[=nx::script::Expose{}]]`, `[[=nx::data::Range{...}]]` | Same fallback |
 | Expansion statements (`template for`) | P1306 | Iterate over reflected members | Same fallback |
 | Contracts | P2900 | `pre`, `post`, `contract_assert` for invariants | The `nx::expects`, `nx::ensures` and `nx::invariant` functions, with the same handler ([§6.5](#65-contracts)) |
-| `std::execution` | P2300 | Job System integration with senders/receivers | `stdexec` reference implementation |
-| `std::inplace_vector` | P0843 | Small fixed-capacity collections without the heap | Own implementation in `nx.core` |
+| `std::execution` | P2300 | Job System integration with senders/receivers | `stdexec` reference implementation (planned, with the scheduler: [04 §4](04-job-system.md#4-integration-with-stdexecution)) |
+| `std::inplace_vector` | P0843 | Small fixed-capacity collections without the heap | Own implementation in `nx.core` (planned, with its first consumer) |
 | `#embed` | P1967 | Embed shaders and minimal fallback assets into the binary | Array generation at build time |
 | `= delete("reason")` | P2573 | Forbid dangerous conversions with a clear message | Plain `= delete` |
 | Pack indexing (`Ts...[I]`) | P2662 | ECS query metaprogramming | `std::tuple_element` |
 | Placeholder variable `_` | P2169 | Ignore values in structured bindings | A descriptive name |
 | Saturating arithmetic (`std::add_sat` etc.) | P0543 | Money, counters, accumulators | **Always** the project's own `nx.core` functions (`addSaturated`…), with the same results: GCC 16 advertises the feature in `<version>`, but its `std` module does not export it |
-| `std::function_ref` | P0792 | Allocation-free callbacks | Own implementation |
+| `std::function_ref` | P0792 | Allocation-free callbacks | Own implementation in `nx.core` (planned, with its first consumer) |
 | `<debugging>` | P2546 | `breakpoint_if_debugging()` in the contract handler (`nx::breakpointIfDebugging`, `nx::isDebuggerPresent`) | Per-platform primitives (`IsDebuggerPresent`/`__debugbreak`, `TracerPid`/`SIGTRAP`) |
-| `std::optional<T&>` | P2988 | Optional references without raw pointers | `nx::OptionalRef<T>` |
+| `std::optional<T&>` | P2988 | Optional references without raw pointers | `nx::OptionalRef<T>` in `nx.core` (planned, with its first consumer) |
 
 C++20/23 features used freely: modules, concepts, ranges, `std::expected`,
 `std::print`/`std::format`, `std::span`, `std::mdspan`, `std::flat_map`,
@@ -84,10 +84,12 @@ engine/ecs/
   its directory ([ADR-0010](adr/0010-license.md), `REUSE.toml`). `MIT` in `rook/`,
   `GPL-3.0-or-later` everywhere else:
 
+<!-- REUSE-IgnoreStart -->
 ```cpp
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 ```
+<!-- REUSE-IgnoreEnd -->
 
 - **Third-party headers** only in the *global module fragment*:
 

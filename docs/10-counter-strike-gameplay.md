@@ -108,9 +108,10 @@ Mandatory support so that **every official map** loads without warnings:
 | Game | `game_text`, `game_counter`, `game_end`, `game_score` |
 | Light | `light`, `light_spot`, `light_environment` (animated styles at runtime) |
 
-The complete list, with the *keyvalues* schema, lives in `data/cstrike/entities.toml`. CI
-loads every official map and fails if there is an unknown `classname` or key. Today the file holds
-how solid the game makes each class of brush entities ([03 §11](03-ecs.md#11-prefabs-and-map-entities)).
+The complete list, with the *keyvalues* schema, will live in `data/cstrike/entities.toml`, and
+the dedicated parity runner will load every official map and fail on an unknown `classname` or
+key (planned, [18](18-testing-and-quality.md#parity-tests)). What the file holds today is in
+[03 §11](03-ecs.md#11-prefabs-and-map-entities).
 
 ## 6. Economy
 
@@ -118,8 +119,8 @@ how solid the game makes each class of brush entities ([03 §11](03-ecs.md#11-pr
   money cap (16000), default reward per kill (300). The others (win by reason, consecutive
   loss bonus, plant, defuse, hostages and *teamkill* penalties) are listed in the file and
   need to be surveyed and validated against the original.
-- Money is `cs::Money` with saturating arithmetic up to the cap (`std::add_sat` plus
-  `clamp`), with no overflow.
+- Money is `nx::Money` (`nx.core`) with saturating arithmetic up to the cap
+  (`nx::addSaturated` plus `clamp`), with no overflow.
 - Every transaction goes through a single auditable function
   (`Economy::apply(player, MoneyTransaction{reason, amount})`), which raises the
   `MoneyChanged` event for the HUD, the log and plugins.
@@ -250,12 +251,15 @@ model = "KickBack"
 
 ## 12. Data organization
 
+The planned layout; today only `entities.toml` exists
+([03 §11](03-ecs.md#11-prefabs-and-map-entities)). The hull sizes are not data: `cs.shared` holds
+them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
+
 ```
 data/cstrike/
 ├── cvars.toml          # all game cvars: name, type, default, range, flags
 ├── economy.toml
 ├── hitGroups.toml
-├── hulls.toml
 ├── movement.toml       # derived constants not exposed as cvars
 ├── entities.toml       # classname -> prefab + keyvalue schema
 ├── teams.toml          # teams, characters, models
