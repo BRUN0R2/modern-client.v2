@@ -297,8 +297,13 @@ flowchart LR
    original keeps it out of walls (`VIEWMODEL_DEPTH_RANGE`). `nxview` holds the knife
    (`models/v_knife.mdl`) as Counter-Strike deploys it: `draw`, then `idle` 1.5 seconds later and
    every 20 seconds, posed by `cs::poseBones` at the frame `cs::sequenceFrameAt` gives, where the
-   player looks from, lit by the world there and by the sky the map's `light_environment` sets. The
-   render modes and effects of entities, the players' colors, the bob of the view's model and
+   player looks from, lit by the world there and by the sky the map's `light_environment` sets. A
+   model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
+   Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
+   any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
+   additive meshes added as their alpha says. The solid models are drawn first, the others but those
+   at a `renderamt` of 0 from the farthest middle of their bounds, then by mode
+   (`R_TransEntityCompare`). The render effects, the players' colors, the bob of the view's model and
    instancing come with their consumers.
 4. **Modern formats (glTF)** use up to 4 influences (`joints: u8x4/u16x4`,
    `weights: unorm8x4`), in the same pipeline with another permutation.
