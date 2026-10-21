@@ -15,17 +15,12 @@ namespace nxview {
 
 namespace {
 
-using nx::render::RenderEffect;
-using nx::render::RenderMode;
-
 constexpr std::string_view kSpriteExtension = ".spr";
 /// The spawnflags of an env_sprite: it starts on though named; it turns off after its last frame.
 constexpr int kStartsOn = 1;
 constexpr int kPlaysOnce = 2;
 /// The game's entities think ten times a second.
 constexpr double kThinkInterval = 0.1;
-/// The most a channel of `rendercolor` and `renderamt` is.
-constexpr float kChannelTop = 255.0F;
 /// How far short of a glow the view's line may stop and still see it.
 constexpr float kGlowSightSlack = 8.0F;
 
@@ -38,26 +33,6 @@ constexpr float kGlowSightSlack = 8.0F;
         return SpriteClass::Glow;
     }
     return classname == "cycler_sprite" ? std::optional{SpriteClass::Cycler} : std::nullopt;
-}
-
-/// `value` held to a channel, cut to a whole number as the entity's state carries it.
-[[nodiscard]] auto channelOf(float value) noexcept -> std::uint8_t {
-    return static_cast<std::uint8_t>(std::clamp(value, 0.0F, kChannelTop));
-}
-
-/// The render settings of `entity` into `sprite`; a mode or an effect the original does not number
-/// is taken as Normal and None.
-void readRendering(const nx::assets::BspEntity& entity, MapSprite& sprite) {
-    const int mode = entity.findInteger("rendermode").value_or(0);
-    const int effect = entity.findInteger("renderfx").value_or(0);
-    sprite.mode = mode >= 0 && mode < std::to_underlying(RenderMode::Count) ? static_cast<RenderMode>(mode)
-                                                                            : RenderMode::Normal;
-    sprite.effect = effect >= 0 && effect < std::to_underlying(RenderEffect::Count)
-                        ? static_cast<RenderEffect>(effect)
-                        : RenderEffect::None;
-    sprite.amount = channelOf(entity.findNumber("renderamt").value_or(0.0F));
-    const nx::Vec3 color = entity.findVector("rendercolor").value_or(nx::Vec3{});
-    sprite.color = {.red = channelOf(color.x), .green = channelOf(color.y), .blue = channelOf(color.z)};
 }
 
 } // namespace
@@ -88,7 +63,11 @@ auto mapSpritesOf(const nx::assets::BspView& map) -> std::vector<MapSprite> {
         }
         sprite.angles = {
             .pitch = nx::Degrees{angles.x}, .yaw = nx::Degrees{angles.y}, .roll = nx::Degrees{angles.z}};
-        readRendering(entity, sprite);
+        const EntityRendering rendering = renderingOf(entity);
+        sprite.mode = rendering.mode;
+        sprite.effect = rendering.effect;
+        sprite.amount = rendering.amount;
+        sprite.color = rendering.color;
         sprites.push_back(std::move(sprite));
     }
     return sprites;

@@ -5,6 +5,7 @@ nxAddTest(nxGameTests
     SOURCES
         brushEntitiesTests.cpp
         doorTests.cpp
+        placementTests.cpp
     DEPENDS
         nx::game
         nx::platform)

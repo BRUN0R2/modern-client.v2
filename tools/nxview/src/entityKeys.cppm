@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// What the engine reads of a map entity's keys before its game class does (not exported): its angles,
-/// as ReHLDS's ED_ParseEdict reads them (GPL, consulted: docs/20 section 3).
+/// as ReHLDS's ED_ParseEdict reads them (GPL, consulted: docs/20 section 3), and how it asks to be
+/// drawn.
 export module tool.nxview:entityKeys;
 
 import std;
 import nx.math;
 import nx.assets;
+import nx.render;
 
 namespace nxview {
 
@@ -19,5 +21,17 @@ namespace nxview {
 
 /// The angles of `entity`, its angle keys read in the order the map gives them.
 [[nodiscard]] auto anglesOf(const nx::assets::BspEntity& entity) -> nx::Vec3;
+
+/// How an entity asks to be drawn.
+struct EntityRendering {
+    nx::render::RenderMode mode = nx::render::RenderMode::Normal;
+    nx::render::RenderEffect effect = nx::render::RenderEffect::None;
+    std::uint8_t amount = 0;
+    nx::render::RenderColor color{};
+};
+
+/// The `rendermode`, `renderfx`, `renderamt` and `rendercolor` of `entity`: amounts and channels held to
+/// a byte, as its state carries them; a mode or an effect the original does not number Normal or None.
+[[nodiscard]] auto renderingOf(const nx::assets::BspEntity& entity) -> EntityRendering;
 
 } // namespace nxview

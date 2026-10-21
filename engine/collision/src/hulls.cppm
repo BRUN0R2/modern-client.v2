@@ -81,6 +81,25 @@ enum class CollisionError : std::uint8_t {
     TooDeep,  ///< A tree deeper than kMaxHullDepth.
 };
 
+/// The box the compilers grow `hull` by, about a point (the clip_mins and clip_maxs the original's
+/// Mod_LoadClipnodes gives each hull): none for Point.
+[[nodiscard]] auto hullBoxOf(Hull hull) noexcept -> Aabb;
+
+/// How the engine traces a box through brush models: the hull it goes through, and how far the hull's
+/// middle is from the box's origin.
+struct BoxHull {
+    Hull hull = Hull::Point;
+    /// The trace of a box at `origin` goes through the hull from origin - offset; where it stops, plus
+    /// offset, is where the box's origin is.
+    Vec3 offset{};
+};
+
+/// The hull of a box `box`, about its origin, as the original's SV_HullForBsp chooses it: a point for
+/// one 8 units wide or less; for one 36 wide or less, the ducked hull when it is 36 tall or less, else
+/// the standing one; else the large one. Its offset, the hull's box's low corner from the box's (a
+/// point's none).
+[[nodiscard]] auto boxHullOf(const Aabb& box) noexcept -> BoxHull;
+
 /// Where a trace goes: from `start` to `end` through `hull` of brush model `model`, placed at
 /// `offset` (its entity's origin; the world's is 0) and turned by `angles` about it (its entity's).
 struct HullTraceQuery {

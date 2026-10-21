@@ -233,4 +233,30 @@ TEST(HullTraceTest, ReadsTheHullsOfAMap) {
               Contents::Solid);
 }
 
+TEST(BoxHullTest, TheEngineTracesABoxThroughTheHullItsSizeChooses) {
+    using nx::collision::boxHullOf;
+    const auto expectOffset = [](Vec3 actual, Vec3 expected) {
+        EXPECT_FLOAT_EQ(actual.x, expected.x);
+        EXPECT_FLOAT_EQ(actual.y, expected.y);
+        EXPECT_FLOAT_EQ(actual.z, expected.z);
+    };
+    // A hostage's box: 20 wide and 62 tall, its origin at its feet.
+    const auto hostage =
+        boxHullOf({.min = {.x = -10.0F, .y = -10.0F}, .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}});
+    EXPECT_EQ(hostage.hull, Hull::Standing);
+    expectOffset(hostage.offset, {.x = -6.0F, .y = -6.0F, .z = -36.0F});
+
+    const auto small = boxHullOf({.min = {.x = -4.0F, .y = -4.0F}, .max = {.x = 4.0F, .y = 4.0F, .z = 8.0F}});
+    EXPECT_EQ(small.hull, Hull::Point);
+    expectOffset(small.offset, {});
+    const auto ducked = boxHullOf(
+        {.min = {.x = -16.0F, .y = -16.0F, .z = -18.0F}, .max = {.x = 16.0F, .y = 16.0F, .z = 18.0F}});
+    EXPECT_EQ(ducked.hull, Hull::Ducked);
+    expectOffset(ducked.offset, {});
+    const auto large =
+        boxHullOf({.min = {.x = -20.0F, .y = -20.0F}, .max = {.x = 20.0F, .y = 20.0F, .z = 40.0F}});
+    EXPECT_EQ(large.hull, Hull::Large);
+    expectOffset(large.offset, {.x = -12.0F, .y = -12.0F, .z = -32.0F});
+}
+
 } // namespace

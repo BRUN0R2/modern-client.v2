@@ -40,6 +40,12 @@ constexpr float kBlendingTop = 255.0F;
 /// original interpolates their quaternions linearly instead.
 constexpr double kNearlyParallel = 0.000001;
 
+/// SetController: a range this much wider than its start is a whole turn or more, and the turn and
+/// half turn it brings a value within.
+constexpr double kWholeTurnLess = 359.0;
+constexpr float kWholeTurn = 360.0F;
+constexpr float kHalfTurn = 180.0F;
+
 /// How far short of its last frame a sequence that does not loop stops.
 constexpr double kShortOfTheLastFrame = 1.001;
 
@@ -212,13 +218,14 @@ auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton {
     return Skeleton{.bones = model.bones(), .controllers = model.boneControllers()};
 }
 
-auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed) noexcept
-    -> SequenceFrame {
+auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed,
+                     float framerate) noexcept -> SequenceFrame {
     if (sequence.frameCount <= 1) {
         return SequenceFrame{0.0F};
     }
     const auto last = static_cast<double>(sequence.frameCount - 1);
-    double frame = std::max(static_cast<double>(elapsed.count()), 0.0) * static_cast<double>(sequence.fps);
+    double frame = std::max(static_cast<double>(elapsed.count()), 0.0) * static_cast<double>(framerate) *
+                   static_cast<double>(sequence.fps);
     if (sequence.isLooping) {
         frame -= std::trunc(frame / last) * last;
     } else {
@@ -265,6 +272,41 @@ auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& seque
         transforms.push_back(placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]));
     }
     return transforms;
+}
+
+auto controllerSettingOf(const BoneController& controller, float value) noexcept -> std::uint8_t {
+    if (isRotation(controller.axis)) {
+        if (controller.end < controller.start) {
+            value = -value;
+        }
+        if (static_cast<double>(controller.end) > static_cast<double>(controller.start) + kWholeTurnLess) {
+            // A whole turn or more: into it.
+            if (static_cast<double>(value) > kDegreesPerTurn) {
+                value = static_cast<float>(
+                    static_cast<double>(value) -
+                    (std::trunc(static_cast<double>(value) / kDegreesPerTurn) * kDegreesPerTurn));
+            } else if (value < 0.0F) {
+                value = static_cast<float>(
+                    static_cast<double>(value) +
+                    (std::trunc((static_cast<double>(value) / -kDegreesPerTurn) + 1.0) * kDegreesPerTurn));
+            }
+        } else {
+            // Within half a turn of the range's middle.
+            const float middle = (controller.start + controller.end) / 2.0F;
+            if (value > middle + kHalfTurn) {
+                value -= kWholeTurn;
+            }
+            if (value < middle - kHalfTurn) {
+                value += kWholeTurn;
+            }
+        }
+    }
+    const float setting =
+        static_cast<float>(kControllerTop) * (value - controller.start) / (controller.end - controller.start);
+    if (!(setting > 0.0F)) {
+        return 0; // below the range, and not a number
+    }
+    return static_cast<std::uint8_t>(std::min(std::trunc(setting), static_cast<float>(kControllerTop)));
 }
 
 } // namespace cs

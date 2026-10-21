@@ -30,61 +30,6 @@ constexpr float kAngleWrap = 3600.0F;
     return EulerAngles{.pitch = Degrees{angles.x}, .yaw = Degrees{angles.y}, .roll = Degrees{angles.z}};
 }
 
-/// A solid brush entity, where it is now.
-struct SolidBrush {
-    ecs::Entity entity{};
-    collision::ModelIndex model{};
-    Vec3 origin{};
-    EulerAngles angles{};
-};
-
-/// The solid brush entities of `world`, where they are now.
-[[nodiscard]] auto solidBrushesOf(ecs::World& world) -> std::vector<SolidBrush> {
-    std::vector<SolidBrush> solids;
-    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
-        [&solids](ecs::Entity entity, const BrushModel& model, const Transform& transform,
-                  const BrushSolidity& solidity) {
-            if (solidity.solid == Solid::Bsp) {
-                solids.push_back({.entity = entity,
-                                  .model = model.index,
-                                  .origin = transform.origin,
-                                  .angles = transform.angles});
-            }
-        });
-    return solids;
-}
-
-/// The server's way for `hull` from `start` to `end` through the world and the solid brush entities
-/// of `solids` but `ignored` (SV_Move of a box among brush models): the world's trace, then each
-/// entity's that stops it sooner or starts in solid; once all-solid, no other is looked at.
-[[nodiscard]] auto serverTrace(const collision::BrushHulls& hulls, std::span<const SolidBrush> solids,
-                               std::optional<ecs::Entity> ignored, collision::Hull hull, Vec3 start, Vec3 end)
-    -> collision::Trace {
-    collision::Trace best = hulls.trace(collision::HullTraceQuery{.hull = hull, .start = start, .end = end});
-    for (const SolidBrush& solid : solids) {
-        if (best.isAllSolid) {
-            break;
-        }
-        if (solid.entity == ignored) {
-            continue;
-        }
-        const collision::Trace hit = hulls.trace(collision::HullTraceQuery{.model = solid.model,
-                                                                           .hull = hull,
-                                                                           .offset = solid.origin,
-                                                                           .angles = solid.angles,
-                                                                           .start = start,
-                                                                           .end = end});
-        if (hit.isAllSolid || hit.startsSolid || hit.fraction < best.fraction) {
-            const bool startedSolid = best.startsSolid;
-            best = hit;
-            best.startsSolid = best.startsSolid || startedSolid;
-        } else if (hit.startsSolid) {
-            best.startsSolid = true;
-        }
-    }
-    return best;
-}
-
 /// Whether the box of `body` at `origin` is in solid (SV_TestEntityPosition).
 [[nodiscard]] auto isStuck(const collision::BrushHulls& hulls, std::span<const SolidBrush> solids,
                            const Body& body, Vec3 origin) -> bool {

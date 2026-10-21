@@ -14,21 +14,21 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import :modelFiles;
 
 export namespace nxview {
 
 /// Why the knife cannot be held.
 enum class ViewModelError : std::uint8_t {
-    ReadFailed, ///< A file of it cannot be read (cause: the VfsError).
-    Invalid,    ///< Its reader rejected a file of it (cause: the MdlError).
-    NoSequence, ///< It lacks a sequence the knife plays.
+    FilesFailed, ///< A file of it cannot be read or used (cause: the model files' error).
+    NoSequence,  ///< It lacks a sequence the knife plays.
 };
 
 /// The knife's model, its textures and the animations of the sequences it plays.
 class ViewModel {
 public:
     /// Reads the knife's model from `vfs`, its `*T.mdl` when its textures are not in it, and the
-    /// animations of `draw` and `idle`, from their sequence group files. Errors: ReadFailed, Invalid,
+    /// animations of `draw` and `idle`, from their sequence group files. Errors: FilesFailed,
     /// NoSequence.
     [[nodiscard]] static auto read(const nx::assets::Vfs& vfs) -> nx::Result<ViewModel, ViewModelError>;
 
@@ -49,18 +49,9 @@ private:
         nx::assets::AnimationFrames frames{};
     };
 
-    /// The bytes of its files, which the views point into.
-    struct Files {
-        std::vector<std::byte> model{};
-        std::vector<std::byte> textures{}; ///< Its `*T.mdl`'s; empty when its textures are in it.
-    };
+    ViewModel(std::unique_ptr<ModelFiles> files, Animation draw, Animation idle) noexcept;
 
-    ViewModel(std::unique_ptr<Files> files, nx::assets::MdlView model,
-              std::optional<nx::assets::MdlView> textures, Animation draw, Animation idle) noexcept;
-
-    std::unique_ptr<Files> m_files;
-    nx::assets::MdlView m_model;
-    std::optional<nx::assets::MdlView> m_textures;
+    std::unique_ptr<ModelFiles> m_files;
     Animation m_draw;
     Animation m_idle;
 };

@@ -303,8 +303,16 @@ flowchart LR
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
    additive meshes added as their alpha says. The solid models are drawn first, the others but those
    at a `renderamt` of 0 from the farthest middle of their bounds, then by mode
-   (`R_TransEntityCompare`). The render effects, the players' colors, the bob of the view's model and
-   instancing come with their consumers.
+   (`R_TransEntityCompare`). A `StudioRenderer` draws once a frame: `nxview` draws the view's own model
+   with one of its own, last. `nxview` shows the maps' studio models as the game makes them: the
+   `cycler_sprite` of a model (ReGameDLL's `CCyclerSprite`), its sequence at its `framerate` from
+   when the map starts, as the client estimates it; and the `hostage_entity` (`CHostage`), its model
+   the map's or `scientist.mdl`, its first idle sequence at its own speed (the game picks one of them
+   at random by weight), its head's controllers straight ahead (`SetController` of 0 degrees,
+   `cs::controllerSettingOf`), dropped to the floor ([07 §5](07-simulation-and-physics.md)); each turned by
+   its entity's angles, the pitch negated as the engine's studio transform negates it, lit where it
+   is. The render effects, the players' colors, the bob of the view's model and instancing come with
+   their consumers.
 4. **Modern formats (glTF)** use up to 4 influences (`joints: u8x4/u16x4`,
    `weights: unorm8x4`), in the same pipeline with another permutation.
 5. **Compute skinning** (`r_skinning compute`): pre-transforms vertices once per frame

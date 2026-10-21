@@ -253,6 +253,14 @@ cannot go, everything goes back and the door goes back the way it came (`CBaseDo
 sooner than 0.25 s after the last time). `nxview` ticks the game at 100 Hz: the player's command, the doors it touched, then the
 pushers, the player's body among the bodies.
 
+**Today** (`nx.game:placement`): an entity the game drops to the floor as it makes it, as the
+engine's `DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's rules through the
+hull its size chooses (`collision::boxHullOf`, `SV_HullForBsp`: a point for one 8 units wide or less,
+the ducked hull for one 36 wide and tall at most, the standing one for one taller, the large one for
+one wider; the hull's middle offset from the box's origin by the hull's low corner from the box's),
+among the world and the solid brush entities; where it starts when it starts all in solid or meets
+nothing. `nxview` drops the hostages so.
+
 ### 5.2 Think, touch and triggers
 
 - **Think:** a `NextThink{time}` component. A system selects the entities that are due in

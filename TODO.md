@@ -261,6 +261,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The view's own model kept out of walls, and `nxview` holding the knife as Counter-Strike deploys it
 - [x] Sprites (`nx.render:sprite`: every orientation and format, groups, the render modes, glows hidden, dimmed and grown, alpha-tested sprites lit by the world), and `nxview` showing the maps' `env_sprite`, `env_glow` and `cycler_sprite` as the game animates them
 - [ ] Blended sprites, brush entities and models sorted together, as the original's one list of blended entities
+- [x] The maps' studio models in `nxview`: `cycler_sprite` models at their framerate, hostages idling, their heads straight ahead, dropped to the floor (`nx.game:placement`)
 - [x] The render modes of studio models (`rendermode`, `renderamt`: solid, blended and added, the blended ones from the farthest)
 - [ ] The render effects of studio models (`renderfx`), the players' colors, the bob of the view's model
 - [ ] Optional compute skinning
