@@ -76,17 +76,36 @@ void expectNear(Vec3 actual, Vec3 expected, std::string_view what = {}) {
 
 TEST(SequenceFrameTest, ALoopingSequenceWrapsAtItsLastFrame) {
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}).value(), 3.0F);
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.5F}).value(), 5.0F) << "15 frames: past 10, 5";
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{-1.0F}).value(), 0.0F) << "not started";
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, 1.0F).value(), 3.0F);
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.5F}, 1.0F).value(), 5.0F)
+        << "15 frames: past 10, 5";
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{-1.0F}, 1.0F).value(), 0.0F) << "not started";
 }
 
 TEST(SequenceFrameTest, ASequenceThatDoesNotLoopStopsShortOfItsLastFrame) {
     const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(draw, nx::Seconds{0.2F}).value(), 6.0F);
-    EXPECT_NEAR(cs::sequenceFrameAt(draw, nx::Seconds{1.0F}).value(), 9.999F, kTolerance);
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(draw, nx::Seconds{0.2F}, 1.0F).value(), 6.0F);
+    EXPECT_NEAR(cs::sequenceFrameAt(draw, nx::Seconds{1.0F}, 1.0F).value(), 9.999F, kTolerance);
     const StudioSequence still{.label = "still", .fps = 30.0F, .isLooping = true, .frameCount = 1};
-    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(still, nx::Seconds{2.0F}).value(), 0.0F) << "a single frame";
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(still, nx::Seconds{2.0F}, 1.0F).value(), 0.0F) << "a single frame";
+}
+
+TEST(SequenceFrameTest, TheEntitysFramerateScalesItsSpeed) {
+    const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
+    EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, 2.0F).value(), 6.0F);
+}
+
+TEST(ControllerSettingTest, AValueIsMappedOntoItsControllersRangeAsTheGameSetsIt) {
+    const BoneController head{.axis = BoneAxis::RotationZ, .start = -90.0F, .end = 90.0F};
+    EXPECT_EQ(cs::controllerSettingOf(head, 0.0F), 127) << "the middle, 127.5 cut";
+    EXPECT_EQ(cs::controllerSettingOf(head, 90.0F), 255);
+    EXPECT_EQ(cs::controllerSettingOf(head, 200.0F), 0) << "200 is -160, within half a turn of 0, below -90";
+    const BoneController backward{.axis = BoneAxis::RotationZ, .start = 90.0F, .end = -90.0F};
+    EXPECT_EQ(cs::controllerSettingOf(backward, 45.0F), 191) << "reversed: -45 on 90 to -90";
+    const BoneController turning{.axis = BoneAxis::RotationY, .start = 0.0F, .end = 360.0F};
+    EXPECT_EQ(cs::controllerSettingOf(turning, -90.0F), 191) << "-90 is 270 of a whole turn";
+    const BoneController sliding{.axis = BoneAxis::X, .start = 0.0F, .end = 10.0F};
+    EXPECT_EQ(cs::controllerSettingOf(sliding, 20.0F), 255) << "held to the range";
 }
 
 TEST(StudioPoseTest, ABoneAtRestIsWhereItsValuesPutIt) {

@@ -7,13 +7,17 @@ nxAddModuleLibrary(toolNxview
     MODULES
         src/tool.nxview.cppm
         src/entityKeys.cppm
+        src/modelFiles.cppm
         src/mapLight.cppm
         src/mapSprites.cppm
+        src/mapModels.cppm
         src/viewModel.cppm
     SOURCES
         src/entityKeys.cpp
+        src/modelFiles.cpp
         src/mapLight.cpp
         src/mapSprites.cpp
+        src/mapModels.cpp
         src/viewModel.cpp
     DEPENDS
         nx::core
@@ -21,7 +25,9 @@ nxAddModuleLibrary(toolNxview
         nx::assets
         nx::rhi
         nx::render
+        nx::ecs
         nx::collision
+        nx::game
         cs::shared)
 
 nxAddProgram(nxview

@@ -60,12 +60,19 @@ struct Skeleton {
 /// The skeleton of `model`, a view of it.
 [[nodiscard]] auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton;
 
-/// Where `sequence` is `elapsed` after it started at its own speed, as the original estimates it
-/// (R_StudioEstimateFrame, from its first frame), in double precision: a looping sequence wraps at its
-/// last frame, which is its first again; another stops 0.001 short of its last; one of a single
-/// frame stays at it, and so does any before it started.
-[[nodiscard]] auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed) noexcept
-    -> SequenceFrame;
+/// Where `sequence` is `elapsed` after it started, at `framerate` times its own speed (the entity's
+/// `framerate`), as the original estimates it (R_StudioEstimateFrame, from its first frame), in double
+/// precision: a looping sequence wraps at its last frame, which is its first again; another stops 0.001
+/// short of its last; one of a single frame stays at it, and so does any before it started.
+[[nodiscard]] auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed,
+                                   float framerate) noexcept -> SequenceFrame;
+
+/// The setting, from 0 to 255, that turns or moves `controller` by `value` (degrees for a rotation),
+/// as the game sets an entity's controller (SetController): a rotation's value reversed for a range
+/// that runs backward, brought into a range of a whole turn or more, else within half a turn of the
+/// range's middle; then mapped onto the range, cut to a whole number and held to it.
+[[nodiscard]] auto controllerSettingOf(const nx::assets::BoneController& controller, float value) noexcept
+    -> std::uint8_t;
 
 /// The bones of `skeleton` posed as `query` asks in `sequence`, whose decoded frames are `animation`:
 /// each bone's rest values plus its animation at the frame, interpolated towards the next one by the

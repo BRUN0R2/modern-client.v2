@@ -137,8 +137,8 @@ template <class Code>
     return kExitUnusable;
 }
 
-/// The map, its WADs, its sky, its hulls, the classes of its entities, its sprites, the knife and the
-/// shaders, read once: the views point into these bytes.
+/// The map, its WADs, its sky, its hulls, the classes of its entities, its sprites and models, the knife
+/// and the shaders, read once: the views point into these bytes.
 struct Content {
     std::vector<std::byte> mapBytes;
     std::optional<nx::assets::BspView> map;
@@ -151,6 +151,7 @@ struct Content {
     std::optional<nx::collision::BrushHulls> hulls;
     std::optional<nxview::GlowBlockers> glowBlockers;
     std::optional<nxview::MapSprites> sprites;
+    std::optional<nxview::MapModels> models;
     std::optional<nxview::ViewModel> knife;
     std::vector<std::byte> worldShader;
     std::vector<std::byte> studioShader;
@@ -258,8 +259,35 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     }
 }
 
-/// Reads the map `options.map` of the installation, its WADs, its sky, its sprites, the knife and the
-/// shaders, and builds its hulls.
+/// Makes in `game` the game of `content`'s map as it starts: its brush entities, as the game makes them;
+/// false when they cannot be made, which is printed.
+[[nodiscard]] auto spawnGame(const Content& content, nx::ecs::World& game) -> bool {
+    if (auto registered = nx::game::registerComponents(game); !registered) {
+        std::ignore = unusable(registered.error());
+        return false;
+    }
+    if (auto spawned = nx::game::spawnBrushEntities(game, content.map->entities(), content.map->models(),
+                                                    content.entityClasses);
+        !spawned) {
+        std::ignore = unusable(spawned.error());
+        return false;
+    }
+    return true;
+}
+
+/// Where the game puts its brush entities now.
+[[nodiscard]] auto placementsOf(nx::ecs::World& game) -> std::vector<nx::render::ModelPlacement> {
+    std::vector<nx::render::ModelPlacement> placements;
+    nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&>{game}.forEach(
+        [&placements](const nx::game::BrushModel& model, const nx::game::Transform& transform) {
+            placements.push_back(
+                {.model = model.index, .origin = transform.origin, .angles = transform.angles});
+        });
+    return placements;
+}
+
+/// Reads the map `options.map` of the installation, its WADs, its sky, its sprites and models, the knife
+/// and the shaders, and builds its hulls.
 [[nodiscard]] auto readContent(const Options& options, Content& content) -> int {
     auto executable = nx::platform::executablePath();
     if (!executable) {
@@ -325,6 +353,18 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
                      content.sprites->missing() | std::views::join_with(std::string_view{", "}) |
                          std::ranges::to<std::string>());
     }
+    content.models = nxview::MapModels::read(*vfs, *content.map);
+    if (!content.models->missing().empty()) {
+        std::println("nxview: models the map's entities show that cannot be read: {}",
+                     content.models->missing() | std::views::join_with(std::string_view{", "}) |
+                         std::ranges::to<std::string>());
+    }
+    // The game drops its hostages to the floor as it makes them, among the brush entities at rest.
+    nx::ecs::World resting;
+    if (!spawnGame(content, resting)) {
+        return kExitUnusable;
+    }
+    content.models->dropToFloor(resting, *content.hulls);
     auto knife = nxview::ViewModel::read(*vfs);
     if (!knife) {
         return unusable(knife.error());
@@ -342,14 +382,16 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     return EXIT_SUCCESS;
 }
 
-/// What nxview draws: the world, the light it gives, the sprites of its entities and the knife on the
-/// GPU.
+/// What nxview draws: the world, the light it gives, the sprites and studio models of its entities and
+/// the knife on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
 struct Scene {
     nx::render::BspWorld world;
     nx::render::WorldLight light;
     nx::render::SpriteRenderer sprites;
     std::vector<nx::render::SpriteModel> spriteModels; ///< Of content.sprites, by file.
     nx::render::StudioRenderer studio;
+    std::vector<nx::render::StudioModel> models; ///< Of content.models, by file.
+    nx::render::StudioRenderer viewModels;
     nx::render::StudioModel knife;
 };
 
@@ -380,15 +422,18 @@ enum class SceneError : std::uint8_t {
         std::ignore = unusable(!sprites ? sprites.error() : spriteModels.error());
         return std::nullopt;
     }
-    auto studio = nx::render::StudioRenderer::create(
-        device, commands, {.shaderCode = content.studioShader, .colorFormat = format});
-    if (!studio) {
-        std::ignore = unusable(studio.error());
+    const nx::render::StudioRendererDesc studioDesc{.shaderCode = content.studioShader,
+                                                    .colorFormat = format};
+    auto studio = nx::render::StudioRenderer::create(device, commands, studioDesc);
+    auto viewModels = nx::render::StudioRenderer::create(device, commands, studioDesc);
+    if (!studio || !viewModels) {
+        std::ignore = unusable(!studio ? studio.error() : viewModels.error());
         return std::nullopt;
     }
-    auto knife = content.knife->load(*studio, commands);
-    if (!knife) {
-        std::ignore = unusable(knife.error());
+    auto models = content.models->load(*studio, commands);
+    auto knife = content.knife->load(*viewModels, commands);
+    if (!models || !knife) {
+        std::ignore = unusable(!models ? models.error() : knife.error());
         return std::nullopt;
     }
     return Scene{.world = std::move(*world),
@@ -396,21 +441,9 @@ enum class SceneError : std::uint8_t {
                  .sprites = std::move(*sprites),
                  .spriteModels = std::move(*spriteModels),
                  .studio = std::move(*studio),
+                 .models = std::move(*models),
+                 .viewModels = std::move(*viewModels),
                  .knife = std::move(*knife)};
-}
-
-/// Where the map's entities put its brush models, unturned: where they rest until the game moves them.
-[[nodiscard]] auto restingPlacementsOf(const nx::assets::BspView& map)
-    -> std::vector<nx::render::ModelPlacement> {
-    std::vector<nx::render::ModelPlacement> placements;
-    for (const nx::assets::BspEntity& entity : map.entities()) {
-        if (const std::optional<nx::assets::ModelIndex> model = entity.findBrushModel();
-            model && *model != nx::assets::kWorldModel && model->value < map.models().size()) {
-            placements.push_back(
-                {.model = *model, .origin = entity.findVector("origin").value_or(nx::Vec3{})});
-        }
-    }
-    return placements;
 }
 
 /// What a frame of the scene shows.
@@ -422,9 +455,10 @@ struct SceneView {
     std::optional<nx::Seconds> sinceDeploy{}; ///< Since the knife came out; none without a player.
 };
 
-/// Draws `view` of `scene`: the world; the sprites of its entities, a glow the player's line of sight
-/// does not reach hidden; then the knife in the player's hand, lit where the player's eye is, as the
-/// original lights the view's own model. Errors: DrawFailed.
+/// Draws `view` of `scene`: the world; the studio models of its entities, each lit where it is; the
+/// sprites of its entities, a glow the player's line of sight does not reach hidden; then the knife in
+/// the player's hand, lit where the player's eye is, as the original lights the view's own model.
+/// Errors: DrawFailed.
 [[nodiscard]] auto drawScene(nx::rhi::CommandList& list, Scene& scene, const Content& content,
                              const SceneView& view) -> nx::Result<void, SceneError> {
     const nx::render::LightStyleValues styles = content.lightStyles.valuesAt(view.time);
@@ -433,6 +467,13 @@ struct SceneView {
                             .time = view.time,
                             .lightStyles = styles,
                             .placements = view.placements});
+    const nxview::PosedModels models =
+        content.models->posed(scene.models, view.time, scene.light, content.skyLight, styles);
+    if (auto drawn = scene.studio.draw(
+            list, {.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
+        !drawn) {
+        return nx::fail(SceneError::DrawFailed, "the map's models", std::move(drawn.error()));
+    }
     std::vector<nx::render::SpriteInstance> sprites =
         content.sprites->instances(scene.spriteModels, view.time);
     for (nx::render::SpriteInstance& sprite : sprites) {
@@ -461,7 +502,7 @@ struct SceneView {
         .light = scene.light.modelLightAt({.origin = view.camera.position, .sky = content.skyLight}, styles),
         .depth = nx::render::StudioDepth::ViewModel}};
     if (auto drawn =
-            scene.studio.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = knife});
+            scene.viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = knife});
         !drawn) {
         return nx::fail(SceneError::DrawFailed, "the knife", std::move(drawn.error()));
     }
@@ -566,8 +607,13 @@ constexpr std::size_t kBlue = 2;
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
                          .area = kScreenshotExtent});
-    // The brush entities where the map puts them, and the knife the player has held since it started.
-    const std::vector<nx::render::ModelPlacement> placements = restingPlacementsOf(*content.map);
+    // The brush entities where the game puts them as the map starts, and the knife the player has held
+    // since it started.
+    nx::ecs::World game;
+    if (!spawnGame(content, game)) {
+        return kExitUnusable;
+    }
+    const std::vector<nx::render::ModelPlacement> placements = placementsOf(game);
     if (auto drawn = drawScene(list, *scene, content,
                                {.camera = camera,
                                 .aspect = aspect,
@@ -741,15 +787,9 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
 [[nodiscard]] auto view(const Options& options, const Content& content) -> int {
     const nx::collision::BrushHulls& hulls = *content.hulls;
     nx::ecs::World game;
-    if (auto registered = nx::game::registerComponents(game); !registered) {
-        return unusable(registered.error());
+    if (!spawnGame(content, game)) {
+        return kExitUnusable;
     }
-    if (auto spawned = nx::game::spawnBrushEntities(game, content.map->entities(), content.map->models(),
-                                                    content.entityClasses);
-        !spawned) {
-        return unusable(spawned.error());
-    }
-    std::vector<nx::render::ModelPlacement> placements; // where the game puts its brush entities
     auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
     if (!window) {
         return unusable(window.error());
@@ -877,12 +917,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
                              .area = frame.size});
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
         const nx::Seconds time{mapClock.elapsed()};
-        placements.clear();
-        nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&>{game}.forEach(
-            [&placements](const nx::game::BrushModel& model, const nx::game::Transform& transform) {
-                placements.push_back(
-                    {.model = model.index, .origin = transform.origin, .angles = transform.angles});
-            });
+        const std::vector<nx::render::ModelPlacement> placements = placementsOf(game);
         const std::optional<nx::Seconds> sinceDeploy =
             isFlying ? std::nullopt : std::optional{nx::Seconds{deployClock.elapsed()}};
         if (auto drawn = drawScene(list, *scene, content,

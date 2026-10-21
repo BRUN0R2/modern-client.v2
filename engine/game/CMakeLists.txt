@@ -7,12 +7,16 @@ nxAddModuleLibrary(nxGame
     MODULES
         src/nx.game.cppm
         src/components.cppm
+        src/solids.cppm
         src/brushEntities.cppm
         src/movers.cppm
+        src/placement.cppm
     SOURCES
         src/components.cpp
+        src/solids.cpp
         src/brushEntities.cpp
         src/movers.cpp
+        src/placement.cpp
     DEPENDS
         nx::core
         nx::math

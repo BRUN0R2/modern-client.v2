@@ -140,4 +140,33 @@ TEST(MapSpriteTest, GlowsAnimateWithAFramerateAndCyclersWithout) {
     EXPECT_EQ(nxview::frameAt(cycler, 3, nx::Seconds{0.25F}), 0.0F) << "frame 2 of the loop's 2: 0 again";
 }
 
+TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
+    const MapOf map{R"({ "classname" "worldspawn" }
+{ "classname" "cycler_sprite" "model" "models/palmtree.mdl" "origin" "1 2 3" "angles" "0 90 0" "framerate" "10" "rendermode" "4" "renderamt" "255" }
+{ "classname" "cycler_sprite" "model" "sprites/glow01.spr" }
+{ "classname" "hostage_entity" "model" "/models/hostage.mdl" "angle" "270" "skin" "2" }
+{ "classname" "hostage_entity" "skin" "-1" })"};
+    const std::vector<nxview::MapModel> models = nxview::mapModelsOf(map.get());
+    ASSERT_EQ(models.size(), 3U) << "the cycler of a model and the hostages; not the cycler of a sprite";
+
+    const nxview::MapModel& palm = models[0];
+    EXPECT_EQ(palm.kind, nxview::ModelClass::Cycler);
+    EXPECT_EQ(palm.model, "models/palmtree.mdl");
+    expectNear(palm.origin, {.x = 1.0F, .y = 2.0F, .z = 3.0F});
+    EXPECT_FLOAT_EQ(palm.angles.yaw.value(), 90.0F) << "a cycler keeps its yaw";
+    EXPECT_FLOAT_EQ(palm.framerate, 10.0F);
+    EXPECT_EQ(palm.mode, RenderMode::TransAlpha);
+    EXPECT_EQ(palm.amount, 255);
+
+    const nxview::MapModel& named = models[1];
+    EXPECT_EQ(named.kind, nxview::ModelClass::Hostage);
+    EXPECT_EQ(named.model, "/models/hostage.mdl");
+    EXPECT_FLOAT_EQ(named.angles.yaw.value(), 270.0F) << "\"angle\" is the yaw";
+    EXPECT_EQ(named.skin, 2U);
+    EXPECT_FLOAT_EQ(named.framerate, 1.0F) << "at its sequence's own speed";
+
+    EXPECT_EQ(models[2].model, "models/scientist.mdl") << "a hostage without a model";
+    EXPECT_EQ(models[2].skin, 0U) << "a negative skin is 0";
+}
+
 } // namespace

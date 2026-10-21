@@ -65,12 +65,12 @@ flowchart TB
 | `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform (today: core, math, meta, data, platform) |
-| `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
+| `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces, and the hull a box is traced through | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
 | `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera, the BSP world, the light it gives models, studio models and sprites | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts | render, assets, platform, console |
-| `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the map's brush entities, as the game makes them when a map starts, and its doors, sliding and rotating | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
+| `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the map's brush entities, as the game makes them when a map starts, its doors, sliding and rotating, and an entity dropped to the floor | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |
 | `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement among the world and the brush entities, and the bones of studio models posed | game, collision (today: core, math, ecs, assets, collision, game) |
 | `cs.server` | 5 | Server rules: rounds, economy, objectives, admin | cs.shared, script, net |
@@ -79,7 +79,7 @@ flowchart TB
 | `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
 | `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
 | `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, jobs, assets, collision, cs.shared (platform in the program) |
-| `tool.nxview` | 6 | `nxview`: what the map viewer sets up as the game would, the light of the map, the sprites of its entities and the knife in hand ([05](05-rendering.md)) | core, math, assets, rhi, render, collision, cs.shared (platform, rhi.vulkan, ecs and game in the program) |
+| `tool.nxview` | 6 | `nxview`: what the map viewer sets up as the game would, the light of the map, the sprites and studio models of its entities and the knife in hand ([05](05-rendering.md)) | core, math, assets, rhi, render, ecs, collision, game, cs.shared (platform and rhi.vulkan in the program) |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
 module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every

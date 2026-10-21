@@ -229,6 +229,48 @@ private:
 
 } // namespace
 
+namespace {
+
+// The boxes compilers grow the hulls by (Mod_LoadClipnodes): a standing player's, a large entity's and
+// a ducked player's, their half sizes.
+constexpr float kPlayerHalfWidth = 16.0F;
+constexpr float kStandingHalfHeight = 36.0F;
+constexpr float kLargeHalfSize = 32.0F;
+constexpr float kDuckedHalfHeight = 18.0F;
+/// SV_HullForBsp: the widest box a point traces, the widest a player's hull does, and the tallest the
+/// ducked one does.
+constexpr float kPointWidth = 8.0F;
+constexpr float kPlayerWidth = 36.0F;
+constexpr float kDuckedHeight = 36.0F;
+
+} // namespace
+
+auto hullBoxOf(Hull hull) noexcept -> Aabb {
+    switch (hull) {
+    case Hull::Standing:
+        return Aabb::around({}, {.x = kPlayerHalfWidth, .y = kPlayerHalfWidth, .z = kStandingHalfHeight});
+    case Hull::Large:
+        return Aabb::around({}, {.x = kLargeHalfSize, .y = kLargeHalfSize, .z = kLargeHalfSize});
+    case Hull::Ducked:
+        return Aabb::around({}, {.x = kPlayerHalfWidth, .y = kPlayerHalfWidth, .z = kDuckedHalfHeight});
+    case Hull::Point:
+    case Hull::Count:
+        break;
+    }
+    return Aabb{};
+}
+
+auto boxHullOf(const Aabb& box) noexcept -> BoxHull {
+    const Vec3 size = box.max - box.min;
+    if (size.x <= kPointWidth) {
+        return BoxHull{.hull = Hull::Point, .offset = hullBoxOf(Hull::Point).min};
+    }
+    const Hull hull = size.x > kPlayerWidth     ? Hull::Large
+                      : size.z <= kDuckedHeight ? Hull::Ducked
+                                                : Hull::Standing;
+    return BoxHull{.hull = hull, .offset = hullBoxOf(hull).min - box.min};
+}
+
 auto BrushHulls::create(BrushHullsDesc desc) -> Result<BrushHulls, CollisionError> {
     for (const auto& [tree, nodes] :
          {std::pair{std::string_view{"hull 0"}, std::span{std::as_const(desc.pointNodes)}},
