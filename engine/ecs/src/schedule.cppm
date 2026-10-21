@@ -16,28 +16,31 @@ export namespace nx::ecs {
 
 /// The parts of a tick (and of a client frame), in the order they run.
 enum class Phase : std::uint8_t {
-    Input,          // apply the user commands received
-    PreSimulation,  // timers, entity think, triggers
-    Simulation,     // movement, physics, weapons, damage
-    Rules,          // serial game rules and synchronous Rook hooks
-    Script,         // Rook event dispatch in deterministic order
-    PostSimulation, // cleanup
-    Replication,    // per-client snapshots (server)
-    Presentation,   // interpolation, visual animation, extract (client)
+    Input,          ///< Apply the user commands received.
+    PreSimulation,  ///< Timers, entity think, triggers.
+    Simulation,     ///< Movement, physics, weapons, damage.
+    Rules,          ///< Serial game rules and synchronous Rook hooks.
+    Script,         ///< Rook event dispatch in deterministic order.
+    PostSimulation, ///< Cleanup.
+    Replication,    ///< Per-client snapshots (server).
+    Presentation,   ///< Interpolation, visual animation, extract (client).
     Count,
 };
 
+/// A system of one Schedule: its position in the order of add().
 enum class SystemId : std::uint32_t {};
 
+/// Why build() could not order the systems.
 enum class ScheduleError : std::uint8_t {
-    Cycle,             // before/after constraints that loop
-    UnknownSystem,     // a constraint names a system this schedule does not have
-    OrderAcrossPhases, // a constraint that the phase order contradicts
+    Cycle,             ///< Before/after constraints that loop.
+    UnknownSystem,     ///< A constraint names a system this schedule does not have.
+    OrderAcrossPhases, ///< A constraint that the phase order contradicts.
 };
 
+/// How to add a system.
 struct SystemDesc {
-    jobs::JobLabel name; // the system's job label too
-    Phase phase = Phase::Simulation;
+    jobs::JobLabel name;             ///< The system's job label too.
+    Phase phase = Phase::Simulation; ///< The phase it runs in.
     /// Run after these systems (read during add()). Constraints on systems of earlier phases hold
     /// by themselves.
     std::span<const SystemId> after = {};
@@ -51,6 +54,7 @@ struct SystemDesc {
 /// on the number of workers.
 class Schedule {
 public:
+    /// An empty schedule for the systems of `world`, which must outlive it.
     inline explicit Schedule(World& world) noexcept : m_world{&world} {}
 
     /// Adds a system (a function or a non-generic lambda; see :system). Invalidates the build.
@@ -62,6 +66,7 @@ public:
     }
 
     /// Orders every phase. Fails on contradictory before/after constraints.
+    /// Errors: Cycle, UnknownSystem, OrderAcrossPhases.
     [[nodiscard]] auto build() -> Result<void, ScheduleError>;
 
     /// Runs the systems of `phase`, then applies their command buffers in declaration order. The
@@ -70,7 +75,9 @@ public:
 
     /// After build(): the systems `id` waits for in its phase.
     [[nodiscard]] auto dependenciesOf(SystemId id) const noexcept -> std::span<const SystemId>;
+    /// The name `id` was added with.
     [[nodiscard]] auto nameOf(SystemId id) const noexcept -> std::string_view;
+    /// Systems added so far, in every phase.
     [[nodiscard]] inline auto systemCount() const noexcept -> std::size_t { return m_entries.size(); }
 
 private:

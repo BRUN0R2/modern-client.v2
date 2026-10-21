@@ -13,39 +13,51 @@ export namespace nx {
 
 // Unit tags: what each quantity below measures, with the suffix or prefix it prints with.
 
+/// The unit of HammerUnits.
 struct HammerUnitsTag {
     static constexpr std::string_view kSuffix = "hu";
 };
+/// The unit of UnitsPerSecond.
 struct UnitsPerSecondTag {
     static constexpr std::string_view kSuffix = "ups";
 };
+/// The unit of UnitsPerSecondSquared.
 struct UnitsPerSecondSquaredTag {
     static constexpr std::string_view kSuffix = "ups/s";
 };
+/// The unit of PerSecond.
 struct PerSecondTag {
     static constexpr std::string_view kSuffix = "/s";
 };
+/// The unit of DegreesPerSecond.
 struct DegreesPerSecondTag {
     static constexpr std::string_view kSuffix = "deg/s";
 };
+/// The unit of HitPoints.
 struct HitPointsTag {
     static constexpr std::string_view kSuffix = "hp";
 };
+/// The unit of ArmorPoints.
 struct ArmorPointsTag {
     static constexpr std::string_view kSuffix = "ap";
 };
+/// The unit of Damage.
 struct DamageTag {
     static constexpr std::string_view kSuffix = "dmg";
 };
+/// The unit of Money.
 struct MoneyTag {
     static constexpr std::string_view kPrefix = "$";
 };
+/// The unit of Scale.
 struct ScaleTag {
     static constexpr std::string_view kSuffix = "x";
 };
+/// The unit of Degrees.
 struct DegreesTag {
     static constexpr std::string_view kSuffix = "deg";
 };
+/// The unit of Radians.
 struct RadiansTag {
     static constexpr std::string_view kSuffix = "rad";
 };
@@ -143,10 +155,12 @@ inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
     return speed * scale;
 }
 
+/// The same angle in radians.
 [[nodiscard]] constexpr auto toRadians(Degrees angle) noexcept -> Radians {
     return Radians{angle.value() * kHalfTurnRadians.value() / kHalfTurnDegrees.value()};
 }
 
+/// The same angle in degrees.
 [[nodiscard]] constexpr auto toDegrees(Radians angle) noexcept -> Degrees {
     return Degrees{angle.value() * kHalfTurnDegrees.value() / kHalfTurnRadians.value()};
 }

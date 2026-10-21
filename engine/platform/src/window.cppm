@@ -159,34 +159,37 @@ struct CloseRequested {};
 
 /// The drawable size changed: what a swapchain must match.
 struct Resized {
-    PixelSize size;
+    PixelSize size; ///< The new drawable size.
 };
 
 /// The window was minimized, or restored from it: a minimized window has nothing to draw to.
 struct Minimized {
-    bool isMinimized = false;
+    bool isMinimized = false; ///< False when the window was restored.
 };
 
+/// The window gained or lost the keyboard focus.
 struct FocusChanged {
-    bool isFocused = false;
+    bool isFocused = false; ///< False when the focus was lost.
 };
 
+/// A key was pressed or released.
 struct KeyChanged {
     Key key{};
-    bool isDown = false;
+    bool isDown = false;   ///< False when the key was released.
     bool isRepeat = false; ///< Sent again while held, by the system's key repeat.
 };
 
 /// Relative motion in the mouse's own counts, without the system's acceleration while the mouse is
 /// relative (Window::setRelativeMouse): what `sensitivity` scales.
 struct MouseMoved {
-    float dx = 0.0F;
+    float dx = 0.0F; ///< Positive to the right.
     float dy = 0.0F; ///< Positive toward the user.
 };
 
+/// A mouse button was pressed or released.
 struct MouseButtonChanged {
     MouseButton button{};
-    bool isDown = false;
+    bool isDown = false; ///< False when the button was released.
 };
 
 /// Wheel notches, fractional on precise wheels: positive away from the user (MWHEELUP).
@@ -194,25 +197,26 @@ struct MouseWheelMoved {
     float dy = 0.0F;
 };
 
+/// Anything that happened to the window or its input, as pollEvents reports it.
 using WindowEvent = std::variant<CloseRequested, Resized, Minimized, FocusChanged, KeyChanged, MouseMoved,
                                  MouseButtonChanged, MouseWheelMoved>;
 
 /// A Win32 window: the HINSTANCE and HWND a Vulkan or D3D11 surface is made from.
 struct Win32Window {
-    void* instance = nullptr;
-    void* window = nullptr;
+    void* instance = nullptr; ///< The HINSTANCE.
+    void* window = nullptr;   ///< The HWND.
 };
 
 /// An X11 window: the Display* and the Window id.
 struct XlibWindow {
-    void* display = nullptr;
-    std::uint64_t window = 0;
+    void* display = nullptr;  ///< The Display*.
+    std::uint64_t window = 0; ///< The Window id.
 };
 
 /// A Wayland window: the wl_display* and the wl_surface*.
 struct WaylandWindow {
-    void* display = nullptr;
-    void* surface = nullptr;
+    void* display = nullptr; ///< The wl_display*.
+    void* surface = nullptr; ///< The wl_surface*.
 };
 
 /// What a GPU backend makes its surface from; the backend creates the surface itself.
@@ -221,10 +225,11 @@ using NativeWindow = std::variant<Win32Window, XlibWindow, WaylandWindow>;
 /// The drawable area of a window that asks for no other.
 inline constexpr PixelSize kDefaultWindowSize{.width = 1280, .height = 720};
 
+/// How to open the window.
 struct WindowDesc {
-    std::string_view title;
+    std::string_view title;              ///< Shown in the title bar.
     PixelSize size = kDefaultWindowSize; ///< Of the drawable area, before the desktop's scaling.
-    bool isResizable = true;
+    bool isResizable = true;             ///< Whether the user may resize the window.
 };
 
 /// The program's window. There is one at a time, and it takes every event of the program: SDL

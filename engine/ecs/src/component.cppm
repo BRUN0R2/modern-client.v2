@@ -39,6 +39,7 @@ struct ComponentInfo {
     StableId stableId;
     /// 0 for tags, which have no storage.
     std::size_t size = 0;
+    /// A power of two, at most kMaxComponentAlignment.
     std::size_t alignment = 1;
     /// Moves the object at `source` into the uninitialized `destination` and destroys the source.
     /// nullptr when a byte copy does that (trivially copyable types).
@@ -46,6 +47,7 @@ struct ComponentInfo {
     /// nullptr when the type is trivially destructible.
     void (*destroy)(void* object) noexcept = nullptr;
 
+    /// Whether the component has no data (a TagComponent).
     [[nodiscard]] inline auto isTag() const noexcept -> bool { return size == 0; }
 };
 
@@ -73,12 +75,13 @@ template <Component Type>
     return info;
 }
 
+/// Why a component type could not be registered.
 enum class ComponentError : std::uint8_t {
-    TypeAlreadyRegistered,
-    NameAlreadyRegistered,
-    StableIdCollision, // two different names hash to the same StableId
-    InvalidAlignment,  // not a power of two, or beyond kMaxComponentAlignment
-    InvalidName,
+    TypeAlreadyRegistered, ///< The C++ type is already registered, under some name.
+    NameAlreadyRegistered, ///< A component with the same name is already registered.
+    StableIdCollision,     ///< Two different names hash to the same StableId.
+    InvalidAlignment,      ///< Not a power of two, or beyond kMaxComponentAlignment.
+    InvalidName,           ///< An empty name.
 };
 
 namespace detail {
@@ -111,25 +114,32 @@ struct TypeKeyHash {
 class ComponentRegistry {
 public:
     /// Registers a C++ component type under its declared name.
+    /// Errors: those of add(ComponentInfo, const void*).
     template <Component Type>
     [[nodiscard]] auto add(std::string_view name) -> Result<ComponentTypeId, ComponentError> {
         return add(describeComponent<Type>(name), detail::typeKeyOf<Type>());
     }
 
     /// Registers a component described at run time. `typeKey` identifies the C++ type, if any.
+    /// Errors: InvalidName, InvalidAlignment, TypeAlreadyRegistered (only with a `typeKey`),
+    /// NameAlreadyRegistered, StableIdCollision.
     [[nodiscard]] auto add(ComponentInfo info, const void* typeKey = nullptr)
         -> Result<ComponentTypeId, ComponentError>;
 
+    /// The id of the C++ type `Type`, if it is registered.
     template <Component Type>
     [[nodiscard]] auto find() const -> std::optional<ComponentTypeId> {
         return findByTypeKey(detail::typeKeyOf<Type>());
     }
 
+    /// The id of the type registered with `typeKey`, if any.
     [[nodiscard]] auto findByTypeKey(const void* typeKey) const -> std::optional<ComponentTypeId>;
+    /// The id of the type registered with `stableId`, if any.
     [[nodiscard]] auto findByStableId(StableId stableId) const -> std::optional<ComponentTypeId>;
 
     /// `id` must come from this registry.
     [[nodiscard]] auto info(ComponentTypeId id) const noexcept -> const ComponentInfo&;
+    /// Component types registered so far.
     [[nodiscard]] inline auto count() const noexcept -> std::size_t { return m_infos.size(); }
 
 private:

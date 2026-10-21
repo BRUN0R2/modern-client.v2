@@ -19,10 +19,10 @@ class JobSystem;
 /// in the global queue (unless another thread was taking from it at that moment) or in what it
 /// could steal.
 enum class Priority : std::uint8_t {
-    Critical,   // the current frame or tick
-    Normal,     // work due soon, but not on the frame's critical path
-    Low,        // streaming, compression
-    Background, // precomputation, caches
+    Critical,   ///< The current frame or tick.
+    Normal,     ///< Work due soon, but not on the frame's critical path.
+    Low,        ///< Streaming, compression.
+    Background, ///< Precomputation, caches.
     Count,
 };
 
@@ -37,15 +37,17 @@ inline void jobLabelMustNotBeEmpty() noexcept {}
 /// expression (a string literal, a type name), so it always outlives the job that carries it.
 class JobLabel {
 public:
-    // Implicit, so that descriptors read `{.label = "physics"}`.
+    /// From a string literal. Implicit, so that descriptors read `{.label = "physics"}`.
     consteval JobLabel(const char* text) : JobLabel{std::string_view{text}} {}
 
+    /// From a constant string; an empty one does not compile.
     consteval JobLabel(std::string_view text) : m_text{text} {
         if (text.empty()) {
             detail::jobLabelMustNotBeEmpty();
         }
     }
 
+    /// The name, as given.
     [[nodiscard]] constexpr auto text() const noexcept -> std::string_view { return m_text; }
 
 private:
@@ -83,8 +85,8 @@ private:
 
 /// How to submit a job.
 struct JobDesc {
-    JobLabel label; // required: every job is named (docs/04, section 7)
-    Priority priority = Priority::Normal;
+    JobLabel label;                       ///< Required: every job is named (docs/04, section 7).
+    Priority priority = Priority::Normal; ///< How urgently threads take the job.
     /// The job starts only after every one of these has completed. The span is read during the
     /// submit call only.
     std::span<const JobHandle> dependsOn = {};

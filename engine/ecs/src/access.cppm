@@ -10,11 +10,12 @@ import :component;
 
 export namespace nx::ecs {
 
+/// The components and resources one system touches, as its parameters declare them.
 struct SystemAccess {
-    std::vector<ComponentTypeId> componentReads;
-    std::vector<ComponentTypeId> componentWrites;
-    std::vector<const void*> resourceReads; // type keys of resources (events are resources)
-    std::vector<const void*> resourceWrites;
+    std::vector<ComponentTypeId> componentReads;  ///< Components read.
+    std::vector<ComponentTypeId> componentWrites; ///< Components written.
+    std::vector<const void*> resourceReads;       ///< Type keys of resources read (events are resources).
+    std::vector<const void*> resourceWrites;      ///< Type keys of resources written.
     /// Takes the whole World: runs alone.
     bool isExclusive = false;
 
