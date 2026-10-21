@@ -39,10 +39,10 @@ constexpr float kTolerance = 1.0e-5F;
 /// unused node keeps the root from being the tree's last, which movement takes for an empty hull.
 [[nodiscard]] auto standingHull(std::vector<Plane> planes, std::vector<HullNode> nodes) -> BrushHulls {
     nodes.push_back(HullNode{.plane = 0, .children = {Contents::Empty, Contents::Empty}});
-    auto hulls = BrushHulls::create(
-        BrushHullsDesc{.planes = std::move(planes),
-                       .clipNodes = std::move(nodes),
-                       .models = {{Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}});
+    auto hulls = BrushHulls::create(BrushHullsDesc{
+        .planes = std::move(planes),
+        .clipNodes = std::move(nodes),
+        .models = {{.hulls = {Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}}});
     EXPECT_TRUE(hulls.has_value());
     return std::move(hulls).value();
 }
@@ -116,10 +116,10 @@ TEST(HullTraceTest, TranslucentContentsAreWaterToMovementOnly) {
 }
 
 TEST(HullTraceTest, MovementTakesAHullRootedAtItsLastNodeForAnEmptyOne) {
-    auto hulls = BrushHulls::create(
-        BrushHullsDesc{.planes = {Plane{.normal = {.z = 1.0F}, .distance = 0.0F}},
-                       .clipNodes = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}},
-                       .models = {{Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}});
+    auto hulls = BrushHulls::create(BrushHullsDesc{
+        .planes = {Plane{.normal = {.z = 1.0F}, .distance = 0.0F}},
+        .clipNodes = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}},
+        .models = {{.hulls = {Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty}}}});
     ASSERT_TRUE(hulls.has_value());
     EXPECT_LT(hulls->trace(standingQuery({.z = 10.0F}, {.z = -10.0F})).fraction, 1.0F);
     EXPECT_EQ(hulls->traceMovement(standingQuery({.z = 10.0F}, {.z = -10.0F})).fraction, 1.0F) << "Parity";
@@ -164,7 +164,8 @@ TEST(HullTraceTest, RefusesBrokenTrees) {
         << "child";
     EXPECT_EQ(errorOf({.planes = planes,
                        .clipNodes = {HullNode{.children = {Contents::Empty, Contents::Empty}}},
-                       .models = {{Contents::Empty, HullNodeIndex{3}, Contents::Empty, Contents::Empty}}}),
+                       .models = {{.hulls = {Contents::Empty, HullNodeIndex{3}, Contents::Empty,
+                                             Contents::Empty}}}}),
               CollisionError::BadIndex)
         << "root";
     EXPECT_EQ(errorOf({.planes = planes,
@@ -189,6 +190,8 @@ TEST(HullTraceTest, ReadsTheHullsOfAMap) {
     const auto hulls = BrushHulls::create(*map);
     ASSERT_TRUE(hulls.has_value()) << nx::describe(hulls.error());
     EXPECT_EQ(hulls->modelCount(), 1U);
+    EXPECT_EQ(hulls->boundsOf(0).min, map->models()[0].bounds.min);
+    EXPECT_EQ(hulls->boundsOf(0).max, map->models()[0].bounds.max);
     for (const Hull hull : {Hull::Point, Hull::Standing}) {
         const Trace trace = hulls->trace(HullTraceQuery{.hull = hull,
                                                         .start = {.x = 32.0F, .y = 32.0F, .z = 32.0F},

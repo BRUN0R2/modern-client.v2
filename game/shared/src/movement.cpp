@@ -70,6 +70,12 @@ constexpr nx::Milliseconds kDuckTime{1000.0F};
 constexpr double kDuckLeftWhenDown = 0.6;
 /// A player stuck by ducking is raised a unit at a time, as far as this.
 constexpr int kMaxCrouchUnstick = 36;
+/// On a ladder, a player climbs at this speed at most, and leaves it at this one when it jumps; on
+/// the floor, moving away from it, it is pushed off at the climbing speed.
+constexpr float kClimbSpeed = 200.0F;
+constexpr float kLadderJumpSpeed = 270.0F;
+/// The floor under a player on a ladder is looked for this far below its feet.
+constexpr float kFloorProbeDepth = 1.0F;
 /// Water: the feet are this far above the bottom of the box.
 constexpr float kFeetProbeHeight = 1.0F;
 /// Without a key held, a swimmer drifts down at this speed.
@@ -179,13 +185,23 @@ auto normalize(Vec3& v) -> double {
 class PlayerMove {
 public:
     PlayerMove(const MovementState& state, const UserCommand& command, const MovementSettings& settings,
-               const BrushHulls& world) noexcept
-        : m_player{state}, m_command{command}, m_settings{settings}, m_world{world} {}
+               const BrushHulls& world, std::span<const BrushEntity> entities) noexcept
+        : m_player{state}, m_command{command}, m_settings{settings}, m_world{world}, m_entities{entities} {}
 
     [[nodiscard]] auto run() -> MovementState {
         prepare();
         categorizePosition();
+        const BrushEntity* const ladder = ladderTouched();
         duck();
+        if (ladder != nullptr && climb(*ladder)) {
+            // Parity: no gravity on a ladder, and jump leaves it rather than jumping
+            checkWater();
+            if (!m_command.buttons.test(Button::Jump)) {
+                m_player.isJumpHeld = false;
+            }
+            slide();
+            return m_player;
+        }
         if (!isSwimming()) {
             startGravity();
         }
@@ -202,12 +218,12 @@ public:
             if (m_player.velocity.z < 0.0F && m_player.waterJumpTime != nx::Milliseconds{}) {
                 m_player.waterJumpTime = {};
             }
-            readJump();
+            readJump(true);
             swim();
             categorizePosition();
             return m_player;
         }
-        readJump();
+        readJump(ladder == nullptr);
         if (m_player.isOnGround) {
             m_player.velocity.z = 0.0F;
             applyFriction();
@@ -285,32 +301,127 @@ private:
         return m_hull == Hull::Ducked ? kDuckedHalfHeight : kStandingHalfHeight;
     }
 
-    /// The way of the player's box from `start` to `end` in the world, by player movement's rules.
+    /// The way of the player's box from `start` to `end`, by player movement's rules.
     [[nodiscard]] auto trace(Vec3 start, Vec3 end) const -> PlayerTrace { return trace(start, end, m_hull); }
 
-    /// The same in `hull`.
+    /// The same in `hull`: through the world and each solid entity, stopped by the first that stops
+    /// it soonest; all the way when none does.
     [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull) const -> PlayerTrace {
-        const nx::collision::Trace hit =
-            m_world.traceMovement(nx::collision::HullTraceQuery{.hull = hull, .start = start, .end = end});
-        if (hit.fraction < 1.0F) {
-            return PlayerTrace{.fraction = hit.fraction,
-                               .end = hit.end,
-                               .normal = hit.plane.normal,
-                               .startsSolid = hit.startsSolid,
-                               .isAllSolid = hit.isAllSolid};
+        PlayerTrace nearest{.end = end};
+        const auto meet = [&](std::uint32_t model, Vec3 offset) {
+            const nx::collision::Trace hit = m_world.traceMovement(nx::collision::HullTraceQuery{
+                .model = model, .hull = hull, .offset = offset, .start = start, .end = end});
+            if (hit.fraction < nearest.fraction) {
+                nearest = PlayerTrace{.fraction = hit.fraction,
+                                      .end = hit.end,
+                                      .normal = hit.plane.normal,
+                                      .startsSolid = hit.startsSolid,
+                                      .isAllSolid = hit.isAllSolid};
+            }
+        };
+        meet(0, Vec3{});
+        for (const BrushEntity& entity : m_entities) {
+            if (entity.role == BrushRole::Solid) {
+                meet(entity.model, entity.origin);
+            }
         }
-        return PlayerTrace{.end = end};
+        return nearest;
     }
 
-    /// What `point` is in, as movement reads it: a current is water.
+    /// What `point` is in, as movement reads it: the world's contents, a current counted as water;
+    /// where the world is not solid, the contents of the first volume the point is in.
     [[nodiscard]] auto contentsAt(Vec3 point) const -> Contents {
-        const Contents contents = m_world.movementContentsAt(0, Hull::Point, point);
+        Contents contents = m_world.movementContentsAt(0, Hull::Point, point);
         const auto value = std::to_underlying(contents);
         if (value <= std::to_underlying(Contents::Current0) &&
             value >= std::to_underlying(Contents::CurrentDown)) {
-            return Contents::Water;
+            contents = Contents::Water;
+        }
+        if (contents == Contents::Solid) {
+            return contents;
+        }
+        for (const BrushEntity& entity : m_entities) {
+            if (entity.role == BrushRole::Volume &&
+                m_world.movementContentsAt(entity.model, Hull::Point, point - entity.origin) !=
+                    Contents::Empty) {
+                return entity.contents;
+            }
         }
         return contents;
+    }
+
+    /// Whether the player's box at `origin` is in solid: the world's or a solid entity's.
+    [[nodiscard]] auto isStuckAt(Vec3 origin) const -> bool {
+        if (m_world.movementContentsAt(0, m_hull, origin) == Contents::Solid) {
+            return true;
+        }
+        return std::ranges::any_of(m_entities, [&](const BrushEntity& entity) {
+            return entity.role == BrushRole::Solid &&
+                   m_world.movementContentsAt(entity.model, m_hull, origin - entity.origin) ==
+                       Contents::Solid;
+        });
+    }
+
+    /// The first ladder the player's box touches, or none.
+    [[nodiscard]] auto ladderTouched() const -> const BrushEntity* {
+        const auto touched = std::ranges::find_if(m_entities, [this](const BrushEntity& entity) {
+            return entity.role == BrushRole::Ladder &&
+                   m_world.movementContentsAt(entity.model, m_hull, m_player.origin - entity.origin) !=
+                       Contents::Empty;
+        });
+        return touched == m_entities.end() ? nullptr : &*touched;
+    }
+
+    /// On `ladder`: the movement buttons climb along its face, towards where the view looks, at most
+    /// kClimbSpeed; nothing held holds the player still. Jump pushes the player off it: then it
+    /// returns false, and the player moves as it would off a ladder.
+    [[nodiscard]] auto climb(const BrushEntity& ladder) -> bool {
+        // Parity: the original aims at the middle of the ladder's model in its own space, wherever
+        // the entity is
+        const nx::Aabb bounds = m_world.boundsOf(ladder.model);
+        const Vec3 middle = (bounds.min + bounds.max) * 0.5F;
+        Vec3 floor = m_player.origin;
+        floor.z += -halfHeight() - kFloorProbeDepth;
+        const bool isOnFloor = contentsAt(floor) == Contents::Solid;
+        const nx::collision::Trace face =
+            m_world.trace(nx::collision::HullTraceQuery{.model = ladder.model,
+                                                        .hull = Hull::Point,
+                                                        .offset = ladder.origin,
+                                                        .start = m_player.origin,
+                                                        .end = middle});
+        if (face.fraction == 1.0F) {
+            return true;
+        }
+        float speed = std::min(kClimbSpeed, m_maxSpeed);
+        if (m_player.isDucked) {
+            speed = static_cast<float>(double{speed} * kDuckSpeedShare);
+        }
+        const auto held = [this, speed](Button positive, Button negative) {
+            return (m_command.buttons.test(positive) ? speed : 0.0F) -
+                   (m_command.buttons.test(negative) ? speed : 0.0F);
+        };
+        const float forward = held(Button::Forward, Button::Back);
+        const float right = held(Button::MoveRight, Button::MoveLeft);
+        const Vec3 normal = face.plane.normal;
+        if (m_command.buttons.test(Button::Jump)) {
+            m_player.velocity = normal * kLadderJumpSpeed;
+            return false;
+        }
+        if (forward == 0.0F && right == 0.0F) {
+            m_player.velocity = {};
+            return true;
+        }
+        // What goes into the face turns into going up or down along it.
+        const Vec3 wish = (m_axes.forward * forward) + (m_axes.right * right);
+        Vec3 across = nx::cross(Vec3{.z = 1.0F}, normal);
+        normalize(across);
+        const float into = nx::dot(wish, normal);
+        const Vec3 lateral = wish - (normal * into);
+        m_player.velocity = lateral + (nx::cross(normal, across) * -into);
+        if (isOnFloor && into > 0.0F) {
+            m_player.velocity = m_player.velocity + (normal * kClimbSpeed);
+        }
+        return true;
     }
 
     /// The water level and type: the feet, the middle of the box and the eyes, in turn.
@@ -467,28 +578,25 @@ private:
 
     /// A player that ducking put into solid is raised out of it, a unit at a time; or left as it is.
     void unstickCrouch() {
-        const auto isStuck = [this](Vec3 point) {
-            return m_world.movementContentsAt(0, m_hull, point) == Contents::Solid;
-        };
-        if (!isStuck(m_player.origin)) {
+        if (!isStuckAt(m_player.origin)) {
             return;
         }
         Vec3 raised = m_player.origin;
         for (int step = 0; step < kMaxCrouchUnstick; ++step) {
             raised.z += 1.0F;
-            if (!isStuck(raised)) {
+            if (!isStuckAt(raised)) {
                 m_player.origin = raised;
                 return;
             }
         }
     }
 
-    /// Jumps when the button is pressed, and remembers whether it is held.
-    void readJump() {
-        if (m_command.buttons.test(Button::Jump)) {
-            jump();
-        } else {
+    /// Jumps when the button is pressed and `mayJump`, and remembers whether it is held.
+    void readJump(bool mayJump) {
+        if (!m_command.buttons.test(Button::Jump)) {
             m_player.isJumpHeld = false;
+        } else if (mayJump) {
+            jump();
         }
     }
 
@@ -827,6 +935,7 @@ private:
     UserCommand m_command;
     const MovementSettings& m_settings;
     const BrushHulls& m_world;
+    std::span<const BrushEntity> m_entities;
     Hull m_hull = Hull::Standing; ///< The player's box.
     float m_maxSpeed = 0.0F;
     float m_frameTime = 0.0F; ///< Seconds.
@@ -836,9 +945,13 @@ private:
 } // namespace
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,
-                      const MovementSettings& settings, const BrushHulls& world) -> MovementState {
-    nx::expects(world.modelCount() > 0, "simulateMovement: the world is model 0 of its hulls");
-    return PlayerMove{state, command, settings, world}.run();
+                      const MovementSettings& settings, const BrushHulls& hulls,
+                      std::span<const BrushEntity> entities) -> MovementState {
+    nx::expects(hulls.modelCount() > 0, "simulateMovement: the world is model 0 of its hulls");
+    nx::expects(std::ranges::all_of(
+                    entities, [&](const BrushEntity& entity) { return entity.model < hulls.modelCount(); }),
+                "simulateMovement: every entity is a model of the hulls");
+    return PlayerMove{state, command, settings, hulls, entities}.run();
 }
 
 } // namespace cs

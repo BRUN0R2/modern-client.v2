@@ -69,7 +69,8 @@ code** on the server (authoritative) and on the client (prediction).
 [[nodiscard]] auto simulateMovement(const MovementState& state,
                                     const UserCommand& command,
                                     const MovementSettings& settings,
-                                    const nx::collision::BrushHulls& world) -> MovementState;
+                                    const nx::collision::BrushHulls& hulls,
+                                    std::span<const BrushEntity> entities) -> MovementState;
 ```
 
 - Pure function: the result depends only on the arguments. No access to global state,
@@ -87,12 +88,19 @@ code** on the server (authoritative) and on the client (prediction).
   ([20 §3](20-legal-and-licensing.md#3-clean-room)): its order of steps, its thresholds and the
   precision of each sum (the ones the original makes in double precision are made in double here),
   which over many commands decide where a player ends up.
+- What it moves among: the world (model 0 of the hulls) and the brush entities near the player,
+  each a brush model of the same hulls at its origin, in the role the game gave it (the original's
+  physents): **solid** (it stops the player), a **volume** whose contents a point inside it is in
+  (`func_water`, and `func_illusionary` or a door given contents), or a **ladder**. Where two stop
+  a trace at once, the first in the list does, the world before them all.
 - Today (`cs.shared:movement`): walking, the air, jumping with its penalty and the bunny hop
   limit, ducking (0.4 s on the ground with the eyes easing down, at once in the air, the ducktap
-  of a duck let go before it is down), stairs, sliding along walls and floors, and water (its
-  levels, swimming, jumping out), in the world. `nxview` walks through the maps with it. Ladders,
-  noclip, observers, unsticking and entities (obstacles, conveyors, pushes, currents) come next
-  ([TODO](../TODO.md)).
+  of a duck let go before it is down), stairs, sliding along walls and floors, water (its levels,
+  swimming, jumping out) and ladders (climbed by the movement buttons along their face, left by
+  a jump or by backing off them on the floor), among the world and brush entities at rest.
+  `nxview` walks through the maps with it, the brush entities made as the game makes them when
+  the map starts. Noclip, observers, unsticking, boxes (players, hostages, pushables), moving and
+  turned entities, conveyors, pushes and currents come next ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -102,7 +110,7 @@ Each item below has a dedicated parity test ([18](18-testing-and-quality.md#pari
 |----------|------|
 | Ground acceleration and friction | Including `edgefriction` near edges and `stopspeed` |
 | Air acceleration with a cap on the desired speed | Basis of *air strafe*, *strafe jump* and *surf* |
-| Jump and jump height | Initial velocity derived from gravity and height, not a literal |
+| Jump and jump height | Initial velocity derived from the height, 45, and a gravity of 800, whatever `sv_gravity` is |
 | Speed penalty after a jump (stamina) | A CS 1.6 trait that limits *bunny hop* |
 | The original's *bunny hop* limiters | Reproduce the original exactly, as the test reveals |
 | Ducking on the ground (transition) and in the air (instant) | *Duck jump*, *ducktap* |
@@ -144,9 +152,9 @@ one, 32 by 32 by 36, its eyes 12 above it).
 - Brush entity submodels (doors, elevators) use their own hulls with the entity's
   transform.
 
-**Today** (`nx.collision`, `BrushHulls`): the hulls of a map's brush models, from its BSP (hull 0
-from the visible tree's nodes, a leaf as its contents; hulls 1 to 3 from the clip nodes they may
-share), checked when built: every index in range, no cycle, no tree deeper than 1024 nodes (the
+**Today** (`nx.collision`, `BrushHulls`): the hulls of a map's brush models and the boxes of their
+faces, from its BSP (hull 0 from the visible tree's nodes, a leaf as its contents; hulls 1 to 3
+from the clip nodes they may share), checked when built: every index in range, no cycle, no tree deeper than 1024 nodes (the
 compilers' deepest, Half-Life's hldemo3, is 146). The original traces by two sets of rules, and both
 are here, written anew from how the GPL engines that reconstruct it describe them (the clean room,
 [20 §3](20-legal-and-licensing.md#3-clean-room)):

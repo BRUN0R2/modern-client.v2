@@ -8,8 +8,9 @@
 /// precision of each sum, which change where a player ends up.
 ///
 /// Today: walking, the air, jumping and its penalties, ducking, stairs, sliding along walls and
-/// floors, and water. Ladders, noclip, observers, unsticking and what is not the world (entities,
-/// conveyors, currents) come next (TODO.md).
+/// floors, water, and ladders, among the world and the brush entities near the player. Noclip,
+/// observers, unsticking, boxes (players, hostages), moving entities, conveyors and currents come
+/// next (TODO.md).
 export module cs.shared:movement;
 
 import std;
@@ -23,6 +24,10 @@ export namespace cs {
 enum class Button : std::uint8_t {
     Jump,
     Duck,
+    Forward, ///< On a ladder, the keys climb by the buttons they hold, not by the speeds they ask.
+    Back,
+    MoveLeft,
+    MoveRight,
     Count,
 };
 
@@ -97,10 +102,27 @@ struct MovementState {
     bool isJumpHeld = false;
 };
 
-/// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `world`. Pure:
-/// the result depends on the arguments alone.
+/// What a brush entity is to a player's movement, as the game made it.
+enum class BrushRole : std::uint8_t {
+    Solid,  ///< It stops the player.
+    Volume, ///< A point inside it is in what it holds: water, slime, lava.
+    Ladder, ///< The player climbs it where its box touches it.
+};
+
+/// A brush entity a player moves among (a physent of the original): brush model `model` of the map,
+/// placed at `origin`.
+struct BrushEntity {
+    std::uint32_t model = 0;
+    nx::Vec3 origin{};
+    BrushRole role = BrushRole::Solid;
+    nx::collision::Contents contents = nx::collision::Contents::Water; ///< What a Volume holds.
+};
+
+/// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `hulls`, among
+/// `entities`, brush models of the same hulls; where two stop the player at once, the first does, the
+/// world before them all. Pure: the result depends on the arguments alone.
 [[nodiscard]] auto simulateMovement(const MovementState& state, const UserCommand& command,
-                                    const MovementSettings& settings, const nx::collision::BrushHulls& world)
-    -> MovementState;
+                                    const MovementSettings& settings, const nx::collision::BrushHulls& hulls,
+                                    std::span<const BrushEntity> entities = {}) -> MovementState;
 
 } // namespace cs

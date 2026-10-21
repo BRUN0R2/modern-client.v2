@@ -43,12 +43,18 @@ constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
     return Plane{.normal = {.z = 1.0F}, .distance = z};
 }
 
-/// A world of `planes` whose standing, point and ducked hulls are the trees `standing`, `point` and
-/// `ducked`, each from its own node 0, and empty where none is given. Each list of nodes gets an
-/// unused last node, which keeps a root from being the list's last: movement takes such a hull for
-/// an empty one.
-[[nodiscard]] auto world(std::vector<Plane> planes, std::vector<HullNode> standing,
-                         std::vector<HullNode> point = {}, std::vector<HullNode> ducked = {}) -> BrushHulls {
+/// The trees of one brush model's standing, point and ducked hulls, each from its own node 0, and
+/// empty where none is given; and the box of its faces.
+struct ModelTrees {
+    std::vector<HullNode> standing{};
+    std::vector<HullNode> point{};
+    std::vector<HullNode> ducked{};
+    nx::Aabb bounds{};
+};
+
+/// Brush models of `planes`, the world first. Each list of nodes gets an unused last node, which
+/// keeps a root from being the list's last: movement takes such a hull for an empty one.
+[[nodiscard]] auto modelsOf(std::vector<Plane> planes, std::vector<ModelTrees> trees) -> BrushHulls {
     const auto append = [](std::vector<HullNode>& nodes, std::vector<HullNode> tree) -> HullChild {
         if (tree.empty()) {
             return Contents::Empty;
@@ -64,21 +70,29 @@ constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
         nodes.insert(nodes.end(), tree.begin(), tree.end());
         return HullNodeIndex{first};
     };
-    std::vector<HullNode> clipNodes;
-    std::vector<HullNode> pointNodes;
-    const HullChild standingRoot = append(clipNodes, std::move(standing));
-    const HullChild duckedRoot = append(clipNodes, std::move(ducked));
-    const HullChild pointRoot = append(pointNodes, std::move(point));
+    nx::collision::BrushHullsDesc desc{.planes = std::move(planes)};
+    for (ModelTrees& model : trees) {
+        const HullChild standingRoot = append(desc.clipNodes, std::move(model.standing));
+        const HullChild duckedRoot = append(desc.clipNodes, std::move(model.ducked));
+        const HullChild pointRoot = append(desc.pointNodes, std::move(model.point));
+        desc.models.push_back(nx::collision::BrushModel{
+            .hulls = {pointRoot, standingRoot, Contents::Empty, duckedRoot}, .bounds = model.bounds});
+    }
     const HullNode spare{.plane = 0, .children = {Contents::Empty, Contents::Empty}};
-    clipNodes.push_back(spare);
-    pointNodes.push_back(spare);
-    auto hulls = BrushHulls::create(
-        nx::collision::BrushHullsDesc{.planes = std::move(planes),
-                                      .pointNodes = std::move(pointNodes),
-                                      .clipNodes = std::move(clipNodes),
-                                      .models = {{pointRoot, standingRoot, Contents::Empty, duckedRoot}}});
+    desc.clipNodes.push_back(spare);
+    desc.pointNodes.push_back(spare);
+    auto hulls = BrushHulls::create(std::move(desc));
     EXPECT_TRUE(hulls.has_value());
     return std::move(hulls).value();
+}
+
+/// A world of `planes` alone, its standing, point and ducked hulls the trees `standing`, `point`
+/// and `ducked`.
+[[nodiscard]] auto world(std::vector<Plane> planes, std::vector<HullNode> standing,
+                         std::vector<HullNode> point = {}, std::vector<HullNode> ducked = {}) -> BrushHulls {
+    return modelsOf(std::move(planes), {ModelTrees{.standing = std::move(standing),
+                                                   .point = std::move(point),
+                                                   .ducked = std::move(ducked)}});
 }
 
 /// Solid below z = 0 for a standing player's origin, and below z = -18 for a ducked one's: a floor
@@ -121,10 +135,10 @@ constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
 }
 
 /// `state` after `count` times `move`.
-[[nodiscard]] auto repeat(MovementState state, const UserCommand& move, int count, const BrushHulls& hulls)
-    -> MovementState {
+[[nodiscard]] auto repeat(MovementState state, const UserCommand& move, int count, const BrushHulls& hulls,
+                          std::span<const cs::BrushEntity> entities = {}) -> MovementState {
     for (int index = 0; index < count; ++index) {
-        state = cs::simulateMovement(state, move, MovementSettings{}, hulls);
+        state = cs::simulateMovement(state, move, MovementSettings{}, hulls, entities);
     }
     return state;
 }
@@ -417,6 +431,85 @@ TEST(MovementTest, LettingGoOfADuckBeforeItIsDownHops) {
     EXPECT_FALSE(released.isDucking);
     EXPECT_FALSE(released.isOnGround);
     EXPECT_NEAR(released.origin.z, kOnTheFloor + 18.0F - 0.04F, kTolerance);
+}
+
+TEST(MovementTest, ASolidEntityStopsThePlayerWhereItIsPlaced) {
+    // The world's floor; model 1, a wall from x = 10 on in its own space, placed 20 units further.
+    const BrushHulls hulls = modelsOf(
+        {facingUp(0.0F), facingX(10.0F)},
+        {ModelTrees{.standing = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}},
+         ModelTrees{.standing = {HullNode{.plane = 1, .children = {Contents::Solid, Contents::Empty}}}}});
+    const std::array wall{cs::BrushEntity{.model = 1, .origin = {.x = 20.0F}}};
+    MovementState walking = standingOnTheFloor();
+    walking.origin.x = 5.0F;
+    walking.velocity = Vec3{.x = kKnifeSpeed.value()};
+    const UserCommand ahead = command(forward(kKnifeSpeed.value()));
+
+    EXPECT_NEAR(repeat(walking, ahead, 20, hulls, wall).origin.x, 30.0F - kOnTheFloor, kTolerance);
+    EXPECT_GT(repeat(walking, ahead, 20, hulls).origin.x, 50.0F) << "without the entity";
+}
+
+TEST(MovementTest, AVolumeEntityHoldsWhatItSays) {
+    // Model 1: below z = 30 in its point hull.
+    const BrushHulls hulls = modelsOf(
+        {facingUp(30.0F)},
+        {ModelTrees{},
+         ModelTrees{.point = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}}});
+    const std::array slime{
+        cs::BrushEntity{.model = 1, .role = cs::BrushRole::Volume, .contents = Contents::Slime}};
+    const MovementState swimmer{.maxSpeed = kKnifeSpeed};
+    const MovementState after = cs::simulateMovement(swimmer, command({}, {Button::Jump}), {}, hulls, slime);
+
+    EXPECT_EQ(after.waterLevel, WaterLevel::Eyes);
+    EXPECT_EQ(after.waterType, Contents::Slime);
+    EXPECT_NEAR(after.velocity.z, 76.8F, kTolerance); // 80 in slime, less its friction
+    EXPECT_EQ(cs::simulateMovement(swimmer, command(), {}, hulls).waterLevel, WaterLevel::Dry)
+        << "without the entity";
+}
+
+/// A floor (its point hull 36 below the standing one's, where the feet are) and model 1, a ladder:
+/// a standing box touches it from x = 9 on, its brush is from x = 25 on, 200 high.
+[[nodiscard]] auto ladderWorld() -> BrushHulls {
+    return modelsOf(
+        {facingUp(0.0F), facingUp(-36.0F), facingX(9.0F), facingX(25.0F)},
+        {ModelTrees{.standing = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}},
+                    .point = {HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}}},
+         ModelTrees{
+             .standing = {HullNode{.plane = 2, .children = {Contents::Solid, Contents::Empty}}},
+             .point = {HullNode{.plane = 3, .children = {Contents::Solid, Contents::Empty}}},
+             .bounds = {.min = {.x = 25.0F, .y = -32.0F}, .max = {.x = 33.0F, .y = 32.0F, .z = 200.0F}}}});
+}
+
+constexpr std::array kLadder{cs::BrushEntity{.model = 1, .role = cs::BrushRole::Ladder}};
+
+TEST(MovementTest, OnALadderForwardClimbsAndBackOnTheFloorStepsOff) {
+    const BrushHulls hulls = ladderWorld();
+    MovementState atTheLadder = standingOnTheFloor();
+    atTheLadder.origin.x = 10.0F;
+
+    // Facing the ladder: what goes into its face goes up it, at 200 at most, without gravity.
+    const MovementState climbing =
+        cs::simulateMovement(atTheLadder, command({}, {Button::Forward}), {}, hulls, kLadder);
+    EXPECT_EQ(climbing.velocity, (Vec3{.z = 200.0F}));
+    EXPECT_NEAR(climbing.origin.z, kOnTheFloor + 2.0F, kTolerance);
+
+    // Backing away down on the floor: pushed off the ladder, sliding along the floor.
+    const MovementState leaving =
+        cs::simulateMovement(atTheLadder, command({}, {Button::Back}), {}, hulls, kLadder);
+    EXPECT_NEAR(leaving.velocity.x, -200.0F, kTolerance);
+    EXPECT_NEAR(leaving.origin.x, 8.0F, kTolerance);
+
+    EXPECT_EQ(cs::simulateMovement(atTheLadder, command(), {}, hulls, kLadder).velocity, Vec3{})
+        << "held still";
+}
+
+TEST(MovementTest, JumpLeavesALadder) {
+    MovementState onTheLadder{.origin = {.x = 10.0F, .z = 50.0F}, .maxSpeed = kKnifeSpeed};
+    const MovementState after =
+        cs::simulateMovement(onTheLadder, command({}, {Button::Jump}), {}, ladderWorld(), kLadder);
+
+    EXPECT_EQ(after.velocity.x, -270.0F); // away from its face
+    EXPECT_NEAR(after.velocity.z, -8.0F, kTolerance);
 }
 
 } // namespace
