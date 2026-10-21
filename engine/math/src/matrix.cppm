@@ -9,7 +9,6 @@
 export module nx.math:matrix;
 
 import std;
-import nx.core;
 import :vector;
 
 export namespace nx {

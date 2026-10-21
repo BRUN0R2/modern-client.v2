@@ -649,7 +649,11 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     if (!device) {
         return unusable(device.error());
     }
-    auto swapchain = (*device)->createSwapchain({.size = extentOf(window->pixelSize())});
+    auto size = window->pixelSize();
+    if (!size) {
+        return unusable(size.error());
+    }
+    auto swapchain = (*device)->createSwapchain({.size = extentOf(*size)});
     if (!swapchain) {
         return unusable(swapchain.error());
     }
@@ -657,7 +661,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     if (!sleepTimer) {
         return unusable(sleepTimer.error());
     }
-    if (auto captured = window->setRelativeMouse(true); !captured) {
+    if (auto captured = window->setMouseMode(nx::platform::MouseMode::Relative); !captured) {
         std::println(stderr, "nxview: {}", nx::describe(captured.error())); // the keys still fly
     }
 

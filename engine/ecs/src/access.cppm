@@ -6,7 +6,6 @@
 export module nx.ecs:access;
 
 import std;
-import nx.core;
 import :component;
 
 export namespace nx::ecs {

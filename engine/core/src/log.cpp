@@ -52,7 +52,10 @@ Logger::Logger(std::vector<std::unique_ptr<Sink>> sinks) : m_sinks{std::move(sin
 }
 
 void Logger::addSink(std::unique_ptr<Sink> sink) {
-    expects(sink != nullptr, "Logger::addSink: sink must not be null");
+    if (sink == nullptr) {
+        expects(false, "Logger::addSink: sink must not be null");
+        return; // the handler let execution continue ("observe"): nothing is added
+    }
     const std::scoped_lock lock{m_mutex};
     m_sinks.push_back(std::move(sink));
 }

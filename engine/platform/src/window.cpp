@@ -30,10 +30,6 @@ static_assert(std::to_underlying(MouseButton::Left) == SDL_BUTTON_LEFT &&
               std::to_underlying(MouseButton::Right) == SDL_BUTTON_RIGHT &&
               std::to_underlying(MouseButton::X2) == SDL_BUTTON_X2);
 
-/// Whether a window is open: SDL queues the events of every window together, so a second one would
-/// take the first one's events.
-constinit std::atomic<bool> isWindowOpen{false};
-
 [[nodiscard]] auto windowOf(void* window) noexcept -> SDL_Window* {
     return static_cast<SDL_Window*>(window);
 }
@@ -41,6 +37,13 @@ constinit std::atomic<bool> isWindowOpen{false};
 /// SDL's message about its last failure.
 [[nodiscard]] auto sdlError() -> std::string {
     return SDL_GetError();
+}
+
+/// How many windows SDL has open; its video subsystem must be started.
+[[nodiscard]] auto openWindowCount() noexcept -> int {
+    int count = 0;
+    SDL_free(SDL_GetWindows(&count));
+    return count;
 }
 
 /// The event `event` is, or nullopt for events the window does not report.
@@ -82,11 +85,12 @@ constinit std::atomic<bool> isWindowOpen{false};
 } // namespace
 
 auto Window::create(const WindowDesc& desc) -> Result<Window, WindowError> {
-    expects(!isWindowOpen.load(), "Window::create: a program has one window, which takes every event");
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
         return fail(WindowError::VideoUnavailable,
                     std::format("SDL_InitSubSystem(SDL_INIT_VIDEO): {}", sdlError()));
     }
+    // SDL queues the events of every window together: a second window would take the first's.
+    expects(openWindowCount() == 0, "Window::create: a program has one window, which takes every event");
     const std::string title{desc.title}; // SDL wants it zero-terminated
     SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (desc.isResizable) {
@@ -99,7 +103,6 @@ auto Window::create(const WindowDesc& desc) -> Result<Window, WindowError> {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return fail(WindowError::CreateFailed, std::format("SDL_CreateWindow: {}", error));
     }
-    isWindowOpen.store(true);
     return Window{window};
 }
 
@@ -109,17 +112,16 @@ void Window::close() noexcept {
     }
     SDL_DestroyWindow(windowOf(std::exchange(m_window, nullptr)));
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    isWindowOpen.store(false);
 }
 
-auto Window::pixelSize() const -> PixelSize {
+auto Window::pixelSize() const -> Result<PixelSize, WindowError> {
     int width = 0;
     int height = 0;
     if (!SDL_GetWindowSizeInPixels(windowOf(m_window), &width, &height)) {
-        return {};
+        return fail(WindowError::SizeUnavailable, std::format("SDL_GetWindowSizeInPixels: {}", sdlError()));
     }
-    return {.width = narrow<std::uint32_t>(std::max(width, 0)),
-            .height = narrow<std::uint32_t>(std::max(height, 0))};
+    return PixelSize{.width = narrow<std::uint32_t>(std::max(width, 0)),
+                     .height = narrow<std::uint32_t>(std::max(height, 0))};
 }
 
 auto Window::nativeWindow() const -> Result<NativeWindow, WindowError> {
@@ -146,8 +148,8 @@ auto Window::nativeWindow() const -> Result<NativeWindow, WindowError> {
                 std::format("the {:?} video driver has no window a GPU can draw to", driver));
 }
 
-auto Window::setRelativeMouse(bool isRelative) -> Result<void, WindowError> {
-    if (!SDL_SetWindowRelativeMouseMode(windowOf(m_window), isRelative)) {
+auto Window::setMouseMode(MouseMode mode) -> Result<void, WindowError> {
+    if (!SDL_SetWindowRelativeMouseMode(windowOf(m_window), mode == MouseMode::Relative)) {
         return fail(WindowError::RelativeMouseUnavailable,
                     std::format("SDL_SetWindowRelativeMouseMode: {}", sdlError()));
     }

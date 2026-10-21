@@ -7,6 +7,8 @@ import std;
 import nx.core;
 import nx.data;
 
+#include "contractRecorder.hpp"
+
 namespace {
 
 using nx::data::DataError;
@@ -74,6 +76,18 @@ TEST(Document, ADocumentOutlivesTheTextItWasParsedFrom) {
     ASSERT_TRUE(document.has_value());
     EXPECT_EQ(document->root().find("name")->asString(), std::optional<std::string_view>{"de_dust2"});
     EXPECT_EQ(document->sourceName(), "map.toml");
+}
+
+TEST(Document, AMovedFromDocumentBreaksTheContractAndReadsAsEmpty) {
+    const nx::test::ContractRecorder recorder;
+    auto document = Document::parse("name = \"de_dust2\"", "map.toml");
+    ASSERT_TRUE(document.has_value());
+    const Document moved = std::move(*document);
+
+    const auto root = document->root(); // NOLINT(bugprone-use-after-move): the contract under test
+    EXPECT_EQ(recorder.count(), 1);
+    EXPECT_FALSE(root.find("name").has_value()) << "observed: an empty document";
+    EXPECT_TRUE(moved.root().find("name").has_value());
 }
 
 } // namespace

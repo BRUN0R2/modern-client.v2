@@ -29,6 +29,7 @@ TEST(WindowTest, OpensWithTheRequestedSize) {
     const auto window = openWindow({.width = 320, .height = 240});
     ASSERT_TRUE(window.has_value());
     EXPECT_EQ(window->pixelSize(), (PixelSize{.width = 320, .height = 240}));
+    EXPECT_EQ(nx::platform::WindowDesc{}.size, nx::platform::kDefaultWindowSize);
 }
 
 TEST(WindowTest, AnOffscreenWindowHasNothingAGpuCanDrawTo) {
