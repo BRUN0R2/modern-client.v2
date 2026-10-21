@@ -57,7 +57,7 @@ struct EntityClasses {
 
 /// Makes in `world`, in their order, the brush entities of `entities`, a map's whose brush models are
 /// `models`, that are of a class of `classes`, with their BrushModel, Transform and BrushSolidity, and
-/// what their class does (a Door and its Pusher); the others are left to what makes them.
+/// what their class does (a Door, its Pusher and its Waves); the others are left to what makes them.
 /// Returns how many it made. Errors: UnknownModel.
 [[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
                                       std::span<const assets::BspModel> models, const EntityClasses& classes)

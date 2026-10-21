@@ -11,7 +11,8 @@
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
-/// the brush entities' render modes, water, and brush entities moved and turned by the game.
+/// the brush entities' render modes, water and its waves, and brush entities moved and turned by the
+/// game.
 export module nx.render:world;
 
 import std;
@@ -105,11 +106,15 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
-/// Where the game puts brush model `model` (not the world) of the map, and how it turns it about there.
+/// Where the game puts brush model `model` (not the world) of the map, how it turns it about there, and
+/// how high the waves of its turbulent faces rise.
 struct ModelPlacement {
     assets::ModelIndex model{};
     Vec3 origin{};
     EulerAngles angles{};
+    /// The entity's scale (func_water's an eighth of its "WaveHeight"): its turbulent faces rise and
+    /// fall by up to about 29 times it, as the original's EmitWaterPolys raises them; 0 for none.
+    float waveHeight = 0.0F;
 };
 
 /// What a draw shows.

@@ -15,6 +15,7 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<BrushSolidity>("nx::game::BrushSolidity"),
                                 world.registerComponent<Pusher>("nx::game::Pusher"),
                                 world.registerComponent<Door>("nx::game::Door"),
+                                world.registerComponent<Waves>("nx::game::Waves"),
                                 world.registerComponent<Body>("nx::game::Body")};
     for (const auto& component : registered) {
         if (!component) {

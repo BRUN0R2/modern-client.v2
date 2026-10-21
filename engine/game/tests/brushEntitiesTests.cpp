@@ -22,6 +22,7 @@ using nx::game::EntityClasses;
 using nx::game::GameError;
 using nx::game::Solid;
 using nx::game::Transform;
+using nx::game::Waves;
 
 [[nodiscard]] auto repositoryClasses() -> EntityClasses {
     const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "entities.toml";
@@ -83,7 +84,7 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
         entity({{"classname", "worldspawn"}}),
         entity({{"classname", "func_wall"}, {"model", "*1"}, {"origin", "8 16 32"}}),
         entity({{"classname", "func_door"}, {"model", "*2"}, {"spawnflags", "8"}}),
-        entity({{"classname", "func_water"}, {"model", "*3"}, {"skin", "-3"}}),
+        entity({{"classname", "func_water"}, {"model", "*3"}, {"skin", "-3"}, {"WaveHeight", "3.2"}}),
         entity({{"classname", "func_ladder"}, {"model", "*4"}, {"skin", "-3"}}),
         entity({{"classname", "trigger_multiple"}, {"model", "*5"}}),
         entity({{"classname", "info_player_start"}, {"origin", "0 0 0"}}),
@@ -107,6 +108,16 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     EXPECT_EQ(made.at(4).second.solid, Solid::Not);
     EXPECT_EQ(made.at(4).second.contents, nx::assets::Contents::Ladder) << "a ladder whatever its skin";
     EXPECT_FALSE(made.at(1).second.contents.has_value()) << "no skin, no contents";
+
+    // A door's waves, an eighth of its WaveHeight; none for what is not a door.
+    std::map<std::uint32_t, float> waves;
+    nx::ecs::Query<const BrushModel&, nx::ecs::Optional<const Waves>>{world}.forEach(
+        [&waves](const BrushModel& model, const Waves* entityWaves) {
+            if (entityWaves != nullptr) {
+                waves.emplace(model.index.value, entityWaves->height);
+            }
+        });
+    EXPECT_EQ(waves, (std::map<std::uint32_t, float>{{2, 0.0F}, {3, 3.2F / 8.0F}}));
 }
 
 TEST(BrushEntityTest, ABrushModelTheMapLacksIsAnError) {
