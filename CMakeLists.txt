@@ -56,6 +56,7 @@ endif()
 
 add_subdirectory(shaders)
 add_subdirectory(engine)
+add_subdirectory(game)
 
 if(NX_BUILD_TOOLS)
     add_subdirectory(tools)

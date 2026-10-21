@@ -19,6 +19,12 @@ struct HammerUnitsTag {
 struct UnitsPerSecondTag {
     static constexpr std::string_view kSuffix = "ups";
 };
+struct UnitsPerSecondSquaredTag {
+    static constexpr std::string_view kSuffix = "ups/s";
+};
+struct PerSecondTag {
+    static constexpr std::string_view kSuffix = "/s";
+};
 struct HitPointsTag {
     static constexpr std::string_view kSuffix = "hp";
 };
@@ -46,6 +52,13 @@ using HammerUnits = Quantity<float, HammerUnitsTag>;
 
 /// Speed in hammer units per second.
 using UnitsPerSecond = Quantity<float, UnitsPerSecondTag>;
+
+/// Acceleration in hammer units per second, per second (gravity).
+using UnitsPerSecondSquared = Quantity<float, UnitsPerSecondSquaredTag>;
+
+/// A rate: how much of something is gained or lost each second (friction, the acceleration
+/// factors of player movement).
+using PerSecond = Quantity<float, PerSecondTag>;
 
 /// Health. Floating point like the original game: fractional damage accumulates, and the HUD
 /// shows the integer value derived by the original rule, without any upper limit.

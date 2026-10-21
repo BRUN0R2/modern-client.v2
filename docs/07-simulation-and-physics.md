@@ -34,6 +34,9 @@ struct UserCommand {
 } // namespace cs
 ```
 
+Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement reads: the duration, the
+view angles, the move and the buttons (Jump). The others arrive with what reads them.
+
 ### 2.2 Generation on the client
 
 - **Fixed generation rate:** the client generates usercmds at `cl_movement_rate` Hz (default
@@ -66,15 +69,28 @@ code** on the server (authoritative) and on the client (prediction).
 [[nodiscard]] auto simulateMovement(const MovementState& state,
                                     const UserCommand& command,
                                     const MovementSettings& settings,
-                                    const CollisionWorld& collision) -> MovementResult;
+                                    const nx::collision::BrushHulls& world) -> MovementState;
 ```
 
 - Pure function: the result depends only on the arguments. No access to global state,
-  the clock or server-only state.
-- `MovementSettings` contains every movement cvar (`sv_gravity`, `sv_friction`,
-  `sv_accelerate`, `sv_airaccelerate`, `sv_stopspeed`, `sv_maxspeed`, `sv_stepsize`,
-  `edgefriction`, `sv_bounce`, `sv_maxvelocity`, `sv_wateraccelerate`, `sv_waterfriction`),
-  replicated to the client.
+  the clock or server-only state. The state carries what the original keeps between commands
+  (the jump penalty, the jump out of water and its push, the held jump button).
+- `MovementSettings` contains the movement cvars (`sv_gravity`, `sv_friction`, `edgefriction`,
+  `sv_stopspeed`, `sv_accelerate`, `sv_airaccelerate`, `sv_maxspeed`, `sv_maxvelocity`,
+  `sv_stepsize`, `sv_rollangle`, `sv_rollspeed`), replicated to the client, with the defaults
+  Counter-Strike plays with (its game sets `sv_accelerate` 5 and `sv_stopspeed` 75 over the
+  engine's). `sv_wateraccelerate` and `sv_waterfriction` are not among them: Counter-Strike's
+  water movement reads `sv_accelerate` and `sv_friction`. `sv_bounce` arrives with the friction of
+  entities, the only thing that makes a player bounce off what it hits.
+- It moves as the original moves, written anew from the GPL code that reconstructs it
+  ([20 §3](20-legal-and-licensing.md#3-clean-room)): its order of steps, its thresholds and the
+  precision of each sum (the ones the original makes in double precision are made in double here),
+  which over many commands decide where a player ends up.
+- Today (`cs.shared:movement`): walking, the air, jumping with its penalty and the bunny hop
+  limit, stairs, sliding along walls and floors, and water (its levels, swimming, jumping out), in
+  the world. `nxview` walks through the maps with it. Ducking, ladders, noclip, observers,
+  unsticking and entities (obstacles, conveyors, pushes, currents) come next
+  ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -111,8 +127,9 @@ default to off.
 | 2 — large | Large entities | GoldSrc large box |
 | 3 — ducked | Ducked player | GoldSrc ducked player box |
 
-The exact dimensions live in `data/cstrike/hulls.toml` and **MUST** match the hulls
-compiled into the BSP, because each hull's clipnode trees come from the map compiler.
+The dimensions **MUST** match the hulls compiled into the BSP, because each hull's clipnode
+trees come from the map compiler. They are not tunable: `cs.shared` holds them as constants
+(today the standing player's box, 32 by 32 by 72 about its origin, its eyes 17 above it).
 
 ## 4. Collision
 
