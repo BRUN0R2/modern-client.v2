@@ -44,7 +44,6 @@ constexpr std::size_t kValidBitsOffset = 18;
 constexpr std::size_t kSubformatOffset = 24;
 constexpr std::size_t kSubformatTagBytes = 2;
 constexpr std::size_t kExtensibleFormatBytes = 40;
-constexpr std::uint16_t kBitsPerByte = 8;
 
 // The rest of the subformat GUIDs of PCM and IEEE float (KSDATAFORMAT_SUBTYPE_PCM and _IEEE_FLOAT,
 // {0000tttt-0000-0010-8000-00AA00389B71}), as stored.
