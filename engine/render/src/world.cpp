@@ -19,8 +19,6 @@ namespace {
 
 constexpr log::Category kLog{"render"};
 
-/// Map units per lightmap sample: GoldSrc's luxel.
-constexpr double kLuxelUnits = 16.0;
 /// A luxel's center, from its corner, in luxels.
 constexpr double kLuxelCenter = 0.5;
 /// The width of the lightmap atlas; its height grows with the map.
@@ -39,11 +37,6 @@ constexpr std::size_t kRgbBytes = 3;
 constexpr std::byte kFull{255};
 /// The corners of a triangle.
 constexpr std::uint32_t kTriangleCorners = 3;
-
-/// The textures compilers leave on brush entities for the game, never drawn: the triggers' and the
-/// tool textures that survive compiling.
-constexpr auto kInvisibleTextures =
-    std::to_array<std::string_view>({"aaatrigger", "clip", "origin", "null", "skip", "hint", "bevel"});
 
 /// The light styles of a face without a lightmap, and after the last of a face's lightmaps.
 constexpr std::uint8_t kNoStyle = assets::kNoLightStyle;
@@ -132,36 +125,6 @@ constexpr float kBackfaceEpsilon = 0.01F;
 /// The blended render modes in the order the original draws them at one distance, after the others
 /// (R_TransEntityCompare).
 constexpr std::array kBlendedDrawOrder{RenderMode::TransTexture, RenderMode::TransAdd, RenderMode::Glow};
-
-/// How a face is drawn, from its texture's name.
-enum class SurfaceKind : std::uint8_t {
-    Opaque,
-    Masked,    ///< `{`: palette index 255 is transparent.
-    Sky,       ///< Shows the side of the sky it is seen toward.
-    Turbulent, ///< Water and lasers: unlit, its texture warping.
-    Invisible, ///< Triggers and tool textures.
-};
-
-[[nodiscard]] auto startsWithIgnoringCase(std::string_view text, std::string_view prefix) noexcept -> bool {
-    return text.size() >= prefix.size() && equalsIgnoringCase(text.substr(0, prefix.size()), prefix);
-}
-
-[[nodiscard]] auto surfaceKindOf(std::string_view name) noexcept -> SurfaceKind {
-    if (equalsIgnoringCase(name, "sky")) {
-        return SurfaceKind::Sky;
-    }
-    if (std::ranges::any_of(kInvisibleTextures, [name](std::string_view invisible) {
-            return equalsIgnoringCase(name, invisible);
-        })) {
-        return SurfaceKind::Invisible;
-    }
-    // Mod_LooksLikeWaterTexture: '!' and Quake's '*', and the names that start with "water" or "laser".
-    if (name.starts_with('!') || name.starts_with('*') || startsWithIgnoringCase(name, "water") ||
-        startsWithIgnoringCase(name, "laser")) {
-        return SurfaceKind::Turbulent;
-    }
-    return name.starts_with('{') ? SurfaceKind::Masked : SurfaceKind::Opaque;
-}
 
 /// A texture of an animation: '+', its frame ('0' to '9' in the main sequence, 'a' to 'j', of any
 /// case, in the alternate one), then the name its frames share.
@@ -423,14 +386,10 @@ struct MapTextures {
     return textures;
 }
 
-/// The extent of a face's lightmaps, in luxels, the texture coordinates of their first luxel, and
-/// how many it has: one for each of its styles.
+/// Where a face's lightmaps lie on it, and how many it has: one for each of its styles.
 struct LightmapExtent {
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
+    SurfaceExtent area{};
     std::uint32_t maps = 0;
-    double minS = 0.0; ///< In texels: the first luxel's s is minS, the next minS + 16.
-    double minT = 0.0;
 };
 
 /// A face the world draws: the world's, or a brush entity's in its model's space.
@@ -465,21 +424,6 @@ struct FaceToDraw {
     return faces;
 }
 
-/// Corner `edge` of `face`, in the order the compiler wound its edges.
-[[nodiscard]] auto cornerOf(const assets::BspView& map, const assets::BspFace& face, std::uint32_t edge)
-    -> Vec3 {
-    const assets::SurfaceEdge& surfaceEdge = map.surfaceEdges()[face.firstEdge.value + edge];
-    const assets::BspEdge& bspEdge = map.edges()[surfaceEdge.edge.value];
-    return map.vertices()[bspEdge.vertices[surfaceEdge.isReversed ? 1 : 0].value];
-}
-
-/// The texture coordinate of `point` along `axis` (a texture's s or t), in double precision as the
-/// compilers compute it.
-[[nodiscard]] auto textureCoordinateOf(Vec3 point, Vec4 axis) -> double {
-    return (double{point.x} * double{axis.x}) + (double{point.y} * double{axis.y}) +
-           (double{point.z} * double{axis.z}) + double{axis.w};
-}
-
 /// The lightmaps of `entry`, as the compilers measure them; none for a face drawn unlit: the sky,
 /// turbulent and special faces, a face without samples, and one whose extent no compiler writes or
 /// whose samples the file does not hold.
@@ -489,37 +433,16 @@ struct FaceToDraw {
     if (entry.isSky || entry.isTurbulent || info.isSpecial || !entry.face->lightmapOffset) {
         return std::nullopt;
     }
-    double minS = std::numeric_limits<double>::max();
-    double maxS = std::numeric_limits<double>::lowest();
-    double minT = minS;
-    double maxT = maxS;
-    for (std::uint32_t edge = 0; edge < entry.face->edgeCount; ++edge) {
-        const Vec3 point = cornerOf(map, *entry.face, edge);
-        minS = std::min(minS, textureCoordinateOf(point, info.s));
-        maxS = std::max(maxS, textureCoordinateOf(point, info.s));
-        minT = std::min(minT, textureCoordinateOf(point, info.t));
-        maxT = std::max(maxT, textureCoordinateOf(point, info.t));
-    }
-    const double firstS = std::floor(minS / kLuxelUnits);
-    const double firstT = std::floor(minT / kLuxelUnits);
-    const auto width = tryRound<std::uint32_t>(std::ceil(maxS / kLuxelUnits) - firstS + 1.0);
-    const auto height = tryRound<std::uint32_t>(std::ceil(maxT / kLuxelUnits) - firstT + 1.0);
-    if (!width || !height || *width > kAtlasWidth || *height > kAtlasWidth) {
+    const std::optional<SurfaceExtent> area = surfaceExtentOf(map, *entry.face);
+    if (!area || area->width > kAtlasWidth || area->height > kAtlasWidth) {
         return std::nullopt;
     }
-    // A lightmap for each style, until the first unused one, as the original counts them.
-    const auto maps = static_cast<std::uint32_t>(
-        std::ranges::distance(entry.face->lightStyles |
-                              std::views::take_while([](std::uint8_t style) { return style != kNoStyle; })));
-    const std::size_t sampleBytes = std::size_t{*width} * *height * kRgbBytes;
+    const std::uint32_t maps = lightmapCountOf(*entry.face);
+    const std::size_t sampleBytes = std::size_t{area->width} * area->height * kRgbBytes;
     if (*entry.face->lightmapOffset + (sampleBytes * maps) > map.lighting().size()) {
         return std::nullopt;
     }
-    return LightmapExtent{.width = *width,
-                          .height = *height,
-                          .maps = maps,
-                          .minS = firstS * kLuxelUnits,
-                          .minT = firstT * kLuxelUnits};
+    return LightmapExtent{.area = *area, .maps = maps};
 }
 
 /// Packs rectangles in rows of the atlas width, each row as tall as its tallest rectangle.
@@ -558,13 +481,13 @@ struct LightmapAtlas {
 /// `atlas`, a layer each, at its corner.
 void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, LightmapAtlas& atlas) {
     const std::span<const std::byte> samples = map.lighting().subspan(*entry.face->lightmapOffset);
-    const LightmapExtent& extent = *entry.lightmap;
-    const std::size_t mapSamples = std::size_t{extent.width} * extent.height;
-    for (std::size_t lightmap = 0; lightmap < extent.maps; ++lightmap) {
-        for (std::uint32_t y = 0; y < extent.height; ++y) {
-            for (std::uint32_t x = 0; x < extent.width; ++x) {
+    const SurfaceExtent& area = entry.lightmap->area;
+    const std::size_t mapSamples = std::size_t{area.width} * area.height;
+    for (std::size_t lightmap = 0; lightmap < entry.lightmap->maps; ++lightmap) {
+        for (std::uint32_t y = 0; y < area.height; ++y) {
+            for (std::uint32_t x = 0; x < area.width; ++x) {
                 const std::size_t from =
-                    ((lightmap * mapSamples) + (std::size_t{y} * extent.width) + x) * kRgbBytes;
+                    ((lightmap * mapSamples) + (std::size_t{y} * area.width) + x) * kRgbBytes;
                 const std::size_t texel =
                     (std::size_t{entry.corner[1] + y} * atlas.extent.width) + entry.corner[0] + x;
                 const std::size_t to = atlas.layerOffsets.at(lightmap) + (texel * kRgbaBytes);
@@ -583,7 +506,7 @@ void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, Lightmap
     for (FaceToDraw& entry : faces) {
         entry.lightmap = lightmapExtentOf(map, entry);
         if (entry.lightmap) {
-            entry.corner = packer.place(entry.lightmap->width, entry.lightmap->height);
+            entry.corner = packer.place(entry.lightmap->area.width, entry.lightmap->area.height);
         }
     }
     LightmapAtlas atlas{.extent = {.width = kAtlasWidth, .height = std::max(packer.height(), 1U)}};
@@ -677,10 +600,11 @@ void cutAlongTheGrid(const std::vector<Vec3>& polygon, std::vector<std::vector<V
     vertex.v = static_cast<float>(t / double{use.height});
     if (entry.lightmap) {
         // Luxel centers: the first luxel's s is minS, 16 texels apart.
+        const SurfaceExtent& area = entry.lightmap->area;
         vertex.lightmapX =
-            static_cast<float>(((s - entry.lightmap->minS) / kLuxelUnits) + kLuxelCenter + entry.corner[0]);
+            static_cast<float>(((s - area.minS) / kLuxelUnits) + kLuxelCenter + entry.corner[0]);
         vertex.lightmapY =
-            static_cast<float>(((t - entry.lightmap->minT) / kLuxelUnits) + kLuxelCenter + entry.corner[1]);
+            static_cast<float>(((t - area.minT) / kLuxelUnits) + kLuxelCenter + entry.corner[1]);
         vertex.styles = entry.face->lightStyles;
     }
     return vertex;
