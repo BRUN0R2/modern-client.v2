@@ -5,13 +5,23 @@
 | Concept | Definition |
 |---------|------------|
 | `sv_tickrate` | Fixed frequency of the server simulation. Default **100 Hz** (parity with classic servers) |
-| `GameTime` (planned) | Integer tick counter plus a fraction. No precision loss with long uptime (GoldSrc used `float` seconds, which degrades after hours) |
-| `TickTime::delta` (planned) | Duration of one tick (`1 / sv_tickrate`) as `nx::Seconds` |
+| `GameTime` | Integer tick counter plus a fraction. No precision loss with long uptime (GoldSrc used `float` seconds, which degrades after hours) |
+| `TickTime::delta` | Duration of one tick (`1 / sv_tickrate`) as `nx::Seconds` |
 | Usercmd | Client input command with its own duration (`msec`), applied individually |
 
 The server advances "world" entities (grenades, doors, triggers, timers) per tick.
 **Players advance per usercmd**, as in the original, with the duration of each command. This
 preserves the original movement behavior.
+
+**Today** (`nx.core:gameTime`, `nx.game:clock`): `nx::TickRate` (`kDefaultTickRate`, 100) and
+`nx::GameTime`, a signed 64-bit count of ticks since the map started and a `float` fraction of the
+next, from 0 up to 1, ordered by tick then fraction. `after(seconds, rate)` moves it by a duration,
+carrying the fraction's whole ticks into the count (a fraction that rounds up to 1 is the next tick's
+start), and `since(earlier, rate)` measures from another moment, both in double precision: a moment
+a month into a map is as precise as one at its start, where float seconds a month in are a quarter
+of a second apart. Each game world holds a `TickTime` resource, its rate and its `now`, which
+`registerComponents` gives it at the map's start and `advanceTick` moves on; the pushers' own clocks
+and when they next act, and when a door was last blocked, are `GameTime`s on it.
 
 ## 2. User commands
 
@@ -250,8 +260,8 @@ the original's mistake, kept. `runPushers` advances each pusher a tick as the or
 clock; carrying each `Body` it runs into, or that stands on it, along with it, or around its origin
 as it turns, through the world and the other solid brush entities by the server's traces; when one
 cannot go, everything goes back and the door goes back the way it came (`CBaseDoor::Blocked`, no
-sooner than 0.25 s after the last time). `nxview` ticks the game at 100 Hz: the player's command, the doors it touched, then the
-pushers, the player's body among the bodies.
+sooner than 0.25 s after the last time). `nxview` ticks the game at 100 Hz: the player's command,
+the doors it touched, then the pushers, the player's body among the bodies, then the clock.
 
 **Today** (`nx.game:placement`): an entity the game drops to the floor as it makes it, as the
 engine's `DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's rules through the

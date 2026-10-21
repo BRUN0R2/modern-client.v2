@@ -6,12 +6,14 @@ nxAddModuleLibrary(nxGame
     LAYER 4
     MODULES
         src/nx.game.cppm
+        src/clock.cppm
         src/components.cppm
         src/solids.cppm
         src/brushEntities.cppm
         src/movers.cppm
         src/placement.cppm
     SOURCES
+        src/clock.cpp
         src/components.cpp
         src/solids.cpp
         src/brushEntities.cpp

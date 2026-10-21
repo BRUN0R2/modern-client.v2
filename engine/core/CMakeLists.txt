@@ -16,6 +16,7 @@ nxAddModuleLibrary(nxCore
         src/byteOrder.cppm
         src/quantity.cppm
         src/units.cppm
+        src/gameTime.cppm
         src/enumArray.cppm
         src/flags.cppm
         src/hash.cppm
@@ -27,6 +28,7 @@ nxAddModuleLibrary(nxCore
         src/failure.cpp
         src/memory.cpp
         src/log.cpp
+        src/gameTime.cpp
     DEPENDS
         # libstdc++ keeps std::stacktrace in libstdc++exp (nx.core:debugging).
         $<$<CXX_COMPILER_ID:GNU>:stdc++exp>)

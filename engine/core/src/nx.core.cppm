@@ -5,7 +5,8 @@
 ///
 /// Typed failures, contract checks with stack traces, strong types and units, explicit conversions,
 /// enum-indexed containers, the text of diagnostics, numbers stored in bytes, stable hashing, frame
-/// allocation and structured logging. Depends only on the C++ standard library.
+/// allocation, structured logging and the simulation's time in ticks. Depends only on the C++ standard
+/// library.
 export module nx.core;
 
 export import :introspection;
@@ -18,6 +19,7 @@ export import :conversion;
 export import :byteOrder;
 export import :quantity;
 export import :units;
+export import :gameTime;
 export import :enumArray;
 export import :flags;
 export import :hash;
