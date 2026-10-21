@@ -12,39 +12,27 @@ import nx.core;
 import nx.rhi;
 import nx.rhi.vulkan;
 
+#include "testDevice.hpp"
+
 namespace {
 
-using nx::rhi::Device;
 using nx::rhi::RhiError;
-
-constexpr std::string_view kNoVulkan = "no Vulkan 1.3 device on this machine";
-
-/// A device without a window, with validation; null when the machine has no Vulkan 1.3 device.
-[[nodiscard]] auto openDevice(std::uint32_t framesInFlight = 2) -> std::unique_ptr<Device> {
-    auto device = nx::rhi::vulkan::createDevice({.applicationName = "nxRhiVulkanTests",
-                                                 .isValidationEnabled = true,
-                                                 .framesInFlight = framesInFlight});
-    if (!device) {
-        const RhiError code = device.error().code;
-        EXPECT_TRUE(code == RhiError::BackendUnavailable || code == RhiError::NoSuitableAdapter)
-            << nx::describe(device.error());
-        return nullptr;
-    }
-    return std::move(*device);
-}
+using nx::test::kNoVulkan;
+using nx::test::openTestDevice;
 
 TEST(VulkanDeviceTest, OpensTheBestAdapter) {
-    const auto device = openDevice();
+    const auto device = openTestDevice();
     if (!device) {
         GTEST_SKIP() << kNoVulkan;
     }
     EXPECT_FALSE(device->adapter().name.empty());
     EXPECT_FALSE(device->adapter().driver.empty());
+    EXPECT_EQ(device->shaderFormat(), nx::rhi::ShaderFormat::Spirv);
     EXPECT_EQ(device->validationErrors(), 0U);
 }
 
 TEST(VulkanDeviceTest, ADeviceWithoutAWindowHasNoSwapchain) {
-    const auto device = openDevice();
+    const auto device = openTestDevice();
     if (!device) {
         GTEST_SKIP() << kNoVulkan;
     }
@@ -55,7 +43,7 @@ TEST(VulkanDeviceTest, ADeviceWithoutAWindowHasNoSwapchain) {
 
 TEST(VulkanDeviceTest, RunsMoreFramesThanItHasInFlight) {
     for (const std::uint32_t framesInFlight : {2U, nx::rhi::vulkan::kMaxFramesInFlight}) {
-        const auto device = openDevice(framesInFlight);
+        const auto device = openTestDevice(framesInFlight);
         if (!device) {
             GTEST_SKIP() << kNoVulkan;
         }
@@ -71,12 +59,34 @@ TEST(VulkanDeviceTest, RunsMoreFramesThanItHasInFlight) {
 }
 
 TEST(VulkanDeviceTest, AnotherDeviceOpensOnceTheFirstIsClosed) {
-    if (!openDevice()) {
+    if (!openTestDevice()) {
         GTEST_SKIP() << kNoVulkan;
     }
-    const auto second = openDevice();
+    const auto second = openTestDevice();
     ASSERT_NE(second, nullptr);
     EXPECT_EQ(second->validationErrors(), 0U);
+}
+
+TEST(VulkanDeviceTest, ADestroyedResourceLivesUntilItsFramesAreDone) {
+    const auto device = openTestDevice();
+    if (!device) {
+        GTEST_SKIP() << kNoVulkan;
+    }
+    const auto buffer = device->createBuffer({.label = "test.retired",
+                                              .size = 256,
+                                              .usage = {nx::rhi::BufferUsage::CopyDestination},
+                                              .location = nx::rhi::MemoryLocation::Device});
+    ASSERT_TRUE(buffer.has_value()) << nx::describe(buffer.error());
+    const auto commands = device->beginFrame();
+    ASSERT_TRUE(commands.has_value());
+    device->destroy(*buffer); // while the frame being recorded may still use it
+    ASSERT_TRUE(device->submitFrame().has_value());
+    for (int frame = 0; frame < 4; ++frame) { // the frames after it destroy it
+        ASSERT_TRUE(device->beginFrame().has_value());
+        ASSERT_TRUE(device->submitFrame().has_value());
+    }
+    device->waitIdle();
+    EXPECT_EQ(device->validationErrors(), 0U);
 }
 
 } // namespace

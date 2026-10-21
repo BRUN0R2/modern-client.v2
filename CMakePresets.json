@@ -23,7 +23,8 @@
       "toolset": { "value": "host=x64", "strategy": "external" },
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "cl",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-nx"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-nx",
+        "VCPKG_HOST_TRIPLET": "x64-windows"
       }
     },
     {
@@ -57,7 +58,7 @@
       "hidden": true,
       "inherits": "base",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
-      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-linux-nx" }
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-linux-nx", "VCPKG_HOST_TRIPLET": "x64-linux" }
     },
     {
       "name": "dev-linux-gcc",
@@ -127,7 +128,9 @@
       "name": "test-tsan",
       "hidden": true,
       "inherits": "test-base",
-      "environment": { "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1" }
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1:suppressions=${sourceDir}/tests/tsan.supp"
+      }
     },
     { "name": "dev-windows-msvc", "inherits": "test-base", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "inherits": "test-base", "configurePreset": "release-windows-msvc" },

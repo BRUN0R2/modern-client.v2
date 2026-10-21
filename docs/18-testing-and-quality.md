@@ -145,7 +145,9 @@ dedicated machine exists they are run by hand from a release build:
 ## Sanitizers and analysis
 
 - TSan on the tests of every pull request and every push to `main` (GCC, `tsan-linux-gcc`
-  preset). Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
+  preset). Its suppressions (`tests/tsan.supp`) name only code that is not the project's, each
+  with why: today Mesa's lavapipe, whose uninstrumented threads TSan sees through their pthread
+  calls only. Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
 - Planned: `clang-tidy` as an error ([02 §12](02-coding-standards.md#12-formatting-and-static-analysis)),
   with a Clang build with modules.
 - Fuzzing of the parsers of external data (`tests/fuzz`, libFuzzer with AddressSanitizer): every

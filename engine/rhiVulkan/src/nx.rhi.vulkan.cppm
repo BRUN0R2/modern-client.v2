@@ -28,11 +28,11 @@ struct DeviceDesc {
 };
 
 /// Opens the best GPU that has what the engine requires: Vulkan 1.3 with dynamic rendering,
-/// synchronization2 and timeline semaphores, a graphics queue and, with a window, presentation to
-/// it. A discrete GPU wins over an integrated one, which wins over a software renderer. One device
-/// at a time: volk loads one device's functions. Errors: BackendUnavailable (no Vulkan loader, or
-/// none of version 1.3), NoSuitableAdapter, SurfaceUnavailable, OutOfHostMemory,
-/// OutOfDeviceMemory, DriverRefused.
+/// synchronization2, timeline semaphores and shader draw parameters, a graphics queue and, with a
+/// window, presentation to it. Anisotropic filtering is used when the GPU has it. A discrete GPU
+/// wins over an integrated one, which wins over a software renderer. One device at a time: volk
+/// loads one device's functions. Errors: BackendUnavailable (no Vulkan loader, or none of version
+/// 1.3), NoSuitableAdapter, SurfaceUnavailable, OutOfHostMemory, OutOfDeviceMemory, DriverRefused.
 [[nodiscard]] auto createDevice(const DeviceDesc& desc) -> Result<std::unique_ptr<Device>, RhiError>;
 
 } // namespace nx::rhi::vulkan

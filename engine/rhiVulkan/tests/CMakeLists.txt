@@ -4,6 +4,11 @@
 nxAddTest(nxRhiVulkanTests
     SOURCES
         deviceTests.cpp
+        drawTests.cpp
     DEPENDS
         nx::rhiVulkan
-        nx::rhi)
+        nx::rhi
+        nx::platform)
+
+# The draw tests load the test shaders from bin/shaders/.
+add_dependencies(nxRhiVulkanTests nxShaders)

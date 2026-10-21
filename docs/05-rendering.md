@@ -61,14 +61,21 @@ express**. The vocabulary is close to WebGPU's.
 - The swapchain is 8-bit UNORM, not sRGB: the `Gamma` pass writes the values of the GoldSrc curves
   as they are ([§11](#11-visual-fidelity)).
 
+- Clip space is DirectX's on every backend: x to the right, y up, depth from 0 (near) to 1 (far);
+  a viewport's rectangle counts from the top-left corner of its target. Vulkan gets there with a
+  viewport of negative height.
+
 **Today** (`engine/rhi`, `engine/rhiVulkan`): the device and its frames in flight
 (`beginFrame` waits for the frame's slot and gives its `CommandList`, `submitFrame` submits and
-presents), the swapchain with its recreation on resize and while minimized, generational texture
-handles (`HandlePool`, a stale handle is a contract violation), transitions between texture states
-and render passes that clear. The validation layers, when installed and asked for, log every
-message and count every error (`Device::validationErrors`), which the tests require to be zero.
-Buffers, the renderer's own textures, samplers, bind groups and pipelines come with the first
-shaders.
+presents), the swapchain with its recreation on resize and while minimized, and generational
+handles (`HandlePool`: a stale handle is a contract violation) to buffers (device memory, or mapped
+memory to upload and read back, through VMA), textures, samplers, shaders, bind group layouts and
+bind groups (descriptor pools added as they fill, so their number has no ceiling) and render
+pipelines (dynamic rendering, dynamic viewport and scissor). A destroyed resource lives until the
+GPU has finished every frame that may use it. The command list transitions textures and buffers,
+copies between them, and draws. The validation layers, when installed and asked for, log every
+message and count every error (`Device::validationErrors`), which the tests require to be zero; the
+tests draw offscreen and read the pixels back, on lavapipe in CI.
 
 ```cpp
 auto lightmapAtlas = device.createTexture(nx::rhi::TextureDesc{
@@ -115,8 +122,11 @@ if (!lightmapAtlas) {
 - Language: **Slang**.
   - Vulkan: Slang → SPIR-V.
   - D3D11: Slang → HLSL → DXBC (SM 5.0, via FXC).
-- Compiled at build time (`nxbake shaders`). The result is packaged and, for the minimal
-  fallback shaders (error screen, console), embedded in the binary with `#embed`.
+- Compiled at build time: `nxAddShaders` runs `slangc` (the vcpkg `shader-slang` port's host tool)
+  on each source of `shaders/`, which becomes one SPIR-V module in `bin/shaders/` with every entry
+  point under its own name; its dependency file recompiles what imports a changed module. Bindings
+  are explicit (`[[vk::binding(binding, group)]]`). Packaging (`nxbake shaders`) and the minimal
+  fallback shaders embedded in the binary with `#embed` (error screen, console) come later.
 - Shader reflection generates the bind group layouts, checked against the ones declared in
   C++ at build time.
 - Shader *hot reload* in development (`r_shader_reload`).

@@ -4,7 +4,8 @@
 #pragma once
 
 // The Vulkan API as the backend's implementation units see it, included by their global module
-// fragments: volk's declarations, and the surface functions of each window system. A global module
+// fragments: volk's declarations, the surface functions of each window system, and the Vulkan Memory
+// Allocator's declarations (vulkanMemoryAllocator.cpp has its implementation). A global module
 // fragment may only include, so the declarations below live here.
 
 #if defined(_WIN32)
@@ -27,3 +28,4 @@ struct wl_surface;
 #include <vulkan/vulkan_wayland.h>
 #include <vulkan/vulkan_xlib.h>
 #endif
+#include <vk_mem_alloc.h>

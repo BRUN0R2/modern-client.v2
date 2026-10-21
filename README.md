@@ -31,12 +31,13 @@ with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime cor
 (typed errors, contracts, strong types and units), `nx.meta` (reflection facade), `nx.data`
 (TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
 `nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars, commands
-and `.cfg`), `nx.platform` (clocks, the native file system, the window and its input) and
-`nx.assets` (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and
-fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and
-`nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. The
-architecture documentation is in [`docs/`](docs/README.md), the project rules in
-[`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
+and `.cfg`), `nx.platform` (clocks, the native file system, the window and its input), `nx.rhi`
+(the GPU interface, with its Vulkan backend) and `nx.assets` (the VFS, the Counter-Strike 1.6
+installation and its detection in Steam, and fuzzed readers of every binary GoldSrc format:
+BSP, WAD3, MDL, SPR, WAV), with tests, and `nxcheck`, which reads every file of a
+Counter-Strike 1.6 installation with those readers. The architecture documentation is in
+[`docs/`](docs/README.md), the project rules in [`docs/RULES.md`](docs/RULES.md) and the
+backlog in [`TODO.md`](TODO.md).
 
 ## Building
 
