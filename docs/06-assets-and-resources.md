@@ -78,8 +78,9 @@ is searched for in this order:
 is usually a link to `~/.local/share/Steam`). `nx::assets::detectGoldsrcInstall` reads each
 `libraryfolders.vdf` (Valve KeyValues, both layouts Steam has written) and takes, in library
 order, the first installation that passes validation. An installation that exists but fails
-validation is reported with its failure, never skipped in silence; with none, the result is
-`ContentError::InstallNotFound`. The app number and the folder name come from
+validation is reported with its failure, never skipped in silence: a warning in the log when a later
+one passes, the result when none does; a library that cannot be read is a warning too. With no
+installation, the result is `ContentError::InstallNotFound`. The app number and the folder name come from
 `data/content/goldsrcCstrike.toml` (`steamAppId`, `steamInstallFolder`).
 
 **Validation** (`nx::assets::GoldsrcInstall::open`) checks the installation against

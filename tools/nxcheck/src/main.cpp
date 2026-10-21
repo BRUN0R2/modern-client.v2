@@ -38,7 +38,8 @@ struct Options {
 /// valid options.
 [[nodiscard]] auto parseOptions(std::span<const std::string_view> arguments) -> std::optional<Options> {
     Options options;
-    for (std::size_t index = 0; index < arguments.size(); index += 2) {
+    constexpr std::size_t kWordsPerOption = 2; // the option, then its value
+    for (std::size_t index = 0; index < arguments.size(); index += kWordsPerOption) {
         const std::string_view option = arguments[index];
         std::optional<std::filesystem::path>* value = option == "--install" ? &options.install
                                                       : option == "--data"  ? &options.data
@@ -71,9 +72,9 @@ struct Options {
 }
 
 /// Prints what each format read, the extensions without a reader and every failure, with the file
-/// of `vfs` it is (relative to `install`); true when no file failed.
+/// of `vfs` it is (relative to `install`); returns how many files failed.
 [[nodiscard]] auto report(std::span<const nxcheck::FileResult> results, const nx::assets::Vfs& vfs,
-                          const std::filesystem::path& install) -> bool {
+                          const std::filesystem::path& install) -> std::size_t {
     struct Totals {
         std::size_t files = 0;
         std::size_t failed = 0;
@@ -124,7 +125,7 @@ struct Options {
         }
     }
     std::println("\n{} files, {} failed", results.size(), failures);
-    return failures == 0;
+    return failures;
 }
 
 [[nodiscard]] auto run(const Options& options) -> int {
@@ -175,7 +176,7 @@ struct Options {
     const std::vector<nxcheck::FileResult> results = nxcheck::checkContent(*vfs, **jobs);
     const std::chrono::duration<double> elapsed = stopwatch.elapsed();
     std::println("checked in {:.2f} s with {} workers\n", elapsed.count(), (*jobs)->workerCount());
-    return report(results, *vfs, install->folder()) ? EXIT_SUCCESS : kExitFailedFiles;
+    return report(results, *vfs, install->folder()) == 0 ? EXIT_SUCCESS : kExitFailedFiles;
 }
 
 } // namespace

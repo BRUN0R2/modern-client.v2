@@ -26,7 +26,7 @@ enum class ContentError : std::uint8_t {
 /// Only names: no Valve asset is part of the repository (ADR-0015).
 struct GoldsrcInstallDesc {
     std::string id;                          ///< Names the source to servers and clients.
-    bool redistributable = false;            ///< Whether servers may send its files to clients.
+    bool isRedistributable = false;          ///< Whether servers may send its files to clients.
     std::uint32_t steamAppId = 0;            ///< The Steam application that installs it.
     std::string steamInstallFolder;          ///< Its folder under steamapps/common.
     std::vector<std::string> mounts;         ///< Directories of the installation, highest priority first.
@@ -77,7 +77,7 @@ struct nx::meta::Description<nx::assets::GoldsrcInstallDesc> {
     static constexpr std::string_view kName = "nx::assets::GoldsrcInstallDesc";
     static constexpr std::tuple kFields{
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::id>("id"),
-        nx::meta::field<&nx::assets::GoldsrcInstallDesc::redistributable>("redistributable"),
+        nx::meta::field<&nx::assets::GoldsrcInstallDesc::isRedistributable>("isRedistributable"),
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::steamAppId>("steamAppId"),
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::steamInstallFolder>("steamInstallFolder"),
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::mounts>("mounts"),

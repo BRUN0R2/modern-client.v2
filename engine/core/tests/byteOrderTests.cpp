@@ -32,4 +32,12 @@ TEST(ByteOrderTest, TooFewBytesBreakTheContract) {
     EXPECT_EQ(recorder.count(), 1);
 }
 
+TEST(ByteOrderTest, BitsTakeWholeBytes) {
+    static_assert(nx::kBitsPerByte == 8);
+    static_assert(nx::bytesForBits(0) == 0);
+    static_assert(nx::bytesForBits(1) == 1);
+    static_assert(nx::bytesForBits(8) == 1);
+    static_assert(nx::bytesForBits(9) == 2);
+}
+
 } // namespace

@@ -11,6 +11,8 @@ namespace nx::assets {
 
 namespace {
 
+constexpr log::Category kLog{"assets"};
+
 /// One entry of a KeyValues file: a key with a text, or a key with a block of entries.
 struct KeyValue {
     std::string key;
@@ -281,8 +283,18 @@ auto detectGoldsrcInstall(const GoldsrcInstallDesc& desc, std::span<const std::f
     const std::string manifest = std::format("appmanifest_{}.acf", desc.steamAppId);
     std::optional<Failure<ContentError>> firstFailure;
     for (const std::filesystem::path& library : *libraries) {
+        const std::filesystem::path manifestPath = library / "steamapps" / manifest;
         std::error_code error;
-        if (!std::filesystem::is_regular_file(library / "steamapps" / manifest, error)) {
+        const std::filesystem::file_status status = std::filesystem::status(manifestPath, error);
+        if (status.type() == std::filesystem::file_type::not_found) {
+            continue;
+        }
+        if (error) {
+            log::warning(kLog, "the Steam library {} cannot be read: {}", platform::toUtf8(library),
+                         error.message());
+            continue;
+        }
+        if (!std::filesystem::is_regular_file(status)) {
             continue;
         }
         auto install = GoldsrcInstall::open(desc, library / "steamapps" / "common" /
@@ -290,6 +302,8 @@ auto detectGoldsrcInstall(const GoldsrcInstallDesc& desc, std::span<const std::f
         if (install) {
             return install;
         }
+        log::warning(kLog, "an installation of Steam app {} fails validation: {}", desc.steamAppId,
+                     describe(install.error()));
         if (!firstFailure) {
             firstFailure = std::move(install.error());
         }

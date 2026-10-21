@@ -11,6 +11,14 @@ import :conversion;
 
 export namespace nx {
 
+/// The bits of a byte, as every format stores them.
+inline constexpr std::size_t kBitsPerByte = std::numeric_limits<std::uint8_t>::digits;
+
+/// The bytes that hold `bits` bits: a whole byte for the bits left over.
+[[nodiscard]] constexpr auto bytesForBits(std::size_t bits) noexcept -> std::size_t {
+    return (bits + kBitsPerByte - 1) / kBitsPerByte;
+}
+
 /// The `Value` stored little-endian in the first sizeof(Value) bytes of `bytes`, which must hold
 /// them (the caller checks the bounds of external data first). Floats are IEEE 754, as the formats
 /// store them.

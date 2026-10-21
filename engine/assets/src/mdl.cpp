@@ -126,7 +126,6 @@ constexpr std::size_t kSequenceEntryNodeOffset = 160;
 constexpr std::size_t kSequenceExitNodeOffset = 164;
 constexpr std::size_t kSequenceNodeFlagsOffset = 168;
 constexpr std::uint32_t kLoopingSequence = 0x1;
-constexpr std::size_t kSequenceBlendAxes = 2;
 
 // An event: frame, event, type (unused), options. A sequence group: label, file name, two unused
 // fields. A sequence group's file: "IDSQ", the version, a name and a length.
@@ -137,7 +136,6 @@ constexpr std::size_t kEventOptionsBytes = 64;
 constexpr std::size_t kGroupLabelBytes = 32;
 constexpr std::size_t kGroupFileNameOffset = 32;
 constexpr std::size_t kGroupFileNameBytes = 64;
-constexpr std::array kSequenceGroupMagic{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}, std::byte{'Q'}};
 constexpr std::size_t kSequenceGroupHeaderBytes = 76;
 
 // An animation: for every blend, every bone's six 16-bit offsets, from that bone's record, to the
@@ -268,7 +266,7 @@ decodeAll(std::span<const std::byte> table, std::size_t recordBytes, Decode deco
     }
     return BoneController{.bone = *bone,
                           .axis = static_cast<BoneAxis>(std::bit_width(axisBits) - 1),
-                          .wraps = (type & kLoopingController) != 0,
+                          .isCyclic = (type & kLoopingController) != 0,
                           .start = start,
                           .end = end,
                           .rest = loadLittleEndian<std::int32_t>(record.subspan(kControllerRestOffset)),
@@ -541,7 +539,7 @@ struct SequenceTargets {
     StudioSequence sequence{
         .label = nameOf(record.first(kSequenceLabelBytes)),
         .fps = loadLittleEndian<float>(record.subspan(kSequenceFpsOffset)),
-        .loops =
+        .isLooping =
             (loadLittleEndian<std::uint32_t>(record.subspan(kSequenceFlagsOffset)) & kLoopingSequence) != 0,
         .activity = loadLittleEndian<std::int32_t>(record.subspan(kSequenceActivityOffset)),
         .activityWeight = loadLittleEndian<std::int32_t>(record.subspan(kSequenceActivityWeightOffset)),
@@ -634,12 +632,12 @@ struct SequenceTargets {
 /// Moves what `decoded` holds into `destination`; its failure, when it holds one.
 template <class Records>
 [[nodiscard]] auto store(Result<Records, MdlError>&& decoded, Records& destination)
-    -> std::optional<Failure<MdlError>> {
+    -> Result<void, MdlError> {
     if (!decoded) {
-        return std::move(decoded.error());
+        return std::unexpected{std::move(decoded.error())};
     }
     destination = std::move(*decoded);
-    return std::nullopt;
+    return {};
 }
 
 /// Fails unless every mesh's skin reference is below `references`. Errors: BadIndex.
@@ -702,42 +700,47 @@ auto MdlView::parse(std::span<const std::byte> bytes) -> Result<MdlView, MdlErro
     const auto decodeBoneOf = [controllerCount](std::span<const std::byte> record, std::size_t index) {
         return decodeBone(record, index, controllerCount);
     };
-    if (auto failure = store(decodeAll(*bones, kBones.recordBytes, decodeBoneOf), view.m_bones)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeAll(*bones, kBones.recordBytes, decodeBoneOf), view.m_bones); !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure =
+    if (auto stored =
             store(decodeAll(*controllers, kBoneControllers.recordBytes, withBones(decodeController)),
-                  view.m_boneControllers)) {
-        return std::unexpected(std::move(*failure));
+                  view.m_boneControllers);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure =
-            store(decodeAll(*hitboxes, kHitboxes.recordBytes, withBones(decodeHitbox)), view.m_hitboxes)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored =
+            store(decodeAll(*hitboxes, kHitboxes.recordBytes, withBones(decodeHitbox)), view.m_hitboxes);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure = store(decodeAll(*attachments, kAttachments.recordBytes, withBones(decodeAttachment)),
-                             view.m_attachments)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeAll(*attachments, kAttachments.recordBytes, withBones(decodeAttachment)),
+                            view.m_attachments);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     const auto decodeTextureOf = [bytes](std::span<const std::byte> record, std::size_t index) {
         return decodeTexture(record, index, bytes);
     };
-    if (auto failure = store(decodeAll(*textures, kTextures.recordBytes, decodeTextureOf), view.m_textures)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = store(decodeAll(*textures, kTextures.recordBytes, decodeTextureOf), view.m_textures);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     const auto decodeBodyPartOf = [bytes, boneCount](std::span<const std::byte> record, std::size_t index) {
         return decodeBodyPart(bytes, record, index, boneCount);
     };
-    if (auto failure =
-            store(decodeAll(*bodyParts, kBodyParts.recordBytes, decodeBodyPartOf), view.m_bodyParts)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored =
+            store(decodeAll(*bodyParts, kBodyParts.recordBytes, decodeBodyPartOf), view.m_bodyParts);
+        !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
-    if (auto failure = view.decodeSequences(bytes)) {
-        return std::unexpected(std::move(*failure));
+    if (auto stored = view.decodeSequences(bytes); !stored) {
+        return std::unexpected(std::move(stored.error()));
     }
     // With its textures, a model's skins map its meshes' references to them; without, its *T.mdl does.
     if (!view.m_textures.empty()) {
-        if (auto failure = store(decodeSkins(bytes, view.m_textures.size()), view.m_skins)) {
-            return std::unexpected(std::move(*failure));
+        if (auto stored = store(decodeSkins(bytes, view.m_textures.size()), view.m_skins); !stored) {
+            return std::unexpected(std::move(stored.error()));
         }
         if (auto references = checkSkinReferences(view.m_bodyParts, view.m_skins.front().size());
             !references) {
@@ -747,11 +750,11 @@ auto MdlView::parse(std::span<const std::byte> bytes) -> Result<MdlView, MdlErro
     return view;
 }
 
-auto MdlView::decodeSequences(std::span<const std::byte> bytes) -> std::optional<Failure<MdlError>> {
+auto MdlView::decodeSequences(std::span<const std::byte> bytes) -> Result<void, MdlError> {
     const auto groups = tableOf(bytes, kSequenceGroups);
     const auto sequences = tableOf(bytes, kSequences);
     if (!groups || !sequences) {
-        return !groups ? groups.error() : sequences.error();
+        return std::unexpected{!groups ? groups.error() : sequences.error()};
     }
     for (std::size_t group = 0; group < groups->size() / kSequenceGroups.recordBytes; ++group) {
         const auto record = groups->subspan(group * kSequenceGroups.recordBytes, kSequenceGroups.recordBytes);
@@ -763,18 +766,19 @@ auto MdlView::decodeSequences(std::span<const std::byte> bytes) -> std::optional
     const auto decodeSequenceOf = [bytes, &targets](std::span<const std::byte> record, std::size_t index) {
         return decodeSequence(bytes, record, index, targets);
     };
-    if (auto failure = store(decodeAll(*sequences, kSequences.recordBytes, decodeSequenceOf), m_sequences)) {
-        return failure;
+    if (auto stored = store(decodeAll(*sequences, kSequences.recordBytes, decodeSequenceOf), m_sequences);
+        !stored) {
+        return stored;
     }
     const auto nodes = loadLittleEndian<std::uint32_t>(bytes.subspan(kTransitionsOffset));
     const auto transitions = region(
         bytes, loadLittleEndian<std::uint32_t>(bytes.subspan(kTransitionsOffset + sizeof(std::uint32_t))),
         std::uint64_t{nodes} * nodes, 1, "Transitions");
     if (!transitions) {
-        return transitions.error();
+        return std::unexpected{transitions.error()};
     }
     m_transitions = *transitions;
-    return std::nullopt;
+    return {};
 }
 
 auto MdlView::checkTextures(const MdlView& texturesFile) const -> Result<void, MdlError> {

@@ -8,6 +8,7 @@ import nx.core;
 import nx.platform;
 import nx.assets;
 
+#include "logRecorder.hpp"
 #include "temporaryDirectory.hpp"
 
 namespace {
@@ -22,7 +23,7 @@ using nx::platform::toUtf8;
 [[nodiscard]] auto desc() -> GoldsrcInstallDesc {
     return GoldsrcInstallDesc{
         .id = "cstrikeOriginal",
-        .redistributable = false,
+        .isRedistributable = false,
         .steamAppId = 10,
         .steamInstallFolder = "Half-Life",
         .mounts = {"cstrike", "valve"},
@@ -162,17 +163,21 @@ TEST(GoldsrcDetectionTest, FindsTheGameInAnotherLibrary) {
     EXPECT_EQ(install->folder(), library.path() / "steamapps" / "common" / "Half-Life");
 }
 
-TEST(GoldsrcDetectionTest, AnIncompleteInstallationGivesWayToACompleteOne) {
+TEST(GoldsrcDetectionTest, AnIncompleteInstallationGivesWayToACompleteOneAndIsReported) {
     const nx::test::TemporaryDirectory steam;
     const nx::test::TemporaryDirectory complete;
     writeLibrary(steam, {.hasGame = true, .isComplete = false});
     writeLibrary(complete, {.hasGame = true, .isComplete = true});
     writeLibraryList(steam, std::vector<std::filesystem::path>{steam.path(), complete.path()});
+    const nx::test::LogRecorder log;
 
     const std::vector<std::filesystem::path> steamFolders{steam.path()};
     const auto install = detectGoldsrcInstall(desc(), steamFolders);
     ASSERT_TRUE(install.has_value()) << nx::describe(install.error());
     EXPECT_EQ(install->folder(), complete.path() / "steamapps" / "common" / "Half-Life");
+    const std::vector<std::string> warnings = log.messagesAt(nx::log::Level::Warning);
+    ASSERT_EQ(warnings.size(), 1U) << "never skipped in silence";
+    EXPECT_NE(warnings.front().find("valve/halflife.wad"), std::string::npos) << warnings.front();
 }
 
 TEST(GoldsrcDetectionTest, AnIncompleteInstallationIsReported) {

@@ -21,7 +21,7 @@ using nx::assets::readGoldsrcInstallDesc;
 [[nodiscard]] auto smallDesc() -> GoldsrcInstallDesc {
     return GoldsrcInstallDesc{
         .id = "cstrikeOriginal",
-        .redistributable = false,
+        .isRedistributable = false,
         .steamAppId = 10,
         .steamInstallFolder = "Half-Life",
         .mounts = {"cstrike", "valve"},
@@ -49,7 +49,7 @@ TEST(GoldsrcInstallTest, TheShippedDescriptionIsValid) {
     ASSERT_TRUE(text.has_value()) << nx::describe(text.error());
     const auto desc = readGoldsrcInstallDesc(*text, "goldsrcCstrike.toml");
     ASSERT_TRUE(desc.has_value()) << nx::describe(desc.error());
-    EXPECT_FALSE(desc->redistributable) << "the user's installation never leaves the machine (ADR-0015)";
+    EXPECT_FALSE(desc->isRedistributable) << "the user's installation never leaves the machine (ADR-0015)";
     EXPECT_EQ(desc->mounts, (std::vector<std::string>{"cstrike", "valve"}));
 
     const nx::test::TemporaryDirectory folder;

@@ -24,7 +24,6 @@ using nx::assets::WadLumpType;
 using nx::assets::WadView;
 
 /// A sequence group file starts with "IDSQ"; a model, or its `*T.mdl`, with "IDST".
-constexpr std::array kSequenceGroupMagic{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}, std::byte{'Q'}};
 
 /// Reads a file that `model` joins (`role` says how), mapping every failure to DependencyFailed.
 [[nodiscard]] auto readJoined(const Vfs& vfs, const nx::Result<VfsPath, nx::assets::VfsError>& path,
@@ -184,7 +183,7 @@ constexpr auto kReaders = std::to_array<Reader>({
         return fail(CheckError::ReadFailed, std::move(bytes.error()));
     }
     result.bytes = bytes->size();
-    if (reader.format == Format::Mdl && std::ranges::starts_with(*bytes, kSequenceGroupMagic)) {
+    if (reader.format == Format::Mdl && std::ranges::starts_with(*bytes, nx::assets::kSequenceGroupMagic)) {
         result.format = Format::SequenceGroup;
         return {}; // read by the models whose sequences are in it
     }
