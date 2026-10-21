@@ -75,9 +75,11 @@ public:
                                              .usage = {nx::rhi::BufferUsage::CopyDestination},
                                              .location = nx::rhi::MemoryLocation::Readback});
         EXPECT_TRUE(color && depth && readback);
-        m_color = color.value_or(nx::rhi::TextureHandle{});
-        m_depth = depth.value_or(nx::rhi::TextureHandle{});
-        m_readback = readback.value_or(nx::rhi::BufferHandle{});
+        if (color && depth && readback) {
+            m_color = std::move(*color);
+            m_depth = std::move(*depth);
+            m_readback = std::move(*readback);
+        }
     }
 
     /// Draws `world` as `camera` sees it with `styles`, `time` after the map started and its brush
@@ -94,11 +96,11 @@ public:
             return {};
         }
         nx::rhi::CommandList& list = commands->get();
-        list.transition(m_color, TextureState::Undefined, TextureState::RenderTarget);
-        list.transition(m_depth, TextureState::Undefined, TextureState::DepthTarget);
-        const std::array colors{nx::rhi::ColorAttachment{.texture = m_color, .clear = {.alpha = 0.0F}}};
+        list.transition(m_color.get(), TextureState::Undefined, TextureState::RenderTarget);
+        list.transition(m_depth.get(), TextureState::Undefined, TextureState::DepthTarget);
+        const std::array colors{nx::rhi::ColorAttachment{.texture = m_color.get(), .clear = {.alpha = 0.0F}}};
         list.beginRendering({.colors = colors,
-                             .depth = nx::rhi::DepthAttachment{.texture = m_depth, .clear = 0.0F},
+                             .depth = nx::rhi::DepthAttachment{.texture = m_depth.get(), .clear = 0.0F},
                              .area = kExtent});
         world.draw(list, {.camera = camera,
                           .aspect = 1.0F,
@@ -106,20 +108,20 @@ public:
                           .lightStyles = styles,
                           .placements = placements});
         list.endRendering();
-        list.transition(m_color, TextureState::RenderTarget, TextureState::CopySource);
-        list.transition(m_readback, BufferState::Undefined, BufferState::CopyDestination);
-        list.copyTextureToBuffer({.buffer = m_readback, .texture = m_color, .extent = kExtent});
-        list.transition(m_readback, BufferState::CopyDestination, BufferState::HostRead);
+        list.transition(m_color.get(), TextureState::RenderTarget, TextureState::CopySource);
+        list.transition(m_readback.get(), BufferState::Undefined, BufferState::CopyDestination);
+        list.copyTextureToBuffer({.buffer = m_readback.get(), .texture = m_color.get(), .extent = kExtent});
+        list.transition(m_readback.get(), BufferState::CopyDestination, BufferState::HostRead);
         EXPECT_TRUE(m_device->submitFrame().has_value());
         m_device->waitIdle();
-        return m_device->mappedBytes(m_readback) | std::ranges::to<std::vector>();
+        return m_device->mappedBytes(m_readback.get()) | std::ranges::to<std::vector>();
     }
 
 private:
     nx::rhi::Device* m_device;
-    nx::rhi::TextureHandle m_color;
-    nx::rhi::TextureHandle m_depth;
-    nx::rhi::BufferHandle m_readback;
+    nx::rhi::OwnedTexture m_color;
+    nx::rhi::OwnedTexture m_depth;
+    nx::rhi::OwnedBuffer m_readback;
 };
 
 /// Builds the world of `desc` in a frame of its own.

@@ -25,8 +25,12 @@ struct GammaSettings {
 /// The entries of the light table: the summed light of a sample, from 0 to 1023.
 inline constexpr std::size_t kLightTableSize = 1024;
 
+/// The values of a color channel of a palette, 0 to 255, and what each becomes.
+inline constexpr std::size_t kChannelValues = 256;
+using ChannelTable = std::array<std::uint8_t, kChannelValues>;
+
 /// `texgamma`: what each palette value of a texture becomes.
-[[nodiscard]] auto textureGammaTable(const GammaSettings& settings) -> std::array<std::uint8_t, 256>;
+[[nodiscard]] auto textureGammaTable(const GammaSettings& settings) -> ChannelTable;
 
 /// `lightgamma`, `brightness` and `gamma`: the light, from 0 to 255, of each summed light from 0 to
 /// 1023 (the original keeps 10 bits and draws the upper 8).

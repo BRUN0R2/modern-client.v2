@@ -17,7 +17,6 @@ import nx.rhi.vulkan;
 
 namespace {
 
-using nx::rhi::BufferHandle;
 using nx::rhi::BufferState;
 using nx::rhi::BufferUsage;
 using nx::rhi::CommandList;
@@ -25,6 +24,8 @@ using nx::rhi::Device;
 using nx::rhi::Extent2d;
 using nx::rhi::Format;
 using nx::rhi::MemoryLocation;
+using nx::rhi::OwnedBuffer;
+using nx::rhi::OwnedTexture;
 using nx::rhi::TextureHandle;
 using nx::rhi::TextureState;
 using nx::rhi::TextureUsage;
@@ -71,7 +72,7 @@ protected:
     [[nodiscard]] auto device() -> Device& { return *m_device; }
 
     /// A target of `extent` to draw to and read back.
-    [[nodiscard]] auto createTarget(Extent2d extent) -> nx::Result<TextureHandle, nx::rhi::RhiError> {
+    [[nodiscard]] auto createTarget(Extent2d extent) -> nx::Result<OwnedTexture, nx::rhi::RhiError> {
         return device().createTexture({.label = "test.target",
                                        .format = Format::Rgba8Unorm,
                                        .extent = extent,
@@ -81,11 +82,11 @@ protected:
     /// An Upload buffer holding `bytes`.
     [[nodiscard]] auto upload(std::string_view label, nx::Flags<BufferUsage> usage,
                               std::span<const std::byte> bytes)
-        -> nx::Result<BufferHandle, nx::rhi::RhiError> {
+        -> nx::Result<OwnedBuffer, nx::rhi::RhiError> {
         auto buffer = device().createBuffer(
             {.label = label, .size = bytes.size(), .usage = usage, .location = MemoryLocation::Upload});
         if (buffer) {
-            std::ranges::copy(bytes, device().mappedBytes(*buffer).begin());
+            std::ranges::copy(bytes, device().mappedBytes(buffer->get()).begin());
         }
         return buffer;
     }
@@ -115,27 +116,27 @@ protected:
             return {};
         }
         runFrame([&](CommandList& commands) {
-            commands.transition(*target, TextureState::Undefined, TextureState::RenderTarget);
+            commands.transition(target->get(), TextureState::Undefined, TextureState::RenderTarget);
             if (depth) {
                 commands.transition(*depth, TextureState::Undefined, TextureState::DepthTarget);
             }
-            const std::array colors{nx::rhi::ColorAttachment{.texture = *target, .clear = {.red = 0.0F}}};
+            const std::array colors{
+                nx::rhi::ColorAttachment{.texture = target->get(), .clear = {.red = 0.0F}}};
             commands.beginRendering(
                 {.colors = colors,
                  .depth = depth ? std::optional{nx::rhi::DepthAttachment{.texture = *depth}} : std::nullopt,
                  .area = extent});
             record(commands);
             commands.endRendering();
-            commands.transition(*target, TextureState::RenderTarget, TextureState::CopySource);
-            commands.transition(*readback, BufferState::Undefined, BufferState::CopyDestination);
-            commands.copyTextureToBuffer({.buffer = *readback, .texture = *target, .extent = extent});
-            commands.transition(*readback, BufferState::CopyDestination, BufferState::HostRead);
+            commands.transition(target->get(), TextureState::RenderTarget, TextureState::CopySource);
+            commands.transition(readback->get(), BufferState::Undefined, BufferState::CopyDestination);
+            commands.copyTextureToBuffer(
+                {.buffer = readback->get(), .texture = target->get(), .extent = extent});
+            commands.transition(readback->get(), BufferState::CopyDestination, BufferState::HostRead);
         });
-        const std::span<const std::byte> bytes = device().mappedBytes(*readback);
+        const std::span<const std::byte> bytes = device().mappedBytes(readback->get());
         std::vector<Pixel> pixels(nx::narrow<std::size_t>(size / sizeof(Pixel)));
         std::ranges::copy(bytes, std::as_writable_bytes(std::span{pixels}).begin());
-        device().destroy(*target);
-        device().destroy(*readback);
         return pixels;
     }
 
@@ -149,10 +150,9 @@ protected:
             commands.transition(texture, layer == 0 ? TextureState::Undefined : TextureState::ShaderRead,
                                 TextureState::CopyDestination);
             commands.copyBufferToTexture(
-                {.buffer = *staging, .texture = texture, .arrayLayer = layer, .extent = extent});
+                {.buffer = staging->get(), .texture = texture, .arrayLayer = layer, .extent = extent});
             commands.transition(texture, TextureState::CopyDestination, TextureState::ShaderRead);
         });
-        device().destroy(*staging);
     }
 
     /// Draws a covering triangle with the entry points of `shaderFile`, which samples `texture`
@@ -178,24 +178,24 @@ protected:
             return {};
         }
         const std::array resources{nx::rhi::Binding{.binding = 0, .resource = texture},
-                                   nx::rhi::Binding{.binding = 1, .resource = *sampler}};
-        auto group =
-            device().createBindGroup({.label = "test.sample", .layout = *layout, .bindings = resources});
+                                   nx::rhi::Binding{.binding = 1, .resource = sampler->get()}};
+        auto group = device().createBindGroup(
+            {.label = "test.sample", .layout = layout->get(), .bindings = resources});
         const std::array targets{nx::rhi::ColorTarget{.format = Format::Rgba8Unorm}};
-        const std::array layouts{*layout};
-        auto pipeline =
-            device().createRenderPipeline({.label = "test.sample",
-                                           .vertex = {.shader = *shader, .entryPoint = "vertexMain"},
-                                           .fragment = {.shader = *shader, .entryPoint = "fragmentMain"},
-                                           .colorTargets = targets,
-                                           .bindGroupLayouts = layouts});
+        const std::array layouts{layout->get()};
+        auto pipeline = device().createRenderPipeline(
+            {.label = "test.sample",
+             .vertex = {.shader = shader->get(), .entryPoint = "vertexMain"},
+             .fragment = {.shader = shader->get(), .entryPoint = "fragmentMain"},
+             .colorTargets = targets,
+             .bindGroupLayouts = layouts});
         if (!group || !pipeline) {
             ADD_FAILURE() << "cannot create the bind group or the pipeline";
             return {};
         }
         return drawAndRead(extent, [&](CommandList& commands) {
-            commands.setPipeline(*pipeline);
-            commands.setBindGroup(0, *group);
+            commands.setPipeline(pipeline->get());
+            commands.setBindGroup(0, group->get());
             commands.draw(3, 1, 0, 0);
         });
     }
@@ -211,9 +211,9 @@ TEST_F(DrawTest, ClearsATargetAndReadsItBack) {
 
 /// The fill pipeline: a triangle from a vertex buffer, in the color of a uniform buffer.
 struct FillPipeline {
-    nx::rhi::ShaderHandle shader;
-    nx::rhi::BindGroupLayoutHandle layout;
-    nx::rhi::RenderPipelineHandle pipeline;
+    nx::rhi::OwnedShader shader;
+    nx::rhi::OwnedBindGroupLayout layout;
+    nx::rhi::OwnedRenderPipeline pipeline;
 };
 
 [[nodiscard]] auto createFillPipeline(Device& device, std::optional<nx::rhi::DepthState> depth)
@@ -233,11 +233,11 @@ struct FillPipeline {
     const std::array vertexBuffers{
         nx::rhi::VertexBufferLayout{.stride = 2 * sizeof(float), .attributes = attributes}};
     const std::array targets{nx::rhi::ColorTarget{.format = Format::Rgba8Unorm}};
-    const std::array layouts{*layout};
+    const std::array layouts{layout->get()};
     auto pipeline =
         device.createRenderPipeline({.label = "test.fill",
-                                     .vertex = {.shader = *shader, .entryPoint = "vertexMain"},
-                                     .fragment = {.shader = *shader, .entryPoint = "fragmentMain"},
+                                     .vertex = {.shader = shader->get(), .entryPoint = "vertexMain"},
+                                     .fragment = {.shader = shader->get(), .entryPoint = "fragmentMain"},
                                      .vertexBuffers = vertexBuffers,
                                      .colorTargets = targets,
                                      .depth = depth,
@@ -246,13 +246,19 @@ struct FillPipeline {
         ADD_FAILURE() << nx::describe(pipeline.error());
         return std::nullopt;
     }
-    return FillPipeline{.shader = *shader, .layout = *layout, .pipeline = *pipeline};
+    return FillPipeline{
+        .shader = std::move(*shader), .layout = std::move(*layout), .pipeline = std::move(*pipeline)};
 }
 
-/// A uniform buffer of `color`, and the bind group of the fill pipeline that binds it: both live with
-/// the device, as the group needs the buffer for as long as it is drawn with.
+/// A uniform buffer of a color, and the bind group of the fill pipeline that binds it, which needs the
+/// buffer for as long as it is drawn with.
+struct FillGroup {
+    OwnedBuffer color;
+    nx::rhi::OwnedBindGroup group;
+};
+
 [[nodiscard]] auto fillGroup(Device& device, const FillPipeline& fill, std::array<float, 4> color)
-    -> std::optional<nx::rhi::BindGroupHandle> {
+    -> std::optional<FillGroup> {
     auto buffer = device.createBuffer({.label = "test.fill.color",
                                        .size = sizeof(color),
                                        .usage = {BufferUsage::Uniform},
@@ -261,16 +267,16 @@ struct FillPipeline {
         ADD_FAILURE() << nx::describe(buffer.error());
         return std::nullopt;
     }
-    std::ranges::copy(std::as_bytes(std::span{color}), device.mappedBytes(*buffer).begin());
+    std::ranges::copy(std::as_bytes(std::span{color}), device.mappedBytes(buffer->get()).begin());
     const std::array bindings{
-        nx::rhi::Binding{.binding = 0, .resource = nx::rhi::BufferBinding{.buffer = *buffer}}};
-    auto group =
-        device.createBindGroup({.label = "test.fill.color", .layout = fill.layout, .bindings = bindings});
+        nx::rhi::Binding{.binding = 0, .resource = nx::rhi::BufferBinding{.buffer = buffer->get()}}};
+    auto group = device.createBindGroup(
+        {.label = "test.fill.color", .layout = fill.layout.get(), .bindings = bindings});
     if (!group) {
         ADD_FAILURE() << nx::describe(group.error());
         return std::nullopt;
     }
-    return *group;
+    return FillGroup{.color = std::move(*buffer), .group = std::move(*group)};
 }
 
 /// A triangle over the whole target: clip space (-1, -1), (3, -1), (-1, 3).
@@ -286,9 +292,9 @@ TEST_F(DrawTest, DrawsAVertexBufferInAUniformColor) {
     ASSERT_TRUE(vertices.has_value()) << nx::describe(vertices.error());
 
     const auto pixels = drawAndRead({.width = 4, .height = 4}, [&](CommandList& commands) {
-        commands.setPipeline(fill->pipeline);
-        commands.setBindGroup(0, *group);
-        commands.setVertexBuffer(0, *vertices, 0);
+        commands.setPipeline(fill->pipeline.get());
+        commands.setBindGroup(0, group->group.get());
+        commands.setVertexBuffer(0, vertices->get(), 0);
         commands.draw(3, 1, 0, 0);
     });
     EXPECT_EQ(pixels, std::vector<Pixel>(16, kGreen));
@@ -306,9 +312,9 @@ TEST_F(DrawTest, ClipSpaceYPointsUp) {
     ASSERT_TRUE(vertices.has_value());
 
     const auto pixels = drawAndRead({.width = 2, .height = 2}, [&](CommandList& commands) {
-        commands.setPipeline(fill->pipeline);
-        commands.setBindGroup(0, *group);
-        commands.setVertexBuffer(0, *vertices, 0);
+        commands.setPipeline(fill->pipeline.get());
+        commands.setBindGroup(0, group->group.get());
+        commands.setVertexBuffer(0, vertices->get(), 0);
         commands.draw(6, 1, 0, 0);
     });
     EXPECT_EQ(pixels, (std::vector<Pixel>{kWhite, kWhite, kBlack, kBlack})) << "the top row is drawn";
@@ -322,9 +328,9 @@ TEST_F(DrawTest, SamplesAnUploadedTexture) {
                                            .extent = kExtent,
                                            .usage = {TextureUsage::Sampled, TextureUsage::CopyDestination}});
     ASSERT_TRUE(texture.has_value()) << nx::describe(texture.error());
-    uploadTexels(*texture, 0, kExtent, texels);
+    uploadTexels(texture->get(), 0, kExtent, texels);
 
-    EXPECT_EQ(drawSampled("sample.spv", *texture, kExtent),
+    EXPECT_EQ(drawSampled("sample.spv", texture->get(), kExtent),
               (std::vector<Pixel>{texels.begin(), texels.end()}))
         << "one texel per pixel, top row first";
 }
@@ -339,10 +345,10 @@ TEST_F(DrawTest, SamplesALayerOfATextureArray) {
                                            .arrayLayers = 2,
                                            .usage = {TextureUsage::Sampled, TextureUsage::CopyDestination}});
     ASSERT_TRUE(texture.has_value()) << nx::describe(texture.error());
-    uploadTexels(*texture, 0, kExtent, firstLayer);
-    uploadTexels(*texture, 1, kExtent, secondLayer);
+    uploadTexels(texture->get(), 0, kExtent, firstLayer);
+    uploadTexels(texture->get(), 1, kExtent, secondLayer);
 
-    EXPECT_EQ(drawSampled("sampleLayer.spv", *texture, kExtent),
+    EXPECT_EQ(drawSampled("sampleLayer.spv", texture->get(), kExtent),
               (std::vector<Pixel>{secondLayer.begin(), secondLayer.end()}))
         << "layer 1, one texel per pixel";
 }
@@ -365,14 +371,14 @@ TEST_F(DrawTest, TheDepthTestKeepsTheFirstOfTwoEqualDepths) {
     const auto pixels = drawAndRead(
         kExtent,
         [&](CommandList& commands) {
-            commands.setPipeline(fill->pipeline);
-            commands.setVertexBuffer(0, *vertices, 0);
-            commands.setBindGroup(0, *red);
+            commands.setPipeline(fill->pipeline.get());
+            commands.setVertexBuffer(0, vertices->get(), 0);
+            commands.setBindGroup(0, red->group.get());
             commands.draw(3, 1, 0, 0); // depth 0 passes the cleared 1
-            commands.setBindGroup(0, *blue);
+            commands.setBindGroup(0, blue->group.get());
             commands.draw(3, 1, 0, 0); // depth 0 is not less than 0
         },
-        *depth);
+        depth->get());
     EXPECT_EQ(pixels, std::vector<Pixel>(16, kRed));
 }
 
