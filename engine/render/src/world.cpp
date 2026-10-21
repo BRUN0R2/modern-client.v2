@@ -35,7 +35,7 @@ constexpr auto kInvisibleTextures =
     std::to_array<std::string_view>({"aaatrigger", "clip", "origin", "null", "skip", "hint", "bevel"});
 
 struct WorldVertex {
-    Vec3 position;
+    Vec3 position{};
     float u = 0.0F;
     float v = 0.0F;
     float lightmapU = 0.0F;
@@ -45,7 +45,7 @@ static_assert(sizeof(WorldVertex) == 7 * sizeof(float), "the vertex layout of th
 
 /// The camera's uniform: the rows of the view-projection matrix.
 struct CameraUniform {
-    Mat4 viewProjection;
+    Mat4 viewProjection{};
 };
 
 /// How a face is drawn, from its texture's name.
@@ -239,7 +239,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         return gpuFailure(std::move(checkerTexture.error()));
     }
     struct TextureUse {
-        rhi::TextureHandle texture;
+        rhi::TextureHandle texture{};
         SurfaceKind kind = SurfaceKind::Opaque;
         float width = 1.0F;
         float height = 1.0F;
@@ -314,7 +314,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         return map.vertices()[bspEdge.vertices[surfaceEdge.isReversed ? 1 : 0].value];
     };
     const auto coordinateOf = [](Vec3 point, Vec4 axis) {
-        return (double{point.x} * axis.x) + (double{point.y} * axis.y) + (double{point.z} * axis.z) + axis.w;
+        return (double{point.x} * double{axis.x}) + (double{point.y} * double{axis.y}) +
+               (double{point.z} * double{axis.z}) + double{axis.w};
     };
     ShelfPacker packer;
     std::ignore = packer.place(1, 1); // the white luxel at (0, 0)
@@ -392,8 +393,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             const double s = coordinateOf(point, info.s);
             const double t = coordinateOf(point, info.t);
             WorldVertex vertex{.position = point + entry.origin,
-                               .u = static_cast<float>(s / use.width),
-                               .v = static_cast<float>(t / use.height),
+                               .u = static_cast<float>(s / double{use.width}),
+                               .v = static_cast<float>(t / double{use.height}),
                                .lightmapU = 0.5F / static_cast<float>(atlasExtent.width),
                                .lightmapV = 0.5F / static_cast<float>(atlasExtent.height)};
             if (entry.lightmap) {

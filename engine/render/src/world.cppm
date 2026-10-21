@@ -27,9 +27,9 @@ struct BspWorldDesc {
     const assets::BspView& map;
     /// The WADs of the map's `wad` key, in its order: a texture without pixels in the map is the
     /// first of them that has its name.
-    std::span<const assets::WadView> wads;
+    std::span<const assets::WadView> wads{};
     /// shaders/world.slang, compiled for the device (bin/shaders/world.spv).
-    std::span<const std::byte> shaderCode;
+    std::span<const std::byte> shaderCode{};
     rhi::Format colorFormat = rhi::Format::Undefined;
 };
 
@@ -38,8 +38,8 @@ struct WorldStats {
     std::size_t faces = 0;
     std::size_t triangles = 0;
     std::size_t textures = 0;
-    std::vector<std::string> missingTextures; ///< In no WAD: drawn as a checkerboard.
-    rhi::Extent2d lightmapAtlas;
+    std::vector<std::string> missingTextures{}; ///< In no WAD: drawn as a checkerboard.
+    rhi::Extent2d lightmapAtlas{};
 };
 
 class BspWorld {
@@ -67,13 +67,13 @@ private:
     struct Batch {
         std::uint32_t firstIndex = 0;
         std::uint32_t indexCount = 0;
-        rhi::BindGroupHandle textures;
+        rhi::BindGroupHandle textures{};
     };
 
     /// What one frame in flight writes the camera to.
     struct CameraSlot {
-        rhi::BufferHandle buffer;
-        rhi::BindGroupHandle group;
+        rhi::BufferHandle buffer{};
+        rhi::BindGroupHandle group{};
     };
 
     explicit BspWorld(rhi::Device& device) noexcept : m_device{&device} {}
