@@ -177,6 +177,18 @@ if (!lightmapAtlas) {
 - **Future:** GPU culling (*GPU-driven*) when new maps without BSP limits justify
   it.
 
+**Today** (`nx.render:world`, `nxview --map`): every face of the world and of the brush
+entities (placed at their `origin`) in one vertex and one index buffer, drawn in batches by
+texture; the textures of the map and of the WADs its `wad` key names, by file name at the root of
+the VFS as the original looks them up, with their four mips, a checkerboard for a name no WAD has;
+masked textures; triggers and the compiler's tool textures (`AAATRIGGER`, `CLIP`...) and the sky not
+drawn. The lightmaps are packed into one atlas: each face's extent in luxels of 16 units is computed
+in double precision, as the compilers compute it, and lightstyle 0 is drawn, twice as bright at
+most (overbright). The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0
+at infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
+original's horizontal angle of a 4:3 view, kept vertical on wider screens (Hor+). On the Steam
+installation, de_dust2 is 4002 faces in 43 textures and a 1024x404 atlas, built in half a second.
+
 ## 9. Studio models and GPU skinning
 
 ### 9.1 Pipeline

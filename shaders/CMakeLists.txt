@@ -4,5 +4,6 @@
 # The engine's shaders, compiled to bin/shaders/ (nxAddShaders, cmake/nxTargets.cmake).
 nxAddShaders(nxShaders
     SOURCES
+        world.slang
         test/fill.slang
         test/sample.slang)

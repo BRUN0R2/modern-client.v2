@@ -14,8 +14,7 @@ import nx.rhi;
 
 export namespace nx::rhi::vulkan {
 
-/// The most frames recorded while the GPU runs the ones before (r_frames_in_flight).
-inline constexpr std::uint32_t kMaxFramesInFlight = 3;
+using rhi::kMaxFramesInFlight;
 
 struct DeviceDesc {
     std::string_view applicationName = "Modern-Client.v2";
