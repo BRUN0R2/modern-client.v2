@@ -4,5 +4,6 @@
 nxAddTest(csSharedTests
     SOURCES
         movementTests.cpp
+        studioTests.cpp
     DEPENDS
         cs::shared)

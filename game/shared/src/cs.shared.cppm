@@ -9,3 +9,4 @@
 export module cs.shared;
 
 export import :movement;
+export import :studio;

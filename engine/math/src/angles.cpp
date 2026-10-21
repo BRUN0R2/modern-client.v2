@@ -26,6 +26,12 @@ auto detail::sineCosine(Degrees angle) noexcept -> SineCosine {
                       .cosine = static_cast<float>(std::cos(radians))};
 }
 
+auto detail::sineCosine(Radians angle) noexcept -> SineCosine {
+    const auto radians = static_cast<double>(angle.value());
+    return SineCosine{.sine = static_cast<float>(std::sin(radians)),
+                      .cosine = static_cast<float>(std::cos(radians))};
+}
+
 auto rotationMatrix(EulerAngles angles) noexcept -> Mat3 {
     const auto [sinPitch, cosPitch] = detail::sineCosine(angles.pitch);
     const auto [sinYaw, cosYaw] = detail::sineCosine(angles.yaw);

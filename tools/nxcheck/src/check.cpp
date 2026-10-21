@@ -7,7 +7,9 @@ import std;
 import nx.core;
 import nx.jobs;
 import nx.assets;
+import nx.math;
 import nx.collision;
+import cs.shared;
 
 namespace nxcheck {
 
@@ -67,8 +69,50 @@ using nx::assets::WadView;
     return {};
 }
 
+/// How far a posed bone's rotation may be from a rotation: its rows from unit length.
+constexpr float kRigidTolerance = 1e-3F;
+
+/// Whether `transform` is finite and its linear part a rotation, within kRigidTolerance.
+[[nodiscard]] auto isRigid(const nx::Mat3x4& transform) noexcept -> bool {
+    return std::ranges::all_of(transform.rows, [](nx::Vec4 row) {
+        return std::isfinite(row.x) && std::isfinite(row.y) && std::isfinite(row.z) && std::isfinite(row.w) &&
+               std::abs(nx::lengthSquared(nx::xyz(row)) - 1.0F) <= kRigidTolerance;
+    });
+}
+
+/// Poses the bones of `model` at every frame of `sequence`, whose decoded frames are `animation`, and
+/// halfway to the next one, at both ends of its first blending: every bone's transform must be rigid.
+/// Errors: Invalid.
+[[nodiscard]] auto checkPoses(const MdlView& model, const nx::assets::StudioSequence& sequence,
+                              const nx::assets::AnimationFrames& animation) -> Result<void, CheckError> {
+    constexpr float kHalfway = 0.5F;
+    constexpr std::uint8_t kFullBlending = 255;
+    const cs::Skeleton skeleton = cs::skeletonOf(model);
+    const auto last = static_cast<float>(animation.frameCount - 1);
+    for (std::uint32_t frame = 0; frame < animation.frameCount; ++frame) {
+        for (const float at : {static_cast<float>(frame), static_cast<float>(frame) + kHalfway}) {
+            for (const std::uint8_t blending : {std::uint8_t{0}, kFullBlending}) {
+                if (at > last) {
+                    continue;
+                }
+                const std::vector<nx::Mat3x4> pose =
+                    cs::poseBones(skeleton, sequence, animation,
+                                  {.frame = cs::SequenceFrame{at}, .blending = {blending, 0}});
+                if (const auto bone = std::ranges::find_if_not(pose, isRigid); bone != pose.end()) {
+                    return fail(
+                        CheckError::Invalid,
+                        std::format("sequence {:?} at frame {} poses bone {:?} out of a rigid transform",
+                                    sequence.label, at,
+                                    model.bones()[nx::narrow<std::size_t>(bone - pose.begin())].name));
+                }
+            }
+        }
+    }
+    return {};
+}
+
 /// Checks the model at `path`: its textures, from its `*T.mdl` when it has none, and the animation
-/// of every sequence, from the sequence group file it is in.
+/// of every sequence, from the sequence group file it is in, posed at each of its frames.
 [[nodiscard]] auto checkMdl(const Vfs& vfs, const VfsPath& path, std::span<const std::byte> bytes)
     -> Result<void, CheckError> {
     auto model = MdlView::parse(bytes);
@@ -107,9 +151,13 @@ using nx::assets::WadView;
             }
             groupFile = *file;
         }
-        if (auto frames = model->decodeAnimation(nx::assets::SequenceIndex{index}, groupFile); !frames) {
+        auto frames = model->decodeAnimation(nx::assets::SequenceIndex{index}, groupFile);
+        if (!frames) {
             return fail(CheckError::Invalid, std::format("the animation of sequence {:?}", sequence.label),
                         std::move(frames.error()));
+        }
+        if (auto posed = checkPoses(*model, sequence, *frames); !posed) {
+            return posed;
         }
     }
     return {};
