@@ -53,10 +53,17 @@ struct WorldVertex {
 };
 static_assert(sizeof(WorldVertex) == 9 * sizeof(float), "the vertex layout of the world pipeline");
 
-/// A brush entity's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1.
+/// A brush model's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1; and where it
+/// is drawn this frame. The world's is 0.
 struct EntityUniform {
     Vec4 color{};
+    Vec4 origin{};
 };
+
+/// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
+/// alignment of uniform buffers a GPU asks for.
+constexpr std::uint64_t kEntityUniformStride = 256;
+static_assert(sizeof(EntityUniform) <= kEntityUniformStride);
 
 /// The frame's uniform: the rows of the view-projection matrix; in `lighting`, the original's
 /// lightscale, the size of the lightmaps and the time; the camera's position; the light styles'
@@ -472,7 +479,6 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     struct FaceToDraw {
         const assets::BspFace* face = nullptr;
         std::uint32_t index = 0; ///< In map.faces().
-        Vec3 origin{};
         std::size_t texture = 0;
         bool isSky = false;
         bool isTurbulent = false;
@@ -492,7 +498,6 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
             faces.push_back(FaceToDraw{.face = &face,
                                        .index = bspModel.firstFace.value + offset,
-                                       .origin = entities[model].origin,
                                        .texture = texture,
                                        .isSky = kind == SurfaceKind::Sky,
                                        .isTurbulent = kind == SurfaceKind::Turbulent});
@@ -646,7 +651,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         for (const std::vector<Vec3>& piece : pieces) {
             const auto first = narrow<std::uint32_t>(vertices.size());
             for (const Vec3 point : piece) {
-                WorldVertex vertex{.position = point + entry.origin};
+                WorldVertex vertex{.position = point}; // a brush entity's in its model's space
                 if (entry.isTurbulent) {
                     vertex.u = dot(point, Vec3{.x = info.s.x, .y = info.s.y, .z = info.s.z});
                     vertex.v = dot(point, Vec3{.x = info.t.x, .y = info.t.y, .z = info.t.z});
@@ -693,7 +698,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
                      .bucket = bucket,
                      .plane = map.planes()[entry.face->plane.value].plane,
                      .isBackSide = entry.face->isBackSide,
-                     .middle = faceBounds.center() + entry.origin};
+                     .middle = faceBounds.center()};
         ++world.m_stats.faces;
     }
     for (std::size_t model = 1; model < map.models().size(); ++model) {
@@ -702,8 +707,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         world.m_models.push_back(
             ModelDraw{.firstFace = bspModel.firstFace.value,
                       .faceCount = bspModel.faceCount,
-                      .bounds = bspModel.bounds.translated(entity.origin),
+                      .bounds = bspModel.bounds,
                       .origin = entity.origin,
+                      .color = extend(entity.color, entity.amount),
                       .mode = entity.mode,
                       // R_AddEntity: drawn other than normally, nothing at a renderamt of 0.
                       .isDrawn = entity.mode == RenderMode::Normal || entity.amount > 0.0F});
@@ -712,7 +718,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     world.m_bucketIndices.resize(bucketFrames.size());
 
     // The pipelines; their bind groups: per frame, the camera, the lightmaps, the light table and the
-    // sky; per batch, its texture; per brush entity drawn blended, its rendercolor and renderamt.
+    // sky; per batch, its texture; per frame and brush model, where it is and how it is blended.
     if (auto created = world.createPipelines(desc.shaderCode, desc.colorFormat); !created) {
         return gpuFailure(std::move(created.error()));
     }
@@ -748,7 +754,29 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             device.destroy(*buffer);
             return gpuFailure(std::move(indices.error()));
         }
-        world.m_frameSlots.push_back(FrameSlot{.buffer = *buffer, .group = *group, .indices = *indices});
+        FrameSlot& added = world.m_frameSlots.emplace_back(
+            FrameSlot{.buffer = *buffer, .group = *group, .indices = *indices});
+        auto entityUniforms = device.createBuffer({.label = "world.entities",
+                                                   .size = kEntityUniformStride * map.models().size(),
+                                                   .usage = {rhi::BufferUsage::Uniform},
+                                                   .location = rhi::MemoryLocation::Upload});
+        if (!entityUniforms) {
+            return gpuFailure(std::move(entityUniforms.error()));
+        }
+        added.entities = *entityUniforms;
+        for (std::size_t model = 0; model < map.models().size(); ++model) {
+            const std::array entityBindings{
+                rhi::Binding{.binding = 0,
+                             .resource = rhi::BufferBinding{.buffer = *entityUniforms,
+                                                            .offset = kEntityUniformStride * model,
+                                                            .size = sizeof(EntityUniform)}}};
+            auto entityGroup = device.createBindGroup(
+                {.label = "world.entity", .layout = world.m_entityLayout, .bindings = entityBindings});
+            if (!entityGroup) {
+                return gpuFailure(std::move(entityGroup.error()));
+            }
+            added.entityGroups.push_back(*entityGroup);
+        }
     }
 
     // A bind group for each texture each bucket shows.
@@ -764,31 +792,6 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
             groups.push_back(*group);
         }
-    }
-    // The rendercolor and renderamt of each brush entity drawn blended.
-    for (std::size_t model = 1; model < map.models().size(); ++model) {
-        ModelDraw& drawn = world.m_models[model - 1];
-        if (drawn.mode == RenderMode::Normal || drawn.mode == RenderMode::TransAlpha || !drawn.isDrawn) {
-            continue;
-        }
-        const EntityUniform uniform{.color = extend(entities[model].color, entities[model].amount)};
-        auto buffer = device.createBuffer({.label = "world.entity",
-                                           .size = sizeof(EntityUniform),
-                                           .usage = {rhi::BufferUsage::Uniform},
-                                           .location = rhi::MemoryLocation::Upload});
-        if (!buffer) {
-            return gpuFailure(std::move(buffer.error()));
-        }
-        drawn.entityBuffer = *buffer;
-        std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), device.mappedBytes(*buffer).begin());
-        const std::array bindings{
-            rhi::Binding{.binding = 0, .resource = rhi::BufferBinding{.buffer = *buffer}}};
-        auto group = device.createBindGroup(
-            {.label = "world.entity", .layout = world.m_entityLayout, .bindings = bindings});
-        if (!group) {
-            return gpuFailure(std::move(group.error()));
-        }
-        drawn.entityGroup = *group;
     }
     world.m_stats.triangles = world.m_faceIndices.size() / 3;
     world.m_stats.lightmapAtlas = atlasExtent;
@@ -866,16 +869,16 @@ void BspWorld::release() noexcept {
         m_device->destroy(slot.group);
         m_device->destroy(slot.buffer);
         m_device->destroy(slot.indices);
+        for (const rhi::BindGroupHandle group : slot.entityGroups) {
+            m_device->destroy(group);
+        }
+        m_device->destroy(slot.entities);
     }
     for (const rhi::BindGroupHandle group : m_bucketFrames | std::views::join) {
         m_device->destroy(group);
     }
     for (const rhi::TextureHandle texture : m_textures) {
         m_device->destroy(texture);
-    }
-    for (const ModelDraw& model : m_models) {
-        m_device->destroy(model.entityGroup);
-        m_device->destroy(model.entityBuffer);
     }
     m_device->destroy(m_pipeline);
     m_device->destroy(m_skyPipeline);
@@ -896,6 +899,18 @@ void BspWorld::release() noexcept {
     m_models.clear();
 }
 
+void BspWorld::place(std::span<const ModelPlacement> placements) {
+    m_origins.resize(m_models.size());
+    std::ranges::transform(m_models, m_origins.begin(), &ModelDraw::origin);
+    for (const ModelPlacement& placement : placements) {
+        expects(placement.model >= 1 && placement.model <= m_models.size(),
+                "BspWorld::draw: a placement of a brush model of the map");
+        if (placement.model >= 1 && placement.model <= m_models.size()) {
+            m_origins[placement.model - 1] = placement.origin; // m_models starts at model 1
+        }
+    }
+}
+
 auto BspWorld::isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noexcept -> bool {
     const FaceDraw& draw = m_faces[face];
     const float distance = draw.plane.signedDistance(eye);
@@ -905,12 +920,12 @@ auto BspWorld::isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noe
     return draw.indexCount != 0 && isFacing;
 }
 
-void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
+void BspWorld::addFace(std::uint32_t face, Vec3 eye) {
     if (m_faceGathered[face] == m_drawCount) {
         return; // in another leaf already
     }
     m_faceGathered[face] = m_drawCount;
-    if (!isSeen(face, eye, isOfAnEntity)) {
+    if (!isSeen(face, eye, false)) {
         return;
     }
     const FaceDraw& draw = m_faces[face];
@@ -921,9 +936,9 @@ void BspWorld::addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity) {
     ++m_lastFrame.faces;
 }
 
-void BspWorld::addEntity(std::uint32_t model, const Camera& camera) {
+void BspWorld::addEntity(std::uint32_t model, const Camera& camera, Vec3 origin) {
     const ModelDraw& drawn = m_models[model];
-    const Vec3 eye = camera.position - drawn.origin;
+    const Vec3 eye = camera.position - origin;
     const auto first = narrow<std::uint32_t>(m_entityFaces.size());
     for (std::uint32_t face = drawn.firstFace; face < drawn.firstFace + drawn.faceCount; ++face) {
         if (m_faces[face].bucket != kSkyBucket && isSeen(face, eye, true)) {
@@ -937,9 +952,10 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera) {
     if (drawn.mode == RenderMode::TransTexture) {
         // R_SurfaceCompare: the farthest along the view first.
         const Vec3 forward = angleVectors(camera.angles).forward;
-        std::ranges::stable_sort(
-            std::span{m_entityFaces}.subspan(first, count), std::ranges::greater{},
-            [this, forward](std::uint32_t face) { return dot(m_faces[face].middle, forward); });
+        std::ranges::stable_sort(std::span{m_entityFaces}.subspan(first, count), std::ranges::greater{},
+                                 [this, forward, origin](std::uint32_t face) {
+                                     return dot(m_faces[face].middle + origin, forward);
+                                 });
     }
     for (const std::uint32_t face : std::span{m_entityFaces}.subspan(first, count)) {
         const FaceDraw& draw = m_faces[face];
@@ -950,10 +966,11 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera) {
             IndexRange{.firstIndex = firstIndex,
                        .indexCount = narrow<std::uint32_t>(m_entityIndices.size()) - firstIndex});
     }
-    m_entityDraws.push_back(EntityDraw{.model = model,
-                                       .distance = lengthSquared(drawn.bounds.center() - camera.position),
-                                       .firstFace = first,
-                                       .faceCount = count});
+    m_entityDraws.push_back(
+        EntityDraw{.model = model,
+                   .distance = lengthSquared(drawn.bounds.center() + origin - camera.position),
+                   .firstFace = first,
+                   .faceCount = count});
     m_lastFrame.faces += count;
 }
 
@@ -993,28 +1010,23 @@ void BspWorld::gather(const Camera& camera, float aspect) {
         }
         ++m_lastFrame.leaves;
         for (std::uint32_t mark = 0; mark < record.markSurfaceCount; ++mark) {
-            addFace(m_map->markSurfaces()[record.firstMarkSurface.value + mark].value, camera.position,
-                    false);
+            addFace(m_map->markSurfaces()[record.firstMarkSurface.value + mark].value, camera.position);
         }
     }
     for (std::uint32_t index = 0; index < m_models.size(); ++index) {
         const ModelDraw& model = m_models[index];
-        if (!model.isDrawn || !isInView(model.bounds)) {
-            continue;
-        }
-        if (model.mode != RenderMode::Normal) {
-            addEntity(index, camera);
-            continue;
-        }
-        for (std::uint32_t face = model.firstFace; face < model.firstFace + model.faceCount; ++face) {
-            addFace(face, camera.position - model.origin, true);
+        const Vec3 origin = m_origins[index];
+        if (model.isDrawn && isInView(model.bounds.translated(origin))) {
+            addEntity(index, camera, origin);
         }
     }
 
     // R_TransEntityCompare: the solid entities first, then the farthest; at one distance, by mode.
     const auto distanceOf = [this](const EntityDraw& draw) {
-        return m_models[draw.model].mode == RenderMode::TransAlpha ? std::numeric_limits<float>::max()
-                                                                   : draw.distance;
+        const RenderMode mode = m_models[draw.model].mode;
+        return mode == RenderMode::Normal || mode == RenderMode::TransAlpha
+                   ? std::numeric_limits<float>::max()
+                   : draw.distance;
     };
     const auto rankOf = [this](const EntityDraw& draw) {
         switch (m_models[draw.model].mode) {
@@ -1047,6 +1059,19 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
     frame.lighting.w = view.time.count(); // what turbulent faces warp with
     std::ranges::copy(std::as_bytes(std::span{&frame, 1}), m_device->mappedBytes(slot.buffer).begin());
 
+    // Where each brush model is drawn, and how it is blended.
+    place(view.placements);
+    const std::span<std::byte> entityBytes = m_device->mappedBytes(slot.entities);
+    const auto writeEntity = [&entityBytes](std::size_t model, const EntityUniform& uniform) {
+        std::ranges::copy(std::as_bytes(std::span{&uniform, 1}),
+                          entityBytes.subspan(kEntityUniformStride * model).begin());
+    };
+    writeEntity(0, EntityUniform{});
+    for (std::size_t index = 0; index < m_models.size(); ++index) {
+        writeEntity(index + 1,
+                    EntityUniform{.color = m_models[index].color, .origin = extend(m_origins[index], 0.0F)});
+    }
+
     // The indices of what the camera sees, a batch for each texture that has some, then the sky's.
     // An animated texture shows its frames ten a second, as the original's R_TextureAnimation.
     gather(view.camera, view.aspect);
@@ -1076,6 +1101,7 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
     commands.setVertexBuffer(0, m_vertices, 0);
     commands.setIndexBuffer(slot.indices, 0, rhi::IndexFormat::Uint32);
     commands.setBindGroup(0, slot.group);
+    commands.setBindGroup(2, slot.entityGroups[0]);
     for (const Batch& batch : m_batches) {
         commands.setBindGroup(1, batch.textures);
         commands.drawIndexed(batch.indices.indexCount, 1, batch.indices.firstIndex, 0, 0);
@@ -1091,9 +1117,7 @@ void BspWorld::draw(rhi::CommandList& commands, const WorldFrame& view) {
         const RenderMode mode = m_models[entity.model].mode;
         commands.setPipeline(pipelineOf(mode));
         commands.setBindGroup(0, slot.group);
-        if (mode != RenderMode::TransAlpha) {
-            commands.setBindGroup(2, m_models[entity.model].entityGroup);
-        }
+        commands.setBindGroup(2, slot.entityGroups[std::size_t{entity.model} + 1]);
         for (std::uint32_t face = entity.firstFace; face < entity.firstFace + entity.faceCount; ++face) {
             if (mode != RenderMode::TransColor) {
                 const std::vector<rhi::BindGroupHandle>& frames =
@@ -1166,6 +1190,16 @@ auto BspWorld::createPipelines(std::span<const std::byte> shaderCode, rhi::Forma
     m_textureLayout = *textureLayout;
     m_textureSampler = *textureSampler;
     m_skySampler = *skySampler;
+    // Where the brush model drawn is, and how a brush entity drawn blended is blended.
+    const std::array entityBindings{
+        rhi::BindingLayout{.binding = 0,
+                           .type = rhi::BindingType::UniformBuffer,
+                           .stages = {rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment}}};
+    auto entityLayout = device.createBindGroupLayout({.label = "world.entity", .bindings = entityBindings});
+    if (!entityLayout) {
+        return std::unexpected{std::move(entityLayout.error())};
+    }
+    m_entityLayout = *entityLayout;
 
     const std::array attributes{
         rhi::VertexAttribute{.location = 0, .format = rhi::VertexFormat::Float3, .offset = 0},
@@ -1184,7 +1218,7 @@ auto BspWorld::createPipelines(std::span<const std::byte> shaderCode, rhi::Forma
         rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = attributes}};
     const std::array targets{rhi::ColorTarget{.format = colorFormat}};
     const rhi::DepthState depth{.isWriteEnabled = true, .compare = rhi::CompareOp::Greater};
-    const std::array layouts{m_frameLayout, m_textureLayout};
+    const std::array layouts{m_frameLayout, m_textureLayout, m_entityLayout};
     auto pipeline =
         device.createRenderPipeline({.label = "world",
                                      .vertex = {.shader = m_shader, .entryPoint = "vertexMain"},
@@ -1210,14 +1244,6 @@ auto BspWorld::createPipelines(std::span<const std::byte> shaderCode, rhi::Forma
 
     // A brush entity drawn blended: its textures (but TransColor) blended over what is behind, as
     // R_SetRenderMode blends them; TransColor and TransAlpha write their depth, the others do not.
-    const std::array entityBindings{rhi::BindingLayout{
-        .binding = 0, .type = rhi::BindingType::UniformBuffer, .stages = {rhi::ShaderStage::Fragment}}};
-    auto entityLayout = device.createBindGroupLayout({.label = "world.entity", .bindings = entityBindings});
-    if (!entityLayout) {
-        return std::unexpected{std::move(entityLayout.error())};
-    }
-    m_entityLayout = *entityLayout;
-    const std::array entityLayouts{m_frameLayout, m_textureLayout, m_entityLayout};
     const rhi::BlendState alphaBlend{.sourceColor = rhi::BlendFactor::SourceAlpha,
                                      .destinationColor = rhi::BlendFactor::OneMinusSourceAlpha,
                                      .sourceAlpha = rhi::BlendFactor::SourceAlpha,
@@ -1240,10 +1266,9 @@ auto BspWorld::createPipelines(std::span<const std::byte> shaderCode, rhi::Forma
              .bindGroupLayouts = groupLayouts});
     };
     auto solid = entityPipeline("world.solid", "solidFragmentMain", std::nullopt, true, layouts);
-    auto texture = entityPipeline("world.texture", "textureFragmentMain", alphaBlend, false, entityLayouts);
-    auto color = entityPipeline("world.color", "colorFragmentMain", alphaBlend, true, entityLayouts);
-    auto additive =
-        entityPipeline("world.additive", "additiveFragmentMain", additiveBlend, false, entityLayouts);
+    auto texture = entityPipeline("world.texture", "textureFragmentMain", alphaBlend, false, layouts);
+    auto color = entityPipeline("world.color", "colorFragmentMain", alphaBlend, true, layouts);
+    auto additive = entityPipeline("world.additive", "additiveFragmentMain", additiveBlend, false, layouts);
     if (!solid || !texture || !color || !additive) {
         return std::unexpected{!solid     ? std::move(solid.error())
                                : !texture ? std::move(texture.error())

@@ -596,6 +596,7 @@ struct Walker {
         return unusable(spawned.error());
     }
     const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
+    std::vector<nx::render::ModelPlacement> placements; // where the game puts its brush entities
     auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
     if (!window) {
         return unusable(window.error());
@@ -719,10 +720,16 @@ struct Walker {
                              .area = frame.size});
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
         const nx::Seconds time{mapClock.elapsed()};
+        placements.clear();
+        nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&>{game}.forEach(
+            [&placements](const nx::game::BrushModel& model, const nx::game::Transform& transform) {
+                placements.push_back({.model = model.index, .origin = transform.origin});
+            });
         world->draw(list, {.camera = camera,
                            .aspect = aspect,
                            .time = time,
-                           .lightStyles = content.lightStyles.valuesAt(time)});
+                           .lightStyles = content.lightStyles.valuesAt(time),
+                           .placements = placements});
         list.endRendering();
         list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
         if (auto submitted = (*device)->submitFrame(**swapchain); !submitted) {

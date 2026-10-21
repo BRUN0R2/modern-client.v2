@@ -6,11 +6,13 @@
 /// lightmaps packed into one atlas.
 ///
 /// Each frame draws the faces that face the camera in the leaves its leaf may see (the potentially
-/// visible set) that are in view, and the brush entities in view, as the original culls them.
+/// visible set) that are in view, and the brush entities in view where the game puts them, as the
+/// original culls them.
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
-/// and the brush entities' render modes. Water and moving entities come next (TODO.md, Rendering).
+/// the brush entities' render modes, water, and brush entities moved by the game. Turned entities
+/// come next (TODO.md, Rendering).
 export module nx.render:world;
 
 import std;
@@ -76,12 +78,20 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
+/// Where the game puts brush model `model` (1 or more) of the map.
+struct ModelPlacement {
+    std::uint32_t model = 0;
+    Vec3 origin{};
+};
+
 /// What a draw shows.
 struct WorldFrame {
     Camera camera{};
     float aspect = 1.0F; ///< Of the target: width over height.
     Seconds time{};      ///< Since the map started: animated textures play from it.
     LightStyleValues lightStyles{};
+    /// Where the game puts brush models; any other is where the map's entity of it says.
+    std::span<const ModelPlacement> placements{};
 };
 
 /// What the last draw drew, for r_speeds.
@@ -125,11 +135,13 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// What one frame in flight writes its uniform and its indices to.
+    /// What one frame in flight writes its uniform, its indices and its brush models' uniforms to.
     struct FrameSlot {
         rhi::BufferHandle buffer{};
         rhi::BindGroupHandle group{};
         rhi::BufferHandle indices{};
+        rhi::BufferHandle entities{};
+        std::vector<rhi::BindGroupHandle> entityGroups{}; ///< Each model's uniform, by its index.
     };
 
     /// A face of the map: its triangle fan in the vertex buffer, and where its triangles go.
@@ -139,23 +151,23 @@ private:
         std::uint32_t bucket = 0;     ///< Its texture's in m_bucketFrames, or kSkyBucket.
         Plane plane{};
         bool isBackSide = false; ///< Drawn from behind its plane.
-        Vec3 middle{};           ///< Of its bounds, where its entity puts it.
+        Vec3 middle{};           ///< Of its bounds, in its model's space.
     };
 
-    /// A brush entity's model: its faces, its bounds where its entity puts it, and how it is drawn.
+    /// A brush entity's model: its faces, its bounds in its own space, where the map's entity of it
+    /// puts it, and how it is drawn.
     struct ModelDraw {
         std::uint32_t firstFace = 0;
         std::uint32_t faceCount = 0;
         Aabb bounds{};
         Vec3 origin{};
+        Vec4 color{}; ///< Its `rendercolor`, and its `renderamt` in w, from 0 to 1.
         RenderMode mode = RenderMode::Normal;
-        bool isDrawn = true;              ///< False for a mode other than Normal at a `renderamt` of 0.
-        rhi::BufferHandle entityBuffer{}; ///< Its `rendercolor` and `renderamt`, for the blended modes.
-        rhi::BindGroupHandle entityGroup{};
+        bool isDrawn = true; ///< False for a mode other than Normal at a `renderamt` of 0.
     };
 
-    /// A brush entity drawn apart this frame, after the world: its faces that face the camera, a
-    /// range of m_entityFaces.
+    /// A brush entity drawn this frame, after the world: its faces that face the camera, a range of
+    /// m_entityFaces.
     struct EntityDraw {
         std::uint32_t model = 0; ///< In m_models.
         float distance = 0.0F;   ///< Squared, from the camera to its middle.
@@ -168,18 +180,23 @@ private:
     explicit BspWorld(rhi::Device& device, const assets::BspView& map) noexcept
         : m_device{&device}, m_map{&map} {}
     void release() noexcept;
-    /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices.
+    /// Where each brush model is drawn this frame, in m_origins: where `placements` puts it, else
+    /// where its entity puts it.
+    void place(std::span<const ModelPlacement> placements);
+    /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices, and the brush
+    /// entities it sees, where m_origins puts them, in m_entityDraws.
     void gather(const Camera& camera, float aspect);
     /// Whether face `face`, drawn, faces `eye` (in its model's space): a face of the world from the
     /// side of its plane the eye is on, the plane itself in front, as the original's
     /// R_RecursiveWorldNode; a brush entity's from at least BACKFACE_EPSILON past it, as its
     /// R_DrawBrushModel.
     [[nodiscard]] auto isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noexcept -> bool;
-    /// Adds the triangles of face `face`, once a frame, to its bucket when it is seen from `eye`.
-    void addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity);
-    /// Puts a brush entity drawn other than normally in m_entityDraws, with its faces seen from
-    /// `camera`, in the order the original draws them.
-    void addEntity(std::uint32_t model, const Camera& camera);
+    /// Adds the triangles of face `face` of the world, once a frame, to its bucket when it is seen
+    /// from `eye`.
+    void addFace(std::uint32_t face, Vec3 eye);
+    /// Puts a brush entity, its model at `origin`, in m_entityDraws, with its faces seen from `camera`,
+    /// in the order the original draws them.
+    void addEntity(std::uint32_t model, const Camera& camera, Vec3 origin);
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
     /// The shader, the bind group layouts, the samplers and a pipeline for each way faces are drawn.
     [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
@@ -213,6 +230,7 @@ private:
     // What each frame gathers, kept to reuse the memory.
     std::uint64_t m_drawCount = 0;
     std::vector<std::uint64_t> m_faceGathered; ///< The draw each face was last looked at in.
+    std::vector<Vec3> m_origins;               ///< Of each of m_models, this frame.
     std::optional<assets::LeafIndex> m_visibleFrom;
     std::vector<assets::LeafIndex> m_visibleLeaves; ///< Those of m_visibleFrom.
     std::vector<std::vector<std::uint32_t>> m_bucketIndices;
