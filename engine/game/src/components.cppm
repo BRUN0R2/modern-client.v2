@@ -44,10 +44,10 @@ struct BrushSolidity {
 struct Pusher {
     Vec3 velocity{};
     Vec3 angularVelocity{}; ///< Degrees a second about the pitch, yaw and roll axes (avelocity).
-    Seconds localTime{};
-    std::optional<Seconds> nextThink{}; ///< When it acts next, by localTime; none while it rests.
-    Vec3 destination{};                 ///< Of the move under way.
-    EulerAngles destinationAngles{};    ///< Of the turn under way.
+    GameTime localTime{};
+    std::optional<GameTime> nextThink{}; ///< When it acts next, by localTime; none while it rests.
+    Vec3 destination{};                  ///< Of the move under way.
+    EulerAngles destinationAngles{};     ///< Of the turn under way.
 };
 
 /// How far a door has gone, as the original's toggle states.
@@ -84,7 +84,7 @@ struct Door {
     bool staysOpen = false;   ///< "Toggle": it closes when it is opened again.
     bool isTouchable = false; ///< A touch acts now: not while it moves.
     ecs::Entity activator{};  ///< What opened it last.
-    Seconds lastBlocked{};    ///< When something last stopped it, by the game's time.
+    GameTime lastBlocked{};   ///< When something last stopped it, by the game's clock.
 };
 
 /// How high the waves of a brush entity's turbulent faces rise: the original's pev->scale of a brush
@@ -102,7 +102,8 @@ struct Body {
     std::optional<assets::ModelIndex> groundModel{}; ///< The brush model of the entity it stands on.
 };
 
-/// Registers the components above in `world`. Errors: those of ecs::World::registerComponent.
+/// Registers the components above in `world`, and gives it a clock at the start of its map
+/// (TickTime, at the default rate). Errors: those of ecs::World::registerComponent.
 [[nodiscard]] auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError>;
 
 } // namespace nx::game

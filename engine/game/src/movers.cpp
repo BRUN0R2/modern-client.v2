@@ -70,7 +70,7 @@ void arrive(ecs::World& world, ecs::Entity entity) {
         if (door.staysOpen) {
             door.isTouchable = !door.isUseOnly;
         } else if (door.wait >= Seconds{}) {
-            pusher.nextThink = pusher.localTime + door.wait;
+            pusher.nextThink = pusher.localTime.after(door.wait, tickTimeOf(world).rate);
         }
         return;
     }
@@ -105,7 +105,8 @@ void moveTo(ecs::World& world, ecs::Entity entity, Vec3 destination, UnitsPerSec
     }
     const Vec3 way = destination - origin;
     const double travelTime = std::sqrt(double{dot(way, way)}) / double{speed.value()};
-    pusher.nextThink = Seconds{static_cast<float>(double{pusher.localTime.count()} + travelTime)};
+    pusher.nextThink =
+        pusher.localTime.after(Seconds{static_cast<float>(travelTime)}, tickTimeOf(world).rate);
     pusher.velocity = way * static_cast<float>(1.0 / travelTime);
 }
 
@@ -120,7 +121,8 @@ void turnTo(ecs::World& world, ecs::Entity entity, EulerAngles destination, Degr
     }
     const Vec3 turn = vectorOf(destination) - vectorOf(angles);
     const double travelTime = std::sqrt(double{dot(turn, turn)}) / double{speed.value()};
-    pusher.nextThink = Seconds{static_cast<float>(double{pusher.localTime.count()} + travelTime)};
+    pusher.nextThink =
+        pusher.localTime.after(Seconds{static_cast<float>(travelTime)}, tickTimeOf(world).rate);
     pusher.angularVelocity = turn / static_cast<float>(travelTime);
 }
 
@@ -198,14 +200,14 @@ void close(ecs::World& world, ecs::Entity entity) {
     turnTo(world, entity, turn.closed, turn.speed);
 }
 
-/// Something the door could not push stopped it at `time` (CBaseDoor::Blocked): it goes back the
-/// way it came, unless it stays open for good or was stopped just before.
-void block(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, Seconds time) {
+/// Something the door could not push stopped it at `clock`'s time (CBaseDoor::Blocked): it goes back
+/// the way it came, unless it stays open for good or was stopped just before.
+void block(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, const TickTime& clock) {
     Door& door = *world.get<Door>(entity);
-    if (time - door.lastBlocked < kBlockedInterval) {
+    if (clock.now.since(door.lastBlocked, clock.rate) < kBlockedInterval) {
         return;
     }
-    door.lastBlocked = time;
+    door.lastBlocked = clock.now;
     if (door.wait >= Seconds{}) {
         if (door.state == DoorState::Closing) {
             open(world, hulls, entity);
@@ -245,23 +247,24 @@ struct Moved {
 
 /// Puts back everything a blocked pusher moved, and blocks it.
 void giveWay(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
-             std::span<const Moved> moved, Seconds moveTime, Seconds time) {
-    world.get<Pusher>(entity)->localTime -= moveTime;
+             std::span<const Moved> moved, Seconds moveTime, const TickTime& clock) {
+    Pusher& pusher = *world.get<Pusher>(entity);
+    pusher.localTime = pusher.localTime.after(-moveTime, clock.rate);
     for (const Moved& back : moved) {
         world.get<Transform>(back.entity)->origin = back.from;
     }
     if (world.has<Door>(entity)) {
-        block(world, hulls, entity, time);
+        block(world, hulls, entity, clock);
     }
 }
 
 /// The pusher moves by its velocity over `moveTime` (SV_PushMove), moving the bodies it runs into,
 /// or that stand on it, along with it; when one cannot go, everything goes back and it gives way.
 void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, Seconds moveTime,
-              Seconds time) {
+              const TickTime& clock) {
     Pusher& pusher = *world.get<Pusher>(entity);
     if (pusher.velocity == Vec3{}) {
-        pusher.localTime += moveTime;
+        pusher.localTime = pusher.localTime.after(moveTime, clock.rate);
         return;
     }
     const Vec3 move = pusher.velocity * moveTime.count();
@@ -271,7 +274,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
     const Aabb swept{.min = linked.min + move, .max = linked.max + move};
     const Vec3 pushedFrom = transform.origin;
     transform.origin = transform.origin + move;
-    pusher.localTime += moveTime;
+    pusher.localTime = pusher.localTime.after(moveTime, clock.rate);
     if (world.get<BrushSolidity>(entity)->solid == Solid::Not) {
         return;
     }
@@ -286,7 +289,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         moved.push_back({.entity = bodyEntity, .from = origin});
         if (pushBody(world, hulls, entity, bodyEntity, move)) {
             world.get<Transform>(entity)->origin = pushedFrom;
-            giveWay(world, hulls, entity, moved, moveTime, time);
+            giveWay(world, hulls, entity, moved, moveTime, clock);
             return;
         }
     }
@@ -296,10 +299,10 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
 /// runs into, or that stand on it, around its origin; when one cannot go, everything goes back and
 /// it gives way. Returns whether it turned.
 [[nodiscard]] auto pushRotate(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
-                              Seconds moveTime, Seconds time) -> bool {
+                              Seconds moveTime, const TickTime& clock) -> bool {
     Pusher& pusher = *world.get<Pusher>(entity);
     if (pusher.angularVelocity == Vec3{}) {
-        pusher.localTime += moveTime;
+        pusher.localTime = pusher.localTime.after(moveTime, clock.rate);
         return true;
     }
     const Vec3 turn = pusher.angularVelocity * moveTime.count();
@@ -308,7 +311,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
     const EulerAngles turnedFrom = transform.angles;
     transform.angles = eulerOf(vectorOf(transform.angles) + turn);
     const AngleVectors after = angleVectors(transform.angles);
-    pusher.localTime += moveTime;
+    pusher.localTime = pusher.localTime.after(moveTime, clock.rate);
     if (world.get<BrushSolidity>(entity)->solid == Solid::Not) {
         return true;
     }
@@ -328,41 +331,42 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         const Vec3 end = outOfAxes(after, intoAxes(before, start));
         if (pushBody(world, hulls, entity, bodyEntity, end - start)) {
             world.get<Transform>(entity)->angles = turnedFrom;
-            giveWay(world, hulls, entity, moved, moveTime, time);
+            giveWay(world, hulls, entity, moved, moveTime, clock);
             return false;
         }
     }
     return true;
 }
 
-/// The original's SV_Physics_Pusher for one pusher.
-void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, Seconds frameTime,
-               Seconds time) {
+/// The original's SV_Physics_Pusher for one pusher, a tick of `clock`.
+void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+               const TickTime& clock) {
     Pusher& pusher = *world.get<Pusher>(entity);
-    const Seconds startTime = pusher.localTime;
-    const std::optional<Seconds> thinkTime = pusher.nextThink;
+    const Seconds frameTime = clock.delta();
+    const GameTime startTime = pusher.localTime;
+    const std::optional<GameTime> thinkTime = pusher.nextThink;
     // Parity: a pusher with nothing to do by its clock does not move, nor does its clock.
     const Seconds moveTime = !thinkTime ? Seconds{}
-                             : *thinkTime < startTime + frameTime
-                                 ? std::max(*thinkTime - pusher.localTime, Seconds{})
+                             : *thinkTime < startTime.after(frameTime, clock.rate)
+                                 ? std::max(thinkTime->since(pusher.localTime, clock.rate), Seconds{})
                                  : frameTime;
     if (moveTime != Seconds{}) {
         if (pusher.angularVelocity != Vec3{}) {
             if (pusher.velocity != Vec3{}) {
-                if (pushRotate(world, hulls, entity, moveTime, time)) {
+                if (pushRotate(world, hulls, entity, moveTime, clock)) {
                     // Both: the move runs on the clock the turn started from, which keeps the later.
                     Pusher& turned = *world.get<Pusher>(entity);
-                    const Seconds afterTurn = turned.localTime;
+                    const GameTime afterTurn = turned.localTime;
                     turned.localTime = startTime;
-                    pushMove(world, hulls, entity, moveTime, time);
+                    pushMove(world, hulls, entity, moveTime, clock);
                     turned.localTime = std::max(turned.localTime, afterTurn);
                 }
             } else {
                 // Whether it turned matters only to a move that would follow the turn.
-                std::ignore = pushRotate(world, hulls, entity, moveTime, time);
+                std::ignore = pushRotate(world, hulls, entity, moveTime, clock);
             }
         } else {
-            pushMove(world, hulls, entity, moveTime, time);
+            pushMove(world, hulls, entity, moveTime, clock);
         }
     }
     Transform& transform = *world.get<Transform>(entity);
@@ -414,12 +418,13 @@ void touchBrushEntities(ecs::World& world, const collision::BrushHulls& hulls,
     }
 }
 
-void runPushers(ecs::World& world, const collision::BrushHulls& hulls, Seconds frameTime, Seconds time) {
+void runPushers(ecs::World& world, const collision::BrushHulls& hulls) {
+    const TickTime clock = tickTimeOf(world);
     std::vector<ecs::Entity> pushers;
     ecs::Query<ecs::Entity, const Pusher&>{world}.forEach(
         [&pushers](ecs::Entity entity, const Pusher&) { pushers.push_back(entity); });
     for (const ecs::Entity entity : pushers) {
-        runPusher(world, hulls, entity, frameTime, time);
+        runPusher(world, hulls, entity, clock);
     }
 }
 

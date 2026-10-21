@@ -279,7 +279,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ## M3 — Local game
 
 ### Simulation
-- [ ] Tick-based `GameTime`, with no degradation over uptime
+- [x] Tick-based `GameTime`, with no degradation over uptime (`nx.core:gameTime`: ticks and a fraction; `nx.game:clock`: each world's `TickTime`, the pushers' clocks on it)
 - [ ] Usercmd generated at a fixed rate (`cl_movement_rate`)
 - [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)
 - [ ] Trace parity tests against traces recorded from the original

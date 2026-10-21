@@ -13,6 +13,7 @@ import nx.math;
 import nx.ecs;
 import nx.collision;
 import :components;
+import :clock;
 
 export namespace nx::game {
 
@@ -22,12 +23,12 @@ export namespace nx::game {
 void touchBrushEntities(ecs::World& world, const collision::BrushHulls& hulls,
                         std::span<const collision::ModelIndex> models, ecs::Entity toucher);
 
-/// Advances each pusher of `world`, in the world's order, by `frameTime`, at `time` since the map
-/// started (SV_Physics_Pusher): it moves at its velocity, and turns at its angular one, while it
+/// Advances each pusher of `world`, in the world's order, by a tick of the world's clock (TickTime),
+/// at its time (SV_Physics_Pusher): it moves at its velocity, and turns at its angular one, while it
 /// has something to do by its clock, carrying each Body it runs into, or that stands on it, along
 /// with it through the world of `hulls` and the other solid brush entities; one that cannot be
 /// carried stops it where it was and it gives way (CBaseDoor::Blocked). Then it acts when its clock
 /// reaches its time: a door arrives, or closes.
-void runPushers(ecs::World& world, const collision::BrushHulls& hulls, Seconds frameTime, Seconds time);
+void runPushers(ecs::World& world, const collision::BrushHulls& hulls);
 
 } // namespace nx::game

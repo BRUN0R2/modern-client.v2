@@ -22,6 +22,7 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
             return std::unexpected{component.error()};
         }
     }
+    world.insertResource(TickTime{});
     return {};
 }
 

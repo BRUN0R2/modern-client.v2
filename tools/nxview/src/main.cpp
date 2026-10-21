@@ -65,7 +65,7 @@ constexpr float kWalkFactor = 0.52F;
 constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
 /// A user command each this long, the classic rate of 100 a second (docs/07, section 2.2); a frame
 /// catches up on this much time at most, so that a stalled one does not run away.
-constexpr nx::Milliseconds kCommandInterval{10.0F};
+constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
 /// Degrees per mouse count: the original's m_yaw and m_pitch, 0.022, at its default sensitivity, 3.
 constexpr float kDegreesPerCount = 0.022F * 3.0F;
@@ -725,12 +725,11 @@ struct Walker {
         .previousEye = eye};
 }
 
-/// The game of the map as nxview plays it, a tick each kCommandInterval: its entities, the player's
-/// body among them, and its clock.
+/// The game of the map as nxview plays it, a tick of its clock each kCommandInterval: the player's
+/// body among its entities.
 struct LocalGame {
     nx::ecs::Entity body{};
     nx::Seconds pending{}; ///< Of the time given to the game, what no tick has taken yet.
-    nx::Seconds time{};    ///< Since the map started.
 };
 
 /// The command of what `keys` and `view` ask for.
@@ -770,11 +769,11 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             game.get<nx::game::Transform>(local.body)->origin = walker->player.origin;
             *game.get<nx::game::Body>(local.body) = cs::bodyOf(walker->player);
         }
-        nx::game::runPushers(game, hulls, kCommandInterval, local.time);
+        nx::game::runPushers(game, hulls);
         if (walker != nullptr) {
             walker->player.origin = game.get<nx::game::Transform>(local.body)->origin;
         }
-        local.time += kCommandInterval;
+        nx::game::advanceTick(game);
         local.pending -= kCommandInterval;
     }
     if (walker == nullptr) {

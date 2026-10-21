@@ -17,7 +17,6 @@ import nx.game;
 namespace {
 
 using nx::Plane;
-using nx::Seconds;
 using nx::Vec3;
 using nx::collision::BrushHulls;
 using nx::collision::Contents;
@@ -31,7 +30,6 @@ using nx::game::Transform;
 using KeyValues = std::vector<std::pair<std::string, std::string>>;
 
 constexpr float kTolerance = 1.0e-3F;
-constexpr Seconds kTick{0.01F};
 
 [[nodiscard]] constexpr auto facingX(float x) -> Plane {
     return Plane{.normal = {.x = 1.0F}, .distance = x};
@@ -93,9 +91,15 @@ public:
 
     void run(const BrushHulls& hulls, int ticks) {
         for (int tick = 0; tick < ticks; ++tick) {
-            nx::game::runPushers(m_world, hulls, kTick, m_time);
-            m_time += kTick;
+            nx::game::runPushers(m_world, hulls);
+            nx::game::advanceTick(m_world);
         }
+    }
+
+    /// The game's clock, and the door's own, put at `time`.
+    void startAt(nx::GameTime time) {
+        m_world.resource<nx::game::TickTime>()->now = time;
+        m_world.get<nx::game::Pusher>(m_door)->localTime = time;
     }
 
     [[nodiscard]] auto door() -> const Door& { return *m_world.get<Door>(m_door); }
@@ -106,7 +110,6 @@ private:
     nx::ecs::World m_world;
     nx::ecs::Entity m_door{};
     nx::ecs::Entity m_toucher{};
-    Seconds m_time{};
 };
 
 /// A sliding door opening toward +X at 100 a second, open a second, and `extra`.
@@ -140,6 +143,25 @@ TEST(DoorTest, ATouchOpensADoorThatClosesAfterItsWait) {
     game.run(hulls, 70);
     EXPECT_EQ(game.door().state, DoorState::Closed);
     EXPECT_EQ(game.doorAt().origin, Vec3{});
+}
+
+TEST(DoorTest, ADoorMovesAMonthIntoAMapAsAtItsStart) {
+    // A month of ticks at 100 a second: float seconds that far are a quarter of a second apart.
+    constexpr std::int64_t kMonth = std::int64_t{100} * 60 * 60 * 24 * 31;
+    const BrushHulls hulls = doorHulls(false);
+    DoorWorld fresh{slidingDoor(), nx::game::BrushBehavior::SlidingDoor};
+    DoorWorld old{slidingDoor(), nx::game::BrushBehavior::SlidingDoor};
+    old.startAt(nx::GameTime::atTick(kMonth));
+
+    fresh.touch(hulls);
+    old.touch(hulls);
+    for (const int ticks : {32, 40, 100, 70}) {
+        fresh.run(hulls, ticks);
+        old.run(hulls, ticks);
+        EXPECT_EQ(old.door().state, fresh.door().state) << "after " << ticks << " more ticks";
+        EXPECT_EQ(old.doorAt().origin, fresh.doorAt().origin) << "after " << ticks << " more ticks";
+    }
+    EXPECT_EQ(old.door().state, DoorState::Closed);
 }
 
 TEST(DoorTest, ADoorOthersOpenIgnoresATouch) {

@@ -13,6 +13,7 @@ nxAddTest(nxCoreTests
         byteOrderTests.cpp
         quantityTests.cpp
         unitsTests.cpp
+        gameTimeTests.cpp
         enumArrayTests.cpp
         flagsTests.cpp
         hashTests.cpp
