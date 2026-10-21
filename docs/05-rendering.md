@@ -163,6 +163,17 @@ if (!lightmapAtlas) {
 | 11 | `Hud` | Sprite HUD, crosshair, text, menus ([12](12-ui-hud-and-console.md)) |
 | 12 | `Present` | Copy to the swapchain |
 
+**Today** (`nx.render:blendedOrder`): until the render graph comes, a frame is one render pass drawn
+in the original's order (`R_DrawEntitiesOnList`, as Xash3D-FWGS reconstructs it). Each renderer
+(`BspWorld`, `StudioRenderer`, `SpriteRenderer`) is prepared for the frame, writing what it draws to
+its slot of the frame in flight, once a frame; then `drawInOrder` records the solid things of each in
+turn (the world, its sky and its normal brush entities; the normal studio models; the normal sprites),
+then the blended things of all of them in one list: the brush entities drawn `kRenderTransAlpha`
+first, then the farthest middle of its bounds first, at one distance by mode (`R_TransEntityCompare`,
+`R_RankForRenderMode`: the others, then TransTexture, TransAdd and Glow), those still tied in the
+order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
+of its own.
+
 ## 8. BSP world
 
 - **Visibility:** the camera's leaf, PVS data decompressed and cached per leaf, frustum
@@ -234,11 +245,11 @@ frame (`WorldFrame::placements`; one the game does not place, where the map's en
 unturned), its model's faces moved and turned there by the vertex shader, when its bounds are in
 view (turned, a cube as wide as its farthest corner about its origin), its faces from at
 least `BACKFACE_EPSILON` past their planes (`R_DrawBrushModel`), as its `rendermode` says
-(`R_SetRenderMode`): after the sky, first the opaque ones, normal (lit, masked textures cut where
-they have no alpha, the original's alpha test at 0) and solid (`kRenderTransAlpha`, lit, cut at an
-alpha of 0.25 or less); and the blended ones, unlit and back to front
-(`R_TransEntityCompare`: by the squared distance to their middles, then by mode): `rendercolor`
-for `kRenderTransColor`, writing its depth; the textures for `kRenderTransTexture` (its faces back to
+(`R_SetRenderMode`): the normal ones after the sky (lit, masked textures cut where they have no
+alpha, the original's alpha test at 0); the others among everything the frame draws blended, by the
+squared distance to their middles (§7.1): the solid ones (`kRenderTransAlpha`, lit, cut at an alpha
+of 0.25 or less) before every other, and the blended ones, unlit: `rendercolor` for
+`kRenderTransColor`, writing its depth; the textures for `kRenderTransTexture` (its faces back to
 front, `R_SurfaceCompare`) and `kRenderGlow`; the textures added to what is behind for
 `kRenderTransAdd`, each as opaque as `renderamt` says. A blended entity at a `renderamt` of 0 is not
 drawn (`R_AddEntity`); a mode the original does not know draws as its default does, as Glow.
@@ -301,9 +312,9 @@ flowchart LR
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
-   additive meshes added as their alpha says. The solid models are drawn first, the others but those
-   at a `renderamt` of 0 from the farthest middle of their bounds, then by mode
-   (`R_TransEntityCompare`). A `StudioRenderer` draws once a frame: `nxview` draws the view's own model
+   additive meshes added as their alpha says. The solid models are drawn with the solid things of the frame, the
+   others but those at a `renderamt` of 0 among everything it draws blended, by the middle of their
+   bounds (§7.1). A `StudioRenderer` is prepared once a frame: `nxview` draws the view's own model
    with one of its own, last. `nxview` shows the maps' studio models as the game makes them: the
    `cycler_sprite` of a model (ReGameDLL's `CCyclerSprite`), its sequence at its `framerate` from
    when the map starts, as the client estimates it; and the `hostage_entity` (`CHostage`), its model
@@ -385,14 +396,14 @@ not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squa
 0.05 to 1) and grows by its distance over 200. An alpha-tested sprite drawn opaque enough (`renderamt`
 above 127, Normal, TransAlpha or TransTexture) is cut at an alpha of a third and lit: drawn again where
 it was, its light from the world under it (`R_LightPoint`) multiplying what is there. The solid sprites
-are drawn first, the others from the farthest (`R_TransEntityCompare`), after the world and before the
-view's own model. `nxview` shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
+are drawn after the solid models, the others among everything the frame draws blended, by their
+origins (§7.1), before the view's own model. `nxview` shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
 sprite as the game makes them (ReGameDLL's `CSprite`, `CGlow`, `CCyclerSprite`): an `env_sprite`'s yaw
 alone is its roll, a named one that does not start on is off, and each animates ten times a second,
 its last frame index the end of its loop (one that plays once turning off past it); a glow the
 player's line of sight stops 8 units or more short of, through glass and models, is hidden
-(`R_SpriteGlowBlend`). The other render effects, the interleaving of blended sprites with blended brush
-entities and models, sprites that follow an entity and the HUD's come with their consumers.
+(`R_SpriteGlowBlend`). The other render effects, sprites that follow an entity and the HUD's come with
+their consumers.
 
 ## 11. Visual fidelity
 

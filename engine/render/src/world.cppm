@@ -23,6 +23,7 @@ import :camera;
 import :gamma;
 import :lightStyle;
 import :renderMode;
+import :blendedOrder;
 
 namespace nx::render {
 
@@ -142,9 +143,22 @@ public:
     /// Its resources go with it, which the device keeps until the GPU is done with them.
     ~BspWorld() = default;
 
-    /// Draws `view`, inside a render pass with a color target of desc.colorFormat and a Depth32Float
-    /// depth target cleared to 0 (reversed depth).
+    /// Writes what `view` shows for the frame in flight, for drawInOrder to record with the other
+    /// renderers of the frame before the next prepare.
+    void prepare(const WorldFrame& view);
+    /// Draws `view` alone: prepares it, then records it (drawInOrder).
     void draw(rhi::CommandList& commands, const WorldFrame& view);
+
+    /// The brush entities the last prepare found that are drawn blended, the index of each its own.
+    [[nodiscard]] inline auto blendedDraws() const noexcept -> std::span<const BlendedDraw> {
+        return m_blendedDraws;
+    }
+    /// Records what the last prepare found of the world, its sky and its solid brush entities, inside a
+    /// render pass with a color target of desc.colorFormat and a Depth32Float depth target cleared to 0
+    /// (reversed depth).
+    void drawSolid(rhi::CommandList& commands) const;
+    /// Records the brush entity of `index`, one of blendedDraws()'s, in the same render pass.
+    void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
     [[nodiscard]] inline auto lastFrame() const noexcept -> const FrameStats& { return m_lastFrame; }
@@ -162,8 +176,8 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// A brush entity drawn this frame, after the world: its faces that face the camera, a range of
-    /// m_entityFaces.
+    /// A brush entity drawn this frame, with the world or blended: its faces that face the camera, a
+    /// range of m_entityFaces.
     struct EntityDraw {
         std::uint32_t model = 0; ///< In m_models.
         float distance = 0.0F;   ///< Squared, from the camera to its middle.
@@ -176,8 +190,8 @@ private:
     /// Where each brush model is drawn this frame, in m_placements: where `placements` puts it, else
     /// where its entity puts it, unturned.
     void place(std::span<const ModelPlacement> placements);
-    /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices, and the brush
-    /// entities it sees, where m_placements puts them, in m_entityDraws.
+    /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices, the brush entities
+    /// it sees, where m_placements puts them, in m_entityDraws, and the blended ones in m_blendedDraws.
     void gather(const Camera& camera, float aspect);
     /// Whether face `face`, drawn, faces `eye` (in its model's space): a face of the world from the
     /// side of its plane the eye is on, the plane itself in front, as the original's
@@ -191,6 +205,11 @@ private:
     /// `camera`, in the order the original draws them.
     void addEntity(std::uint32_t model, const Camera& camera, const ModelPlacement& placement);
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
+    /// The frame slot the last prepare wrote.
+    [[nodiscard]] auto preparedSlot() const noexcept -> const FrameSlot&;
+    /// Records the faces of `entity`, with the vertex and index buffers bound, each with its texture's
+    /// frame.
+    void drawEntity(rhi::CommandList& commands, const EntityDraw& entity) const;
     /// The shader, the bind group layouts and the samplers, then a pipeline for each way faces are
     /// drawn.
     [[nodiscard]] auto createLayouts(std::span<const std::byte> shaderCode) -> Result<void, rhi::RhiError>;
@@ -237,7 +256,11 @@ private:
     std::vector<std::vector<std::uint32_t>> m_bucketIndices;
     std::vector<std::uint32_t> m_skyIndices;
     std::vector<Batch> m_batches;
+    IndexRange m_sky{};                   ///< The sky's triangles, in the slot's indices.
+    std::uint32_t m_firstEntityIndex = 0; ///< Where m_entityIndices start in the slot's indices.
+    std::size_t m_animationStep = 0;      ///< The frame of each animated texture shown: this one of them.
     std::vector<EntityDraw> m_entityDraws;
+    std::vector<BlendedDraw> m_blendedDraws; ///< Of m_entityDraws, by their index.
     std::vector<std::uint32_t> m_entityFaces;
     std::vector<std::uint32_t> m_entityIndices;
     std::vector<IndexRange> m_entityRanges; ///< Of each of m_entityFaces, in m_entityIndices.

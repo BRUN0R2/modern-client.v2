@@ -129,6 +129,33 @@ struct Scene {
     return {channel, channel, channel, static_cast<int>(kChannelTop)};
 }
 
+// The blended tests' triangles: each 200 of 255 opaque, the far one 20 units behind the near one, the
+// near one lit by 50, the far one by 200.
+constexpr std::uint8_t kBlendedAmount = 200;
+constexpr float kBehind = 20.0F;
+constexpr float kNearAmbient = 50.0F;
+constexpr float kFarAmbient = 200.0F;
+
+/// The triangle of `scene`'s model posed by `bones` at `origin`, blended, lit by `ambient` alone.
+[[nodiscard]] auto blendedTriangle(const Scene& scene, std::span<const Mat3x4> bones, Vec3 origin,
+                                   float ambient) -> StudioInstance {
+    return StudioInstance{.model = scene.model,
+                          .bones = bones,
+                          .light = ambientLight(ambient),
+                          .origin = origin,
+                          .mode = nx::render::RenderMode::TransTexture,
+                          .amount = kBlendedAmount};
+}
+
+/// Each channel of the near triangle blended over the far one, blended over nothing.
+[[nodiscard]] auto nearOverFarChannel() -> int {
+    constexpr float kChannelTop = 255.0F;
+    constexpr float kOpacity = static_cast<float>(kBlendedAmount) / kChannelTop;
+    const float far = std::round(texelLitBy(kFarAmbient) * kOpacity * kChannelTop) / kChannelTop;
+    const float near = (texelLitBy(kNearAmbient) * kOpacity) + (far * (1.0F - kOpacity));
+    return static_cast<int>(std::lround(near * kChannelTop));
+}
+
 void expectNear(const Pixel& actual, const Pixel& expected, std::string_view what = {}) {
     for (std::size_t channel = 0; channel < actual.size(); ++channel) {
         EXPECT_NEAR(actual.at(channel), expected.at(channel), 1) << what << ", channel " << channel;
@@ -247,28 +274,53 @@ TEST(StudioRendererTest, BlendedModelsAreDrawnFromTheFarthest) {
     ASSERT_NE(scene, nullptr);
     OffscreenTarget target{**device};
     const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
-    // The same triangle twice, each 200 of 255 opaque: the second 20 units behind the first, given
-    // first. Drawn from the farthest, the far one shows through the near one.
-    const Vec3 behind = nx::normalized(kWoundSide) * 20.0F;
+    // The same triangle twice, the far one given second. Drawn from the farthest, the far one shows
+    // through the near one.
+    const Vec3 behind = nx::normalized(kWoundSide) * kBehind;
     const std::vector nearBones(scene->model.boneCount(), Mat3x4{});
     const std::vector farBones(scene->model.boneCount(), nx::affine(nx::Mat3{}, behind));
-    const auto blended = [&](std::span<const Mat3x4> bones, Vec3 origin, float ambient) {
-        return StudioInstance{.model = scene->model,
-                              .bones = bones,
-                              .light = ambientLight(ambient),
-                              .origin = origin,
-                              .mode = nx::render::RenderMode::TransTexture,
-                              .amount = 200};
-    };
-    const std::array instances{blended(nearBones, {}, 50.0F), blended(farBones, behind, 200.0F)};
+    const std::array instances{blendedTriangle(*scene, nearBones, {}, kNearAmbient),
+                               blendedTriangle(*scene, farBones, behind, kFarAmbient)};
 
-    constexpr float kOpacity = 200.0F / 255.0F;
-    const float far = std::round(texelLitBy(200.0F) * kOpacity * 255.0F) / 255.0F;
-    const float near = (texelLitBy(50.0F) * kOpacity) + (far * (1.0F - kOpacity));
-    const int channel = static_cast<int>(std::lround(near * 255.0F));
     const std::vector<std::byte> pixels = drawStudio(target, *scene, camera, instances);
     for (std::size_t color = 0; color < 3; ++color) {
-        EXPECT_NEAR(pixelAt(pixels, kMiddle, kMiddle).at(color), channel, 1) << "channel " << color;
+        EXPECT_NEAR(pixelAt(pixels, kMiddle, kMiddle).at(color), nearOverFarChannel(), 1)
+            << "channel " << color;
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(StudioRendererTest, TheBlendedModelsOfTwoRenderersAreDrawnInOneOrder) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const auto first = sceneOn(**device);
+    const auto second = sceneOn(**device);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    OffscreenTarget target{**device};
+    const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
+    // The near triangle drawn by the renderer given first, the far one by the other: drawn one renderer
+    // after the other, the near one would hide the far one.
+    const Vec3 behind = nx::normalized(kWoundSide) * kBehind;
+    const std::vector nearBones(first->model.boneCount(), Mat3x4{});
+    const std::vector farBones(second->model.boneCount(), nx::affine(nx::Mat3{}, behind));
+    const std::array near{blendedTriangle(*first, nearBones, {}, kNearAmbient)};
+    const std::array far{blendedTriangle(*second, farBones, behind, kFarAmbient)};
+
+    const std::vector<std::byte> pixels = target.draw([&](nx::rhi::CommandList& list) {
+        const auto preparedNear =
+            first->renderer.prepare({.camera = camera, .aspect = 1.0F, .instances = near});
+        const auto preparedFar =
+            second->renderer.prepare({.camera = camera, .aspect = 1.0F, .instances = far});
+        EXPECT_TRUE(preparedNear.has_value() && preparedFar.has_value());
+        nx::render::drawInOrder(list, first->renderer, second->renderer);
+    });
+    for (std::size_t color = 0; color < 3; ++color) {
+        EXPECT_NEAR(pixelAt(pixels, kMiddle, kMiddle).at(color), nearOverFarChannel(), 1)
+            << "channel " << color;
     }
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }

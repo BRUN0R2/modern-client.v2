@@ -9,8 +9,8 @@
 /// texture says: masked, additive, chrome, flat shaded or fullbright.
 ///
 /// A model drawn other than normally blends as its render mode makes it (GL_StudioSetRenderMode): added,
-/// unlit; or blended, lit, as opaque as `renderamt` says. The solid models are drawn first, the others
-/// from the farthest (R_TransEntityCompare).
+/// unlit; or blended, lit, as opaque as `renderamt` says. The solid models are drawn with the solid
+/// things of the frame, the others among everything it draws blended (nx.render:blendedOrder).
 ///
 /// Today: the skins and body parts of models, a draw call for each mesh, the render modes, and the
 /// view's own model kept out of walls. The render effects (renderfx), the players' colors, the dynamic
@@ -26,6 +26,7 @@ import :camera;
 import :gamma;
 import :light;
 import :renderMode;
+import :blendedOrder;
 
 namespace nx::render {
 
@@ -61,6 +62,24 @@ struct StudioSkinDraw {
     rhi::OwnedBuffer uniform{};
     rhi::OwnedBindGroup group{};
     MeshKind kind = MeshKind::Opaque;
+};
+
+/// A mesh a frame draws: its triangles in its model's index buffer, and its texture's bind group.
+struct StudioMeshCall {
+    std::uint32_t firstIndex = 0;
+    std::uint32_t indexCount = 0;
+    MeshKind kind = MeshKind::Opaque;
+    rhi::BindGroupHandle texture{};
+};
+
+/// A model a frame draws: its buffers, how it blends, and its meshes, a range of the frame's
+/// StudioMeshCalls.
+struct StudioModelCall {
+    rhi::BufferHandle vertices{};
+    rhi::BufferHandle indices{};
+    StudioBlending blending = StudioBlending::Solid;
+    std::uint32_t firstMesh = 0;
+    std::uint32_t meshCount = 0;
 };
 
 /// What one frame in flight writes the view, its models' bones and their lights to.
@@ -173,11 +192,24 @@ public:
     [[nodiscard]] auto load(rhi::CommandList& commands, const StudioModelDesc& desc)
         -> Result<StudioModel, StudioError>;
 
-    /// Draws `frame`'s models in their order, inside a render pass with a color target of
-    /// desc.colorFormat and a Depth32Float depth target (reversed depth), after the world. Each
-    /// instance gives its model's every bone. Errors: GpuFailed (room for more bones or models).
+    /// Writes `frame`'s models for the frame in flight, for drawInOrder to record with the other
+    /// renderers of the frame before the next prepare; the models must last until then. Each instance
+    /// gives its model's every bone. Errors: GpuFailed (room for more bones or models).
+    [[nodiscard]] auto prepare(const StudioFrame& frame) -> Result<void, StudioError>;
+    /// Draws `frame`'s models alone: prepares them, then records them (drawInOrder). Errors: those of
+    /// prepare.
     [[nodiscard]] auto draw(rhi::CommandList& commands, const StudioFrame& frame)
         -> Result<void, StudioError>;
+
+    /// The models the last prepare found that are drawn blended, the index of each its own.
+    [[nodiscard]] inline auto blendedDraws() const noexcept -> std::span<const BlendedDraw> {
+        return m_blendedDraws;
+    }
+    /// Records the solid models of the last prepare in their order, inside a render pass with a color
+    /// target of desc.colorFormat and a Depth32Float depth target (reversed depth), after the world.
+    void drawSolid(rhi::CommandList& commands) const;
+    /// Records the model of `index`, one of blendedDraws()'s, in the same render pass.
+    void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
 private:
     inline explicit StudioRenderer(rhi::Device& device) noexcept : m_device{&device} {}
@@ -187,8 +219,12 @@ private:
     /// Makes room in `slot` for `bones` bones and `instances` models, at least.
     [[nodiscard]] auto reserve(StudioFrameSlot& slot, std::size_t bones, std::size_t instances)
         -> Result<void, rhi::RhiError>;
-    /// Records the meshes of `instance`, whose uniform is bound, blended as `blending` says.
-    void drawMeshes(rhi::CommandList& commands, const StudioInstance& instance, StudioBlending blending);
+    /// What `instance` draws, blended as `blending` says: its meshes put in m_meshCalls.
+    [[nodiscard]] auto callOf(const StudioInstance& instance, StudioBlending blending) -> StudioModelCall;
+    /// The frame slot the last prepare wrote.
+    [[nodiscard]] auto preparedSlot() const noexcept -> const StudioFrameSlot&;
+    /// Records the model of m_modelCalls' `index`.
+    void drawModel(rhi::CommandList& commands, std::size_t index) const;
 
     rhi::Device* m_device;
     ChannelTable m_textureGamma{};
@@ -201,6 +237,11 @@ private:
     rhi::OwnedBuffer m_lightGamma;
     std::vector<StudioFrameSlot> m_frameSlots;
     std::uint64_t m_drawCount = 0;
+
+    // What the last prepare found, kept to reuse the memory.
+    std::vector<StudioModelCall> m_modelCalls; ///< By the place of their uniform.
+    std::vector<StudioMeshCall> m_meshCalls;
+    std::vector<BlendedDraw> m_blendedDraws; ///< Of m_modelCalls, by their index.
 };
 
 } // namespace nx::render

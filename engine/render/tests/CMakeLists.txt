@@ -3,6 +3,7 @@
 
 nxAddTest(nxRenderTests
     SOURCES
+        blendedOrderTests.cpp
         cameraTests.cpp
         gammaTests.cpp
         lightStyleTests.cpp

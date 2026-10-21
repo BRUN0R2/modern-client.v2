@@ -62,12 +62,3 @@ struct RenderColor {
 };
 
 } // namespace nx::render
-
-namespace nx::render {
-
-/// Where an entity of `mode` is drawn among the blended entities at one distance, as the original
-/// sorts them (R_TransEntityCompare, R_RankForRenderMode): the others first (0), then TransTexture,
-/// TransAdd and Glow. Not exported.
-[[nodiscard]] auto blendedRankOf(RenderMode mode) noexcept -> std::ptrdiff_t;
-
-} // namespace nx::render
