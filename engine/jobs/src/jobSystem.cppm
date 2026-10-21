@@ -23,6 +23,7 @@ inline constexpr std::uint32_t kMaxWorkerCount = 256;
 /// (the main thread). 0 when the hardware thread count is unknown.
 [[nodiscard]] auto defaultWorkerCount() noexcept -> std::uint32_t;
 
+/// How to start a JobSystem.
 struct JobSystemConfig {
     /// Threads that run jobs, besides the threads that wait on them (`jobs_workers`). With 0, every
     /// job runs inside wait() on the waiting thread, in priority and submission order: the serial
@@ -37,16 +38,16 @@ enum class JobSystemError : std::uint8_t {
 
 /// What one worker has done since the system started.
 struct WorkerStats {
-    std::uint64_t executedJobs = 0;
-    std::uint64_t stolenJobs = 0; // taken from another worker's deque
-    std::uint64_t sleeps = 0;     // times the worker found no work and slept
+    std::uint64_t executedJobs = 0; ///< Jobs it ran, stolen ones included.
+    std::uint64_t stolenJobs = 0;   ///< Taken from another worker's deque.
+    std::uint64_t sleeps = 0;       ///< Times the worker found no work and slept.
 };
 
 /// Counters for `jobs_stats`. Each value is exact for its own counter, but they are read one after
 /// another while the system runs.
 struct JobSystemStats {
-    std::vector<WorkerStats> workers;
-    std::uint64_t jobsExecutedByWaiters = 0; // run by threads inside wait()
+    std::vector<WorkerStats> workers;        ///< One per worker, in worker order.
+    std::uint64_t jobsExecutedByWaiters = 0; ///< Run by threads inside wait().
 };
 
 namespace detail {
@@ -55,6 +56,8 @@ struct Worker;
 
 } // namespace detail
 
+/// Runs jobs on a fixed pool of worker threads. Any thread may submit and wait, a running job
+/// included; a thread that waits runs jobs meanwhile.
 class JobSystem {
     struct CreateToken {
         explicit CreateToken() = default;

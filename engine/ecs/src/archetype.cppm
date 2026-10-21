@@ -15,6 +15,7 @@ export namespace nx::ecs {
 /// Changed<T> compares against.
 enum class Version : std::uint64_t {};
 
+/// Index of an archetype in its World, in creation order.
 enum class ArchetypeId : std::uint32_t {};
 
 /// Size of a chunk. A row larger than this gets chunks of several contiguous blocks.
@@ -22,15 +23,15 @@ inline constexpr std::size_t kChunkBytes = 16 * 1024;
 
 /// Where the components of an entity live.
 struct EntityLocation {
-    ArchetypeId archetype{};
-    std::uint32_t chunk = 0;
-    std::uint32_t row = 0;
+    ArchetypeId archetype{}; ///< The archetype that stores them.
+    std::uint32_t chunk = 0; ///< Index of the chunk in that archetype.
+    std::uint32_t row = 0;   ///< Row in that chunk.
 };
 
 /// What removeRow() does with the components of the removed row.
 enum class RowContents : std::uint8_t {
-    Live,     // still constructed: destroy them
-    MovedOut, // already relocated or destroyed by the caller
+    Live,     ///< Still constructed: destroy them.
+    MovedOut, ///< Already relocated or destroyed by the caller.
 };
 
 namespace detail {
@@ -65,19 +66,24 @@ private:
 
 /// A component array inside every chunk of an archetype.
 struct Column {
-    ComponentTypeId type{};
-    std::size_t offset = 0; // bytes from the start of the chunk
-    const ComponentInfo* info = nullptr;
+    ComponentTypeId type{};              ///< The component stored.
+    std::size_t offset = 0;              ///< Bytes from the start of the chunk.
+    const ComponentInfo* info = nullptr; ///< What the registry knows of the component.
 };
 
+/// One block of an archetype's rows: the entity array, then one array per column.
 class Chunk {
 public:
+    /// A chunk without rows in `storage`, with version 0 for each of its `columnCount` columns.
     Chunk(detail::ChunkStorage storage, std::size_t columnCount);
 
+    /// Rows in use, from the first.
     [[nodiscard]] inline auto rowCount() const noexcept -> std::uint32_t { return m_rowCount; }
+    /// Start of the chunk: its entity array.
     [[nodiscard]] inline auto data() noexcept -> std::byte* { return m_storage[0].bytes.data(); }
     [[nodiscard]] inline auto data() const noexcept -> const std::byte* { return m_storage[0].bytes.data(); }
 
+    /// The version of the last write to the column.
     [[nodiscard]] inline auto changedVersion(std::size_t column) const noexcept -> Version {
         return m_changed[column];
     }
@@ -110,19 +116,27 @@ public:
     auto operator=(Archetype&&) -> Archetype& = delete;
     ~Archetype();
 
+    /// Its id in its World.
     [[nodiscard]] inline auto id() const noexcept -> ArchetypeId { return m_id; }
+    /// Its component types, tags included, sorted.
     [[nodiscard]] inline auto types() const noexcept -> std::span<const ComponentTypeId> { return m_types; }
+    /// Whether `type` is one of its component types, tags included.
     [[nodiscard]] auto contains(ComponentTypeId type) const noexcept -> bool;
     /// Column index of a stored component; nullopt for tags and absent components.
     [[nodiscard]] auto columnOf(ComponentTypeId type) const noexcept -> std::optional<std::size_t>;
+    /// The stored components (tags have no column), in type order.
     [[nodiscard]] inline auto columns() const noexcept -> std::span<const Column> { return m_columns; }
 
+    /// Rows a chunk holds.
     [[nodiscard]] inline auto chunkCapacity() const noexcept -> std::uint32_t { return m_chunkCapacity; }
+    /// Chunks in use; every one is full except the last.
     [[nodiscard]] inline auto chunkCount() const noexcept -> std::size_t { return m_chunks.size(); }
+    /// The chunk at `index`, which must be below chunkCount().
     [[nodiscard]] inline auto chunk(std::size_t index) noexcept -> Chunk& { return m_chunks[index]; }
     [[nodiscard]] inline auto chunk(std::size_t index) const noexcept -> const Chunk& {
         return m_chunks[index];
     }
+    /// Entities stored, in every chunk.
     [[nodiscard]] auto entityCount() const noexcept -> std::size_t;
 
     /// Start of the entity array of a chunk.
@@ -147,6 +161,7 @@ public:
         return columnData(location.chunk, column) +
                (std::size_t{location.row} * m_columns[column].info->size);
     }
+    /// The entity of one row.
     [[nodiscard]] auto entityAt(EntityLocation location) const noexcept -> Entity;
 
     /// Appends a row for `entity`. Its components are left uninitialized: the caller constructs
@@ -174,6 +189,7 @@ public:
     /// Archetype graph: the archetype reached by adding or removing one component type.
     [[nodiscard]] auto findAddEdge(ComponentTypeId type) const -> std::optional<ArchetypeId>;
     [[nodiscard]] auto findRemoveEdge(ComponentTypeId type) const -> std::optional<ArchetypeId>;
+    /// Records the archetype reached by adding or removing `type`, for the find functions above.
     inline void setAddEdge(ComponentTypeId type, ArchetypeId target) {
         m_addEdges.insert_or_assign(type, target);
     }
