@@ -83,6 +83,9 @@ readers expected, and the readers now follow them
 - **Contracts:** to verify that a check fired without aborting, the test installs a handler
   that records and returns (`ContractRecorder`, *observe* mode). The default handler
   (*enforce*) is covered by death tests (`EXPECT_DEATH`).
+- **GPU:** the Vulkan tests run on whatever device the machine has, with the validation layers,
+  and require that validation reports no error. In CI they run on lavapipe, Mesa's software
+  Vulkan, in the Linux jobs; a machine without Vulkan skips them.
 - **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
   `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
 - **Files:** a test that reads the file system writes its input into a

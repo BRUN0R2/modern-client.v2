@@ -220,9 +220,12 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### RHI and Vulkan
 - [x] `nx.platform`: SDL3 window, events and input (vcpkg `sdl3` port), keys by physical position, raw mouse, and the native handles the swapchain is made from ([decision](#pending-decisions))
-- [ ] `nx.rhi` interface (device, queue, command list, buffers, textures, samplers, bind groups, pipelines, queries)
-- [ ] Vulkan 1.3 backend with volk and VMA
-- [ ] Swapchain, present modes, recreation and *device lost*
+- [x] `nx.rhi` interface: device and frames, command list, swapchain, generational texture handles, transitions, render passes
+- [ ] `nx.rhi`: buffers, textures, samplers, bind groups, pipelines, queries
+- [x] Vulkan 1.3 backend with volk: instance and adapter choice, device, frames in flight on a timeline semaphore, validation counted
+- [ ] VMA in the Vulkan backend (with buffers and textures)
+- [x] Swapchain, present modes and recreation (resize, minimized, out of date)
+- [ ] *Device lost*: recreate the device and its resources once, then a crash report
 - [ ] Parallel recording (one command pool per worker per frame)
 - [ ] Persistent staging ring
 - [ ] On-disk pipeline cache
@@ -242,7 +245,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
 - [ ] Optional compute skinning
 - [ ] Model instancing
-- [ ] Map and model viewer with a free camera
+- [ ] Map and model viewer with a free camera (`nxview`: the window and the frames today)
 - [ ] Reference images in CI (lavapipe)
 - [ ] All official maps rendering without errors
 

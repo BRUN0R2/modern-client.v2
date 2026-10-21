@@ -86,8 +86,10 @@ module exists (`cmake/nxLayers.cmake`, at the end of the configuration, whatever
 modules are added in) a dependency on a project module of the same or of a higher layer fails
 the configuration, locally and in every CI build. The `LayerCheck.*` tests run that check on a
 fixture of empty modules. A strict layer order also rules out cycles. The same-layer
-dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi`, `nx.render` on `nx.assets`, …)
-get their explicit declaration in that check together with the first of those modules.
+dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi` and `nx.platform`, `nx.render` on
+`nx.assets`, …) are declared `LATERAL` where the module is built (`nxAddModuleLibrary`): the check
+accepts a same-layer dependency only when it is declared, and a `LATERAL` module only when it is of
+the same layer.
 
 ## 2. Structural principles
 

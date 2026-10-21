@@ -56,6 +56,7 @@ modern-client.v2/
 ├── tools/
 │   ├── nxbake/                 # asset import/cook/pack
 │   ├── nxcheck/                # reads the CS 1.6 installation with every reader (tool.nxcheck)
+│   ├── nxview/                 # the map and model viewer
 │   └── parityRecorder/        # reference data capture from the original game
 ├── tests/
 │   ├── parity/                 # parity fixtures and tests
@@ -176,8 +177,8 @@ The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 
 In use today: toml++, SDL3 (on Linux with its X11 and Wayland backends only: its default IBus
 support would build D-Bus and its dependencies from source, for an input method nothing uses yet),
-xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive
-with their first consumer, in the milestone that needs them.
+Vulkan Headers and volk, xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others
+arrive with their first consumer, in the milestone that needs them.
 
 | Library | Use | License |
 |---------|-----|---------|
@@ -227,6 +228,7 @@ Rules:
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
+| `nxview` | The map and model viewer. Today: the window and the frames of the Vulkan backend (`--validation`) |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
@@ -242,7 +244,7 @@ and on demand. **Running today:**
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
 | `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
-| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against | Yes |
+| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run (the Windows runners have no Vulkan and skip them) | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the

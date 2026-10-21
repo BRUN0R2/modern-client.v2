@@ -35,6 +35,8 @@ nxAddStdModuleLibrary()
 # Runtime dependencies (vcpkg.json; docs/17-build-and-tools.md, section 5).
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
+find_package(VulkanHeaders CONFIG REQUIRED)
+find_package(volk CONFIG REQUIRED)
 
 if(NX_BUILD_TESTS)
     enable_testing()
