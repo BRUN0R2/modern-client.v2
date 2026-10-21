@@ -187,11 +187,56 @@ public:
     [[nodiscard]] virtual auto resize(Extent2d size) -> Result<void, RhiError> = 0;
 };
 
+class Device;
+
+/// A resource of a device, held by its owner: destroyed when the owner lets it go (reset) or ends,
+/// once the GPU has finished every frame that may use it. Moved, never copied; it must not outlive
+/// its device. The device's create functions give them.
+template <class Tag>
+class Owned {
+public:
+    /// Owns nothing.
+    Owned() noexcept = default;
+    Owned(Owned&& other) noexcept : m_device{other.m_device}, m_handle{std::exchange(other.m_handle, {})} {}
+    auto operator=(Owned&& other) noexcept -> Owned& {
+        if (this != &other) {
+            reset();
+            m_device = other.m_device;
+            m_handle = std::exchange(other.m_handle, {});
+        }
+        return *this;
+    }
+    Owned(const Owned&) = delete;
+    auto operator=(const Owned&) -> Owned& = delete;
+    ~Owned() { reset(); }
+
+    /// The resource's handle, for the commands and bindings that name it; null when it owns nothing.
+    [[nodiscard]] auto get() const noexcept -> Handle<Tag> { return m_handle; }
+
+    /// Destroys the resource now; it then owns nothing.
+    void reset() noexcept;
+
+private:
+    friend class Device;
+    Owned(Device& device, Handle<Tag> handle) noexcept : m_device{&device}, m_handle{handle} {}
+
+    Device* m_device = nullptr;
+    Handle<Tag> m_handle{};
+};
+
+using OwnedBuffer = Owned<BufferTag>;
+using OwnedTexture = Owned<TextureTag>;
+using OwnedSampler = Owned<SamplerTag>;
+using OwnedShader = Owned<ShaderTag>;
+using OwnedBindGroupLayout = Owned<BindGroupLayoutTag>;
+using OwnedBindGroup = Owned<BindGroupTag>;
+using OwnedRenderPipeline = Owned<RenderPipelineTag>;
+
 /// A GPU, its resources and the frames it runs: up to a backend's frames in flight are recorded
 /// while the GPU runs the ones before. Use it from one thread: the render thread.
 ///
-/// A resource lives until it is destroyed (Device::destroy), which happens once the GPU has
-/// finished every frame that may use it; a resource left at the device's end is destroyed with it.
+/// Each resource has an owner (Owned), which destroys it; the device then keeps it until the GPU has
+/// finished every frame that may use it. Every owner ends before its device.
 class Device {
 public:
     Device() = default;
@@ -207,29 +252,18 @@ public:
     [[nodiscard]] virtual auto shaderFormat() const noexcept -> ShaderFormat = 0;
 
     /// Errors (every create): OutOfHostMemory, OutOfDeviceMemory, DriverRefused.
-    [[nodiscard]] virtual auto createBuffer(const BufferDesc& desc) -> Result<BufferHandle, RhiError> = 0;
+    [[nodiscard]] auto createBuffer(const BufferDesc& desc) -> Result<OwnedBuffer, RhiError>;
     /// Errors: also UnsupportedFormat.
-    [[nodiscard]] virtual auto createTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> = 0;
-    [[nodiscard]] virtual auto createSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> = 0;
+    [[nodiscard]] auto createTexture(const TextureDesc& desc) -> Result<OwnedTexture, RhiError>;
+    [[nodiscard]] auto createSampler(const SamplerDesc& desc) -> Result<OwnedSampler, RhiError>;
     /// Errors: also InvalidShader.
-    [[nodiscard]] virtual auto createShader(const ShaderDesc& desc) -> Result<ShaderHandle, RhiError> = 0;
-    [[nodiscard]] virtual auto createBindGroupLayout(const BindGroupLayoutDesc& desc)
-        -> Result<BindGroupLayoutHandle, RhiError> = 0;
-    [[nodiscard]] virtual auto createBindGroup(const BindGroupDesc& desc)
-        -> Result<BindGroupHandle, RhiError> = 0;
+    [[nodiscard]] auto createShader(const ShaderDesc& desc) -> Result<OwnedShader, RhiError>;
+    [[nodiscard]] auto createBindGroupLayout(const BindGroupLayoutDesc& desc)
+        -> Result<OwnedBindGroupLayout, RhiError>;
+    [[nodiscard]] auto createBindGroup(const BindGroupDesc& desc) -> Result<OwnedBindGroup, RhiError>;
     /// Errors: also InvalidShader (an entry point the shader does not have).
-    [[nodiscard]] virtual auto createRenderPipeline(const RenderPipelineDesc& desc)
-        -> Result<RenderPipelineHandle, RhiError> = 0;
-
-    /// Destroys a resource once the GPU has finished every frame that may use it; the handle names
-    /// nothing from now on. The null handle and a handle already destroyed are left alone.
-    virtual void destroy(BufferHandle buffer) = 0;
-    virtual void destroy(TextureHandle texture) = 0;
-    virtual void destroy(SamplerHandle sampler) = 0;
-    virtual void destroy(ShaderHandle shader) = 0;
-    virtual void destroy(BindGroupLayoutHandle layout) = 0;
-    virtual void destroy(BindGroupHandle group) = 0;
-    virtual void destroy(RenderPipelineHandle pipeline) = 0;
+    [[nodiscard]] auto createRenderPipeline(const RenderPipelineDesc& desc)
+        -> Result<OwnedRenderPipeline, RhiError>;
 
     /// The memory of an Upload or Readback buffer, mapped for as long as the buffer lives. Read a
     /// Readback buffer once the frame that wrote it has finished (waitIdle, or frames in flight
@@ -257,6 +291,74 @@ public:
     /// Errors the backend's validation reported (the Vulkan validation layers in development
     /// builds), which the device also logs. Zero without validation.
     [[nodiscard]] virtual auto validationErrors() const noexcept -> std::uint64_t = 0;
+
+protected:
+    // What a backend implements: each resource created, which the create functions give an owner,
+    // and destroyed, when its owner lets it go.
+    [[nodiscard]] virtual auto makeBuffer(const BufferDesc& desc) -> Result<BufferHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeShader(const ShaderDesc& desc) -> Result<ShaderHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeBindGroupLayout(const BindGroupLayoutDesc& desc)
+        -> Result<BindGroupLayoutHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeBindGroup(const BindGroupDesc& desc)
+        -> Result<BindGroupHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeRenderPipeline(const RenderPipelineDesc& desc)
+        -> Result<RenderPipelineHandle, RhiError> = 0;
+
+    /// Destroys a resource once the GPU has finished every frame that may use it; the handle names
+    /// nothing from now on. The null handle and a handle already destroyed are left alone.
+    virtual void destroy(BufferHandle buffer) = 0;
+    virtual void destroy(TextureHandle texture) = 0;
+    virtual void destroy(SamplerHandle sampler) = 0;
+    virtual void destroy(ShaderHandle shader) = 0;
+    virtual void destroy(BindGroupLayoutHandle layout) = 0;
+    virtual void destroy(BindGroupHandle group) = 0;
+    virtual void destroy(RenderPipelineHandle pipeline) = 0;
+
+private:
+    template <class>
+    friend class Owned;
+
+    /// `created`, given an owner.
+    template <class Tag>
+    [[nodiscard]] auto owned(Result<Handle<Tag>, RhiError> created) -> Result<Owned<Tag>, RhiError> {
+        if (!created) {
+            return std::unexpected{std::move(created.error())};
+        }
+        return Owned<Tag>{*this, *created};
+    }
 };
+
+template <class Tag>
+void Owned<Tag>::reset() noexcept {
+    if (!m_handle.isNull()) {
+        m_device->destroy(std::exchange(m_handle, {}));
+    }
+}
+
+inline auto Device::createBuffer(const BufferDesc& desc) -> Result<OwnedBuffer, RhiError> {
+    return owned(makeBuffer(desc));
+}
+inline auto Device::createTexture(const TextureDesc& desc) -> Result<OwnedTexture, RhiError> {
+    return owned(makeTexture(desc));
+}
+inline auto Device::createSampler(const SamplerDesc& desc) -> Result<OwnedSampler, RhiError> {
+    return owned(makeSampler(desc));
+}
+inline auto Device::createShader(const ShaderDesc& desc) -> Result<OwnedShader, RhiError> {
+    return owned(makeShader(desc));
+}
+inline auto Device::createBindGroupLayout(const BindGroupLayoutDesc& desc)
+    -> Result<OwnedBindGroupLayout, RhiError> {
+    return owned(makeBindGroupLayout(desc));
+}
+inline auto Device::createBindGroup(const BindGroupDesc& desc) -> Result<OwnedBindGroup, RhiError> {
+    return owned(makeBindGroup(desc));
+}
+inline auto Device::createRenderPipeline(const RenderPipelineDesc& desc)
+    -> Result<OwnedRenderPipeline, RhiError> {
+    return owned(makeRenderPipeline(desc));
+}
 
 } // namespace nx::rhi

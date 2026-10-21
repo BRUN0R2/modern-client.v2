@@ -801,23 +801,6 @@ public:
 
     [[nodiscard]] auto adapter() const noexcept -> const AdapterInfo& override { return m_adapter; }
     [[nodiscard]] auto shaderFormat() const noexcept -> ShaderFormat override { return ShaderFormat::Spirv; }
-    [[nodiscard]] auto createBuffer(const BufferDesc& desc) -> Result<BufferHandle, RhiError> override;
-    [[nodiscard]] auto createTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> override;
-    [[nodiscard]] auto createSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> override;
-    [[nodiscard]] auto createShader(const ShaderDesc& desc) -> Result<ShaderHandle, RhiError> override;
-    [[nodiscard]] auto createBindGroupLayout(const BindGroupLayoutDesc& desc)
-        -> Result<BindGroupLayoutHandle, RhiError> override;
-    [[nodiscard]] auto createBindGroup(const BindGroupDesc& desc)
-        -> Result<BindGroupHandle, RhiError> override;
-    [[nodiscard]] auto createRenderPipeline(const RenderPipelineDesc& desc)
-        -> Result<RenderPipelineHandle, RhiError> override;
-    void destroy(BufferHandle buffer) override;
-    void destroy(TextureHandle texture) override;
-    void destroy(SamplerHandle sampler) override;
-    void destroy(ShaderHandle shader) override;
-    void destroy(BindGroupLayoutHandle layout) override;
-    void destroy(BindGroupHandle group) override;
-    void destroy(RenderPipelineHandle pipeline) override;
     [[nodiscard]] auto mappedBytes(BufferHandle buffer) -> std::span<std::byte> override;
     [[nodiscard]] auto createSwapchain(const SwapchainDesc& desc)
         -> Result<std::unique_ptr<Swapchain>, RhiError> override;
@@ -848,6 +831,24 @@ public:
     void swapchainClosed() noexcept { --m_openSwapchains; }
 
     void countValidationError() noexcept { ++m_validationErrors; }
+
+protected:
+    [[nodiscard]] auto makeBuffer(const BufferDesc& desc) -> Result<BufferHandle, RhiError> override;
+    [[nodiscard]] auto makeTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> override;
+    [[nodiscard]] auto makeSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> override;
+    [[nodiscard]] auto makeShader(const ShaderDesc& desc) -> Result<ShaderHandle, RhiError> override;
+    [[nodiscard]] auto makeBindGroupLayout(const BindGroupLayoutDesc& desc)
+        -> Result<BindGroupLayoutHandle, RhiError> override;
+    [[nodiscard]] auto makeBindGroup(const BindGroupDesc& desc) -> Result<BindGroupHandle, RhiError> override;
+    [[nodiscard]] auto makeRenderPipeline(const RenderPipelineDesc& desc)
+        -> Result<RenderPipelineHandle, RhiError> override;
+    void destroy(BufferHandle buffer) override;
+    void destroy(TextureHandle texture) override;
+    void destroy(SamplerHandle sampler) override;
+    void destroy(ShaderHandle shader) override;
+    void destroy(BindGroupLayoutHandle layout) override;
+    void destroy(BindGroupHandle group) override;
+    void destroy(RenderPipelineHandle pipeline) override;
 
 private:
     [[nodiscard]] auto createInstance(const DeviceDesc& desc) -> Result<void, RhiError>;
@@ -1964,7 +1965,7 @@ void VulkanDevice::destroyNow(RetiredResource::Resource& resource) noexcept {
         resource);
 }
 
-auto VulkanDevice::createBuffer(const BufferDesc& desc) -> Result<BufferHandle, RhiError> {
+auto VulkanDevice::makeBuffer(const BufferDesc& desc) -> Result<BufferHandle, RhiError> {
     expects(!desc.label.empty() && desc.size > 0, "rhi::Device::createBuffer: a label and a size");
     const VkBufferCreateInfo info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                                   .pNext = nullptr,
@@ -2006,7 +2007,7 @@ auto VulkanDevice::createBuffer(const BufferDesc& desc) -> Result<BufferHandle, 
     return m_buffers.insert(buffer);
 }
 
-auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> {
+auto VulkanDevice::makeTexture(const TextureDesc& desc) -> Result<TextureHandle, RhiError> {
     expects(!desc.label.empty() && desc.extent.width > 0 && desc.extent.height > 0 && desc.mipLevels > 0 &&
                 desc.arrayLayers > 0,
             "rhi::Device::createTexture: a label, a size, a mip level and a layer");
@@ -2077,7 +2078,7 @@ auto VulkanDevice::createTexture(const TextureDesc& desc) -> Result<TextureHandl
     return m_textures.insert(texture);
 }
 
-auto VulkanDevice::createSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> {
+auto VulkanDevice::makeSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> {
     const bool isAnisotropic = m_hasAnisotropy && desc.maxAnisotropy > 1.0F;
     const VkSamplerCreateInfo info{.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                                    .pNext = nullptr,
@@ -2107,7 +2108,7 @@ auto VulkanDevice::createSampler(const SamplerDesc& desc) -> Result<SamplerHandl
     return m_samplers.insert(sampler);
 }
 
-auto VulkanDevice::createShader(const ShaderDesc& desc) -> Result<ShaderHandle, RhiError> {
+auto VulkanDevice::makeShader(const ShaderDesc& desc) -> Result<ShaderHandle, RhiError> {
     if (desc.code.size() < sizeof(std::uint32_t) || desc.code.size() % sizeof(std::uint32_t) != 0 ||
         loadLittleEndian<std::uint32_t>(desc.code) != kSpirvMagic) {
         return fail(RhiError::InvalidShader,
@@ -2130,7 +2131,7 @@ auto VulkanDevice::createShader(const ShaderDesc& desc) -> Result<ShaderHandle, 
     return m_shaders.insert(shader);
 }
 
-auto VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc)
+auto VulkanDevice::makeBindGroupLayout(const BindGroupLayoutDesc& desc)
     -> Result<BindGroupLayoutHandle, RhiError> {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     bindings.reserve(desc.bindings.size());
@@ -2156,7 +2157,7 @@ auto VulkanDevice::createBindGroupLayout(const BindGroupLayoutDesc& desc)
     return m_bindGroupLayouts.insert(std::move(layout));
 }
 
-auto VulkanDevice::createBindGroup(const BindGroupDesc& desc) -> Result<BindGroupHandle, RhiError> {
+auto VulkanDevice::makeBindGroup(const BindGroupDesc& desc) -> Result<BindGroupHandle, RhiError> {
     const VulkanBindGroupLayout& layout = m_bindGroupLayouts.get(desc.layout);
     expects(desc.bindings.size() == layout.bindings.size(),
             "rhi::Device::createBindGroup: one resource per binding");
@@ -2216,7 +2217,7 @@ auto VulkanDevice::createBindGroup(const BindGroupDesc& desc) -> Result<BindGrou
     return m_bindGroups.insert(*group);
 }
 
-auto VulkanDevice::createRenderPipeline(const RenderPipelineDesc& desc)
+auto VulkanDevice::makeRenderPipeline(const RenderPipelineDesc& desc)
     -> Result<RenderPipelineHandle, RhiError> {
     expects(desc.colorTargets.size() <= kMaxColorAttachments,
             "rhi::Device::createRenderPipeline: at most 8 targets");

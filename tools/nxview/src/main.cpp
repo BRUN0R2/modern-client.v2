@@ -450,27 +450,28 @@ constexpr std::size_t kBlue = 2;
     const nx::render::Camera camera = startCamera(options, *content.map);
     const float aspect =
         static_cast<float>(kScreenshotExtent.width) / static_cast<float>(kScreenshotExtent.height);
-    list.transition(*target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-    list.transition(*depth, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = *target, .clear = kVoidColor}};
+    list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+    list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
+    const std::array colors{nx::rhi::ColorAttachment{.texture = target->get(), .clear = kVoidColor}};
     list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
+                         .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
                          .area = kScreenshotExtent});
     world->draw(list, {.camera = camera,
                        .aspect = aspect,
                        .time = options.time,
                        .lightStyles = content.lightStyles.valuesAt(options.time)});
     list.endRendering();
-    list.transition(*target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
-    list.transition(*readback, nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
-    list.copyTextureToBuffer({.buffer = *readback, .texture = *target, .extent = kScreenshotExtent});
-    list.transition(*readback, nx::rhi::BufferState::CopyDestination, nx::rhi::BufferState::HostRead);
+    list.transition(target->get(), nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
+    list.transition(readback->get(), nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
+    list.copyTextureToBuffer(
+        {.buffer = readback->get(), .texture = target->get(), .extent = kScreenshotExtent});
+    list.transition(readback->get(), nx::rhi::BufferState::CopyDestination, nx::rhi::BufferState::HostRead);
     if (auto submitted = (*device)->submitFrame(); !submitted) {
         return unusable(submitted.error());
     }
     (*device)->waitIdle();
-    if (auto written = nx::platform::writeFile(*options.screenshot,
-                                               bmpOf(kScreenshotExtent, (*device)->mappedBytes(*readback)));
+    if (auto written = nx::platform::writeFile(
+            *options.screenshot, bmpOf(kScreenshotExtent, (*device)->mappedBytes(readback->get())));
         !written) {
         return unusable(written.error());
     }
@@ -669,7 +670,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
         .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, cs::bodyOf(walker.player))};
     bool isFlying = false;
     std::optional<nx::render::BspWorld> world; // made with the first image, which gives the format
-    std::optional<nx::rhi::TextureHandle> depth;
+    std::optional<nx::rhi::OwnedTexture> depth;
     nx::rhi::Extent2d depthExtent;
     HeldKeys keys;
     std::vector<nx::platform::WindowEvent> events;
@@ -745,9 +746,6 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             std::ignore = mapClock.restart(); // the light styles start with the map
         }
         if (!depth || depthExtent != frame.size) {
-            if (depth) {
-                (*device)->destroy(*depth);
-            }
             auto created = (*device)->createTexture({.label = "nxview.depth",
                                                      .format = nx::rhi::Format::Depth32Float,
                                                      .extent = frame.size,
@@ -755,14 +753,14 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             if (!created) {
                 return unusable(created.error());
             }
-            depth = *created;
+            depth = std::move(*created); // the old one, if any, goes
             depthExtent = frame.size;
         }
         list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-        list.transition(*depth, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
+        list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
         const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
         list.beginRendering({.colors = colors,
-                             .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
+                             .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
                              .area = frame.size});
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
         const nx::Seconds time{mapClock.elapsed()};

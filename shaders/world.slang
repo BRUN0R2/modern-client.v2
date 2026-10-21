@@ -8,6 +8,11 @@
 // entities are drawn as their render mode says. The sky's faces show the side of the sky they are
 // seen toward, projected as the original projects it.
 
+// The styles the frame sets, four to an element of Frame::styles; the ones above keep the normal
+// brightness, 'm'.
+static const uint kSetStyles = 64;
+static const uint kStylesPerElement = 4;
+
 struct Frame
 {
     // The rows of the view-projection matrix: clip = (dot(row0, p), dot(row1, p), ...).
@@ -17,8 +22,8 @@ struct Frame
     float4 lighting;
     // xyz: the camera's position, where the directions to the sky start.
     float4 eye;
-    // The brightness of the 64 light styles, four to an element.
-    float4 styles[16];
+    // The brightness of the light styles.
+    float4 styles[kSetStyles / kStylesPerElement];
 };
 
 [[vk::binding(0, 0)]]
@@ -62,9 +67,9 @@ ConstantBuffer<Entity> entity;
 static const uint kLightmaps = 4;
 // The style of a lightmap the face does not have: its lightmaps end there.
 static const uint kNoStyle = 255;
-// The styles the frame sets; the ones above keep the normal brightness, 'm'.
-static const uint kSetStyles = 64;
 static const uint kNormalStyleValue = 264;
+// A lightmap sample's channel, read from 0 to 1, is a byte to the original.
+static const float kSampleTop = 255.0;
 static const uint kLightScaleShift = 14;
 static const uint kLightTableTop = 1023;
 
@@ -96,12 +101,19 @@ float4 clipPositionOf(float3 position)
 
 static const uint kTurbulent = 1;
 static const float kTurbulentCell = 64.0;
+// The original's warp: a table of kTurbulentSines sines of a turn, each times kTurbulentAmplitude
+// texels, read kTurbulentFrequency times as fast as the texels go.
+static const int kTurbulentSines = 256;
+static const float kTurbulentAmplitude = 8.0;
+static const float kTurbulentFrequency = 0.125;
+static const float kTurn = 2.0 * 3.14159265358979;
 
-/// The original's r_turbsin: 8 sin(2 pi i / 256), the values of its warpsin table.
+/// The original's r_turbsin: kTurbulentAmplitude sin(2 pi i / kTurbulentSines), the values of its
+/// warpsin table, the index wrapping around the table.
 float turbulentSine(float position)
 {
-    const int index = int(position * (256.0 / (2.0 * 3.14159265358979))) & 255;
-    return 8.0 * sin(float(index) * (2.0 * 3.14159265358979 / 256.0));
+    const int index = int(position * (float(kTurbulentSines) / kTurn)) & (kTurbulentSines - 1);
+    return kTurbulentAmplitude * sin(float(index) * (kTurn / float(kTurbulentSines)));
 }
 
 /// The texture coordinates of a vertex; on a turbulent face, its texels warped as the original's
@@ -114,8 +126,8 @@ float2 textureCoordinatesOf(VertexInput input)
         return input.uv;
     }
     const float time = frame.lighting.w;
-    const float s = input.uv.x + turbulentSine((input.uv.y * 0.125) + time);
-    const float t = input.uv.y + turbulentSine((input.uv.x * 0.125) + time);
+    const float s = input.uv.x + turbulentSine((input.uv.y * kTurbulentFrequency) + time);
+    const float t = input.uv.y + turbulentSine((input.uv.x * kTurbulentFrequency) + time);
     return float2(s, t) / kTurbulentCell;
 }
 
@@ -132,7 +144,8 @@ VertexOutput vertexMain(VertexInput input)
 
 uint styleValueOf(uint style)
 {
-    return style < kSetStyles ? uint(frame.styles[style / 4][style % 4]) : kNormalStyleValue;
+    return style < kSetStyles ? uint(frame.styles[style / kStylesPerElement][style % kStylesPerElement])
+                              : kNormalStyleValue;
 }
 
 /// The light of `luxel`, from 0 to 1: the sum over the face's lightmaps of its sample times the
@@ -145,7 +158,7 @@ float3 luxelLight(int2 luxel, uint4 styles)
     uint3 summed = uint3(0, 0, 0);
     for (uint map = 0; map < kLightmaps && styles[map] != kNoStyle; ++map)
     {
-        const uint3 sample = uint3(round(lightmaps.Load(int4(inside, int(map), 0)).rgb * 255.0));
+        const uint3 sample = uint3(round(lightmaps.Load(int4(inside, int(map), 0)).rgb * kSampleTop));
         summed += sample * styleValueOf(styles[map]);
     }
     const uint3 index = min((summed * uint(frame.lighting.x)) >> kLightScaleShift, kLightTableTop);
@@ -175,6 +188,11 @@ float3 lightAt(float2 position, uint4 styles)
 // world and normal entities, and the solid ones (kRenderTransAlpha), are lit and opaque, their masked
 // (`{`) textures cut out by the original's alpha tests; the others are unlit and blended.
 
+// The original's alpha tests: what has an alpha above them is drawn (DEFAULT_ALPHATEST, and
+// kRenderTransAlpha's).
+static const float kDefaultAlphaTest = 0.0;
+static const float kSolidAlphaTest = 0.25;
+
 float4 litOrDiscarded(VertexOutput input, float alphaTest)
 {
     const float4 color = albedo.Sample(albedoSampler, input.uv);
@@ -189,14 +207,14 @@ float4 litOrDiscarded(VertexOutput input, float alphaTest)
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
-    return litOrDiscarded(input, 0.0);
+    return litOrDiscarded(input, kDefaultAlphaTest);
 }
 
 // kRenderTransAlpha: what has an alpha above 0.25 is drawn.
 [shader("fragment")]
 float4 solidFragmentMain(VertexOutput input) : SV_Target
 {
-    return litOrDiscarded(input, 0.25);
+    return litOrDiscarded(input, kSolidAlphaTest);
 }
 
 // kRenderTransTexture and kRenderGlow: the texture, as opaque as renderamt makes it.
@@ -239,9 +257,19 @@ SkyVertexOutput skyVertexMain(VertexInput input)
 /// Where a direction reaches the sky: a side, and a point of it.
 struct SkyPoint
 {
-    float side; // the layer: 0 to 5 for +X, -X, +Y, -Y, +Z and -Z
+    float side; // the layer of skySides
     float2 st;  // s to the right and t up, from -1 to 1
 };
+
+// The layers of skySides, by the axis their side faces.
+static const float kSkyPositiveX = 0.0;
+static const float kSkyNegativeX = 1.0;
+static const float kSkyPositiveY = 2.0;
+static const float kSkyNegativeY = 3.0;
+static const float kSkyPositiveZ = 4.0;
+static const float kSkyNegativeZ = 5.0;
+// The least a direction's largest axis is divided by: a direction of zero reaches an edge of a side.
+static const float kLeastAxis = 1e-30;
 
 /// The side `direction` points at, by its largest axis with ties broken as the original breaks them,
 /// and the point it reaches there, as the original projects it (vec_to_st): from the middle of the
@@ -252,19 +280,19 @@ SkyPoint skyPointOf(float3 direction)
     SkyPoint point;
     if (size.x > size.y && size.x > size.z)
     {
-        point.side = direction.x > 0.0 ? 0.0 : 1.0;
+        point.side = direction.x > 0.0 ? kSkyPositiveX : kSkyNegativeX;
         point.st = float2(-direction.y * sign(direction.x), direction.z) / size.x;
     }
     else if (size.y > size.z && size.y > size.x)
     {
-        point.side = direction.y > 0.0 ? 2.0 : 3.0;
+        point.side = direction.y > 0.0 ? kSkyPositiveY : kSkyNegativeY;
         point.st = float2(direction.x * sign(direction.y), direction.z) / size.y;
     }
     else
     {
         // A tie of x and y with no z ends here, as in the original: the edge of the side, not 0 / 0.
-        point.side = direction.z > 0.0 ? 4.0 : 5.0;
-        point.st = float2(-direction.y, -direction.x * sign(direction.z)) / max(size.z, 1e-30);
+        point.side = direction.z > 0.0 ? kSkyPositiveZ : kSkyNegativeZ;
+        point.st = float2(-direction.y, -direction.x * sign(direction.z)) / max(size.z, kLeastAxis);
     }
     return point;
 }
