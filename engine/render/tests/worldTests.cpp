@@ -99,6 +99,13 @@ TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
         std::views::iota(std::size_t{0}, pixels.size() / 4),
         [&pixels](std::size_t pixel) { return pixels[(pixel * 4) + 3] == std::byte{255}; }));
     EXPECT_EQ(drawn, std::size_t{kExtent.width} * kExtent.height) << "a wall covers the whole view";
+    // The wall's lightmap rises from 2 to 255: nearly every pixel is lit, so it has color.
+    const auto lit = static_cast<std::size_t>(std::ranges::count_if(
+        std::views::iota(std::size_t{0}, pixels.size() / 4), [&pixels](std::size_t pixel) {
+            return pixels[pixel * 4] != std::byte{0} || pixels[(pixel * 4) + 1] != std::byte{0} ||
+                   pixels[(pixel * 4) + 2] != std::byte{0};
+        }));
+    EXPECT_GE(lit * 10, drawn * 9) << "at least 90% of the wall lit";
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

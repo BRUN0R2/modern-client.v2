@@ -6,8 +6,8 @@
 /// lightmaps packed into one atlas.
 ///
 /// Today: lightstyle 0 of each face, opaque and masked (`{`) textures, from the map or from its
-/// WADs. Visibility (PVS and frustum), the four lightstyles, sky, water, animated textures, render
-/// modes and the GoldSrc gamma curves come next (TODO.md, Rendering).
+/// WADs, in the original's picture (nx.render:gamma). Visibility (PVS and frustum), the four
+/// lightstyles, sky, water, animated textures and render modes come next (TODO.md, Rendering).
 export module nx.render:world;
 
 import std;
@@ -15,6 +15,7 @@ import nx.core;
 import nx.math;
 import nx.rhi;
 import nx.assets;
+import :gamma;
 
 export namespace nx::render {
 
@@ -31,13 +32,14 @@ struct BspWorldDesc {
     /// shaders/world.slang, compiled for the device (bin/shaders/world.spv).
     std::span<const std::byte> shaderCode{};
     rhi::Format colorFormat = rhi::Format::Undefined;
+    GammaSettings gamma{};
 };
 
 /// What the world holds, for the log and r_speeds.
 struct WorldStats {
     std::size_t faces = 0;
     std::size_t triangles = 0;
-    std::size_t textures = 0;
+    std::size_t textures = 0;                   ///< Of the map and of its WADs.
     std::vector<std::string> missingTextures{}; ///< In no WAD: drawn as a checkerboard.
     rhi::Extent2d lightmapAtlas{};
 };
@@ -70,8 +72,8 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// What one frame in flight writes the camera to.
-    struct CameraSlot {
+    /// What one frame in flight writes its uniform to.
+    struct FrameSlot {
         rhi::BufferHandle buffer{};
         rhi::BindGroupHandle group{};
     };
@@ -90,9 +92,10 @@ private:
     rhi::BindGroupLayoutHandle m_textureLayout;
     rhi::RenderPipelineHandle m_pipeline;
     std::vector<rhi::BindGroupHandle> m_textureGroups;
-    std::vector<CameraSlot> m_cameraSlots;
+    std::vector<FrameSlot> m_frameSlots;
     std::vector<Batch> m_batches;
     std::uint64_t m_drawCount = 0;
+    float m_lightScale = 0.0F; ///< lightTableScale of the settings it was made with.
     WorldStats m_stats;
 };
 

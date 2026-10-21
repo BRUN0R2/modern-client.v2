@@ -156,7 +156,7 @@ if (!lightmapAtlas) {
 | 7 | `Translucent` | Water, translucent render modes, sprites, beams, particles, sorted according to the original's rules |
 | 8 | `ViewModel` | First-person weapon (its own FOV and depth range) |
 | 9 | `ScreenEffects` | Flashbang, fade, *screen shake* (applied to the camera), NVG tint |
-| 10 | `Gamma` | `gamma`/`brightness`/`texgamma`/`lightgamma` curves |
+| 10 | `Gamma` | Output curve of `r_fidelity enhanced` (HDR); the GoldSrc curves are applied where the original applies them (§11) |
 | 11 | `Hud` | Sprite HUD, crosshair, text, menus ([12](12-ui-hud-and-console.md)) |
 | 12 | `Present` | Copy to the swapchain |
 
@@ -183,11 +183,11 @@ texture; the textures of the map and of the WADs its `wad` key names, by file na
 the VFS as the original looks them up, with their four mips, a checkerboard for a name no WAD has;
 masked textures; triggers and the compiler's tool textures (`AAATRIGGER`, `CLIP`...) and the sky not
 drawn. The lightmaps are packed into one atlas: each face's extent in luxels of 16 units is computed
-in double precision, as the compilers compute it, and lightstyle 0 is drawn, twice as bright at
-most (overbright). The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0
+in double precision, as the compilers compute it, and lightstyle 0 is drawn through the original's
+light curve (§11). The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0
 at infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
 original's horizontal angle of a 4:3 view, kept vertical on wider screens (Hor+). On the Steam
-installation, de_dust2 is 4002 faces in 43 textures and a 1024x404 atlas, built in half a second.
+installation, de_dust2 is 4002 faces in 41 textures and a 1024x404 atlas, built in half a second.
 
 ## 9. Studio models and GPU skinning
 
@@ -262,6 +262,17 @@ same model become one draw call per submesh.
 
 Every visual improvement is **optional** and **does not change gameplay** (visibility through
 smoke, for example, must be identical).
+
+**Today** (`nx.render:gamma`): the original's picture, each curve where the original applies it.
+`texgamma` maps the palette of a texture when it loads (`pow(value, texgamma / gamma)`, truncated);
+the light of a lightmap sample, scaled by its lightstyle value (264 at the normal `m`) and by
+`lightscale` (2^(1/`lightgamma`) in 8.8 fixed point) to the original's 10-bit summed light, indexes
+a table of 1024 entries, built as the original builds `lightgammatable`: `lightgamma`, then
+`brightness` (a multiplier above 1, and the knee that lifts the shadows), then 1/`gamma`, of which
+the upper 8 bits are drawn. The color is the texture's times that light, never brighter
+(`gl_overbright 0`). The defaults are what CS 1.6 ships: `gamma 2.5`, `brightness 1`, `texgamma 2`,
+`lightgamma 2.5`; each setting is held to the original's range. The tables match those the
+Xash3D-FWGS project records from the original for its tests.
 
 ## 12. Latency and frame pacing
 
