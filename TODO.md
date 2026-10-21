@@ -285,7 +285,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Parity: ladders
 - [ ] Parity: water
 - [ ] Parity: fall damage
-- [ ] Entity movement types (`TOSS`, `BOUNCE`, `PUSH`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`)
+- [x] Sliding doors (`func_door`, `func_water`): opened by a player's touch, moved by the pusher physics of the original (`SV_PushMove`), pushing bodies and blocked by them (`nx.game:movers`); `nxview` opens them
+- [ ] Rotating doors, platforms, trains, buttons; doors opened by others (`targetname`, `master`); a blocked door's damage
+- [ ] Entity movement types (`TOSS`, `BOUNCE`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`; `PUSH` beyond sliding doors)
 - [ ] Deterministic think, touch and triggers
 
 ### Player and weapons

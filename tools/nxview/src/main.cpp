@@ -531,7 +531,6 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
 struct Walker {
     cs::MovementState player{};
     nx::Vec3 previousEye{}; ///< Before the last command.
-    nx::Seconds pending{};  ///< Of the time given to the walk, what no command has taken yet.
 };
 
 [[nodiscard]] auto eyeOf(const cs::MovementState& player) -> nx::Vec3 {
@@ -545,12 +544,30 @@ struct Walker {
         .previousEye = eye};
 }
 
-/// Gives `elapsed` to commands of what `keys` and `view` ask for, one each kCommandInterval, among
-/// the world of `hulls` and `entities`; returns the player's eye, between where the last two commands
-/// left it by the time left.
-[[nodiscard]] auto walk(Walker& walker, const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed,
-                        const nx::collision::BrushHulls& hulls, std::span<const cs::BrushEntity> entities)
-    -> nx::Vec3 {
+/// The box of a standing player, and of a ducked one, about its origin.
+constexpr nx::Vec3 kStandingHalfBox{16.0F, 16.0F, 36.0F};
+constexpr nx::Vec3 kDuckedHalfBox{16.0F, 16.0F, 18.0F};
+
+/// The body of `player` the game's pushers move.
+[[nodiscard]] auto bodyOf(const cs::MovementState& player) -> nx::game::Body {
+    const nx::Vec3 half = player.isDucked ? kDuckedHalfBox : kStandingHalfBox;
+    return nx::game::Body{.hull =
+                              player.isDucked ? nx::collision::Hull::Ducked : nx::collision::Hull::Standing,
+                          .mins = -half,
+                          .maxs = half,
+                          .groundModel = player.isOnGround ? player.groundModel : std::nullopt};
+}
+
+/// The game of the map as nxview plays it, a tick each kCommandInterval: its entities, the player's
+/// body among them, and its clock.
+struct LocalGame {
+    nx::ecs::Entity body{};
+    nx::Seconds pending{}; ///< Of the time given to the game, what no tick has taken yet.
+    nx::Seconds time{};    ///< Since the map started.
+};
+
+/// The command of what `keys` and `view` ask for.
+[[nodiscard]] auto commandOf(const HeldKeys& keys, nx::EulerAngles view) -> cs::UserCommand {
     const float speed = kKeySpeed * (keys.shift ? kWalkFactor : 1.0F);
     nx::Flags<cs::Button> buttons;
     for (const auto& [isHeld, button] :
@@ -561,19 +578,42 @@ struct Walker {
             buttons.set(button);
         }
     }
-    const cs::UserCommand command{
-        .duration = kCommandInterval,
-        .viewAngles = view,
-        .move = {.forward = nx::UnitsPerSecond{speed * axisOf(keys.forward, keys.back)},
-                 .side = nx::UnitsPerSecond{speed * axisOf(keys.right, keys.left)}},
-        .buttons = buttons};
-    walker.pending = std::min(walker.pending + elapsed, kMaxCatchUp);
-    while (walker.pending >= kCommandInterval) {
-        walker.previousEye = eyeOf(walker.player);
-        walker.player = cs::simulateMovement(walker.player, command, cs::MovementSettings{}, hulls, entities);
-        walker.pending -= kCommandInterval;
+    return cs::UserCommand{.duration = kCommandInterval,
+                           .viewAngles = view,
+                           .move = {.forward = nx::UnitsPerSecond{speed * axisOf(keys.forward, keys.back)},
+                                    .side = nx::UnitsPerSecond{speed * axisOf(keys.right, keys.left)}},
+                           .buttons = buttons};
+}
+
+/// Gives `elapsed` to the game, tick by tick: the command of `keys` and `view` moves `walker`, when
+/// one walks, among the entities of `game` and the world of `hulls`, and what it meets is touched;
+/// then the pushers move, pushing the player's body. Returns the player's eye, between where the
+/// last two ticks left it by the time left; none without a walker.
+auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHulls& hulls, Walker* walker,
+          const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed) -> std::optional<nx::Vec3> {
+    local.pending = std::min(local.pending + elapsed, kMaxCatchUp);
+    while (local.pending >= kCommandInterval) {
+        if (walker != nullptr) {
+            walker->previousEye = eyeOf(walker->player);
+            const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
+            const cs::MovementResult moved = cs::simulateMovement(walker->player, commandOf(keys, view),
+                                                                  cs::MovementSettings{}, hulls, entities);
+            walker->player = moved.state;
+            nx::game::touchBrushEntities(game, moved.touchedModels);
+            game.get<nx::game::Transform>(local.body)->origin = walker->player.origin;
+            *game.get<nx::game::Body>(local.body) = bodyOf(walker->player);
+        }
+        nx::game::runPushers(game, hulls, kCommandInterval, local.time);
+        if (walker != nullptr) {
+            walker->player.origin = game.get<nx::game::Transform>(local.body)->origin;
+        }
+        local.time += kCommandInterval;
+        local.pending -= kCommandInterval;
     }
-    return nx::lerp(walker.previousEye, eyeOf(walker.player), walker.pending / kCommandInterval);
+    if (walker == nullptr) {
+        return std::nullopt;
+    }
+    return nx::lerp(walker->previousEye, eyeOf(walker->player), local.pending / kCommandInterval);
 }
 
 [[nodiscard]] auto extentOf(nx::platform::PixelSize size) noexcept -> nx::rhi::Extent2d {
@@ -587,15 +627,14 @@ struct Walker {
         return unusable(hulls.error());
     }
     nx::ecs::World game;
-    if (auto registered = nx::game::registerBrushComponents(game); !registered) {
+    if (auto registered = nx::game::registerComponents(game); !registered) {
         return unusable(registered.error());
     }
-    if (auto spawned = nx::game::spawnBrushEntities(game, content.map->entities(),
-                                                    content.map->models().size(), content.entityClasses);
+    if (auto spawned = nx::game::spawnBrushEntities(game, content.map->entities(), content.map->models(),
+                                                    content.entityClasses);
         !spawned) {
         return unusable(spawned.error());
     }
-    const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
     std::vector<nx::render::ModelPlacement> placements; // where the game puts its brush entities
     auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
     if (!window) {
@@ -624,6 +663,8 @@ struct Walker {
 
     nx::render::Camera camera = startCamera(options, *content.map);
     Walker walker = walkerAt(camera.position);
+    LocalGame local{
+        .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, bodyOf(walker.player))};
     bool isFlying = false;
     std::optional<nx::render::BspWorld> world; // made with the first image, which gives the format
     std::optional<nx::rhi::TextureHandle> depth;
@@ -664,8 +705,10 @@ struct Walker {
         const nx::Seconds elapsed = frameClock.restart();
         if (isFlying) {
             fly(camera, keys, elapsed.count());
+            std::ignore = play(game, local, *hulls, nullptr, keys, camera.angles, elapsed);
         } else {
-            camera.position = walk(walker, keys, camera.angles, elapsed, *hulls, entities);
+            camera.position =
+                play(game, local, *hulls, &walker, keys, camera.angles, elapsed).value_or(camera.position);
         }
 
         auto commands = (*device)->beginFrame();

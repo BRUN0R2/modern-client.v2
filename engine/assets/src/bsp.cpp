@@ -894,6 +894,13 @@ auto integerOfValue(std::string_view value) noexcept -> std::optional<int> {
     return error == std::errc{} ? std::optional{number} : std::nullopt;
 }
 
+auto numberOfValue(std::string_view value) noexcept -> std::optional<float> {
+    const std::size_t first = std::min(value.find_first_not_of(' '), value.size());
+    float number = 0.0F;
+    const auto [stop, error] = std::from_chars(value.data() + first, value.data() + value.size(), number);
+    return error == std::errc{} ? std::optional{number} : std::nullopt;
+}
+
 auto vectorOfValue(std::string_view value) noexcept -> std::optional<Vec3> {
     std::array<float, 3> numbers{};
     const char* next = value.data();
@@ -923,6 +930,10 @@ auto BspEntity::find(std::string_view key) const noexcept -> std::optional<std::
 
 auto BspEntity::findInteger(std::string_view key) const noexcept -> std::optional<int> {
     return find(key).and_then(integerOfValue);
+}
+
+auto BspEntity::findNumber(std::string_view key) const noexcept -> std::optional<float> {
+    return find(key).and_then(numberOfValue);
 }
 
 auto BspEntity::findVector(std::string_view key) const noexcept -> std::optional<Vec3> {

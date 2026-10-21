@@ -111,6 +111,7 @@ struct PlayerTrace {
     Vec3 normal{};
     bool startsSolid = false;
     bool isAllSolid = false;
+    std::optional<std::uint32_t> model{}; ///< Of the entity that stopped it; none for the world.
 };
 
 /// Length as the original measures it: each square in single precision, their sum in double.
@@ -190,7 +191,7 @@ public:
                const BrushHulls& world, std::span<const BrushEntity> entities) noexcept
         : m_player{state}, m_command{command}, m_settings{settings}, m_world{world}, m_entities{entities} {}
 
-    [[nodiscard]] auto run() -> MovementState {
+    [[nodiscard]] auto run() -> MovementResult {
         prepare();
         categorizePosition();
         const BrushEntity* const ladder = ladderTouched();
@@ -202,7 +203,7 @@ public:
                 m_player.isJumpHeld = false;
             }
             slide();
-            return m_player;
+            return result();
         }
         if (!isSwimming()) {
             startGravity();
@@ -211,7 +212,7 @@ public:
             continueWaterJump();
             slide();
             checkWater();
-            return m_player;
+            return result();
         }
         if (m_player.waterLevel >= WaterLevel::Waist) {
             if (m_player.waterLevel == WaterLevel::Waist) {
@@ -223,7 +224,7 @@ public:
             readJump(true);
             swim();
             categorizePosition();
-            return m_player;
+            return result();
         }
         readJump(ladder == nullptr);
         if (m_player.isOnGround) {
@@ -244,10 +245,14 @@ public:
         if (m_player.isOnGround) {
             m_player.velocity.z = 0.0F;
         }
-        return m_player;
+        return result();
     }
 
 private:
+    [[nodiscard]] auto result() const -> MovementResult {
+        return MovementResult{.state = m_player, .touchedModels = m_touched};
+    }
+
     /// The box, the speed limit, the command's moves capped by it, the frame time, the view and its
     /// axes, and the timers.
     void prepare() {
@@ -310,7 +315,7 @@ private:
     /// it soonest; all the way when none does.
     [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull) const -> PlayerTrace {
         PlayerTrace nearest{.end = end};
-        const auto meet = [&](std::uint32_t model, Vec3 offset) {
+        const auto meet = [&](std::uint32_t model, Vec3 offset, std::optional<std::uint32_t> entity) {
             const nx::collision::Trace hit = m_world.traceMovement(nx::collision::HullTraceQuery{
                 .model = model, .hull = hull, .offset = offset, .start = start, .end = end});
             if (hit.fraction < nearest.fraction) {
@@ -318,13 +323,14 @@ private:
                                       .end = hit.end,
                                       .normal = hit.plane.normal,
                                       .startsSolid = hit.startsSolid,
-                                      .isAllSolid = hit.isAllSolid};
+                                      .isAllSolid = hit.isAllSolid,
+                                      .model = entity};
             }
         };
-        meet(0, Vec3{});
+        meet(0, Vec3{}, std::nullopt);
         for (const BrushEntity& entity : m_entities) {
             if (entity.role == BrushRole::Solid) {
-                meet(entity.model, entity.origin);
+                meet(entity.model, entity.origin, entity.model);
             }
         }
         return nearest;
@@ -455,15 +461,25 @@ private:
         const Vec3 below = m_player.origin - Vec3{.z = kGroundProbeDepth};
         if (m_player.velocity.z > kLiftOffSpeed) {
             m_player.isOnGround = false;
+            m_player.groundModel = std::nullopt;
             return;
         }
         const PlayerTrace ground = trace(m_player.origin, below);
         m_player.isOnGround = ground.normal.z >= kMinGroundNormalZ;
+        m_player.groundModel = m_player.isOnGround ? ground.model : std::nullopt;
         if (m_player.isOnGround) {
             m_player.waterJumpTime = {};
             if (!isSwimming() && !ground.startsSolid && !ground.isAllSolid) {
                 m_player.origin = ground.end;
             }
+        }
+        touch(ground.model);
+    }
+
+    /// Remembers that the player met the entity of `model`, when there is one, once.
+    void touch(std::optional<std::uint32_t> model) {
+        if (model && !std::ranges::contains(m_touched, *model)) {
+            m_touched.push_back(*model);
         }
     }
 
@@ -806,6 +822,7 @@ private:
             if (hit.fraction == 1.0F) {
                 break;
             }
+            touch(hit.model);
             timeLeft -= timeLeft * hit.fraction;
             if (planeCount >= kMaxClipPlanes) {
                 velocity = {};
@@ -938,7 +955,8 @@ private:
     const MovementSettings& m_settings;
     const BrushHulls& m_world;
     std::span<const BrushEntity> m_entities;
-    Hull m_hull = Hull::Standing; ///< The player's box.
+    std::vector<std::uint32_t> m_touched; ///< The models of the entities met, in order.
+    Hull m_hull = Hull::Standing;         ///< The player's box.
     float m_maxSpeed = 0.0F;
     float m_frameTime = 0.0F; ///< Seconds.
     nx::AngleVectors m_axes{};
@@ -970,7 +988,7 @@ auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,
                       const MovementSettings& settings, const BrushHulls& hulls,
-                      std::span<const BrushEntity> entities) -> MovementState {
+                      std::span<const BrushEntity> entities) -> MovementResult {
     nx::expects(hulls.modelCount() > 0, "simulateMovement: the world is model 0 of its hulls");
     nx::expects(std::ranges::all_of(
                     entities, [&](const BrushEntity& entity) { return entity.model < hulls.modelCount(); }),

@@ -205,6 +205,10 @@ private:
 /// nullopt when the value does not start with one.
 [[nodiscard]] auto integerOfValue(std::string_view value) noexcept -> std::optional<int>;
 
+/// The number at the start of an entity's value, after spaces, as the original's atof reads it;
+/// nullopt when the value does not start with one.
+[[nodiscard]] auto numberOfValue(std::string_view value) noexcept -> std::optional<float>;
+
 /// The three numbers of an entity's vector value ("-512 1024 36"), each after spaces; nullopt for
 /// other text.
 [[nodiscard]] auto vectorOfValue(std::string_view value) noexcept -> std::optional<Vec3>;
@@ -217,6 +221,8 @@ struct BspEntity {
     [[nodiscard]] auto find(std::string_view key) const noexcept -> std::optional<std::string_view>;
     /// The value of `key` read by integerOfValue; nullopt when there is none too.
     [[nodiscard]] auto findInteger(std::string_view key) const noexcept -> std::optional<int>;
+    /// The value of `key` read by numberOfValue; nullopt when there is none too.
+    [[nodiscard]] auto findNumber(std::string_view key) const noexcept -> std::optional<float>;
     /// The value of `key` read by vectorOfValue; nullopt when there is none too.
     [[nodiscard]] auto findVector(std::string_view key) const noexcept -> std::optional<Vec3>;
     /// The brush model the entity is ("model" "*3"), by its index in the map's models; nullopt when

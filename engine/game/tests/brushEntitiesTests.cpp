@@ -36,6 +36,12 @@ using nx::game::Transform;
     return BspEntity{.keyValues = keyValues};
 }
 
+/// `count` brush models, each a box of 8 units about its origin.
+[[nodiscard]] auto models(std::size_t count) -> std::vector<nx::assets::BspModel> {
+    return std::vector(
+        count, nx::assets::BspModel{.bounds = {.min = {-4.0F, -4.0F, -4.0F}, .max = {4.0F, 4.0F, 4.0F}}});
+}
+
 TEST(BrushEntityTest, TheRepositoryDescribesTheBrushClasses) {
     const EntityClasses classes = repositoryClasses();
     const auto find = [&](std::string_view classname) {
@@ -72,7 +78,7 @@ TEST(BrushEntityTest, RefusesBrokenClasses) {
 
 TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     nx::ecs::World world;
-    ASSERT_TRUE(nx::game::registerBrushComponents(world).has_value());
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
     const std::vector entities{
         entity({{"classname", "worldspawn"}}),
         entity({{"classname", "func_wall"}, {"model", "*1"}, {"origin", "8 16 32"}}),
@@ -83,32 +89,31 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
         entity({{"classname", "info_player_start"}, {"origin", "0 0 0"}}),
     };
 
-    const auto spawned = nx::game::spawnBrushEntities(world, entities, 6, repositoryClasses());
+    const auto spawned = nx::game::spawnBrushEntities(world, entities, models(6), repositoryClasses());
     ASSERT_TRUE(spawned.has_value()) << nx::describe(spawned.error());
     EXPECT_EQ(*spawned, 4U);
 
-    std::vector<std::tuple<std::uint32_t, nx::Vec3, BrushSolidity>> made;
+    std::map<std::uint32_t, std::pair<nx::Vec3, BrushSolidity>> made;
     nx::ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
         [&](const BrushModel& model, const Transform& transform, const BrushSolidity& solidity) {
-            made.emplace_back(model.index, transform.origin, solidity);
+            made.emplace(model.index, std::pair{transform.origin, solidity});
         });
     ASSERT_EQ(made.size(), 4U);
-    EXPECT_EQ(std::get<0>(made[0]), 1U);
-    EXPECT_EQ(std::get<1>(made[0]), (nx::Vec3{.x = 8.0F, .y = 16.0F, .z = 32.0F}));
-    EXPECT_EQ(std::get<2>(made[0]).solid, Solid::Bsp);
-    EXPECT_EQ(std::get<2>(made[1]).solid, Solid::Not) << "a passable door";
-    EXPECT_EQ(std::get<2>(made[2]).solid, Solid::Not) << "water: a door with a skin";
-    EXPECT_EQ(std::get<2>(made[2]).contents, -3);
-    EXPECT_EQ(std::get<2>(made[3]).solid, Solid::Not);
-    EXPECT_EQ(std::get<2>(made[3]).contents, -16) << "a ladder whatever its skin";
+    EXPECT_EQ(made.at(1).first, (nx::Vec3{.x = 8.0F, .y = 16.0F, .z = 32.0F}));
+    EXPECT_EQ(made.at(1).second.solid, Solid::Bsp);
+    EXPECT_EQ(made.at(2).second.solid, Solid::Not) << "a passable door";
+    EXPECT_EQ(made.at(3).second.solid, Solid::Not) << "water: a door with a skin";
+    EXPECT_EQ(made.at(3).second.contents, -3);
+    EXPECT_EQ(made.at(4).second.solid, Solid::Not);
+    EXPECT_EQ(made.at(4).second.contents, -16) << "a ladder whatever its skin";
 }
 
 TEST(BrushEntityTest, ABrushModelTheMapLacksIsAnError) {
     nx::ecs::World world;
-    ASSERT_TRUE(nx::game::registerBrushComponents(world).has_value());
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
     const std::vector entities{entity({{"classname", "func_wall"}, {"model", "*9"}})};
 
-    const auto spawned = nx::game::spawnBrushEntities(world, entities, 6, repositoryClasses());
+    const auto spawned = nx::game::spawnBrushEntities(world, entities, models(6), repositoryClasses());
     ASSERT_FALSE(spawned.has_value());
     EXPECT_EQ(spawned.error().code, GameError::UnknownModel);
 }

@@ -452,6 +452,7 @@ TEST(BspTest, ValuesReadAsTheOriginalReadsThem) {
     EXPECT_EQ(door.findVector("origin"), (nx::Vec3{.x = -512.0F, .y = 1024.5F, .z = 36.0F}));
     EXPECT_EQ(door.findInteger("spawnflags"), std::optional{256});
     EXPECT_EQ(door.findInteger("skin"), std::optional{-3}) << "atoi stops at what is not a digit";
+    EXPECT_EQ(door.findNumber("origin"), std::optional{-512.0F}) << "atof reads the first number";
     EXPECT_FALSE(door.findVector("angles").has_value()) << "two numbers";
     EXPECT_FALSE(door.findInteger("classname").has_value());
     EXPECT_FALSE(door.findInteger("wait").has_value());

@@ -70,7 +70,7 @@ code** on the server (authoritative) and on the client (prediction).
                                     const UserCommand& command,
                                     const MovementSettings& settings,
                                     const nx::collision::BrushHulls& hulls,
-                                    std::span<const BrushEntity> entities) -> MovementState;
+                                    std::span<const BrushEntity> entities) -> MovementResult;
 ```
 
 - Pure function: the result depends only on the arguments. No access to global state,
@@ -99,8 +99,12 @@ code** on the server (authoritative) and on the client (prediction).
   swimming, jumping out) and ladders (climbed by the movement buttons along their face, left by
   a jump or by backing off them on the floor), among the world and brush entities at rest.
   `nxview` walks through the maps with it, among the brush entities `nx.game` makes as the game
-  does when the map starts, listed for movement by `cs::brushEntitiesOf`. Noclip, observers, unsticking, boxes (players, hostages, pushables), moving and
-  turned entities, conveyors, pushes and currents come next ([TODO](../TODO.md)).
+  does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
+  player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
+  list), which the game touches, a door opening; the player keeps the entity it stands on
+  (`groundModel`), which a pusher carries. Noclip, observers, unsticking, boxes (players,
+  hostages, pushables), turned entities, conveyors, pushes and currents come next
+  ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -218,6 +222,19 @@ if (hit.entity) {
 | `NOCLIP` | Spectator, debugging | `Noclip` |
 
 Each type is its own ECS system, with its execution order documented in the schedule.
+
+**Today** (`nx.game:movers`): `PUSH`, for sliding doors (`func_door`, `func_water`). A door is a
+`SlidingDoor` (where it is closed and open, its speed, its wait, its state) moved by a `Pusher` (its
+velocity, its own clock and when it next acts by it), as the original's `CBaseDoor` and
+`CBaseToggle::LinearMove`: a player's touch opens one nobody else opens (no `targetname` or
+`master`, not use-only), it stays open its `wait` and closes, or stays open for good (a negative
+`wait`), or until it is touched again (toggle). `runPushers` advances each pusher a tick as the
+original's `SV_Physics_Pusher` and `SV_PushMove` do: only while it has something to do by its
+clock; pushing each `Body` it runs into, or that stands on it, along with it through the world and
+the other solid brush entities by the server's traces; when one cannot go, everything goes back and
+the door goes back the way it came (`CBaseDoor::Blocked`, no sooner than 0.25 s after the last
+time). `nxview` ticks the game at 100 Hz: the player's command, the doors it touched, then the
+pushers, the player's body among the bodies.
 
 ### 5.2 Think, touch and triggers
 

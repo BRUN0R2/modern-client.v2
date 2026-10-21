@@ -5,7 +5,10 @@
 /// triggers, movers, spawn (docs/01-architecture.md, section 1.1; docs/03-ecs.md, section 11).
 ///
 /// Today: the map's brush entities, made in an ECS world when the map starts, each with its brush
-/// model, its place and how solid it is, by the classes data/cstrike/entities.toml describes.
+/// model, its place and how solid it is, by the classes data/cstrike/entities.toml describes; and
+/// sliding doors, which a player's touch opens and the engine's pusher physics moves.
 export module nx.game;
 
+export import :components;
 export import :brushEntities;
+export import :movers;
