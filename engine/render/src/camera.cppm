@@ -36,4 +36,9 @@ struct Camera {
 /// Map space to clip space.
 [[nodiscard]] auto viewProjectionMatrix(const Camera& camera, float aspect) noexcept -> Mat4;
 
+/// The left, right, bottom and top planes of what `camera` sees on a target of `aspect`, their fronts
+/// inward: what lies wholly behind one of them is out of view. The near plane, a few units from the
+/// eye, and the far one, at infinity, cull nothing worth a test.
+[[nodiscard]] auto frustumPlanes(const Camera& camera, float aspect) noexcept -> std::array<Plane, 4>;
+
 } // namespace nx::render

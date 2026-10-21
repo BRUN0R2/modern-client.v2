@@ -394,8 +394,10 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     if (!writeBmp(*options.screenshot, kScreenshotExtent, (*device)->mappedBytes(*readback))) {
         return unusable(std::format("cannot write {}", nx::platform::toUtf8(*options.screenshot)));
     }
-    std::println("nxview: {} from {} at {}x{}", nx::platform::toUtf8(*options.screenshot), options.map,
-                 kScreenshotExtent.width, kScreenshotExtent.height);
+    const nx::render::FrameStats& drawn = world->lastFrame();
+    std::println("nxview: {} from {} at {}x{}: {} of {} faces, {} triangles, in {} leaves",
+                 nx::platform::toUtf8(*options.screenshot), options.map, kScreenshotExtent.width,
+                 kScreenshotExtent.height, drawn.faces, world->stats().faces, drawn.triangles, drawn.leaves);
     return (*device)->validationErrors() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

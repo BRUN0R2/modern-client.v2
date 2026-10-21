@@ -5,9 +5,12 @@
 /// of its brush entities in one vertex and one index buffer, drawn in batches by texture, and the
 /// lightmaps packed into one atlas.
 ///
+/// Each frame draws the faces that face the camera in the leaves its leaf may see (the potentially
+/// visible set) that are in view, and the brush entities in view, as the original culls them.
+///
 /// Today: lightstyle 0 of each face, opaque and masked (`{`) textures, from the map or from its
-/// WADs, in the original's picture (nx.render:gamma), and the sky. Visibility (PVS and frustum),
-/// the four lightstyles, water, animated textures and render modes come next (TODO.md, Rendering).
+/// WADs, in the original's picture (nx.render:gamma), and the sky. The four lightstyles, water,
+/// animated textures and render modes come next (TODO.md, Rendering).
 export module nx.render:world;
 
 import std;
@@ -34,6 +37,7 @@ inline constexpr std::array<std::string_view, 6> kSkySuffixes{"rt", "bk", "lf", 
 inline constexpr std::string_view kDefaultSkyName = "desert";
 
 struct BspWorldDesc {
+    /// Read every frame for its tree and visibility: it must outlive the world.
     const assets::BspView& map;
     /// The WADs of the map's `wad` key, in its order: a texture without pixels in the map is the
     /// first of them that has its name.
@@ -57,6 +61,13 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
+/// What the last draw drew, for r_speeds.
+struct FrameStats {
+    std::size_t leaves = 0; ///< Potentially visible from the camera's leaf, and in view.
+    std::size_t faces = 0;
+    std::size_t triangles = 0;
+};
+
 class BspWorld {
 public:
     /// Builds the world of `desc.map` and records its uploads in `commands`: draw it from the same
@@ -71,12 +82,13 @@ public:
     /// Destroys its resources, which the device keeps until the GPU is done with them.
     ~BspWorld();
 
-    /// Draws every face as `camera` sees it on a target of `aspect` (width over height), inside a
-    /// render pass with a color target of desc.colorFormat and a Depth32Float depth target cleared
-    /// to 0 (reversed depth).
+    /// Draws what `camera` sees on a target of `aspect` (width over height), inside a render pass
+    /// with a color target of desc.colorFormat and a Depth32Float depth target cleared to 0
+    /// (reversed depth).
     void draw(rhi::CommandList& commands, const Camera& camera, float aspect);
 
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
+    [[nodiscard]] inline auto lastFrame() const noexcept -> const FrameStats& { return m_lastFrame; }
 
 private:
     /// A range of the index buffer.
@@ -91,18 +103,46 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// What one frame in flight writes its uniform to.
+    /// What one frame in flight writes its uniform and its indices to.
     struct FrameSlot {
         rhi::BufferHandle buffer{};
         rhi::BindGroupHandle group{};
+        rhi::BufferHandle indices{};
     };
 
-    explicit BspWorld(rhi::Device& device) noexcept : m_device{&device} {}
+    /// A face of the map: its triangle fan in the vertex buffer, and where its triangles go.
+    struct FaceDraw {
+        std::uint32_t firstVertex = 0;
+        std::uint32_t vertexCount = 0; ///< 0: never drawn (triggers and tool textures).
+        std::uint32_t bucket = 0;      ///< Its texture's in m_textureGroups, or kSkyBucket.
+        Plane plane{};
+        bool isBackSide = false; ///< Drawn from behind its plane.
+    };
+
+    /// A brush entity's model: its faces, and its bounds where its entity puts it.
+    struct ModelDraw {
+        std::uint32_t firstFace = 0;
+        std::uint32_t faceCount = 0;
+        Aabb bounds{};
+        Vec3 origin{};
+    };
+
+    static constexpr std::uint32_t kSkyBucket = std::numeric_limits<std::uint32_t>::max();
+
+    explicit BspWorld(rhi::Device& device, const assets::BspView& map) noexcept
+        : m_device{&device}, m_map{&map} {}
     void release() noexcept;
+    /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices.
+    void gather(const Camera& camera, float aspect);
+    /// Adds the triangles of face `face` when it faces `eye` (in its model's space): a face of the
+    /// world from the side of its plane the eye is on, the plane itself in front, as the original's
+    /// R_RecursiveWorldNode; a brush entity's from at least BACKFACE_EPSILON past it, as its
+    /// R_DrawBrushModel.
+    void addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity);
 
     rhi::Device* m_device;
+    const assets::BspView* m_map;
     rhi::BufferHandle m_vertices;
-    rhi::BufferHandle m_indices;
     std::vector<rhi::TextureHandle> m_textures; ///< Every texture, the atlas and the sky's included.
     rhi::SamplerHandle m_textureSampler;
     rhi::SamplerHandle m_lightmapSampler;
@@ -112,13 +152,22 @@ private:
     rhi::BindGroupLayoutHandle m_textureLayout;
     rhi::RenderPipelineHandle m_pipeline;
     rhi::RenderPipelineHandle m_skyPipeline;
-    std::vector<rhi::BindGroupHandle> m_textureGroups;
+    std::vector<rhi::BindGroupHandle> m_textureGroups; ///< One per bucket of faces.
     std::vector<FrameSlot> m_frameSlots;
-    std::vector<Batch> m_batches;
-    IndexRange m_skyFaces;
-    std::uint64_t m_drawCount = 0;
+    std::vector<FaceDraw> m_faces; ///< Every face of the map, by its index.
+    std::vector<ModelDraw> m_models;
     float m_lightScale = 0.0F; ///< lightTableScale of the settings it was made with.
     WorldStats m_stats;
+
+    // What each frame gathers, kept to reuse the memory.
+    std::uint64_t m_drawCount = 0;
+    std::vector<std::uint64_t> m_faceGathered; ///< The draw each face was last looked at in.
+    std::optional<assets::LeafIndex> m_visibleFrom;
+    std::vector<assets::LeafIndex> m_visibleLeaves; ///< Those of m_visibleFrom.
+    std::vector<std::vector<std::uint32_t>> m_bucketIndices;
+    std::vector<std::uint32_t> m_skyIndices;
+    std::vector<Batch> m_batches;
+    FrameStats m_lastFrame;
 };
 
 } // namespace nx::render

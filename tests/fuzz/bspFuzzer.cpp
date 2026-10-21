@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // BSP v30 maps (nx.assets:bsp). A map that parses is walked as a renderer and a collision trace
-// would, without checks: parse() promises that every index it returns is in range and that every
-// tree ends in leaves, and AddressSanitizer holds it to that.
+// would, without checks: parse() promises that every index it returns is in range, that every tree
+// ends in leaves and that every leaf's visible set decompresses, and AddressSanitizer holds it to that.
 
 import std;
 import nx.math;
@@ -96,6 +96,11 @@ void nx::test::fuzz(std::span<const std::byte> input) {
     }
     for (const nx::assets::BspEntity& entity : map->entities()) {
         sum += static_cast<float>(entity.find("classname").has_value());
+    }
+    // The leaf of the middle of each leaf's bounds, and the set it sees, as a camera there would.
+    for (const nx::assets::BspLeaf& leaf : map->leaves()) {
+        const nx::assets::LeafSet visible = map->potentiallyVisible(map->leafAt(leaf.bounds.center()));
+        sum += static_cast<float>(visible.contains(nx::assets::LeafIndex{.value = 1}));
     }
     std::ignore = sum; // the reads are the test
 }
