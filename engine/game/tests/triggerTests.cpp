@@ -73,7 +73,10 @@ public:
                                                   .behavior = BrushBehavior::Trigger},
                              nx::game::BrushClass{.classname = "trigger_once",
                                                   .solid = nx::game::Solid::Not,
-                                                  .behavior = BrushBehavior::TriggerOnce}}};
+                                                  .behavior = BrushBehavior::TriggerOnce},
+                             nx::game::BrushClass{.classname = "func_wall",
+                                                  .solid = nx::game::Solid::Bsp,
+                                                  .behavior = BrushBehavior::Wall}}};
         EXPECT_TRUE(nx::game::spawnBrushEntities(m_world, made, models, classes).has_value());
         m_body = m_world.spawn(
             Transform{.origin = body},
@@ -104,6 +107,18 @@ public:
             }
         });
         return state;
+    }
+
+    /// Whether the entity named `name` shows its alternate textures; none when there is none.
+    [[nodiscard]] auto showsAlternateTextures(std::string_view name) -> std::optional<bool> {
+        std::optional<bool> isShown;
+        nx::ecs::Query<const Named&, const nx::game::AlternateTextures&>{m_world}.forEach(
+            [&](const Named& named, const nx::game::AlternateTextures& textures) {
+                if (named.name == name) {
+                    isShown = textures.isShown;
+                }
+            });
+        return isShown;
     }
 
     /// How many entities have a `Component`.
@@ -215,6 +230,20 @@ TEST(TriggerTest, AKillTargetIsRemovedBeforeTheTargetFires) {
     game.touchAt(kInside);
     EXPECT_EQ(game.doorState("wall"), std::nullopt);
     EXPECT_EQ(game.doorState("gate"), DoorState::Opening);
+}
+
+TEST(TriggerTest, AFuncWallFiredShowsItsOtherTextures) {
+    TriggerWorld game{{{{"classname", "func_wall"}, {"model", "*2"}, {"targetname", "lights"}},
+                       {{"classname", "func_wall"}, {"model", "*1"}, {"targetname", "lit"}, {"frame", "1"}},
+                       trigger("trigger_multiple", {{"target", "lights"}})}};
+    EXPECT_EQ(game.showsAlternateTextures("lights"), false);
+    EXPECT_EQ(game.showsAlternateTextures("lit"), true) << "the map's frame";
+
+    game.touchAt(kInside);
+    EXPECT_EQ(game.showsAlternateTextures("lights"), true);
+    game.run(25); // past the trigger's wait of 0.2 s
+    game.touchAt(kInside);
+    EXPECT_EQ(game.showsAlternateTextures("lights"), false) << "and back, fired again";
 }
 
 TEST(TriggerTest, ADoorFiresItsTargetsWhenItArrives) {

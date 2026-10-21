@@ -30,6 +30,7 @@ enum class BrushBehavior : std::uint8_t {
     RotatingDoor, ///< Turn open when a player touches them, away from it, and back (CRotDoor).
     Button,       ///< Go in when a player uses them, or touches them when flagged so, and back out
                   ///< (CBaseButton).
+    Wall,         ///< Show their other textures when used (CFuncWall).
     Trigger,      ///< Fire their targets when a player walks into them, again after their "wait"
                   ///< (CTriggerMultiple).
     TriggerOnce,  ///< The same, once (CTriggerOnce).
@@ -63,9 +64,9 @@ struct EntityClasses {
 /// Makes in `world`, in their order, the brush entities of `entities`, a map's whose brush models are
 /// `models`, that are of a class of `classes`, with their BrushModel, Transform and BrushSolidity,
 /// what their class does (a Door, its Pusher, its Waves and its Targets; a Button, its Pusher and its
-/// Targets; a Trigger and its Targets),
-/// and their name when they have one (Named); the others are left to what makes them. Returns how
-/// many it made. Errors: UnknownModel.
+/// Targets; a Wall; a Trigger and its Targets), the textures they show (AlternateTextures, by their
+/// "frame"), and their name when they have one (Named); the others are left to what makes them.
+/// Returns how many it made. Errors: UnknownModel.
 [[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
                                       std::span<const assets::BspModel> models, const EntityClasses& classes)
     -> Result<std::size_t, GameError>;

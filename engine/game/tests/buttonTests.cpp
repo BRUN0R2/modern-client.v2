@@ -104,6 +104,9 @@ public:
     }
 
     [[nodiscard]] auto button() -> const Button& { return *m_world.get<Button>(m_button); }
+    [[nodiscard]] auto showsAlternateTextures() -> bool {
+        return m_world.get<nx::game::AlternateTextures>(m_button)->isShown;
+    }
     [[nodiscard]] auto buttonAt() -> Vec3 { return m_world.get<Transform>(m_button)->origin; }
     [[nodiscard]] auto buttonEntity() const -> nx::ecs::Entity { return m_button; }
     [[nodiscard]] auto doorEntity() const -> nx::ecs::Entity { return m_door; }
@@ -123,15 +126,18 @@ TEST(ButtonTest, AUsedButtonGoesInFiresItsTargetsAndComesBackOut) {
 
     game.use();
     EXPECT_EQ(game.button().state, ButtonState::GoingIn);
+    EXPECT_FALSE(game.showsAlternateTextures());
     game.run(kButtonTravelTicks + 1);
     EXPECT_EQ(game.button().state, ButtonState::In);
     EXPECT_EQ(game.buttonAt(), (Vec3{.x = 4.0F}));
     EXPECT_EQ(game.door().state, DoorState::Opening) << "its target fired once in";
+    EXPECT_TRUE(game.showsAlternateTextures()) << "in, its other textures shown";
 
     game.use();
     EXPECT_EQ(game.button().state, ButtonState::In) << "in, and no toggle: a use does nothing";
     game.run(100);
     EXPECT_EQ(game.button().state, ButtonState::GoingOut) << "a second in";
+    EXPECT_FALSE(game.showsAlternateTextures()) << "coming out, its usual textures again";
     game.run(kButtonTravelTicks + 1);
     EXPECT_EQ(game.button().state, ButtonState::Out);
     EXPECT_EQ(game.buttonAt(), Vec3{});

@@ -250,7 +250,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Animated textures (`+0`..`+9`, `+a`..`+j`: every face of a sequence on the same frame, ten a second)
 - [x] Water (turbulent faces: cut along the 64-unit grid and warped at each corner as the original warps them, unlit)
 - [x] The waves of `func_water` (`nx::game::Waves`, an eighth of its `WaveHeight`; `ModelPlacement::waveHeight` raises the corners of its turbulent faces as `EmitWaterPolys` does)
-- [ ] The alternate animations of brush entities (`+a`..`+j` when their frame is not 0)
+- [x] The alternate animations of brush entities (`+a`..`+j` for `+0`..`+9`, and back, when their frame is not 0: a button in, a `func_wall` used)
 - [x] Brush entities with render modes (`rendermode`, `renderamt`, `rendercolor`: solid, color, texture, glow, additive, blended back to front as the original sorts them)
 - [x] Brush entities drawn where the game puts them each frame (`WorldFrame::placements`)
 - [x] Brush entities turned by the game (`ModelPlacement::angles`), culled as the original culls them

@@ -95,6 +95,16 @@ struct Waves {
     float height = 0.0F;
 };
 
+/// Which of its textures' sequences a brush entity shows: the original's pev->frame, which shows each
+/// face's alternate sequence (+a... for +0..., and back) when it is not 0 (R_TextureAnimation). The
+/// map's "frame" sets it; a button in, and a func_wall used, change it.
+struct AlternateTextures {
+    bool isShown = false;
+};
+
+/// A func_wall: used, it shows its other textures (CFuncWall::Use).
+struct Wall {};
+
 /// A body a pusher moves out of its way, and carries while it stands on it: a player's box (the
 /// original's MOVETYPE_WALK).
 struct Body {

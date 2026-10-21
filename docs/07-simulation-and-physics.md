@@ -271,9 +271,12 @@ move". Used (`ButtonUse`), one that is out and not moving goes in; one that is i
 it is a toggle (spawnflag 32), firing nothing then, as the original. One flagged "touch only"
 (spawnflag 256) ignores use and is pressed by a player's touch instead (`ButtonTouch`), untouchable
 until its move is done; touched in, a toggle fires its targets and comes back out. In, a button
-fires its targets (`TriggerAndWait`) and comes back out after its `wait` (1 s when it gives none), or
-stays in until used again (a toggle), or for good (a `wait` of -1); back out, a toggle fires its
-targets again (`ButtonBackHome`). The moves of doors and buttons are those of the original's
+shows its alternate textures (its frame 1, `nx::game::AlternateTextures`) and fires its targets
+(`TriggerAndWait`) and comes back out after its `wait` (1 s when it gives none), or
+stays in until used again (a toggle), or for good (a `wait` of -1); on its way back out it shows
+its usual textures again, and back out, a toggle fires its targets again (`ButtonBackHome`). A
+`func_wall` used shows its other textures (`CFuncWall::Use`, every use a toggle today); a brush
+entity's "frame" sets which it shows first. The moves of doors and buttons are those of the original's
 `CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `nxview` ticks the game at 100 Hz:
 the player's use (E), the player's command, the doors and buttons it touched, the triggers it is in,
 what is due, then the pushers, the player's body among the bodies, then the clock.

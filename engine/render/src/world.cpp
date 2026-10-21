@@ -178,6 +178,27 @@ constexpr std::size_t kSequenceStart = 2;
     return frames | std::views::values | std::ranges::to<std::vector>();
 }
 
+/// The textures the faces of `texture` show instead when their brush entity's frame is not 0: the
+/// frames of its sequence's alternate (+a... for +0..., and back), as framesOf gives them; none when it
+/// is not an animation or has no alternate (R_TextureAnimation's alternate_anims).
+[[nodiscard]] auto alternateFramesOf(std::span<const std::optional<assets::MipTexture>> textures,
+                                     std::size_t texture) -> std::vector<std::size_t> {
+    const std::optional<AnimationFrame> self =
+        textures[texture] ? animationFrameOf(textures[texture]->name) : std::nullopt;
+    if (!self) {
+        return {};
+    }
+    for (std::size_t index = 0; index < textures.size(); ++index) {
+        const std::optional<AnimationFrame> frame =
+            textures[index] ? animationFrameOf(textures[index]->name) : std::nullopt;
+        if (frame && frame->isAlternate != self->isAlternate &&
+            equalsIgnoringCase(frame->sequence, self->sequence)) {
+            return framesOf(textures, index);
+        }
+    }
+    return {};
+}
+
 /// The RGBA texels of the mip levels of `texture`, level after level.
 struct TexelLevels {
     std::vector<std::byte> bytes;
@@ -529,8 +550,8 @@ struct Geometry {
     std::vector<WorldVertex> vertices;
     std::vector<std::uint32_t> faceIndices; ///< Each face's triangles, in vertices.
     std::vector<FaceDraw> faces;            ///< By the index of the face in the map.
-    /// The textures each bucket of faces shows in turn: one, unless animated.
-    std::vector<std::vector<rhi::TextureHandle>> bucketTextures;
+    /// The textures each bucket of faces shows.
+    std::vector<BucketTextures> bucketTextures;
 };
 
 /// The triangles of `faces`, each a fan, a turbulent face cut along the grid first; and the bucket of
@@ -580,10 +601,14 @@ struct Geometry {
             std::optional<std::uint32_t>& slot = bucketOfTexture[entry.texture];
             if (!slot) {
                 slot = narrow<std::uint32_t>(geometry.bucketTextures.size());
-                geometry.bucketTextures.push_back(
-                    framesOf(map.textures(), entry.texture) |
-                    std::views::transform([uses](std::size_t frame) { return uses[frame].texture; }) |
-                    std::ranges::to<std::vector>());
+                const auto texturesOf = [uses](const std::vector<std::size_t>& frames) {
+                    return frames |
+                           std::views::transform([uses](std::size_t frame) { return uses[frame].texture; }) |
+                           std::ranges::to<std::vector>();
+                };
+                geometry.bucketTextures.push_back(BucketTextures{
+                    .frames = texturesOf(framesOf(map.textures(), entry.texture)),
+                    .alternates = texturesOf(alternateFramesOf(map.textures(), entry.texture))});
             }
             bucket = *slot;
         }
@@ -985,7 +1010,7 @@ void BspWorld::prepare(const WorldFrame& view) {
     m_batches.clear();
     for (std::size_t bucket = 0; bucket < m_bucketIndices.size(); ++bucket) {
         if (!m_bucketIndices[bucket].empty()) {
-            const std::vector<rhi::OwnedBindGroup>& frames = m_bucketFrames[bucket];
+            const std::vector<rhi::OwnedBindGroup>& frames = m_bucketFrames[bucket].frames;
             m_batches.push_back(Batch{.indices = write(m_bucketIndices[bucket]),
                                       .textures = frames[m_animationStep % frames.size()].get()});
         }
@@ -1042,10 +1067,12 @@ void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) 
     commands.setPipeline(pipelineOf(mode));
     commands.setBindGroup(kFrameGroup, slot.group.get());
     commands.setBindGroup(kEntityGroup, slot.entityGroups[std::size_t{entity.model} + 1].get());
+    const bool showsAlternates = m_placements[entity.model].showsAlternateTextures;
     for (std::uint32_t face = entity.firstFace; face < entity.firstFace + entity.faceCount; ++face) {
         if (mode != RenderMode::TransColor) {
+            const BucketFrames& bucket = m_bucketFrames[m_faces[m_entityFaces[face]].bucket];
             const std::vector<rhi::OwnedBindGroup>& frames =
-                m_bucketFrames[m_faces[m_entityFaces[face]].bucket];
+                showsAlternates && !bucket.alternates.empty() ? bucket.alternates : bucket.frames;
             commands.setBindGroup(kTextureGroup, frames[m_animationStep % frames.size()].get());
         }
         const IndexRange& range = m_entityRanges[face];
@@ -1242,10 +1269,10 @@ auto BspWorld::createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle
     return {};
 }
 
-auto BspWorld::createBucketGroups(std::span<const std::vector<rhi::TextureHandle>> bucketTextures)
+auto BspWorld::createBucketGroups(std::span<const BucketTextures> bucketTextures)
     -> Result<void, rhi::RhiError> {
-    for (const std::vector<rhi::TextureHandle>& textures : bucketTextures) {
-        std::vector<rhi::OwnedBindGroup>& groups = m_bucketFrames.emplace_back();
+    const auto groupsOf = [this](std::span<const rhi::TextureHandle> textures,
+                                 std::vector<rhi::OwnedBindGroup>& groups) -> Result<void, rhi::RhiError> {
         for (const rhi::TextureHandle texture : textures) {
             const std::array bindings{
                 rhi::Binding{.binding = kAlbedoBinding, .resource = texture},
@@ -1256,6 +1283,16 @@ auto BspWorld::createBucketGroups(std::span<const std::vector<rhi::TextureHandle
                 return std::unexpected{std::move(group.error())};
             }
             groups.push_back(std::move(*group));
+        }
+        return {};
+    };
+    for (const BucketTextures& textures : bucketTextures) {
+        BucketFrames& groups = m_bucketFrames.emplace_back();
+        if (auto made = groupsOf(textures.frames, groups.frames).and_then([&] {
+                return groupsOf(textures.alternates, groups.alternates);
+            });
+            !made) {
+            return made;
         }
     }
     return {};

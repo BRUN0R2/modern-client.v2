@@ -11,8 +11,8 @@
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
-/// the brush entities' render modes, water and its waves, and brush entities moved and turned by the
-/// game.
+/// the brush entities' render modes and alternate textures, water and its waves, and brush entities
+/// moved and turned by the game.
 export module nx.render:world;
 
 import std;
@@ -53,6 +53,19 @@ struct ModelDraw {
     Vec4 color{}; ///< Its `rendercolor`, and its `renderamt` in w, from 0 to 1.
     RenderMode mode = RenderMode::Normal;
     bool isDrawn = true; ///< False for a mode other than Normal at a `renderamt` of 0.
+};
+
+/// The textures of a bucket of faces: each it shows in turn, one unless animated; and those the faces
+/// of a brush entity whose frame is not 0 show instead, its alternate sequence, none without one.
+struct BucketTextures {
+    std::vector<rhi::TextureHandle> frames{};
+    std::vector<rhi::TextureHandle> alternates{};
+};
+
+/// A bind group for each of a bucket's BucketTextures.
+struct BucketFrames {
+    std::vector<rhi::OwnedBindGroup> frames{};
+    std::vector<rhi::OwnedBindGroup> alternates{};
 };
 
 /// What one frame in flight writes its uniform, its indices and its brush models' uniforms to.
@@ -106,8 +119,8 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
-/// Where the game puts brush model `model` (not the world) of the map, how it turns it about there, and
-/// how high the waves of its turbulent faces rise.
+/// Where the game puts brush model `model` (not the world) of the map, how it turns it about there, how
+/// high the waves of its turbulent faces rise, and which of its textures' sequences it shows.
 struct ModelPlacement {
     assets::ModelIndex model{};
     Vec3 origin{};
@@ -115,6 +128,9 @@ struct ModelPlacement {
     /// The entity's scale (func_water's an eighth of its "WaveHeight"): its turbulent faces rise and
     /// fall by up to about 29 times it, as the original's EmitWaterPolys raises them; 0 for none.
     float waveHeight = 0.0F;
+    /// Its frame is not 0: each of its faces shows its texture's alternate sequence (+a... for +0...,
+    /// and back) when there is one (R_TextureAnimation).
+    bool showsAlternateTextures = false;
 };
 
 /// What a draw shows.
@@ -224,7 +240,7 @@ private:
     [[nodiscard]] auto createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle lightTable,
                                         rhi::TextureHandle sky) -> Result<void, rhi::RhiError>;
     /// A bind group for each texture each bucket of `bucketTextures` shows.
-    [[nodiscard]] auto createBucketGroups(std::span<const std::vector<rhi::TextureHandle>> bucketTextures)
+    [[nodiscard]] auto createBucketGroups(std::span<const BucketTextures> bucketTextures)
         -> Result<void, rhi::RhiError>;
 
     rhi::Device* m_device;
@@ -243,8 +259,9 @@ private:
     rhi::OwnedRenderPipeline m_texturePipeline;  ///< TransTexture and Glow.
     rhi::OwnedRenderPipeline m_colorPipeline;    ///< TransColor.
     rhi::OwnedRenderPipeline m_additivePipeline; ///< TransAdd.
-    /// For each bucket of faces, a bind group for each texture it shows in turn: one, unless animated.
-    std::vector<std::vector<rhi::OwnedBindGroup>> m_bucketFrames;
+    /// For each bucket of faces, a bind group for each texture it shows in turn, and for each of its
+    /// alternate sequence.
+    std::vector<BucketFrames> m_bucketFrames;
     std::vector<FrameSlot> m_frameSlots;
     std::vector<FaceDraw> m_faces;            ///< Every face of the map, by its index.
     std::vector<std::uint32_t> m_faceIndices; ///< The triangles of every face, in the vertex buffer.
