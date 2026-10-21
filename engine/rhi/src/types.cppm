@@ -24,6 +24,10 @@ enum class RhiError : std::uint8_t {
     DriverRefused,     ///< The driver refused an operation for another reason; the detail has its result.
 };
 
+/// The most frames a device records while the GPU runs the ones before (r_frames_in_flight), on
+/// every backend: what a ring of per-frame resources needs.
+inline constexpr std::uint32_t kMaxFramesInFlight = 3;
+
 /// A size in texels.
 struct Extent2d {
     std::uint32_t width = 0;

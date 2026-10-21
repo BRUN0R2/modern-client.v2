@@ -236,18 +236,22 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] RHI conformance tests (today: offscreen draws read back, on lavapipe in CI)
 
 ### Rendering
-- [ ] View and projection matrices in `nx.math`, with the renderer's *clip space* and depth conventions ([05](docs/05-rendering.md))
+- [x] View and projection matrices with the renderer's *clip space* and depth conventions (`nx.render:camera`: reversed infinite depth, `fov` as the original's 4:3 angle, Hor+) ([05](docs/05-rendering.md))
 - [ ] Render graph (barriers, aliasing, pass culling, parallel recording)
-- [ ] BSP world: PVS, frustum culling, batching by texture and lightmap
-- [ ] Lightmap atlas and lightstyles combined in the shader
-- [ ] Sky, water, animated textures, masked transparency
-- [ ] Brush entities with transforms and render modes
+- [x] BSP world (`nx.render:world`): every face of the world and of the brush entities in one vertex and index buffer, batched by texture; textures of the map and of its WADs with their mips; triggers and tool textures not drawn
+- [ ] BSP world: PVS and frustum culling
+- [x] Lightmap atlas (lightstyle 0 of each face, extents computed as the compilers compute them)
+- [ ] Lightstyles combined in the shader
+- [x] Masked transparency (`{` textures)
+- [ ] Sky, water, animated textures
+- [ ] Brush entities with render modes and moving transforms (today: placed at their `origin`)
 - [ ] Emulation of gamma, brightness, texgamma and lightgamma
 - [ ] Studio models: animation evaluation on the CPU in jobs
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
 - [ ] Optional compute skinning
 - [ ] Model instancing
-- [ ] Map and model viewer with a free camera (`nxview`: the window and the frames today)
+- [x] Map viewer with a free camera (`nxview --map`), and a frame of a map to a file without a window (`--screenshot`)
+- [ ] Model viewer
 - [ ] Reference images in CI (lavapipe)
 - [ ] All official maps rendering without errors
 

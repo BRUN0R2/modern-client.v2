@@ -66,7 +66,7 @@ flowchart TB
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes | core, math, jobs |
-| `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning | rhi, ecs, assets, jobs |
+| `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera and the BSP world | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts | render, assets, platform, console |

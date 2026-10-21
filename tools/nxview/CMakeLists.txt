@@ -6,6 +6,12 @@ nxAddProgram(nxview
         src/main.cpp
     DEPENDS
         nx::core
+        nx::math
         nx::platform
+        nx::assets
         nx::rhi
-        nx::rhiVulkan)
+        nx::rhiVulkan
+        nx::render)
+
+# The world shader, in bin/shaders/.
+add_dependencies(nxview nxShaders)
