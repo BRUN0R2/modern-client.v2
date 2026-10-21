@@ -12,7 +12,8 @@ nxAddModuleLibrary(toolNxcheck
         nx::core
         nx::jobs
         nx::assets
-        nx::collision)
+        nx::collision
+        cs::shared)
 
 nxAddProgram(nxcheck
     SOURCES
