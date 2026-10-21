@@ -93,6 +93,8 @@ struct MovementState {
     /// Its own speed limit, that of the weapon it holds; zero leaves the server's (sv_maxspeed).
     nx::UnitsPerSecond maxSpeed{};
     bool isOnGround = false;
+    /// The brush model of the entity it stands on; none on the world or in the air.
+    std::optional<std::uint32_t> groundModel{};
     WaterLevel waterLevel = WaterLevel::Dry;
     nx::collision::Contents waterType = nx::collision::Contents::Empty; ///< What it is in, when wet.
     /// Left of the slowdown a jump costs: the next jump is lower and walking slower while it lasts.
@@ -125,11 +127,18 @@ struct BrushEntity {
 /// (-16) or a volume of nx::collision::Contents.
 [[nodiscard]] auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity>;
 
+/// What a command did: the player after it, and the brush entities it ran into or stood on, by their
+/// models, in the order it met them, each once (the original's touch list): the game has them touched.
+struct MovementResult {
+    MovementState state{};
+    std::vector<std::uint32_t> touchedModels{};
+};
+
 /// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `hulls`, among
 /// `entities`, brush models of the same hulls; where two stop the player at once, the first does, the
 /// world before them all. Pure: the result depends on the arguments alone.
 [[nodiscard]] auto simulateMovement(const MovementState& state, const UserCommand& command,
                                     const MovementSettings& settings, const nx::collision::BrushHulls& hulls,
-                                    std::span<const BrushEntity> entities = {}) -> MovementState;
+                                    std::span<const BrushEntity> entities = {}) -> MovementResult;
 
 } // namespace cs

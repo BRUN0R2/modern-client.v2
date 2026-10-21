@@ -3,7 +3,7 @@
 
 /// The brush entities of a map, as the game makes them when the map starts (docs/03-ecs.md,
 /// section 11): an entity of the ECS world for each one whose class data/cstrike/entities.toml
-/// describes, with its brush model, where it is, and how solid it is.
+/// describes, with its brush model, where it is, how solid it is, and what moves it.
 export module nx.game:brushEntities;
 
 import std;
@@ -13,6 +13,7 @@ import nx.meta;
 import nx.data;
 import nx.ecs;
 import nx.assets;
+import :components;
 
 export namespace nx::game {
 
@@ -23,10 +24,9 @@ enum class GameError : std::uint8_t {
     UnknownModel,  ///< An entity is a brush model the map does not have; the detail names it.
 };
 
-/// How solid an entity is, as the original's pev->solid.
-enum class Solid : std::uint8_t {
-    Not, ///< Nothing collides with it.
-    Bsp, ///< Its brush model stops what moves into it.
+/// What the entities of a class of brush entities do.
+enum class BrushBehavior : std::uint8_t {
+    SlidingDoor, ///< Slide open when a player touches them, and back (CBaseDoor).
     Count,
 };
 
@@ -40,6 +40,8 @@ struct BrushClass {
     std::optional<bool> skinMakesNotSolid{};
     /// The contents the game gives each, whatever its "skin" (func_ladder: -16, a ladder).
     std::optional<std::int32_t> contents{};
+    /// What they do; nothing when absent: they stay as they are.
+    std::optional<BrushBehavior> behavior{};
 };
 
 /// data/cstrike/entities.toml: the classes of the entities of Counter-Strike's maps.
@@ -51,35 +53,12 @@ struct EntityClasses {
 [[nodiscard]] auto readEntityClasses(std::string_view text, std::string_view sourceName)
     -> Result<EntityClasses, GameError>;
 
-// The components of a brush entity.
-
-/// Its shape: brush model `index` of the map ("model" "*3").
-struct BrushModel {
-    std::uint32_t index = 0;
-};
-
-/// Where an entity is.
-struct Transform {
-    Vec3 origin{};
-    EulerAngles angles{};
-};
-
-/// How solid a brush entity is, and the contents a point inside it is in, as the original's
-/// pev->solid and pev->skin: 0 for none, -16 a ladder, else a value of nx::assets::Contents.
-struct BrushSolidity {
-    Solid solid = Solid::Not;
-    std::int32_t contents = 0;
-};
-
-/// Registers the components of brush entities in `world`. Errors: those of
-/// ecs::World::registerComponent.
-[[nodiscard]] auto registerBrushComponents(ecs::World& world) -> Result<void, ecs::ComponentError>;
-
-/// Makes in `world`, in their order, the brush entities of `entities`, a map's whose brush models
-/// number `modelCount`, that are of a class of `classes`; the others are left to what makes them.
+/// Makes in `world`, in their order, the brush entities of `entities`, a map's whose brush models are
+/// `models`, that are of a class of `classes`, with their BrushModel, Transform and BrushSolidity, and
+/// what their class does (a SlidingDoor and its Pusher); the others are left to what makes them.
 /// Returns how many it made. Errors: UnknownModel.
 [[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
-                                      std::size_t modelCount, const EntityClasses& classes)
+                                      std::span<const assets::BspModel> models, const EntityClasses& classes)
     -> Result<std::size_t, GameError>;
 
 } // namespace nx::game
@@ -95,6 +74,7 @@ struct nx::meta::Description<nx::game::BrushClass> {
         nx::meta::field<&nx::game::BrushClass::skinMakesNotSolid>("skinMakesNotSolid"),
         nx::meta::field<&nx::game::BrushClass::contents>("contents",
                                                          nx::data::Range{.minimum = -16.0, .maximum = -1.0}),
+        nx::meta::field<&nx::game::BrushClass::behavior>("behavior"),
     };
 };
 

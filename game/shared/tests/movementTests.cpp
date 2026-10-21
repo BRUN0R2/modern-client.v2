@@ -124,6 +124,13 @@ struct ModelTrees {
                  {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Water}}});
 }
 
+/// The player after one command, as cs::simulateMovement leaves it.
+[[nodiscard]] auto simulate(const MovementState& state, const UserCommand& command,
+                            const MovementSettings& settings, const BrushHulls& hulls,
+                            std::span<const cs::BrushEntity> entities = {}) -> MovementState {
+    return cs::simulateMovement(state, command, settings, hulls, entities).state;
+}
+
 [[nodiscard]] auto standingOnTheFloor() -> MovementState {
     return MovementState{.origin = {.z = kOnTheFloor}, .maxSpeed = kKnifeSpeed, .isOnGround = true};
 }
@@ -140,7 +147,7 @@ struct ModelTrees {
 [[nodiscard]] auto repeat(MovementState state, const UserCommand& move, int count, const BrushHulls& hulls,
                           std::span<const cs::BrushEntity> entities = {}) -> MovementState {
     for (int index = 0; index < count; ++index) {
-        state = cs::simulateMovement(state, move, MovementSettings{}, hulls, entities);
+        state = simulate(state, move, MovementSettings{}, hulls, entities);
     }
     return state;
 }
@@ -160,7 +167,7 @@ struct ModelTrees {
 }
 
 TEST(MovementTest, APlayerStandingStillStays) {
-    const MovementState after = cs::simulateMovement(standingOnTheFloor(), command(), {}, floorWorld());
+    const MovementState after = simulate(standingOnTheFloor(), command(), {}, floorWorld());
 
     EXPECT_TRUE(after.isOnGround);
     EXPECT_EQ(after.origin, (Vec3{.z = kOnTheFloor}));
@@ -168,8 +175,7 @@ TEST(MovementTest, APlayerStandingStillStays) {
 }
 
 TEST(MovementTest, GravityPullsHalfBeforeTheMoveAndHalfAfter) {
-    const MovementState after =
-        cs::simulateMovement(MovementState{.origin = {.z = 100.0F}}, command(), {}, emptyWorld());
+    const MovementState after = simulate(MovementState{.origin = {.z = 100.0F}}, command(), {}, emptyWorld());
 
     EXPECT_FALSE(after.isOnGround);
     EXPECT_NEAR(after.velocity.z, -8.0F, kTolerance);
@@ -178,8 +184,7 @@ TEST(MovementTest, GravityPullsHalfBeforeTheMoveAndHalfAfter) {
 
 TEST(MovementTest, WalkingAcceleratesTowardsTheSpeedLimit) {
     const BrushHulls hulls = floorWorld();
-    const MovementState first =
-        cs::simulateMovement(standingOnTheFloor(), command(forward(400.0F)), {}, hulls);
+    const MovementState first = simulate(standingOnTheFloor(), command(forward(400.0F)), {}, hulls);
 
     // sv_accelerate 5 for a hundredth of a second, of a wish capped at the knife's 250.
     EXPECT_NEAR(first.velocity.x, 12.5F, kTolerance);
@@ -194,24 +199,24 @@ TEST(MovementTest, WalkingAcceleratesTowardsTheSpeedLimit) {
 TEST(MovementTest, FrictionSlowsAndEdgeFrictionMoreNearADrop) {
     MovementState sliding = standingOnTheFloor();
     sliding.velocity = Vec3{.x = 100.0F};
-    const MovementState onTheFloor = cs::simulateMovement(sliding, command(), {}, floorWorld());
+    const MovementState onTheFloor = simulate(sliding, command(), {}, floorWorld());
     // The floor up to x = 10 only: a drop 16 units ahead of the player.
     const BrushHulls edge = world({facingX(10.0F), facingUp(0.0F)},
                                   {HullNode{.plane = 0, .children = {Contents::Empty, HullNodeIndex{1}}},
                                    HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}}});
-    const MovementState nearTheEdge = cs::simulateMovement(sliding, command(), {}, edge);
+    const MovementState nearTheEdge = simulate(sliding, command(), {}, edge);
 
     EXPECT_NEAR(onTheFloor.velocity.x, 96.0F, kTolerance);  // sv_friction 4 over a hundredth of a second
     EXPECT_NEAR(nearTheEdge.velocity.x, 92.0F, kTolerance); // twice that: edgefriction 2
 
     sliding.velocity = Vec3{.x = 50.0F};
-    EXPECT_NEAR(cs::simulateMovement(sliding, command(), {}, floorWorld()).velocity.x, 47.0F, kTolerance)
+    EXPECT_NEAR(simulate(sliding, command(), {}, floorWorld()).velocity.x, 47.0F, kTolerance)
         << "slower than sv_stopspeed, friction takes what it takes at 75";
 }
 
 TEST(MovementTest, AJumpRisesAndCostsTheNextJumpAndTheWalk) {
     const MovementState jumped =
-        cs::simulateMovement(standingOnTheFloor(), command({}, {Button::Jump}), {}, floorWorld());
+        simulate(standingOnTheFloor(), command({}, {Button::Jump}), {}, floorWorld());
 
     EXPECT_FALSE(jumped.isOnGround);
     EXPECT_TRUE(jumped.isJumpHeld);
@@ -220,30 +225,30 @@ TEST(MovementTest, AJumpRisesAndCostsTheNextJumpAndTheWalk) {
 
     MovementState tired = standingOnTheFloor();
     tired.jumpPenalty = nx::Milliseconds{500.0F};
-    EXPECT_NEAR(cs::simulateMovement(tired, command({}, {Button::Jump}), {}, floorWorld()).velocity.z,
+    EXPECT_NEAR(simulate(tired, command({}, {Button::Jump}), {}, floorWorld()).velocity.z,
                 jumpSpeedAfterOneCommand(500.0), kTolerance);
 
     tired.velocity = Vec3{.x = 100.0F};
     const double share = (100.0 - 490.0 * 0.001 * 19.0) * 0.01;
-    EXPECT_NEAR(cs::simulateMovement(tired, command(), {}, floorWorld()).velocity.x, 96.0 * share, kTolerance)
+    EXPECT_NEAR(simulate(tired, command(), {}, floorWorld()).velocity.x, 96.0 * share, kTolerance)
         << "friction, then the penalty";
 }
 
 TEST(MovementTest, HoldingJumpDoesNotJumpAgain) {
     MovementState held = standingOnTheFloor();
     held.isJumpHeld = true;
-    const MovementState after = cs::simulateMovement(held, command({}, {Button::Jump}), {}, floorWorld());
+    const MovementState after = simulate(held, command({}, {Button::Jump}), {}, floorWorld());
 
     EXPECT_TRUE(after.isOnGround);
     EXPECT_EQ(after.velocity, Vec3{});
     EXPECT_TRUE(after.isJumpHeld);
-    EXPECT_FALSE(cs::simulateMovement(held, command(), {}, floorWorld()).isJumpHeld) << "released";
+    EXPECT_FALSE(simulate(held, command(), {}, floorWorld()).isJumpHeld) << "released";
 }
 
 TEST(MovementTest, AJumpFasterThanTheLimitIsSlowed) {
     MovementState fast = standingOnTheFloor();
     fast.velocity = Vec3{.x = 400.0F};
-    const MovementState after = cs::simulateMovement(fast, command({}, {Button::Jump}), {}, floorWorld());
+    const MovementState after = simulate(fast, command({}, {Button::Jump}), {}, floorWorld());
 
     // Over 1.2 times the knife's 250, slowed to 0.8 of that, without the ground's friction; the speed
     // it measures has the half of gravity the command pulled before the jump.
@@ -276,7 +281,7 @@ TEST(MovementTest, AMoveIntoAWallSlidesAlongIt) {
     MovementState diagonal = standingOnTheFloor();
     diagonal.origin.x = 9.0F;
     diagonal.velocity = Vec3{.x = 200.0F, .y = 200.0F};
-    const MovementState after = cs::simulateMovement(diagonal, command(), {}, walled);
+    const MovementState after = simulate(diagonal, command(), {}, walled);
 
     EXPECT_EQ(after.velocity.x, 0.0F);
     EXPECT_NEAR(after.velocity.y, 192.0F, 0.01F); // what friction left of it
@@ -291,7 +296,7 @@ TEST(MovementTest, ASteepSlopeIsNotGround) {
     };
     const MovementState above{.origin = {.z = 1.0F}, .maxSpeed = kKnifeSpeed};
 
-    EXPECT_TRUE(cs::simulateMovement(above, command(), {}, slope({.x = 0.6F, .z = 0.8F})).isOnGround);
+    EXPECT_TRUE(simulate(above, command(), {}, slope({.x = 0.6F, .z = 0.8F})).isOnGround);
 
     const MovementState sliding = repeat(above, command(), 50, slope({.x = 0.8F, .z = 0.6F}));
     EXPECT_FALSE(sliding.isOnGround);
@@ -315,27 +320,26 @@ TEST(MovementTest, AirAccelerationStopsAtThirtyAlongTheWish) {
 TEST(MovementTest, VelocityIsHeldWithinTheMaximum) {
     const MovementState fast{.origin = {.z = 100.0F}, .velocity = {.x = 5000.0F}};
 
-    EXPECT_EQ(cs::simulateMovement(fast, command(), {}, emptyWorld()).velocity.x, 2000.0F);
+    EXPECT_EQ(simulate(fast, command(), {}, emptyWorld()).velocity.x, 2000.0F);
 }
 
 TEST(MovementTest, WaterLevelsAreTheFeetTheWaistAndTheEyes) {
     const MovementState swimmer{.maxSpeed = kKnifeSpeed};
     const auto levelIn = [&](float surface) {
-        return cs::simulateMovement(swimmer, command(), {}, waterWorld(surface)).waterLevel;
+        return simulate(swimmer, command(), {}, waterWorld(surface)).waterLevel;
     };
 
     EXPECT_EQ(levelIn(-50.0F), WaterLevel::Dry);
     EXPECT_EQ(levelIn(-20.0F), WaterLevel::Feet);
     EXPECT_EQ(levelIn(10.0F), WaterLevel::Waist);
     EXPECT_EQ(levelIn(30.0F), WaterLevel::Eyes);
-    EXPECT_EQ(cs::simulateMovement(swimmer, command(), {}, waterWorld(30.0F)).waterType, Contents::Water);
+    EXPECT_EQ(simulate(swimmer, command(), {}, waterWorld(30.0F)).waterType, Contents::Water);
 }
 
 TEST(MovementTest, JumpSwimsUpAndNothingHeldSinks) {
     const MovementState swimmer{.maxSpeed = kKnifeSpeed};
-    const MovementState up =
-        cs::simulateMovement(swimmer, command({}, {Button::Jump}), {}, waterWorld(30.0F));
-    const MovementState down = cs::simulateMovement(swimmer, command(), {}, waterWorld(30.0F));
+    const MovementState up = simulate(swimmer, command({}, {Button::Jump}), {}, waterWorld(30.0F));
+    const MovementState down = simulate(swimmer, command(), {}, waterWorld(30.0F));
 
     EXPECT_NEAR(up.velocity.z, 96.0F, kTolerance); // 100, less water's friction
     EXPECT_FALSE(up.isOnGround);
@@ -351,12 +355,12 @@ TEST(MovementTest, AWallAtTheSurfaceStartsAJumpOutOfTheWater) {
                                    HullNode{.plane = 2, .children = {Contents::Empty, Contents::Water}}});
     const MovementState swimmer{.origin = {.x = 5.0F}, .maxSpeed = kKnifeSpeed};
 
-    const MovementState starting = cs::simulateMovement(swimmer, command(), {}, pool);
+    const MovementState starting = simulate(swimmer, command(), {}, pool);
     EXPECT_EQ(starting.waterJumpTime, nx::Milliseconds{2000.0F});
     EXPECT_EQ(starting.waterJumpVelocity, (Vec3{.x = 50.0F}));
     EXPECT_GT(starting.velocity.z, 200.0F);
 
-    const MovementState climbing = cs::simulateMovement(starting, command(), {}, pool);
+    const MovementState climbing = simulate(starting, command(), {}, pool);
     EXPECT_EQ(climbing.waterJumpTime, nx::Milliseconds{1990.0F});
     EXPECT_EQ(climbing.velocity.x, 50.0F);
 }
@@ -392,7 +396,7 @@ TEST(MovementTest, ADuckOnTheGroundTakesFourTenthsOfASecond) {
 
 TEST(MovementTest, ADuckInTheAirIsAtOnce) {
     const MovementState falling{.origin = {.z = 100.0F}, .maxSpeed = kKnifeSpeed};
-    const MovementState after = cs::simulateMovement(falling, command({}, {Button::Duck}), {}, emptyWorld());
+    const MovementState after = simulate(falling, command({}, {Button::Duck}), {}, emptyWorld());
 
     EXPECT_TRUE(after.isDucked);
     EXPECT_EQ(after.viewHeight, cs::kDuckedViewHeight);
@@ -408,7 +412,7 @@ TEST(MovementTest, ADuckedPlayerMovesAtAThirdOfTheSpeed) {
 }
 
 TEST(MovementTest, StandingUpNeedsRoom) {
-    const MovementState standing = cs::simulateMovement(duckedOnTheFloor(), command(), {}, floorWorld());
+    const MovementState standing = simulate(duckedOnTheFloor(), command(), {}, floorWorld());
     EXPECT_FALSE(standing.isDucked);
     EXPECT_EQ(standing.viewHeight, cs::kStandingViewHeight);
     EXPECT_NEAR(standing.origin.z, kOnTheFloor, kTolerance);
@@ -418,16 +422,15 @@ TEST(MovementTest, StandingUpNeedsRoom) {
     const BrushHulls tunnel =
         world({facingUp(-18.0F)}, {HullNode{.plane = 0, .children = {Contents::Solid, Contents::Solid}}}, {},
               {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}});
-    const MovementState stuck = cs::simulateMovement(duckedOnTheFloor(), command(), {}, tunnel);
+    const MovementState stuck = simulate(duckedOnTheFloor(), command(), {}, tunnel);
     EXPECT_TRUE(stuck.isDucked);
     EXPECT_NEAR(stuck.origin.z, kOnTheFloor - 18.0F, kTolerance);
 }
 
 TEST(MovementTest, LettingGoOfADuckBeforeItIsDownHops) {
     const BrushHulls hulls = floorWorld();
-    const MovementState pressed =
-        cs::simulateMovement(standingOnTheFloor(), command({}, {Button::Duck}), {}, hulls);
-    const MovementState released = cs::simulateMovement(pressed, command(), {}, hulls);
+    const MovementState pressed = simulate(standingOnTheFloor(), command({}, {Button::Duck}), {}, hulls);
+    const MovementState released = simulate(pressed, command(), {}, hulls);
 
     // The ducktap: the standing box is raised as if it had been ducked, and falls from there.
     EXPECT_FALSE(released.isDucking);
@@ -451,6 +454,31 @@ TEST(MovementTest, ASolidEntityStopsThePlayerWhereItIsPlaced) {
     EXPECT_GT(repeat(walking, ahead, 20, hulls).origin.x, 50.0F) << "without the entity";
 }
 
+TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
+    // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
+    const BrushHulls hulls = modelsOf(
+        {facingUp(0.0F), facingX(10.0F)},
+        {ModelTrees{},
+         ModelTrees{.standing = {HullNode{.plane = 1, .children = {Contents::Solid, Contents::Empty}}}},
+         ModelTrees{.standing = {HullNode{.plane = 0, .children = {Contents::Empty, Contents::Solid}}}}});
+    const std::array entities{cs::BrushEntity{.model = 1}, cs::BrushEntity{.model = 2}};
+    MovementState running = standingOnTheFloor();
+    running.origin.x = 9.0F;
+    running.velocity = Vec3{.x = 200.0F};
+
+    const cs::MovementResult result = cs::simulateMovement(running, command(), {}, hulls, entities);
+    EXPECT_TRUE(result.state.isOnGround);
+    EXPECT_EQ(result.state.groundModel, std::optional<std::uint32_t>{2});
+    EXPECT_EQ(result.touchedModels, (std::vector<std::uint32_t>{2, 1}))
+        << "the floor, then the wall, each once";
+
+    const cs::MovementResult onTheWorld =
+        cs::simulateMovement(standingOnTheFloor(), command(), {}, floorWorld());
+    EXPECT_TRUE(onTheWorld.state.isOnGround);
+    EXPECT_FALSE(onTheWorld.state.groundModel.has_value());
+    EXPECT_TRUE(onTheWorld.touchedModels.empty());
+}
+
 TEST(MovementTest, AVolumeEntityHoldsWhatItSays) {
     // Model 1: below z = 30 in its point hull.
     const BrushHulls hulls = modelsOf(
@@ -460,13 +488,12 @@ TEST(MovementTest, AVolumeEntityHoldsWhatItSays) {
     const std::array slime{
         cs::BrushEntity{.model = 1, .role = cs::BrushRole::Volume, .contents = Contents::Slime}};
     const MovementState swimmer{.maxSpeed = kKnifeSpeed};
-    const MovementState after = cs::simulateMovement(swimmer, command({}, {Button::Jump}), {}, hulls, slime);
+    const MovementState after = simulate(swimmer, command({}, {Button::Jump}), {}, hulls, slime);
 
     EXPECT_EQ(after.waterLevel, WaterLevel::Eyes);
     EXPECT_EQ(after.waterType, Contents::Slime);
     EXPECT_NEAR(after.velocity.z, 76.8F, kTolerance); // 80 in slime, less its friction
-    EXPECT_EQ(cs::simulateMovement(swimmer, command(), {}, hulls).waterLevel, WaterLevel::Dry)
-        << "without the entity";
+    EXPECT_EQ(simulate(swimmer, command(), {}, hulls).waterLevel, WaterLevel::Dry) << "without the entity";
 }
 
 /// A floor (its point hull 36 below the standing one's, where the feet are) and model 1, a ladder:
@@ -490,25 +517,22 @@ TEST(MovementTest, OnALadderForwardClimbsAndBackOnTheFloorStepsOff) {
     atTheLadder.origin.x = 10.0F;
 
     // Facing the ladder: what goes into its face goes up it, at 200 at most, without gravity.
-    const MovementState climbing =
-        cs::simulateMovement(atTheLadder, command({}, {Button::Forward}), {}, hulls, kLadder);
+    const MovementState climbing = simulate(atTheLadder, command({}, {Button::Forward}), {}, hulls, kLadder);
     EXPECT_EQ(climbing.velocity, (Vec3{.z = 200.0F}));
     EXPECT_NEAR(climbing.origin.z, kOnTheFloor + 2.0F, kTolerance);
 
     // Backing away down on the floor: pushed off the ladder, sliding along the floor.
-    const MovementState leaving =
-        cs::simulateMovement(atTheLadder, command({}, {Button::Back}), {}, hulls, kLadder);
+    const MovementState leaving = simulate(atTheLadder, command({}, {Button::Back}), {}, hulls, kLadder);
     EXPECT_NEAR(leaving.velocity.x, -200.0F, kTolerance);
     EXPECT_NEAR(leaving.origin.x, 8.0F, kTolerance);
 
-    EXPECT_EQ(cs::simulateMovement(atTheLadder, command(), {}, hulls, kLadder).velocity, Vec3{})
-        << "held still";
+    EXPECT_EQ(simulate(atTheLadder, command(), {}, hulls, kLadder).velocity, Vec3{}) << "held still";
 }
 
 TEST(MovementTest, JumpLeavesALadder) {
     MovementState onTheLadder{.origin = {.x = 10.0F, .z = 50.0F}, .maxSpeed = kKnifeSpeed};
     const MovementState after =
-        cs::simulateMovement(onTheLadder, command({}, {Button::Jump}), {}, ladderWorld(), kLadder);
+        simulate(onTheLadder, command({}, {Button::Jump}), {}, ladderWorld(), kLadder);
 
     EXPECT_EQ(after.velocity.x, -270.0F); // away from its face
     EXPECT_NEAR(after.velocity.z, -8.0F, kTolerance);
@@ -516,7 +540,7 @@ TEST(MovementTest, JumpLeavesALadder) {
 
 TEST(MovementTest, TheGamesBrushEntitiesAreMetAsTheEngineListsThem) {
     nx::ecs::World world;
-    ASSERT_TRUE(nx::game::registerBrushComponents(world).has_value());
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
     const auto spawn = [&](std::uint32_t model, nx::game::Solid solid, std::int32_t contents) {
         std::ignore = world.spawn(nx::game::BrushModel{.index = model},
                                   nx::game::Transform{.origin = {.x = static_cast<float>(model)}},
