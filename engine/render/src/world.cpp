@@ -54,10 +54,13 @@ struct WorldVertex {
     float lightmapY = -1.0F;
     std::array<std::uint8_t, assets::kFaceLightStyles> styles{kNoStyle, kNoStyle, kNoStyle, kNoStyle};
     std::uint32_t flags = 0; ///< kTurbulent, or 0.
+    /// On a turbulent face, the height of the corner the original tells which way its waves go by:
+    /// the first of the last piece it cuts the face into, the first of its list of them.
+    float waveBase = 0.0F;
 };
 /// The 4-byte words of a vertex: the position's three, the texture's two, the lightmaps' two, the
-/// styles' one and the flags'.
-constexpr std::size_t kWorldVertexWords = 9;
+/// styles' one, the flags' and the wave's base.
+constexpr std::size_t kWorldVertexWords = 10;
 static_assert(sizeof(WorldVertex) == kWorldVertexWords * sizeof(float),
               "the vertex layout of the world pipeline");
 
@@ -85,12 +88,14 @@ constexpr std::array kWorldVertexAttributes{
     rhi::VertexAttribute{.location = 3,
                          .format = rhi::VertexFormat::Uint8x4,
                          .offset = offsetof(WorldVertex, styles)}, // NOLINT
-    rhi::VertexAttribute{.location = 4,
-                         .format = rhi::VertexFormat::Uint32,
-                         .offset = offsetof(WorldVertex, flags)}}; // NOLINT
+    rhi::VertexAttribute{
+        .location = 4, .format = rhi::VertexFormat::Uint32, .offset = offsetof(WorldVertex, flags)}, // NOLINT
+    rhi::VertexAttribute{.location = 5,
+                         .format = rhi::VertexFormat::Float,
+                         .offset = offsetof(WorldVertex, waveBase)}}; // NOLINT
 
-/// A brush model's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1; and where it
-/// is drawn this frame. The world's is 0.
+/// A brush model's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1; where it is
+/// drawn this frame, and in `origin.w` the height of its waves. The world's is 0.
 struct EntityUniform {
     Vec4 color{};
     Vec4 origin{};
@@ -554,10 +559,16 @@ struct Geometry {
             pieces.push_back(std::move(outline));
         }
         const auto firstIndex = narrow<std::uint32_t>(geometry.faceIndices.size());
+        // The original puts each piece first in its list of them: the last one cut leads it.
+        const float waveBase = pieces.back().front().z;
         for (const std::vector<Vec3>& piece : pieces) {
             const auto first = narrow<std::uint32_t>(geometry.vertices.size());
             for (const Vec3 point : piece) {
-                geometry.vertices.push_back(vertexOf(point, entry, info, uses[entry.texture]));
+                WorldVertex vertex = vertexOf(point, entry, info, uses[entry.texture]);
+                if (entry.isTurbulent) {
+                    vertex.waveBase = waveBase;
+                }
+                geometry.vertices.push_back(vertex);
             }
             for (std::uint32_t corner = kTriangleCorners - 1; corner < piece.size(); ++corner) {
                 geometry.faceIndices.insert(geometry.faceIndices.end(),
@@ -788,7 +799,7 @@ void BspWorld::place(std::span<const ModelPlacement> placements) {
     for (const ModelPlacement& placement : placements) {
         const std::uint32_t model = placement.model.value;
         expects(model >= 1 && model <= m_models.size(),
-                "BspWorld::draw: a placement of a brush model of the map");
+                "BspWorld::prepare: a placement of a brush model of the map");
         if (model >= 1 && model <= m_models.size()) {
             m_placements[model - 1] = placement; // m_models starts at model 1
         }
@@ -947,7 +958,8 @@ void BspWorld::prepare(const WorldFrame& view) {
     writeEntity(0, EntityUniform{});
     for (std::size_t index = 0; index < m_models.size(); ++index) {
         const ModelPlacement& placement = m_placements[index];
-        EntityUniform uniform{.color = m_models[index].color, .origin = extend(placement.origin, 0.0F)};
+        EntityUniform uniform{.color = m_models[index].color,
+                              .origin = extend(placement.origin, placement.waveHeight)};
         if (placement.angles != EulerAngles{}) {
             const Mat3 turn = rotationMatrix(placement.angles);
             for (std::size_t row = 0; row < Mat3::kRowCount; ++row) {

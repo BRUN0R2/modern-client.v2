@@ -249,7 +249,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Sky: the faces of `sky` show the sides of `gfx/env/<skyname>*.tga` as the original projects them (texture arrays in `nx.rhi`)
 - [x] Animated textures (`+0`..`+9`, `+a`..`+j`: every face of a sequence on the same frame, ten a second)
 - [x] Water (turbulent faces: cut along the 64-unit grid and warped at each corner as the original warps them, unlit)
-- [ ] The alternate animations of brush entities (`+a`..`+j` when their frame is not 0) and the waves of `func_water`
+- [x] The waves of `func_water` (`nx::game::Waves`, an eighth of its `WaveHeight`; `ModelPlacement::waveHeight` raises the corners of its turbulent faces as `EmitWaterPolys` does)
+- [ ] The alternate animations of brush entities (`+a`..`+j` when their frame is not 0)
 - [x] Brush entities with render modes (`rendermode`, `renderamt`, `rendercolor`: solid, color, texture, glow, additive, blended back to front as the original sorts them)
 - [x] Brush entities drawn where the game puts them each frame (`WorldFrame::placements`)
 - [x] Brush entities turned by the game (`ModelPlacement::angles`), culled as the original culls them

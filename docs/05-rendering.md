@@ -201,8 +201,13 @@ same frame, ten a second (`R_TextureAnimation`), where the original would refuse
 missing number the frames it has play in order; turbulent faces (water and lasers: `!`, Quake's `*`,
 and names that start with `water` or `laser`), unlit, cut along the axial planes every 64 units
 (`GL_SubdivideSurface`), their texture coordinates in texels without the texture's shift and warped
-at each corner of the pieces, a cell of 64 texels a texture, as `EmitWaterPolys` warps them
-(the waves of a `func_water`'s `scale` come with moving entities); triggers and the compiler's tool
+at each corner of the pieces, a cell of 64 texels a texture, as `EmitWaterPolys` warps them, and
+on a brush entity with waves (its `scale`, `ModelPlacement::waveHeight`: a `func_water`'s an eighth of
+its `WaveHeight`) each corner raised by two sines of the warp's table, each lifted above 0, read at
+160 entries a second along x + y and at 171 along 5x - y (four fifths of it), times the height, and
+lowered instead when the face's first corner (the first of the last piece cut, the head of the
+original's list of them) is at or above the eye, in its model's space as the original compares them;
+triggers and the compiler's tool
 textures (`AAATRIGGER`, `CLIP`...) not drawn. The lightmaps are packed into one atlas of four
 layers, each face's lightmaps (one per light style, up to its first unused one) at the same place
 of each layer; a face's extent in luxels of 16 units is computed in double precision, as the
