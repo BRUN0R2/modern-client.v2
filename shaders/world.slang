@@ -4,8 +4,9 @@
 // The BSP world (nx.render:world): each face's texture, already through `texgamma`, times its
 // light, as the original draws it (nx.render:gamma): each luxel sums its lightmaps, each times its
 // style's brightness, goes through `lightgamma`, `brightness` and `gamma`, and the face blends the
-// four luxels around each point. Masked textures (`{`) discard their transparent texels. The sky's
-// faces show the side of the sky they are seen toward, projected as the original projects it.
+// four luxels around each point. Masked textures (`{`) discard their transparent texels; brush
+// entities are drawn as their render mode says. The sky's faces show the side of the sky they are
+// seen toward, projected as the original projects it.
 
 struct Frame
 {
@@ -37,6 +38,14 @@ SamplerState skySampler;
 Texture2D albedo;
 [[vk::binding(1, 1)]]
 SamplerState albedoSampler;
+
+// A brush entity drawn other than normally: rgb its `rendercolor`, a its `renderamt`, from 0 to 1.
+struct Entity
+{
+    float4 color;
+};
+[[vk::binding(0, 2)]]
+ConstantBuffer<Entity> entity;
 
 static const uint kLightmaps = 4;
 // The style of a lightmap the face does not have: its lightmaps end there.
@@ -123,15 +132,55 @@ float3 lightAt(float2 position, uint4 styles)
     return lerp(top, bottom, weight.y);
 }
 
-[shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+// What a brush entity's `rendermode` makes of a fragment, as the original's R_SetRenderMode does: the
+// world and normal entities, and the solid ones (kRenderTransAlpha), are lit and opaque, their masked
+// (`{`) textures cut out by the original's alpha tests; the others are unlit and blended.
+
+float4 litOrDiscarded(VertexOutput input, float alphaTest)
 {
     const float4 color = albedo.Sample(albedoSampler, input.uv);
-    if (color.a < 0.5)
+    if (color.a <= alphaTest)
     {
         discard;
     }
     return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), 1.0);
+}
+
+// The world and kRenderNormal: what has any alpha is drawn (the original's DEFAULT_ALPHATEST, 0).
+[shader("fragment")]
+float4 fragmentMain(VertexOutput input) : SV_Target
+{
+    return litOrDiscarded(input, 0.0);
+}
+
+// kRenderTransAlpha: what has an alpha above 0.25 is drawn.
+[shader("fragment")]
+float4 solidFragmentMain(VertexOutput input) : SV_Target
+{
+    return litOrDiscarded(input, 0.25);
+}
+
+// kRenderTransTexture and kRenderGlow: the texture, as opaque as renderamt makes it.
+[shader("fragment")]
+float4 textureFragmentMain(VertexOutput input) : SV_Target
+{
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb, color.a * entity.color.a);
+}
+
+// kRenderTransColor: rendercolor, as opaque as renderamt makes it, without the texture.
+[shader("fragment")]
+float4 colorFragmentMain(VertexOutput input) : SV_Target
+{
+    return entity.color;
+}
+
+// kRenderTransAdd: the texture times renderamt, added to what is behind.
+[shader("fragment")]
+float4 additiveFragmentMain(VertexOutput input) : SV_Target
+{
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb * entity.color.a, 1.0);
 }
 struct SkyVertexOutput
 {

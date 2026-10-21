@@ -222,7 +222,15 @@ frame in flight, in a batch per texture and then the sky's: the leaves the camer
 leaf from inside a wall), those whose bounds are in front of the four side planes of the view, and
 their faces that face the camera: from the side of its plane the eye is on, the plane itself in
 front (`R_RecursiveWorldNode`). A brush entity is drawn when its bounds are in view, its faces
-from at least `BACKFACE_EPSILON` past their planes (`R_DrawBrushModel`).
+from at least `BACKFACE_EPSILON` past their planes (`R_DrawBrushModel`), as its `rendermode` says
+(`R_SetRenderMode`): normal, with the world, lit and opaque, masked textures cut where they have no
+alpha (the original's alpha test at 0); then, after the sky, solid (`kRenderTransAlpha`), lit and
+opaque, cut at an alpha of 0.25 or less; and the blended ones, unlit and back to front
+(`R_TransEntityCompare`: by the squared distance to their middles, then by mode): `rendercolor`
+for `kRenderTransColor`, writing its depth; the textures for `kRenderTransTexture` (its faces back to
+front, `R_SurfaceCompare`) and `kRenderGlow`; the textures added to what is behind for
+`kRenderTransAdd`, each as opaque as `renderamt` says. A blended entity at a `renderamt` of 0 is not
+drawn (`R_AddEntity`); a mode the original does not know draws as its default does, as Glow.
 
 On the Steam installation, de_dust2 is 5358 faces (1356 of them sky) in 41 textures and a 1024x404
 atlas, built in half a second; from the terrorists' spawn a frame draws 382 of them, in 83 leaves.

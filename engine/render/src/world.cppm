@@ -9,8 +9,8 @@
 /// visible set) that are in view, and the brush entities in view, as the original culls them.
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
-/// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), and the
-/// sky. Water and render modes come next (TODO.md, Rendering).
+/// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
+/// and the brush entities' render modes. Water and moving entities come next (TODO.md, Rendering).
 export module nx.render:world;
 
 import std;
@@ -21,6 +21,20 @@ import nx.assets;
 import :camera;
 import :gamma;
 import :lightStyle;
+
+namespace nx::render {
+
+/// How a brush entity is drawn, its `rendermode`, numbered as the original numbers them.
+enum class RenderMode : std::uint8_t {
+    Normal,       ///< Lit and opaque, as the world.
+    TransColor,   ///< Its `rendercolor` instead of its textures, unlit, as opaque as `renderamt` says.
+    TransTexture, ///< Its textures, unlit, as opaque as `renderamt` says, its faces back to front.
+    Glow,         ///< As TransTexture, its faces unsorted (meant for sprites; any unknown mode too).
+    TransAlpha,   ///< "Solid": lit and opaque, its masked textures cut where their alpha is 0.25 or less.
+    TransAdd,     ///< Its textures times `renderamt`, unlit, added to what is behind.
+};
+
+} // namespace nx::render
 
 export namespace nx::render {
 
@@ -125,14 +139,28 @@ private:
         std::uint32_t bucket = 0;      ///< Its texture's in m_bucketFrames, or kSkyBucket.
         Plane plane{};
         bool isBackSide = false; ///< Drawn from behind its plane.
+        Vec3 middle{};           ///< Of its bounds, where its entity puts it.
     };
 
-    /// A brush entity's model: its faces, and its bounds where its entity puts it.
+    /// A brush entity's model: its faces, its bounds where its entity puts it, and how it is drawn.
     struct ModelDraw {
         std::uint32_t firstFace = 0;
         std::uint32_t faceCount = 0;
         Aabb bounds{};
         Vec3 origin{};
+        RenderMode mode = RenderMode::Normal;
+        bool isDrawn = true;              ///< False for a mode other than Normal at a `renderamt` of 0.
+        rhi::BufferHandle entityBuffer{}; ///< Its `rendercolor` and `renderamt`, for the blended modes.
+        rhi::BindGroupHandle entityGroup{};
+    };
+
+    /// A brush entity drawn apart this frame, after the world: its faces that face the camera, a
+    /// range of m_entityFaces.
+    struct EntityDraw {
+        std::uint32_t model = 0; ///< In m_models.
+        float distance = 0.0F;   ///< Squared, from the camera to its middle.
+        std::uint32_t firstFace = 0;
+        std::uint32_t faceCount = 0;
     };
 
     static constexpr std::uint32_t kSkyBucket = std::numeric_limits<std::uint32_t>::max();
@@ -142,11 +170,20 @@ private:
     void release() noexcept;
     /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices.
     void gather(const Camera& camera, float aspect);
-    /// Adds the triangles of face `face` when it faces `eye` (in its model's space): a face of the
-    /// world from the side of its plane the eye is on, the plane itself in front, as the original's
+    /// Whether face `face`, drawn, faces `eye` (in its model's space): a face of the world from the
+    /// side of its plane the eye is on, the plane itself in front, as the original's
     /// R_RecursiveWorldNode; a brush entity's from at least BACKFACE_EPSILON past it, as its
     /// R_DrawBrushModel.
+    [[nodiscard]] auto isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noexcept -> bool;
+    /// Adds the triangles of face `face`, once a frame, to its bucket when it is seen from `eye`.
     void addFace(std::uint32_t face, Vec3 eye, bool isOfAnEntity);
+    /// Puts a brush entity drawn other than normally in m_entityDraws, with its faces seen from
+    /// `camera`, in the order the original draws them.
+    void addEntity(std::uint32_t model, const Camera& camera);
+    [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
+    /// The shader, the bind group layouts, the samplers and a pipeline for each way faces are drawn.
+    [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
+        -> Result<void, rhi::RhiError>;
 
     rhi::Device* m_device;
     const assets::BspView* m_map;
@@ -159,6 +196,11 @@ private:
     rhi::BindGroupLayoutHandle m_textureLayout;
     rhi::RenderPipelineHandle m_pipeline;
     rhi::RenderPipelineHandle m_skyPipeline;
+    rhi::BindGroupLayoutHandle m_entityLayout;
+    rhi::RenderPipelineHandle m_solidPipeline;    ///< TransAlpha.
+    rhi::RenderPipelineHandle m_texturePipeline;  ///< TransTexture and Glow.
+    rhi::RenderPipelineHandle m_colorPipeline;    ///< TransColor.
+    rhi::RenderPipelineHandle m_additivePipeline; ///< TransAdd.
     /// For each bucket of faces, a bind group for each texture it shows in turn: one, unless animated.
     std::vector<std::vector<rhi::BindGroupHandle>> m_bucketFrames;
     std::vector<FrameSlot> m_frameSlots;
@@ -175,6 +217,10 @@ private:
     std::vector<std::vector<std::uint32_t>> m_bucketIndices;
     std::vector<std::uint32_t> m_skyIndices;
     std::vector<Batch> m_batches;
+    std::vector<EntityDraw> m_entityDraws;
+    std::vector<std::uint32_t> m_entityFaces;
+    std::vector<std::uint32_t> m_entityIndices;
+    std::vector<IndexRange> m_entityRanges; ///< Of each of m_entityFaces, in m_entityIndices.
     FrameStats m_lastFrame;
 };
 
