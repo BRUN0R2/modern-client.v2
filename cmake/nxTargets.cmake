@@ -217,5 +217,8 @@ function(nxAddTest target)
     add_executable(${target} ${arg_SOURCES})
     target_link_libraries(${target} PRIVATE nx::std ${arg_DEPENDS} nx::testSupport GTest::gtest GTest::gtest_main)
     nxTargetDefaults(${target})
-    gtest_discover_tests(${target} DISCOVERY_MODE PRE_TEST PROPERTIES ENVIRONMENT "${arg_ENVIRONMENT}")
+    # Listing the tests runs the executable before the first test: a CI runner scanning a freshly
+    # linked file can take longer than GoogleTest's 5 seconds to start it.
+    gtest_discover_tests(${target} DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+                         PROPERTIES ENVIRONMENT "${arg_ENVIRONMENT}")
 endfunction()
