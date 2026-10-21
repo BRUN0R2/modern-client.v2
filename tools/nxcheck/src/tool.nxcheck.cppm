@@ -16,7 +16,8 @@ export namespace nxcheck {
 
 /// The formats with a reader in nx.assets.
 enum class Format : std::uint8_t {
-    Bsp,           ///< A map: BspView, which reads every lump and its embedded textures.
+    Bsp,           ///< A map: BspView, which reads every lump and its embedded textures, and the
+                   ///< collision hulls of its brush models.
     Wad,           ///< A WAD3: WadView, and readTexture on every mip texture.
     Mdl,           ///< A model: MdlView; the `*T.mdl` its textures are in, when they are not in it;
                    ///< and the animation of every sequence, from its sequence group file too.

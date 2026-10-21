@@ -65,7 +65,7 @@ flowchart TB
 | `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform |
-| `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes | core, math, jobs |
+| `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
 | `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera and the BSP world | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
@@ -86,8 +86,8 @@ module exists (`cmake/nxLayers.cmake`, at the end of the configuration, whatever
 modules are added in) a dependency on a project module of the same or of a higher layer fails
 the configuration, locally and in every CI build. The `LayerCheck.*` tests run that check on a
 fixture of empty modules. A strict layer order also rules out cycles. The same-layer
-dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi` and `nx.platform`, `nx.render` on
-`nx.assets`, …) are declared `LATERAL` where the module is built (`nxAddModuleLibrary`): the check
+dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi` and `nx.platform`, `nx.render` and
+`nx.collision` on `nx.assets`, …) are declared `LATERAL` where the module is built (`nxAddModuleLibrary`): the check
 accepts a same-layer dependency only when it is declared, and a `LATERAL` module only when it is of
 the same layer.
 
