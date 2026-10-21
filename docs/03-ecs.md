@@ -348,7 +348,9 @@ Destroying an entity removes the relations that point to it at the same sync poi
 of them, how solid the game makes it (`nx::game::BrushClass`: solid or not, the spawnflags that
 make one not solid, whether a `skin` makes a door a volume, contents the class always has).
 `spawnBrushEntities` makes, in the map's order, an entity for each one of a listed class, with its
-`BrushModel`, its `Transform` and its `BrushSolidity` (the original's `solid` and `skin`), and what
+`BrushModel` (its `nx::assets::ModelIndex`), its `Transform` and its `BrushSolidity` (the original's
+`solid`, and its `skin` as the contents that number names, `nx::assets::contentsNumbered`: a volume
+of water, slime or lava, a ladder, or nothing), and what
 its class's `behavior` makes of it (`slidingDoor`, `rotatingDoor`: a `Door` and its `Pusher`,
 [07 §5.1](07-simulation-and-physics.md#51-movement-types)); an entity of a brush model the map
 lacks is `GameError::UnknownModel`. `nx.assets` reads the values as

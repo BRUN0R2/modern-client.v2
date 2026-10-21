@@ -33,7 +33,7 @@ constexpr float kAngleWrap = 3600.0F;
 /// A solid brush entity, where it is now.
 struct SolidBrush {
     ecs::Entity entity{};
-    std::uint32_t model = 0;
+    collision::ModelIndex model{};
     Vec3 origin{};
     EulerAngles angles{};
 };
@@ -110,8 +110,8 @@ struct SolidBrush {
 /// Whether a body's linked box, at `origin`, overlaps `box`.
 [[nodiscard]] auto overlaps(const Body& body, Vec3 origin, const Aabb& box) -> bool {
     const Vec3 link{kLinkGrowth, kLinkGrowth, kLinkGrowth};
-    const Vec3 low = origin + body.mins - link;
-    const Vec3 high = origin + body.maxs + link;
+    const Vec3 low = origin + body.box.min - link;
+    const Vec3 high = origin + body.box.max + link;
     return low.x < box.max.x && low.y < box.max.y && low.z < box.max.z && high.x > box.min.x &&
            high.y > box.min.y && high.z > box.min.z;
 }
@@ -185,7 +185,7 @@ void turnTo(ecs::World& world, ecs::Entity entity, EulerAngles destination, Degr
     const float armX = toActivator.x - origin.x;
     const float armY = toActivator.y - origin.y;
     // Parity: the original compares the arms' lengths cut to whole units.
-    const bool isArmYLonger = std::abs(static_cast<int>(armY)) > std::abs(static_cast<int>(armX));
+    const bool isArmYLonger = std::abs(std::trunc(armY)) > std::abs(std::trunc(armX));
     const auto sign = [](bool isPositive) {
         return isPositive ? 1.0F : -1.0F;
     };
@@ -320,7 +320,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         return;
     }
     const Vec3 move = pusher.velocity * moveTime.count();
-    const std::uint32_t model = world.get<BrushModel>(entity)->index;
+    const collision::ModelIndex model = world.get<BrushModel>(entity)->index;
     Transform& transform = *world.get<Transform>(entity);
     const Aabb linked = linkedBoxOf(hulls.boundsOf(model), transform.origin, transform.angles);
     const Aabb swept{.min = linked.min + move, .max = linked.max + move};
@@ -367,7 +367,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
     if (world.get<BrushSolidity>(entity)->solid == Solid::Not) {
         return true;
     }
-    const std::uint32_t model = world.get<BrushModel>(entity)->index;
+    const collision::ModelIndex model = world.get<BrushModel>(entity)->index;
     const Aabb linked = linkedBoxOf(hulls.boundsOf(model), transform.origin, transform.angles);
     std::vector<Moved> moved;
     for (const ecs::Entity bodyEntity : bodiesOf(world)) {
@@ -413,6 +413,7 @@ void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entit
                     turned.localTime = std::max(turned.localTime, afterTurn);
                 }
             } else {
+                // Whether it turned matters only to a move that would follow the turn.
                 std::ignore = pushRotate(world, hulls, entity, moveTime, time);
             }
         } else {
@@ -443,9 +444,9 @@ void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entit
 } // namespace
 
 void touchBrushEntities(ecs::World& world, const collision::BrushHulls& hulls,
-                        std::span<const std::uint32_t> models, ecs::Entity toucher) {
+                        std::span<const collision::ModelIndex> models, ecs::Entity toucher) {
     std::vector<ecs::Entity> doors;
-    for (const std::uint32_t model : models) {
+    for (const collision::ModelIndex model : models) {
         ecs::Query<ecs::Entity, const BrushModel&, const Door&>{world}.forEach(
             [&doors, model](ecs::Entity entity, const BrushModel& brush, const Door&) {
                 if (brush.index == model) {

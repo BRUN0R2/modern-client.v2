@@ -9,6 +9,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.ecs;
+import nx.assets;
 import nx.collision;
 
 export namespace nx::game {
@@ -22,7 +23,7 @@ enum class Solid : std::uint8_t {
 
 /// A brush entity's shape: brush model `index` of the map ("model" "*3").
 struct BrushModel {
-    std::uint32_t index = 0;
+    assets::ModelIndex index{};
 };
 
 /// Where an entity is.
@@ -31,11 +32,11 @@ struct Transform {
     EulerAngles angles{};
 };
 
-/// How solid a brush entity is, and the contents a point inside it is in, as the original's
-/// pev->solid and pev->skin: 0 for none, -16 a ladder, else a value of nx::assets::Contents.
+/// How solid a brush entity is, and what a point inside it is in, as the original's pev->solid and
+/// pev->skin: nothing (a skin of 0, or of a number that names no contents), a ladder, or a volume.
 struct BrushSolidity {
     Solid solid = Solid::Not;
-    std::int32_t contents = 0;
+    std::optional<assets::Contents> contents{};
 };
 
 /// A brush entity the game moves, as the original moves its pushers (MOVETYPE_PUSH): at its
@@ -90,9 +91,8 @@ struct Door {
 /// original's MOVETYPE_WALK).
 struct Body {
     collision::Hull hull = collision::Hull::Standing;
-    Vec3 mins{}; ///< Of its box, about its origin.
-    Vec3 maxs{};
-    std::optional<std::uint32_t> groundModel{}; ///< The brush model of the entity it stands on.
+    Aabb box{};                                      ///< About its origin.
+    std::optional<assets::ModelIndex> groundModel{}; ///< The brush model of the entity it stands on.
 };
 
 /// Registers the components above in `world`. Errors: those of ecs::World::registerComponent.

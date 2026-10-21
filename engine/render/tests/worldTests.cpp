@@ -407,17 +407,17 @@ TEST(BspWorldTest, ABrushEntityIsDrawnWhereTheGamePutsAndTurnsIt) {
     const std::vector<std::byte> inPlace = target.draw(*world, camera);
     EXPECT_EQ(pixelAt(inPlace, 16, 16), (Pixel{255, 0, 0, 255}));
 
-    const std::array away{nx::render::ModelPlacement{.model = 1, .origin = {.z = 1000.0F}}};
+    const std::array away{nx::render::ModelPlacement{.model = {1}, .origin = {.z = 1000.0F}}};
     const std::vector<std::byte> moved = target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, away);
     EXPECT_NE(pixelAt(moved, 16, 16), (Pixel{255, 0, 0, 255}));
     EXPECT_EQ(world->lastFrame().faces, 6U) << "moved out of view: the walls alone";
 
     // Turned half a turn about its origin, at the corner of the box, it is behind the walls.
-    const std::array turned{nx::render::ModelPlacement{.model = 1, .angles = {.yaw = nx::Degrees{180.0F}}}};
+    const std::array turned{nx::render::ModelPlacement{.model = {1}, .angles = {.yaw = nx::Degrees{180.0F}}}};
     EXPECT_NE(pixelAt(target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, turned), 16, 16),
               (Pixel{255, 0, 0, 255}));
 
-    const std::array back{nx::render::ModelPlacement{.model = 1}};
+    const std::array back{nx::render::ModelPlacement{.model = {1}}};
     EXPECT_EQ(pixelAt(target.draw(*world, camera, normalStyles(), nx::Seconds{0.0F}, back), 16, 16),
               (Pixel{255, 0, 0, 255}));
     EXPECT_EQ((*device)->validationErrors(), 0U);
