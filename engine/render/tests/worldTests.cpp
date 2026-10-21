@@ -51,6 +51,13 @@ void renameToSky(std::vector<std::byte>& file, std::string_view name) {
     std::ranges::copy(std::as_bytes(std::span{std::string_view{"sky"}}), field.begin());
 }
 
+/// The styles as a map starts: the world's style 0 at 'm', the normal brightness.
+[[nodiscard]] auto normalStyles() -> nx::render::LightStyleValues {
+    nx::render::LightStyles styles;
+    styles.set(0, "m");
+    return styles.valuesAt(nx::Seconds{0.0F});
+}
+
 /// An offscreen target, its depth and the buffer it is read back to.
 class OffscreenTarget {
 public:
@@ -74,9 +81,10 @@ public:
         m_readback = readback.value_or(nx::rhi::BufferHandle{});
     }
 
-    /// Draws `world` as `camera` sees it, in a frame of its own, on a target cleared to an alpha of
-    /// 0, which the world never writes; then the pixels, RGBA rows from the top.
-    [[nodiscard]] auto draw(nx::render::BspWorld& world, const nx::render::Camera& camera)
+    /// Draws `world` as `camera` sees it with `styles`, in a frame of its own, on a target cleared to an
+    /// alpha of 0, which the world never writes; then the pixels, RGBA rows from the top.
+    [[nodiscard]] auto draw(nx::render::BspWorld& world, const nx::render::Camera& camera,
+                            const nx::render::LightStyleValues& styles = normalStyles())
         -> std::vector<std::byte> {
         auto commands = m_device->beginFrame();
         EXPECT_TRUE(commands.has_value());
@@ -90,7 +98,7 @@ public:
         list.beginRendering({.colors = colors,
                              .depth = nx::rhi::DepthAttachment{.texture = m_depth, .clear = 0.0F},
                              .area = kExtent});
-        world.draw(list, camera, 1.0F);
+        world.draw(list, camera, 1.0F, styles);
         list.endRendering();
         list.transition(m_color, TextureState::RenderTarget, TextureState::CopySource);
         list.transition(m_readback, BufferState::Undefined, BufferState::CopyDestination);
@@ -166,6 +174,45 @@ TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+/// The sum of the red, green and blue of every pixel.
+[[nodiscard]] auto brightnessOf(std::span<const std::byte> pixels) -> std::uint64_t {
+    std::uint64_t sum = 0;
+    for (std::size_t pixel = 0; pixel < pixels.size() / 4; ++pixel) {
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            sum += std::to_integer<std::uint64_t>(pixels[(pixel * 4) + channel]);
+        }
+    }
+    return sum;
+}
+
+TEST(BspWorldTest, AFacesLightIsAsBrightAsItsStyle) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+
+    // The wall of CRATE01 again, its lightmap of style 0 at 'a', 'm' and 'z'.
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    nx::render::LightStyles styles;
+    const auto drawnAt = [&](std::string_view pattern) {
+        styles.set(0, pattern);
+        return brightnessOf(target.draw(*world, camera, styles.valuesAt(nx::Seconds{0.0F})));
+    };
+    EXPECT_EQ(drawnAt("a"), 0U) << "dark";
+    const std::uint64_t normal = drawnAt("m");
+    EXPECT_GT(normal, 0U);
+    EXPECT_GT(drawnAt("z"), normal) << "brighter than normal";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
 TEST(BspWorldTest, DrawsOnlyWhatTheCameraSees) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});

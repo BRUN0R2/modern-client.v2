@@ -303,6 +303,8 @@ struct StateAccess {
         return VK_FORMAT_R32G32B32_SFLOAT;
     case VertexFormat::Float4:
         return VK_FORMAT_R32G32B32A32_SFLOAT;
+    case VertexFormat::Uint8x4:
+        return VK_FORMAT_R8G8B8A8_UINT;
     case VertexFormat::Unorm8x4:
         break;
     }

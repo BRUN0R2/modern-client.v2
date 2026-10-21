@@ -181,6 +181,7 @@ enum class VertexFormat : std::uint8_t {
     Float3,
     Float4,
     Unorm8x4, ///< Four bytes read as values from 0 to 1.
+    Uint8x4,  ///< Four bytes read as unsigned integers (a uint4 in shaders).
 };
 
 struct VertexAttribute {

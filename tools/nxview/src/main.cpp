@@ -141,6 +141,7 @@ struct Content {
     std::vector<std::vector<std::byte>> wadBytes;
     std::vector<nx::assets::WadView> wads;
     std::vector<nx::assets::RgbaImage> sky; ///< Its sides, in the order of nx::render::kSkySuffixes.
+    nx::render::LightStyles lightStyles;
     std::vector<std::byte> shader;
 };
 
@@ -177,6 +178,51 @@ struct Content {
     return camera;
 }
 
+/// The light styles the game sets for the map, as CS 1.6's game sets them: the world's patterns (the
+/// Half-Life SDK's CWorld::Precache) and those of the switchable lights, from their entities.
+[[nodiscard]] auto mapLightStyles(const nx::assets::BspView& map) -> nx::render::LightStyles {
+    nx::render::LightStyles styles;
+    for (const auto [style, pattern] : std::to_array<std::pair<std::size_t, std::string_view>>({
+             {0, "m"},                                                   // normal
+             {1, "mmnmmommommnonmmonqnmmo"},                             // flicker
+             {2, "abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba"}, // slow strong pulse
+             {3, "mmmmmaaaaammmmmaaaaaabcdefgabcdefg"},                  // candle
+             {4, "mamamamamama"},                                        // fast strobe
+             {5, "jklmnopqrstuvwxyzyxwvutsrqponmlkj"},                   // gentle pulse
+             {6, "nmonqnmomnmomomno"},                                   // flicker
+             {7, "mmmaaaabcdefgmmmmaaaammmaamm"},                        // candle
+             {8, "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa"},          // candle
+             {9, "aaaaaaaazzzzzzzz"},                                    // slow strobe
+             {10, "mmamammmmammamamaaamammma"},                          // fluorescent flicker
+             {11, "abcdefghijklmnopqrrqponmlkjihgfedcba"},               // slow pulse, not to black
+             {12, "mmnnmmnnnmmnn"},                                      // underwater
+             {63, "a"},
+         })) {
+        styles.set(style, pattern);
+    }
+    // A light with a name and a style from 32 on can be switched: 'a' when it starts off, else its
+    // pattern, else 'm' (CLight::Spawn).
+    constexpr std::size_t kFirstSwitchableStyle = 32;
+    constexpr int kStartsOff = 1;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::string_view classname = entity.find("classname").value_or("");
+        if ((classname != "light" && classname != "light_spot" && classname != "light_environment") ||
+            !entity.find("targetname")) {
+            continue;
+        }
+        std::size_t style = 0;
+        int flags = 0;
+        const std::string_view styleText = entity.find("style").value_or("");
+        const std::string_view flagsText = entity.find("spawnflags").value_or("0");
+        if (std::from_chars(styleText.data(), styleText.data() + styleText.size(), style).ec != std::errc{} ||
+            style < kFirstSwitchableStyle || style >= nx::render::kLightStyleCount) {
+            continue;
+        }
+        std::ignore = std::from_chars(flagsText.data(), flagsText.data() + flagsText.size(), flags);
+        styles.set(style, (flags & kStartsOff) != 0 ? "a" : entity.find("pattern").value_or("m"));
+    }
+    return styles;
+}
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names
 /// at the root of the VFS, as the original looks them up. Maps often name WADs of their author's
 /// computer that no texture of theirs needs; the ones the installation lacks are listed and left
@@ -285,6 +331,7 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
         return unusable(map.error());
     }
     content.map = std::move(*map);
+    content.lightStyles = mapLightStyles(*content.map);
     readWads(*vfs, content);
     readSky(*vfs, content);
     auto shader = nx::platform::readFile(executable->parent_path() / "shaders" / "world.spv");
@@ -381,7 +428,7 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                          .area = kScreenshotExtent});
-    world->draw(list, camera, aspect);
+    world->draw(list, camera, aspect, content.lightStyles.valuesAt(nx::Seconds{0.0F}));
     list.endRendering();
     list.transition(*target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
     list.transition(*readback, nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
@@ -495,6 +542,7 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
     HeldKeys keys;
     std::vector<nx::platform::WindowEvent> events;
     nx::platform::Stopwatch frameClock;
+    nx::platform::Stopwatch mapClock;
     bool isRunning = true;
     while (isRunning) {
         events.clear();
@@ -549,6 +597,7 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
                 return unusable(created.error());
             }
             world.emplace(std::move(*created));
+            std::ignore = mapClock.restart(); // the light styles start with the map
         }
         if (!depth || depthExtent != frame.size) {
             if (depth) {
@@ -571,7 +620,7 @@ void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexce
                              .depth = nx::rhi::DepthAttachment{.texture = *depth, .clear = 0.0F},
                              .area = frame.size});
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
-        world->draw(list, camera, aspect);
+        world->draw(list, camera, aspect, content.lightStyles.valuesAt(nx::Seconds{mapClock.elapsed()}));
         list.endRendering();
         list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
         if (auto submitted = (*device)->submitFrame(**swapchain); !submitted) {

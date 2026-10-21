@@ -8,9 +8,9 @@
 /// Each frame draws the faces that face the camera in the leaves its leaf may see (the potentially
 /// visible set) that are in view, and the brush entities in view, as the original culls them.
 ///
-/// Today: lightstyle 0 of each face, opaque and masked (`{`) textures, from the map or from its
-/// WADs, in the original's picture (nx.render:gamma), and the sky. The four lightstyles, water,
-/// animated textures and render modes come next (TODO.md, Rendering).
+/// Today: the lightmaps of each face's light styles, opaque and masked (`{`) textures, from the map
+/// or from its WADs, in the original's picture (nx.render:gamma), and the sky. Water, animated
+/// textures and render modes come next (TODO.md, Rendering).
 export module nx.render:world;
 
 import std;
@@ -20,6 +20,7 @@ import nx.rhi;
 import nx.assets;
 import :camera;
 import :gamma;
+import :lightStyle;
 
 export namespace nx::render {
 
@@ -82,10 +83,11 @@ public:
     /// Destroys its resources, which the device keeps until the GPU is done with them.
     ~BspWorld();
 
-    /// Draws what `camera` sees on a target of `aspect` (width over height), inside a render pass
-    /// with a color target of desc.colorFormat and a Depth32Float depth target cleared to 0
-    /// (reversed depth).
-    void draw(rhi::CommandList& commands, const Camera& camera, float aspect);
+    /// Draws what `camera` sees on a target of `aspect` (width over height), its lightmaps as bright
+    /// as `lightStyles` make them, inside a render pass with a color target of desc.colorFormat and
+    /// a Depth32Float depth target cleared to 0 (reversed depth).
+    void draw(rhi::CommandList& commands, const Camera& camera, float aspect,
+              const LightStyleValues& lightStyles);
 
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
     [[nodiscard]] inline auto lastFrame() const noexcept -> const FrameStats& { return m_lastFrame; }
@@ -145,7 +147,6 @@ private:
     rhi::BufferHandle m_vertices;
     std::vector<rhi::TextureHandle> m_textures; ///< Every texture, the atlas and the sky's included.
     rhi::SamplerHandle m_textureSampler;
-    rhi::SamplerHandle m_lightmapSampler;
     rhi::SamplerHandle m_skySampler;
     rhi::ShaderHandle m_shader;
     rhi::BindGroupLayoutHandle m_frameLayout;
@@ -156,7 +157,7 @@ private:
     std::vector<FrameSlot> m_frameSlots;
     std::vector<FaceDraw> m_faces; ///< Every face of the map, by its index.
     std::vector<ModelDraw> m_models;
-    float m_lightScale = 0.0F; ///< lightTableScale of the settings it was made with.
+    Vec4 m_lighting{}; ///< The lightScale of the settings it was made with, and the lightmaps' size.
     WorldStats m_stats;
 
     // What each frame gathers, kept to reuse the memory.

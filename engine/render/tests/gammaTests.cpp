@@ -41,8 +41,8 @@ TEST(GammaTest, BrightnessLiftsTheShadows) {
 }
 
 TEST(GammaTest, TheLightScaleIsTheOriginalsFixedPoint) {
-    // lightscale = round(2^(1/2.5) * 256) = 338; a sample at the normal style value 264, >> 14.
-    EXPECT_FLOAT_EQ(nx::render::lightTableScale(kRecorded), 264.0F * 338.0F / 16384.0F);
+    EXPECT_EQ(nx::render::lightScale(kRecorded), 338U) << "round(2^(1/2.5) * 256)";
+    EXPECT_EQ(nx::render::lightScale({.lightGamma = 1.8F}), 376U) << "round(2^(1/1.8) * 256)";
 }
 
 TEST(GammaTest, SettingsAreHeldToTheOriginalsRanges) {

@@ -67,12 +67,10 @@ auto lightTable(const GammaSettings& settings) -> std::array<std::uint8_t, kLigh
     return table;
 }
 
-auto lightTableScale(const GammaSettings& settings) -> float {
+auto lightScale(const GammaSettings& settings) -> std::uint32_t {
     const Bounded values = bounded(settings);
     constexpr double kFixedPointOne = 256.0;
-    constexpr double kShiftedOut = 16384.0; // >> 14
-    const auto lightScale = static_cast<int>((std::pow(2.0, 1.0 / values.lightGamma) * kFixedPointOne) + 0.5);
-    return static_cast<float>(static_cast<double>(kNormalLightStyleValue) * lightScale / kShiftedOut);
+    return static_cast<std::uint32_t>((std::pow(2.0, 1.0 / values.lightGamma) * kFixedPointOne) + 0.5);
 }
 
 } // namespace nx::render

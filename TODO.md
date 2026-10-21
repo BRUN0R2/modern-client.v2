@@ -241,8 +241,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Render graph (barriers, aliasing, pass culling, parallel recording)
 - [x] BSP world (`nx.render:world`): every face of the world and of the brush entities in one vertex and index buffer, batched by texture; textures of the map and of its WADs with their mips; triggers and tool textures not drawn
 - [x] BSP world: PVS and frustum culling (`BspView::leafAt` and `potentiallyVisible`; leaves against the view's planes, faces facing the camera, as the original culls them; indices gathered each frame)
-- [x] Lightmap atlas (lightstyle 0 of each face, extents computed as the compilers compute them)
-- [ ] Lightstyles combined in the shader
+- [x] Lightmap atlas (a layer for each of a face's light styles, extents computed as the compilers compute them)
+- [x] Lightstyles combined in the shader (`nx.render:lightStyle`: the original's integer light per luxel, then blended; patterns stepped ten letters a second)
 - [x] Masked transparency (`{` textures)
 - [x] Sky: the faces of `sky` show the sides of `gfx/env/<skyname>*.tga` as the original projects them (texture arrays in `nx.rhi`)
 - [ ] Water, animated textures
