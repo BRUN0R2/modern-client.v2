@@ -245,7 +245,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Masked transparency (`{` textures)
 - [ ] Sky, water, animated textures
 - [ ] Brush entities with render modes and moving transforms (today: placed at their `origin`)
-- [ ] Emulation of gamma, brightness, texgamma and lightgamma
+- [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [ ] Studio models: animation evaluation on the CPU in jobs
 - [ ] GPU skinning (vertex shader) with per-vertex and per-normal bone indices
 - [ ] Optional compute skinning

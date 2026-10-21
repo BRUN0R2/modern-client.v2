@@ -43,9 +43,11 @@ struct WorldVertex {
 };
 static_assert(sizeof(WorldVertex) == 7 * sizeof(float), "the vertex layout of the world pipeline");
 
-/// The camera's uniform: the rows of the view-projection matrix.
-struct CameraUniform {
+/// The frame's uniform: the rows of the view-projection matrix, and in `lighting.x` what a
+/// lightmap sample is multiplied by to index the light table (lightTableScale).
+struct FrameUniform {
     Mat4 viewProjection{};
+    Vec4 lighting{};
 };
 
 /// How a face is drawn, from its texture's name.
@@ -74,7 +76,8 @@ struct TexelLevels {
     std::array<std::size_t, assets::kMipLevels> offsets{};
 };
 
-[[nodiscard]] auto texelsOf(const assets::MipTexture& texture, bool isMasked) -> TexelLevels {
+[[nodiscard]] auto texelsOf(const assets::MipTexture& texture, bool isMasked,
+                            const std::array<std::uint8_t, 256>& textureGamma) -> TexelLevels {
     TexelLevels result;
     for (std::size_t level = 0; level < assets::kMipLevels; ++level) {
         result.offsets.at(level) = result.bytes.size();
@@ -82,7 +85,8 @@ struct TexelLevels {
             const auto entry = std::to_integer<std::size_t>(index);
             const bool isTransparent = isMasked && entry == kTransparentIndex;
             for (std::size_t channel = 0; channel < 3; ++channel) {
-                result.bytes.push_back(isTransparent ? std::byte{0} : texture.palette[(entry * 3) + channel]);
+                const auto value = std::to_integer<std::size_t>(texture.palette[(entry * 3) + channel]);
+                result.bytes.push_back(isTransparent ? std::byte{0} : std::byte{textureGamma[value]});
             }
             result.bytes.push_back(isTransparent ? std::byte{0} : std::byte{255});
         }
@@ -230,11 +234,13 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         return texture;
     };
 
-    // The textures: the map's, or the first WAD's that has the name; a checkerboard otherwise.
+    // The textures: the map's, or the first WAD's that has the name, through `texgamma`; a
+    // checkerboard otherwise.
+    const std::array<std::uint8_t, 256> textureGamma = textureGammaTable(desc.gamma);
     const std::vector<std::byte> checker = checkerTexels();
-    const std::array<std::size_t, 1> checkerOffsets{0};
-    auto checkerTexture = uploadTexture("world.missing", {.width = kCheckerSize, .height = kCheckerSize}, 1,
-                                        checker, checkerOffsets);
+    const std::array<std::size_t, 1> oneLevel{0}; // the level offsets of a texture without mips
+    auto checkerTexture =
+        uploadTexture("world.missing", {.width = kCheckerSize, .height = kCheckerSize}, 1, checker, oneLevel);
     if (!checkerTexture) {
         return gpuFailure(std::move(checkerTexture.error()));
     }
@@ -272,7 +278,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             world.m_stats.missingTextures.push_back(slot->name);
             continue;
         }
-        const TexelLevels texels = texelsOf(*pixels, use.kind == SurfaceKind::Masked);
+        const TexelLevels texels = texelsOf(*pixels, use.kind == SurfaceKind::Masked, textureGamma);
         auto texture = uploadTexture(std::format("world.texture.{}", slot->name),
                                      {.width = pixels->width, .height = pixels->height},
                                      narrow<std::uint32_t>(assets::kMipLevels), texels.bytes, texels.offsets);
@@ -280,6 +286,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             return gpuFailure(std::move(texture.error()));
         }
         use.texture = *texture;
+        ++world.m_stats.textures;
     }
 
     // The faces to draw: the world's, and those of the brush entities where their entities put them.
@@ -374,11 +381,26 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
             }
         }
     }
-    const std::array<std::size_t, 1> atlasOffsets{0};
-    auto atlasTexture = uploadTexture("world.lightmaps", atlasExtent, 1, atlas, atlasOffsets);
+    auto atlasTexture = uploadTexture("world.lightmaps", atlasExtent, 1, atlas, oneLevel);
     if (!atlasTexture) {
         return gpuFailure(std::move(atlasTexture.error()));
     }
+
+    // The light table: what the summed light of a sample is drawn as (nx.render:gamma).
+    const std::array<std::uint8_t, kLightTableSize> levels = lightTable(desc.gamma);
+    std::vector<std::byte> lightTexels;
+    lightTexels.reserve(levels.size() * 4);
+    for (const std::uint8_t level : levels) {
+        lightTexels.insert(lightTexels.end(),
+                           {std::byte{level}, std::byte{level}, std::byte{level}, std::byte{255}});
+    }
+    auto lightTableTexture =
+        uploadTexture("world.lightTable", {.width = narrow<std::uint32_t>(kLightTableSize), .height = 1}, 1,
+                      lightTexels, oneLevel);
+    if (!lightTableTexture) {
+        return gpuFailure(std::move(lightTableTexture.error()));
+    }
+    world.m_lightScale = lightTableScale(desc.gamma);
 
     // The geometry: each face a triangle fan, its triangles grouped by texture.
     std::vector<WorldVertex> vertices;
@@ -414,7 +436,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         ++world.m_stats.faces;
     }
 
-    // The pipeline and its bind groups: per frame, the camera and the lightmaps; per batch, its texture.
+    // The pipeline and its bind groups: per frame, the camera, the lightmaps and the light table; per
+    // batch, its texture.
     auto shader = device.createShader({.label = "world", .code = desc.shaderCode});
     if (!shader) {
         return gpuFailure(std::move(shader.error()));
@@ -422,11 +445,15 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     world.m_shader = *shader;
     const std::array frameBindings{
         rhi::BindingLayout{
-            .binding = 0, .type = rhi::BindingType::UniformBuffer, .stages = {rhi::ShaderStage::Vertex}},
+            .binding = 0,
+            .type = rhi::BindingType::UniformBuffer,
+            .stages = {rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment}}, // the matrix; the light scale
         rhi::BindingLayout{
             .binding = 1, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
         rhi::BindingLayout{
-            .binding = 2, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}}};
+            .binding = 2, .type = rhi::BindingType::Sampler, .stages = {rhi::ShaderStage::Fragment}},
+        rhi::BindingLayout{
+            .binding = 3, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}}};
     const std::array textureBindings{
         rhi::BindingLayout{
             .binding = 0, .type = rhi::BindingType::SampledTexture, .stages = {rhi::ShaderStage::Fragment}},
@@ -475,8 +502,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     world.m_pipeline = *pipeline;
 
     for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        auto buffer = device.createBuffer({.label = "world.camera",
-                                           .size = sizeof(CameraUniform),
+        auto buffer = device.createBuffer({.label = "world.frame",
+                                           .size = sizeof(FrameUniform),
                                            .usage = {rhi::BufferUsage::Uniform},
                                            .location = rhi::MemoryLocation::Upload});
         if (!buffer) {
@@ -485,14 +512,15 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         const std::array bindings{
             rhi::Binding{.binding = 0, .resource = rhi::BufferBinding{.buffer = *buffer}},
             rhi::Binding{.binding = 1, .resource = *atlasTexture},
-            rhi::Binding{.binding = 2, .resource = world.m_lightmapSampler}};
+            rhi::Binding{.binding = 2, .resource = world.m_lightmapSampler},
+            rhi::Binding{.binding = 3, .resource = *lightTableTexture}};
         auto group = device.createBindGroup(
             {.label = "world.frame", .layout = world.m_frameLayout, .bindings = bindings});
         if (!group) {
             device.destroy(*buffer);
             return gpuFailure(std::move(group.error()));
         }
-        world.m_cameraSlots.push_back(CameraSlot{.buffer = *buffer, .group = *group});
+        world.m_frameSlots.push_back(FrameSlot{.buffer = *buffer, .group = *group});
     }
 
     // The buffers, and a batch for each texture that has triangles.
@@ -517,7 +545,6 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         indices.insert(indices.end(), indicesByTexture[texture].begin(), indicesByTexture[texture].end());
     }
     world.m_stats.triangles = indices.size() / 3;
-    world.m_stats.textures = world.m_textures.size();
     world.m_stats.lightmapAtlas = atlasExtent;
 
     const auto uploadBuffer =
@@ -571,11 +598,11 @@ BspWorld::BspWorld(BspWorld&& other) noexcept
       m_shader{std::exchange(other.m_shader, {})}, m_frameLayout{std::exchange(other.m_frameLayout, {})},
       m_textureLayout{std::exchange(other.m_textureLayout, {})},
       m_pipeline{std::exchange(other.m_pipeline, {})}, m_textureGroups{std::move(other.m_textureGroups)},
-      m_cameraSlots{std::move(other.m_cameraSlots)}, m_batches{std::move(other.m_batches)},
-      m_drawCount{other.m_drawCount}, m_stats{std::move(other.m_stats)} {
+      m_frameSlots{std::move(other.m_frameSlots)}, m_batches{std::move(other.m_batches)},
+      m_drawCount{other.m_drawCount}, m_lightScale{other.m_lightScale}, m_stats{std::move(other.m_stats)} {
     other.m_textures.clear();
     other.m_textureGroups.clear();
-    other.m_cameraSlots.clear();
+    other.m_frameSlots.clear();
 }
 
 BspWorld::~BspWorld() {
@@ -583,7 +610,7 @@ BspWorld::~BspWorld() {
 }
 
 void BspWorld::release() noexcept {
-    for (const CameraSlot& slot : m_cameraSlots) {
+    for (const FrameSlot& slot : m_frameSlots) {
         m_device->destroy(slot.group);
         m_device->destroy(slot.buffer);
     }
@@ -601,16 +628,16 @@ void BspWorld::release() noexcept {
     m_device->destroy(m_lightmapSampler);
     m_device->destroy(m_vertices);
     m_device->destroy(m_indices);
-    m_cameraSlots.clear();
+    m_frameSlots.clear();
     m_textureGroups.clear();
     m_textures.clear();
 }
 
 void BspWorld::draw(rhi::CommandList& commands, const Mat4& viewProjection) {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    const CameraSlot& slot = m_cameraSlots[m_drawCount++ % m_cameraSlots.size()];
-    const CameraUniform camera{.viewProjection = viewProjection};
-    std::ranges::copy(std::as_bytes(std::span{&camera, 1}), m_device->mappedBytes(slot.buffer).begin());
+    const FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    const FrameUniform frame{.viewProjection = viewProjection, .lighting = {.x = m_lightScale}};
+    std::ranges::copy(std::as_bytes(std::span{&frame, 1}), m_device->mappedBytes(slot.buffer).begin());
 
     commands.setPipeline(m_pipeline);
     commands.setVertexBuffer(0, m_vertices, 0);

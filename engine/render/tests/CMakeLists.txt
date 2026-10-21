@@ -4,6 +4,7 @@
 nxAddTest(nxRenderTests
     SOURCES
         cameraTests.cpp
+        gammaTests.cpp
         worldTests.cpp
     DEPENDS
         nx::render
