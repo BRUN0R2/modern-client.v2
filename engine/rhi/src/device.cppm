@@ -16,6 +16,7 @@ import :handles;
 export namespace nx::rhi {
 
 /// A range of a buffer bound to a binding.
+/// A range of a buffer bound to a binding of a bind group.
 struct BufferBinding {
     BufferHandle buffer{};
     std::uint64_t offset = 0;
@@ -23,27 +24,33 @@ struct BufferBinding {
 };
 
 /// What a binding of a bind group holds: as its layout's BindingType says.
+/// What a binding of a bind group holds: as its BindingType says.
 using BindingResource = std::variant<BufferBinding, TextureHandle, SamplerHandle>;
 
+/// The resource of binding `binding` of a bind group.
 struct Binding {
     std::uint32_t binding = 0;
     BindingResource resource{};
 };
 
+/// A bind group to create (Device::createBindGroup): the resources of a layout's bindings.
 struct BindGroupDesc {
-    std::string_view label{};
+    std::string_view label{}; ///< Names the group to the debug tools.
     BindGroupLayoutHandle layout{};
     std::span<const Binding> bindings{}; ///< One per binding of the layout.
 };
 
 /// A shader's entry point: the function of the stage in the shader's code.
+/// An entry point of a shader, which a stage of a pipeline runs.
 struct ShaderEntry {
     ShaderHandle shader{};
     std::string_view entryPoint{};
 };
 
+/// A render pipeline to create (Device::createRenderPipeline): its shaders, its vertices, its
+/// triangles, its targets and its bind groups. The viewport and the scissor are set while recording.
 struct RenderPipelineDesc {
-    std::string_view label{};
+    std::string_view label{}; ///< Names the pipeline to the debug tools.
     ShaderEntry vertex{};
     ShaderEntry fragment{};
     std::span<const VertexBufferLayout> vertexBuffers{}; ///< Slot by slot.
@@ -56,6 +63,7 @@ struct RenderPipelineDesc {
 };
 
 /// A color attachment of a render pass.
+/// A color attachment of a render pass: its texture, and what the pass does with its content.
 struct ColorAttachment {
     TextureHandle texture{};
     LoadOp load = LoadOp::Clear;
@@ -64,6 +72,7 @@ struct ColorAttachment {
 };
 
 /// The depth attachment of a render pass.
+/// The depth attachment of a render pass, as ColorAttachment.
 struct DepthAttachment {
     TextureHandle texture{};
     LoadOp load = LoadOp::Clear;
@@ -72,12 +81,14 @@ struct DepthAttachment {
 };
 
 /// The attachments a render pass draws to, and the area it draws in.
+/// A render pass (CommandList::beginRendering): its attachments and the area it draws.
 struct RenderingDesc {
     std::span<const ColorAttachment> colors{};
     std::optional<DepthAttachment> depth{};
     Extent2d area{};
 };
 
+/// A copy between a buffer and a mip level of a layer of a texture.
 /// A copy between a buffer and a mip level of a layer of a texture.
 struct TextureCopy {
     BufferHandle buffer{};
@@ -90,6 +101,7 @@ struct TextureCopy {
 };
 
 /// The commands of a frame, recorded in order and run by the GPU when the frame is submitted.
+/// The commands of a frame (Device::beginFrame), which the GPU runs in order once submitted.
 class CommandList {
 public:
     CommandList() = default;
@@ -116,23 +128,33 @@ public:
     /// Starts a render pass: its color attachments must be in RenderTarget, its depth attachment in
     /// DepthTarget. The viewport and the scissor then cover the whole area.
     virtual void beginRendering(const RenderingDesc& desc) = 0;
+    /// Ends the render pass under way.
     virtual void endRendering() = 0;
 
+    /// Draws with `pipeline` from now on, in the render pass under way.
     virtual void setPipeline(RenderPipelineHandle pipeline) = 0;
     /// Binds `group` as bind group `index` of the pipeline set last.
     virtual void setBindGroup(std::uint32_t index, BindGroupHandle group) = 0;
+    /// Reads the vertices of vertex buffer slot `slot` from `buffer`, at `offset` bytes; it must be in
+    /// BufferState::Vertex.
     virtual void setVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) = 0;
+    /// Reads the indices of drawIndexed from `buffer`, at `offset` bytes, in `format`; it must be in
+    /// BufferState::Index.
     virtual void setIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) = 0;
     /// The part of the targets clip space maps to, with depths from 0 to 1.
     virtual void setViewport(const Rect& area) = 0;
     /// The part of the targets fragments may be drawn to.
     virtual void setScissor(const Rect& area) = 0;
+    /// Draws `instanceCount` instances of `vertexCount` vertices from `firstVertex`, the instances
+    /// numbered from `firstInstance`.
     virtual void draw(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstVertex,
                       std::uint32_t firstInstance) = 0;
+    /// The same with `indexCount` indices from `firstIndex`, each added to `vertexOffset`.
     virtual void drawIndexed(std::uint32_t indexCount, std::uint32_t instanceCount, std::uint32_t firstIndex,
                              std::int32_t vertexOffset, std::uint32_t firstInstance) = 0;
 };
 
+/// A swapchain to create (Device::createSwapchain).
 struct SwapchainDesc {
     Extent2d size{}; ///< The window's drawable size; the surface may impose its own.
     PresentMode presentMode = PresentMode::Fifo;
@@ -179,6 +201,7 @@ public:
     auto operator=(Device&&) -> Device& = delete;
     virtual ~Device() = default;
 
+    /// What the device runs on.
     [[nodiscard]] virtual auto adapter() const noexcept -> const AdapterInfo& = 0;
     /// What the code of ShaderDesc must be.
     [[nodiscard]] virtual auto shaderFormat() const noexcept -> ShaderFormat = 0;
@@ -198,6 +221,8 @@ public:
     [[nodiscard]] virtual auto createRenderPipeline(const RenderPipelineDesc& desc)
         -> Result<RenderPipelineHandle, RhiError> = 0;
 
+    /// Destroys a resource once the GPU has finished every frame that may use it; the handle names
+    /// nothing from now on. The null handle and a handle already destroyed are left alone.
     virtual void destroy(BufferHandle buffer) = 0;
     virtual void destroy(TextureHandle texture) = 0;
     virtual void destroy(SamplerHandle sampler) = 0;
