@@ -77,9 +77,9 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
-/// Where the game puts brush model `model` (1 or more) of the map, and how it turns it about there.
+/// Where the game puts brush model `model` (not the world) of the map, and how it turns it about there.
 struct ModelPlacement {
-    std::uint32_t model = 0;
+    assets::ModelIndex model{};
     Vec3 origin{};
     EulerAngles angles{};
 };

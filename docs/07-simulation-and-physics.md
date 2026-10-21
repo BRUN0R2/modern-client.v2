@@ -98,7 +98,8 @@ code** on the server (authoritative) and on the client (prediction).
   limit, ducking (0.4 s on the ground with the eyes easing down, at once in the air, the ducktap
   of a duck let go before it is down), stairs, sliding along walls and floors, water (its levels,
   swimming, jumping out) and ladders (climbed by the movement buttons along their face, left by
-  a jump or by backing off them on the floor), among the world and brush entities at rest.
+  a jump or by backing off them on the floor), among the world and the brush entities, where the
+  game puts and turns them.
   `nxview` walks through the maps with it, among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
@@ -145,8 +146,9 @@ default to off.
 
 The dimensions **MUST** match the hulls compiled into the BSP, because each hull's clipnode
 trees come from the map compiler. They are not tunable: `cs.shared` holds them as constants
-(the standing player's box, 32 by 32 by 72 about its origin, its eyes 17 above it; the ducked
-one, 32 by 32 by 36, its eyes 12 above it).
+(`cs::kStandingBox`, 32 by 32 by 72 about the player's origin, its eyes 17 above it;
+`cs::kDuckedBox`, 32 by 32 by 36, its eyes 12 above it), which movement and the player's body
+among the game's pushers (`cs::bodyOf`) both read.
 
 ## 4. Collision
 

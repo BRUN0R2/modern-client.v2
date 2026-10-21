@@ -135,11 +135,6 @@ template <class Code>
     return kExitUnusable;
 }
 
-[[nodiscard]] auto unusable(std::string_view problem) -> int {
-    std::println(stderr, "nxview: {}", problem);
-    return kExitUnusable;
-}
-
 /// The map, its WADs, its sky, the classes of its entities and the shader, read once: the views
 /// point into these bytes.
 struct Content {
@@ -218,16 +213,14 @@ struct Content {
         if ((classname != "light" && classname != "light_spot") || !entity.find("targetname")) {
             continue;
         }
-        std::size_t style = 0;
-        int flags = 0;
-        const std::string_view styleText = entity.find("style").value_or("");
-        const std::string_view flagsText = entity.find("spawnflags").value_or("0");
-        if (std::from_chars(styleText.data(), styleText.data() + styleText.size(), style).ec != std::errc{} ||
-            style < kFirstSwitchableStyle || style >= nx::render::kLightStyleCount) {
+        const std::optional<int> style = entity.findInteger("style");
+        if (!style || std::cmp_less(*style, kFirstSwitchableStyle) ||
+            std::cmp_greater_equal(*style, nx::render::kLightStyleCount)) {
             continue;
         }
-        std::ignore = std::from_chars(flagsText.data(), flagsText.data() + flagsText.size(), flags);
-        styles.set(style, (flags & kStartsOff) != 0 ? "a" : entity.find("pattern").value_or("m"));
+        const int flags = entity.findInteger("spawnflags").value_or(0);
+        styles.set(nx::narrow<std::size_t>(*style),
+                   (flags & kStartsOff) != 0 ? "a" : entity.find("pattern").value_or("m"));
     }
     return styles;
 }
@@ -360,43 +353,60 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
     return EXIT_SUCCESS;
 }
 
-/// Writes `pixels`, RGBA rows from the top, as a 24-bit BMP.
-[[nodiscard]] auto writeBmp(const std::filesystem::path& path, nx::rhi::Extent2d extent,
-                            std::span<const std::byte> pixels) -> bool {
-    constexpr std::uint32_t kHeaderBytes = 14 + 40;
-    const std::uint32_t rowBytes = ((extent.width * 3) + 3) & ~3U; // rows are padded to 4 bytes
+// A BMP file of 24-bit pixels: its file header, its BITMAPINFOHEADER, then its rows of blue, green
+// and red bytes from the bottom up, each padded to a multiple of four bytes.
+constexpr std::uint32_t kBmpFileHeaderBytes = 14;
+constexpr std::uint32_t kBmpInfoHeaderBytes = 40;
+constexpr std::uint16_t kBmpPlanes = 1;
+constexpr std::uint32_t kBmpBytesPerPixel = 3; // blue, green and red
+constexpr auto kBmpBitsPerPixel =
+    nx::narrow<std::uint16_t>(kBmpBytesPerPixel * std::numeric_limits<std::uint8_t>::digits);
+constexpr std::uint32_t kBmpUncompressed = 0;
+constexpr std::int32_t kBmpPixelsPerMeter = 2835; // 72 dpi
+constexpr std::uint32_t kBmpRowAlignment = 4;
+/// The bytes of a pixel of the readback, and where its red, green and blue are among them.
+constexpr std::size_t kRgbaBytes = 4;
+constexpr std::size_t kRed = 0;
+constexpr std::size_t kGreen = 1;
+constexpr std::size_t kBlue = 2;
+
+/// The BMP file of `pixels`, RGBA rows from the top, of `extent`.
+[[nodiscard]] auto bmpOf(nx::rhi::Extent2d extent, std::span<const std::byte> pixels)
+    -> std::vector<std::byte> {
+    constexpr std::uint32_t kHeaderBytes = kBmpFileHeaderBytes + kBmpInfoHeaderBytes;
+    const std::uint32_t rowBytes =
+        (((extent.width * kBmpBytesPerPixel) + kBmpRowAlignment - 1) / kBmpRowAlignment) * kBmpRowAlignment;
     const std::uint32_t imageBytes = rowBytes * extent.height;
     std::vector<std::byte> file;
+    file.reserve(kHeaderBytes + imageBytes);
     const auto put = [&file]<class Value>(Value value) {
         const auto raw = std::bit_cast<std::array<std::byte, sizeof(Value)>>(value); // little-endian hosts
         file.insert(file.end(), raw.begin(), raw.end());
     };
     file.insert(file.end(), {std::byte{'B'}, std::byte{'M'}});
     put(kHeaderBytes + imageBytes);
-    put(std::uint32_t{0});
+    put(std::uint32_t{0}); // reserved
     put(kHeaderBytes);
-    put(std::uint32_t{40});
-    put(static_cast<std::int32_t>(extent.width));
-    put(static_cast<std::int32_t>(extent.height)); // positive: rows from the bottom
-    put(std::uint16_t{1});
-    put(std::uint16_t{24});
-    put(std::uint32_t{0});
+    put(kBmpInfoHeaderBytes);
+    put(nx::narrow<std::int32_t>(extent.width));
+    put(nx::narrow<std::int32_t>(extent.height)); // positive: rows from the bottom
+    put(kBmpPlanes);
+    put(kBmpBitsPerPixel);
+    put(kBmpUncompressed);
     put(imageBytes);
-    put(std::int32_t{2835}); // 72 dpi
-    put(std::int32_t{2835});
-    put(std::uint32_t{0});
-    put(std::uint32_t{0});
+    put(kBmpPixelsPerMeter);
+    put(kBmpPixelsPerMeter);
+    put(std::uint32_t{0}); // no palette
+    put(std::uint32_t{0}); // every color matters
     for (std::uint32_t row = extent.height; row-- > 0;) {
         for (std::uint32_t x = 0; x < extent.width; ++x) {
-            const std::size_t pixel = ((std::size_t{row} * extent.width) + x) * 4;
-            file.insert(file.end(), {pixels[pixel + 2], pixels[pixel + 1], pixels[pixel]});
+            const auto rgba =
+                pixels.subspan(((std::size_t{row} * extent.width) + x) * kRgbaBytes, kRgbaBytes);
+            file.insert(file.end(), {rgba[kBlue], rgba[kGreen], rgba[kRed]});
         }
-        file.resize(file.size() + (rowBytes - (extent.width * 3)), std::byte{0});
+        file.resize(file.size() + (rowBytes - (extent.width * kBmpBytesPerPixel)), std::byte{0});
     }
-    std::ofstream stream{path, std::ios::binary};
-    stream.write(reinterpret_cast<const char*>(file.data()), // NOLINT: the stream's byte type
-                 static_cast<std::streamsize>(file.size()));
-    return stream.good();
+    return file;
 }
 
 /// Renders one frame from the camera's start into options.screenshot, without a window.
@@ -417,7 +427,7 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
                                            .usage = {nx::rhi::TextureUsage::DepthTarget}});
     auto readback = (*device)->createBuffer(
         {.label = "nxview.readback",
-         .size = std::uint64_t{kScreenshotExtent.width} * kScreenshotExtent.height * 4,
+         .size = std::uint64_t{kScreenshotExtent.width} * kScreenshotExtent.height * kRgbaBytes,
          .usage = {nx::rhi::BufferUsage::CopyDestination},
          .location = nx::rhi::MemoryLocation::Readback});
     if (!target || !depth || !readback) {
@@ -459,8 +469,10 @@ void readSky(const nx::assets::Vfs& vfs, Content& content) {
         return unusable(submitted.error());
     }
     (*device)->waitIdle();
-    if (!writeBmp(*options.screenshot, kScreenshotExtent, (*device)->mappedBytes(*readback))) {
-        return unusable(std::format("cannot write {}", nx::platform::toUtf8(*options.screenshot)));
+    if (auto written = nx::platform::writeFile(*options.screenshot,
+                                               bmpOf(kScreenshotExtent, (*device)->mappedBytes(*readback)));
+        !written) {
+        return unusable(written.error());
     }
     const nx::render::FrameStats& drawn = world->lastFrame();
     std::println("nxview: {} from {} at {}x{}: {} of {} faces, {} triangles, in {} leaves",
@@ -544,20 +556,6 @@ struct Walker {
         .previousEye = eye};
 }
 
-/// The box of a standing player, and of a ducked one, about its origin.
-constexpr nx::Vec3 kStandingHalfBox{16.0F, 16.0F, 36.0F};
-constexpr nx::Vec3 kDuckedHalfBox{16.0F, 16.0F, 18.0F};
-
-/// The body of `player` the game's pushers move.
-[[nodiscard]] auto bodyOf(const cs::MovementState& player) -> nx::game::Body {
-    const nx::Vec3 half = player.isDucked ? kDuckedHalfBox : kStandingHalfBox;
-    return nx::game::Body{.hull =
-                              player.isDucked ? nx::collision::Hull::Ducked : nx::collision::Hull::Standing,
-                          .mins = -half,
-                          .maxs = half,
-                          .groundModel = player.isOnGround ? player.groundModel : std::nullopt};
-}
-
 /// The game of the map as nxview plays it, a tick each kCommandInterval: its entities, the player's
 /// body among them, and its clock.
 struct LocalGame {
@@ -601,7 +599,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             walker->player = moved.state;
             nx::game::touchBrushEntities(game, hulls, moved.touchedModels, local.body);
             game.get<nx::game::Transform>(local.body)->origin = walker->player.origin;
-            *game.get<nx::game::Body>(local.body) = bodyOf(walker->player);
+            *game.get<nx::game::Body>(local.body) = cs::bodyOf(walker->player);
         }
         nx::game::runPushers(game, hulls, kCommandInterval, local.time);
         if (walker != nullptr) {
@@ -668,7 +666,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     nx::render::Camera camera = startCamera(options, *content.map);
     Walker walker = walkerAt(camera.position);
     LocalGame local{
-        .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, bodyOf(walker.player))};
+        .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, cs::bodyOf(walker.player))};
     bool isFlying = false;
     std::optional<nx::render::BspWorld> world; // made with the first image, which gives the format
     std::optional<nx::rhi::TextureHandle> depth;
@@ -709,6 +707,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
         const nx::Seconds elapsed = frameClock.restart();
         if (isFlying) {
             fly(camera, keys, elapsed.count());
+            // No walker, no eye: the game runs on while the camera flies.
             std::ignore = play(game, local, *hulls, nullptr, keys, camera.angles, elapsed);
         } else {
             camera.position =

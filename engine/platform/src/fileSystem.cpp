@@ -21,9 +21,9 @@ namespace nx::platform {
 
 namespace {
 
-/// The most bytes one read asks the operating system for: below the limits of ReadFile (a DWORD)
-/// and of read on Linux (0x7ffff000 bytes).
-constexpr std::size_t kMaxBytesPerRead = std::size_t{1} << 30;
+/// The most bytes one read or write asks the operating system for: below the limits of ReadFile and
+/// WriteFile (a DWORD) and of read and write on Linux (0x7ffff000 bytes).
+constexpr std::size_t kMaxBytesPerCall = std::size_t{1} << 30;
 
 /// The FileError of an operating system error, or `otherwise` when the error is specific to the
 /// operation.
@@ -44,6 +44,10 @@ constexpr std::size_t kMaxBytesPerRead = std::size_t{1} << 30;
 
 [[nodiscard]] auto shrankText(const std::filesystem::path& path) -> std::string {
     return std::format("{}: the file shrank while it was read", toUtf8(path));
+}
+
+[[nodiscard]] auto wroteNothingText(const std::filesystem::path& path) -> std::string {
+    return std::format("{}: the operating system wrote nothing", toUtf8(path));
 }
 
 /// What a file is read into: bytes, or the text of a text file.
@@ -91,7 +95,7 @@ template <FileBuffer Buffer>
     Buffer bytes(narrow<std::size_t>(size.QuadPart), {});
     std::size_t offset = 0;
     while (offset < bytes.size()) {
-        const auto request = narrow<DWORD>(std::min(bytes.size() - offset, kMaxBytesPerRead));
+        const auto request = narrow<DWORD>(std::min(bytes.size() - offset, kMaxBytesPerCall));
         DWORD count = 0;
         if (ReadFile(file.get(), std::span{bytes}.subspan(offset).data(), request, &count, nullptr) ==
             FALSE) {
@@ -103,6 +107,30 @@ template <FileBuffer Buffer>
         offset += count;
     }
     return bytes;
+}
+
+[[nodiscard]] auto writeRegularFile(const std::filesystem::path& path, std::span<const std::byte> bytes)
+    -> Result<void, FileError> {
+    const HANDLE handle =
+        CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        const std::error_code error = lastError();
+        return fail(classify(error, FileError::WriteFailed), osFailureText(path, error));
+    }
+    const ScopedHandle file{handle};
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const auto request = narrow<DWORD>(std::min(bytes.size() - offset, kMaxBytesPerCall));
+        DWORD count = 0;
+        if (WriteFile(file.get(), bytes.subspan(offset).data(), request, &count, nullptr) == FALSE) {
+            return fail(FileError::WriteFailed, osFailureText(path, lastError()));
+        }
+        if (count == 0) {
+            return fail(FileError::WriteFailed, wroteNothingText(path));
+        }
+        offset += count;
+    }
+    return {};
 }
 
 #else
@@ -144,7 +172,7 @@ template <FileBuffer Buffer>
     std::size_t offset = 0;
     while (offset < bytes.size()) {
         const ::ssize_t count = ::read(file.get(), std::span{bytes}.subspan(offset).data(),
-                                       std::min(bytes.size() - offset, kMaxBytesPerRead));
+                                       std::min(bytes.size() - offset, kMaxBytesPerCall));
         if (count < 0) {
             if (errno == EINTR) {
                 continue; // a signal interrupted the read before any byte arrived
@@ -157,6 +185,33 @@ template <FileBuffer Buffer>
         offset += narrow<std::size_t>(count);
     }
     return bytes;
+}
+
+[[nodiscard]] auto writeRegularFile(const std::filesystem::path& path, std::span<const std::byte> bytes)
+    -> Result<void, FileError> {
+    constexpr ::mode_t kNewFileMode = 0666; // read and write for all, less the umask, as files are made
+    const int descriptor = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, kNewFileMode);
+    if (descriptor < 0) {
+        const std::error_code error = lastError();
+        return fail(classify(error, FileError::WriteFailed), osFailureText(path, error));
+    }
+    const ScopedDescriptor file{descriptor};
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const ::ssize_t count = ::write(file.get(), bytes.subspan(offset).data(),
+                                        std::min(bytes.size() - offset, kMaxBytesPerCall));
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue; // a signal interrupted the write before any byte left
+            }
+            return fail(FileError::WriteFailed, osFailureText(path, lastError()));
+        }
+        if (count == 0) {
+            return fail(FileError::WriteFailed, wroteNothingText(path));
+        }
+        offset += narrow<std::size_t>(count);
+    }
+    return {};
 }
 
 #endif
@@ -235,6 +290,21 @@ auto readFile(const std::filesystem::path& path) -> Result<std::vector<std::byte
 
 auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError> {
     return readWholeFile<std::string>(path);
+}
+
+auto writeFile(const std::filesystem::path& path, std::span<const std::byte> bytes)
+    -> Result<void, FileError> {
+    std::error_code error;
+    const std::filesystem::file_status status = std::filesystem::status(path, error);
+    if (status.type() != std::filesystem::file_type::not_found) {
+        if (error) {
+            return fail(classify(error, FileError::WriteFailed), osFailureText(path, error));
+        }
+        if (!std::filesystem::is_regular_file(status)) {
+            return fail(FileError::NotAFile, toUtf8(path));
+        }
+    }
+    return writeRegularFile(path, bytes);
 }
 
 #if defined(_WIN32)

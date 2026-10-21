@@ -24,6 +24,7 @@ using nx::collision::Contents;
 using nx::collision::HullChild;
 using nx::collision::HullNode;
 using nx::collision::HullNodeIndex;
+using nx::collision::HullRoots;
 using nx::game::Door;
 using nx::game::DoorState;
 using nx::game::Transform;
@@ -43,19 +44,19 @@ constexpr nx::Aabb kDoorBounds{.min = {.x = 0.0F, .y = -64.0F, .z = -64.0F},
 /// The world, with a wall from x = 100 on for a standing box when `isWalled`, and the door, model 1:
 /// solid from x = 0 to 64 for a standing box, in its own space.
 [[nodiscard]] auto doorHulls(bool isWalled, nx::Aabb doorBounds = kDoorBounds) -> BrushHulls {
-    std::vector<HullNode> nodes{HullNode{.plane = 0, .children = {HullNodeIndex{1}, Contents::Empty}},
-                                HullNode{.plane = 1, .children = {Contents::Empty, Contents::Solid}},
-                                HullNode{.plane = 2, .children = {Contents::Solid, Contents::Empty}},
-                                HullNode{.plane = 0, .children = {Contents::Empty, Contents::Empty}}};
+    std::vector<HullNode> nodes{HullNode{.plane = {0}, .children = {HullNodeIndex{1}, Contents::Empty}},
+                                HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}},
+                                HullNode{.plane = {2}, .children = {Contents::Solid, Contents::Empty}},
+                                HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Empty}}};
     const HullChild wall = isWalled ? HullChild{HullNodeIndex{2}} : HullChild{Contents::Empty};
     auto hulls = BrushHulls::create(nx::collision::BrushHullsDesc{
         .planes = {facingX(0.0F), facingX(64.0F), facingX(100.0F)},
         .clipNodes = std::move(nodes),
-        .models = {
-            nx::collision::BrushModel{.hulls = {Contents::Empty, wall, Contents::Empty, Contents::Empty}},
-            nx::collision::BrushModel{
-                .hulls = {Contents::Empty, HullNodeIndex{0}, Contents::Empty, Contents::Empty},
-                .bounds = doorBounds}}});
+        .models = {nx::collision::BrushModel{
+                       .hulls = HullRoots{{Contents::Empty, wall, Contents::Empty, Contents::Empty}}},
+                   nx::collision::BrushModel{.hulls = HullRoots{{Contents::Empty, HullNodeIndex{0},
+                                                                 Contents::Empty, Contents::Empty}},
+                                             .bounds = doorBounds}}});
     EXPECT_TRUE(hulls.has_value());
     return std::move(hulls).value();
 }
@@ -77,16 +78,16 @@ public:
         nx::ecs::Query<nx::ecs::Entity, const Door&>{m_world}.forEach(
             [this](nx::ecs::Entity entity, const Door&) { m_door = entity; });
         if (body) {
-            m_toucher =
-                m_world.spawn(Transform{.origin = *body}, nx::game::Body{.mins = {-16.0F, -16.0F, -36.0F},
-                                                                         .maxs = {16.0F, 16.0F, 36.0F}});
+            m_toucher = m_world.spawn(
+                Transform{.origin = *body},
+                nx::game::Body{.box = {.min = {-16.0F, -16.0F, -36.0F}, .max = {16.0F, 16.0F, 36.0F}}});
         } else {
             m_toucher = m_world.spawn(Transform{.origin = toucher});
         }
     }
 
     void touch(const BrushHulls& hulls) {
-        const std::array models{std::uint32_t{1}};
+        const std::array models{nx::collision::ModelIndex{1}};
         nx::game::touchBrushEntities(m_world, hulls, models, m_toucher);
     }
 

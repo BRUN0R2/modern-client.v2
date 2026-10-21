@@ -46,6 +46,7 @@ struct MarkSurfaceTag;
 struct NodeTag;
 struct LeafTag;
 struct ClipNodeTag;
+struct ModelTag;
 
 using PlaneIndex = BspIndex<PlaneTag>;
 using VertexIndex = BspIndex<VertexTag>;
@@ -58,6 +59,11 @@ using MarkSurfaceIndex = BspIndex<MarkSurfaceTag>;
 using NodeIndex = BspIndex<NodeTag>;
 using LeafIndex = BspIndex<LeafTag>;
 using ClipNodeIndex = BspIndex<ClipNodeTag>;
+/// The world (model 0) or a brush entity's model ("*1", "*2"...), by its index in the models.
+using ModelIndex = BspIndex<ModelTag>;
+
+/// The world: model 0 of every map.
+inline constexpr ModelIndex kWorldModel{};
 
 /// What can be wrong with a BSP file; the detail names the lump, the record and the value.
 enum class BspError : std::uint8_t {
@@ -75,7 +81,8 @@ enum class BspError : std::uint8_t {
     BadEntities,        ///< The entity text breaks its syntax; the detail has the line.
 };
 
-/// What a leaf or a side of a clip node holds.
+/// What a point of a map is in, numbered as the original numbers it: what a leaf or a side of a clip
+/// node holds, Empty to Translucent; and Ladder, which only an entity holds (a func_ladder's "skin").
 enum class Contents : std::int8_t {
     Empty = -1,
     Solid = -2,
@@ -92,7 +99,12 @@ enum class Contents : std::int8_t {
     CurrentUp = -13,
     CurrentDown = -14,
     Translucent = -15,
+    Ladder = -16,
 };
+
+/// The contents the original numbers `value`, as an entity's "skin" holds them; nullopt for a number
+/// that names none.
+[[nodiscard]] auto contentsNumbered(std::int32_t value) noexcept -> std::optional<Contents>;
 
 /// The axis a plane faces: one of the three exactly, or the nearest of them.
 enum class PlaneAxis : std::uint8_t {
@@ -225,9 +237,9 @@ struct BspEntity {
     [[nodiscard]] auto findNumber(std::string_view key) const noexcept -> std::optional<float>;
     /// The value of `key` read by vectorOfValue; nullopt when there is none too.
     [[nodiscard]] auto findVector(std::string_view key) const noexcept -> std::optional<Vec3>;
-    /// The brush model the entity is ("model" "*3"), by its index in the map's models; nullopt when
-    /// it has no model or another kind (a studio model or a sprite).
-    [[nodiscard]] auto findBrushModel() const noexcept -> std::optional<std::uint32_t>;
+    /// The brush model the entity is ("model" "*3"); nullopt when it has no model or another kind (a
+    /// studio model or a sprite). The map may lack it: parse() does not read the entities' values.
+    [[nodiscard]] auto findBrushModel() const noexcept -> std::optional<ModelIndex>;
 };
 
 /// A BSP v30 file: decoded records, and views of the bytes it was parsed from (textures, lighting,
