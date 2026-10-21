@@ -109,7 +109,8 @@ Mandatory support so that **every official map** loads without warnings:
 | Light | `light`, `light_spot`, `light_environment` (animated styles at runtime) |
 
 The complete list, with the *keyvalues* schema, lives in `data/cstrike/entities.toml`. CI
-loads every official map and fails if there is an unknown `classname` or key.
+loads every official map and fails if there is an unknown `classname` or key. Today the file holds
+how solid the game makes each class of brush entities ([03 §11](03-ecs.md#11-prefabs-and-map-entities)).
 
 ## 6. Economy
 

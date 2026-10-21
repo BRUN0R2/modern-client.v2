@@ -274,7 +274,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [ ] pmove: noclip, observers and unsticking
 - [ ] pmove among entities: boxes (players, hostages, pushables), moving and turned brush entities, base velocity (conveyors, `trigger_push`, water currents), the entities touched
-- [ ] Brush entities made by the game when the map starts (`nx.game`): `nxview` then takes their roles from it instead of its own table of classes
+- [x] Brush entities made by the game when the map starts (`nx.game`, by the classes of `data/cstrike/entities.toml`), listed for movement by `cs::brushEntitiesOf`
 - [ ] Parity: ground acceleration and friction (including `edgefriction`)
 - [ ] Parity: air acceleration and strafing
 - [ ] Parity: jump and stamina penalty

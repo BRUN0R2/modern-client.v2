@@ -201,12 +201,27 @@ private:
     std::uint32_t m_leafCount = 0;
 };
 
+/// The integer at the start of an entity's value, after spaces, as the original's atoi reads it;
+/// nullopt when the value does not start with one.
+[[nodiscard]] auto integerOfValue(std::string_view value) noexcept -> std::optional<int>;
+
+/// The three numbers of an entity's vector value ("-512 1024 36"), each after spaces; nullopt for
+/// other text.
+[[nodiscard]] auto vectorOfValue(std::string_view value) noexcept -> std::optional<Vec3>;
+
 /// An entity of the map: its keys and values, in file order.
 struct BspEntity {
     std::vector<std::pair<std::string, std::string>> keyValues{};
 
     /// The value of `key`; the last when it repeats, as the original assigns them in order.
     [[nodiscard]] auto find(std::string_view key) const noexcept -> std::optional<std::string_view>;
+    /// The value of `key` read by integerOfValue; nullopt when there is none too.
+    [[nodiscard]] auto findInteger(std::string_view key) const noexcept -> std::optional<int>;
+    /// The value of `key` read by vectorOfValue; nullopt when there is none too.
+    [[nodiscard]] auto findVector(std::string_view key) const noexcept -> std::optional<Vec3>;
+    /// The brush model the entity is ("model" "*3"), by its index in the map's models; nullopt when
+    /// it has no model or another kind (a studio model or a sprite).
+    [[nodiscard]] auto findBrushModel() const noexcept -> std::optional<std::uint32_t>;
 };
 
 /// A BSP v30 file: decoded records, and views of the bytes it was parsed from (textures, lighting,

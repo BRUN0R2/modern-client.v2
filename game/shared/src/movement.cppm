@@ -16,7 +16,9 @@ export module cs.shared:movement;
 import std;
 import nx.core;
 import nx.math;
+import nx.ecs;
 import nx.collision;
+import nx.game;
 
 export namespace cs {
 
@@ -117,6 +119,11 @@ struct BrushEntity {
     BrushRole role = BrushRole::Solid;
     nx::collision::Contents contents = nx::collision::Contents::Water; ///< What a Volume holds.
 };
+
+/// The brush entities of `world`, made by nx.game, that movement meets, in the world's order, as the
+/// original's engine lists them for it: the solid ones, and the others that hold contents, a ladder
+/// (-16) or a volume of nx::collision::Contents.
+[[nodiscard]] auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity>;
 
 /// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `hulls`, among
 /// `entities`, brush models of the same hulls; where two stop the player at once, the first does, the

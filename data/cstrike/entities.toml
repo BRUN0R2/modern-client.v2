@@ -1,0 +1,128 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The classes of the entities of Counter-Strike 1.6's maps, as its game makes them when a map
+# starts (docs/10, section 5), read into nx::game::EntityClasses.
+#
+# Today: the brush entities, by how solid the game makes each class. `solid` is "bsp" (its brush
+# model stops what moves into it) or "not"; any spawnflag of `notSolidFlags` makes one not solid;
+# `skinMakesNotSolid` marks the doors a "skin" other than 0 makes a volume of those contents
+# (water, slime, lava); `contents` is what the game gives each whatever its "skin". A class not
+# listed makes no brush entity yet: triggers, zones, and func_pushable, which the game makes a box.
+
+[[brushClasses]]
+classname = "func_wall"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_wall_toggle"
+solid = "bsp"
+notSolidFlags = 1 # starts off
+
+[[brushClasses]]
+classname = "func_breakable"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_door"
+solid = "bsp"
+notSolidFlags = 8 # passable
+skinMakesNotSolid = true
+
+[[brushClasses]]
+classname = "func_water" # a door
+solid = "bsp"
+notSolidFlags = 8
+skinMakesNotSolid = true
+
+[[brushClasses]]
+classname = "func_door_rotating"
+solid = "bsp"
+notSolidFlags = 8 # passable
+
+[[brushClasses]]
+classname = "func_illusionary" # its "skin" makes it a volume, or a ladder (-16)
+solid = "not"
+
+[[brushClasses]]
+classname = "func_ladder"
+solid = "not"
+contents = -16
+
+[[brushClasses]]
+classname = "func_button"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_rot_button"
+solid = "bsp"
+notSolidFlags = 1 # not solid
+
+[[brushClasses]]
+classname = "func_rotating"
+solid = "bsp"
+notSolidFlags = 64 # not solid
+
+[[brushClasses]]
+classname = "func_plat"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_platrot"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_train"
+solid = "bsp"
+notSolidFlags = 8 # passable
+
+[[brushClasses]]
+classname = "func_tracktrain"
+solid = "bsp"
+notSolidFlags = 8 # passable
+
+[[brushClasses]]
+classname = "func_vehicle"
+solid = "bsp"
+notSolidFlags = 8 # passable
+
+[[brushClasses]]
+classname = "func_conveyor"
+solid = "bsp"
+notSolidFlags = 2 # not solid
+
+[[brushClasses]]
+classname = "func_guntarget"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_tank"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_tanklaser"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_tankrocket"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_tankmortar"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_healthcharger"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "func_recharge"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "momentary_door"
+solid = "bsp"
+
+[[brushClasses]]
+classname = "momentary_rot_button"
+solid = "bsp"

@@ -14,7 +14,9 @@ nxAddModuleLibrary(csShared
     DEPENDS
         nx::core
         nx::math
-        nx::collision)
+        nx::ecs
+        nx::collision
+        nx::game)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

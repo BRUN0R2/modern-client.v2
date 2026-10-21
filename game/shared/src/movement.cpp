@@ -6,7 +6,9 @@ module cs.shared;
 import std;
 import nx.core;
 import nx.math;
+import nx.ecs;
 import nx.collision;
+import nx.game;
 
 namespace cs {
 
@@ -943,6 +945,28 @@ private:
 };
 
 } // namespace
+
+auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
+    constexpr std::int32_t kLadder = -16;
+    std::vector<BrushEntity> entities;
+    nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&, const nx::game::BrushSolidity&>
+        brushes{world};
+    brushes.forEach([&](const nx::game::BrushModel& model, const nx::game::Transform& transform,
+                        const nx::game::BrushSolidity& solidity) {
+        if (solidity.solid == nx::game::Solid::Bsp) {
+            entities.push_back({.model = model.index, .origin = transform.origin});
+        } else if (solidity.contents == kLadder) {
+            entities.push_back({.model = model.index, .origin = transform.origin, .role = BrushRole::Ladder});
+        } else if (solidity.contents <= std::to_underlying(Contents::Empty) &&
+                   solidity.contents >= std::to_underlying(Contents::Translucent)) {
+            entities.push_back({.model = model.index,
+                                .origin = transform.origin,
+                                .role = BrushRole::Volume,
+                                .contents = static_cast<Contents>(solidity.contents)});
+        }
+    });
+    return entities;
+}
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,
                       const MovementSettings& settings, const BrushHulls& hulls,

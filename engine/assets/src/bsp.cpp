@@ -887,6 +887,30 @@ auto LeafSet::contains(LeafIndex leaf) const noexcept -> bool {
     return ((static_cast<std::uint32_t>(m_bits[bit / 8]) >> (bit % 8)) & 1U) != 0;
 }
 
+auto integerOfValue(std::string_view value) noexcept -> std::optional<int> {
+    const std::size_t first = std::min(value.find_first_not_of(' '), value.size());
+    int number = 0;
+    const auto [stop, error] = std::from_chars(value.data() + first, value.data() + value.size(), number);
+    return error == std::errc{} ? std::optional{number} : std::nullopt;
+}
+
+auto vectorOfValue(std::string_view value) noexcept -> std::optional<Vec3> {
+    std::array<float, 3> numbers{};
+    const char* next = value.data();
+    const char* const end = value.data() + value.size();
+    for (float& number : numbers) {
+        while (next != end && *next == ' ') {
+            ++next;
+        }
+        const auto [stop, error] = std::from_chars(next, end, number);
+        if (error != std::errc{}) {
+            return std::nullopt;
+        }
+        next = stop;
+    }
+    return Vec3{.x = numbers[0], .y = numbers[1], .z = numbers[2]};
+}
+
 auto BspEntity::find(std::string_view key) const noexcept -> std::optional<std::string_view> {
     const auto reversed = keyValues | std::views::reverse;
     const auto found =
@@ -895,6 +919,24 @@ auto BspEntity::find(std::string_view key) const noexcept -> std::optional<std::
         return std::nullopt;
     }
     return found->second;
+}
+
+auto BspEntity::findInteger(std::string_view key) const noexcept -> std::optional<int> {
+    return find(key).and_then(integerOfValue);
+}
+
+auto BspEntity::findVector(std::string_view key) const noexcept -> std::optional<Vec3> {
+    return find(key).and_then(vectorOfValue);
+}
+
+auto BspEntity::findBrushModel() const noexcept -> std::optional<std::uint32_t> {
+    const std::optional<std::string_view> model = find("model");
+    std::uint32_t index = 0;
+    if (!model || !model->starts_with('*') ||
+        std::from_chars(model->data() + 1, model->data() + model->size(), index).ec != std::errc{}) {
+        return std::nullopt;
+    }
+    return index;
 }
 
 } // namespace nx::assets

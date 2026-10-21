@@ -344,6 +344,14 @@ Destroying an entity removes the relations that point to it at the same sync poi
   produces a typed error.
 - Mods register new prefabs and `classname`s through the API ([15](15-mod-api.md)).
 
+**Today** (`nx.game`): the brush entities. `data/cstrike/entities.toml` describes, for each class
+of them, how solid the game makes it (`nx::game::BrushClass`: solid or not, the spawnflags that
+make one not solid, whether a `skin` makes a door a volume, contents the class always has).
+`spawnBrushEntities` makes, in the map's order, an entity for each one of a listed class, with its
+`BrushModel`, its `Transform` and its `BrushSolidity` (the original's `solid` and `skin`); an
+entity of a brush model the map lacks is `GameError::UnknownModel`. `nx.assets` reads the values as
+the original does (`BspEntity::findInteger`, `findVector`, `findBrushModel`).
+
 ## 12. Networking integration
 
 - `[[=nx::net::Replicated{}]]` components take part in snapshots. The `StableTypeId` and the
