@@ -25,9 +25,10 @@ inline constexpr std::uint32_t kMaxWorkerCount = 256;
 
 /// How to start a JobSystem.
 struct JobSystemConfig {
-    /// Threads that run jobs, besides the threads that wait on them (`jobs_workers`). With 0, every
-    /// job runs inside wait() on the waiting thread, in priority and submission order: the serial
-    /// mode used to isolate concurrency bugs (`jobs_serial`).
+    /// Threads that run jobs, besides the threads that wait on them (a `jobs_workers` cvar is
+    /// planned, TODO.md). With 0, every job runs inside wait() on the waiting thread, in priority
+    /// and submission order: the serial mode used to isolate concurrency bugs (a `jobs_serial`
+    /// command is planned).
     std::uint32_t workerCount = defaultWorkerCount();
 };
 
@@ -43,8 +44,8 @@ struct WorkerStats {
     std::uint64_t sleeps = 0;       ///< Times the worker found no work and slept.
 };
 
-/// Counters for `jobs_stats`. Each value is exact for its own counter, but they are read one after
-/// another while the system runs.
+/// Counters for `jobs_stats` (a command planned in TODO.md). Each value is exact for its own counter,
+/// but they are read one after another while the system runs.
 struct JobSystemStats {
     std::vector<WorkerStats> workers;        ///< One per worker, in worker order.
     std::uint64_t jobsExecutedByWaiters = 0; ///< Run by threads inside wait().
@@ -144,7 +145,7 @@ public:
     /// Worker threads, besides the threads that wait.
     [[nodiscard]] inline auto workerCount() const noexcept -> std::uint32_t { return m_workerCount; }
 
-    /// What every worker has done so far: for jobs_stats.
+    /// What every worker has done so far: for jobs_stats (planned, TODO.md).
     [[nodiscard]] auto stats() const -> JobSystemStats;
 
 private:

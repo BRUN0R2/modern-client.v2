@@ -82,8 +82,8 @@ applications and tools of later milestones are not in the repository yet. Each m
 | CMake | 4.3+ (validated with 4.3.1 and 4.4.4) | Stable C++ modules. The `std` module is built by the project ([ADR-0014](adr/0014-std-module-built-by-the-project.md)) |
 | Ninja | 1.12+ (the one shipped with Visual Studio works) | Mandatory (module scanning) |
 | vcpkg | Manifest mode with a pinned *baseline* (the one shipped with Visual Studio works) | Reproducible builds, custom triplets without exceptions |
-| Slang | Pinned version, from M2 on | Shader compilation (planned, with the shader pipeline) |
-| Python | 3.12+ | Build and CI scripts only (not a runtime dependency) |
+| Slang | The vcpkg `shader-slang` port, pinned by the *baseline* | Shader compilation: `slangc` comes from the port as a host tool (`nxAddShaders`, `shaders/`) |
+| Python | 3.12+ | Installs tools with `pip`: `reuse` and `clang-format` (the [local checks](../CONTRIBUTING.md#local-checks) and CI), CMake and Ninja (CI). The repository has no Python script; nothing needs Python at run time |
 
 ### 2.1 Compiler matrix
 
@@ -130,7 +130,7 @@ dialect is `/std:c++latest`.
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers with Clang (ASan + UBSan, TSan) | To be validated |
 | `fuzz-windows-msvc` | Only the fuzz targets, with libFuzzer and AddressSanitizer: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus | Validated; nightly in CI (`fuzz`) |
-| `server-headless`, `tools` | Only `nextds` or only the tools | When those targets exist |
+| `server-headless`, `tools` | Only `nextds` or only the tools | Planned: `tools` is not defined yet (its tools, `nxcheck` and `nxview`, exist); `server-headless` with `nextds` |
 
 Each configure preset has a build preset and a test preset with the same name. The build
 directory is `build/<preset>`.
@@ -147,7 +147,18 @@ cmake --build --preset dev-windows-msvc
 ctest --preset dev-windows-msvc
 ```
 
-**Linux:**
+**Linux:** besides GCC 16, CMake, Ninja and vcpkg (with `VCPKG_ROOT` set), the build needs the
+system packages vcpkg and the `sdl3` port build with: the X11, Wayland, xkbcommon, EGL and
+libdecor development headers. The Vulkan loader, lavapipe and the validation layers let the
+Vulkan tests run. On Debian or Ubuntu, these are the packages CI installs
+(`.github/workflows/ci.yml`):
+
+```bash
+apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip \
+  libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxft-dev \
+  libwayland-dev wayland-protocols libxkbcommon-dev libegl-dev libdecor-0-dev \
+  libvulkan1 mesa-vulkan-drivers vulkan-validationlayers
+```
 
 ```bash
 cmake --preset dev-linux-gcc
@@ -165,7 +176,7 @@ ctest --preset dev-linux-gcc
 | `NX_BUILD_CLIENT` | `ON` | Builds `next` |
 | `NX_BUILD_SERVER` | `ON` | Builds `nextds` |
 | `NX_BUILD_TOOLS` | `ON` | Builds the tools |
-| `NX_RHI_VULKAN` | `ON` | Vulkan backend |
+| `NX_RHI_VULKAN` | `ON` | Vulkan backend (planned: today `nx.rhi.vulkan` is always built) |
 | `NX_RHI_D3D11` | `OFF` | DirectX 11 backend (future) |
 | `NX_ENABLE_TRACY` | `ON` in dev | Profiler |
 | `NX_REFLECTION_BACKEND` | `auto` | `native` (P2996: adds `-freflection` and checks every `nx.meta` description against its type), `fallback` (descriptions as written) or `auto` (native where the compiler has it). `native` on a compiler without P2996 fails the configuration |
@@ -231,12 +242,12 @@ Rules:
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
-| `nxview` | The map and model viewer: `--map de_dust2` walks a player with a knife through a map of the Counter-Strike 1.6 installation, moved by `cs.shared`'s movement at 100 commands a second, or flies a free camera through it (F switches); `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--screenshot <file.bmp>` renders one frame without a window, `--time <seconds>` after the map starts; `--validation` |
+| `nxview` | The map and model viewer: `--map de_dust2` walks a player with a knife through a map of the Counter-Strike 1.6 installation, moved by `cs.shared`'s movement at 100 commands a second, or flies a free camera through it (F switches); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--screenshot <file.bmp>` renders one frame without a window, `--time <seconds>` after the map starts; `--validation` |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzTga`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 

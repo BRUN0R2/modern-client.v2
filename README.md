@@ -34,7 +34,7 @@ with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime cor
 and `.cfg`), `nx.platform` (clocks, the native file system, the window and its input), `nx.rhi`
 (the GPU interface, with its Vulkan backend), `nx.render` (the camera and the BSP world) and
 `nx.assets` (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and
-fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV), with tests, and
+fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV, TGA), with tests, and
 `nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. M3
 has begun: `nx.collision` (traces through the hulls of a map), `nx.game` (the map's brush
 entities, as the game makes them, and the doors a touch opens) and `cs.shared` (player
