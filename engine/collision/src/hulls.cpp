@@ -279,6 +279,26 @@ auto BrushHulls::boundsOf(std::uint32_t model) const noexcept -> Aabb {
     return m_models[model].bounds;
 }
 
+namespace {
+
+/// `point` in the space of a model at `offset` turned by `angles`; turned only when it is.
+[[nodiscard]] auto inModelSpace(Vec3 point, Vec3 offset, EulerAngles angles) noexcept -> Vec3 {
+    const Vec3 moved = point - offset;
+    return angles == EulerAngles{} ? moved : intoAxes(angleVectors(angles), moved);
+}
+
+} // namespace
+
+auto BrushHulls::contentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+                            EulerAngles angles) const noexcept -> Contents {
+    return contentsAt(model, hull, inModelSpace(point, offset, angles));
+}
+
+auto BrushHulls::movementContentsAt(std::uint32_t model, Hull hull, Vec3 point, Vec3 offset,
+                                    EulerAngles angles) const noexcept -> Contents {
+    return movementContentsAt(model, hull, inModelSpace(point, offset, angles));
+}
+
 auto BrushHulls::contentsAt(std::uint32_t model, Hull hull, Vec3 point) const noexcept -> Contents {
     expects(model < m_models.size() && hull != Hull::Count, "BrushHulls::contentsAt: a model and a hull");
     return contentsUnder(m_planes, hull == Hull::Point ? m_pointNodes : m_clipNodes,
@@ -303,8 +323,12 @@ auto BrushHulls::trace(const HullTraceQuery& query) const noexcept -> Trace {
     const HullChild root = m_models[query.model].hulls[std::to_underlying(query.hull)];
     Tracer<Rules::Server> tracer{m_planes, query.hull == Hull::Point ? m_pointNodes : m_clipNodes, root,
                                  result};
-    std::ignore = tracer.follow(root, 0.0F, 1.0F, query.start - query.offset, query.end - query.offset);
+    std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
+                                inModelSpace(query.end, query.offset, query.angles));
     if (result.fraction != 1.0F) {
+        if (query.angles != EulerAngles{}) {
+            result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
+        }
         // The end, from the fraction, in double precision as the original's.
         const auto along = [&result](float from, float to) {
             return static_cast<float>((double{result.fraction} * double{to - from}) + double{from});
@@ -326,7 +350,8 @@ auto BrushHulls::traceMovement(const HullTraceQuery& query) const noexcept -> Tr
         root = Contents::Empty; // Parity: movement takes such a hull for an empty one
     }
     Tracer<Rules::Movement> tracer{m_planes, nodes, root, result};
-    std::ignore = tracer.follow(root, 0.0F, 1.0F, query.start - query.offset, query.end - query.offset);
+    std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
+                                inModelSpace(query.end, query.offset, query.angles));
     if (result.isAllSolid) {
         result.startsSolid = true;
     }
@@ -334,6 +359,9 @@ auto BrushHulls::traceMovement(const HullTraceQuery& query) const noexcept -> Tr
         result.fraction = 0.0F;
     }
     if (result.fraction != 1.0F) {
+        if (query.angles != EulerAngles{}) {
+            result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
+        }
         result.end = ((query.end - query.start) * result.fraction) + query.start;
     }
     return result;

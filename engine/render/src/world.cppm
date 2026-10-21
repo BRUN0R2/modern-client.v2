@@ -11,8 +11,7 @@
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
-/// the brush entities' render modes, water, and brush entities moved by the game. Turned entities
-/// come next (TODO.md, Rendering).
+/// the brush entities' render modes, water, and brush entities moved and turned by the game.
 export module nx.render:world;
 
 import std;
@@ -78,10 +77,11 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
-/// Where the game puts brush model `model` (1 or more) of the map.
+/// Where the game puts brush model `model` (1 or more) of the map, and how it turns it about there.
 struct ModelPlacement {
     std::uint32_t model = 0;
     Vec3 origin{};
+    EulerAngles angles{};
 };
 
 /// What a draw shows.
@@ -180,11 +180,11 @@ private:
     explicit BspWorld(rhi::Device& device, const assets::BspView& map) noexcept
         : m_device{&device}, m_map{&map} {}
     void release() noexcept;
-    /// Where each brush model is drawn this frame, in m_origins: where `placements` puts it, else
-    /// where its entity puts it.
+    /// Where each brush model is drawn this frame, in m_placements: where `placements` puts it, else
+    /// where its entity puts it, unturned.
     void place(std::span<const ModelPlacement> placements);
     /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices, and the brush
-    /// entities it sees, where m_origins puts them, in m_entityDraws.
+    /// entities it sees, where m_placements puts them, in m_entityDraws.
     void gather(const Camera& camera, float aspect);
     /// Whether face `face`, drawn, faces `eye` (in its model's space): a face of the world from the
     /// side of its plane the eye is on, the plane itself in front, as the original's
@@ -194,9 +194,9 @@ private:
     /// Adds the triangles of face `face` of the world, once a frame, to its bucket when it is seen
     /// from `eye`.
     void addFace(std::uint32_t face, Vec3 eye);
-    /// Puts a brush entity, its model at `origin`, in m_entityDraws, with its faces seen from `camera`,
-    /// in the order the original draws them.
-    void addEntity(std::uint32_t model, const Camera& camera, Vec3 origin);
+    /// Puts a brush entity, its model placed by `placement`, in m_entityDraws, with its faces seen from
+    /// `camera`, in the order the original draws them.
+    void addEntity(std::uint32_t model, const Camera& camera, const ModelPlacement& placement);
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
     /// The shader, the bind group layouts, the samplers and a pipeline for each way faces are drawn.
     [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
@@ -230,7 +230,7 @@ private:
     // What each frame gathers, kept to reuse the memory.
     std::uint64_t m_drawCount = 0;
     std::vector<std::uint64_t> m_faceGathered; ///< The draw each face was last looked at in.
-    std::vector<Vec3> m_origins;               ///< Of each of m_models, this frame.
+    std::vector<ModelPlacement> m_placements;  ///< Of each of m_models, this frame.
     std::optional<assets::LeafIndex> m_visibleFrom;
     std::vector<assets::LeafIndex> m_visibleLeaves; ///< Those of m_visibleFrom.
     std::vector<std::vector<std::uint32_t>> m_bucketIndices;

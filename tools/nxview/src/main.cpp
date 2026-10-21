@@ -599,7 +599,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
             const cs::MovementResult moved = cs::simulateMovement(walker->player, commandOf(keys, view),
                                                                   cs::MovementSettings{}, hulls, entities);
             walker->player = moved.state;
-            nx::game::touchBrushEntities(game, moved.touchedModels);
+            nx::game::touchBrushEntities(game, hulls, moved.touchedModels, local.body);
             game.get<nx::game::Transform>(local.body)->origin = walker->player.origin;
             *game.get<nx::game::Body>(local.body) = bodyOf(walker->player);
         }
@@ -766,7 +766,8 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
         placements.clear();
         nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&>{game}.forEach(
             [&placements](const nx::game::BrushModel& model, const nx::game::Transform& transform) {
-                placements.push_back({.model = model.index, .origin = transform.origin});
+                placements.push_back(
+                    {.model = model.index, .origin = transform.origin, .angles = transform.angles});
             });
         world->draw(list, {.camera = camera,
                            .aspect = aspect,

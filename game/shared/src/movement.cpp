@@ -315,9 +315,15 @@ private:
     /// it soonest; all the way when none does.
     [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull) const -> PlayerTrace {
         PlayerTrace nearest{.end = end};
-        const auto meet = [&](std::uint32_t model, Vec3 offset, std::optional<std::uint32_t> entity) {
-            const nx::collision::Trace hit = m_world.traceMovement(nx::collision::HullTraceQuery{
-                .model = model, .hull = hull, .offset = offset, .start = start, .end = end});
+        const auto meet = [&](std::uint32_t model, Vec3 offset, nx::EulerAngles angles,
+                              std::optional<std::uint32_t> entity) {
+            const nx::collision::Trace hit =
+                m_world.traceMovement(nx::collision::HullTraceQuery{.model = model,
+                                                                    .hull = hull,
+                                                                    .offset = offset,
+                                                                    .angles = angles,
+                                                                    .start = start,
+                                                                    .end = end});
             if (hit.fraction < nearest.fraction) {
                 nearest = PlayerTrace{.fraction = hit.fraction,
                                       .end = hit.end,
@@ -327,10 +333,10 @@ private:
                                       .model = entity};
             }
         };
-        meet(0, Vec3{}, std::nullopt);
+        meet(0, Vec3{}, nx::EulerAngles{}, std::nullopt);
         for (const BrushEntity& entity : m_entities) {
             if (entity.role == BrushRole::Solid) {
-                meet(entity.model, entity.origin, entity.model);
+                meet(entity.model, entity.origin, entity.angles, entity.model);
             }
         }
         return nearest;
@@ -365,7 +371,7 @@ private:
         }
         return std::ranges::any_of(m_entities, [&](const BrushEntity& entity) {
             return entity.role == BrushRole::Solid &&
-                   m_world.movementContentsAt(entity.model, m_hull, origin - entity.origin) ==
+                   m_world.movementContentsAt(entity.model, m_hull, origin, entity.origin, entity.angles) ==
                        Contents::Solid;
         });
     }
@@ -972,7 +978,8 @@ auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
     brushes.forEach([&](const nx::game::BrushModel& model, const nx::game::Transform& transform,
                         const nx::game::BrushSolidity& solidity) {
         if (solidity.solid == nx::game::Solid::Bsp) {
-            entities.push_back({.model = model.index, .origin = transform.origin});
+            entities.push_back(
+                {.model = model.index, .origin = transform.origin, .angles = transform.angles});
         } else if (solidity.contents == kLadder) {
             entities.push_back({.model = model.index, .origin = transform.origin, .role = BrushRole::Ladder});
         } else if (solidity.contents <= std::to_underlying(Contents::Empty) &&

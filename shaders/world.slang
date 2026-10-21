@@ -40,13 +40,22 @@ Texture2D albedo;
 [[vk::binding(1, 1)]]
 SamplerState albedoSampler;
 
-// The brush model drawn: where the game puts it this frame (xyz of `origin`; the world's is 0); and,
-// drawn other than normally, rgb its `rendercolor`, a its `renderamt`, from 0 to 1.
+// The brush model drawn: where the game puts it this frame, its turn (the rows of its rotation, in
+// xyz) and its origin (xyz; the world's are the identity and 0); and, drawn other than normally, rgb
+// its `rendercolor`, a its `renderamt`, from 0 to 1.
 struct Entity
 {
     float4 color;
     float4 origin;
+    float4 turn[3];
 };
+
+float3 placedPosition(float3 position)
+{
+    return entity.origin.xyz +
+           float3(dot(entity.turn[0].xyz, position), dot(entity.turn[1].xyz, position),
+                  dot(entity.turn[2].xyz, position));
+}
 [[vk::binding(0, 2)]]
 ConstantBuffer<Entity> entity;
 
@@ -114,7 +123,7 @@ float2 textureCoordinatesOf(VertexInput input)
 VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
-    output.position = clipPositionOf(input.position + entity.origin.xyz);
+    output.position = clipPositionOf(placedPosition(input.position));
     output.uv = textureCoordinatesOf(input);
     output.lightmapPosition = input.lightmapPosition;
     output.styles = input.styles;

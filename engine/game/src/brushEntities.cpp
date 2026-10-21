@@ -16,11 +16,15 @@ namespace {
 
 // The spawnflags of a door the game reads.
 constexpr std::int32_t kStartsOpen = 1;
+constexpr std::int32_t kTurnsBackwards = 2;
+constexpr std::int32_t kTurnsOneWay = 16;
 constexpr std::int32_t kStaysOpen = 32; ///< "Toggle": the original's SF_DOOR_NO_AUTO_RETURN.
+constexpr std::int32_t kTurnsAboutRoll = 64;
+constexpr std::int32_t kTurnsAboutPitch = 128;
 constexpr std::int32_t kUseOnly = 256;
 
-/// A door's speed when its "speed" is 0 or absent.
-constexpr UnitsPerSecond kDoorSpeed{100.0F};
+/// A door's speed when its "speed" is 0 or absent: units a second, or degrees when it turns.
+constexpr float kDoorSpeed = 100.0F;
 
 /// The engine grows a brush model's bounds by a unit on every side when it loads them, and the
 /// game takes it back from a door's size.
@@ -42,6 +46,10 @@ constexpr float kDoorSizeTrim = 2.0F;
     return Vec3{.x = static_cast<int>(angle) == static_cast<int>(kUp) ? -kQuarterTurn : kQuarterTurn};
 }
 
+[[nodiscard]] auto eulerOf(Vec3 angles) -> EulerAngles {
+    return EulerAngles{.pitch = Degrees{angles.x}, .yaw = Degrees{angles.y}, .roll = Degrees{angles.z}};
+}
+
 /// The way a mover goes for `angles` (the original's SetMovedir): (0 -1 0) up, (0 -2 0) down, else
 /// the way they face.
 [[nodiscard]] auto moveDirectionOf(Vec3 angles) -> Vec3 {
@@ -53,46 +61,82 @@ constexpr float kDoorSizeTrim = 2.0F;
     if (angles == kDownAngles) {
         return Vec3{.z = -1.0F};
     }
-    return angleVectors(
-               EulerAngles{.pitch = Degrees{angles.x}, .yaw = Degrees{angles.y}, .roll = Degrees{angles.z}})
-        .forward;
+    return angleVectors(eulerOf(angles)).forward;
 }
 
-/// A sliding door of `entity`, its model's bounds `bounds`, at `origin`, as CBaseDoor::Spawn makes
-/// it; and where it starts.
+/// A door of `entity` as the game makes it, and where it starts: its origin, and its angles.
 struct MadeDoor {
-    SlidingDoor door{};
+    Door door{};
     Vec3 origin{};
+    EulerAngles angles{};
 };
 
+/// What opens and closes a door of `entity`, and how long it stays open.
+[[nodiscard]] auto doorOf(const assets::BspEntity& entity, std::int32_t flags) -> Door {
+    return Door{.wait = Seconds{entity.findNumber("wait").value_or(0.0F)},
+                .isNamed = !entity.find("targetname").value_or("").empty() ||
+                           !entity.find("master").value_or("").empty(),
+                .isUseOnly = (flags & kUseOnly) != 0,
+                .staysOpen = (flags & kStaysOpen) != 0,
+                .isTouchable = (flags & kUseOnly) == 0};
+}
+
+[[nodiscard]] auto speedOf(const assets::BspEntity& entity) -> float {
+    const float speed = entity.findNumber("speed").value_or(0.0F);
+    return speed == 0.0F ? kDoorSpeed : speed;
+}
+
+/// A sliding door of `entity`, its model's bounds `bounds`, at `origin`, as CBaseDoor::Spawn makes it.
 [[nodiscard]] auto slidingDoorOf(const assets::BspEntity& entity, const Aabb& bounds, Vec3 origin)
     -> MadeDoor {
     const std::int32_t flags = entity.findInteger("spawnflags").value_or(0);
     const Vec3 direction = moveDirectionOf(anglesOf(entity));
-    const Vec3 size = (bounds.max + Vec3{kLoadedBoundsGrowth, kLoadedBoundsGrowth, kLoadedBoundsGrowth}) -
-                      (bounds.min - Vec3{kLoadedBoundsGrowth, kLoadedBoundsGrowth, kLoadedBoundsGrowth});
+    const Vec3 growth{kLoadedBoundsGrowth, kLoadedBoundsGrowth, kLoadedBoundsGrowth};
+    const Vec3 size = (bounds.max + growth) - (bounds.min - growth);
     const float lip = entity.findNumber("lip").value_or(0.0F);
     // How far it goes: its size along the way it goes, less its lip.
     const double travel = std::abs(double{direction.x * (size.x - kDoorSizeTrim)}) +
                           std::abs(double{direction.y * (size.y - kDoorSizeTrim)}) +
                           std::abs(double{direction.z * (size.z - kDoorSizeTrim)}) - double{lip};
-    MadeDoor made{.door = SlidingDoor{.closed = origin,
-                                      .open = origin + (direction * static_cast<float>(travel)),
-                                      .wait = Seconds{entity.findNumber("wait").value_or(0.0F)},
-                                      .isNamed = !entity.find("targetname").value_or("").empty() ||
-                                                 !entity.find("master").value_or("").empty(),
-                                      .isUseOnly = (flags & kUseOnly) != 0,
-                                      .staysOpen = (flags & kStaysOpen) != 0,
-                                      .isTouchable = (flags & kUseOnly) == 0},
-                  .origin = origin};
-    const float speed = entity.findNumber("speed").value_or(0.0F);
-    made.door.speed = speed == 0.0F ? kDoorSpeed : UnitsPerSecond{speed};
+    DoorSlide slide{.closed = origin,
+                    .open = origin + (direction * static_cast<float>(travel)),
+                    .speed = UnitsPerSecond{speedOf(entity)}};
+    Vec3 start = origin;
     if ((flags & kStartsOpen) != 0) {
-        // Parity: it starts where it would open to, and opens back to where the map put it.
-        made.origin = made.door.open;
-        made.door.open = made.door.closed;
-        made.door.closed = made.origin;
+        // It starts where it would open to, and opens back to where the map put it.
+        start = slide.open;
+        slide.open = slide.closed;
+        slide.closed = start;
     }
+    MadeDoor made{.door = doorOf(entity, flags), .origin = start};
+    made.door.motion = slide;
+    return made;
+}
+
+/// A rotating door of `entity` at `origin`, as CRotDoor::Spawn makes it: turning about the yaw
+/// axis, or the roll or pitch one, by its "distance" in degrees from the angles the map gives it.
+[[nodiscard]] auto rotatingDoorOf(const assets::BspEntity& entity, Vec3 origin) -> MadeDoor {
+    const std::int32_t flags = entity.findInteger("spawnflags").value_or(0);
+    Vec3 axis = (flags & kTurnsAboutRoll) != 0    ? Vec3{.z = 1.0F}
+                : (flags & kTurnsAboutPitch) != 0 ? Vec3{.x = 1.0F}
+                                                  : Vec3{.y = 1.0F};
+    if ((flags & kTurnsBackwards) != 0) {
+        axis = axis * -1.0F;
+    }
+    const Vec3 closed = anglesOf(entity);
+    const Vec3 open = closed + (axis * entity.findNumber("distance").value_or(0.0F));
+    DoorTurn turn{
+        .closed = eulerOf(closed), .open = eulerOf(open), .speed = DegreesPerSecond{speedOf(entity)}};
+    Vec3 start = closed;
+    if ((flags & kStartsOpen) != 0) {
+        // Parity: the original puts it open but swaps its ends wrongly, both closed then.
+        start = open;
+        turn.open = turn.closed;
+        axis = axis * -1.0F;
+    }
+    turn.opensAway = (flags & kTurnsOneWay) == 0 && axis.y != 0.0F;
+    MadeDoor made{.door = doorOf(entity, flags), .origin = origin, .angles = eulerOf(start)};
+    made.door.motion = turn;
     return made;
 }
 
@@ -136,9 +180,12 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
         const BrushSolidity solidity{.solid = isNotSolid ? Solid::Not : brushClass->solid,
                                      .contents = contents};
         const Vec3 origin = entity.findVector("origin").value_or(Vec3{});
-        if (brushClass->behavior == BrushBehavior::SlidingDoor) {
-            const MadeDoor made = slidingDoorOf(entity, models[*model].bounds, origin);
-            std::ignore = world.spawn(BrushModel{.index = *model}, Transform{.origin = made.origin}, solidity,
+        if (brushClass->behavior) {
+            const MadeDoor made = *brushClass->behavior == BrushBehavior::SlidingDoor
+                                      ? slidingDoorOf(entity, models[*model].bounds, origin)
+                                      : rotatingDoorOf(entity, origin);
+            std::ignore = world.spawn(BrushModel{.index = *model},
+                                      Transform{.origin = made.origin, .angles = made.angles}, solidity,
                                       Pusher{}, made.door);
         } else {
             std::ignore = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);
