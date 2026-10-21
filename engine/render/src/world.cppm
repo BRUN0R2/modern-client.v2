@@ -8,9 +8,9 @@
 /// Each frame draws the faces that face the camera in the leaves its leaf may see (the potentially
 /// visible set) that are in view, and the brush entities in view, as the original culls them.
 ///
-/// Today: the lightmaps of each face's light styles, opaque and masked (`{`) textures, from the map
-/// or from its WADs, in the original's picture (nx.render:gamma), and the sky. Water, animated
-/// textures and render modes come next (TODO.md, Rendering).
+/// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
+/// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), and the
+/// sky. Water and render modes come next (TODO.md, Rendering).
 export module nx.render:world;
 
 import std;
@@ -62,6 +62,14 @@ struct WorldStats {
     rhi::Extent2d lightmapAtlas{};
 };
 
+/// What a draw shows.
+struct WorldFrame {
+    Camera camera{};
+    float aspect = 1.0F; ///< Of the target: width over height.
+    Seconds time{};      ///< Since the map started: animated textures play from it.
+    LightStyleValues lightStyles{};
+};
+
 /// What the last draw drew, for r_speeds.
 struct FrameStats {
     std::size_t leaves = 0; ///< Potentially visible from the camera's leaf, and in view.
@@ -83,11 +91,9 @@ public:
     /// Destroys its resources, which the device keeps until the GPU is done with them.
     ~BspWorld();
 
-    /// Draws what `camera` sees on a target of `aspect` (width over height), its lightmaps as bright
-    /// as `lightStyles` make them, inside a render pass with a color target of desc.colorFormat and
-    /// a Depth32Float depth target cleared to 0 (reversed depth).
-    void draw(rhi::CommandList& commands, const Camera& camera, float aspect,
-              const LightStyleValues& lightStyles);
+    /// Draws `view`, inside a render pass with a color target of desc.colorFormat and a Depth32Float
+    /// depth target cleared to 0 (reversed depth).
+    void draw(rhi::CommandList& commands, const WorldFrame& view);
 
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
     [[nodiscard]] inline auto lastFrame() const noexcept -> const FrameStats& { return m_lastFrame; }
@@ -116,7 +122,7 @@ private:
     struct FaceDraw {
         std::uint32_t firstVertex = 0;
         std::uint32_t vertexCount = 0; ///< 0: never drawn (triggers and tool textures).
-        std::uint32_t bucket = 0;      ///< Its texture's in m_textureGroups, or kSkyBucket.
+        std::uint32_t bucket = 0;      ///< Its texture's in m_bucketFrames, or kSkyBucket.
         Plane plane{};
         bool isBackSide = false; ///< Drawn from behind its plane.
     };
@@ -153,7 +159,8 @@ private:
     rhi::BindGroupLayoutHandle m_textureLayout;
     rhi::RenderPipelineHandle m_pipeline;
     rhi::RenderPipelineHandle m_skyPipeline;
-    std::vector<rhi::BindGroupHandle> m_textureGroups; ///< One per bucket of faces.
+    /// For each bucket of faces, a bind group for each texture it shows in turn: one, unless animated.
+    std::vector<std::vector<rhi::BindGroupHandle>> m_bucketFrames;
     std::vector<FrameSlot> m_frameSlots;
     std::vector<FaceDraw> m_faces; ///< Every face of the map, by its index.
     std::vector<ModelDraw> m_models;
