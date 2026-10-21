@@ -230,7 +230,7 @@ struct StateAccess {
     VkBufferUsageFlags flags = 0;
     for (const auto& [use, bit] : kBits) {
         if (usage.test(use)) {
-            flags |= bit;
+            flags |= static_cast<VkBufferUsageFlags>(bit);
         }
     }
     return flags;
@@ -247,7 +247,7 @@ struct StateAccess {
     VkImageUsageFlags flags = 0;
     for (const auto& [use, bit] : kBits) {
         if (usage.test(use)) {
-            flags |= bit;
+            flags |= static_cast<VkImageUsageFlags>(bit);
         }
     }
     return flags;
@@ -463,7 +463,7 @@ struct VulkanBuffer {
     VkBuffer buffer = VK_NULL_HANDLE;
     VmaAllocation allocation = VK_NULL_HANDLE;
     std::uint64_t size = 0;
-    std::span<std::byte> mapped; ///< Upload and Readback buffers only.
+    std::span<std::byte> mapped{}; ///< Upload and Readback buffers only.
 };
 
 /// A texture the device knows: its image and the view passes draw to and shaders sample.

@@ -17,7 +17,7 @@ export namespace nx::rhi {
 
 /// A range of a buffer bound to a binding.
 struct BufferBinding {
-    BufferHandle buffer;
+    BufferHandle buffer{};
     std::uint64_t offset = 0;
     std::uint64_t size = 0; ///< 0: from the offset to the end of the buffer.
 };
@@ -27,37 +27,37 @@ using BindingResource = std::variant<BufferBinding, TextureHandle, SamplerHandle
 
 struct Binding {
     std::uint32_t binding = 0;
-    BindingResource resource;
+    BindingResource resource{};
 };
 
 struct BindGroupDesc {
-    std::string_view label;
-    BindGroupLayoutHandle layout;
-    std::span<const Binding> bindings; ///< One per binding of the layout.
+    std::string_view label{};
+    BindGroupLayoutHandle layout{};
+    std::span<const Binding> bindings{}; ///< One per binding of the layout.
 };
 
 /// A shader's entry point: the function of the stage in the shader's code.
 struct ShaderEntry {
-    ShaderHandle shader;
-    std::string_view entryPoint;
+    ShaderHandle shader{};
+    std::string_view entryPoint{};
 };
 
 struct RenderPipelineDesc {
-    std::string_view label;
-    ShaderEntry vertex;
-    ShaderEntry fragment;
-    std::span<const VertexBufferLayout> vertexBuffers; ///< Slot by slot.
+    std::string_view label{};
+    ShaderEntry vertex{};
+    ShaderEntry fragment{};
+    std::span<const VertexBufferLayout> vertexBuffers{}; ///< Slot by slot.
     PrimitiveTopology topology = PrimitiveTopology::TriangleList;
     CullMode cullMode = CullMode::None;
     FrontFace frontFace = FrontFace::CounterClockwise;
-    std::span<const ColorTarget> colorTargets;
-    std::optional<DepthState> depth{};                       ///< None: no depth test, no depth attachment.
-    std::span<const BindGroupLayoutHandle> bindGroupLayouts; ///< Bind group 0, 1...
+    std::span<const ColorTarget> colorTargets{};
+    std::optional<DepthState> depth{};                         ///< None: no depth test, no depth attachment.
+    std::span<const BindGroupLayoutHandle> bindGroupLayouts{}; ///< Bind group 0, 1...
 };
 
 /// A color attachment of a render pass.
 struct ColorAttachment {
-    TextureHandle texture;
+    TextureHandle texture{};
     LoadOp load = LoadOp::Clear;
     StoreOp store = StoreOp::Store;
     ClearColor clear{};
@@ -65,7 +65,7 @@ struct ColorAttachment {
 
 /// The depth attachment of a render pass.
 struct DepthAttachment {
-    TextureHandle texture;
+    TextureHandle texture{};
     LoadOp load = LoadOp::Clear;
     StoreOp store = StoreOp::DontCare;
     float clear = 1.0F; ///< The far plane.
@@ -73,19 +73,19 @@ struct DepthAttachment {
 
 /// The attachments a render pass draws to, and the area it draws in.
 struct RenderingDesc {
-    std::span<const ColorAttachment> colors;
+    std::span<const ColorAttachment> colors{};
     std::optional<DepthAttachment> depth{};
-    Extent2d area;
+    Extent2d area{};
 };
 
 /// A copy between a buffer and a mip level of a texture.
 struct TextureCopy {
-    BufferHandle buffer;
+    BufferHandle buffer{};
     std::uint64_t bufferOffset = 0;
     std::uint32_t bytesPerRow = 0; ///< 0: the rows are packed, extent.width texels each.
-    TextureHandle texture;
+    TextureHandle texture{};
     std::uint32_t mipLevel = 0;
-    Extent2d extent;
+    Extent2d extent{};
 };
 
 /// The commands of a frame, recorded in order and run by the GPU when the frame is submitted.
@@ -133,14 +133,14 @@ public:
 };
 
 struct SwapchainDesc {
-    Extent2d size; ///< The window's drawable size; the surface may impose its own.
+    Extent2d size{}; ///< The window's drawable size; the surface may impose its own.
     PresentMode presentMode = PresentMode::Fifo;
 };
 
 /// The image of the frame: draw to it, then leave it in TextureState::Present.
 struct SwapchainImage {
-    TextureHandle texture; ///< TextureState::Undefined when acquired: its old content is gone.
-    Extent2d size;
+    TextureHandle texture{}; ///< TextureState::Undefined when acquired: its old content is gone.
+    Extent2d size{};
     Format format = Format::Undefined;
 };
 

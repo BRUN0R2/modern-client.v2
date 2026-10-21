@@ -90,7 +90,7 @@ enum class MemoryLocation : std::uint8_t {
 };
 
 struct BufferDesc {
-    std::string_view label; ///< Required: it names the buffer to the debug tools.
+    std::string_view label{}; ///< Required: it names the buffer to the debug tools.
     std::uint64_t size = 0;
     Flags<BufferUsage> usage{};
     MemoryLocation location = MemoryLocation::Device;
@@ -107,9 +107,9 @@ enum class TextureUsage : std::uint8_t {
 };
 
 struct TextureDesc {
-    std::string_view label; ///< Required: it names the texture to the debug tools.
+    std::string_view label{}; ///< Required: it names the texture to the debug tools.
     Format format = Format::Undefined;
-    Extent2d extent;
+    Extent2d extent{};
     std::uint32_t mipLevels = 1;
     Flags<TextureUsage> usage{};
 };
@@ -125,7 +125,7 @@ enum class AddressMode : std::uint8_t {
 };
 
 struct SamplerDesc {
-    std::string_view label;
+    std::string_view label{};
     Filter magnify = Filter::Linear;
     Filter minify = Filter::Linear;
     Filter mipmap = Filter::Linear;
@@ -146,8 +146,8 @@ enum class ShaderStage : std::uint8_t {
 };
 
 struct ShaderDesc {
-    std::string_view label;
-    std::span<const std::byte> code; ///< In the device's ShaderFormat; copied by the device.
+    std::string_view label{};
+    std::span<const std::byte> code{}; ///< In the device's ShaderFormat; copied by the device.
 };
 
 /// What a binding of a bind group holds. Textures and samplers bind apart, as in DirectX 11.
@@ -165,8 +165,8 @@ struct BindingLayout {
 };
 
 struct BindGroupLayoutDesc {
-    std::string_view label;
-    std::span<const BindingLayout> bindings;
+    std::string_view label{};
+    std::span<const BindingLayout> bindings{};
 };
 
 enum class VertexFormat : std::uint8_t {
@@ -185,7 +185,7 @@ struct VertexAttribute {
 /// The vertices of one vertex buffer slot.
 struct VertexBufferLayout {
     std::uint32_t stride = 0;
-    std::span<const VertexAttribute> attributes;
+    std::span<const VertexAttribute> attributes{};
 };
 
 enum class PrimitiveTopology : std::uint8_t {
@@ -280,7 +280,7 @@ struct ClearColor {
 struct Rect {
     std::int32_t x = 0;
     std::int32_t y = 0;
-    Extent2d size;
+    Extent2d size{};
 };
 
 /// The kind of GPU an adapter is.
@@ -293,9 +293,9 @@ enum class AdapterKind : std::uint8_t {
 };
 
 struct AdapterInfo {
-    std::string name;
+    std::string name{};
     AdapterKind kind = AdapterKind::Other;
-    std::string driver; ///< The driver's name and version, as it reports them.
+    std::string driver{}; ///< The driver's name and version, as it reports them.
 };
 
 } // namespace nx::rhi
