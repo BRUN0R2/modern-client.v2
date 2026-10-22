@@ -59,7 +59,7 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
 | `nx.jobs` | 1 | Job System, counters, dependency graphs. Planned: a `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2 and their Steam folders, clocks. Planned: OS threads | core |
+| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks. Planned: OS threads | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math (today: core) |
@@ -70,7 +70,7 @@ flowchart TB
 | `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera, the BSP world, the light it gives models, studio models and sprites | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
-| `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts. Today: panels, placed by VGUI2's layouts and following their parent as it changes size; fonts, sized and drawn as Windows did; and text on the screen ([ADR-0020](adr/0020-in-house-ui-toolkit.md)) | render, assets, platform, console (today: core, assets, render; FreeType) |
+| `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts. Today: panels, placed by VGUI2's layouts and following their parent as it changes size; fonts, found, sized and drawn as Windows did; and text on the screen ([ADR-0020](adr/0020-in-house-ui-toolkit.md)) | render, assets, platform, console (today: core, platform, assets, render; FreeType) |
 | `nx.settings` | 3 | The player's settings: the `.cfg` files of the user's folder run at startup and `config.cfg` written at exit, the client's cvars by the original's names ([12 §5.2](12-ui-hud-and-console.md#52-client-configuration-files)), the binds by the original's key names and the keys that run them ([12 §6](12-ui-hud-and-console.md#6-input)). Planned: `video.toml`, `audio.toml` | core, console, platform |
 | `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the map's brush entities, as the game makes them when a map starts, its doors, sliding and rotating, and an entity dropped to the floor | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |

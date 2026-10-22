@@ -10,6 +10,11 @@ namespace nx::test {
 
 /// What a SquareFont is made with.
 struct SquareFontDesc {
+    std::string family = "Square";  ///< Its name ID 1.
+    std::string style = "Regular";  ///< Its name ID 2.
+    std::uint16_t weight = 400;     ///< Its OS/2 usWeightClass.
+    bool isItalic = false;          ///< Its OS/2 fsSelection's italic bit.
+    std::int16_t side = 1024;       ///< Of 'A' and 'B', in units: half an em.
     std::uint16_t winAscent = 2049; ///< Tahoma's, so that the font sizes as Tahoma does.
     std::uint16_t winDescent = 423;
     /// The VDMX records of a version 1 table for square pixels (yPelHeight, yMax, yMin); no table when
@@ -19,8 +24,8 @@ struct SquareFontDesc {
     std::vector<std::array<std::uint16_t, 2>> gaspRanges{};
 };
 
-/// A TrueType font of the family "Square", style "Regular", with an em of 2048 units and no hinting
-/// instructions. At 16 pixels per em, a pixel is 128 units:
+/// A TrueType font of the family "Square", style "Regular" unless its desc names others, with an em
+/// of 2048 units and no hinting instructions. At 16 pixels per em, a pixel is 128 units:
 /// - 'A' is a square half an em wide (8 pixels) sitting on the baseline, its left on the pen;
 /// - 'B' is the same square a quarter of a pixel to the right;
 /// - the space has no outline;
@@ -28,31 +33,32 @@ struct SquareFontDesc {
 class SquareFont {
 public:
     static constexpr std::int16_t kUnitsPerEm = 2048;
-    static constexpr std::int16_t kSide = 1024;
     static constexpr std::int16_t kQuarterPixelAt16 = 32;
     static constexpr std::uint16_t kAdvance = 1280;
     static constexpr std::uint16_t kSpaceAdvance = 512;
 
     [[nodiscard]] static auto build(const SquareFontDesc& desc = {}) -> std::vector<std::byte> {
-        std::vector<Table> tables;
-        tables.push_back({"OS/2", windowsMetrics(desc)});
-        if (!desc.deviceHeights.empty()) {
-            tables.push_back({"VDMX", deviceHeights(desc)});
+        return assemble(tablesOf(desc), 0);
+    }
+
+    /// A TrueType collection (.ttc) of a font for each of `fonts`, in their order.
+    [[nodiscard]] static auto collection(std::span<const SquareFontDesc> fonts) -> std::vector<std::byte> {
+        Bytes bytes;
+        for (const char letter : {'t', 't', 'c', 'f'}) {
+            bytes.push_back(static_cast<std::byte>(letter));
         }
-        tables.push_back({"cmap", characterMap()});
-        if (!desc.gaspRanges.empty()) {
-            tables.push_back({"gasp", gridFitting(desc)});
+        put(bytes, std::uint32_t{0x0001'0000});
+        put(bytes, static_cast<std::uint32_t>(fonts.size()));
+        std::size_t offset = bytes.size() + (fonts.size() * 4);
+        Bytes faces;
+        for (const SquareFontDesc& font : fonts) {
+            put(bytes, static_cast<std::uint32_t>(offset));
+            const Bytes face = assemble(tablesOf(font), offset); // its tables where the face lands
+            faces.insert(faces.end(), face.begin(), face.end());
+            offset += face.size();
         }
-        const auto [glyphs, locations] = glyphData();
-        tables.push_back({"glyf", glyphs});
-        tables.push_back({"head", header()});
-        tables.push_back({"hhea", horizontalHeader(desc)});
-        tables.push_back({"hmtx", horizontalMetrics()});
-        tables.push_back({"loca", locations});
-        tables.push_back({"maxp", maximumProfile()});
-        tables.push_back({"name", names()});
-        tables.push_back({"post", postScript()});
-        return assemble(tables);
+        bytes.insert(bytes.end(), faces.begin(), faces.end());
+        return bytes;
     }
 
 private:
@@ -62,6 +68,28 @@ private:
         std::string_view tag; // in the order of their tags, as the directory lists them
         Bytes bytes;
     };
+
+    [[nodiscard]] static auto tablesOf(const SquareFontDesc& desc) -> std::vector<Table> {
+        std::vector<Table> tables;
+        tables.push_back({"OS/2", windowsMetrics(desc)});
+        if (!desc.deviceHeights.empty()) {
+            tables.push_back({"VDMX", deviceHeights(desc)});
+        }
+        tables.push_back({"cmap", characterMap()});
+        if (!desc.gaspRanges.empty()) {
+            tables.push_back({"gasp", gridFitting(desc)});
+        }
+        const auto [glyphs, locations] = glyphData(desc);
+        tables.push_back({"glyf", glyphs});
+        tables.push_back({"head", header(desc)});
+        tables.push_back({"hhea", horizontalHeader(desc)});
+        tables.push_back({"hmtx", horizontalMetrics()});
+        tables.push_back({"loca", locations});
+        tables.push_back({"maxp", maximumProfile()});
+        tables.push_back({"name", names(desc)});
+        tables.push_back({"post", postScript()});
+        return tables;
+    }
 
     static constexpr std::uint16_t kGlyphCount = 4; // .notdef, 'A', 'B', the space
 
@@ -90,7 +118,7 @@ private:
         Bytes bytes;
         put(bytes, std::uint16_t{1});                  // version
         put(bytes, std::int16_t{1024});                // xAvgCharWidth
-        put(bytes, std::uint16_t{400});                // usWeightClass
+        put(bytes, desc.weight);                       // usWeightClass
         put(bytes, std::uint16_t{5});                  // usWidthClass
         put(bytes, std::uint16_t{0});                  // fsType
         putAll(bytes, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}); // sub- and superscripts, strikeout
@@ -100,14 +128,17 @@ private:
         for (const char letter : {'N', 'X', 'T', 'S'}) {
             bytes.push_back(static_cast<std::byte>(letter)); // achVendID
         }
-        put(bytes, std::uint16_t{0x40}); // fsSelection: regular
-        put(bytes, std::uint16_t{0x20}); // usFirstCharIndex
-        put(bytes, std::uint16_t{0x42}); // usLastCharIndex
-        putAll(bytes, {1638, -410, 0});  // sTypoAscender, sTypoDescender, sTypoLineGap
-        put(bytes, desc.winAscent);      // usWinAscent
-        put(bytes, desc.winDescent);     // usWinDescent
-        put(bytes, std::uint32_t{1});    // ulCodePageRange1: Latin 1
-        put(bytes, std::uint32_t{0});    // ulCodePageRange2
+        const auto selection =
+            static_cast<std::uint16_t>((desc.isItalic ? 0x01 : 0) | (desc.weight >= 700 ? 0x20 : 0));
+        put(bytes,
+            selection != 0 ? selection : std::uint16_t{0x40}); // fsSelection: italic, bold, else regular
+        put(bytes, std::uint16_t{0x20});                       // usFirstCharIndex
+        put(bytes, std::uint16_t{0x42});                       // usLastCharIndex
+        putAll(bytes, {1638, -410, 0});                        // sTypoAscender, sTypoDescender, sTypoLineGap
+        put(bytes, desc.winAscent);                            // usWinAscent
+        put(bytes, desc.winDescent);                           // usWinDescent
+        put(bytes, std::uint32_t{1});                          // ulCodePageRange1: Latin 1
+        put(bytes, std::uint32_t{0});                          // ulCodePageRange2
         return bytes;
     }
 
@@ -154,20 +185,20 @@ private:
         return bytes;
     }
 
-    /// A glyph of one square contour from (left, 0) to (left + kSide, kSide), clockwise.
-    [[nodiscard]] static auto square(std::int16_t left) -> Bytes {
+    /// A glyph of one square contour from (left, 0) to (left + side, side), clockwise.
+    [[nodiscard]] static auto square(std::int16_t left, std::int16_t side) -> Bytes {
         Bytes bytes;
-        putAll(bytes, {1, left, 0, static_cast<std::int16_t>(left + kSide), kSide}); // contours, bounds
-        putAll(bytes, {3, 0});                         // last point, no instructions
-        bytes.insert(bytes.end(), 4, std::byte{0x01}); // each point on the curve
-        putAll(bytes, {left, 0, kSide, 0});            // x, each from the last
-        putAll(bytes, {0, kSide, 0, -kSide});          // y, each from the last
+        putAll(bytes, {1, left, 0, static_cast<std::int16_t>(left + side), side}); // contours, bounds
+        putAll(bytes, {3, 0});                                         // last point, no instructions
+        bytes.insert(bytes.end(), 4, std::byte{0x01});                 // each point on the curve
+        putAll(bytes, {left, 0, side, 0});                             // x, each from the last
+        putAll(bytes, {0, side, 0, static_cast<std::int16_t>(-side)}); // y, each from the last
         return bytes;
     }
 
-    [[nodiscard]] static auto glyphData() -> std::pair<Bytes, Bytes> {
-        const Bytes squareA = square(0);
-        const Bytes squareB = square(kQuarterPixelAt16);
+    [[nodiscard]] static auto glyphData(const SquareFontDesc& desc) -> std::pair<Bytes, Bytes> {
+        const Bytes squareA = square(0, desc.side);
+        const Bytes squareB = square(kQuarterPixelAt16, desc.side);
         Bytes glyphs = squareA;
         glyphs.insert(glyphs.end(), squareB.begin(), squareB.end());
         Bytes locations; // short offsets, halved: .notdef and the space have no outline
@@ -178,7 +209,7 @@ private:
         return {glyphs, locations};
     }
 
-    [[nodiscard]] static auto header() -> Bytes {
+    [[nodiscard]] static auto header(const SquareFontDesc& desc) -> Bytes {
         Bytes bytes;
         put(bytes, std::uint32_t{0x0001'0000}); // version
         put(bytes, std::uint32_t{0x0001'0000}); // fontRevision
@@ -187,7 +218,7 @@ private:
         put(bytes, std::uint16_t{0x0009});      // flags: baseline at 0, whole pixels per em
         put(bytes, kUnitsPerEm);
         bytes.insert(bytes.end(), 16, std::byte{0}); // created, modified
-        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + kSide), kSide}); // bounds
+        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + desc.side), desc.side}); // bounds
         putAll(bytes, {0, 8, 2, 0, 0}); // macStyle, lowestRecPPEM, fontDirectionHint, short offsets, format
         return bytes;
     }
@@ -197,11 +228,11 @@ private:
         put(bytes, std::uint32_t{0x0001'0000});
         putAll(bytes,
                {static_cast<std::int16_t>(desc.winAscent), static_cast<std::int16_t>(-desc.winDescent), 0});
-        put(bytes, kAdvance);                                                        // advanceWidthMax
-        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + kSide)}); // bearings, extent
-        putAll(bytes, {1, 0, 0, 0, 0, 0, 0});                                        // caret, reserved
-        put(bytes, std::int16_t{0});                                                 // metricDataFormat
-        put(bytes, kGlyphCount);                                                     // numberOfHMetrics
+        put(bytes, kAdvance);                                                            // advanceWidthMax
+        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + desc.side)}); // bearings, extent
+        putAll(bytes, {1, 0, 0, 0, 0, 0, 0});                                            // caret, reserved
+        put(bytes, std::int16_t{0});                                                     // metricDataFormat
+        put(bytes, kGlyphCount);                                                         // numberOfHMetrics
         return bytes;
     }
 
@@ -224,18 +255,18 @@ private:
         return bytes;
     }
 
-    [[nodiscard]] static auto names() -> Bytes {
+    [[nodiscard]] static auto names(const SquareFontDesc& desc) -> Bytes {
         // The family (1) and the style (2), for Windows, in UTF-16 big-endian.
-        constexpr std::array<std::string_view, 2> kNames{"Square", "Regular"};
+        const std::array<std::string_view, 2> texts{desc.family, desc.style};
         Bytes bytes;
         putAll(bytes, {0, 2, 6 + (12 * 2)}); // format, count, stringOffset
         std::int16_t offset = 0;
-        for (std::int16_t id = 1; const std::string_view name : kNames) {
+        for (std::int16_t id = 1; const std::string_view name : texts) {
             const auto length = static_cast<std::int16_t>(name.size() * 2);
             putAll(bytes, {3, 1, 0x409, id++, length, offset});
             offset = static_cast<std::int16_t>(offset + length);
         }
-        for (const std::string_view name : kNames) {
+        for (const std::string_view name : texts) {
             for (const char letter : name) {
                 put(bytes, static_cast<std::uint16_t>(letter));
             }
@@ -250,8 +281,9 @@ private:
         return bytes;
     }
 
-    /// The offset table and the directory, then each table, padded to four bytes.
-    [[nodiscard]] static auto assemble(const std::vector<Table>& tables) -> Bytes {
+    /// The offset table and the directory, then each table, padded to four bytes; `base` bytes into
+    /// the file, which the tables' offsets count from.
+    [[nodiscard]] static auto assemble(const std::vector<Table>& tables, std::size_t base) -> Bytes {
         constexpr std::size_t kDirectoryEntrySize = 16;
         const auto count = static_cast<std::uint16_t>(tables.size());
         Bytes bytes;
@@ -261,7 +293,7 @@ private:
         put(bytes, static_cast<std::uint16_t>(power * 16));
         put(bytes, static_cast<std::uint16_t>(std::countr_zero(power)));
         put(bytes, static_cast<std::uint16_t>((count - power) * 16));
-        std::size_t offset = bytes.size() + (tables.size() * kDirectoryEntrySize);
+        std::size_t offset = base + bytes.size() + (tables.size() * kDirectoryEntrySize);
         Bytes data;
         for (const Table& table : tables) {
             for (const char letter : table.tag) {

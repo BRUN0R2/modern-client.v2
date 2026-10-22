@@ -183,6 +183,24 @@ TEST(FontTest, DrawsGlyphsWithAntialiasing) {
     }
 }
 
+TEST(FontTest, BoldIsSimulatedByStrikingEachGlyphTwice) {
+    auto font = Font::open(squareFile(),
+                           {.cellHeight = 20, .smoothing = FontSmoothing::Antialiased, .isEmboldened = true});
+    ASSERT_TRUE(font.has_value()) << font.error().detail;
+    const auto shifted = font->glyph(U'B');
+    ASSERT_TRUE(shifted.has_value()) << shifted.error().detail;
+    ASSERT_EQ(shifted->width, 10) << "a pixel wider";
+    EXPECT_EQ(shifted->advance, 11);
+    for (std::size_t row = 0; row < 8; ++row) {
+        EXPECT_NEAR(shifted->coverage[row * 10], 0.75 * 255, 1.0) << "its left edge as it was";
+        EXPECT_EQ(shifted->coverage[(row * 10) + 8], 255) << "the right edge struck over by the body";
+        EXPECT_NEAR(shifted->coverage[(row * 10) + 9], 0.25 * 255, 1.0) << "the right edge a pixel on";
+    }
+    const auto space = font->glyph(U' ');
+    ASSERT_TRUE(space.has_value()) << space.error().detail;
+    EXPECT_EQ(space->advance, 5);
+}
+
 TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
     // As Tahoma's: fitted but not smoothed up to 16 pixels per em, fitted and smoothed above.
     const auto file = squareFile({.gaspRanges = {{16, 0x0005}, {0xFFFF, 0x000F}}});
@@ -202,6 +220,16 @@ TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
     ASSERT_GT(smoothed->width, 0);
     EXPECT_GT(smoothed->coverage.front(), 0);
     EXPECT_LT(smoothed->coverage.front(), 255) << "its first column partly covered";
+}
+
+TEST(FontTest, GlyphsOfManyEmsAreRefused) {
+    // Squares of 32000 units, 15 ems: no letter, but a font made to exhaust whoever draws it.
+    auto font = Font::open(squareFile({.side = 32000}), {.cellHeight = 20});
+    ASSERT_TRUE(font.has_value()) << font.error().detail;
+    const auto giant = font->glyph(U'A');
+    ASSERT_FALSE(giant.has_value());
+    EXPECT_EQ(giant.error().code, FontError::BadGlyph);
+    EXPECT_EQ(giant.error().detail, "U+0041: 250 by 250 pixels at 16 pixels per em");
 }
 
 TEST(FontTest, GlyphsWithoutOutlinesOnlyAdvance) {

@@ -130,7 +130,7 @@ dialect is `/std:c++latest`.
 | `dev-linux-clang` | Development with `clangd`/`clang-tidy` | To be validated |
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers with Clang (ASan + UBSan, TSan) | To be validated |
-| `fuzz-windows-msvc` | Only the fuzz targets, with libFuzzer and AddressSanitizer: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus | Validated; nightly in CI (`fuzz`) |
+| `fuzz-windows-msvc` | Only the fuzz targets, with libFuzzer and AddressSanitizer: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus; an input that runs past `NX_FUZZ_INPUT_SECONDS` (30) is reported as a hang and kept | Validated; nightly in CI (`fuzz`) |
 | `server-headless`, `tools` | Only `nextds` or only the tools | Planned: `tools` is not defined yet (its tools, `nxcheck` and `nxview`, exist); `server-headless` with `nextds` |
 
 Each configure preset has a build preset and a test preset with the same name. The build
@@ -185,7 +185,7 @@ ctest --preset dev-linux-gcc
 
 The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 `NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS`, `NX_BUILD_TOOLS` and
-`NX_REFLECTION_BACKEND` exist, with `NX_FUZZ` and `NX_FUZZ_SECONDS`, which the fuzz preset sets.
+`NX_REFLECTION_BACKEND` exist, with `NX_FUZZ`, `NX_FUZZ_SECONDS` and `NX_FUZZ_INPUT_SECONDS`, which the fuzz preset uses.
 
 ## 5. Dependencies
 

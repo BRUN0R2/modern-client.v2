@@ -48,6 +48,12 @@ enum class FileError : std::uint8_t {
 /// any decoding.
 [[nodiscard]] auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError>;
 
+/// `size` bytes of the regular file at `path` from `offset`: fewer when the file ends sooner, none
+/// past its end. A part of a large file, such as the tables of a font, without reading the rest.
+/// Errors: those of readFile.
+[[nodiscard]] auto readFilePart(const std::filesystem::path& path, std::uint64_t offset, std::size_t size)
+    -> Result<std::vector<std::byte>, FileError>;
+
 /// Makes `bytes` the whole content of the file at `path`, creating it or replacing what it held; its
 /// directory must exist. The file holds either what it held or all of `bytes`, never a part: they are
 /// written beside it first, to `path` and ".partial", flushed to the disk, then put in its place.
@@ -64,6 +70,12 @@ enum class FileError : std::uint8_t {
 /// application data (%APPDATA%); elsewhere, modern-client.v2 in $XDG_CONFIG_HOME, else in
 /// ~/.config. It may not exist yet. Errors: NotFound (the system names no such folder).
 [[nodiscard]] auto userDirectory() -> Result<std::filesystem::path, FileError>;
+
+/// The folders the system keeps its fonts and the user's in, those that exist: on Windows its Fonts
+/// folder and the user's own (%LOCALAPPDATA%\Microsoft\Windows\Fonts); elsewhere the fonts
+/// folders of $XDG_DATA_HOME (else ~/.local/share) and of each of $XDG_DATA_DIRS (else
+/// /usr/local/share and /usr/share), and ~/.fonts. VGUI2's schemes name fonts found in them.
+[[nodiscard]] auto fontFolders() -> std::vector<std::filesystem::path>;
 
 /// The path of the running executable: the programs find their `data/` next to it.
 /// Errors: ReadFailed (the operating system did not tell it).

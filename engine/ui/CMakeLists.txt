@@ -9,13 +9,16 @@ nxAddModuleLibrary(nxUi
         src/nx.ui.cppm
         src/panel.cppm
         src/font.cppm
+        src/fontCatalog.cppm
         src/text.cppm
     SOURCES
         src/panel.cpp
         src/font.cpp
+        src/fontCatalog.cpp
         src/text.cpp
     DEPENDS
         nx::core
+        nx::platform
         nx::assets
         nx::render
     LATERAL

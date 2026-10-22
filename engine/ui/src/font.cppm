@@ -22,10 +22,14 @@ enum class FontError : std::uint8_t {
     BadHeight,  ///< The cell height is not a whole number of pixels from 1 to kMaxCellHeight.
     NoGlyph,    ///< The face has no glyph for the character.
     BadGlyph,   ///< The face's glyph cannot be loaded or drawn; the detail says why.
+    Unreadable, ///< The font file cannot be read (cause: the file system's).
 };
 
 /// The tallest cell a font is sized to, in pixels: past it, a glyph's bitmap outgrows any atlas.
 inline constexpr std::int32_t kMaxCellHeight = 1024;
+/// How many ems a glyph may stretch across, each way: more is no letter, but a font made to exhaust
+/// the memory or the time of whoever draws it.
+inline constexpr std::int32_t kMaxGlyphEms = 8;
 
 /// How a face draws the edges of its glyphs (VGUI2's `antialias` flag).
 enum class FontSmoothing : std::uint8_t {
@@ -93,6 +97,9 @@ struct FontRequest {
     std::int32_t cellHeight = 0; ///< VGUI2's `tall`: the height of a line, in pixels.
     FontSmoothing smoothing = FontSmoothing::None;
     std::uint32_t faceIndex = 0; ///< The face of a collection (.ttc); 0 for a single face.
+    /// Bold simulated, as Windows simulates it: each glyph struck twice, the second a pixel to the
+    /// right, and a pixel wider.
+    bool isEmboldened = false;
 };
 
 /// A face of a font file at a size, drawing its glyphs. Each font owns its own FreeType instance, so
@@ -119,7 +126,8 @@ public:
 
     /// The glyph of `character`, hinted and drawn as the font's smoothing says. Asked to smooth, a font
     /// does as Windows does, as its gasp table says at its size: smoothed or not, fitted to the pixels
-    /// or not (Tahoma from 9 to 16 pixels per em: not smoothed). Errors: NoGlyph, BadGlyph.
+    /// or not (Tahoma from 9 to 16 pixels per em: not smoothed). Errors: NoGlyph, BadGlyph (also a
+    /// glyph wider or taller than kMaxGlyphEms ems).
     [[nodiscard]] auto glyph(char32_t character) const -> Result<Glyph, FontError>;
 
 private:

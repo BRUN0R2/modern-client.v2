@@ -8,6 +8,7 @@ module;
 #include <freetype/freetype.h>
 #include <freetype/ftdriver.h>
 #include <freetype/ftmodapi.h>
+#include <freetype/ftoutln.h>
 #include <freetype/tttables.h>
 #include <freetype/tttags.h>
 #include <ft2build.h>
@@ -88,6 +89,28 @@ constexpr FT_Pos kSubpixels = 64;
     constexpr std::uint8_t kFull = 255;
     const std::size_t shift = kBitsPerByte - 1 - (column % kBitsPerByte);
     return ((row[column / kBitsPerByte] >> shift) & 1U) != 0 ? kFull : std::uint8_t{0};
+}
+
+/// `glyph` struck twice, the second a pixel to the right, as Windows simulates bold: a pixel wider, each
+/// pixel as covered as the more covered of itself and the one left of it.
+[[nodiscard]] auto struckTwice(const Glyph& glyph) -> Glyph {
+    Glyph wider = glyph;
+    if (glyph.width == 0) {
+        return wider;
+    }
+    const auto width = narrow<std::size_t>(glyph.width);
+    wider.width = glyph.width + 1;
+    wider.coverage.assign((width + 1) * narrow<std::size_t>(glyph.height), 0);
+    for (std::size_t row = 0; row < narrow<std::size_t>(glyph.height); ++row) {
+        for (std::size_t column = 0; column <= width; ++column) {
+            const std::uint8_t self =
+                column < width ? glyph.coverage[(row * width) + column] : std::uint8_t{0};
+            const std::uint8_t left =
+                column > 0 ? glyph.coverage[(row * width) + column - 1] : std::uint8_t{0};
+            wider.coverage[(row * (width + 1)) + column] = std::max(self, left);
+        }
+    }
+    return wider;
 }
 
 /// FreeType's error `error`, as a failure's detail.
@@ -232,8 +255,9 @@ struct Font::Face {
     std::shared_ptr<const std::vector<std::byte>> file; // FreeType reads the face from it
     FT_Library library = nullptr;
     FT_Face face = nullptr;
-    bool isSmoothed = false; ///< Its glyphs antialiased, at its size.
-    bool isFitted = true;    ///< Its glyphs fitted to the pixels by its instructions, at its size.
+    bool isSmoothed = false;   ///< Its glyphs antialiased, at its size.
+    bool isFitted = true;      ///< Its glyphs fitted to the pixels by its instructions, at its size.
+    bool isEmboldened = false; ///< Its glyphs struck twice, a pixel apart.
 
     /// The table `tag` of the face; empty when it has none.
     [[nodiscard]] auto table(FT_ULong tag) const -> std::vector<FT_Byte> {
@@ -317,6 +341,7 @@ auto Font::open(std::shared_ptr<const std::vector<std::byte>> file, const FontRe
     }
     // Asked to smooth its glyphs, Windows does as the face's gasp table says at its size: Tahoma has
     // them neither smoothed nor unfitted from 9 to 16 pixels per em. Without smoothing, it fits them.
+    face->isEmboldened = request.isEmboldened;
     if (request.smoothing == FontSmoothing::Antialiased) {
         const std::vector<FT_Byte> gasp = face->table(TTAG_gasp);
         const std::uint16_t flags = gaspFlagsAt(std::as_bytes(std::span{gasp}), metrics.pixelsPerEm);
@@ -360,10 +385,22 @@ auto Font::glyph(char32_t character) const -> Result<Glyph, FontError> {
                     freeTypeError(std::format("loading U+{:04X}", std::uint32_t{character}), error));
     }
     const FT_GlyphSlot slot = m_face->face->glyph;
-    // Hinted, the advance is a whole number of pixels.
-    const auto advance = narrow<std::int32_t>((slot->advance.x + (kSubpixels / 2)) / kSubpixels);
+    // Hinted, the advance is a whole number of pixels; a pixel more struck twice.
+    const auto advance = narrow<std::int32_t>((slot->advance.x + (kSubpixels / 2)) / kSubpixels) +
+                         (m_face->isEmboldened ? 1 : 0);
     if (slot->format == FT_GLYPH_FORMAT_OUTLINE && slot->outline.n_points == 0) {
         return Glyph{.advance = advance}; // nothing to draw: a space
+    }
+    if (slot->format == FT_GLYPH_FORMAT_OUTLINE) {
+        FT_BBox box{};
+        FT_Outline_Get_CBox(&slot->outline, &box);
+        const FT_Pos largest = FT_Pos{kMaxGlyphEms} * m_metrics.pixelsPerEm * kSubpixels;
+        if (box.xMax - box.xMin > largest || box.yMax - box.yMin > largest) {
+            return fail(FontError::BadGlyph,
+                        std::format("U+{:04X}: {} by {} pixels at {} pixels per em", std::uint32_t{character},
+                                    (box.xMax - box.xMin) / kSubpixels, (box.yMax - box.yMin) / kSubpixels,
+                                    m_metrics.pixelsPerEm));
+        }
     }
     if (const FT_Error error = FT_Render_Glyph(slot, isSmooth ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO);
         error != 0) {
@@ -393,7 +430,7 @@ auto Font::glyph(char32_t character) const -> Result<Glyph, FontError> {
                 isMono ? monoCoverage(bytes, column) : bytes[column];
         }
     }
-    return glyph;
+    return m_face->isEmboldened ? struckTwice(glyph) : glyph;
 }
 
 } // namespace nx::ui

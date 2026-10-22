@@ -67,7 +67,9 @@ without antialiasing (each pixel in or out by its centre) or with it (`FontSmoot
 smooth them, Windows does as the face's `gasp` table says at its size, and so does `Font`:
 smoothed or not, fitted to the pixels or not. Tahoma and Verdana are not smoothed from 9 to 16
 pixels per em, so a scheme's `antialias` changes nothing at the console's size. Without smoothing,
-Windows fits the glyphs at every size, whatever the table says. Measured
+Windows fits the glyphs at every size, whatever the table says. A glyph wider or taller than eight
+ems (`kMaxGlyphEms`) is refused: no letter is, and a font made to exhaust whoever draws it could
+ask for bitmaps of thousands of pixels a side. Measured
 against GDI's glyphs (`GetGlyphOutline`) in Tahoma, Tahoma Bold, Verdana, Verdana Bold, Arial and
 Trebuchet MS at cells of 12 to 28 pixels, the 94 printable ASCII characters each:
 
@@ -96,9 +98,26 @@ original shows needs reference shots of its smoothed text (the console's size is
 Below 9 pixels per em the hinting differs more (20 to 100 pixels of a line); no scheme asks for
 such sizes.
 
-Still to come: the face of a family that a weight asks for (Tahoma Bold for weights from 600),
-found among the system's fonts and the schemes' `CustomFontFiles`; Windows' bitmap fonts (`.fon`),
-which `GameConsole_Mono` asks for (Courier); and atlases that grow as new characters come.
+**Which face** (`nx.ui:fontCatalog`). A `FontCatalog` holds the faces of the system's fonts
+(`nx::platform::fontFolders`: Windows' Fonts folder and the user's own; elsewhere the XDG fonts
+folders and `~/.fonts`) and of the files a scheme brings (`CustomFontFiles`), each described by
+reading only its tables: its family (name ID 1, in each language the file gives it), style, weight
+and italics; a name longer than the 31 characters GDI's LOGFONT holds is no family a scheme can ask
+for, and a collection gives at most 64 faces, so that no file makes the scan run long. GDI was asked for each weight from 0 to 1000 in Tahoma, Verdana, Arial, Trebuchet MS,
+Segoe UI and Marlett, and `choose` reproduces what it gave:
+
+- the family by its name ID 1 only, in any case: "Verdana Bold", which `cstrike`'s
+  `ClientScheme.res` names, is no family, and GDI gives another font for it;
+- the faces as italic as asked if there are any; of them the heaviest at most 88 heavier than asked
+  (0 asks for 400), else the lightest: Tahoma Bold from 612;
+- bold simulated on a face lighter than 600 more than 150 lighter than asked: Tahoma from 551,
+  Marlett (500) from 651, never on a bold face. Simulated, each glyph is struck twice, the second
+  a pixel to the right, and advances a pixel more, as GDI draws it (the same in all 94 glyphs
+  compared); the line keeps its metrics.
+
+Scanning this computer's 172 faces takes about 0.2 s. Still to come: Windows' bitmap fonts
+(`.fon`), such as the Courier that `GameConsole_Mono` asks for; italics simulated on a family
+without an italic face (Tahoma); and atlases that grow as new characters come.
 
 ## 3. HUD
 
