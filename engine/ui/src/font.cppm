@@ -22,6 +22,7 @@ enum class FontError : std::uint8_t {
     BadHeight,  ///< The cell height is not a whole number of pixels from 1 to kMaxCellHeight.
     NoGlyph,    ///< The face has no glyph for the character.
     BadGlyph,   ///< The face's glyph cannot be loaded or drawn; the detail says why.
+    Unreadable, ///< The font file cannot be read (cause: the file system's).
 };
 
 /// The tallest cell a font is sized to, in pixels: past it, a glyph's bitmap outgrows any atlas.
@@ -93,6 +94,9 @@ struct FontRequest {
     std::int32_t cellHeight = 0; ///< VGUI2's `tall`: the height of a line, in pixels.
     FontSmoothing smoothing = FontSmoothing::None;
     std::uint32_t faceIndex = 0; ///< The face of a collection (.ttc); 0 for a single face.
+    /// Bold simulated, as Windows simulates it: each glyph struck twice, the second a pixel to the
+    /// right, and a pixel wider.
+    bool isEmboldened = false;
 };
 
 /// A face of a font file at a size, drawing its glyphs. Each font owns its own FreeType instance, so

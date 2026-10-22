@@ -93,6 +93,26 @@ TEST(FileSystemTest, ReadsATextFileAsItIs) {
     EXPECT_EQ(missing.error().code, FileError::NotFound);
 }
 
+TEST(FileSystemTest, ReadsAPartOfAFile) {
+    const nx::test::TemporaryDirectory directory;
+    directory.write("tables.ttf", "0123456789");
+    const std::filesystem::path path = directory.path() / "tables.ttf";
+
+    const auto part = nx::platform::readFilePart(path, 3, 4);
+    ASSERT_TRUE(part.has_value()) << nx::describe(part.error());
+    EXPECT_EQ(*part, bytesOf("3456"));
+    EXPECT_EQ(nx::platform::readFilePart(path, 0, 2).value_or(std::vector<std::byte>{}), bytesOf("01"));
+    EXPECT_EQ(nx::platform::readFilePart(path, 8, 100).value_or(std::vector<std::byte>{}), bytesOf("89"))
+        << "fewer where the file ends";
+    const auto past = nx::platform::readFilePart(path, 20, 4);
+    ASSERT_TRUE(past.has_value()) << nx::describe(past.error());
+    EXPECT_TRUE(past->empty()) << "none past its end";
+
+    const auto missing = nx::platform::readFilePart(directory.path() / "missing.ttf", 0, 4);
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_EQ(missing.error().code, FileError::NotFound);
+}
+
 TEST(FileSystemTest, WritesAWholeFileAndReplacesOne) {
     const nx::test::TemporaryDirectory directory;
     const std::filesystem::path path = directory.path() / "screenshot.bmp";
@@ -155,6 +175,17 @@ TEST(FileSystemTest, TheExecutablePathIsThisTestProgram) {
     EXPECT_TRUE(path->is_absolute());
     EXPECT_TRUE(std::filesystem::is_regular_file(*path));
     EXPECT_EQ(path->stem(), "nxPlatformTests");
+}
+
+TEST(FileSystemTest, TheFontFoldersAreFoldersEachOnce) {
+    const std::vector<std::filesystem::path> folders = nx::platform::fontFolders();
+    for (const std::filesystem::path& folder : folders) {
+        EXPECT_TRUE(std::filesystem::is_directory(folder)) << toUtf8(folder);
+        EXPECT_EQ(std::ranges::count(folders, folder), 1) << toUtf8(folder);
+    }
+#if defined(_WIN32)
+    EXPECT_FALSE(folders.empty()) << "Windows has its Fonts folder";
+#endif
 }
 
 TEST(FileSystemTest, ReadingSomethingOtherThanAFileFails) {

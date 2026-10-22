@@ -65,6 +65,19 @@ constexpr std::size_t kMaxBytesPerCall = std::size_t{1} << 30;
 template <class Buffer>
 concept FileBuffer = std::same_as<Buffer, std::vector<std::byte>> || std::same_as<Buffer, std::string>;
 
+/// What of a file is read: `size` bytes from `offset`, fewer when the file ends sooner; all of it by
+/// default.
+struct FilePart {
+    std::uint64_t offset = 0;
+    std::uint64_t size = std::numeric_limits<std::uint64_t>::max();
+};
+
+/// The bytes `part` asks for of a file of `fileSize` bytes: from its offset, none past the file's end.
+[[nodiscard]] constexpr auto partWithin(FilePart part, std::uint64_t fileSize) noexcept -> FilePart {
+    const std::uint64_t start = std::min(part.offset, fileSize);
+    return {.offset = start, .size = std::min(part.size, fileSize - start)};
+}
+
 #if defined(_WIN32)
 
 [[nodiscard]] auto lastError() noexcept -> std::error_code {
@@ -88,7 +101,8 @@ private:
 };
 
 template <FileBuffer Buffer>
-[[nodiscard]] auto readRegularFile(const std::filesystem::path& path) -> Result<Buffer, FileError> {
+[[nodiscard]] auto readRegularFile(const std::filesystem::path& path, FilePart part)
+    -> Result<Buffer, FileError> {
     // Shared as a POSIX file is: other processes may write, rename or delete it meanwhile.
     const HANDLE handle =
         CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -103,7 +117,12 @@ template <FileBuffer Buffer>
     if (GetFileSizeEx(file.get(), &size) == FALSE) {
         return fail(FileError::ReadFailed, osFailureText(path, lastError()));
     }
-    Buffer bytes(narrow<std::size_t>(size.QuadPart), {});
+    const FilePart within = partWithin(part, narrow<std::uint64_t>(size.QuadPart));
+    if (LARGE_INTEGER start{.QuadPart = narrow<LONGLONG>(within.offset)};
+        within.offset > 0 && SetFilePointerEx(file.get(), start, nullptr, FILE_BEGIN) == FALSE) {
+        return fail(FileError::ReadFailed, osFailureText(path, lastError()));
+    }
+    Buffer bytes(narrow<std::size_t>(within.size), {});
     std::size_t offset = 0;
     while (offset < bytes.size()) {
         const auto request = narrow<DWORD>(std::min(bytes.size() - offset, kMaxBytesPerCall));
@@ -170,7 +189,8 @@ private:
 };
 
 template <FileBuffer Buffer>
-[[nodiscard]] auto readRegularFile(const std::filesystem::path& path) -> Result<Buffer, FileError> {
+[[nodiscard]] auto readRegularFile(const std::filesystem::path& path, FilePart part)
+    -> Result<Buffer, FileError> {
     const int descriptor = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (descriptor < 0) {
         const std::error_code error = lastError();
@@ -182,7 +202,11 @@ template <FileBuffer Buffer>
     if (::fstat(file.get(), &info) != 0) {
         return fail(FileError::ReadFailed, osFailureText(path, lastError()));
     }
-    Buffer bytes(narrow<std::size_t>(info.st_size), {});
+    const FilePart within = partWithin(part, narrow<std::uint64_t>(info.st_size));
+    if (within.offset > 0 && ::lseek(file.get(), narrow<::off_t>(within.offset), SEEK_SET) < 0) {
+        return fail(FileError::ReadFailed, osFailureText(path, lastError()));
+    }
+    Buffer bytes(narrow<std::size_t>(within.size), {});
     std::size_t offset = 0;
     while (offset < bytes.size()) {
         const ::ssize_t count = ::read(file.get(), std::span{bytes}.subspan(offset).data(),
@@ -233,9 +257,24 @@ template <FileBuffer Buffer>
 
 #endif
 
-/// readFile and readTextFile: checks that `path` is a regular file, then reads it.
+/// The folders of `candidates` that are folders, each once, in their order.
+[[nodiscard]] auto existingFolders(std::span<const std::filesystem::path> candidates)
+    -> std::vector<std::filesystem::path> {
+    std::vector<std::filesystem::path> folders;
+    for (const std::filesystem::path& candidate : candidates) {
+        std::error_code error;
+        if (std::filesystem::is_directory(candidate, error) &&
+            std::ranges::find(folders, candidate) == folders.end()) {
+            folders.push_back(candidate);
+        }
+    }
+    return folders;
+}
+
+/// readFile, readTextFile and readFilePart: checks that `path` is a regular file, then reads `part` of it.
 template <FileBuffer Buffer>
-[[nodiscard]] auto readWholeFile(const std::filesystem::path& path) -> Result<Buffer, FileError> {
+[[nodiscard]] auto readCheckedFile(const std::filesystem::path& path, FilePart part = {})
+    -> Result<Buffer, FileError> {
     std::error_code error;
     const std::filesystem::file_status status = std::filesystem::status(path, error);
     if (status.type() == std::filesystem::file_type::not_found) {
@@ -247,7 +286,7 @@ template <FileBuffer Buffer>
     if (!std::filesystem::is_regular_file(status)) {
         return fail(FileError::NotAFile, toUtf8(path));
     }
-    return readRegularFile<Buffer>(path);
+    return readRegularFile<Buffer>(path, part);
 }
 
 } // namespace
@@ -302,11 +341,16 @@ auto listFiles(const std::filesystem::path& directory)
 }
 
 auto readFile(const std::filesystem::path& path) -> Result<std::vector<std::byte>, FileError> {
-    return readWholeFile<std::vector<std::byte>>(path);
+    return readCheckedFile<std::vector<std::byte>>(path);
 }
 
 auto readTextFile(const std::filesystem::path& path) -> Result<std::string, FileError> {
-    return readWholeFile<std::string>(path);
+    return readCheckedFile<std::string>(path);
+}
+
+auto readFilePart(const std::filesystem::path& path, std::uint64_t offset, std::size_t size)
+    -> Result<std::vector<std::byte>, FileError> {
+    return readCheckedFile<std::vector<std::byte>>(path, {.offset = offset, .size = size});
 }
 
 auto writeFile(const std::filesystem::path& path, std::span<const std::byte> bytes)
@@ -365,6 +409,23 @@ auto userDirectory() -> Result<std::filesystem::path, FileError> {
     return std::filesystem::path{folder} / kUserFolder;
 }
 
+auto fontFolders() -> std::vector<std::filesystem::path> {
+    const auto known = [](REFKNOWNFOLDERID id) -> std::optional<std::filesystem::path> {
+        PWSTR folder = nullptr;
+        const HRESULT found = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, nullptr, &folder);
+        const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> owned{folder, &CoTaskMemFree};
+        return FAILED(found) ? std::nullopt : std::optional{std::filesystem::path{folder}};
+    };
+    std::vector<std::filesystem::path> candidates;
+    if (auto system = known(FOLDERID_Fonts)) {
+        candidates.push_back(std::move(*system));
+    }
+    if (auto local = known(FOLDERID_LocalAppData)) {
+        candidates.push_back(*local / "Microsoft" / "Windows" / "Fonts"); // the user's own, since Windows 10
+    }
+    return existingFolders(candidates);
+}
+
 auto executablePath() -> Result<std::filesystem::path, FileError> {
     std::wstring path(MAX_PATH, L'\0');
     for (;;) {
@@ -397,6 +458,34 @@ auto userDirectory() -> Result<std::filesystem::path, FileError> {
         return fail(FileError::NotFound, "the user's folders: neither XDG_CONFIG_HOME nor HOME is set");
     }
     return fromUtf8(home) / ".config" / kUserFolder;
+}
+
+auto fontFolders() -> std::vector<std::filesystem::path> {
+    // XDG Base Directory: $XDG_DATA_HOME, then each of $XDG_DATA_DIRS (relative ones are invalid and
+    // ignored), each with its fonts folder; and the older ~/.fonts.
+    const auto isAbsolute = [](const char* value) {
+        return value != nullptr && *value == '/';
+    };
+    const char* home = std::getenv("HOME");
+    std::vector<std::filesystem::path> candidates;
+    if (const char* data = std::getenv("XDG_DATA_HOME"); isAbsolute(data)) {
+        candidates.push_back(fromUtf8(data) / "fonts");
+    } else if (isAbsolute(home)) {
+        candidates.push_back(fromUtf8(home) / ".local" / "share" / "fonts");
+    }
+    if (isAbsolute(home)) {
+        candidates.push_back(fromUtf8(home) / ".fonts");
+    }
+    const char* shared = std::getenv("XDG_DATA_DIRS");
+    const std::string_view folders =
+        shared != nullptr && *shared != '\0' ? std::string_view{shared} : "/usr/local/share:/usr/share";
+    for (const auto folder : folders | std::views::split(':')) {
+        const std::string_view text{folder.begin(), folder.end()};
+        if (text.starts_with('/')) {
+            candidates.push_back(fromUtf8(text) / "fonts");
+        }
+    }
+    return existingFolders(candidates);
 }
 
 auto executablePath() -> Result<std::filesystem::path, FileError> {

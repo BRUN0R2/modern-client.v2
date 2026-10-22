@@ -5,6 +5,7 @@ nxAddTest(nxUiTests
     SOURCES
         panelTests.cpp
         fontTests.cpp
+        fontCatalogTests.cpp
         textTests.cpp
     DEPENDS
         nx::ui

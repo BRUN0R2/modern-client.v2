@@ -17,6 +17,7 @@
 *.ktx2 binary
 *.nxpak binary
 *.ttf  binary
+*.ttc  binary
 
 # VGUI2's localized strings are UTF-16 with CRLF: the fuzz seed keeps them byte for byte.
 tests/fuzz/corpus/keyValues/*.txt binary

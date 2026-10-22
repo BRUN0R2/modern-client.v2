@@ -20,7 +20,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
 - [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
 - [x] `nx.ui` text: glyph atlases drawn by `nx.render:screen`, lines laid out as GDI's `TextOut` lays them out ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts)); UTF-8 in `nx.core`
-- [ ] Fonts: a family's face by weight among the system's fonts and the schemes' `CustomFontFiles`; Windows' bitmap fonts (`.fon`); atlases that grow as new characters come
+- [x] `nx.ui` font catalog: the system's fonts and a scheme's own, the face of a family by weight and italics as GDI chooses it, bold simulated as GDI simulates it ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
+- [ ] Fonts: Windows' bitmap fonts (`.fon`); simulated italics; atlases that grow as new characters come
 - [ ] Define the reference hardware for the performance targets
 - [x] Free content by default; original assets optional and configured locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md))
 - [x] Rook Plugin Exception: additional permission under section 7 of the GPL for plugins and mods ([ADR-0010](docs/adr/0010-license.md))

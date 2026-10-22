@@ -183,6 +183,24 @@ TEST(FontTest, DrawsGlyphsWithAntialiasing) {
     }
 }
 
+TEST(FontTest, BoldIsSimulatedByStrikingEachGlyphTwice) {
+    auto font = Font::open(squareFile(),
+                           {.cellHeight = 20, .smoothing = FontSmoothing::Antialiased, .isEmboldened = true});
+    ASSERT_TRUE(font.has_value()) << font.error().detail;
+    const auto shifted = font->glyph(U'B');
+    ASSERT_TRUE(shifted.has_value()) << shifted.error().detail;
+    ASSERT_EQ(shifted->width, 10) << "a pixel wider";
+    EXPECT_EQ(shifted->advance, 11);
+    for (std::size_t row = 0; row < 8; ++row) {
+        EXPECT_NEAR(shifted->coverage[row * 10], 0.75 * 255, 1.0) << "its left edge as it was";
+        EXPECT_EQ(shifted->coverage[(row * 10) + 8], 255) << "the right edge struck over by the body";
+        EXPECT_NEAR(shifted->coverage[(row * 10) + 9], 0.25 * 255, 1.0) << "the right edge a pixel on";
+    }
+    const auto space = font->glyph(U' ');
+    ASSERT_TRUE(space.has_value()) << space.error().detail;
+    EXPECT_EQ(space->advance, 5);
+}
+
 TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
     // As Tahoma's: fitted but not smoothed up to 16 pixels per em, fitted and smoothed above.
     const auto file = squareFile({.gaspRanges = {{16, 0x0005}, {0xFFFF, 0x000F}}});
