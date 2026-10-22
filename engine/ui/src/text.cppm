@@ -12,6 +12,7 @@ import nx.core;
 import nx.assets;
 import nx.render;
 import :font;
+import :schemeFont;
 
 export namespace nx::ui {
 
@@ -35,6 +36,10 @@ public:
     /// the font has no glyph for is left out. Errors: BadGlyph.
     [[nodiscard]] static auto build(const Font& font, std::u32string_view characters,
                                     std::uint32_t width = kAtlasWidth) -> Result<GlyphAtlas, FontError>;
+    /// The same of a scheme's font, each character's glyph from the font of the set that draws it,
+    /// the line the set's.
+    [[nodiscard]] static auto build(const SchemeFontSet& fonts, std::u32string_view characters,
+                                    std::uint32_t width = kAtlasWidth) -> Result<GlyphAtlas, FontError>;
 
     /// The font's line, which text is laid out by.
     [[nodiscard]] inline auto metrics() const noexcept -> const FontMetrics& { return m_metrics; }
@@ -47,6 +52,9 @@ public:
 
 private:
     GlyphAtlas() = default;
+    /// The atlas of `drawn`, in rows `width` wide (wider when a glyph is), for a font of `metrics`.
+    [[nodiscard]] static auto pack(const FontMetrics& metrics, std::vector<std::pair<char32_t, Glyph>> drawn,
+                                   std::uint32_t width) -> GlyphAtlas;
 
     FontMetrics m_metrics{};
     std::uint32_t m_width = 0;
