@@ -2,19 +2,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The classic HUD (docs/12-ui-hud-and-console.md, section 3): the player's health, armor and money,
-/// in the pictures sprites/hud.txt names, where Counter-Strike 1.6 draws them and as it draws them,
-/// measured on the original (docs/12, section 3.2). Its pictures keep their size at every
+/// in the pictures sprites/hud.txt names, and the crosshair, where Counter-Strike 1.6 draws them and
+/// as it draws them, measured on the original (docs/12, section 3.2). Its pictures keep their size at every
 /// resolution, each drawn as the original draws a HUD sprite (nx::render::spriteQuad), added in the
 /// HUD's color; its elements keep to the screen's edges. Its numbers have no ceiling (docs/12,
 /// section 3.4): a number of more digits than the original's room for it widens it, and pushes away
 /// what is beside it.
 ///
-/// Today: health, armor and money as they rest. The ammo, the round's time, the status icons, the
-/// radar and the crosshair, and the flash of a number that changes, come next (TODO.md).
+/// Today: health, armor and money as they rest, and the crosshair of a player standing, with the
+/// original's cvars. The ammo, the round's time, the status icons, the radar, the crosshair opening
+/// as the player moves, and the flash of a number that changes, come next (TODO.md).
 export module cs.client:hud;
 
 import std;
 import nx.core;
+import nx.console;
 import nx.assets;
 import nx.rhi;
 import nx.render;
@@ -62,7 +64,55 @@ struct HudView {
     nx::HitPoints health{};
     nx::ArmorPoints armor{};
     nx::Money money{};
+    /// How far from the middle the crosshair of the weapon in hand is (cs::kKnifeCrosshairDistance);
+    /// none without a crosshair.
+    std::optional<std::uint32_t> crosshairDistance{};
 };
+
+/// The size of the crosshair, as `cl_crosshair_size` names it.
+enum class CrosshairSize : std::uint8_t {
+    Auto,   ///< `auto`: small on screens under 800 wide, medium under 1024, large from 1024.
+    Small,  ///< `small`.
+    Medium, ///< `medium`.
+    Large,  ///< `large`.
+    Count,
+};
+
+/// The size `text` names: "auto", "small", "medium" or "large"; none for other text.
+[[nodiscard]] auto crosshairSizeNamed(std::string_view text) noexcept -> std::optional<CrosshairSize>;
+/// The color `text` gives: three whole numbers from 0 to 255, red, green and blue, spaces between them
+/// ("50 250 50"); none for other text.
+[[nodiscard]] auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::render::ScreenColor>;
+
+/// How the crosshair is drawn, as its cvars say.
+struct CrosshairStyle {
+    nx::render::ScreenColor color{.red = 50, .green = 250, .blue = 50};
+    CrosshairSize size = CrosshairSize::Auto;
+    bool isTranslucent = true; ///< Added to what is behind it; else drawn over it as it is.
+};
+
+/// The HUD's cvars, by the original's names, archived, with Counter-Strike 1.6's values:
+/// `cl_crosshair_color` (50 250 50), `cl_crosshair_size` (auto) and `cl_crosshair_translucent` (1).
+struct HudCvars {
+    nx::console::Cvar<std::string> crosshairColor;
+    nx::console::Cvar<std::string> crosshairSize;
+    nx::console::Cvar<bool> crosshairTranslucent;
+
+    /// Registers them in `console`. Errors: those of Console::registerCvar.
+    [[nodiscard]] static auto registerIn(nx::console::Console& console)
+        -> nx::Result<HudCvars, nx::console::CvarError>;
+
+    /// The crosshair they ask for.
+    [[nodiscard]] auto crosshair() const -> CrosshairStyle;
+};
+
+/// Where the crosshair of a weapon `distance` from the middle is drawn in `crosshairSize` on a screen
+/// of `size`: four rectangles a pixel thick, left of the middle, right of it, above it and under it,
+/// each ⌊5·s·f⌋ long and ⌊distance·s·f⌋ from it, s the screen's width over 640 and f the size's factor
+/// (small 5/8, medium 4/5, large 1): the left one ends `gap` before the middle's column, the right one
+/// starts `gap` after it, and the top and bottom ones likewise.
+[[nodiscard]] auto crosshairRects(CrosshairSize crosshairSize, std::uint32_t distance, nx::rhi::Extent2d size)
+    -> std::array<nx::render::ScreenRect, 4>;
 
 /// The digits the HUD shows of `health`, a finite health, as the game makes it a whole number for its
 /// client (ReGameDLL_CS's CBasePlayer::UpdateClientData): its whole part, none below 0, and 1 above 0
@@ -104,9 +154,10 @@ public:
                                    nx::rhi::CommandList& commands) -> nx::Result<Hud, HudError>;
 
     /// Appends to `quads` the HUD of `view` on a screen of `size` (layoutHud), each picture drawn as the
-    /// original draws a HUD sprite, added in the HUD's color. The quads point into the HUD.
+    /// original draws a HUD sprite, added in the HUD's color; then the crosshair in `crosshair`'s
+    /// style (crosshairRects), added or drawn as it is. The quads point into the HUD.
     void append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
-                nx::rhi::Extent2d size) const;
+                const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const;
 
 private:
     Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,

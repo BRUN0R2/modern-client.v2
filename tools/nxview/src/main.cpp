@@ -44,7 +44,8 @@ run next.
   --time <seconds>        when the frame is, after the map starts (default: 0): what animates
                           (light styles, textures, water, the knife) is drawn as it is then
   --size <width>x<height> the frame's size in pixels (default: 1280x720)
-  --hud                   the HUD over the frame: the player's as it spawns
+  --hud                   the HUD over the frame: the player's as it spawns, the knife's crosshair
+                          in Counter-Strike's default style
   --validation            the Khronos validation layer, when it is installed: its messages are
                           logged and nxview exits with 1 when it reported an error
 )";
@@ -295,7 +296,12 @@ constexpr std::size_t kBlue = 2;
     if (hud) {
         const cs::PlayerStatus& status = (*game)->status();
         std::vector<nx::render::ScreenQuad> quads;
-        hud->append(quads, {.health = status.health, .armor = status.armor, .money = status.money}, extent);
+        hud->append(quads,
+                    {.health = status.health,
+                     .armor = status.armor,
+                     .money = status.money,
+                     .crosshairDistance = cs::kKnifeCrosshairDistance},
+                    cs::CrosshairStyle{}, extent);
         if (auto drawn = screen->draw(list, {.size = extent, .quads = quads}); !drawn) {
             return unusable(drawn.error());
         }
