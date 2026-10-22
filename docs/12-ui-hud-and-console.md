@@ -145,8 +145,9 @@ here the startup runs that file itself. `registerClientCvars` registers the clie
 (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), all archived, and `texgamma`
 (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive. `nxview` reads
 them as it starts and writes `config.cfg` as it ends; a change takes effect when it starts again
-until the console comes. The binds, `vid_vsync` as the name of `gl_vsync`, and the other cvars
-come with their consumers.
+until the console comes. `config.cfg` keeps the binds too (§6), before the cvars, in the
+original's order. `vid_vsync` as the name of `gl_vsync`, and the other cvars, come with their
+consumers.
 
 ### 5.3 The `nx.console` module
 
@@ -221,6 +222,41 @@ category the application passes in (`log_level_net debug`, or the level's number
   behavior).
 - Non-QWERTY keyboard layouts: optional binds by **physical position**
   (`in_keymap scancode`).
+
+**Today** (`nx.settings`): a key is the original's key number, which `console::KeyId` holds: a
+key that types an ASCII character has that character's number (`a` 97, `SPACE` 32), the others
+the original's own (`UPARROW` 128, `MWHEELUP` 240, `MOUSE1` 241). `keyOf` gives the key at a
+position of a US keyboard: both Ctrl keys are `CTRL`, both Shift `SHIFT`, both Alt `ALT`, and
+the keypad's keys are its `KP_` keys whatever Num Lock says; the keys the original has no number
+for (Print Screen, Scroll Lock, Num Lock, the system keys) run nothing. The platform reports
+positions only, so binds follow them until `in_keymap` brings the layout's characters. `bind
+<key> [command]`, `unbind`, `unbindall` and `bindlist` set and list them: a key is one ASCII
+character (a letter in either case) or one of the original's names in any case (`keyNamed`), and
+a command holds no `"`, so that `config.cfg` reads it back. `defaultBindings` are Counter-Strike
+1.6's, those its options restore, and `config.cfg` keeps the binds: `unbindall`, then a `bind
+"<key>" "<command>"` line per bound key. `BoundInput` runs them as the original does: a key
+going down queues its command, followed by the key's number when it starts with `+` (`+jump
+32`); coming up, the same with its `+` turned to `-` (`-jump 32`), and nothing for other
+commands. The number follows the whole command, as in the original: a key bound to `+jump;
+wait; -jump` queues `+jump; wait; -jump 32`. A key the system repeats queues nothing more, a key
+that comes up without having gone down here queues nothing, and every key down comes up when the
+window loses the keyboard. Each notch of the wheel presses its key and releases it at once.
+
+`cs::PlayerInput` (`cs.client`) registers the player's buttons, `+forward`, `+back`,
+`+moveleft`, `+moveright`, `+moveup`, `+movedown`, `+left`, `+right`, `+lookup`, `+lookdown`,
+`+strafe`, `+speed`, `+jump`, `+duck` and `+use`, and their cvars with Counter-Strike 1.6's
+values: `cl_forwardspeed`, `cl_backspeed` and `cl_sidespeed` (400, archived), `cl_upspeed`
+(320), `cl_movespeedkey` (0.52), `cl_yawspeed` (210), `cl_pitchspeed` (225) and
+`cl_anglespeedkey` (0.67). `nextCommand` makes a user command as the original's `CL_CreateMove`
+makes it: each movement button asks its speed for the share of the command it was held (all of
+it, but half when it went down during the command, as `CL_KeyState` counts), `+speed` asks
+`cl_movespeedkey` of each, and together they are cut to the player's speed limit. `+jump`,
+`+duck` and `+use` count also when pressed and released within one command, so that `+jump` on
+`MWHEELDOWN` jumps once a notch. `turn` turns the view each frame as `CL_AdjustAngles` does:
+`+left` and `+right` (which move instead while `+strafe` is held), `+lookup` and `+lookdown`, up
+to 89 degrees. `+attack`, `+reload` and the other buttons come with what reads them; the mouse
+always looks, so `+mlook` and `+klook` are not there. `nxview` plays with them: Counter-Strike's
+binds, and `noclip` on `v`.
 
 ## 7. Localization
 

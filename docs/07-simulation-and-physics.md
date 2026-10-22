@@ -44,9 +44,10 @@ struct UserCommand {
 } // namespace cs
 ```
 
-Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement reads: the duration, the
-view angles, the move and the buttons (`Jump`, `Duck`, `Forward`, `Back`, `MoveLeft`,
-`MoveRight`). The others arrive with what reads them.
+Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement and the game read: the
+duration, the view angles, the move and the buttons (`Jump`, `Duck`, `Forward`, `Back`,
+`MoveLeft`, `MoveRight`, and `Use`, which the game reads as it goes down). The others arrive with
+what reads them.
 
 ### 2.2 Generation on the client
 
@@ -62,6 +63,10 @@ view angles, the move and the buttons (`Jump`, `Duck`, `Forward`, `Back`, `MoveL
   loss), as in the original.
 - The server validates the sum of `duration` per time window, against *speedhack*
   (`sv_max_command_time_drift`). The excess is discarded, with a per-client metric.
+
+**Today** (`cs.client`): `cs::PlayerInput::nextCommand` makes a command from the player's `+`
+buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)).
+`nxview` makes one each 10 ms, whatever its frame rate; `cl_movement_rate` comes with the client.
 
 ### 2.3 Shared seed
 
@@ -115,9 +120,12 @@ code** on the server (authoritative) and on the client (prediction).
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
   list), which the game touches, a door opening; the player keeps the entity it stands on
   (`groundModel`), which a pusher carries. A solid entity turned by its angles is met turned, as
-  the original turns a trace into its space and the plane it meets back out. Noclip, observers,
-  unsticking, boxes (players, hostages, pushables), conveyors, pushes and currents come next
-  ([TODO](../TODO.md)).
+  the original turns a trace into its space and the plane it meets back out. Noclip too
+  (`MoveType::Noclip`, which the `noclip` cheat sets): through everything, along the view at the
+  speeds the command asks and up at its up speed, without gravity; as in the original, a player on
+  the ground is still put back on the floor 2 units below, so that a slower rise stays there, and
+  pushers pass through it (`nx::game::Body::isPushed`). Observers, unsticking, boxes (players,
+  hostages, pushables), conveyors, pushes and currents come next ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 

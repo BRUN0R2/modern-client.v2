@@ -106,6 +106,9 @@ public:
     [[nodiscard]] auto doorAt() -> const Transform& { return *m_world.get<Transform>(m_door); }
     [[nodiscard]] auto toucherOrigin() -> Vec3 { return m_world.get<Transform>(m_toucher)->origin; }
 
+    /// The body flies in noclip: pushers pass through it.
+    void noclip() { m_world.get<nx::game::Body>(m_toucher)->isPushed = false; }
+
 private:
     nx::ecs::World m_world;
     nx::ecs::Entity m_door{};
@@ -182,6 +185,17 @@ TEST(DoorTest, AnOpeningDoorPushesABodyOutOfItsWay) {
     game.run(hulls, 80);
     EXPECT_EQ(game.door().state, DoorState::Open);
     EXPECT_NEAR(game.toucherOrigin().x, 128.0F, 0.01F) << "pushed ahead of its face";
+}
+
+TEST(DoorTest, AnOpeningDoorPassesThroughABodyInNoclip) {
+    const BrushHulls hulls = doorHulls(true);
+    DoorWorld game{slidingDoor(), nx::game::BrushBehavior::SlidingDoor, Vec3{.x = 70.0F}};
+    game.noclip();
+
+    game.touch(hulls);
+    game.run(hulls, 80);
+    EXPECT_EQ(game.door().state, DoorState::Open) << "not blocked, even against the wall";
+    EXPECT_EQ(game.toucherOrigin(), (Vec3{.x = 70.0F})) << "not pushed";
 }
 
 TEST(DoorTest, ADoorThatCannotPushABodyGoesBack) {

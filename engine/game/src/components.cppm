@@ -111,6 +111,9 @@ struct Body {
     collision::Hull hull = collision::Hull::Standing;
     Aabb box{};                                      ///< About its origin.
     std::optional<assets::ModelIndex> groundModel{}; ///< The brush model of the entity it stands on.
+    /// Whether pushers push it and it blocks them: not a player in noclip, which they pass through as
+    /// the original's pass a MOVETYPE_NOCLIP entity. It still touches triggers.
+    bool isPushed = true;
 };
 
 /// Registers the components of nx.game in `world` (those above, NextThink, Named, Targets,

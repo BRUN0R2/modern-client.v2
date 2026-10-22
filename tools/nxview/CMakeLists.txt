@@ -47,7 +47,8 @@ nxAddProgram(nxview
         nx::ecs
         nx::collision
         nx::game
-        cs::shared)
+        cs::shared
+        cs::client)
 
 # The world, studio and sprite shaders, in bin/shaders/.
 add_dependencies(nxview nxShaders)

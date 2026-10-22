@@ -276,6 +276,39 @@ TEST(MovementTest, APlayerWalksUpAStairButNotAWall) {
     EXPECT_LT(wall.origin.x, 10.0F);
 }
 
+TEST(MovementTest, NoclipFliesThroughWallsAtTheCommandsSpeeds) {
+    // A wall from x = 10 on, over the floor.
+    const BrushHulls walled = world({facingX(10.0F), facingUp(0.0F)},
+                                    {HullNode{.plane = {0}, .children = {Contents::Solid, HullNodeIndex{1}}},
+                                     HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}}});
+    const MovementState flying{.moveType = cs::MoveType::Noclip,
+                               .origin = {.x = 5.0F, .z = 50.0F},
+                               .velocity = {.z = -100.0F},
+                               .maxSpeed = kKnifeSpeed};
+    // 400 ahead and 300 up ask for 500, which the knife's 250 halves.
+    const UserCommand ahead =
+        command(cs::MoveIntent{.forward = nx::UnitsPerSecond{400.0F}, .up = nx::UnitsPerSecond{300.0F}});
+
+    const MovementState after = repeat(flying, ahead, 10, walled);
+    EXPECT_NEAR(after.origin.x, 5.0F + 20.0F, kTolerance) << "through the wall at x = 10";
+    EXPECT_NEAR(after.origin.z, 50.0F + 15.0F, kTolerance) << "without gravity";
+    EXPECT_EQ(after.velocity, Vec3{});
+    EXPECT_EQ(after.moveType, cs::MoveType::Noclip);
+}
+
+TEST(MovementTest, NoclipRisesOffTheFloorOnlyFasterThanItSticks) {
+    // Parity: on the ground, each command puts the player back on the floor 2 units below, noclip
+    // too: a rise of 1.5 a command stays there, one of 2.5 leaves it.
+    MovementState onTheFloor = standingOnTheFloor();
+    onTheFloor.moveType = cs::MoveType::Noclip;
+    const auto rise = [](float speed) {
+        return command(cs::MoveIntent{.up = nx::UnitsPerSecond{speed}});
+    };
+
+    EXPECT_NEAR(repeat(onTheFloor, rise(150.0F), 10, floorWorld()).origin.z, kOnTheFloor + 1.5F, kTolerance);
+    EXPECT_NEAR(repeat(onTheFloor, rise(250.0F), 10, floorWorld()).origin.z, kOnTheFloor + 25.0F, kTolerance);
+}
+
 TEST(MovementTest, AMoveIntoAWallSlidesAlongIt) {
     // A wall from x = 10 on, over the floor.
     const BrushHulls walled = world({facingX(10.0F), facingUp(0.0F)},
