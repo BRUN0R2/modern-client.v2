@@ -33,6 +33,58 @@ follows: the left and top edges those of the pinned corner, the right and bottom
 right and bottom when the child resizes that way, else its own left and top, keeping its size. A
 setting that cannot be read is refused, and changes nothing.
 
+### 2.1 Fonts
+
+VGUI2's text is TrueType: the schemes name a face (Tahoma, Verdana, Arial, Trebuchet MS, Marlett),
+a cell height (`tall`), a weight and flags such as `antialias`, and Windows' GDI sized and drew it.
+`nx.ui:font` reads the faces with FreeType (`Font::open`) and reproduces both.
+
+**Size.** A cell height is the height of a line. GDI turns it into a whole number of pixels per em
+by the face's tables, which `fontMetricsFor` reproduces (the rule below was found by asking GDI
+for every height from 4 to 120 in Tahoma, Verdana, Arial, Trebuchet MS, Courier New, Marlett,
+Times New Roman, Segoe UI, Georgia and Lucida Console, regular and bold, and matches it in every
+case):
+
+- The device heights of the face's `VDMX` table (the highest and lowest pixel of its glyphs at each
+  size, recorded by the font maker), when Windows takes them: a version 1 table, or a version 0
+  table made for the ANSI characters (the OpenType specification says Windows ignores the others;
+  Tahoma's is one of those). When the table reaches past the cell, the em of the first device
+  height whose line is exactly the cell, else the largest em whose line fits. Its line is the
+  device height's highest and lowest pixel.
+- Otherwise every em counts, each by its device height where it has one, else by its line,
+  `usWinAscent + usWinDescent` scaled and rounded: again the first em whose line is exactly the
+  cell, else the largest whose line fits. A scaled line is split as the cell is: the ascent and
+  descent at the scale of the cell, a whole number of 1/65536 steps, each rounded. So Tahoma at 16
+  is 13 pixels per em with a line of 13 + 3, at 20 it is 16 with 17 + 3, and at 38 its line is 37,
+  one pixel short of the cell, as GDI makes it.
+
+Past about 250 pixels per em, beyond the schemes' sizes, GDI's results stray from the rule by a
+pixel or two.
+
+**Glyphs.** FreeType hints them by the faces' own instructions with its version 35 interpreter,
+the one that hints both axes as Windows does (never with its automatic hinter), and draws them
+without antialiasing (each pixel in or out by its centre) or with it (`FontSmoothing`). Asked to
+smooth them, Windows does as the face's `gasp` table says at its size, and so does `Font`:
+smoothed or not, fitted to the pixels or not. Tahoma and Verdana are not smoothed from 9 to 16
+pixels per em, so a scheme's `antialias` changes nothing at the console's size. Without smoothing,
+Windows fits the glyphs at every size, whatever the table says. Measured
+against GDI's glyphs (`GetGlyphOutline`) in Tahoma, Tahoma Bold, Verdana, Verdana Bold, Arial and
+Trebuchet MS at cells of 12 to 28 pixels, the 94 printable ASCII characters each:
+
+| | Result |
+|-|--------|
+| Line metrics | Identical everywhere |
+| Advances | Identical, but for one glyph (Arial at 13) |
+| With antialiasing | Each pixel within 2/16 of the coverage GDI gives (4/16 in two cases), compared at every size: `GetGlyphOutline` ignores the `gasp` table |
+| Without antialiasing | 0 to 11 glyphs out of 94 differ, by a pixel or two (Tahoma at 16, the console's size: `/` and `z`); 29 in Arial at 28 and 35 in Trebuchet MS at 12 (7 pixels per em) |
+
+The glyphs without antialiasing that differ are thin diagonals, where GDI turns on a pixel more
+than FreeType; the cause is still open (the two rasterizers' dropout control is the suspect). Still
+to come: the face of a family that a weight asks for (Tahoma Bold for weights from 600), found
+among the system's fonts and the schemes' `CustomFontFiles`, and Windows' bitmap fonts (`.fon`),
+which `GameConsole_Mono` asks for (Courier); then the glyphs in an atlas, drawn by
+`nx.render:screen`.
+
 ## 3. HUD
 
 ### 3.1 Classic elements

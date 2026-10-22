@@ -8,13 +8,19 @@ nxAddModuleLibrary(nxUi
     MODULES
         src/nx.ui.cppm
         src/panel.cppm
+        src/font.cppm
     SOURCES
         src/panel.cpp
+        src/font.cpp
     DEPENDS
         nx::core
         nx::assets
     LATERAL
         nx::assets)
+
+# FreeType draws the glyphs; it is an implementation detail of src/font.cpp, never part of the
+# interface.
+target_link_libraries(nxUi PRIVATE Freetype::Freetype)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

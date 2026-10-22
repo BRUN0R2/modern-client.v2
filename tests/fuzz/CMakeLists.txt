@@ -58,3 +58,11 @@ nxAddFuzzer(fuzzTga
         nx::assets
     CORPUS
         corpus/tga)
+
+nxAddFuzzer(fuzzFont
+    SOURCES
+        fontFuzzer.cpp
+    DEPENDS
+        nx::ui
+    CORPUS
+        corpus/font)
