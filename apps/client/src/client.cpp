@@ -686,9 +686,16 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
         return {}; // no map: the void
     }
     const std::vector<nx::render::ModelPlacement> placements = m_session->game->placements();
+    // The view is drawn turned by the kick the player's weapon gave it, as the original's client adds
+    // the punch to it.
+    nx::render::Camera kicked = m_camera;
+    const nx::EulerAngles punch = m_session->game->punch();
+    kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
+                                    .yaw = m_camera.angles.yaw + punch.yaw,
+                                    .roll = m_camera.angles.roll + punch.roll};
     if (auto drawn = m_scene->draw(
             list, *m_session->level,
-            {.camera = m_camera,
+            {.camera = kicked,
              .aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height),
              .time = nx::Seconds{m_mapClock.elapsed()},
              .placements = placements,

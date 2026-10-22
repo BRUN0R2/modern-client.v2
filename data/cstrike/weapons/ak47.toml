@@ -29,3 +29,29 @@ viewHand = "left"
 drawSequences = [2] # draw
 idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle1
 idlesWhenEmpty = true
+
+[firing]
+cycle = 0.0955
+isAutomatic = true
+idleAfterShot = 1.9
+shootSequences = [3, 4, 5] # shoot1, shoot2, shoot3
+
+[firing.accuracy] # bursts: the shots cubed over 200, in whole numbers, plus 0.35, at most 1.25
+initial = 0.2
+burst = { divisor = 200, offset = 0.35, maximum = 1.25 }
+
+[firing.spread] # base plus scale times the accuracy
+movingAbove = 140.0
+air = { base = 0.04, scale = 0.4 }
+moving = { base = 0.04, scale = 0.07 }
+standing = { base = 0.0, scale = 0.0275 }
+
+[firing.recoil.kicks]
+moving = { upBase = 1.5, lateralBase = 0.45, upModifier = 0.225, lateralModifier = 0.05, upMax = 6.5, lateralMax = 2.5, directionChange = 7 }
+air = { upBase = 2.0, lateralBase = 1.0, upModifier = 0.5, lateralModifier = 0.35, upMax = 9.0, lateralMax = 6.0, directionChange = 5 }
+ducked = { upBase = 0.9, lateralBase = 0.35, upModifier = 0.15, lateralModifier = 0.025, upMax = 5.5, lateralMax = 1.5, directionChange = 9 }
+standing = { upBase = 1.0, lateralBase = 0.375, upModifier = 0.175, lateralModifier = 0.0375, upMax = 5.75, lateralMax = 1.75, directionChange = 8 }
+
+[reload]
+time = 2.45
+sequences = [1] # reload

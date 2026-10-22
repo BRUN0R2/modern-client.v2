@@ -205,6 +205,106 @@ TEST(WeaponsTest, TheRepositorysWeaponsDrawAndIdleAsTheOriginalsDo) {
     }
 }
 
+TEST(WeaponsTest, TheRepositorysGunsFireAsTheOriginals) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    struct Expected {
+        std::string_view id;
+        float cycle;
+        bool isAutomatic;
+        float idleAfterShot;
+        float initialAccuracy;
+        float standingScale;
+        float reloadTime;
+    };
+    for (const Expected& expected : {
+             Expected{"glock18", 0.15F, false, 2.5F, 0.9F, 0.1F, 2.2F},
+             Expected{"usp", 0.15F, false, 2.0F, 0.92F, 0.1F, 2.7F},
+             Expected{"ak47", 0.0955F, true, 1.9F, 0.2F, 0.0275F, 2.45F},
+             Expected{"m4a1", 0.0875F, true, 1.5F, 0.2F, 0.02F, 3.05F},
+         }) {
+        const Weapon* const weapon = catalog->findWeapon(expected.id);
+        ASSERT_NE(weapon, nullptr) << expected.id;
+        ASSERT_TRUE(weapon->firing.has_value()) << expected.id;
+        ASSERT_TRUE(weapon->reload.has_value()) << expected.id;
+        EXPECT_EQ(weapon->firing->cycle, nx::Seconds{expected.cycle}) << expected.id;
+        EXPECT_EQ(weapon->firing->isAutomatic, expected.isAutomatic) << expected.id;
+        EXPECT_EQ(weapon->firing->idleAfterShot, nx::Seconds{expected.idleAfterShot}) << expected.id;
+        EXPECT_EQ(weapon->firing->accuracy.initial, expected.initialAccuracy) << expected.id;
+        EXPECT_EQ(weapon->firing->accuracy.burst.has_value(), expected.isAutomatic) << expected.id;
+        EXPECT_EQ(weapon->firing->spread.standing.scale, expected.standingScale) << expected.id;
+        EXPECT_EQ(weapon->reload->time, nx::Seconds{expected.reloadTime}) << expected.id;
+    }
+    EXPECT_FALSE(catalog->findWeapon("knife")->firing.has_value());
+
+    const cs::WeaponFiring& ak = *catalog->findWeapon("ak47")->firing;
+    EXPECT_EQ(ak.accuracy.burst->divisor, 200U);
+    EXPECT_EQ(ak.accuracy.burst->offset, 0.35F);
+    EXPECT_EQ(ak.accuracy.burst->maximum, 1.25F);
+    EXPECT_EQ(ak.spread.movingAbove, nx::UnitsPerSecond{140.0F});
+    EXPECT_EQ(ak.spread.air.base, 0.04F);
+    EXPECT_EQ(ak.spread.air.scale, 0.4F);
+    ASSERT_TRUE(ak.recoil.kicks.has_value());
+    EXPECT_EQ(ak.recoil.kicks->standing.upBase, 1.0F);
+    EXPECT_EQ(ak.recoil.kicks->standing.upMax, 5.75F);
+    EXPECT_EQ(ak.recoil.kicks->air.directionChange, 5U);
+    const cs::WeaponFiring& usp = *catalog->findWeapon("usp")->firing;
+    EXPECT_EQ(usp.accuracy.paced->threshold, nx::Seconds{0.3F});
+    EXPECT_EQ(usp.accuracy.paced->maximum, 0.92F);
+    EXPECT_EQ(usp.recoil.punch, nx::Degrees{2.0F});
+    EXPECT_EQ(usp.lastShotSequence, 12U);
+    const cs::WeaponFiring& glock = *catalog->findWeapon("glock18")->firing;
+    EXPECT_FALSE(glock.recoil.kicks.has_value() || glock.recoil.punch.has_value())
+        << "the Glock does not kick";
+    EXPECT_EQ(catalog->findWeapon("glock18")->reload->sequences, (std::vector<std::uint32_t>{7, 12}));
+}
+
+TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
+    constexpr std::string_view kMagazine = "[magazine]\nammo = \"9mm\"\nclipSize = 20\n";
+    const std::string firing = R"(
+[firing]
+cycle = 0.15
+isAutomatic = false
+idleAfterShot = 2.0
+shootSequences = [1]
+[firing.accuracy]
+initial = 0.9
+paced = { threshold = 0.3, rate = 0.275, minimum = 0.6, maximum = 0.92 }
+[firing.spread]
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.2 }
+moving = { base = 0.0, scale = 0.225 }
+standing = { base = 0.0, scale = 0.1 }
+[firing.recoil]
+)";
+    const auto replaced = [&firing](std::string_view from, std::string_view to) {
+        std::string text = firing;
+        const std::size_t at = text.find(from);
+        EXPECT_NE(at, std::string::npos) << from;
+        return at == std::string::npos ? text : text.replace(at, from.size(), to);
+    };
+    const auto read = [](const std::string& extra) {
+        return cs::readWeapon(weaponText(kGunKeys, extra), "gun.toml");
+    };
+    ASSERT_TRUE(read(std::string{kMagazine} + firing).has_value());
+    for (const std::string& extra : {
+             firing, // no magazine
+             std::string{kMagazine} + replaced("shootSequences = [1]", "shootSequences = []"),
+             std::string{kMagazine} + replaced("cycle = 0.15", "cycle = 0.0"),
+             std::string{kMagazine} +
+                 replaced("paced = {", "burst = { divisor = 200, offset = 0.35, maximum = 1.25 }\npaced = {"),
+             std::string{kMagazine} +
+                 replaced("paced = { threshold = 0.3, rate = 0.275, minimum = 0.6, maximum = 0.92 }", ""),
+             std::string{kMagazine} +
+                 replaced("minimum = 0.6, maximum = 0.92", "minimum = 0.95, maximum = 0.92"),
+             std::string{kMagazine} + firing + "[reload]\ntime = 2.7\nsequences = []\n",
+         }) {
+        const auto weapon = read(extra);
+        ASSERT_FALSE(weapon.has_value()) << extra;
+        EXPECT_EQ(weapon.error().code, WeaponError::DataInvalid);
+    }
+}
+
 TEST(WeaponsTest, AWeaponReadsItsKeys) {
     const auto weapon = cs::readWeapon(weaponText(kGunKeys, R"(
 [purchase]

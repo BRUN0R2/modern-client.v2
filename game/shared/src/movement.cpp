@@ -63,6 +63,10 @@ constexpr float kBunnyHopSpeedFactor = 1.2F;
 constexpr double kBunnyHopSlowdown = 0.8;
 /// A command's view roll is this multiple of the roll its sideways speed asks for.
 constexpr float kRollScale = 4.0F;
+/// A weapon's kick drops back by this many degrees a second, and this share of itself a second
+/// more (PM_DropPunchAngle).
+constexpr double kPunchDrop = 10.0;
+constexpr double kPunchDropShare = 0.5;
 /// Ducking or ducked, a player's keys ask for this share of their speed.
 constexpr double kDuckSpeedShare = 0.333;
 /// A duck on the ground starts with this much time and ends when it is down to this share of it:
@@ -278,19 +282,46 @@ private:
                               .up = nx::UnitsPerSecond{static_cast<float>(double{up} * share)}};
         }
 
-        nx::EulerAngles view = m_command.viewAngles;
-        view.roll = nx::Degrees{rollFor(m_command.viewAngles) * kRollScale};
+        m_frameTime = static_cast<float>(double{m_command.duration.count()} * kSecondsPerMillisecond);
+        // The weapon's kick drops back, then turns the view the moves follow.
+        m_player.punch = droppedPunch(m_player.punch, m_frameTime);
+        const nx::EulerAngles kicked{.pitch = m_command.viewAngles.pitch + m_player.punch.pitch,
+                                     .yaw = m_command.viewAngles.yaw + m_player.punch.yaw,
+                                     .roll = m_command.viewAngles.roll + m_player.punch.roll};
+        nx::EulerAngles view = kicked;
+        view.roll = nx::Degrees{rollFor(kicked) * kRollScale};
         if (view.yaw > nx::kHalfTurnDegrees) {
             view.yaw = view.yaw - (nx::kHalfTurnDegrees + nx::kHalfTurnDegrees);
         }
         m_axes = nx::angleVectors(view);
 
-        m_frameTime = static_cast<float>(double{m_command.duration.count()} * kSecondsPerMillisecond);
         for (nx::Milliseconds* const timer : {&m_player.duckTime, &m_player.jumpPenalty}) {
             if (*timer > nx::Milliseconds{}) {
                 *timer = std::max(*timer - m_command.duration, nx::Milliseconds{});
             }
         }
+    }
+
+    /// `punch` dropped back over `frameTime` seconds, as PM_DropPunchAngle drops it: its length less
+    /// 10 and half of itself a second, none below 0; its length summed in float, the rest in double
+    /// and rounded to float, as the original's real_t makes them.
+    [[nodiscard]] static auto droppedPunch(nx::EulerAngles punch, float frameTime) -> nx::EulerAngles {
+        std::array<float, 3> axes{punch.pitch.value(), punch.yaw.value(), punch.roll.value()};
+        const float squares = (axes[0] * axes[0]) + (axes[1] * axes[1]) + (axes[2] * axes[2]);
+        double length = std::sqrt(double{squares});
+        if (length != 0.0) {
+            const double inverse = 1.0 / length;
+            for (float& axis : axes) {
+                axis = static_cast<float>(double{axis} * inverse);
+            }
+        }
+        length -= (kPunchDrop + (length * kPunchDropShare)) * double{frameTime};
+        length = std::max(length, 0.0);
+        for (float& axis : axes) {
+            axis = static_cast<float>(double{axis} * length);
+        }
+        return nx::EulerAngles{
+            .pitch = nx::Degrees{axes[0]}, .yaw = nx::Degrees{axes[1]}, .roll = nx::Degrees{axes[2]}};
     }
 
     /// The roll a sideways speed asks for, seen from `view`: sv_rollangle at sv_rollspeed and over,

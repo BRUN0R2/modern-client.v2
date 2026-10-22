@@ -44,10 +44,10 @@ struct UserCommand {
 } // namespace cs
 ```
 
-Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement and the game read: the
-duration, the view angles, the move and the buttons (`Jump`, `Duck`, `Forward`, `Back`,
-`MoveLeft`, `MoveRight`, and `Use`, which the game reads as it goes down). The others arrive with
-what reads them.
+Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement and the game read: its
+number, the duration, the view angles, the move, the buttons (`Jump`, `Duck`, `Forward`, `Back`,
+`MoveLeft`, `MoveRight`, `Use`, which the game reads as it goes down, `Attack` and `Reload`), and
+the weapon it selects. The others arrive with what reads them.
 
 ### 2.2 Generation on the client
 
@@ -121,7 +121,9 @@ code** on the server (authoritative) and on the client (prediction).
   of a duck let go before it is down), stairs, sliding along walls and floors, water (its levels,
   swimming, jumping out) and ladders (climbed by the movement buttons along their face, left by
   a jump or by backing off them on the floor), among the world and the brush entities, where the
-  game puts and turns them.
+  game puts and turns them; and the weapon's kick to the view (`MovementState::punch`), dropped
+  back each move (`PM_DropPunchAngle`: its length less 10 and half of itself a second) and added to
+  the view the move follows.
   `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch

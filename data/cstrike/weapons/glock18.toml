@@ -33,3 +33,27 @@ idles = [
     { sequence = 1, wait = 2.5, share = 0.4 },    # idle2
 ]
 idlesWhenEmpty = false
+
+[firing]
+cycle = 0.15 # semi-automatic: the original's 0.2 less 0.05
+isAutomatic = false
+idleAfterShot = 2.5
+shootSequences = [3, 4, 5] # shoot, shoot2, shoot3
+lastShotSequence = 6 # shoot_empty
+
+[firing.accuracy] # paced: each shot takes (0.325 - the time since the last) x 0.275, within 0.6 and 0.9
+initial = 0.9
+paced = { threshold = 0.325, rate = 0.275, minimum = 0.6, maximum = 0.9 }
+
+[firing.spread] # scale times 1 less the accuracy
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.0 }
+moving = { base = 0.0, scale = 0.165 }
+ducked = { base = 0.0, scale = 0.075 }
+standing = { base = 0.0, scale = 0.1 }
+
+[firing.recoil] # none
+
+[reload]
+time = 2.2
+sequences = [7, 12] # reload, reload2

@@ -2,15 +2,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The weapons a player has and the one it holds (docs/10-counter-strike-gameplay.md, section 7.3):
-/// given, drawn and idling as Counter-Strike's are, the same on the server and in the client's
-/// prediction (ReGameDLL_CS's AddPlayerItem, AddPrimaryAmmo, GiveAmmo, SelectItem, SelectLastItem,
-/// DefaultDeploy, ResetMaxSpeed and the weapons' WeaponIdle, GPL, consulted: docs/20 section 3).
+/// given, drawn, fired, reloaded and idling as Counter-Strike's are, the same on the server and in
+/// the client's prediction (ReGameDLL_CS's AddPlayerItem, AddPrimaryAmmo, GiveAmmo, SelectItem,
+/// SelectLastItem, DefaultDeploy, ItemPostFrame, the guns' PrimaryAttack and Fire, KickBack,
+/// DefaultReload, ResetMaxSpeed and the weapons' WeaponIdle, GPL, consulted: docs/20 section 3).
 ///
-/// Today: giving, choosing, drawing and idling; firing, reloading and dropping come next (TODO.md).
+/// The weapons' timers are the original's (UseDecrement): seconds left, set as an event happens and
+/// counted down in float by each command's frame time once its weapon frame is over, so that a
+/// delay lasts as many commands as the original's does (0.15 seconds, 16 at 100 a second).
+///
+/// Today: giving, choosing, drawing, idling, and the guns' fire, accuracy, spread, kick and reload;
+/// what the shots hit, the knife's attacks, the silencers, the Glock's burst and dropping come next
+/// (TODO.md).
 export module cs.shared:inventory;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.game;
 import :movement;
 import :weapons;
@@ -19,13 +27,26 @@ export namespace cs {
 
 /// How fast a player runs with no weapon in hand.
 inline constexpr nx::UnitsPerSecond kUnarmedSpeed{240.0F};
-/// A weapon drawn first idles this long after it was drawn (DefaultDeploy).
-inline constexpr nx::Seconds kIdleAfterDraw{1.5F};
+/// A weapon drawn first idles this long after it was drawn, and it neither fires nor is reloaded
+/// for this long (DefaultDeploy): seconds, counted down.
+inline constexpr float kIdleAfterDraw = 1.5F;
+inline constexpr float kAttackAfterDraw = 0.75F;
 
-/// A weapon a player has, and the rounds in its clip.
+/// A weapon a player has, the rounds in its clip, and how it fires now.
 struct OwnedWeapon {
     WeaponIndex weapon{};
     std::uint32_t clip{}; ///< 0 for a weapon that fires no ammo.
+    float accuracy{};     ///< What its spread is made of (m_flAccuracy).
+    /// The shots of its burst, or since its button went down for a gun that fires once a press
+    /// (m_iShotsFired).
+    std::uint32_t shotsFired{};
+    std::optional<nx::GameTime> lastShot{}; ///< None before its first (m_flLastFire).
+    /// Seconds until it may fire again: at 0 and below (m_flNextPrimaryAttack), counted down to -1.
+    float nextShot{};
+    /// While its button is up, its burst loses a shot from then on (m_flDecreaseShotsFired).
+    nx::GameTime fewerShotsAt{};
+    bool isBursting{}; ///< It fired since its button went up (m_bDelayFire).
+    bool kicksLeft{};  ///< The side its next kick turns the view to (m_iDirection).
 };
 
 /// What a player's view model plays: a sequence of the weapon it holds, since when.
@@ -33,6 +54,26 @@ struct ViewAnimation {
     WeaponIndex weapon{};
     std::uint32_t sequence{};
     nx::GameTime start{};
+};
+
+/// What a player's weapon fires from and how its holder moves.
+struct Shooter {
+    nx::Vec3 eye{};
+    nx::EulerAngles view{}; ///< The command's.
+    /// The kick to the view (punchangle): shots aim along the view turned by it, and add to it.
+    nx::EulerAngles punch{};
+    nx::UnitsPerSecond horizontalSpeed{};
+    bool isOnGround{};
+    bool isDucked{};
+};
+
+/// A shot fired: from where, the way it goes, and how far its bullet may stray.
+struct Shot {
+    nx::Vec3 origin{};
+    /// Forward, strayed by at most twice `spread` to the right and up, at random: not of length 1,
+    /// as the original's (FireBullets3).
+    nx::Vec3 direction{};
+    float spread{};
 };
 
 /// The weapons a player has, the rounds it carries besides their clips, and the one it holds.
@@ -53,10 +94,21 @@ public:
     /// many it took.
     auto giveAmmo(std::string_view ammo, std::uint32_t rounds) -> std::uint32_t;
 
-    /// The weapons' part of `command`, at `time`: the player draws the weapon it selects when it has
-    /// it and does not hold it (SelectItem), and then the one it holds idles when its wait is over
-    /// (WeaponIdle). The random numbers this draws are the command number's.
-    void play(const UserCommand& command, const nx::game::TickTime& time);
+    /// The part of `command` before it moves the player (CmdStart): the player draws the weapon it
+    /// selects at `time` when it has it and does not hold it (SelectItem). The random numbers this
+    /// draws are the command number's.
+    void select(const UserCommand& command, const nx::game::TickTime& time);
+
+    /// The weapon held after `command` moved the player, at `time` (ItemPostFrame), `shooter` its
+    /// holder: nothing while it is being drawn or reloaded; a reload over fills its clip; with
+    /// `Attack` down it fires when its cycle allows (a click on an empty clip, and once a press for a
+    /// gun that is not automatic), its accuracy and spread as it moves, kicking the shooter's view;
+    /// with `Reload` down it is reloaded; with no fire button down its burst wanes (a pistol's at
+    /// once), an empty clip is reloaded, or it idles; then the weapons' timers count down by the
+    /// command's duration. Returns the shots it fired. The random numbers this draws are the command
+    /// number's.
+    auto frame(const UserCommand& command, Shooter& shooter, const nx::game::TickTime& time)
+        -> std::vector<Shot>;
 
     /// The weapon `lastinv` selects (SelectLastItem): the one the player held before, or else the
     /// newest of the first of its primary, secondary and knife slots whose newest it does not hold;
@@ -72,6 +124,8 @@ public:
     [[nodiscard]] inline auto animation() const noexcept -> const std::optional<ViewAnimation>& {
         return m_animation;
     }
+    /// Whether the weapon held is being reloaded.
+    [[nodiscard]] inline auto isReloading() const noexcept -> bool { return m_isReloading; }
     /// How fast the weapon the player holds lets it run, kUnarmedSpeed with none (ResetMaxSpeed).
     [[nodiscard]] auto maxSpeed() const noexcept -> nx::UnitsPerSecond;
 
@@ -82,10 +136,20 @@ private:
     /// the rest besides it (AddPrimaryAmmo).
     void takeRounds(std::size_t index, std::uint32_t rounds);
     /// The player draws its weapon at `index` at `time`, the one it held becoming the one before
-    /// (Deploy, DefaultDeploy).
+    /// (Holster, Deploy, DefaultDeploy).
     void draw(std::size_t index, const nx::game::TickTime& time, nx::Random& random);
+    /// The held `owned`, of `weapon`, fires at `time` (PrimaryAttack, and the guns' Fire): its shot, if
+    /// a round left it.
+    auto fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter, std::uint32_t seed,
+              const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
+    /// The held `owned`, of `weapon`, is reloaded at `time` when a round can go into its clip
+    /// (DefaultReload, and the guns' Reload).
+    void reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time, nx::Random& random);
     /// The weapon the player holds idles at `time` when its wait is over (WeaponIdle).
     void idle(const nx::game::TickTime& time, nx::Random& random);
+    /// Counts the timers down by `frameTime` seconds, as the original's PostThink does once the
+    /// weapon frame is over.
+    void countDown(float frameTime) noexcept;
 
     const WeaponCatalog* m_catalog;
     std::vector<OwnedWeapon> m_weapons; ///< In the order the player was given them.
@@ -93,7 +157,12 @@ private:
     std::optional<std::size_t> m_held;
     std::optional<std::size_t> m_before; ///< The one the player held before.
     std::optional<ViewAnimation> m_animation;
-    nx::GameTime m_nextIdle{};
+    /// Seconds until the weapon held idles (m_flTimeWeaponIdle), counted down to -0.001.
+    float m_nextIdle = 0.0F;
+    /// Seconds until the weapon held does anything (the player's m_flNextAttack), counted down to
+    /// -0.001.
+    float m_nextAttack = 0.0F;
+    bool m_isReloading = false; ///< (m_fInReload)
 };
 
 } // namespace cs
