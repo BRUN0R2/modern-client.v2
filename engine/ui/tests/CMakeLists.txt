@@ -8,6 +8,7 @@ nxAddTest(nxUiTests
         fontCatalogTests.cpp
         schemeFontTests.cpp
         textTests.cpp
+        paintTests.cpp
     DEPENDS
         nx::ui
         nx::assets

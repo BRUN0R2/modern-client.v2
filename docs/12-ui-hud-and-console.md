@@ -33,6 +33,17 @@ follows: the left and top edges those of the pinned corner, the right and bottom
 right and bottom when the child resizes that way, else its own left and top, keeping its size. A
 setting that cannot be read is refused, and changes nothing.
 
+Panels are drawn (`nx.ui:painter`) as rectangles of the screen: a `PanelPainter` places what a
+panel draws from its top left and keeps it within the panel and every panel it is in, with the
+screen's clips ([05 §7.1](05-rendering.md#71-frame-passes-legacy-mode)), as VGUI2 keeps a panel's
+drawing within it. `paintTree` draws a panel's background, then over it each of its visible
+children in their order; a hidden panel draws nothing, nor do its children. A control is a kind of
+panel that draws more: the first is the `Label` (`nx.ui:label`), a line of text in a face and a
+colour, placed against an edge of the label or halfway between two by its alignment, named as the
+layouts' `textAlignment` names them (`north-west` to `south-east`). Which of a scheme's colours,
+borders and fonts each control takes, and where VGUI2 puts a label's text to the pixel, wait for
+reference shots of the original's windows.
+
 ### 2.1 Fonts
 
 VGUI2's text is TrueType: the schemes name a face (Tahoma, Verdana, Arial, Trebuchet MS, Marlett),

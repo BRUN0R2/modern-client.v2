@@ -21,6 +21,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
 - [x] `nx.ui` text: glyph atlases drawn by `nx.render:screen`, lines laid out as GDI's `TextOut` lays them out ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts)); UTF-8 in `nx.core`
 - [x] `nx.ui` font catalog: the system's fonts and a scheme's own, the face of a family by weight and italics as GDI chooses it, bold simulated as GDI simulates it ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
+- [x] `nx.ui` painting: panels' backgrounds and their children within them; labels placed by their alignment
 - [x] `nx.ui` scheme fonts: a scheme's font made for a screen's height, its candidates in its order, each for the characters left by those before it
 - [ ] Fonts: Windows' bitmap fonts (`.fon`); simulated italics; atlases that grow as new characters come
 - [ ] Define the reference hardware for the performance targets
