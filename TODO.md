@@ -215,6 +215,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] WAD3 reader with fuzzing (`nx.assets:wad`, `fuzzWad`; fuzz infrastructure: `nxAddFuzzer`, the `fuzz-windows-msvc` preset and the nightly `fuzz` workflow): mip textures, pictures (`CONBACK`) and console fonts (`CONCHARS`, `fonts.wad`)
 - [x] The HUD's sprite lists (`hud.txt`, `sprites/weapon_*.txt`: `nx.assets:spriteList`), read by `nxcheck`
 - [x] VGUI2's KeyValues: schemes, layouts and localized strings in UTF-16 (`nx.assets:keyValues`), read by `nxcheck` and fuzzed
+- [x] VGUI2's schemes typed: colors, settings, fonts and borders (`nx.assets:scheme`), read by `nxcheck`
+- [x] VGUI2's localized strings: the text of each token, found as layouts name them (`nx.assets:localization`), read by `nxcheck`
 - [x] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing (`nx.assets:mdl`, `fuzzMdl`): structure, geometry, textures, skins, sequences and animations decoded from the model or its sequence groups
 - [x] SPR v2 reader with fuzzing (`nx.assets:spr`, `fuzzSpr`)
 - [x] WAV reader (PCM 8/16, cue points) with fuzzing (`nx.assets:wav`, `fuzzWav`), and every other uncompressed layout (24/32-bit PCM, 32/64-bit float, extensible) at any rate and channel count

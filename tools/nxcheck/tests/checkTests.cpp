@@ -140,9 +140,11 @@ TEST(CheckContentTest, AModelWithoutTexturesNeedsItsTexturesFile) {
     }
 }
 
-TEST(CheckContentTest, ReadsVgui2sLayoutsAndLocalizedStrings) {
+TEST(CheckContentTest, ReadsVgui2sLayoutsSchemesAndLocalizedStrings) {
     const nx::test::TemporaryDirectory directory;
     directory.write("resource/GameMenu.res", R"("GameMenu" { "1" { "label" "#GameUI_Quit" } })");
+    directory.write("resource/ClientScheme.res", R"(Scheme { Colors { "BaseText" "255 176 0 255" } })");
+    directory.write("resource/BrokenScheme.res", R"(Scheme { Colors { "BaseText" "orange" } })");
     directory.write("classes/ak47.res", R"("classes/ak47.res" { })");
     // A localized string with a line break, in UTF-16 little-endian after its byte order mark.
     std::string localized{"\xFF\xFE"};
@@ -159,6 +161,7 @@ TEST(CheckContentTest, ReadsVgui2sLayoutsAndLocalizedStrings) {
 
     for (const auto& [path, format] :
          {std::pair{"resource/GameMenu.res", std::optional{Format::KeyValues}},
+          std::pair{"resource/ClientScheme.res", std::optional{Format::Scheme}},
           std::pair{"classes/ak47.res", std::optional{Format::KeyValues}},
           std::pair{"resource/cstrike_english.txt", std::optional{Format::Localization}},
           std::pair{"resource/BackgroundLayout.txt", std::optional<Format>{}},
@@ -172,6 +175,11 @@ TEST(CheckContentTest, ReadsVgui2sLayoutsAndLocalizedStrings) {
     ASSERT_NE(broken, nullptr);
     ASSERT_TRUE(broken->failure.has_value());
     EXPECT_EQ(firstCauseOf(*broken), "KeyValuesError::UnclosedQuote");
+    const FileResult* brokenScheme = resultOf(results, "resource/BrokenScheme.res");
+    ASSERT_NE(brokenScheme, nullptr);
+    EXPECT_EQ(brokenScheme->format, Format::Scheme);
+    ASSERT_TRUE(brokenScheme->failure.has_value());
+    EXPECT_EQ(firstCauseOf(*brokenScheme), "SchemeError::BadColor");
 }
 
 TEST(CheckContentTest, TellsSequenceGroupFilesFromModels) {
