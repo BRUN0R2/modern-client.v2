@@ -9,6 +9,7 @@ nxAddModuleLibrary(nxJobs
         src/workStealingDeque.cppm
         src/concurrentPool.cppm
         src/intrusiveQueue.cppm
+        src/spscQueue.cppm
         src/job.cppm
         src/jobSystem.cppm
     SOURCES

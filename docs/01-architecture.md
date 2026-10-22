@@ -58,7 +58,7 @@ flowchart TB
 | `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes. SIMD is planned, when a benchmark shows a gain | core |
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
-| `nx.jobs` | 1 | Job System, counters, dependency graphs. Planned: a `std::execution` scheduler | core |
+| `nx.jobs` | 1 | Job System, counters, dependency graphs, and the lock-free queues between long-lived threads (today: SPSC). Planned: a `std::execution` scheduler | core |
 | `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks. Planned: OS threads | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
@@ -68,7 +68,7 @@ flowchart TB
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform (today: core, math, meta, data, platform) |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces, and the hull a box is traced through | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
 | `nx.render` | 3 | Render graph, BSP world, studio models, sprites, particles, GPU skinning. Today: the camera, the BSP world, the light it gives models, studio models and sprites | rhi, ecs, assets, jobs (today: core, math, rhi, assets) |
-| `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
+| `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice. Today: sounds of WAV files and the mixer ([11 §2](11-audio.md#2-architecture)) | assets, jobs, platform (today: core, jobs, assets) |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts. Today: panels, placed by VGUI2's layouts and following their parent as it changes size; fonts, found, sized and drawn as Windows did; text on the screen; controls (labels, text entries, rich text) and the console's window ([ADR-0020](adr/0020-in-house-ui-toolkit.md)) | render, assets, platform, console (today: core, console, platform, rhi, assets, render; FreeType) |
 | `nx.settings` | 3 | The player's settings: the `.cfg` files of the user's folder run at startup and `config.cfg` written at exit, the client's cvars by the original's names ([12 §5.2](12-ui-hud-and-console.md#52-client-configuration-files)), the binds by the original's key names and the keys that run them ([12 §6](12-ui-hud-and-console.md#6-input)). Planned: `video.toml`, `audio.toml` | core, console, platform |

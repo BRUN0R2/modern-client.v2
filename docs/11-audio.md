@@ -28,6 +28,18 @@ flowchart LR
 - The audio thread mixes in small blocks (configurable size, low-latency default),
   resampling every source, whatever its rate, to the device rate.
 
+Today (`nx.audio`): the mixer, not yet on a device. A `Sound` is a WAV file of any layout made
+32-bit floats, its first two channels, at its own rate, looping from its first cue point; the
+game owns it, so the audio thread never frees memory. The game sends the mixer `PlayVoice`,
+`StopVoice`, `SetVoiceGains` and `SetMasterGain` through an SPSC queue (`nx.jobs:spscQueue`; a
+full queue is a typed `QueueFull`, never a wait). Each voice reads its sound at
+`rate / deviceRate × pitch` frames a frame through a windowed sinc (Kaiser window, β 8, 8 zero
+crossings each way), narrowed when the sound is sped up so that nothing folds back: a sine at
+another rate comes out over 90 dB clean, and one sped up past the mix's band over 80 dB down.
+Voices sum in float; a master gain and a stereo-linked limiter (instant attack, 100 ms release)
+keep every sample under 0.98 of full scale. Choosing a voice (channels, priorities, stealing),
+spatialization, the room's DSP and streaming come with what plays sounds.
+
 ### 2.1 The original's audio problems and their causes
 
 | Problem in the original | Cause | Here |
