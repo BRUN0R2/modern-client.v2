@@ -259,6 +259,31 @@ TEST(WeaponsTest, TheRepositorysGunsFireAsTheOriginals) {
     EXPECT_EQ(catalog->findWeapon("glock18")->reload->sequences, (std::vector<std::uint32_t>{7, 12}));
 }
 
+TEST(WeaponsTest, TheRepositorysAlternatesAreTheOriginals) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    const cs::WeaponAlternate& usp = *catalog->findWeapon("usp")->alternate;
+    EXPECT_EQ(usp.switchTime, nx::Seconds{3.0F});
+    EXPECT_EQ(usp.onSequence, 7U);
+    EXPECT_EQ(usp.offSequence, 15U);
+    EXPECT_EQ(usp.view->drawSequences, (std::vector<std::uint32_t>{6}));
+    EXPECT_EQ(usp.firing->spread.standing.scale, 0.15F);
+    EXPECT_EQ(usp.reload->sequences, (std::vector<std::uint32_t>{5}));
+    const cs::WeaponAlternate& m4a1 = *catalog->findWeapon("m4a1")->alternate;
+    EXPECT_EQ(m4a1.switchTime, nx::Seconds{2.0F});
+    EXPECT_EQ(m4a1.onSequence, 6U);
+    EXPECT_EQ(m4a1.offSequence, 13U);
+    EXPECT_EQ(m4a1.firing->spread.standing.scale, 0.025F);
+    const cs::WeaponAlternate& glock = *catalog->findWeapon("glock18")->alternate;
+    EXPECT_EQ(glock.switchTime, nx::Seconds{0.3F});
+    EXPECT_FALSE(glock.onSequence.has_value());
+    EXPECT_EQ(glock.firing->cycle, nx::Seconds{0.5F});
+    ASSERT_TRUE(glock.firing->followUps.has_value());
+    EXPECT_EQ(glock.firing->followUps->rounds, 2U);
+    EXPECT_EQ(glock.firing->followUps->spread, 0.05F);
+    EXPECT_FALSE(catalog->findWeapon("ak47")->alternate.has_value());
+}
+
 TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
     constexpr std::string_view kMagazine = "[magazine]\nammo = \"9mm\"\nclipSize = 20\n";
     const std::string firing = R"(
@@ -298,6 +323,7 @@ standing = { base = 0.0, scale = 0.1 }
              std::string{kMagazine} +
                  replaced("minimum = 0.6, maximum = 0.92", "minimum = 0.95, maximum = 0.92"),
              std::string{kMagazine} + firing + "[reload]\ntime = 2.7\nsequences = []\n",
+             std::string{kMagazine} + firing + "[alternate]\nswitchTime = 3.0\nonSequence = 7\n",
          }) {
         const auto weapon = read(extra);
         ASSERT_FALSE(weapon.has_value()) << extra;

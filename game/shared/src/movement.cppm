@@ -31,9 +31,10 @@ enum class Button : std::uint8_t {
     Back,
     MoveLeft,
     MoveRight,
-    Use,    ///< The game reads it: pressed, the player uses what it looks at.
-    Attack, ///< The game reads it: held, the weapon in hand fires.
-    Reload, ///< The game reads it: held, the weapon in hand is reloaded.
+    Use,     ///< The game reads it: pressed, the player uses what it looks at.
+    Attack,  ///< The game reads it: held, the weapon in hand fires.
+    Attack2, ///< The game reads it: held, the weapon in hand switches to its alternate and back.
+    Reload,  ///< The game reads it: held, the weapon in hand is reloaded.
     Count,
 };
 

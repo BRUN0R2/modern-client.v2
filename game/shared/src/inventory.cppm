@@ -11,9 +11,9 @@
 /// counted down in float by each command's frame time once its weapon frame is over, so that a
 /// delay lasts as many commands as the original's does (0.15 seconds, 16 at 100 a second).
 ///
-/// Today: giving, choosing, drawing, idling, and the guns' fire, accuracy, spread, kick and reload;
-/// what the shots hit, the knife's attacks, the silencers, the Glock's burst and dropping come next
-/// (TODO.md).
+/// Today: giving, choosing, drawing, idling, the guns' fire, accuracy, spread, kick and reload, and
+/// their alternates, the silencers and the Glock's burst; what the shots hit, the knife's attacks and
+/// dropping come next (TODO.md).
 export module cs.shared:inventory;
 
 import std;
@@ -45,8 +45,12 @@ struct OwnedWeapon {
     float nextShot{};
     /// While its button is up, its burst loses a shot from then on (m_flDecreaseShotsFired).
     nx::GameTime fewerShotsAt{};
-    bool isBursting{}; ///< It fired since its button went up (m_bDelayFire).
-    bool kicksLeft{};  ///< The side its next kick turns the view to (m_iDirection).
+    bool isBursting{};  ///< It fired since its button went up (m_bDelayFire).
+    bool kicksLeft{};   ///< The side its next kick turns the view to (m_iDirection).
+    bool isAlternate{}; ///< Its alternate is on: its silencer, its burst (m_iWeaponState).
+    /// Seconds until it may switch again (m_flNextSecondaryAttack), counted down to -0.001.
+    float nextSwitch{};
+    std::uint32_t followUpsLeft{}; ///< The rounds its last shot still fires, one a frame.
 };
 
 /// What a player's view model plays: a sequence of the weapon it holds, since when.
@@ -102,7 +106,9 @@ public:
     /// The weapon held after `command` moved the player, at `time` (ItemPostFrame), `shooter` its
     /// holder: nothing while it is being drawn or reloaded; a reload over fills its clip; with
     /// `Attack` down it fires when its cycle allows (a click on an empty clip, and once a press for a
-    /// gun that is not automatic), its accuracy and spread as it moves, kicking the shooter's view;
+    /// gun that is not automatic), its accuracy and spread as it moves, kicking the shooter's view, a
+    /// shot's follow-up rounds one a frame after it; with `Attack2` down it switches to its alternate
+    /// and back when it may, before it fires;
     /// with `Reload` down it is reloaded; with no fire button down its burst wanes (a pistol's at
     /// once), an empty clip is reloaded, or it idles; then the weapons' timers count down by the
     /// command's duration. Returns the shots it fired. The random numbers this draws are the command
@@ -142,6 +148,12 @@ private:
     /// a round left it.
     auto fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter, std::uint32_t seed,
               const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
+    /// The held `owned`, of `weapon`, fires the next of its last shot's follow-up rounds
+    /// (FireRemaining): its shot, if a round was left for it.
+    auto fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter, std::uint32_t seed,
+                      const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
+    /// The held `owned`, of `weapon`, switches to its alternate or back at `time` (SecondaryAttack).
+    void switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
     /// The held `owned`, of `weapon`, is reloaded at `time` when a round can go into its clip
     /// (DefaultReload, and the guns' Reload).
     void reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time, nx::Random& random);

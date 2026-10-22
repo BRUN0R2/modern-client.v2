@@ -51,30 +51,63 @@ constexpr double kShareTolerance = 1e-4;
     return {};
 }
 
+/// What is wrong with `firing`, when anything is: no shoot sequence or cycle, not one accuracy, or a
+/// paced accuracy whose minimum is above its maximum.
+[[nodiscard]] auto firingProblem(const WeaponFiring& firing) -> std::optional<std::string_view> {
+    if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{}) {
+        return "fires without a shoot sequence or a cycle";
+    }
+    if (firing.accuracy.burst.has_value() == firing.accuracy.paced.has_value()) {
+        return "fires without one accuracy, by bursts or by pace";
+    }
+    if (firing.accuracy.paced && firing.accuracy.paced->minimum > firing.accuracy.paced->maximum) {
+        return "fires with a paced accuracy whose minimum is above its maximum";
+    }
+    return std::nullopt;
+}
+
 /// DataInvalid when `weapon`, of `where` (a file, or the catalog), fires or is reloaded without a
-/// magazine, or fires without a shoot sequence, a cycle or one accuracy, or is reloaded without a
-/// sequence.
+/// magazine, fires with a problem (firingProblem), or is reloaded without a sequence; the same of its
+/// alternate, which also may not play one of its switch's sequences alone, nor have a view checkView
+/// refuses.
 [[nodiscard]] auto checkFiring(const Weapon& weapon, std::string_view where)
     -> nx::Result<void, WeaponError> {
     const auto invalid = [&](std::string_view problem) {
         return nx::fail(WeaponError::DataInvalid, std::format("{}: {:?} {}", where, weapon.id, problem));
     };
-    if ((weapon.firing || weapon.reload) && !weapon.magazine) {
+    std::vector<const WeaponFiring*> firings;
+    std::vector<const WeaponReload*> reloads;
+    if (weapon.firing) {
+        firings.push_back(&*weapon.firing);
+    }
+    if (weapon.reload) {
+        reloads.push_back(&*weapon.reload);
+    }
+    if (const std::optional<WeaponAlternate>& alternate = weapon.alternate) {
+        if (alternate->onSequence.has_value() != alternate->offSequence.has_value()) {
+            return invalid("switches with one of its sequences alone");
+        }
+        if (alternate->view) {
+            if (auto checked = checkView(*alternate->view, weapon.id, where); !checked) {
+                return checked;
+            }
+        }
+        if (alternate->firing) {
+            firings.push_back(&*alternate->firing);
+        }
+        if (alternate->reload) {
+            reloads.push_back(&*alternate->reload);
+        }
+    }
+    if ((!firings.empty() || !reloads.empty()) && !weapon.magazine) {
         return invalid("fires or is reloaded without a magazine");
     }
-    if (weapon.firing) {
-        const WeaponFiring& firing = *weapon.firing;
-        if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{}) {
-            return invalid("fires without a shoot sequence or a cycle");
-        }
-        if (firing.accuracy.burst.has_value() == firing.accuracy.paced.has_value()) {
-            return invalid("fires without one accuracy, by bursts or by pace");
-        }
-        if (firing.accuracy.paced && firing.accuracy.paced->minimum > firing.accuracy.paced->maximum) {
-            return invalid("fires with a paced accuracy whose minimum is above its maximum");
+    for (const WeaponFiring* const firing : firings) {
+        if (const std::optional<std::string_view> problem = firingProblem(*firing)) {
+            return invalid(*problem);
         }
     }
-    if (weapon.reload && weapon.reload->sequences.empty()) {
+    if (std::ranges::any_of(reloads, [](const WeaponReload* reload) { return reload->sequences.empty(); })) {
         return invalid("is reloaded without a sequence");
     }
     return {};

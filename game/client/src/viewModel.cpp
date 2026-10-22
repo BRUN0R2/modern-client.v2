@@ -18,20 +18,37 @@ namespace {
 using nx::assets::MdlView;
 using nx::assets::Vfs;
 
-/// NoSequence when `weapon` plays a sequence `model` lacks: drawn, idling, firing or reloaded.
-[[nodiscard]] auto checkSequences(const MdlView& model, const Weapon& weapon)
-    -> nx::Result<void, ViewModelError> {
-    std::vector<std::uint32_t> played = weapon.view.drawSequences;
-    std::ranges::copy(weapon.view.idles | std::views::transform(&WeaponIdle::sequence),
-                      std::back_inserter(played));
-    if (weapon.firing) {
-        std::ranges::copy(weapon.firing->shootSequences, std::back_inserter(played));
-        if (weapon.firing->lastShotSequence) {
-            played.push_back(*weapon.firing->lastShotSequence);
+/// The sequences of `view`, `firing` and `reload` of a weapon, added to `played`.
+void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
+               const std::optional<WeaponFiring>& firing, const std::optional<WeaponReload>& reload) {
+    std::ranges::copy(view.drawSequences, std::back_inserter(played));
+    std::ranges::copy(view.idles | std::views::transform(&WeaponIdle::sequence), std::back_inserter(played));
+    if (firing) {
+        std::ranges::copy(firing->shootSequences, std::back_inserter(played));
+        if (firing->lastShotSequence) {
+            played.push_back(*firing->lastShotSequence);
         }
     }
-    if (weapon.reload) {
-        std::ranges::copy(weapon.reload->sequences, std::back_inserter(played));
+    if (reload) {
+        std::ranges::copy(reload->sequences, std::back_inserter(played));
+    }
+}
+
+/// NoSequence when `weapon` plays a sequence `model` lacks: drawn, idling, firing, reloaded or
+/// switched, with its alternate on or off.
+[[nodiscard]] auto checkSequences(const MdlView& model, const Weapon& weapon)
+    -> nx::Result<void, ViewModelError> {
+    std::vector<std::uint32_t> played;
+    addPlayed(played, weapon.view, weapon.firing, weapon.reload);
+    if (const std::optional<WeaponAlternate>& alternate = weapon.alternate) {
+        addPlayed(played, alternate->view.value_or(weapon.view),
+                  alternate->firing ? alternate->firing : weapon.firing,
+                  alternate->reload ? alternate->reload : weapon.reload);
+        for (const std::optional<std::uint32_t>& switched : {alternate->onSequence, alternate->offSequence}) {
+            if (switched) {
+                played.push_back(*switched);
+            }
+        }
     }
     for (const std::uint32_t sequence : played) {
         if (sequence >= model.sequences().size()) {
