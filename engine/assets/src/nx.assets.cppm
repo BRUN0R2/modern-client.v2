@@ -20,5 +20,6 @@ export import :bsp;
 export import :spr;
 export import :spriteList;
 export import :keyValues;
+export import :localization;
 export import :mdl;
 export import :tga;
