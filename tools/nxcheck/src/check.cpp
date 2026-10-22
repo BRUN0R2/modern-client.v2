@@ -128,6 +128,22 @@ using nx::assets::WadView;
     return {};
 }
 
+/// The localized strings of `bytes`.
+[[nodiscard]] auto checkLocalization(std::span<const std::byte> bytes) -> Result<void, CheckError> {
+    auto text = nx::assets::keyValuesText(bytes);
+    if (!text) {
+        return fail(CheckError::Invalid, std::move(text.error()));
+    }
+    auto entries = nx::assets::parseKeyValues(*text, KeyValuesEscapes::Backslash);
+    if (!entries) {
+        return fail(CheckError::Invalid, std::move(entries.error()));
+    }
+    if (auto strings = nx::assets::LocalizedStrings::read(*entries); !strings) {
+        return fail(CheckError::Invalid, std::move(strings.error()));
+    }
+    return {};
+}
+
 /// The byte order mark of UTF-16 little-endian, which VGUI2's localized strings start with.
 constexpr std::array kUtf16Mark{std::byte{0xFF}, std::byte{0xFE}};
 
@@ -292,10 +308,8 @@ constexpr auto kReaders = std::to_array<Reader>({
     {.extension = "txt",
      .folder = "resource/",
      .format = Format::Localization,
-     .check =
-         [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) {
-             return checkKeyValues(bytes, KeyValuesEscapes::Backslash);
-         }},
+     .check = [](const Vfs&, const VfsPath&,
+                 std::span<const std::byte> bytes) { return checkLocalization(bytes); }},
 });
 
 /// The reader of the file at `path`, by its extension; null when no reader reads it yet.

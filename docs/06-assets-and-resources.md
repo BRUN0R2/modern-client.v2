@@ -179,6 +179,10 @@ Readers today:
   `Scheme::color` looks a color up as VGUI2 does (the setting, else the name; a color, or a named
   one), and `Scheme::border` follows names to the border with lines of its own; a name that leads
   nowhere, or round in a loop, is refused. Keys VGUI2 does not know are left out.
+- VGUI2's localized strings (`nx.assets:localization`, `LocalizedStrings::read` over the KeyValues
+  of `resource/*_<language>.txt`): the language its `lang` block names, and the text of each token
+  of its `Tokens`, found with or without the `#` a layout writes before it (`#GameUI_Console`),
+  letters in any case; the first of a token written twice is kept.
 - WAV (`nx.assets:wav`): the 8- and 16-bit PCM of the original content and every other
   uncompressed layout (24- and 32-bit PCM, 32- and 64-bit IEEE float, `WAVE_FORMAT_EXTENSIBLE`),
   at any rate (`SampleRate`) and in any number of channels (`ChannelCount`), so no sound is held to
