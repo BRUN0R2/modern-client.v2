@@ -52,4 +52,15 @@ struct SplitScript {
 /// Every command of `script` that has words, in order.
 [[nodiscard]] auto parseScript(std::string_view script) -> std::vector<CommandLine>;
 
+/// The name being typed at the end of a line: where it starts in the line, and what it is so far.
+struct CompletionPrefix {
+    std::size_t offset = 0;
+    std::string_view prefix{};
+};
+
+/// The name of the last command of `line`, as far as it is typed: the first word of what follows the
+/// last `;` or line break (or of the line), when that word is still being typed (nothing after it)
+/// and is not quoted; none otherwise, when the last command already has arguments.
+[[nodiscard]] auto completionPrefix(std::string_view line) noexcept -> std::optional<CompletionPrefix>;
+
 } // namespace nx::console

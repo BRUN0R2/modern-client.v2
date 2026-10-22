@@ -77,6 +77,24 @@ auto tokenize(std::string_view command) -> CommandLine {
     return line;
 }
 
+auto completionPrefix(std::string_view line) noexcept -> std::optional<CompletionPrefix> {
+    std::string_view last = line;
+    for (std::string_view rest = line; !rest.empty();) {
+        const auto [command, remainder] = splitFirstCommand(rest);
+        // A command that ends before the text does was ended by a separator: what follows it, even
+        // nothing, is the command being typed.
+        last = command.data() + command.size() == line.data() + line.size() ? command : remainder;
+        rest = remainder;
+    }
+    constexpr std::string_view kBlanks = " \t\r";
+    const std::size_t start = std::min(last.find_first_not_of(kBlanks), last.size());
+    const std::string_view name = last.substr(start);
+    if (name.starts_with('"') || name.find_first_of(kBlanks) != std::string_view::npos) {
+        return std::nullopt;
+    }
+    return CompletionPrefix{.offset = narrow<std::size_t>(name.data() - line.data()), .prefix = name};
+}
+
 auto parseScript(std::string_view script) -> std::vector<CommandLine> {
     std::vector<CommandLine> commands;
     while (!script.empty()) {
