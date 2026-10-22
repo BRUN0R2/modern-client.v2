@@ -35,8 +35,8 @@ struct ConsoleColors {
     render::ScreenColor cursor{.red = 216, .green = 222, .blue = 211};
     render::ScreenColor offered{.red = 216, .green = 222, .blue = 211}; ///< A name offered.
     render::ScreenColor detail{.red = 140, .green = 140, .blue = 140};  ///< What the console tells of it.
-    render::ScreenColor chosen{
-        .red = 64, .green = 64, .blue = 64, .alpha = 224}; ///< Behind the one Tab takes.
+    render::ScreenColor offeredBackground{.red = 24, .green = 24, .blue = 24}; ///< Behind the names offered.
+    render::ScreenColor chosen{.red = 64, .green = 64, .blue = 64};            ///< Behind the one Tab takes.
 };
 
 /// The console's window over `console`: it runs the lines typed in it, through the console's buffer,
@@ -66,7 +66,8 @@ public:
     void showLogged(log::Level level, std::string_view line);
     /// A reply of the console.
     void print(std::string_view line) override;
-    /// A command of the console that failed, in the error colour.
+    /// A command of the console that failed, in the error colour: what failed, and why, each cause by
+    /// its name and its detail ("map de_dust3 (NotFound: maps/de_dust3.bsp)").
     void reportFailure(const Failure<console::ConsoleError>& failure) override;
 
     [[nodiscard]] inline auto output() const noexcept -> const RichText& { return *m_output; }
@@ -96,7 +97,7 @@ private:
 };
 
 /// The lines logged from any thread for a console window: a sink of the log that keeps them until
-/// the main thread shows them.
+/// the main thread shows them, at most as many as rich text keeps (the oldest go first).
 class ConsoleLogSink final : public log::Sink {
 public:
     void write(const log::Record& record) noexcept override;
@@ -105,7 +106,7 @@ public:
 
 private:
     std::mutex m_mutex;
-    std::vector<std::pair<log::Level, std::string>> m_lines; ///< Guarded by m_mutex.
+    std::deque<std::pair<log::Level, std::string>> m_lines; ///< Guarded by m_mutex.
 };
 
 } // namespace nx::ui

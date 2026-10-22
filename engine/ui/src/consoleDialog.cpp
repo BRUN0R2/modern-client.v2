@@ -81,7 +81,7 @@ void ConsoleDialog::setColors(const ConsoleColors& colors) {
     m_colors = colors;
     setBackground(colors.background);
     m_input->setColors(colors.input, colors.cursor);
-    m_names->setBackground(colors.background);
+    m_names->setBackground(colors.offeredBackground);
 }
 
 void ConsoleDialog::layOut() {
@@ -178,19 +178,23 @@ void ConsoleDialog::print(std::string_view line) {
 }
 
 void ConsoleDialog::reportFailure(const Failure<console::ConsoleError>& failure) {
-    for (const auto part : std::views::split(describe(failure), '\n')) {
-        m_output->append(
-            {.text = std::string{std::string_view{part.begin(), part.end()}}, .color = m_colors.error});
+    std::string text = failure.detail.empty() ? std::string{enumName(failure.code)} : failure.detail;
+    for (const CauseRecord& cause : failure.cause.records()) {
+        text += std::format(" ({}: {})", cause.code, cause.detail);
     }
+    m_output->append({.text = std::move(text), .color = m_colors.error});
 }
 
 void ConsoleLogSink::write(const log::Record& record) noexcept {
     const std::scoped_lock lock{m_mutex};
+    if (m_lines.size() == kRichTextLines) {
+        m_lines.pop_front(); // a window shows no more
+    }
     m_lines.emplace_back(record.level, std::format("[{}] {}", record.category, record.message));
 }
 
 void ConsoleLogSink::showIn(ConsoleDialog& dialog) {
-    std::vector<std::pair<log::Level, std::string>> lines;
+    std::deque<std::pair<log::Level, std::string>> lines;
     {
         const std::scoped_lock lock{m_mutex};
         lines.swap(m_lines);

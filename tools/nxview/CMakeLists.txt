@@ -9,10 +9,12 @@ nxAddProgram(nxview
         nx::core
         nx::math
         nx::platform
+        nx::console
         nx::assets
         nx::rhi
         nx::rhiVulkan
         nx::render
+        nx::ui
         cs::shared
         cs::client)
 

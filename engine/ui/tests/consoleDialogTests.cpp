@@ -115,7 +115,12 @@ TEST_F(ConsoleDialogTest, EachKindOfLineInItsColour) {
     EXPECT_EQ(lastLine().color, colors.debug);
     dialog.reportFailure(nx::fail(ConsoleError::UnknownCommand, "sv_gravty").error());
     EXPECT_EQ(lastLine().color, colors.error);
-    EXPECT_NE(lastLine().text.find("sv_gravty"), std::string::npos) << lastLine().text;
+    EXPECT_EQ(lastLine().text, "sv_gravty") << "what failed, as the player reads it";
+    dialog.reportFailure(
+        nx::fail(ConsoleError::CommandFailed, "map de_dust3",
+                 nx::fail(nx::console::ConfigFileError::NotFound, "maps/de_dust3.bsp").error())
+            .error());
+    EXPECT_EQ(lastLine().text, "map de_dust3 (NotFound: maps/de_dust3.bsp)");
 }
 
 TEST_F(ConsoleDialogTest, LinesLoggedOnAnyThreadShowInTheirOrder) {
@@ -132,6 +137,14 @@ TEST_F(ConsoleDialogTest, LinesLoggedOnAnyThreadShowInTheirOrder) {
     EXPECT_EQ(dialog.output().lines()[1].text, "[net] second");
     sink.showIn(dialog);
     EXPECT_EQ(dialog.output().lines().size(), 2U) << "each shown once";
+
+    for (std::size_t line = 0; line <= nx::ui::kRichTextLines; ++line) {
+        sink.write({.level = nx::log::Level::Info, .category = "net", .message = "kept"});
+    }
+    sink.write({.level = nx::log::Level::Info, .category = "net", .message = "last"});
+    sink.showIn(dialog);
+    EXPECT_EQ(dialog.output().lines().size(), nx::ui::kRichTextLines) << "no more than a window shows";
+    EXPECT_EQ(dialog.output().lines().back().text, "[net] last");
 }
 
 TEST_F(ConsoleDialogTest, PageKeysScrollTheOutputAndOtherKeysAreLeft) {
