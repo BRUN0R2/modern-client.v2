@@ -174,6 +174,18 @@ first, then the farthest middle of its bounds first, at one distance by mode (`R
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
 of its own.
 
+**Today** (`nx.render:screen`, the `Hud` pass): `ScreenRenderer` draws rectangles in pixels of the
+target from its top left, over everything the frame drew, its depth neither tested nor written: a
+part of a picture stretched over a rectangle, times a color, or a color alone, in the order given,
+those in a row drawn alike in one draw. As the original draws its HUD, a rectangle is drawn as it is
+(`SPR_Draw`, a texel with no alpha left out), added to what is there as much as its alpha says
+(`SPR_DrawAdditive`; `FillRGBA` adds too, which the crosshair shows), or blended over it
+(`FillRGBABlend`). Its pictures are the images of a sprite's frames, the first of a group (the HUD's
+sprites), and the pictures and console fonts of the WADs, their palettes through the texture gamma
+as the original's textures go; a masked picture, a font always, shows through at index 255. Texels
+are sampled at the nearest, so a picture stays sharp at any whole scale. `appendText` lays out a
+font's characters one after another, each its own width wide.
+
 ## 8. BSP world
 
 - **Visibility:** the camera's leaf, PVS data decompressed and cached per leaf, frustum

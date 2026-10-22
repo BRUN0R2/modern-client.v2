@@ -93,44 +93,6 @@ struct FrameUniform {
     Mat4 viewProjection{};
 };
 
-/// The RGBA texels of `image` of `sprite`, its palette as its format makes it (Mod_LoadSpriteModel):
-/// through `textureGamma` but for index-alpha sprites, the last color and the index as alpha, and
-/// alpha-tested ones, index 255 transparent.
-[[nodiscard]] auto texelsOf(const assets::SpriteView& sprite, const assets::SpriteImage& image,
-                            const ChannelTable& textureGamma) -> std::vector<std::byte> {
-    std::vector<std::byte> texels;
-    texels.reserve(image.pixels.size() * kRgbaBytes);
-    for (const std::byte pixel : image.pixels) {
-        const auto index = std::to_integer<std::size_t>(pixel);
-        const auto channel = [&sprite](std::size_t entry, std::size_t which) {
-            return sprite.palette[(entry * kRgbBytes) + which];
-        };
-        switch (sprite.rendering) {
-        case assets::SpriteRendering::IndexAlpha:
-            texels.insert(texels.end(),
-                          {channel(kLastIndex, 0), channel(kLastIndex, 1), channel(kLastIndex, 2), pixel});
-            break;
-        case assets::SpriteRendering::AlphaTest:
-            if (index == kLastIndex) {
-                texels.insert(texels.end(), kRgbaBytes, std::byte{0});
-            } else {
-                texels.insert(texels.end(), {channel(index, 0), channel(index, 1), channel(index, 2), kFull});
-            }
-            break;
-        case assets::SpriteRendering::Normal:
-        case assets::SpriteRendering::Additive:
-        case assets::SpriteRendering::Count:
-            for (std::size_t which = 0; which < kRgbBytes; ++which) {
-                texels.push_back(
-                    std::byte{textureGamma[std::to_integer<std::size_t>(channel(index, which))]});
-            }
-            texels.push_back(kFull);
-            break;
-        }
-    }
-    return texels;
-}
-
 /// The image of frame `frame` of `frames`, cut to a whole number and held to them, at `time`: the image
 /// of a group whose interval has not passed in its loop (R_GetSpriteFrame).
 [[nodiscard]] auto imageOf(std::span<const SpriteFrameDraw> frames, float frame, Seconds time) noexcept
@@ -226,6 +188,41 @@ void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, 
 }
 
 } // namespace
+
+auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& image,
+                  const ChannelTable& textureGamma) -> std::vector<std::byte> {
+    std::vector<std::byte> texels;
+    texels.reserve(image.pixels.size() * kRgbaBytes);
+    for (const std::byte pixel : image.pixels) {
+        const auto index = std::to_integer<std::size_t>(pixel);
+        const auto channel = [&sprite](std::size_t entry, std::size_t which) {
+            return sprite.palette[(entry * kRgbBytes) + which];
+        };
+        switch (sprite.rendering) {
+        case assets::SpriteRendering::IndexAlpha:
+            texels.insert(texels.end(),
+                          {channel(kLastIndex, 0), channel(kLastIndex, 1), channel(kLastIndex, 2), pixel});
+            break;
+        case assets::SpriteRendering::AlphaTest:
+            if (index == kLastIndex) {
+                texels.insert(texels.end(), kRgbaBytes, std::byte{0});
+            } else {
+                texels.insert(texels.end(), {channel(index, 0), channel(index, 1), channel(index, 2), kFull});
+            }
+            break;
+        case assets::SpriteRendering::Normal:
+        case assets::SpriteRendering::Additive:
+        case assets::SpriteRendering::Count:
+            for (std::size_t which = 0; which < kRgbBytes; ++which) {
+                texels.push_back(
+                    std::byte{textureGamma[std::to_integer<std::size_t>(channel(index, which))]});
+            }
+            texels.push_back(kFull);
+            break;
+        }
+    }
+    return texels;
+}
 
 auto SpriteRenderer::create(rhi::Device& device, const SpriteRendererDesc& desc)
     -> Result<SpriteRenderer, SpriteError> {
@@ -383,7 +380,7 @@ auto SpriteRenderer::load(rhi::CommandList& commands, const assets::SpriteView& 
                                [](Seconds interval) { return interval.count(); });
         for (const assets::SpriteImage& image : frame.images) {
             const MipChain texels =
-                mipChainOf(texelsOf(sprite, image, m_textureGamma), image.width, image.height);
+                mipChainOf(spriteTexels(sprite, image, m_textureGamma), image.width, image.height);
             const std::string name = std::format("sprite.{}.{}", label, model.m_images.size());
             auto texture = uploader.texture(name, {.width = image.width, .height = image.height},
                                             narrow<std::uint32_t>(texels.offsets.size()), 1, texels.texels,

@@ -19,6 +19,7 @@ nxAddModuleLibrary(nxRender
         src/world.cppm
         src/studio.cppm
         src/sprite.cppm
+        src/screen.cppm
     SOURCES
         src/camera.cpp
         src/gamma.cpp
@@ -30,6 +31,7 @@ nxAddModuleLibrary(nxRender
         src/world.cpp
         src/studio.cpp
         src/sprite.cpp
+        src/screen.cpp
     DEPENDS
         nx::core
         nx::math

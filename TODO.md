@@ -336,7 +336,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Voice pool with priority and documented stealing
 
 ### Basic HUD
-- [ ] HUD sprite and font renderer
+- [x] HUD sprite and font renderer (`nx.render:screen`: pictures of sprites and WADs, console fonts, drawn as they are, added or blended, in pixels)
 - [ ] Health, armor, ammo and crosshair (with the original cvars)
 - [ ] Numbers without truncation: health above 255, high ammo counts ([12 §3.4](docs/12-ui-hud-and-console.md#34-no-value-truncation))
 - [ ] HUD regression test with health 5000, 100000 and the type's maximum
