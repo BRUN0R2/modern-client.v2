@@ -34,10 +34,10 @@ struct Category {
 /// One logged event, as sinks receive it. The views live only during Sink::write.
 struct Record {
     Level level = Level::Info;
-    std::string_view category;
-    std::string_view message;
-    std::source_location where;
-    std::chrono::system_clock::time_point time;
+    std::string_view category{};
+    std::string_view message{};
+    std::source_location where{};
+    std::chrono::system_clock::time_point time{};
 };
 
 /// Destination of log records. Logger serializes the calls it makes into its sinks.

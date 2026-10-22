@@ -38,7 +38,9 @@ auto consoleCharacters() -> std::u32string {
         characters += character;
     }
     // The rest of code page 1252 that the console meets: the euro, quotes, dashes and the ellipsis.
-    for (const char32_t character : {0x20AC, 0x2018, 0x2019, 0x201C, 0x201D, 0x2013, 0x2014, 0x2026}) {
+    constexpr auto kCodePageExtras =
+        std::to_array<char32_t>({0x20AC, 0x2018, 0x2019, 0x201C, 0x201D, 0x2013, 0x2014, 0x2026});
+    for (const char32_t character : kCodePageExtras) {
         characters += character;
     }
     return characters;
