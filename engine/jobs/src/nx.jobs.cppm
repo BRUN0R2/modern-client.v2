@@ -11,5 +11,6 @@ export module nx.jobs;
 export import :workStealingDeque;
 export import :concurrentPool;
 export import :intrusiveQueue;
+export import :spscQueue;
 export import :job;
 export import :jobSystem;
