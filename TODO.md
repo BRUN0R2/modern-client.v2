@@ -322,6 +322,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] The other triggers (`trigger_hurt`, `trigger_push`, `trigger_teleport`, `trigger_gravity`, `trigger_relay`, `multi_manager`...) and how a target is used (`USE_TYPE`)
 
 ### Player and weapons
+- [x] The weapons' data: what each is (slot, team, price, ammo, clip, speed, models) for the knife, Glock, USP, AK-47 and M4A1 (`cs.shared:weapons`, `data/cstrike/weapons/`, `data/cstrike/ammo.toml`, [10 §7.2](docs/10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)); the knife's speed and view model from it
 - [ ] Player animation (torso sequence, gait, aim blends)
 - [ ] Viewmodel with its own FOV
 - [ ] Weapon class system (original and custom weapons in the same system)

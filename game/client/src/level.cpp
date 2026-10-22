@@ -20,6 +20,11 @@ namespace {
 
 constexpr nx::log::Category kLog{"client"};
 
+/// The weapon the player holds until the game gives its weapons.
+constexpr std::string_view kKnifeId = "knife";
+/// The extension of the project's data files.
+constexpr std::string_view kDataExtension = ".toml";
+
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names at
 /// the root of the VFS, as the original looks them up: their bytes, and the names of those the
 /// installation lacks. Maps often name WADs of their author's computer that no texture of theirs
@@ -84,6 +89,53 @@ struct WadFiles {
     return {};
 }
 
+/// The game's weapons, from `data`, the project's data/ folder: cstrike/ammo.toml and each
+/// cstrike/weapons/<id>.toml, which must hold the weapon `id`. Errors: ContentUnavailable.
+[[nodiscard]] auto readWeaponCatalog(const std::filesystem::path& data)
+    -> nx::Result<WeaponCatalog, LevelError> {
+    const std::filesystem::path ammoFile = data / "cstrike" / "ammo.toml";
+    auto ammoText = nx::platform::readTextFile(ammoFile);
+    if (!ammoText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(ammoText.error()));
+    }
+    auto ammo = readAmmoTypes(*ammoText, nx::platform::toUtf8(ammoFile));
+    if (!ammo) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(ammo.error()));
+    }
+    const std::filesystem::path folder = data / "cstrike" / "weapons";
+    auto files = nx::platform::listFiles(folder);
+    if (!files) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(files.error()));
+    }
+    std::vector<Weapon> weapons;
+    for (const std::filesystem::path& file : *files) {
+        if (file.has_parent_path() || file.extension() != kDataExtension) {
+            continue;
+        }
+        const std::filesystem::path path = folder / file;
+        auto text = nx::platform::readTextFile(path);
+        if (!text) {
+            return nx::fail(LevelError::ContentUnavailable, std::move(text.error()));
+        }
+        auto weapon = readWeapon(*text, nx::platform::toUtf8(path));
+        if (!weapon) {
+            return nx::fail(LevelError::ContentUnavailable, std::move(weapon.error()));
+        }
+        if (weapon->id != nx::platform::toUtf8(file.stem())) {
+            return nx::fail(LevelError::ContentUnavailable,
+                            std::format("{}: the weapon {:?}, in a file not named after it",
+                                        nx::platform::toUtf8(path), weapon->id));
+        }
+        weapons.push_back(std::move(*weapon));
+    }
+    auto catalog = WeaponCatalog::make(std::move(*ammo), std::move(weapons));
+    if (!catalog) {
+        return nx::fail(LevelError::ContentUnavailable, nx::platform::toUtf8(folder),
+                        std::move(catalog.error()));
+    }
+    return std::move(*catalog);
+}
+
 /// `names`, separated by commas.
 template <class Names>
 [[nodiscard]] auto listed(const Names& names) -> std::string {
@@ -122,7 +174,12 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!classes) {
         return nx::fail(LevelError::ContentUnavailable, std::move(classes.error()));
     }
-    return GameContent{.vfs = std::move(*vfs), .entityClasses = std::move(*classes)};
+    auto weapons = readWeaponCatalog(data);
+    if (!weapons) {
+        return std::unexpected{std::move(weapons.error())};
+    }
+    return GameContent{
+        .vfs = std::move(*vfs), .entityClasses = std::move(*classes), .weapons = std::move(*weapons)};
 }
 
 auto Level::load(const GameContent& content, std::string_view name)
@@ -182,7 +239,12 @@ auto Level::load(const GameContent& content, std::string_view name)
         return std::unexpected{std::move(spawned.error())};
     }
     level.m_models->dropToFloor(resting, *level.m_hulls);
-    auto knife = ViewModel::read(content.vfs);
+    const Weapon* const held = content.weapons.findWeapon(kKnifeId);
+    if (held == nullptr) {
+        return nx::fail(LevelError::KnifeUnreadable, std::format("no weapon {:?}", kKnifeId));
+    }
+    level.m_heldWeapon = *held;
+    auto knife = ViewModel::read(content.vfs, *held);
     if (!knife) {
         return nx::fail(LevelError::KnifeUnreadable, std::move(knife.error()));
     }
