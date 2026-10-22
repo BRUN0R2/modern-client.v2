@@ -49,6 +49,16 @@
   without blurring sprites.
 - Wide aspect ratios (16:9, 21:9) keep the original relative position of the elements.
 
+**Observed** (Counter-Strike 1.6, build 8684, de_dust2 at 640x480, 1280x720 and 1920x1080, the
+references the HUD is checked against): the HUD does not scale. The 640 sprites of `hud.txt` keep
+their size in pixels at every resolution above 640 wide; the elements anchor to the screen's edges
+and middle. The bottom row (health with its cross, armor with its shield at a fifth of the width, the
+round timer with its stopwatch about the middle, the ammo with its divider and icon at the right) has
+its numbers 24 pixels tall, 13 pixels above the bottom; the money is the row above, at the right;
+the status icons (buy zone, C4) are on the left about the middle; the radar is in the top left
+corner. The default crosshair is four short lines about the middle, added green. The drawing itself
+is `nx.render:screen` ([05 §7.1](05-rendering.md#71-frame-passes-legacy-mode)).
+
 ### 3.3 Visual parity of numbers
 
 Values within the original range (health up to 100, armor up to 100, money up to 16000)

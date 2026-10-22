@@ -63,6 +63,12 @@ struct SpriteCall {
     bool isSolid = false;
 };
 
+/// The RGBA texels of `image` of `sprite`, its palette as its format makes it (Mod_LoadSpriteModel):
+/// through `textureGamma` but for index-alpha sprites, the last color and the index as alpha, and
+/// alpha-tested ones, index 255 transparent. What the sprites of the world and of the screen show.
+[[nodiscard]] auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& image,
+                                const ChannelTable& textureGamma) -> std::vector<std::byte>;
+
 /// What one frame in flight writes its view and its sprites' quads to.
 struct SpriteFrameSlot {
     rhi::OwnedBuffer frame{};
