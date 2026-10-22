@@ -90,6 +90,27 @@ struct FrameUniform {
 }
 
 /// Appends the two triangles of `quad`, its picture's `source` part, or its color alone.
+/// The part of `clip` within `area`; empty when they do not meet.
+[[nodiscard]] auto within(const rhi::Rect& clip, const rhi::Rect& area) noexcept -> rhi::Rect {
+    const std::int64_t left = std::max<std::int64_t>(clip.x, area.x);
+    const std::int64_t top = std::max<std::int64_t>(clip.y, area.y);
+    const std::int64_t right =
+        std::min(std::int64_t{clip.x} + clip.size.width, std::int64_t{area.x} + area.size.width);
+    const std::int64_t bottom =
+        std::min(std::int64_t{clip.y} + clip.size.height, std::int64_t{area.y} + area.size.height);
+    if (right <= left || bottom <= top) {
+        return {};
+    }
+    return {.x = narrow<std::int32_t>(left),
+            .y = narrow<std::int32_t>(top),
+            .size = {.width = narrow<std::uint32_t>(right - left),
+                     .height = narrow<std::uint32_t>(bottom - top)}};
+}
+
+[[nodiscard]] constexpr auto isSameRect(const rhi::Rect& a, const rhi::Rect& b) noexcept -> bool {
+    return a.x == b.x && a.y == b.y && a.size.width == b.size.width && a.size.height == b.size.height;
+}
+
 void addQuad(std::vector<ScreenVertex>& vertices, const ScreenQuad& quad) {
     const ScreenRect& target = quad.target;
     float left = 0.0F;
@@ -369,6 +390,7 @@ auto ScreenRenderer::loadImage(rhi::CommandList& commands, std::span<const std::
 
 auto ScreenRenderer::prepare(const ScreenDraw& draw) -> Result<void, ScreenError> {
     m_batches.clear();
+    m_targetSize = draw.size;
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     ScreenFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     if (draw.quads.empty()) {
@@ -384,15 +406,21 @@ auto ScreenRenderer::prepare(const ScreenDraw& draw) -> Result<void, ScreenError
     // Each rectangle in its turn, those in a row drawn alike in one batch.
     std::vector<ScreenVertex> vertices;
     vertices.reserve(draw.quads.size() * kQuadVertices);
+    const rhi::Rect whole{.x = 0, .y = 0, .size = draw.size};
     for (const ScreenQuad& quad : draw.quads) {
+        const rhi::Rect scissor = quad.clip ? within(*quad.clip, whole) : whole;
+        if (scissor.size.width == 0 || scissor.size.height == 0) {
+            continue; // clipped away
+        }
         const ScreenBatch next{.pipeline = quad.image != nullptr ? m_picturePipelines[quad.blend].get()
                                                                  : m_colorPipelines[quad.blend].get(),
                                .image = quad.image != nullptr ? quad.image->m_groups[quad.filter].get()
                                                               : rhi::BindGroupHandle{},
+                               .scissor = scissor,
                                .firstQuad = narrow<std::uint32_t>(vertices.size() / kQuadVertices),
                                .quadCount = 1};
         if (!m_batches.empty() && m_batches.back().pipeline == next.pipeline &&
-            m_batches.back().image == next.image) {
+            m_batches.back().image == next.image && isSameRect(m_batches.back().scissor, next.scissor)) {
             ++m_batches.back().quadCount;
         } else {
             m_batches.push_back(next);
@@ -411,6 +439,7 @@ void ScreenRenderer::record(rhi::CommandList& commands) const {
     const ScreenFrameSlot& slot = m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
     commands.setVertexBuffer(0, slot.vertices.get(), 0);
     for (const ScreenBatch& batch : m_batches) {
+        commands.setScissor(batch.scissor);
         commands.setPipeline(batch.pipeline);
         commands.setBindGroup(kFrameGroup, slot.group.get());
         if (!batch.image.isNull()) {
@@ -418,6 +447,7 @@ void ScreenRenderer::record(rhi::CommandList& commands) const {
         }
         commands.draw(batch.quadCount * kQuadVertices, 1, batch.firstQuad * kQuadVertices, 0);
     }
+    commands.setScissor({.x = 0, .y = 0, .size = m_targetSize});
 }
 
 auto ScreenRenderer::draw(rhi::CommandList& commands, const ScreenDraw& draw) -> Result<void, ScreenError> {
