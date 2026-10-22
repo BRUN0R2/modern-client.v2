@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The muzzle flashes of the weapon in the player's view (docs/05-rendering.md, section 9): what the
-/// client events of its view model's sequences show as they play, those numbered 5000 and above a
-/// frame of the sequence passes (Xash3D's R_StudioClientEvents, GPL, consulted: docs/20 section 3);
-/// a muzzle flash's, 5001, 5011, 5021 and 5031, at the view model's first to fourth attachment (as
+/// client events of its view model's sequences show as they play (ViewModelEvents); a muzzle
+/// flash's, 5001, 5011, 5021 and 5031, at the view model's first to fourth attachment (as
 /// GoldSrc's model events are documented): one of sprites/muzzleflash1.spr to 3, chosen and sized by
 /// the event's number, added in full, at a frame and rolled at random, shown a hundredth of a second
 /// (R_MuzzleFlash).
 ///
-/// Today: the muzzle flashes; the light they cast, the shells and the sounds of the other client
-/// events come with what draws and plays them (TODO.md).
+/// Today: the muzzle flashes; the light they cast and the shells come with what draws them (TODO.md).
 export module cs.client:muzzleFlash;
 
 import std;
@@ -22,15 +20,8 @@ import nx.render;
 
 export namespace cs {
 
-/// The first number of the client's events; the game's own come before.
-inline constexpr std::int32_t kFirstClientEvent = 5000;
 /// A muzzle flash shows this long.
 inline constexpr nx::Seconds kMuzzleFlashTime{0.01F};
-
-/// The client events of `sequence` its play passes from frame `from`, left out, to frame `to`,
-/// included, in their order.
-[[nodiscard]] auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
-    -> std::vector<const nx::assets::StudioEvent*>;
 
 /// The attachment the muzzle flash event `event` shows its flash at: 5001 the first, 5011 the second,
 /// 5021 the third, 5031 the fourth; none for any other event.

@@ -28,7 +28,8 @@ constexpr double kShareTolerance = 1e-4;
 }
 
 /// DataInvalid when `view`, of the weapon `id` of `where` (a file, or the catalog), lacks a draw
-/// sequence or an idle, waits no time to idle again, or has idles whose shares do not add up to 1.
+/// sequence or an idle, waits no time to idle again, has idles whose shares do not add up to 1, or
+/// a draw sound soundProblem refuses.
 [[nodiscard]] auto checkView(const WeaponView& view, std::string_view id, std::string_view where)
     -> nx::Result<void, WeaponError> {
     if (view.drawSequences.empty() || view.idles.empty()) {
@@ -48,11 +49,16 @@ constexpr double kShareTolerance = 1e-4;
             WeaponError::DataInvalid,
             std::format("{}: the idles of {:?} have shares adding up to {}, not 1", where, id, shares));
     }
+    if (view.drawSound) {
+        if (const std::optional<std::string_view> problem = soundProblem(*view.drawSound)) {
+            return nx::fail(WeaponError::DataInvalid, std::format("{}: {:?} {}", where, id, *problem));
+        }
+    }
     return {};
 }
 
-/// What is wrong with `firing`, when anything is: no shoot sequence or cycle, not one accuracy, or a
-/// paced accuracy whose minimum is above its maximum.
+/// What is wrong with `firing`, when anything is: no shoot sequence or cycle, not one accuracy, a
+/// paced accuracy whose minimum is above its maximum, or a sound soundProblem refuses.
 [[nodiscard]] auto firingProblem(const WeaponFiring& firing) -> std::optional<std::string_view> {
     if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{}) {
         return "fires without a shoot sequence or a cycle";
@@ -62,6 +68,13 @@ constexpr double kShareTolerance = 1e-4;
     }
     if (firing.accuracy.paced && firing.accuracy.paced->minimum > firing.accuracy.paced->maximum) {
         return "fires with a paced accuracy whose minimum is above its maximum";
+    }
+    for (const std::optional<GameSound>* const sound : {&firing.sound, &firing.emptySound}) {
+        if (*sound) {
+            if (const std::optional<std::string_view> problem = soundProblem(**sound)) {
+                return problem;
+            }
+        }
     }
     return std::nullopt;
 }
@@ -117,6 +130,13 @@ constexpr double kShareTolerance = 1e-4;
         for (const MeleeAttack* const attack : {&melee->slash, &melee->stab}) {
             if (attack->missSequences.empty() || attack->hitSequences.empty()) {
                 return invalid("attacks without a miss or a hit sequence");
+            }
+            for (const std::optional<GameSound>* const sound : {&attack->missSound, &attack->hitSound}) {
+                if (*sound) {
+                    if (const std::optional<std::string_view> problem = soundProblem(**sound)) {
+                        return invalid(*problem);
+                    }
+                }
             }
         }
     }

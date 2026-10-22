@@ -9,6 +9,7 @@ export module cs.client:scene;
 import std;
 import nx.core;
 import nx.math;
+import nx.assets;
 import nx.rhi;
 import nx.render;
 import :level;
@@ -43,6 +44,8 @@ struct SceneView {
     nx::Seconds time{}; ///< Since the map started.
     std::span<const nx::render::ModelPlacement> placements{};
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
+    /// The client events the view model passed since the last frame (ViewModelEvents).
+    std::span<const nx::assets::StudioEvent* const> clientEvents{};
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
@@ -57,8 +60,8 @@ public:
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
     /// sight does not reach hidden, the blended ones of them all in one order
-    /// (nx.render:blendedOrder), among them the muzzle flashes of the client events the view model
-    /// passed since the last frame and those still showing; then the weapon in the player's hand, lit
+    /// (nx.render:blendedOrder), among them the muzzle flashes of the view's client events and those
+    /// still showing; then the weapon in the player's hand, lit
     /// where the player's eye is, as the original lights the view's own model. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
@@ -79,10 +82,11 @@ private:
           std::vector<nx::render::StudioModel> weapons,
           std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept;
 
-    /// Adds the muzzle flashes of the client events the view model of `level` passed from the last
-    /// frame's pose to `pose`, its bones `bones`, at `time`; and forgets those shown long enough.
+    /// Adds the muzzle flashes of `events`, the client events the view model of `level` passed to
+    /// `pose`, its bones `bones`, at `time`; and forgets those shown long enough.
     void flash(const Level& level, const std::optional<ViewModelPose>& pose,
-               std::span<const nx::Mat3x4> bones, nx::Seconds time);
+               std::span<const nx::assets::StudioEvent* const> events, std::span<const nx::Mat3x4> bones,
+               nx::Seconds time);
 
     nx::render::BspWorld m_world;
     nx::render::WorldLight m_light;
@@ -93,9 +97,8 @@ private:
     nx::render::StudioRenderer m_viewModels;
     std::vector<nx::render::StudioModel> m_weapons; ///< The weapons' view models, by their WeaponIndex.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels; ///< Of sprites/muzzleflash1.spr to 3.
-    std::optional<ViewModelPose> m_lastPose; ///< The view model's in the last frame.
-    std::vector<MuzzleFlash> m_flashes;      ///< Those showing.
-    std::uint64_t m_flashCount = 0;          ///< The flashes made, which seed each one's chances.
+    std::vector<MuzzleFlash> m_flashes;                                ///< Those showing.
+    std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
 };
 
 } // namespace cs

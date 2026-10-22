@@ -17,8 +17,6 @@ namespace {
 
 /// A muzzle flash is added in full (R_MuzzleFlash's renderamt).
 constexpr std::uint8_t kFullAmount = 255;
-/// A sequence played anew plays the events of its first frame too (R_StudioClientEvents).
-constexpr float kBeforeTheFirstFrame = -0.01F;
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
 
@@ -124,7 +122,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         bones = level.viewModels()[view.viewModel->weapon.value].pose(view.camera, view.viewModel->sequence,
                                                                       view.viewModel->intoIt);
     }
-    flash(level, view.viewModel, bones, view.time);
+    flash(level, view.viewModel, view.clientEvents, bones, view.time);
     std::vector<nx::render::SpriteInstance> sprites = level.sprites().instances(m_spriteModels, view.time);
     for (nx::render::SpriteInstance& sprite : sprites) {
         if (sprite.mode == nx::render::RenderMode::Glow) {
@@ -172,25 +170,18 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
 }
 
 void Scene::flash(const Level& level, const std::optional<ViewModelPose>& pose,
-                  std::span<const nx::Mat3x4> bones, nx::Seconds time) {
+                  std::span<const nx::assets::StudioEvent* const> events, std::span<const nx::Mat3x4> bones,
+                  nx::Seconds time) {
     std::erase_if(m_flashes, [time](const MuzzleFlash& shown) { return shown.until < time; });
     if (!pose) {
-        m_lastPose.reset();
         return;
     }
     const ViewModel& viewModel = level.viewModels()[pose->weapon.value];
-    const nx::assets::StudioSequence& sequence = viewModel.sequence(pose->sequence);
-    const float now = cs::sequenceFrameAt(sequence, pose->intoIt, 1.0F).value();
-    // A play already shown goes on from the frame it was at; a new one plays its events from its first.
-    const float before = m_lastPose && m_lastPose->isSamePlay(*pose)
-                             ? cs::sequenceFrameAt(sequence, m_lastPose->intoIt, 1.0F).value()
-                             : kBeforeTheFirstFrame;
-    m_lastPose = pose;
     std::array<std::size_t, MuzzleFlashSprites::kCount> frameCounts{};
     for (std::size_t index = 0; index < frameCounts.size(); ++index) {
         frameCounts[index] = m_flashModels[index] ? m_flashModels[index]->frameCount() : 0;
     }
-    for (const nx::assets::StudioEvent* const event : clientEventsBetween(sequence, before, now)) {
+    for (const nx::assets::StudioEvent* const event : events) {
         const std::optional<std::uint32_t> attachment = muzzleFlashAttachmentOf(event->event);
         const std::optional<nx::Vec3> origin =
             attachment ? viewModel.attachmentAt(bones, *attachment) : std::nullopt;

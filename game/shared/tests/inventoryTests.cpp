@@ -6,8 +6,8 @@
 // guns' fire, as the original's: their cycle, once a press for a pistol, the empty click, the
 // accuracy by burst or by pace, the spread as the shooter moves, the kick, and the reload; the timers
 // counted down in float by each command, as many commands as the original's last; and the
-// alternates `+attack2` switches: the USP's silencer, the Glock's burst; and the knife's slash and
-// stab, missing or hitting what the tracer finds.
+// alternates `+attack2` switches: the USP's silencer, the Glock's burst; the knife's slash and
+// stab, missing or hitting what the tracer finds; and the sounds they all make.
 
 #include <gtest/gtest.h>
 
@@ -51,6 +51,11 @@ constexpr float kTolerance = 1e-5F;
     return nx::game::TickTime{.now = nx::GameTime::atTick(tick)};
 }
 
+/// A sound of `file` alone, on `channel`, at full volume.
+[[nodiscard]] auto sound(std::string file, cs::SoundChannel channel) -> cs::GameSound {
+    return cs::GameSound{.files = {std::move(file)}, .channel = channel};
+}
+
 [[nodiscard]] auto weapon(std::string id, WeaponSlot slot, std::uint32_t weight, float maxSpeed,
                           std::optional<cs::WeaponMagazine> magazine, cs::WeaponView view) -> Weapon {
     return Weapon{.id = id,
@@ -70,14 +75,17 @@ constexpr float kTolerance = 1e-5F;
     Weapon knife = weapon("knife", WeaponSlot::Knife, 0, 250.0F, std::nullopt,
                           {.drawSequences = {3},
                            .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
-                           .idlesWhenEmpty = true});
+                           .idlesWhenEmpty = true,
+                           .drawSound = sound("weapons/knife_deploy1.wav", cs::SoundChannel::Item)});
     knife.melee =
         cs::WeaponMelee{.slash = {.reach = nx::HammerUnits{48.0F},
                                   .missSequences = {6, 7},
                                   .hitSequences = {6, 7},
                                   .miss = {.primary = nx::Seconds{0.35F}, .secondary = nx::Seconds{0.5F}},
                                   .hit = {.primary = nx::Seconds{0.4F}, .secondary = nx::Seconds{0.5F}},
-                                  .idleAfter = nx::Seconds{2.0F}},
+                                  .idleAfter = nx::Seconds{2.0F},
+                                  .missSound = sound("weapons/knife_slash1.wav", cs::SoundChannel::Weapon),
+                                  .hitSound = sound("weapons/knife_hitwall1.wav", cs::SoundChannel::Item)},
                         .stab = {.reach = nx::HammerUnits{32.0F},
                                  .missSequences = {5},
                                  .hitSequences = {4},
@@ -90,20 +98,23 @@ constexpr float kTolerance = 1e-5F;
                           WeaponIdle{.sequence = 0, .wait = nx::Seconds{3.75F}, .share = 0.3F},
                           WeaponIdle{.sequence = 1, .wait = nx::Seconds{2.5F}, .share = 0.4F}},
                 .idlesWhenEmpty = false});
-    glock.firing = cs::WeaponFiring{.cycle = nx::Seconds{0.15F},
-                                    .isAutomatic = false,
-                                    .idleAfterShot = nx::Seconds{2.5F},
-                                    .shootSequences = {3, 4, 5},
-                                    .lastShotSequence = 6,
-                                    .accuracy = {.initial = 0.9F,
-                                                 .paced = cs::PacedAccuracy{.threshold = nx::Seconds{0.325F},
-                                                                            .rate = 0.275F,
-                                                                            .minimum = 0.6F,
-                                                                            .maximum = 0.9F}},
-                                    .spread = {.air = {.scale = 1.0F},
-                                               .moving = {.scale = 0.165F},
-                                               .ducked = SpreadTerm{.scale = 0.075F},
-                                               .standing = {.scale = 0.1F}}};
+    glock.firing =
+        cs::WeaponFiring{.cycle = nx::Seconds{0.15F},
+                         .isAutomatic = false,
+                         .idleAfterShot = nx::Seconds{2.5F},
+                         .shootSequences = {3, 4, 5},
+                         .lastShotSequence = 6,
+                         .accuracy = {.initial = 0.9F,
+                                      .paced = cs::PacedAccuracy{.threshold = nx::Seconds{0.325F},
+                                                                 .rate = 0.275F,
+                                                                 .minimum = 0.6F,
+                                                                 .maximum = 0.9F}},
+                         .spread = {.air = {.scale = 1.0F},
+                                    .moving = {.scale = 0.165F},
+                                    .ducked = SpreadTerm{.scale = 0.075F},
+                                    .standing = {.scale = 0.1F}},
+                         .sound = sound("weapons/glock18-2.wav", cs::SoundChannel::Weapon),
+                         .emptySound = sound("weapons/dryfire_pistol.wav", cs::SoundChannel::Weapon)};
     glock.reload = cs::WeaponReload{.time = nx::Seconds{2.2F}, .sequences = {7, 12}};
     cs::WeaponFiring burst = *glock.firing;
     burst.cycle = nx::Seconds{0.5F};
@@ -679,6 +690,74 @@ TEST(MeleeTest, AnAttackMeetsALineAheadThenADuckedHull) {
     EXPECT_NEAR(traced[0].second.x, 10.0F, kTolerance);
     EXPECT_NEAR(traced[0].second.y, 48.0F, kTolerance);
     EXPECT_NEAR(traced[0].second.z, 64.0F, kTolerance);
+}
+
+/// The first file of each sound `inventory` made since the last call, in their order.
+[[nodiscard]] auto soundsOf(Inventory& inventory) -> std::vector<std::string> {
+    std::vector<std::string> files;
+    for (const cs::GameSound* const made : inventory.takeSounds()) {
+        files.push_back(made->files.front());
+    }
+    return files;
+}
+
+using Files = std::vector<std::string>;
+
+TEST(SoundTest, AWeaponDrawnMakesItsDrawSoundAndTheSoundsAreTakenOnce) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife});
+    EXPECT_EQ(soundsOf(inventory), Files{"weapons/knife_deploy1.wav"});
+    EXPECT_EQ(soundsOf(inventory), Files{});
+    nx::Random random{0, "test"};
+    EXPECT_TRUE(inventory.give(kGlock, true, at(1), random));
+    EXPECT_EQ(soundsOf(inventory), Files{}) << "the Glock's view model plays its own";
+}
+
+TEST(SoundTest, AGunSoundsEachRoundItFiresAndClicksEmpty) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::int64_t tick = kReady;
+    for (int shot = 0; shot < 20; ++shot) {
+        std::ignore = frames(inventory, shooter, tick, tick, {Button::Attack});
+        ASSERT_EQ(soundsOf(inventory), Files{"weapons/glock18-2.wav"}) << shot;
+        std::ignore = frames(inventory, shooter, tick + 1, tick + 19);
+        tick += 20;
+    }
+    std::ignore = frames(inventory, shooter, tick, tick, {Button::Attack});
+    EXPECT_EQ(soundsOf(inventory), Files{"weapons/dryfire_pistol.wav"});
+    // Held, a pistol clicks once a press; pressed again after its 0.2 seconds, it clicks again.
+    std::ignore = frames(inventory, shooter, tick + 1, tick + 20, {Button::Attack});
+    EXPECT_EQ(soundsOf(inventory), Files{});
+    std::ignore = frames(inventory, shooter, tick + 21, tick + 21);
+    std::ignore = frames(inventory, shooter, tick + 22, tick + 22, {Button::Attack});
+    EXPECT_EQ(soundsOf(inventory), Files{"weapons/dryfire_pistol.wav"});
+}
+
+TEST(SoundTest, EachRoundOfTheGlocksBurstSounds) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = frames(inventory, shooter, kReady, kReady, {Button::Attack2});
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 1, {Button::Attack});
+    std::ignore = frames(inventory, shooter, kReady + 2, kReady + 4);
+    EXPECT_EQ(soundsOf(inventory), Files(3, "weapons/glock18-2.wav"));
+}
+
+TEST(SoundTest, TheKnifeSoundsItsMissOrItsHitOnTheWorld) {
+    const WeaponCatalog weapons = catalog();
+    for (const bool hits : {false, true}) {
+        Inventory inventory = given(weapons, {kKnife});
+        Shooter shooter = standing();
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        std::ignore = soundsOf(inventory);
+        std::ignore =
+            inventory.frame(command(1, {Button::Attack}), shooter, hits ? hitAll() : missAll(), at(kReady));
+        EXPECT_EQ(soundsOf(inventory),
+                  Files{hits ? "weapons/knife_hitwall1.wav" : "weapons/knife_slash1.wav"});
+    }
 }
 
 TEST(FiringTest, DrawingAnotherWeaponStopsAReload) {

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// What the player hears (docs/11-audio.md): the system's sound output playing the mixer, the
-/// game's sounds read by their names, and the sounds the client plays itself, as the original's
-/// `play` and `playvol` do. The game's own sounds (weapons, steps, the world) come with their events
-/// (TODO.md).
+/// game's sounds read by their names, the sounds the player makes on its channels, and those the
+/// client plays itself, as the original's `play` and `playvol` do. Every sound is heard as the
+/// player's own, at full level in both ears, until spatialization comes (TODO.md).
 export module cs.client:audio;
 
 import std;
@@ -13,6 +13,7 @@ import nx.assets;
 import nx.platform;
 import nx.console;
 import nx.audio;
+import cs.shared;
 
 export namespace cs {
 
@@ -26,8 +27,9 @@ enum class PlayError : std::uint8_t {
 /// mixer.
 class ClientAudio {
 public:
-    /// Voices of the mixer the client's own sounds take in turn: a sound played while all of them
-    /// play takes the one that started first.
+    /// Voices of the mixer the sounds on SoundChannel::Auto take in turn, the client's own among them:
+    /// a sound played while all of them play takes the one that started first. The player's other
+    /// channels have a voice each, after them.
     static constexpr std::uint32_t kLocalVoices = 8;
 
     /// Opens the system's default output and plays the mixer on it, everything heard at `volume`'s
@@ -47,6 +49,11 @@ public:
     /// QueueFull.
     [[nodiscard]] auto playLocal(std::string_view name, float volume) -> nx::Result<void, PlayError>;
 
+    /// Plays `sound` as the player makes it: one of its files and a pitch of its range at random, as
+    /// the original's client and engine choose them, on its channel of the player, replacing what that
+    /// channel plays. Errors: NoSound, QueueFull.
+    [[nodiscard]] auto play(const GameSound& sound) -> nx::Result<void, PlayError>;
+
     /// Sends the mixer `volume`'s value when it changed since it was last sent: before each sound
     /// played, so that none is heard at another gain, and each frame, so that a change is heard
     /// while nothing new plays. A value the mixer could not take is sent again the next time.
@@ -59,12 +66,20 @@ private:
     ClientAudio(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
                 nx::platform::AudioDevice device);
 
+    /// Plays the sound `name` names in `voice` at `volume` and `pitch` (1 as recorded).
+    [[nodiscard]] auto playIn(std::uint32_t voice, std::string_view name, float volume, float pitch)
+        -> nx::Result<void, PlayError>;
+    /// Plays the sound `name` names in the next of the kLocalVoices.
+    [[nodiscard]] auto playAuto(std::string_view name, float volume, float pitch)
+        -> nx::Result<void, PlayError>;
+
     nx::console::Cvar<float> m_volumeCvar;
     nx::audio::SoundLibrary m_sounds;
     nx::audio::Mixer m_mixer;
     nx::platform::AudioDevice m_device; ///< Last: it stops reading the mixer before the mixer goes.
     std::uint32_t m_nextLocalVoice = 0;
     std::optional<float> m_volume; ///< The gain the mixer was last sent.
+    nx::Random m_random;           ///< What chooses the files and the pitches.
 };
 
 } // namespace cs

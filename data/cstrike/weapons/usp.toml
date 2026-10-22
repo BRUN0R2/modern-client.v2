@@ -51,6 +51,16 @@ standing = { base = 0.0, scale = 0.1 }
 [firing.recoil]
 punch = 2.0
 
+[firing.sound] # its client event plays one of them, which to be measured on the original
+files = ["weapons/usp_unsil-1.wav"]
+channel = "weapon"
+volume = 1.0
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8
+
 [reload]
 time = 2.7
 sequences = [13] # reload_unsil
@@ -85,6 +95,16 @@ standing = { base = 0.0, scale = 0.15 }
 
 [alternate.firing.recoil]
 punch = 2.0
+
+[alternate.firing.sound] # its client event plays one of them, which to be measured on the original
+files = ["weapons/usp1.wav", "weapons/usp2.wav"]
+channel = "weapon"
+volume = 1.0
+
+[alternate.firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8
 
 [alternate.reload]
 time = 2.7
