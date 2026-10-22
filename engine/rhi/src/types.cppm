@@ -269,11 +269,21 @@ struct ColorTarget {
     std::optional<BlendState> blend{}; ///< None: the fragment replaces what is there.
 };
 
+/// How far a pipeline moves its fragments' depth before the test, so that what lies on a surface
+/// drawn before (a decal on a wall) is not hidden by it: `constant` times the depth format's least
+/// step, plus `slope` times the triangle's steepest depth change across a pixel. Positive values
+/// raise the depth.
+struct DepthBias {
+    float constant = 0.0F;
+    float slope = 0.0F;
+};
+
 /// The depth attachment of a render pipeline and its test.
 struct DepthState {
     Format format = Format::Depth32Float;
     bool isWriteEnabled = true; ///< A fragment that passes stores its depth.
     CompareOp compare = CompareOp::Less;
+    std::optional<DepthBias> bias{}; ///< None: fragments keep their depth.
 };
 
 /// What an index buffer's indices are.

@@ -127,6 +127,13 @@ constexpr float kAnimationFramesPerSecond = 10.0F;
 /// How far past a brush entity's face the eye must be for it to be drawn: the original's
 /// BACKFACE_EPSILON.
 constexpr float kBackfaceEpsilon = 0.01F;
+/// How far decals are pulled toward the eye over the faces they lie on, as the original's
+/// glPolygonOffset(-1, -gl_polyoffset) pulls them (gl_polyoffset 2): the depth here is reversed, so
+/// toward the eye is up.
+constexpr rhi::DepthBias kDecalBias{.constant = 2.0F, .slope = 1.0F};
+/// The bytes a frame's decal vertices first take; they grow twice as large as the decals need.
+constexpr std::uint64_t kFirstDecalBytes = 64 * 1024;
+constexpr std::uint64_t kDecalGrowth = 2;
 
 /// A texture of an animation: '+', its frame ('0' to '9' in the main sequence, 'a' to 'j', of any
 /// case, in the alternate one), then the name its frames share.
@@ -321,6 +328,33 @@ struct MapTextures {
     return textures;
 }
 
+/// The decals' images on the GPU, and the size of each.
+struct DecalTextures {
+    std::vector<rhi::OwnedTexture> owned;
+    std::vector<DecalSize> sizes;
+};
+
+/// The images of `desc.decals`, made as the original makes them, their palettes through `texgamma`,
+/// each with its levels. Errors: those of the uploads.
+[[nodiscard]] auto loadDecalTextures(Uploader& uploader, const BspWorldDesc& desc)
+    -> Result<DecalTextures, rhi::RhiError> {
+    const ChannelTable textureGamma = textureGammaTable(desc.gamma);
+    DecalTextures decals;
+    for (const assets::MipTexture& texture : desc.decals) {
+        const assets::RgbaImage image = decalImageOf(texture, textureGamma);
+        const DecalLevels levels = decalLevelsOf(image);
+        auto uploaded = uploader.texture(
+            std::format("world.decal.{}", texture.name), {.width = image.width, .height = image.height},
+            narrow<std::uint32_t>(levels.offsets.size()), 1, levels.bytes, levels.offsets);
+        if (!uploaded) {
+            return std::unexpected{std::move(uploaded.error())};
+        }
+        decals.owned.push_back(std::move(*uploaded));
+        decals.sizes.push_back(DecalSize{.width = image.width, .height = image.height});
+    }
+    return decals;
+}
+
 /// Where a face's lightmaps lie on it, and how many it has: one for each of its styles.
 struct LightmapExtent {
     SurfaceExtent area{};
@@ -456,6 +490,32 @@ void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, Lightmap
         }
     }
     return atlas;
+}
+
+/// What decals need of each face of `map`, by its index, of `faces`, their lightmaps placed: those
+/// whose texture takes them, measured as the compilers measure them, and lit as the face is.
+[[nodiscard]] auto decalFacesOf(const assets::BspView& map, std::span<const FaceToDraw> faces)
+    -> std::vector<DecalFace> {
+    std::vector<DecalFace> decalFaces(map.faces().size());
+    for (const FaceToDraw& entry : faces) {
+        const std::optional<assets::MipTexture>& texture = map.textures()[entry.texture];
+        if (!texture || !takesDecals(texture->name)) {
+            continue;
+        }
+        DecalFace& face = decalFaces[entry.index];
+        face.takesDecals = true;
+        if (const std::optional<SurfaceExtent> area = surfaceExtentOf(map, *entry.face)) {
+            face.extent = DecalFaceExtent{.minS = area->minS,
+                                          .minT = area->minT,
+                                          .spanS = static_cast<double>(area->width - 1) * kLuxelUnits,
+                                          .spanT = static_cast<double>(area->height - 1) * kLuxelUnits};
+        }
+        if (entry.lightmap) {
+            face.lightmapCorner = entry.corner;
+            face.styles = entry.face->lightStyles;
+        }
+    }
+    return decalFaces;
 }
 
 /// The light table: what the summed light of a sample is drawn as (nx.render:gamma), gray texels.
@@ -751,6 +811,12 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     }
     std::vector<FaceToDraw> faces = facesToDraw(map, textures->uses);
     const LightmapAtlas atlas = packLightmaps(map, faces);
+    auto decalTextures = loadDecalTextures(uploader, desc);
+    if (!decalTextures) {
+        return gpuFailure(std::move(decalTextures.error()));
+    }
+    world.m_decals.emplace(map, decalFacesOf(map, faces), desc.decalLimit);
+    world.m_decalSizes = std::move(decalTextures->sizes);
     auto frameTextures = uploadFrameTextures(uploader, atlas, desc.gamma, *skyLayers);
     if (!frameTextures) {
         return gpuFailure(std::move(frameTextures.error()));
@@ -776,7 +842,8 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
                                                           frameTextures->lightTable.get(),
                                                           frameTextures->sky.get());
                         })
-                        .and_then([&] { return world.createBucketGroups(geometry.bucketTextures); });
+                        .and_then([&] { return world.createBucketGroups(geometry.bucketTextures); })
+                        .and_then([&] { return world.createDecalGroups(decalTextures->owned); });
         !made) {
         return gpuFailure(std::move(made.error()));
     }
@@ -791,6 +858,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
          {&frameTextures->lightmaps, &frameTextures->lightTable, &frameTextures->sky}) {
         world.m_textures.push_back(std::move(*texture));
     }
+    std::ranges::move(decalTextures->owned, std::back_inserter(world.m_textures));
     log::info(kLog, "world: {} faces, {} triangles, {} textures, lightmaps {}x{}, {} missing",
               world.m_stats.faces, world.m_stats.triangles, world.m_stats.textures, atlas.extent.width,
               atlas.extent.height, world.m_stats.missingTextures.size());
@@ -964,7 +1032,11 @@ void BspWorld::gather(const Camera& camera, float aspect) {
 
 void BspWorld::prepare(const WorldFrame& view) {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    const FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    if (auto written = writeDecals(slot); !written) {
+        // The frame goes on without them; the next one tries again.
+        log::error(kLog, "the decals are not drawn: {}", describe(written.error()));
+    }
     FrameUniform frame{.viewProjection = viewProjectionMatrix(view.camera, view.aspect),
                        .lighting = m_lighting,
                        .eye = extend(view.camera.position, 1.0F)};
@@ -1036,6 +1108,19 @@ void BspWorld::drawSolid(rhi::CommandList& commands) const {
         commands.setBindGroup(kTextureGroup, batch.textures);
         commands.drawIndexed(batch.indices.indexCount, 1, batch.indices.firstIndex, 0, 0);
     }
+    if (!slot.decalRuns.empty()) {
+        // The decals over the world's faces, oldest first, as the original draws them after its
+        // textures and before its lightmaps.
+        commands.setPipeline(m_decalPipeline.get());
+        commands.setVertexBuffer(0, slot.decalVertices.get(), 0);
+        commands.setBindGroup(kFrameGroup, slot.group.get());
+        commands.setBindGroup(kEntityGroup, slot.entityGroups[0].get());
+        for (const DecalRun& run : slot.decalRuns) {
+            commands.setBindGroup(kTextureGroup, m_decalGroups[run.texture].get());
+            commands.draw(run.vertexCount, 1, run.firstVertex, 0);
+        }
+        commands.setVertexBuffer(0, m_vertices.get(), 0);
+    }
     if (m_sky.indexCount != 0) {
         // Last, so that what the world hides of them fails the depth test before it is shaded.
         commands.setPipeline(m_skyPipeline.get());
@@ -1078,6 +1163,61 @@ void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) 
         const IndexRange& range = m_entityRanges[face];
         commands.drawIndexed(range.indexCount, 1, m_firstEntityIndex + range.firstIndex, 0, 0);
     }
+}
+
+auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center) -> std::uint32_t {
+    expects(decal < m_decalSizes.size(), "BspWorld::shootDecal: one of BspWorldDesc::decals");
+    return m_decals->shoot(decal, m_decalSizes[decal], center);
+}
+
+auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
+    if (slot.decalRevision == m_decals->revision()) {
+        return {};
+    }
+    // Each decal's fan as triangles, its run continued while the image stays the same.
+    std::vector<WorldVertex> vertices;
+    std::vector<DecalRun> runs;
+    for (const PlacedDecal* const decal : m_decals->inOrder()) {
+        if (runs.empty() || runs.back().texture != decal->texture) {
+            runs.push_back(
+                DecalRun{.texture = decal->texture, .firstVertex = narrow<std::uint32_t>(vertices.size())});
+        }
+        const auto vertexOf = [](const DecalVertex& corner) {
+            return WorldVertex{.position = corner.position,
+                               .u = corner.u,
+                               .v = corner.v,
+                               .lightmapX = corner.lightmapX,
+                               .lightmapY = corner.lightmapY,
+                               .styles = corner.styles};
+        };
+        for (std::size_t corner = kTriangleCorners - 1; corner < decal->polygon.size(); ++corner) {
+            vertices.insert(vertices.end(),
+                            {vertexOf(decal->polygon.front()), vertexOf(decal->polygon[corner - 1]),
+                             vertexOf(decal->polygon[corner])});
+        }
+        runs.back().vertexCount = narrow<std::uint32_t>(vertices.size()) - runs.back().firstVertex;
+    }
+    const std::span<const std::byte> bytes = std::as_bytes(std::span{vertices});
+    if (bytes.size() > slot.decalCapacity) {
+        const std::uint64_t capacity = std::max<std::uint64_t>(
+            {kFirstDecalBytes, slot.decalCapacity * kDecalGrowth, std::uint64_t{bytes.size()}});
+        auto buffer = m_device->createBuffer({.label = "world.decals",
+                                              .size = capacity,
+                                              .usage = {rhi::BufferUsage::Vertex},
+                                              .location = rhi::MemoryLocation::Upload});
+        if (!buffer) {
+            slot.decalRuns.clear();
+            return std::unexpected{std::move(buffer.error())};
+        }
+        slot.decalVertices = std::move(*buffer);
+        slot.decalCapacity = capacity;
+    }
+    if (!bytes.empty()) {
+        std::ranges::copy(bytes, m_device->mappedBytes(slot.decalVertices.get()).begin());
+    }
+    slot.decalRuns = std::move(runs);
+    slot.decalRevision = m_decals->revision();
+    return {};
 }
 
 auto BspWorld::preparedSlot() const noexcept -> const FrameSlot& {
@@ -1197,7 +1337,20 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
                           Depth::TestedAndWritten, layouts);
     auto additive = pipeline("world.additive", "vertexMain", "additiveFragmentMain", additiveBlend,
                              Depth::Tested, layouts);
-    for (auto* const created : {&opaque, &sky, &solid, &texture, &color, &additive}) {
+    // Decals over the faces they lie on: blended, their depth tested against the faces' pulled toward
+    // the eye, not written.
+    const std::array decalTargets{rhi::ColorTarget{.format = colorFormat, .blend = alphaBlend}};
+    auto decal = device.createRenderPipeline(
+        {.label = "world.decal",
+         .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
+         .fragment = {.shader = m_shader.get(), .entryPoint = "decalFragmentMain"},
+         .vertexBuffers = vertexBuffers,
+         .colorTargets = decalTargets,
+         .depth = rhi::DepthState{.isWriteEnabled = false,
+                                  .compare = rhi::CompareOp::GreaterOrEqual,
+                                  .bias = kDecalBias},
+         .bindGroupLayouts = layouts});
+    for (auto* const created : {&opaque, &sky, &solid, &texture, &color, &additive, &decal}) {
         if (!*created) {
             return std::unexpected{std::move(created->error())};
         }
@@ -1208,6 +1361,7 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
     m_texturePipeline = std::move(*texture);
     m_colorPipeline = std::move(*color);
     m_additivePipeline = std::move(*additive);
+    m_decalPipeline = std::move(*decal);
     return {};
 }
 
@@ -1265,6 +1419,28 @@ auto BspWorld::createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle
         slot.indices = std::move(*indices);
         slot.entities = std::move(*entities);
         slot.group = std::move(*group);
+    }
+    return {};
+}
+
+auto BspWorld::createDecalGroups(std::span<const rhi::OwnedTexture> decals) -> Result<void, rhi::RhiError> {
+    // Clamped at its edges, as the original samples a decal (TF_DECAL).
+    auto sampler =
+        m_device->createSampler({.label = "world.decal", .address = rhi::AddressMode::ClampToEdge});
+    if (!sampler) {
+        return std::unexpected{std::move(sampler.error())};
+    }
+    m_decalSampler = std::move(*sampler);
+    for (const rhi::OwnedTexture& decal : decals) {
+        const std::array bindings{
+            rhi::Binding{.binding = kAlbedoBinding, .resource = decal.get()},
+            rhi::Binding{.binding = kAlbedoSamplerBinding, .resource = m_decalSampler.get()}};
+        auto group = m_device->createBindGroup(
+            {.label = "world.decal", .layout = m_textureLayout.get(), .bindings = bindings});
+        if (!group) {
+            return std::unexpected{std::move(group.error())};
+        }
+        m_decalGroups.push_back(std::move(*group));
     }
     return {};
 }
