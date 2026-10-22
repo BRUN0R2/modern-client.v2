@@ -26,7 +26,8 @@ struct FontFace {
 };
 
 /// The faces of the TrueType or OpenType font, or collection, `bytes`, which file `file` holds: those
-/// whose tables name a family. None for what is not such a font.
+/// whose tables name a family GDI could be asked for (at most 31 characters, as its LOGFONT holds
+/// them). None for what is not such a font; at most 64 of a collection.
 [[nodiscard]] auto readFontFaces(std::span<const std::byte> bytes, const std::filesystem::path& file = {})
     -> std::vector<FontFace>;
 

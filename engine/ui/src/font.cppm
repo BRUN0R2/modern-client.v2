@@ -27,6 +27,9 @@ enum class FontError : std::uint8_t {
 
 /// The tallest cell a font is sized to, in pixels: past it, a glyph's bitmap outgrows any atlas.
 inline constexpr std::int32_t kMaxCellHeight = 1024;
+/// How many ems a glyph may stretch across, each way: more is no letter, but a font made to exhaust
+/// the memory or the time of whoever draws it.
+inline constexpr std::int32_t kMaxGlyphEms = 8;
 
 /// How a face draws the edges of its glyphs (VGUI2's `antialias` flag).
 enum class FontSmoothing : std::uint8_t {
@@ -123,7 +126,8 @@ public:
 
     /// The glyph of `character`, hinted and drawn as the font's smoothing says. Asked to smooth, a font
     /// does as Windows does, as its gasp table says at its size: smoothed or not, fitted to the pixels
-    /// or not (Tahoma from 9 to 16 pixels per em: not smoothed). Errors: NoGlyph, BadGlyph.
+    /// or not (Tahoma from 9 to 16 pixels per em: not smoothed). Errors: NoGlyph, BadGlyph (also a
+    /// glyph wider or taller than kMaxGlyphEms ems).
     [[nodiscard]] auto glyph(char32_t character) const -> Result<Glyph, FontError>;
 
 private:

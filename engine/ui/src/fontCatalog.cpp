@@ -22,7 +22,7 @@ constexpr std::int32_t kSimulatedBoldGap = 150;
 constexpr std::int32_t kRegularWeight = 400;
 
 /// The most faces of a collection, and tables of a face, read: far more than any font has.
-constexpr std::uint32_t kMaxFaces = 256;
+constexpr std::uint32_t kMaxFaces = 64;
 constexpr std::uint16_t kMaxTables = 256;
 /// The bytes of a face's header and its table records, of a collection's header and its offsets.
 constexpr std::size_t kFaceHeaderSize = 12;
@@ -30,6 +30,12 @@ constexpr std::size_t kTableRecordSize = 16;
 constexpr std::size_t kCollectionHeaderSize = 12;
 /// The most bytes of a name table read: names are short.
 constexpr std::size_t kMaxNameTableSize = std::size_t{1} << 20;
+
+/// The longest family or style name GDI takes, in UTF-16 units: its LOGFONT holds 32 with the
+/// terminator (LF_FACESIZE). A longer one names no face a scheme can ask for.
+constexpr std::size_t kMaxNameUnits = 31;
+/// The most family names a face keeps, one a language: far more than any font gives.
+constexpr std::size_t kMaxFamilyNames = 32;
 
 /// The tag of a table, as the four letters a directory lists it by.
 [[nodiscard]] constexpr auto tagOf(std::string_view letters) noexcept -> std::uint32_t {
@@ -90,7 +96,7 @@ void readNames(std::span<const std::byte> table, FontFace& face) {
         const std::size_t offset = strings + loadBigEndian<std::uint16_t>(record.subspan(10));
         if ((platform != kWindowsPlatform && platform != kUnicodePlatform) ||
             (id != kFamilyName && id != kStyleName) || offset > table.size() ||
-            length > table.size() - offset) {
+            length > table.size() - offset || length > 2 * kMaxNameUnits) {
             continue;
         }
         std::string text = utf16Name(table.subspan(offset, length));
@@ -101,7 +107,15 @@ void readNames(std::span<const std::byte> table, FontFace& face) {
                 hasEnglishStyle = isEnglish;
             }
         } else if (!text.empty() && std::ranges::find(face.families, text) == face.families.end()) {
-            face.families.insert(isEnglish ? face.families.begin() : face.families.end(), std::move(text));
+            // English first, the others while there is room.
+            if (isEnglish) {
+                face.families.insert(face.families.begin(), std::move(text));
+                if (face.families.size() > kMaxFamilyNames) {
+                    face.families.pop_back();
+                }
+            } else if (face.families.size() < kMaxFamilyNames) {
+                face.families.push_back(std::move(text));
+            }
         }
     }
 }

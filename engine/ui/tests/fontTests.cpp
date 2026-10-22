@@ -222,6 +222,16 @@ TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
     EXPECT_LT(smoothed->coverage.front(), 255) << "its first column partly covered";
 }
 
+TEST(FontTest, GlyphsOfManyEmsAreRefused) {
+    // Squares of 32000 units, 15 ems: no letter, but a font made to exhaust whoever draws it.
+    auto font = Font::open(squareFile({.side = 32000}), {.cellHeight = 20});
+    ASSERT_TRUE(font.has_value()) << font.error().detail;
+    const auto giant = font->glyph(U'A');
+    ASSERT_FALSE(giant.has_value());
+    EXPECT_EQ(giant.error().code, FontError::BadGlyph);
+    EXPECT_EQ(giant.error().detail, "U+0041: 250 by 250 pixels at 16 pixels per em");
+}
+
 TEST(FontTest, GlyphsWithoutOutlinesOnlyAdvance) {
     const auto space = squareFont(FontSmoothing::None).glyph(U' ');
     ASSERT_TRUE(space.has_value()) << space.error().detail;

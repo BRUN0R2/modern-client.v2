@@ -8,6 +8,7 @@ module;
 #include <freetype/freetype.h>
 #include <freetype/ftdriver.h>
 #include <freetype/ftmodapi.h>
+#include <freetype/ftoutln.h>
 #include <freetype/tttables.h>
 #include <freetype/tttags.h>
 #include <ft2build.h>
@@ -389,6 +390,17 @@ auto Font::glyph(char32_t character) const -> Result<Glyph, FontError> {
                          (m_face->isEmboldened ? 1 : 0);
     if (slot->format == FT_GLYPH_FORMAT_OUTLINE && slot->outline.n_points == 0) {
         return Glyph{.advance = advance}; // nothing to draw: a space
+    }
+    if (slot->format == FT_GLYPH_FORMAT_OUTLINE) {
+        FT_BBox box{};
+        FT_Outline_Get_CBox(&slot->outline, &box);
+        const FT_Pos largest = FT_Pos{kMaxGlyphEms} * m_metrics.pixelsPerEm * kSubpixels;
+        if (box.xMax - box.xMin > largest || box.yMax - box.yMin > largest) {
+            return fail(FontError::BadGlyph,
+                        std::format("U+{:04X}: {} by {} pixels at {} pixels per em", std::uint32_t{character},
+                                    (box.xMax - box.xMin) / kSubpixels, (box.yMax - box.yMin) / kSubpixels,
+                                    m_metrics.pixelsPerEm));
+        }
     }
     if (const FT_Error error = FT_Render_Glyph(slot, isSmooth ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO);
         error != 0) {

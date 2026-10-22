@@ -14,6 +14,7 @@ struct SquareFontDesc {
     std::string style = "Regular";  ///< Its name ID 2.
     std::uint16_t weight = 400;     ///< Its OS/2 usWeightClass.
     bool isItalic = false;          ///< Its OS/2 fsSelection's italic bit.
+    std::int16_t side = 1024;       ///< Of 'A' and 'B', in units: half an em.
     std::uint16_t winAscent = 2049; ///< Tahoma's, so that the font sizes as Tahoma does.
     std::uint16_t winDescent = 423;
     /// The VDMX records of a version 1 table for square pixels (yPelHeight, yMax, yMin); no table when
@@ -32,7 +33,6 @@ struct SquareFontDesc {
 class SquareFont {
 public:
     static constexpr std::int16_t kUnitsPerEm = 2048;
-    static constexpr std::int16_t kSide = 1024;
     static constexpr std::int16_t kQuarterPixelAt16 = 32;
     static constexpr std::uint16_t kAdvance = 1280;
     static constexpr std::uint16_t kSpaceAdvance = 512;
@@ -79,9 +79,9 @@ private:
         if (!desc.gaspRanges.empty()) {
             tables.push_back({"gasp", gridFitting(desc)});
         }
-        const auto [glyphs, locations] = glyphData();
+        const auto [glyphs, locations] = glyphData(desc);
         tables.push_back({"glyf", glyphs});
-        tables.push_back({"head", header()});
+        tables.push_back({"head", header(desc)});
         tables.push_back({"hhea", horizontalHeader(desc)});
         tables.push_back({"hmtx", horizontalMetrics()});
         tables.push_back({"loca", locations});
@@ -185,20 +185,20 @@ private:
         return bytes;
     }
 
-    /// A glyph of one square contour from (left, 0) to (left + kSide, kSide), clockwise.
-    [[nodiscard]] static auto square(std::int16_t left) -> Bytes {
+    /// A glyph of one square contour from (left, 0) to (left + side, side), clockwise.
+    [[nodiscard]] static auto square(std::int16_t left, std::int16_t side) -> Bytes {
         Bytes bytes;
-        putAll(bytes, {1, left, 0, static_cast<std::int16_t>(left + kSide), kSide}); // contours, bounds
-        putAll(bytes, {3, 0});                         // last point, no instructions
-        bytes.insert(bytes.end(), 4, std::byte{0x01}); // each point on the curve
-        putAll(bytes, {left, 0, kSide, 0});            // x, each from the last
-        putAll(bytes, {0, kSide, 0, -kSide});          // y, each from the last
+        putAll(bytes, {1, left, 0, static_cast<std::int16_t>(left + side), side}); // contours, bounds
+        putAll(bytes, {3, 0});                                         // last point, no instructions
+        bytes.insert(bytes.end(), 4, std::byte{0x01});                 // each point on the curve
+        putAll(bytes, {left, 0, side, 0});                             // x, each from the last
+        putAll(bytes, {0, side, 0, static_cast<std::int16_t>(-side)}); // y, each from the last
         return bytes;
     }
 
-    [[nodiscard]] static auto glyphData() -> std::pair<Bytes, Bytes> {
-        const Bytes squareA = square(0);
-        const Bytes squareB = square(kQuarterPixelAt16);
+    [[nodiscard]] static auto glyphData(const SquareFontDesc& desc) -> std::pair<Bytes, Bytes> {
+        const Bytes squareA = square(0, desc.side);
+        const Bytes squareB = square(kQuarterPixelAt16, desc.side);
         Bytes glyphs = squareA;
         glyphs.insert(glyphs.end(), squareB.begin(), squareB.end());
         Bytes locations; // short offsets, halved: .notdef and the space have no outline
@@ -209,7 +209,7 @@ private:
         return {glyphs, locations};
     }
 
-    [[nodiscard]] static auto header() -> Bytes {
+    [[nodiscard]] static auto header(const SquareFontDesc& desc) -> Bytes {
         Bytes bytes;
         put(bytes, std::uint32_t{0x0001'0000}); // version
         put(bytes, std::uint32_t{0x0001'0000}); // fontRevision
@@ -218,7 +218,7 @@ private:
         put(bytes, std::uint16_t{0x0009});      // flags: baseline at 0, whole pixels per em
         put(bytes, kUnitsPerEm);
         bytes.insert(bytes.end(), 16, std::byte{0}); // created, modified
-        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + kSide), kSide}); // bounds
+        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + desc.side), desc.side}); // bounds
         putAll(bytes, {0, 8, 2, 0, 0}); // macStyle, lowestRecPPEM, fontDirectionHint, short offsets, format
         return bytes;
     }
@@ -228,11 +228,11 @@ private:
         put(bytes, std::uint32_t{0x0001'0000});
         putAll(bytes,
                {static_cast<std::int16_t>(desc.winAscent), static_cast<std::int16_t>(-desc.winDescent), 0});
-        put(bytes, kAdvance);                                                        // advanceWidthMax
-        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + kSide)}); // bearings, extent
-        putAll(bytes, {1, 0, 0, 0, 0, 0, 0});                                        // caret, reserved
-        put(bytes, std::int16_t{0});                                                 // metricDataFormat
-        put(bytes, kGlyphCount);                                                     // numberOfHMetrics
+        put(bytes, kAdvance);                                                            // advanceWidthMax
+        putAll(bytes, {0, 0, static_cast<std::int16_t>(kQuarterPixelAt16 + desc.side)}); // bearings, extent
+        putAll(bytes, {1, 0, 0, 0, 0, 0, 0});                                            // caret, reserved
+        put(bytes, std::int16_t{0});                                                     // metricDataFormat
+        put(bytes, kGlyphCount);                                                         // numberOfHMetrics
         return bytes;
     }
 

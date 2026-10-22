@@ -191,9 +191,12 @@ function(nxAddFuzzer target)
         set(workCorpus "${CMAKE_CURRENT_BINARY_DIR}/${target}Corpus")
         set(artifacts "${CMAKE_BINARY_DIR}/fuzzArtifacts")
         file(MAKE_DIRECTORY "${workCorpus}" "${artifacts}")
+        # An input that runs past NX_FUZZ_INPUT_SECONDS is a hang libFuzzer reports and keeps among
+        # the artifacts, rather than one the test's timeout kills without a trace.
         add_test(NAME ${target}
             COMMAND ${target} "${workCorpus}" "${corpus}"
-                -max_total_time=${NX_FUZZ_SECONDS} "-artifact_prefix=${artifacts}/")
+                -max_total_time=${NX_FUZZ_SECONDS} -timeout=${NX_FUZZ_INPUT_SECONDS}
+                "-artifact_prefix=${artifacts}/")
         math(EXPR timeout "${NX_FUZZ_SECONDS} * 2 + 60") # libFuzzer stops itself; this is a backstop
         set_tests_properties(${target} PROPERTIES TIMEOUT ${timeout})
     else()

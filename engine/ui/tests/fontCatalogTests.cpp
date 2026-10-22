@@ -71,6 +71,12 @@ TEST(FontFacesTest, ACollectionHasAFaceForEachOfItsFonts) {
     EXPECT_TRUE(faces[1].isItalic);
 }
 
+TEST(FontFacesTest, OnlyNamesGdiCouldBeAskedForMakeFaces) {
+    EXPECT_EQ(nx::ui::readFontFaces(SquareFont::build({.family = std::string(31, 'F')})).size(), 1U)
+        << "31 characters, as many as GDI's LOGFONT holds";
+    EXPECT_TRUE(nx::ui::readFontFaces(SquareFont::build({.family = std::string(32, 'F')})).empty());
+}
+
 TEST(FontFacesTest, WhatIsNoFontHasNoFaces) {
     EXPECT_TRUE(nx::ui::readFontFaces(std::vector<std::byte>(64, std::byte{'x'})).empty());
     std::vector<std::byte> cut = SquareFont::build();
