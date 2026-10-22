@@ -169,6 +169,16 @@ Readers today:
   brackets (`[$WIN32]`) after a key or a value. The localized strings are UTF-16 little-endian,
   decoded to UTF-8 (`keyValuesText`), and spell `\n`, `\t`, `\\` and `\"` in their quoted words
   (`KeyValuesEscapes::Backslash`); the layouts keep their backslashes. Blocks nest at most 64 deep.
+- VGUI2's schemes (`nx.assets:scheme`, `readScheme` over the KeyValues of `*Scheme.res`): the named
+  colors of `Colors` (three or four numbers, opaque without the fourth); the settings of
+  `BaseSettings`, a block's joined to its name by a dot (`Menu.TextInset`), which name a color, give
+  one or hold other text (a picture, a number); the fonts of `Fonts`, each a list of candidates (a
+  face, a height and a weight, flags such as `antialias` or `symbol`, the screen heights `yres` and
+  the characters `range` it is for); the borders of `Borders`, another's name or an inset and the
+  lines of each side (a color by name, and how far its ends stop short); and the `CustomFontFiles`.
+  `Scheme::color` looks a color up as VGUI2 does (the setting, else the name; a color, or a named
+  one), and `Scheme::border` follows names to the border with lines of its own; a name that leads
+  nowhere, or round in a loop, is refused. Keys VGUI2 does not know are left out.
 - VGUI2's localized strings (`nx.assets:localization`, `LocalizedStrings::read` over the KeyValues
   of `resource/*_<language>.txt`): the language its `lang` block names, and the text of each token
   of its `Tokens`, found with or without the `#` a layout writes before it (`#GameUI_Console`),
