@@ -12,12 +12,14 @@ nxAddModuleLibrary(nxConsole
         src/button.cppm
         src/console.cppm
         src/logLevels.cppm
+        src/history.cppm
     SOURCES
         src/text.cpp
         src/parser.cpp
         src/cvar.cpp
         src/console.cpp
         src/logLevels.cpp
+        src/history.cpp
     DEPENDS
         nx::core)
 

@@ -444,7 +444,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Team and character menus
 - [ ] MOTD with restricted HTML
 - [ ] Main menu, options and server browser
-- [ ] Complete console (history, autocomplete, suggestions)
+- [ ] Complete console (history, autocomplete, suggestions): the window over `nx.console`; its history, completions and suggestions are in `nx.console` ([12 §5.3](docs/12-ui-hud-and-console.md#53-the-nxconsole-module))
 - [x] Binds with the original key names (`nx.settings`, above)
 - [ ] Localization with typed keys
 - [ ] Spectator (free, chase, first person, overview) and `mp_forcecamera`

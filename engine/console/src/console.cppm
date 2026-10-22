@@ -94,6 +94,23 @@ struct CommandDesc {
     std::string_view description{}; ///< What cmdlist and find show.
 };
 
+/// What a name of the console is.
+enum class NameKind : std::uint8_t {
+    Command, ///< Built in or registered, a button's `+name` and `-name` among them.
+    Cvar,
+    Alias,
+    Count,
+};
+
+/// A name of the console that what is typed may complete to, and what the console tells of it.
+struct Completion {
+    std::string name{};
+    NameKind kind = NameKind::Command;
+    std::string description{}; ///< A command's or a cvar's; an alias's body.
+    std::string value{};       ///< A cvar's value, as the console writes it; empty for the others.
+    std::string expectation{}; ///< What a cvar accepts ("a number in [1.8, 3]"); empty for the others.
+};
+
 /// Alias expansions and execs allowed in one execute(). Far above any real script, which expands a
 /// few per command; reaching it means an alias or a config that runs itself without a `wait`.
 inline constexpr std::size_t kMaxExpansionsPerExecute = 1U << 16U;
@@ -180,6 +197,11 @@ public:
 
     /// One `name "value"` line per Archive cvar, sorted by name: what config.cfg saves.
     [[nodiscard]] auto archivedCvars() const -> std::string;
+
+    /// The commands, cvars and aliases whose names begin with `prefix`, letters in any case, in the
+    /// order of their names without regard to case: at most `limit` of them.
+    [[nodiscard]] auto completions(std::string_view prefix, std::size_t limit) const
+        -> std::vector<Completion>;
 
     /// Calls `function` with every cvar, sorted by name without regard to case.
     template <std::invocable<const CvarBase&> Function>

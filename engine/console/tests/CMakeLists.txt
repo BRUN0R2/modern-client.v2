@@ -9,5 +9,6 @@ nxAddTest(nxConsoleTests
         buttonTests.cpp
         listingTests.cpp
         logLevelsTests.cpp
+        completionTests.cpp
     DEPENDS
         nx::console)

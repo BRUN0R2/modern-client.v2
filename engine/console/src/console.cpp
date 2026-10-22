@@ -182,6 +182,34 @@ auto Console::hasCommand(std::string_view name) const -> bool {
     return m_commands.contains(name);
 }
 
+auto Console::completions(std::string_view prefix, std::size_t limit) const -> std::vector<Completion> {
+    std::vector<Completion> found;
+    // Each map is sorted as the names are: its matches are a run from the first name not before the
+    // prefix.
+    const auto collect = [&found, prefix](const auto& names, auto&& make) {
+        for (auto entry = names.lower_bound(prefix);
+             entry != names.end() && startsWithIgnoringCase(entry->first, prefix); ++entry) {
+            found.push_back(make(entry->first, entry->second));
+        }
+    };
+    collect(m_commands, [](const std::string& name, const Command& command) {
+        return Completion{.name = name, .kind = NameKind::Command, .description = command.description};
+    });
+    collect(m_cvars, [](const std::string& name, const std::unique_ptr<CvarBase>& cvar) {
+        return Completion{.name = name,
+                          .kind = NameKind::Cvar,
+                          .description = std::string{cvar->description()},
+                          .value = cvar->text(),
+                          .expectation = cvar->expectation()};
+    });
+    collect(m_aliases, [](const std::string& name, const std::string& body) {
+        return Completion{.name = name, .kind = NameKind::Alias, .description = body};
+    });
+    std::ranges::sort(found, CaseInsensitiveLess{}, &Completion::name);
+    found.resize(std::min(found.size(), limit));
+    return found;
+}
+
 auto Console::checkCvarName(std::string_view name) const -> Result<void, CvarError> {
     if (!isValidName(name)) {
         return fail(CvarError::InvalidName, std::format("\"{}\"", name));
