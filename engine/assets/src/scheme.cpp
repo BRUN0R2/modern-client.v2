@@ -230,9 +230,8 @@ auto Scheme::font(std::string_view name) const noexcept -> const SchemeFont* {
 
 auto Scheme::border(std::string_view name) const noexcept -> const SchemeBorder* {
     const auto named = [this](std::string_view wanted) -> const SchemeBorder* {
-        const auto found = std::ranges::find_if(borders, [wanted](const SchemeBorder& each) {
-            return equalsIgnoringCase(each.name, wanted);
-        });
+        const auto found = std::ranges::find_if(
+            borders, [wanted](const SchemeBorder& each) { return equalsIgnoringCase(each.name, wanted); });
         return found == borders.end() ? nullptr : &*found;
     };
     const SchemeBorder* reached = named(name);
