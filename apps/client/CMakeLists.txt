@@ -21,6 +21,7 @@ nxAddModuleLibrary(appClient
         nx::rhi
         nx::rhiVulkan
         nx::render
+        cs::shared
         cs::client)
 
 nxAddProgram(next
@@ -30,7 +31,7 @@ nxAddProgram(next
         app::client
         nx::core)
 
-# The world, studio and sprite shaders, in bin/shaders/.
+# The world, studio, sprite and screen shaders, in bin/shaders/.
 add_dependencies(next nxShaders)
 
 if(NX_BUILD_TESTS)

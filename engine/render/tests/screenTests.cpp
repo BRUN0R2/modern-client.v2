@@ -3,7 +3,8 @@
 
 // The screen drawn offscreen on whatever Vulkan device the machine has (lavapipe in CI), with
 // validation: pictures of a palette built here, each texel on the pixel it covers, drawn as they are,
-// added or blended; colors alone; text in a console font; and a sprite's frames.
+// added or blended; a sprite's rectangle as the original draws it; colors alone; text in a console
+// font; and a sprite's frames.
 
 #include <gtest/gtest.h>
 
@@ -164,6 +165,38 @@ TEST(ScreenRendererTest, APartOfAPictureStretchesTexelsIntoBlocks) {
           std::tuple{0U, 3U, 24UZ}, std::tuple{5U, 5U, 255UZ}}) {
         expectRgb(pixelAt(drawn, x, y), shown(index), std::format("pixel {}, {}", x, y));
     }
+    EXPECT_EQ(screen.validationErrors(), 0U);
+}
+
+TEST(ScreenRendererTest, ASpriteRectangleIsDrawnAPixelLargerEachWayAndFilteredLinearly) {
+    Screen screen;
+    if (!screen.isReady()) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    // A 2 x 1 picture of indices 10 and 40: over 3 x 2 pixels, the middle column is half of each.
+    const std::vector<std::byte> palette = paletteBytes();
+    const std::array pixels{std::byte{10}, std::byte{40}};
+    const nx::assets::WadPicture picture{.width = 2, .height = 1, .pixels = pixels, .palette = palette};
+    const nx::render::ScreenImage opaque = screen.load([&](nx::rhi::CommandList& commands) {
+        return screen.renderer().loadPicture(commands, picture, nx::render::PictureMask::Opaque, "pair");
+    });
+    const std::array quads{nx::render::spriteQuad(opaque, {.x = 0, .y = 0, .width = 2, .height = 1}, 4.0F,
+                                                  2.0F, {}, ScreenBlend::Normal)};
+    EXPECT_EQ(quads[0].target.width, 3.0F);
+    EXPECT_EQ(quads[0].target.height, 2.0F);
+    const std::vector<std::byte> drawn = screen.draw(quads);
+
+    const std::array<int, 3> left = shown(10);
+    const std::array<int, 3> right = shown(40);
+    for (const std::uint32_t y : {2U, 3U}) {
+        expectRgb(pixelAt(drawn, 4, y), left, std::format("the first texel, row {}", y));
+        expectRgb(pixelAt(drawn, 5, y),
+                  {(left[0] + right[0]) / 2, (left[1] + right[1]) / 2, (left[2] + right[2]) / 2},
+                  std::format("half of each, row {}", y));
+        expectRgb(pixelAt(drawn, 6, y), right, std::format("the second texel, row {}", y));
+    }
+    EXPECT_EQ(pixelAt(drawn, 7, 2), (Pixel{0, 0, 0, 0})) << "nothing right of it";
+    EXPECT_EQ(pixelAt(drawn, 4, 4), (Pixel{0, 0, 0, 0})) << "nothing under it";
     EXPECT_EQ(screen.validationErrors(), 0U);
 }
 

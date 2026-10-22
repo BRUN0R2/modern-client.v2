@@ -5,6 +5,7 @@ nxAddTest(csClientTests
     SOURCES
         inputTests.cpp
         mapTests.cpp
+        hudTests.cpp
     DEPENDS
         cs::client
         cs::shared

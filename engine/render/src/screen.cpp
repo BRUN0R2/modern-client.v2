@@ -149,6 +149,19 @@ auto appendText(std::vector<ScreenQuad>& quads, const ScreenFont& font, std::str
     return x;
 }
 
+auto spriteQuad(const ScreenImage& image, assets::SpriteRect source, float x, float y, ScreenColor color,
+                ScreenBlend blend) -> ScreenQuad {
+    return ScreenQuad{.image = &image,
+                      .source = source,
+                      .target = {.x = x,
+                                 .y = y,
+                                 .width = static_cast<float>(source.width + 1),
+                                 .height = static_cast<float>(source.height + 1)},
+                      .color = color,
+                      .blend = blend,
+                      .filter = ScreenFilter::Linear};
+}
+
 auto ScreenRenderer::create(rhi::Device& device, const ScreenRendererDesc& desc)
     -> Result<ScreenRenderer, ScreenError> {
     ScreenRenderer renderer{device};
@@ -180,22 +193,27 @@ auto ScreenRenderer::createPipelines(const ScreenRendererDesc& desc) -> Result<v
     auto shader = device.createShader({.label = "screen", .code = desc.shaderCode});
     auto frameLayout = device.createBindGroupLayout({.label = "screen.frame", .bindings = frameBindings});
     auto imageLayout = device.createBindGroupLayout({.label = "screen.image", .bindings = imageBindings});
-    // A texel to a pixel: the nearest, which keeps a picture sharp at any whole scale.
-    auto sampler = device.createSampler({.label = "screen.image",
-                                         .magnify = rhi::Filter::Nearest,
-                                         .minify = rhi::Filter::Nearest,
-                                         .mipmap = rhi::Filter::Nearest,
-                                         .address = rhi::AddressMode::ClampToEdge});
-    if (!shader || !frameLayout || !imageLayout || !sampler) {
+    if (!shader || !frameLayout || !imageLayout) {
         return std::unexpected(!shader        ? std::move(shader.error())
                                : !frameLayout ? std::move(frameLayout.error())
-                               : !imageLayout ? std::move(imageLayout.error())
-                                              : std::move(sampler.error()));
+                                              : std::move(imageLayout.error()));
     }
     m_shader = std::move(*shader);
     m_frameLayout = std::move(*frameLayout);
     m_imageLayout = std::move(*imageLayout);
-    m_sampler = std::move(*sampler);
+    using Filters = EnumArray<ScreenFilter, rhi::Filter>;
+    const Filters filters{Filters::Storage{rhi::Filter::Nearest, rhi::Filter::Linear}};
+    for (const ScreenFilter filter : Filters::keys()) {
+        auto sampler = device.createSampler({.label = std::format("screen.image.{}", enumName(filter)),
+                                             .magnify = filters[filter],
+                                             .minify = filters[filter],
+                                             .mipmap = rhi::Filter::Nearest,
+                                             .address = rhi::AddressMode::ClampToEdge});
+        if (!sampler) {
+            return std::unexpected{std::move(sampler.error())};
+        }
+        m_samplers[filter] = std::move(*sampler);
+    }
 
     // Over everything the frame drew, its depth neither tested nor written.
     const std::array vertexBuffers{
@@ -290,16 +308,20 @@ auto ScreenRenderer::upload(rhi::CommandList& commands, std::span<const std::byt
     if (!texture) {
         return fail(ScreenError::GpuFailed, std::string{label}, std::move(texture.error()));
     }
-    const std::array bindings{rhi::Binding{.binding = kImageBinding, .resource = texture->get()},
-                              rhi::Binding{.binding = kImageSamplerBinding, .resource = m_sampler.get()}};
-    auto group =
-        m_device->createBindGroup({.label = label, .layout = m_imageLayout.get(), .bindings = bindings});
-    if (!group) {
-        return fail(ScreenError::GpuFailed, std::string{label}, std::move(group.error()));
-    }
     ScreenImage image;
+    for (const ScreenFilter filter : EnumArray<ScreenFilter, rhi::OwnedSampler>::keys()) {
+        const std::array bindings{
+            rhi::Binding{.binding = kImageBinding, .resource = texture->get()},
+            rhi::Binding{.binding = kImageSamplerBinding, .resource = m_samplers[filter].get()}};
+        auto group = m_device->createBindGroup({.label = std::format("{}.{}", label, enumName(filter)),
+                                                .layout = m_imageLayout.get(),
+                                                .bindings = bindings});
+        if (!group) {
+            return fail(ScreenError::GpuFailed, std::string{label}, std::move(group.error()));
+        }
+        image.m_groups[filter] = std::move(*group);
+    }
     image.m_texture = std::move(*texture);
-    image.m_group = std::move(*group);
     image.m_width = width;
     image.m_height = height;
     return image;
@@ -357,8 +379,8 @@ auto ScreenRenderer::prepare(const ScreenDraw& draw) -> Result<void, ScreenError
     for (const ScreenQuad& quad : draw.quads) {
         const ScreenBatch next{.pipeline = quad.image != nullptr ? m_picturePipelines[quad.blend].get()
                                                                  : m_colorPipelines[quad.blend].get(),
-                               .image =
-                                   quad.image != nullptr ? quad.image->m_group.get() : rhi::BindGroupHandle{},
+                               .image = quad.image != nullptr ? quad.image->m_groups[quad.filter].get()
+                                                              : rhi::BindGroupHandle{},
                                .firstQuad = narrow<std::uint32_t>(vertices.size() / kQuadVertices),
                                .quadCount = 1};
         if (!m_batches.empty() && m_batches.back().pipeline == next.pipeline &&

@@ -17,6 +17,7 @@ import nx.settings;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
+import cs.shared;
 import cs.client;
 
 namespace app {
@@ -167,6 +168,8 @@ private:
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
     void startNextSession();
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
+    [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
+        -> nx::Result<void, ClientError>;
     [[nodiscard]] auto drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
@@ -181,10 +184,14 @@ private:
     std::optional<cs::PlayerInput> m_input;
     std::optional<cs::GameContent> m_content;
     std::optional<cs::SceneShaders> m_shaders;
+    std::vector<std::byte> m_screenShader;
     std::optional<Session> m_session;     ///< The map played.
     std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene; ///< Of the session's level, made with the first image of it.
+    std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
+    std::optional<cs::Hud> m_hud;                       ///< None when its pictures could not be read.
+    std::vector<nx::render::ScreenQuad> m_screenQuads;  ///< What the screen draws in a frame.
     std::optional<nx::rhi::OwnedTexture> m_depth;
     nx::rhi::Extent2d m_depthExtent{};
     std::vector<nx::platform::WindowEvent> m_events;
@@ -218,6 +225,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(shaders.error()));
     }
     m_shaders = std::move(*shaders);
+    auto screenShader = nx::platform::readFile(executable->parent_path() / "shaders" / "screen.spv");
+    if (!screenShader) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(screenShader.error()));
+    }
+    m_screenShader = std::move(*screenShader);
     // The player's files, then the command line's commands, as the original's valve.rc runs them.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
@@ -388,6 +400,9 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
         m_depth = std::move(*created); // the old one, if any, goes
         m_depthExtent = frame.size;
     }
+    if (auto uploaded = upload(list, frame.format); !uploaded) {
+        return uploaded;
+    }
     list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(m_depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
@@ -405,13 +420,26 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
     return {};
 }
 
-auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-    -> nx::Result<void, ClientError> {
-    if (!m_session) {
-        return {}; // no map: the void
+/// Puts on the GPU what the frame draws that is not there yet, its uploads recorded in `list` before
+/// the frame renders: the screen and the HUD's pictures, and the scene of the map played.
+auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::Result<void, ClientError> {
+    if (!m_screen) {
+        auto screen = nx::render::ScreenRenderer::create(
+            *m_video->device,
+            {.shaderCode = m_screenShader, .colorFormat = format, .gamma = gammaOf(m_cvars->video)});
+        if (!screen) {
+            return nx::fail(ClientError::GpuFailed, std::move(screen.error()));
+        }
+        m_screen.emplace(std::move(*screen));
+        if (auto hud = cs::Hud::load(m_content->vfs, *m_screen, list); hud) {
+            m_hud.emplace(std::move(*hud));
+        } else {
+            nx::log::warning(kLog, "the HUD is not drawn: {}",
+                             nx::describe(hud.error())); // the game plays on
+        }
     }
-    if (!m_scene) {
-        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, frame.format,
+    if (m_session && !m_scene) {
+        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, format,
                                        gammaOf(m_cvars->video));
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
@@ -419,6 +447,14 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
         m_scene.emplace(std::move(*scene));
         std::ignore = m_mapClock.restart();    // the light styles start with the map
         std::ignore = m_deployClock.restart(); // and the player draws the knife
+    }
+    return {};
+}
+
+auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+    -> nx::Result<void, ClientError> {
+    if (!m_session) {
+        return {}; // no map: the void
     }
     const std::vector<nx::render::ModelPlacement> placements = m_session->game->placements();
     if (auto drawn = m_scene->draw(
@@ -429,6 +465,17 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
              .placements = placements,
              .sinceDeploy = nx::Seconds{m_deployClock.elapsed()}});
         !drawn) {
+        return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
+    }
+    if (!m_hud || !m_cvars->video.hudDraw.value()) {
+        return {};
+    }
+    // The HUD, over the scene.
+    const cs::PlayerStatus& status = m_session->game->status();
+    m_screenQuads.clear();
+    m_hud->append(m_screenQuads, {.health = status.health, .armor = status.armor, .money = status.money},
+                  frame.size);
+    if (auto drawn = m_screen->draw(list, {.size = frame.size, .quads = m_screenQuads}); !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }
     return {};

@@ -13,7 +13,8 @@ nxAddProgram(nxview
         nx::rhi
         nx::rhiVulkan
         nx::render
+        cs::shared
         cs::client)
 
-# The world, studio and sprite shaders, in bin/shaders/.
+# The world, studio, sprite and screen shaders, in bin/shaders/.
 add_dependencies(nxview nxShaders)

@@ -10,6 +10,7 @@ nxAddModuleLibrary(csShared
         src/cs.shared.cppm
         src/movement.cppm
         src/studio.cppm
+        src/player.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp

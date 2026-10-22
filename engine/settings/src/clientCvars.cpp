@@ -85,14 +85,20 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                         .description = "The gamma the lightmaps are brought from; read when a map is loaded.",
                         .minimum = kLeastGamma,
                         .maximum = kMostGamma});
+    auto hudDraw = console.registerCvar(CvarDesc<bool>{.name = "hud_draw",
+                                                       .defaultValue = true,
+                                                       .description = "Whether the HUD is drawn.",
+                                                       .flags = kArchived});
     for (auto* const registered :
          {&sensitivity, &yaw, &pitch, &fpsMax, &gamma, &brightness, &textureGamma, &lightGamma}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
     }
-    if (!vsync) {
-        return std::unexpected{std::move(vsync.error())};
+    for (auto* const registered : {&vsync, &hudDraw}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
     }
     return ClientCvars{.mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
                        .video = {.fpsMax = *fpsMax,
@@ -100,7 +106,8 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .gamma = *gamma,
                                  .brightness = *brightness,
                                  .textureGamma = *textureGamma,
-                                 .lightGamma = *lightGamma}};
+                                 .lightGamma = *lightGamma,
+                                 .hudDraw = *hudDraw}};
 }
 
 } // namespace nx::settings

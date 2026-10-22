@@ -28,6 +28,7 @@ struct VideoCvars {
     console::Cvar<float> brightness;
     console::Cvar<float> textureGamma; ///< `texgamma`.
     console::Cvar<float> lightGamma;   ///< `lightgamma`.
+    console::Cvar<bool> hudDraw;       ///< `hud_draw`: the HUD is drawn.
 };
 
 struct ClientCvars {

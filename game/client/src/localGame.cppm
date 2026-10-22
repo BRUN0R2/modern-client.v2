@@ -52,11 +52,15 @@ public:
     /// show: what the scene draws them by.
     [[nodiscard]] auto placements() -> std::vector<nx::render::ModelPlacement>;
 
+    /// What the player has: what it spawned with, until the game's rules change it.
+    [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
+
 private:
     const Level* m_level;
     nx::ecs::World m_world;
     nx::ecs::Entity m_body{};
     MovementState m_player{};
+    PlayerStatus m_status{};
     nx::Vec3 m_previousEye{};          ///< Before the last command.
     nx::Seconds m_pending{};           ///< Of the time given to the game, what no tick has taken yet.
     nx::Flags<Button> m_lastButtons{}; ///< Of the last command: the use button acts as it goes down.

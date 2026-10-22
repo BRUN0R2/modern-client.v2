@@ -17,6 +17,7 @@ nxAddModuleLibrary(csClient
         src/level.cppm
         src/scene.cppm
         src/localGame.cppm
+        src/hud.cppm
     SOURCES
         src/input.cpp
         src/entityKeys.cpp
@@ -28,6 +29,7 @@ nxAddModuleLibrary(csClient
         src/level.cpp
         src/scene.cpp
         src/localGame.cpp
+        src/hud.cpp
     DEPENDS
         nx::core
         nx::math

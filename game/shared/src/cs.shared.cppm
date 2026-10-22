@@ -5,8 +5,9 @@
 /// section 1.1): player movement, weapons and the rules they share. Compiled once, into the one
 /// library both link (docs/07-simulation-and-physics.md, section 6).
 ///
-/// Today: player movement in the world.
+/// Today: player movement in the world, and what a player has as it spawns.
 export module cs.shared;
 
 export import :movement;
 export import :studio;
+export import :player;
