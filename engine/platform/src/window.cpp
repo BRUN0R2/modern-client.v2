@@ -77,6 +77,8 @@ static_assert(std::to_underlying(MouseButton::Left) == SDL_BUTTON_LEFT &&
         // A flipped wheel ("natural scrolling") reports the opposite of the finger's motion.
         return MouseWheelMoved{.dy = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y
                                                                                      : event.wheel.y};
+    case SDL_EVENT_TEXT_INPUT:
+        return TextEntered{.text = event.text.text != nullptr ? std::string{event.text.text} : std::string{}};
     default:
         return std::nullopt;
     }
@@ -154,6 +156,18 @@ auto Window::setMouseMode(MouseMode mode) -> Result<void, WindowError> {
                     std::format("SDL_SetWindowRelativeMouseMode: {}", sdlError()));
     }
     return {};
+}
+
+auto Window::setTextInput(bool isOn) -> Result<void, WindowError> {
+    if (!(isOn ? SDL_StartTextInput(windowOf(m_window)) : SDL_StopTextInput(windowOf(m_window)))) {
+        return fail(WindowError::TextInputUnavailable,
+                    std::format("{}: {}", isOn ? "SDL_StartTextInput" : "SDL_StopTextInput", sdlError()));
+    }
+    return {};
+}
+
+auto Window::isTextInputOn() const noexcept -> bool {
+    return SDL_TextInputActive(windowOf(m_window));
 }
 
 void Window::pollEvents(std::vector<WindowEvent>& events) {

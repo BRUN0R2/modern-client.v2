@@ -277,7 +277,10 @@ category the application passes in (`log_level_net debug`, or the level's number
 
 - **SDL3** for keyboard, mouse and gamepad, behind `nx::platform::Window`: keys arrive by
   physical position (`Key`, the USB HID usage code), the mouse as relative motion in its own
-  counts (`MouseMoved`), and the window gives a GPU backend its native handles.
+  counts (`MouseMoved`), and the window gives a GPU backend its native handles. Typed text arrives
+  apart from the keys, as the keyboard's layout and the system's input method make it
+  (`TextEntered`, UTF-8), while text input is on (`Window::setTextInput`): the console and the
+  menus' text entries turn it on while they have the keyboard.
 - **Raw mouse** by default (`m_rawinput 1`), without OS acceleration. Sensitivity is
   calibrated so that `sensitivity` has **the same effect in degrees per count** as in the
   original (validated by a parity test).

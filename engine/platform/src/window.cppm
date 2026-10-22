@@ -18,6 +18,7 @@ enum class WindowError : std::uint8_t {
     NoNativeWindow,           ///< The video driver has no window a GPU can draw to (offscreen).
     RelativeMouseUnavailable, ///< The mouse could not be captured for relative motion.
     SizeUnavailable,          ///< The video driver did not tell the size of the window.
+    TextInputUnavailable,     ///< Text input could not be turned on or off.
 };
 
 /// How the mouse reports itself to the window.
@@ -197,9 +198,15 @@ struct MouseWheelMoved {
     float dy = 0.0F;
 };
 
+/// Text the user typed while text input is on (Window::setTextInput), as the keyboard's layout and
+/// the system's input method make it: what a text entry inserts. Its keys are reported too.
+struct TextEntered {
+    std::string text{}; ///< UTF-8.
+};
+
 /// Anything that happened to the window or its input, as pollEvents reports it.
 using WindowEvent = std::variant<CloseRequested, Resized, Minimized, FocusChanged, KeyChanged, MouseMoved,
-                                 MouseButtonChanged, MouseWheelMoved>;
+                                 MouseButtonChanged, MouseWheelMoved, TextEntered>;
 
 /// A Win32 window: the HINSTANCE and HWND a Vulkan or D3D11 surface is made from.
 struct Win32Window {
@@ -260,6 +267,13 @@ public:
 
     /// Puts the mouse in `mode`. Errors: RelativeMouseUnavailable.
     [[nodiscard]] auto setMouseMode(MouseMode mode) -> Result<void, WindowError>;
+
+    /// Turns text input on, for typing in the console and the menus' text entries, or off; it starts
+    /// off. While it is on, pollEvents reports TextEntered, and the system may show its input method.
+    /// Errors: TextInputUnavailable.
+    [[nodiscard]] auto setTextInput(bool isOn) -> Result<void, WindowError>;
+    /// Whether text input is on.
+    [[nodiscard]] auto isTextInputOn() const noexcept -> bool;
 
     /// Appends the events that arrived since the last call, in order, to `events`.
     void pollEvents(std::vector<WindowEvent>& events);
