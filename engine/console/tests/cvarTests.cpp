@@ -146,6 +146,32 @@ TEST(CvarTextTest, TextKeepsWhatTheConsoleCanWriteBack) {
     EXPECT_EQ(cvar.value(), "My Server; really");
 }
 
+/// The sizes of a crosshair, as a text cvar names them.
+[[nodiscard]] auto isSize(std::string_view text) noexcept -> bool {
+    return text == "small" || text == "large";
+}
+
+TEST(CvarTextTest, TextWithARuleTakesOnlyWhatTheRuleAccepts) {
+    TypedCvar<std::string> cvar{
+        CvarDesc<std::string>{.name = "cl_size",
+                              .defaultValue = "small",
+                              .rule = {.expectation = "small or large", .accepts = isSize}}};
+    EXPECT_TRUE(cvar.checkDefinition().has_value());
+    EXPECT_TRUE(cvar.assign("large").has_value());
+    EXPECT_EQ(cvar.value(), "large");
+    const auto refused = cvar.assign("huge");
+    ASSERT_FALSE(refused.has_value());
+    EXPECT_EQ(refused.error().code, CvarError::InvalidValue);
+    EXPECT_EQ(refused.error().detail, R"(cl_size: expected small or large, got "huge")");
+    EXPECT_EQ(cvar.value(), "large");
+
+    const TypedCvar<std::string> refusesItsDefault{
+        CvarDesc<std::string>{.name = "cl_size",
+                              .defaultValue = "huge",
+                              .rule = {.expectation = "small or large", .accepts = isSize}}};
+    EXPECT_EQ(refusesItsDefault.checkDefinition().error().code, CvarError::InvalidDefinition);
+}
+
 TEST(CvarTextTest, EnumsTakeTheValueOrTheName) {
     TypedCvar<ForceCamera> cvar{CvarDesc<ForceCamera>{.name = "mp_forcecamera"}};
     EXPECT_EQ(cvar.kind(), CvarKind::Enum);

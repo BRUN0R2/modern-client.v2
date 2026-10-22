@@ -63,6 +63,23 @@ struct CvarDesc {
     CvarFlags flags{};              ///< How the console treats the cvar.
 };
 
+/// What a text cvar accepts besides text the console can write back: the text `accepts` takes, as
+/// `expectation` says it in messages ("auto, small, medium or large"). Without `accepts`, any.
+struct TextRule {
+    std::string_view expectation{};
+    bool (*accepts)(std::string_view text) noexcept = nullptr;
+};
+
+/// Definition of a text cvar: also the rule of the text it accepts.
+template <>
+struct CvarDesc<std::string> {
+    ConsoleName name;               ///< Unique among cvars, commands and aliases, in any case.
+    std::string defaultValue{};     ///< The value after registration; the cvar must accept it.
+    std::string_view description{}; ///< What find searches and shows.
+    CvarFlags flags{};              ///< How the console treats the cvar.
+    TextRule rule{};
+};
+
 /// Definition of a numeric cvar: also an optional range, inclusive at both ends.
 template <NumericCvarType Type>
 struct CvarDesc<Type> {
@@ -186,6 +203,8 @@ public:
           m_default{desc.defaultValue} {
         if constexpr (NumericCvarType<Type>) {
             m_range = Range{.minimum = desc.minimum, .maximum = desc.maximum};
+        } else if constexpr (std::same_as<Type, std::string>) {
+            m_rule = desc.rule;
         }
     }
 
@@ -244,7 +263,8 @@ public:
         } else if constexpr (std::same_as<Type, float>) {
             return detail::rangeExpectation("a number", m_range.minimum, m_range.maximum);
         } else if constexpr (std::same_as<Type, std::string>) {
-            return "text without double quotes or line breaks";
+            return m_rule.accepts != nullptr ? std::string{m_rule.expectation}
+                                             : "text without double quotes or line breaks";
         } else {
             std::string choices = "one of";
             std::string_view separator = " ";
@@ -310,7 +330,8 @@ private:
                 return refuse(CvarError::OutOfRange, format(candidate));
             }
         } else if constexpr (std::same_as<Type, std::string>) {
-            if (!detail::isWritableText(candidate)) {
+            if (!detail::isWritableText(candidate) ||
+                (m_rule.accepts != nullptr && !m_rule.accepts(candidate))) {
                 return refuse(CvarError::InvalidValue, candidate);
             }
         } else if constexpr (CountedEnum<Type>) {
@@ -324,6 +345,7 @@ private:
     Type m_value;
     Type m_default;
     std::conditional_t<NumericCvarType<Type>, Range, NoRange> m_range{};
+    std::conditional_t<std::same_as<Type, std::string>, TextRule, NoRange> m_rule{};
 };
 
 /// Typed handle to a registered cvar: what code reads every tick and sets directly. Setting from

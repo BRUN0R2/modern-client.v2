@@ -5,6 +5,7 @@ module cs.client;
 
 import std;
 import nx.core;
+import nx.console;
 import nx.assets;
 import nx.rhi;
 import nx.render;
@@ -40,6 +41,42 @@ constexpr std::size_t kArmorRoom = 3;
 constexpr std::size_t kMoneyRoom = 5;
 /// The armor that fills the suit.
 constexpr float kFullArmor = 100.0F;
+
+// The crosshair (docs/12 section 3.2, measured at 640x480 to 1600x900): its lines' length before its
+// scale, the screen width its scale is 1 at, and the widths auto turns medium and large at.
+constexpr std::uint64_t kCrosshairLength = 5;
+constexpr std::uint64_t kCrosshairWidth = 640;
+constexpr std::uint32_t kMediumFrom = 800;
+constexpr std::uint32_t kLargeFrom = 1024;
+/// The names cl_crosshair_size takes.
+constexpr nx::EnumArray<CrosshairSize, std::string_view> kSizeNames{
+    nx::EnumArray<CrosshairSize, std::string_view>::Storage{"auto", "small", "medium", "large"}};
+
+/// A factor of the crosshair's scale, kept exact.
+struct Fraction {
+    std::uint64_t numerator = 1;
+    std::uint64_t denominator = 1;
+};
+
+/// The factor of `size`, which is not Auto.
+[[nodiscard]] auto factorOf(CrosshairSize size) noexcept -> Fraction {
+    switch (size) {
+    case CrosshairSize::Small:
+        return {.numerator = 5, .denominator = 8};
+    case CrosshairSize::Medium:
+        return {.numerator = 4, .denominator = 5};
+    default:
+        return {};
+    }
+}
+
+[[nodiscard]] auto isCrosshairSize(std::string_view text) noexcept -> bool {
+    return crosshairSizeNamed(text).has_value();
+}
+
+[[nodiscard]] auto isCrosshairColor(std::string_view text) noexcept -> bool {
+    return crosshairColorOf(text).has_value();
+}
 
 /// The digits of the whole part of `value`, a finite number above 0: exactly, however many.
 [[nodiscard]] auto wholeDigits(float value) -> std::string {
@@ -138,6 +175,100 @@ auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d siz
     return marks;
 }
 
+auto crosshairSizeNamed(std::string_view text) noexcept -> std::optional<CrosshairSize> {
+    for (const CrosshairSize size : nx::EnumArray<CrosshairSize, std::string_view>::keys()) {
+        if (kSizeNames[size] == text) {
+            return size;
+        }
+    }
+    return std::nullopt;
+}
+
+auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::render::ScreenColor> {
+    constexpr std::uint32_t kChannelTop = 255;
+    std::array<std::uint8_t, 3> channels{};
+    std::size_t count = 0;
+    for (const auto part : std::views::split(text, ' ')) {
+        const std::string_view word{part};
+        if (word.empty()) {
+            continue;
+        }
+        std::uint32_t channel = 0;
+        const auto [end, error] = std::from_chars(word.data(), word.data() + word.size(), channel);
+        if (count == channels.size() || error != std::errc{} || end != word.data() + word.size() ||
+            channel > kChannelTop) {
+            return std::nullopt;
+        }
+        channels[count++] = static_cast<std::uint8_t>(channel);
+    }
+    if (count != channels.size()) {
+        return std::nullopt;
+    }
+    return nx::render::ScreenColor{.red = channels[0], .green = channels[1], .blue = channels[2]};
+}
+
+auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars, nx::console::CvarError> {
+    using nx::console::CvarDesc;
+    constexpr nx::console::CvarFlags kArchived{nx::console::CvarFlag::Archive};
+    auto color = console.registerCvar(CvarDesc<std::string>{
+        .name = "cl_crosshair_color",
+        .defaultValue = "50 250 50",
+        .description = "The crosshair's color: red, green and blue, from 0 to 255.",
+        .flags = kArchived,
+        .rule = {.expectation = "three whole numbers from 0 to 255", .accepts = isCrosshairColor}});
+    auto size = console.registerCvar(CvarDesc<std::string>{
+        .name = "cl_crosshair_size",
+        .defaultValue = "auto",
+        .description = "The crosshair's size: auto picks it by the screen's width.",
+        .flags = kArchived,
+        .rule = {.expectation = "auto, small, medium or large", .accepts = isCrosshairSize}});
+    auto translucent = console.registerCvar(
+        nx::console::CvarDesc<bool>{.name = "cl_crosshair_translucent",
+                                    .defaultValue = true,
+                                    .description = "Whether the crosshair is added to what is behind it.",
+                                    .flags = kArchived});
+    if (!color || !size) {
+        return std::unexpected{std::move(!color ? color.error() : size.error())};
+    }
+    if (!translucent) {
+        return std::unexpected{std::move(translucent.error())};
+    }
+    return HudCvars{.crosshairColor = *color, .crosshairSize = *size, .crosshairTranslucent = *translucent};
+}
+
+auto HudCvars::crosshair() const -> CrosshairStyle {
+    const std::optional<nx::render::ScreenColor> color = crosshairColorOf(crosshairColor.value());
+    const std::optional<CrosshairSize> size = crosshairSizeNamed(crosshairSize.value());
+    nx::invariant(color.has_value() && size.has_value(), "HudCvars: their rules keep their values valid");
+    const CrosshairStyle defaults{};
+    return {.color = color.value_or(defaults.color),
+            .size = size.value_or(defaults.size),
+            .isTranslucent = crosshairTranslucent.value()};
+}
+
+auto crosshairRects(CrosshairSize crosshairSize, std::uint32_t distance, nx::rhi::Extent2d size)
+    -> std::array<nx::render::ScreenRect, 4> {
+    if (crosshairSize == CrosshairSize::Auto) {
+        crosshairSize = size.width < kMediumFrom  ? CrosshairSize::Small
+                        : size.width < kLargeFrom ? CrosshairSize::Medium
+                                                  : CrosshairSize::Large;
+    }
+    const Fraction factor = factorOf(crosshairSize);
+    // ⌊units · width / 640 · factor⌋, in whole numbers: exact at every width.
+    const auto scaled = [&](std::uint64_t units) {
+        return static_cast<float>((units * size.width * factor.numerator) /
+                                  (kCrosshairWidth * factor.denominator));
+    };
+    const float length = scaled(kCrosshairLength);
+    const float gap = scaled(distance);
+    const auto x = static_cast<float>(size.width / 2);
+    const auto y = static_cast<float>(size.height / 2);
+    return {nx::render::ScreenRect{.x = x - gap - length + 1.0F, .y = y, .width = length, .height = 1.0F},
+            nx::render::ScreenRect{.x = x + gap, .y = y, .width = length, .height = 1.0F},
+            nx::render::ScreenRect{.x = x, .y = y - gap - length + 1.0F, .width = 1.0F, .height = length},
+            nx::render::ScreenRect{.x = x, .y = y + gap, .width = 1.0F, .height = length}};
+}
+
 Hud::Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,
          nx::EnumArray<HudPicture, std::size_t> imageOf) noexcept
     : m_sheet{std::move(sheet)}, m_images{std::move(images)}, m_imageOf{imageOf} {}
@@ -199,7 +330,7 @@ auto Hud::load(const nx::assets::Vfs& vfs, nx::render::ScreenRenderer& screen, n
 }
 
 void Hud::append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
-                 nx::rhi::Extent2d size) const {
+                 const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const {
     for (const HudMark& mark : layoutHud(view, m_sheet, size)) {
         nx::assets::SpriteRect source = m_sheet[mark.picture].rect;
         source.y += mark.cutTop;
@@ -207,6 +338,15 @@ void Hud::append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view
         quads.push_back(nx::render::spriteQuad(m_images[m_imageOf[mark.picture]], source,
                                                static_cast<float>(mark.x), static_cast<float>(mark.y),
                                                kHudColor, nx::render::ScreenBlend::Additive));
+    }
+    if (!view.crosshairDistance) {
+        return;
+    }
+    // As FillRGBA draws it: added at its full alpha, or drawn as it is.
+    const nx::render::ScreenBlend blend =
+        crosshair.isTranslucent ? nx::render::ScreenBlend::Additive : nx::render::ScreenBlend::Normal;
+    for (const nx::render::ScreenRect& line : crosshairRects(crosshair.size, *view.crosshairDistance, size)) {
+        quads.push_back(nx::render::ScreenQuad{.target = line, .color = crosshair.color, .blend = blend});
     }
 }
 
