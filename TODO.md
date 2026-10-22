@@ -338,7 +338,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### Basic HUD
 - [x] HUD sprite and font renderer (`nx.render:screen`: pictures of sprites and WADs, console fonts, drawn as they are, added or blended, in pixels)
 - [x] Health, armor and money where the original draws them, measured on it (`cs.client:hud`, [12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution)); `hud_draw`
-- [ ] Ammo and the crosshair (with the original cvars), measured at more resolutions; the first row of each HUD picture, which the original leaves out
+- [ ] Ammo, and the crosshair with the original cvars (measured: [12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution)); the first row of each HUD picture, which the original leaves out
 - [x] Numbers without truncation: health above 255, armor and money ([12 §3.4](docs/12-ui-hud-and-console.md#34-no-value-truncation)); high ammo counts with the ammo
 - [x] HUD regression test with health 5000, 100000 and the type's maximum
 

@@ -49,16 +49,18 @@
   without blurring sprites.
 - Wide aspect ratios (16:9, 21:9) keep the original relative position of the elements.
 
-**Observed** (Counter-Strike 1.6, build 8684 through NextClient, de_dust2 at 640x480, 1280x720 and
-1920x1080, `gamma` 3: snapshots with `hud_draw` 1 and 0, what the HUD added fitted to the sprites'
-texels): the HUD does not scale. The 640 entries of `hud.txt` are drawn at every resolution from 640
-wide up, at their size in pixels, and the elements keep to the screen's edges and middle. The
-pictures are added (`SPR_DrawAdditive`) in (255, 160, 0) at the alpha the HUD rests at, 100, their
-palettes through the texture gamma (the texels match to within one level). A rectangle of w by h
-texels of a sprite is drawn from its x, y over w + 1 by h + 1 pixels, its texels filtered linearly,
-but for its first row of pixels, which the original leaves out: that row is not reproduced yet, its
-cause unknown. At W by H pixels, the pictures' top left corners, a number's digits each the width of
-`number_0` (20) after the one before:
+**Observed** (Counter-Strike 1.6, build 8684 through NextClient, de_dust2 at 640x480, 800x600,
+1024x768, 1280x720, 1280x960, 1600x900 and 1920x1080, `gamma` 3: snapshots with `hud_draw` 1 and 0,
+what the HUD added fitted to the sprites' texels): the HUD does not scale. The 640 entries of
+`hud.txt` are drawn at every resolution from 640 wide up, at their size in pixels, and the elements
+keep to the screen's edges and middle. The pictures are added (`SPR_DrawAdditive`) in (255, 160, 0)
+at the alpha the HUD rests at, 100, their palettes through the texture gamma (the texels match to
+within one level). A rectangle of w by h texels of a sprite is drawn from its x, y over w + 1 by
+h + 1 pixels, its texels filtered linearly, but for its first row of pixels, which the original
+leaves out: that row is not reproduced yet, its cause unknown. At W by H pixels, the pictures' top
+left corners, a number's digits each the width of `number_0` (20) after the one before; at every
+resolution measured but 1920x1080, the first lit pixel of the cross, the health, the suit, the
+armor, the dollar and the money is where these rules put it, to the pixel:
 
 | Element | Where |
 |---------|-------|
@@ -69,7 +71,7 @@ cause unknown. At W by H pixels, the pictures' top left corners, a number's digi
 | Round timer | `stopwatch` at (W / 2 − 64, H − 37); the minutes' digit at W / 2 − 20, the seconds' at W / 2 + 6 and W / 2 + 26, y H − 37; the colon two 2 by 2 rectangles, dimmer, at (W / 2 + 2, H − 28) and (W / 2 + 2, H − 22) |
 | Status icons | Added green; at 1280x720 `buyzone` at (12, 286) and `c4` at (12, 323) |
 | Radar | `radar` in the top left corner |
-| Crosshair | Four lines a pixel thick added about the middle (`FillRGBA`, `cl_crosshair_color` 50 250 50 at full alpha). At 1280x720 10 long, 14 from the middle with the knife, 16 with the Glock and 24 running with it; at 1920x1080 15 long and 24 away standing, 36 running; at 640x480 3 long and 5 away |
+| Crosshair | Four rectangles of `cl_crosshair_color` (50 250 50), a pixel thick, about (W / 2, H / 2): added at full alpha (`FillRGBA`) with `cl_crosshair_translucent` 1, drawn as they are with 0. With s = W / 640 and f the size's factor (`cl_crosshair_size` `small` 0.625, `medium` 0.8, `large` 1; `auto` small at 640 wide, medium at 800, large from 1024), each is ⌊5·s·f⌋ long and the gap ⌊d·s·f⌋, d the weapon's distance (standing: the knife 7, the Glock and the Desert Eagle 8): the left one ends at W / 2 − gap and the right one starts at W / 2 + gap, the top and bottom ones likewise. Running opens the gap (at 1280x720 the Glock's to 24). NextClient draws it itself (`cl_crosshair_type` 0, the cross), to be checked against Valve's client |
 
 The drawing itself is `nx.render:screen` ([05 §7.1](05-rendering.md#71-frame-passes-legacy-mode)).
 
