@@ -129,7 +129,7 @@ auto Level::load(const GameContent& content, std::string_view name)
     -> nx::Result<std::unique_ptr<Level>, LevelError> {
     const auto mapPath = nx::assets::VfsPath::parse(std::format("maps/{}.bsp", name));
     if (!mapPath) {
-        return nx::fail(LevelError::MapUnreadable, std::string{name}, std::move(mapPath.error()));
+        return nx::fail(LevelError::MapUnreadable, std::string{name}, mapPath.error());
     }
     auto made = std::make_unique<Level>(CreateToken{});
     Level& level = *made;
