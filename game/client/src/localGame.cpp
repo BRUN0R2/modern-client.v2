@@ -124,7 +124,10 @@ void LocalGame::tick(const UserCommand& command) {
             (m_player.velocity.x * m_player.velocity.x) + (m_player.velocity.y * m_player.velocity.y)}))},
         .isOnGround = m_player.isOnGround,
         .isDucked = m_player.isDucked};
-    std::ignore = m_inventory.frame(command, shooter, nx::game::tickTimeOf(m_world));
+    const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
+        return nx::game::traceSolids(m_world, hulls, hull, start, end);
+    };
+    std::ignore = m_inventory.frame(command, shooter, tracer, nx::game::tickTimeOf(m_world));
     m_player.punch = shooter.punch;
     nx::game::runThinks(m_world, hulls);
     nx::game::runPushers(m_world, hulls);

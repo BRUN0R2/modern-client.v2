@@ -110,6 +110,16 @@ constexpr double kShareTolerance = 1e-4;
     if (std::ranges::any_of(reloads, [](const WeaponReload* reload) { return reload->sequences.empty(); })) {
         return invalid("is reloaded without a sequence");
     }
+    if (const std::optional<WeaponMelee>& melee = weapon.melee) {
+        if (weapon.alternate) {
+            return invalid("has melee attacks and an alternate, both of +attack2");
+        }
+        for (const MeleeAttack* const attack : {&melee->slash, &melee->stab}) {
+            if (attack->missSequences.empty() || attack->hitSequences.empty()) {
+                return invalid("attacks without a miss or a hit sequence");
+            }
+        }
+    }
     return {};
 }
 

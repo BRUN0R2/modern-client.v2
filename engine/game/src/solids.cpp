@@ -54,4 +54,9 @@ auto serverTrace(const collision::BrushHulls& hulls, std::span<const SolidBrush>
     return best;
 }
 
+auto traceSolids(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull, Vec3 start,
+                 Vec3 end) -> collision::Trace {
+    return serverTrace(hulls, solidBrushesOf(world), std::nullopt, hull, start, end);
+}
+
 } // namespace nx::game

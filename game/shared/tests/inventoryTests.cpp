@@ -6,13 +6,15 @@
 // guns' fire, as the original's: their cycle, once a press for a pistol, the empty click, the
 // accuracy by burst or by pace, the spread as the shooter moves, the kick, and the reload; the timers
 // counted down in float by each command, as many commands as the original's last; and the
-// alternates `+attack2` switches: the USP's silencer, the Glock's burst.
+// alternates `+attack2` switches: the USP's silencer, the Glock's burst; and the knife's slash and
+// stab, missing or hitting what the tracer finds.
 
 #include <gtest/gtest.h>
 
 import std;
 import nx.core;
 import nx.math;
+import nx.collision;
 import nx.game;
 import cs.shared;
 
@@ -69,6 +71,18 @@ constexpr float kTolerance = 1e-5F;
                           {.drawSequences = {3},
                            .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
                            .idlesWhenEmpty = true});
+    knife.melee =
+        cs::WeaponMelee{.slash = {.reach = nx::HammerUnits{48.0F},
+                                  .missSequences = {6, 7},
+                                  .hitSequences = {6, 7},
+                                  .miss = {.primary = nx::Seconds{0.35F}, .secondary = nx::Seconds{0.5F}},
+                                  .hit = {.primary = nx::Seconds{0.4F}, .secondary = nx::Seconds{0.5F}},
+                                  .idleAfter = nx::Seconds{2.0F}},
+                        .stab = {.reach = nx::HammerUnits{32.0F},
+                                 .missSequences = {5},
+                                 .hitSequences = {4},
+                                 .miss = {.primary = nx::Seconds{1.0F}, .secondary = nx::Seconds{1.0F}},
+                                 .hit = {.primary = nx::Seconds{1.1F}, .secondary = nx::Seconds{1.1F}}}};
     Weapon glock =
         weapon("glock18", WeaponSlot::Secondary, 5, 250.0F, cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
                {.drawSequences = {8, 11},
@@ -171,6 +185,20 @@ constexpr float kTolerance = 1e-5F;
     return made;
 }
 
+/// A tracer that meets nothing.
+[[nodiscard]] auto missAll() -> cs::WeaponTracer {
+    return [](nx::collision::Hull, nx::Vec3, nx::Vec3) {
+        return nx::collision::Trace{};
+    };
+}
+
+/// A tracer that meets something halfway, whatever the hull.
+[[nodiscard]] auto hitAll() -> cs::WeaponTracer {
+    return [](nx::collision::Hull, nx::Vec3, nx::Vec3) {
+        return nx::collision::Trace{.fraction = 0.5F};
+    };
+}
+
 /// A shooter standing still on the ground.
 [[nodiscard]] auto standing() -> Shooter {
     return Shooter{.isOnGround = true};
@@ -192,8 +220,9 @@ auto frames(Inventory& inventory, Shooter& shooter, std::int64_t first, std::int
             std::initializer_list<Button> held = {}) -> std::vector<Shot> {
     std::vector<Shot> shots;
     for (std::int64_t tick = first; tick <= last; ++tick) {
-        std::ranges::move(inventory.frame(command(static_cast<std::uint32_t>(tick), held), shooter, at(tick)),
-                          std::back_inserter(shots));
+        std::ranges::move(
+            inventory.frame(command(static_cast<std::uint32_t>(tick), held), shooter, missAll(), at(tick)),
+            std::back_inserter(shots));
     }
     return shots;
 }
@@ -304,7 +333,7 @@ TEST(InventoryTest, IdlesAreChosenByTheirSharesTheSameForTheSameCommand) {
     const auto idledBy = [&](std::uint32_t number) {
         Inventory inventory = given(weapons, {kGlock});
         std::ignore = frames(inventory, shooter, 0, kFirstIdle - 1);
-        std::ignore = inventory.frame(command(number), shooter, at(kFirstIdle));
+        std::ignore = inventory.frame(command(number), shooter, missAll(), at(kFirstIdle));
         return inventory.animation()->sequence;
     };
     for (std::uint32_t number = 1; number <= kCommands; ++number) {
@@ -451,7 +480,7 @@ TEST(FiringTest, AShotStraysWithinTwiceItsSpreadTheSameForTheSameCommand) {
         Shooter shooter{}; // in the air: a wide spread
         std::ignore = frames(inventory, shooter, 0, kReady - 1);
         const std::vector<Shot> shots =
-            inventory.frame(command(number, {Button::Attack}), shooter, at(kReady));
+            inventory.frame(command(number, {Button::Attack}), shooter, missAll(), at(kReady));
         ASSERT_EQ(shots.size(), 1U);
         const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{});
         const Shot& shot = shots.front();
@@ -462,7 +491,8 @@ TEST(FiringTest, AShotStraysWithinTwiceItsSpreadTheSameForTheSameCommand) {
         Inventory again = given(weapons, {kAk});
         Shooter same{};
         std::ignore = frames(again, same, 0, kReady - 1);
-        const std::vector<Shot> repeated = again.frame(command(number, {Button::Attack}), same, at(kReady));
+        const std::vector<Shot> repeated =
+            again.frame(command(number, {Button::Attack}), same, missAll(), at(kReady));
         ASSERT_EQ(repeated.size(), 1U);
         EXPECT_EQ(repeated.front().direction, shot.direction);
     }
@@ -593,6 +623,62 @@ TEST(AlternateTest, AWeaponWithoutAnAlternateIgnoresAttack2) {
     std::ignore = frames(inventory, shooter, 0, kFirstIdle, {Button::Attack2});
     EXPECT_FALSE(inventory.held()->isAlternate);
     EXPECT_EQ(inventory.animation()->sequence, 0U) << "idling, as with no fire button down";
+}
+
+TEST(MeleeTest, TheKnifeSlashesItsSequencesInTurnHeldByItsMissOrHit) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+
+    std::ignore = inventory.frame(command(1, {Button::Attack}), shooter, missAll(), at(kReady));
+    EXPECT_EQ(inventory.animation()->sequence, 6U);
+    // A miss holds a slash 0.35 seconds and a stab 0.5, already counted down by its command.
+    EXPECT_NEAR(inventory.held()->nextShot, 0.34F, kTolerance);
+    EXPECT_NEAR(inventory.held()->nextSecondary, 0.49F, kTolerance);
+
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 40);
+    std::ignore = inventory.frame(command(2, {Button::Attack}), shooter, hitAll(), at(kReady + 41));
+    EXPECT_EQ(inventory.animation()->sequence, 7U) << "the next of the two";
+    EXPECT_NEAR(inventory.held()->nextShot, 0.39F, kTolerance) << "a hit holds it 0.4";
+}
+
+TEST(MeleeTest, TheKnifeStabsWithAttack2ItsMissOrHitSequence) {
+    const WeaponCatalog weapons = catalog();
+    for (const bool hits : {false, true}) {
+        Inventory inventory = given(weapons, {kKnife});
+        Shooter shooter = standing();
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        std::ignore =
+            inventory.frame(command(1, {Button::Attack2}), shooter, hits ? hitAll() : missAll(), at(kReady));
+        EXPECT_EQ(inventory.animation()->sequence, hits ? 4U : 5U);
+        EXPECT_NEAR(inventory.held()->nextShot, hits ? 1.09F : 0.99F, kTolerance);
+        EXPECT_NEAR(inventory.held()->nextSecondary, hits ? 1.09F : 0.99F, kTolerance);
+    }
+}
+
+TEST(MeleeTest, AnAttackMeetsALineAheadThenADuckedHull) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife});
+    Shooter shooter{.eye = nx::Vec3{.x = 10.0F, .z = 64.0F},
+                    .view = nx::EulerAngles{.yaw = nx::Degrees{90.0F}},
+                    .punch = nx::EulerAngles{.pitch = nx::Degrees{-5.0F}},
+                    .isOnGround = true};
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::vector<std::pair<nx::collision::Hull, nx::Vec3>> traced;
+    const cs::WeaponTracer tracer = [&traced](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
+        EXPECT_EQ(start, (nx::Vec3{.x = 10.0F, .z = 64.0F}));
+        traced.emplace_back(hull, end);
+        return nx::collision::Trace{};
+    };
+    std::ignore = inventory.frame(command(1, {Button::Attack}), shooter, tracer, at(kReady));
+    ASSERT_EQ(traced.size(), 2U);
+    EXPECT_EQ(traced[0].first, nx::collision::Hull::Point);
+    EXPECT_EQ(traced[1].first, nx::collision::Hull::Ducked);
+    // 48 units along the view, without its kick: straight along +y.
+    EXPECT_NEAR(traced[0].second.x, 10.0F, kTolerance);
+    EXPECT_NEAR(traced[0].second.y, 48.0F, kTolerance);
+    EXPECT_NEAR(traced[0].second.z, 64.0F, kTolerance);
 }
 
 TEST(FiringTest, DrawingAnotherWeaponStopsAReload) {

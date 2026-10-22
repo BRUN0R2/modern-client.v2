@@ -337,7 +337,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The player's weapons (`cs.shared:inventory`): given by its team's loadout (`data/cstrike/loadouts.toml`), drawn when heavier, chosen by `weapon_<name>` and `lastinv`, drawn and idling as their data says; each view model in the player's hand, the guns mirrored as the original draws them ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors), [05 §9](docs/05-rendering.md#9-studio-models-and-gpu-skinning))
 - [x] The guns' fire and reload (`cs::Inventory::frame`, the original's `ItemPostFrame`): cycle, once a press for a pistol, the empty click, burst and paced accuracy, the spread by movement, the rifles' `KickBack` and the USP's punch, dropped back in the movement, the reload and its timing; the timers counted down in float as the original's ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [x] `+attack2`: the USP's and the M4A1's silencers, the Glock's burst and its follow-up rounds ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
-- [ ] Weapon state machine: the knife's attacks, holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
+- [x] The knife's slash and stab: what they meet (`nx::game::traceSolids`), their sequences and timings ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
+- [ ] Weapon state machine: holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
 - [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [ ] What the shots hit: `FireBullets3`'s traces, damage by distance, penetration, decals; the knife's damage
