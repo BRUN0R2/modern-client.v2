@@ -6,7 +6,8 @@
 /// SPR_Draw, SPR_DrawAdditive, FillRGBA and FillRGBABlend draw them: a rectangle of a picture, or
 /// of a color alone, times a color, drawn as it is, added to what is there, or blended over it.
 /// The pictures are the images of sprites (the HUD's), and the pictures and console fonts of the
-/// WADs, their palettes through the texture gamma, as the original's textures go.
+/// WADs, their palettes through the texture gamma, as the original's textures go. A rectangle of a
+/// HUD sprite is drawn as the original draws it (spriteQuad).
 export module nx.render:screen;
 
 import std;
@@ -38,6 +39,13 @@ struct ScreenBatch {
 } // namespace nx::render
 
 export namespace nx::render {
+
+/// How a picture's texels become the pixels a rectangle of it covers.
+enum class ScreenFilter : std::uint8_t {
+    Nearest, ///< The texel under each pixel, which keeps a picture sharp at any whole scale.
+    Linear,  ///< The four texels about each pixel, each as much as it is near: the original's sprites.
+    Count,
+};
 
 /// Why a picture, or what draws the screen, could not be put on the GPU.
 enum class ScreenError : std::uint8_t {
@@ -72,7 +80,7 @@ private:
     ScreenImage() = default;
 
     rhi::OwnedTexture m_texture;
-    rhi::OwnedBindGroup m_group;
+    EnumArray<ScreenFilter, rhi::OwnedBindGroup> m_groups; ///< The texture with each filter's sampler.
     std::uint32_t m_width = 0;
     std::uint32_t m_height = 0;
 };
@@ -148,7 +156,15 @@ struct ScreenQuad {
     ScreenRect target{};
     ScreenColor color{};
     ScreenBlend blend = ScreenBlend::Normal;
+    ScreenFilter filter = ScreenFilter::Nearest;
 };
+
+/// The rectangle `source` of `image` as the original draws a rectangle of a HUD sprite
+/// (SPR_DrawAdditive, as Counter-Strike 1.6 shows it: docs/12-ui-hud-and-console.md, section 3.2):
+/// from `x`, `y` over a pixel more than its size each way, its texels filtered linearly; in
+/// `color`, drawn as `blend` says.
+[[nodiscard]] auto spriteQuad(const ScreenImage& image, assets::SpriteRect source, float x, float y,
+                              ScreenColor color, ScreenBlend blend) -> ScreenQuad;
 
 /// Appends to `quads` the characters of `text`, bytes of `font`'s code page, the first with its top
 /// left at `x`, `y`, each after the one before it by its width, in `color`, drawn as `blend` says.
@@ -162,7 +178,7 @@ struct ScreenDraw {
     std::span<const ScreenQuad> quads{};
 };
 
-/// What draws the screen: its shader, pipelines and sampler, and what each frame in flight writes.
+/// What draws the screen: its shader, pipelines and samplers, and what each frame in flight writes.
 class ScreenRenderer {
 public:
     /// Errors: GpuFailed.
@@ -201,8 +217,8 @@ public:
 
 private:
     inline explicit ScreenRenderer(rhi::Device& device) noexcept : m_device{&device} {}
-    /// The shader, the bind group layouts, the sampler, and a pipeline for each way a rectangle is
-    /// drawn, with a picture and with a color alone.
+    /// The shader, the bind group layouts, a sampler for each filter, and a pipeline for each way a
+    /// rectangle is drawn, with a picture and with a color alone.
     [[nodiscard]] auto createPipelines(const ScreenRendererDesc& desc) -> Result<void, rhi::RhiError>;
     /// Makes room in `slot` for `quads` rectangles, at least.
     [[nodiscard]] auto reserve(ScreenFrameSlot& slot, std::size_t quads) -> Result<void, rhi::RhiError>;
@@ -216,7 +232,7 @@ private:
     rhi::OwnedShader m_shader;
     rhi::OwnedBindGroupLayout m_frameLayout;
     rhi::OwnedBindGroupLayout m_imageLayout;
-    rhi::OwnedSampler m_sampler;
+    EnumArray<ScreenFilter, rhi::OwnedSampler> m_samplers;
     EnumArray<ScreenBlend, rhi::OwnedRenderPipeline> m_picturePipelines;
     EnumArray<ScreenBlend, rhi::OwnedRenderPipeline> m_colorPipelines;
     std::vector<ScreenFrameSlot> m_frameSlots;

@@ -49,15 +49,38 @@
   without blurring sprites.
 - Wide aspect ratios (16:9, 21:9) keep the original relative position of the elements.
 
-**Observed** (Counter-Strike 1.6, build 8684, de_dust2 at 640x480, 1280x720 and 1920x1080, the
-references the HUD is checked against): the HUD does not scale. The 640 sprites of `hud.txt` keep
-their size in pixels at every resolution above 640 wide; the elements anchor to the screen's edges
-and middle. The bottom row (health with its cross, armor with its shield at a fifth of the width, the
-round timer with its stopwatch about the middle, the ammo with its divider and icon at the right) has
-its numbers 24 pixels tall, 13 pixels above the bottom; the money is the row above, at the right;
-the status icons (buy zone, C4) are on the left about the middle; the radar is in the top left
-corner. The default crosshair is four short lines about the middle, added green. The drawing itself
-is `nx.render:screen` ([05 §7.1](05-rendering.md#71-frame-passes-legacy-mode)).
+**Observed** (Counter-Strike 1.6, build 8684 through NextClient, de_dust2 at 640x480, 1280x720 and
+1920x1080, `gamma` 3: snapshots with `hud_draw` 1 and 0, what the HUD added fitted to the sprites'
+texels): the HUD does not scale. The 640 entries of `hud.txt` are drawn at every resolution from 640
+wide up, at their size in pixels, and the elements keep to the screen's edges and middle. The
+pictures are added (`SPR_DrawAdditive`) in (255, 160, 0) at the alpha the HUD rests at, 100, their
+palettes through the texture gamma (the texels match to within one level). A rectangle of w by h
+texels of a sprite is drawn from its x, y over w + 1 by h + 1 pixels, its texels filtered linearly,
+but for its first row of pixels, which the original leaves out: that row is not reproduced yet, its
+cause unknown. At W by H pixels, the pictures' top left corners, a number's digits each the width of
+`number_0` (20) after the one before:
+
+| Element | Where |
+|---------|-------|
+| Health | `cross` at (10, H − 40); the digits at the right of room for three from x 36, y H − 40 |
+| Armor | `suit_empty` at (W / 5, H − 37), `suit_full` over it; the digits right after the suit, at the right of room for three, y H − 37 |
+| Money | The digits at the right of room for five that ends 16 from the right edge, y H − 75; `dollar` right before that room (W − 134) |
+| Ammo (a Glock, 20 and 40) | The weapon list's `ammo` icon at (W − 42, H − 40); the reserve's digits ending at the icon, y H − 37; a 2 by 25 rectangle of the HUD's color added (`FillRGBA`) at (W − 114, H − 37); the clip's digits ending 10 before it |
+| Round timer | `stopwatch` at (W / 2 − 64, H − 37); the minutes' digit at W / 2 − 20, the seconds' at W / 2 + 6 and W / 2 + 26, y H − 37; the colon two 2 by 2 rectangles, dimmer, at (W / 2 + 2, H − 28) and (W / 2 + 2, H − 22) |
+| Status icons | Added green; at 1280x720 `buyzone` at (12, 286) and `c4` at (12, 323) |
+| Radar | `radar` in the top left corner |
+| Crosshair | Four lines a pixel thick added about the middle (`FillRGBA`, `cl_crosshair_color` 50 250 50 at full alpha). At 1280x720 10 long, 14 from the middle with the knife, 16 with the Glock and 24 running with it; at 1920x1080 15 long and 24 away standing, 36 running; at 640x480 3 long and 5 away |
+
+The drawing itself is `nx.render:screen` ([05 §7.1](05-rendering.md#71-frame-passes-legacy-mode)).
+
+**Today** (`cs.client:hud`): `next`, and `nxview --hud`, draw the health, armor and money of the
+player as it spawns (100, 0 and 800: `cs.shared:player`) where the table puts them, each picture
+drawn by `nx::render::spriteQuad`, while `hud_draw` is 1. A number with more digits than its room
+widens the room, health and armor to the right and money to the left, and a longer health pushes the
+suit right, keeping the 32 pixels it has at 640 wide (§3.4). Armor between none and 100 shows as
+much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet. The
+first row of each picture, the 320 entries for screens under 640 wide, the helmet, the flash of a
+number that changes, and the ammo, timer, status icons, radar and crosshair come next.
 
 ### 3.3 Visual parity of numbers
 
@@ -81,6 +104,12 @@ wrong, as did large reserve ammo and clips. In Modern-Client.v2:
 - Mandatory regression test: health 5000, 100000 and the type's maximum, armor above
   100, reserve ammo above 255 and money above 16000 (allowed by plugins). All drawn
   correctly, without *wrap*.
+
+**Today** (`cs.client:hud`): `healthDigits` makes a health a whole number as the game sends it to
+its client (its whole part, none below 0, and 1 above 0 up to 1), without the 255 ceiling, every
+digit of it up to the type's maximum (39 digits); armor and money likewise. The tests draw health
+5000, 100000 and the type's maximum, armor 300 and 70000, and money above 16000 up to the type's
+maximum; reserve ammo comes with the ammo.
 
 ### 3.5 HUD for plugins
 
@@ -152,10 +181,10 @@ the new ones, never a part. The original ends its `config.cfg` with `exec userco
 here the startup runs that file itself. `registerClientCvars` registers the client's cvars of
 §5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, 0 for no limit), `gl_vsync`
-(1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), all archived, and `texgamma`
-(2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive. `next` reads
-them as it starts and writes `config.cfg` as it ends; a change takes effect when it starts again
-until the console comes. `config.cfg` keeps the binds too (§6), before the cvars, in the
+(1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), all archived,
+and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
+`next` reads them as it starts and writes `config.cfg` as it ends; a change takes effect when it
+starts again until the console comes, but `hud_draw`'s, which each frame reads. `config.cfg` keeps the binds too (§6), before the cvars, in the
 original's order. `vid_vsync` as the name of `gl_vsync`, and the other cvars, come with their
 consumers.
 

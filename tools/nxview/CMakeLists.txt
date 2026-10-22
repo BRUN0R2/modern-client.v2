@@ -15,5 +15,5 @@ nxAddProgram(nxview
         nx::render
         cs::client)
 
-# The world, studio and sprite shaders, in bin/shaders/.
+# The world, studio, sprite and screen shaders, in bin/shaders/.
 add_dependencies(nxview nxShaders)

@@ -183,8 +183,10 @@ those in a row drawn alike in one draw. As the original draws its HUD, a rectang
 (`FillRGBABlend`). Its pictures are the images of a sprite's frames, the first of a group (the HUD's
 sprites), and the pictures and console fonts of the WADs, their palettes through the texture gamma
 as the original's textures go; a masked picture, a font always, shows through at index 255. Texels
-are sampled at the nearest, so a picture stays sharp at any whole scale. `appendText` lays out a
-font's characters one after another, each its own width wide.
+are sampled at the nearest, so a picture stays sharp at any whole scale, or filtered linearly:
+`spriteQuad` draws a rectangle of a HUD sprite as the original does, over a pixel more than its size
+each way, filtered linearly ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
+`appendText` lays out a font's characters one after another, each its own width wide.
 
 ## 8. BSP world
 

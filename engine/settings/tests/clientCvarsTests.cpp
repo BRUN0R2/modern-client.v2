@@ -45,13 +45,14 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_FLOAT_EQ(cvars->video.brightness.value(), 1.0F);
     EXPECT_FLOAT_EQ(cvars->video.textureGamma.value(), 2.0F);
     EXPECT_FLOAT_EQ(cvars->video.lightGamma.value(), 2.5F);
+    EXPECT_TRUE(cvars->video.hudDraw.value());
     EXPECT_EQ(cvars->mouse.yaw.name(), "m_yaw");
     EXPECT_EQ(cvars->video.vsync.name(), "gl_vsync");
 
     // What config.cfg keeps: what the original archives, not texgamma nor lightgamma.
     const std::string archived = console.archivedCvars();
     for (const std::string_view name :
-         {"sensitivity", "m_yaw", "m_pitch", "fps_max", "gl_vsync", "gamma", "brightness"}) {
+         {"sensitivity", "m_yaw", "m_pitch", "fps_max", "gl_vsync", "gamma", "brightness", "hud_draw"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }
     EXPECT_EQ(archived.find("texgamma"), std::string::npos);
