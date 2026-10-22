@@ -27,6 +27,7 @@ one, without erasing the history.
 | [0017](0017-counter-strike-only.md) | Counter-Strike 1.6 only: no Half-Life and no other GoldSrc games | Accepted |
 | [0018](0018-work-handed-down-is-not-a-callback.md) | Work handed down to a lower layer is not a forbidden callback | Accepted |
 | [0019](0019-launcher-and-automatic-updates.md) | Automatic, independent updates for the client and the server | Accepted |
+| [0020](0020-in-house-ui-toolkit.md) | In-house retained UI toolkit for the menus, the screens and the console | Accepted |
 
 ## Template
 
