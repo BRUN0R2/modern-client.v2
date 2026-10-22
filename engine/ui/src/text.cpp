@@ -19,19 +19,19 @@ constexpr std::size_t kTexelBytes = 4;
 /// The alpha of a texel: its last byte.
 constexpr std::size_t kAlphaByte = 3;
 
-} // namespace
-
-auto GlyphAtlas::build(const Font& font, std::u32string_view characters, std::uint32_t width)
-    -> Result<GlyphAtlas, FontError> {
+/// The glyphs `source` draws for `characters`, each once, in the order of their characters; those it
+/// has none for left out.
+template <class Source>
+[[nodiscard]] auto drawGlyphs(const Source& source, std::u32string_view characters)
+    -> Result<std::vector<std::pair<char32_t, Glyph>>, FontError> {
     std::vector<char32_t> wanted(characters.begin(), characters.end());
     std::ranges::sort(wanted);
     const auto repeated = std::ranges::unique(wanted);
     wanted.erase(repeated.begin(), repeated.end());
-
     std::vector<std::pair<char32_t, Glyph>> drawn;
     drawn.reserve(wanted.size());
     for (const char32_t character : wanted) {
-        auto glyph = font.glyph(character);
+        auto glyph = source.glyph(character);
         if (!glyph && glyph.error().code == FontError::NoGlyph) {
             continue;
         }
@@ -40,11 +40,35 @@ auto GlyphAtlas::build(const Font& font, std::u32string_view characters, std::ui
         }
         drawn.emplace_back(character, std::move(*glyph));
     }
+    return drawn;
+}
 
+} // namespace
+
+auto GlyphAtlas::build(const Font& font, std::u32string_view characters, std::uint32_t width)
+    -> Result<GlyphAtlas, FontError> {
+    auto drawn = drawGlyphs(font, characters);
+    if (!drawn) {
+        return std::unexpected{std::move(drawn.error())};
+    }
+    return pack(font.metrics(), std::move(*drawn), width);
+}
+
+auto GlyphAtlas::build(const SchemeFontSet& fonts, std::u32string_view characters, std::uint32_t width)
+    -> Result<GlyphAtlas, FontError> {
+    auto drawn = drawGlyphs(fonts, characters);
+    if (!drawn) {
+        return std::unexpected{std::move(drawn.error())};
+    }
+    return pack(fonts.metrics(), std::move(*drawn), width);
+}
+
+auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t, Glyph>> drawn,
+                      std::uint32_t width) -> GlyphAtlas {
     // Shelves: the tallest glyphs first, each right of the last, a new row under the tallest of a full
     // one.
     GlyphAtlas atlas;
-    atlas.m_metrics = font.metrics();
+    atlas.m_metrics = metrics;
     std::uint32_t widest = 0;
     for (const auto& [character, glyph] : drawn) {
         widest = std::max(widest, narrow<std::uint32_t>(glyph.width));

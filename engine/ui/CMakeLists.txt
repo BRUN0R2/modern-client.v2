@@ -10,11 +10,13 @@ nxAddModuleLibrary(nxUi
         src/panel.cppm
         src/font.cppm
         src/fontCatalog.cppm
+        src/schemeFont.cppm
         src/text.cppm
     SOURCES
         src/panel.cpp
         src/font.cpp
         src/fontCatalog.cpp
+        src/schemeFont.cpp
         src/text.cpp
     DEPENDS
         nx::core
