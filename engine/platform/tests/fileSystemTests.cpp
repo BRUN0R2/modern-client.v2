@@ -105,6 +105,35 @@ TEST(FileSystemTest, WritesAWholeFileAndReplacesOne) {
     const auto bytes = readFile(path);
     ASSERT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
     EXPECT_EQ(*bytes, bytesOf("second")) << "nothing of the longer content is left";
+    EXPECT_EQ(listFiles(directory.path()).value_or(std::vector<std::filesystem::path>{}),
+              (std::vector<std::filesystem::path>{"screenshot.bmp"}))
+        << "nothing written beside it is left";
+}
+
+TEST(FileSystemTest, MakesADirectoryAndThoseAboveIt) {
+    const nx::test::TemporaryDirectory directory;
+    const std::filesystem::path nested = directory.path() / "a" / "b" / "c";
+
+    const auto made = nx::platform::createDirectories(nested);
+    ASSERT_TRUE(made.has_value()) << nx::describe(made.error());
+    EXPECT_TRUE(std::filesystem::is_directory(nested));
+    EXPECT_TRUE(nx::platform::createDirectories(nested).has_value()) << "one that exists already";
+
+    directory.write("file.txt", "x");
+    const auto blocked = nx::platform::createDirectories(directory.path() / "file.txt");
+    ASSERT_FALSE(blocked.has_value());
+    EXPECT_EQ(blocked.error().code, FileError::NotADirectory);
+}
+
+TEST(FileSystemTest, TheUserDirectoryIsTheGamesFolderOfTheUsersSettings) {
+    const auto path = nx::platform::userDirectory();
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_TRUE(path->is_absolute());
+#if defined(_WIN32)
+    EXPECT_EQ(path->filename(), "Modern-Client.v2");
+#else
+    EXPECT_EQ(path->filename(), "modern-client.v2");
+#endif
 }
 
 TEST(FileSystemTest, WritingWhereNoFileCanBeFails) {

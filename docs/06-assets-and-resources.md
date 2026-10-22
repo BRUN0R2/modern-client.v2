@@ -114,7 +114,7 @@ yield `ContentError::MissingEssentialFiles` with the full list.
 - **First start:** if detection finds a valid installation, the wizard asks once:
   *"Counter-Strike 1.6 found at <path>. Use the original assets?"*. The answer is written
   to `content.toml` (profile `classic` or `open`/`dev`).
-- **Where `content.toml` lives:** in the user profile, outside the repository:
+- **Where `content.toml` lives:** in the user profile (`nx::platform::userDirectory`), outside the repository:
   `%APPDATA%\Modern-Client.v2\content.toml` (Windows) and
   `~/.config/modern-client.v2/content.toml` (Linux). For development, a `content.toml` in
   the working directory takes precedence (and is ignored by git). The repository ships the
