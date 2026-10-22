@@ -23,3 +23,9 @@ clipSize = 30
 view = "models/v_m4a1.mdl"
 player = "models/p_m4a1.mdl"
 playerAnimation = "rifle"
+viewHand = "left"
+
+[view] # sequences of models/v_m4a1.mdl, without its silencer
+drawSequences = [12] # draw_unsil
+idles = [{ sequence = 7, wait = 20.0, share = 1.0 }] # idle_unsil
+idlesWhenEmpty = true

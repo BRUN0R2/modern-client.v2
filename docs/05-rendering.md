@@ -331,10 +331,17 @@ flowchart LR
    the viewer and its right (`R_StudioSetupChrome`); a masked mesh is cut where its alpha is 0.5 or
    less, an additive one adds itself without writing its depth; the triangles the original culls
    (`GL_FRONT`) are culled. The view's own model is drawn in the nearest 0.3 of the depths, as the
-   original keeps it out of walls (`VIEWMODEL_DEPTH_RANGE`). The client holds the knife
-   (`models/v_knife.mdl`) as Counter-Strike deploys it: `draw`, then `idle` 1.5 seconds later and
-   every 20 seconds, posed by `cs::poseBones` at the frame `cs::sequenceFrameAt` gives, where the
-   player looks from, lit by the world there and by the sky the map's `light_environment` sets. A
+   original keeps it out of walls (`VIEWMODEL_DEPTH_RANGE`). The client draws the weapon in the
+   player's hand: its view model, as its data names it (`cs::Weapon`), in the sequence the player's
+   weapons play since they started it (`cs::Inventory`: drawn, then idling,
+   [10 §7.3](10-counter-strike-gameplay.md#73-behaviors)), posed by `cs::poseBones` at the frame
+   `cs::sequenceFrameAt` gives, where the player looks from, lit by the world there and by the sky
+   the map's `light_environment` sets. A view model modeled in the other hand than the player's (its
+   `viewHand`; the player's is the right, `cl_righthand`'s default, until the cvar comes) is drawn
+   mirrored, its left turned to its right (`StudioInstance::isMirrored`), the other faces culled as
+   its triangles turn over: Counter-Strike's guns are modeled in the left hand and its knife in the
+   right, and the original draws them all in the right (observed on it; Xash3D's
+   `R_AllowFlipViewModel`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its

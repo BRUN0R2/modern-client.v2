@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The weapons' data: the repository's files, with the original's values, and what a file or the
-// catalog may not hold.
+// catalog may not hold. The repository's loadouts, and what they may not hold.
 
 #include <gtest/gtest.h>
 
@@ -16,6 +16,7 @@ namespace {
 using cs::AmmoType;
 using cs::AmmoTypes;
 using cs::Buyers;
+using cs::Team;
 using cs::Weapon;
 using cs::WeaponCatalog;
 using cs::WeaponError;
@@ -50,16 +51,27 @@ using cs::WeaponSlot;
     return catalog ? std::optional{std::move(*catalog)} : std::nullopt;
 }
 
-/// A weapon file with `extra` after its keys.
-[[nodiscard]] auto weaponText(std::string_view keys, std::string_view extra = "") -> std::string {
+/// A weapon's view, as a weapon file holds it.
+constexpr std::string_view kGunView = R"(
+[view]
+drawSequences = [5]
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }]
+idlesWhenEmpty = true
+)";
+
+/// A weapon file with `extra` after its keys, its models and `view`.
+[[nodiscard]] auto weaponText(std::string_view keys, std::string_view extra = "",
+                              std::string_view view = kGunView) -> std::string {
     return std::format(R"(
 {}
 [models]
 view = "models/v_gun.mdl"
 player = "models/p_gun.mdl"
 playerAnimation = "gun"
+viewHand = "left"
+{}
 {})",
-                       keys, extra);
+                       keys, view, extra);
 }
 
 constexpr std::string_view kGunKeys = R"(
@@ -76,7 +88,11 @@ maxSpeed = 221.0
                   .classname = "weapon_" + id,
                   .slot = slot,
                   .position = position,
-                  .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20}};
+                  .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
+                  .view = cs::WeaponView{
+                      .drawSequences = {5},
+                      .idles = {cs::WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
+                      .idlesWhenEmpty = true}};
 }
 
 [[nodiscard]] auto nineMillimeter() -> AmmoTypes {
@@ -139,6 +155,9 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
         EXPECT_EQ(weapon->models.view, std::format("models/v_{}.mdl", expected.id));
         EXPECT_EQ(weapon->models.player, std::format("models/p_{}.mdl", expected.id));
         EXPECT_EQ(weapon->models.playerAnimation, expected.playerAnimation) << expected.id;
+        // Counter-Strike's guns are modeled in the left hand, its knife in the right (docs/05, section 9).
+        EXPECT_EQ(weapon->models.viewHand, expected.id == "knife" ? cs::Hand::Right : cs::Hand::Left)
+            << expected.id;
         EXPECT_EQ(weapon->purchase.has_value(), expected.buyers.has_value()) << expected.id;
         EXPECT_EQ(weapon->magazine.has_value(), !expected.ammo.empty()) << expected.id;
         if (weapon->purchase) {
@@ -149,6 +168,40 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
             EXPECT_EQ(weapon->magazine->ammo, expected.ammo) << expected.id;
             EXPECT_EQ(weapon->magazine->clipSize, expected.clipSize) << expected.id;
         }
+    }
+}
+
+TEST(WeaponsTest, TheRepositorysWeaponsDrawAndIdleAsTheOriginalsDo) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    struct Idle {
+        std::uint32_t sequence;
+        float wait;
+        float share;
+    };
+    struct Expected {
+        std::string_view id;
+        std::vector<std::uint32_t> drawSequences;
+        std::vector<Idle> idles;
+        bool idlesWhenEmpty;
+    };
+    for (const Expected& expected : {
+             Expected{"knife", {3}, {{0, 20.0F, 1.0F}}, true},
+             Expected{"glock18", {8, 11}, {{2, 3.0625F, 0.3F}, {0, 3.75F, 0.3F}, {1, 2.5F, 0.4F}}, false},
+             Expected{"usp", {14}, {{8, 60.0F, 1.0F}}, false},
+             Expected{"ak47", {2}, {{0, 20.0F, 1.0F}}, true},
+             Expected{"m4a1", {12}, {{7, 20.0F, 1.0F}}, true},
+         }) {
+        const Weapon* const weapon = catalog->findWeapon(expected.id);
+        ASSERT_NE(weapon, nullptr) << expected.id;
+        EXPECT_EQ(weapon->view.drawSequences, expected.drawSequences) << expected.id;
+        ASSERT_EQ(weapon->view.idles.size(), expected.idles.size()) << expected.id;
+        for (std::size_t index = 0; index < expected.idles.size(); ++index) {
+            EXPECT_EQ(weapon->view.idles[index].sequence, expected.idles[index].sequence) << expected.id;
+            EXPECT_EQ(weapon->view.idles[index].wait, nx::Seconds{expected.idles[index].wait}) << expected.id;
+            EXPECT_EQ(weapon->view.idles[index].share, expected.idles[index].share) << expected.id;
+        }
+        EXPECT_EQ(weapon->view.idlesWhenEmpty, expected.idlesWhenEmpty) << expected.id;
     }
 }
 
@@ -208,19 +261,41 @@ maxSpeed = 221.0
 view = "models/../v_gun.mdl"
 player = "models/p_gun.mdl"
 playerAnimation = "gun"
-)";
+viewHand = "left"
+)" + std::string{kGunView};
     const std::string noAnimation = std::string{kGunKeys} + R"(
 [models]
 view = "models/v_gun.mdl"
 player = "models/p_gun.mdl"
 playerAnimation = ""
-)";
+viewHand = "left"
+)" + std::string{kGunView};
     for (const std::string& text :
          {weaponText(kNoId), weaponText(kGunKeys, "[magazine]\nammo = \"\"\nclipSize = 30"), badModels,
           noAnimation}) {
         const auto weapon = cs::readWeapon(text, "gun.toml");
         ASSERT_FALSE(weapon.has_value()) << text;
         EXPECT_EQ(weapon.error().code, WeaponError::DataInvalid);
+    }
+}
+
+TEST(WeaponsTest, AViewThatDrawsOrIdlesWithNothingIsInvalid) {
+    for (const std::string_view view : {
+             "[view]\ndrawSequences = []\nidles = [{ sequence = 0, wait = 20.0, share = 1.0 "
+             "}]\nidlesWhenEmpty = true",
+             "[view]\ndrawSequences = [5]\nidles = []\nidlesWhenEmpty = true",
+             "[view]\ndrawSequences = [5]\nidles = [{ sequence = 0, wait = 0.0, share = 1.0 "
+             "}]\nidlesWhenEmpty = true",
+             "[view]\ndrawSequences = [5]\nidles = [{ sequence = 0, wait = 2.0, share = 0.5 }, "
+             "{ sequence = 1, wait = 2.0, share = 0.4 }]\nidlesWhenEmpty = true",
+             "[view]\ndrawSequences = [5]\nidles = [{ sequence = 0, wait = 2.0, share = 1.5 "
+             "}]\nidlesWhenEmpty = true",
+         }) {
+        const std::string text = weaponText(kGunKeys, "", view);
+        const auto weapon = cs::readWeapon(text, "gun.toml");
+        ASSERT_FALSE(weapon.has_value()) << text;
+        EXPECT_EQ(weapon.error().code, WeaponError::DataInvalid);
+        EXPECT_TRUE(weapon.error().detail.starts_with("gun.toml")) << weapon.error().detail;
     }
 }
 
@@ -244,6 +319,9 @@ TEST(WeaponsTest, TheCatalogFindsWhatItHas) {
     ASSERT_NE(catalog->findWeapon("glock18"), nullptr);
     EXPECT_EQ(catalog->findWeapon("glock18")->position, 2U);
     EXPECT_EQ(catalog->findWeapon("ak47"), nullptr);
+    EXPECT_EQ(catalog->indexOf("mp5navy"), cs::WeaponIndex{1});
+    EXPECT_EQ(catalog->weapon(cs::WeaponIndex{1}).id, "mp5navy");
+    EXPECT_EQ(catalog->indexOf("ak47"), std::nullopt);
     ASSERT_NE(catalog->findAmmo("9mm"), nullptr);
     EXPECT_EQ(catalog->findAmmo("9mm")->maxCarried, 120U);
     EXPECT_EQ(catalog->findAmmo("45ACP"), nullptr);
@@ -256,6 +334,8 @@ TEST(WeaponsTest, TheCatalogRefusesWhatClashesOrIsMissing) {
     unknownAmmo.magazine->ammo = "45ACP";
     AmmoTypes twice = nineMillimeter();
     twice.ammo.push_back(twice.ammo.front());
+    Weapon unseen = gun("usp", WeaponSlot::Secondary, 4);
+    unseen.view = cs::WeaponView{};
     const Weapon glock = gun("glock18", WeaponSlot::Secondary, 2);
     struct Case {
         AmmoTypes ammo;
@@ -268,11 +348,55 @@ TEST(WeaponsTest, TheCatalogRefusesWhatClashesOrIsMissing) {
              Case{nineMillimeter(), {glock, gun("elite", WeaponSlot::Secondary, 2)}, "position 2"},
              Case{nineMillimeter(), {glock, unknownAmmo}, "\"45ACP\""},
              Case{twice, {glock}, "the kind of ammo \"9mm\" twice"},
+             Case{nineMillimeter(), {glock, unseen}, "\"usp\" without a draw sequence"},
          }) {
         const auto catalog = WeaponCatalog::make(clash.ammo, clash.weapons);
         ASSERT_FALSE(catalog.has_value()) << clash.detail;
         EXPECT_EQ(catalog.error().code, WeaponError::DataInvalid);
         EXPECT_TRUE(catalog.error().detail.contains(clash.detail)) << catalog.error().detail;
+    }
+}
+
+TEST(LoadoutsTest, TheRepositoryHasTheOriginalsLoadouts) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    const auto loadouts = cs::readLoadouts(textOf(dataFolder() / "loadouts.toml"), "loadouts.toml", *catalog);
+    ASSERT_TRUE(loadouts.has_value()) << nx::describe(loadouts.error());
+    const cs::Loadout* const terrorists = loadouts->find(Team::Terrorists);
+    const cs::Loadout* const counterTerrorists = loadouts->find(Team::CounterTerrorists);
+    ASSERT_NE(terrorists, nullptr);
+    ASSERT_NE(counterTerrorists, nullptr);
+    EXPECT_EQ(terrorists->weapons, (std::vector<std::string>{"knife", "glock18"}));
+    ASSERT_EQ(terrorists->ammo.size(), 1U);
+    EXPECT_EQ(terrorists->ammo[0].id, "9mm");
+    EXPECT_EQ(terrorists->ammo[0].rounds, 40U);
+    EXPECT_EQ(counterTerrorists->weapons, (std::vector<std::string>{"knife", "usp"}));
+    ASSERT_EQ(counterTerrorists->ammo.size(), 1U);
+    EXPECT_EQ(counterTerrorists->ammo[0].id, "45ACP");
+    EXPECT_EQ(counterTerrorists->ammo[0].rounds, 24U);
+}
+
+TEST(LoadoutsTest, ALoadoutOfWhatTheCatalogLacksOrATeamTwiceIsInvalid) {
+    const auto catalog = WeaponCatalog::make(nineMillimeter(), {gun("glock18", WeaponSlot::Secondary, 2)});
+    ASSERT_TRUE(catalog.has_value()) << nx::describe(catalog.error());
+    for (const std::string_view text : {
+             R"([[loadouts]]
+team = "terrorists"
+weapons = ["glock18"]
+ammo = [{ id = "9mm", rounds = 40 }]
+
+[[loadouts]]
+team = "terrorists"
+weapons = []
+ammo = [])",
+             "[[loadouts]]\nteam = \"terrorists\"\nweapons = [\"ak47\"]\nammo = []",
+             "[[loadouts]]\nteam = \"terrorists\"\nweapons = []\nammo = [{ id = \"45ACP\", rounds = 24 }]",
+             "[[loadouts]]\nteam = \"spectators\"\nweapons = []\nammo = []",
+         }) {
+        const auto loadouts = cs::readLoadouts(text, "loadouts.toml", *catalog);
+        ASSERT_FALSE(loadouts.has_value()) << text;
+        EXPECT_EQ(loadouts.error().code, WeaponError::DataInvalid);
+        EXPECT_TRUE(loadouts.error().detail.starts_with("loadouts.toml")) << loadouts.error().detail;
     }
 }
 

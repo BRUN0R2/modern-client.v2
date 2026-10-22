@@ -128,7 +128,7 @@ struct Session {
         return std::unexpected{std::move(level.error())};
     }
     const nx::render::Camera start = cs::spawnView((*level)->map());
-    auto game = cs::LocalGame::start(**level, start.position);
+    auto game = cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), start.position);
     if (!game) {
         return std::unexpected{std::move(game.error())};
     }
@@ -163,8 +163,13 @@ public:
 private:
     [[nodiscard]] auto registerSettings() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
+    /// Registers `weapon_<name>` for each weapon of the game's content, as the original's game
+    /// takes them.
+    [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     void noclipCommand();
+    void lastWeaponCommand();
+    void selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name);
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
     void startNextSession();
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
@@ -198,8 +203,7 @@ private:
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
-    nx::platform::Stopwatch m_mapClock;    ///< Since the map started: the light styles' time.
-    nx::platform::Stopwatch m_deployClock; ///< Since the player drew the knife.
+    nx::platform::Stopwatch m_mapClock; ///< Since the map started: the light styles' time.
     nx::platform::Instant m_frameStart = nx::platform::MonotonicClock::now();
     bool m_isRunning = true;
 };
@@ -221,6 +225,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
     m_content = std::move(*content);
+    if (auto registered = registerWeaponCommands(); !registered) {
+        return registered;
+    }
     auto shaders = cs::readSceneShaders(executable->parent_path() / "shaders");
     if (!shaders) {
         return nx::fail(ClientError::ContentUnavailable, std::move(shaders.error()));
@@ -283,11 +290,34 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                   noclipCommand();
                   return nx::Result<void, ConsoleError>{};
               }),
+          add({.name = "lastinv", .description = "Draws the weapon held before."},
+              [this](Console&, const CommandLine&) {
+                  lastWeaponCommand();
+                  return nx::Result<void, ConsoleError>{};
+              }),
           add({.name = "quit", .description = "Ends the client."}, [this](Console&, const CommandLine&) {
               m_isRunning = false;
               return nx::Result<void, ConsoleError>{};
           })}) {
         if (!registered) {
+            return nx::fail(ClientError::SettingsUnavailable, registered.error());
+        }
+    }
+    return {};
+}
+
+auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
+    const cs::WeaponCatalog& weapons = m_content->weapons;
+    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
+        const cs::WeaponIndex weapon{index};
+        const std::string& name = weapons.weapon(weapon).classname;
+        if (auto registered = m_console.registerCommand(
+                {.name = std::string_view{name}, .description = "Draws the weapon, when the player has it."},
+                [this, weapon, name](nx::console::Console&, const nx::console::CommandLine&) {
+                    selectWeaponCommand(weapon, name);
+                    return nx::Result<void, ConsoleError>{};
+                });
+            !registered) {
             return nx::fail(ClientError::SettingsUnavailable, registered.error());
         }
     }
@@ -313,6 +343,24 @@ void Client::noclipCommand() {
         return;
     }
     m_console.print(m_session->game->toggleNoclip() ? "noclip ON" : "noclip OFF");
+}
+
+void Client::lastWeaponCommand() {
+    if (!m_session) {
+        m_console.print("Can't \"lastinv\", not playing a map");
+        return;
+    }
+    if (const std::optional<cs::WeaponIndex> last = m_session->game->inventory().lastWeapon()) {
+        m_input->selectWeapon(*last);
+    }
+}
+
+void Client::selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name) {
+    if (!m_session) {
+        m_console.print(std::format("Can't {:?}, not playing a map", name));
+        return;
+    }
+    m_input->selectWeapon(weapon);
 }
 
 auto Client::run() -> nx::Result<void, ClientError> {
@@ -451,8 +499,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
         m_scene.emplace(std::move(*scene));
-        std::ignore = m_mapClock.restart();    // the light styles start with the map
-        std::ignore = m_deployClock.restart(); // and the player draws the knife
+        std::ignore = m_mapClock.restart(); // the light styles start with the map
     }
     return {};
 }
@@ -469,7 +516,7 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
              .aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height),
              .time = nx::Seconds{m_mapClock.elapsed()},
              .placements = placements,
-             .sinceDeploy = nx::Seconds{m_deployClock.elapsed()}});
+             .viewModel = m_session->game->viewModel()});
         !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }

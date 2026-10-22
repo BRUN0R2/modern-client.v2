@@ -23,3 +23,13 @@ clipSize = 20
 view = "models/v_glock18.mdl"
 player = "models/p_glock18.mdl"
 playerAnimation = "onehanded"
+viewHand = "left"
+
+[view] # sequences of models/v_glock18.mdl
+drawSequences = [8, 11] # draw, draw2
+idles = [
+    { sequence = 2, wait = 3.0625, share = 0.3 }, # idle3
+    { sequence = 0, wait = 3.75, share = 0.3 },   # idle1
+    { sequence = 1, wait = 2.5, share = 0.4 },    # idle2
+]
+idlesWhenEmpty = false

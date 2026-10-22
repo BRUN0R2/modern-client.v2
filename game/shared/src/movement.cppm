@@ -19,6 +19,7 @@ import nx.math;
 import nx.ecs;
 import nx.collision;
 import nx.game;
+import :weapons;
 
 export namespace cs {
 
@@ -42,13 +43,22 @@ struct MoveIntent {
     nx::UnitsPerSecond up{};   ///< Read in water.
 };
 
+/// Which of a client's commands one is: they count up from 1, one a command.
+struct CommandNumber {
+    std::uint32_t value = 0;
+
+    [[nodiscard]] inline auto operator<=>(const CommandNumber&) const noexcept = default;
+};
+
 /// What a client asks for one stretch of its time (docs/07, section 2.1). Today the fields movement
-/// reads; the rest arrive with what reads them.
+/// and the weapons read; the rest arrive with what reads them.
 struct UserCommand {
+    CommandNumber number{};      ///< What seeds the random numbers the command makes the game draw.
     nx::Milliseconds duration{}; ///< The stretch of time the command moves the player through.
     nx::EulerAngles viewAngles{};
     MoveIntent move{};
     nx::Flags<Button> buttons{};
+    std::optional<WeaponIndex> weaponSelect{}; ///< The weapon the player asks to draw.
 };
 
 /// The movement cvars (docs/07, section 3.1), which the server replicates to its clients. The

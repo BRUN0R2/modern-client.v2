@@ -22,33 +22,36 @@ export namespace cs {
 
 /// Why the game's content or a map of it could not be read.
 enum class LevelError : std::uint8_t {
-    ContentUnavailable, ///< The project's data or the installation could not be read (cause).
-    MapUnreadable,      ///< maps/<name>.bsp is missing or invalid (cause).
-    HullsInvalid,       ///< The map's hulls could not be built (cause).
-    GameUnspawnable,    ///< The map's brush entities could not be made (cause).
-    KnifeUnreadable,    ///< The knife's model could not be read (cause).
+    ContentUnavailable,  ///< The project's data or the installation could not be read (cause).
+    MapUnreadable,       ///< maps/<name>.bsp is missing or invalid (cause).
+    HullsInvalid,        ///< The map's hulls could not be built (cause).
+    GameUnspawnable,     ///< The map's brush entities could not be made (cause).
+    ViewModelUnreadable, ///< A weapon's view model could not be read (cause).
 };
 
 /// The game's files: the Counter-Strike 1.6 installation through its VFS, the classes the game makes
-/// the map's entities by (data/cstrike/entities.toml), and its weapons (data/cstrike/ammo.toml and
-/// data/cstrike/weapons/<id>.toml).
+/// the map's entities by (data/cstrike/entities.toml), its weapons (data/cstrike/ammo.toml and
+/// data/cstrike/weapons/<id>.toml), and what a player of each team spawns with
+/// (data/cstrike/loadouts.toml).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
     WeaponCatalog weapons;
+    Loadouts loadouts;
 };
 
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
-/// installation's files, the entity classes and the weapons, each in the file named after its id;
-/// and the installation at `install`, or the one Steam installed. Errors: ContentUnavailable.
+/// installation's files, the entity classes, the weapons, each in the file named after its id, and
+/// the loadouts; and the installation at `install`, or the one Steam installed. Errors:
+/// ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
                                    const std::optional<std::filesystem::path>& install)
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
-/// the game gives it, the sprites and studio models its entities show and the knife the player
-/// holds, its data and its model, read once. It stays where it is made: the views point into it,
-/// and what is made of it (the light of nx::render::WorldLight) to its map.
+/// the game gives it, the sprites and studio models its entities show and the view models of the
+/// game's weapons, read once. It stays where it is made: the views point into it, and what is made
+/// of it (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -58,7 +61,7 @@ public:
     /// The map `name` of `content` (maps/<name>.bsp). A WAD, the sky, a sprite or a studio model the
     /// installation lacks is left out and logged, as the original carries on without it; its
     /// hostages are dropped to the floor, as the game drops them. Errors: MapUnreadable,
-    /// HullsInvalid, GameUnspawnable, KnifeUnreadable (also when `content` has no weapon "knife").
+    /// HullsInvalid, GameUnspawnable, ViewModelUnreadable.
     [[nodiscard]] static auto load(const GameContent& content, std::string_view name)
         -> nx::Result<std::unique_ptr<Level>, LevelError>;
 
@@ -86,9 +89,10 @@ public:
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
-    /// The weapon the player holds: the knife, until the game gives its weapons.
-    [[nodiscard]] inline auto heldWeapon() const noexcept -> const Weapon& { return m_heldWeapon; }
-    [[nodiscard]] inline auto knife() const noexcept -> const ViewModel& { return *m_knife; }
+    /// The view models of the game's weapons, by their WeaponIndex.
+    [[nodiscard]] inline auto viewModels() const noexcept -> std::span<const ViewModel> {
+        return m_viewModels;
+    }
 
 private:
     std::vector<std::byte> m_mapBytes;
@@ -103,8 +107,7 @@ private:
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;
     std::optional<MapModels> m_models;
-    Weapon m_heldWeapon;
-    std::optional<ViewModel> m_knife;
+    std::vector<ViewModel> m_viewModels;
 };
 
 /// Makes in `world` the game of `map` as it starts: the components of nx.game, and the map's brush
@@ -115,5 +118,8 @@ private:
 /// Where a player of `map` first stands, its eye and the way it looks: at the first
 /// counter-terrorist spawn, else the first terrorist one; the origin without either.
 [[nodiscard]] auto spawnView(const nx::assets::BspView& map) -> nx::render::Camera;
+
+/// The team of the spawn spawnView stands a player at: the counter-terrorists' without either.
+[[nodiscard]] auto spawnTeam(const nx::assets::BspView& map) -> Team;
 
 } // namespace cs

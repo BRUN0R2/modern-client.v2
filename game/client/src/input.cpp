@@ -199,7 +199,8 @@ auto PlayerInput::nextCommand(nx::EulerAngles view, nx::Milliseconds duration, n
                        .move = {.forward = nx::UnitsPerSecond{forward},
                                 .side = nx::UnitsPerSecond{side},
                                 .up = nx::UnitsPerSecond{up}},
-                       .buttons = held};
+                       .buttons = held,
+                       .weaponSelect = std::exchange(m_weaponSelect, std::nullopt)};
 }
 
 } // namespace cs

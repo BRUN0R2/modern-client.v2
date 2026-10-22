@@ -20,8 +20,6 @@ namespace {
 
 constexpr nx::log::Category kLog{"client"};
 
-/// The weapon the player holds until the game gives its weapons.
-constexpr std::string_view kKnifeId = "knife";
 /// The extension of the project's data files.
 constexpr std::string_view kDataExtension = ".toml";
 
@@ -136,6 +134,31 @@ struct WadFiles {
     return std::move(*catalog);
 }
 
+/// The first spawn of a map with an origin, and the team it spawns.
+struct FirstSpawn {
+    const nx::assets::BspEntity* entity{};
+    nx::Vec3 origin{};
+    Team team{};
+};
+
+/// The first spawn of `map` with an origin: a counter-terrorist one (info_player_start), else a
+/// terrorist one (info_player_deathmatch); none.
+[[nodiscard]] auto firstSpawnOf(const nx::assets::BspView& map) -> std::optional<FirstSpawn> {
+    for (const auto& [classname, team] :
+         {std::pair{std::string_view{"info_player_start"}, Team::CounterTerrorists},
+          std::pair{std::string_view{"info_player_deathmatch"}, Team::Terrorists}}) {
+        for (const nx::assets::BspEntity& entity : map.entities()) {
+            if (entity.find("classname") != classname) {
+                continue;
+            }
+            if (const std::optional<nx::Vec3> origin = entity.findVector("origin")) {
+                return FirstSpawn{.entity = &entity, .origin = *origin, .team = team};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// `names`, separated by commas.
 template <class Names>
 [[nodiscard]] auto listed(const Names& names) -> std::string {
@@ -178,8 +201,19 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!weapons) {
         return std::unexpected{std::move(weapons.error())};
     }
-    return GameContent{
-        .vfs = std::move(*vfs), .entityClasses = std::move(*classes), .weapons = std::move(*weapons)};
+    const std::filesystem::path loadoutsFile = data / "cstrike" / "loadouts.toml";
+    auto loadoutsText = nx::platform::readTextFile(loadoutsFile);
+    if (!loadoutsText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(loadoutsText.error()));
+    }
+    auto loadouts = readLoadouts(*loadoutsText, nx::platform::toUtf8(loadoutsFile), *weapons);
+    if (!loadouts) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(loadouts.error()));
+    }
+    return GameContent{.vfs = std::move(*vfs),
+                       .entityClasses = std::move(*classes),
+                       .weapons = std::move(*weapons),
+                       .loadouts = std::move(*loadouts)};
 }
 
 auto Level::load(const GameContent& content, std::string_view name)
@@ -239,16 +273,14 @@ auto Level::load(const GameContent& content, std::string_view name)
         return std::unexpected{std::move(spawned.error())};
     }
     level.m_models->dropToFloor(resting, *level.m_hulls);
-    const Weapon* const held = content.weapons.findWeapon(kKnifeId);
-    if (held == nullptr) {
-        return nx::fail(LevelError::KnifeUnreadable, std::format("no weapon {:?}", kKnifeId));
+    for (const Weapon& weapon : content.weapons.weapons()) {
+        auto viewModel = ViewModel::read(content.vfs, weapon);
+        if (!viewModel) {
+            return nx::fail(LevelError::ViewModelUnreadable, weapon.models.view,
+                            std::move(viewModel.error()));
+        }
+        level.m_viewModels.push_back(std::move(*viewModel));
     }
-    level.m_heldWeapon = *held;
-    auto knife = ViewModel::read(content.vfs, *held);
-    if (!knife) {
-        return nx::fail(LevelError::KnifeUnreadable, std::move(knife.error()));
-    }
-    level.m_knife = std::move(*knife);
     return made;
 }
 
@@ -264,21 +296,18 @@ auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& cl
 }
 
 auto spawnView(const nx::assets::BspView& map) -> nx::render::Camera {
-    for (const std::string_view classname : {"info_player_start", "info_player_deathmatch"}) {
-        for (const nx::assets::BspEntity& entity : map.entities()) {
-            if (entity.find("classname") != classname) {
-                continue;
-            }
-            const std::optional<nx::Vec3> origin = entity.findVector("origin");
-            const std::optional<nx::Vec3> angles = entity.findVector("angles");
-            if (!origin) {
-                continue;
-            }
-            return nx::render::Camera{.position = *origin + nx::Vec3{.z = kStandingViewHeight.value()},
-                                      .angles = {.yaw = nx::Degrees{angles ? angles->y : 0.0F}}};
-        }
+    const std::optional<FirstSpawn> spawn = firstSpawnOf(map);
+    if (!spawn) {
+        return nx::render::Camera{};
     }
-    return nx::render::Camera{};
+    const std::optional<nx::Vec3> angles = spawn->entity->findVector("angles");
+    return nx::render::Camera{.position = spawn->origin + nx::Vec3{.z = kStandingViewHeight.value()},
+                              .angles = {.yaw = nx::Degrees{angles ? angles->y : 0.0F}}};
+}
+
+auto spawnTeam(const nx::assets::BspView& map) -> Team {
+    const std::optional<FirstSpawn> spawn = firstSpawnOf(map);
+    return spawn ? spawn->team : Team::CounterTerrorists;
 }
 
 } // namespace cs

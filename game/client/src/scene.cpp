@@ -29,10 +29,10 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             nx::render::StudioModel knife) noexcept
+             std::vector<nx::render::StudioModel> weapons) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
-      m_viewModels{std::move(viewModels)}, m_knife{std::move(knife)} {}
+      m_viewModels{std::move(viewModels)}, m_weapons{std::move(weapons)} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format,
@@ -70,14 +70,18 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!models) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(models.error()));
     }
-    auto knife = level.knife().load(*viewModels, commands);
-    if (!knife) {
-        return nx::fail(SceneError::CreateFailed, "the knife", std::move(knife.error()));
+    std::vector<nx::render::StudioModel> weapons;
+    for (const ViewModel& viewModel : level.viewModels()) {
+        auto loaded = viewModel.load(*viewModels, commands);
+        if (!loaded) {
+            return nx::fail(SceneError::CreateFailed, "a weapon's view model", std::move(loaded.error()));
+        }
+        weapons.push_back(std::move(*loaded));
     }
     return Scene{std::move(*world),      nx::render::WorldLight{level.map()},
                  std::move(*sprites),    std::move(*spriteModels),
                  std::move(*studio),     std::move(*models),
-                 std::move(*viewModels), std::move(*knife)};
+                 std::move(*viewModels), std::move(weapons)};
 }
 
 auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
@@ -111,19 +115,23 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
     }
     nx::render::drawInOrder(list, m_world, m_studio, m_sprites);
-    if (!view.sinceDeploy) {
+    if (!view.viewModel) {
         return {};
     }
-    const std::vector<nx::Mat3x4> bones = level.knife().pose(view.camera, *view.sinceDeploy);
-    const std::array knife{nx::render::StudioInstance{
-        .model = m_knife,
+    const std::uint32_t weapon = view.viewModel->weapon.value;
+    nx::expects(weapon < m_weapons.size(), "Scene::draw: a weapon of the level's");
+    const std::vector<nx::Mat3x4> bones =
+        level.viewModels()[weapon].pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt);
+    const std::array held{nx::render::StudioInstance{
+        .model = m_weapons[weapon],
         .bones = bones,
         .light = m_light.modelLightAt({.origin = view.camera.position, .sky = level.skyLight()}, styles),
-        .depth = nx::render::StudioDepth::ViewModel}};
+        .depth = nx::render::StudioDepth::ViewModel,
+        .isMirrored = level.viewModels()[weapon].isMirrored()}};
     if (auto drawn =
-            m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = knife});
+            m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
         !drawn) {
-        return nx::fail(SceneError::DrawFailed, "the knife", std::move(drawn.error()));
+        return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }
     return {};
 }

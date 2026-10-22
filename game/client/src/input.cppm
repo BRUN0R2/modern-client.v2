@@ -90,9 +90,14 @@ public:
     /// together no more than `maxSpeed` (the player's, from the server; zero for no limit). The
     /// movement buttons are set while held; `+jump`, `+duck` and `+use` also when pressed during the
     /// command, so that a press and a release within one (a bind on the mouse wheel) still counts.
-    /// Once a command: it takes the edges of the buttons it reads.
+    /// It selects the weapon selectWeapon chose since the last command. Once a command: it takes the
+    /// edges of the buttons it reads, and the weapon chosen.
     [[nodiscard]] auto nextCommand(nx::EulerAngles view, nx::Milliseconds duration,
                                    nx::UnitsPerSecond maxSpeed) -> UserCommand;
+
+    /// The next command selects `weapon`: what the original's `weapon_<name>` commands and `lastinv`
+    /// ask.
+    inline void selectWeapon(WeaponIndex weapon) noexcept { m_weaponSelect = weapon; }
 
     [[nodiscard]] inline auto buttons() const noexcept -> const InputButtons& { return m_buttons; }
     [[nodiscard]] inline auto cvars() const noexcept -> const InputCvars& { return m_cvars; }
@@ -103,6 +108,7 @@ private:
 
     InputButtons m_buttons;
     InputCvars m_cvars;
+    std::optional<WeaponIndex> m_weaponSelect;
 };
 
 } // namespace cs

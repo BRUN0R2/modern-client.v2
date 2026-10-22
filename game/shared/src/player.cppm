@@ -19,6 +19,13 @@ inline constexpr nx::HitPoints kSpawnHealth{100.0F};
 /// The money a player starts with: mp_startmoney's default.
 inline constexpr nx::Money kStartMoney{800};
 
+/// The teams a player plays in.
+enum class Team : std::uint8_t {
+    Terrorists,
+    CounterTerrorists,
+    Count,
+};
+
 /// What a player has: what its HUD shows of it.
 struct PlayerStatus {
     nx::HitPoints health{kSpawnHealth};

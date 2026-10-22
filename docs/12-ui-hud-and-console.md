@@ -441,8 +441,11 @@ it, but half when it went down during the command, as `CL_KeyState` counts), `+s
 `MWHEELDOWN` jumps once a notch. `turn` turns the view each frame as `CL_AdjustAngles` does:
 `+left` and `+right` (which move instead while `+strafe` is held), `+lookup` and `+lookdown`, up
 to 89 degrees. `+attack`, `+reload` and the other buttons come with what reads them; the mouse
-always looks, so `+mlook` and `+klook` are not there. `next` plays with them: Counter-Strike's
-binds, and `noclip` on `v`.
+always looks, so `+mlook` and `+klook` are not there. `selectWeapon` makes the next command select
+a weapon: `next` registers `weapon_<name>` for each weapon (`weapon_knife`, `weapon_usp`), as the
+original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to
+`slot5`, `invnext` and `invprev` come with the weapon menu. `next` plays with them:
+Counter-Strike's binds, and `noclip` on `v`.
 
 ## 7. Localization
 

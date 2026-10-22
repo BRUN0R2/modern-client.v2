@@ -330,8 +330,10 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Player animation (torso sequence, gait, aim blends)
 - [ ] Viewmodel with its own FOV
 - [ ] Weapon class system (original and custom weapons in the same system)
-- [ ] Weapon state machine (deploy, idle, attack, reload, holster, drop)
-- [ ] Shared spread seed per command
+- [x] The player's weapons (`cs.shared:inventory`): given by its team's loadout (`data/cstrike/loadouts.toml`), drawn when heavier, chosen by `weapon_<name>` and `lastinv`, drawn and idling as their data says; each view model in the player's hand, the guns mirrored as the original draws them ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors), [05 §9](docs/05-rendering.md#9-studio-models-and-gpu-skinning))
+- [ ] Weapon state machine: attack, reload, holster, drop
+- [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
+- [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [ ] Spread, recoil and damage for the knife, Glock, USP, AK-47 and M4A1
 - [ ] Hitgroups, kevlar and helmet
 - [ ] Penetration by material (`materials.txt`)

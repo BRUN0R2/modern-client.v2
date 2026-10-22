@@ -187,6 +187,12 @@ clipSize = 30
 view            = "models/v_ak47.mdl"
 player          = "models/p_ak47.mdl"
 playerAnimation = "ak47"       # the end of the player model's sequences: "ref_aim_ak47"
+viewHand        = "left"       # the view model's hand: drawn mirrored for a player of the other
+
+[view]                         # the view model's sequences, by their number in it
+drawSequences  = [2]           # one at random as it is drawn
+idles          = [{ sequence = 0, wait = 20.0, share = 1.0 }] # by their shares, after each wait
+idlesWhenEmpty = true          # the pistols do not idle with an empty clip
 ```
 
 ```toml
@@ -198,19 +204,36 @@ boxRounds  = 30
 ```
 
 The catalog (`cs::WeaponCatalog`) refuses an id or a classname twice, two weapons at one position
-of a slot, and a weapon whose ammo `ammo.toml` lacks.
+of a slot, a weapon whose ammo `ammo.toml` lacks, and a view without a draw sequence or an idle, an
+idle that waits no time, or idles whose shares do not add up to 1.
 
-**Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1; the client gives the player
-the knife's speed and its view model from its data. Each next part of the weapons brings the data
-its code reads: the view model's sequences and their timings (deploy, idle), firing (cycle time,
-damage, range modifier, penetration), spread and accuracy by movement, recoil (`KickBack`), reload,
-the special modes (silencer, burst), the knife's attacks, and the armor ratio.
+What a player of each team spawns with is `data/cstrike/loadouts.toml` (`cs::Loadouts`, the
+original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds of 9mm, the
+counter-terrorists a knife, a USP and 24 rounds of 45ACP, each weapon with a clip's worth.
+
+**Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, and the loadouts. Each next
+part of the weapons brings the data its code reads: firing (cycle time, damage, range modifier,
+penetration), spread and accuracy by movement, recoil (`KickBack`), reload, the special modes
+(silencer, burst: the USP and the M4A1 are without their silencer today), the knife's attacks, and
+the armor ratio.
 
 ### 7.3 Behaviors
 
 - **Weapon state machine:** deploy, idle, primary/secondary attack, reload (including the
   shell-by-shell shotgun reload), holster, drop. The timings come from the model's sequences
   and from the data.
+  **Today** (`cs.shared:inventory`, `cs::Inventory`, the same for the server and the client's
+  prediction): a player is given weapons with a clip's worth of rounds (`AddPlayerItem`; a weapon
+  it has gives its rounds alone) and carries rounds up to each kind's most (`GiveAmmo`); it draws
+  the first weapon given, and one heavier than the one it holds while `_cl_autowepswitch` is on
+  (`FShouldSwitchWeapon`). A command's selection draws the weapon (`SelectItem`), the one held
+  becoming the one before, which `lastinv` selects (`SelectLastItem`: else the newest of the first
+  of the primary, secondary and knife slots whose newest is not held). Drawing plays a draw
+  sequence, and the weapon idles 1.5 seconds later (`DefaultDeploy`), then after each idle's wait
+  (`WeaponIdle`), the pistols not with an empty clip. The player runs at the speed of the weapon it
+  holds, 240 with none (`ResetMaxSpeed`). `next` gives the player its team's loadout, its team
+  that of the spawn it starts at, and selects with `weapon_<name>` and `lastinv`; the slot keys
+  and the weapon menu come with the HUD's.
 - **Spread:** a per-weapon function reproducing the original, depending on movement, being
   in the air, crouching, zoom and accumulated accuracy.
 - **Recoil:** *punch angle* and accumulation over consecutive shots, with recovery.
