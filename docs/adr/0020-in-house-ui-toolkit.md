@@ -1,6 +1,6 @@
 # ADR-0020 — In-house retained UI toolkit for the menus, the screens and the console
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-22
 
 ## Context
