@@ -58,13 +58,34 @@ using nx::assets::WadView;
         return fail(CheckError::Invalid, std::move(wad.error()));
     }
     for (const nx::assets::WadEntry& entry : wad->entries()) {
-        if (entry.type != WadLumpType::MipTexture) {
-            continue; // pictures and fonts have no reader yet
+        Result<void, nx::assets::WadError> read{};
+        switch (entry.type) {
+        case WadLumpType::MipTexture:
+            read = nx::assets::readTexture(entry).transform([](const auto&) {});
+            break;
+        case WadLumpType::Picture:
+            read = nx::assets::readPicture(entry).transform([](const auto&) {});
+            break;
+        case WadLumpType::Font:
+            read = nx::assets::readFont(entry).transform([](const auto&) {});
+            break;
+        default:
+            continue; // a type no reader decodes
         }
-        if (auto texture = nx::assets::readTexture(entry); !texture) {
-            return fail(CheckError::Invalid, std::format("texture {:?}", entry.name),
-                        std::move(texture.error()));
+        if (!read) {
+            return fail(CheckError::Invalid, std::format("{} {:?}", nx::enumName(entry.type), entry.name),
+                        std::move(read.error()));
         }
+    }
+    return {};
+}
+
+[[nodiscard]] auto checkSpriteList(std::span<const std::byte> bytes) -> Result<void, CheckError> {
+    const std::string text = bytes |
+                             std::views::transform([](std::byte value) { return static_cast<char>(value); }) |
+                             std::ranges::to<std::string>();
+    if (auto list = nx::assets::parseSpriteList(text); !list) {
+        return fail(CheckError::Invalid, std::move(list.error()));
     }
     return {};
 }
@@ -184,9 +205,10 @@ constexpr float kRigidTolerance = 1e-3F;
     return {};
 }
 
-/// The reader of the files with one extension.
+/// The reader of the files with one extension, in one folder when the extension alone does not tell.
 struct Reader {
     std::string_view extension;
+    std::string_view folder{}; ///< The start of their paths: "sprites/" for the sprite lists.
     Format format{};
     auto (*check)(const Vfs& vfs, const VfsPath& path, std::span<const std::byte> bytes)
         -> Result<void, CheckError>;
@@ -209,14 +231,20 @@ constexpr auto kReaders = std::to_array<Reader>({
     {.extension = "wav",
      .format = Format::Wav,
      .check = [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) { return checkWav(bytes); }},
+    {.extension = "txt",
+     .folder = "sprites/",
+     .format = Format::SpriteList,
+     .check = [](const Vfs&, const VfsPath&,
+                 std::span<const std::byte> bytes) { return checkSpriteList(bytes); }},
 });
 
 /// The reader of the file at `path`, by its extension; null when no reader reads it yet.
 [[nodiscard]] auto readerOf(const VfsPath& path) -> const Reader* {
     const std::string_view text = path.text();
     const std::string_view extension = text.substr(text.rfind('.') + 1); // every VfsPath has one
-    const auto found = std::ranges::find_if(kReaders, [extension](const Reader& reader) {
-        return nx::equalsIgnoringCase(extension, reader.extension);
+    const auto found = std::ranges::find_if(kReaders, [text, extension](const Reader& reader) {
+        return nx::equalsIgnoringCase(extension, reader.extension) &&
+               nx::equalsIgnoringCase(text.substr(0, reader.folder.size()), reader.folder);
     });
     return found == kReaders.end() ? nullptr : &*found;
 }

@@ -14,6 +14,7 @@ nxAddModuleLibrary(nxAssets
         src/wav.cppm
         src/bsp.cppm
         src/spr.cppm
+        src/spriteList.cppm
         src/mdl.cppm
         src/tga.cppm
     SOURCES
@@ -25,6 +26,7 @@ nxAddModuleLibrary(nxAssets
         src/wav.cpp
         src/bsp.cpp
         src/spr.cpp
+        src/spriteList.cpp
         src/mdl.cpp
         src/tga.cpp
     DEPENDS

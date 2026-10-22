@@ -206,4 +206,120 @@ TEST(WadTest, RejectsBrokenTextures) {
     EXPECT_EQ(textureError(std::move(noPalette)), WadError::BadTexture);
 }
 
+/// A palette of 256 gray colors after its count, `colors`.
+void appendPalette(Bytes& lump, std::uint16_t colors) {
+    append(lump, colors);
+    for (std::size_t color = 0; color < 256; ++color) {
+        lump.insert(lump.end(), 3, static_cast<std::byte>(color));
+    }
+}
+
+/// A picture lump of `width` by `height` pixels, pixel `i` being `i` modulo 256.
+[[nodiscard]] auto picture(std::uint32_t width, std::uint32_t height, std::uint16_t colors = 256) -> Bytes {
+    Bytes lump;
+    append(lump, width);
+    append(lump, height);
+    for (std::size_t pixel = 0; pixel < std::size_t{width} * height; ++pixel) {
+        lump.push_back(static_cast<std::byte>(pixel % 256));
+    }
+    appendPalette(lump, colors);
+    lump.insert(lump.end(), 2, std::byte{0}); // padding, as the tools write it
+    return lump;
+}
+
+TEST(WadTest, ReadsAPicture) {
+    const Bytes file = wadFile({{.name = "CONBACK", .type = WadLumpType::Picture, .data = picture(32, 20)}});
+    const auto wad = WadView::parse(file);
+    ASSERT_TRUE(wad.has_value());
+    const auto read = nx::assets::readPicture(wad->entries()[0]);
+    ASSERT_TRUE(read.has_value()) << nx::describe(read.error());
+    EXPECT_EQ(read->width, 32U);
+    EXPECT_EQ(read->height, 20U);
+    ASSERT_EQ(read->pixels.size(), 640U);
+    EXPECT_EQ(read->pixels[33], std::byte{33});
+    ASSERT_EQ(read->palette.size(), kPaletteBytes);
+    EXPECT_EQ(read->palette[3 * 200], std::byte{200});
+
+    const auto pictureError = [](Bytes lump, WadLumpType type = WadLumpType::Picture) {
+        const Bytes broken = wadFile({{.name = "BROKEN", .type = type, .data = std::move(lump)}});
+        const auto parsed = WadView::parse(broken);
+        const auto result = nx::assets::readPicture(parsed->entries()[0]);
+        return result ? WadError{} : result.error().code;
+    };
+    EXPECT_EQ(pictureError(picture(8, 8), WadLumpType::MipTexture), WadError::NotAPicture);
+    EXPECT_EQ(pictureError(Bytes(4, std::byte{0})), WadError::BadPicture) << "no header";
+    EXPECT_EQ(pictureError(picture(8, 8, 255)), WadError::BadPicture) << "255 colors";
+    Bytes tooTall = picture(8, 8);
+    tooTall[4] = std::byte{9};
+    EXPECT_EQ(pictureError(std::move(tooTall)), WadError::BadPicture) << "its pixels past its end";
+}
+
+/// A console font of a 256 by 32 picture, rows 10 tall: character `c` is `c % 8 + 2` wide at
+/// (c % 16 * 16, c / 16 % 3 * 10); its palette counts `colors`, and `trailer` bytes follow it.
+[[nodiscard]] auto font(std::uint32_t widthField, std::uint16_t colors = 256, std::size_t trailer = 2)
+    -> Bytes {
+    constexpr std::uint32_t kHeight = 32;
+    constexpr std::uint32_t kRowHeight = 10;
+    Bytes lump;
+    append(lump, widthField);
+    append(lump, kHeight);
+    append(lump, std::uint32_t{3}); // rows
+    append(lump, kRowHeight);
+    for (std::uint32_t character = 0; character < 256; ++character) {
+        append(lump,
+               static_cast<std::uint16_t>((character / 16 % 3 * kRowHeight * 256) + (character % 16 * 16)));
+        append(lump, static_cast<std::uint16_t>((character % 8) + 2));
+    }
+    for (std::size_t pixel = 0; pixel < std::size_t{256} * kHeight; ++pixel) {
+        lump.push_back(pixel % 7 == 0 ? std::byte{255} : std::byte{15});
+    }
+    appendPalette(lump, colors);
+    lump.insert(lump.end(), trailer, std::byte{0});
+    return lump;
+}
+
+TEST(WadTest, ReadsAConsoleFont) {
+    const Bytes file = wadFile({{.name = "CONCHARS", .type = WadLumpType::Font, .data = font(12)}});
+    const auto wad = WadView::parse(file);
+    ASSERT_TRUE(wad.has_value());
+    const auto read = nx::assets::readFont(wad->entries()[0]);
+    ASSERT_TRUE(read.has_value()) << nx::describe(read.error());
+    EXPECT_EQ(read->rowHeight, 10U);
+    EXPECT_EQ(read->picture.width, 256U) << "whatever the width field says";
+    EXPECT_EQ(read->picture.height, 32U);
+    EXPECT_EQ(read->picture.pixels.size(), 256U * 32U);
+    EXPECT_EQ(read->picture.pixels[7], std::byte{255});
+    EXPECT_EQ(read->glyphs['A'].x, 16U); // 65: the second of its row
+    EXPECT_EQ(read->glyphs['A'].y, 10U); // 65 / 16 = 4, 4 % 3 = 1
+    EXPECT_EQ(read->glyphs['A'].width, 3U);
+    EXPECT_EQ(read->glyphs[255].width, 9U);
+
+    // fonts.wad: a width field of 16, sixteen to the picture's width, a palette counting its 768
+    // bytes, and 64 bytes after it, which make its size the one Half-Life 1.1.0.0 writes.
+    const Bytes newStyle = wadFile({{.name = "FONT0", .type = WadLumpType::Font, .data = font(16, 768, 64)}});
+    const auto wadOfFonts = WadView::parse(newStyle);
+    ASSERT_TRUE(wadOfFonts.has_value());
+    const auto font0 = nx::assets::readFont(wadOfFonts->entries()[0]);
+    ASSERT_TRUE(font0.has_value()) << nx::describe(font0.error());
+    EXPECT_EQ(font0->picture.width, 256U);
+}
+
+TEST(WadTest, RejectsBrokenFonts) {
+    const auto fontError = [](Bytes lump, WadLumpType type = WadLumpType::Font) {
+        const Bytes broken = wadFile({{.name = "BROKEN", .type = type, .data = std::move(lump)}});
+        const auto parsed = WadView::parse(broken);
+        const auto result = nx::assets::readFont(parsed->entries()[0]);
+        return result ? WadError{} : result.error().code;
+    };
+    EXPECT_EQ(fontError(font(12), WadLumpType::Picture), WadError::NotAFont);
+    EXPECT_EQ(fontError(Bytes(100, std::byte{0})), WadError::BadFont) << "no header";
+    EXPECT_EQ(fontError(font(12, 100)), WadError::BadFont) << "100 colors";
+    Bytes flat = font(12);
+    flat[12] = std::byte{0}; // rows 0 tall
+    EXPECT_EQ(fontError(std::move(flat)), WadError::BadFont);
+    Bytes outside = font(12);
+    outside[16 + (4 * 'A') + 2] = std::byte{250}; // 'A' 250 wide at x 16
+    EXPECT_EQ(fontError(std::move(outside)), WadError::BadFont);
+}
+
 } // namespace

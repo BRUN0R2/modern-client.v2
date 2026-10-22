@@ -68,10 +68,10 @@ Fuzzing proves that the readers survive hostile input; they must also read every
 real game. `nxcheck` (`tools/nxcheck`) mounts the user's own Counter-Strike 1.6 installation,
 found through Steam or given with `--install <folder>`, and reads each file through the VFS with
 the reader of its format, on the workers of the Job System: every lump of a map and its collision
-hulls, every mip texture of a WAD, a model with its `*T.mdl` and the animation of each sequence from
+hulls, every mip texture, picture and console font of a WAD, a model with its `*T.mdl` and the animation of each sequence from
 its sequence group file, its bones posed at every frame and halfway to the next at both ends of its
-first blending (`cs::poseBones`, each bone's transform rigid), every sprite, every TGA image and every
-sound. It prints what each format read and every failure with its causes, and exits with 1 when a
+first blending (`cs::poseBones`, each bone's transform rigid), every sprite, every TGA image, every
+sound and every sprite list of the HUD (`sprites/*.txt`). It prints what each format read and every failure with its causes, and exits with 1 when a
 file failed, 2 when the installation cannot be used.
 
 It runs on a legitimate local copy, never in CI: no Valve file enters the repository or its
