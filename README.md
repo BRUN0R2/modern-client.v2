@@ -38,8 +38,8 @@ fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV, TGA), w
 `nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. M3
 has begun: `nx.collision` (traces through the hulls of a map), `nx.game` (the map's brush
 entities, as the game makes them, and the doors a touch opens) and `cs.shared` (player
-movement: walking, the air, jumps, ducking, stairs, water and ladders), with which `nxview` walks
-through the maps.
+movement: walking, the air, jumps, ducking, stairs, water and ladders), with which the client,
+`next`, plays the maps alone.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
 
@@ -61,13 +61,16 @@ On Linux, use the `dev-linux-gcc` preset; the other presets and their status are
 
 With Counter-Strike 1.6 installed through Steam, `nxcheck` reads every file of the installation
 with the engine's readers and reports any it cannot read
-([docs/18](docs/18-testing-and-quality.md#real-content)), and `nxview` walks through one of its
-maps as a player (the mouse looks; W A S D move, Space jumps, Ctrl ducks, Shift walks; F flies
-instead, with Space and Ctrl to rise and sink; Escape ends):
+([docs/18](docs/18-testing-and-quality.md#real-content)), and `next` plays one of its maps as a
+player with a knife: the mouse looks, and the keys do what Counter-Strike binds them to (W A S D
+move, Space jumps, Ctrl ducks, Shift walks, E uses, the arrows turn); V flies through everything
+(`noclip`), and Escape ends it. Its settings and binds are kept in `config.cfg`, in
+`%APPDATA%\Modern-Client.v2`. `nxview` renders one frame of a map into a BMP file:
 
 ```powershell
 .\build\dev-windows-msvc\bin\nxcheck.exe
-.\build\dev-windows-msvc\bin\nxview.exe --map de_dust2
+.\build\dev-windows-msvc\bin\next.exe +map de_dust2
+.\build\dev-windows-msvc\bin\nxview.exe --map cs_italy --screenshot cs_italy.bmp
 ```
 
 ## License

@@ -105,7 +105,7 @@ if (!lightmapAtlas) {
 | Present | `vid_vsync 0/1`, `r_present_mode immediate/mailbox/fifo` |
 | Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID |
 | Parallel recording | One `VkCommandPool` per worker per frame in flight |
-| Validation | Validation layers + sync validation in development builds (`--validation` in `nxview`; always in the tests) |
+| Validation | Validation layers + sync validation in development builds (`--validation` in `next` and `nxview`; always in the tests) |
 | *Device lost* | Typed error. The renderer tries to recreate the device and resources once and, if that fails, produces a crash report |
 | Upload | Persistent mapped staging ring. A dedicated transfer queue when available |
 
@@ -191,7 +191,7 @@ of its own.
 - **Future:** GPU culling (*GPU-driven*) when new maps without BSP limits justify
   it.
 
-**Today** (`nx.render:world`, `nxview --map`): every face of the world and of the brush
+**Today** (`nx.render:world`, which `next` and `nxview` draw): every face of the world and of the brush
 entities (placed at their `origin`) in one vertex buffer; the textures of the map and of the WADs
 its `wad` key names, by file name at the root of the VFS as the original looks them up, with their
 four mips, a checkerboard for a name no WAD has, or whose first WAD that has it cannot read it (logged
@@ -223,7 +223,7 @@ luxels around each point, as the original's bilinear filter blends its light tex
 without lightmaps is fully bright, as the original draws a face without samples. The styles'
 brightness comes with each draw (`nx.render:lightStyle`): 22 for each letter of a style's pattern
 after `a` (264 at `m`, the normal one), ten letters a second, 256 for a style the game left unset,
-and 264 for the styles above the 64 the game sets. `nxview` sets the world's patterns (flicker,
+and 264 for the styles above the 64 the game sets. The client (`cs.client`) sets the world's patterns (flicker,
 candles, strobes, pulses...) as Quake's world.qc sets them, under the names the Half-Life FGDs give
 the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
 their entities, `a` for those that start off, else `m` or their `pattern`.
@@ -313,7 +313,7 @@ flowchart LR
    the viewer and its right (`R_StudioSetupChrome`); a masked mesh is cut where its alpha is 0.5 or
    less, an additive one adds itself without writing its depth; the triangles the original culls
    (`GL_FRONT`) are culled. The view's own model is drawn in the nearest 0.3 of the depths, as the
-   original keeps it out of walls (`VIEWMODEL_DEPTH_RANGE`). `nxview` holds the knife
+   original keeps it out of walls (`VIEWMODEL_DEPTH_RANGE`). The client holds the knife
    (`models/v_knife.mdl`) as Counter-Strike deploys it: `draw`, then `idle` 1.5 seconds later and
    every 20 seconds, posed by `cs::poseBones` at the frame `cs::sequenceFrameAt` gives, where the
    player looks from, lit by the world there and by the sky the map's `light_environment` sets. A
@@ -322,8 +322,8 @@ flowchart LR
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
    additive meshes added as their alpha says. The solid models are drawn with the solid things of the frame, the
    others but those at a `renderamt` of 0 among everything it draws blended, by the middle of their
-   bounds (§7.1). A `StudioRenderer` is prepared once a frame: `nxview` draws the view's own model
-   with one of its own, last. `nxview` shows the maps' studio models as the game makes them: the
+   bounds (§7.1). A `StudioRenderer` is prepared once a frame: the client's scene (`cs::Scene`) draws the view's
+   own model with one of its own, last. The client shows the maps' studio models as the game makes them: the
    `cycler_sprite` of a model (ReGameDLL's `CCyclerSprite`), its sequence at its `framerate` from
    when the map starts, as the client estimates it; and the `hostage_entity` (`CHostage`), its model
    the map's or `scientist.mdl`, its first idle sequence at its own speed (the game picks one of them
@@ -405,7 +405,7 @@ not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squa
 above 127, Normal, TransAlpha or TransTexture) is cut at an alpha of a third and lit: drawn again where
 it was, its light from the world under it (`R_LightPoint`) multiplying what is there. The solid sprites
 are drawn after the solid models, the others among everything the frame draws blended, by their
-origins (§7.1), before the view's own model. `nxview` shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
+origins (§7.1), before the view's own model. The client shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
 sprite as the game makes them (ReGameDLL's `CSprite`, `CGlow`, `CCyclerSprite`): an `env_sprite`'s yaw
 alone is its roll, a named one that does not start on is off, and each animates ten times a second,
 its last frame index the end of its loop (one that plays once turning off past it); a glow the

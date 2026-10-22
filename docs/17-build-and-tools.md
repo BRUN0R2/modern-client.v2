@@ -56,7 +56,7 @@ modern-client.v2/
 ├── tools/
 │   ├── nxbake/                 # asset import/cook/pack
 │   ├── nxcheck/                # reads the CS 1.6 installation with every reader (tool.nxcheck)
-│   ├── nxview/                 # the map and model viewer
+│   ├── nxview/                 # a frame of a map into a file, as the client draws it
 │   └── parityRecorder/        # reference data capture from the original game
 ├── tests/
 │   ├── parity/                 # parity fixtures and tests
@@ -236,13 +236,13 @@ Rules:
 | Target | Description |
 |--------|-------------|
 | `nextLauncher` | Launcher: updates itself and the client, then starts `next` ([21](21-launcher-and-updates.md)). Planned (M4) |
-| `next` | Client (includes the listen server). Planned (M2–M3) |
+| `next` | Client (the listen server comes with `cs.server`). Today (`app.client`): the original's command line (`-basedir <folder>`, and the `+` commands it runs after the player's config files: `next +map de_dust2`), the player's settings and binds, and a map the `map` command loads, played alone in a window, the player walking with a knife as the binds ask; `noclip` flies, `quit` or Escape ends it; `--data` names the project's `data/` folder, `--validation` |
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
-| `nxview` | The map and model viewer: `--map de_dust2` walks a player with a knife through a map of the Counter-Strike 1.6 installation, moved by `cs.shared`'s movement at 100 commands a second, or flies a free camera through it (F switches); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--screenshot <file.bmp>` renders one frame without a window, `--time <seconds>` after the map starts; `--validation` |
+| `nxview` | A frame of a map into a file, as the client draws it (`cs.client`): `--screenshot <file.bmp>` renders one 1280x720 frame of `--map <name>` (default: de_dust2) of the Counter-Strike 1.6 installation without a window, with the original's default settings, `--time <seconds>` after the map starts; `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--validation`. Playing a map is `next`'s |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |

@@ -5,8 +5,8 @@
 /// Counter-Strike deploys it (ReGameDLL's CKnife::Deploy, DefaultDeploy and CKnife::WeaponIdle, GPL,
 /// consulted: docs/20 section 3): its `draw` sequence as it comes out, then `idle` 1.5 seconds later
 /// and again every 20 seconds, each from its first frame; posed where the player looks from, as the
-/// view's own model is (cs::poseBones). Until the game's weapons come, nxview holds it.
-export module tool.nxview:viewModel;
+/// view's own model is (cs::poseBones). Until the game's weapons come, the player holds it.
+export module cs.client:viewModel;
 
 import std;
 import nx.core;
@@ -16,7 +16,7 @@ import nx.rhi;
 import nx.render;
 import :modelFiles;
 
-export namespace nxview {
+export namespace cs {
 
 /// Why the knife cannot be held.
 enum class ViewModelError : std::uint8_t {
@@ -56,4 +56,4 @@ private:
     Animation m_idle;
 };
 
-} // namespace nxview
+} // namespace cs

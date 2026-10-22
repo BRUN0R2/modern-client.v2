@@ -143,7 +143,7 @@ here the startup runs that file itself. `registerClientCvars` registers the clie
 §5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, 0 for no limit), `gl_vsync`
 (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), all archived, and `texgamma`
-(2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive. `nxview` reads
+(2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive. `next` reads
 them as it starts and writes `config.cfg` as it ends; a change takes effect when it starts again
 until the console comes. `config.cfg` keeps the binds too (§6), before the cvars, in the
 original's order. `vid_vsync` as the name of `gl_vsync`, and the other cvars, come with their
@@ -255,7 +255,7 @@ it, but half when it went down during the command, as `CL_KeyState` counts), `+s
 `MWHEELDOWN` jumps once a notch. `turn` turns the view each frame as `CL_AdjustAngles` does:
 `+left` and `+right` (which move instead while `+strafe` is held), `+lookup` and `+lookdown`, up
 to 89 degrees. `+attack`, `+reload` and the other buttons come with what reads them; the mouse
-always looks, so `+mlook` and `+klook` are not there. `nxview` plays with them: Counter-Strike's
+always looks, so `+mlook` and `+klook` are not there. `next` plays with them: Counter-Strike's
 binds, and `noclip` on `v`.
 
 ## 7. Localization

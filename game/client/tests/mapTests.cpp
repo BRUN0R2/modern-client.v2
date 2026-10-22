@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// What nxview sets up as the game would: the sky's light and the sprite entities of a map, the BSP seed
+// What the client sets up as the game would: the sky's light and the sprite entities of a map, the BSP seed
 // of the fuzz corpus given other entities, and how those sprites animate.
 
 #include <gtest/gtest.h>
@@ -12,13 +12,13 @@ import nx.math;
 import nx.platform;
 import nx.assets;
 import nx.render;
-import tool.nxview;
+import cs.client;
 
 namespace {
 
+using cs::MapSprite;
+using cs::SpriteClass;
 using nx::render::RenderMode;
-using nxview::MapSprite;
-using nxview::SpriteClass;
 
 constexpr float kTolerance = 1e-5F;
 /// Where the header of a BSP keeps the offset and the length of its entities.
@@ -68,7 +68,7 @@ void expectNear(nx::Vec3 actual, nx::Vec3 expected, std::string_view what = {}) 
 TEST(SkyLightTest, LightEnvironmentsLightIsMadeTheEnginesAndAimsByItsPitch) {
     const MapOf map{R"({ "classname" "worldspawn" }
 { "classname" "light_environment" "angles" "0 90 0" "pitch" "-90" "_light" "255 128 64 200" })"};
-    const nx::render::SkyLight sky = nxview::skyLightOf(map.get());
+    const nx::render::SkyLight sky = cs::skyLightOf(map.get());
     // Each channel scaled by 200 / 255 and cut: 200, 100 and 50.
     expectNear(sky.color, {.x = engineLevel(200.0), .y = engineLevel(100.0), .z = engineLevel(50.0)});
     expectNear(sky.direction, {.z = -1.0F}, "a pitch of -90 aims straight down");
@@ -78,14 +78,14 @@ TEST(SkyLightTest, OneLevelIsGrayAndLaterKeysWin) {
     // `pitch` before `angles`: the angles set later win, their pitch 0.
     const MapOf map{R"({ "classname" "worldspawn" }
 { "classname" "light_environment" "pitch" "-90" "angles" "0 180 0" "_light" "100" })"};
-    const nx::render::SkyLight sky = nxview::skyLightOf(map.get());
+    const nx::render::SkyLight sky = cs::skyLightOf(map.get());
     expectNear(sky.color, {.x = engineLevel(100.0), .y = engineLevel(100.0), .z = engineLevel(100.0)});
     expectNear(sky.direction, {.x = -1.0F}, "level, toward a yaw of 180");
 }
 
 TEST(SkyLightTest, AMapWithoutLightEnvironmentHasNoSkyLight) {
     const MapOf map{R"({ "classname" "worldspawn" })"};
-    expectNear(nxview::skyLightOf(map.get()).color, {});
+    expectNear(cs::skyLightOf(map.get()).color, {});
 }
 
 TEST(MapSpriteTest, SpriteEntitiesAreReadAsTheGameMakesThem) {
@@ -95,7 +95,7 @@ TEST(MapSpriteTest, SpriteEntitiesAreReadAsTheGameMakesThem) {
 { "classname" "env_glow" "model" "sprites/glow01.SPR" "rendermode" "3" "renderfx" "14" "renderamt" "300" }
 { "classname" "cycler_sprite" "model" "models/palmtree.mdl" }
 { "classname" "info_target" "model" "sprites/ignored.spr" })"};
-    const std::vector<MapSprite> sprites = nxview::mapSpritesOf(map.get());
+    const std::vector<MapSprite> sprites = cs::mapSpritesOf(map.get());
     ASSERT_EQ(sprites.size(), 3U) << "the sprites of env_sprite and env_glow; not a model, nor another class";
 
     const MapSprite& flare = sprites[0];
@@ -117,27 +117,26 @@ TEST(MapSpriteTest, SpriteEntitiesAreReadAsTheGameMakesThem) {
 
 TEST(MapSpriteTest, AnEnvSpriteAnimatesTenTimesASecondAndLoopsShortOfItsLastFrame) {
     const MapSprite flare{.kind = SpriteClass::Sprite, .framerate = 10.0F};
-    EXPECT_EQ(nxview::frameAt(flare, 10, nx::Seconds{0.05F}), 0.0F) << "no think has added a frame";
-    EXPECT_EQ(nxview::frameAt(flare, 10, nx::Seconds{0.35F}), 3.0F) << "three thinks";
-    EXPECT_EQ(nxview::frameAt(flare, 10, nx::Seconds{1.05F}), 1.0F) << "frame 10 is past 9: 10 modulo 9";
-    EXPECT_EQ(nxview::frameAt(flare, 2, nx::Seconds{1.0F}), 0.0F) << "two frames do not animate";
+    EXPECT_EQ(cs::frameAt(flare, 10, nx::Seconds{0.05F}), 0.0F) << "no think has added a frame";
+    EXPECT_EQ(cs::frameAt(flare, 10, nx::Seconds{0.35F}), 3.0F) << "three thinks";
+    EXPECT_EQ(cs::frameAt(flare, 10, nx::Seconds{1.05F}), 1.0F) << "frame 10 is past 9: 10 modulo 9";
+    EXPECT_EQ(cs::frameAt(flare, 2, nx::Seconds{1.0F}), 0.0F) << "two frames do not animate";
 
     const MapSprite once{.kind = SpriteClass::Sprite, .framerate = 10.0F, .playsOnce = true};
-    EXPECT_EQ(nxview::frameAt(once, 10, nx::Seconds{0.95F}), 9.0F);
-    EXPECT_EQ(nxview::frameAt(once, 10, nx::Seconds{1.05F}), std::nullopt)
-        << "past its last frame it turns off";
+    EXPECT_EQ(cs::frameAt(once, 10, nx::Seconds{0.95F}), 9.0F);
+    EXPECT_EQ(cs::frameAt(once, 10, nx::Seconds{1.05F}), std::nullopt) << "past its last frame it turns off";
 
     const MapSprite off{.kind = SpriteClass::Sprite, .isOn = false};
-    EXPECT_EQ(nxview::frameAt(off, 10, nx::Seconds{1.0F}), std::nullopt);
+    EXPECT_EQ(cs::frameAt(off, 10, nx::Seconds{1.0F}), std::nullopt);
 }
 
 TEST(MapSpriteTest, GlowsAnimateWithAFramerateAndCyclersWithout) {
     const MapSprite still{.kind = SpriteClass::Glow};
-    EXPECT_EQ(nxview::frameAt(still, 10, nx::Seconds{1.0F}), 0.0F);
+    EXPECT_EQ(cs::frameAt(still, 10, nx::Seconds{1.0F}), 0.0F);
     const MapSprite glow{.kind = SpriteClass::Glow, .framerate = 20.0F};
-    EXPECT_EQ(nxview::frameAt(glow, 10, nx::Seconds{0.25F}), 4.0F) << "two thinks of two frames";
+    EXPECT_EQ(cs::frameAt(glow, 10, nx::Seconds{0.25F}), 4.0F) << "two thinks of two frames";
     const MapSprite cycler{.kind = SpriteClass::Cycler, .framerate = 10.0F};
-    EXPECT_EQ(nxview::frameAt(cycler, 3, nx::Seconds{0.25F}), 0.0F) << "frame 2 of the loop's 2: 0 again";
+    EXPECT_EQ(cs::frameAt(cycler, 3, nx::Seconds{0.25F}), 0.0F) << "frame 2 of the loop's 2: 0 again";
 }
 
 TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
@@ -146,11 +145,11 @@ TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
 { "classname" "cycler_sprite" "model" "sprites/glow01.spr" }
 { "classname" "hostage_entity" "model" "/models/hostage.mdl" "angle" "270" "skin" "2" }
 { "classname" "hostage_entity" "skin" "-1" })"};
-    const std::vector<nxview::MapModel> models = nxview::mapModelsOf(map.get());
+    const std::vector<cs::MapModel> models = cs::mapModelsOf(map.get());
     ASSERT_EQ(models.size(), 3U) << "the cycler of a model and the hostages; not the cycler of a sprite";
 
-    const nxview::MapModel& palm = models[0];
-    EXPECT_EQ(palm.kind, nxview::ModelClass::Cycler);
+    const cs::MapModel& palm = models[0];
+    EXPECT_EQ(palm.kind, cs::ModelClass::Cycler);
     EXPECT_EQ(palm.model, "models/palmtree.mdl");
     expectNear(palm.origin, {.x = 1.0F, .y = 2.0F, .z = 3.0F});
     EXPECT_FLOAT_EQ(palm.angles.yaw.value(), 90.0F) << "a cycler keeps its yaw";
@@ -158,8 +157,8 @@ TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
     EXPECT_EQ(palm.mode, RenderMode::TransAlpha);
     EXPECT_EQ(palm.amount, 255);
 
-    const nxview::MapModel& named = models[1];
-    EXPECT_EQ(named.kind, nxview::ModelClass::Hostage);
+    const cs::MapModel& named = models[1];
+    EXPECT_EQ(named.kind, cs::ModelClass::Hostage);
     EXPECT_EQ(named.model, "/models/hostage.mdl");
     EXPECT_FLOAT_EQ(named.angles.yaw.value(), 270.0F) << "\"angle\" is the yaw";
     EXPECT_EQ(named.skin, 2U);
