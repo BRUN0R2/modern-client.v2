@@ -5,8 +5,9 @@
 ///
 /// Today: the VFS over mounted directories, the Counter-Strike 1.6 installation as a content
 /// source, detected in the Steam libraries, the WAD3 (textures, pictures, console fonts), WAV,
-/// BSP v30, SPR v2, MDL v10 and TGA readers, and the HUD's sprite lists. Profiles, asset handles
-/// and the loading pipeline come next, in the order of TODO.md (M2).
+/// BSP v30, SPR v2, MDL v10 and TGA readers, the HUD's sprite lists, and VGUI2's KeyValues (its
+/// schemes, layouts and localized strings). Profiles, asset handles and the loading pipeline come
+/// next, in the order of TODO.md (M2).
 export module nx.assets;
 
 export import :binary; // nothing exported: what the readers share
@@ -18,5 +19,6 @@ export import :wav;
 export import :bsp;
 export import :spr;
 export import :spriteList;
+export import :keyValues;
 export import :mdl;
 export import :tga;

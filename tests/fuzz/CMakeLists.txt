@@ -43,6 +43,14 @@ nxAddFuzzer(fuzzMdl
     CORPUS
         corpus/mdl)
 
+nxAddFuzzer(fuzzKeyValues
+    SOURCES
+        keyValuesFuzzer.cpp
+    DEPENDS
+        nx::assets
+    CORPUS
+        corpus/keyValues)
+
 nxAddFuzzer(fuzzTga
     SOURCES
         tgaFuzzer.cpp
