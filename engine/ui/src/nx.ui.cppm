@@ -15,4 +15,5 @@ export module nx.ui;
 export import :panel;
 export import :font;
 export import :fontCatalog;
+export import :schemeFont;
 export import :text;

@@ -115,7 +115,18 @@ Segoe UI and Marlett, and `choose` reproduces what it gave:
   a pixel to the right, and advances a pixel more, as GDI draws it (the same in all 94 glyphs
   compared); the line keeps its metrics.
 
-Scanning this computer's 172 faces takes about 0.2 s. Still to come: Windows' bitmap fonts
+Scanning this computer's 172 faces takes about 0.2 s.
+
+**A scheme's font** (`nx.ui:schemeFont`). A font of a scheme's `Fonts` lists candidates; the scheme
+files say how they combine: in their order, a later one only for a range not already filled, and
+one that fails to load replaced by those after it. A `SchemeFontSet` is a font made for a screen:
+the candidates whose `yres` holds the screen's height (and those without one), each opened with the
+face the catalog chooses for its name, weight and italics, at its `tall`, smoothed when it says
+`antialias`; a character is drawn by the first whose `range` holds it, and the line is the first's.
+Every font of the installation's `TrackerScheme.res` and `ClientScheme.res` opens so on this
+computer, but `GameConsole_Mono`, whose Courier is a bitmap font.
+
+Still to come: Windows' bitmap fonts
 (`.fon`), such as the Courier that `GameConsole_Mono` asks for; italics simulated on a family
 without an italic face (Tahoma); and atlases that grow as new characters come.
 

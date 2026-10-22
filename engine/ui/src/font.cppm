@@ -23,6 +23,7 @@ enum class FontError : std::uint8_t {
     NoGlyph,    ///< The face has no glyph for the character.
     BadGlyph,   ///< The face's glyph cannot be loaded or drawn; the detail says why.
     Unreadable, ///< The font file cannot be read (cause: the file system's).
+    NoFace,     ///< No face can be had for what a scheme asks for; the detail names what it asked.
 };
 
 /// The tallest cell a font is sized to, in pixels: past it, a glyph's bitmap outgrows any atlas.
