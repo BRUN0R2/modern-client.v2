@@ -239,8 +239,15 @@ views over an `nx::console::Console`, which writes replies and failures to a
   `10.5`), finite `float`, text (no double quotes or line endings, so that `config.cfg`
   always reads the value back; a `TextRule` may narrow it further, as `cl_crosshair_size`
   takes `auto, small, medium or large` and writes the word) and `enum` with `Count` (accepts
-  the number or the enumerator name and writes the number). Numbers may have a range. Rejected text never
-  becomes 0: `mp_freezetime: expected a whole number in [0, 60], got "abc"`.
+  the number or the enumerator name and writes the number). Numbers may have a range. Rejected text
+  never becomes 0: `mp_freezetime: expected a whole number in [0, 60], got "abc"`.
+- **The input line's help:** `completions(prefix, limit)` gives the commands, cvars and aliases
+  whose names begin with what is typed, in any case and in the order of their names, each with its
+  description (an alias's body), and a cvar's value and what it accepts; `completionPrefix(line)`
+  finds the name being typed: the first word of the last command, after the last `;` outside
+  quotes, while nothing follows it. `CommandHistory` keeps the last 128 lines sent, the newest last,
+  without blank lines or the newest one again, and walks them with the up and down keys back to
+  the line being typed.
 
 | Flag | Effect |
 |------|--------|
