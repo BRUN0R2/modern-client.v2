@@ -17,6 +17,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
+- [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
 - [ ] Define the reference hardware for the performance targets
 - [x] Free content by default; original assets optional and configured locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md))
 - [x] Rook Plugin Exception: additional permission under section 7 of the GPL for plugins and mods ([ADR-0010](docs/adr/0010-license.md))
