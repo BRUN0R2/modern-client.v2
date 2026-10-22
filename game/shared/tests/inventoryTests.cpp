@@ -2,19 +2,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // A player's weapons: given with their rounds, drawn when heavier, chosen by a command or `lastinv`,
-// idling after their draw and each wait, with the random numbers of the command's number.
+// idling after their draw and each wait, with the random numbers of the command's number; and the
+// guns' fire, as the original's: their cycle, once a press for a pistol, the empty click, the
+// accuracy by burst or by pace, the spread as the shooter moves, the kick, and the reload; the timers
+// counted down in float by each command, as many commands as the original's last.
 
 #include <gtest/gtest.h>
 
 import std;
 import nx.core;
+import nx.math;
 import nx.game;
 import cs.shared;
 
 namespace {
 
+using cs::Button;
 using cs::CommandNumber;
 using cs::Inventory;
+using cs::Shooter;
+using cs::Shot;
+using cs::SpreadTerm;
 using cs::UserCommand;
 using cs::Weapon;
 using cs::WeaponCatalog;
@@ -26,8 +34,14 @@ constexpr WeaponIndex kKnife{0};
 constexpr WeaponIndex kGlock{1};
 constexpr WeaponIndex kAk{2};
 
-/// Ticks at the default rate, from the map's start.
-constexpr std::int64_t kTicksPerSecond = 100;
+/// A command each tick, at the default rate of 100 a second.
+constexpr nx::Milliseconds kCommandDuration{10.0F};
+/// A weapon given before the first command fires from this one: DefaultDeploy's 0.75 seconds, which
+/// counted down in float last 76 commands, as the original's do.
+constexpr std::int64_t kReady = 76;
+/// It idles first at this one: 1.5 seconds, 151 commands.
+constexpr std::int64_t kFirstIdle = 151;
+constexpr float kTolerance = 1e-5F;
 
 [[nodiscard]] auto at(std::int64_t tick) -> nx::game::TickTime {
     return nx::game::TickTime{.now = nx::GameTime::atTick(tick)};
@@ -48,30 +62,72 @@ constexpr std::int64_t kTicksPerSecond = 100;
 [[nodiscard]] auto catalog() -> WeaponCatalog {
     const cs::AmmoTypes ammo{.ammo = {cs::AmmoType{.id = "9mm", .maxCarried = 120, .boxRounds = 30},
                                       cs::AmmoType{.id = "762Nato", .maxCarried = 90, .boxRounds = 30}}};
-    auto made = WeaponCatalog::make(
-        ammo, {weapon("knife", WeaponSlot::Knife, 0, 250.0F, std::nullopt,
-                      {.drawSequences = {3},
-                       .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
-                       .idlesWhenEmpty = true}),
-               weapon("glock18", WeaponSlot::Secondary, 5, 250.0F,
-                      cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
-                      {.drawSequences = {8, 11},
-                       .idles = {WeaponIdle{.sequence = 2, .wait = nx::Seconds{3.0625F}, .share = 0.3F},
-                                 WeaponIdle{.sequence = 0, .wait = nx::Seconds{3.75F}, .share = 0.3F},
-                                 WeaponIdle{.sequence = 1, .wait = nx::Seconds{2.5F}, .share = 0.4F}},
-                       .idlesWhenEmpty = false}),
-               weapon("ak47", WeaponSlot::Primary, 25, 221.0F,
-                      cs::WeaponMagazine{.ammo = "762Nato", .clipSize = 30},
-                      {.drawSequences = {2},
-                       .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
-                       .idlesWhenEmpty = true})});
+    Weapon knife = weapon("knife", WeaponSlot::Knife, 0, 250.0F, std::nullopt,
+                          {.drawSequences = {3},
+                           .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
+                           .idlesWhenEmpty = true});
+    Weapon glock =
+        weapon("glock18", WeaponSlot::Secondary, 5, 250.0F, cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
+               {.drawSequences = {8, 11},
+                .idles = {WeaponIdle{.sequence = 2, .wait = nx::Seconds{3.0625F}, .share = 0.3F},
+                          WeaponIdle{.sequence = 0, .wait = nx::Seconds{3.75F}, .share = 0.3F},
+                          WeaponIdle{.sequence = 1, .wait = nx::Seconds{2.5F}, .share = 0.4F}},
+                .idlesWhenEmpty = false});
+    glock.firing = cs::WeaponFiring{.cycle = nx::Seconds{0.15F},
+                                    .isAutomatic = false,
+                                    .idleAfterShot = nx::Seconds{2.5F},
+                                    .shootSequences = {3, 4, 5},
+                                    .lastShotSequence = 6,
+                                    .accuracy = {.initial = 0.9F,
+                                                 .paced = cs::PacedAccuracy{.threshold = nx::Seconds{0.325F},
+                                                                            .rate = 0.275F,
+                                                                            .minimum = 0.6F,
+                                                                            .maximum = 0.9F}},
+                                    .spread = {.air = {.scale = 1.0F},
+                                               .moving = {.scale = 0.165F},
+                                               .ducked = SpreadTerm{.scale = 0.075F},
+                                               .standing = {.scale = 0.1F}}};
+    glock.reload = cs::WeaponReload{.time = nx::Seconds{2.2F}, .sequences = {7, 12}};
+    Weapon ak =
+        weapon("ak47", WeaponSlot::Primary, 25, 221.0F, cs::WeaponMagazine{.ammo = "762Nato", .clipSize = 30},
+               {.drawSequences = {2},
+                .idles = {WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
+                .idlesWhenEmpty = true});
+    ak.firing = cs::WeaponFiring{
+        .cycle = nx::Seconds{0.0955F},
+        .isAutomatic = true,
+        .idleAfterShot = nx::Seconds{1.9F},
+        .shootSequences = {3, 4, 5},
+        .accuracy = {.initial = 0.2F,
+                     .burst = cs::BurstAccuracy{.divisor = 200, .offset = 0.35F, .maximum = 1.25F}},
+        .spread = {.movingAbove = nx::UnitsPerSecond{140.0F},
+                   .air = {.base = 0.04F, .scale = 0.4F},
+                   .moving = {.base = 0.04F, .scale = 0.07F},
+                   .standing = {.scale = 0.0275F}},
+        .recoil = {.kicks =
+                       cs::KickByMovement{.moving = {1.5F, 0.45F, 0.225F, 0.05F, 6.5F, 2.5F, 7},
+                                          .air = {2.0F, 1.0F, 0.5F, 0.35F, 9.0F, 6.0F, 5},
+                                          .ducked = {0.9F, 0.35F, 0.15F, 0.025F, 5.5F, 1.5F, 9},
+                                          .standing = {1.0F, 0.375F, 0.175F, 0.0375F, 5.75F, 1.75F, 8}}}};
+    ak.reload = cs::WeaponReload{.time = nx::Seconds{2.45F}, .sequences = {1}};
+    auto made = WeaponCatalog::make(ammo, {std::move(knife), std::move(glock), std::move(ak)});
     EXPECT_TRUE(made.has_value()) << (made ? "" : nx::describe(made.error()));
     return std::move(made).value();
 }
 
-[[nodiscard]] auto command(std::uint32_t number, std::optional<WeaponIndex> select = std::nullopt)
-    -> UserCommand {
-    return UserCommand{.number = CommandNumber{number}, .weaponSelect = select};
+/// The command `number`, holding `held`, selecting `select`.
+[[nodiscard]] auto command(std::uint32_t number, std::initializer_list<Button> held = {},
+                           std::optional<WeaponIndex> select = std::nullopt) -> UserCommand {
+    UserCommand made{.number = CommandNumber{number}, .duration = kCommandDuration, .weaponSelect = select};
+    for (const Button button : held) {
+        made.buttons.set(button);
+    }
+    return made;
+}
+
+/// A shooter standing still on the ground.
+[[nodiscard]] auto standing() -> Shooter {
+    return Shooter{.isOnGround = true};
 }
 
 /// An inventory given `weapons` in their order at the map's start, each drawn when heavier.
@@ -83,6 +139,17 @@ constexpr std::int64_t kTicksPerSecond = 100;
         EXPECT_TRUE(inventory.give(index, true, at(0), random));
     }
     return inventory;
+}
+
+/// The shots of the frames from `first` to `last`, each command numbered by its tick, holding `held`.
+auto frames(Inventory& inventory, Shooter& shooter, std::int64_t first, std::int64_t last,
+            std::initializer_list<Button> held = {}) -> std::vector<Shot> {
+    std::vector<Shot> shots;
+    for (std::int64_t tick = first; tick <= last; ++tick) {
+        std::ranges::move(inventory.frame(command(static_cast<std::uint32_t>(tick), held), shooter, at(tick)),
+                          std::back_inserter(shots));
+    }
+    return shots;
 }
 
 TEST(InventoryTest, TheFirstWeaponAndEachHeavierOneAreDrawn) {
@@ -102,6 +169,7 @@ TEST(InventoryTest, TheFirstWeaponAndEachHeavierOneAreDrawn) {
     EXPECT_TRUE(inventory.give(kGlock, true, at(10), random));
     EXPECT_EQ(inventory.held()->weapon, kGlock);
     EXPECT_EQ(inventory.held()->clip, 20U);
+    EXPECT_EQ(inventory.held()->accuracy, 0.9F);
     EXPECT_EQ(inventory.reserve("9mm"), 0U);
     EXPECT_TRUE(inventory.animation()->sequence == 8U || inventory.animation()->sequence == 11U);
     EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(10));
@@ -140,15 +208,15 @@ TEST(InventoryTest, ACommandDrawsTheWeaponItSelectsAndLastinvTheOneBefore) {
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kKnife, kGlock});
 
-    inventory.play(command(1, kKnife), at(5));
+    inventory.select(command(1, {}, kKnife), at(5));
     EXPECT_EQ(inventory.held()->weapon, kKnife);
     EXPECT_EQ(inventory.animation()->sequence, 3U);
     EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(5));
     EXPECT_EQ(inventory.lastWeapon(), kGlock);
 
     // A weapon the player lacks, or the one it holds, is not drawn again.
-    inventory.play(command(2, kAk), at(6));
-    inventory.play(command(3, kKnife), at(7));
+    inventory.select(command(2, {}, kAk), at(6));
+    inventory.select(command(3, {}, kKnife), at(7));
     EXPECT_EQ(inventory.held()->weapon, kKnife);
     EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(5));
 }
@@ -168,38 +236,40 @@ TEST(InventoryTest, LastinvWithoutAWeaponBeforeTakesTheNewestOfTheFirstSlotWithA
 TEST(InventoryTest, TheWeaponHeldIdlesAfterItsDrawAndThenAfterEachWait) {
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kKnife});
-    const std::int64_t firstIdle = kTicksPerSecond * 3 / 2;
-    const std::int64_t wait = kTicksPerSecond * 20;
+    Shooter shooter = standing();
+    const std::int64_t wait = 2000; // 20 seconds
 
-    inventory.play(command(1), at(firstIdle - 1));
+    std::ignore = frames(inventory, shooter, 0, kFirstIdle - 1);
     EXPECT_EQ(inventory.animation()->sequence, 3U); // still drawing
-    inventory.play(command(2), at(firstIdle));
+    std::ignore = frames(inventory, shooter, kFirstIdle, kFirstIdle);
     EXPECT_EQ(inventory.animation()->sequence, 0U);
-    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(firstIdle));
-    inventory.play(command(3), at(firstIdle + wait - 1));
-    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(firstIdle));
-    inventory.play(command(4), at(firstIdle + wait));
-    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(firstIdle + wait));
+    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(kFirstIdle));
+    std::ignore = frames(inventory, shooter, kFirstIdle + 1, kFirstIdle + wait - 1);
+    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(kFirstIdle));
+    std::ignore = frames(inventory, shooter, kFirstIdle + wait, kFirstIdle + wait);
+    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(kFirstIdle + wait));
 }
 
 TEST(InventoryTest, IdlesAreChosenByTheirSharesTheSameForTheSameCommand) {
     const WeaponCatalog weapons = catalog();
-    const std::int64_t firstIdle = kTicksPerSecond * 3 / 2;
     std::map<std::uint32_t, int> chosen;
     constexpr std::uint32_t kCommands = 4000;
-    for (std::uint32_t number = 1; number <= kCommands; ++number) {
+    Shooter shooter = standing();
+    const auto idledBy = [&](std::uint32_t number) {
         Inventory inventory = given(weapons, {kGlock});
-        inventory.play(command(number), at(firstIdle));
-        ++chosen[inventory.animation()->sequence];
-
-        Inventory again = given(weapons, {kGlock});
-        again.play(command(number), at(firstIdle));
-        ASSERT_EQ(again.animation()->sequence, inventory.animation()->sequence);
+        std::ignore = frames(inventory, shooter, 0, kFirstIdle - 1);
+        std::ignore = inventory.frame(command(number), shooter, at(kFirstIdle));
+        return inventory.animation()->sequence;
+    };
+    for (std::uint32_t number = 1; number <= kCommands; ++number) {
+        const std::uint32_t sequence = idledBy(number);
+        ++chosen[sequence];
+        ASSERT_EQ(idledBy(number), sequence);
     }
-    constexpr double kTolerance = 0.03;
-    EXPECT_NEAR(chosen[2] / double{kCommands}, 0.3, kTolerance);
-    EXPECT_NEAR(chosen[0] / double{kCommands}, 0.3, kTolerance);
-    EXPECT_NEAR(chosen[1] / double{kCommands}, 0.4, kTolerance);
+    constexpr double kShareTolerance = 0.03;
+    EXPECT_NEAR(chosen[2] / double{kCommands}, 0.3, kShareTolerance);
+    EXPECT_NEAR(chosen[0] / double{kCommands}, 0.3, kShareTolerance);
+    EXPECT_NEAR(chosen[1] / double{kCommands}, 0.4, kShareTolerance);
 }
 
 TEST(InventoryTest, EachDrawSequenceIsChosenAtRandom) {
@@ -207,11 +277,222 @@ TEST(InventoryTest, EachDrawSequenceIsChosenAtRandom) {
     std::set<std::uint32_t> drawn;
     for (std::uint32_t number = 1; number <= 64; ++number) {
         Inventory inventory = given(weapons, {kGlock, kKnife});
-        inventory.play(command(number, kKnife), at(1));
-        inventory.play(command(number, kGlock), at(2));
+        inventory.select(command(number, {}, kKnife), at(1));
+        inventory.select(command(number, {}, kGlock), at(2));
         drawn.insert(inventory.animation()->sequence);
     }
     EXPECT_EQ(drawn, (std::set<std::uint32_t>{8, 11}));
+}
+
+TEST(FiringTest, AWeaponBeingDrawnDoesNotFire) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kAk});
+    Shooter shooter = standing();
+    EXPECT_TRUE(frames(inventory, shooter, 0, kReady - 1, {Button::Attack}).empty());
+    EXPECT_EQ(frames(inventory, shooter, kReady, kReady, {Button::Attack}).size(), 1U);
+}
+
+TEST(FiringTest, AnAutomaticGunFiresEachCycleWhileItsButtonIsDown) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kAk});
+    Shooter shooter = standing();
+    // 0.0955 seconds apart: a shot each tenth tick at 100 ticks a second, as the original's timers.
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    EXPECT_EQ(frames(inventory, shooter, kReady, kReady + 29, {Button::Attack}).size(), 3U);
+    EXPECT_EQ(inventory.held()->clip, 27U);
+    ASSERT_TRUE(inventory.animation().has_value());
+    EXPECT_GE(inventory.animation()->sequence, 3U);
+    EXPECT_LE(inventory.animation()->sequence, 5U);
+}
+
+TEST(FiringTest, AGunThatIsNotAutomaticFiresOnceAPress) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    EXPECT_EQ(frames(inventory, shooter, kReady, kReady + 50, {Button::Attack}).size(), 1U);
+    std::ignore = frames(inventory, shooter, kReady + 51, kReady + 51); // let go
+    EXPECT_EQ(frames(inventory, shooter, kReady + 52, kReady + 52, {Button::Attack}).size(), 1U);
+    EXPECT_EQ(inventory.held()->clip, 18U);
+    // 0.15 seconds apart, which counted down in float last 16 commands, as the original's.
+    std::ignore = frames(inventory, shooter, kReady + 53, kReady + 53);
+    EXPECT_TRUE(frames(inventory, shooter, kReady + 54, kReady + 67, {Button::Attack}).empty());
+    EXPECT_EQ(frames(inventory, shooter, kReady + 68, kReady + 68, {Button::Attack}).size(), 1U);
+}
+
+TEST(FiringTest, TheLastRoundPlaysItsOwnSequenceAndAnEmptyClipClicks) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::int64_t tick = kReady;
+    for (int shot = 0; shot < 20; ++shot) {
+        ASSERT_EQ(frames(inventory, shooter, tick, tick, {Button::Attack}).size(), 1U) << shot;
+        std::ignore = frames(inventory, shooter, tick + 1, tick + 19);
+        tick += 20;
+    }
+    EXPECT_EQ(inventory.held()->clip, 0U);
+    EXPECT_EQ(inventory.animation()->sequence, 6U);
+    // Empty, with nothing to reload with: a click, and the next no sooner than 0.2 seconds after,
+    // counted down by the click's command already.
+    EXPECT_TRUE(frames(inventory, shooter, tick, tick, {Button::Attack}).empty());
+    EXPECT_NEAR(inventory.held()->nextShot, 0.19F, kTolerance);
+    EXPECT_FALSE(inventory.isReloading());
+}
+
+TEST(FiringTest, ABurstWorsensTheAccuracyByItsShotsCubedInWholeNumbers) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kAk});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::int64_t tick = kReady;
+    // 1³ to 5³ over 200 are 0 in whole numbers; 6³ = 216 is 1: 1.35, held to 1.25.
+    for (const float expected : {0.35F, 0.35F, 0.35F, 0.35F, 0.35F, 1.25F}) {
+        ASSERT_EQ(frames(inventory, shooter, tick, tick + 9, {Button::Attack}).size(), 1U);
+        EXPECT_FLOAT_EQ(inventory.held()->accuracy, expected);
+        tick += 10;
+    }
+    // Let go, the burst keeps its shots for 0.4 seconds, then loses one every 0.0225.
+    std::ignore = frames(inventory, shooter, tick, tick + 40);
+    EXPECT_EQ(inventory.held()->shotsFired, 6U);
+    std::ignore = frames(inventory, shooter, tick + 41, tick + 45);
+    EXPECT_LT(inventory.held()->shotsFired, 6U);
+}
+
+TEST(FiringTest, APacedAccuracyRecoversWithTheTimeBetweenShots) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+    EXPECT_FLOAT_EQ(inventory.held()->accuracy, 0.9F) << "the first shot changes nothing";
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 15);
+    std::ignore = frames(inventory, shooter, kReady + 16, kReady + 16, {Button::Attack});
+    EXPECT_NEAR(inventory.held()->accuracy, 0.9F - ((0.325F - 0.16F) * 0.275F), kTolerance);
+    std::ignore = frames(inventory, shooter, kReady + 17, kReady + 115);
+    std::ignore = frames(inventory, shooter, kReady + 116, kReady + 116, {Button::Attack});
+    EXPECT_FLOAT_EQ(inventory.held()->accuracy, 0.9F) << "held to its maximum";
+}
+
+TEST(FiringTest, TheSpreadIsOfHowTheShooterMoves) {
+    const WeaponCatalog weapons = catalog();
+    const auto firstSpread = [&weapons](WeaponIndex index, Shooter shooter) {
+        Inventory inventory = given(weapons, {index});
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        const std::vector<Shot> shots = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+        EXPECT_EQ(shots.size(), 1U);
+        return shots.empty() ? 0.0F : shots.front().spread;
+    };
+    // The AK-47's first shot, of an accuracy of 0.2: in the air, moving faster than 140, else standing.
+    EXPECT_NEAR(firstSpread(kAk, Shooter{}), 0.04F + (0.4F * 0.2F), kTolerance);
+    EXPECT_NEAR(firstSpread(kAk, Shooter{.horizontalSpeed = nx::UnitsPerSecond{200.0F}, .isOnGround = true}),
+                0.04F + (0.07F * 0.2F), kTolerance);
+    EXPECT_NEAR(firstSpread(kAk, Shooter{.horizontalSpeed = nx::UnitsPerSecond{100.0F}, .isOnGround = true}),
+                0.0275F * 0.2F, kTolerance);
+    EXPECT_NEAR(firstSpread(kAk, Shooter{.isOnGround = true, .isDucked = true}), 0.0275F * 0.2F, kTolerance);
+    // The Glock's, of an accuracy of 0.9, by 1 less it: moving at all, ducked, standing.
+    EXPECT_NEAR(firstSpread(kGlock, Shooter{.horizontalSpeed = nx::UnitsPerSecond{1.0F}, .isOnGround = true}),
+                0.165F * 0.1F, kTolerance);
+    EXPECT_NEAR(firstSpread(kGlock, Shooter{.isOnGround = true, .isDucked = true}), 0.075F * 0.1F,
+                kTolerance);
+    EXPECT_NEAR(firstSpread(kGlock, standing()), 0.1F * 0.1F, kTolerance);
+}
+
+TEST(FiringTest, AShotStraysWithinTwiceItsSpreadTheSameForTheSameCommand) {
+    const WeaponCatalog weapons = catalog();
+    for (std::uint32_t number = 1; number <= 200; ++number) {
+        Inventory inventory = given(weapons, {kAk});
+        Shooter shooter{}; // in the air: a wide spread
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        const std::vector<Shot> shots =
+            inventory.frame(command(number, {Button::Attack}), shooter, at(kReady));
+        ASSERT_EQ(shots.size(), 1U);
+        const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{});
+        const Shot& shot = shots.front();
+        EXPECT_FLOAT_EQ(nx::dot(shot.direction, axes.forward), 1.0F);
+        EXPECT_LE(std::abs(nx::dot(shot.direction, axes.right)), 2.0F * shot.spread);
+        EXPECT_LE(std::abs(nx::dot(shot.direction, axes.up)), 2.0F * shot.spread);
+
+        Inventory again = given(weapons, {kAk});
+        Shooter same{};
+        std::ignore = frames(again, same, 0, kReady - 1);
+        const std::vector<Shot> repeated = again.frame(command(number, {Button::Attack}), same, at(kReady));
+        ASSERT_EQ(repeated.size(), 1U);
+        EXPECT_EQ(repeated.front().direction, shot.direction);
+    }
+}
+
+TEST(FiringTest, ARifleKicksTheViewUpAndAsideWithinItsLimits) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kAk});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+    EXPECT_FLOAT_EQ(shooter.punch.pitch.value(), -1.0F);
+    EXPECT_FLOAT_EQ(std::abs(shooter.punch.yaw.value()), 0.375F);
+    // The second shot: 2 x 0.175 + 1.0 more up.
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 10, {Button::Attack});
+    EXPECT_FLOAT_EQ(shooter.punch.pitch.value(), -2.35F);
+    // A long burst, the kick held to its limits (the view's own drop back is the movement's).
+    std::ignore = frames(inventory, shooter, kReady + 11, kReady + 250, {Button::Attack});
+    EXPECT_FLOAT_EQ(shooter.punch.pitch.value(), -5.75F);
+    EXPECT_LE(std::abs(shooter.punch.yaw.value()), 1.75F);
+
+    // The Glock does not kick.
+    Inventory pistol = given(weapons, {kGlock});
+    Shooter still = standing();
+    std::ignore = frames(pistol, still, 0, kReady, {Button::Attack});
+    EXPECT_EQ(still.punch, nx::EulerAngles{});
+}
+
+TEST(FiringTest, AReloadFillsTheClipOnceItsTimeIsOverAndAnEmptyClipIsReloadedOnItsOwn) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kAk});
+    std::ignore = inventory.giveAmmo("762Nato", 90);
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady + 9, {Button::Attack});
+    ASSERT_EQ(inventory.held()->clip, 29U);
+
+    std::ignore = frames(inventory, shooter, kReady + 10, kReady + 10, {Button::Reload});
+    EXPECT_TRUE(inventory.isReloading());
+    EXPECT_EQ(inventory.animation()->sequence, 1U);
+    EXPECT_FLOAT_EQ(inventory.held()->accuracy, 0.2F);
+    const std::int64_t done = kReady + 10 + 246; // 2.45 seconds, which count down in 246 commands
+    std::ignore = frames(inventory, shooter, kReady + 11, done - 1, {Button::Attack});
+    EXPECT_EQ(inventory.held()->clip, 29U) << "neither firing nor reloaded meanwhile";
+    std::ignore = frames(inventory, shooter, done, done);
+    EXPECT_FALSE(inventory.isReloading());
+    EXPECT_EQ(inventory.held()->clip, 30U);
+    EXPECT_EQ(inventory.reserve("762Nato"), 89U);
+
+    // A full clip is not reloaded.
+    std::ignore = frames(inventory, shooter, done + 1, done + 1, {Button::Reload});
+    EXPECT_FALSE(inventory.isReloading());
+
+    // An empty clip, once the gun may fire again and no fire button is down, is reloaded.
+    std::int64_t tick = done + 2;
+    while (inventory.held()->clip > 0) {
+        std::ignore = frames(inventory, shooter, tick, tick, {Button::Attack});
+        ++tick;
+    }
+    std::ignore = frames(inventory, shooter, tick, tick + 20);
+    EXPECT_TRUE(inventory.isReloading());
+}
+
+TEST(FiringTest, DrawingAnotherWeaponStopsAReload) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife, kAk});
+    std::ignore = inventory.giveAmmo("762Nato", 90);
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady, {Button::Attack});
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 19);
+    std::ignore = frames(inventory, shooter, kReady + 20, kReady + 20, {Button::Reload});
+    ASSERT_TRUE(inventory.isReloading());
+    inventory.select(command(1, {}, kKnife), at(kReady + 21));
+    EXPECT_FALSE(inventory.isReloading());
+    inventory.select(command(2, {}, kAk), at(kReady + 22));
+    std::ignore = frames(inventory, shooter, kReady + 400, kReady + 400);
+    EXPECT_EQ(inventory.held()->clip, 29U);
 }
 
 } // namespace

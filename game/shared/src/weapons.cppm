@@ -3,12 +3,13 @@
 
 /// The weapons of Counter-Strike as data (docs/10-counter-strike-gameplay.md, section 7.2): what each
 /// is, the slot it takes, who buys it and for how much, the ammo it fires and how much of it its clip
-/// holds, how fast its holder runs, the models it is seen by and how its view model moves as it is
-/// drawn and held. The game's own are in data/cstrike/weapons/<weapon>.toml and
-/// data/cstrike/ammo.toml, with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
+/// holds, how fast its holder runs, the models it is seen by, how its view model moves as it is
+/// drawn and held, and how it fires and is reloaded: its cycle, its accuracy, its spread and its
+/// recoil. The game's own are in data/cstrike/weapons/<weapon>.toml and data/cstrike/ammo.toml,
+/// with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
 ///
-/// Today: what a weapon is and how it is held; how it fires and reloads, its spread and its recoil
-/// come next (TODO.md).
+/// Today: the guns' fire as it starts; their damage and how far it reaches, the knife's attacks, the
+/// silencers and the Glock's burst come next (TODO.md).
 export module cs.shared:weapons;
 
 import std;
@@ -90,6 +91,97 @@ struct WeaponView {
     bool idlesWhenEmpty{}; ///< Whether it idles with its clip empty: the pistols do not.
 };
 
+/// A part of a shot's spread: `base`, plus `scale` times the weapon's inaccuracy.
+struct SpreadTerm {
+    float base{};
+    float scale{};
+};
+
+/// How far a weapon's shots spread as its holder moves: in the air, else moving faster than
+/// `movingAbove`, else ducked (as standing when not given), else standing (the guns' PrimaryAttack).
+struct WeaponSpread {
+    nx::UnitsPerSecond movingAbove{};
+    SpreadTerm air{};
+    SpreadTerm moving{};
+    std::optional<SpreadTerm> ducked{};
+    SpreadTerm standing{};
+};
+
+/// An accuracy each shot of a burst worsens: the shots of the burst cubed over `divisor`, in whole
+/// numbers as the original divides them, plus `offset`, at most `maximum`. The weapon's inaccuracy
+/// is the accuracy itself.
+struct BurstAccuracy {
+    std::uint32_t divisor{};
+    float offset{};
+    float maximum{};
+};
+
+/// An accuracy the time between shots restores: each shot after the first takes (`threshold` less
+/// the time since the one before) times `rate` from it, keeping it within `minimum` and `maximum`.
+/// The weapon's inaccuracy is 1 less the accuracy.
+struct PacedAccuracy {
+    nx::Seconds threshold{};
+    float rate{};
+    float minimum{};
+    float maximum{};
+};
+
+/// How a weapon's accuracy changes as it fires: by bursts or by pace, one of them.
+struct WeaponAccuracy {
+    float initial{}; ///< As it is given, drawn and reloaded.
+    std::optional<BurstAccuracy> burst{};
+    std::optional<PacedAccuracy> paced{};
+};
+
+/// The kick a shot gives its holder's view (KickBack): up by `upBase`, and by `upModifier` more a
+/// shot of the burst after the first, to `upMax` at most; to its side likewise; the side it kicks to
+/// turned over once in `directionChange` + 1 shots, at random.
+struct Kick {
+    float upBase{};
+    float lateralBase{};
+    float upModifier{};
+    float lateralModifier{};
+    float upMax{};
+    float lateralMax{};
+    std::uint32_t directionChange{};
+};
+
+/// A weapon's kicks as its holder moves: moving, else in the air, else ducked, else standing.
+struct KickByMovement {
+    Kick moving{};
+    Kick air{};
+    Kick ducked{};
+    Kick standing{};
+};
+
+/// How a weapon's shots kick its holder's view: by its kicks, or up by `punch` alone; with neither,
+/// not at all.
+struct WeaponRecoil {
+    std::optional<KickByMovement> kicks{};
+    std::optional<nx::Degrees> punch{};
+};
+
+/// How a gun fires.
+struct WeaponFiring {
+    nx::Seconds cycle{}; ///< From a shot to the next.
+    bool isAutomatic{};  ///< Holding its button fires again; else each press fires once.
+    nx::Seconds idleAfterShot{};
+    /// Its view model's sequences, by their numbers: one at random as it fires, and the one as it
+    /// fires its clip's last round, when it has one. Its client chooses them, which is to be measured
+    /// on the original (TODO.md).
+    std::vector<std::uint32_t> shootSequences{};
+    std::optional<std::uint32_t> lastShotSequence{};
+    WeaponAccuracy accuracy{};
+    WeaponSpread spread{};
+    WeaponRecoil recoil{};
+};
+
+/// How a weapon is reloaded (DefaultReload).
+struct WeaponReload {
+    nx::Seconds time{};
+    std::vector<std::uint32_t> sequences{}; ///< One of them, at random, as it reloads.
+};
+
 /// The models a weapon is seen by.
 struct WeaponModels {
     std::string view{};   ///< In its holder's own view: models/v_<weapon>.mdl.
@@ -116,6 +208,8 @@ struct Weapon {
     std::optional<WeaponMagazine> magazine{}; ///< None: it fires no ammo (the knife).
     WeaponModels models{};
     WeaponView view{};
+    std::optional<WeaponFiring> firing{}; ///< None: it fires nothing (the knife, until its attacks).
+    std::optional<WeaponReload> reload{}; ///< None: it is not reloaded.
 };
 
 /// A weapon of a catalog, by its place in it.
@@ -131,7 +225,9 @@ struct WeaponIndex {
 
 /// Reads `text`, the file `sourceName`: a weapon, its id and classname not empty, its models paths
 /// of the game's files, a draw sequence and an idle at least, each idle's wait above 0 and the
-/// idles' shares adding up to 1. Errors: DataInvalid.
+/// idles' shares adding up to 1; firing and reloading only with a magazine, a shoot sequence and a
+/// reload sequence at least, a cycle above 0, and one accuracy, by bursts or by pace. Errors:
+/// DataInvalid.
 [[nodiscard]] auto readWeapon(std::string_view text, std::string_view sourceName)
     -> nx::Result<Weapon, WeaponError>;
 
@@ -140,7 +236,7 @@ class WeaponCatalog {
 public:
     /// The catalog of `ammo` and `weapons`, in their order. Errors: DataInvalid: an id twice (of a
     /// kind of ammo, or of a weapon), a classname twice, two weapons at one position of a slot, a
-    /// weapon firing a kind of ammo `ammo` lacks, or a view readWeapon refuses.
+    /// weapon firing a kind of ammo `ammo` lacks, or a view, firing or reload readWeapon refuses.
     [[nodiscard]] static auto make(AmmoTypes ammo, std::vector<Weapon> weapons)
         -> nx::Result<WeaponCatalog, WeaponError>;
 
@@ -223,6 +319,116 @@ struct nx::meta::Description<cs::WeaponView> {
 };
 
 template <>
+struct nx::meta::Description<cs::SpreadTerm> {
+    static constexpr std::string_view kName = "cs::SpreadTerm";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::SpreadTerm::base>("base", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::SpreadTerm::scale>("scale", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponSpread> {
+    static constexpr std::string_view kName = "cs::WeaponSpread";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponSpread::movingAbove>("movingAbove", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponSpread::air>("air"),
+        nx::meta::field<&cs::WeaponSpread::moving>("moving"),
+        nx::meta::field<&cs::WeaponSpread::ducked>("ducked"),
+        nx::meta::field<&cs::WeaponSpread::standing>("standing"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BurstAccuracy> {
+    static constexpr std::string_view kName = "cs::BurstAccuracy";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BurstAccuracy::divisor>("divisor", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::BurstAccuracy::offset>("offset"),
+        nx::meta::field<&cs::BurstAccuracy::maximum>("maximum"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::PacedAccuracy> {
+    static constexpr std::string_view kName = "cs::PacedAccuracy";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::PacedAccuracy::threshold>("threshold", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::PacedAccuracy::rate>("rate"),
+        nx::meta::field<&cs::PacedAccuracy::minimum>("minimum"),
+        nx::meta::field<&cs::PacedAccuracy::maximum>("maximum"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponAccuracy> {
+    static constexpr std::string_view kName = "cs::WeaponAccuracy";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponAccuracy::initial>("initial"),
+        nx::meta::field<&cs::WeaponAccuracy::burst>("burst"),
+        nx::meta::field<&cs::WeaponAccuracy::paced>("paced"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::Kick> {
+    static constexpr std::string_view kName = "cs::Kick";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::Kick::upBase>("upBase"),
+        nx::meta::field<&cs::Kick::lateralBase>("lateralBase"),
+        nx::meta::field<&cs::Kick::upModifier>("upModifier"),
+        nx::meta::field<&cs::Kick::lateralModifier>("lateralModifier"),
+        nx::meta::field<&cs::Kick::upMax>("upMax", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::Kick::lateralMax>("lateralMax", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::Kick::directionChange>("directionChange"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::KickByMovement> {
+    static constexpr std::string_view kName = "cs::KickByMovement";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::KickByMovement::moving>("moving"),
+        nx::meta::field<&cs::KickByMovement::air>("air"),
+        nx::meta::field<&cs::KickByMovement::ducked>("ducked"),
+        nx::meta::field<&cs::KickByMovement::standing>("standing"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponRecoil> {
+    static constexpr std::string_view kName = "cs::WeaponRecoil";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponRecoil::kicks>("kicks"),
+        nx::meta::field<&cs::WeaponRecoil::punch>("punch"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponFiring> {
+    static constexpr std::string_view kName = "cs::WeaponFiring";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponFiring::cycle>("cycle"),
+        nx::meta::field<&cs::WeaponFiring::isAutomatic>("isAutomatic"),
+        nx::meta::field<&cs::WeaponFiring::idleAfterShot>("idleAfterShot", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponFiring::shootSequences>("shootSequences"),
+        nx::meta::field<&cs::WeaponFiring::lastShotSequence>("lastShotSequence"),
+        nx::meta::field<&cs::WeaponFiring::accuracy>("accuracy"),
+        nx::meta::field<&cs::WeaponFiring::spread>("spread"),
+        nx::meta::field<&cs::WeaponFiring::recoil>("recoil"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponReload> {
+    static constexpr std::string_view kName = "cs::WeaponReload";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponReload::time>("time", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponReload::sequences>("sequences"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponModels> {
     static constexpr std::string_view kName = "cs::WeaponModels";
     static constexpr std::tuple kFields{
@@ -247,5 +453,7 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::magazine>("magazine"),
         nx::meta::field<&cs::Weapon::models>("models"),
         nx::meta::field<&cs::Weapon::view>("view"),
+        nx::meta::field<&cs::Weapon::firing>("firing"),
+        nx::meta::field<&cs::Weapon::reload>("reload"),
     };
 };

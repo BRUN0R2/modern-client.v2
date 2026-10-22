@@ -51,6 +51,35 @@ constexpr double kShareTolerance = 1e-4;
     return {};
 }
 
+/// DataInvalid when `weapon`, of `where` (a file, or the catalog), fires or is reloaded without a
+/// magazine, or fires without a shoot sequence, a cycle or one accuracy, or is reloaded without a
+/// sequence.
+[[nodiscard]] auto checkFiring(const Weapon& weapon, std::string_view where)
+    -> nx::Result<void, WeaponError> {
+    const auto invalid = [&](std::string_view problem) {
+        return nx::fail(WeaponError::DataInvalid, std::format("{}: {:?} {}", where, weapon.id, problem));
+    };
+    if ((weapon.firing || weapon.reload) && !weapon.magazine) {
+        return invalid("fires or is reloaded without a magazine");
+    }
+    if (weapon.firing) {
+        const WeaponFiring& firing = *weapon.firing;
+        if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{}) {
+            return invalid("fires without a shoot sequence or a cycle");
+        }
+        if (firing.accuracy.burst.has_value() == firing.accuracy.paced.has_value()) {
+            return invalid("fires without one accuracy, by bursts or by pace");
+        }
+        if (firing.accuracy.paced && firing.accuracy.paced->minimum > firing.accuracy.paced->maximum) {
+            return invalid("fires with a paced accuracy whose minimum is above its maximum");
+        }
+    }
+    if (weapon.reload && weapon.reload->sequences.empty()) {
+        return invalid("is reloaded without a sequence");
+    }
+    return {};
+}
+
 /// DataInvalid when two of `items` have the same `key`, which names what they are: `what`.
 template <class Item>
 [[nodiscard]] auto checkUnique(std::span<const Item> items, std::string Item::* key, std::string_view what)
@@ -104,6 +133,9 @@ auto readWeapon(std::string_view text, std::string_view sourceName) -> nx::Resul
     if (auto checked = checkView(weapon->view, weapon->id, sourceName); !checked) {
         return std::unexpected{std::move(checked.error())};
     }
+    if (auto checked = checkFiring(*weapon, sourceName); !checked) {
+        return std::unexpected{std::move(checked.error())};
+    }
     return std::move(*weapon);
 }
 
@@ -124,6 +156,9 @@ auto WeaponCatalog::make(AmmoTypes ammo, std::vector<Weapon> weapons)
     std::set<std::pair<WeaponSlot, std::uint32_t>> places;
     for (const Weapon& weapon : weapons) {
         if (auto checked = checkView(weapon.view, weapon.id, "the catalog"); !checked) {
+            return std::unexpected{std::move(checked.error())};
+        }
+        if (auto checked = checkFiring(weapon, "the catalog"); !checked) {
             return std::unexpected{std::move(checked.error())};
         }
         if (!places.emplace(weapon.slot, weapon.position).second) {

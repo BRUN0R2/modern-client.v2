@@ -9,8 +9,8 @@
 ///
 /// Today: walking, the air, jumping and its penalties, ducking, stairs, sliding along walls and
 /// floors, water, and ladders, among the world and the brush entities where the game puts and turns
-/// them; and noclip. Observers, unsticking, boxes (players, hostages), conveyors and currents come
-/// next (TODO.md).
+/// them; noclip; and the weapon's kick to the view, dropped back each move. Observers, unsticking, boxes
+/// (players, hostages), conveyors and currents come next (TODO.md).
 export module cs.shared:movement;
 
 import std;
@@ -31,7 +31,9 @@ enum class Button : std::uint8_t {
     Back,
     MoveLeft,
     MoveRight,
-    Use, ///< The game reads it: pressed, the player uses what it looks at.
+    Use,    ///< The game reads it: pressed, the player uses what it looks at.
+    Attack, ///< The game reads it: held, the weapon in hand fires.
+    Reload, ///< The game reads it: held, the weapon in hand is reloaded.
     Count,
 };
 
@@ -129,6 +131,9 @@ struct MovementState {
     nx::Vec3 waterJumpVelocity{};
     /// The jump button was held at the end of the last command: holding it does not jump again.
     bool isJumpHeld = false;
+    /// The kick its weapon gave its view (punchangle): added to the view its moves follow and its
+    /// shots aim along, and dropped back a little each move.
+    nx::EulerAngles punch{};
 };
 
 /// What a brush entity is to a player's movement, as the game made it.

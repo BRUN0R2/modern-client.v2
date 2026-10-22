@@ -43,11 +43,11 @@ public:
 
     /// Gives `elapsed` to the game, tick by tick, catching up on a quarter of a second at most: the
     /// next command of `input`, looking along `view`, numbered after the last, draws the weapon it
-    /// selects and idles the one held, moves the player among the brush entities at the speed of the
-    /// weapon it holds, the use button using what is in front as it goes down, and the doors it meets
-    /// and the triggers it is in are touched; then what is due acts, and the pushers move, pushing the
-    /// player's body. Returns the player's eye, between where the last two ticks left it by the time
-    /// left.
+    /// selects, moves the player among the brush entities at the speed of the weapon it holds, the use
+    /// button using what is in front as it goes down, and the doors it meets and the triggers it is in
+    /// are touched; the weapon in hand fires, is reloaded or idles (cs::Inventory::frame); then what is
+    /// due acts, and the pushers move, pushing the player's body. Returns the player's eye, between
+    /// where the last two ticks left it by the time left.
     auto play(PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3;
 
     /// As play(), all of `elapsed`, each command looking along `view` and asking nothing else: the
@@ -56,6 +56,8 @@ public:
 
     /// What the view model shows when the eye is drawn: none while the player holds no weapon.
     [[nodiscard]] auto viewModel() const -> std::optional<ViewModelPose>;
+    /// The kick the player's weapon gave its view (punchangle), which the view is drawn turned by.
+    [[nodiscard]] inline auto punch() const noexcept -> nx::EulerAngles { return m_player.punch; }
 
     /// Turns noclip on or off, as the original's `noclip` cheat does; returns whether it is on now.
     auto toggleNoclip() -> bool;

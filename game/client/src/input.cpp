@@ -48,8 +48,11 @@ constexpr float kAngleSpeedKey = 0.67F;
     auto jump = add("jump", "Jumps.");
     auto duck = add("duck", "Ducks while held.");
     auto use = add("use", "Uses what the player looks at.");
-    for (auto* const registered : {&forward, &back, &moveLeft, &moveRight, &moveUp, &moveDown, &left, &right,
-                                   &lookUp, &lookDown, &strafe, &speed, &jump, &duck, &use}) {
+    auto attack = add("attack", "Fires the weapon in hand while held.");
+    auto reload = add("reload", "Reloads the weapon in hand.");
+    for (auto* const registered :
+         {&forward, &back, &moveLeft, &moveRight, &moveUp, &moveDown, &left, &right, &lookUp, &lookDown,
+          &strafe, &speed, &jump, &duck, &use, &attack, &reload}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -68,7 +71,9 @@ constexpr float kAngleSpeedKey = 0.67F;
                         .speed = *speed,
                         .jump = *jump,
                         .duck = *duck,
-                        .use = *use};
+                        .use = *use,
+                        .attack = *attack,
+                        .reload = *reload};
 }
 
 [[nodiscard]] auto registerCvars(Console& console) -> nx::Result<InputCvars, nx::console::CvarError> {
@@ -189,7 +194,9 @@ auto PlayerInput::nextCommand(nx::EulerAngles view, nx::Milliseconds duration, n
                                         std::pair{cs::Button::MoveRight, m_buttons.moveRight.isDown()},
                                         std::pair{cs::Button::Jump, takeIsPressed(m_buttons.jump)},
                                         std::pair{cs::Button::Duck, takeIsPressed(m_buttons.duck)},
-                                        std::pair{cs::Button::Use, takeIsPressed(m_buttons.use)}}) {
+                                        std::pair{cs::Button::Use, takeIsPressed(m_buttons.use)},
+                                        std::pair{cs::Button::Attack, takeIsPressed(m_buttons.attack)},
+                                        std::pair{cs::Button::Reload, takeIsPressed(m_buttons.reload)}}) {
         if (isSet) {
             held.set(button);
         }

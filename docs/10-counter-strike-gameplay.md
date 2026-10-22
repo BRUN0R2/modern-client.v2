@@ -193,6 +193,30 @@ viewHand        = "left"       # the view model's hand: drawn mirrored for a pla
 drawSequences  = [2]           # one at random as it is drawn
 idles          = [{ sequence = 0, wait = 20.0, share = 1.0 }] # by their shares, after each wait
 idlesWhenEmpty = true          # the pistols do not idle with an empty clip
+
+[firing]                       # absent: it fires nothing (the knife, until its attacks)
+cycle          = 0.0955        # seconds from a shot to the next
+isAutomatic    = true          # holding the button fires again; else once a press
+idleAfterShot  = 1.9
+shootSequences = [3, 4, 5]     # one at random; lastShotSequence: the clip's last round's
+
+[firing.accuracy]              # initial, and burst (rifles) or paced (pistols)
+initial = 0.2
+burst   = { divisor = 200, offset = 0.35, maximum = 1.25 } # shots³ / 200 in whole numbers + 0.35
+
+[firing.spread]                # base + scale × inaccuracy (the accuracy, or 1 less it when paced)
+movingAbove = 140.0            # in the air, else moving faster, else ducked (when given), else standing
+air         = { base = 0.04, scale = 0.4 }
+moving      = { base = 0.04, scale = 0.07 }
+standing    = { base = 0.0, scale = 0.0275 }
+
+[firing.recoil.kicks]          # KickBack's seven numbers, by movement; or `punch`, up alone
+standing = { upBase = 1.0, lateralBase = 0.375, upModifier = 0.175, lateralModifier = 0.0375, upMax = 5.75, lateralMax = 1.75, directionChange = 8 }
+# moving, air and ducked likewise
+
+[reload]
+time      = 2.45
+sequences = [1]
 ```
 
 ```toml
@@ -204,18 +228,19 @@ boxRounds  = 30
 ```
 
 The catalog (`cs::WeaponCatalog`) refuses an id or a classname twice, two weapons at one position
-of a slot, a weapon whose ammo `ammo.toml` lacks, and a view without a draw sequence or an idle, an
-idle that waits no time, or idles whose shares do not add up to 1.
+of a slot, a weapon whose ammo `ammo.toml` lacks, a view without a draw sequence or an idle, an
+idle that waits no time, or idles whose shares do not add up to 1, and firing or a reload without a
+magazine, a shoot or reload sequence, a cycle, or one accuracy.
 
 What a player of each team spawns with is `data/cstrike/loadouts.toml` (`cs::Loadouts`, the
 original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds of 9mm, the
 counter-terrorists a knife, a USP and 24 rounds of 45ACP, each weapon with a clip's worth.
 
-**Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, and the loadouts. Each next
-part of the weapons brings the data its code reads: firing (cycle time, damage, range modifier,
-penetration), spread and accuracy by movement, recoil (`KickBack`), reload, the special modes
-(silencer, burst: the USP and the M4A1 are without their silencer today), the knife's attacks, and
-the armor ratio.
+**Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, how the guns fire and are
+reloaded, and the loadouts. Each next part of the weapons brings the data its code reads: damage,
+range modifier and penetration, the special modes (silencer, burst: the USP and the M4A1 are without
+their silencer today), the knife's attacks, and the armor ratio. Which shoot sequence a gun's client
+plays is the project's choice until it is measured on the original.
 
 ### 7.3 Behaviors
 
@@ -234,9 +259,29 @@ the armor ratio.
   holds, 240 with none (`ResetMaxSpeed`). `next` gives the player its team's loadout, its team
   that of the spawn it starts at, and selects with `weapon_<name>` and `lastinv`; the slot keys
   and the weapon menu come with the HUD's.
+  Once a command has moved the player, the weapon held runs its frame (`ItemPostFrame`): nothing
+  while it is being drawn (0.75 seconds) or reloaded; a reload over fills the clip from what the
+  player carries; `+attack` fires it when its cycle allows (once a press for a gun that is not
+  automatic, a click and 0.2 seconds on an empty clip), `+reload` reloads it (its accuracy back to
+  the initial, a rifle's burst forgotten); with no fire button down a rifle's burst wanes (kept
+  0.4 seconds, then a shot every 0.0225) and a pistol's is forgotten, an empty clip is reloaded,
+  else the weapon idles. The timers are the original's: seconds set as an event happens and counted
+  down in float by each command's frame time once its frame is over, so a delay lasts as many
+  commands as the original's (0.15 seconds, 16 commands at 100 a second; 0.75, 76). Drawing
+  another weapon stops a reload.
+- **Shots** (`cs::Shot`, today hitting nothing): from the eye, along the view turned by the punch,
+  strayed by the spread at random, each way the sum of two even draws from the command number's
+  `spread` stream (`FireBullets3`).
 - **Spread:** a per-weapon function reproducing the original, depending on movement, being
   in the air, crouching, zoom and accumulated accuracy.
+  **Today:** the data's terms (section 7.2), of the accuracy before the shot changes it: a burst's
+  shots cubed over its divisor in whole numbers, as the original divides them (the AK-47's 0.35 up
+  to the fifth shot, 1.25 from the sixth); a paced one losing (threshold less the time since the
+  last shot) times its rate a shot.
 - **Recoil:** *punch angle* and accumulation over consecutive shots, with recovery.
+  **Today:** the rifles' `KickBack` (moving at all, else in the air, else ducked, else standing;
+  its side turned over once in `directionChange` + 1 shots), the USP's 2 degrees up; the punch
+  drops back in the movement (`PM_DropPunchAngle`) and turns the view `next` draws.
 - **Special modes:** burst (Glock, FAMAS), silencer (USP, M4A1, with different damage and
   sound), one- or two-level zoom, shield with pistols.
 - **Penetration:** depends on the weapon's power, the distance and the surface material

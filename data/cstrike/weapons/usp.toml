@@ -29,3 +29,28 @@ viewHand = "left"
 drawSequences = [14] # draw_unsil
 idles = [{ sequence = 8, wait = 60.0, share = 1.0 }] # idle_unsil
 idlesWhenEmpty = false
+
+[firing] # without its silencer
+cycle = 0.15 # semi-automatic: the original's 0.225 less 0.075
+isAutomatic = false
+idleAfterShot = 2.0
+shootSequences = [9, 10, 11] # shoot1_unsil, shoot2_unsil, shoot3_unsil
+lastShotSequence = 12 # shootlast_unsil
+
+[firing.accuracy] # paced: each shot takes (0.3 - the time since the last) x 0.275, within 0.6 and 0.92
+initial = 0.92
+paced = { threshold = 0.3, rate = 0.275, minimum = 0.6, maximum = 0.92 }
+
+[firing.spread] # scale times 1 less the accuracy
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.2 }
+moving = { base = 0.0, scale = 0.225 }
+ducked = { base = 0.0, scale = 0.08 }
+standing = { base = 0.0, scale = 0.1 }
+
+[firing.recoil]
+punch = 2.0
+
+[reload]
+time = 2.7
+sequences = [13] # reload_unsil
