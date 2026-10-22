@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The player's knife in view (docs/05-rendering.md, section 9): models/v_knife.mdl, held as
-/// Counter-Strike deploys it (ReGameDLL's CKnife::Deploy, DefaultDeploy and CKnife::WeaponIdle, GPL,
-/// consulted: docs/20 section 3): its `draw` sequence as it comes out, then `idle` 1.5 seconds later
-/// and again every 20 seconds, each from its first frame; posed where the player looks from, as the
-/// view's own model is (cs::poseBones). Until the game's weapons come, the player holds it.
+/// The player's knife in view (docs/05-rendering.md, section 9): the view model its data names
+/// (cs::Weapon), held as Counter-Strike deploys it (ReGameDLL's CKnife::Deploy, DefaultDeploy and
+/// CKnife::WeaponIdle, GPL, consulted: docs/20 section 3): its `draw` sequence as it comes out, then
+/// `idle` 1.5 seconds later and again every 20 seconds, each from its first frame; posed where the
+/// player looks from, as the view's own model is (cs::poseBones). Until the game's weapons come, the
+/// player holds it.
 export module cs.client:viewModel;
 
 import std;
@@ -14,6 +15,7 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import cs.shared;
 import :modelFiles;
 
 export namespace cs {
@@ -31,10 +33,11 @@ enum class ViewModelError : std::uint8_t {
 /// The knife's model, its textures and the animations of the sequences it plays.
 class ViewModel {
 public:
-    /// Reads the knife's model from `vfs`, its `*T.mdl` when its textures are not in it, and the
-    /// animations of `draw` and `idle`, from their sequence group files. Errors: FilesFailed,
+    /// Reads the view model of `knife` from `vfs`, its `*T.mdl` when its textures are not in it, and
+    /// the animations of `draw` and `idle`, from their sequence group files. Errors: FilesFailed,
     /// NoSequence.
-    [[nodiscard]] static auto read(const nx::assets::Vfs& vfs) -> nx::Result<ViewModel, ViewModelError>;
+    [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const Weapon& knife)
+        -> nx::Result<ViewModel, ViewModelError>;
 
     /// Its model on the GPU of `renderer`, its uploads recorded in `commands`. Errors: those of
     /// StudioRenderer::load.

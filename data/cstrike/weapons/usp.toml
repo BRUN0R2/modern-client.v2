@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The USP .45 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "usp"
+classname = "weapon_usp"
+slot = "secondary"
+position = 4
+weight = 5
+maxSpeed = 250.0
+
+[purchase]
+buyers = "everyone"
+price = 500
+
+[magazine]
+ammo = "45ACP"
+clipSize = 12
+
+[models]
+view = "models/v_usp.mdl"
+player = "models/p_usp.mdl"
+playerAnimation = "onehanded"

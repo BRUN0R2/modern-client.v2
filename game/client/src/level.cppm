@@ -13,6 +13,7 @@ import nx.render;
 import nx.collision;
 import nx.ecs;
 import nx.game;
+import cs.shared;
 import :mapSprites;
 import :mapModels;
 import :viewModel;
@@ -28,24 +29,26 @@ enum class LevelError : std::uint8_t {
     KnifeUnreadable,    ///< The knife's model could not be read (cause).
 };
 
-/// The game's files: the Counter-Strike 1.6 installation through its VFS, and the classes the game
-/// makes the map's entities by (data/cstrike/entities.toml).
+/// The game's files: the Counter-Strike 1.6 installation through its VFS, the classes the game makes
+/// the map's entities by (data/cstrike/entities.toml), and its weapons (data/cstrike/ammo.toml and
+/// data/cstrike/weapons/<id>.toml).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
+    WeaponCatalog weapons;
 };
 
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
-/// installation's files and the entity classes; and the installation at `install`, or the one Steam
-/// installed. Errors: ContentUnavailable.
+/// installation's files, the entity classes and the weapons, each in the file named after its id;
+/// and the installation at `install`, or the one Steam installed. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
                                    const std::optional<std::filesystem::path>& install)
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
 /// the game gives it, the sprites and studio models its entities show and the knife the player
-/// holds, read once. It stays where it is made: the views point into it, and what is made of it
-/// (the light of nx::render::WorldLight) to its map.
+/// holds, its data and its model, read once. It stays where it is made: the views point into it,
+/// and what is made of it (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -55,7 +58,7 @@ public:
     /// The map `name` of `content` (maps/<name>.bsp). A WAD, the sky, a sprite or a studio model the
     /// installation lacks is left out and logged, as the original carries on without it; its
     /// hostages are dropped to the floor, as the game drops them. Errors: MapUnreadable,
-    /// HullsInvalid, GameUnspawnable, KnifeUnreadable.
+    /// HullsInvalid, GameUnspawnable, KnifeUnreadable (also when `content` has no weapon "knife").
     [[nodiscard]] static auto load(const GameContent& content, std::string_view name)
         -> nx::Result<std::unique_ptr<Level>, LevelError>;
 
@@ -83,6 +86,8 @@ public:
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
+    /// The weapon the player holds: the knife, until the game gives its weapons.
+    [[nodiscard]] inline auto heldWeapon() const noexcept -> const Weapon& { return m_heldWeapon; }
     [[nodiscard]] inline auto knife() const noexcept -> const ViewModel& { return *m_knife; }
 
 private:
@@ -98,6 +103,7 @@ private:
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;
     std::optional<MapModels> m_models;
+    Weapon m_heldWeapon;
     std::optional<ViewModel> m_knife;
 };
 

@@ -21,8 +21,6 @@ namespace {
 /// does not run away.
 constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
-/// The speed limit of a player holding a knife.
-constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -31,8 +29,8 @@ constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
 } // namespace
 
 LocalGame::LocalGame(CreateToken /*token*/, const Level& level, nx::Vec3 eye)
-    : m_level{&level},
-      m_player{.origin = eye - nx::Vec3{.z = kStandingViewHeight.value()}, .maxSpeed = kKnifeSpeed},
+    : m_level{&level}, m_player{.origin = eye - nx::Vec3{.z = kStandingViewHeight.value()},
+                                .maxSpeed = level.heldWeapon().maxSpeed},
       m_previousEye{eye} {}
 
 auto LocalGame::start(const Level& level, nx::Vec3 eye)
