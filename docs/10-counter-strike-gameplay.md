@@ -161,31 +161,50 @@ key (planned, [18](18-testing-and-quality.md#parity-tests)). What the file holds
 | | Defuse kit, Tactical shield | CT |
 | Objective | C4 | T (handed out, not buyable) |
 
-### 7.2 Per-weapon data (`data/cstrike/weapons/<weapon>.toml`)
+### 7.2 Weapon data (`data/cstrike/weapons/<weapon>.toml`, `data/cstrike/ammo.toml`)
+
+Each weapon is a file named after its `id`, read into `cs::Weapon` (`cs.shared:weapons`); the
+kinds of ammo are `data/cstrike/ammo.toml`, read into `cs::AmmoTypes`. The values are ReGameDLL_CS's
+([20 §3](20-legal-and-licensing.md#3-clean-room)), and `csSharedTests` pins them.
 
 ```toml
-[weapon]
-id            = "ak47"
-team          = "Terrorist"
-slot          = "Primary"
-price         = 2500           # reference value, validated by parity test
-clipSize      = 30
-ammoType      = "762nato"
-maxSpeed      = 221.0          # units per second
-fireInterval  = 0.0955         # seconds between shots
-damage        = 36
-rangeModifier = 0.98
-penetration   = { power = 2, distance = 8192.0 }
-armorRatio    = 1.55
+id        = "ak47"             # also the file's name, and the buy commands' name
+classname = "weapon_ak47"
+slot      = "primary"          # primary, secondary, knife, grenade, bomb: the HUD's 1 to 5
+position  = 1                  # the order of the slot's weapons in the HUD's weapon menu
+weight    = 25                 # the game picks the heaviest when it picks a weapon for a player
+maxSpeed  = 221.0              # its holder's, in units per second
 
-[weapon.spread]
-model = "RifleAk47"            # selects the parity-accurate spread function in cs.shared
-[weapon.recoil]
-model = "KickBack"
+[purchase]                     # absent: not sold (the knife)
+buyers = "terrorists"          # terrorists, counterTerrorists, everyone
+price  = 2500
+
+[magazine]                     # absent: no ammo (the knife)
+ammo     = "762Nato"           # an id of ammo.toml
+clipSize = 30
+
+[models]
+view            = "models/v_ak47.mdl"
+player          = "models/p_ak47.mdl"
+playerAnimation = "ak47"       # the end of the player model's sequences: "ref_aim_ak47"
 ```
 
-> The numbers above illustrate the format. The official values come from the parity
-> survey.
+```toml
+[[ammo]]
+id         = "762Nato"         # the original's name
+maxCarried = 90                # rounds a player carries besides the clips'
+boxPrice   = 80
+boxRounds  = 30
+```
+
+The catalog (`cs::WeaponCatalog`) refuses an id or a classname twice, two weapons at one position
+of a slot, and a weapon whose ammo `ammo.toml` lacks.
+
+**Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1; the client gives the player
+the knife's speed and its view model from its data. Each next part of the weapons brings the data
+its code reads: the view model's sequences and their timings (deploy, idle), firing (cycle time,
+damage, range modifier, penetration), spread and accuracy by movement, recoil (`KickBack`), reload,
+the special modes (silencer, burst), the knife's attacks, and the armor ratio.
 
 ### 7.3 Behaviors
 
@@ -251,8 +270,8 @@ model = "KickBack"
 
 ## 12. Data organization
 
-The planned layout; today only `entities.toml` exists
-([03 §11](03-ecs.md#11-prefabs-and-map-entities)). The hull sizes are not data: `cs.shared` holds
+The planned layout; today `entities.toml`
+([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml` and `weapons/` (section 7.2) exist. The hull sizes are not data: `cs.shared` holds
 them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
 ```
@@ -263,6 +282,7 @@ data/cstrike/
 ├── movement.toml       # derived constants not exposed as cvars
 ├── entities.toml       # classname -> prefab + keyvalue schema
 ├── teams.toml          # teams, characters, models
+├── ammo.toml           # kinds of ammo: carried, box price and rounds
 ├── weapons/
 │   ├── ak47.toml
 │   └── ...

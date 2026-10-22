@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The AK-47 (docs/10, section 7.2), read into cs::Weapon, with ReGameDLL_CS's values (GPL,
+# consulted: docs/20 section 3).
+
+id = "ak47"
+classname = "weapon_ak47"
+slot = "primary"
+position = 1
+weight = 25
+maxSpeed = 221.0
+
+[purchase]
+buyers = "terrorists"
+price = 2500
+
+[magazine]
+ammo = "762Nato"
+clipSize = 30
+
+[models]
+view = "models/v_ak47.mdl"
+player = "models/p_ak47.mdl"
+playerAnimation = "ak47"

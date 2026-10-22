@@ -18,7 +18,6 @@ namespace {
 using nx::assets::MdlView;
 using nx::assets::Vfs;
 
-constexpr std::string_view kKnifePath = "models/v_knife.mdl";
 constexpr std::string_view kDrawSequence = "draw";
 constexpr std::string_view kIdleSequence = "idle";
 /// When the knife first idles after it came out, and how long it waits to idle again.
@@ -40,8 +39,8 @@ constexpr nx::Seconds kIdleInterval{20.0F};
 ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, Animation draw, Animation idle) noexcept
     : m_files{std::move(files)}, m_draw{std::move(draw)}, m_idle{std::move(idle)} {}
 
-auto ViewModel::read(const Vfs& vfs) -> nx::Result<ViewModel, ViewModelError> {
-    auto files = readModelFiles(vfs, kKnifePath);
+auto ViewModel::read(const Vfs& vfs, const Weapon& knife) -> nx::Result<ViewModel, ViewModelError> {
+    auto files = readModelFiles(vfs, knife.models.view);
     if (!files) {
         return nx::fail(ViewModelError::FilesFailed, std::move(files.error()));
     }

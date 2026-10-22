@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The kinds of ammo of Counter-Strike 1.6 (docs/10, section 7.2), read into cs::AmmoTypes, with
+# ReGameDLL_CS's values (GPL, consulted: docs/20 section 3). `id` is the original's name for it,
+# which a weapon's `magazine.ammo` names; a player carries `maxCarried` rounds of it at most besides
+# what its clips hold; buying sells it in boxes of `boxRounds` rounds for `boxPrice` each.
+#
+# Today: the ammo of the Glock 18, the USP, the AK-47 and the M4A1.
+
+[[ammo]]
+id = "9mm"
+maxCarried = 120
+boxPrice = 20
+boxRounds = 30
+
+[[ammo]]
+id = "45ACP"
+maxCarried = 100
+boxPrice = 25
+boxRounds = 12
+
+[[ammo]]
+id = "556Nato"
+maxCarried = 90
+boxPrice = 60
+boxRounds = 30
+
+[[ammo]]
+id = "762Nato"
+maxCarried = 90
+boxPrice = 80
+boxRounds = 30

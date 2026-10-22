@@ -11,12 +11,16 @@ nxAddModuleLibrary(csShared
         src/movement.cppm
         src/studio.cppm
         src/player.cppm
+        src/weapons.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
+        src/weapons.cpp
     DEPENDS
         nx::core
         nx::math
+        nx::meta
+        nx::data
         nx::ecs
         nx::assets
         nx::collision
