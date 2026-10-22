@@ -182,6 +182,7 @@ private:
     nx::settings::BoundInput m_keys;
     std::optional<nx::settings::ClientCvars> m_cvars;
     std::optional<cs::PlayerInput> m_input;
+    std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameContent> m_content;
     std::optional<cs::SceneShaders> m_shaders;
     std::vector<std::byte> m_screenShader;
@@ -253,6 +254,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(input.error()));
     }
     m_input = std::move(*input);
+    auto hudCvars = cs::HudCvars::registerIn(m_console);
+    if (!hudCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(hudCvars.error()));
+    }
+    m_hudCvars = std::move(*hudCvars);
     // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
     const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
     nx::invariant(noclipKey.has_value(), "Client: the noclip key has a name");
@@ -470,11 +476,15 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
     if (!m_hud || !m_cvars->video.hudDraw.value()) {
         return {};
     }
-    // The HUD, over the scene.
+    // The HUD, over the scene, the knife's crosshair in the middle.
     const cs::PlayerStatus& status = m_session->game->status();
     m_screenQuads.clear();
-    m_hud->append(m_screenQuads, {.health = status.health, .armor = status.armor, .money = status.money},
-                  frame.size);
+    m_hud->append(m_screenQuads,
+                  {.health = status.health,
+                   .armor = status.armor,
+                   .money = status.money,
+                   .crosshairDistance = cs::kKnifeCrosshairDistance},
+                  m_hudCvars->crosshair(), frame.size);
     if (auto drawn = m_screen->draw(list, {.size = frame.size, .quads = m_screenQuads}); !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }

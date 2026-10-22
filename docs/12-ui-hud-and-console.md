@@ -19,9 +19,9 @@
 | Console | In-house toolkit | Game console and listen server console |
 | Dev tools | Dear ImGui | Inspectors, profiler, navigation editor (development builds only) |
 
-> The choice of menu toolkit is recorded as pending validation in the
-> [TODO](../TODO.md). The alternative evaluated is RmlUi (HTML/CSS-like). The criteria are
-> visual fidelity, performance and ease of use for plugins.
+> **Decided** in [ADR-0020](adr/0020-in-house-ui-toolkit.md): `nx.ui`, in-house and retained, in
+> VGUI2's model of widgets, layouts and schemes, so that the original's own schemes, `.res`
+> layouts and strings are read as they are; RmlUi was weighed and not chosen.
 
 ## 3. HUD
 
@@ -81,8 +81,12 @@ drawn by `nx::render::spriteQuad`, while `hud_draw` is 1. A number with more dig
 widens the room, health and armor to the right and money to the left, and a longer health pushes the
 suit right, keeping the 32 pixels it has at 640 wide (§3.4). Armor between none and 100 shows as
 much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet. The
-first row of each picture, the 320 entries for screens under 640 wide, the helmet, the flash of a
-number that changes, and the ammo, timer, status icons, radar and crosshair come next.
+crosshair of the knife in hand is drawn by the table's rule (`crosshairRects`, in whole numbers),
+in the style `cl_crosshair_color`, `cl_crosshair_size` and `cl_crosshair_translucent` set
+(`HudCvars`; `nxview` draws Counter-Strike's default). The first row of each picture, the 320
+entries for screens under 640 wide, the helmet, the flash of a number that changes, the crosshair
+opening as the player moves (`cl_dynamiccrosshair`, with the weapons), and the ammo, timer, status
+icons and radar come next.
 
 ### 3.3 Visual parity of numbers
 
@@ -186,9 +190,11 @@ here the startup runs that file itself. `registerClientCvars` registers the clie
 (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), all archived,
 and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends; a change takes effect when it
-starts again until the console comes, but `hud_draw`'s, which each frame reads. `config.cfg` keeps the binds too (§6), before the cvars, in the
-original's order. `vid_vsync` as the name of `gl_vsync`, and the other cvars, come with their
-consumers.
+starts again until the console comes, but `hud_draw`'s, which each frame reads. `config.cfg`
+keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
+crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
+`cl_crosshair_translucent` (1), archived, which each frame reads. `vid_vsync` as the name of
+`gl_vsync`, and the other cvars, come with their consumers.
 
 ### 5.3 The `nx.console` module
 
@@ -221,8 +227,9 @@ views over an `nx::console::Console`, which writes replies and failures to a
   with a bind on the mouse wheel.
 - **Typed cvars:** `bool` (`0` or `1`), 32-bit integer (accepts `10.0` and `1e3`, rejects
   `10.5`), finite `float`, text (no double quotes or line endings, so that `config.cfg`
-  always reads the value back) and `enum` with `Count` (accepts the number or the
-  enumerator name and writes the number). Numbers may have a range. Rejected text never
+  always reads the value back; a `TextRule` may narrow it further, as `cl_crosshair_size`
+  takes `auto, small, medium or large` and writes the word) and `enum` with `Count` (accepts
+  the number or the enumerator name and writes the number). Numbers may have a range. Rejected text never
   becomes 0: `mp_freezetime: expected a whole number in [0, 60], got "abc"`.
 
 | Flag | Effect |

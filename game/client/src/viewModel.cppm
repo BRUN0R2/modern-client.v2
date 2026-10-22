@@ -18,6 +18,10 @@ import :modelFiles;
 
 export namespace cs {
 
+/// How far from the middle the knife's crosshair is when the player stands, before the crosshair's
+/// scale (measured: docs/12-ui-hud-and-console.md, section 3.2).
+inline constexpr std::uint32_t kKnifeCrosshairDistance = 7;
+
 /// Why the knife cannot be held.
 enum class ViewModelError : std::uint8_t {
     FilesFailed, ///< A file of it cannot be read or used (cause: the model files' error).

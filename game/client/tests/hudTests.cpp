@@ -3,14 +3,17 @@
 
 // The HUD: its pictures among hud.txt's entries, the numbers it shows of the player as the game makes
 // them, and where it draws them, as the original draws them at 640x480, 1280x720 and 1920x1080
-// (docs/12-ui-hud-and-console.md, section 3.2); and numbers of any size, none cut short (section 3.4).
+// (docs/12-ui-hud-and-console.md, section 3.2); numbers of any size, none cut short (section 3.4);
+// and the crosshair, its cvars and where it is, as the original draws it from 640x480 to 1920x1080.
 
 #include <gtest/gtest.h>
 
 import std;
 import nx.core;
+import nx.console;
 import nx.assets;
 import nx.rhi;
+import nx.render;
 import cs.shared;
 import cs.client;
 
@@ -206,6 +209,131 @@ TEST(HudTest, LongerNumbersWidenTheirRoomAndPushWhatIsBeside) {
     EXPECT_EQ(numberAt(rich, 405), "2147483647");
     EXPECT_EQ(find(rich, HudPicture::Dollar)->x, 1264 - 200 - 18);
     EXPECT_TRUE(std::ranges::contains(rich, digit('7', 1244, 405))) << "ends where it did";
+}
+
+/// A console's output that keeps nothing.
+class SilentOutput final : public nx::console::ConsoleOutput {
+public:
+    void print(std::string_view /*line*/) override {}
+    void reportFailure(const nx::Failure<nx::console::ConsoleError>& /*failure*/) override {}
+};
+
+/// No files.
+class NoFiles final : public nx::console::ConfigFiles {
+public:
+    [[nodiscard]] auto read(std::string_view path)
+        -> nx::Result<std::string, nx::console::ConfigFileError> override {
+        return nx::fail(nx::console::ConfigFileError::NotFound, std::string{path});
+    }
+};
+
+/// What the crosshair's left line says: how long it is and how far its end is from the middle.
+struct Measured {
+    std::uint32_t length = 0;
+    std::uint32_t gap = 0;
+};
+
+[[nodiscard]] auto measured(cs::CrosshairSize size, std::uint32_t distance, std::uint32_t width,
+                            std::uint32_t height) -> Measured {
+    const std::array lines = cs::crosshairRects(size, distance, {.width = width, .height = height});
+    const auto middle = static_cast<float>(width / 2);
+    return {.length = static_cast<std::uint32_t>(lines[0].width),
+            .gap = static_cast<std::uint32_t>(middle - (lines[0].x + lines[0].width - 1.0F))};
+}
+
+void expectRect(const nx::render::ScreenRect& line, const nx::render::ScreenRect& wanted,
+                std::string_view which) {
+    EXPECT_EQ(line.x, wanted.x) << which;
+    EXPECT_EQ(line.y, wanted.y) << which;
+    EXPECT_EQ(line.width, wanted.width) << which;
+    EXPECT_EQ(line.height, wanted.height) << which;
+}
+
+TEST(CrosshairTest, TheLinesAreWhereTheOriginalDrawsThem) {
+    // A Glock at 1280x720: left 615..624 and right 656..665 on row 360, top 335..344 and bottom
+    // 376..385 on column 640, a pixel thick.
+    const std::array lines = cs::crosshairRects(cs::CrosshairSize::Auto, 8, {.width = 1280, .height = 720});
+    expectRect(lines[0], {.x = 615.0F, .y = 360.0F, .width = 10.0F, .height = 1.0F}, "left");
+    expectRect(lines[1], {.x = 656.0F, .y = 360.0F, .width = 10.0F, .height = 1.0F}, "right");
+    expectRect(lines[2], {.x = 640.0F, .y = 335.0F, .width = 1.0F, .height = 10.0F}, "top");
+    expectRect(lines[3], {.x = 640.0F, .y = 376.0F, .width = 1.0F, .height = 10.0F}, "bottom");
+}
+
+TEST(CrosshairTest, ItsSizeScalesWithTheScreensWidthAsTheOriginals) {
+    using cs::CrosshairSize;
+    // Measured on the original (docs/12 section 3.2): length and gap, a Glock (8) standing.
+    struct Case {
+        CrosshairSize size;
+        std::uint32_t width;
+        std::uint32_t height;
+        Measured expected;
+    };
+    const std::array cases{
+        Case{CrosshairSize::Small, 640, 480, {3, 5}},    Case{CrosshairSize::Small, 800, 600, {3, 6}},
+        Case{CrosshairSize::Small, 1024, 768, {5, 8}},   Case{CrosshairSize::Small, 1280, 720, {6, 10}},
+        Case{CrosshairSize::Small, 1600, 900, {7, 12}},  Case{CrosshairSize::Medium, 640, 480, {4, 6}},
+        Case{CrosshairSize::Medium, 800, 600, {5, 8}},   Case{CrosshairSize::Medium, 1024, 768, {6, 10}},
+        Case{CrosshairSize::Medium, 1280, 720, {8, 12}}, Case{CrosshairSize::Medium, 1600, 900, {10, 16}},
+        Case{CrosshairSize::Large, 640, 480, {5, 8}},    Case{CrosshairSize::Large, 800, 600, {6, 10}},
+        Case{CrosshairSize::Large, 1024, 768, {8, 12}},  Case{CrosshairSize::Large, 1280, 960, {10, 16}},
+        Case{CrosshairSize::Large, 1600, 900, {12, 20}}, Case{CrosshairSize::Large, 1920, 1080, {15, 24}},
+        Case{CrosshairSize::Auto, 640, 480, {3, 5}},     Case{CrosshairSize::Auto, 800, 600, {5, 8}},
+        Case{CrosshairSize::Auto, 1024, 768, {8, 12}},   Case{CrosshairSize::Auto, 1600, 900, {12, 20}}};
+    for (const Case& test : cases) {
+        const Measured got = measured(test.size, 8, test.width, test.height);
+        EXPECT_EQ(got.length, test.expected.length) << test.width << "x" << test.height;
+        EXPECT_EQ(got.gap, test.expected.gap) << test.width << "x" << test.height;
+    }
+    // The knife (7), auto: 3 and 4 at 640x480, 5 and 7 at 800x600, 8 and 11 at 1024x768, 10 and 14
+    // at 1280x720, 12 and 17 at 1600x900.
+    for (const auto& [width, height, length, gap] :
+         {std::tuple{640U, 480U, 3U, 4U}, std::tuple{800U, 600U, 5U, 7U}, std::tuple{1024U, 768U, 8U, 11U},
+          std::tuple{1280U, 720U, 10U, 14U}, std::tuple{1600U, 900U, 12U, 17U}}) {
+        const Measured got = measured(CrosshairSize::Auto, cs::kKnifeCrosshairDistance, width, height);
+        EXPECT_EQ(got.length, length) << width << "x" << height;
+        EXPECT_EQ(got.gap, gap) << width << "x" << height;
+    }
+}
+
+TEST(CrosshairTest, ItsCvarsAreTheOriginalsAndRefuseWhatItCannotDraw) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = cs::HudCvars::registerIn(console);
+    ASSERT_TRUE(cvars.has_value()) << nx::describe(cvars.error());
+    const cs::CrosshairStyle style = cvars->crosshair();
+    EXPECT_EQ(style.color, (nx::render::ScreenColor{.red = 50, .green = 250, .blue = 50}));
+    EXPECT_EQ(style.size, cs::CrosshairSize::Auto);
+    EXPECT_TRUE(style.isTranslucent);
+    const std::string archived = console.archivedCvars();
+    for (const std::string_view line : {R"(cl_crosshair_color "50 250 50")", R"(cl_crosshair_size "auto")",
+                                        R"(cl_crosshair_translucent "1")"}) {
+        EXPECT_NE(archived.find(line), std::string::npos) << line;
+    }
+
+    EXPECT_TRUE(console.setCvar("cl_crosshair_color", "255 255 255").has_value());
+    EXPECT_TRUE(console.setCvar("cl_crosshair_size", "small").has_value());
+    EXPECT_TRUE(console.setCvar("cl_crosshair_translucent", "0").has_value());
+    EXPECT_FALSE(console.setCvar("cl_crosshair_color", "300 0 0").has_value());
+    EXPECT_FALSE(console.setCvar("cl_crosshair_color", "50 250").has_value());
+    EXPECT_FALSE(console.setCvar("cl_crosshair_size", "huge").has_value());
+    const cs::CrosshairStyle changed = cvars->crosshair();
+    EXPECT_EQ(changed.color, (nx::render::ScreenColor{.red = 255, .green = 255, .blue = 255}));
+    EXPECT_EQ(changed.size, cs::CrosshairSize::Small);
+    EXPECT_FALSE(changed.isTranslucent);
+}
+
+TEST(CrosshairTest, ColorsAndSizesAreReadAsTheOriginalWritesThem) {
+    EXPECT_EQ(cs::crosshairColorOf("50 250 50"),
+              (nx::render::ScreenColor{.red = 50, .green = 250, .blue = 50}));
+    EXPECT_EQ(cs::crosshairColorOf(" 0  0 255 "),
+              (nx::render::ScreenColor{.red = 0, .green = 0, .blue = 255}));
+    EXPECT_FALSE(cs::crosshairColorOf("").has_value());
+    EXPECT_FALSE(cs::crosshairColorOf("1 2 3 4").has_value());
+    EXPECT_FALSE(cs::crosshairColorOf("1 2 -3").has_value());
+    EXPECT_FALSE(cs::crosshairColorOf("1 2 3.5").has_value());
+    EXPECT_EQ(cs::crosshairSizeNamed("medium"), cs::CrosshairSize::Medium);
+    EXPECT_FALSE(cs::crosshairSizeNamed("Medium").has_value()) << "as the original spells them";
 }
 
 } // namespace
