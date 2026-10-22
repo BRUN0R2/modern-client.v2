@@ -10,6 +10,7 @@
 /// (TODO.md).
 export module cs.shared:player;
 
+import std;
 import nx.core;
 
 export namespace cs {
