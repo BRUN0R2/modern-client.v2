@@ -19,6 +19,9 @@ namespace {
 constexpr std::uint8_t kFullAmount = 255;
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
+/// The most decals on the world's faces: the original's r_decals, which a multiplayer game holds to
+/// mp_decals' default, until the cvars come.
+constexpr std::size_t kMultiplayerDecals = 300;
 
 } // namespace
 
@@ -55,7 +58,9 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                                                .shaderCode = shaders.world,
                                                .colorFormat = format,
                                                .gamma = gamma,
-                                               .sky = level.sky()});
+                                               .sky = level.sky(),
+                                               .decals = level.gunshotDecals(),
+                                               .decalLimit = kMultiplayerDecals});
     if (!world) {
         return nx::fail(SceneError::CreateFailed, "the world", std::move(world.error()));
     }
@@ -167,6 +172,10 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }
     return {};
+}
+
+auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position) -> std::uint32_t {
+    return m_world.shootDecal(decal, position);
 }
 
 void Scene::flash(const Level& level, const std::optional<ViewModelPose>& pose,

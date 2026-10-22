@@ -344,7 +344,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Weapon state machine: holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
 - [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
-- [ ] What the shots hit: `FireBullets3`'s traces, damage by distance, penetration, decals; the knife's damage
+- [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
+- [ ] What the shots hit: damage by distance, penetration, brush entities' decals (`{bproof1` on glass); the knife's damage
 - [ ] Hitgroups, kevlar and helmet
 - [ ] Penetration by material (`materials.txt`)
 
