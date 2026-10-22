@@ -186,7 +186,11 @@ as the original's textures go; a masked picture, a font always, shows through at
 are sampled at the nearest, so a picture stays sharp at any whole scale, or filtered linearly:
 `spriteQuad` draws a rectangle of a HUD sprite as the original does, over a pixel more than its size
 each way, filtered linearly ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
-`appendText` lays out a font's characters one after another, each its own width wide.
+`appendText` lays out a font's characters one after another, each its own width wide. `loadImage`
+puts an RGBA picture on the GPU as it is, for what the interface makes itself (its glyph atlases,
+[12 §2.1](12-ui-hud-and-console.md#21-fonts)). A rectangle with a clip draws only the pixels of the
+clip, those of the panel a text scrolls in: the rectangles in a row drawn alike share a scissor, and
+the scissor covers the whole target again after them.
 
 ## 8. BSP world
 

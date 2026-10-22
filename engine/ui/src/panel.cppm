@@ -10,6 +10,8 @@ export module nx.ui:panel;
 import std;
 import nx.core;
 import nx.assets;
+import nx.render;
+import :painter;
 
 export namespace nx::ui {
 
@@ -48,7 +50,7 @@ struct PanelBounds {
 };
 
 /// A panel of the interface, its children over it in their order. It stays where it is made: its
-/// children point to it.
+/// children point to it. A control is a kind of panel that draws more than its background.
 class Panel {
 public:
     /// A panel named `name` at `bounds`, visible and enabled, pinned to its parent's top left.
@@ -58,7 +60,7 @@ public:
     auto operator=(const Panel&) -> Panel& = delete;
     Panel(Panel&&) = delete;
     auto operator=(Panel&&) -> Panel& = delete;
-    ~Panel() = default;
+    virtual ~Panel() = default;
 
     [[nodiscard]] inline auto name() const noexcept -> std::string_view { return m_name; }
     [[nodiscard]] inline auto bounds() const noexcept -> const PanelBounds& { return m_bounds; }
@@ -72,6 +74,10 @@ public:
     [[nodiscard]] inline auto parent() const noexcept -> Panel* { return m_parent; }
     [[nodiscard]] inline auto children() const noexcept -> std::span<const std::unique_ptr<Panel>> {
         return m_children;
+    }
+    /// The color its background is filled with; none for no background.
+    [[nodiscard]] inline auto background() const noexcept -> const std::optional<render::ScreenColor>& {
+        return m_background;
     }
 
     /// Puts `child` in the panel, after its other children: over them. Returns it.
@@ -88,6 +94,11 @@ public:
         m_pinCorner = pinCorner;
         m_autoResize = autoResize;
     }
+    inline void setBackground(std::optional<render::ScreenColor> color) noexcept { m_background = color; }
+
+    /// Draws the panel with `painter`, its parent's, then over it each of its visible children in
+    /// their order, each kept within it. A hidden panel draws nothing, nor do its children.
+    void paintTree(const PanelPainter& painter) const;
 
     /// Applies `settings`, the panel's block of a layout: `xpos` and `ypos` (from the parent's right or
     /// bottom with `r`, from its middle with `c`), `wide`, `tall`, `visible`, `enabled`, `pinCorner`,
@@ -97,6 +108,10 @@ public:
     /// Applies each block of `layout`, a layout's root block, to the child its key names; a block that
     /// names no child is left. Errors: those of applySettings.
     [[nodiscard]] auto applyLayout(const assets::KeyValuesEntry& layout) -> Result<void, PanelError>;
+
+protected:
+    /// Draws what the panel itself shows, from its top left: its background. A control draws more.
+    virtual void paint(PanelPainter& painter) const;
 
 private:
     /// Moves the panel's edges that follow its parent's, which grew by `wider` and `taller`.
@@ -111,6 +126,7 @@ private:
     std::int32_t m_tabPosition = 0;
     Panel* m_parent = nullptr;
     std::vector<std::unique_ptr<Panel>> m_children;
+    std::optional<render::ScreenColor> m_background;
 };
 
 } // namespace nx::ui

@@ -6,6 +6,7 @@ module nx.ui;
 import std;
 import nx.core;
 import nx.assets;
+import nx.render;
 
 namespace nx::ui {
 
@@ -155,6 +156,26 @@ auto Panel::applySettings(const assets::KeyValuesEntry& settings) -> Result<void
     m_pinCorner = *pin;
     m_autoResize = *resize;
     return {};
+}
+
+void Panel::paintTree(const PanelPainter& painter) const {
+    if (!m_isVisible) {
+        return;
+    }
+    PanelPainter mine = painter.inside(m_bounds.x, m_bounds.y, m_bounds.wide, m_bounds.tall);
+    if (mine.isClippedAway()) {
+        return;
+    }
+    paint(mine);
+    for (const std::unique_ptr<Panel>& child : m_children) {
+        child->paintTree(mine);
+    }
+}
+
+void Panel::paint(PanelPainter& painter) const {
+    if (m_background) {
+        painter.fill(0, 0, m_bounds.wide, m_bounds.tall, *m_background);
+    }
 }
 
 auto Panel::applyLayout(const assets::KeyValuesEntry& layout) -> Result<void, PanelError> {
