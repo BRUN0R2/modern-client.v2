@@ -46,7 +46,7 @@ struct UserCommand {
 
 Today `cs::UserCommand` (`cs.shared:movement`) has the fields movement and the game read: its
 number, the duration, the view angles, the move, the buttons (`Jump`, `Duck`, `Forward`, `Back`,
-`MoveLeft`, `MoveRight`, `Use`, which the game reads as it goes down, `Attack` and `Reload`), and
+`MoveLeft`, `MoveRight`, `Use`, which the game reads as it goes down, `Attack`, `Attack2` and `Reload`), and
 the weapon it selects. The others arrive with what reads them.
 
 ### 2.2 Generation on the client

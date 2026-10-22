@@ -8,8 +8,8 @@
 /// recoil. The game's own are in data/cstrike/weapons/<weapon>.toml and data/cstrike/ammo.toml,
 /// with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
 ///
-/// Today: the guns' fire as it starts; their damage and how far it reaches, the knife's attacks, the
-/// silencers and the Glock's burst come next (TODO.md).
+/// Today: the guns' fire as it starts, the silencers and the Glock's burst; their damage and how far
+/// it reaches and the knife's attacks come next (TODO.md).
 export module cs.shared:weapons;
 
 import std;
@@ -161,6 +161,12 @@ struct WeaponRecoil {
     std::optional<nx::Degrees> punch{};
 };
 
+/// The rounds a shot fires after it on its own, one a weapon frame (the Glock's burst: FireRemaining).
+struct FollowUps {
+    std::uint32_t rounds{};
+    float spread{}; ///< Each strays this much, whatever the accuracy and the movement.
+};
+
 /// How a gun fires.
 struct WeaponFiring {
     nx::Seconds cycle{}; ///< From a shot to the next.
@@ -174,12 +180,26 @@ struct WeaponFiring {
     WeaponAccuracy accuracy{};
     WeaponSpread spread{};
     WeaponRecoil recoil{};
+    std::optional<FollowUps> followUps{}; ///< None: a shot fires one round.
 };
 
 /// How a weapon is reloaded (DefaultReload).
 struct WeaponReload {
     nx::Seconds time{};
     std::vector<std::uint32_t> sequences{}; ///< One of them, at random, as it reloads.
+};
+
+/// What `+attack2` switches a weapon to and back: the USP's and the M4A1's silencers, the Glock's
+/// burst. While on, its view, firing and reload are these, those not given the weapon's own.
+struct WeaponAlternate {
+    /// It switches again no sooner than this after a switch; one that plays a sequence neither fires
+    /// nor idles meanwhile either.
+    nx::Seconds switchTime{};
+    std::optional<std::uint32_t> onSequence{};  ///< Its view model's, as it switches on.
+    std::optional<std::uint32_t> offSequence{}; ///< And off.
+    std::optional<WeaponView> view{};
+    std::optional<WeaponFiring> firing{};
+    std::optional<WeaponReload> reload{};
 };
 
 /// The models a weapon is seen by.
@@ -208,8 +228,9 @@ struct Weapon {
     std::optional<WeaponMagazine> magazine{}; ///< None: it fires no ammo (the knife).
     WeaponModels models{};
     WeaponView view{};
-    std::optional<WeaponFiring> firing{}; ///< None: it fires nothing (the knife, until its attacks).
-    std::optional<WeaponReload> reload{}; ///< None: it is not reloaded.
+    std::optional<WeaponFiring> firing{};       ///< None: it fires nothing (the knife, until its attacks).
+    std::optional<WeaponReload> reload{};       ///< None: it is not reloaded.
+    std::optional<WeaponAlternate> alternate{}; ///< None: `+attack2` does nothing with it.
 };
 
 /// A weapon of a catalog, by its place in it.
@@ -226,8 +247,8 @@ struct WeaponIndex {
 /// Reads `text`, the file `sourceName`: a weapon, its id and classname not empty, its models paths
 /// of the game's files, a draw sequence and an idle at least, each idle's wait above 0 and the
 /// idles' shares adding up to 1; firing and reloading only with a magazine, a shoot sequence and a
-/// reload sequence at least, a cycle above 0, and one accuracy, by bursts or by pace. Errors:
-/// DataInvalid.
+/// reload sequence at least, a cycle above 0, and one accuracy, by bursts or by pace; and the same of
+/// its alternate's, which plays both its switch's sequences or neither. Errors: DataInvalid.
 [[nodiscard]] auto readWeapon(std::string_view text, std::string_view sourceName)
     -> nx::Result<Weapon, WeaponError>;
 
@@ -405,6 +426,15 @@ struct nx::meta::Description<cs::WeaponRecoil> {
 };
 
 template <>
+struct nx::meta::Description<cs::FollowUps> {
+    static constexpr std::string_view kName = "cs::FollowUps";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::FollowUps::rounds>("rounds", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::FollowUps::spread>("spread", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponFiring> {
     static constexpr std::string_view kName = "cs::WeaponFiring";
     static constexpr std::tuple kFields{
@@ -416,6 +446,7 @@ struct nx::meta::Description<cs::WeaponFiring> {
         nx::meta::field<&cs::WeaponFiring::accuracy>("accuracy"),
         nx::meta::field<&cs::WeaponFiring::spread>("spread"),
         nx::meta::field<&cs::WeaponFiring::recoil>("recoil"),
+        nx::meta::field<&cs::WeaponFiring::followUps>("followUps"),
     };
 };
 
@@ -425,6 +456,19 @@ struct nx::meta::Description<cs::WeaponReload> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponReload::time>("time", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponReload::sequences>("sequences"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponAlternate> {
+    static constexpr std::string_view kName = "cs::WeaponAlternate";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponAlternate::switchTime>("switchTime", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponAlternate::onSequence>("onSequence"),
+        nx::meta::field<&cs::WeaponAlternate::offSequence>("offSequence"),
+        nx::meta::field<&cs::WeaponAlternate::view>("view"),
+        nx::meta::field<&cs::WeaponAlternate::firing>("firing"),
+        nx::meta::field<&cs::WeaponAlternate::reload>("reload"),
     };
 };
 
@@ -455,5 +499,6 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::view>("view"),
         nx::meta::field<&cs::Weapon::firing>("firing"),
         nx::meta::field<&cs::Weapon::reload>("reload"),
+        nx::meta::field<&cs::Weapon::alternate>("alternate"),
     };
 };

@@ -54,3 +54,38 @@ punch = 2.0
 [reload]
 time = 2.7
 sequences = [13] # reload_unsil
+
+[alternate] # the silencer
+switchTime = 3.0
+onSequence = 7 # add_silencer
+offSequence = 15 # detach_silencer
+
+[alternate.view]
+drawSequences = [6] # draw
+idles = [{ sequence = 0, wait = 60.0, share = 1.0 }] # idle
+idlesWhenEmpty = false
+
+[alternate.firing]
+cycle = 0.15
+isAutomatic = false
+idleAfterShot = 2.0
+shootSequences = [1, 2, 3] # shoot1, shoot2, shoot3
+lastShotSequence = 4 # shootlast
+
+[alternate.firing.accuracy]
+initial = 0.92
+paced = { threshold = 0.3, rate = 0.275, minimum = 0.6, maximum = 0.92 }
+
+[alternate.firing.spread]
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.3 }
+moving = { base = 0.0, scale = 0.25 }
+ducked = { base = 0.0, scale = 0.125 }
+standing = { base = 0.0, scale = 0.15 }
+
+[alternate.firing.recoil]
+punch = 2.0
+
+[alternate.reload]
+time = 2.7
+sequences = [5] # reload

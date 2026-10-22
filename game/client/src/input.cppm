@@ -40,6 +40,7 @@ struct InputButtons {
     nx::console::Button duck;      ///< `+duck`.
     nx::console::Button use;       ///< `+use`.
     nx::console::Button attack;    ///< `+attack`.
+    nx::console::Button attack2;   ///< `+attack2`.
     nx::console::Button reload;    ///< `+reload`.
 };
 
@@ -90,9 +91,9 @@ public:
     /// makes it: each movement button asks its speed (cl_forwardspeed...) for the share of the
     /// command it was held (heldShare), all of them cl_movespeedkey of that while `+speed` is held,
     /// together no more than `maxSpeed` (the player's, from the server; zero for no limit). The
-    /// movement buttons are set while held; `+jump`, `+duck`, `+use`, `+attack` and `+reload` also
-    /// when pressed during the command, so that a press and a release within one (a bind on the mouse
-    /// wheel) still counts.
+    /// movement buttons are set while held; `+jump`, `+duck`, `+use`, `+attack`, `+attack2` and
+    /// `+reload` also when pressed during the command, so that a press and a release within one (a
+    /// bind on the mouse wheel) still counts.
     /// It selects the weapon selectWeapon chose since the last command. Once a command: it takes the
     /// edges of the buttons it reads, and the weapon chosen.
     [[nodiscard]] auto nextCommand(nx::EulerAngles view, nx::Milliseconds duration,

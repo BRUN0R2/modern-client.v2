@@ -456,17 +456,17 @@ window loses the keyboard. Each notch of the wheel presses its key and releases 
 
 `cs::PlayerInput` (`cs.client`) registers the player's buttons, `+forward`, `+back`,
 `+moveleft`, `+moveright`, `+moveup`, `+movedown`, `+left`, `+right`, `+lookup`, `+lookdown`,
-`+strafe`, `+speed`, `+jump`, `+duck`, `+use`, `+attack` and `+reload`, and their cvars with Counter-Strike 1.6's
+`+strafe`, `+speed`, `+jump`, `+duck`, `+use`, `+attack`, `+attack2` and `+reload`, and their cvars with Counter-Strike 1.6's
 values: `cl_forwardspeed`, `cl_backspeed` and `cl_sidespeed` (400, archived), `cl_upspeed`
 (320), `cl_movespeedkey` (0.52), `cl_yawspeed` (210), `cl_pitchspeed` (225) and
 `cl_anglespeedkey` (0.67). `nextCommand` makes a user command as the original's `CL_CreateMove`
 makes it: each movement button asks its speed for the share of the command it was held (all of
 it, but half when it went down during the command, as `CL_KeyState` counts), `+speed` asks
 `cl_movespeedkey` of each, and together they are cut to the player's speed limit. `+jump`,
-`+duck`, `+use`, `+attack` and `+reload` count also when pressed and released within one command,
-so that `+jump` on `MWHEELDOWN` jumps once a notch. `turn` turns the view each frame as `CL_AdjustAngles` does:
+`+duck`, `+use`, `+attack`, `+attack2` and `+reload` count also when pressed and released within
+one command, so that `+jump` on `MWHEELDOWN` jumps once a notch. `turn` turns the view each frame as `CL_AdjustAngles` does:
 `+left` and `+right` (which move instead while `+strafe` is held), `+lookup` and `+lookdown`, up
-to 89 degrees. `+attack2` and the other buttons come with what reads them; the mouse
+to 89 degrees. The other buttons come with what reads them; the mouse
 always looks, so `+mlook` and `+klook` are not there. `selectWeapon` makes the next command select
 a weapon: `next` registers `weapon_<name>` for each weapon (`weapon_knife`, `weapon_usp`), as the
 original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to

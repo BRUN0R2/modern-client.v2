@@ -57,3 +57,27 @@ standing = { base = 0.0, scale = 0.1 }
 [reload]
 time = 2.2
 sequences = [7, 12] # reload, reload2
+
+[alternate] # the burst: 3 rounds a press, the 2 after the first on the next frames
+switchTime = 0.3
+
+[alternate.firing]
+cycle = 0.5
+isAutomatic = true # in burst, holding the button fires again
+idleAfterShot = 2.5
+shootSequences = [3, 4, 5]
+lastShotSequence = 6
+followUps = { rounds = 2, spread = 0.05 }
+
+[alternate.firing.accuracy]
+initial = 0.9
+paced = { threshold = 0.325, rate = 0.275, minimum = 0.6, maximum = 0.9 }
+
+[alternate.firing.spread]
+movingAbove = 0.0
+air = { base = 0.0, scale = 1.2 }
+moving = { base = 0.0, scale = 0.185 }
+ducked = { base = 0.0, scale = 0.095 }
+standing = { base = 0.0, scale = 0.3 }
+
+[alternate.firing.recoil] # none

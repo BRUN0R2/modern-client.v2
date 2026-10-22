@@ -49,10 +49,11 @@ constexpr float kAngleSpeedKey = 0.67F;
     auto duck = add("duck", "Ducks while held.");
     auto use = add("use", "Uses what the player looks at.");
     auto attack = add("attack", "Fires the weapon in hand while held.");
+    auto attack2 = add("attack2", "Switches the weapon in hand to its silencer or its burst, and back.");
     auto reload = add("reload", "Reloads the weapon in hand.");
     for (auto* const registered :
          {&forward, &back, &moveLeft, &moveRight, &moveUp, &moveDown, &left, &right, &lookUp, &lookDown,
-          &strafe, &speed, &jump, &duck, &use, &attack, &reload}) {
+          &strafe, &speed, &jump, &duck, &use, &attack, &attack2, &reload}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -73,6 +74,7 @@ constexpr float kAngleSpeedKey = 0.67F;
                         .duck = *duck,
                         .use = *use,
                         .attack = *attack,
+                        .attack2 = *attack2,
                         .reload = *reload};
 }
 
@@ -196,6 +198,7 @@ auto PlayerInput::nextCommand(nx::EulerAngles view, nx::Milliseconds duration, n
                                         std::pair{cs::Button::Duck, takeIsPressed(m_buttons.duck)},
                                         std::pair{cs::Button::Use, takeIsPressed(m_buttons.use)},
                                         std::pair{cs::Button::Attack, takeIsPressed(m_buttons.attack)},
+                                        std::pair{cs::Button::Attack2, takeIsPressed(m_buttons.attack2)},
                                         std::pair{cs::Button::Reload, takeIsPressed(m_buttons.reload)}}) {
         if (isSet) {
             held.set(button);
