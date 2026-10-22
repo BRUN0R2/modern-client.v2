@@ -282,6 +282,28 @@ Without the historical limits on text channels and message size:
 - **Content:** `content_list`, `content_scan`, `content_add <path>` and
   `content_profile <profile>` ([06 §2.5](06-assets-and-resources.md#25-local-configuration)).
 
+**Today** (`nx.ui:consoleDialog`): `ConsoleDialog` is the console's window over `nx.console`, its
+output a `RichText` and its input line a `TextEntry`. A line typed and sent with Enter is shown
+after `] `, as the original shows it, kept in the history and queued on the console's buffer, which
+runs it in its turn. As a command's name is typed, the window offers the names it completes to
+(commands, cvars and aliases, at most eight), each with what the console tells of it (a cvar's
+value and what it accepts, a command's description); Up and Down choose one, and Tab completes the
+name to the one chosen, or the first, and a space. Without names offered, Up and Down walk the
+history; Page Up and Page Down scroll the output by half its rows, and a line sent brings back the
+newest. Replies are shown in one colour, failures in another, and what is logged in the colour of
+its level: `ConsoleLogSink` keeps the lines logged on any thread until the main thread shows them.
+`next` opens the window with `toggleconsole`, which the default binds put on `~` and `` ` ``, and
+closes it with the same keys or Escape: while it is open the keys and the typed text are its, the
+keys held for the game are let go and the cursor shows. Its font is the `Default` of the scheme of
+the installation's windows (`resource/TrackerScheme.res`, Tahoma 16 at 768 lines and up: 13 pixels
+per em, not smoothed), found among the system's fonts (`cs.client:console`); without the scheme or
+the face the console has no window, and the reason is logged. What is logged and what the console
+replies show in it as well as where they always went. Failures read as the player reads them:
+what failed, then each cause by its name and detail (`map de_dust3 (NotFound: maps/de_dust3.bsp)`).
+`nxview --console <line>` and `--typing <text>` draw the window over a frame. Its place (the middle
+three quarters of the screen) and its colours are the project's until the original's are measured
+from reference shots; search comes later.
+
 ### 5.1 Preserved client cvars (selection)
 
 | Group | Cvars |

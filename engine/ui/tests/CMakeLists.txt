@@ -11,8 +11,10 @@ nxAddTest(nxUiTests
         paintTests.cpp
         textEntryTests.cpp
         richTextTests.cpp
+        consoleDialogTests.cpp
     DEPENDS
         nx::ui
+        nx::console
         nx::assets
         nx::render
         nx::rhiVulkan

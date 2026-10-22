@@ -7,8 +7,8 @@
 /// Today: the player's input, the buttons the binds hold, the commands they make and the view the
 /// keys turn; the game's content and a level of it, what its entities show as the game sets them up
 /// until the server comes (the light of the map, its sprites and studio models, the knife in hand);
-/// the scene that draws it; the level's game, played by the client alone; and the HUD of its
-/// player.
+/// the scene that draws it; the level's game, played by the client alone; the HUD of its player;
+/// and the console's window's font and place.
 export module cs.client;
 
 export import :input;
@@ -22,3 +22,4 @@ export import :level;
 export import :scene;
 export import :localGame;
 export import :hud;
+export import :console;

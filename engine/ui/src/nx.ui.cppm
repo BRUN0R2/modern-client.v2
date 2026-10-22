@@ -9,7 +9,8 @@
 /// it changes size; fonts, the TrueType faces the schemes name, found, sized and drawn as Windows
 /// found, sized and drew them; and text on the screen, their glyphs packed into atlases and placed as Windows
 /// placed them; panels drawn, their backgrounds and their children within them; labels, text
-/// entries and rich text. The schemes' styles and the other controls (the console first) come next (TODO.md).
+/// entries and rich text; and the console's window over nx.console. The schemes' styles and the other
+/// controls (the console first) come next (TODO.md).
 export module nx.ui;
 
 export import :panel;
@@ -17,6 +18,7 @@ export import :painter;
 export import :label;
 export import :textEntry;
 export import :richText;
+export import :consoleDialog;
 export import :font;
 export import :fontCatalog;
 export import :schemeFont;

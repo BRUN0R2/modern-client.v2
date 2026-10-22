@@ -24,6 +24,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `nx.ui` painting: panels' backgrounds and their children within them; labels placed by their alignment
 - [x] `nx.ui` text entries: typed text at the cursor, the keys that edit it, scrolled so that the cursor shows
 - [x] `nx.ui` rich text: coloured lines wrapped to the width, the oldest dropped past a capacity, scrolled from the newest
+- [x] `nx.ui` console window over `nx.console`: lines run and shown, names offered and completed, history, output coloured by kind and log level
+- [x] The console window in `next` (`toggleconsole`, `~`), its font the installation's scheme's, what is logged shown in it; `nxview --console`
+- [ ] The console window in the original's look and place, from its scheme and reference shots; search in it
 - [x] `nx.ui` scheme fonts: a scheme's font made for a screen's height, its candidates in its order, each for the characters left by those before it
 - [ ] Fonts: Windows' bitmap fonts (`.fon`); simulated italics; atlases that grow as new characters come
 - [ ] Define the reference hardware for the performance targets

@@ -3,7 +3,7 @@
 
 // nxview: the map viewer (TODO.md, M2). It renders one frame of a map of the Counter-Strike 1.6
 // installation to a BMP file, as the client draws it (cs.client), from where it is told to look, and
-// the HUD over it when asked.
+// the HUD and the console's window over it when asked.
 
 #include <cstdio>
 #include <cstdlib>
@@ -12,10 +12,12 @@ import std;
 import nx.core;
 import nx.math;
 import nx.platform;
+import nx.console;
 import nx.assets;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
+import nx.ui;
 import cs.shared;
 import cs.client;
 
@@ -25,7 +27,8 @@ constexpr int kExitUnusable = 2; // the arguments, the content or the GPU
 constexpr std::string_view kUsage =
     R"(usage: nxview --screenshot <file.bmp> [--map <name>] [--install <folder>]
               [--data <folder>] [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
-              [--time <seconds>] [--size <width>x<height>] [--hud] [--validation]
+              [--time <seconds>] [--size <width>x<height>] [--hud] [--console <line>]...
+              [--typing <text>] [--validation]
 
 Renders one frame of a map of the Counter-Strike 1.6 installation into a BMP file, without a window,
 as the client draws it with the original's default settings: the world as the game makes it when
@@ -46,6 +49,10 @@ run next.
   --size <width>x<height> the frame's size in pixels (default: 1280x720)
   --hud                   the HUD over the frame: the player's as it spawns, the knife's crosshair
                           in Counter-Strike's default style
+  --console <line>        the console's window over the frame, <line> typed and sent in it; once
+                          for each line, in their order (a console of the built-in commands)
+  --typing <text>         the console's window over the frame, <text> typed in it and not sent,
+                          the names it completes to offered
   --validation            the Khronos validation layer, when it is installed: its messages are
                           logged and nxview exits with 1 when it reported an error
 )";
@@ -66,6 +73,11 @@ struct Options {
     nx::rhi::Extent2d size{kDefaultExtent};
     bool isHudShown = false;
     bool isValidationEnabled = false;
+    std::vector<std::string> consoleLines; ///< Sent in the console's window.
+    std::optional<std::string> typing;     ///< Left typed in it.
+
+    /// Whether the console's window is drawn.
+    [[nodiscard]] auto isConsoleShown() const noexcept -> bool { return !consoleLines.empty() || typing; }
 };
 
 /// The size `text` writes as <width>x<height>, both above 0; nullopt when it does not.
@@ -95,8 +107,8 @@ struct Options {
     std::set<std::string_view> seen;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const std::string_view option = arguments[index];
-        if (!seen.insert(option).second) {
-            return std::nullopt; // repeated
+        if (option != "--console" && !seen.insert(option).second) {
+            return std::nullopt; // repeated, but the console's lines
         }
         if (option == "--validation" || option == "--hud") {
             (option == "--hud" ? options.isHudShown : options.isValidationEnabled) = true;
@@ -127,6 +139,10 @@ struct Options {
                 return std::nullopt;
             }
             options.size = *size;
+        } else if (option == "--console") {
+            options.consoleLines.emplace_back(value);
+        } else if (option == "--typing") {
+            options.typing = std::string{value};
         } else if (option == "--position" || option == "--angles") {
             const std::optional<nx::Vec3> numbers = nx::assets::vectorOfValue(value);
             if (!numbers) {
@@ -139,6 +155,26 @@ struct Options {
     }
     return options;
 }
+
+/// The console's replies, shown in its window.
+class WindowOutput final : public nx::console::ConsoleOutput {
+public:
+    void print(std::string_view line) override { window->print(line); }
+    void reportFailure(const nx::Failure<nx::console::ConsoleError>& failure) override {
+        window->reportFailure(failure);
+    }
+
+    nx::ui::ConsoleDialog* window = nullptr;
+};
+
+/// No file for `exec` to read.
+class NoFiles final : public nx::console::ConfigFiles {
+public:
+    [[nodiscard]] auto read(std::string_view path)
+        -> nx::Result<std::string, nx::console::ConfigFileError> override {
+        return nx::fail(nx::console::ConfigFileError::NotFound, std::string{path});
+    }
+};
 
 /// Prints `failure` and returns kExitUnusable.
 template <class Code>
@@ -218,7 +254,8 @@ constexpr std::size_t kBlue = 2;
 }
 
 /// Renders one frame of `level` from the camera's start into options.screenshot, without a window,
-/// and the HUD over it, its pictures from `content` and drawn with `screenShader`, when the options ask.
+/// and the HUD and the console's window over it, its pictures from `content` and drawn with
+/// `screenShader`, when the options ask.
 [[nodiscard]] auto takeScreenshot(const Options& options, const cs::GameContent& content,
                                   const cs::Level& level, const cs::SceneShaders& shaders,
                                   std::span<const std::byte> screenShader) -> int {
@@ -256,18 +293,56 @@ constexpr std::size_t kBlue = 2;
     }
     std::optional<nx::render::ScreenRenderer> screen;
     std::optional<cs::Hud> hud;
-    if (options.isHudShown) {
+    if (options.isHudShown || options.isConsoleShown()) {
         auto made = nx::render::ScreenRenderer::create(
             **device, {.shaderCode = screenShader, .colorFormat = nx::rhi::Format::Rgba8Unorm});
         if (!made) {
             return unusable(made.error());
         }
         screen.emplace(std::move(*made));
+    }
+    if (options.isHudShown) {
         auto loaded = cs::Hud::load(content.vfs, *screen, list);
         if (!loaded) {
             return unusable(loaded.error());
         }
         hud.emplace(std::move(*loaded));
+    }
+    // The console's window, its lines sent and run, its typing left.
+    WindowOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    nx::ui::FontCatalog fonts;
+    std::optional<nx::ui::SchemeFontSet> consoleFont;
+    std::optional<nx::ui::GlyphAtlas> consoleAtlas;
+    std::optional<nx::render::ScreenImage> consoleImage;
+    std::optional<nx::ui::ConsoleDialog> consoleWindow;
+    if (options.isConsoleShown()) {
+        consoleFont = cs::openConsoleFont(content.vfs, fonts, extent.height);
+        if (!consoleFont) {
+            std::println(stderr, "nxview: the console has no window");
+            return kExitUnusable;
+        }
+        auto atlas = nx::ui::GlyphAtlas::build(*consoleFont, cs::consoleCharacters());
+        if (!atlas) {
+            return unusable(atlas.error());
+        }
+        consoleAtlas.emplace(std::move(*atlas));
+        auto image = screen->loadImage(list, consoleAtlas->texels(), consoleAtlas->width(),
+                                       consoleAtlas->height(), "console");
+        if (!image) {
+            return unusable(image.error());
+        }
+        consoleImage.emplace(std::move(*image));
+        consoleWindow.emplace(console, cs::consoleBounds(extent));
+        consoleWindow->setFace({.atlas = &*consoleAtlas, .image = &*consoleImage});
+        output.window = &*consoleWindow;
+        for (const std::string& line : options.consoleLines) {
+            consoleWindow->insertText(line);
+            std::ignore = consoleWindow->pressKey(nx::platform::Key::Enter);
+            std::ignore = console.execute();
+        }
+        consoleWindow->insertText(options.typing.value_or(std::string{}));
     }
     const nx::render::Camera camera = startCamera(options, level.map());
     // The brush entities where the game puts them as the map starts, and the knife the player has held
@@ -293,15 +368,20 @@ constexpr std::size_t kBlue = 2;
         !drawn) {
         return unusable(drawn.error());
     }
-    if (hud) {
-        const cs::PlayerStatus& status = (*game)->status();
+    if (screen) {
         std::vector<nx::render::ScreenQuad> quads;
-        hud->append(quads,
-                    {.health = status.health,
-                     .armor = status.armor,
-                     .money = status.money,
-                     .crosshairDistance = cs::kKnifeCrosshairDistance},
-                    cs::CrosshairStyle{}, extent);
+        if (hud) {
+            const cs::PlayerStatus& status = (*game)->status();
+            hud->append(quads,
+                        {.health = status.health,
+                         .armor = status.armor,
+                         .money = status.money,
+                         .crosshairDistance = cs::kKnifeCrosshairDistance},
+                        cs::CrosshairStyle{}, extent);
+        }
+        if (consoleWindow) {
+            consoleWindow->paintTree(nx::ui::PanelPainter{quads, extent});
+        }
         if (auto drawn = screen->draw(list, {.size = extent, .quads = quads}); !drawn) {
             return unusable(drawn.error());
         }
