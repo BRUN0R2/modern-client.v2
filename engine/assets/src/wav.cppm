@@ -12,18 +12,12 @@ import nx.core;
 
 export namespace nx::assets {
 
-struct HertzTag {
-    static constexpr std::string_view kSuffix = "Hz";
-};
 struct SampleFramesTag {
     static constexpr std::string_view kSuffix = " frames";
 };
 struct ChannelsTag {
     static constexpr std::string_view kSuffix = " channels";
 };
-
-/// Sample frames per second.
-using SampleRate = Quantity<std::uint32_t, HertzTag>;
 
 /// A position in a sound, or a length, in sample frames: one sample of every channel.
 using SampleFrames = Quantity<std::uint32_t, SampleFramesTag>;

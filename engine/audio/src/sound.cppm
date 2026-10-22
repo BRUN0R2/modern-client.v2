@@ -22,11 +22,11 @@ public:
 
     /// A sound of `samples`, `channels` (1 or 2) interleaved, at `rate`, looping from `loopStart` when
     /// it loops.
-    Sound(std::vector<float> samples, std::uint16_t channels, assets::SampleRate rate,
+    Sound(std::vector<float> samples, std::uint16_t channels, SampleRate rate,
           std::optional<assets::SampleFrames> loopStart = std::nullopt);
 
     [[nodiscard]] inline auto channels() const noexcept -> std::uint16_t { return m_channels; }
-    [[nodiscard]] inline auto rate() const noexcept -> assets::SampleRate { return m_rate; }
+    [[nodiscard]] inline auto rate() const noexcept -> SampleRate { return m_rate; }
     /// Its length in frames: a sample of each channel.
     [[nodiscard]] inline auto frames() const noexcept -> std::size_t { return m_samples.size() / m_channels; }
     [[nodiscard]] inline auto samples() const noexcept -> std::span<const float> { return m_samples; }
@@ -38,7 +38,7 @@ public:
 private:
     std::vector<float> m_samples;
     std::uint16_t m_channels;
-    assets::SampleRate m_rate;
+    SampleRate m_rate;
     std::optional<assets::SampleFrames> m_loopStart;
 };
 

@@ -37,6 +37,10 @@ nxAddStdModuleLibrary()
 # Runtime dependencies (vcpkg.json; docs/17-build-and-tools.md, section 5).
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
+# SDL3 marks its headers as not the system's (its SDL3Config.cmake), so that its macros would be held
+# to the project's warnings where they expand: SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK casts in C's style.
+# They are a third party's code, whose headers are the system's here as every other library's are.
+set_property(TARGET SDL3::Headers PROPERTY SYSTEM TRUE)
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)

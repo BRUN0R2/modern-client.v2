@@ -9,11 +9,11 @@ import nx.assets;
 
 namespace {
 
+using nx::SampleRate;
 using nx::assets::ChannelCount;
 using nx::assets::parseWav;
 using nx::assets::SampleFormat;
 using nx::assets::SampleFrames;
-using nx::assets::SampleRate;
 using nx::assets::WavError;
 
 using Bytes = std::vector<std::byte>;

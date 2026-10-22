@@ -31,9 +31,15 @@ struct VideoCvars {
     console::Cvar<bool> hudDraw;       ///< `hud_draw`: the HUD is drawn.
 };
 
+/// What is heard.
+struct AudioCvars {
+    console::Cvar<float> volume; ///< The gain of everything heard, 1 the sounds as they are.
+};
+
 struct ClientCvars {
     MouseCvars mouse;
     VideoCvars video;
+    AudioCvars audio;
 };
 
 /// Registers the client's cvars in `console`. Errors: those of Console::registerCvar.

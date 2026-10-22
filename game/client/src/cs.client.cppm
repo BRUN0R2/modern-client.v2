@@ -8,7 +8,7 @@
 /// keys turn; the game's content and a level of it, what its entities show as the game sets them up
 /// until the server comes (the light of the map, its sprites and studio models, the knife in hand);
 /// the scene that draws it; the level's game, played by the client alone; the HUD of its player;
-/// and the console's window's font and place.
+/// the console's window's font and place; and the sound output with the sounds the client plays.
 export module cs.client;
 
 export import :input;
@@ -23,3 +23,4 @@ export import :scene;
 export import :localGame;
 export import :hud;
 export import :console;
+export import :audio;

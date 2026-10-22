@@ -28,7 +28,7 @@ flowchart LR
 - The audio thread mixes in small blocks (configurable size, low-latency default),
   resampling every source, whatever its rate, to the device rate.
 
-Today (`nx.audio`): the mixer, not yet on a device. A `Sound` is a WAV file of any layout made
+Today: the mixer, on the system's default output. A `Sound` is a WAV file of any layout made
 32-bit floats, its first two channels, at its own rate, looping from its first cue point; the
 game owns it, so the audio thread never frees memory. The game sends the mixer `PlayVoice`,
 `StopVoice`, `SetVoiceGains` and `SetMasterGain` through an SPSC queue (`nx.jobs:spscQueue`; a
@@ -39,6 +39,21 @@ another rate comes out over 90 dB clean, and one sped up past the mix's band ove
 Voices sum in float; a master gain and a stereo-linked limiter (instant attack, 100 ms release)
 keep every sample under 0.98 of full scale. Choosing a voice (channels, priorities, stealing),
 spatialization, the room's DSP and streaming come with what plays sounds.
+
+`nx.platform:audio` opens the system's default output with SDL3 at its own rate, in two channels
+of 32-bit floats, and pulls an `AudioSource` (the mixer is one) on SDL's real-time thread in
+blocks of whole frames; when the default output changes, SDL moves the stream to the new one.
+`nx.audio:library` reads the game's sounds by the original's names, under `sound/` (`\` a
+separator too, any case), once each, and keeps them while it lives: a missing or broken file is a
+typed `SoundError` and is tried again the next time. In `next`, `cs::ClientAudio` plays the mixer
+on the output and the console's `play <sound>` and `playvol <sound> <volume>` as the original's:
+heard everywhere, `.wav` added to a name without an extension, the volume bounded to [0, 1]. They
+take 8 voices in turn, a ninth sound the voice of the one that started first, until the voice pool
+of §4. `volume` (0.7, from 0) is the mixer's master gain, sent before each sound and each frame.
+Without an output the game plays on, silent, and says so once. The tests run on SDL's dummy output,
+which pulls at a real device's pace; the client was checked end to end on SDL's disk output: `play
+weapons/ak47-1` is the WAV resampled from 22 050 to 44 100 Hz at 0.7 of its level, to float
+precision at the WAV's own instants.
 
 ### 2.1 The original's audio problems and their causes
 

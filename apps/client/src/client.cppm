@@ -24,8 +24,9 @@ enum class ClientError : std::uint8_t {
 /// settings from the user's folder (config.cfg, userconfig.cfg, autoexec.cfg), then the command
 /// line's `+` commands; a map once `map <name>` loads it, the player walking through it with a
 /// knife as the binds ask, `noclip` making it fly, its health, armor and money on the HUD while
-/// `hud_draw` says so. config.cfg is written as it ends. A map that cannot be loaded, or a HUD whose
-/// pictures cannot be, is reported, and the client goes on. Errors: SettingsUnavailable,
+/// `hud_draw` says so; `play` and `playvol` heard on the system's sound output at `volume`.
+/// config.cfg is written as it ends. A map that cannot be loaded, a HUD whose pictures cannot be, or
+/// a sound output that cannot be opened, is reported, and the client goes on. Errors: SettingsUnavailable,
 /// ContentUnavailable, WindowUnavailable, GpuFailed, ValidationFailed.
 [[nodiscard]] auto runClient(const ClientOptions& options) -> nx::Result<void, ClientError>;
 

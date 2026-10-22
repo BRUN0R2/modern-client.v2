@@ -25,6 +25,7 @@ constexpr float kGamma = 2.5F;
 constexpr float kBrightness = 1.0F;
 constexpr float kTextureGamma = 2.0F;
 constexpr float kLightGamma = 2.5F;
+constexpr float kVolume = 0.7F;
 // The ranges the original holds the picture's cvars to (V_CheckGamma).
 constexpr float kLeastGamma = 1.8F;
 constexpr float kMostGamma = 3.0F;
@@ -89,8 +90,14 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                                        .defaultValue = true,
                                                        .description = "Whether the HUD is drawn.",
                                                        .flags = kArchived});
+    auto volume = console.registerCvar(
+        CvarDesc<float>{.name = "volume",
+                        .defaultValue = kVolume,
+                        .description = "The gain of everything heard: 1 plays the sounds as they are.",
+                        .flags = kArchived,
+                        .minimum = 0.0F});
     for (auto* const registered :
-         {&sensitivity, &yaw, &pitch, &fpsMax, &gamma, &brightness, &textureGamma, &lightGamma}) {
+         {&sensitivity, &yaw, &pitch, &fpsMax, &gamma, &brightness, &textureGamma, &lightGamma, &volume}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -107,7 +114,8 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .brightness = *brightness,
                                  .textureGamma = *textureGamma,
                                  .lightGamma = *lightGamma,
-                                 .hudDraw = *hudDraw}};
+                                 .hudDraw = *hudDraw},
+                       .audio = {.volume = *volume}};
 }
 
 } // namespace nx::settings

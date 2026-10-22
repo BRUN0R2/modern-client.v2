@@ -35,6 +35,8 @@ constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0
 constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
+/// The volume `play` plays a sound at: as it is.
+constexpr float kFullVolume = 1.0F;
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -62,6 +64,15 @@ public:
             .brightness = video.brightness.value(),
             .textureGamma = video.textureGamma.value(),
             .lightGamma = video.lightGamma.value()};
+}
+
+/// `name` as the original's `play` reads it: a WAV file's when it has no extension.
+[[nodiscard]] auto soundFileOf(std::string_view name) -> std::string {
+    const std::size_t dot = name.rfind('.');
+    const std::size_t separator = name.find_last_of("/\\");
+    const bool hasExtension =
+        dot != std::string_view::npos && (separator == std::string_view::npos || dot > separator);
+    return hasExtension ? std::string{name} : std::format("{}.wav", name);
 }
 
 [[nodiscard]] auto extentOf(nx::platform::PixelSize size) noexcept -> nx::rhi::Extent2d {
@@ -186,6 +197,11 @@ private:
     /// takes them.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    [[nodiscard]] auto playVolumeCommand(const nx::console::CommandLine& line)
+        -> nx::Result<void, ConsoleError>;
+    /// Plays the sound `name` names at `volume`, heard everywhere, as `play` and `playvol` do.
+    [[nodiscard]] auto playSound(std::string_view name, float volume) -> nx::Result<void, ConsoleError>;
     void noclipCommand();
     void lastWeaponCommand();
     void selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name);
@@ -218,6 +234,7 @@ private:
     std::optional<cs::PlayerInput> m_input;
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameContent> m_content;
+    std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::vector<std::byte> m_screenShader;
     std::optional<Session> m_session;     ///< The map played.
@@ -273,6 +290,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(screenShader.error()));
     }
     m_screenShader = std::move(*screenShader);
+    if (auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume); audio) {
+        m_audio = std::move(*audio);
+    } else {
+        nx::log::warning(kLog, "no sound: {}", nx::describe(audio.error()));
+    }
     // The player's files, then the command line's commands, as the original's valve.rc runs them.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
@@ -331,6 +353,12 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     for (auto&& registered :
          {add({.name = "map", .description = "Plays a map: map <name>."},
               [this](Console&, const CommandLine& line) { return mapCommand(line); }),
+          add({.name = "play", .description = "Plays a sound heard everywhere: play <sound>."},
+              [this](Console&, const CommandLine& line) { return playCommand(line); }),
+          add({.name = "playvol",
+               .description =
+                   "Plays a sound heard everywhere at a volume from 0 to 1: playvol <sound> <volume>."},
+              [this](Console&, const CommandLine& line) { return playVolumeCommand(line); }),
           add({.name = "noclip", .description = "Flies through everything, or walks again."},
               [this](Console&, const CommandLine&) {
                   noclipCommand();
@@ -386,6 +414,39 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
     }
     m_nextSession = std::move(*session);
+    return {};
+}
+
+auto Client::playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
+    if (line.arguments().size() != 1) {
+        return nx::fail(ConsoleError::InvalidArguments, "usage: play <sound>");
+    }
+    return playSound(line.arguments().front(), kFullVolume);
+}
+
+auto Client::playVolumeCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
+    constexpr std::string_view kUsage = "usage: playvol <sound> <volume>";
+    if (line.arguments().size() != 2) {
+        return nx::fail(ConsoleError::InvalidArguments, std::string{kUsage});
+    }
+    const std::string& text = line.arguments()[1];
+    float volume = 0.0F;
+    if (const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), volume);
+        error != std::errc{} || end != text.data() + text.size()) {
+        return nx::fail(ConsoleError::InvalidArguments, std::string{kUsage});
+    }
+    return playSound(line.arguments().front(), volume);
+}
+
+auto Client::playSound(std::string_view name, float volume) -> nx::Result<void, ConsoleError> {
+    if (m_audio == nullptr) {
+        m_console.print("Can't play a sound, no sound output");
+        return {};
+    }
+    const std::string file = soundFileOf(name);
+    if (auto played = m_audio->playLocal(file, volume); !played) {
+        return nx::fail(ConsoleError::CommandFailed, std::format("play {}", file), std::move(played.error()));
+    }
     return {};
 }
 
@@ -469,6 +530,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         }
         // What the keys queued, and what a `wait` left, before the frame's commands are made.
         std::ignore = m_console.execute();
+        if (m_audio != nullptr) {
+            m_audio->update();
+        }
         startNextSession();
         const nx::Seconds elapsed = m_frameClock.restart();
         m_input->turn(m_camera.angles, elapsed);

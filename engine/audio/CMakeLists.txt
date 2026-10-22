@@ -9,13 +9,16 @@ nxAddModuleLibrary(nxAudio
     MODULES
         src/nx.audio.cppm
         src/sound.cppm
+        src/library.cppm
         src/mixer.cppm
     SOURCES
         src/sound.cpp
+        src/library.cpp
         src/mixer.cpp
     DEPENDS
         nx::core
         nx::jobs
+        nx::platform
         nx::assets
     LATERAL
         nx::assets)
