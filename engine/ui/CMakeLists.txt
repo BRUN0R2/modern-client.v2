@@ -12,6 +12,7 @@ nxAddModuleLibrary(nxUi
         src/label.cppm
         src/textEntry.cppm
         src/richText.cppm
+        src/consoleDialog.cppm
         src/font.cppm
         src/fontCatalog.cppm
         src/schemeFont.cppm
@@ -22,12 +23,14 @@ nxAddModuleLibrary(nxUi
         src/label.cpp
         src/textEntry.cpp
         src/richText.cpp
+        src/consoleDialog.cpp
         src/font.cpp
         src/fontCatalog.cpp
         src/schemeFont.cpp
         src/text.cpp
     DEPENDS
         nx::core
+        nx::console
         nx::platform
         nx::rhi
         nx::assets
