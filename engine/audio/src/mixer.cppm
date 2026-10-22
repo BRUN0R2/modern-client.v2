@@ -15,6 +15,7 @@ import std;
 import nx.core;
 import nx.jobs;
 import nx.assets;
+import nx.platform;
 import :sound;
 
 export namespace nx::audio {
@@ -74,14 +75,15 @@ private:
     std::vector<float> m_table; ///< At 0, 1/kResolution, ... kZeroCrossings, and one more.
 };
 
-/// What the mixer is made for: the rate it mixes at, the device's, and how many voices it has.
+/// What the mixer is made for: the rate it mixes at, the device's (platform::AudioDevice::rate), and
+/// how many voices it has.
 struct MixerDesc {
-    assets::SampleRate rate{48'000};
+    SampleRate rate{48'000};
     std::uint32_t voices = 64;
 };
 
-/// Voices mixed into blocks of two channels.
-class Mixer {
+/// Voices mixed into blocks of two channels: what the sound device plays.
+class Mixer final : public platform::AudioSource {
 public:
     /// The most commands sent and not yet taken by the audio thread.
     static constexpr std::size_t kCommandCapacity = 1024;
@@ -94,7 +96,7 @@ public:
     auto operator=(const Mixer&) -> Mixer& = delete;
     Mixer(Mixer&&) = delete;
     auto operator=(Mixer&&) -> Mixer& = delete;
-    ~Mixer() = default;
+    ~Mixer() override = default;
 
     /// Sends `command` from the game's thread: the audio thread does it before the next block it
     /// mixes. A command of a voice the mixer does not have does nothing. Errors: QueueFull.
@@ -103,7 +105,7 @@ public:
     /// Mixes the next `out.size() / 2` frames into `out`, left and right interleaved, from the audio
     /// thread: the commands sent first, then every voice playing, through the master gain and the
     /// limiter. Neither allocates nor waits.
-    void render(std::span<float> out) noexcept;
+    void render(std::span<float> out) noexcept override;
 
     /// Whether voice `voice` plays, as the audio thread last left it; from any thread.
     [[nodiscard]] auto isPlaying(std::uint32_t voice) const noexcept -> bool;
@@ -111,7 +113,7 @@ public:
     [[nodiscard]] inline auto voices() const noexcept -> std::uint32_t {
         return static_cast<std::uint32_t>(m_voices.size());
     }
-    [[nodiscard]] inline auto rate() const noexcept -> assets::SampleRate { return m_rate; }
+    [[nodiscard]] inline auto rate() const noexcept -> SampleRate { return m_rate; }
 
 private:
     /// A voice: what it plays and where it is in it.
@@ -131,7 +133,7 @@ private:
     [[nodiscard]] auto sampleOf(const Voice& voice, std::int64_t frame, std::size_t channel) const noexcept
         -> float;
 
-    assets::SampleRate m_rate;
+    SampleRate m_rate;
     SincKernel m_kernel;
     std::vector<Voice> m_voices;
     std::unique_ptr<std::atomic<bool>[]> m_playing; ///< Of each voice, for the other threads.

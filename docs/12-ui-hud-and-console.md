@@ -341,10 +341,10 @@ the new ones, never a part. The original ends its `config.cfg` with `exec userco
 here the startup runs that file itself. `registerClientCvars` registers the client's cvars of
 §5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, 0 for no limit), `gl_vsync`
-(1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), all archived,
-and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
+(1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `volume` (0.7,
+from 0, the gain of everything heard, [11 §8](11-audio.md#8-cvars)), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends; a change takes effect when it
-starts again until the console comes, but `hud_draw`'s, which each frame reads. `config.cfg`
+starts again until the console comes, but `hud_draw`'s and `volume`'s, which each frame reads. `config.cfg`
 keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 `cl_crosshair_translucent` (1), archived, which each frame reads. `vid_vsync` as the name of
@@ -471,7 +471,8 @@ always looks, so `+mlook` and `+klook` are not there. `selectWeapon` makes the n
 a weapon: `next` registers `weapon_<name>` for each weapon (`weapon_knife`, `weapon_usp`), as the
 original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to
 `slot5`, `invnext` and `invprev` come with the weapon menu. `next` plays with them:
-Counter-Strike's binds, and `noclip` on `v`.
+Counter-Strike's binds, and `noclip` on `v`. `play <sound>` and `playvol <sound> <volume>` play
+a sound heard everywhere, as the original's do ([11 §2](11-audio.md#2-architecture)).
 
 ## 7. Localization
 

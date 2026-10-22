@@ -13,8 +13,8 @@ import nx.audio;
 
 namespace {
 
+using nx::SampleRate;
 using nx::assets::SampleFrames;
-using nx::assets::SampleRate;
 using nx::audio::Mixer;
 using nx::audio::MixerDesc;
 using nx::audio::MixerError;

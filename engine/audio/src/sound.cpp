@@ -96,7 +96,7 @@ auto Sound::of(const assets::WavSound& wav) -> Sound {
     return Sound{std::move(samples), kept, wav.rate, loopStart};
 }
 
-Sound::Sound(std::vector<float> samples, std::uint16_t channels, assets::SampleRate rate,
+Sound::Sound(std::vector<float> samples, std::uint16_t channels, SampleRate rate,
              std::optional<assets::SampleFrames> loopStart)
     : m_samples{std::move(samples)}, m_channels{channels == 0 ? std::uint16_t{1} : channels}, m_rate{rate},
       m_loopStart{loopStart} {
