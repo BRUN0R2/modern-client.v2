@@ -18,6 +18,7 @@ namespace {
 using nx::fail;
 using nx::Result;
 using nx::assets::BspView;
+using nx::assets::KeyValuesEscapes;
 using nx::assets::MdlView;
 using nx::assets::SpriteView;
 using nx::assets::Vfs;
@@ -89,6 +90,22 @@ using nx::assets::WadView;
     }
     return {};
 }
+
+/// The KeyValues text of `bytes`, its quoted words spelled as `escapes` says.
+[[nodiscard]] auto checkKeyValues(std::span<const std::byte> bytes, KeyValuesEscapes escapes)
+    -> Result<void, CheckError> {
+    auto text = nx::assets::keyValuesText(bytes);
+    if (!text) {
+        return fail(CheckError::Invalid, std::move(text.error()));
+    }
+    if (auto entries = nx::assets::parseKeyValues(*text, escapes); !entries) {
+        return fail(CheckError::Invalid, std::move(entries.error()));
+    }
+    return {};
+}
+
+/// The byte order mark of UTF-16 little-endian, which VGUI2's localized strings start with.
+constexpr std::array kUtf16Mark{std::byte{0xFF}, std::byte{0xFE}};
 
 /// How far a posed bone's rotation may be from a rotation: its rows from unit length.
 constexpr float kRigidTolerance = 1e-3F;
@@ -236,6 +253,23 @@ constexpr auto kReaders = std::to_array<Reader>({
      .format = Format::SpriteList,
      .check = [](const Vfs&, const VfsPath&,
                  std::span<const std::byte> bytes) { return checkSpriteList(bytes); }},
+    {.extension = "res",
+     .folder = "resource/",
+     .format = Format::KeyValues,
+     .check = [](const Vfs&, const VfsPath&,
+                 std::span<const std::byte> bytes) { return checkKeyValues(bytes, KeyValuesEscapes::None); }},
+    {.extension = "res",
+     .folder = "classes/",
+     .format = Format::KeyValues,
+     .check = [](const Vfs&, const VfsPath&,
+                 std::span<const std::byte> bytes) { return checkKeyValues(bytes, KeyValuesEscapes::None); }},
+    {.extension = "txt",
+     .folder = "resource/",
+     .format = Format::Localization,
+     .check =
+         [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) {
+             return checkKeyValues(bytes, KeyValuesEscapes::Backslash);
+         }},
 });
 
 /// The reader of the file at `path`, by its extension; null when no reader reads it yet.
@@ -262,6 +296,11 @@ constexpr auto kReaders = std::to_array<Reader>({
     if (reader.format == Format::Mdl && std::ranges::starts_with(*bytes, nx::assets::kSequenceGroupMagic)) {
         result.format = Format::SequenceGroup;
         return {}; // read by the models whose sequences are in it
+    }
+    if (reader.format == Format::Localization && !std::ranges::starts_with(*bytes, kUtf16Mark)) {
+        result.format = std::nullopt; // another text of resource/ (BackgroundLayout.txt): no reader yet
+        result.bytes = 0;
+        return {};
     }
     return reader.check(vfs, path, *bytes);
 }
