@@ -5,7 +5,7 @@
 /// until its server spawns its entities: env_sprite, env_glow and the cycler_sprite of a sprite, as
 /// ReGameDLL's CSprite, CGlow and CCyclerSprite make and animate them (GPL, consulted: docs/20
 /// section 3), and the line of sight that hides a glow, as the original's client traces it.
-export module tool.nxview:mapSprites;
+export module cs.client:mapSprites;
 
 import std;
 import nx.core;
@@ -15,7 +15,7 @@ import nx.rhi;
 import nx.render;
 import nx.collision;
 
-export namespace nxview {
+export namespace cs {
 
 /// Which entity of the game shows a sprite: how it animates it.
 enum class SpriteClass : std::uint8_t {
@@ -108,4 +108,4 @@ private:
     std::vector<std::string> m_missing;
 };
 
-} // namespace nxview
+} // namespace cs

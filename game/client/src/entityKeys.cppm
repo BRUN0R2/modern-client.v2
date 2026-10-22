@@ -4,14 +4,14 @@
 /// What the engine reads of a map entity's keys before its game class does (not exported): its angles,
 /// as ReHLDS's ED_ParseEdict reads them (GPL, consulted: docs/20 section 3), and how it asks to be
 /// drawn.
-export module tool.nxview:entityKeys;
+export module cs.client:entityKeys;
 
 import std;
 import nx.math;
 import nx.assets;
 import nx.render;
 
-namespace nxview {
+namespace cs {
 
 /// `angles` after the key `key` of value `value`, when the engine reads it as an entity's angles:
 /// "angles" whole, or "angle", a yaw, or -1 for straight up and any other negative value straight
@@ -34,4 +34,4 @@ struct EntityRendering {
 /// a byte, as its state carries them; a mode or an effect the original does not number Normal or None.
 [[nodiscard]] auto renderingOf(const nx::assets::BspEntity& entity) -> EntityRendering;
 
-} // namespace nxview
+} // namespace cs

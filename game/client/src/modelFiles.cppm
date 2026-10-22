@@ -3,13 +3,13 @@
 
 /// The files of a studio model (not exported): the model, its `*T.mdl` when its textures are not in it,
 /// and the animations of its sequences, from the file each is in.
-export module tool.nxview:modelFiles;
+export module cs.client:modelFiles;
 
 import std;
 import nx.core;
 import nx.assets;
 
-namespace nxview {
+namespace cs {
 
 /// Why a model's files cannot be used.
 enum class ModelFileError : std::uint8_t {
@@ -40,4 +40,4 @@ struct ModelFiles {
                                nx::assets::SequenceIndex sequence)
     -> nx::Result<nx::assets::AnimationFrames, ModelFileError>;
 
-} // namespace nxview
+} // namespace cs

@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The light the game sets for a map, as nxview plays the game until the server spawns its entities:
+/// The light the game sets for a map, as the client plays the game until the server spawns its entities:
 /// the patterns of its light styles, and the light of its sky (docs/05-rendering.md, sections 8 and
 /// 9.2).
-export module tool.nxview:mapLight;
+export module cs.client:mapLight;
 
 import std;
 import nx.core;
 import nx.assets;
 import nx.render;
 
-export namespace nxview {
+export namespace cs {
 
 /// The light styles the game sets for `map`: the world's patterns, as Quake's world.qc sets them (GPL,
 /// consulted for behavior: docs/20 section 3), under the names the Half-Life FGDs give the styles of a
@@ -27,4 +27,4 @@ export namespace nxview {
 /// one, the sky has no light.
 [[nodiscard]] auto skyLightOf(const nx::assets::BspView& map) -> nx::render::SkyLight;
 
-} // namespace nxview
+} // namespace cs

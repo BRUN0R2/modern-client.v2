@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-module tool.nxview;
+module cs.client;
 
 import std;
 import nx.core;
@@ -11,7 +11,7 @@ import nx.rhi;
 import nx.render;
 import cs.shared;
 
-namespace nxview {
+namespace cs {
 
 namespace {
 
@@ -86,4 +86,4 @@ auto ViewModel::pose(const nx::render::Camera& camera, nx::Seconds sinceDeploy) 
                           .placement = nx::affine(nx::rotationMatrix(camera.angles), camera.position)});
 }
 
-} // namespace nxview
+} // namespace cs

@@ -76,12 +76,11 @@ flowchart TB
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |
 | `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement among the world and the brush entities, and the bones of studio models posed | game, collision (today: core, math, ecs, assets, collision, game) |
 | `cs.server` | 5 | Server rules: rounds, economy, objectives, admin | cs.shared, script, net |
-| `cs.client` | 5 | HUD, menus, effects, prediction, interpolation. Today: the player's input, the `+` buttons the binds hold and the user commands they make ([12 §6](12-ui-hud-and-console.md#6-input)) | cs.shared, render, audio, ui (today: core, math, console, cs.shared) |
+| `cs.client` | 5 | HUD, menus, effects, prediction, interpolation. Today: the player's input, the `+` buttons the binds hold and the user commands they make ([12 §6](12-ui-hud-and-console.md#6-input)); the game's content and a map of it (`Level`), what its entities show as the game sets them up until the server comes, the scene that draws it (`Scene`), and its game, played by the client alone (`LocalGame`) | cs.shared, render, audio, ui (today: core, math, platform, console, assets, rhi, render, ecs, collision, game, cs.shared) |
 | `nx.update` | 3 | Updates of the client and the server products: signed release metadata, content-addressed chunks, atomic installs and rollback ([21](21-launcher-and-updates.md)). Planned (M4) | core, jobs, platform, net |
-| `app.client` / `app.server` | 6 | Bootstrap, command line, main loop | everything above |
+| `app.client` / `app.server` | 6 | Bootstrap, command line, main loop. Today: `app.client`, the client `next`: the original's command line, the player's settings, and a map played alone in a window | everything above |
 | `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
 | `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, jobs, assets, collision, cs.shared (platform in the program) |
-| `tool.nxview` | 6 | `nxview`: what the map viewer sets up as the game would, the light of the map, the sprites and studio models of its entities and the knife in hand ([05](05-rendering.md)) | core, math, assets, rhi, render, ecs, collision, game, cs.shared (platform, console, settings, cs.client and rhi.vulkan in the program) |
 
 The dependency rules **MUST** be checked automatically. They are, when CMake configures: every
 module library declares its layer (`nxAddModuleLibrary(... LAYER <n> ...)`), and once every

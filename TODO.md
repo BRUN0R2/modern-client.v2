@@ -191,8 +191,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `.cfg` parser compatible with the original
 - [x] `cvarlist`, `cmdlist` and `find` commands ([09 §8](docs/09-dedicated-server.md#8-server-console-commands))
 - [x] Log levels per cvar (`log_level_<category>`, [02 §10](docs/02-coding-standards.md#10-logging))
-- [x] The player's settings (`nx.settings`): the user's folder (`nx::platform::userDirectory`), `config.cfg`, `userconfig.cfg` and `autoexec.cfg` run at startup and `config.cfg` written at exit, whole or not at all; the mouse's and the video's cvars with the original's names and values, read by `nxview`
-- [x] Binds (`nx.settings`): `bind`, `unbind`, `unbindall` and `bindlist` by the original's key names and numbers, Counter-Strike 1.6's binds, written to `config.cfg`, and the keys, mouse buttons and wheel running them as the original does; the player's `+` buttons making the user command (`cs.client`: `CL_CreateMove`'s shares and speeds, `CL_AdjustAngles`'s turning), read by `nxview`
+- [x] The player's settings (`nx.settings`): the user's folder (`nx::platform::userDirectory`), `config.cfg`, `userconfig.cfg` and `autoexec.cfg` run at startup and `config.cfg` written at exit, whole or not at all; the mouse's and the video's cvars with the original's names and values, read by `next`
+- [x] Binds (`nx.settings`): `bind`, `unbind`, `unbindall` and `bindlist` by the original's key names and numbers, Counter-Strike 1.6's binds, written to `config.cfg`, and the keys, mouse buttons and wheel running them as the original does; the player's `+` buttons making the user command (`cs.client`: `CL_CreateMove`'s shares and speeds, `CL_AdjustAngles`'s turning), read by `next`
 - [ ] `in_keymap`: binds by the layout's characters; `+attack`, `+reload` and the other buttons with what reads them
 - [x] Determinism test with 0, 1, 3 and 15 workers (`nxIntegrationTests`: `nx.math` in parallel ECS systems, world *hash* every tick)
 
@@ -272,7 +272,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Model instancing
 - [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)
 - [ ] The dynamic lights of studio models (*elights*, *dlights*)
-- [x] Map viewer with a free camera (`nxview --map`, placed with `--position` and `--angles`), and a frame of a map to a file without a window (`--screenshot`)
+- [x] A frame of a map to a file without a window (`nxview --screenshot`, placed with `--position` and `--angles`, at `--time`), as the client draws it; `next` plays the maps
 - [ ] Model viewer
 - [ ] Reference images in CI (lavapipe)
 - [ ] All official maps rendering without errors
@@ -282,6 +282,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ## M3 — Local game
 
 ### Simulation
+- [x] The client, `next` (`app.client`): the original's command line (`-basedir`, `+map de_dust2`), the player's settings and binds, `map`, `noclip` and `quit`, and a map played alone in a window (`cs.client`: `Level`, `Scene`, `LocalGame`, out of `nxview`)
 - [x] Tick-based `GameTime`, with no degradation over uptime (`nx.core:gameTime`: ticks and a fraction; `nx.game:clock`: each world's `TickTime`, the pushers' clocks on it)
 - [ ] Usercmd generated at a fixed rate (`cl_movement_rate`)
 - [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)
@@ -289,7 +290,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
 - [ ] Traces against animated hitboxes
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
-- [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `nxview`
+- [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
 - [ ] pmove: observers and unsticking
 - [ ] pmove among entities: boxes (players, hostages, pushables), base velocity (conveyors, `trigger_push`, water currents)
 - [x] Brush entities made by the game when the map starts (`nx.game`, by the classes of `data/cstrike/entities.toml`), listed for movement by `cs::brushEntitiesOf`

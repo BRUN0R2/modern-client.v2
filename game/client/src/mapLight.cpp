@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-module tool.nxview;
+module cs.client;
 
 import std;
 import nx.core;
@@ -9,7 +9,7 @@ import nx.math;
 import nx.assets;
 import nx.render;
 
-namespace nxview {
+namespace cs {
 
 namespace {
 
@@ -141,4 +141,4 @@ auto skyLightOf(const nx::assets::BspView& map) -> nx::render::SkyLight {
     return sky;
 }
 
-} // namespace nxview
+} // namespace cs

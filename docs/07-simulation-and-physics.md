@@ -66,7 +66,7 @@ what reads them.
 
 **Today** (`cs.client`): `cs::PlayerInput::nextCommand` makes a command from the player's `+`
 buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)).
-`nxview` makes one each 10 ms, whatever its frame rate; `cl_movement_rate` comes with the client.
+`next` (`cs::LocalGame`) makes one each 10 ms, whatever its frame rate; `cl_movement_rate` comes with the client.
 
 ### 2.3 Shared seed
 
@@ -115,7 +115,7 @@ code** on the server (authoritative) and on the client (prediction).
   swimming, jumping out) and ladders (climbed by the movement buttons along their face, left by
   a jump or by backing off them on the floor), among the world and the brush entities, where the
   game puts and turns them.
-  `nxview` walks through the maps with it, among the brush entities `nx.game` makes as the game
+  `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
   list), which the game touches, a door opening; the player keeps the entity it stands on
@@ -285,8 +285,8 @@ stays in until used again (a toggle), or for good (a `wait` of -1); on its way b
 its usual textures again, and back out, a toggle fires its targets again (`ButtonBackHome`). A
 `func_wall` used shows its other textures (`CFuncWall::Use`, every use a toggle today); a brush
 entity's "frame" sets which it shows first. The moves of doors and buttons are those of the original's
-`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `nxview` ticks the game at 100 Hz:
-the player's use (E), the player's command, the doors and buttons it touched, the triggers it is in,
+`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `next` ticks the game at 100 Hz
+(`cs::LocalGame`): the player's use (`+use`, as it goes down), the player's command, the doors and buttons it touched, the triggers it is in,
 what is due, then the pushers, the player's body among the bodies, then the clock.
 
 **Today** (`nx.game:placement`): an entity the game drops to the floor as it makes it, as the
@@ -295,7 +295,7 @@ hull its size chooses (`collision::boxHullOf`, `SV_HullForBsp`: a point for one 
 the ducked hull for one 36 wide and tall at most, the standing one for one taller, the large one for
 one wider; the hull's middle offset from the box's origin by the hull's low corner from the box's),
 among the world and the solid brush entities; where it starts when it starts all in solid or meets
-nothing. `nxview` drops the hostages so.
+nothing. The client drops the hostages so as it loads a map (`cs::Level`).
 
 ### 5.2 Think, touch and triggers
 
@@ -325,7 +325,7 @@ when it is closed (`DoorHitTop`, `DoorHitBottom`). `trigger_multiple` and `trigg
 a body touches one when their linked boxes meet and the trigger model's hull for the body's size holds
 the body's origin (`SV_TouchLinks`, the model not turned); one not flagged "no clients" and not still
 waiting (its `NextThink` after now) fires its targets for the body, then waits its `wait` (0.2 s when
-it gives none) or, a `trigger_once`, is spent and goes 0.1 s later. `nxview` touches the triggers the
+it gives none) or, a `trigger_once`, is spent and goes 0.1 s later. `next` touches the triggers the
 player is in after each command, then runs what is due before the pushers: cs_747's curtains open as
 the player walks to them. A player's use (`playerUse`, `CBasePlayer::PlayerUse`) uses, of the brush
 entities it reaches (a button that takes no damage, a door flagged "use only"), whose linked box

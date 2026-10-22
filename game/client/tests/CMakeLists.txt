@@ -4,7 +4,14 @@
 nxAddTest(csClientTests
     SOURCES
         inputTests.cpp
+        mapTests.cpp
     DEPENDS
         cs::client
         cs::shared
-        nx::console)
+        nx::console
+        nx::assets
+        nx::render
+        nx::platform)
+
+# The maps of the tests are the BSP seed of the fuzz corpus, given other entities.
+target_compile_definitions(csClientTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")

@@ -8,12 +8,37 @@ nxAddModuleLibrary(csClient
     MODULES
         src/cs.client.cppm
         src/input.cppm
+        src/entityKeys.cppm
+        src/modelFiles.cppm
+        src/mapLight.cppm
+        src/mapSprites.cppm
+        src/mapModels.cppm
+        src/viewModel.cppm
+        src/level.cppm
+        src/scene.cppm
+        src/localGame.cppm
     SOURCES
         src/input.cpp
+        src/entityKeys.cpp
+        src/modelFiles.cpp
+        src/mapLight.cpp
+        src/mapSprites.cpp
+        src/mapModels.cpp
+        src/viewModel.cpp
+        src/level.cpp
+        src/scene.cpp
+        src/localGame.cpp
     DEPENDS
         nx::core
         nx::math
+        nx::platform
         nx::console
+        nx::assets
+        nx::rhi
+        nx::render
+        nx::ecs
+        nx::collision
+        nx::game
         cs::shared
     LATERAL
         cs::shared)

@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// nxview: the map viewer (TODO.md, M2). It opens a map of the Counter-Strike 1.6 installation and
-// walks a player through its world, a knife in hand, moved by the game's own movement as the
-// player's binds ask, in noclip too; or it renders one frame of it to a BMP file.
+// nxview: the map viewer (TODO.md, M2). It renders one frame of a map of the Counter-Strike 1.6
+// installation to a BMP file, as the client draws it (cs.client), from where it is told to look.
 
 #include <cstdio>
 #include <cstdlib>
@@ -12,47 +11,36 @@ import std;
 import nx.core;
 import nx.math;
 import nx.platform;
-import nx.console;
-import nx.settings;
 import nx.assets;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
-import nx.ecs;
-import nx.collision;
-import nx.game;
-import cs.shared;
 import cs.client;
-import tool.nxview;
 
 namespace {
 
-constexpr int kExitUnusable = 2; // the arguments, the content, the window or the GPU
-constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <folder>] [--data <folder>]
-              [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
-              [--screenshot <file.bmp> [--time <seconds>]] [--validation]
+constexpr int kExitUnusable = 2; // the arguments, the content or the GPU
+constexpr std::string_view kUsage =
+    R"(usage: nxview --screenshot <file.bmp> [--map <name>] [--install <folder>]
+              [--data <folder>] [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
+              [--time <seconds>] [--validation]
 
-Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife.
-The mouse looks, and the keys do what the player's binds say: Counter-Strike's at first (W A S D
-move, Space jumps, Ctrl ducks, Shift walks, E uses what is in front, the arrows turn), and V runs
-noclip, which flies through everything (' and / rise and sink) and back. Escape ends it. It runs
-the player's config.cfg, userconfig.cfg and autoexec.cfg from the user's folder of
-Modern-Client.v2 as it starts (binds, sensitivity, m_yaw, m_pitch, fps_max, gl_vsync, gamma,
-brightness, texgamma, lightgamma, cl_forwardspeed...), and writes config.cfg there as it ends.
+Renders one 1280x720 frame of a map of the Counter-Strike 1.6 installation into a BMP file, without
+a window, as the client draws it with the original's default settings: the world as the game makes
+it when the map starts, its sprites and studio models, and the knife in the player's hand. To play
+a map, run next.
 
+  --screenshot <file.bmp> the file the frame is written to
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
                           Steam installed)
   --data <folder>         the data/ folder of the project (default: the one next to nxview)
-  --position "<x> <y> <z>" where the camera starts, the eye of the player (default: a standing
+  --position "<x> <y> <z>" where the camera is, the eye of the player (default: a standing
                           player's eye at the first spawn)
   --angles "<p> <y> <r>"  where it looks, in degrees: pitch (down is positive), yaw, roll (default:
                           the spawn's yaw)
-  --screenshot <file.bmp> renders one 1280x720 frame from the camera's start into the file, without
-                          a window, with the original's default settings, and ends
-  --time <seconds>        when the frame of --screenshot is, after the map starts (default: 0):
-                          what animates (light styles, textures, water, the knife) is drawn as it
-                          is then
+  --time <seconds>        when the frame is, after the map starts (default: 0): what animates
+                          (light styles, textures, water, the knife) is drawn as it is then
   --validation            the Khronos validation layer, when it is installed: its messages are
                           logged and nxview exits with 1 when it reported an error
 )";
@@ -61,16 +49,6 @@ constexpr std::string_view kDefaultMap = "de_dust2";
 constexpr nx::rhi::Extent2d kScreenshotExtent{.width = 1280, .height = 720};
 /// What no face covers: the void outside a map, seen through its leaks.
 constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
-/// The speed limit of a player holding a knife.
-constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
-/// A user command each this long, the classic rate of 100 a second (docs/07, section 2.2); a frame
-/// catches up on this much time at most, so that a stalled one does not run away.
-constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
-constexpr nx::Seconds kMaxCatchUp{0.25F};
-/// The key nxview binds `noclip` to, which Counter-Strike leaves free.
-constexpr std::string_view kNoclipKey = "v";
-/// How long a minimized window waits before it looks for events again.
-constexpr std::chrono::milliseconds kMinimizedWait{50};
 
 struct Options {
     std::string map{kDefaultMap};
@@ -136,49 +114,9 @@ template <class Code>
     return kExitUnusable;
 }
 
-/// The map, its WADs, its sky, its hulls, the classes of its entities, its sprites and models, the knife
-/// and the shaders, read once: the views point into these bytes.
-struct Content {
-    std::vector<std::byte> mapBytes;
-    std::optional<nx::assets::BspView> map;
-    nx::game::EntityClasses entityClasses;
-    std::vector<std::vector<std::byte>> wadBytes;
-    std::vector<nx::assets::WadView> wads;
-    std::vector<nx::assets::RgbaImage> sky; ///< Its sides, in the order of nx::render::kSkySuffixes.
-    nx::render::LightStyles lightStyles;
-    nx::render::SkyLight skyLight;
-    std::optional<nx::collision::BrushHulls> hulls;
-    std::optional<nxview::GlowBlockers> glowBlockers;
-    std::optional<nxview::MapSprites> sprites;
-    std::optional<nxview::MapModels> models;
-    std::optional<nxview::ViewModel> knife;
-    std::vector<std::byte> worldShader;
-    std::vector<std::byte> studioShader;
-    std::vector<std::byte> spriteShader;
-};
-
-/// Where a player first stands: the first counter-terrorist spawn, else the first terrorist one.
-[[nodiscard]] auto spawnCamera(const nx::assets::BspView& map) -> nx::render::Camera {
-    for (const std::string_view classname : {"info_player_start", "info_player_deathmatch"}) {
-        for (const nx::assets::BspEntity& entity : map.entities()) {
-            if (entity.find("classname") != classname) {
-                continue;
-            }
-            const std::optional<nx::Vec3> origin = entity.findVector("origin");
-            const std::optional<nx::Vec3> angles = entity.findVector("angles");
-            if (!origin) {
-                continue;
-            }
-            return nx::render::Camera{.position = *origin + nx::Vec3{.z = cs::kStandingViewHeight.value()},
-                                      .angles = {.yaw = nx::Degrees{angles ? angles->y : 0.0F}}};
-        }
-    }
-    return nx::render::Camera{};
-}
-
-/// Where the camera starts: at the first spawn, but where the options put it.
+/// Where the camera is: at the first spawn, but where the options put it.
 [[nodiscard]] auto startCamera(const Options& options, const nx::assets::BspView& map) -> nx::render::Camera {
-    nx::render::Camera camera = spawnCamera(map);
+    nx::render::Camera camera = cs::spawnView(map);
     if (options.position) {
         camera.position = *options.position;
     }
@@ -190,330 +128,14 @@ struct Content {
     return camera;
 }
 
-/// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names
-/// at the root of the VFS, as the original looks them up. Maps often name WADs of their author's
-/// computer that no texture of theirs needs; the ones the installation lacks are listed and left
-/// out, and a texture none of the others has is reported by the world.
-void readWads(const nx::assets::Vfs& vfs, Content& content) {
-    const std::string_view list = content.map->entities().empty()
-                                      ? std::string_view{}
-                                      : content.map->entities()[0].find("wad").value_or("");
-    std::vector<std::string_view> absent;
-    for (const auto part : std::views::split(list, ';')) {
-        const std::string_view entry{part};
-        const std::string_view name = entry.substr(entry.find_last_of("\\/") + 1); // npos + 1 is 0
-        if (name.empty()) {
-            continue;
-        }
-        const auto path = nx::assets::VfsPath::parse(name);
-        auto bytes = path ? vfs.readAll(*path) : nx::Result<std::vector<std::byte>, nx::assets::VfsError>{};
-        if (!path || !bytes) {
-            absent.push_back(name);
-            continue;
-        }
-        content.wadBytes.push_back(std::move(*bytes));
+/// The level of `options.map`, from the installation and the project's data the options name.
+[[nodiscard]] auto loadLevel(const Options& options, const std::filesystem::path& programFolder)
+    -> nx::Result<std::unique_ptr<cs::Level>, cs::LevelError> {
+    auto content = cs::openGameContent(options.data.value_or(programFolder / "data"), options.install);
+    if (!content) {
+        return std::unexpected{std::move(content.error())};
     }
-    if (!absent.empty()) {
-        std::println("nxview: WADs the map names that the installation does not have: {}",
-                     absent | std::views::join_with(std::string_view{", "}) | std::ranges::to<std::string>());
-    }
-    for (const std::vector<std::byte>& bytes : content.wadBytes) {
-        if (auto wad = nx::assets::WadView::parse(bytes)) {
-            content.wads.push_back(std::move(*wad));
-        }
-    }
-}
-
-/// The sides of the sky `name`, gfx/env/<name><suffix>.tga; nullopt when one is missing or unreadable.
-[[nodiscard]] auto readSkySides(const nx::assets::Vfs& vfs, std::string_view name)
-    -> std::optional<std::vector<nx::assets::RgbaImage>> {
-    std::vector<nx::assets::RgbaImage> sides;
-    for (const std::string_view suffix : nx::render::kSkySuffixes) {
-        const auto path = nx::assets::VfsPath::parse(std::format("gfx/env/{}{}.tga", name, suffix));
-        auto bytes = path ? vfs.readAll(*path) : nx::Result<std::vector<std::byte>, nx::assets::VfsError>{};
-        auto side =
-            bytes ? nx::assets::readTga(*bytes) : nx::Result<nx::assets::RgbaImage, nx::assets::TgaError>{};
-        if (!path || !bytes || !side) {
-            return std::nullopt;
-        }
-        sides.push_back(std::move(*side));
-    }
-    return sides;
-}
-
-/// The sky the worldspawn's `skyname` names, or the default one when the installation lacks it, as
-/// the original falls back; none when neither can be read: the world draws its sky gray.
-void readSky(const nx::assets::Vfs& vfs, Content& content) {
-    const std::string_view name =
-        content.map->entities().empty()
-            ? nx::render::kDefaultSkyName
-            : content.map->entities()[0].find("skyname").value_or(nx::render::kDefaultSkyName);
-    const std::array candidates{name, nx::render::kDefaultSkyName};
-    for (const std::string_view candidate : std::span{candidates}.first(name == candidates[1] ? 1 : 2)) {
-        if (auto sides = readSkySides(vfs, candidate)) {
-            content.sky = std::move(*sides);
-            return;
-        }
-        std::println("nxview: the sky {:?} is missing or unreadable", candidate);
-    }
-}
-
-/// Makes in `game` the game of `content`'s map as it starts: its brush entities, as the game makes them;
-/// false when they cannot be made, which is printed.
-[[nodiscard]] auto spawnGame(const Content& content, nx::ecs::World& game) -> bool {
-    if (auto registered = nx::game::registerComponents(game); !registered) {
-        std::ignore = unusable(registered.error());
-        return false;
-    }
-    if (auto spawned = nx::game::spawnBrushEntities(game, content.map->entities(), content.map->models(),
-                                                    content.entityClasses);
-        !spawned) {
-        std::ignore = unusable(spawned.error());
-        return false;
-    }
-    return true;
-}
-
-/// Where the game puts its brush entities now, how high their waves rise, and which textures they show.
-[[nodiscard]] auto placementsOf(nx::ecs::World& game) -> std::vector<nx::render::ModelPlacement> {
-    std::vector<nx::render::ModelPlacement> placements;
-    nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&,
-                   nx::ecs::Optional<const nx::game::Waves>,
-                   nx::ecs::Optional<const nx::game::AlternateTextures>>{game}
-        .forEach([&placements](const nx::game::BrushModel& model, const nx::game::Transform& transform,
-                               const nx::game::Waves* waves, const nx::game::AlternateTextures* textures) {
-            placements.push_back({.model = model.index,
-                                  .origin = transform.origin,
-                                  .angles = transform.angles,
-                                  .waveHeight = waves != nullptr ? waves->height : 0.0F,
-                                  .showsAlternateTextures = textures != nullptr && textures->isShown});
-        });
-    return placements;
-}
-
-/// Reads the map `options.map` of the installation, its WADs, its sky, its sprites and models, the knife
-/// and the shaders, and builds its hulls.
-[[nodiscard]] auto readContent(const Options& options, Content& content) -> int {
-    auto executable = nx::platform::executablePath();
-    if (!executable) {
-        return unusable(executable.error());
-    }
-    const std::filesystem::path data = options.data.value_or(executable->parent_path() / "data");
-    const std::filesystem::path descriptionFile = data / "content" / "goldsrcCstrike.toml";
-    auto text = nx::platform::readTextFile(descriptionFile);
-    if (!text) {
-        return unusable(text.error());
-    }
-    auto description = nx::assets::readGoldsrcInstallDesc(*text, nx::platform::toUtf8(descriptionFile));
-    if (!description) {
-        return unusable(description.error());
-    }
-    auto install = options.install
-                       ? nx::assets::GoldsrcInstall::open(*description, *options.install)
-                       : nx::assets::detectGoldsrcInstall(*description, nx::platform::steamFolders());
-    if (!install) {
-        return unusable(install.error());
-    }
-    auto vfs = nx::assets::Vfs::create(install->mounts());
-    if (!vfs) {
-        return unusable(vfs.error());
-    }
-    const auto mapPath = nx::assets::VfsPath::parse(std::format("maps/{}.bsp", options.map));
-    if (!mapPath) {
-        return unusable(mapPath.error());
-    }
-    auto mapBytes = vfs->readAll(*mapPath);
-    if (!mapBytes) {
-        return unusable(mapBytes.error());
-    }
-    content.mapBytes = std::move(*mapBytes);
-    auto map = nx::assets::BspView::parse(content.mapBytes);
-    if (!map) {
-        return unusable(map.error());
-    }
-    content.map = std::move(*map);
-    content.lightStyles = nxview::mapLightStyles(*content.map);
-    content.skyLight = nxview::skyLightOf(*content.map);
-    auto hulls = nx::collision::BrushHulls::create(*content.map);
-    if (!hulls) {
-        return unusable(hulls.error());
-    }
-    content.hulls = std::move(*hulls);
-    content.glowBlockers.emplace(*content.map);
-    const std::filesystem::path classesFile = data / "cstrike" / "entities.toml";
-    auto classesText = nx::platform::readTextFile(classesFile);
-    if (!classesText) {
-        return unusable(classesText.error());
-    }
-    auto classes = nx::game::readEntityClasses(*classesText, nx::platform::toUtf8(classesFile));
-    if (!classes) {
-        return unusable(classes.error());
-    }
-    content.entityClasses = std::move(*classes);
-    readWads(*vfs, content);
-    readSky(*vfs, content);
-    content.sprites = nxview::MapSprites::read(*vfs, *content.map);
-    if (!content.sprites->missing().empty()) {
-        std::println("nxview: sprites the map's entities show that the installation does not have: {}",
-                     content.sprites->missing() | std::views::join_with(std::string_view{", "}) |
-                         std::ranges::to<std::string>());
-    }
-    content.models = nxview::MapModels::read(*vfs, *content.map);
-    if (!content.models->missing().empty()) {
-        std::println("nxview: models the map's entities show that cannot be read: {}",
-                     content.models->missing() | std::views::join_with(std::string_view{", "}) |
-                         std::ranges::to<std::string>());
-    }
-    // The game drops its hostages to the floor as it makes them, among the brush entities at rest.
-    nx::ecs::World resting;
-    if (!spawnGame(content, resting)) {
-        return kExitUnusable;
-    }
-    content.models->dropToFloor(resting, *content.hulls);
-    auto knife = nxview::ViewModel::read(*vfs);
-    if (!knife) {
-        return unusable(knife.error());
-    }
-    content.knife = std::move(*knife);
-    for (const auto& [file, shader] :
-         {std::pair{"world.spv", &content.worldShader}, std::pair{"studio.spv", &content.studioShader},
-          std::pair{"sprite.spv", &content.spriteShader}}) {
-        auto code = nx::platform::readFile(executable->parent_path() / "shaders" / file);
-        if (!code) {
-            return unusable(code.error());
-        }
-        *shader = std::move(*code);
-    }
-    return EXIT_SUCCESS;
-}
-
-/// What nxview draws: the world, the light it gives, the sprites and studio models of its entities and
-/// the knife on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
-struct Scene {
-    nx::render::BspWorld world;
-    nx::render::WorldLight light;
-    nx::render::SpriteRenderer sprites;
-    std::vector<nx::render::SpriteModel> spriteModels; ///< Of content.sprites, by file.
-    nx::render::StudioRenderer studio;
-    std::vector<nx::render::StudioModel> models; ///< Of content.models, by file.
-    nx::render::StudioRenderer viewModels;
-    nx::render::StudioModel knife;
-};
-
-/// Why a frame of the scene could not be drawn.
-enum class SceneError : std::uint8_t {
-    DrawFailed, ///< The GPU refused the room it needed (cause: the renderer's error).
-};
-
-/// The scene of `content` for targets of `format`, its uploads recorded in `commands`; none when the
-/// GPU refused it, which is printed.
-[[nodiscard]] auto createScene(nx::rhi::Device& device, nx::rhi::CommandList& commands,
-                               const Content& content, nx::rhi::Format format,
-                               const nx::render::GammaSettings& gamma) -> std::optional<Scene> {
-    auto world = nx::render::BspWorld::create(device, commands,
-                                              {.map = *content.map,
-                                               .wads = content.wads,
-                                               .shaderCode = content.worldShader,
-                                               .colorFormat = format,
-                                               .gamma = gamma,
-                                               .sky = content.sky});
-    if (!world) {
-        std::ignore = unusable(world.error());
-        return std::nullopt;
-    }
-    auto sprites = nx::render::SpriteRenderer::create(
-        device, {.shaderCode = content.spriteShader, .colorFormat = format, .gamma = gamma});
-    auto spriteModels = sprites ? content.sprites->load(*sprites, commands)
-                                : nx::Result<std::vector<nx::render::SpriteModel>, nx::render::SpriteError>{};
-    if (!sprites || !spriteModels) {
-        std::ignore = unusable(!sprites ? sprites.error() : spriteModels.error());
-        return std::nullopt;
-    }
-    const nx::render::StudioRendererDesc studioDesc{
-        .shaderCode = content.studioShader, .colorFormat = format, .gamma = gamma};
-    auto studio = nx::render::StudioRenderer::create(device, commands, studioDesc);
-    auto viewModels = nx::render::StudioRenderer::create(device, commands, studioDesc);
-    if (!studio || !viewModels) {
-        std::ignore = unusable(!studio ? studio.error() : viewModels.error());
-        return std::nullopt;
-    }
-    auto models = content.models->load(*studio, commands);
-    auto knife = content.knife->load(*viewModels, commands);
-    if (!models || !knife) {
-        std::ignore = unusable(!models ? models.error() : knife.error());
-        return std::nullopt;
-    }
-    return Scene{.world = std::move(*world),
-                 .light = nx::render::WorldLight{*content.map},
-                 .sprites = std::move(*sprites),
-                 .spriteModels = std::move(*spriteModels),
-                 .studio = std::move(*studio),
-                 .models = std::move(*models),
-                 .viewModels = std::move(*viewModels),
-                 .knife = std::move(*knife)};
-}
-
-/// What a frame of the scene shows.
-struct SceneView {
-    nx::render::Camera camera{};
-    float aspect = 1.0F;
-    nx::Seconds time{}; ///< Since the map started.
-    std::span<const nx::render::ModelPlacement> placements{};
-    std::optional<nx::Seconds> sinceDeploy{}; ///< Since the knife came out; none without a player.
-};
-
-/// Draws `view` of `scene`: the world, the studio models of its entities, each lit where it is, and the
-/// sprites of its entities, a glow the player's line of sight does not reach hidden, the blended ones of
-/// them all in one order (nx.render:blendedOrder); then the knife in the player's hand, lit where the
-/// player's eye is, as the original lights the view's own model. Errors: DrawFailed.
-[[nodiscard]] auto drawScene(nx::rhi::CommandList& list, Scene& scene, const Content& content,
-                             const SceneView& view) -> nx::Result<void, SceneError> {
-    const nx::render::LightStyleValues styles = content.lightStyles.valuesAt(view.time);
-    scene.world.prepare({.camera = view.camera,
-                         .aspect = view.aspect,
-                         .time = view.time,
-                         .lightStyles = styles,
-                         .placements = view.placements});
-    const nxview::PosedModels models =
-        content.models->posed(scene.models, view.time, scene.light, content.skyLight, styles);
-    if (auto prepared = scene.studio.prepare(
-            {.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
-        !prepared) {
-        return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
-    }
-    std::vector<nx::render::SpriteInstance> sprites =
-        content.sprites->instances(scene.spriteModels, view.time);
-    for (nx::render::SpriteInstance& sprite : sprites) {
-        if (sprite.mode == nx::render::RenderMode::Glow) {
-            sprite.isHidden = content.glowBlockers->hides(*content.hulls, view.placements,
-                                                          view.camera.position, sprite.origin);
-        }
-    }
-    if (auto prepared = scene.sprites.prepare({.camera = view.camera,
-                                               .aspect = view.aspect,
-                                               .time = view.time,
-                                               .lightStyles = styles,
-                                               .instances = sprites},
-                                              scene.light);
-        !prepared) {
-        return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
-    }
-    nx::render::drawInOrder(list, scene.world, scene.studio, scene.sprites);
-    if (!view.sinceDeploy) {
-        return {};
-    }
-    const std::vector<nx::Mat3x4> bones = content.knife->pose(view.camera, *view.sinceDeploy);
-    const std::array knife{nx::render::StudioInstance{
-        .model = scene.knife,
-        .bones = bones,
-        .light = scene.light.modelLightAt({.origin = view.camera.position, .sky = content.skyLight}, styles),
-        .depth = nx::render::StudioDepth::ViewModel}};
-    if (auto drawn =
-            scene.viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = knife});
-        !drawn) {
-        return nx::fail(SceneError::DrawFailed, "the knife", std::move(drawn.error()));
-    }
-    return {};
+    return cs::Level::load(*content, options.map);
 }
 
 // A BMP file of 24-bit pixels: its file header, its BITMAPINFOHEADER, then its rows of blue, green
@@ -572,8 +194,9 @@ constexpr std::size_t kBlue = 2;
     return file;
 }
 
-/// Renders one frame from the camera's start into options.screenshot, without a window.
-[[nodiscard]] auto takeScreenshot(const Options& options, const Content& content) -> int {
+/// Renders one frame of `level` from the camera's start into options.screenshot, without a window.
+[[nodiscard]] auto takeScreenshot(const Options& options, const cs::Level& level,
+                                  const cs::SceneShaders& shaders) -> int {
     auto device = nx::rhi::vulkan::createDevice(
         {.applicationName = "nxview", .isValidationEnabled = options.isValidationEnabled});
     if (!device) {
@@ -601,33 +224,32 @@ constexpr std::size_t kBlue = 2;
         return unusable(commands.error());
     }
     nx::rhi::CommandList& list = commands->get();
-    std::optional<Scene> scene =
-        createScene(**device, list, content, nx::rhi::Format::Rgba8Unorm, nx::render::GammaSettings{});
+    auto scene = cs::Scene::create(**device, list, level, shaders, nx::rhi::Format::Rgba8Unorm,
+                                   nx::render::GammaSettings{});
     if (!scene) {
-        return kExitUnusable;
+        return unusable(scene.error());
     }
-    const nx::render::Camera camera = startCamera(options, *content.map);
-    const float aspect =
-        static_cast<float>(kScreenshotExtent.width) / static_cast<float>(kScreenshotExtent.height);
+    const nx::render::Camera camera = startCamera(options, level.map());
+    // The brush entities where the game puts them as the map starts, and the knife the player has held
+    // since it started.
+    auto game = cs::LocalGame::start(level, camera.position);
+    if (!game) {
+        return unusable(game.error());
+    }
+    const std::vector<nx::render::ModelPlacement> placements = (*game)->placements();
     list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = target->get(), .clear = kVoidColor}};
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
                          .area = kScreenshotExtent});
-    // The brush entities where the game puts them as the map starts, and the knife the player has held
-    // since it started.
-    nx::ecs::World game;
-    if (!spawnGame(content, game)) {
-        return kExitUnusable;
-    }
-    const std::vector<nx::render::ModelPlacement> placements = placementsOf(game);
-    if (auto drawn = drawScene(list, *scene, content,
-                               {.camera = camera,
-                                .aspect = aspect,
-                                .time = options.time,
-                                .placements = placements,
-                                .sinceDeploy = options.time});
+    if (auto drawn = scene->draw(list, level,
+                                 {.camera = camera,
+                                  .aspect = static_cast<float>(kScreenshotExtent.width) /
+                                            static_cast<float>(kScreenshotExtent.height),
+                                  .time = options.time,
+                                  .placements = placements,
+                                  .sinceDeploy = options.time});
         !drawn) {
         return unusable(drawn.error());
     }
@@ -646,297 +268,12 @@ constexpr std::size_t kBlue = 2;
         !written) {
         return unusable(written.error());
     }
-    const nx::render::FrameStats& drawn = scene->world.lastFrame();
+    const nx::render::FrameStats& drawn = scene->lastFrame();
     std::println("nxview: {} from {} at {}x{}: {} of {} faces, {} triangles, in {} leaves",
                  nx::platform::toUtf8(*options.screenshot), options.map, kScreenshotExtent.width,
-                 kScreenshotExtent.height, drawn.faces, scene->world.stats().faces, drawn.triangles,
+                 kScreenshotExtent.height, drawn.faces, scene->worldStats().faces, drawn.triangles,
                  drawn.leaves);
     return (*device)->validationErrors() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
-}
-
-/// A player walking through the map, moved one user command at a time by the game's movement.
-struct Walker {
-    cs::MovementState player{};
-    nx::Vec3 previousEye{}; ///< Before the last command.
-};
-
-[[nodiscard]] auto eyeOf(const cs::MovementState& player) -> nx::Vec3 {
-    return player.origin + nx::Vec3{.z = player.viewHeight.value()};
-}
-
-/// A standing player whose eye is at `eye`.
-[[nodiscard]] auto walkerAt(nx::Vec3 eye) -> Walker {
-    return Walker{
-        .player = {.origin = eye - nx::Vec3{.z = cs::kStandingViewHeight.value()}, .maxSpeed = kKnifeSpeed},
-        .previousEye = eye};
-}
-
-/// The console's output: replies on the standard output, failures on the standard error.
-class PrintedOutput final : public nx::console::ConsoleOutput {
-public:
-    void print(std::string_view line) override { std::println("{}", line); }
-    void reportFailure(const nx::Failure<nx::console::ConsoleError>& failure) override {
-        std::println(stderr, "nxview: {}", nx::describe(failure));
-    }
-};
-
-/// The original's picture as the video cvars set it.
-[[nodiscard]] auto gammaOf(const nx::settings::VideoCvars& video) -> nx::render::GammaSettings {
-    return {.gamma = video.gamma.value(),
-            .brightness = video.brightness.value(),
-            .textureGamma = video.textureGamma.value(),
-            .lightGamma = video.lightGamma.value()};
-}
-
-/// The game of the map as nxview plays it, a tick of its clock each kCommandInterval: the player's
-/// body among its entities.
-struct LocalGame {
-    nx::ecs::Entity body{};
-    nx::Seconds pending{};               ///< Of the time given to the game, what no tick has taken yet.
-    nx::Flags<cs::Button> lastButtons{}; ///< Of the last command: the use button acts as it goes down.
-};
-
-/// Gives `elapsed` to the game, tick by tick: the next command of `input`, looking along `view`,
-/// moves `walker` among the entities of `game` and the world of `hulls`, and the doors it meets and
-/// the triggers it is in are touched; then what is due acts, and the pushers move, pushing the
-/// player's body. Returns the player's eye, between where the last two ticks left it by the time
-/// left.
-auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHulls& hulls, Walker& walker,
-          cs::PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
-    local.pending = std::min(local.pending + elapsed, kMaxCatchUp);
-    while (local.pending >= kCommandInterval) {
-        const cs::UserCommand command = input.nextCommand(view, kCommandInterval, walker.player.maxSpeed);
-        walker.previousEye = eyeOf(walker.player);
-        if (command.buttons.test(cs::Button::Use) && !local.lastButtons.test(cs::Button::Use)) {
-            // Before the command moves the player, as the original's PreThink uses.
-            std::ignore =
-                nx::game::playerUse(game, hulls, local.body,
-                                    {.eye = walker.previousEye, .forward = nx::angleVectors(view).forward});
-        }
-        local.lastButtons = command.buttons;
-        const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
-        const cs::MovementResult moved =
-            cs::simulateMovement(walker.player, command, cs::MovementSettings{}, hulls, entities);
-        walker.player = moved.state;
-        nx::game::touchBrushEntities(game, hulls, moved.touchedModels, local.body);
-        game.get<nx::game::Transform>(local.body)->origin = walker.player.origin;
-        *game.get<nx::game::Body>(local.body) = cs::bodyOf(walker.player);
-        nx::game::touchTriggers(game, hulls, local.body);
-        nx::game::runThinks(game, hulls);
-        nx::game::runPushers(game, hulls);
-        walker.player.origin = game.get<nx::game::Transform>(local.body)->origin;
-        nx::game::advanceTick(game);
-        local.pending -= kCommandInterval;
-    }
-    return nx::lerp(walker.previousEye, eyeOf(walker.player), local.pending / kCommandInterval);
-}
-
-[[nodiscard]] auto extentOf(nx::platform::PixelSize size) noexcept -> nx::rhi::Extent2d {
-    return {.width = size.width, .height = size.height};
-}
-
-/// Walks through the map in a window, in noclip too, until it is closed.
-[[nodiscard]] auto view(const Options& options, const Content& content) -> int {
-    const nx::collision::BrushHulls& hulls = *content.hulls;
-    nx::ecs::World game;
-    if (!spawnGame(content, game)) {
-        return kExitUnusable;
-    }
-    // The player's settings, from the user's folder.
-    auto userFolder = nx::platform::userDirectory();
-    if (!userFolder) {
-        return unusable(userFolder.error());
-    }
-    PrintedOutput consoleOutput;
-    nx::settings::UserConfigFiles configFiles{*userFolder};
-    nx::console::Console console{consoleOutput, configFiles};
-    const auto cvars = nx::settings::registerClientCvars(console);
-    if (!cvars) {
-        return unusable(cvars.error());
-    }
-    auto input = cs::PlayerInput::registerIn(console);
-    if (!input) {
-        return unusable(input.error());
-    }
-    // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
-    nx::settings::KeyBindings bindings = nx::settings::defaultBindings();
-    bindings.bind(nx::settings::keyNamed(kNoclipKey).value(), "noclip");
-    if (auto registered = nx::settings::registerBindCommands(console, bindings); !registered) {
-        return unusable(registered.error());
-    }
-    nx::settings::runStartupFiles(console, configFiles);
-
-    auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
-    if (!window) {
-        return unusable(window.error());
-    }
-    auto native = window->nativeWindow();
-    if (!native) {
-        return unusable(native.error());
-    }
-    auto device = nx::rhi::vulkan::createDevice(
-        {.applicationName = "nxview", .window = *native, .isValidationEnabled = options.isValidationEnabled});
-    if (!device) {
-        return unusable(device.error());
-    }
-    auto size = window->pixelSize();
-    if (!size) {
-        return unusable(size.error());
-    }
-    auto swapchain = (*device)->createSwapchain({.size = extentOf(*size),
-                                                 .presentMode = cvars->video.vsync.value()
-                                                                    ? nx::rhi::PresentMode::Fifo
-                                                                    : nx::rhi::PresentMode::Immediate});
-    if (!swapchain) {
-        return unusable(swapchain.error());
-    }
-    auto sleepTimer = nx::platform::SleepTimer::create();
-    if (!sleepTimer) {
-        return unusable(sleepTimer.error());
-    }
-    if (auto captured = window->setMouseMode(nx::platform::MouseMode::Relative); !captured) {
-        std::println(stderr, "nxview: {}", nx::describe(captured.error())); // the keys still move
-    }
-
-    nx::render::Camera camera = startCamera(options, *content.map);
-    Walker walker = walkerAt(camera.position);
-    LocalGame local{
-        .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, cs::bodyOf(walker.player))};
-    // The original's cheat: the player flies through everything, and back.
-    if (auto registered = console.registerCommand(
-            {.name = "noclip", .description = "Flies through everything, or walks again."},
-            [&walker](nx::console::Console& self, const nx::console::CommandLine&) {
-                const bool isFlying = walker.player.moveType == cs::MoveType::Walk;
-                walker.player.moveType = isFlying ? cs::MoveType::Noclip : cs::MoveType::Walk;
-                self.print(isFlying ? "noclip ON" : "noclip OFF");
-                return nx::Result<void, nx::console::ConsoleError>{};
-            });
-        !registered) {
-        return unusable(registered.error());
-    }
-    nx::settings::BoundInput keys{console, bindings};
-    std::optional<Scene> scene; // made with the first image, which gives the format
-    std::optional<nx::rhi::OwnedTexture> depth;
-    nx::rhi::Extent2d depthExtent;
-    std::vector<nx::platform::WindowEvent> events;
-    nx::platform::Stopwatch frameClock;
-    nx::platform::Stopwatch mapClock;
-    nx::platform::Stopwatch deployClock; ///< Since the player drew the knife.
-    nx::platform::Instant frameStart = nx::platform::MonotonicClock::now();
-    bool isRunning = true;
-    while (isRunning) {
-        // fps_max: the limiter waits before the input is read, so that the frame shows the latest
-        // (docs/05-rendering.md, section 12).
-        if (const float fpsMax = cvars->video.fpsMax.value(); fpsMax > 0.0F) {
-            sleepTimer->sleepUntil(frameStart +
-                                   std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(
-                                       nx::Seconds{1.0F / fpsMax}));
-        }
-        frameStart = nx::platform::MonotonicClock::now();
-        events.clear();
-        window->pollEvents(events);
-        for (const nx::platform::WindowEvent& event : events) {
-            const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
-            if (std::holds_alternative<nx::platform::CloseRequested>(event) ||
-                (key != nullptr && key->key == nx::platform::Key::Escape && key->isDown)) {
-                isRunning = false; // Escape ends nxview, whatever is bound to it
-            } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
-                // The original's mouse: sensitivity times m_yaw degrees a count across, m_pitch down.
-                const float sensitivity = cvars->mouse.sensitivity.value();
-                camera.angles.yaw = nx::normalizeAngle(
-                    camera.angles.yaw - nx::Degrees{moved->dx * sensitivity * cvars->mouse.yaw.value()});
-                camera.angles.pitch = nx::Degrees{std::clamp(
-                    camera.angles.pitch.value() + (moved->dy * sensitivity * cvars->mouse.pitch.value()),
-                    -cs::kMaxPitch.value(), cs::kMaxPitch.value())};
-            } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
-                if (auto recreated = (*swapchain)->resize(extentOf(resized->size)); !recreated) {
-                    return unusable(recreated.error());
-                }
-            } else {
-                keys.handle(event);
-            }
-        }
-        // What the keys queued, and what a `wait` left, before the frame's commands are made.
-        std::ignore = console.execute();
-        const nx::Seconds elapsed = frameClock.restart();
-        input->turn(camera.angles, elapsed);
-        camera.position = play(game, local, hulls, walker, *input, camera.angles, elapsed);
-
-        auto commands = (*device)->beginFrame();
-        if (!commands) {
-            return unusable(commands.error());
-        }
-        nx::rhi::CommandList& list = commands->get();
-        auto image = (*swapchain)->acquire();
-        if (!image) {
-            return unusable(image.error());
-        }
-        if (!*image) {
-            if (auto submitted = (*device)->submitFrame(); !submitted) {
-                return unusable(submitted.error());
-            }
-            sleepTimer->sleepUntil(nx::platform::MonotonicClock::now() + kMinimizedWait); // nothing to show
-            continue;
-        }
-        const nx::rhi::SwapchainImage& frame = **image;
-        if (!scene) {
-            std::optional<Scene> created =
-                createScene(**device, list, content, frame.format, gammaOf(cvars->video));
-            if (!created) {
-                return kExitUnusable;
-            }
-            scene.emplace(std::move(*created));
-            std::ignore = mapClock.restart();    // the light styles start with the map
-            std::ignore = deployClock.restart(); // and the player draws the knife
-        }
-        if (!depth || depthExtent != frame.size) {
-            auto created = (*device)->createTexture({.label = "nxview.depth",
-                                                     .format = nx::rhi::Format::Depth32Float,
-                                                     .extent = frame.size,
-                                                     .usage = {nx::rhi::TextureUsage::DepthTarget}});
-            if (!created) {
-                return unusable(created.error());
-            }
-            depth = std::move(*created); // the old one, if any, goes
-            depthExtent = frame.size;
-        }
-        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-        list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-        const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
-        list.beginRendering({.colors = colors,
-                             .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
-                             .area = frame.size});
-        const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
-        const nx::Seconds time{mapClock.elapsed()};
-        const std::vector<nx::render::ModelPlacement> placements = placementsOf(game);
-        if (auto drawn = drawScene(list, *scene, content,
-                                   {.camera = camera,
-                                    .aspect = aspect,
-                                    .time = time,
-                                    .placements = placements,
-                                    .sinceDeploy = nx::Seconds{deployClock.elapsed()}});
-            !drawn) {
-            return unusable(drawn.error());
-        }
-        list.endRendering();
-        list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
-        if (auto submitted = (*device)->submitFrame(**swapchain); !submitted) {
-            return unusable(submitted.error());
-        }
-    }
-
-    (*device)->waitIdle();
-    if (auto saved = nx::settings::saveConfig(console, bindings, configFiles); !saved) {
-        std::println(stderr, "nxview: {}", nx::describe(saved.error()));
-    }
-    const std::uint64_t validationErrors = (*device)->validationErrors();
-    scene.reset();
-    swapchain->reset(); // before its device
-    if (validationErrors != 0) {
-        std::println(stderr, "nxview: the validation layer reported {} errors", validationErrors);
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
 }
 
 } // namespace
@@ -950,13 +287,21 @@ auto main(int argumentCount, char** argumentValues) -> int {
         return EXIT_SUCCESS;
     }
     const std::optional<Options> options = parseOptions(arguments);
-    if (!options) {
+    if (!options || !options->screenshot) {
         std::print(stderr, "{}", kUsage);
         return kExitUnusable;
     }
-    Content content;
-    if (const int read = readContent(*options, content); read != EXIT_SUCCESS) {
-        return read;
+    auto executable = nx::platform::executablePath();
+    if (!executable) {
+        return unusable(executable.error());
     }
-    return options->screenshot ? takeScreenshot(*options, content) : view(*options, content);
+    auto level = loadLevel(*options, executable->parent_path());
+    if (!level) {
+        return unusable(level.error());
+    }
+    auto shaders = cs::readSceneShaders(executable->parent_path() / "shaders");
+    if (!shaders) {
+        return unusable(shaders.error());
+    }
+    return takeScreenshot(*options, **level, *shaders);
 }

@@ -4,7 +4,7 @@
 /// The studio models the map's entities show (docs/05-rendering.md, section 9), as the game makes them
 /// until its server spawns its entities: the cycler_sprite of a model and the hostage_entity, as
 /// ReGameDLL's CCyclerSprite and CHostage make them (GPL, consulted: docs/20 section 3).
-export module tool.nxview:mapModels;
+export module cs.client:mapModels;
 
 import std;
 import nx.core;
@@ -17,7 +17,7 @@ import nx.collision;
 import cs.shared;
 import :modelFiles;
 
-export namespace nxview {
+export namespace cs {
 
 /// Which entity of the game shows a studio model: how it plays it.
 enum class ModelClass : std::uint8_t {
@@ -105,4 +105,4 @@ private:
     std::vector<std::string> m_missing;
 };
 
-} // namespace nxview
+} // namespace cs

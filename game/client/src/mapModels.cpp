@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-module tool.nxview;
+module cs.client;
 
 import std;
 import nx.core;
@@ -14,7 +14,7 @@ import nx.collision;
 import nx.game;
 import cs.shared;
 
-namespace nxview {
+namespace cs {
 
 namespace {
 
@@ -205,4 +205,4 @@ auto MapModels::posed(std::span<const nx::render::StudioModel> models, nx::Secon
     return posed;
 }
 
-} // namespace nxview
+} // namespace cs
