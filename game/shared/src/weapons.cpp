@@ -12,6 +12,9 @@ namespace cs {
 
 namespace {
 
+/// The shares of a weapon's idles add up to 1 within this much.
+constexpr double kShareTolerance = 1e-4;
+
 /// DataInvalid when `path`, the `role` model of the weapon `id` of `sourceName`, is not a path of
 /// the game's files.
 [[nodiscard]] auto checkModelPath(std::string_view path, std::string_view role, std::string_view id,
@@ -20,6 +23,30 @@ namespace {
         return nx::fail(WeaponError::DataInvalid,
                         std::format("{}: the {} model of {:?}, {:?}", sourceName, role, id, path),
                         std::move(parsed.error()));
+    }
+    return {};
+}
+
+/// DataInvalid when `view`, of the weapon `id` of `where` (a file, or the catalog), lacks a draw
+/// sequence or an idle, waits no time to idle again, or has idles whose shares do not add up to 1.
+[[nodiscard]] auto checkView(const WeaponView& view, std::string_view id, std::string_view where)
+    -> nx::Result<void, WeaponError> {
+    if (view.drawSequences.empty() || view.idles.empty()) {
+        return nx::fail(WeaponError::DataInvalid,
+                        std::format("{}: {:?} without a draw sequence or an idle", where, id));
+    }
+    double shares = 0.0;
+    for (const WeaponIdle& idle : view.idles) {
+        if (idle.wait <= nx::Seconds{}) {
+            return nx::fail(WeaponError::DataInvalid,
+                            std::format("{}: an idle of {:?} that waits no time to idle again", where, id));
+        }
+        shares += double{idle.share};
+    }
+    if (std::abs(shares - 1.0) > kShareTolerance) {
+        return nx::fail(
+            WeaponError::DataInvalid,
+            std::format("{}: the idles of {:?} have shares adding up to {}, not 1", where, id, shares));
     }
     return {};
 }
@@ -74,6 +101,9 @@ auto readWeapon(std::string_view text, std::string_view sourceName) -> nx::Resul
     if (auto checked = checkModelPath(weapon->models.player, "player", weapon->id, sourceName); !checked) {
         return std::unexpected{std::move(checked.error())};
     }
+    if (auto checked = checkView(weapon->view, weapon->id, sourceName); !checked) {
+        return std::unexpected{std::move(checked.error())};
+    }
     return std::move(*weapon);
 }
 
@@ -93,6 +123,9 @@ auto WeaponCatalog::make(AmmoTypes ammo, std::vector<Weapon> weapons)
     }
     std::set<std::pair<WeaponSlot, std::uint32_t>> places;
     for (const Weapon& weapon : weapons) {
+        if (auto checked = checkView(weapon.view, weapon.id, "the catalog"); !checked) {
+            return std::unexpected{std::move(checked.error())};
+        }
         if (!places.emplace(weapon.slot, weapon.position).second) {
             return nx::fail(
                 WeaponError::DataInvalid,
@@ -114,6 +147,19 @@ auto WeaponCatalog::findAmmo(std::string_view id) const noexcept -> const AmmoTy
 auto WeaponCatalog::findWeapon(std::string_view id) const noexcept -> const Weapon* {
     const auto found = std::ranges::find(m_weapons, id, &Weapon::id);
     return found == m_weapons.end() ? nullptr : &*found;
+}
+
+auto WeaponCatalog::indexOf(std::string_view id) const noexcept -> std::optional<WeaponIndex> {
+    const auto found = std::ranges::find(m_weapons, id, &Weapon::id);
+    if (found == m_weapons.end()) {
+        return std::nullopt;
+    }
+    return WeaponIndex{nx::narrow<std::uint32_t>(found - m_weapons.begin())};
+}
+
+auto WeaponCatalog::weapon(WeaponIndex index) const noexcept -> const Weapon& {
+    nx::expects(index.value < m_weapons.size(), "WeaponCatalog::weapon: an index of the catalog");
+    return m_weapons[index.value];
 }
 
 } // namespace cs

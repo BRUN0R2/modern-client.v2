@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The player's knife in view (docs/05-rendering.md, section 9): the view model its data names
-/// (cs::Weapon), held as Counter-Strike deploys it (ReGameDLL's CKnife::Deploy, DefaultDeploy and
-/// CKnife::WeaponIdle, GPL, consulted: docs/20 section 3): its `draw` sequence as it comes out, then
-/// `idle` 1.5 seconds later and again every 20 seconds, each from its first frame; posed where the
-/// player looks from, as the view's own model is (cs::poseBones). Until the game's weapons come, the
-/// player holds it.
+/// A weapon in its holder's view (docs/05-rendering.md, section 9): the view model its data names
+/// (cs::Weapon), each of its sequences decoded, posed where the player looks from, as the view's own
+/// model is (cs::poseBones), in the sequence the player's weapons play (cs::Inventory); mirrored when
+/// it was modeled in the other hand than the player's, the right one (cl_righthand's default), as
+/// the original draws Counter-Strike's guns (Xash3D's R_AllowFlipViewModel, GPL, consulted: docs/20
+/// section 3; the original's, observed: docs/05 section 9).
 export module cs.client:viewModel;
 
 import std;
@@ -24,19 +24,29 @@ export namespace cs {
 /// scale (measured: docs/12-ui-hud-and-console.md, section 3.2).
 inline constexpr std::uint32_t kKnifeCrosshairDistance = 7;
 
-/// Why the knife cannot be held.
+/// Why a weapon's view model cannot be held.
 enum class ViewModelError : std::uint8_t {
     FilesFailed, ///< A file of it cannot be read or used (cause: the model files' error).
-    NoSequence,  ///< It lacks a sequence the knife plays.
+    NoSequence,  ///< It lacks a sequence its weapon's data plays.
 };
 
-/// The knife's model, its textures and the animations of the sequences it plays.
+/// The hand the player holds its weapons in: cl_righthand's default, until the cvar comes.
+inline constexpr Hand kPlayerHand = Hand::Right;
+
+/// What a frame shows of the view model: the weapon's, its sequence, and how far into it.
+struct ViewModelPose {
+    WeaponIndex weapon{};
+    std::uint32_t sequence{};
+    nx::Seconds intoIt{};
+};
+
+/// A weapon's view model, its textures and the animations of its sequences.
 class ViewModel {
 public:
-    /// Reads the view model of `knife` from `vfs`, its `*T.mdl` when its textures are not in it, and
-    /// the animations of `draw` and `idle`, from their sequence group files. Errors: FilesFailed,
-    /// NoSequence.
-    [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const Weapon& knife)
+    /// Reads the view model of `weapon` from `vfs`, its `*T.mdl` when its textures are not in it, and
+    /// the animations of each of its sequences, from their sequence group files. Errors: FilesFailed,
+    /// NoSequence (one the weapon's view plays).
+    [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const Weapon& weapon)
         -> nx::Result<ViewModel, ViewModelError>;
 
     /// Its model on the GPU of `renderer`, its uploads recorded in `commands`. Errors: those of
@@ -44,23 +54,22 @@ public:
     [[nodiscard]] auto load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
         -> nx::Result<nx::render::StudioModel, nx::render::StudioError>;
 
-    /// Its bones `sinceDeploy` after it came out, in the hand of a player whose eye and view are
-    /// `camera`'s, from each bone's space to the world.
-    [[nodiscard]] auto pose(const nx::render::Camera& camera, nx::Seconds sinceDeploy) const
-        -> std::vector<nx::Mat3x4>;
+    /// Its bones `intoIt` into its sequence `sequence`, which must be one of its, played from its
+    /// first frame (cs::sequenceFrameAt), in the hand of a player whose eye and view are `camera`'s:
+    /// from each bone's space to the world, mirrored across the view's right when isMirrored.
+    [[nodiscard]] auto pose(const nx::render::Camera& camera, std::uint32_t sequence,
+                            nx::Seconds intoIt) const -> std::vector<nx::Mat3x4>;
+
+    /// Whether it is drawn mirrored: modeled in the other hand than the player's.
+    [[nodiscard]] inline auto isMirrored() const noexcept -> bool { return m_isMirrored; }
 
 private:
-    /// A sequence the knife plays, and its decoded frames.
-    struct Animation {
-        nx::assets::SequenceIndex sequence{};
-        nx::assets::AnimationFrames frames{};
-    };
-
-    ViewModel(std::unique_ptr<ModelFiles> files, Animation draw, Animation idle) noexcept;
+    ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
+              bool isMirrored) noexcept;
 
     std::unique_ptr<ModelFiles> m_files;
-    Animation m_draw;
-    Animation m_idle;
+    std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
+    bool m_isMirrored;
 };
 
 } // namespace cs

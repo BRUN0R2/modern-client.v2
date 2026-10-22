@@ -32,8 +32,8 @@ constexpr std::string_view kUsage =
 
 Renders one frame of a map of the Counter-Strike 1.6 installation into a BMP file, without a window,
 as the client draws it with the original's default settings: the world as the game makes it when
-the map starts, its sprites and studio models, and the knife in the player's hand. To play a map,
-run next.
+the map starts, its sprites and studio models, and the weapon in the player's hand, what a player
+of the first spawn's team draws as it spawns. To play a map, run next.
 
   --screenshot <file.bmp> the file the frame is written to
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
@@ -45,7 +45,8 @@ run next.
   --angles "<p> <y> <r>"  where it looks, in degrees: pitch (down is positive), yaw, roll (default:
                           the spawn's yaw)
   --time <seconds>        when the frame is, after the map starts (default: 0): what animates
-                          (light styles, textures, water, the knife) is drawn as it is then
+                          (light styles, textures, water, the weapon in hand) is drawn as it is
+                          then, the player standing still
   --size <width>x<height> the frame's size in pixels (default: 1280x720)
   --hud                   the HUD over the frame: the player's as it spawns, the knife's crosshair
                           in Counter-Strike's default style
@@ -345,12 +346,13 @@ constexpr std::size_t kBlue = 2;
         consoleWindow->insertText(options.typing.value_or(std::string{}));
     }
     const nx::render::Camera camera = startCamera(options, level.map());
-    // The brush entities where the game puts them as the map starts, and the knife the player has held
-    // since it started.
-    auto game = cs::LocalGame::start(level, camera.position);
+    // The brush entities where the game puts them, and the weapon the player drew as the map started,
+    // the player standing still until the frame.
+    auto game = cs::LocalGame::start(content, level, cs::spawnTeam(level.map()), camera.position);
     if (!game) {
         return unusable(game.error());
     }
+    std::ignore = (*game)->wait(camera.angles, options.time);
     const std::vector<nx::render::ModelPlacement> placements = (*game)->placements();
     list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
@@ -364,7 +366,7 @@ constexpr std::size_t kBlue = 2;
                          .aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height),
                          .time = options.time,
                          .placements = placements,
-                         .sinceDeploy = options.time});
+                         .viewModel = (*game)->viewModel()});
         !drawn) {
         return unusable(drawn.error());
     }

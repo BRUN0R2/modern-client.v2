@@ -23,3 +23,9 @@ clipSize = 12
 view = "models/v_usp.mdl"
 player = "models/p_usp.mdl"
 playerAnimation = "onehanded"
+viewHand = "left"
+
+[view] # sequences of models/v_usp.mdl, without its silencer
+drawSequences = [14] # draw_unsil
+idles = [{ sequence = 8, wait = 60.0, share = 1.0 }] # idle_unsil
+idlesWhenEmpty = false

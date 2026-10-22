@@ -12,9 +12,9 @@
 /// unlit; or blended, lit, as opaque as `renderamt` says. The solid models are drawn with the solid
 /// things of the frame, the others among everything it draws blended (nx.render:blendedOrder).
 ///
-/// Today: the skins and body parts of models, a draw call for each mesh, the render modes, and the
-/// view's own model kept out of walls. The render effects (renderfx), the players' colors, the dynamic
-/// lights and instancing come with their consumers.
+/// Today: the skins and body parts of models, a draw call for each mesh, the render modes, the view's
+/// own model kept out of walls, and models drawn mirrored. The render effects (renderfx), the players'
+/// colors, the dynamic lights and instancing come with their consumers.
 export module nx.render:studio;
 
 import std;
@@ -48,6 +48,13 @@ enum class StudioBlending : std::uint8_t {
     Count,
 };
 
+/// Which way a model's triangles face as drawn: as modeled, or turned over by bones that mirror it.
+enum class StudioFacing : std::uint8_t {
+    AsModeled,
+    Mirrored,
+    Count,
+};
+
 /// A mesh of a choice of a body part: its triangles in its model's index buffer, and its texture's
 /// place in each skin.
 struct StudioMeshDraw {
@@ -78,6 +85,7 @@ struct StudioModelCall {
     rhi::BufferHandle vertices{};
     rhi::BufferHandle indices{};
     StudioBlending blending = StudioBlending::Solid;
+    StudioFacing facing = StudioFacing::AsModeled;
     std::uint32_t firstMesh = 0;
     std::uint32_t meshCount = 0;
 };
@@ -159,6 +167,9 @@ struct StudioInstance {
     /// The choice of each body part, by its index; those it leaves out are their first.
     std::span<const std::uint32_t> bodyChoices{};
     StudioDepth depth = StudioDepth::World;
+    /// Whether its bones mirror its model (a view model held in the other hand than it was modeled
+    /// in): its triangles face the other way, and the other way is culled.
+    bool isMirrored = false;
     /// Where its entity is: a blended model is sorted by the middle of its bounds there.
     Vec3 origin{};
     RenderMode mode = RenderMode::Normal;
@@ -233,7 +244,8 @@ private:
     rhi::OwnedBindGroupLayout m_skinLayout;
     rhi::OwnedBindGroupLayout m_instanceLayout;
     rhi::OwnedSampler m_sampler;
-    EnumArray<StudioBlending, EnumArray<MeshKind, rhi::OwnedRenderPipeline>> m_pipelines;
+    EnumArray<StudioFacing, EnumArray<StudioBlending, EnumArray<MeshKind, rhi::OwnedRenderPipeline>>>
+        m_pipelines;
     rhi::OwnedBuffer m_lightGamma;
     std::vector<StudioFrameSlot> m_frameSlots;
     std::uint64_t m_drawCount = 0;

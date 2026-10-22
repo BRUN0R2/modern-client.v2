@@ -15,3 +15,9 @@ maxSpeed = 250.0
 view = "models/v_knife.mdl"
 player = "models/p_knife.mdl"
 playerAnimation = "knife"
+viewHand = "right"
+
+[view] # sequences of models/v_knife.mdl
+drawSequences = [3] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true

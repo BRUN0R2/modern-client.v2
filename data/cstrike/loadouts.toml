@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# What a player of each team has as it spawns (docs/10, section 7.1), read into cs::Loadouts, with
+# ReGameDLL_CS's values (CBasePlayer::GiveDefaultItems; GPL, consulted: docs/20 section 3). `team` is
+# "terrorists" or "counterTerrorists"; `weapons` are ids of data/cstrike/weapons/, given in their order,
+# each with its clip full, the player drawing the heaviest; `ammo` is rounds of the kinds of
+# data/cstrike/ammo.toml besides the clips.
+
+[[loadouts]]
+team = "terrorists"
+weapons = ["knife", "glock18"]
+ammo = [{ id = "9mm", rounds = 40 }]
+
+[[loadouts]]
+team = "counterTerrorists"
+weapons = ["knife", "usp"]
+ammo = [{ id = "45ACP", rounds = 24 }]

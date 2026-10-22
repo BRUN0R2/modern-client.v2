@@ -20,6 +20,7 @@ nxAddModuleLibrary(nxCore
         src/enumArray.cppm
         src/flags.cppm
         src/hash.cppm
+        src/random.cppm
         src/memory.cppm
         src/log.cppm
     SOURCES

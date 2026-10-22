@@ -3,12 +3,14 @@
 
 nxAddTest(csSharedTests
     SOURCES
+        inventoryTests.cpp
         movementTests.cpp
         studioTests.cpp
         weaponsTests.cpp
     DEPENDS
         cs::shared
+        nx::game
         nx::platform)
 
-# A test reads the repository's data/cstrike/ammo.toml and data/cstrike/weapons/.
+# Tests read the repository's data/cstrike/ammo.toml, loadouts.toml and weapons/.
 target_compile_definitions(csSharedTests PRIVATE NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")

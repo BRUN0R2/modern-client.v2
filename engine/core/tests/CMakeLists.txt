@@ -17,6 +17,7 @@ nxAddTest(nxCoreTests
         enumArrayTests.cpp
         flagsTests.cpp
         hashTests.cpp
+        randomTests.cpp
         memoryTests.cpp
         logTests.cpp
     DEPENDS

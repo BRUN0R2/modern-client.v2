@@ -21,6 +21,10 @@ namespace {
 /// does not run away.
 constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
+/// Whether a weapon given heavier than the one held is drawn: _cl_autowepswitch's default.
+constexpr bool kAutoSwitch = true;
+/// The stream of random numbers a spawn's weapons draw from.
+constexpr std::string_view kSpawnStream = "spawn";
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -28,48 +32,92 @@ constexpr nx::Seconds kMaxCatchUp{0.25F};
 
 } // namespace
 
-LocalGame::LocalGame(CreateToken /*token*/, const Level& level, nx::Vec3 eye)
-    : m_level{&level}, m_player{.origin = eye - nx::Vec3{.z = kStandingViewHeight.value()},
-                                .maxSpeed = level.heldWeapon().maxSpeed},
-      m_previousEye{eye} {}
+LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Level& level, nx::Vec3 eye)
+    : m_level{&level}, m_player{.origin = eye - nx::Vec3{.z = kStandingViewHeight.value()}},
+      m_inventory{content.weapons}, m_previousEye{eye} {}
 
-auto LocalGame::start(const Level& level, nx::Vec3 eye)
+auto LocalGame::start(const GameContent& content, const Level& level, Team team, nx::Vec3 eye)
     -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
-    auto game = std::make_unique<LocalGame>(CreateToken{}, level, eye);
+    auto game = std::make_unique<LocalGame>(CreateToken{}, content, level, eye);
     if (auto spawned = spawnGame(level.map(), level.entityClasses(), game->m_world); !spawned) {
         return std::unexpected{std::move(spawned.error())};
     }
     game->m_body =
         game->m_world.spawn(nx::game::Transform{.origin = game->m_player.origin}, bodyOf(game->m_player));
+    if (const Loadout* const loadout = content.loadouts.find(team)) {
+        const nx::game::TickTime& time = nx::game::tickTimeOf(game->m_world);
+        nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
+        for (const std::string& weapon : loadout->weapons) {
+            // readLoadouts checked that the catalog has each.
+            std::ignore = game->m_inventory.give(*content.weapons.indexOf(weapon), kAutoSwitch, time, random);
+        }
+        for (const LoadoutAmmo& ammo : loadout->ammo) {
+            std::ignore = game->m_inventory.giveAmmo(ammo.id, ammo.rounds);
+        }
+    }
+    game->m_player.maxSpeed = game->m_inventory.maxSpeed();
     return game;
 }
 
 auto LocalGame::play(PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
-    const nx::collision::BrushHulls& hulls = m_level->hulls();
     m_pending = std::min(m_pending + elapsed, kMaxCatchUp);
+    return run([&input, view, this] { return input.nextCommand(view, kCommandInterval, m_player.maxSpeed); });
+}
+
+auto LocalGame::wait(nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
+    m_pending += elapsed;
+    return run([view] { return UserCommand{.duration = kCommandInterval, .viewAngles = view}; });
+}
+
+auto LocalGame::viewModel() const -> std::optional<ViewModelPose> {
+    const std::optional<ViewAnimation>& animation = m_inventory.animation();
+    if (!animation) {
+        return std::nullopt;
+    }
+    // The time the eye is drawn at, a tick behind the game as the eye is.
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    const nx::GameTime shown = time.now.after(m_pending - kCommandInterval, time.rate);
+    return ViewModelPose{.weapon = animation->weapon,
+                         .sequence = animation->sequence,
+                         .intoIt = std::max(shown.since(animation->start, time.rate), nx::Seconds{})};
+}
+
+auto LocalGame::run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3 {
     while (m_pending >= kCommandInterval) {
-        const UserCommand command = input.nextCommand(view, kCommandInterval, m_player.maxSpeed);
-        m_previousEye = eyeOf(m_player);
-        if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
-            // Before the command moves the player, as the original's PreThink uses.
-            std::ignore = nx::game::playerUse(
-                m_world, hulls, m_body, {.eye = m_previousEye, .forward = nx::angleVectors(view).forward});
-        }
-        m_lastButtons = command.buttons;
-        const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
-        const MovementResult moved = simulateMovement(m_player, command, MovementSettings{}, hulls, entities);
-        m_player = moved.state;
-        nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
-        m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
-        *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
-        nx::game::touchTriggers(m_world, hulls, m_body);
-        nx::game::runThinks(m_world, hulls);
-        nx::game::runPushers(m_world, hulls);
-        m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;
-        nx::game::advanceTick(m_world);
+        UserCommand command = nextCommand();
+        m_lastCommand = CommandNumber{m_lastCommand.value + 1};
+        command.number = m_lastCommand;
+        tick(command);
         m_pending -= kCommandInterval;
     }
     return nx::lerp(m_previousEye, eyeOf(m_player), m_pending / kCommandInterval);
+}
+
+void LocalGame::tick(const UserCommand& command) {
+    const nx::collision::BrushHulls& hulls = m_level->hulls();
+    m_previousEye = eyeOf(m_player);
+    // The weapon the command selects is drawn before it moves the player, at the speed it allows, as
+    // the original's CmdStart selects it.
+    m_inventory.play(command, nx::game::tickTimeOf(m_world));
+    m_player.maxSpeed = m_inventory.maxSpeed();
+    if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
+        // Before the command moves the player, as the original's PreThink uses.
+        std::ignore = nx::game::playerUse(
+            m_world, hulls, m_body,
+            {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
+    }
+    m_lastButtons = command.buttons;
+    const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
+    const MovementResult moved = simulateMovement(m_player, command, MovementSettings{}, hulls, entities);
+    m_player = moved.state;
+    nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
+    m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
+    *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
+    nx::game::touchTriggers(m_world, hulls, m_body);
+    nx::game::runThinks(m_world, hulls);
+    nx::game::runPushers(m_world, hulls);
+    m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;
+    nx::game::advanceTick(m_world);
 }
 
 auto LocalGame::toggleNoclip() -> bool {

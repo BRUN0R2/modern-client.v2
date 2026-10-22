@@ -326,7 +326,8 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     m_sampler = std::move(*sampler);
 
     // The original culls the triangles that face the viewer in GL's sense (GL_FRONT): a model's
-    // triangles face away from it. Each render mode's blending, and in it each kind of mesh, as
+    // triangles face away from it; mirrored, they face the other way, and the others are culled. Each
+    // facing, each render mode's blending, and in it each kind of mesh, as
     // GL_StudioSetRenderMode and R_StudioDrawPoints set them: an additive mesh adds itself, as
     // its texture's alpha says unless the model is solid; a masked one is cut at an alpha of 0.5.
     const std::array vertexBuffers{
@@ -362,25 +363,30 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
                       Way{.fragment = kCut, .blend = added, .writesDepth = false},
                       Way{.fragment = kWhole, .blend = addedByAlpha, .writesDepth = false}}},
     }};
-    for (const StudioBlending blending : EnumArray<StudioBlending, WaysOfMeshes>::keys()) {
-        for (const MeshKind kind : WaysOfMeshes::keys()) {
-            const Way& way = ways[blending][kind];
-            const std::array targets{rhi::ColorTarget{.format = colorFormat, .blend = way.blend}};
-            auto pipeline = device.createRenderPipeline(
-                {.label = std::format("studio.{}.{}", std::to_underlying(blending), std::to_underlying(kind)),
-                 .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
-                 .fragment = {.shader = m_shader.get(), .entryPoint = way.fragment},
-                 .vertexBuffers = vertexBuffers,
-                 .cullMode = rhi::CullMode::Front,
-                 .frontFace = rhi::FrontFace::CounterClockwise,
-                 .colorTargets = targets,
-                 .depth =
-                     rhi::DepthState{.isWriteEnabled = way.writesDepth, .compare = rhi::CompareOp::Greater},
-                 .bindGroupLayouts = layouts});
-            if (!pipeline) {
-                return std::unexpected{std::move(pipeline.error())};
+    for (const StudioFacing facing : EnumArray<StudioFacing, int>::keys()) {
+        const rhi::CullMode culled =
+            facing == StudioFacing::Mirrored ? rhi::CullMode::Back : rhi::CullMode::Front;
+        for (const StudioBlending blending : EnumArray<StudioBlending, WaysOfMeshes>::keys()) {
+            for (const MeshKind kind : WaysOfMeshes::keys()) {
+                const Way& way = ways[blending][kind];
+                const std::array targets{rhi::ColorTarget{.format = colorFormat, .blend = way.blend}};
+                auto pipeline = device.createRenderPipeline(
+                    {.label = std::format("studio.{}.{}.{}", std::to_underlying(facing),
+                                          std::to_underlying(blending), std::to_underlying(kind)),
+                     .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
+                     .fragment = {.shader = m_shader.get(), .entryPoint = way.fragment},
+                     .vertexBuffers = vertexBuffers,
+                     .cullMode = culled,
+                     .frontFace = rhi::FrontFace::CounterClockwise,
+                     .colorTargets = targets,
+                     .depth = rhi::DepthState{.isWriteEnabled = way.writesDepth,
+                                              .compare = rhi::CompareOp::Greater},
+                     .bindGroupLayouts = layouts});
+                if (!pipeline) {
+                    return std::unexpected{std::move(pipeline.error())};
+                }
+                m_pipelines[facing][blending][kind] = std::move(*pipeline);
             }
-            m_pipelines[blending][kind] = std::move(*pipeline);
         }
     }
     return {};
@@ -586,6 +592,7 @@ auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blend
     StudioModelCall call{.vertices = model.m_vertices.get(),
                          .indices = model.m_indices.get(),
                          .blending = blending,
+                         .facing = instance.isMirrored ? StudioFacing::Mirrored : StudioFacing::AsModeled,
                          .firstMesh = narrow<std::uint32_t>(m_meshCalls.size())};
     if (model.m_skins.empty()) {
         return call; // no mesh: the reader checked that every mesh has its skin
@@ -627,7 +634,7 @@ void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) co
     const StudioFrameSlot& slot = preparedSlot();
     // The frame's group binds with a pipeline set.
     MeshKind bound = meshes.front().kind;
-    commands.setPipeline(m_pipelines[call.blending][bound].get());
+    commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());
     commands.setBindGroup(kFrameGroup, slot.group.get());
     commands.setBindGroup(kInstanceGroup, slot.instanceGroups[index].get());
     commands.setVertexBuffer(0, call.vertices, 0);
@@ -635,7 +642,7 @@ void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) co
     for (const StudioMeshCall& mesh : meshes) {
         if (mesh.kind != bound) {
             bound = mesh.kind;
-            commands.setPipeline(m_pipelines[call.blending][bound].get());
+            commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());
         }
         commands.setBindGroup(kSkinGroup, mesh.texture);
         commands.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);

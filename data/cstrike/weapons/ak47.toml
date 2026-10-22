@@ -23,3 +23,9 @@ clipSize = 30
 view = "models/v_ak47.mdl"
 player = "models/p_ak47.mdl"
 playerAnimation = "ak47"
+viewHand = "left"
+
+[view] # sequences of models/v_ak47.mdl
+drawSequences = [2] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle1
+idlesWhenEmpty = true

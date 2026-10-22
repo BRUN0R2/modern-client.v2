@@ -12,10 +12,14 @@ nxAddModuleLibrary(csShared
         src/studio.cppm
         src/player.cppm
         src/weapons.cppm
+        src/loadouts.cppm
+        src/inventory.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
         src/weapons.cpp
+        src/loadouts.cpp
+        src/inventory.cpp
     DEPENDS
         nx::core
         nx::math

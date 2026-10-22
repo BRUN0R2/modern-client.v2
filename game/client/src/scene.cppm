@@ -3,7 +3,7 @@
 
 /// What the client draws of a level (docs/05-rendering.md): the world and the light it gives, the
 /// sprites and studio models of its entities, the blended ones of them all in one order, and the
-/// knife in the player's hand, drawn last.
+/// weapon in the player's hand, drawn last.
 export module cs.client:scene;
 
 import std;
@@ -12,6 +12,7 @@ import nx.math;
 import nx.rhi;
 import nx.render;
 import :level;
+import :viewModel;
 
 export namespace cs {
 
@@ -40,7 +41,7 @@ struct SceneView {
     float aspect = 1.0F;
     nx::Seconds time{}; ///< Since the map started.
     std::span<const nx::render::ModelPlacement> placements{};
-    std::optional<nx::Seconds> sinceDeploy{}; ///< Since the knife came out; none without a player.
+    std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
@@ -55,8 +56,8 @@ public:
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
     /// sight does not reach hidden, the blended ones of them all in one order
-    /// (nx.render:blendedOrder); then the knife in the player's hand, lit where the player's eye is,
-    /// as the original lights the view's own model. Errors: DrawFailed.
+    /// (nx.render:blendedOrder); then the weapon in the player's hand, lit where the player's eye
+    /// is, as the original lights the view's own model. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
 
@@ -73,7 +74,7 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          nx::render::StudioModel knife) noexcept;
+          std::vector<nx::render::StudioModel> weapons) noexcept;
 
     nx::render::BspWorld m_world;
     nx::render::WorldLight m_light;
@@ -82,7 +83,7 @@ private:
     nx::render::StudioRenderer m_studio;
     std::vector<nx::render::StudioModel> m_models; ///< Of the level's models, by file.
     nx::render::StudioRenderer m_viewModels;
-    nx::render::StudioModel m_knife;
+    std::vector<nx::render::StudioModel> m_weapons; ///< The weapons' view models, by their WeaponIndex.
 };
 
 } // namespace cs

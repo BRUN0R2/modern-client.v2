@@ -3,12 +3,12 @@
 
 /// The weapons of Counter-Strike as data (docs/10-counter-strike-gameplay.md, section 7.2): what each
 /// is, the slot it takes, who buys it and for how much, the ammo it fires and how much of it its clip
-/// holds, how fast its holder runs, and the models it is seen by. The game's own are in
-/// data/cstrike/weapons/<weapon>.toml and data/cstrike/ammo.toml, with ReGameDLL_CS's values (GPL,
-/// consulted: docs/20 section 3).
+/// holds, how fast its holder runs, the models it is seen by and how its view model moves as it is
+/// drawn and held. The game's own are in data/cstrike/weapons/<weapon>.toml and
+/// data/cstrike/ammo.toml, with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
 ///
-/// Today: what a weapon is and how it is held; its animations, how it fires and reloads, its spread
-/// and its recoil come with the weapons' state machine (TODO.md).
+/// Today: what a weapon is and how it is held; how it fires and reloads, its spread and its recoil
+/// come next (TODO.md).
 export module cs.shared:weapons;
 
 import std;
@@ -31,6 +31,13 @@ enum class WeaponSlot : std::uint8_t {
     Knife,
     Grenade,
     Bomb,
+    Count,
+};
+
+/// A hand.
+enum class Hand : std::uint8_t {
+    Left,
+    Right,
     Count,
 };
 
@@ -68,6 +75,21 @@ struct WeaponMagazine {
     std::uint32_t clipSize{};
 };
 
+/// An idle of a weapon's view model: the sequence it plays, and how long before it idles again.
+struct WeaponIdle {
+    std::uint32_t sequence{}; ///< By its number in the view model.
+    nx::Seconds wait{};
+    float share{}; ///< How likely it is chosen, from 0 to 1: the shares of a weapon's idles add up to 1.
+};
+
+/// How a weapon's view model moves as it is drawn and held, by its sequences' numbers in the model.
+struct WeaponView {
+    std::vector<std::uint32_t> drawSequences{}; ///< One of them, at random, as it is drawn.
+    /// One of them, at random by their shares, once it is drawn and each time its wait is over.
+    std::vector<WeaponIdle> idles{};
+    bool idlesWhenEmpty{}; ///< Whether it idles with its clip empty: the pistols do not.
+};
+
 /// The models a weapon is seen by.
 struct WeaponModels {
     std::string view{};   ///< In its holder's own view: models/v_<weapon>.mdl.
@@ -75,6 +97,9 @@ struct WeaponModels {
     /// What its holder's model plays as it holds it: the end of the labels of its sequences ("ak47"
     /// of "ref_aim_ak47").
     std::string playerAnimation{};
+    /// The hand its view model holds it in: one modeled in the other hand than the player's is drawn
+    /// mirrored. Counter-Strike's guns are modeled in the left hand, its knife in the right.
+    Hand viewHand{};
 };
 
 /// A weapon: data/cstrike/weapons/<id>.toml.
@@ -90,6 +115,14 @@ struct Weapon {
     std::optional<WeaponPurchase> purchase{}; ///< None: it is not sold (the knife).
     std::optional<WeaponMagazine> magazine{}; ///< None: it fires no ammo (the knife).
     WeaponModels models{};
+    WeaponView view{};
+};
+
+/// A weapon of a catalog, by its place in it.
+struct WeaponIndex {
+    std::uint32_t value = 0;
+
+    [[nodiscard]] inline auto operator==(const WeaponIndex&) const noexcept -> bool = default;
 };
 
 /// Reads `text`, the file `sourceName`: the kinds of ammo. Errors: DataInvalid.
@@ -97,7 +130,8 @@ struct Weapon {
     -> nx::Result<AmmoTypes, WeaponError>;
 
 /// Reads `text`, the file `sourceName`: a weapon, its id and classname not empty, its models paths
-/// of the game's files. Errors: DataInvalid.
+/// of the game's files, a draw sequence and an idle at least, each idle's wait above 0 and the
+/// idles' shares adding up to 1. Errors: DataInvalid.
 [[nodiscard]] auto readWeapon(std::string_view text, std::string_view sourceName)
     -> nx::Result<Weapon, WeaponError>;
 
@@ -105,8 +139,8 @@ struct Weapon {
 class WeaponCatalog {
 public:
     /// The catalog of `ammo` and `weapons`, in their order. Errors: DataInvalid: an id twice (of a
-    /// kind of ammo, or of a weapon), a classname twice, two weapons at one position of a slot, or a
-    /// weapon firing a kind of ammo `ammo` lacks.
+    /// kind of ammo, or of a weapon), a classname twice, two weapons at one position of a slot, a
+    /// weapon firing a kind of ammo `ammo` lacks, or a view readWeapon refuses.
     [[nodiscard]] static auto make(AmmoTypes ammo, std::vector<Weapon> weapons)
         -> nx::Result<WeaponCatalog, WeaponError>;
 
@@ -117,6 +151,10 @@ public:
     [[nodiscard]] auto findAmmo(std::string_view id) const noexcept -> const AmmoType*;
     /// The weapon `id` names; none when the catalog has none of that id.
     [[nodiscard]] auto findWeapon(std::string_view id) const noexcept -> const Weapon*;
+    /// Where the weapon `id` names is; none when the catalog has none of that id.
+    [[nodiscard]] auto indexOf(std::string_view id) const noexcept -> std::optional<WeaponIndex>;
+    /// The weapon at `index`, which must be one of the catalog's.
+    [[nodiscard]] auto weapon(WeaponIndex index) const noexcept -> const Weapon&;
 
 private:
     WeaponCatalog(std::vector<AmmoType> ammo, std::vector<Weapon> weapons) noexcept;
@@ -165,12 +203,33 @@ struct nx::meta::Description<cs::WeaponMagazine> {
 };
 
 template <>
+struct nx::meta::Description<cs::WeaponIdle> {
+    static constexpr std::string_view kName = "cs::WeaponIdle";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponIdle::sequence>("sequence"),
+        nx::meta::field<&cs::WeaponIdle::wait>("wait"),
+        nx::meta::field<&cs::WeaponIdle::share>("share", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponView> {
+    static constexpr std::string_view kName = "cs::WeaponView";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponView::drawSequences>("drawSequences"),
+        nx::meta::field<&cs::WeaponView::idles>("idles"),
+        nx::meta::field<&cs::WeaponView::idlesWhenEmpty>("idlesWhenEmpty"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponModels> {
     static constexpr std::string_view kName = "cs::WeaponModels";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponModels::view>("view"),
         nx::meta::field<&cs::WeaponModels::player>("player"),
         nx::meta::field<&cs::WeaponModels::playerAnimation>("playerAnimation"),
+        nx::meta::field<&cs::WeaponModels::viewHand>("viewHand"),
     };
 };
 
@@ -187,5 +246,6 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::purchase>("purchase"),
         nx::meta::field<&cs::Weapon::magazine>("magazine"),
         nx::meta::field<&cs::Weapon::models>("models"),
+        nx::meta::field<&cs::Weapon::view>("view"),
     };
 };

@@ -18,50 +18,45 @@ namespace {
 using nx::assets::MdlView;
 using nx::assets::Vfs;
 
-constexpr std::string_view kDrawSequence = "draw";
-constexpr std::string_view kIdleSequence = "idle";
-/// When the knife first idles after it came out, and how long it waits to idle again.
-constexpr nx::Seconds kFirstIdle{1.5F};
-constexpr nx::Seconds kIdleInterval{20.0F};
-
-/// The index of the sequence of `model` labeled `label`. Errors: NoSequence.
-[[nodiscard]] auto sequenceLabeled(const MdlView& model, std::string_view label)
-    -> nx::Result<nx::assets::SequenceIndex, ViewModelError> {
-    const auto found = std::ranges::find(model.sequences(), label, &nx::assets::StudioSequence::label);
-    if (found == model.sequences().end()) {
-        return nx::fail(ViewModelError::NoSequence, std::format("{:?} in {:?}", label, model.name()));
+/// NoSequence when `weapon`'s view plays a sequence `model` lacks.
+[[nodiscard]] auto checkSequences(const MdlView& model, const Weapon& weapon)
+    -> nx::Result<void, ViewModelError> {
+    std::vector<std::uint32_t> played = weapon.view.drawSequences;
+    std::ranges::copy(weapon.view.idles | std::views::transform(&WeaponIdle::sequence),
+                      std::back_inserter(played));
+    for (const std::uint32_t sequence : played) {
+        if (sequence >= model.sequences().size()) {
+            return nx::fail(ViewModelError::NoSequence, std::format("{} of the {} of {:?}", sequence,
+                                                                    model.sequences().size(), model.name()));
+        }
     }
-    return nx::assets::SequenceIndex{nx::narrow<std::uint32_t>(found - model.sequences().begin())};
+    return {};
 }
 
 } // namespace
 
-ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, Animation draw, Animation idle) noexcept
-    : m_files{std::move(files)}, m_draw{std::move(draw)}, m_idle{std::move(idle)} {}
+ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
+                     bool isMirrored) noexcept
+    : m_files{std::move(files)}, m_animations{std::move(animations)}, m_isMirrored{isMirrored} {}
 
-auto ViewModel::read(const Vfs& vfs, const Weapon& knife) -> nx::Result<ViewModel, ViewModelError> {
-    auto files = readModelFiles(vfs, knife.models.view);
+auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
+    auto files = readModelFiles(vfs, weapon.models.view);
     if (!files) {
         return nx::fail(ViewModelError::FilesFailed, std::move(files.error()));
     }
-    const auto animationLabeled = [&vfs,
-                                   &files](std::string_view label) -> nx::Result<Animation, ViewModelError> {
-        auto sequence = sequenceLabeled(*(*files)->view, label);
-        if (!sequence) {
-            return std::unexpected{std::move(sequence.error())};
-        }
-        auto frames = animationOf(vfs, **files, *sequence);
+    const MdlView& model = *(*files)->view;
+    if (auto checked = checkSequences(model, weapon); !checked) {
+        return std::unexpected{std::move(checked.error())};
+    }
+    std::vector<nx::assets::AnimationFrames> animations;
+    for (std::uint32_t sequence = 0; sequence < model.sequences().size(); ++sequence) {
+        auto frames = animationOf(vfs, **files, nx::assets::SequenceIndex{sequence});
         if (!frames) {
             return nx::fail(ViewModelError::FilesFailed, std::move(frames.error()));
         }
-        return Animation{.sequence = *sequence, .frames = std::move(*frames)};
-    };
-    auto draw = animationLabeled(kDrawSequence);
-    auto idle = animationLabeled(kIdleSequence);
-    if (!draw || !idle) {
-        return std::unexpected{std::move(!draw ? draw.error() : idle.error())};
+        animations.push_back(std::move(*frames));
     }
-    return ViewModel{std::move(*files), std::move(*draw), std::move(*idle)};
+    return ViewModel{std::move(*files), std::move(animations), weapon.models.viewHand != kPlayerHand};
 }
 
 auto ViewModel::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
@@ -69,20 +64,22 @@ auto ViewModel::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList&
     return renderer.load(commands, {.model = *m_files->view, .textures = m_files->texturesView()});
 }
 
-auto ViewModel::pose(const nx::render::Camera& camera, nx::Seconds sinceDeploy) const
+auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt) const
     -> std::vector<nx::Mat3x4> {
-    const bool isIdling = sinceDeploy >= kFirstIdle;
-    const Animation& playing = isIdling ? m_idle : m_draw;
-    const nx::Seconds intoIt =
-        isIdling ? nx::Seconds{std::fmod((sinceDeploy - kFirstIdle).count(), kIdleInterval.count())}
-                 : sinceDeploy;
     const MdlView& model = *m_files->view;
-    const nx::assets::StudioSequence& sequence = model.sequences()[playing.sequence.value];
+    nx::expects(sequence < m_animations.size(), "ViewModel::pose: a sequence of the model");
+    const nx::assets::StudioSequence& played = model.sequences()[sequence];
     // The view's own model turns as the view does: the client gives it the view's angles with the pitch
     // negated, which the engine's studio transform negates back.
-    return cs::poseBones(cs::skeletonOf(model), sequence, playing.frames,
-                         {.frame = cs::sequenceFrameAt(sequence, intoIt, 1.0F),
-                          .placement = nx::affine(nx::rotationMatrix(camera.angles), camera.position)});
+    nx::Mat3x4 placement = nx::affine(nx::rotationMatrix(camera.angles), camera.position);
+    if (m_isMirrored) {
+        // Its left, the placement's second column, turned to its right.
+        for (nx::Vec4& row : placement.rows) {
+            row.y = -row.y;
+        }
+    }
+    return cs::poseBones(cs::skeletonOf(model), played, m_animations[sequence],
+                         {.frame = cs::sequenceFrameAt(played, intoIt, 1.0F), .placement = placement});
 }
 
 } // namespace cs

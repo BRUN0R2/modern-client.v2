@@ -65,14 +65,21 @@ what reads them.
   (`sv_max_command_time_drift`). The excess is discarded, with a per-client metric.
 
 **Today** (`cs.client`): `cs::PlayerInput::nextCommand` makes a command from the player's `+`
-buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)).
-`next` (`cs::LocalGame`) makes one each 10 ms, whatever its frame rate; `cl_movement_rate` comes with the client.
+buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)),
+and the weapon `weapon_<name>` or `lastinv` selected since the last. `next` (`cs::LocalGame`) makes
+one each 10 ms, whatever its frame rate, numbered after the last; `cl_movement_rate` comes with the
+client.
 
 ### 2.3 Shared seed
 
 Spread and other weapon randomness use a **seed derived from the command number**,
 the same on the client and the server. This way the client's spread prediction matches the
 server, as in the original.
+
+**Today** (`nx.core:random`, `cs.shared:inventory`): `nx::Random` is a stream of random numbers
+named for what it draws and seeded by a number (SplitMix64, whole-number arithmetic, the same on
+every platform); the weapons draw theirs, which draw sequence and which idle, from the stream
+`weapons` of the command's number. The spread comes with firing.
 
 ## 3. Player movement (pmove)
 
@@ -348,7 +355,7 @@ button by the garage door raises it.
   (Windows × Linux), prediction corrects small divergences like any other prediction
   error.
 - Gameplay randomness comes only from `nx::Random` with named, seeded streams
-  (spread by command seed, gibs, spawn choice).
+  (spread by command seed, gibs, spawn choice; section 2.3).
 
 ## 7. Typed errors
 
