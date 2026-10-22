@@ -74,8 +74,8 @@ runtime exceptions (GCC Runtime Library Exception, Classpath Exception):
 
 Every dependency planned in [17 §5](../17-build-and-tools.md#5-dependencies) uses permissive
 licenses compatible with the GPL-3.0: Zlib, MIT, BSD-2/3-Clause, ISC, Apache-2.0 (with or
-without the LLVM exception), CC0 and public domain. A new dependency has to pass this check
-before it comes in ([17 §5](../17-build-and-tools.md#5-dependencies)).
+without the LLVM exception), the FreeType Licence, CC0 and public domain. A new dependency has to
+pass this check before it comes in ([17 §5](../17-build-and-tools.md#5-dependencies)).
 
 ## Consequences
 

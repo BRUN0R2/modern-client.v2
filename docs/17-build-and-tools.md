@@ -191,8 +191,9 @@ The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
 
 In use today: toml++, SDL3 (on Linux with its X11 and Wayland backends only: its default IBus
 support would build D-Bus and its dependencies from source, for an input method nothing uses yet),
-Vulkan Headers, volk, Vulkan Memory Allocator, Slang (its compiler, as a host tool), xxHash,
-GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive with their first consumer, in the
+Vulkan Headers, volk, Vulkan Memory Allocator, Slang (its compiler, as a host tool), FreeType
+(without its optional features: no zlib, bzip2, PNG or Brotli, which only compressed or colour
+fonts need), xxHash, GoogleTest and Google Benchmark (`vcpkg.json`). The others arrive with their first consumer, in the
 milestone that needs them.
 
 | Library | Use | License |
@@ -201,6 +202,7 @@ milestone that needs them.
 | Vulkan Headers + volk | Vulkan API and loader | Apache-2.0 / MIT |
 | Vulkan Memory Allocator | GPU memory | MIT |
 | Slang | Shader compiler | Apache-2.0 with LLVM exception |
+| FreeType | The interface's TrueType fonts (`nx.ui:font`) | FTL (offered with GPL-2.0-or-later): taken under the FTL, a permissive licence, so that nothing of the program falls outside the Rook Plugin Exception |
 | stdexec | `std::execution` until the standard library supports it | Apache-2.0 with LLVM exception |
 | libsodium | Network cryptography, signatures | ISC |
 | zstd | Package and network compression | BSD-3-Clause |
@@ -230,7 +232,8 @@ Rules:
   Libraries that require exceptions stay isolated behind a boundary that converts to
   `nx::Result`, or are not used.
 - `THIRD_PARTY_NOTICES.md` will be generated from `vcpkg.json` in the release build (planned,
-  before the first release).
+  before the first release). The FreeType Licence asks the documentation for a credit: "Portions
+  of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved."
 
 ## 6. Targets
 
@@ -248,7 +251,7 @@ Rules:
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
-| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzTga`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzKeyValues`, `fuzzTga`, `fuzzFont`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 

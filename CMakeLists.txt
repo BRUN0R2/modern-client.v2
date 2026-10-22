@@ -39,6 +39,7 @@ find_package(SDL3 CONFIG REQUIRED)
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+find_package(Freetype REQUIRED)
 
 if(NX_BUILD_TESTS)
     enable_testing()
