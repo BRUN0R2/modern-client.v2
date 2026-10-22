@@ -204,6 +204,11 @@ public:
     /// The console font `font`, its index 255 transparent. Errors: GpuFailed.
     [[nodiscard]] auto loadFont(rhi::CommandList& commands, const assets::FontView& font,
                                 std::string_view label) -> Result<ScreenFont, ScreenError>;
+    /// The picture of `texels`, `width` by `height` RGBA texels row by row from the top, as they are:
+    /// what the interface makes itself, such as its glyph atlases. Errors: GpuFailed.
+    [[nodiscard]] auto loadImage(rhi::CommandList& commands, std::span<const std::byte> texels,
+                                 std::uint32_t width, std::uint32_t height, std::string_view label)
+        -> Result<ScreenImage, ScreenError>;
 
     /// Writes `draw`'s rectangles for the frame in flight, for record to draw before the next prepare;
     /// their pictures must last until then. Errors: GpuFailed (room for more rectangles).

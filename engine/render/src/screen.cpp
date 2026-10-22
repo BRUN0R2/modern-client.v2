@@ -359,6 +359,14 @@ auto ScreenRenderer::loadFont(rhi::CommandList& commands, const assets::FontView
     return ScreenFont{std::move(*image), font.rowHeight, font.glyphs};
 }
 
+auto ScreenRenderer::loadImage(rhi::CommandList& commands, std::span<const std::byte> texels,
+                               std::uint32_t width, std::uint32_t height, std::string_view label)
+    -> Result<ScreenImage, ScreenError> {
+    expects(texels.size() == std::size_t{width} * height * 4,
+            "ScreenRenderer::loadImage: RGBA texels of its size");
+    return upload(commands, texels, width, height, std::format("screen.{}", label));
+}
+
 auto ScreenRenderer::prepare(const ScreenDraw& draw) -> Result<void, ScreenError> {
     m_batches.clear();
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.

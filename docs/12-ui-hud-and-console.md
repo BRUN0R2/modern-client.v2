@@ -79,11 +79,26 @@ Trebuchet MS at cells of 12 to 28 pixels, the 94 printable ASCII characters each
 | Without antialiasing | 0 to 11 glyphs out of 94 differ, by a pixel or two (Tahoma at 16, the console's size: `/` and `z`); 29 in Arial at 28 and 35 in Trebuchet MS at 12 (7 pixels per em) |
 
 The glyphs without antialiasing that differ are thin diagonals, where GDI turns on a pixel more
-than FreeType; the cause is still open (the two rasterizers' dropout control is the suspect). Still
-to come: the face of a family that a weight asks for (Tahoma Bold for weights from 600), found
-among the system's fonts and the schemes' `CustomFontFiles`, and Windows' bitmap fonts (`.fon`),
-which `GameConsole_Mono` asks for (Courier); then the glyphs in an atlas, drawn by
-`nx.render:screen`.
+than FreeType; the cause is still open (the two rasterizers' dropout control is the suspect).
+
+**Text on the screen** (`nx.ui:text`). A `GlyphAtlas` packs a font's glyphs for a set of
+characters into one picture of white texels, each as opaque as its glyph covers the pixel, in rows
+a texel apart; `ScreenRenderer::loadImage` puts it on the GPU as it is. `layoutText` places the
+glyphs of a UTF-8 line: the baseline the font's ascent below the line's top, each glyph's bitmap
+where the pen puts it, the pen moved by its advance alone (Windows' `TextOut` does not kern);
+`appendText` makes them rectangles of the screen in the text's colour, blended by their coverage.
+Lines of 80 characters composed so and drawn by GDI's `TextOutW` in Tahoma, Verdana and Trebuchet
+MS at cells of 13 to 28 pixels end on the same pixel; without smoothing, and at the sizes `gasp`
+does not smooth, 0 to 7 of their 900 to 3400 inked pixels differ. Where GDI smooths, drawing white
+on black, its 16 levels lie on a curve (the first is 104 of 255) where FreeType's coverage is
+linear, and about a quarter of the edge pixels differ by more than 40 of 255; which of the two the
+original shows needs reference shots of its smoothed text (the console's size is not smoothed).
+Below 9 pixels per em the hinting differs more (20 to 100 pixels of a line); no scheme asks for
+such sizes.
+
+Still to come: the face of a family that a weight asks for (Tahoma Bold for weights from 600),
+found among the system's fonts and the schemes' `CustomFontFiles`; Windows' bitmap fonts (`.fon`),
+which `GameConsole_Mono` asks for (Courier); and atlases that grow as new characters come.
 
 ## 3. HUD
 

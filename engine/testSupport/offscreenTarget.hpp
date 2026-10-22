@@ -3,9 +3,9 @@
 
 #pragma once
 
-// Test helper: an offscreen target of the render tests, its depth and the buffer it is read back to,
-// and what is drawn on it read back. Include after <gtest/gtest.h>, `import std;`, `import nx.core;`
-// and `import nx.rhi;`.
+// Test helper: an offscreen target of the tests that draw (the renderers', the interface's), its
+// depth and the buffer it is read back to, and what is drawn on it read back. Include after
+// <gtest/gtest.h>, `import std;`, `import nx.core;` and `import nx.rhi;`.
 
 namespace nx::test {
 
