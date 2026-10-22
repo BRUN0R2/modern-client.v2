@@ -17,6 +17,7 @@ import nx.settings;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
+import nx.ui;
 import cs.shared;
 import cs.client;
 
@@ -35,13 +36,24 @@ constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
 
-/// The console's output: replies on the standard output, failures on the standard error.
+/// The console's output: replies on the standard output, failures on the standard error, and both in
+/// the console's window once there is one.
 class PrintedOutput final : public nx::console::ConsoleOutput {
 public:
-    void print(std::string_view line) override { std::println("{}", line); }
+    void print(std::string_view line) override {
+        std::println("{}", line);
+        if (window != nullptr) {
+            window->print(line);
+        }
+    }
     void reportFailure(const nx::Failure<ConsoleError>& failure) override {
         std::println(stderr, "next: {}", nx::describe(failure));
+        if (window != nullptr) {
+            window->reportFailure(failure);
+        }
     }
+
+    nx::ui::ConsoleDialog* window = nullptr; ///< The client's, when it has one.
 };
 
 /// The original's picture as the video cvars set it.
@@ -140,14 +152,21 @@ struct Session {
 class Client {
 public:
     Client(const ClientOptions& options, const std::filesystem::path& userFolder)
-        : m_options{&options}, m_files{userFolder}, m_console{m_output, m_files},
-          m_bindings{nx::settings::defaultBindings()}, m_keys{m_console, m_bindings} {}
+        : m_options{&options}, m_loggerScope{m_logger}, m_files{userFolder}, m_console{m_output, m_files},
+          m_bindings{nx::settings::defaultBindings()}, m_keys{m_console, m_bindings} {
+        // What is logged goes where it always went, and to the console's window.
+        auto logSink = std::make_unique<nx::ui::ConsoleLogSink>();
+        m_logSink = logSink.get();
+        m_logger.addSink(std::make_unique<nx::log::ConsoleSink>());
+        m_logger.addSink(std::move(logSink));
+    }
 
     Client(const Client&) = delete;
     auto operator=(const Client&) -> Client& = delete;
     Client(Client&&) = delete;
     auto operator=(Client&&) -> Client& = delete;
     ~Client() {
+        m_output.window = nullptr; // the window goes before the console's output
         if (m_video) {
             m_video->device->waitIdle(); // what the GPU still draws goes with the scene, however it ends
         }
@@ -170,16 +189,26 @@ private:
     void noclipCommand();
     void lastWeaponCommand();
     void selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name);
+    /// Opens the console's window, or closes it.
+    void toggleConsole();
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
+    /// What `event` does in the console's window, open.
+    void handleInConsole(const nx::platform::WindowEvent& event);
     void startNextSession();
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
     [[nodiscard]] auto drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
+    /// The HUD and the console's window, over what is drawn.
+    [[nodiscard]] auto drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+        -> nx::Result<void, ClientError>;
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
 
     const ClientOptions* m_options;
+    nx::log::Logger m_logger;                    ///< The client's, the console's window among its sinks.
+    nx::ui::ConsoleLogSink* m_logSink = nullptr; ///< m_logger's.
+    nx::log::DefaultLoggerScope m_loggerScope;   ///< m_logger installed while the client lives.
     PrintedOutput m_output;
     nx::settings::UserConfigFiles m_files;
     nx::console::Console m_console;
@@ -198,6 +227,12 @@ private:
     std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
     std::optional<cs::Hud> m_hud;                       ///< None when its pictures could not be read.
     std::vector<nx::render::ScreenQuad> m_screenQuads;  ///< What the screen draws in a frame.
+    nx::ui::FontCatalog m_fonts;
+    std::optional<nx::ui::SchemeFontSet> m_consoleFont; ///< None when the console has no window.
+    std::optional<nx::ui::GlyphAtlas> m_consoleAtlas;
+    std::optional<nx::render::ScreenImage> m_consoleImage;  ///< The atlas on the GPU, with the screen.
+    std::unique_ptr<nx::ui::ConsoleDialog> m_consoleWindow; ///< Made with its atlas.
+    bool m_isConsoleOpen = false;
     std::optional<nx::rhi::OwnedTexture> m_depth;
     nx::rhi::Extent2d m_depthExtent{};
     std::vector<nx::platform::WindowEvent> m_events;
@@ -247,6 +282,17 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return std::unexpected{std::move(video.error())};
     }
     m_video = std::move(*video);
+    if (const auto size = m_video->window.pixelSize(); size) {
+        m_consoleFont = cs::openConsoleFont(m_content->vfs, m_fonts, size->height);
+    }
+    if (m_consoleFont) {
+        auto atlas = nx::ui::GlyphAtlas::build(*m_consoleFont, cs::consoleCharacters());
+        if (atlas) {
+            m_consoleAtlas.emplace(std::move(*atlas));
+        } else {
+            nx::log::warning(kLog, "the console has no window: {}", nx::describe(atlas.error()));
+        }
+    }
     return {};
 }
 
@@ -295,10 +341,16 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                   lastWeaponCommand();
                   return nx::Result<void, ConsoleError>{};
               }),
-          add({.name = "quit", .description = "Ends the client."}, [this](Console&, const CommandLine&) {
-              m_isRunning = false;
-              return nx::Result<void, ConsoleError>{};
-          })}) {
+          add({.name = "quit", .description = "Ends the client."},
+              [this](Console&, const CommandLine&) {
+                  m_isRunning = false;
+                  return nx::Result<void, ConsoleError>{};
+              }),
+          add({.name = "toggleconsole", .description = "Opens the console, or closes it."},
+              [this](Console&, const CommandLine&) {
+                  toggleConsole();
+                  return nx::Result<void, ConsoleError>{};
+              })}) {
         if (!registered) {
             return nx::fail(ClientError::SettingsUnavailable, registered.error());
         }
@@ -363,6 +415,45 @@ void Client::selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name) 
     m_input->selectWeapon(weapon);
 }
 
+void Client::toggleConsole() {
+    if (m_consoleWindow == nullptr) {
+        m_console.print("The console has no window: its font could not be found");
+        return;
+    }
+    m_isConsoleOpen = !m_isConsoleOpen;
+    if (m_isConsoleOpen) {
+        m_keys.releaseAll(); // the keys held for the game are let go
+    }
+    // The cursor shows and the keys type while it is open; the mouse turns the view again once closed.
+    for (const auto& failure :
+         {m_video->window.setTextInput(m_isConsoleOpen),
+          m_video->window.setMouseMode(m_isConsoleOpen ? nx::platform::MouseMode::Absolute
+                                                       : nx::platform::MouseMode::Relative)}) {
+        if (!failure) {
+            nx::log::warning(kLog, "{}", nx::describe(failure.error()));
+        }
+    }
+}
+
+void Client::handleInConsole(const nx::platform::WindowEvent& event) {
+    if (const auto* typed = std::get_if<nx::platform::TextEntered>(&event)) {
+        m_consoleWindow->insertText(typed->text);
+        return;
+    }
+    const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+    if (key == nullptr || !key->isDown) {
+        return;
+    }
+    // Escape, and the keys bound to toggleconsole, close it; the rest are the window's.
+    const std::optional<nx::console::KeyId> bound = nx::settings::keyOf(key->key);
+    const bool isToggle = bound && m_bindings.commandOf(*bound) == "toggleconsole";
+    if (key->key == nx::platform::Key::Escape || isToggle) {
+        toggleConsole();
+        return;
+    }
+    std::ignore = m_consoleWindow->pressKey(key->key);
+}
+
 auto Client::run() -> nx::Result<void, ClientError> {
     while (m_isRunning) {
         // fps_max: the limiter waits before the input is read, so that the frame shows the latest
@@ -396,8 +487,11 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
     m_video->window.pollEvents(m_events);
     for (const nx::platform::WindowEvent& event : m_events) {
         const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
-        if (std::holds_alternative<nx::platform::CloseRequested>(event) ||
-            (key != nullptr && key->key == nx::platform::Key::Escape && key->isDown)) {
+        if (m_isConsoleOpen && !std::holds_alternative<nx::platform::CloseRequested>(event) &&
+            !std::holds_alternative<nx::platform::Resized>(event)) {
+            handleInConsole(event);
+        } else if (std::holds_alternative<nx::platform::CloseRequested>(event) ||
+                   (key != nullptr && key->key == nx::platform::Key::Escape && key->isDown)) {
             m_isRunning = false; // until the menus come, Escape ends the client, whatever is bound to it
         } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
             look(m_camera.angles, *moved, m_cvars->mouse);
@@ -466,6 +560,9 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
     if (auto drawn = drawSession(list, frame); !drawn) {
         return drawn;
     }
+    if (auto drawn = drawScreen(list, frame); !drawn) {
+        return drawn;
+    }
     list.endRendering();
     list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
     if (auto submitted = device.submitFrame(*m_video->swapchain); !submitted) {
@@ -490,6 +587,21 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         } else {
             nx::log::warning(kLog, "the HUD is not drawn: {}",
                              nx::describe(hud.error())); // the game plays on
+        }
+        if (m_consoleAtlas) {
+            auto image = m_screen->loadImage(list, m_consoleAtlas->texels(), m_consoleAtlas->width(),
+                                             m_consoleAtlas->height(), "console");
+            if (!image) {
+                return nx::fail(ClientError::GpuFailed, std::move(image.error()));
+            }
+            m_consoleImage.emplace(std::move(*image));
+            const auto size = m_video->window.pixelSize();
+            m_consoleWindow = std::make_unique<nx::ui::ConsoleDialog>(
+                m_console,
+                cs::consoleBounds(size ? nx::rhi::Extent2d{.width = size->width, .height = size->height}
+                                       : nx::rhi::Extent2d{}));
+            m_consoleWindow->setFace({.atlas = &*m_consoleAtlas, .image = &*m_consoleImage});
+            m_output.window = m_consoleWindow.get();
         }
     }
     if (m_session && !m_scene) {
@@ -520,18 +632,32 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
         !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }
-    if (!m_hud || !m_cvars->video.hudDraw.value()) {
+    return {};
+}
+
+auto Client::drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+    -> nx::Result<void, ClientError> {
+    m_screenQuads.clear();
+    if (m_session && m_hud && m_cvars->video.hudDraw.value()) {
+        // The HUD, over the scene, the knife's crosshair in the middle.
+        const cs::PlayerStatus& status = m_session->game->status();
+        m_hud->append(m_screenQuads,
+                      {.health = status.health,
+                       .armor = status.armor,
+                       .money = status.money,
+                       .crosshairDistance = cs::kKnifeCrosshairDistance},
+                      m_hudCvars->crosshair(), frame.size);
+    }
+    if (m_consoleWindow != nullptr) {
+        m_logSink->showIn(*m_consoleWindow);
+        if (m_isConsoleOpen) {
+            m_consoleWindow->setBounds(cs::consoleBounds(frame.size));
+            m_consoleWindow->paintTree(nx::ui::PanelPainter{m_screenQuads, frame.size});
+        }
+    }
+    if (m_screenQuads.empty()) {
         return {};
     }
-    // The HUD, over the scene, the knife's crosshair in the middle.
-    const cs::PlayerStatus& status = m_session->game->status();
-    m_screenQuads.clear();
-    m_hud->append(m_screenQuads,
-                  {.health = status.health,
-                   .armor = status.armor,
-                   .money = status.money,
-                   .crosshairDistance = cs::kKnifeCrosshairDistance},
-                  m_hudCvars->crosshair(), frame.size);
     if (auto drawn = m_screen->draw(list, {.size = frame.size, .quads = m_screenQuads}); !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }

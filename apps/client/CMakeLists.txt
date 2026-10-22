@@ -18,9 +18,11 @@ nxAddModuleLibrary(appClient
         nx::platform
         nx::console
         nx::settings
+        nx::assets
         nx::rhi
         nx::rhiVulkan
         nx::render
+        nx::ui
         cs::shared
         cs::client)
 
