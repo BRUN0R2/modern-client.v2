@@ -17,6 +17,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
+- [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
 - [ ] Define the reference hardware for the performance targets
 - [x] Free content by default; original assets optional and configured locally ([ADR-0015](docs/adr/0015-free-content-and-optional-original-assets.md))
 - [x] Rook Plugin Exception: additional permission under section 7 of the GPL for plugins and mods ([ADR-0010](docs/adr/0010-license.md))
@@ -214,6 +215,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] WAD3 reader with fuzzing (`nx.assets:wad`, `fuzzWad`; fuzz infrastructure: `nxAddFuzzer`, the `fuzz-windows-msvc` preset and the nightly `fuzz` workflow): mip textures, pictures (`CONBACK`) and console fonts (`CONCHARS`, `fonts.wad`)
 - [x] The HUD's sprite lists (`hud.txt`, `sprites/weapon_*.txt`: `nx.assets:spriteList`), read by `nxcheck`
 - [x] VGUI2's KeyValues: schemes, layouts and localized strings in UTF-16 (`nx.assets:keyValues`), read by `nxcheck` and fuzzed
+- [x] VGUI2's schemes typed: colors, settings, fonts and borders (`nx.assets:scheme`), read by `nxcheck`
+- [x] VGUI2's localized strings: the text of each token, found as layouts name them (`nx.assets:localization`), read by `nxcheck`
 - [x] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing (`nx.assets:mdl`, `fuzzMdl`): structure, geometry, textures, skins, sequences and animations decoded from the model or its sequence groups
 - [x] SPR v2 reader with fuzzing (`nx.assets:spr`, `fuzzSpr`)
 - [x] WAV reader (PCM 8/16, cue points) with fuzzing (`nx.assets:wav`, `fuzzWav`), and every other uncompressed layout (24/32-bit PCM, 32/64-bit float, extensible) at any rate and channel count

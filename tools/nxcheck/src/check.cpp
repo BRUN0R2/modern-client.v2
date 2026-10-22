@@ -104,6 +104,46 @@ using nx::assets::WadView;
     return {};
 }
 
+/// Whether `path` is a VGUI2 scheme, as VGUI2 names them (resource/ClientScheme.res).
+[[nodiscard]] auto isScheme(const VfsPath& path) noexcept -> bool {
+    constexpr std::string_view kSuffix = "scheme.res";
+    const std::string_view text = path.text();
+    return text.size() >= kSuffix.size() &&
+           nx::equalsIgnoringCase(text.substr(text.size() - kSuffix.size()), kSuffix);
+}
+
+/// The scheme of `bytes`.
+[[nodiscard]] auto checkScheme(std::span<const std::byte> bytes) -> Result<void, CheckError> {
+    auto text = nx::assets::keyValuesText(bytes);
+    if (!text) {
+        return fail(CheckError::Invalid, std::move(text.error()));
+    }
+    auto entries = nx::assets::parseKeyValues(*text);
+    if (!entries) {
+        return fail(CheckError::Invalid, std::move(entries.error()));
+    }
+    if (auto scheme = nx::assets::readScheme(*entries); !scheme) {
+        return fail(CheckError::Invalid, std::move(scheme.error()));
+    }
+    return {};
+}
+
+/// The localized strings of `bytes`.
+[[nodiscard]] auto checkLocalization(std::span<const std::byte> bytes) -> Result<void, CheckError> {
+    auto text = nx::assets::keyValuesText(bytes);
+    if (!text) {
+        return fail(CheckError::Invalid, std::move(text.error()));
+    }
+    auto entries = nx::assets::parseKeyValues(*text, KeyValuesEscapes::Backslash);
+    if (!entries) {
+        return fail(CheckError::Invalid, std::move(entries.error()));
+    }
+    if (auto strings = nx::assets::LocalizedStrings::read(*entries); !strings) {
+        return fail(CheckError::Invalid, std::move(strings.error()));
+    }
+    return {};
+}
+
 /// The byte order mark of UTF-16 little-endian, which VGUI2's localized strings start with.
 constexpr std::array kUtf16Mark{std::byte{0xFF}, std::byte{0xFE}};
 
@@ -256,8 +296,10 @@ constexpr auto kReaders = std::to_array<Reader>({
     {.extension = "res",
      .folder = "resource/",
      .format = Format::KeyValues,
-     .check = [](const Vfs&, const VfsPath&,
-                 std::span<const std::byte> bytes) { return checkKeyValues(bytes, KeyValuesEscapes::None); }},
+     .check =
+         [](const Vfs&, const VfsPath& path, std::span<const std::byte> bytes) {
+             return isScheme(path) ? checkScheme(bytes) : checkKeyValues(bytes, KeyValuesEscapes::None);
+         }},
     {.extension = "res",
      .folder = "classes/",
      .format = Format::KeyValues,
@@ -266,10 +308,8 @@ constexpr auto kReaders = std::to_array<Reader>({
     {.extension = "txt",
      .folder = "resource/",
      .format = Format::Localization,
-     .check =
-         [](const Vfs&, const VfsPath&, std::span<const std::byte> bytes) {
-             return checkKeyValues(bytes, KeyValuesEscapes::Backslash);
-         }},
+     .check = [](const Vfs&, const VfsPath&,
+                 std::span<const std::byte> bytes) { return checkLocalization(bytes); }},
 });
 
 /// The reader of the file at `path`, by its extension; null when no reader reads it yet.
@@ -296,6 +336,9 @@ constexpr auto kReaders = std::to_array<Reader>({
     if (reader.format == Format::Mdl && std::ranges::starts_with(*bytes, nx::assets::kSequenceGroupMagic)) {
         result.format = Format::SequenceGroup;
         return {}; // read by the models whose sequences are in it
+    }
+    if (reader.format == Format::KeyValues && isScheme(path)) {
+        result.format = Format::Scheme;
     }
     if (reader.format == Format::Localization && !std::ranges::starts_with(*bytes, kUtf16Mark)) {
         result.format = std::nullopt; // another text of resource/ (BackgroundLayout.txt): no reader yet
