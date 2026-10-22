@@ -98,7 +98,7 @@ void LocalGame::tick(const UserCommand& command) {
     m_previousEye = eyeOf(m_player);
     // The weapon the command selects is drawn before it moves the player, at the speed it allows, as
     // the original's CmdStart selects it.
-    m_inventory.play(command, nx::game::tickTimeOf(m_world));
+    m_inventory.select(command, nx::game::tickTimeOf(m_world));
     m_player.maxSpeed = m_inventory.maxSpeed();
     if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
         // Before the command moves the player, as the original's PreThink uses.
@@ -114,6 +114,18 @@ void LocalGame::tick(const UserCommand& command) {
     m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
     *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
     nx::game::touchTriggers(m_world, hulls, m_body);
+    // The weapon in hand fires, is reloaded or idles once the command moved the player, as the
+    // original's PostThink runs it; its shots hit nothing yet.
+    Shooter shooter{
+        .eye = eyeOf(m_player),
+        .view = command.viewAngles,
+        .punch = m_player.punch,
+        .horizontalSpeed = nx::UnitsPerSecond{static_cast<float>(std::sqrt(double{
+            (m_player.velocity.x * m_player.velocity.x) + (m_player.velocity.y * m_player.velocity.y)}))},
+        .isOnGround = m_player.isOnGround,
+        .isDucked = m_player.isDucked};
+    std::ignore = m_inventory.frame(command, shooter, nx::game::tickTimeOf(m_world));
+    m_player.punch = shooter.punch;
     nx::game::runThinks(m_world, hulls);
     nx::game::runPushers(m_world, hulls);
     m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;

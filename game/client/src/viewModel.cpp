@@ -18,12 +18,21 @@ namespace {
 using nx::assets::MdlView;
 using nx::assets::Vfs;
 
-/// NoSequence when `weapon`'s view plays a sequence `model` lacks.
+/// NoSequence when `weapon` plays a sequence `model` lacks: drawn, idling, firing or reloaded.
 [[nodiscard]] auto checkSequences(const MdlView& model, const Weapon& weapon)
     -> nx::Result<void, ViewModelError> {
     std::vector<std::uint32_t> played = weapon.view.drawSequences;
     std::ranges::copy(weapon.view.idles | std::views::transform(&WeaponIdle::sequence),
                       std::back_inserter(played));
+    if (weapon.firing) {
+        std::ranges::copy(weapon.firing->shootSequences, std::back_inserter(played));
+        if (weapon.firing->lastShotSequence) {
+            played.push_back(*weapon.firing->lastShotSequence);
+        }
+    }
+    if (weapon.reload) {
+        std::ranges::copy(weapon.reload->sequences, std::back_inserter(played));
+    }
     for (const std::uint32_t sequence : played) {
         if (sequence >= model.sequences().size()) {
             return nx::fail(ViewModelError::NoSequence, std::format("{} of the {} of {:?}", sequence,

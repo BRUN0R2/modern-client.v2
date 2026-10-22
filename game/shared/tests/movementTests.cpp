@@ -177,6 +177,21 @@ TEST(MovementTest, APlayerStandingStillStays) {
     EXPECT_EQ(after.velocity, Vec3{});
 }
 
+TEST(MovementTest, AWeaponsKickDropsBackEachMove) {
+    // PM_DropPunchAngle: the kick's length less 10 and half of itself a second.
+    MovementState kicked = standingOnTheFloor();
+    kicked.punch = nx::EulerAngles{.pitch = nx::Degrees{-3.0F}, .yaw = nx::Degrees{4.0F}};
+    const MovementState after = simulate(kicked, command(), {}, floorWorld());
+    const double length = 5.0 - ((10.0 + (5.0 * 0.5)) * 0.01);
+    EXPECT_NEAR(after.punch.pitch.value(), -3.0 * length / 5.0, kTolerance);
+    EXPECT_NEAR(after.punch.yaw.value(), 4.0 * length / 5.0, kTolerance);
+
+    // Never past none.
+    MovementState small = standingOnTheFloor();
+    small.punch = nx::EulerAngles{.pitch = nx::Degrees{-0.05F}};
+    EXPECT_EQ(simulate(small, command(), {}, floorWorld()).punch, nx::EulerAngles{});
+}
+
 TEST(MovementTest, GravityPullsHalfBeforeTheMoveAndHalfAfter) {
     const MovementState after = simulate(MovementState{.origin = {.z = 100.0F}}, command(), {}, emptyWorld());
 
