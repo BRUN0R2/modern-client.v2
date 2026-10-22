@@ -6,6 +6,7 @@ nxAddTest(nxJobsTests
         workStealingDequeTests.cpp
         concurrentPoolTests.cpp
         intrusiveQueueTests.cpp
+        spscQueueTests.cpp
         jobSystemTests.cpp
     DEPENDS
         nx::jobs)

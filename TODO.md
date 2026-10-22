@@ -135,7 +135,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `OptionalRef<T>` (facade for `std::optional<T&>`), when the first consumer exists
 - [x] `FrameArena` with a typed failure (`Exhausted`); a bad alignment is a contract violation
 - [ ] Generic `PoolAllocator<T>` (the ECS chunks use the `World`'s own block pool) and `TrackedHeapAllocator`
-- [ ] Lock-free SPSC/MPSC queues with a typed queue-full error, when the first consumer exists (networking, audio)
+- [x] Lock-free SPSC queue with a typed queue-full error (`nx.jobs:spscQueue`), first used by the mixer's commands
+- [ ] Lock-free MPSC queue, when the first consumer exists (networking)
 - [x] Structured logging: levels, per-module categories, compile-time checked formatting, `ConsoleSink`, a *thread-safe* `Logger` and `RateLimit` (tested under ThreadSanitizer)
 - [ ] File and JSON lines sinks
 - [x] `nx::hash64` (`constexpr` XXH64, verified against the reference implementation) and `nx::StableId`
@@ -342,7 +343,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Penetration by material (`materials.txt`)
 
 ### Audio
-- [ ] Mixer on a real-time thread with a command queue, 32-bit float mixing with headroom and a limiter, and a high-quality resampler from any rate ([11 §2.1](docs/11-audio.md#21-the-originals-audio-problems-and-their-causes))
+- [x] The mixer (`nx.audio:mixer`): voices fed by a command queue, a windowed-sinc resampler from any rate and pitch, 32-bit float mixing with headroom and a limiter; sounds of any WAV layout (`nx.audio:sound`) ([11 §2](docs/11-audio.md#2-architecture))
+- [ ] The mixer on the device's real-time thread (SDL3 audio stream in `nx.platform`), `volume`, and the client playing its first sounds
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
 - [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device
 - [ ] Per-entity channels with replacement as in the original
