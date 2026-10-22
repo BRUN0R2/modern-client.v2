@@ -14,9 +14,9 @@ struct SquareFontDesc {
     std::uint16_t winDescent = 423;
     /// The VDMX records of a version 1 table for square pixels (yPelHeight, yMax, yMin); no table when
     /// empty.
-    std::vector<std::array<std::int16_t, 3>> deviceHeights;
+    std::vector<std::array<std::int16_t, 3>> deviceHeights{};
     /// The ranges of a gasp table (rangeMaxPPEM, rangeGaspBehavior); no table when empty.
-    std::vector<std::array<std::uint16_t, 2>> gaspRanges;
+    std::vector<std::array<std::uint16_t, 2>> gaspRanges{};
 };
 
 /// A TrueType font of the family "Square", style "Regular", with an em of 2048 units and no hinting

@@ -80,12 +80,12 @@ struct FontMetrics {
 
 /// A glyph drawn at a size: a bitmap of how much of each pixel it covers, placed from the pen.
 struct Glyph {
-    std::int32_t left = 0;              ///< From the pen to the bitmap's left edge, in pixels.
-    std::int32_t top = 0;               ///< From the baseline up to the bitmap's top edge.
-    std::int32_t width = 0;             ///< Columns of the bitmap.
-    std::int32_t height = 0;            ///< Rows of the bitmap.
-    std::int32_t advance = 0;           ///< How far the pen moves past the glyph.
-    std::vector<std::uint8_t> coverage; ///< Row by row from the top: 0 for none, 255 for all of a pixel.
+    std::int32_t left = 0;                ///< From the pen to the bitmap's left edge, in pixels.
+    std::int32_t top = 0;                 ///< From the baseline up to the bitmap's top edge.
+    std::int32_t width = 0;               ///< Columns of the bitmap.
+    std::int32_t height = 0;              ///< Rows of the bitmap.
+    std::int32_t advance = 0;             ///< How far the pen moves past the glyph.
+    std::vector<std::uint8_t> coverage{}; ///< Row by row from the top: 0 for none, 255 for all of a pixel.
 };
 
 /// What a font is asked to be, as a scheme asks for it.
