@@ -29,6 +29,7 @@ nxAddModuleLibrary(nxCore
         src/memory.cpp
         src/log.cpp
         src/gameTime.cpp
+        src/text.cpp
     DEPENDS
         # libstdc++ keeps std::stacktrace in libstdc++exp (nx.core:debugging).
         $<$<CXX_COMPILER_ID:GNU>:stdc++exp>)

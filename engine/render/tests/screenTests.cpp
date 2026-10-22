@@ -231,6 +231,33 @@ TEST(ScreenRendererTest, ColorsAreDrawnAsTheyAreAddedOrBlended) {
     EXPECT_EQ(screen.validationErrors(), 0U);
 }
 
+TEST(ScreenRendererTest, AnImageIsDrawnAsItIsTimesItsColor) {
+    Screen screen;
+    if (!screen.isReady()) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    // Two white texels, the first opaque and the second a quarter opaque, as a glyph's coverage is.
+    const std::array<std::byte, 8> texels{std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255},
+                                          std::byte{255}, std::byte{255}, std::byte{255}, std::byte{64}};
+    const nx::render::ScreenImage image = screen.load([&](nx::rhi::CommandList& commands) {
+        return screen.renderer().loadImage(commands, texels, 2, 1, "pair");
+    });
+    const std::array quads{ScreenQuad{.image = &image,
+                                      .source = {.x = 0, .y = 0, .width = 2, .height = 1},
+                                      .target = {.x = 1.0F, .y = 1.0F, .width = 2.0F, .height = 1.0F},
+                                      .color = {.red = 200, .green = 100, .blue = 0},
+                                      .blend = ScreenBlend::Translucent}};
+    const std::vector<std::byte> drawn = screen.draw(quads);
+
+    expectRgb(pixelAt(drawn, 1, 1), {200, 100, 0}, "opaque: the color itself, no texture gamma");
+    const float share = 64.0F / 255.0F;
+    expectRgb(
+        pixelAt(drawn, 2, 1),
+        {static_cast<int>(std::lround(200.0F * share)), static_cast<int>(std::lround(100.0F * share)), 0},
+        "a quarter of the color over the black");
+    EXPECT_EQ(screen.validationErrors(), 0U);
+}
+
 TEST(ScreenRendererTest, TextIsTheFontsCharactersOneAfterAnother) {
     Screen screen;
     if (!screen.isReady()) {

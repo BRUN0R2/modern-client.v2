@@ -9,14 +9,18 @@ nxAddModuleLibrary(nxUi
         src/nx.ui.cppm
         src/panel.cppm
         src/font.cppm
+        src/text.cppm
     SOURCES
         src/panel.cpp
         src/font.cpp
+        src/text.cpp
     DEPENDS
         nx::core
         nx::assets
+        nx::render
     LATERAL
-        nx::assets)
+        nx::assets
+        nx::render)
 
 # FreeType draws the glyphs; it is an implementation detail of src/font.cpp, never part of the
 # interface.

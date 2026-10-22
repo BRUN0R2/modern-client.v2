@@ -6,10 +6,12 @@
 /// nx.render:screen, so that the original's own files are read as they are.
 ///
 /// Today: panels and their layout, placed as a layout places them and following their parent as
-/// it changes size; and fonts, the TrueType faces the schemes name, sized and drawn as Windows sized
-/// and drew them. The schemes' styles, text on the screen, input and the controls (the console
-/// first) come next (TODO.md).
+/// it changes size; fonts, the TrueType faces the schemes name, sized and drawn as Windows sized
+/// and drew them; and text on the screen, their glyphs packed into atlases and placed as Windows
+/// placed them. The schemes' styles, input and the controls (the console first) come next
+/// (TODO.md).
 export module nx.ui;
 
 export import :panel;
 export import :font;
+export import :text;

@@ -5,6 +5,13 @@ nxAddTest(nxUiTests
     SOURCES
         panelTests.cpp
         fontTests.cpp
+        textTests.cpp
     DEPENDS
         nx::ui
-        nx::assets)
+        nx::assets
+        nx::render
+        nx::rhiVulkan
+        nx::platform)
+
+# The text test draws with the build's screen shader.
+add_dependencies(nxUiTests nxShaders)
