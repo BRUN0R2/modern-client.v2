@@ -27,6 +27,9 @@ enum class Format : std::uint8_t {
     Tga,           ///< An image (the skies, the VGUI menus): readTga.
     Wav,           ///< A sound: parseWav.
     SpriteList,    ///< A sprite list of the HUD (sprites/*.txt): parseSpriteList.
+    KeyValues,     ///< VGUI2's schemes and layouts (resource/*.res, classes/*.res): parseKeyValues.
+    Localization,  ///< VGUI2's localized strings (resource/*.txt in UTF-16): keyValuesText, then
+                   ///< parseKeyValues with backslash escapes.
     Count,
 };
 

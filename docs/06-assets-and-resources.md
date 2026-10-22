@@ -141,6 +141,7 @@ yield `ContentError::MissingEssentialFiles` with the full list.
 | `titles.txt` | In-game text messages | Localizable |
 | `hud.txt` and `sprites/*.txt` | HUD sprite layout | Per resolution |
 | `*.res` | Per-map resource list | Become manifest dependencies ([§6](#6-end-of-precache-resource-registry)) |
+| `resource/*.res`, `classes/*.res`, `resource/*_<language>.txt` | VGUI2's schemes, layouts and localized strings (KeyValues) | Read by `nx.ui` ([ADR-0020](adr/0020-in-house-ui-toolkit.md)) |
 | `*_detail.txt` | Per-map detail textures | Optional support, as in CS 1.6 |
 | `overviews/*.txt` + BMP image | Spectator overview map | |
 | `gfx/env/*.tga` | Sky box | Six faces per `skyname` of `worldspawn` |
@@ -161,6 +162,13 @@ Readers today:
   sprite, and the rectangle of the sprite it shows), split as the original splits them (whitespace,
   quotes, `//` comments). A count above the entries reads those there are: Counter-Strike's
   `hud.txt` counts 215 for 190.
+- KeyValues (`nx.assets:keyValues`, VGUI2's schemes `TrackerScheme.res` and `ClientScheme.res`, its
+  layouts in `resource/` and `classes/`, and its localized strings `resource/*_<language>.txt`):
+  entries of a key and a value, a word or a block in braces, kept in their order, keys looked up
+  in any case; words quoted (across lines) or bare, `//` comments before a word, and a condition in
+  brackets (`[$WIN32]`) after a key or a value. The localized strings are UTF-16 little-endian,
+  decoded to UTF-8 (`keyValuesText`), and spell `\n`, `\t`, `\\` and `\"` in their quoted words
+  (`KeyValuesEscapes::Backslash`); the layouts keep their backslashes. Blocks nest at most 64 deep.
 - WAV (`nx.assets:wav`): the 8- and 16-bit PCM of the original content and every other
   uncompressed layout (24- and 32-bit PCM, 32- and 64-bit IEEE float, `WAVE_FORMAT_EXTENSIBLE`),
   at any rate (`SampleRate`) and in any number of channels (`ChannelCount`), so no sound is held to
@@ -220,7 +228,7 @@ Readers today:
   runs of 128, is refused before anything is allocated.
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`, `materials.txt`...) are planned with their consumers (M3), but the sprite lists, read today.
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`, `materials.txt`...) are planned with their consumers (M3), but the sprite lists and VGUI2's KeyValues, read today.
 
 ### 3.2 Modern (for mods)
 
