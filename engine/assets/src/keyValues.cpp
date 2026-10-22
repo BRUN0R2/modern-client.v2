@@ -90,7 +90,7 @@ struct Token {
                         continue;
                     }
                 }
-                line += character == '\n' ? 1 : 0;
+                line += character == '\n' ? 1U : 0U;
                 word += character;
             }
             tokens.push_back({.kind = TokenKind::Word, .text = std::move(word), .line = startLine});

@@ -17,7 +17,7 @@ void visit(const std::vector<nx::assets::KeyValuesEntry>& entries, std::size_t& 
         total += entry.key.size() + entry.word.size() + entry.condition.size();
         if (entry.isBlock) {
             for (const nx::assets::KeyValuesEntry& inner : entry.entries) {
-                total += entry.find(inner.key) != nullptr ? 1 : 0;
+                total += entry.find(inner.key) != nullptr ? 1U : 0U;
                 total += entry.findWord(inner.key).value_or(std::string_view{}).size();
             }
             visit(entry.entries, total);
