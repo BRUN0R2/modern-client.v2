@@ -19,9 +19,9 @@
 | Console | In-house toolkit | Game console and listen server console |
 | Dev tools | Dear ImGui | Inspectors, profiler, navigation editor (development builds only) |
 
-> The choice of menu toolkit is recorded as pending validation in the
-> [TODO](../TODO.md). The alternative evaluated is RmlUi (HTML/CSS-like). The criteria are
-> visual fidelity, performance and ease of use for plugins.
+> **Decided** in [ADR-0020](adr/0020-in-house-ui-toolkit.md): `nx.ui`, in-house and retained, in
+> VGUI2's model of widgets, layouts and schemes, so that the original's own schemes, `.res`
+> layouts and strings are read as they are; RmlUi was weighed and not chosen.
 
 ## 3. HUD
 
