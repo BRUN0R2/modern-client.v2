@@ -21,6 +21,7 @@ nxAddModuleLibrary(appClient
         nx::rhi
         nx::rhiVulkan
         nx::render
+        cs::shared
         cs::client)
 
 nxAddProgram(next

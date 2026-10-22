@@ -17,6 +17,7 @@ import nx.settings;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
+import cs.shared;
 import cs.client;
 
 namespace app {

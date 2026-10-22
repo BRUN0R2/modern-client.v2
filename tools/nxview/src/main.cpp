@@ -16,6 +16,7 @@ import nx.assets;
 import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
+import cs.shared;
 import cs.client;
 
 namespace {
