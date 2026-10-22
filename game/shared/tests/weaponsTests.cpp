@@ -94,7 +94,7 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsAmmo) {
         std::uint32_t boxRounds;
     };
     for (const Expected& expected : {Expected{"9mm", 120, 20, 30}, Expected{"45ACP", 100, 25, 12},
-                                    Expected{"556Nato", 90, 60, 30}, Expected{"762Nato", 90, 80, 30}}) {
+                                     Expected{"556Nato", 90, 60, 30}, Expected{"762Nato", 90, 80, 30}}) {
         const AmmoType* const ammo = catalog->findAmmo(expected.id);
         ASSERT_NE(ammo, nullptr) << expected.id;
         EXPECT_EQ(ammo->maxCarried, expected.maxCarried) << expected.id;
