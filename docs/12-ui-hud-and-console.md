@@ -129,6 +129,25 @@ Without the historical limits on text channels and message size:
 | `userconfig.cfg` | The user's personal configuration |
 | `video.toml`, `audio.toml` | Video and audio device and mode (new, structured) |
 
+**Today** (`nx.settings`): the files live in the user's folder of Modern-Client.v2
+(`nx::platform::userDirectory`: `%APPDATA%\Modern-Client.v2` on Windows,
+`$XDG_CONFIG_HOME/modern-client.v2` or `~/.config/modern-client.v2` elsewhere), next to
+`content.toml`, never in the game's installation. At startup `runStartupFiles` runs `config.cfg`,
+then `userconfig.cfg`, then `autoexec.cfg`, those that exist; a missing one is no failure, an
+unreadable one is printed. `exec` reads `.cfg` files of that folder by relative paths
+(`UserConfigFiles`; an absolute path, `..` or another extension is `InvalidPath`). At exit
+`saveConfig` writes `config.cfg`: a line that says what it is, then the archived cvars; the
+file is written beside its place and then moved there, so a crash leaves the old settings or
+the new ones, never a part. The original ends its `config.cfg` with `exec userconfig.cfg`;
+here the startup runs that file itself. `registerClientCvars` registers the client's cvars of
+§5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
+`sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, 0 for no limit), `gl_vsync`
+(1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), all archived, and `texgamma`
+(2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive. `nxview` reads
+them as it starts and writes `config.cfg` as it ends; a change takes effect when it starts again
+until the console comes. The binds, `vid_vsync` as the name of `gl_vsync`, and the other cvars
+come with their consumers.
+
 ### 5.3 The `nx.console` module
 
 The console language is the same on the client and the server and lives in `nx.console`

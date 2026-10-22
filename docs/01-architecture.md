@@ -30,6 +30,7 @@ flowchart TB
         COLL[nx.collision]
         UI[nx.ui]
         ASSETS[nx.assets]
+        SETTINGS[nx.settings · the player's settings]
     end
     subgraph L2[Runtime foundation]
         ECS[nx.ecs]
@@ -58,7 +59,7 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
 | `nx.jobs` | 1 | Job System, counters, dependency graphs. Planned: a `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system, the path of the running program, the user's Steam folders, clocks. Planned: OS threads | core |
+| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2 and their Steam folders, clocks. Planned: OS threads | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math (today: core) |
@@ -70,6 +71,7 @@ flowchart TB
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice | assets, jobs, platform |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts | render, assets, platform, console |
+| `nx.settings` | 3 | The player's settings: the `.cfg` files of the user's folder run at startup and `config.cfg` written at exit, the client's cvars by the original's names ([12 §5.2](12-ui-hud-and-console.md#52-client-configuration-files)). Planned: binds, `video.toml`, `audio.toml` | core, console, platform |
 | `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the map's brush entities, as the game makes them when a map starts, its doors, sliding and rotating, and an entity dropped to the floor | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |
 | `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement among the world and the brush entities, and the bones of studio models posed | game, collision (today: core, math, ecs, assets, collision, game) |

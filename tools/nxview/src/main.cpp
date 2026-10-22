@@ -12,6 +12,8 @@ import std;
 import nx.core;
 import nx.math;
 import nx.platform;
+import nx.console;
+import nx.settings;
 import nx.assets;
 import nx.rhi;
 import nx.rhi.vulkan;
@@ -32,7 +34,9 @@ constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <
 Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife:
 the mouse looks, W A S D move, Space jumps, Ctrl ducks, Shift walks slowly, E uses what is in front
 (a button). F flies instead, and back: W A S D move, Space and Ctrl rise and sink, Shift is faster.
-Escape ends it.
+Escape ends it. It runs the player's config.cfg, userconfig.cfg and autoexec.cfg from the user's
+folder of Modern-Client.v2 as it starts (sensitivity, m_yaw, m_pitch, fps_max, gl_vsync, gamma,
+brightness, texgamma, lightgamma), and writes config.cfg there as it ends.
 
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
@@ -43,7 +47,7 @@ Escape ends it.
   --angles "<p> <y> <r>"  where it looks, in degrees: pitch (down is positive), yaw, roll (default:
                           the spawn's yaw)
   --screenshot <file.bmp> renders one 1280x720 frame from the camera's start into the file, without
-                          a window, and ends
+                          a window, with the original's default settings, and ends
   --time <seconds>        when the frame of --screenshot is, after the map starts (default: 0):
                           what animates (light styles, textures, water, the knife) is drawn as it
                           is then
@@ -69,7 +73,6 @@ constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
 constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
 /// Degrees per mouse count: the original's m_yaw and m_pitch, 0.022, at its default sensitivity, 3.
-constexpr float kDegreesPerCount = 0.022F * 3.0F;
 constexpr float kMaxPitch = 89.0F;
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
@@ -410,27 +413,29 @@ enum class SceneError : std::uint8_t {
 /// The scene of `content` for targets of `format`, its uploads recorded in `commands`; none when the
 /// GPU refused it, which is printed.
 [[nodiscard]] auto createScene(nx::rhi::Device& device, nx::rhi::CommandList& commands,
-                               const Content& content, nx::rhi::Format format) -> std::optional<Scene> {
+                               const Content& content, nx::rhi::Format format,
+                               const nx::render::GammaSettings& gamma) -> std::optional<Scene> {
     auto world = nx::render::BspWorld::create(device, commands,
                                               {.map = *content.map,
                                                .wads = content.wads,
                                                .shaderCode = content.worldShader,
                                                .colorFormat = format,
+                                               .gamma = gamma,
                                                .sky = content.sky});
     if (!world) {
         std::ignore = unusable(world.error());
         return std::nullopt;
     }
     auto sprites = nx::render::SpriteRenderer::create(
-        device, {.shaderCode = content.spriteShader, .colorFormat = format});
+        device, {.shaderCode = content.spriteShader, .colorFormat = format, .gamma = gamma});
     auto spriteModels = sprites ? content.sprites->load(*sprites, commands)
                                 : nx::Result<std::vector<nx::render::SpriteModel>, nx::render::SpriteError>{};
     if (!sprites || !spriteModels) {
         std::ignore = unusable(!sprites ? sprites.error() : spriteModels.error());
         return std::nullopt;
     }
-    const nx::render::StudioRendererDesc studioDesc{.shaderCode = content.studioShader,
-                                                    .colorFormat = format};
+    const nx::render::StudioRendererDesc studioDesc{
+        .shaderCode = content.studioShader, .colorFormat = format, .gamma = gamma};
     auto studio = nx::render::StudioRenderer::create(device, commands, studioDesc);
     auto viewModels = nx::render::StudioRenderer::create(device, commands, studioDesc);
     if (!studio || !viewModels) {
@@ -601,7 +606,8 @@ constexpr std::size_t kBlue = 2;
         return unusable(commands.error());
     }
     nx::rhi::CommandList& list = commands->get();
-    std::optional<Scene> scene = createScene(**device, list, content, nx::rhi::Format::Rgba8Unorm);
+    std::optional<Scene> scene =
+        createScene(**device, list, content, nx::rhi::Format::Rgba8Unorm, nx::render::GammaSettings{});
     if (!scene) {
         return kExitUnusable;
     }
@@ -728,6 +734,23 @@ struct Walker {
         .previousEye = eye};
 }
 
+/// The console's output: replies on the standard output, failures on the standard error.
+class PrintedOutput final : public nx::console::ConsoleOutput {
+public:
+    void print(std::string_view line) override { std::println("{}", line); }
+    void reportFailure(const nx::Failure<nx::console::ConsoleError>& failure) override {
+        std::println(stderr, "nxview: {}", nx::describe(failure));
+    }
+};
+
+/// The original's picture as the video cvars set it.
+[[nodiscard]] auto gammaOf(const nx::settings::VideoCvars& video) -> nx::render::GammaSettings {
+    return {.gamma = video.gamma.value(),
+            .brightness = video.brightness.value(),
+            .textureGamma = video.textureGamma.value(),
+            .lightGamma = video.lightGamma.value()};
+}
+
 /// The game of the map as nxview plays it, a tick of its clock each kCommandInterval: the player's
 /// body among its entities.
 struct LocalGame {
@@ -807,6 +830,20 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     if (!spawnGame(content, game)) {
         return kExitUnusable;
     }
+    // The player's settings, from the user's folder.
+    auto userFolder = nx::platform::userDirectory();
+    if (!userFolder) {
+        return unusable(userFolder.error());
+    }
+    PrintedOutput consoleOutput;
+    nx::settings::UserConfigFiles configFiles{*userFolder};
+    nx::console::Console console{consoleOutput, configFiles};
+    const auto cvars = nx::settings::registerClientCvars(console);
+    if (!cvars) {
+        return unusable(cvars.error());
+    }
+    nx::settings::runStartupFiles(console, configFiles);
+
     auto window = nx::platform::Window::create({.title = std::format("nxview: {}", options.map)});
     if (!window) {
         return unusable(window.error());
@@ -824,7 +861,10 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     if (!size) {
         return unusable(size.error());
     }
-    auto swapchain = (*device)->createSwapchain({.size = extentOf(*size)});
+    auto swapchain = (*device)->createSwapchain({.size = extentOf(*size),
+                                                 .presentMode = cvars->video.vsync.value()
+                                                                    ? nx::rhi::PresentMode::Fifo
+                                                                    : nx::rhi::PresentMode::Immediate});
     if (!swapchain) {
         return unusable(swapchain.error());
     }
@@ -849,8 +889,18 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     nx::platform::Stopwatch frameClock;
     nx::platform::Stopwatch mapClock;
     nx::platform::Stopwatch deployClock; ///< Since the player drew the knife.
+    nx::platform::Instant frameStart = nx::platform::MonotonicClock::now();
     bool isRunning = true;
     while (isRunning) {
+        // fps_max: the limiter waits before the input is read, so that the frame shows the latest
+        // (docs/05-rendering.md, section 12).
+        if (const float fpsMax = cvars->video.fpsMax.value(); fpsMax > 0.0F) {
+            sleepTimer->sleepUntil(frameStart +
+                                   std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(
+                                       nx::Seconds{1.0F / fpsMax}));
+        }
+        frameStart = nx::platform::MonotonicClock::now();
+        std::ignore = console.execute(); // what a `wait` left for this frame
         events.clear();
         window->pollEvents(events);
         for (const nx::platform::WindowEvent& event : events) {
@@ -872,10 +922,13 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
                 }
                 keys.set(key->key, key->isDown);
             } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
-                camera.angles.yaw =
-                    nx::normalizeAngle(camera.angles.yaw - nx::Degrees{moved->dx * kDegreesPerCount});
+                // The original's mouse: sensitivity times m_yaw degrees a count across, m_pitch down.
+                const float sensitivity = cvars->mouse.sensitivity.value();
+                camera.angles.yaw = nx::normalizeAngle(
+                    camera.angles.yaw - nx::Degrees{moved->dx * sensitivity * cvars->mouse.yaw.value()});
                 camera.angles.pitch = nx::Degrees{std::clamp(
-                    camera.angles.pitch.value() + (moved->dy * kDegreesPerCount), -kMaxPitch, kMaxPitch)};
+                    camera.angles.pitch.value() + (moved->dy * sensitivity * cvars->mouse.pitch.value()),
+                    -kMaxPitch, kMaxPitch)};
             } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
                 if (auto recreated = (*swapchain)->resize(extentOf(resized->size)); !recreated) {
                     return unusable(recreated.error());
@@ -910,7 +963,8 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
         }
         const nx::rhi::SwapchainImage& frame = **image;
         if (!scene) {
-            std::optional<Scene> created = createScene(**device, list, content, frame.format);
+            std::optional<Scene> created =
+                createScene(**device, list, content, frame.format, gammaOf(cvars->video));
             if (!created) {
                 return kExitUnusable;
             }
@@ -957,6 +1011,9 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     }
 
     (*device)->waitIdle();
+    if (auto saved = nx::settings::saveConfig(console, configFiles); !saved) {
+        std::println(stderr, "nxview: {}", nx::describe(saved.error()));
+    }
     const std::uint64_t validationErrors = (*device)->validationErrors();
     scene.reset();
     swapchain->reset(); // before its device

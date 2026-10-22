@@ -4,6 +4,7 @@
 module;
 
 #if defined(_WIN32)
+#include <shlobj.h>  // SHGetKnownFolderPath, from shell32
 #include <windows.h> // WIN32_LEAN_AND_MEAN and NOMINMAX come from engine/platform/CMakeLists.txt
 #else
 #include <cerrno>
@@ -20,6 +21,16 @@ import nx.core;
 namespace nx::platform {
 
 namespace {
+
+/// What writeFile appends to a file's name to write beside it first.
+constexpr std::string_view kPartialSuffix = ".partial";
+
+/// The folder of the user's own files, in the folder the system gives each user's settings.
+#if defined(_WIN32)
+constexpr std::string_view kUserFolder = "Modern-Client.v2";
+#else
+constexpr std::string_view kUserFolder = "modern-client.v2";
+#endif
 
 /// The most bytes one read or write asks the operating system for: below the limits of ReadFile and
 /// WriteFile (a DWORD) and of read and write on Linux (0x7ffff000 bytes).
@@ -130,6 +141,9 @@ template <FileBuffer Buffer>
         }
         offset += count;
     }
+    if (FlushFileBuffers(file.get()) == FALSE) {
+        return fail(FileError::WriteFailed, osFailureText(path, lastError()));
+    }
     return {};
 }
 
@@ -210,6 +224,9 @@ template <FileBuffer Buffer>
             return fail(FileError::WriteFailed, wroteNothingText(path));
         }
         offset += narrow<std::size_t>(count);
+    }
+    if (::fsync(file.get()) != 0) {
+        return fail(FileError::WriteFailed, osFailureText(path, lastError()));
     }
     return {};
 }
@@ -304,10 +321,49 @@ auto writeFile(const std::filesystem::path& path, std::span<const std::byte> byt
             return fail(FileError::NotAFile, toUtf8(path));
         }
     }
-    return writeRegularFile(path, bytes);
+    std::filesystem::path partial = path;
+    partial += kPartialSuffix;
+    std::error_code ignored; // a partial file left behind is replaced by the next write
+    if (auto written = writeRegularFile(partial, bytes); !written) {
+        std::filesystem::remove(partial, ignored);
+        return written;
+    }
+    std::filesystem::rename(partial, path, error);
+    if (error) {
+        std::filesystem::remove(partial, ignored);
+        return fail(classify(error, FileError::WriteFailed), osFailureText(path, error));
+    }
+    return {};
+}
+
+auto createDirectories(const std::filesystem::path& path) -> Result<void, FileError> {
+    std::error_code error;
+    std::filesystem::create_directories(path, error);
+    std::error_code ignored;
+    if (std::filesystem::is_directory(path, ignored)) {
+        return {};
+    }
+    if (!error || error == std::errc::file_exists || error == std::errc::not_a_directory) {
+        return fail(FileError::NotADirectory, toUtf8(path)); // a file where it, or one above it, goes
+    }
+    if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted) {
+        return fail(FileError::AccessDenied, osFailureText(path, error));
+    }
+    return fail(FileError::WriteFailed, osFailureText(path, error));
 }
 
 #if defined(_WIN32)
+
+auto userDirectory() -> Result<std::filesystem::path, FileError> {
+    PWSTR folder = nullptr;
+    const HRESULT found = SHGetKnownFolderPath(FOLDERID_RoamingAppData, KF_FLAG_DEFAULT, nullptr, &folder);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> owned{folder, &CoTaskMemFree};
+    if (FAILED(found)) {
+        return fail(FileError::NotFound, std::format("the user's roaming application data (error {:#x})",
+                                                     static_cast<std::uint32_t>(found)));
+    }
+    return std::filesystem::path{folder} / kUserFolder;
+}
 
 auto executablePath() -> Result<std::filesystem::path, FileError> {
     std::wstring path(MAX_PATH, L'\0');
@@ -329,6 +385,19 @@ auto executablePath() -> Result<std::filesystem::path, FileError> {
 }
 
 #else
+
+auto userDirectory() -> Result<std::filesystem::path, FileError> {
+    // XDG Base Directory: a relative $XDG_CONFIG_HOME is invalid and ignored.
+    if (const char* configuration = std::getenv("XDG_CONFIG_HOME");
+        configuration != nullptr && *configuration == '/') {
+        return fromUtf8(configuration) / kUserFolder;
+    }
+    const char* home = std::getenv("HOME");
+    if (home == nullptr || *home == '\0') {
+        return fail(FileError::NotFound, "the user's folders: neither XDG_CONFIG_HOME nor HOME is set");
+    }
+    return fromUtf8(home) / ".config" / kUserFolder;
+}
 
 auto executablePath() -> Result<std::filesystem::path, FileError> {
     const std::filesystem::path link{"/proc/self/exe"};
