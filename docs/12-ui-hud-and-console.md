@@ -46,7 +46,11 @@ layouts' `textAlignment` names them (`north-west` to `south-east`). The `TextEnt
 cursor by a character, Home and End to the ends, Backspace and Delete remove the character before
 or after it, and Enter submits the line to its owner; it draws its text and a cursor a pixel wide,
 scrolled left when the cursor would pass its right edge. Selection, the clipboard and the cursor's
-blinking come later. Which of a scheme's colours,
+blinking come later. `RichText` (`nx.ui:richText`) shows lines of text, each in its colour, the
+console's output: the newest at the bottom, each wrapped at its last space that fits its width
+(anywhere in a word wider than it), the oldest dropped past its capacity (1024 lines unless told
+otherwise), scrolled up from the newest by whole rows; scrolled up, it stays on the rows it shows
+as lines come. Which of a scheme's colours,
 borders and fonts each control takes, and where VGUI2 puts a label's text to the pixel, wait for
 reference shots of the original's windows.
 

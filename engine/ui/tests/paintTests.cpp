@@ -15,8 +15,7 @@ import nx.rhi.vulkan;
 import nx.render;
 import nx.ui;
 
-#include "offscreenTarget.hpp"
-#include "squareFont.hpp"
+#include "gpuScreen.hpp"
 
 namespace {
 
@@ -88,18 +87,8 @@ TEST(PanelPaintTest, ABackgroundThenTheVisibleChildrenWithinIt) {
     EXPECT_TRUE(isSameRect(*quads[1].clip, rect(6, 6, 18, 18))) << "the list within the dialog";
 }
 
-/// The square font at 16 pixels per em, a line of 20: 'A' and 'B' 10 pixels apart.
-[[nodiscard]] auto squareAtlas() -> nx::ui::GlyphAtlas {
-    auto font = nx::ui::Font::open(
-        std::make_shared<const std::vector<std::byte>>(nx::test::SquareFont::build()), {.cellHeight = 20});
-    EXPECT_TRUE(font.has_value());
-    auto atlas = nx::ui::GlyphAtlas::build(*font, U"AB");
-    EXPECT_TRUE(atlas.has_value());
-    return std::move(atlas).value();
-}
-
 TEST(LabelTest, ItsAlignmentPlacesItsText) {
-    const nx::ui::GlyphAtlas atlas = squareAtlas();
+    const nx::ui::GlyphAtlas atlas = nx::test::squareAtlas();
     Label label{"Title", {.wide = 40, .tall = 30}};
     label.setFace({.atlas = &atlas});
     label.setText("AB");
@@ -122,34 +111,20 @@ TEST(LabelTest, AlignmentsByTheirNamesInLayouts) {
 }
 
 TEST(LabelTest, DrawsItsTextOverItsBackground) {
-    auto device =
-        nx::rhi::vulkan::createDevice({.applicationName = "nxUiTests", .isValidationEnabled = true});
-    if (!device) {
+    const nx::test::GpuScreen screen;
+    if (!screen.isReady()) {
         GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
     }
-    const auto executable = nx::platform::executablePath();
-    ASSERT_TRUE(executable.has_value());
-    const auto shader = nx::platform::readFile(executable->parent_path() / "shaders" / "screen.spv");
-    ASSERT_TRUE(shader.has_value());
-    auto renderer = nx::render::ScreenRenderer::create(
-        **device, {.shaderCode = *shader, .colorFormat = nx::rhi::Format::Rgba8Unorm});
-    ASSERT_TRUE(renderer.has_value()) << nx::describe(renderer.error());
-    const nx::ui::GlyphAtlas atlas = squareAtlas();
-    auto image = nx::test::inFrameOfItsOwn(**device, [&](nx::rhi::CommandList& commands) {
-        return renderer->loadImage(commands, atlas.texels(), atlas.width(), atlas.height(), "label");
-    });
-    ASSERT_TRUE(image.has_value()) << nx::describe(image.error());
-
     Label label{"Title", {.x = 4, .y = 2, .wide = 12, .tall = 24}};
     label.setBackground(kGray);
-    label.setFace({.atlas = &atlas, .image = &*image});
+    label.setFace(screen.face());
     label.setText("AB");
     label.setColor({.red = 200});
     std::vector<ScreenQuad> quads;
     label.paintTree(PanelPainter{quads, kScreen});
     ASSERT_EQ(quads.size(), 3U) << "its background, then 'A' and 'B'";
     EXPECT_EQ(quads[0].image, nullptr);
-    EXPECT_EQ(quads[1].image, &*image);
+    EXPECT_EQ(quads[1].image, screen.image());
     EXPECT_EQ(quads[1].target.x, 4.0F);
     EXPECT_EQ(quads[1].target.y, 2.0F + 2.0F + 9.0F)
         << "the line 2 down, its baseline 17 below, the square 8 above it";

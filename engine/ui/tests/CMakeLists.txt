@@ -10,6 +10,7 @@ nxAddTest(nxUiTests
         textTests.cpp
         paintTests.cpp
         textEntryTests.cpp
+        richTextTests.cpp
     DEPENDS
         nx::ui
         nx::assets
