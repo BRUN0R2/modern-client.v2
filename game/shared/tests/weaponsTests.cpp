@@ -93,7 +93,7 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsAmmo) {
         std::int32_t boxPrice;
         std::uint32_t boxRounds;
     };
-    for (const Expected expected : {Expected{"9mm", 120, 20, 30}, Expected{"45ACP", 100, 25, 12},
+    for (const Expected& expected : {Expected{"9mm", 120, 20, 30}, Expected{"45ACP", 100, 25, 12},
                                     Expected{"556Nato", 90, 60, 30}, Expected{"762Nato", 90, 80, 30}}) {
         const AmmoType* const ammo = catalog->findAmmo(expected.id);
         ASSERT_NE(ammo, nullptr) << expected.id;
@@ -118,7 +118,7 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
         std::uint32_t clipSize;
         std::string_view playerAnimation;
     };
-    for (const Expected expected : {
+    for (const Expected& expected : {
              Expected{"knife", WeaponSlot::Knife, 1, 0, 250.0F, std::nullopt, 0, "", 0, "knife"},
              Expected{"glock18", WeaponSlot::Secondary, 2, 5, 250.0F, Buyers::Everyone, 400, "9mm", 20,
                       "onehanded"},
