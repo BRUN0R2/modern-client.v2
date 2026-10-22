@@ -9,6 +9,7 @@ export module nx.settings:files;
 import std;
 import nx.core;
 import nx.console;
+import :binds;
 
 export namespace nx::settings {
 
@@ -45,10 +46,11 @@ private:
 /// be read, or a command of one that fails, goes to the console's output.
 void runStartupFiles(console::Console& console, UserConfigFiles& files);
 
-/// Writes config.cfg in the folder of `files`, making the folder when it is missing: a line that
-/// says what the file is, then the archived cvars of `console` (Console::archivedCvars). The file
-/// holds the old settings or the new ones, never a part. Errors: SaveFailed.
-[[nodiscard]] auto saveConfig(const console::Console& console, const UserConfigFiles& files)
-    -> Result<void, SettingsError>;
+/// Writes config.cfg in the folder of `files`, making the folder when it is missing: lines that say
+/// what the file is, then `bindings` (KeyBindings::configText), then the archived cvars of `console`
+/// (Console::archivedCvars), in the original's order. The file holds the old settings or the new
+/// ones, never a part. Errors: SaveFailed.
+[[nodiscard]] auto saveConfig(const console::Console& console, const KeyBindings& bindings,
+                              const UserConfigFiles& files) -> Result<void, SettingsError>;
 
 } // namespace nx::settings

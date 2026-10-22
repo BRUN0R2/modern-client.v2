@@ -6,9 +6,13 @@ nxAddModuleLibrary(nxSettings
     LAYER 3
     MODULES
         src/nx.settings.cppm
+        src/keys.cppm
+        src/binds.cppm
         src/files.cppm
         src/clientCvars.cppm
     SOURCES
+        src/keys.cpp
+        src/binds.cpp
         src/files.cpp
         src/clientCvars.cpp
     DEPENDS

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // nxview: the map viewer (TODO.md, M2). It opens a map of the Counter-Strike 1.6 installation and
-// walks a player through its world, moved by the game's own movement, a knife in hand, or flies a
-// free camera through it; or it renders one frame of it to a BMP file.
+// walks a player through its world, a knife in hand, moved by the game's own movement as the
+// player's binds ask, in noclip too; or it renders one frame of it to a BMP file.
 
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +22,7 @@ import nx.ecs;
 import nx.collision;
 import nx.game;
 import cs.shared;
+import cs.client;
 import tool.nxview;
 
 namespace {
@@ -31,12 +32,13 @@ constexpr std::string_view kUsage = R"(usage: nxview [--map <name>] [--install <
               [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
               [--screenshot <file.bmp> [--time <seconds>]] [--validation]
 
-Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife:
-the mouse looks, W A S D move, Space jumps, Ctrl ducks, Shift walks slowly, E uses what is in front
-(a button). F flies instead, and back: W A S D move, Space and Ctrl rise and sink, Shift is faster.
-Escape ends it. It runs the player's config.cfg, userconfig.cfg and autoexec.cfg from the user's
-folder of Modern-Client.v2 as it starts (sensitivity, m_yaw, m_pitch, fps_max, gl_vsync, gamma,
-brightness, texgamma, lightgamma), and writes config.cfg there as it ends.
+Opens a map of the Counter-Strike 1.6 installation and walks through it as a player with a knife.
+The mouse looks, and the keys do what the player's binds say: Counter-Strike's at first (W A S D
+move, Space jumps, Ctrl ducks, Shift walks, E uses what is in front, the arrows turn), and V runs
+noclip, which flies through everything (' and / rise and sink) and back. Escape ends it. It runs
+the player's config.cfg, userconfig.cfg and autoexec.cfg from the user's folder of
+Modern-Client.v2 as it starts (binds, sensitivity, m_yaw, m_pitch, fps_max, gl_vsync, gamma,
+brightness, texgamma, lightgamma, cl_forwardspeed...), and writes config.cfg there as it ends.
 
   --map <name>            the map of maps/<name>.bsp (default: de_dust2)
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
@@ -59,21 +61,14 @@ constexpr std::string_view kDefaultMap = "de_dust2";
 constexpr nx::rhi::Extent2d kScreenshotExtent{.width = 1280, .height = 720};
 /// What no face covers: the void outside a map, seen through its leaks.
 constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
-/// The flying camera's speed in map units per second, and how much faster it goes with Shift.
-constexpr float kSpeed = 320.0F;
-constexpr float kFastFactor = 3.0F;
-/// The speed a movement key asks for, CS 1.6's cl_forwardspeed, cl_backspeed and cl_sidespeed; and
-/// the share of it Shift walks at, its cl_movespeedkey.
-constexpr float kKeySpeed = 400.0F;
-constexpr float kWalkFactor = 0.52F;
 /// The speed limit of a player holding a knife.
 constexpr nx::UnitsPerSecond kKnifeSpeed{250.0F};
 /// A user command each this long, the classic rate of 100 a second (docs/07, section 2.2); a frame
 /// catches up on this much time at most, so that a stalled one does not run away.
 constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
-/// Degrees per mouse count: the original's m_yaw and m_pitch, 0.022, at its default sensitivity, 3.
-constexpr float kMaxPitch = 89.0F;
+/// The key nxview binds `noclip` to, which Counter-Strike leaves free.
+constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
 
@@ -659,64 +654,6 @@ constexpr std::size_t kBlue = 2;
     return (*device)->validationErrors() == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-/// The keys a player walks with and the camera flies with.
-struct HeldKeys {
-    bool forward = false;
-    bool back = false;
-    bool left = false;
-    bool right = false;
-    bool space = false;   ///< Jumps; rises in flight.
-    bool control = false; ///< Ducks; sinks in flight.
-    bool shift = false;   ///< Walks slowly; flies faster.
-
-    void set(nx::platform::Key key, bool isDown) noexcept {
-        using nx::platform::Key;
-        switch (key) {
-        case Key::W:
-            forward = isDown;
-            break;
-        case Key::S:
-            back = isDown;
-            break;
-        case Key::A:
-            left = isDown;
-            break;
-        case Key::D:
-            right = isDown;
-            break;
-        case Key::Space:
-            space = isDown;
-            break;
-        case Key::LeftControl:
-            control = isDown;
-            break;
-        case Key::LeftShift:
-            shift = isDown;
-            break;
-        default:
-            break;
-        }
-    }
-};
-
-/// 1 when only the positive key of an axis is held, -1 when only the negative one is, else 0.
-[[nodiscard]] constexpr auto axisOf(bool positive, bool negative) noexcept -> float {
-    return (positive ? 1.0F : 0.0F) - (negative ? 1.0F : 0.0F);
-}
-
-/// Moves `camera` by what the held keys ask for over `seconds`.
-void fly(nx::render::Camera& camera, const HeldKeys& keys, float seconds) noexcept {
-    const nx::AngleVectors axes = nx::angleVectors(camera.angles);
-    const nx::Vec3 direction = (axes.forward * axisOf(keys.forward, keys.back)) +
-                               (axes.right * axisOf(keys.right, keys.left)) +
-                               (nx::Vec3{.z = 1.0F} * axisOf(keys.space, keys.control));
-    if (nx::lengthSquared(direction) == 0.0F) {
-        return;
-    }
-    camera.position = camera.position +
-                      (nx::normalized(direction) * (kSpeed * (keys.shift ? kFastFactor : 1.0F) * seconds));
-}
-
 /// A player walking through the map, moved one user command at a time by the game's movement.
 struct Walker {
     cs::MovementState player{};
@@ -755,75 +692,50 @@ public:
 /// body among its entities.
 struct LocalGame {
     nx::ecs::Entity body{};
-    nx::Seconds pending{}; ///< Of the time given to the game, what no tick has taken yet.
-    bool isUsing = false;  ///< The use key went down since the last tick.
+    nx::Seconds pending{};               ///< Of the time given to the game, what no tick has taken yet.
+    nx::Flags<cs::Button> lastButtons{}; ///< Of the last command: the use button acts as it goes down.
 };
 
-/// The command of what `keys` and `view` ask for.
-[[nodiscard]] auto commandOf(const HeldKeys& keys, nx::EulerAngles view) -> cs::UserCommand {
-    const float speed = kKeySpeed * (keys.shift ? kWalkFactor : 1.0F);
-    nx::Flags<cs::Button> buttons;
-    for (const auto& [isHeld, button] :
-         {std::pair{keys.space, cs::Button::Jump}, std::pair{keys.control, cs::Button::Duck},
-          std::pair{keys.forward, cs::Button::Forward}, std::pair{keys.back, cs::Button::Back},
-          std::pair{keys.left, cs::Button::MoveLeft}, std::pair{keys.right, cs::Button::MoveRight}}) {
-        if (isHeld) {
-            buttons.set(button);
-        }
-    }
-    return cs::UserCommand{.duration = kCommandInterval,
-                           .viewAngles = view,
-                           .move = {.forward = nx::UnitsPerSecond{speed * axisOf(keys.forward, keys.back)},
-                                    .side = nx::UnitsPerSecond{speed * axisOf(keys.right, keys.left)}},
-                           .buttons = buttons};
-}
-
-/// Gives `elapsed` to the game, tick by tick: the command of `keys` and `view` moves `walker`, when
-/// one walks, among the entities of `game` and the world of `hulls`, and the doors it meets and the
-/// triggers it is in are touched; then what is due acts, and the pushers move, pushing the player's
-/// body. Returns the player's eye, between where the last two ticks left it by the time left; none
-/// without a walker.
-auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHulls& hulls, Walker* walker,
-          const HeldKeys& keys, nx::EulerAngles view, nx::Seconds elapsed) -> std::optional<nx::Vec3> {
+/// Gives `elapsed` to the game, tick by tick: the next command of `input`, looking along `view`,
+/// moves `walker` among the entities of `game` and the world of `hulls`, and the doors it meets and
+/// the triggers it is in are touched; then what is due acts, and the pushers move, pushing the
+/// player's body. Returns the player's eye, between where the last two ticks left it by the time
+/// left.
+auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHulls& hulls, Walker& walker,
+          cs::PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
     local.pending = std::min(local.pending + elapsed, kMaxCatchUp);
     while (local.pending >= kCommandInterval) {
-        if (walker != nullptr) {
-            walker->previousEye = eyeOf(walker->player);
-            if (local.isUsing) {
-                // Before the command moves the player, as the original's PreThink uses.
-                std::ignore = nx::game::playerUse(
-                    game, hulls, local.body,
-                    {.eye = walker->previousEye, .forward = nx::angleVectors(view).forward});
-                local.isUsing = false;
-            }
-            const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
-            const cs::MovementResult moved = cs::simulateMovement(walker->player, commandOf(keys, view),
-                                                                  cs::MovementSettings{}, hulls, entities);
-            walker->player = moved.state;
-            nx::game::touchBrushEntities(game, hulls, moved.touchedModels, local.body);
-            game.get<nx::game::Transform>(local.body)->origin = walker->player.origin;
-            *game.get<nx::game::Body>(local.body) = cs::bodyOf(walker->player);
-            nx::game::touchTriggers(game, hulls, local.body);
+        const cs::UserCommand command = input.nextCommand(view, kCommandInterval, walker.player.maxSpeed);
+        walker.previousEye = eyeOf(walker.player);
+        if (command.buttons.test(cs::Button::Use) && !local.lastButtons.test(cs::Button::Use)) {
+            // Before the command moves the player, as the original's PreThink uses.
+            std::ignore =
+                nx::game::playerUse(game, hulls, local.body,
+                                    {.eye = walker.previousEye, .forward = nx::angleVectors(view).forward});
         }
+        local.lastButtons = command.buttons;
+        const std::vector<cs::BrushEntity> entities = cs::brushEntitiesOf(game);
+        const cs::MovementResult moved =
+            cs::simulateMovement(walker.player, command, cs::MovementSettings{}, hulls, entities);
+        walker.player = moved.state;
+        nx::game::touchBrushEntities(game, hulls, moved.touchedModels, local.body);
+        game.get<nx::game::Transform>(local.body)->origin = walker.player.origin;
+        *game.get<nx::game::Body>(local.body) = cs::bodyOf(walker.player);
+        nx::game::touchTriggers(game, hulls, local.body);
         nx::game::runThinks(game, hulls);
         nx::game::runPushers(game, hulls);
-        if (walker != nullptr) {
-            walker->player.origin = game.get<nx::game::Transform>(local.body)->origin;
-        }
+        walker.player.origin = game.get<nx::game::Transform>(local.body)->origin;
         nx::game::advanceTick(game);
         local.pending -= kCommandInterval;
     }
-    if (walker == nullptr) {
-        return std::nullopt;
-    }
-    return nx::lerp(walker->previousEye, eyeOf(walker->player), local.pending / kCommandInterval);
+    return nx::lerp(walker.previousEye, eyeOf(walker.player), local.pending / kCommandInterval);
 }
 
 [[nodiscard]] auto extentOf(nx::platform::PixelSize size) noexcept -> nx::rhi::Extent2d {
     return {.width = size.width, .height = size.height};
 }
 
-/// Walks or flies through the map in a window until it is closed.
+/// Walks through the map in a window, in noclip too, until it is closed.
 [[nodiscard]] auto view(const Options& options, const Content& content) -> int {
     const nx::collision::BrushHulls& hulls = *content.hulls;
     nx::ecs::World game;
@@ -841,6 +753,16 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     const auto cvars = nx::settings::registerClientCvars(console);
     if (!cvars) {
         return unusable(cvars.error());
+    }
+    auto input = cs::PlayerInput::registerIn(console);
+    if (!input) {
+        return unusable(input.error());
+    }
+    // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
+    nx::settings::KeyBindings bindings = nx::settings::defaultBindings();
+    bindings.bind(nx::settings::keyNamed(kNoclipKey).value(), "noclip");
+    if (auto registered = nx::settings::registerBindCommands(console, bindings); !registered) {
+        return unusable(registered.error());
     }
     nx::settings::runStartupFiles(console, configFiles);
 
@@ -873,18 +795,29 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
         return unusable(sleepTimer.error());
     }
     if (auto captured = window->setMouseMode(nx::platform::MouseMode::Relative); !captured) {
-        std::println(stderr, "nxview: {}", nx::describe(captured.error())); // the keys still fly
+        std::println(stderr, "nxview: {}", nx::describe(captured.error())); // the keys still move
     }
 
     nx::render::Camera camera = startCamera(options, *content.map);
     Walker walker = walkerAt(camera.position);
     LocalGame local{
         .body = game.spawn(nx::game::Transform{.origin = walker.player.origin}, cs::bodyOf(walker.player))};
-    bool isFlying = false;
+    // The original's cheat: the player flies through everything, and back.
+    if (auto registered = console.registerCommand(
+            {.name = "noclip", .description = "Flies through everything, or walks again."},
+            [&walker](nx::console::Console& self, const nx::console::CommandLine&) {
+                const bool isFlying = walker.player.moveType == cs::MoveType::Walk;
+                walker.player.moveType = isFlying ? cs::MoveType::Noclip : cs::MoveType::Walk;
+                self.print(isFlying ? "noclip ON" : "noclip OFF");
+                return nx::Result<void, nx::console::ConsoleError>{};
+            });
+        !registered) {
+        return unusable(registered.error());
+    }
+    nx::settings::BoundInput keys{console, bindings};
     std::optional<Scene> scene; // made with the first image, which gives the format
     std::optional<nx::rhi::OwnedTexture> depth;
     nx::rhi::Extent2d depthExtent;
-    HeldKeys keys;
     std::vector<nx::platform::WindowEvent> events;
     nx::platform::Stopwatch frameClock;
     nx::platform::Stopwatch mapClock;
@@ -900,27 +833,13 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
                                        nx::Seconds{1.0F / fpsMax}));
         }
         frameStart = nx::platform::MonotonicClock::now();
-        std::ignore = console.execute(); // what a `wait` left for this frame
         events.clear();
         window->pollEvents(events);
         for (const nx::platform::WindowEvent& event : events) {
-            if (std::holds_alternative<nx::platform::CloseRequested>(event)) {
-                isRunning = false;
-            } else if (const auto* key = std::get_if<nx::platform::KeyChanged>(&event)) {
-                if (key->key == nx::platform::Key::Escape && key->isDown) {
-                    isRunning = false;
-                }
-                if (key->key == nx::platform::Key::E && key->isDown && !key->isRepeat) {
-                    local.isUsing = true;
-                }
-                if (key->key == nx::platform::Key::F && key->isDown && !key->isRepeat) {
-                    isFlying = !isFlying;
-                    if (!isFlying) {
-                        walker = walkerAt(camera.position);  // the player lands where the camera flew
-                        std::ignore = deployClock.restart(); // and draws the knife again
-                    }
-                }
-                keys.set(key->key, key->isDown);
+            const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
+            if (std::holds_alternative<nx::platform::CloseRequested>(event) ||
+                (key != nullptr && key->key == nx::platform::Key::Escape && key->isDown)) {
+                isRunning = false; // Escape ends nxview, whatever is bound to it
             } else if (const auto* moved = std::get_if<nx::platform::MouseMoved>(&event)) {
                 // The original's mouse: sensitivity times m_yaw degrees a count across, m_pitch down.
                 const float sensitivity = cvars->mouse.sensitivity.value();
@@ -928,22 +847,20 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
                     camera.angles.yaw - nx::Degrees{moved->dx * sensitivity * cvars->mouse.yaw.value()});
                 camera.angles.pitch = nx::Degrees{std::clamp(
                     camera.angles.pitch.value() + (moved->dy * sensitivity * cvars->mouse.pitch.value()),
-                    -kMaxPitch, kMaxPitch)};
+                    -cs::kMaxPitch.value(), cs::kMaxPitch.value())};
             } else if (const auto* resized = std::get_if<nx::platform::Resized>(&event)) {
                 if (auto recreated = (*swapchain)->resize(extentOf(resized->size)); !recreated) {
                     return unusable(recreated.error());
                 }
+            } else {
+                keys.handle(event);
             }
         }
+        // What the keys queued, and what a `wait` left, before the frame's commands are made.
+        std::ignore = console.execute();
         const nx::Seconds elapsed = frameClock.restart();
-        if (isFlying) {
-            fly(camera, keys, elapsed.count());
-            // No walker, no eye: the game runs on while the camera flies.
-            std::ignore = play(game, local, hulls, nullptr, keys, camera.angles, elapsed);
-        } else {
-            camera.position =
-                play(game, local, hulls, &walker, keys, camera.angles, elapsed).value_or(camera.position);
-        }
+        input->turn(camera.angles, elapsed);
+        camera.position = play(game, local, hulls, walker, *input, camera.angles, elapsed);
 
         auto commands = (*device)->beginFrame();
         if (!commands) {
@@ -992,14 +909,12 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
         const float aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height);
         const nx::Seconds time{mapClock.elapsed()};
         const std::vector<nx::render::ModelPlacement> placements = placementsOf(game);
-        const std::optional<nx::Seconds> sinceDeploy =
-            isFlying ? std::nullopt : std::optional{nx::Seconds{deployClock.elapsed()}};
         if (auto drawn = drawScene(list, *scene, content,
                                    {.camera = camera,
                                     .aspect = aspect,
                                     .time = time,
                                     .placements = placements,
-                                    .sinceDeploy = sinceDeploy});
+                                    .sinceDeploy = nx::Seconds{deployClock.elapsed()}});
             !drawn) {
             return unusable(drawn.error());
         }
@@ -1011,7 +926,7 @@ auto play(nx::ecs::World& game, LocalGame& local, const nx::collision::BrushHull
     }
 
     (*device)->waitIdle();
-    if (auto saved = nx::settings::saveConfig(console, configFiles); !saved) {
+    if (auto saved = nx::settings::saveConfig(console, bindings, configFiles); !saved) {
         std::println(stderr, "nxview: {}", nx::describe(saved.error()));
     }
     const std::uint64_t validationErrors = (*device)->validationErrors();

@@ -195,6 +195,11 @@ public:
         categorizePosition();
         const BrushEntity* const ladder = ladderTouched();
         duck();
+        if (m_player.moveType == MoveType::Noclip) {
+            // Parity: a ladder does not hold a player in noclip, nor water, nor gravity
+            noclip();
+            return result();
+        }
         if (ladder != nullptr && climb(*ladder)) {
             // Parity: no gravity on a ladder, and jump leaves it rather than jumping
             checkWater();
@@ -707,6 +712,19 @@ private:
         m_player.velocity = addScaled(m_player.velocity, gain, direction);
     }
 
+    /// Noclip: through everything, along the view at the speeds the command asks and up at its up
+    /// speed. No velocity is left, so that gravity gathers none.
+    void noclip() {
+        Vec3 forward = m_axes.forward;
+        Vec3 right = m_axes.right;
+        normalize(forward);
+        normalize(right);
+        Vec3 wish = (forward * m_command.move.forward.value()) + (right * m_command.move.side.value());
+        wish.z += m_command.move.up.value();
+        m_player.origin = m_player.origin + (wish * m_frameTime);
+        m_player.velocity = Vec3{};
+    }
+
     /// On the ground: the jump penalty, acceleration, then the move, up a stair when that goes farther.
     void walk() {
         if (m_player.jumpPenalty > nx::Milliseconds{}) {
@@ -993,7 +1011,8 @@ auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
 auto bodyOf(const MovementState& state) -> nx::game::Body {
     return nx::game::Body{.hull = state.isDucked ? Hull::Ducked : Hull::Standing,
                           .box = state.isDucked ? kDuckedBox : kStandingBox,
-                          .groundModel = state.isOnGround ? state.groundModel : std::nullopt};
+                          .groundModel = state.isOnGround ? state.groundModel : std::nullopt,
+                          .isPushed = state.moveType == MoveType::Walk};
 }
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,

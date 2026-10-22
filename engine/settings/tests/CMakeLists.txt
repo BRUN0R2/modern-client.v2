@@ -3,6 +3,8 @@
 
 nxAddTest(nxSettingsTests
     SOURCES
+        keysTests.cpp
+        bindsTests.cpp
         filesTests.cpp
         clientCvarsTests.cpp
     DEPENDS

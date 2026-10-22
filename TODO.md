@@ -192,7 +192,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `cvarlist`, `cmdlist` and `find` commands ([09 §8](docs/09-dedicated-server.md#8-server-console-commands))
 - [x] Log levels per cvar (`log_level_<category>`, [02 §10](docs/02-coding-standards.md#10-logging))
 - [x] The player's settings (`nx.settings`): the user's folder (`nx::platform::userDirectory`), `config.cfg`, `userconfig.cfg` and `autoexec.cfg` run at startup and `config.cfg` written at exit, whole or not at all; the mouse's and the video's cvars with the original's names and values, read by `nxview`
-- [ ] Binds (`bind`, `unbind`, `unbindall`, the original's key names) written to `config.cfg`
+- [x] Binds (`nx.settings`): `bind`, `unbind`, `unbindall` and `bindlist` by the original's key names and numbers, Counter-Strike 1.6's binds, written to `config.cfg`, and the keys, mouse buttons and wheel running them as the original does; the player's `+` buttons making the user command (`cs.client`: `CL_CreateMove`'s shares and speeds, `CL_AdjustAngles`'s turning), read by `nxview`
+- [ ] `in_keymap`: binds by the layout's characters; `+attack`, `+reload` and the other buttons with what reads them
 - [x] Determinism test with 0, 1, 3 and 15 workers (`nxIntegrationTests`: `nx.math` in parallel ECS systems, world *hash* every tick)
 
 ---
@@ -288,7 +289,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
 - [ ] Traces against animated hitboxes
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
-- [ ] pmove: noclip, observers and unsticking
+- [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `nxview`
+- [ ] pmove: observers and unsticking
 - [ ] pmove among entities: boxes (players, hostages, pushables), base velocity (conveyors, `trigger_push`, water currents)
 - [x] Brush entities made by the game when the map starts (`nx.game`, by the classes of `data/cstrike/entities.toml`), listed for movement by `cs::brushEntitiesOf`
 - [ ] Parity: ground acceleration and friction (including `edgefriction`)
@@ -439,7 +441,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] MOTD with restricted HTML
 - [ ] Main menu, options and server browser
 - [ ] Complete console (history, autocomplete, suggestions)
-- [ ] Binds with the original key names
+- [x] Binds with the original key names (`nx.settings`, above)
 - [ ] Localization with typed keys
 - [ ] Spectator (free, chase, first person, overview) and `mp_forcecamera`
 

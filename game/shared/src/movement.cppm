@@ -9,8 +9,8 @@
 ///
 /// Today: walking, the air, jumping and its penalties, ducking, stairs, sliding along walls and
 /// floors, water, and ladders, among the world and the brush entities where the game puts and turns
-/// them. Noclip, observers, unsticking, boxes (players, hostages), conveyors and currents come next
-/// (TODO.md).
+/// them; and noclip. Observers, unsticking, boxes (players, hostages), conveyors and currents come
+/// next (TODO.md).
 export module cs.shared:movement;
 
 import std;
@@ -22,7 +22,7 @@ import nx.game;
 
 export namespace cs {
 
-/// The buttons of a user command that movement reads.
+/// The buttons of a user command, those movement reads and those the game does.
 enum class Button : std::uint8_t {
     Jump,
     Duck,
@@ -30,6 +30,7 @@ enum class Button : std::uint8_t {
     Back,
     MoveLeft,
     MoveRight,
+    Use, ///< The game reads it: pressed, the player uses what it looks at.
     Count,
 };
 
@@ -85,8 +86,15 @@ inline constexpr nx::Aabb kDuckedBox{.min = {.x = -16.0F, .y = -16.0F, .z = -18.
 inline constexpr nx::HammerUnits kStandingViewHeight{17.0F};
 inline constexpr nx::HammerUnits kDuckedViewHeight{12.0F};
 
+/// How a player moves, the original's movetype that the game sets.
+enum class MoveType : std::uint8_t {
+    Walk,   ///< Under gravity, among the world and the brush entities.
+    Noclip, ///< Through everything, at the speeds its command asks, without gravity (the `noclip` cheat).
+};
+
 /// A player between commands: what one command reads and leaves for the next.
 struct MovementState {
+    MoveType moveType = MoveType::Walk;
     nx::Vec3 origin{}; ///< The center of its box, the standing or the ducked one.
     nx::Vec3 velocity{};
     /// Its eyes above its origin: they go down while it ducks.

@@ -34,21 +34,24 @@ public:
     std::vector<nx::console::ConsoleError> failures;
 };
 
-/// A console reading the files of `directory`, with an archived cvar `order` and a cvar `kept`
-/// config.cfg does not save.
+/// A console reading the files of `directory`, with an archived cvar `order`, a cvar `kept`
+/// config.cfg does not save, and Counter-Strike's binds.
 class Profile {
 public:
     explicit Profile(const std::filesystem::path& directory)
         : files{directory}, console{output, files},
           order{console.registerCvar(CvarDesc<std::int32_t>{.name = "order", .flags = {CvarFlag::Archive}})
                     .value()},
-          kept{console.registerCvar(CvarDesc<std::int32_t>{.name = "kept"}).value()} {}
+          kept{console.registerCvar(CvarDesc<std::int32_t>{.name = "kept"}).value()} {
+        nx::invariant(nx::settings::registerBindCommands(console, bindings).has_value(), "the bind commands");
+    }
 
     RecordingOutput output;
     UserConfigFiles files;
     Console console;
     nx::console::Cvar<std::int32_t> order;
     nx::console::Cvar<std::int32_t> kept;
+    nx::settings::KeyBindings bindings = nx::settings::defaultBindings();
 };
 
 TEST(UserConfigFilesTest, ReadsOnlyCfgFilesInsideItsFolder) {
@@ -91,20 +94,25 @@ TEST(SettingsFilesTest, TheStartupFilesRunInOrderThoseMissingSkipped) {
     EXPECT_EQ(setup.kept.value(), 2);
 }
 
-TEST(SettingsFilesTest, ConfigCfgKeepsTheArchivedCvarsForTheNextStart) {
+TEST(SettingsFilesTest, ConfigCfgKeepsTheSettingsForTheNextStart) {
     const nx::test::TemporaryDirectory folder;
     const std::filesystem::path profile = folder.path() / "Modern-Client.v2";
+    const nx::console::KeyId up = nx::settings::keyNamed("UPARROW").value();
+    const nx::console::KeyId v = nx::settings::keyNamed("v").value();
     {
         Profile setup{profile};
         ASSERT_TRUE(setup.order.set(7).has_value());
         ASSERT_TRUE(setup.kept.set(7).has_value());
-        const auto saved = nx::settings::saveConfig(setup.console, setup.files);
+        setup.bindings.bind(up, {});
+        setup.bindings.bind(v, "+jump");
+        const auto saved = nx::settings::saveConfig(setup.console, setup.bindings, setup.files);
         ASSERT_TRUE(saved.has_value()) << nx::describe(saved.error());
     }
     const auto text = nx::platform::readTextFile(profile / "config.cfg");
     ASSERT_TRUE(text.has_value()) << "the folder made";
     EXPECT_TRUE(text->starts_with("//"));
-    EXPECT_NE(text->find("order \"7\""), std::string::npos);
+    EXPECT_LT(text->find("unbindall\n"), text->find("bind \"v\" \"+jump\"\n")) << "the binds first";
+    EXPECT_LT(text->find("bind \"v\" \"+jump\"\n"), text->find("order \"7\"\n")) << "then the cvars";
     EXPECT_EQ(text->find("kept"), std::string::npos) << "not archived";
     EXPECT_FALSE(std::filesystem::exists(profile / "config.cfg.partial"));
 
@@ -112,6 +120,9 @@ TEST(SettingsFilesTest, ConfigCfgKeepsTheArchivedCvarsForTheNextStart) {
     nx::settings::runStartupFiles(next.console, next.files);
     EXPECT_EQ(next.order.value(), 7);
     EXPECT_EQ(next.kept.value(), 0);
+    EXPECT_EQ(next.bindings.commandOf(v), "+jump");
+    EXPECT_EQ(next.bindings.commandOf(up), "") << "unbound, though Counter-Strike binds it";
+    EXPECT_TRUE(next.output.failures.empty());
 }
 
 } // namespace

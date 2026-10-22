@@ -43,11 +43,14 @@ struct Moved {
     Vec3 from{};
 };
 
-/// The bodies of `world`.
+/// The bodies of `world` that pushers push.
 [[nodiscard]] auto bodiesOf(ecs::World& world) -> std::vector<ecs::Entity> {
     std::vector<ecs::Entity> bodies;
-    ecs::Query<ecs::Entity, const Body&>{world}.forEach(
-        [&bodies](ecs::Entity body, const Body&) { bodies.push_back(body); });
+    ecs::Query<ecs::Entity, const Body&>{world}.forEach([&bodies](ecs::Entity entity, const Body& body) {
+        if (body.isPushed) {
+            bodies.push_back(entity);
+        }
+    });
     return bodies;
 }
 

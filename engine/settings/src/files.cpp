@@ -65,12 +65,13 @@ void runStartupFiles(console::Console& console, UserConfigFiles& files) {
     std::ignore = console.execute();
 }
 
-auto saveConfig(const console::Console& console, const UserConfigFiles& files)
+auto saveConfig(const console::Console& console, const KeyBindings& bindings, const UserConfigFiles& files)
     -> Result<void, SettingsError> {
     if (auto made = platform::createDirectories(files.directory()); !made) {
         return fail(SettingsError::SaveFailed, platform::toUtf8(files.directory()), std::move(made.error()));
     }
-    const std::string text = std::format("{}\n{}", kConfigHeader, console.archivedCvars());
+    const std::string text =
+        std::format("{}\n{}{}", kConfigHeader, bindings.configText(), console.archivedCvars());
     const std::filesystem::path path = files.directory() / kConfigFile;
     if (auto written = platform::writeFile(path, std::as_bytes(std::span{text})); !written) {
         return fail(SettingsError::SaveFailed, platform::toUtf8(path), std::move(written.error()));

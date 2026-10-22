@@ -3,3 +3,4 @@
 
 # Counter-Strike's modules, over the engine's (docs/01-architecture.md, section 1.1).
 add_subdirectory(shared)
+add_subdirectory(client)
