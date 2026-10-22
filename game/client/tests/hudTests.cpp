@@ -4,7 +4,8 @@
 // The HUD: its pictures among hud.txt's entries, the numbers it shows of the player as the game makes
 // them, and where it draws them, as the original draws them at 640x480, 1280x720 and 1920x1080
 // (docs/12-ui-hud-and-console.md, section 3.2); numbers of any size, none cut short (section 3.4);
-// and the crosshair, its cvars and where it is, as the original draws it from 640x480 to 1920x1080.
+// and the crosshair, its cvars and where it is, as the original draws it from 640x480 to 1920x1080;
+// the ammo of the weapon in hand, as the original draws a Glock's.
 
 #include <gtest/gtest.h>
 
@@ -247,6 +248,86 @@ void expectRect(const nx::render::ScreenRect& line, const nx::render::ScreenRect
     EXPECT_EQ(line.y, wanted.y) << which;
     EXPECT_EQ(line.width, wanted.width) << which;
     EXPECT_EQ(line.height, wanted.height) << which;
+}
+
+TEST(AmmoHudTest, TheAmmoPictureIsTheWeaponListsEntryForScreens640Wide) {
+    const auto entries = nx::assets::parseSpriteList(R"(3
+ammo    320 640hud7 48 72 24 24
+weapon  640 640hud1 0  45 170 45
+ammo    640 640hud7 48 72 24 24
+)");
+    ASSERT_TRUE(entries.has_value());
+    const auto picture = cs::ammoPictureOf(*entries);
+    ASSERT_TRUE(picture.has_value()) << nx::describe(picture.error());
+    EXPECT_EQ(picture->resolution, 640U);
+    EXPECT_EQ(picture->rect, (nx::assets::SpriteRect{.x = 48, .y = 72, .width = 24, .height = 24}));
+
+    const auto without = cs::ammoPictureOf(std::span{*entries}.first(2));
+    ASSERT_FALSE(without.has_value());
+    EXPECT_EQ(without.error().code, cs::HudError::PictureMissing);
+}
+
+TEST(AmmoHudTest, AGlocksAmmoIsWhereTheOriginalDrawsIt) {
+    // Measured at 1280x720 (docs/12 section 3.2): the 9mm picture at W - 42, H - 40; "40" ending at it,
+    // 37 from the bottom; the bar, 2 by 25, at W - 114; "20" ending ten before it.
+    const cs::AmmoLayout layout =
+        cs::layoutAmmo({.clip = 20, .reserve = 40}, sheet(), {.width = 1280, .height = 720});
+    EXPECT_EQ(layout.pictureX, 1238);
+    EXPECT_EQ(layout.pictureY, 680);
+    const std::vector<HudMark> expected{digit('2', 1116, 683), digit('0', 1136, 683), digit('4', 1198, 683),
+                                        digit('0', 1218, 683)};
+    EXPECT_EQ(layout.digits, expected);
+    EXPECT_EQ(layout.bar.x, 1166.0F);
+    EXPECT_EQ(layout.bar.y, 683.0F);
+    EXPECT_EQ(layout.bar.width, 2.0F);
+    EXPECT_EQ(layout.bar.height, 25.0F);
+
+    const cs::AmmoLayout small =
+        cs::layoutAmmo({.clip = 20, .reserve = 40}, sheet(), {.width = 640, .height = 480});
+    EXPECT_EQ(small.pictureX, 598);
+    EXPECT_EQ(small.bar.x, 526.0F);
+    EXPECT_EQ(numberAt(small.digits, 443), "2040");
+}
+
+TEST(AmmoHudTest, MoreDigitsWidenTheirRoomToTheLeft) {
+    // docs/12 section 3.4: no ammo is cut short. A reserve of five digits pushes the bar and the clip
+    // left; the picture stays at the right edge.
+    const cs::AmmoLayout layout =
+        cs::layoutAmmo({.clip = 1000, .reserve = 12345}, sheet(), {.width = 1280, .height = 720});
+    EXPECT_EQ(layout.pictureX, 1238);
+    EXPECT_EQ(numberAt(layout.digits, 683, 1138), "12345");
+    EXPECT_EQ(layout.bar.x, 1138.0F - 12.0F);
+    EXPECT_EQ(numberAt(layout.digits, 683), "100012345");
+    EXPECT_EQ(layout.digits.front().x, 1126 - 10 - 80);
+}
+
+TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
+    const cs::AmmoTypes ammo{.ammo = {cs::AmmoType{.id = "9mm", .maxCarried = 120, .boxRounds = 30}}};
+    const cs::WeaponView view{.drawSequences = {0},
+                              .idles = {cs::WeaponIdle{.wait = nx::Seconds{20.0F}, .share = 1.0F}},
+                              .idlesWhenEmpty = true};
+    auto catalog = cs::WeaponCatalog::make(
+        ammo,
+        {cs::Weapon{.id = "knife", .classname = "weapon_knife", .slot = cs::WeaponSlot::Knife, .view = view},
+         cs::Weapon{.id = "glock18",
+                    .classname = "weapon_glock18",
+                    .slot = cs::WeaponSlot::Secondary,
+                    .weight = 5,
+                    .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
+                    .view = view}});
+    ASSERT_TRUE(catalog.has_value()) << nx::describe(catalog.error());
+    cs::Inventory inventory{*catalog};
+    EXPECT_EQ(cs::hudAmmoOf(inventory, *catalog), std::nullopt);
+    nx::Random random{0, "test"};
+    std::ignore = inventory.give(cs::WeaponIndex{0}, true, {}, random);
+    EXPECT_EQ(cs::hudAmmoOf(inventory, *catalog), std::nullopt) << "the knife fires none";
+    std::ignore = inventory.give(cs::WeaponIndex{1}, true, {}, random);
+    std::ignore = inventory.giveAmmo("9mm", 40);
+    const std::optional<cs::HudAmmo> shown = cs::hudAmmoOf(inventory, *catalog);
+    ASSERT_TRUE(shown.has_value());
+    EXPECT_EQ(shown->weapon, cs::WeaponIndex{1});
+    EXPECT_EQ(shown->clip, 20U);
+    EXPECT_EQ(shown->reserve, 40U);
 }
 
 TEST(CrosshairTest, TheLinesAreWhereTheOriginalDrawsThem) {

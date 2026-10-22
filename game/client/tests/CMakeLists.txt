@@ -9,6 +9,7 @@ nxAddTest(csClientTests
     DEPENDS
         cs::client
         cs::shared
+        nx::game
         nx::console
         nx::assets
         nx::render

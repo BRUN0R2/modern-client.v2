@@ -211,10 +211,14 @@ suit right, keeping the 32 pixels it has at 640 wide (§3.4). Armor between none
 much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet. The
 crosshair of the knife in hand is drawn by the table's rule (`crosshairRects`, in whole numbers),
 in the style `cl_crosshair_color`, `cl_crosshair_size` and `cl_crosshair_translucent` set
-(`HudCvars`; `nxview` draws Counter-Strike's default). The first row of each picture, the 320
-entries for screens under 640 wide, the helmet, the flash of a number that changes, the crosshair
-opening as the player moves (`cl_dynamiccrosshair`, with the weapons), and the ammo, timer, status
-icons and radar come next.
+(`HudCvars`; `nxview` draws Counter-Strike's default). The ammo of the weapon in hand, one that
+fires ammo (`HudAmmo`, `hudAmmoOf`), is drawn where the table puts it (`layoutAmmo`): its clip, the
+bar and the rounds of its kind the player carries, then the `ammo` picture of the weapon's list
+(`sprites/weapon_<name>.txt`, `ammoPictureOf`); a number of more digits widens its room to the
+left. The first row of each picture, the 320 entries for screens under 640 wide, the helmet, the
+flash of a number that changes, each weapon's crosshair (only the knife's is measured: it is drawn
+for every weapon) and its opening as the player moves (`cl_dynamiccrosshair`), the weapon menu,
+and the timer, status icons and radar come next.
 
 ### 3.3 Visual parity of numbers
 
@@ -243,7 +247,7 @@ wrong, as did large reserve ammo and clips. In Modern-Client.v2:
 its client (its whole part, none below 0, and 1 above 0 up to 1), without the 255 ceiling, every
 digit of it up to the type's maximum (39 digits); armor and money likewise. The tests draw health
 5000, 100000 and the type's maximum, armor 300 and 70000, and money above 16000 up to the type's
-maximum; reserve ammo comes with the ammo.
+maximum, and a clip of 1000 and a reserve of 12345.
 
 ### 3.5 HUD for plugins
 

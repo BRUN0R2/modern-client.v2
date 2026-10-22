@@ -1,17 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The classic HUD (docs/12-ui-hud-and-console.md, section 3): the player's health, armor and money,
-/// in the pictures sprites/hud.txt names, and the crosshair, where Counter-Strike 1.6 draws them and
+/// The classic HUD (docs/12-ui-hud-and-console.md, section 3): the player's health, armor, money and
+/// ammo, in the pictures sprites/hud.txt and the weapons' lists (sprites/weapon_<name>.txt) name, and
+/// the crosshair, where Counter-Strike 1.6 draws them and
 /// as it draws them, measured on the original (docs/12, section 3.2). Its pictures keep their size at every
 /// resolution, each drawn as the original draws a HUD sprite (nx::render::spriteQuad), added in the
 /// HUD's color; its elements keep to the screen's edges. Its numbers have no ceiling (docs/12,
 /// section 3.4): a number of more digits than the original's room for it widens it, and pushes away
 /// what is beside it.
 ///
-/// Today: health, armor and money as they rest, and the crosshair of a player standing, with the
-/// original's cvars. The ammo, the round's time, the status icons, the radar, the crosshair opening
-/// as the player moves, and the flash of a number that changes, come next (TODO.md).
+/// Today: health, armor, money and ammo as they rest, and the crosshair of a player standing, with
+/// the original's cvars. The round's time, the status icons, the radar, the weapon menu, the
+/// crosshair opening as the player moves, and the flash of a number that changes, come next
+/// (TODO.md).
 export module cs.client:hud;
 
 import std;
@@ -20,13 +22,14 @@ import nx.console;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import cs.shared;
 
 export namespace cs {
 
 /// Why the HUD's pictures could not be read or put on the GPU.
 enum class HudError : std::uint8_t {
-    ListUnreadable,   ///< sprites/hud.txt is missing or invalid (cause).
-    PictureMissing,   ///< hud.txt has no entry for screens 640 wide of a picture the HUD draws (detail).
+    ListUnreadable,   ///< sprites/hud.txt, or a weapon's list, is missing or invalid (cause).
+    PictureMissing,   ///< A list has no entry for screens 640 wide of a picture the HUD draws (detail).
     SpriteUnreadable, ///< A sprite of the HUD's pictures is missing or invalid (cause).
     GpuFailed,        ///< The GPU refused a sprite (cause: the ScreenError).
 };
@@ -59,11 +62,24 @@ using HudSheet = nx::EnumArray<HudPicture, nx::assets::SpriteListEntry>;
 [[nodiscard]] auto hudSheetOf(std::span<const nx::assets::SpriteListEntry> entries)
     -> nx::Result<HudSheet, HudError>;
 
+/// The ammo the HUD shows: of the weapon in hand, one that fires ammo.
+struct HudAmmo {
+    WeaponIndex weapon{}; ///< Its list's `ammo` picture is drawn.
+    std::uint32_t clip{};
+    std::uint32_t reserve{}; ///< The rounds of its kind the player carries besides the clips.
+};
+
+/// The ammo the HUD shows of `inventory`, whose weapons are of `catalog`: of the weapon it holds, when
+/// it fires ammo; none.
+[[nodiscard]] auto hudAmmoOf(const Inventory& inventory, const WeaponCatalog& catalog)
+    -> std::optional<HudAmmo>;
+
 /// What the HUD shows of the player.
 struct HudView {
     nx::HitPoints health{};
     nx::ArmorPoints armor{};
     nx::Money money{};
+    std::optional<HudAmmo> ammo{}; ///< None without a weapon in hand that fires ammo.
     /// How far from the middle the crosshair of the weapon in hand is (cs::kKnifeCrosshairDistance);
     /// none without a crosshair.
     std::optional<std::uint32_t> crosshairDistance{};
@@ -144,28 +160,62 @@ struct HudMark {
 [[nodiscard]] auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d size)
     -> std::vector<HudMark>;
 
+/// The `ammo` picture among `entries`, those of a weapon's list: the first entry for screens 640 wide
+/// so named. Errors: PictureMissing.
+[[nodiscard]] auto ammoPictureOf(std::span<const nx::assets::SpriteListEntry> entries)
+    -> nx::Result<nx::assets::SpriteListEntry, HudError>;
+
+/// Where the HUD draws the ammo of a weapon in hand.
+struct AmmoLayout {
+    std::vector<HudMark> digits{}; ///< The clip's, then the reserve's.
+    nx::render::ScreenRect bar{};  ///< Between them, of the HUD's color, added.
+    std::int32_t pictureX = 0;     ///< The top left corner of the weapon's `ammo` picture.
+    std::int32_t pictureY = 0;
+};
+
+/// Where the HUD draws `ammo` on a screen of `size`, its digits those of `sheet`: the weapon's `ammo`
+/// picture 42 pixels from the right edge and 40 from the bottom; the reserve's digits 37 from the
+/// bottom, aligned to the right of room for three that ends at the picture; a bar two pixels wide
+/// and the digits' height ten before that room, and the clip's digits aligned to the right of room for
+/// three that ends ten before the bar. More digits widen a room to the left, pushing what is left of
+/// it.
+[[nodiscard]] auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d size)
+    -> AmmoLayout;
+
 /// The HUD's pictures on the GPU.
 class Hud {
 public:
-    /// Reads sprites/hud.txt from `vfs`, and the sprites of the HUD's pictures, put on the GPU by
-    /// `screen` with their uploads recorded in `commands`. Errors: ListUnreadable, PictureMissing,
-    /// SpriteUnreadable, GpuFailed.
-    [[nodiscard]] static auto load(const nx::assets::Vfs& vfs, nx::render::ScreenRenderer& screen,
-                                   nx::rhi::CommandList& commands) -> nx::Result<Hud, HudError>;
+    /// Reads sprites/hud.txt from `vfs`, the list of each of `weapons` that fires ammo
+    /// (sprites/<classname>.txt), and the sprites of the HUD's pictures and of the weapons' `ammo`
+    /// pictures, put on the GPU by `screen` with their uploads recorded in `commands`. Errors:
+    /// ListUnreadable, PictureMissing, SpriteUnreadable, GpuFailed.
+    [[nodiscard]] static auto load(const nx::assets::Vfs& vfs, std::span<const Weapon> weapons,
+                                   nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
+        -> nx::Result<Hud, HudError>;
 
-    /// Appends to `quads` the HUD of `view` on a screen of `size` (layoutHud), each picture drawn as the
-    /// original draws a HUD sprite, added in the HUD's color; then the crosshair in `crosshair`'s
-    /// style (crosshairRects), added or drawn as it is. The quads point into the HUD.
+    /// Appends to `quads` the HUD of `view` on a screen of `size` (layoutHud, layoutAmmo), each picture
+    /// drawn as the original draws a HUD sprite, added in the HUD's color, the ammo's bar added in it;
+    /// then the crosshair in `crosshair`'s style (crosshairRects), added or drawn as it is. The quads
+    /// point into the HUD.
     void append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
                 const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const;
 
 private:
+    /// A picture of a sprite: its entry of a list, and which of the images its sprite is.
+    struct Picture {
+        nx::assets::SpriteListEntry entry{};
+        std::size_t image = 0;
+    };
+
     Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,
-        nx::EnumArray<HudPicture, std::size_t> imageOf) noexcept;
+        nx::EnumArray<HudPicture, std::size_t> imageOf,
+        std::vector<std::optional<Picture>> ammoPictures) noexcept;
 
     HudSheet m_sheet;
     std::vector<nx::render::ScreenImage> m_images;    ///< The first frame of each sprite of the pictures.
     nx::EnumArray<HudPicture, std::size_t> m_imageOf; ///< Which of the images each picture is in.
+    /// The `ammo` picture of each weapon, by its WeaponIndex; none for a weapon that fires none.
+    std::vector<std::optional<Picture>> m_ammoPictures;
 };
 
 } // namespace cs
