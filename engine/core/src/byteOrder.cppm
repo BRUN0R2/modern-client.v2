@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Numbers stored in bytes: the little-endian fields of the file formats (WAD3, BSP, MDL, SPR,
-/// WAV), read the same on any host.
+/// WAV) and the big-endian ones of TrueType's tables, read the same on any host.
 export module nx.core:byteOrder;
 
 import std;
@@ -32,6 +32,23 @@ template <class Value>
     }
     std::ranges::copy(bytes.first(raw.size()), raw.begin());
     if constexpr (std::endian::native == std::endian::big) {
+        std::ranges::reverse(raw);
+    }
+    return std::bit_cast<Value>(raw);
+}
+
+/// The `Value` stored big-endian in the first sizeof(Value) bytes of `bytes`, which must hold them,
+/// as TrueType stores its numbers.
+template <class Value>
+    requires Integer<Value>
+[[nodiscard]] constexpr auto loadBigEndian(std::span<const std::byte> bytes) noexcept -> Value {
+    std::array<std::byte, sizeof(Value)> raw{};
+    expects(bytes.size() >= raw.size(), "loadBigEndian: fewer bytes than the value");
+    if (bytes.size() < raw.size()) {
+        return Value{}; // the handler let execution continue ("observe")
+    }
+    std::ranges::copy(bytes.first(raw.size()), raw.begin());
+    if constexpr (std::endian::native == std::endian::little) {
         std::ranges::reverse(raw);
     }
     return std::bit_cast<Value>(raw);
