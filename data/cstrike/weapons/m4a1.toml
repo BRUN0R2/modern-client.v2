@@ -55,3 +55,39 @@ standing = { upBase = 0.65, lateralBase = 0.35, upModifier = 0.25, lateralModifi
 [reload]
 time = 3.05
 sequences = [11] # reload_unsil
+
+[alternate] # the silencer
+switchTime = 2.0
+onSequence = 6 # add_silencer
+offSequence = 13 # detach_silencer
+
+[alternate.view]
+drawSequences = [5] # draw
+idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
+idlesWhenEmpty = true
+
+[alternate.firing]
+cycle = 0.0875
+isAutomatic = true
+idleAfterShot = 1.5
+shootSequences = [1, 2, 3] # shoot1, shoot2, shoot3
+
+[alternate.firing.accuracy]
+initial = 0.2
+burst = { divisor = 220, offset = 0.3, maximum = 1.0 }
+
+[alternate.firing.spread]
+movingAbove = 140.0
+air = { base = 0.035, scale = 0.4 }
+moving = { base = 0.035, scale = 0.07 }
+standing = { base = 0.0, scale = 0.025 }
+
+[alternate.firing.recoil.kicks]
+moving = { upBase = 1.0, lateralBase = 0.45, upModifier = 0.28, lateralModifier = 0.045, upMax = 3.75, lateralMax = 3.0, directionChange = 7 }
+air = { upBase = 1.2, lateralBase = 0.5, upModifier = 0.23, lateralModifier = 0.15, upMax = 5.5, lateralMax = 3.5, directionChange = 6 }
+ducked = { upBase = 0.6, lateralBase = 0.3, upModifier = 0.2, lateralModifier = 0.0125, upMax = 3.25, lateralMax = 2.0, directionChange = 7 }
+standing = { upBase = 0.65, lateralBase = 0.35, upModifier = 0.25, lateralModifier = 0.015, upMax = 3.5, lateralMax = 2.25, directionChange = 7 }
+
+[alternate.reload]
+time = 3.05
+sequences = [4] # reload

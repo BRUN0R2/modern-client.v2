@@ -219,6 +219,13 @@ time      = 2.45
 sequences = [1]
 ```
 
+A weapon `+attack2` switches has an `[alternate]` (the USP's and the M4A1's silencers, the
+Glock's burst): its `switchTime`, the view model's `onSequence` and `offSequence` (a switch that
+plays them also holds the weapon's fire and idle that long), and the `view`, `firing` and `reload`
+it has while on, the weapon's own where it gives none. A firing's `followUps` are the rounds a shot
+fires after it on its own, one a weapon frame, each strayed by their `spread` (the Glock's burst:
+`{ rounds = 2, spread = 0.05 }`).
+
 ```toml
 [[ammo]]
 id         = "762Nato"         # the original's name
@@ -237,10 +244,10 @@ original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds
 counter-terrorists a knife, a USP and 24 rounds of 45ACP, each weapon with a clip's worth.
 
 **Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, how the guns fire and are
-reloaded, and the loadouts. Each next part of the weapons brings the data its code reads: damage,
-range modifier and penetration, the special modes (silencer, burst: the USP and the M4A1 are without
-their silencer today), the knife's attacks, and the armor ratio. Which shoot sequence a gun's client
-plays is the project's choice until it is measured on the original.
+reloaded, their silencers and burst, and the loadouts. Each next part of the weapons brings the data
+its code reads: damage, range modifier and penetration, the knife's attacks, and the armor ratio.
+Which shoot sequence a gun's client plays is the project's choice until it is measured on the
+original.
 
 ### 7.3 Behaviors
 
@@ -284,6 +291,13 @@ plays is the project's choice until it is measured on the original.
   drops back in the movement (`PM_DropPunchAngle`) and turns the view `next` draws.
 - **Special modes:** burst (Glock, FAMAS), silencer (USP, M4A1, with different damage and
   sound), one- or two-level zoom, shield with pistols.
+  **Today:** `+attack2` switches a weapon with an alternate before it fires, once its last switch's
+  time is over, again while held (`SecondaryAttack`): the USP's silencer (3 seconds, its sequences
+  and spread), the M4A1's (2 seconds), each drawn and reloaded as they are; the Glock's burst (0.3
+  seconds, no sequence), which fires two more rounds on the next two weapon frames, as the
+  original's does with no time between them (`FireRemaining`), and fires again while held, every
+  0.5 seconds. A weapon without an alternate ignores `+attack2`. The message the Glock's switch
+  prints comes with the HUD's center text.
 - **Penetration:** depends on the weapon's power, the distance and the surface material
   (`materials.txt`).
 - **Grenades:** bounce physics, detonation time, flashbang blindness by angle and distance,
