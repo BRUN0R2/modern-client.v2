@@ -253,7 +253,8 @@ reloaded, their silencers and burst, the knife's attacks, and the loadouts. Each
 weapons brings the data its code reads: damage, range modifier and penetration, the knife's damage
 and back stab, and the armor ratio.
 Which shoot sequence a gun's client plays is the project's choice until it is measured on the
-original.
+original, guided by the models' own events: the Glock's `shoot3` flashes once, a single shot, and
+its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave playing.
 
 ### 7.3 Behaviors
 

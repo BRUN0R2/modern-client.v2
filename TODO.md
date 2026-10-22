@@ -288,7 +288,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Optional compute skinning
 - [ ] Model instancing
 - [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)
-- [ ] The dynamic lights of studio models (*elights*, *dlights*)
+- [x] The view model's client events, and the muzzle flashes they show (`cs.client:muzzleFlash`, [05 §9](docs/05-rendering.md#9-studio-models-and-gpu-skinning))
+- [ ] The dynamic lights of studio models (*elights*, *dlights*), the muzzle flash's among them; the shells the guns eject
 - [x] A frame of a map to a file without a window (`nxview --screenshot`, placed with `--position` and `--angles`, at `--time`), as the client draws it; `next` plays the maps
 - [ ] Model viewer
 - [ ] Reference images in CI (lavapipe)

@@ -96,6 +96,20 @@ auto ViewModel::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList&
     return renderer.load(commands, {.model = *m_files->view, .textures = m_files->texturesView()});
 }
 
+auto ViewModel::sequence(std::uint32_t sequence) const -> const nx::assets::StudioSequence& {
+    nx::expects(sequence < m_animations.size(), "ViewModel::sequence: a sequence of the model");
+    return m_files->view->sequences()[sequence];
+}
+
+auto ViewModel::attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t attachment) const
+    -> std::optional<nx::Vec3> {
+    const std::span<const nx::assets::Attachment> attachments = m_files->view->attachments();
+    if (attachment >= attachments.size() || attachments[attachment].bone.value >= bones.size()) {
+        return std::nullopt;
+    }
+    return nx::transformPoint(bones[attachments[attachment].bone.value], attachments[attachment].origin);
+}
+
 auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt) const
     -> std::vector<nx::Mat3x4> {
     const MdlView& model = *m_files->view;

@@ -281,6 +281,11 @@ auto Level::load(const GameContent& content, std::string_view name)
         }
         level.m_viewModels.push_back(std::move(*viewModel));
     }
+    level.m_muzzleFlashes = MuzzleFlashSprites::read(content.vfs);
+    if (!level.m_muzzleFlashes->missing().empty()) {
+        nx::log::warning(kLog, "muzzle flash sprites that cannot be read: {}",
+                         listed(level.m_muzzleFlashes->missing()));
+    }
     return made;
 }
 
