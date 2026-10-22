@@ -61,6 +61,10 @@ struct DegreesTag {
 struct RadiansTag {
     static constexpr std::string_view kSuffix = "rad";
 };
+/// The unit of SampleRate.
+struct HertzTag {
+    static constexpr std::string_view kSuffix = "Hz";
+};
 
 /// Map distance. One hammer unit is the GoldSrc world unit (about one inch).
 using HammerUnits = Quantity<float, HammerUnitsTag>;
@@ -97,6 +101,9 @@ using Scale = Quantity<float, ScaleTag>;
 /// Angles. Degrees and radians never convert implicitly: toRadians and toDegrees do it.
 using Degrees = Quantity<float, DegreesTag>;
 using Radians = Quantity<float, RadiansTag>;
+
+/// Sample frames a second: what a sound is made at and what a sound device plays at.
+using SampleRate = Quantity<std::uint32_t, HertzTag>;
 
 /// Simulation durations. Wall-clock time belongs to nx.platform.
 using Seconds = std::chrono::duration<float>;

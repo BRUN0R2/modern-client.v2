@@ -13,10 +13,10 @@ import nx.audio;
 
 namespace {
 
+using nx::SampleRate;
 using nx::assets::ChannelCount;
 using nx::assets::SampleFormat;
 using nx::assets::SampleFrames;
-using nx::assets::SampleRate;
 using nx::assets::WavSound;
 using nx::audio::Sound;
 

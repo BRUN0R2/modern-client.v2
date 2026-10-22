@@ -19,6 +19,7 @@ nxAddModuleLibrary(csClient
         src/localGame.cppm
         src/hud.cppm
         src/console.cppm
+        src/audio.cppm
     SOURCES
         src/input.cpp
         src/entityKeys.cpp
@@ -32,6 +33,7 @@ nxAddModuleLibrary(csClient
         src/localGame.cpp
         src/hud.cpp
         src/console.cpp
+        src/audio.cpp
     DEPENDS
         nx::core
         nx::math
@@ -41,6 +43,7 @@ nxAddModuleLibrary(csClient
         nx::rhi
         nx::render
         nx::ui
+        nx::audio
         nx::ecs
         nx::collision
         nx::game

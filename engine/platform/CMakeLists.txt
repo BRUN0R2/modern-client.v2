@@ -6,11 +6,13 @@ nxAddModuleLibrary(nxPlatform
     LAYER 2
     MODULES
         src/nx.platform.cppm
+        src/audio.cppm
         src/clock.cppm
         src/fileSystem.cppm
         src/steam.cppm
         src/window.cppm
     SOURCES
+        src/audio.cpp
         src/clock.cpp
         src/fileSystem.cpp
         src/steam.cpp
@@ -24,7 +26,7 @@ if(WIN32)
     target_compile_definitions(nxPlatform PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
-# SDL3 stays in window.cpp: no interface of nx.platform names it.
+# SDL3 stays in window.cpp and audio.cpp: no interface of nx.platform names it.
 target_link_libraries(nxPlatform PRIVATE SDL3::SDL3)
 
 if(NX_BUILD_TESTS)

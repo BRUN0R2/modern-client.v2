@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.jobs;
 import nx.assets;
+import nx.platform;
 
 namespace nx::audio {
 
