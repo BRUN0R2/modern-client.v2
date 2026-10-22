@@ -53,6 +53,18 @@ TEST(WindowTest, PollingAppendsWithoutAskingToClose) {
     }));
 }
 
+TEST(WindowTest, TextInputTurnsOnAndOff) {
+    auto window = openWindow();
+    ASSERT_TRUE(window.has_value());
+    EXPECT_FALSE(window->isTextInputOn()) << "off until something is typed in";
+    const auto on = window->setTextInput(true);
+    ASSERT_TRUE(on.has_value()) << nx::describe(on.error());
+    EXPECT_TRUE(window->isTextInputOn());
+    const auto off = window->setTextInput(false);
+    ASSERT_TRUE(off.has_value()) << nx::describe(off.error());
+    EXPECT_FALSE(window->isTextInputOn());
+}
+
 TEST(WindowTest, AMovedWindowStaysOpenUntilItsLastOwnerCloses) {
     auto window = openWindow();
     ASSERT_TRUE(window.has_value());
