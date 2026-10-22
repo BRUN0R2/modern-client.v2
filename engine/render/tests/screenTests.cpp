@@ -231,6 +231,31 @@ TEST(ScreenRendererTest, ColorsAreDrawnAsTheyAreAddedOrBlended) {
     EXPECT_EQ(screen.validationErrors(), 0U);
 }
 
+TEST(ScreenRendererTest, AClippedRectangleDrawsOnlyWithinItsClip) {
+    Screen screen;
+    if (!screen.isReady()) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const ScreenColor red{.red = 255, .green = 0, .blue = 0};
+    const std::array quads{
+        ScreenQuad{.target = {.x = 0.0F, .y = 0.0F, .width = 8.0F, .height = 8.0F},
+                   .color = red,
+                   .clip = nx::rhi::Rect{.x = 2, .y = 2, .size = {.width = 4, .height = 4}}},
+        ScreenQuad{.target = {.x = 0.0F, .y = 10.0F, .width = 4.0F, .height = 4.0F}, .color = red},
+        ScreenQuad{.target = {.x = 10.0F, .y = 0.0F, .width = 4.0F, .height = 4.0F},
+                   .color = red,
+                   .clip = nx::rhi::Rect{.x = 40, .y = 0, .size = {.width = 4, .height = 4}}}};
+    const std::vector<std::byte> drawn = screen.draw(quads);
+
+    expectRgb(pixelAt(drawn, 1, 1), {0, 0, 0}, "outside the clip");
+    expectRgb(pixelAt(drawn, 2, 2), {255, 0, 0}, "the clip's first pixel");
+    expectRgb(pixelAt(drawn, 5, 5), {255, 0, 0}, "the clip's last pixel");
+    expectRgb(pixelAt(drawn, 6, 6), {0, 0, 0}, "past the clip");
+    expectRgb(pixelAt(drawn, 3, 13), {255, 0, 0}, "the next rectangle unclipped");
+    expectRgb(pixelAt(drawn, 11, 1), {0, 0, 0}, "a clip off the target draws nothing");
+    EXPECT_EQ(screen.validationErrors(), 0U);
+}
+
 TEST(ScreenRendererTest, AnImageIsDrawnAsItIsTimesItsColor) {
     Screen screen;
     if (!screen.isReady()) {

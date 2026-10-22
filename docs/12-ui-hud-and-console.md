@@ -33,6 +33,27 @@ follows: the left and top edges those of the pinned corner, the right and bottom
 right and bottom when the child resizes that way, else its own left and top, keeping its size. A
 setting that cannot be read is refused, and changes nothing.
 
+Panels are drawn (`nx.ui:painter`) as rectangles of the screen: a `PanelPainter` places what a
+panel draws from its top left and keeps it within the panel and every panel it is in, with the
+screen's clips ([05 §7.1](05-rendering.md#71-frame-passes-legacy-mode)), as VGUI2 keeps a panel's
+drawing within it. `paintTree` draws a panel's background, then over it each of its visible
+children in their order; a hidden panel draws nothing, nor do its children. A control is a kind of
+panel that draws more: the first is the `Label` (`nx.ui:label`), a line of text in a face and a
+colour, placed against an edge of the label or halfway between two by its alignment, named as the
+layouts' `textAlignment` names them (`north-west` to `south-east`). The `TextEntry`
+(`nx.ui:textEntry`) is a line the player types in, the console's input line first: typed text
+([§6](#6-input)) goes in at its cursor, control characters left out; Left and Right move the
+cursor by a character, Home and End to the ends, Backspace and Delete remove the character before
+or after it, and Enter submits the line to its owner; it draws its text and a cursor a pixel wide,
+scrolled left when the cursor would pass its right edge. Selection, the clipboard and the cursor's
+blinking come later. `RichText` (`nx.ui:richText`) shows lines of text, each in its colour, the
+console's output: the newest at the bottom, each wrapped at its last space that fits its width
+(anywhere in a word wider than it), the oldest dropped past its capacity (1024 lines unless told
+otherwise), scrolled up from the newest by whole rows; scrolled up, it stays on the rows it shows
+as lines come. Which of a scheme's colours,
+borders and fonts each control takes, and where VGUI2 puts a label's text to the pixel, wait for
+reference shots of the original's windows.
+
 ### 2.1 Fonts
 
 VGUI2's text is TrueType: the schemes name a face (Tahoma, Verdana, Arial, Trebuchet MS, Marlett),

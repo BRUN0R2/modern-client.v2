@@ -8,12 +8,20 @@ nxAddModuleLibrary(nxUi
     MODULES
         src/nx.ui.cppm
         src/panel.cppm
+        src/painter.cppm
+        src/label.cppm
+        src/textEntry.cppm
+        src/richText.cppm
         src/font.cppm
         src/fontCatalog.cppm
         src/schemeFont.cppm
         src/text.cppm
     SOURCES
         src/panel.cpp
+        src/painter.cpp
+        src/label.cpp
+        src/textEntry.cpp
+        src/richText.cpp
         src/font.cpp
         src/fontCatalog.cpp
         src/schemeFont.cpp
@@ -21,6 +29,7 @@ nxAddModuleLibrary(nxUi
     DEPENDS
         nx::core
         nx::platform
+        nx::rhi
         nx::assets
         nx::render
     LATERAL

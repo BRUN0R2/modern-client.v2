@@ -28,10 +28,12 @@ struct ScreenFrameSlot {
     std::size_t quadCapacity = 0;
 };
 
-/// Rectangles in a row that are drawn alike: with one pipeline and one picture (none for colors).
+/// Rectangles in a row that are drawn alike: with one pipeline, one picture (none for colors) and
+/// one scissor.
 struct ScreenBatch {
     rhi::RenderPipelineHandle pipeline{};
     rhi::BindGroupHandle image{};
+    rhi::Rect scissor{};
     std::uint32_t firstQuad = 0;
     std::uint32_t quadCount = 0;
 };
@@ -149,7 +151,8 @@ struct ScreenRect {
 };
 
 /// A rectangle the screen draws: a part of a picture stretched over `target`, times `color`; or, with
-/// no picture, `color` alone.
+/// no picture, `color` alone. Only the pixels of `clip` are drawn, when there is one: those of the
+/// panel a text scrolls in.
 struct ScreenQuad {
     const ScreenImage* image = nullptr;
     assets::SpriteRect source{}; ///< Of the picture, in texels.
@@ -157,6 +160,7 @@ struct ScreenQuad {
     ScreenColor color{};
     ScreenBlend blend = ScreenBlend::Normal;
     ScreenFilter filter = ScreenFilter::Nearest;
+    std::optional<rhi::Rect> clip{}; ///< In pixels of the target; none for all of it.
 };
 
 /// The rectangle `source` of `image` as the original draws a rectangle of a HUD sprite
@@ -215,7 +219,7 @@ public:
     [[nodiscard]] auto prepare(const ScreenDraw& draw) -> Result<void, ScreenError>;
     /// Records the rectangles of the last prepare, in their order, in a render pass with a color target
     /// of desc.colorFormat (and a depth target of desc.depthFormat, untested): after the rest of the
-    /// frame, over it.
+    /// frame, over it. The scissor covers the whole target again after them.
     void record(rhi::CommandList& commands) const;
     /// Draws `draw`: prepares it, then records it. Errors: those of prepare.
     [[nodiscard]] auto draw(rhi::CommandList& commands, const ScreenDraw& draw) -> Result<void, ScreenError>;
@@ -242,6 +246,7 @@ private:
     EnumArray<ScreenBlend, rhi::OwnedRenderPipeline> m_colorPipelines;
     std::vector<ScreenFrameSlot> m_frameSlots;
     std::vector<ScreenBatch> m_batches; ///< Of the last prepare.
+    rhi::Extent2d m_targetSize{};       ///< Of the last prepare.
     std::uint64_t m_drawCount = 0;      ///< Prepares so far: the frame slot of the next is this one's.
 };
 
