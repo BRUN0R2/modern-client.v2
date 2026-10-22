@@ -357,8 +357,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] HUD sprite and font renderer (`nx.render:screen`: pictures of sprites and WADs, console fonts, drawn as they are, added or blended, in pixels)
 - [x] Health, armor and money where the original draws them, measured on it (`cs.client:hud`, [12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution)); `hud_draw`
 - [x] The crosshair with the original cvars (`cl_crosshair_color`, `cl_crosshair_size`, `cl_crosshair_translucent`), drawn by the rule measured on the original ([12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution))
-- [ ] Ammo; the crosshair opening as the player moves (`cl_dynamiccrosshair`) with the weapons; the first row of each HUD picture, which the original leaves out
-- [x] Numbers without truncation: health above 255, armor and money ([12 §3.4](docs/12-ui-hud-and-console.md#34-no-value-truncation)); high ammo counts with the ammo
+- [x] The ammo of the weapon in hand: its clip, the bar, its reserve and its list's `ammo` picture, where the original draws a Glock's ([12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution))
+- [ ] Each weapon's crosshair (measured: the knife 7, the Glock and the Desert Eagle 8), opening as the player moves (`cl_dynamiccrosshair`); the weapon menu (`slot1`–`slot5`, `invnext`, `invprev`, `hud_fastswitch`), its layout measured on the original; the first row of each HUD picture, which the original leaves out
+- [x] Numbers without truncation: health above 255, armor, money and ammo ([12 §3.4](docs/12-ui-hud-and-console.md#34-no-value-truncation))
 - [x] HUD regression test with health 5000, 100000 and the type's maximum
 
 ---

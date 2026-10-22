@@ -9,6 +9,7 @@ import nx.console;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import cs.shared;
 
 namespace cs {
 
@@ -41,6 +42,15 @@ constexpr std::size_t kArmorRoom = 3;
 constexpr std::size_t kMoneyRoom = 5;
 /// The armor that fills the suit.
 constexpr float kFullArmor = 100.0F;
+// The ammo (docs/12 section 3.2, measured with a Glock's 20 and 40).
+constexpr std::int32_t kAmmoPictureFromRight = 42; ///< The left of the weapon's `ammo` picture.
+constexpr std::int32_t kAmmoPictureAbove = 40;     ///< Its top, from the bottom.
+constexpr std::int32_t kAmmoAbove = 37;            ///< The digits' and the bar's top.
+constexpr std::int32_t kAmmoBarGap = 10;           ///< Between the bar and each number's room.
+constexpr std::int32_t kAmmoBarWidth = 2;
+constexpr std::size_t kAmmoRoom = 3;
+/// The name a weapon's list gives the picture of its ammo.
+constexpr std::string_view kAmmoPictureName = "ammo";
 
 // The crosshair (docs/12 section 3.2, measured at 640x480 to 1600x900): its lines' length before its
 // scale, the screen width its scale is 1 at, and the widths auto turns medium and large at.
@@ -109,6 +119,17 @@ auto hudSheetOf(std::span<const nx::assets::SpriteListEntry> entries) -> nx::Res
     return sheet;
 }
 
+auto ammoPictureOf(std::span<const nx::assets::SpriteListEntry> entries)
+    -> nx::Result<nx::assets::SpriteListEntry, HudError> {
+    const auto found = std::ranges::find_if(entries, [](const nx::assets::SpriteListEntry& entry) {
+        return entry.resolution == kResolution && entry.name == kAmmoPictureName;
+    });
+    if (found == entries.end()) {
+        return nx::fail(HudError::PictureMissing, std::string{kAmmoPictureName});
+    }
+    return *found;
+}
+
 auto healthDigits(nx::HitPoints health) -> std::string {
     const float value = health.value();
     nx::expects(std::isfinite(value), "healthDigits: a finite health");
@@ -173,6 +194,47 @@ auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d siz
                      .y = moneyY});
     std::ignore = addNumber(money, moneyX, moneyY, kMoneyRoom);
     return marks;
+}
+
+auto hudAmmoOf(const Inventory& inventory, const WeaponCatalog& catalog) -> std::optional<HudAmmo> {
+    const OwnedWeapon* const held = inventory.held();
+    if (held == nullptr) {
+        return std::nullopt;
+    }
+    const std::optional<WeaponMagazine>& magazine = catalog.weapon(held->weapon).magazine;
+    if (!magazine) {
+        return std::nullopt;
+    }
+    return HudAmmo{.weapon = held->weapon, .clip = held->clip, .reserve = inventory.reserve(magazine->ammo)};
+}
+
+auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d size) -> AmmoLayout {
+    const std::int32_t width = sizeOf(size.width);
+    const std::int32_t height = sizeOf(size.height);
+    const std::int32_t digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
+    const std::int32_t y = height - kAmmoAbove;
+    AmmoLayout layout{.pictureX = width - kAmmoPictureFromRight, .pictureY = height - kAmmoPictureAbove};
+    // A number's digits, added to `marks`, aligned to the right of its room, which ends at `end` and
+    // more digits widen to the left; returns where the room starts.
+    const auto addNumber = [&](std::vector<HudMark>& marks, std::uint32_t number, std::int32_t end) {
+        const std::string digits = std::to_string(number);
+        std::int32_t at = end - (nx::narrow<std::int32_t>(digits.size()) * digitWidth);
+        for (const char digit : digits) {
+            marks.push_back({.picture = digitPicture(digit), .x = at, .y = y});
+            at += digitWidth;
+        }
+        return end - (nx::narrow<std::int32_t>(std::max(digits.size(), kAmmoRoom)) * digitWidth);
+    };
+    std::vector<HudMark> reserve;
+    const std::int32_t reserveStart = addNumber(reserve, ammo.reserve, layout.pictureX);
+    const std::int32_t barX = reserveStart - kAmmoBarGap - kAmmoBarWidth;
+    layout.bar = nx::render::ScreenRect{.x = static_cast<float>(barX),
+                                        .y = static_cast<float>(y),
+                                        .width = static_cast<float>(kAmmoBarWidth),
+                                        .height = static_cast<float>(sheet[HudPicture::Number0].rect.height)};
+    std::ignore = addNumber(layout.digits, ammo.clip, barX - kAmmoBarGap);
+    std::ranges::move(reserve, std::back_inserter(layout.digits));
+    return layout;
 }
 
 auto crosshairSizeNamed(std::string_view text) noexcept -> std::optional<CrosshairSize> {
@@ -270,10 +332,13 @@ auto crosshairRects(CrosshairSize crosshairSize, std::uint32_t distance, nx::rhi
 }
 
 Hud::Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,
-         nx::EnumArray<HudPicture, std::size_t> imageOf) noexcept
-    : m_sheet{std::move(sheet)}, m_images{std::move(images)}, m_imageOf{imageOf} {}
+         nx::EnumArray<HudPicture, std::size_t> imageOf,
+         std::vector<std::optional<Picture>> ammoPictures) noexcept
+    : m_sheet{std::move(sheet)}, m_images{std::move(images)}, m_imageOf{imageOf},
+      m_ammoPictures{std::move(ammoPictures)} {}
 
-auto Hud::load(const nx::assets::Vfs& vfs, nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
+auto Hud::load(const nx::assets::Vfs& vfs, std::span<const Weapon> weapons,
+               nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
     -> nx::Result<Hud, HudError> {
     const auto read = [&vfs](std::string_view file) {
         return nx::assets::VfsPath::parse(file).and_then(
@@ -295,19 +360,46 @@ auto Hud::load(const nx::assets::Vfs& vfs, nx::render::ScreenRenderer& screen, n
         return std::unexpected{std::move(sheet.error())};
     }
     // Each sprite once, in the order the pictures first name it.
-    std::vector<std::string_view> sprites;
+    std::vector<std::string> sprites;
+    const auto imageOfSprite = [&sprites](std::string_view sprite) {
+        const auto found = std::ranges::find(sprites, sprite);
+        if (found == sprites.end()) {
+            sprites.emplace_back(sprite);
+            return sprites.size() - 1;
+        }
+        return nx::narrow<std::size_t>(found - sprites.begin());
+    };
     nx::EnumArray<HudPicture, std::size_t> imageOf;
     for (const HudPicture picture : HudSheet::keys()) {
-        const std::string_view sprite = (*sheet)[picture].sprite;
-        const auto found = std::ranges::find(sprites, sprite);
-        imageOf[picture] = nx::narrow<std::size_t>(found - sprites.begin());
-        if (found == sprites.end()) {
-            sprites.push_back(sprite);
+        imageOf[picture] = imageOfSprite((*sheet)[picture].sprite);
+    }
+    std::vector<std::optional<Picture>> ammoPictures;
+    for (const Weapon& weapon : weapons) {
+        if (!weapon.magazine) {
+            ammoPictures.emplace_back();
+            continue;
         }
+        const std::string listFile = std::format("sprites/{}.txt", weapon.classname);
+        auto weaponListBytes = read(listFile);
+        if (!weaponListBytes) {
+            return nx::fail(HudError::ListUnreadable, listFile, std::move(weaponListBytes.error()));
+        }
+        auto weaponEntries =
+            nx::assets::parseSpriteList(*weaponListBytes | std::views::transform([](std::byte value) {
+                return static_cast<char>(value);
+            }) | std::ranges::to<std::string>());
+        if (!weaponEntries) {
+            return nx::fail(HudError::ListUnreadable, listFile, std::move(weaponEntries.error()));
+        }
+        auto picture = ammoPictureOf(*weaponEntries);
+        if (!picture) {
+            return nx::fail(HudError::PictureMissing, listFile, std::move(picture.error()));
+        }
+        ammoPictures.emplace_back(Picture{.entry = *picture, .image = imageOfSprite(picture->sprite)});
     }
     std::vector<nx::render::ScreenImage> images;
     images.reserve(sprites.size());
-    for (const std::string_view sprite : sprites) {
+    for (const std::string& sprite : sprites) {
         const std::string file = std::format("sprites/{}.spr", sprite);
         auto bytes = read(file);
         if (!bytes) {
@@ -326,18 +418,30 @@ auto Hud::load(const nx::assets::Vfs& vfs, nx::render::ScreenRenderer& screen, n
         }
         images.push_back(std::move(frames->front()));
     }
-    return Hud{std::move(*sheet), std::move(images), imageOf};
+    return Hud{std::move(*sheet), std::move(images), imageOf, std::move(ammoPictures)};
 }
 
 void Hud::append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
                  const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const {
-    for (const HudMark& mark : layoutHud(view, m_sheet, size)) {
+    const auto addMark = [&](const HudMark& mark) {
         nx::assets::SpriteRect source = m_sheet[mark.picture].rect;
         source.y += mark.cutTop;
         source.height -= mark.cutTop;
         quads.push_back(nx::render::spriteQuad(m_images[m_imageOf[mark.picture]], source,
                                                static_cast<float>(mark.x), static_cast<float>(mark.y),
                                                kHudColor, nx::render::ScreenBlend::Additive));
+    };
+    std::ranges::for_each(layoutHud(view, m_sheet, size), addMark);
+    if (view.ammo && view.ammo->weapon.value < m_ammoPictures.size() &&
+        m_ammoPictures[view.ammo->weapon.value]) {
+        const Picture& picture = *m_ammoPictures[view.ammo->weapon.value];
+        const AmmoLayout ammo = layoutAmmo(*view.ammo, m_sheet, size);
+        std::ranges::for_each(ammo.digits, addMark);
+        quads.push_back(nx::render::ScreenQuad{
+            .target = ammo.bar, .color = kHudColor, .blend = nx::render::ScreenBlend::Additive});
+        quads.push_back(nx::render::spriteQuad(
+            m_images[picture.image], picture.entry.rect, static_cast<float>(ammo.pictureX),
+            static_cast<float>(ammo.pictureY), kHudColor, nx::render::ScreenBlend::Additive));
     }
     if (!view.crosshairDistance) {
         return;

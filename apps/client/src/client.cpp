@@ -582,7 +582,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(screen.error()));
         }
         m_screen.emplace(std::move(*screen));
-        if (auto hud = cs::Hud::load(m_content->vfs, *m_screen, list); hud) {
+        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.weapons(), *m_screen, list); hud) {
             m_hud.emplace(std::move(*hud));
         } else {
             nx::log::warning(kLog, "the HUD is not drawn: {}",
@@ -645,6 +645,7 @@ auto Client::drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImag
                       {.health = status.health,
                        .armor = status.armor,
                        .money = status.money,
+                       .ammo = cs::hudAmmoOf(m_session->game->inventory(), m_content->weapons),
                        .crosshairDistance = cs::kKnifeCrosshairDistance},
                       m_hudCvars->crosshair(), frame.size);
     }

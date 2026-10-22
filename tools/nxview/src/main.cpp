@@ -303,7 +303,7 @@ constexpr std::size_t kBlue = 2;
         screen.emplace(std::move(*made));
     }
     if (options.isHudShown) {
-        auto loaded = cs::Hud::load(content.vfs, *screen, list);
+        auto loaded = cs::Hud::load(content.vfs, content.weapons.weapons(), *screen, list);
         if (!loaded) {
             return unusable(loaded.error());
         }
@@ -378,6 +378,7 @@ constexpr std::size_t kBlue = 2;
                         {.health = status.health,
                          .armor = status.armor,
                          .money = status.money,
+                         .ammo = cs::hudAmmoOf((*game)->inventory(), content.weapons),
                          .crosshairDistance = cs::kKnifeCrosshairDistance},
                         cs::CrosshairStyle{}, extent);
         }
