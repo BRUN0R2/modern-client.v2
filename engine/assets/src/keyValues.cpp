@@ -196,28 +196,6 @@ private:
     std::size_t m_at = 0;
 };
 
-/// Appends the UTF-8 bytes of `code`, a Unicode scalar value.
-void appendUtf8(std::string& text, std::uint32_t code) {
-    const auto put = [&text](std::uint32_t value) {
-        text += static_cast<char>(static_cast<std::uint8_t>(value));
-    };
-    if (code < 0x80U) {
-        put(code);
-    } else if (code < 0x800U) {
-        put(0xC0U | (code >> 6U));
-        put(0x80U | (code & 0x3FU));
-    } else if (code < 0x10000U) {
-        put(0xE0U | (code >> 12U));
-        put(0x80U | ((code >> 6U) & 0x3FU));
-        put(0x80U | (code & 0x3FU));
-    } else {
-        put(0xF0U | (code >> 18U));
-        put(0x80U | ((code >> 12U) & 0x3FU));
-        put(0x80U | ((code >> 6U) & 0x3FU));
-        put(0x80U | (code & 0x3FU));
-    }
-}
-
 constexpr std::uint32_t kHighSurrogates = 0xD800U;
 constexpr std::uint32_t kLowSurrogates = 0xDC00U;
 constexpr std::uint32_t kSurrogatesEnd = 0xE000U;
@@ -283,7 +261,7 @@ auto keyValuesText(std::span<const std::byte> bytes) -> Result<std::string, KeyV
                 kSupplementaryPlanes + ((code - kHighSurrogates) << kSurrogateBits) + (low - kLowSurrogates);
             index += 2;
         }
-        appendUtf8(text, code);
+        appendUtf8(text, static_cast<char32_t>(code));
     }
     return text;
 }

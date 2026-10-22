@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Text shared by the modules that read values from text and describe them in diagnostics: ASCII
-/// case and the wording of numeric bounds.
+/// case and the wording of numeric bounds; and UTF-8, the encoding of all the engine's text.
 export module nx.core:text;
 
 import std;
@@ -43,5 +43,18 @@ template <class Number>
     }
     return {};
 }
+
+/// What a character of text that is not UTF-8 reads as: U+FFFD REPLACEMENT CHARACTER.
+inline constexpr char32_t kReplacementCharacter = U'\uFFFD';
+
+/// Appends to `text` the UTF-8 of `character`, a Unicode scalar value (not a surrogate, at most
+/// U+10FFFF).
+void appendUtf8(std::string& text, char32_t character);
+
+/// The characters of the UTF-8 `text`. What is not UTF-8 reads as kReplacementCharacter, one for each
+/// maximal part of a sequence that could have begun one, as the Unicode Standard recommends
+/// (section 3.9): a stray byte, a sequence cut short, an overlong form, a surrogate, a value past
+/// U+10FFFF.
+[[nodiscard]] auto decodeUtf8(std::string_view text) -> std::u32string;
 
 } // namespace nx

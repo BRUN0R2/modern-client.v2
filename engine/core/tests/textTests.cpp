@@ -41,4 +41,33 @@ TEST(Text, WordsBounds) {
     EXPECT_EQ(nx::boundsText<int>(std::nullopt, std::nullopt), "");
 }
 
+TEST(Text, EncodesUtf8) {
+    std::string text;
+    for (const char32_t character : {U'A', U'\u00E9', U'\u20AC', U'\U0001F600', U'\U0010FFFF'}) {
+        nx::appendUtf8(text, character);
+    }
+    EXPECT_EQ(text, "A\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80\xF4\x8F\xBF\xBF");
+}
+
+TEST(Text, DecodesUtf8) {
+    EXPECT_EQ(nx::decodeUtf8("A\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80"), U"A\u00E9\u20AC\U0001F600");
+    EXPECT_EQ(nx::decodeUtf8(""), U"");
+    EXPECT_EQ(nx::decodeUtf8(std::string_view{"a\0b", 3}), std::u32string(U"a\0b", 3))
+        << "NUL is a character";
+}
+
+TEST(Text, DecodesWhatIsNotUtf8AsReplacements) {
+    constexpr char32_t kBad = nx::kReplacementCharacter;
+    EXPECT_EQ(nx::decodeUtf8("a\x80z"), (std::u32string{U'a', kBad, U'z'})) << "a stray continuation";
+    EXPECT_EQ(nx::decodeUtf8("\xC0\xAF"), (std::u32string{kBad, kBad})) << "an overlong form";
+    EXPECT_EQ(nx::decodeUtf8("\xE0\x80\xAF"), (std::u32string{kBad, kBad, kBad})) << "an overlong form";
+    EXPECT_EQ(nx::decodeUtf8("\xED\xA0\x80"), (std::u32string{kBad, kBad, kBad})) << "a surrogate";
+    EXPECT_EQ(nx::decodeUtf8("\xF4\x90\x80\x80"), (std::u32string{kBad, kBad, kBad, kBad}))
+        << "past U+10FFFF";
+    EXPECT_EQ(nx::decodeUtf8("\xE2\x82z"), (std::u32string{kBad, U'z'}))
+        << "a sequence cut short: one replacement, and what cut it read anew";
+    EXPECT_EQ(nx::decodeUtf8("\xF0\x9F\x98"), (std::u32string{kBad})) << "cut short by the end";
+    EXPECT_EQ(nx::decodeUtf8("\xFF"), (std::u32string{kBad}));
+}
+
 } // namespace
