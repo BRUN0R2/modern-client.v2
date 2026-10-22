@@ -12,6 +12,7 @@ nxAddTest(nxAssetsTests
         sprTests.cpp
         spriteListTests.cpp
         keyValuesTests.cpp
+        schemeTests.cpp
         mdlTests.cpp
         tgaTests.cpp
     DEPENDS
