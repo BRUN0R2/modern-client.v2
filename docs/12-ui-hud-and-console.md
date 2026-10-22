@@ -40,7 +40,13 @@ drawing within it. `paintTree` draws a panel's background, then over it each of 
 children in their order; a hidden panel draws nothing, nor do its children. A control is a kind of
 panel that draws more: the first is the `Label` (`nx.ui:label`), a line of text in a face and a
 colour, placed against an edge of the label or halfway between two by its alignment, named as the
-layouts' `textAlignment` names them (`north-west` to `south-east`). Which of a scheme's colours,
+layouts' `textAlignment` names them (`north-west` to `south-east`). The `TextEntry`
+(`nx.ui:textEntry`) is a line the player types in, the console's input line first: typed text
+([§6](#6-input)) goes in at its cursor, control characters left out; Left and Right move the
+cursor by a character, Home and End to the ends, Backspace and Delete remove the character before
+or after it, and Enter submits the line to its owner; it draws its text and a cursor a pixel wide,
+scrolled left when the cursor would pass its right edge. Selection, the clipboard and the cursor's
+blinking come later. Which of a scheme's colours,
 borders and fonts each control takes, and where VGUI2 puts a label's text to the pixel, wait for
 reference shots of the original's windows.
 

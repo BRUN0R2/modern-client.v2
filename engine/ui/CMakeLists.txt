@@ -10,6 +10,7 @@ nxAddModuleLibrary(nxUi
         src/panel.cppm
         src/painter.cppm
         src/label.cppm
+        src/textEntry.cppm
         src/font.cppm
         src/fontCatalog.cppm
         src/schemeFont.cppm
@@ -18,6 +19,7 @@ nxAddModuleLibrary(nxUi
         src/panel.cpp
         src/painter.cpp
         src/label.cpp
+        src/textEntry.cpp
         src/font.cpp
         src/fontCatalog.cpp
         src/schemeFont.cpp
