@@ -140,6 +140,40 @@ TEST(CheckContentTest, AModelWithoutTexturesNeedsItsTexturesFile) {
     }
 }
 
+TEST(CheckContentTest, ReadsVgui2sLayoutsAndLocalizedStrings) {
+    const nx::test::TemporaryDirectory directory;
+    directory.write("resource/GameMenu.res", R"("GameMenu" { "1" { "label" "#GameUI_Quit" } })");
+    directory.write("classes/ak47.res", R"("classes/ak47.res" { })");
+    // A localized string with a line break, in UTF-16 little-endian after its byte order mark.
+    std::string localized{"\xFF\xFE"};
+    for (const char character : std::string_view{R"("lang" { "Tokens" { "a" "b\nc" } })"}) {
+        localized += character;
+        localized += '\0';
+    }
+    directory.write("resource/cstrike_english.txt", localized);
+    directory.write("resource/BackgroundLayout.txt", "resolution\t800\t600\n");
+    directory.write("maps/de_aztec.res", "de_aztec.wad\n"); // a list of downloads, not KeyValues
+    directory.write("resource/broken.res", "\"open");
+
+    const std::vector<FileResult> results = checkDirectory(directory);
+
+    for (const auto& [path, format] :
+         {std::pair{"resource/GameMenu.res", std::optional{Format::KeyValues}},
+          std::pair{"classes/ak47.res", std::optional{Format::KeyValues}},
+          std::pair{"resource/cstrike_english.txt", std::optional{Format::Localization}},
+          std::pair{"resource/BackgroundLayout.txt", std::optional<Format>{}},
+          std::pair{"maps/de_aztec.res", std::optional<Format>{}}}) {
+        const FileResult* result = resultOf(results, path);
+        ASSERT_NE(result, nullptr) << path;
+        EXPECT_EQ(result->format, format) << path;
+        EXPECT_FALSE(result->failure.has_value()) << path << ": " << nx::describe(*result->failure);
+    }
+    const FileResult* broken = resultOf(results, "resource/broken.res");
+    ASSERT_NE(broken, nullptr);
+    ASSERT_TRUE(broken->failure.has_value());
+    EXPECT_EQ(firstCauseOf(*broken), "KeyValuesError::UnclosedQuote");
+}
+
 TEST(CheckContentTest, TellsSequenceGroupFilesFromModels) {
     const nx::test::TemporaryDirectory directory;
     directory.write("models/hostage01.mdl", std::string_view{"IDSQ\x0a\0\0\0", 8});
