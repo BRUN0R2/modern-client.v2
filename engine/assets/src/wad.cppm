@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// WAD3, the texture archives of GoldSrc (halflife.wad, cstrike.wad, decals.wad and the WADs a
-/// map names; docs/06-assets-and-resources.md, section 3.1).
+/// map names; docs/06-assets-and-resources.md, section 3.1), and the pictures and console fonts of
+/// gfx.wad, fonts.wad and cached.wad.
 export module nx.assets:wad;
 
 import std;
@@ -32,6 +33,10 @@ enum class WadError : std::uint8_t {
     CompressedLump,       ///< An entry is compressed, which no GoldSrc tool writes.
     NotATexture,          ///< The entry holds something other than a mip texture.
     BadTexture,           ///< A mip texture breaks its format.
+    NotAPicture,          ///< The entry holds something other than a picture.
+    BadPicture,           ///< A picture breaks its format.
+    NotAFont,             ///< The entry holds something other than a console font.
+    BadFont,              ///< A console font breaks its format.
 };
 
 /// What a WAD3 entry holds. An entry may hold a value without an enumerator: a type this reader
@@ -85,6 +90,44 @@ struct MipTexture {
 
 /// The mip texture of `entry`, with views of the same bytes. Errors: NotATexture, BadTexture.
 [[nodiscard]] auto readTexture(const WadEntry& entry) -> Result<MipTexture, WadError>;
+
+/// A picture (qpic): palette indices, row by row, and the palette. The console's background
+/// (CONBACK) and the loading screen are pictures; index 255 is where a masked picture shows
+/// through.
+struct WadPicture {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::span<const std::byte> pixels{};  ///< A view of width times height palette indices.
+    std::span<const std::byte> palette{}; ///< A view of kPaletteColors RGB triples.
+};
+
+/// The picture of `entry`, with views of the same bytes. Errors: NotAPicture, BadPicture.
+[[nodiscard]] auto readPicture(const WadEntry& entry) -> Result<WadPicture, WadError>;
+
+/// The characters of a console font: the 256 of a code page.
+inline constexpr std::size_t kFontGlyphs = 256;
+
+/// Where a character of a console font is drawn from in its picture: its left and top, and its
+/// width; every glyph of a font is FontView::rowHeight tall.
+struct FontGlyph {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+};
+
+/// A console font (CONCHARS and CREDITSFONT of gfx.wad, FONT0 to FONT2 of fonts.wad): a picture of
+/// its characters in rows, index 255 where they show through, and where each character is.
+struct FontView {
+    std::uint32_t rowHeight = 0; ///< The height of every glyph.
+    WadPicture picture{};
+    std::array<FontGlyph, kFontGlyphs> glyphs{};
+};
+
+/// The console font of `entry`, as GoldSrc reads it, with views of the same bytes: its picture is
+/// 256 pixels wide (the width field is a character's, but in the fonts of Half-Life 1.1.0.0, whose
+/// size says so, it is a sixteenth of the picture's); its palette counts 256 colors, or 768, as
+/// fonts.wad writes it. Errors: NotAFont, BadFont (a glyph outside the picture among them).
+[[nodiscard]] auto readFont(const WadEntry& entry) -> Result<FontView, WadError>;
 
 } // namespace nx::assets
 

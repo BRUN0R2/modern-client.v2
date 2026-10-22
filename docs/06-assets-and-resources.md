@@ -132,7 +132,7 @@ yield `ContentError::MissingEssentialFiles` with the full list.
 | Format | Use | Notes |
 |--------|-----|-------|
 | BSP v30 | Maps | Geometry lumps, colored lightmaps, PVS, clipnode hulls, entity lump, embedded textures |
-| WAD3 | Textures | `halflife.wad`, `cstrike.wad`, `decals.wad`, `tempdecal.wad` (sprays), WADs referenced by the `wad` key of `worldspawn` |
+| WAD3 | Textures, pictures and console fonts | `halflife.wad`, `cstrike.wad`, `decals.wad`, `tempdecal.wad` (sprays), WADs referenced by the `wad` key of `worldspawn`; the pictures (`CONBACK`, `LOADING`) and fonts (`CONCHARS`, `CREDITSFONT`, `FONT0` to `FONT2`) of `gfx.wad`, `fonts.wad` and `cached.wad` |
 | MDL v10 | Studio models | Bones, sequences, *blends*, hitboxes, attachments, events, textures (including `*T.mdl`) and sequence groups (`*01.mdl`) |
 | SPR v2 | Sprites | HUD, effects, smoke, crosshair |
 | WAV (8/16-bit PCM) | Sounds | *Cue* points for looping. Original rates (11/22/44 kHz) |
@@ -150,7 +150,17 @@ Readers today:
 
 - WAD3 (`nx.assets:wad`): the directory, looked up by name ignoring ASCII case with the first
   entry of a name winning, as in GoldSrc, and the mip textures, with their four levels and
-  palette, as views of the file's bytes. Pictures and fonts are listed but not decoded yet.
+  palette, as views of the file's bytes. Its pictures (`readPicture`: a size, palette indices and
+  the palette) and console fonts (`readFont`), as GoldSrc reads them: a font's picture is 256
+  pixels wide, its width field being a character's (`CONCHARS`), but in the fonts of Half-Life
+  1.1.0.0, whose size says so, a sixteenth of the picture's (`FONT0`); each of its 256 characters is
+  at an offset into the picture, its own width wide and the font's row tall; its palette counts 256
+  colors, or 768, as `fonts.wad` writes it; index 255 is where its characters show through.
+- Sprite lists (`nx.assets:spriteList`, `hud.txt` and the weapons' `sprites/weapon_<name>.txt`):
+  their count, then seven words an entry (its name, the screen width it is for, 320 or 640, its
+  sprite, and the rectangle of the sprite it shows), split as the original splits them (whitespace,
+  quotes, `//` comments). A count above the entries reads those there are: Counter-Strike's
+  `hud.txt` counts 215 for 190.
 - WAV (`nx.assets:wav`): the 8- and 16-bit PCM of the original content and every other
   uncompressed layout (24- and 32-bit PCM, 32- and 64-bit IEEE float, `WAVE_FORMAT_EXTENSIBLE`),
   at any rate (`SampleRate`) and in any number of channels (`ChannelCount`), so no sound is held to
@@ -210,7 +220,7 @@ Readers today:
   runs of 128, is refused before anything is allocated.
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`, `materials.txt`, `hud.txt`...) are planned with their consumers (M3).
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`, `materials.txt`...) are planned with their consumers (M3), but the sprite lists, read today.
 
 ### 3.2 Modern (for mods)
 

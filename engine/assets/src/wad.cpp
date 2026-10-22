@@ -32,6 +32,23 @@ constexpr std::size_t kTextureLevelsOffset = 24;
 constexpr std::size_t kTextureHeaderBytes = kTextureLevelsOffset + (kMipLevels * sizeof(std::uint32_t));
 constexpr std::size_t kPaletteCountBytes = sizeof(std::uint16_t);
 
+// A picture: its width and height, then its pixels and the palette, as after a texture's levels.
+constexpr std::size_t kPictureHeightOffset = 4;
+constexpr std::size_t kPictureHeaderBytes = 8;
+
+// A console font: the width of a character (or a sixteenth of the picture's), the picture's
+// height, its rows of characters and their height; each character's offset in the picture and
+// width, 16 bits each; then the picture, 256 pixels wide, and the palette, which may count 768.
+constexpr std::size_t kFontHeightOffset = 4;
+constexpr std::size_t kFontRowHeightOffset = 12;
+constexpr std::size_t kFontGlyphsOffset = 16;
+constexpr std::size_t kFontGlyphBytes = 4;
+constexpr std::size_t kFontPictureOffset = kFontGlyphsOffset + (kFontGlyphs * kFontGlyphBytes);
+constexpr std::uint32_t kFontPictureWidth = 256;
+constexpr std::uint32_t kFontCellsPerRow = 16; ///< In the fonts of Half-Life 1.1.0.0.
+constexpr std::size_t kFontTrailerBytes = 64;  ///< After their palette, unexplained.
+constexpr std::uint16_t kFontPaletteBytesAsCount = 768;
+
 /// Whether `length` bytes at `offset` lie inside `bytes`; 64-bit, so 32-bit fields cannot wrap.
 [[nodiscard]] auto fits(std::span<const std::byte> bytes, std::uint64_t offset, std::uint64_t length) noexcept
     -> bool {
@@ -140,6 +157,100 @@ auto WadView::find(std::string_view name) const noexcept -> const WadEntry* {
     const auto found = std::ranges::find_if(
         m_entries, [name](const WadEntry& entry) { return equalsIgnoringCase(entry.name, name); });
     return found == m_entries.end() ? nullptr : &*found;
+}
+
+namespace {
+
+/// The `width` by `height` pixels at `offset` of `lump` and the palette after them, which counts
+/// one of `colorCounts`; none when they do not fit or the count is another.
+[[nodiscard]] auto picturePixels(std::span<const std::byte> lump, std::size_t offset, std::uint64_t width,
+                                 std::uint64_t height, std::span<const std::uint16_t> colorCounts)
+    -> std::optional<WadPicture> {
+    const std::uint64_t pixels = width * height; // each below 2^32: no wrap
+    if (!fits(lump, offset, pixels) || !fits(lump, offset + pixels, kPaletteCountBytes + kPaletteBytes)) {
+        return std::nullopt;
+    }
+    const auto paletteStart = narrow<std::size_t>(offset + pixels);
+    if (!std::ranges::contains(colorCounts, loadLittleEndian<std::uint16_t>(lump.subspan(paletteStart)))) {
+        return std::nullopt;
+    }
+    return WadPicture{.width = narrow<std::uint32_t>(width),
+                      .height = narrow<std::uint32_t>(height),
+                      .pixels = lump.subspan(offset, narrow<std::size_t>(pixels)),
+                      .palette = lump.subspan(paletteStart + kPaletteCountBytes, kPaletteBytes)};
+}
+
+} // namespace
+
+auto readPicture(const WadEntry& entry) -> Result<WadPicture, WadError> {
+    if (entry.type != WadLumpType::Picture) {
+        return fail(WadError::NotAPicture,
+                    std::format("{:?} has type {:#04x}", entry.name, std::to_underlying(entry.type)));
+    }
+    if (entry.data.size() < kPictureHeaderBytes) {
+        return fail(WadError::BadPicture, std::format("{:?}: {} bytes, less than the {} of a picture header",
+                                                      entry.name, entry.data.size(), kPictureHeaderBytes));
+    }
+    const auto width = loadLittleEndian<std::uint32_t>(entry.data);
+    const auto height = loadLittleEndian<std::uint32_t>(entry.data.subspan(kPictureHeightOffset));
+    constexpr std::array<std::uint16_t, 1> kColorCounts{kPaletteColors};
+    std::optional<WadPicture> picture =
+        picturePixels(entry.data, kPictureHeaderBytes, width, height, kColorCounts);
+    if (!picture) {
+        return fail(WadError::BadPicture,
+                    std::format("{:?}: {}x{} pixels and a palette of {} colors are not in its {} bytes",
+                                entry.name, width, height, kPaletteColors, entry.data.size()));
+    }
+    return *picture;
+}
+
+auto readFont(const WadEntry& entry) -> Result<FontView, WadError> {
+    if (entry.type != WadLumpType::Font) {
+        return fail(WadError::NotAFont,
+                    std::format("{:?} has type {:#04x}", entry.name, std::to_underlying(entry.type)));
+    }
+    const std::span<const std::byte> lump = entry.data;
+    if (lump.size() < kFontPictureOffset) {
+        return fail(WadError::BadFont, std::format("{:?}: {} bytes, less than the {} of a font header",
+                                                   entry.name, lump.size(), kFontPictureOffset));
+    }
+    const std::uint64_t cellWidth = loadLittleEndian<std::uint32_t>(lump);
+    const std::uint64_t height = loadLittleEndian<std::uint32_t>(lump.subspan(kFontHeightOffset));
+    const std::uint32_t rowHeight = loadLittleEndian<std::uint32_t>(lump.subspan(kFontRowHeightOffset));
+    // The fonts of Half-Life 1.1.0.0 are exactly this long; the others are 256 pixels wide.
+    const std::uint64_t newStyleBytes = kFontPictureOffset + (height * cellWidth * kFontCellsPerRow) +
+                                        kPaletteCountBytes + kPaletteBytes + kFontTrailerBytes;
+    const std::uint64_t width =
+        newStyleBytes == lump.size() ? cellWidth * kFontCellsPerRow : kFontPictureWidth;
+    constexpr std::array<std::uint16_t, 2> kColorCounts{kPaletteColors, kFontPaletteBytesAsCount};
+    std::optional<WadPicture> picture =
+        width <= std::numeric_limits<std::uint32_t>::max()
+            ? picturePixels(lump, kFontPictureOffset, width, height, kColorCounts)
+            : std::nullopt;
+    if (!picture || picture->width == 0 || rowHeight == 0) {
+        return fail(WadError::BadFont,
+                    std::format("{:?}: a picture {} wide and {} tall, rows {} tall, and its "
+                                "palette are not in its {} bytes",
+                                entry.name, width, height, rowHeight, lump.size()));
+    }
+    FontView font{.rowHeight = rowHeight, .picture = *picture, .glyphs = {}};
+    for (std::size_t character = 0; character < kFontGlyphs; ++character) {
+        const auto record = lump.subspan(kFontGlyphsOffset + (character * kFontGlyphBytes));
+        const std::uint32_t offset = loadLittleEndian<std::uint16_t>(record);
+        const std::uint32_t glyphWidth =
+            loadLittleEndian<std::uint16_t>(record.subspan(sizeof(std::uint16_t)));
+        const FontGlyph glyph{
+            .x = offset % font.picture.width, .y = offset / font.picture.width, .width = glyphWidth};
+        if (std::uint64_t{glyph.x} + glyph.width > font.picture.width ||
+            std::uint64_t{glyph.y} + rowHeight > font.picture.height) {
+            return fail(WadError::BadFont,
+                        std::format("{:?}: character {} ({} wide at {}, {}) is outside the {}x{} picture",
+                                    entry.name, character, glyph.width, glyph.x, glyph.y, font.picture.width,
+                                    font.picture.height));
+        }
+        font.glyphs.at(character) = glyph;
+    }
+    return font;
 }
 
 auto readTexture(const WadEntry& entry) -> Result<MipTexture, WadError> {

@@ -18,7 +18,7 @@ export namespace nxcheck {
 enum class Format : std::uint8_t {
     Bsp,           ///< A map: BspView, which reads every lump and its embedded textures, and the
                    ///< collision hulls of its brush models.
-    Wad,           ///< A WAD3: WadView, and readTexture on every mip texture.
+    Wad,           ///< A WAD3: WadView, and readTexture, readPicture or readFont on every entry.
     Mdl,           ///< A model: MdlView; the `*T.mdl` its textures are in, when they are not in it;
                    ///< and the animation of every sequence, from its sequence group file too, its
                    ///< bones posed at each frame (cs::poseBones).
@@ -26,6 +26,7 @@ enum class Format : std::uint8_t {
     Spr,           ///< A sprite: SpriteView.
     Tga,           ///< An image (the skies, the VGUI menus): readTga.
     Wav,           ///< A sound: parseWav.
+    SpriteList,    ///< A sprite list of the HUD (sprites/*.txt): parseSpriteList.
     Count,
 };
 
