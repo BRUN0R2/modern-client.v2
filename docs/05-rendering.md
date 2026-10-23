@@ -302,8 +302,10 @@ others, each texel lit as the face is there and blended over the lit face as opa
 the original draws them over the face's texture before it multiplies both by the lightmap, which
 comes out the same. Their depth is tested against the faces' pulled toward the eye by the
 original's polygon offset (2 units of the depth's least step, plus the slope), and not written.
-The decals of brush entities, permanent ones (`infodecal`), the decals of masked faces (which the
-original cuts with a stencil) and the bullet holes the client stamps come with what stamps them.
+In `next`, each shot that meets the world leaves its bullet hole (docs/10 §7.3), the level's
+gunshot decals (`{shot1` to `{shot5`) in a pool of 300, `mp_decals`' default, until the `r_decals`
+and `mp_decals` cvars come. The decals of brush entities, permanent ones (`infodecal`) and the
+decals of masked faces (which the original cuts with a stencil) come with what stamps them.
 
 On the Steam installation, de_dust2 is 5358 faces (1356 of them sky) in 41 textures and a 1024x404
 atlas, built in half a second; from the terrorists' spawn a frame draws 382 of them, in 83 leaves.

@@ -290,9 +290,15 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   down in float by each command's frame time once its frame is over, so a delay lasts as many
   commands as the original's (0.15 seconds, 16 commands at 100 a second; 0.75, 76). Drawing
   another weapon stops a reload.
-- **Shots** (`cs::Shot`, today hitting nothing): from the eye, along the view turned by the punch,
-  strayed by the spread at random, each way the sum of two even draws from the command number's
-  `spread` stream (`FireBullets3`).
+- **Shots** (`cs::Shot`): from the eye, along the view turned by the punch, strayed by the spread
+  at random, each way the sum of two even draws from the command number's `spread` stream
+  (`FireBullets3`). Each goes 8192 units, its direction as it strayed (not of length 1), through
+  the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it);
+  where it meets the world it leaves a bullet hole, one of `{shot1` to `{shot5` of decals.wad at
+  random, as the original's `DamageDecal` names them for a surface drawn normally (the client
+  stamps them, `DecalGunshot` being empty on the server: docs/05 §8). What they meet of the brush
+  entities (their decals, `{bproof1` on glass), their damage and how far they go through come with
+  damage.
 - **Spread:** a per-weapon function reproducing the original, depending on movement, being
   in the air, crouching, zoom and accumulated accuracy.
   **Today:** the data's terms (section 7.2), of the accuracy before the shot changes it: a burst's

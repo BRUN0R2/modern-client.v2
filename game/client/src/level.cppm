@@ -98,6 +98,10 @@ public:
     [[nodiscard]] inline auto viewModels() const noexcept -> std::span<const ViewModel> {
         return m_viewModels;
     }
+    /// The decals a bullet leaves on the world, of decals.wad: those of kGunshotDecals it has.
+    [[nodiscard]] inline auto gunshotDecals() const noexcept -> std::span<const nx::assets::MipTexture> {
+        return m_gunshotDecals;
+    }
 
 private:
     std::vector<std::byte> m_mapBytes;
@@ -105,6 +109,8 @@ private:
     nx::game::EntityClasses m_entityClasses;
     std::vector<std::vector<std::byte>> m_wadBytes;
     std::vector<nx::assets::WadView> m_wads;
+    std::vector<std::byte> m_decalWadBytes;
+    std::vector<nx::assets::MipTexture> m_gunshotDecals; ///< Views of m_decalWadBytes.
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;

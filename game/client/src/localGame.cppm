@@ -70,6 +70,9 @@ public:
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_inventory; }
+    /// Where the player's shots met the world since the last call, in their order: what a bullet
+    /// leaves its hole at. What they meet of the brush entities comes with their decals (TODO.md).
+    [[nodiscard]] inline auto takeImpacts() -> std::vector<nx::Vec3> { return std::exchange(m_impacts, {}); }
     /// The sounds the player's weapons made since the last call (Inventory::takeSounds).
     [[nodiscard]] inline auto takeSounds() -> std::vector<const GameSound*> {
         return m_inventory.takeSounds();
@@ -85,6 +88,7 @@ private:
     const Level* m_level;
     nx::ecs::World m_world;
     nx::ecs::Entity m_body{};
+    std::vector<nx::Vec3> m_impacts; ///< Since takeImpacts.
     MovementState m_player{};
     PlayerStatus m_status{};
     Inventory m_inventory;

@@ -26,10 +26,14 @@ auto solidBrushesOf(ecs::World& world) -> std::vector<SolidBrush> {
     return solids;
 }
 
-auto serverTrace(const collision::BrushHulls& hulls, std::span<const SolidBrush> solids,
-                 std::optional<ecs::Entity> ignored, collision::Hull hull, Vec3 start, Vec3 end)
-    -> collision::Trace {
-    collision::Trace best = hulls.trace(collision::HullTraceQuery{.hull = hull, .start = start, .end = end});
+namespace {
+
+/// serverTrace, and the entity of `solids` that stopped it, none for the world or nothing.
+[[nodiscard]] auto serverHit(const collision::BrushHulls& hulls, std::span<const SolidBrush> solids,
+                             std::optional<ecs::Entity> ignored, collision::Hull hull, Vec3 start, Vec3 end)
+    -> SolidHit {
+    SolidHit found{.trace = hulls.trace(collision::HullTraceQuery{.hull = hull, .start = start, .end = end})};
+    collision::Trace& best = found.trace;
     for (const SolidBrush& solid : solids) {
         if (best.isAllSolid) {
             break;
@@ -47,16 +51,30 @@ auto serverTrace(const collision::BrushHulls& hulls, std::span<const SolidBrush>
             const bool startedSolid = best.startsSolid;
             best = hit;
             best.startsSolid = best.startsSolid || startedSolid;
+            found.entity = solid.entity;
         } else if (hit.startsSolid) {
             best.startsSolid = true;
         }
     }
-    return best;
+    return found;
+}
+
+} // namespace
+
+auto serverTrace(const collision::BrushHulls& hulls, std::span<const SolidBrush> solids,
+                 std::optional<ecs::Entity> ignored, collision::Hull hull, Vec3 start, Vec3 end)
+    -> collision::Trace {
+    return serverHit(hulls, solids, ignored, hull, start, end).trace;
 }
 
 auto traceSolids(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull, Vec3 start,
                  Vec3 end) -> collision::Trace {
     return serverTrace(hulls, solidBrushesOf(world), std::nullopt, hull, start, end);
+}
+
+auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull, Vec3 start,
+                    Vec3 end) -> SolidHit {
+    return serverHit(hulls, solidBrushesOf(world), std::nullopt, hull, start, end);
 }
 
 } // namespace nx::game

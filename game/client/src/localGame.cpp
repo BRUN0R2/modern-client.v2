@@ -25,6 +25,8 @@ constexpr nx::Seconds kMaxCatchUp{0.25F};
 constexpr bool kAutoSwitch = true;
 /// The stream of random numbers a spawn's weapons draw from.
 constexpr std::string_view kSpawnStream = "spawn";
+/// How far a bullet goes: FireBullets3's distance for every gun the game has.
+constexpr float kBulletReach = 8192.0F;
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -116,7 +118,8 @@ void LocalGame::tick(const UserCommand& command) {
     *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
     nx::game::touchTriggers(m_world, hulls, m_body);
     // The weapon in hand fires, is reloaded or idles once the command moved the player, as the
-    // original's PostThink runs it; its shots hit nothing yet.
+    // original's PostThink runs it; each shot goes as far as a bullet does, and where it meets the
+    // world it leaves its hole (its damage and how far it goes through come with damage).
     Shooter shooter{
         .eye = eyeOf(m_player),
         .view = command.viewAngles,
@@ -128,7 +131,15 @@ void LocalGame::tick(const UserCommand& command) {
     const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
         return nx::game::traceSolids(m_world, hulls, hull, start, end);
     };
-    std::ignore = m_inventory.frame(command, shooter, tracer, nx::game::tickTimeOf(m_world));
+    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, nx::game::tickTimeOf(m_world))) {
+        // As FireBullets3 traces it: its direction as it strays, not of length 1.
+        const nx::game::SolidHit hit =
+            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin,
+                                     shot.origin + (shot.direction * kBulletReach));
+        if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid && !hit.entity) {
+            m_impacts.push_back(hit.trace.end);
+        }
+    }
     m_player.punch = shooter.punch;
     nx::game::runThinks(m_world, hulls);
     nx::game::runPushers(m_world, hulls);
