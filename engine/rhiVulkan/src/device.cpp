@@ -519,9 +519,10 @@ struct VertexInput {
         .primitiveRestartEnable = VK_FALSE};
 }
 
-/// Filled triangles, culled and facing as `desc` says.
+/// Filled triangles, culled and facing as `desc` says, their depth biased as its depth state says.
 [[nodiscard]] auto rasterizationOf(const RenderPipelineDesc& desc) noexcept
     -> VkPipelineRasterizationStateCreateInfo {
+    const std::optional<DepthBias> bias = desc.depth ? desc.depth->bias : std::nullopt;
     return VkPipelineRasterizationStateCreateInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
@@ -532,10 +533,10 @@ struct VertexInput {
         .cullMode = cullModeOf(desc.cullMode),
         .frontFace = desc.frontFace == FrontFace::CounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE
                                                                    : VK_FRONT_FACE_CLOCKWISE,
-        .depthBiasEnable = VK_FALSE,
-        .depthBiasConstantFactor = 0.0F,
+        .depthBiasEnable = bias ? VK_TRUE : VK_FALSE,
+        .depthBiasConstantFactor = bias ? bias->constant : 0.0F,
         .depthBiasClamp = 0.0F,
-        .depthBiasSlopeFactor = 0.0F,
+        .depthBiasSlopeFactor = bias ? bias->slope : 0.0F,
         .lineWidth = 1.0F};
 }
 

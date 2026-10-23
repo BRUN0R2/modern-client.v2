@@ -5,7 +5,8 @@
 // light, as the original draws it (nx.render:gamma): each luxel sums its lightmaps, each times its
 // style's brightness, goes through `lightgamma`, `brightness` and `gamma`, and the face blends the
 // four luxels around each point. Masked textures (`{`) discard their transparent texels; brush
-// entities are drawn as their render mode says, the water of those with waves rising and falling.
+// entities are drawn as their render mode says, the water of those with waves rising and falling;
+// decals lie over the faces, lit as they are.
 // The sky's faces show the side of the sky they are seen toward, projected as the original projects
 // it.
 
@@ -254,6 +255,16 @@ float4 fragmentMain(VertexOutput input) : SV_Target
 float4 solidFragmentMain(VertexOutput input) : SV_Target
 {
     return litOrDiscarded(input, kSolidAlphaTest);
+}
+
+// A decal over the face it lies on (nx.render:decals): its texel lit as the face is there, blended
+// over the lit face as opaque as its alpha. The original draws its decals over the face's texture
+// and then multiplies both by the lightmap; lit first, they come out the same.
+[shader("fragment")]
+float4 decalFragmentMain(VertexOutput input) : SV_Target
+{
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), color.a);
 }
 
 // kRenderTransTexture and kRenderGlow: the texture, as opaque as renderamt makes it.

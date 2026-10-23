@@ -16,6 +16,7 @@ nxAddModuleLibrary(nxRender
         src/surface.cppm
         src/upload.cppm
         src/light.cppm
+        src/decals.cppm
         src/world.cppm
         src/studio.cppm
         src/sprite.cppm
@@ -28,6 +29,7 @@ nxAddModuleLibrary(nxRender
         src/surface.cpp
         src/upload.cpp
         src/light.cpp
+        src/decals.cpp
         src/world.cpp
         src/studio.cpp
         src/sprite.cpp

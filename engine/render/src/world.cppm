@@ -11,8 +11,8 @@
 ///
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
-/// the brush entities' render modes and alternate textures, water and its waves, and brush entities
-/// moved and turned by the game.
+/// the brush entities' render modes and alternate textures, water and its waves, brush entities
+/// moved and turned by the game, and decals on the world's faces (nx.render:decals).
 export module nx.render:world;
 
 import std;
@@ -25,6 +25,7 @@ import :gamma;
 import :lightStyle;
 import :renderMode;
 import :blendedOrder;
+import :decals;
 
 namespace nx::render {
 
@@ -68,13 +69,26 @@ struct BucketFrames {
     std::vector<rhi::OwnedBindGroup> alternates{};
 };
 
-/// What one frame in flight writes its uniform, its indices and its brush models' uniforms to.
+/// Decals of one image that follow one another in the order they are drawn: their triangles, in a
+/// frame's decal vertices.
+struct DecalRun {
+    std::uint32_t texture = 0;
+    std::uint32_t firstVertex = 0;
+    std::uint32_t vertexCount = 0;
+};
+
+/// What one frame in flight writes its uniform, its indices, its brush models' uniforms and its
+/// decals' triangles to.
 struct FrameSlot {
     rhi::OwnedBuffer buffer{};
     rhi::OwnedBindGroup group{};
     rhi::OwnedBuffer indices{};
     rhi::OwnedBuffer entities{};
     std::vector<rhi::OwnedBindGroup> entityGroups{}; ///< Each model's uniform, by its index.
+    rhi::OwnedBuffer decalVertices{};                ///< Grown as the decals need.
+    std::uint64_t decalCapacity = 0;                 ///< Its bytes.
+    std::optional<std::uint64_t> decalRevision{};    ///< Of the decals it holds: none, none yet.
+    std::vector<DecalRun> decalRuns{};
 };
 
 } // namespace nx::render
@@ -108,6 +122,12 @@ struct BspWorldDesc {
     /// their files have them: unlike the palettes of the textures, the original puts them through no
     /// gamma curve.
     std::span<const assets::RgbaImage> sky{};
+    /// The decals the world can show, by their index (shootDecal's): images of decals.wad, made as
+    /// decalImageOf makes them.
+    std::span<const assets::MipTexture> decals{};
+    /// The most decals on faces the world keeps, its oldest going first (DecalPool::kMostDecals at
+    /// most): `r_decals`, which a multiplayer game holds to `mp_decals`.
+    std::size_t decalLimit = DecalPool::kMostDecals;
 };
 
 /// What the world holds, for the log and r_speeds.
@@ -181,6 +201,13 @@ public:
     /// Records the brush entity of `index`, one of blendedDraws()'s, in the same render pass.
     void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
+    /// Stamps decal `decal`, of BspWorldDesc::decals, on the world's faces near `center`, as
+    /// DecalPool::shoot does; drawn from the next prepare on, over the faces, lit as they are, after
+    /// the world's faces as the original draws them. Returns the faces it was stamped on.
+    auto shootDecal(std::uint32_t decal, Vec3 center) -> std::uint32_t;
+    /// The world's decals.
+    [[nodiscard]] inline auto decals() const noexcept -> const DecalPool& { return *m_decals; }
+
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
     [[nodiscard]] inline auto lastFrame() const noexcept -> const FrameStats& { return m_lastFrame; }
 
@@ -242,6 +269,12 @@ private:
     /// A bind group for each texture each bucket of `bucketTextures` shows.
     [[nodiscard]] auto createBucketGroups(std::span<const BucketTextures> bucketTextures)
         -> Result<void, rhi::RhiError>;
+    /// A bind group for each of `decals`, sampled clamped at its edges.
+    [[nodiscard]] auto createDecalGroups(std::span<const rhi::OwnedTexture> decals)
+        -> Result<void, rhi::RhiError>;
+    /// Writes the decals' triangles to `slot` when it holds others, growing its buffer as they need.
+    /// Errors: those of the buffer's creation.
+    [[nodiscard]] auto writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError>;
 
     rhi::Device* m_device;
     const assets::BspView* m_map;
@@ -259,6 +292,11 @@ private:
     rhi::OwnedRenderPipeline m_texturePipeline;  ///< TransTexture and Glow.
     rhi::OwnedRenderPipeline m_colorPipeline;    ///< TransColor.
     rhi::OwnedRenderPipeline m_additivePipeline; ///< TransAdd.
+    rhi::OwnedRenderPipeline m_decalPipeline;
+    rhi::OwnedSampler m_decalSampler;
+    std::vector<rhi::OwnedBindGroup> m_decalGroups; ///< Of each decal's image, by its index.
+    std::vector<DecalSize> m_decalSizes;
+    std::optional<DecalPool> m_decals; ///< Made with the faces, once their lightmaps are placed.
     /// For each bucket of faces, a bind group for each texture it shows in turn, and for each of its
     /// alternate sequence.
     std::vector<BucketFrames> m_bucketFrames;
