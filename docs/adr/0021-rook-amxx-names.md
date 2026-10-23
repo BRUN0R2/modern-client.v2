@@ -66,9 +66,14 @@ camelCase API, with every Rook guarantee kept.
    "file"`, an unknown header and `#define` are errors whose fix rewrites them as an `import` or a
    `const`.
 2. **`new`** is a contextual keyword at the start of a declaration: `new x = 10;` is exactly
-   `var x = 10;`, mutable as in Pawn, with Rook's type syntax (`new speed: Speed = 250ups;`). A
-   Pawn tag (`new Float:speed`) is an error whose fix writes the type. Everywhere else `new` stays
-   a name, so constructors (`PlayerMap.new()`) are untouched.
+   `var x = 10;`, mutable as in Pawn. Its type may be written where Pawn writes a tag, before the
+   name: `new Weapon:drakar = createWeapon("DrakarIII", WeaponType.Primary)?;` is exactly
+   `var drakar: Weapon = createWeapon("DrakarIII", WeaponType.Primary)?;`. It is Rook's type, not a
+   tag: nominal, checked, never converted implicitly; `Float` is `amxx.amxmodx`'s name of `f32`, and
+   Pawn's untagging (`_:value`) is an error whose fix writes the conversion. Rook's order
+   (`new speed: Speed = 250ups;`) is accepted too; the two are told apart by which side names a
+   type, and a declaration where both or neither do is an error. Everywhere else `new` stays a
+   name, so constructors (`PlayerMap.new()`) are untouched.
 3. **AMXX's natives that do what no catalog does, by their literal names,** live in the `amxx.*`
    modules of the SDK, written in Rook, each a one-line function over the canonical API:
    `register_clcmd` calls `registerClcmd`, `client_print` calls `clientPrint`, `set_task` calls
@@ -122,8 +127,8 @@ camelCase API, with every Rook guarantee kept.
    (`register_clcmd expects a function: the handler AMXX names by a string is the function itself
    in Rook`; `client_print expects a Player: AMXX's player index is a Player handle in Rook`).
 8. **`rook migrate`** gains `--keep-amxx-names`: the converted plugin keeps the literal names,
-   `new` and the `get_<handle>_var` spelling, changing only what typing requires, for the smallest
-   diff; without it, it writes the canonical forms as today.
+   `new` with its type before the name and the `get_<handle>_var` spelling, changing only what
+   typing requires, for the smallest diff; without it, it writes the canonical forms as today.
 
 The `vars` keys stay as the catalogs declare them (`"health"`, `"maxClip"`), whichever spelling of
 the accessor reaches them; accepting `"max_clip"` too would be a decision of its own. AMXX/ReAPI's

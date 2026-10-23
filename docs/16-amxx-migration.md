@@ -24,7 +24,7 @@ they read in Pawn, the types aside ([§3.1](#31-the-amxx-layer),
 | `#define MAX_ZOMBIES 10` | `const MAX_ZOMBIES: i32 = 10;` |
 | `register_plugin("Name", VERSION, AUTHOR)` | `plugin { name: ..., version: ..., author: ... }` block |
 | `new x = 10;` | `let x = 10;` (immutable) or `var x = 10;`; `new x = 10;` is kept as `var` |
-| `new Float:speed = 250.0;` | `let speed: Speed = 250ups;` |
+| `new Float:speed = 250.0;` | `let speed: Speed = 250ups;`, or kept with its type before the name: `new Speed:speed = 250ups;` |
 | `new Class:class = ...` (tag) | `let class: Class = ...` (nominal handle) |
 | `any:` | Generics (`fn f<T>(x: T)`) |
 | `_:value` (remove the tag) | `.value()` or an explicit conversion |

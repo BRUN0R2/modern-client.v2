@@ -97,9 +97,11 @@ fn cmdHello(player: Player) -> PluginResult {
   `err`, `void`.
 - AMX Mod X's spelling ([ADR-0021](adr/0021-rook-amxx-names.md)):
   - `new` is a **contextual** keyword: at the start of a declaration, `new x = 10;` is exactly
-    `var x = 10;`, with Rook's type syntax (`new speed: Speed = 250ups;`); a Pawn tag
-    (`new Float:speed`) is an error whose fix writes the type. Anywhere else `new` is a name, so
-    constructors (`PlayerMap.new()`) keep it.
+    `var x = 10;`. Its type is written in Rook's order (`new speed: Speed = 250ups;`) or before the
+    name, where Pawn writes a tag (`new Weapon:drakar = createWeapon(...)?;`): a strong, nominal
+    type either way, never converted implicitly; `Float` is `amxx.amxmodx`'s name of `f32`, and
+    Pawn's untagging (`_:value`) is an error. The two orders are told apart by which side names a
+    type. Anywhere else `new` is a name, so constructors (`PlayerMap.new()`) keep it.
   - `#include <header>`, on a line of its own before the first declaration, is
     `import amxx.<header>.*;` for an AMXX header the layer provides (§19). There is no
     preprocessor: `#include "file"`, an unknown header and `#define` are errors whose fix writes an
