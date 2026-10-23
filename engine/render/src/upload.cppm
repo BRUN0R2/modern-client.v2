@@ -21,6 +21,12 @@ struct MipChain {
     std::vector<std::size_t> offsets{};
 };
 
+/// The RGBA texels of `indices`, each an index into `palette`'s colors (red, green and blue bytes), its
+/// color through `textureGamma`, opaque; with `isMasked`, the last index transparent and of no color, as
+/// the original draws a masked texture.
+[[nodiscard]] auto paletteTexelsOf(std::span<const std::byte> indices, std::span<const std::byte> palette,
+                                   bool isMasked, const ChannelTable& textureGamma) -> std::vector<std::byte>;
+
 /// `texels`, the RGBA rows of a `width` x `height` texture, and its mip levels down to one texel, each
 /// texel the mean of the two by two above it, cut as the original's GL_MipMap cuts it, the last row or
 /// column of an odd size taken twice: of a texture of data, or of display colors as the original

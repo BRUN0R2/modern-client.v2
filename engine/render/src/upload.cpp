@@ -21,6 +21,10 @@ constexpr std::uint32_t kMipMeanShift = 2;
 constexpr float kMipTexels = static_cast<float>(kMipStep * kMipStep);
 /// A channel at its brightest.
 constexpr float kChannelTop = 255.0F;
+/// An opaque alpha.
+constexpr std::byte kOpaque{255};
+/// The palette index a masked texture draws as transparent.
+constexpr std::uint8_t kTransparentIndex = 255;
 /// The gamma of the display the original's colors are made for (shaders/colorEncoding.slang).
 constexpr float kDisplayGamma = 2.2F;
 /// sRGB's transfer function (IEC 61966-2-1): a line near black, a power curve above it.
@@ -79,46 +83,82 @@ struct SrgbTables {
     return srgbByteOf((light[above[0]] + light[above[1]] + light[above[2]] + light[above[3]]) / kMipTexels);
 }
 
-/// Appends to `chain` the level below the `width` x `height` one that starts at `from`, each channel of
-/// each texel `mean(channel, the four bytes above it)`.
+/// The bytes of the level `level` of a `width` x `height` texture.
+[[nodiscard]] auto levelBytesOf(std::uint32_t width, std::uint32_t height, std::uint32_t level) noexcept
+    -> std::size_t {
+    return std::size_t{std::max(width >> level, 1U)} * std::max(height >> level, 1U) * kRgbaBytes;
+}
+
+/// Writes to `below` the level under the `width` x `height` one `above` holds, each channel of each texel
+/// `mean(channel, the four bytes above it)`: the corners of each texel are found once, and no byte is
+/// added one at a time, which made most of the cost of a texture.
 template <class ChannelMean>
-void addMipLevel(MipChain& chain, std::size_t from, std::uint32_t width, std::uint32_t height,
-                 const ChannelMean& mean) {
+void makeMipLevel(std::span<const std::byte> above, std::uint32_t width, std::uint32_t height,
+                  std::span<std::byte> below, const ChannelMean& mean) {
     const std::uint32_t lowerWidth = std::max(width / kMipStep, 1U);
     const std::uint32_t lowerHeight = std::max(height / kMipStep, 1U);
-    chain.offsets.push_back(chain.texels.size());
-    const auto at = [&](std::uint32_t x, std::uint32_t y, std::size_t channel) {
-        const std::size_t texel = (std::size_t{std::min(y, height - 1)} * width) + std::min(x, width - 1);
-        return std::to_integer<std::uint32_t>(chain.texels[from + (texel * kRgbaBytes) + channel]);
-    };
     for (std::uint32_t y = 0; y < lowerHeight; ++y) {
+        const std::size_t top = std::size_t{std::min(y * kMipStep, height - 1)} * width;
+        const std::size_t bottom = std::size_t{std::min((y * kMipStep) + 1, height - 1)} * width;
         for (std::uint32_t x = 0; x < lowerWidth; ++x) {
+            const std::size_t left = std::min(x * kMipStep, width - 1);
+            const std::size_t right = std::min((x * kMipStep) + 1, width - 1);
+            const std::array corners{(top + left) * kRgbaBytes, (top + right) * kRgbaBytes,
+                                     (bottom + left) * kRgbaBytes, (bottom + right) * kRgbaBytes};
+            const std::size_t at = ((std::size_t{y} * lowerWidth) + x) * kRgbaBytes;
             for (std::size_t channel = 0; channel < kRgbaBytes; ++channel) {
-                const MipQuad above{at(x * kMipStep, y * kMipStep, channel),
-                                    at((x * kMipStep) + 1, y * kMipStep, channel),
-                                    at(x * kMipStep, (y * kMipStep) + 1, channel),
-                                    at((x * kMipStep) + 1, (y * kMipStep) + 1, channel)};
-                chain.texels.push_back(mean(channel, above));
+                const MipQuad quad{std::to_integer<std::uint32_t>(above[corners[0] + channel]),
+                                   std::to_integer<std::uint32_t>(above[corners[1] + channel]),
+                                   std::to_integer<std::uint32_t>(above[corners[2] + channel]),
+                                   std::to_integer<std::uint32_t>(above[corners[3] + channel])};
+                below[at + channel] = mean(channel, quad);
             }
         }
     }
 }
 
 /// `texels`, the first level of a `width` x `height` texture, and its levels below down to one texel,
-/// each made by `mean`.
+/// each made by `mean`, the chain sized once.
 template <class ChannelMean>
 [[nodiscard]] auto mipChainMadeBy(std::vector<std::byte> texels, std::uint32_t width, std::uint32_t height,
                                   const ChannelMean& mean) -> MipChain {
-    MipChain chain{.texels = std::move(texels), .offsets = {0}};
     const auto levels = static_cast<std::uint32_t>(std::bit_width(std::max(width, height)));
+    MipChain chain{.texels = std::move(texels), .offsets = {0}};
+    std::size_t size = chain.texels.size();
     for (std::uint32_t level = 1; level < levels; ++level) {
-        addMipLevel(chain, chain.offsets.back(), std::max(width >> (level - 1), 1U),
-                    std::max(height >> (level - 1), 1U), mean);
+        chain.offsets.push_back(size);
+        size += levelBytesOf(width, height, level);
+    }
+    chain.texels.resize(size);
+    const std::span<std::byte> all{chain.texels};
+    for (std::uint32_t level = 1; level < levels; ++level) {
+        const std::size_t from = chain.offsets[level - 1];
+        makeMipLevel(all.subspan(from, levelBytesOf(width, height, level - 1)),
+                     std::max(width >> (level - 1), 1U), std::max(height >> (level - 1), 1U),
+                     all.subspan(chain.offsets[level], levelBytesOf(width, height, level)), mean);
     }
     return chain;
 }
 
 } // namespace
+
+auto paletteTexelsOf(std::span<const std::byte> indices, std::span<const std::byte> palette, bool isMasked,
+                     const ChannelTable& textureGamma) -> std::vector<std::byte> {
+    std::vector<std::byte> texels(indices.size() * kRgbaBytes); // a transparent texel stays as it is made
+    for (std::size_t texel = 0; texel < indices.size(); ++texel) {
+        const auto entry = std::to_integer<std::size_t>(indices[texel]);
+        if (isMasked && entry == kTransparentIndex) {
+            continue;
+        }
+        const std::size_t at = texel * kRgbaBytes;
+        for (std::size_t channel = 0; channel < kColorBytes; ++channel) {
+            const auto value = std::to_integer<std::size_t>(palette[(entry * kColorBytes) + channel]);
+            texels[at + channel] = std::byte{textureGamma[value]};
+        }
+        texels[at + kColorBytes] = kOpaque;
+    }
+    return texels;
+}
 
 auto mipChainOf(std::vector<std::byte> texels, std::uint32_t width, std::uint32_t height) -> MipChain {
     return mipChainMadeBy(std::move(texels), width, height, byteMeanOf);

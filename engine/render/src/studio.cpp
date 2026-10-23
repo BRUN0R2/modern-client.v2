@@ -51,8 +51,6 @@ constexpr std::uint32_t kOriginalSurface = 0;
 constexpr std::uint32_t kMetallicRoughnessSurface = 1;
 constexpr std::uint32_t kPaintedSurface = 2;
 
-/// The palette index a masked texture draws as transparent.
-constexpr std::uint8_t kTransparentIndex = 255;
 /// The bytes of a palette color, red, green and blue; of a texel, red, green, blue and alpha.
 constexpr std::size_t kRgbBytes = 3;
 constexpr std::size_t kRgbaBytes = 4;
@@ -304,18 +302,8 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
 /// its mip levels, unless it has none, as a color texture of `encoding` stores them.
 [[nodiscard]] auto skinTexelsOf(const assets::StudioTexture& texture, const ChannelTable& textureGamma,
                                 ColorEncoding encoding) -> MipChain {
-    const bool isMasked = texture.flags.test(assets::StudioTextureFlag::Masked);
-    std::vector<std::byte> texels;
-    texels.reserve(texture.pixels.size() * kRgbaBytes);
-    for (const std::byte index : texture.pixels) {
-        const auto entry = std::to_integer<std::size_t>(index);
-        const bool isTransparent = isMasked && entry == kTransparentIndex;
-        for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
-            const auto value = std::to_integer<std::size_t>(texture.palette[(entry * kRgbBytes) + channel]);
-            texels.push_back(isTransparent ? std::byte{0} : std::byte{textureGamma[value]});
-        }
-        texels.push_back(isTransparent ? std::byte{0} : kFull);
-    }
+    std::vector<std::byte> texels = paletteTexelsOf(
+        texture.pixels, texture.palette, texture.flags.test(assets::StudioTextureFlag::Masked), textureGamma);
     if (texture.flags.test(assets::StudioTextureFlag::NoMipmaps)) {
         return MipChain{.texels = colorTexelsOf(std::move(texels), encoding), .offsets = {0}};
     }

@@ -26,8 +26,6 @@ constexpr std::uint32_t kAtlasWidth = 1024;
 /// The checkerboard of a texture no WAD has: its size and its squares.
 constexpr std::uint32_t kCheckerSize = 16;
 constexpr std::uint32_t kCheckerSquare = 8;
-/// The palette index a masked (`{`) texture draws as transparent.
-constexpr std::uint8_t kTransparentIndex = 255;
 
 /// The bytes of a texel the world uploads, red, green, blue and alpha; of a lightmap sample and of a
 /// palette color, red, green and blue.
@@ -208,18 +206,7 @@ constexpr std::size_t kSequenceStart = 2;
 /// transparent index transparent.
 [[nodiscard]] auto levelTexelsOf(const assets::MipTexture& texture, std::size_t level, bool isMasked,
                                  const ChannelTable& textureGamma) -> std::vector<std::byte> {
-    std::vector<std::byte> texels;
-    texels.reserve(texture.levels.at(level).size() * kRgbaBytes);
-    for (const std::byte index : texture.levels.at(level)) {
-        const auto entry = std::to_integer<std::size_t>(index);
-        const bool isTransparent = isMasked && entry == kTransparentIndex;
-        for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
-            const auto value = std::to_integer<std::size_t>(texture.palette[(entry * kRgbBytes) + channel]);
-            texels.push_back(isTransparent ? std::byte{0} : std::byte{textureGamma[value]});
-        }
-        texels.push_back(isTransparent ? std::byte{0} : kFull);
-    }
-    return texels;
+    return paletteTexelsOf(texture.levels.at(level), texture.palette, isMasked, textureGamma);
 }
 
 /// The texels of `texture` and its mip levels as a color texture of `encoding` stores them: the levels
