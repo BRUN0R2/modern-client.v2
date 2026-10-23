@@ -28,6 +28,7 @@ one, without erasing the history.
 | [0018](0018-work-handed-down-is-not-a-callback.md) | Work handed down to a lower layer is not a forbidden callback | Accepted |
 | [0019](0019-launcher-and-automatic-updates.md) | Automatic, independent updates for the client and the server | Accepted |
 | [0020](0020-in-house-ui-toolkit.md) | In-house retained UI toolkit for the menus, the screens and the console | Accepted |
+| [0021](0021-rook-amxx-names.md) | Rook accepts AMX Mod X's names through an `amxx` compatibility layer | Proposed |
 
 ## Template
 
