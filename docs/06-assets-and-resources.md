@@ -29,9 +29,13 @@ Search order (highest priority first), equivalent to the GoldSrc *search path*. 
 | 4 | The profile's game source: `<install>/cstrike/` + the base files Counter-Strike 1.6 loads from `<install>/valve/` (`classic`), `openContent` (`open`) or `devContent` (`dev`) | Game content | `goldsrcInstall`: **no**. The others: yes |
 | 5 | `engine/` (embedded) | Engine minimum: console font, fallback shaders, error screen | Yes |
 
-Today the VFS (`nx::assets::Vfs`) mounts directories, in the order it is given. The content
-sources and profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) and
-the embedded `engine/` mount are planned (M2, [TODO](../TODO.md)).
+Today the VFS (`nx::assets::Vfs`) mounts directories, in the order it is given: `next` mounts
+`addons/cstrike/` of the user's folder (`%APPDATA%\Modern-Client.v2` on Windows,
+[§2.5](#25-local-configuration)) above the installation when it exists (`cs::addonsFolderOf`),
+so that a model, a sound or a sprite put there is read instead of the installation's, or as a file
+it lacks; `nxview` mounts none, its screenshots the installation's alone. The content sources and
+profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) and the embedded
+`engine/` mount are planned (M2, [TODO](../TODO.md)).
 
 ### 2.2 Path rules
 

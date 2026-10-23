@@ -180,7 +180,12 @@ template <class Names>
 
 } // namespace
 
-auto openGameContent(const std::filesystem::path& data, const std::optional<std::filesystem::path>& install)
+auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path {
+    return userFolder / "addons" / "cstrike";
+}
+
+auto openGameContent(const std::filesystem::path& data, const std::optional<std::filesystem::path>& install,
+                     const std::optional<std::filesystem::path>& addons)
     -> nx::Result<GameContent, LevelError> {
     const std::filesystem::path descriptionFile = data / "content" / "goldsrcCstrike.toml";
     auto text = nx::platform::readTextFile(descriptionFile);
@@ -197,7 +202,13 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!installation) {
         return nx::fail(LevelError::ContentUnavailable, std::move(installation.error()));
     }
-    auto vfs = nx::assets::Vfs::create(installation->mounts());
+    std::vector<std::filesystem::path> mounts;
+    if (std::error_code error; addons && std::filesystem::is_directory(*addons, error)) {
+        nx::log::info(kLog, "the user's own content: {}", nx::platform::toUtf8(*addons));
+        mounts.push_back(*addons);
+    }
+    std::ranges::copy(installation->mounts(), std::back_inserter(mounts));
+    auto vfs = nx::assets::Vfs::create(mounts);
     if (!vfs) {
         return nx::fail(LevelError::ContentUnavailable, std::move(vfs.error()));
     }

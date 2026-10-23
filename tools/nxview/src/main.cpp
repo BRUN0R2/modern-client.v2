@@ -437,7 +437,9 @@ auto main(int argumentCount, char** argumentValues) -> int {
         return unusable(executable.error());
     }
     const std::filesystem::path programFolder = executable->parent_path();
-    auto content = cs::openGameContent(options->data.value_or(programFolder / "data"), options->install);
+    // No user's own content: a screenshot is the installation's and the repository's alone.
+    auto content =
+        cs::openGameContent(options->data.value_or(programFolder / "data"), options->install, std::nullopt);
     if (!content) {
         return unusable(content.error());
     }

@@ -43,12 +43,19 @@ struct GameContent {
     Loadouts loadouts;
 };
 
+/// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its
+/// addons/cstrike/ folder, the original's cstrike_addon (docs/06-assets-and-resources.md, section
+/// 2.1).
+[[nodiscard]] auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path;
+
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, and
-/// the loadouts; and the installation at `install`, or the one Steam installed. Errors:
-/// ContentUnavailable.
+/// the loadouts; and the installation at `install`, or the one Steam installed, below `addons`, the
+/// user's own content (addonsFolderOf), when it is given and is a folder: a file there is read
+/// instead of the installation's. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
-                                   const std::optional<std::filesystem::path>& install)
+                                   const std::optional<std::filesystem::path>& install,
+                                   const std::optional<std::filesystem::path>& addons)
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light

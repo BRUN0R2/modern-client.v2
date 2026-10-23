@@ -288,8 +288,8 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!executable) {
         return nx::fail(ClientError::ContentUnavailable, std::move(executable.error()));
     }
-    auto content =
-        cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"), m_options->install);
+    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"),
+                                       m_options->install, cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
