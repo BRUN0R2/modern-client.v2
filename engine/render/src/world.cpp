@@ -117,9 +117,6 @@ struct FrameUniform {
     std::array<float, kLightStyleCount> styles{}; ///< Four to a float4 in the shader.
 };
 
-/// The side of the sky the original draws toward +X, -X, +Y, -Y, +Z and -Z, by its place in
-/// kSkySuffixes (r_skyTexOrder): the layers of the sky's texture are in this order.
-constexpr std::array<std::size_t, kSkySuffixes.size()> kSkySideOfAxis{0, 2, 1, 3, 4, 5};
 /// The sky of a world without one: the original's stand-in, gray.
 constexpr std::byte kNoSkyLevel{128};
 /// The frames an animated texture shows in a second.

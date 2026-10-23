@@ -25,9 +25,12 @@ constexpr std::uint32_t kInstanceGroup = 2;
 constexpr std::uint32_t kFrameUniformBinding = 0;
 constexpr std::uint32_t kLightGammaBinding = 1;
 constexpr std::uint32_t kBonesBinding = 2;
+constexpr std::uint32_t kEnvironmentBinding = 3;
+constexpr std::uint32_t kEnvironmentSamplerBinding = 4;
 constexpr std::uint32_t kAlbedoBinding = 0;
 constexpr std::uint32_t kAlbedoSamplerBinding = 1;
 constexpr std::uint32_t kSkinUniformBinding = 2;
+constexpr std::uint32_t kEmissiveMaskBinding = 3;
 constexpr std::uint32_t kInstanceUniformBinding = 0;
 
 // Skin::flags, as the shader reads them.
@@ -83,19 +86,25 @@ constexpr std::array kStudioVertexAttributes{
                          .format = rhi::VertexFormat::Uint32,
                          .offset = offsetof(StudioVertex, normalBone)}}; // NOLINT
 
-/// The frame's uniform: the rows of the view-projection matrix, where the view is and its right.
+/// The frame's uniform: the rows of the view-projection matrix, where the view is and its right, and
+/// the environment's last mip level and whether there is one.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 eye{};
     Vec4 right{};
+    Vec4 environment{};
 };
 
-/// A texture's uniform: how its texels map to coordinates, and how it is drawn.
+/// A texture's uniform: how its texels map to coordinates, how it is drawn, and its material.
 struct SkinUniform {
     float texelWidth = 0.0F; ///< 1 / its width.
     float texelHeight = 0.0F;
     std::uint32_t flags = 0;
-    std::uint32_t reserved = 0;
+    float metallic = 0.0F;
+    float roughness = 1.0F;
+    float emissive = 0.0F;
+    float padding0 = 0.0F;
+    float padding1 = 0.0F;
 };
 
 /// A model's uniform: its light, how its depths are mapped, and where its bones start.
@@ -109,7 +118,9 @@ struct InstanceUniform {
     std::uint32_t firstBone = 0;
     float blend = 1.0F;        ///< How opaque it is drawn, from 0 to 1.
     std::uint32_t isUnlit = 0; ///< 1: its vertices' light is its blend (an added model).
-    std::uint32_t reserved = 0;
+    std::uint32_t lightCount = 0;
+    std::array<Vec4, kMostStudioLights> lightPositions{}; ///< xyz where, w how far it reaches.
+    std::array<Vec4, kMostStudioLights> lightColors{};
 };
 
 /// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
@@ -201,7 +212,10 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     return texture.flags.test(assets::StudioTextureFlag::Additive) ? MeshKind::Additive : MeshKind::Opaque;
 }
 
-[[nodiscard]] auto skinUniformOf(const assets::StudioTexture& texture) noexcept -> SkinUniform {
+/// The uniform of `texture`, of `material` in the enhanced look: its fullbright flag the material's
+/// when it says.
+[[nodiscard]] auto skinUniformOf(const assets::StudioTexture& texture,
+                                 const std::optional<StudioMaterial>& material) noexcept -> SkinUniform {
     SkinUniform uniform{.texelWidth = 1.0F / static_cast<float>(texture.width),
                         .texelHeight = 1.0F / static_cast<float>(texture.height)};
     for (const auto& [flag, bit] : {std::pair{assets::StudioTextureFlag::FlatShade, kFlatShade},
@@ -211,7 +225,21 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
             uniform.flags |= bit;
         }
     }
+    if (material) {
+        uniform.metallic = material->metallic;
+        uniform.roughness = material->roughness;
+        uniform.emissive = material->emissive;
+        if (material->isFullbright) {
+            uniform.flags =
+                *material->isFullbright ? (uniform.flags | kFullbright) : (uniform.flags & ~kFullbright);
+        }
+    }
     return uniform;
+}
+
+/// The RGBA texels of `image` and its mip levels.
+[[nodiscard]] auto imageMipChainOf(const assets::RgbaImage& image) -> MipChain {
+    return mipChainOf(image.pixels, image.width, image.height);
 }
 
 /// How `mode` blends a model (GL_StudioSetRenderMode): any mode but Normal and TransAdd as blended.
@@ -248,6 +276,13 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
                             .firstBone = narrow<std::uint32_t>(firstBone),
                             .blend = blendOf(instance),
                             .isUnlit = blendingOf(instance.mode) == StudioBlending::Added ? 1U : 0U};
+    const std::span<const StudioLight> lights =
+        instance.lights.first(std::min(instance.lights.size(), kMostStudioLights));
+    uniform.lightCount = narrow<std::uint32_t>(lights.size());
+    for (std::size_t index = 0; index < lights.size(); ++index) {
+        uniform.lightPositions.at(index) = extend(lights[index].position, lights[index].reach);
+        uniform.lightColors.at(index) = extend(lights[index].color, 0.0F);
+    }
     if (instance.depth == StudioDepth::ViewModel) {
         uniform.depthScale = kViewModelDepthShare;
         uniform.depthOffset = 1.0F - kViewModelDepthShare;
@@ -270,9 +305,30 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
         return fail(StudioError::GpuFailed, std::move(lightGamma.error()));
     }
     renderer.m_lightGamma = std::move(*lightGamma);
-    if (auto made = renderer.createPipelines(desc.shaderCode, desc.colorFormat); !made) {
+    if (auto made = renderer.createPipelines(desc.shaderCode, desc.colorFormat, desc.look); !made) {
         return fail(StudioError::GpuFailed, std::move(made.error()));
     }
+    // A material without an emissive mask emits everywhere; a renderer without a sky reflects none.
+    constexpr std::array kWhite{std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255}};
+    constexpr std::array kBlackSides = [] {
+        std::array<std::byte, kRgbaBytes * rhi::kCubeFaces> sides{};
+        for (std::size_t side = 0; side < rhi::kCubeFaces; ++side) {
+            sides.at((side * kRgbaBytes) + kRgbBytes) = kFull;
+        }
+        return sides;
+    }();
+    std::array<std::size_t, rhi::kCubeFaces> sideOffsets{};
+    for (std::size_t side = 0; side < sideOffsets.size(); ++side) {
+        sideOffsets.at(side) = side * kRgbaBytes;
+    }
+    auto white = uploader.texture("studio.whiteMask", {.width = 1, .height = 1}, 1, 1, kWhite, kOneLevel);
+    auto black = uploader.texture("studio.noEnvironment", {.width = 1, .height = 1}, 1, rhi::kCubeFaces,
+                                  kBlackSides, sideOffsets);
+    if (!white || !black) {
+        return fail(StudioError::GpuFailed, std::move(!white ? white.error() : black.error()));
+    }
+    renderer.m_whiteMask = std::move(*white);
+    renderer.m_environment = std::move(*black);
     renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
     for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
         if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstBoneCapacity,
@@ -284,41 +340,51 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
     return renderer;
 }
 
-auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
-    -> Result<void, rhi::RhiError> {
+auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat,
+                                     StudioLook look) -> Result<void, rhi::RhiError> {
     rhi::Device& device = *m_device;
     constexpr Flags<rhi::ShaderStage> kVertex{rhi::ShaderStage::Vertex};
     constexpr Flags<rhi::ShaderStage> kFragment{rhi::ShaderStage::Fragment};
     constexpr Flags<rhi::ShaderStage> kBothStages{rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment};
     const std::array frameBindings{
         rhi::BindingLayout{
-            .binding = kFrameUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kVertex},
+            .binding = kFrameUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages},
         rhi::BindingLayout{
             .binding = kLightGammaBinding, .type = rhi::BindingType::StorageBuffer, .stages = kVertex},
         rhi::BindingLayout{
-            .binding = kBonesBinding, .type = rhi::BindingType::StorageBuffer, .stages = kVertex}};
+            .binding = kBonesBinding, .type = rhi::BindingType::StorageBuffer, .stages = kVertex},
+        rhi::BindingLayout{
+            .binding = kEnvironmentBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
+        rhi::BindingLayout{
+            .binding = kEnvironmentSamplerBinding, .type = rhi::BindingType::Sampler, .stages = kFragment}};
     const std::array skinBindings{
         rhi::BindingLayout{
             .binding = kAlbedoBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
         rhi::BindingLayout{
             .binding = kAlbedoSamplerBinding, .type = rhi::BindingType::Sampler, .stages = kFragment},
         rhi::BindingLayout{
-            .binding = kSkinUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages}};
+            .binding = kSkinUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages},
+        rhi::BindingLayout{
+            .binding = kEmissiveMaskBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment}};
     const std::array instanceBindings{rhi::BindingLayout{
-        .binding = kInstanceUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kVertex}};
+        .binding = kInstanceUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages}};
     auto shader = device.createShader({.label = "studio", .code = shaderCode});
     auto frameLayout = device.createBindGroupLayout({.label = "studio.frame", .bindings = frameBindings});
     auto skinLayout = device.createBindGroupLayout({.label = "studio.skin", .bindings = skinBindings});
     auto instanceLayout =
         device.createBindGroupLayout({.label = "studio.instance", .bindings = instanceBindings});
     auto sampler = device.createSampler({.label = "studio.skin"});
-    if (!shader || !frameLayout || !skinLayout || !instanceLayout || !sampler) {
+    auto environmentSampler =
+        device.createSampler({.label = "studio.environment", .address = rhi::AddressMode::ClampToEdge});
+    if (!shader || !frameLayout || !skinLayout || !instanceLayout || !sampler || !environmentSampler) {
         return std::unexpected(!shader           ? std::move(shader.error())
                                : !frameLayout    ? std::move(frameLayout.error())
                                : !skinLayout     ? std::move(skinLayout.error())
                                : !instanceLayout ? std::move(instanceLayout.error())
-                                                 : std::move(sampler.error()));
+                               : !sampler        ? std::move(sampler.error())
+                                                 : std::move(environmentSampler.error()));
     }
+    m_environmentSampler = std::move(*environmentSampler);
     m_shader = std::move(*shader);
     m_frameLayout = std::move(*frameLayout);
     m_skinLayout = std::move(*skinLayout);
@@ -349,8 +415,9 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
         std::optional<rhi::BlendState> blend;
         bool writesDepth = true;
     };
-    constexpr std::string_view kWhole = "fragmentMain";
-    constexpr std::string_view kCut = "maskedFragmentMain";
+    const bool isEnhanced = look == StudioLook::Enhanced;
+    const std::string_view kWhole = isEnhanced ? "enhancedFragmentMain" : "fragmentMain";
+    const std::string_view kCut = isEnhanced ? "enhancedMaskedFragmentMain" : "maskedFragmentMain";
     using WaysOfMeshes = EnumArray<MeshKind, Way>;
     const EnumArray<StudioBlending, WaysOfMeshes> ways{{
         WaysOfMeshes{{Way{.fragment = kWhole, .blend = std::nullopt},
@@ -419,7 +486,9 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
                          .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
             rhi::Binding{.binding = kLightGammaBinding,
                          .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
-            rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = buffer->get()}}};
+            rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = buffer->get()}},
+            rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
+            rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()}};
         auto group = device.createBindGroup(
             {.label = "studio.frame", .layout = m_frameLayout.get(), .bindings = bindings});
         if (!group) {
@@ -484,33 +553,95 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     model.m_boneCount = desc.model.bones().size();
     model.m_middle = (desc.model.bounds().min + desc.model.bounds().max) * (1.0F / 2.0F);
     model.m_skins.assign(desc.textures.skins().begin(), desc.textures.skins().end());
-    for (const assets::StudioTexture& texture : desc.textures.textures()) {
+    const std::span<const assets::StudioTexture> textures = desc.textures.textures();
+    for (std::size_t index = 0; index < textures.size(); ++index) {
+        const assets::StudioTexture& texture = textures[index];
+        const std::optional<StudioMaterial> material =
+            index < desc.materials.size() ? desc.materials[index] : std::nullopt;
         const MipChain texels = skinTexelsOf(texture, m_textureGamma);
         const std::string label = std::format("studio.{}", texture.name);
         auto uploaded =
             uploader.texture(label, {.width = texture.width, .height = texture.height},
                              narrow<std::uint32_t>(texels.offsets.size()), 1, texels.texels, texels.offsets);
-        const SkinUniform skin = skinUniformOf(texture);
+        const SkinUniform skin = skinUniformOf(texture, material);
         auto uniform = uploader.buffer(label, rhi::BufferUsage::Uniform, rhi::BufferState::Uniform,
                                        std::as_bytes(std::span{&skin, 1}));
         if (!uploaded || !uniform) {
             return gpuFailure(std::move(!uploaded ? uploaded.error() : uniform.error()));
         }
-        const std::array bindings{rhi::Binding{.binding = kAlbedoBinding, .resource = uploaded->get()},
-                                  rhi::Binding{.binding = kAlbedoSamplerBinding, .resource = m_sampler.get()},
-                                  rhi::Binding{.binding = kSkinUniformBinding,
-                                               .resource = rhi::BufferBinding{.buffer = uniform->get()}}};
+        rhi::OwnedTexture emissiveMask;
+        if (material && material->emissiveMask) {
+            const assets::RgbaImage& mask = *material->emissiveMask;
+            const MipChain maskTexels = imageMipChainOf(mask);
+            auto maskUploaded = uploader.texture(
+                std::format("{}.emissiveMask", label), {.width = mask.width, .height = mask.height},
+                narrow<std::uint32_t>(maskTexels.offsets.size()), 1, maskTexels.texels, maskTexels.offsets);
+            if (!maskUploaded) {
+                return gpuFailure(std::move(maskUploaded.error()));
+            }
+            emissiveMask = std::move(*maskUploaded);
+        }
+        const std::array bindings{
+            rhi::Binding{.binding = kAlbedoBinding, .resource = uploaded->get()},
+            rhi::Binding{.binding = kAlbedoSamplerBinding, .resource = m_sampler.get()},
+            rhi::Binding{.binding = kSkinUniformBinding,
+                         .resource = rhi::BufferBinding{.buffer = uniform->get()}},
+            rhi::Binding{.binding = kEmissiveMaskBinding,
+                         .resource = emissiveMask.get().isNull() ? m_whiteMask.get() : emissiveMask.get()}};
         auto group =
             m_device->createBindGroup({.label = label, .layout = m_skinLayout.get(), .bindings = bindings});
         if (!group) {
             return gpuFailure(std::move(group.error()));
         }
         model.m_textures.push_back(StudioSkinDraw{.texture = std::move(*uploaded),
+                                                  .emissiveMask = std::move(emissiveMask),
                                                   .uniform = std::move(*uniform),
                                                   .group = std::move(*group),
                                                   .kind = meshKindOf(texture)});
     }
     return model;
+}
+
+auto StudioRenderer::setEnvironment(rhi::CommandList& commands, std::span<const assets::RgbaImage> sky)
+    -> Result<void, StudioError> {
+    if (sky.empty()) {
+        return {};
+    }
+    const auto isOfTheFirstsSize = [&sky](const assets::RgbaImage& side) {
+        return side.width == sky.front().width && side.height == sky.front().height &&
+               side.pixels.size() == std::size_t{side.width} * side.height * kRgbaBytes;
+    };
+    if (sky.size() != kSkySuffixes.size() || sky.front().width == 0 || sky.front().height == 0 ||
+        !std::ranges::all_of(sky, isOfTheFirstsSize)) {
+        return fail(StudioError::BadTextures, std::format("a sky of {} sides", sky.size()));
+    }
+    // Its sides toward +X, -X, +Y, -Y, +Z and -Z, each with its mip levels, layer after layer.
+    std::vector<std::byte> texels;
+    std::vector<std::size_t> offsets;
+    std::uint32_t levels = 0;
+    for (const std::size_t side : kSkySideOfAxis) {
+        const MipChain chain = imageMipChainOf(sky[side]);
+        levels = narrow<std::uint32_t>(chain.offsets.size());
+        for (const std::size_t offset : chain.offsets) {
+            offsets.push_back(texels.size() + offset);
+        }
+        texels.insert(texels.end(), chain.texels.begin(), chain.texels.end());
+    }
+    Uploader uploader{*m_device, commands};
+    auto environment =
+        uploader.texture("studio.environment", {.width = sky.front().width, .height = sky.front().height},
+                         levels, narrow<std::uint32_t>(kSkySuffixes.size()), texels, offsets);
+    if (!environment) {
+        return fail(StudioError::GpuFailed, std::move(environment.error()));
+    }
+    m_environment = std::move(*environment);
+    m_environmentLevels = levels;
+    m_hasEnvironment = true;
+    // Each frame's group names the environment: made again as each slot is next written.
+    for (StudioFrameSlot& slot : m_frameSlots) {
+        slot.group = {};
+    }
+    return {};
 }
 
 auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioError> {
@@ -530,7 +661,11 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
     }
     const FrameUniform uniform{.viewProjection = viewProjectionMatrix(frame.camera, frame.aspect),
                                .eye = extend(frame.camera.position, 1.0F),
-                               .right = extend(angleVectors(frame.camera.angles).right, 0.0F)};
+                               .right = extend(angleVectors(frame.camera.angles).right, 0.0F),
+                               .environment = Vec4{.x = static_cast<float>(m_environmentLevels - 1),
+                                                   .y = m_hasEnvironment ? 1.0F : 0.0F,
+                                                   .z = 0.0F,
+                                                   .w = 0.0F}};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 
     // Every model but the invisible ones (R_AddEntity): the solid ones drawn with the solid things of

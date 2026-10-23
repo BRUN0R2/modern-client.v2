@@ -116,6 +116,9 @@ enum class WorldError : std::uint8_t {
 /// The sides of a sky, in the order the original loads them: the suffixes of its files,
 /// `gfx/env/<skyname><suffix>.tga`.
 inline constexpr std::array<std::string_view, 6> kSkySuffixes{"rt", "bk", "lf", "ft", "up", "dn"};
+/// The side of the sky the original draws toward +X, -X, +Y, -Y, +Z and -Z, by its place in
+/// kSkySuffixes (r_skyTexOrder): the layers of a texture of the sky are in this order.
+inline constexpr std::array<std::size_t, kSkySuffixes.size()> kSkySideOfAxis{0, 2, 1, 3, 4, 5};
 
 /// The sky of a map whose worldspawn has no `skyname`, and the one the original falls back to.
 inline constexpr std::string_view kDefaultSkyName = "desert";

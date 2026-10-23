@@ -55,7 +55,8 @@ public:
     /// and `gamma`, its uploads recorded in `commands`. Errors: CreateFailed.
     [[nodiscard]] static auto create(nx::rhi::Device& device, nx::rhi::CommandList& commands,
                                      const Level& level, const SceneShaders& shaders, nx::rhi::Format format,
-                                     const nx::render::GammaSettings& gamma) -> nx::Result<Scene, SceneError>;
+                                     const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
+        -> nx::Result<Scene, SceneError>;
 
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of

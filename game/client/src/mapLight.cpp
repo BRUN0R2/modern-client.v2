@@ -114,6 +114,68 @@ auto mapLightStyles(const nx::assets::BspView& map) -> nx::render::LightStyles {
     return styles;
 }
 
+auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render::StudioLight> {
+    // The compilers' light without a `_light`: white, of 300.
+    constexpr std::array<float, 4> kDefaultLight{255.0F, 255.0F, 255.0F, 300.0F};
+    constexpr float kChannelTop = 255.0F;
+    constexpr float kDisplayGamma = 2.2F;
+    // How far a light of a brightness reaches, in units a brightness; and how bright its highlight is.
+    constexpr float kReachPerBrightness = 2.0F;
+    constexpr float kHighlightPerBrightness = 8.0F;
+    std::vector<nx::render::StudioLight> lights;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::optional<std::string_view> classname = entity.find("classname");
+        if (classname != "light" && classname != "light_spot") {
+            continue;
+        }
+        const std::optional<nx::Vec3> origin = entity.findVector("origin");
+        if (!origin) {
+            continue;
+        }
+        std::array<float, 4> light = kDefaultLight;
+        if (const std::optional<std::string_view> value = entity.find("_light")) {
+            std::size_t read = 0;
+            for (const auto word : std::views::split(*value, ' ')) {
+                const std::string_view number{word.begin(), word.end()};
+                if (number.empty() || read == light.size()) {
+                    continue;
+                }
+                light.at(read++) = nx::assets::numberOfValue(number).value_or(0.0F);
+            }
+        }
+        const float brightness = light[3];
+        if (brightness <= 0.0F) {
+            continue;
+        }
+        const auto linear = [&](float channel) {
+            return std::pow(std::clamp(channel / kChannelTop, 0.0F, 1.0F), kDisplayGamma) * brightness *
+                   kHighlightPerBrightness;
+        };
+        lights.push_back(nx::render::StudioLight{
+            .position = *origin,
+            .reach = brightness * kReachPerBrightness,
+            .color = {.x = linear(light[0]), .y = linear(light[1]), .z = linear(light[2])}});
+    }
+    return lights;
+}
+
+auto nearestLights(std::span<const nx::render::StudioLight> lights, nx::Vec3 point, std::size_t count)
+    -> std::vector<nx::render::StudioLight> {
+    std::vector<nx::render::StudioLight> reaching;
+    for (const nx::render::StudioLight& light : lights) {
+        if (nx::lengthSquared(light.position - point) < light.reach * light.reach) {
+            reaching.push_back(light);
+        }
+    }
+    const auto distance = [point](const nx::render::StudioLight& light) {
+        return nx::lengthSquared(light.position - point);
+    };
+    const std::size_t kept = std::min(count, reaching.size());
+    std::ranges::partial_sort(reaching, reaching.begin() + nx::narrow<std::ptrdiff_t>(kept), {}, distance);
+    reaching.resize(kept);
+    return reaching;
+}
+
 auto skyLightOf(const nx::assets::BspView& map) -> nx::render::SkyLight {
     nx::render::SkyLight sky;
     for (const nx::assets::BspEntity& entity : map.entities()) {

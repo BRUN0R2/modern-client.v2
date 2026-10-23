@@ -51,7 +51,8 @@ Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::rende
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format,
-                   const nx::render::GammaSettings& gamma) -> nx::Result<Scene, SceneError> {
+                   const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
+    -> nx::Result<Scene, SceneError> {
     auto world = nx::render::BspWorld::create(device, commands,
                                               {.map = level.map(),
                                                .wads = level.wads(),
@@ -74,7 +75,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(spriteModels.error()));
     }
     const nx::render::StudioRendererDesc studioDesc{
-        .shaderCode = shaders.studio, .colorFormat = format, .gamma = gamma};
+        .shaderCode = shaders.studio, .colorFormat = format, .gamma = gamma, .look = look};
     auto studio = nx::render::StudioRenderer::create(device, commands, studioDesc);
     if (!studio) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(studio.error()));
@@ -82,6 +83,14 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     auto viewModels = nx::render::StudioRenderer::create(device, commands, studioDesc);
     if (!viewModels) {
         return nx::fail(SceneError::CreateFailed, "the view's model", std::move(viewModels.error()));
+    }
+    // The enhanced look's metals reflect the map's sky.
+    if (look == nx::render::StudioLook::Enhanced) {
+        for (nx::render::StudioRenderer* const renderer : {&*studio, &*viewModels}) {
+            if (auto set = renderer->setEnvironment(commands, level.sky()); !set) {
+                return nx::fail(SceneError::CreateFailed, "the sky models reflect", std::move(set.error()));
+            }
+        }
     }
     auto models = level.models().load(*studio, commands);
     if (!models) {
@@ -165,12 +174,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     if (bones.empty()) {
         return {};
     }
+    const std::vector<nx::render::StudioLight> lights =
+        nearestLights(level.lights(), view.camera.position, nx::render::kMostStudioLights);
     const std::array held{nx::render::StudioInstance{
         .model = *weaponModel,
         .bones = bones,
         .light = m_light.modelLightAt({.origin = view.camera.position, .sky = level.skyLight()}, styles),
         .depth = nx::render::StudioDepth::ViewModel,
-        .isMirrored = viewModel->isMirrored()}};
+        .isMirrored = viewModel->isMirrored(),
+        .lights = lights}};
     if (auto drawn =
             m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
         !drawn) {

@@ -8,6 +8,7 @@ nxAddShaders(nxShaders
         studio.slang
         sprite.slang
         screen.slang
+        post.slang
         test/fill.slang
         test/sample.slang
         test/sampleLayer.slang)

@@ -19,6 +19,7 @@ export import :modelFiles;
 export import :mapLight;
 export import :mapSprites;
 export import :mapModels;
+export import :modelMaterials;
 export import :viewModel;
 export import :muzzleFlash;
 export import :levelDecals;

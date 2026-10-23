@@ -90,6 +90,13 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                                        .defaultValue = true,
                                                        .description = "Whether the HUD is drawn.",
                                                        .flags = kArchived});
+    auto fidelity = console.registerCvar(CvarDesc<Fidelity>{
+        .name = "r_fidelity",
+        .defaultValue = Fidelity::Legacy,
+        .description =
+            "How the picture is made: legacy, as Counter-Strike 1.6 makes it, or enhanced; read when a "
+            "map is loaded.",
+        .flags = kArchived});
     auto volume = console.registerCvar(
         CvarDesc<float>{.name = "volume",
                         .defaultValue = kVolume,
@@ -107,6 +114,9 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
             return std::unexpected{std::move(registered->error())};
         }
     }
+    if (!fidelity) {
+        return std::unexpected{std::move(fidelity.error())};
+    }
     return ClientCvars{.mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
                        .video = {.fpsMax = *fpsMax,
                                  .vsync = *vsync,
@@ -114,7 +124,8 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .brightness = *brightness,
                                  .textureGamma = *textureGamma,
                                  .lightGamma = *lightGamma,
-                                 .hudDraw = *hudDraw},
+                                 .hudDraw = *hudDraw,
+                                 .fidelity = *fidelity},
                        .audio = {.volume = *volume}};
 }
 

@@ -17,6 +17,7 @@ import nx.rhi;
 import nx.render;
 import cs.shared;
 import :modelFiles;
+import :modelMaterials;
 
 export namespace cs {
 
@@ -91,10 +92,12 @@ public:
 
 private:
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
-              bool isMirrored) noexcept;
+              std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored) noexcept;
 
     std::unique_ptr<ModelFiles> m_files;
     std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
+    /// Of each of its textures in the enhanced look, from its material file (cs.client:modelMaterials).
+    std::vector<std::optional<nx::render::StudioMaterial>> m_materials;
     bool m_isMirrored;
 };
 

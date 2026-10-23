@@ -288,7 +288,7 @@ constexpr std::size_t kBlue = 2;
     }
     nx::rhi::CommandList& list = commands->get();
     auto scene = cs::Scene::create(**device, list, level, shaders, nx::rhi::Format::Rgba8Unorm,
-                                   nx::render::GammaSettings{});
+                                   nx::render::GammaSettings{}, nx::render::StudioLook::Legacy);
     if (!scene) {
         return unusable(scene.error());
     }

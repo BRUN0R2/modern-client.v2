@@ -229,6 +229,9 @@ private:
     [[nodiscard]] auto drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     /// The HUD and the console's window, over what is drawn.
+    /// The session's scene in the enhanced look, to the post renderer's target, then its bloom.
+    [[nodiscard]] auto drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+        -> nx::Result<void, ClientError>;
     [[nodiscard]] auto drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
@@ -249,6 +252,7 @@ private:
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::vector<std::byte> m_screenShader;
+    std::vector<std::byte> m_postShader;
     std::optional<Session> m_session;     ///< The map played.
     std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
     cs::ViewModelEvents m_viewModelEvents;
@@ -258,6 +262,9 @@ private:
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene; ///< Of the session's level, made with the first image of it.
+    /// Whether the scene draws the enhanced look (r_fidelity, read as it is made), through m_post.
+    bool m_isSceneEnhanced = false;
+    std::optional<nx::render::PostRenderer> m_post;     ///< Made with the first enhanced scene.
     std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
     std::optional<cs::Hud> m_hud;                       ///< None when its pictures could not be read.
     std::vector<nx::render::ScreenQuad> m_screenQuads;  ///< What the screen draws in a frame.
@@ -269,6 +276,7 @@ private:
     bool m_isConsoleOpen = false;
     std::optional<nx::rhi::OwnedTexture> m_depth;
     nx::rhi::Extent2d m_depthExtent{};
+    nx::rhi::Extent2d m_postSize{}; ///< The screen's size m_post's targets were made for.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
@@ -307,6 +315,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(screenShader.error()));
     }
     m_screenShader = std::move(*screenShader);
+    auto postShader = nx::platform::readFile(executable->parent_path() / "shaders" / "post.spv");
+    if (!postShader) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(postShader.error()));
+    }
+    m_postShader = std::move(*postShader);
     if (auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume); audio) {
         m_audio = std::move(*audio);
     } else {
@@ -674,14 +687,27 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
     if (auto uploaded = upload(list, frame.format); !uploaded) {
         return uploaded;
     }
-    list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(m_depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
-    list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
-                         .area = frame.size});
-    if (auto drawn = drawSession(list, frame); !drawn) {
-        return drawn;
+    if (m_session && m_isSceneEnhanced) {
+        // The enhanced look: the scene to its target of half floats, bloomed and through the tone
+        // curve to the screen, the screen's pictures over it.
+        if (auto drawn = drawEnhancedSession(list, frame); !drawn) {
+            return drawn;
+        }
+        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+        const std::array screen{
+            nx::rhi::ColorAttachment{.texture = frame.texture, .load = nx::rhi::LoadOp::DontCare}};
+        list.beginRendering({.colors = screen, .area = frame.size});
+        m_post->drawToneMapped(list);
+    } else {
+        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+        const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
+        list.beginRendering({.colors = colors,
+                             .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
+                             .area = frame.size});
+        if (auto drawn = drawSession(list, frame); !drawn) {
+            return drawn;
+        }
     }
     if (auto drawn = drawScreen(list, frame); !drawn) {
         return drawn;
@@ -728,8 +754,20 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
     }
     if (m_session && !m_scene) {
-        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, format,
-                                       gammaOf(m_cvars->video));
+        m_isSceneEnhanced = m_cvars->video.fidelity.value() == nx::settings::Fidelity::Enhanced;
+        if (m_isSceneEnhanced && !m_post) {
+            auto post = nx::render::PostRenderer::create(
+                *m_video->device, {.shaderCode = m_postShader, .outputFormat = format});
+            if (!post) {
+                return nx::fail(ClientError::GpuFailed, std::move(post.error()));
+            }
+            m_post.emplace(std::move(*post));
+        }
+        const nx::rhi::Format sceneFormat =
+            m_isSceneEnhanced ? nx::render::PostRenderer::sceneFormat() : format;
+        auto scene = cs::Scene::create(
+            *m_video->device, list, *m_session->level, *m_shaders, sceneFormat, gammaOf(m_cvars->video),
+            m_isSceneEnhanced ? nx::render::StudioLook::Enhanced : nx::render::StudioLook::Legacy);
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
@@ -774,6 +812,30 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
         !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }
+    return {};
+}
+
+auto Client::drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+    -> nx::Result<void, ClientError> {
+    if (m_postSize != frame.size) {
+        m_video->device->waitIdle(); // the frames in flight may still read the old targets
+        if (auto resized = m_post->resize(frame.size); !resized) {
+            return nx::fail(ClientError::GpuFailed, std::move(resized.error()));
+        }
+        m_postSize = frame.size;
+    }
+    const nx::rhi::TextureHandle target = m_post->sceneTarget();
+    list.transition(target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+    const std::array colors{nx::rhi::ColorAttachment{.texture = target, .clear = kVoidColor}};
+    list.beginRendering({.colors = colors,
+                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
+                         .area = frame.size});
+    if (auto drawn = drawSession(list, frame); !drawn) {
+        return drawn;
+    }
+    list.endRendering();
+    list.transition(target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
+    m_post->bloom(list);
     return {};
 }
 

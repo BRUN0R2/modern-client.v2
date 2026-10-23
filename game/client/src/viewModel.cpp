@@ -17,6 +17,7 @@ namespace {
 
 /// A sequence played anew plays the events of its first frame too (R_StudioClientEvents).
 constexpr float kBeforeTheFirstFrame = -0.01F;
+constexpr nx::log::Category kViewModelLog{"client"};
 
 using nx::assets::MdlView;
 using nx::assets::Vfs;
@@ -71,8 +72,10 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
 } // namespace
 
 ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
+                     std::vector<std::optional<nx::render::StudioMaterial>> materials,
                      bool isMirrored) noexcept
-    : m_files{std::move(files)}, m_animations{std::move(animations)}, m_isMirrored{isMirrored} {}
+    : m_files{std::move(files)}, m_animations{std::move(animations)}, m_materials{std::move(materials)},
+      m_isMirrored{isMirrored} {}
 
 auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
     auto files = readModelFiles(vfs, weapon.models.view);
@@ -91,12 +94,21 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
         }
         animations.push_back(std::move(*frames));
     }
-    return ViewModel{std::move(*files), std::move(animations), weapon.models.viewHand != kPlayerHand};
+    // Its materials for the enhanced look: without them, as the original shades it.
+    auto materials = readModelMaterials(vfs, weapon.models.view, (*files)->texturesView());
+    if (!materials) {
+        nx::log::warning(kViewModelLog, "{}: shaded as the original shades it: {}", weapon.models.view,
+                         nx::describe(materials.error()));
+    }
+    return ViewModel{std::move(*files), std::move(animations),
+                     std::move(materials).value_or(std::vector<std::optional<nx::render::StudioMaterial>>{}),
+                     weapon.models.viewHand != kPlayerHand};
 }
 
 auto ViewModel::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
     -> nx::Result<nx::render::StudioModel, nx::render::StudioError> {
-    return renderer.load(commands, {.model = *m_files->view, .textures = m_files->texturesView()});
+    return renderer.load(
+        commands, {.model = *m_files->view, .textures = m_files->texturesView(), .materials = m_materials});
 }
 
 auto ViewModel::sequence(std::uint32_t sequence) const -> const nx::assets::StudioSequence& {

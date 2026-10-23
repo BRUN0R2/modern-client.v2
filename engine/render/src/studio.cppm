@@ -12,6 +12,11 @@
 /// unlit; or blended, lit, as opaque as `renderamt` says. The solid models are drawn with the solid
 /// things of the frame, the others among everything it draws blended (nx.render:blendedOrder).
 ///
+/// The enhanced look (docs/adr/0025-enhanced-rendering.md) shades each texture by its material
+/// (StudioMaterial): metals reflect the map's sky, the lights near a model give highlights, and what
+/// a texture emits goes beyond white, where the bloom spreads it; a texture without a material draws
+/// as in the original.
+///
 /// Today: the skins and body parts of models, a draw call for each mesh, the render modes, the view's
 /// own model kept out of walls, and models drawn mirrored. The render effects (renderfx), the players'
 /// colors, the dynamic lights and instancing come with their consumers.
@@ -24,6 +29,7 @@ import nx.rhi;
 import nx.assets;
 import :camera;
 import :gamma;
+import :world;
 import :light;
 import :renderMode;
 import :blendedOrder;
@@ -66,6 +72,7 @@ struct StudioMeshDraw {
 /// A texture of a model on the GPU, and the bind group a mesh is drawn with it by.
 struct StudioSkinDraw {
     rhi::OwnedTexture texture{};
+    rhi::OwnedTexture emissiveMask{}; ///< Its material's; none: the renderer's white.
     rhi::OwnedBuffer uniform{};
     rhi::OwnedBindGroup group{};
     MeshKind kind = MeshKind::Opaque;
@@ -117,17 +124,51 @@ enum class StudioDepth : std::uint8_t {
                ///< keeps it.
 };
 
+/// How studio models are shaded.
+enum class StudioLook : std::uint8_t {
+    Legacy,   ///< As the original shades them.
+    Enhanced, ///< By their materials (ADR-0025), to a target that keeps light beyond 1.
+    Count,
+};
+
+/// The most lights near a model it lights itself by, in the enhanced look.
+inline constexpr std::size_t kMostStudioLights = 4;
+
 struct StudioRendererDesc {
     /// shaders/studio.slang, compiled for the device (bin/shaders/studio.spv).
     std::span<const std::byte> shaderCode{};
     rhi::Format colorFormat = rhi::Format::Undefined;
     GammaSettings gamma{};
+    StudioLook look = StudioLook::Legacy;
+};
+
+/// What a texture of a model is made of, in the enhanced look: glTF 2.0's metallic and roughness, and
+/// what it emits. A texture without one is shaded as the original shades it.
+struct StudioMaterial {
+    float metallic = 0.0F;  ///< From 0, a dielectric, to 1, a metal.
+    float roughness = 1.0F; ///< From 0, a mirror, to 1.
+    /// How bright what it emits is: its color times this, where emissiveMask says; 1 as bright as white,
+    /// beyond 1 it blooms. GoldSrc's fullbright lights a whole texture as 1 does; this lights a part.
+    float emissive = 0.0F;
+    /// Where it emits and how much, by its texels, of the texture's size or any other; none: everywhere.
+    std::optional<assets::RgbaImage> emissiveMask{};
+    /// Whether the original's light reaches it, in place of its Fullbright flag; none: as its flags say.
+    std::optional<bool> isFullbright{};
 };
 
 struct StudioModelDesc {
     const assets::MdlView& model;
     /// Where its textures and skins are: the model itself, or its `*T.mdl` (assets::texturesFilePath).
     const assets::MdlView& textures;
+    /// The material of each texture, by its index, in the enhanced look; one it lacks has none.
+    std::span<const std::optional<StudioMaterial>> materials{};
+};
+
+/// A light near a model, which gives it highlights in the enhanced look.
+struct StudioLight {
+    Vec3 position{};
+    float reach = 0.0F; ///< How far its light goes, in units.
+    Vec3 color{};       ///< Its light at a unit's distance, in linear light.
 };
 
 /// A studio model on the GPU, which a StudioRenderer loads and draws.
@@ -174,6 +215,9 @@ struct StudioInstance {
     Vec3 origin{};
     RenderMode mode = RenderMode::Normal;
     std::uint8_t amount = 0; ///< `renderamt`: how opaque a mode other than Normal draws it.
+    /// The lights near it, nearest first, which give it highlights in the enhanced look; the first
+    /// kMostStudioLights count.
+    std::span<const StudioLight> lights{};
 };
 
 /// What a draw shows.
@@ -203,6 +247,12 @@ public:
     [[nodiscard]] auto load(rhi::CommandList& commands, const StudioModelDesc& desc)
         -> Result<StudioModel, StudioError>;
 
+    /// The sky the enhanced look's metals reflect, its uploads recorded in `commands`: its sides in the
+    /// order of kSkySuffixes, all of one size, as BspWorldDesc::sky has them; none: nothing reflected.
+    /// Errors: BadTextures (sides that are not six of one size), GpuFailed.
+    [[nodiscard]] auto setEnvironment(rhi::CommandList& commands, std::span<const assets::RgbaImage> sky)
+        -> Result<void, StudioError>;
+
     /// Writes `frame`'s models for the frame in flight, for drawInOrder to record with the other
     /// renderers of the frame before the next prepare; the models must last until then. Each instance
     /// gives its model's every bone. Errors: GpuFailed (room for more bones or models).
@@ -224,9 +274,9 @@ public:
 
 private:
     inline explicit StudioRenderer(rhi::Device& device) noexcept : m_device{&device} {}
-    /// The shader, the bind group layouts, the sampler and the pipelines.
-    [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
-        -> Result<void, rhi::RhiError>;
+    /// The shader, the bind group layouts, the samplers and the pipelines.
+    [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat,
+                                       StudioLook look) -> Result<void, rhi::RhiError>;
     /// Makes room in `slot` for `bones` bones and `instances` models, at least.
     [[nodiscard]] auto reserve(StudioFrameSlot& slot, std::size_t bones, std::size_t instances)
         -> Result<void, rhi::RhiError>;
@@ -244,8 +294,13 @@ private:
     rhi::OwnedBindGroupLayout m_skinLayout;
     rhi::OwnedBindGroupLayout m_instanceLayout;
     rhi::OwnedSampler m_sampler;
+    rhi::OwnedSampler m_environmentSampler;
     EnumArray<StudioFacing, EnumArray<StudioBlending, EnumArray<MeshKind, rhi::OwnedRenderPipeline>>>
         m_pipelines;
+    rhi::OwnedTexture m_whiteMask;   ///< The emissive mask of a material without one.
+    rhi::OwnedTexture m_environment; ///< The sky's sides with their mip levels; one black texel without.
+    std::uint32_t m_environmentLevels = 1;
+    bool m_hasEnvironment = false;
     rhi::OwnedBuffer m_lightGamma;
     std::vector<StudioFrameSlot> m_frameSlots;
     std::uint64_t m_drawCount = 0;

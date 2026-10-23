@@ -97,6 +97,10 @@ public:
         return m_lightStyles;
     }
     [[nodiscard]] inline auto skyLight() const noexcept -> const nx::render::SkyLight& { return m_skyLight; }
+    /// The lights of its light entities, which give models highlights in the enhanced look.
+    [[nodiscard]] inline auto lights() const noexcept -> std::span<const nx::render::StudioLight> {
+        return m_lights;
+    }
     [[nodiscard]] inline auto hulls() const noexcept -> const nx::collision::BrushHulls& { return *m_hulls; }
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
@@ -132,6 +136,7 @@ private:
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;
+    std::vector<nx::render::StudioLight> m_lights;
     std::optional<nx::collision::BrushHulls> m_hulls;
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;
