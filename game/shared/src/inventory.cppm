@@ -159,8 +159,8 @@ private:
               const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
     /// The held `owned`, of `weapon`, fires the next of its last shot's follow-up rounds
     /// (FireRemaining): its shot, if a round was left for it.
-    auto fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter, std::uint32_t seed,
-                      const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
+    auto fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter, std::uint32_t seed)
+        -> std::optional<Shot>;
     /// The held `owned`, of `weapon`, switches to its alternate or back at `time` (SecondaryAttack).
     void switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
     /// The held `owned` makes `attack`, the `count`th of its kind, at `time`, meeting what `tracer`

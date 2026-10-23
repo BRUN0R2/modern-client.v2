@@ -33,11 +33,18 @@ enum class ViewModelError : std::uint8_t {
 /// The hand the player holds its weapons in: cl_righthand's default, until the cvar comes.
 inline constexpr Hand kPlayerHand = Hand::Right;
 
-/// What a frame shows of the view model: the weapon's, its sequence, and how far into it.
+/// What a frame shows of the view model: the weapon's, its sequence, when it started, and how far
+/// into it.
 struct ViewModelPose {
     WeaponIndex weapon{};
     std::uint32_t sequence{};
+    nx::GameTime start{}; ///< A sequence started again (a shot after a shot) plays its events again.
     nx::Seconds intoIt{};
+
+    /// Whether `other` is the same play of the same sequence, further into it or not.
+    [[nodiscard]] inline auto isSamePlay(const ViewModelPose& other) const noexcept -> bool {
+        return weapon == other.weapon && sequence == other.sequence && start == other.start;
+    }
 };
 
 /// A weapon's view model, its textures and the animations of its sequences.
@@ -62,6 +69,14 @@ public:
 
     /// Whether it is drawn mirrored: modeled in the other hand than the player's.
     [[nodiscard]] inline auto isMirrored() const noexcept -> bool { return m_isMirrored; }
+
+    /// Its sequence `sequence`, which must be one of its.
+    [[nodiscard]] auto sequence(std::uint32_t sequence) const -> const nx::assets::StudioSequence&;
+
+    /// Where its attachment `attachment` is, its bones posed as `bones` says (what pose gave); none
+    /// when it has no such attachment.
+    [[nodiscard]] auto attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t attachment) const
+        -> std::optional<nx::Vec3>;
 
 private:
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,

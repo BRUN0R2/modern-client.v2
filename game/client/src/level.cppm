@@ -17,6 +17,7 @@ import cs.shared;
 import :mapSprites;
 import :mapModels;
 import :viewModel;
+import :muzzleFlash;
 
 export namespace cs {
 
@@ -49,9 +50,9 @@ struct GameContent {
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
-/// the game gives it, the sprites and studio models its entities show and the view models of the
-/// game's weapons, read once. It stays where it is made: the views point into it, and what is made
-/// of it (the light of nx::render::WorldLight) to its map.
+/// the game gives it, the sprites and studio models its entities show, and the view models of the
+/// game's weapons and the sprites of their muzzle flashes, read once. It stays where it is made: the views
+/// point into it, and what is made of it (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -89,6 +90,10 @@ public:
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
+    /// The sprites of the weapons' muzzle flashes.
+    [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
+        return *m_muzzleFlashes;
+    }
     /// The view models of the game's weapons, by their WeaponIndex.
     [[nodiscard]] inline auto viewModels() const noexcept -> std::span<const ViewModel> {
         return m_viewModels;
@@ -108,6 +113,7 @@ private:
     std::optional<MapSprites> m_sprites;
     std::optional<MapModels> m_models;
     std::vector<ViewModel> m_viewModels;
+    std::optional<MuzzleFlashSprites> m_muzzleFlashes;
 };
 
 /// Makes in `world` the game of `map` as it starts: the components of nx.game, and the map's brush

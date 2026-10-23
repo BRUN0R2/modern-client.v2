@@ -38,7 +38,7 @@ idlesWhenEmpty = false
 cycle = 0.15 # semi-automatic: the original's 0.2 less 0.05
 isAutomatic = false
 idleAfterShot = 2.5
-shootSequences = [3, 4, 5] # shoot, shoot2, shoot3
+shootSequences = [5] # shoot3: its model flashes once, a single shot
 lastShotSequence = 6 # shoot_empty
 
 [firing.accuracy] # paced: each shot takes (0.325 - the time since the last) x 0.275, within 0.6 and 0.9
@@ -65,9 +65,9 @@ switchTime = 0.3
 cycle = 0.5
 isAutomatic = true # in burst, holding the button fires again
 idleAfterShot = 2.5
-shootSequences = [3, 4, 5]
+shootSequences = [3, 4] # shoot, shoot2: its model flashes three times, a burst
 lastShotSequence = 6
-followUps = { rounds = 2, spread = 0.05 }
+followUps = { rounds = 2, spread = 0.05 } # they leave the burst's sequence playing
 
 [alternate.firing.accuracy]
 initial = 0.9

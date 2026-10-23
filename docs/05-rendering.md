@@ -366,7 +366,15 @@ flowchart LR
    mirrored, its left turned to its right (`StudioInstance::isMirrored`), the other faces culled as
    its triangles turn over: Counter-Strike's guns are modeled in the left hand and its knife in the
    right, and the original draws them all in the right (observed on it; Xash3D's
-   `R_AllowFlipViewModel`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). A
+   `R_AllowFlipViewModel`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). The
+   view model's client events (5000 and above) fire as a frame passes them, a sequence played anew
+   from its first frame (`R_StudioClientEvents`); a muzzle flash's (5001, 5011, 5021, 5031: the
+   first to fourth attachment, as GoldSrc's model events are documented) shows one of
+   `sprites/muzzleflash1.spr` to 3 at that attachment where the bones put it, chosen by its number's
+   units, a tenth of its tens in size, half with none, added in full, at a frame and rolled at random
+   (by 20 degrees at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`), among the
+   blended sprites of the frame (`cs.client:muzzleFlash`). The light it casts, the shells and the
+   sounds of the other events come with what draws and plays them. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its

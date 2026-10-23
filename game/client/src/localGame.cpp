@@ -79,6 +79,7 @@ auto LocalGame::viewModel() const -> std::optional<ViewModelPose> {
     const nx::GameTime shown = time.now.after(m_pending - kCommandInterval, time.rate);
     return ViewModelPose{.weapon = animation->weapon,
                          .sequence = animation->sequence,
+                         .start = animation->start,
                          .intoIt = std::max(shown.since(animation->start, time.rate), nx::Seconds{})};
 }
 
