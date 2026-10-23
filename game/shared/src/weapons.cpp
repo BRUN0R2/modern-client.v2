@@ -274,12 +274,14 @@ auto WeaponCatalog::findAmmo(std::string_view id) const noexcept -> const AmmoTy
 }
 
 auto WeaponCatalog::findWeapon(std::string_view id) const noexcept -> const Weapon* {
-    const auto found = std::ranges::find(m_weapons, id, &Weapon::id);
-    return found == m_weapons.end() ? nullptr : &*found;
+    const std::optional<WeaponIndex> found = indexOf(id);
+    return found ? &m_weapons[found->value] : nullptr;
 }
 
 auto WeaponCatalog::indexOf(std::string_view id) const noexcept -> std::optional<WeaponIndex> {
-    const auto found = std::ranges::find(m_weapons, id, &Weapon::id);
+    // No two weapons' ids differ only in case (create, make): one at most is so named.
+    const auto found = std::ranges::find_if(
+        m_weapons, [id](const Weapon& weapon) { return nx::equalsIgnoringCase(weapon.id, id); });
     if (found == m_weapons.end()) {
         return std::nullopt;
     }

@@ -8,6 +8,7 @@ nxAddTest(csClientTests
         hudTests.cpp
         muzzleFlashTests.cpp
         decalsTests.cpp
+        weaponCommandsTests.cpp
     DEPENDS
         cs::client
         cs::shared

@@ -341,9 +341,10 @@ public:
 
     /// The kind of ammo `id` names; none when the catalog has none of that id.
     [[nodiscard]] auto findAmmo(std::string_view id) const noexcept -> const AmmoType*;
-    /// The weapon `id` names; none when the catalog has none of that id.
+    /// The weapon `id` names, in any case ("drakariii" names "DrakarIII"); none when the catalog has
+    /// none of that id.
     [[nodiscard]] auto findWeapon(std::string_view id) const noexcept -> const Weapon*;
-    /// Where the weapon `id` names is; none when the catalog has none of that id.
+    /// Where the weapon `id` names is, in any case; none when the catalog has none of that id.
     [[nodiscard]] auto indexOf(std::string_view id) const noexcept -> std::optional<WeaponIndex>;
     /// The weapon at `index`, which must be one of the catalog's.
     [[nodiscard]] auto weapon(WeaponIndex index) const noexcept -> const Weapon&;

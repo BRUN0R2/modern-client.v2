@@ -20,7 +20,8 @@ struct WeaponActions {
     std::function<bool(WeaponIndex weapon)> give;   ///< The player is given `weapon`, which is complete.
 };
 
-/// The weapon `name` names in `weapons`: by its id, or by its classname; none.
+/// The weapon `name` names in `weapons`: by its id, or by its classname, in any case, as the console
+/// takes its commands' names; none.
 [[nodiscard]] auto findWeaponNamed(const WeaponCatalog& weapons, std::string_view name) noexcept
     -> std::optional<WeaponIndex>;
 

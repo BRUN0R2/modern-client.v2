@@ -217,7 +217,9 @@ auto findWeaponNamed(const WeaponCatalog& weapons, std::string_view name) noexce
     if (const std::optional<WeaponIndex> byId = weapons.indexOf(name)) {
         return byId;
     }
-    const auto found = std::ranges::find(weapons.weapons(), name, &Weapon::classname);
+    const auto found = std::ranges::find_if(weapons.weapons(), [name](const Weapon& weapon) {
+        return nx::equalsIgnoringCase(weapon.classname, name);
+    });
     if (found == weapons.weapons().end()) {
         return std::nullopt;
     }

@@ -96,6 +96,8 @@ TEST(WeaponTypesTest, AWeaponFromAnotherCopiesItsValuesOnce) {
     EXPECT_EQ(made.magazine->clipSize, 30U);
     EXPECT_TRUE(weapons.isComplete(drakar));
     EXPECT_EQ(weapons.findWeapon("DrakarIII"), &made);
+    EXPECT_EQ(weapons.findWeapon("drakariii"), &made) << "in any case";
+    EXPECT_EQ(weapons.indexOf("DRAKARIII"), drakar);
 
     set(weapons, kAk, "magazine.clipSize", "45");
     EXPECT_EQ(weapons.weapon(drakar).magazine->clipSize, 30U) << "linked to the AK-47 no more";
