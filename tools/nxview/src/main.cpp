@@ -18,6 +18,7 @@ import nx.rhi;
 import nx.rhi.vulkan;
 import nx.render;
 import nx.ui;
+import nx.settings;
 import cs.shared;
 import cs.client;
 
@@ -324,8 +325,11 @@ constexpr std::size_t kBlue = 2;
         post ? nx::render::PostRenderer::sceneFormat() : nx::rhi::Format::Rgba8Unorm;
     const nx::rhi::Format effectsFormat =
         post ? nx::render::PostRenderer::effectsFormat() : nx::rhi::Format::Rgba8Unorm;
+    // The original's default settings in a game of more than one player, as next plays it.
+    const auto decalLimit = nx::narrow<std::size_t>(nx::settings::decalsInMultiplayer(
+        nx::settings::kDefaultDecals, nx::settings::kDefaultMultiplayerDecals));
     auto scene = cs::Scene::create(**device, uploadCommands, level, shaders, sceneFormat, effectsFormat,
-                                   nx::render::GammaSettings{}, options.look);
+                                   nx::render::GammaSettings{}, options.look, decalLimit);
     if (!scene) {
         return unusable(scene.error());
     }

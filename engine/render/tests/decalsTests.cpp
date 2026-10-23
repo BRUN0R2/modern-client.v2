@@ -265,6 +265,42 @@ TEST_F(DecalPoolTest, APermanentDecalCutAwayLeavesItsSlotPermanent) {
     EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{2})) << "the second's slot went to the third";
 }
 
+TEST_F(DecalPoolTest, ALowerLimitKeepsTheRingWithinItAndTheDecalsPastIt) {
+    DecalPool decals = pool(3, floorOnly());
+    for (const auto& [texture, x] : {std::pair{0U, 8.0F}, std::pair{1U, 32.0F}, std::pair{2U, 56.0F}}) {
+        ASSERT_EQ(decals.shoot(onTheFloor(texture, x)), 1U);
+    }
+    decals.setLimit(1);
+    EXPECT_EQ(decals.limit(), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(3, 8.0F)), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(4, 8.0F)), 1U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{1, 2, 4}))
+        << "the first slot taken in turn, the others' decals left";
+
+    // A higher one brings their slots back into the ring, where it goes on.
+    decals.setLimit(3);
+    ASSERT_EQ(decals.shoot(onTheFloor(5, 32.0F)), 1U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{2, 4, 5}));
+}
+
+TEST_F(DecalPoolTest, AHigherLimitGrowsThePoolUpToTheMost) {
+    DecalPool decals = pool(1, floorOnly());
+    ASSERT_EQ(decals.shoot(onTheFloor(0, 8.0F)), 1U);
+    decals.setLimit(2);
+    ASSERT_EQ(decals.shoot(onTheFloor(1, 56.0F)), 1U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{0, 1})) << "a slot of its own";
+    decals.setLimit(DecalPool::kMostDecals + 1);
+    EXPECT_EQ(decals.limit(), DecalPool::kMostDecals);
+}
+
+TEST_F(DecalPoolTest, ALimitOfNoneStampsNoMoreAndKeepsWhatItHas) {
+    DecalPool decals = pool(2, floorOnly());
+    ASSERT_EQ(decals.shoot(onTheFloor(0, 8.0F)), 1U);
+    decals.setLimit(0);
+    EXPECT_EQ(decals.shoot(onTheFloor(1, 56.0F)), 0U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{0}));
+}
+
 TEST_F(DecalPoolTest, APoolOfNoDecalsStampsNone) {
     DecalPool decals = pool(0);
     EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 0U);

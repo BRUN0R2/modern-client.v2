@@ -187,9 +187,16 @@ auto takesDecals(std::string_view name) noexcept -> bool {
 }
 
 DecalPool::DecalPool(const assets::BspView& map, std::vector<DecalFace> faces, std::size_t limit)
-    : m_map{&map}, m_faces{std::move(faces)}, m_slots(std::min(limit, kMostDecals)),
-      m_decalsOfFace(m_faces.size()) {
+    : m_map{&map}, m_faces{std::move(faces)}, m_decalsOfFace(m_faces.size()) {
     expects(m_faces.size() == map.faces().size(), "DecalPool: a DecalFace for each face of the map");
+    setLimit(limit);
+}
+
+void DecalPool::setLimit(std::size_t limit) {
+    m_limit = std::min(limit, kMostDecals);
+    if (m_slots.size() < m_limit) {
+        m_slots.resize(m_limit);
+    }
 }
 
 auto DecalPool::shoot(const DecalShot& shot) -> std::uint32_t {
@@ -198,7 +205,7 @@ auto DecalPool::shoot(const DecalShot& shot) -> std::uint32_t {
         expects(false, "DecalPool::shoot: a model of the map");
         return 0;
     }
-    if (m_slots.empty() || shot.size.width == 0 || shot.size.height == 0) {
+    if (m_limit == 0 || shot.size.width == 0 || shot.size.height == 0) {
         return 0;
     }
     Walk walked{.shot = shot, .reach = static_cast<float>(std::max(shot.size.width, shot.size.height) / 2)};
@@ -350,9 +357,11 @@ auto DecalPool::slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, V
 
 auto DecalPool::nextSlot() -> std::size_t {
     for (std::size_t tried = 1;; ++tried) {
-        const std::size_t next = m_next;
-        m_next = (m_next + 1) % m_slots.size();
-        if (m_slots[next].life != DecalLife::Permanent || tried == m_slots.size()) {
+        if (m_next >= m_limit) {
+            m_next = 0;
+        }
+        const std::size_t next = m_next++;
+        if (m_slots[next].life != DecalLife::Permanent || tried == m_limit) {
             return next;
         }
     }

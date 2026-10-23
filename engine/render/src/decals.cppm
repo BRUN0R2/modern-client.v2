@@ -100,8 +100,15 @@ public:
     static constexpr std::size_t kMostDecals = 4096;
 
     /// A pool for the models of `map`, which must outlive it, `faces` its faces' by their index, of at
-    /// most `limit` decals on faces (kMostDecals at most; 0 holds none).
+    /// most `limit` decals on faces (setLimit).
     DecalPool(const assets::BspView& map, std::vector<DecalFace> faces, std::size_t limit);
+
+    /// Takes the next decals in the first `limit` slots, kMostDecals at most; 0 stamps none. As the
+    /// original's R_DecalAlloc reads r_decals at each decal: those past a lower limit stay until the
+    /// overlap rule replaces them or a higher one brings their slots back into the ring.
+    void setLimit(std::size_t limit);
+    /// The slots it takes decals in now.
+    [[nodiscard]] inline auto limit() const noexcept -> std::size_t { return m_limit; }
 
     /// Stamps `shot`, its model one of the map's, as the original's R_DecalShoot: the faces on the
     /// planes of the nodes of the model's tree it reaches within half the image's larger side that pass
@@ -147,15 +154,16 @@ private:
         -> std::size_t;
     /// Empties slot `slot`, its decal leaving its face.
     void empty(std::size_t slot);
-    /// The pool's next slot not taken for good, the next whatever it is once every slot is
-    /// (R_DecalAlloc); the one after it next.
+    /// The pool's next slot within its limit not taken for good, the last tried once each was
+    /// (R_DecalAlloc); the one after it next, the first past the limit.
     [[nodiscard]] auto nextSlot() -> std::size_t;
 
     const assets::BspView* m_map;
     std::vector<DecalFace> m_faces;
-    std::vector<Slot> m_slots;
+    std::vector<Slot> m_slots;                            ///< As many as the highest limit asked for.
     std::vector<std::vector<std::size_t>> m_decalsOfFace; ///< Slots, in the order stamped on it.
-    std::size_t m_next = 0;                               ///< The slot the pool takes next.
+    std::size_t m_limit = 0;
+    std::size_t m_next = 0; ///< The slot the pool tries next.
     std::uint64_t m_sequence = 0;
     std::uint64_t m_revision = 0;
 };
