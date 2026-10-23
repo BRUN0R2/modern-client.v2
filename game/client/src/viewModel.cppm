@@ -27,8 +27,9 @@ inline constexpr std::uint32_t kKnifeCrosshairDistance = 7;
 
 /// Why a weapon's view model cannot be held.
 enum class ViewModelError : std::uint8_t {
-    FilesFailed, ///< A file of it cannot be read or used (cause: the model files' error).
-    NoSequence,  ///< It lacks a sequence its weapon's data plays.
+    FilesFailed,  ///< A file of it cannot be read or used (cause: the model files' error).
+    NoSequence,   ///< It lacks a sequence its weapon's data plays.
+    NoAppearance, ///< Its static skin/body choices cannot be bound, or its alternate declares them.
 };
 
 /// The hand the player holds its weapons in: cl_righthand's default, until the cvar comes.
@@ -59,12 +60,12 @@ inline constexpr std::int32_t kSoundEvent = 5004;
 [[nodiscard]] auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
     -> std::vector<const nx::assets::StudioEvent*>;
 
-/// A weapon's view model, its textures and the animations of its sequences.
+/// A weapon's view model, its textures, validated static appearance and animations of its sequences.
 class ViewModel {
 public:
     /// Reads the view model of `weapon` from `vfs`, its `*T.mdl` when its textures are not in it, and
     /// the animations of each of its sequences, from their sequence group files. Errors: FilesFailed,
-    /// NoSequence (one the weapon's view plays).
+    /// NoSequence (one the weapon's view plays), NoAppearance (skin, textures or body choices).
     [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const Weapon& weapon)
         -> nx::Result<ViewModel, ViewModelError>;
 
@@ -82,6 +83,15 @@ public:
     /// Whether it is drawn mirrored: modeled in the other hand than the player's.
     [[nodiscard]] inline auto isMirrored() const noexcept -> bool { return m_isMirrored; }
 
+    /// Its validated static skin family, from the weapon's main view; zero when omitted.
+    [[nodiscard]] inline auto skin() const noexcept -> std::uint32_t { return m_skin; }
+
+    /// Its validated static body choices. The model owns them: the span lasts as long as it does.
+    /// Omitted parts select their first choice, also while the weapon's alternate is on.
+    [[nodiscard]] inline auto bodyChoices() const noexcept -> std::span<const std::uint32_t> {
+        return m_bodyChoices;
+    }
+
     /// Its sequence `sequence`, which must be one of its.
     [[nodiscard]] auto sequence(std::uint32_t sequence) const -> const nx::assets::StudioSequence&;
 
@@ -92,13 +102,16 @@ public:
 
 private:
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
-              std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored) noexcept;
+              std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
+              std::uint32_t skin, std::vector<std::uint32_t> bodyChoices) noexcept;
 
     std::unique_ptr<ModelFiles> m_files;
     std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
     /// Of each of its textures in the enhanced look, from its material file (cs.client:modelMaterials).
     std::vector<std::optional<nx::render::StudioMaterial>> m_materials;
     bool m_isMirrored;
+    std::uint32_t m_skin = 0;
+    std::vector<std::uint32_t> m_bodyChoices;
 };
 
 /// The client events the view model passes, frame after frame, as the original's client plays them

@@ -180,6 +180,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         .model = *weaponModel,
         .bones = bones,
         .light = m_light.modelLightAt({.origin = view.camera.position, .sky = level.skyLight()}, styles),
+        .skin = viewModel->skin(),
+        .bodyChoices = viewModel->bodyChoices(),
         .depth = nx::render::StudioDepth::ViewModel,
         .isMirrored = viewModel->isMirrored(),
         .lights = lights}};

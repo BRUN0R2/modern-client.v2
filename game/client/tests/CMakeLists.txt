@@ -7,6 +7,7 @@ nxAddTest(csClientTests
         mapTests.cpp
         hudTests.cpp
         muzzleFlashTests.cpp
+        viewModelTests.cpp
         decalsTests.cpp
         weaponCommandsTests.cpp
     DEPENDS

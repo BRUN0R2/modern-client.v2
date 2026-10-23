@@ -105,6 +105,36 @@ maxSpeed = 221.0
         .ammo = {AmmoType{.id = "9mm", .maxCarried = 120, .boxPrice = nx::Money{20}, .boxRounds = 30}}};
 }
 
+TEST(WeaponAppearanceSchemaTest, keepsOriginalDefaultsWhenAppearanceIsOmitted) {
+    const auto weapon = cs::readWeapon(weaponText(kGunKeys), "gun.toml");
+    ASSERT_TRUE(weapon.has_value()) << nx::describe(weapon.error());
+    EXPECT_FALSE(weapon->view.skin.has_value());
+    EXPECT_FALSE(weapon->view.bodyChoices.has_value());
+    EXPECT_EQ(weapon->view.skin.value_or(0), 0U);
+    EXPECT_TRUE(weapon->view.bodyChoices.value_or(std::vector<std::uint32_t>{}).empty());
+}
+
+TEST(WeaponAppearanceSchemaTest, readsDeclaredStaticAppearance) {
+    const auto weapon = cs::readWeapon(
+        weaponText(kGunKeys, "", std::format("{}skin = 5\nbodyChoices = [0, 2, 1]\n", kGunView)), "gun.toml");
+    ASSERT_TRUE(weapon.has_value()) << nx::describe(weapon.error());
+    EXPECT_EQ(weapon->view.skin, 5U);
+    ASSERT_TRUE(weapon->view.bodyChoices.has_value());
+    EXPECT_EQ(*weapon->view.bodyChoices, (std::vector<std::uint32_t>{0, 2, 1}));
+}
+
+TEST(WeaponAppearanceSchemaTest, rejectsInvalidAppearanceIndexes) {
+    for (const std::string_view appearance :
+         {"skin = -1", "skin = 1.5", "skin = 4294967296", "skin = \"gold\"", "bodyChoices = [-1]",
+          "bodyChoices = [0.5]", "bodyChoices = [4294967296]", "bodyChoices = [\"glow\"]"}) {
+        SCOPED_TRACE(appearance);
+        const auto weapon =
+            cs::readWeapon(weaponText(kGunKeys, "", std::format("{}{}\n", kGunView, appearance)), "gun.toml");
+        ASSERT_FALSE(weapon.has_value());
+        EXPECT_EQ(weapon.error().code, WeaponError::DataInvalid);
+    }
+}
+
 TEST(WeaponsTest, TheRepositoryHasTheOriginalsAmmo) {
     const std::optional<WeaponCatalog> catalog = repositoryCatalog();
     ASSERT_TRUE(catalog.has_value());

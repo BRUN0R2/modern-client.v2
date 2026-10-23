@@ -111,7 +111,7 @@ struct WeaponIdle {
     float share{}; ///< How likely it is chosen, from 0 to 1: the shares of a weapon's idles add up to 1.
 };
 
-/// How a weapon's view model moves as it is drawn and held, by its sequences' numbers in the model.
+/// How a weapon's view model moves as it is drawn and held, and its declared static appearance.
 struct WeaponView {
     std::vector<std::uint32_t> drawSequences{}; ///< One of them, at random, as it is drawn.
     /// One of them, at random by their shares, once it is drawn and each time its wait is over.
@@ -119,6 +119,11 @@ struct WeaponView {
     bool idlesWhenEmpty{}; ///< Whether it idles with its clip empty: the pistols do not.
     /// As it is drawn, besides those its view model's sequence plays (the knife's Deploy).
     std::optional<GameSound> drawSound{};
+    /// Its fixed skin family, zero-based; none selects the first. Only the weapon's main view may set it.
+    std::optional<std::uint32_t> skin{};
+    /// Its fixed choices by body-part index, zero-based; omitted parts select their first choice.
+    /// Only the weapon's main view may set them; none is the original's empty selection.
+    std::optional<std::vector<std::uint32_t>> bodyChoices{};
 };
 
 /// A part of a shot's spread: `base`, plus `scale` times the weapon's inaccuracy.
@@ -474,6 +479,8 @@ struct nx::meta::Description<cs::WeaponView> {
         nx::meta::field<&cs::WeaponView::idles>("idles"),
         nx::meta::field<&cs::WeaponView::idlesWhenEmpty>("idlesWhenEmpty"),
         nx::meta::field<&cs::WeaponView::drawSound>("drawSound"),
+        nx::meta::field<&cs::WeaponView::skin>("skin"),
+        nx::meta::field<&cs::WeaponView::bodyChoices>("bodyChoices"),
     };
 };
 

@@ -22,6 +22,44 @@ constexpr nx::log::Category kViewModelLog{"client"};
 using nx::assets::MdlView;
 using nx::assets::Vfs;
 
+/// NoAppearance when declared static choices cannot bind to the model or its external textures.
+[[nodiscard]] auto checkAppearance(const MdlView& model, const MdlView& textures, const Weapon& weapon)
+    -> nx::Result<void, ViewModelError> {
+    if (weapon.alternate && weapon.alternate->view &&
+        (weapon.alternate->view->skin || weapon.alternate->view->bodyChoices)) {
+        return nx::fail(ViewModelError::NoAppearance,
+                        std::format("{}: alternate.view cannot declare static skin or bodyChoices; use view",
+                                    weapon.models.view));
+    }
+    if (auto checked = model.checkTextures(textures); !checked) {
+        return nx::fail(ViewModelError::NoAppearance, weapon.models.view, std::move(checked.error()));
+    }
+    const std::uint32_t skin = weapon.view.skin.value_or(0);
+    if (skin >= textures.skins().size()) {
+        return nx::fail(ViewModelError::NoAppearance,
+                        std::format("{}: view.skin {} is outside {} skin families", weapon.models.view, skin,
+                                    textures.skins().size()));
+    }
+    if (weapon.view.bodyChoices) {
+        const std::vector<std::uint32_t>& choices = *weapon.view.bodyChoices;
+        const std::span<const nx::assets::BodyPart> parts = model.bodyParts();
+        if (choices.size() > parts.size()) {
+            return nx::fail(ViewModelError::NoAppearance,
+                            std::format("{}: view.bodyChoices has {} entries for {} body parts",
+                                        weapon.models.view, choices.size(), parts.size()));
+        }
+        for (std::size_t part = 0; part < choices.size(); ++part) {
+            if (choices[part] >= parts[part].models.size()) {
+                return nx::fail(ViewModelError::NoAppearance,
+                                std::format("{}: view.bodyChoices[{}] {} is outside {} choices of {:?}",
+                                            weapon.models.view, part, choices[part],
+                                            parts[part].models.size(), parts[part].name));
+            }
+        }
+    }
+    return {};
+}
+
 /// The sequences of `view`, `firing` and `reload` of a weapon, added to `played`.
 void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
                const std::optional<WeaponFiring>& firing, const std::optional<WeaponReload>& reload) {
@@ -72,10 +110,10 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
 } // namespace
 
 ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
-                     std::vector<std::optional<nx::render::StudioMaterial>> materials,
-                     bool isMirrored) noexcept
+                     std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
+                     std::uint32_t skin, std::vector<std::uint32_t> bodyChoices) noexcept
     : m_files{std::move(files)}, m_animations{std::move(animations)}, m_materials{std::move(materials)},
-      m_isMirrored{isMirrored} {}
+      m_isMirrored{isMirrored}, m_skin{skin}, m_bodyChoices{std::move(bodyChoices)} {}
 
 auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
     auto files = readModelFiles(vfs, weapon.models.view);
@@ -83,6 +121,9 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
         return nx::fail(ViewModelError::FilesFailed, std::move(files.error()));
     }
     const MdlView& model = *(*files)->view;
+    if (auto checked = checkAppearance(model, (*files)->texturesView(), weapon); !checked) {
+        return std::unexpected{std::move(checked.error())};
+    }
     if (auto checked = checkSequences(model, weapon); !checked) {
         return std::unexpected{std::move(checked.error())};
     }
@@ -100,9 +141,12 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
         nx::log::warning(kViewModelLog, "{}: shaded as the original shades it: {}", weapon.models.view,
                          nx::describe(materials.error()));
     }
-    return ViewModel{std::move(*files), std::move(animations),
+    return ViewModel{std::move(*files),
+                     std::move(animations),
                      std::move(materials).value_or(std::vector<std::optional<nx::render::StudioMaterial>>{}),
-                     weapon.models.viewHand != kPlayerHand};
+                     weapon.models.viewHand != kPlayerHand,
+                     weapon.view.skin.value_or(0),
+                     weapon.view.bodyChoices.value_or(std::vector<std::uint32_t>{})};
 }
 
 auto ViewModel::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const

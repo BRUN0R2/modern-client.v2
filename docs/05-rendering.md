@@ -373,7 +373,12 @@ flowchart LR
    weapons play since they started it (`cs::Inventory`: drawn, then idling,
    [10 §7.3](10-counter-strike-gameplay.md#73-behaviors)), posed by `cs::poseBones` at the frame
    `cs::sequenceFrameAt` gives, where the player looks from, lit by the world there and by the sky
-   the map's `light_environment` sets. A view model modeled in the other hand than the player's (its
+   the map's `light_environment` sets. Its main weapon data can select a static `view.skin` and
+   `view.bodyChoices`; `cs::ViewModel` validates and owns those values, and `cs::Scene` passes them
+   to `StudioInstance`. Their defaults keep skin zero and each body part's first choice. Appearance
+   indexes are checked against the actual model and its textures file before GPU upload; alternate
+   views cannot override them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   A view model modeled in the other hand than the player's (its
    `viewHand`; the player's is the right, `cl_righthand`'s default, until the cvar comes) is drawn
    mirrored, its left turned to its right (`StudioInstance::isMirrored`), the other faces culled as
    its triangles turn over: Counter-Strike's guns are modeled in the left hand and its knife in the

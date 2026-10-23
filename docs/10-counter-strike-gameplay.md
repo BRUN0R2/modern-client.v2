@@ -190,10 +190,12 @@ player          = "models/p_ak47.mdl"
 playerAnimation = "ak47"       # the end of the player model's sequences: "ref_aim_ak47"
 viewHand        = "left"       # the view model's hand: drawn mirrored for a player of the other
 
-[view]                         # the view model's sequences, by their number in it
+[view]                         # the view model's sequences and static appearance
 drawSequences  = [2]           # one at random as it is drawn
 idles          = [{ sequence = 0, wait = 20.0, share = 1.0 }] # by their shares, after each wait
 idlesWhenEmpty = true          # the pistols do not idle with an empty clip
+skin           = 0             # optional, zero-based skin family; omitted: the first
+bodyChoices    = []            # optional, zero-based choice by body-part index; omitted parts: the first
 
 [firing]                       # absent: it fires nothing (the knife, until its attacks)
 cycle          = 0.0955        # seconds from a shot to the next
@@ -226,6 +228,14 @@ plays them also holds the weapon's fire and idle that long), and the `view`, `fi
 it has while on, the weapon's own where it gives none. A firing's `followUps` are the rounds a shot
 fires after it on its own, one a weapon frame, each strayed by their `spread` (the Glock's burst:
 `{ rounds = 2, spread = 0.05 }`).
+
+The main `[view]` may declare a fixed appearance with `skin` and `bodyChoices`. They bind to the
+loaded MDL's skin families (from its `*T.mdl` when separate) and body parts; unavailable indexes,
+choices or extra body-part entries fail with `ViewModelError::NoAppearance`, rather than falling
+back to a different appearance. These values stay fixed during the weapon's alternate mode.
+`[alternate.view]` may change its sequences but cannot declare either appearance field, including
+an explicit `skin = 0` or `bodyChoices = []`. This is static presentation data, for offline and
+live rendering alike; it does not implement charge, transformation or other weapon state.
 
 A melee weapon has `[melee.slash]` (`+attack`) and `[melee.stab]` (`+attack2`): each its `reach`,
 its `missSequences` and `hitSequences`, played in turn an attack after another, how long a miss
