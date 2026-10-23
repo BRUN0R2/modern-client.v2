@@ -192,24 +192,26 @@ DecalPool::DecalPool(const assets::BspView& map, std::vector<DecalFace> faces, s
     expects(m_faces.size() == map.faces().size(), "DecalPool: a DecalFace for each face of the map");
 }
 
-auto DecalPool::shoot(std::uint32_t texture, DecalSize size, Vec3 center, float scale) -> std::uint32_t {
-    if (m_slots.empty() || size.width == 0 || size.height == 0 || m_map->models().empty()) {
+auto DecalPool::shoot(const DecalShot& shot) -> std::uint32_t {
+    const std::span<const assets::BspModel> models = m_map->models();
+    if (shot.model.value >= models.size()) {
+        expects(false, "DecalPool::shoot: a model of the map");
         return 0;
     }
-    const Shot shot{.texture = texture,
-                    .size = size,
-                    .center = center,
-                    .scale = std::clamp(scale, kLeastScale, kMostScale),
-                    .reach = static_cast<float>(std::max(size.width, size.height) / 2)};
+    if (m_slots.empty() || shot.size.width == 0 || shot.size.height == 0) {
+        return 0;
+    }
+    Walk walked{.shot = shot, .reach = static_cast<float>(std::max(shot.size.width, shot.size.height) / 2)};
+    walked.shot.scale = std::clamp(shot.scale, kLeastScale, kMostScale);
     std::uint32_t stamped = 0;
-    walk(m_map->models().front().headNode, shot, stamped);
+    walk(models[shot.model.value].headNode, walked, stamped);
     return stamped;
 }
 
-void DecalPool::walk(assets::NodeIndex index, const Shot& shot, std::uint32_t& stamped) {
+void DecalPool::walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped) {
     const assets::BspNode& node = m_map->nodes()[index.value];
     const Plane& plane = m_map->planes()[node.plane.value].plane;
-    const float distance = dot(shot.center, plane.normal) - plane.distance;
+    const float distance = dot(shot.shot.center, plane.normal) - plane.distance;
     const auto into = [&](std::size_t side) {
         if (const auto* const child = std::get_if<assets::NodeIndex>(&node.children.at(side))) {
             walk(*child, shot, stamped);
@@ -234,7 +236,8 @@ void DecalPool::walk(assets::NodeIndex index, const Shot& shot, std::uint32_t& s
     into(1);
 }
 
-auto DecalPool::stamp(std::uint32_t face, const Shot& shot) -> bool {
+auto DecalPool::stamp(std::uint32_t face, const Walk& walked) -> bool {
+    const DecalShot& shot = walked.shot;
     const DecalFace& about = m_faces[face];
     if (!about.takesDecals) {
         return false;
@@ -280,7 +283,7 @@ auto DecalPool::stamp(std::uint32_t face, const Shot& shot) -> bool {
     if (cut.size() < kTriangleCorners) {
         return false; // its slot stays empty: its decal went all the same
     }
-    PlacedDecal placed{.texture = shot.texture, .face = face};
+    PlacedDecal placed{.texture = shot.texture, .face = face, .model = shot.model};
     for (const CutCorner& corner : cut) {
         DecalVertex vertex{.position = corner.position, .u = corner.u, .v = corner.v};
         if (about.extent && about.lightmapCorner) {
@@ -305,7 +308,7 @@ auto DecalPool::stamp(std::uint32_t face, const Shot& shot) -> bool {
     return true;
 }
 
-auto DecalPool::slotFor(std::uint32_t face, const Shot& shot, Vec3 sAxis, Vec3 tAxis) -> std::size_t {
+auto DecalPool::slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis) -> std::size_t {
     // How much of each decal of the face the new one covers, in that decal's own square.
     const double halfWide = static_cast<double>(shot.size.width) / double{shot.scale} / 2.0;
     const double halfHigh = static_cast<double>(shot.size.height) / double{shot.scale} / 2.0;

@@ -66,9 +66,11 @@ public:
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
 
-    /// Stamps decal `decal`, of the level's gunshot decals, on the world's faces near `position`, as
-    /// nx::render::BspWorld::shootDecal does; returns the faces it was stamped on.
-    auto shootDecal(std::uint32_t decal, nx::Vec3 position) -> std::uint32_t;
+    /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
+    /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
+    /// faces it was stamped on.
+    auto shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
+        -> std::uint32_t;
 
     /// What the world drew in its last frame.
     [[nodiscard]] inline auto lastFrame() const noexcept -> const nx::render::FrameStats& {
