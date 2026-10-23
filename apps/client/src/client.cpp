@@ -40,8 +40,8 @@ constexpr std::chrono::milliseconds kMinimizedWait{50};
 constexpr float kFullVolume = 1.0F;
 /// A sound that could not be played is reported once in this long, with how many others were not.
 constexpr std::chrono::seconds kSoundFailureInterval{5};
-/// The stream of random numbers that chooses which hole a bullet leaves, as the original's client
-/// chooses it among the gunshot decals.
+/// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
+/// the original's game chooses it among them.
 constexpr std::string_view kBulletHoleStream = "bulletHoles";
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
@@ -222,8 +222,8 @@ private:
     void hearSession();
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Leaves a bullet's hole, one of the level's gunshot decals at random, where each of the session's
-    /// shots met the world in the frame, once the scene is drawn.
+    /// Leaves a bullet's mark where each of the session's shots met the world or a brush entity in the
+    /// frame, once the scene is drawn: the decal the mark of what it met leaves (cs::bulletDecalOf).
     void stampBulletHoles();
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
@@ -621,13 +621,18 @@ void Client::hearSession() {
 }
 
 void Client::stampBulletHoles() {
-    const std::vector<nx::Vec3> impacts = m_session->game->takeImpacts();
-    const std::size_t decals = m_session->level->gunshotDecals().size();
-    if (!m_scene || decals == 0) {
+    const std::vector<cs::Impact> impacts = m_session->game->takeImpacts();
+    if (!m_scene) {
         return;
     }
-    for (const nx::Vec3 impact : impacts) {
-        std::ignore = m_scene->shootDecal(nx::narrow<std::uint32_t>(m_bulletHoles.below(decals)), impact);
+    const cs::Level& level = *m_session->level;
+    for (const cs::Impact& impact : impacts) {
+        const std::optional<std::string_view> name =
+            cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles);
+        // One the installation lacks was reported as the level was read.
+        if (const std::optional<std::uint32_t> decal = name ? level.decals().indexOf(*name) : std::nullopt) {
+            std::ignore = m_scene->shootDecal(*decal, impact.position, impact.on);
+        }
     }
 }
 
