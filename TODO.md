@@ -505,7 +505,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] AMX Mod X's spelling: `new` as a contextual keyword, `#include` of the `amxx` headers ([ADR-0021](docs/adr/0021-rook-amxx-names.md))
 - [ ] Known forwards with name and signature checking
 - [ ] Interpolated strings and checked translation keys
-- [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming, `compatName`…)
+- [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming, `compatibilityName`…)
 - [ ] RIR (typed SSA) and optimizations
 - [ ] `.rbc` bytecode generation with metadata and debug info
 - [ ] Query-driven incremental compilation

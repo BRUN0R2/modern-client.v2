@@ -102,8 +102,8 @@ camelCase API, with every Rook guarantee kept.
    the `amxx.*` modules, as the generated accessors, and in the plugins that use them. The
    project's own Rook code (built-in mods, examples, documentation, the API's tests) stays
    canonical; only the layer's conformance tests use it.
-6. **Lints.** A new `compatName` lint (`info` by default) marks each AMXX name and each
-   `get_<handle>_var`/`set_<handle>_var` with its canonical form, with an LSP quick fix and
+6. **Lints.** A new `compatibilityName` lint (`information` by default) marks each AMXX name and
+   each `get_<handle>_var`/`set_<handle>_var` with its canonical form, with an LSP quick fix and
    `rook fmt --canonical` to rewrite a file at once; the LSP offers the canonical form first. In a
    file that includes an AMXX header, `naming` is a warning instead of an error, so that a plugin
    carried over with its own `g_data`-style names compiles; everywhere else it stays an error.
@@ -146,8 +146,8 @@ variable names (`var_health`, `m_iAccount`) are outside this ADR.
   AMXX's terms (decision 7), the fix that turns a property's native into its accessor, and the
   differences of [16 §5](../16-amxx-migration.md#5-important-behavior-differences).
 - ⚠️ ADR-0013's single convention gets a scoped exception, and `naming` a softer default in
-  files that include AMXX headers. Mitigation: the exception is the layer alone, and `compatName`
-  points at every use.
+  files that include AMXX headers. Mitigation: the exception is the layer alone, and
+  `compatibilityName` points at every use.
 - ⚠️ A contextual keyword and a restricted `#include` in the grammar. Mitigation: both covered by
   the conformance suite, and `new` never reserved, so no existing name breaks.
 - ⚠️ The layer is API surface to keep: the CI's API compatibility check

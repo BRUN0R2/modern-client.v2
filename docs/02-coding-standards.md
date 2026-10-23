@@ -171,8 +171,8 @@ Exceptions, because the name comes from outside the code or is required by a too
 
 `.clang-tidy` encodes the rule for C++ (`readability-identifier-naming`, as an error); it runs
 in CI once a Clang build with modules exists (planned, [17 §7](17-build-and-tools.md#7-continuous-integration)).
-In Rook, the `naming` lint of `rookc` will check it, and the `compatName` lint will point each
-AMX Mod X name at its canonical form ([14 §22](14-rook-language.md#22-lints-and-magic-numbers)).
+In Rook, the `naming` lint of `rookc` will check it, and the `compatibilityName` lint will point
+each AMX Mod X name at its canonical form ([14 §22](14-rook-language.md#22-lints-and-magic-numbers)).
 
 ### 3.2 Other naming rules
 

@@ -679,7 +679,7 @@ fn assassinHasHighHealth() -> Result<void, TestError> {
 | `wildcardHidesVariants` | warning | `_` in `match` hides the plugin's own variants |
 | `unused` | warning | Unused variable, import, function or result |
 | `naming` | error (warning in a file that includes an AMXX header) | Naming outside the standard of [§4](#4-lexical-structure) |
-| `compatName` | info | An AMX Mod X name or an underscored accessor: its canonical form, with a quick fix (`rook fmt --canonical` rewrites a file) |
+| `compatibilityName` | information | An AMX Mod X name or an underscored accessor: its canonical form, with a quick fix (`rook fmt --canonical` rewrites a file) |
 
 ## 23. The `rookc` compiler
 
