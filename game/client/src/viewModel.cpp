@@ -199,8 +199,19 @@ auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from,
     return passed;
 }
 
+auto intoPlayOf(const nx::assets::StudioSequence& sequence, float frame, float now, nx::Seconds intoIt)
+    -> nx::Seconds {
+    if (sequence.fps <= 0.0F) {
+        return nx::Seconds{};
+    }
+    if (!sequence.isLooping) {
+        return nx::Seconds{frame / sequence.fps};
+    }
+    return std::max(intoIt - nx::Seconds{(now - frame) / sequence.fps}, nx::Seconds{});
+}
+
 auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<ViewModelPose>& pose)
-    -> std::vector<const nx::assets::StudioEvent*> {
+    -> std::vector<PassedEvent> {
     if (!pose || viewModel == nullptr) {
         m_lastPose.reset();
         return {};
@@ -212,7 +223,13 @@ auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<Vie
                              ? sequenceFrameAt(sequence, m_lastPose->intoIt, 1.0F).value()
                              : kBeforeTheFirstFrame;
     m_lastPose = pose;
-    return clientEventsBetween(sequence, before, now);
+    return clientEventsBetween(sequence, before, now) |
+           std::views::transform([&sequence, now, &pose](const nx::assets::StudioEvent* event) {
+               return PassedEvent{
+                   .event = event,
+                   .intoPlay = intoPlayOf(sequence, static_cast<float>(event->frame), now, pose->intoIt)};
+           }) |
+           std::ranges::to<std::vector>();
 }
 
 } // namespace cs

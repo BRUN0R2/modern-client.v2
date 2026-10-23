@@ -391,7 +391,7 @@ constexpr std::size_t kBlue = 2;
     // a shot shows.
     const std::optional<cs::ViewModelPose> viewPose = (*game)->viewModel();
     cs::ViewModelEvents viewEvents;
-    const std::vector<const nx::assets::StudioEvent*> clientEvents =
+    const std::vector<cs::PassedEvent> clientEvents =
         viewEvents.passed(viewPose ? level.viewModel(viewPose->weapon) : nullptr, viewPose);
     if (post) {
         // Each bake owns a frame's world uniforms. Finish every probe at the screenshot's fixed time

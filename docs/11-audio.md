@@ -32,7 +32,10 @@ Today: the mixer, on the system's default output. A `Sound` is a WAV file of any
 32-bit floats, its first two channels, at its own rate, looping from its first cue point; the
 game owns it, so the audio thread never frees memory. The game sends the mixer `PlayVoice`,
 `StopVoice`, `SetVoiceGains` and `SetMasterGain` through an SPSC queue (`nx.jobs:spscQueue`; a
-full queue is a typed `QueueFull`, never a wait). Each voice reads its sound at
+full queue is a typed `QueueFull`, never a wait), each done at once or a delay after the start of
+the block that takes it, to the frame: the block is mixed in parts, cut where a command is due, and
+commands due at the same frame are done in the order sent. `QueueFull` counts the commands waiting
+for their time too, so the audio thread never makes room for them. Each voice reads its sound at
 `rate / deviceRate × pitch` frames a frame through a windowed sinc (Kaiser window, β 8, 8 zero
 crossings each way), narrowed when the sound is sped up so that nothing folds back: a sine at
 another rate comes out over 90 dB clean, and one sped up past the mix's band over 80 dB down.
@@ -73,6 +76,16 @@ silencers' sounds of the original's models) play their sound at full volume as a
 draw, the USP's `usp_slideback` from its draw's event, and a shot's `usp_unsil-1` are heard in
 their order, each matching its file.
 
+A frame runs as many ticks of the game as its time takes (docs/07 §2.2), so a slow one makes many
+sounds at once. Each sound comes with the moment of its tick (`cs::SoundMade`), each view model event
+with the moment of its play it comes at (`cs::PassedEvent`), and the client hears it as long after
+the frame as it came after the moment the last frame showed (`cs::Hearing`): the sounds of a frame
+are heard spread as they were made, a frame later at most, and a shot cuts the last one's tail as it
+starts, not before. Measured with the Drakar III (10 ticks between shots) on the mixer's own clock:
+its shots are heard 95 to 105 ms apart at 100, 20 and 8 frames a second and with no limit, where
+before two came together at 8 (0 ms) and a fast pair at 20 (49 ms), heard as a weapon firing faster.
+The ±5 ms left, at any frame rate, is the output's block, at whose start the mixer takes commands.
+
 ### 2.1 The original's audio problems and their causes
 
 | Problem in the original | Cause | Here |
@@ -80,7 +93,7 @@ their order, each matching its file.
 | Sounds limited to 8/16-bit PCM, mostly mono, at 11/22/44 kHz; other files rejected or played at the wrong speed | Fixed formats in the loader and the mixer | WAV of any common PCM layout (8, 16, 24 and 32-bit integer, 32-bit float, extensible) at any rate, plus FLAC, Vorbis and Opus ([§6](#6-formats)); every source resampled with a high-quality resampler; mixing in 32-bit float with headroom and a limiter, never clipping |
 | MP3 music that stops by itself, after a map change, an alt-tab or a device change, with its own volume | Music played by a second player (Miles), outside the mixer, with its own device and state | **One mixer for everything:** effects, sentences, voice and music (`media/*.mp3` included) are voices of the same mixer on the same device; music is a streamed voice and `bgmvolume` a gain of the mixer |
 | A stream that stalls or ends early | Decoding on demand, with no margin, and failures without a report | Streams decode ahead in `Low` jobs into a ring of blocks with a prefetch margin. An underrun plays silence for the missing block, is counted (`snd_stats`) and reported once, and the stream goes on; only its end or a command stops it. A decoding failure is a typed `SoundError` in the log, never a silent stop |
-| Sound that depends on the frame, the loading screen or the window focus | Mixing driven by the game loop | The audio thread runs on its own clock: frame rate, map loads and losing the focus do not touch it (`s_play_unfocused` decides whether an unfocused window is heard) |
+| Sound that depends on the frame, the loading screen or the window focus | Mixing driven by the game loop | The audio thread runs on its own clock: frame rate, map loads and losing the focus do not touch it (`s_play_unfocused` decides whether an unfocused window is heard); and each sound is heard at its tick's moment, not at the frame that took it, so a weapon's cadence is the same at any frame rate |
 | Audio gone after unplugging headphones | The device opened once | Losing or changing the device reopens the system default and resumes every voice and stream where it was |
 
 Every decoder refuses malformed input with a typed error and is fuzzed

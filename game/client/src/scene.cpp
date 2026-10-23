@@ -273,7 +273,7 @@ auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
     return {};
 }
 
-void Scene::flash(const ViewModel* viewModel, std::span<const nx::assets::StudioEvent* const> events,
+void Scene::flash(const ViewModel* viewModel, std::span<const PassedEvent> events,
                   std::span<const nx::Mat3x4> bones, nx::Seconds time) {
     std::erase_if(m_flashes, [time](const MuzzleFlash& shown) { return shown.until < time; });
     if (viewModel == nullptr || bones.empty()) {
@@ -283,7 +283,8 @@ void Scene::flash(const ViewModel* viewModel, std::span<const nx::assets::Studio
     for (std::size_t index = 0; index < frameCounts.size(); ++index) {
         frameCounts[index] = m_flashModels[index] ? m_flashModels[index]->frameCount() : 0;
     }
-    for (const nx::assets::StudioEvent* const event : events) {
+    for (const PassedEvent& passed : events) {
+        const nx::assets::StudioEvent* const event = passed.event;
         const std::optional<std::uint32_t> attachment = muzzleFlashAttachmentOf(event->event);
         const std::optional<nx::Vec3> origin =
             attachment ? viewModel->attachmentAt(bones, *attachment) : std::nullopt;

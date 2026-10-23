@@ -216,9 +216,10 @@ private:
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
     void startNextSession();
-    /// What the player hears of the frame the session played: the sounds its weapons made and its view
-    /// model's sound events; and the client events its view model passed, which the frame shows.
-    void hearSession();
+    /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
+    /// weapons made and its view model's sound events, each as long after the frame as it came after
+    /// what the last frame showed; and the client events its view model passed, which the frame shows.
+    void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
     /// Leaves a bullet's mark where each of the session's shots met the world or a brush entity in the
@@ -257,8 +258,8 @@ private:
     std::optional<Session> m_session;     ///< The map played.
     std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
     cs::ViewModelEvents m_viewModelEvents;
-    std::optional<cs::ViewModelPose> m_viewPose;                ///< Of the frame played.
-    std::vector<const nx::assets::StudioEvent*> m_clientEvents; ///< Its view model passed in the frame.
+    std::optional<cs::ViewModelPose> m_viewPose; ///< Of the frame played.
+    std::vector<cs::PassedEvent> m_clientEvents; ///< Its view model passed in the frame.
     nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
@@ -568,8 +569,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // A session plays once its scene is made, from the frame after the first image of it: what the
         // player hears of it, they see.
         if (m_session && m_scene) {
+            const cs::Hearing hearing = m_session->game->hearing(); // from what the last frame showed
             m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
-            hearSession();
+            hearSession(hearing);
             stampBulletHoles();
         }
         if (auto drawn = drawFrame(); !drawn) {
@@ -617,20 +619,21 @@ void Client::startNextSession() {
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
 }
 
-void Client::hearSession() {
+void Client::hearSession(const cs::Hearing& hearing) {
     m_viewPose = m_session->game->viewModel();
     m_clientEvents = m_viewModelEvents.passed(
         m_viewPose ? m_session->level->viewModel(m_viewPose->weapon) : nullptr, m_viewPose);
-    const std::vector<const cs::GameSound*> sounds = m_session->game->takeSounds();
+    const std::vector<cs::SoundMade> sounds = m_session->game->takeSounds();
     if (m_audio == nullptr) {
         return;
     }
-    for (const cs::GameSound* const sound : sounds) {
-        reportSound(m_audio->play(*sound));
+    for (const cs::SoundMade& made : sounds) {
+        reportSound(m_audio->play(*made.sound, hearing.delayOf(made.at)));
     }
-    for (const nx::assets::StudioEvent* const event : m_clientEvents) {
-        if (event->event == cs::kSoundEvent) {
-            reportSound(m_audio->playLocal(event->options, kFullVolume));
+    for (const cs::PassedEvent& passed : m_clientEvents) {
+        if (passed.event->event == cs::kSoundEvent) {
+            const nx::GameTime at = m_viewPose->start.after(passed.intoPlay, hearing.rate);
+            reportSound(m_audio->playLocal(passed.event->options, kFullVolume, hearing.delayOf(at)));
         }
     }
 }

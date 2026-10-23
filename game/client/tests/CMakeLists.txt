@@ -11,6 +11,7 @@ nxAddTest(csClientTests
         viewModelTests.cpp
         decalsTests.cpp
         weaponCommandsTests.cpp
+        hearingTests.cpp
     DEPENDS
         cs::client
         cs::shared

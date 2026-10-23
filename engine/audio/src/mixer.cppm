@@ -3,10 +3,12 @@
 
 /// The mixer (docs/11-audio.md, section 2): voices playing sounds at any rate and pitch, read
 /// through a windowed sinc, summed in 32-bit float with headroom, and kept under full scale by a
-/// limiter, so that nothing clips. The game sends it commands through a lock-free queue; the audio
-/// thread mixes block after block, neither allocating nor waiting.
+/// limiter, so that nothing clips. The game sends it commands through a lock-free queue, each done
+/// at once or a delay later, to the frame; the audio thread mixes block after block, neither
+/// allocating nor waiting.
 ///
-/// Today: voices with their gains and pitch, looping or not, a master gain and the limiter. Which
+/// Today: voices with their gains and pitch, looping or not, a master gain, the limiter, and
+/// commands done after a delay. Which
 /// voice a sound takes (channels, priorities and stealing), spatialization, the room's DSP and
 /// streaming come with what plays sounds (TODO.md).
 export module nx.audio:mixer;
@@ -22,7 +24,9 @@ export namespace nx::audio {
 
 /// What can go wrong with the mixer.
 enum class MixerError : std::uint8_t {
-    QueueFull, ///< The audio thread has not taken the commands sent yet: this one was not sent.
+    /// The mixer holds as many commands sent and not yet done as it can, waiting for the audio thread
+    /// or for their time: this one was not sent.
+    QueueFull,
 };
 
 /// How loud a voice is in each ear, 1 the sound as it is.
@@ -85,7 +89,8 @@ struct MixerDesc {
 /// Voices mixed into blocks of two channels: what the sound device plays.
 class Mixer final : public platform::AudioSource {
 public:
-    /// The most commands sent and not yet taken by the audio thread.
+    /// The most commands sent and not yet done: not taken by the audio thread yet, or waiting for
+    /// their time.
     static constexpr std::size_t kCommandCapacity = 1024;
     /// Samples never go past this, by the limiter: a little under full scale.
     static constexpr float kCeiling = 0.98F;
@@ -98,13 +103,15 @@ public:
     auto operator=(Mixer&&) -> Mixer& = delete;
     ~Mixer() override = default;
 
-    /// Sends `command` from the game's thread: the audio thread does it before the next block it
-    /// mixes. A command of a voice the mixer does not have does nothing. Errors: QueueFull.
-    [[nodiscard]] auto send(MixerCommand command) -> Result<void, MixerError>;
+    /// Sends `command` from the game's thread: the audio thread does it `delay` after the start of
+    /// the next block it mixes, to the nearest frame of the mix, at once with none; commands due at
+    /// the same frame are done in the order sent. A command of a voice the mixer does not have does
+    /// nothing. Errors: QueueFull.
+    [[nodiscard]] auto send(MixerCommand command, Seconds delay = Seconds{}) -> Result<void, MixerError>;
 
     /// Mixes the next `out.size() / 2` frames into `out`, left and right interleaved, from the audio
-    /// thread: the commands sent first, then every voice playing, through the master gain and the
-    /// limiter. Neither allocates nor waits.
+    /// thread: every voice playing, through the master gain and the limiter, each command done at the
+    /// frame it is due. Neither allocates nor waits.
     void render(std::span<float> out) noexcept override;
 
     /// Whether voice `voice` plays, as the audio thread last left it; from any thread.
@@ -126,7 +133,24 @@ private:
         bool loops = false;
     };
 
+    /// A command sent, and the frames of the mix it waits from the start of the block that takes it.
+    struct Sent {
+        MixerCommand command;
+        std::uint64_t delay = 0;
+    };
+    /// A command taken, and the frame of the mix it is due at.
+    struct Scheduled {
+        MixerCommand command;
+        std::uint64_t frame = 0;
+    };
+
+    /// Keeps `sent`, taken as the block that starts at m_mixed is mixed, until it is due.
+    void schedule(Sent sent) noexcept;
+    /// Does the commands due by `frame`, in their order.
+    void doDue(std::uint64_t frame) noexcept;
     void apply(const MixerCommand& command) noexcept;
+    /// Adds every voice playing to `out`, then puts it through the master gain and the limiter.
+    void mixFrames(std::span<float> out) noexcept;
     /// Adds voice `voice`'s next frames to `out`; stops it when its sound ends.
     void mixVoice(std::size_t voice, std::span<float> out) noexcept;
     /// The sample of `channel` of `voice`'s sound at frame `frame`, read as it loops or 0 outside it.
@@ -137,7 +161,12 @@ private:
     SincKernel m_kernel;
     std::vector<Voice> m_voices;
     std::unique_ptr<std::atomic<bool>[]> m_playing; ///< Of each voice, for the other threads.
-    std::unique_ptr<jobs::SpscQueue<MixerCommand, kCommandCapacity>> m_commands;
+    std::unique_ptr<jobs::SpscQueue<Sent, kCommandCapacity>> m_commands;
+    /// Taken and not yet due, the next due last: never more than kCommandCapacity, its room made once.
+    std::vector<Scheduled> m_scheduled;
+    /// Sent and not yet done: what send holds to kCommandCapacity.
+    std::atomic<std::size_t> m_unfinished{0};
+    std::uint64_t m_mixed = 0; ///< Frames mixed so far.
     float m_masterGain = 1.0F;
     float m_limiterGain = 1.0F;
     float m_limiterRelease; ///< The share of the way back to a gain of 1 the limiter goes a frame.

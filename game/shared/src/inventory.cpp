@@ -184,7 +184,8 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     }
     if (owned.followUpsLeft > 0) {
         // The rounds a shot fires after it, one a frame, whatever the buttons (FireRemaining).
-        if (const std::optional<Shot> shot = fireFollowUp(owned, weapon, shooter, command.number.value)) {
+        if (const std::optional<Shot> shot =
+                fireFollowUp(owned, weapon, shooter, command.number.value, time)) {
             shots.push_back(*shot);
         }
     }
@@ -273,7 +274,7 @@ auto Inventory::maxSpeed() const noexcept -> nx::UnitsPerSecond {
     return m_held ? m_catalog->weapon(m_weapons[*m_held].weapon).maxSpeed : kUnarmedSpeed;
 }
 
-auto Inventory::takeSounds() -> std::vector<const GameSound*> {
+auto Inventory::takeSounds() -> std::vector<SoundMade> {
     return std::exchange(m_sounds, {});
 }
 
@@ -297,9 +298,9 @@ void Inventory::takeRounds(std::size_t index, std::uint32_t rounds) {
     std::ignore = giveAmmo(magazine->ammo, besides);
 }
 
-void Inventory::makeSound(const std::optional<GameSound>& sound) {
+void Inventory::makeSound(const std::optional<GameSound>& sound, const nx::game::TickTime& time) {
     if (sound) {
-        m_sounds.push_back(&*sound);
+        m_sounds.push_back(SoundMade{.sound = &*sound, .at = time.now});
     }
 }
 
@@ -318,7 +319,7 @@ void Inventory::draw(std::size_t index, const nx::game::TickTime& time, nx::Rand
     const WeaponView& view = viewOf(weapon, owned);
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = anyOf(view.drawSequences, random), .start = time.now};
-    makeSound(view.drawSound);
+    makeSound(view.drawSound, time);
     m_nextIdle = kIdleAfterDraw;
     m_nextAttack = kAttackAfterDraw;
 }
@@ -349,11 +350,11 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     }
     if (owned.clip == 0) {
         owned.nextShot = kEmptyClickDelay;
-        makeSound(firing.emptySound);
+        makeSound(firing.emptySound, time);
         return std::nullopt;
     }
     --owned.clip;
-    makeSound(firing.sound);
+    makeSound(firing.sound, time);
     owned.nextShot = firing.cycle.count();
     owned.nextSecondary = firing.cycle.count();
     m_nextIdle = firing.idleAfterShot.count();
@@ -375,7 +376,7 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
 }
 
 auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter,
-                             std::uint32_t seed) -> std::optional<Shot> {
+                             std::uint32_t seed, const nx::game::TickTime& time) -> std::optional<Shot> {
     const std::optional<WeaponFiring>& firing = firingOf(weapon, owned);
     if (owned.clip == 0 || !firing || !firing->followUps) {
         owned.followUpsLeft = 0;
@@ -385,7 +386,7 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
     // shot does.
     --owned.clip;
     --owned.followUpsLeft;
-    makeSound(firing->sound);
+    makeSound(firing->sound, time);
     return shotFrom(shooter, firing->followUps->spread, seed);
 }
 
@@ -413,7 +414,7 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
         met = tracer(nx::collision::Hull::Ducked, shooter.eye, end);
     }
     const bool hits = met.fraction < 1.0F;
-    makeSound(hits ? attack.hitSound : attack.missSound);
+    makeSound(hits ? attack.hitSound : attack.missSound, time);
     const std::vector<std::uint32_t>& sequences = hits ? attack.hitSequences : attack.missSequences;
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = sequences[count++ % sequences.size()], .start = time.now};

@@ -55,10 +55,23 @@ inline constexpr std::int32_t kFirstClientEvent = 5000;
 /// `sound/` (the reloads' and the draws' sounds of the original's view models).
 inline constexpr std::int32_t kSoundEvent = 5004;
 
+/// A client event a view model's play passed, and how long into the play it comes: when it is heard
+/// and seen, though a frame passes many at once.
+struct PassedEvent {
+    const nx::assets::StudioEvent* event{};
+    nx::Seconds intoPlay{};
+};
+
 /// The client events of `sequence` its play passes from frame `from`, left out, to frame `to`,
 /// included, in their order.
 [[nodiscard]] auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
     -> std::vector<const nx::assets::StudioEvent*>;
+
+/// How long into a play of `sequence` its frame `frame` comes, the play `intoIt` into it at frame
+/// `now` (cs::sequenceFrameAt): from its start, or, in a loop, from the start of the turn `now` is
+/// in. A sequence of no rate stays at its first frame.
+[[nodiscard]] auto intoPlayOf(const nx::assets::StudioSequence& sequence, float frame, float now,
+                              nx::Seconds intoIt) -> nx::Seconds;
 
 /// A weapon's view model, its textures, validated static appearance and animations of its sequences.
 class ViewModel {
@@ -119,10 +132,10 @@ private:
 /// from the frame it was at in the last frame, or from before its first frame when a play starts.
 class ViewModelEvents {
 public:
-    /// The client events `viewModel`, that of the weapon of `pose`, passed since the last call's pose;
-    /// none without either.
+    /// The client events `viewModel`, that of the weapon of `pose`, passed since the last call's pose,
+    /// each with how long into the play it comes; none without either.
     [[nodiscard]] auto passed(const ViewModel* viewModel, const std::optional<ViewModelPose>& pose)
-        -> std::vector<const nx::assets::StudioEvent*>;
+        -> std::vector<PassedEvent>;
 
 private:
     std::optional<ViewModelPose> m_lastPose; ///< The last call's.

@@ -45,14 +45,16 @@ public:
     ~ClientAudio() = default;
 
     /// Plays the sound `name` names (nx::audio::SoundLibrary::load) at `volume`, from 0 to 1 as it is,
-    /// in both ears, as the original's `play` and `playvol` play a sound heard everywhere. Errors: NoSound,
-    /// QueueFull.
-    [[nodiscard]] auto playLocal(std::string_view name, float volume) -> nx::Result<void, PlayError>;
+    /// in both ears, as the original's `play` and `playvol` play a sound heard everywhere, `delay` from
+    /// now. Errors: NoSound, QueueFull.
+    [[nodiscard]] auto playLocal(std::string_view name, float volume, nx::Seconds delay = nx::Seconds{})
+        -> nx::Result<void, PlayError>;
 
-    /// Plays `sound` as the player makes it: one of its files and a pitch of its range at random, as
-    /// the original's client and engine choose them, on its channel of the player, replacing what that
-    /// channel plays. Errors: NoSound, QueueFull.
-    [[nodiscard]] auto play(const GameSound& sound) -> nx::Result<void, PlayError>;
+    /// Plays `sound` as the player makes it, `delay` from now: one of its files and a pitch of its
+    /// range at random, as the original's client and engine choose them, on its channel of the player,
+    /// replacing what that channel plays as it starts. Errors: NoSound, QueueFull.
+    [[nodiscard]] auto play(const GameSound& sound, nx::Seconds delay = nx::Seconds{})
+        -> nx::Result<void, PlayError>;
 
     /// Sends the mixer `volume`'s value when it changed since it was last sent: before each sound
     /// played, so that none is heard at another gain, and each frame, so that a change is heard
@@ -66,12 +68,18 @@ private:
     ClientAudio(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
                 nx::platform::AudioDevice device);
 
-    /// Plays the sound `name` names in `voice` at `volume` and `pitch` (1 as recorded).
-    [[nodiscard]] auto playIn(std::uint32_t voice, std::string_view name, float volume, float pitch)
+    /// How a sound plays: at `volume` and `pitch` (1 as recorded), `delay` from now.
+    struct Playing {
+        float volume = 1.0F;
+        float pitch = 1.0F;
+        nx::Seconds delay{};
+    };
+
+    /// Plays the sound `name` names in `voice` as `playing` says.
+    [[nodiscard]] auto playIn(std::uint32_t voice, std::string_view name, const Playing& playing)
         -> nx::Result<void, PlayError>;
     /// Plays the sound `name` names in the next of the kLocalVoices.
-    [[nodiscard]] auto playAuto(std::string_view name, float volume, float pitch)
-        -> nx::Result<void, PlayError>;
+    [[nodiscard]] auto playAuto(std::string_view name, const Playing& playing) -> nx::Result<void, PlayError>;
 
     nx::console::Cvar<float> m_volumeCvar;
     nx::audio::SoundLibrary m_sounds;

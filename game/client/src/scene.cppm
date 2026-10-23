@@ -46,7 +46,7 @@ struct SceneView {
     std::span<const nx::render::ModelPlacement> placements{};
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
     /// The client events the view model passed since the last frame (ViewModelEvents).
-    std::span<const nx::assets::StudioEvent* const> clientEvents{};
+    std::span<const PassedEvent> clientEvents{};
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
@@ -105,7 +105,7 @@ private:
 
     /// Adds the muzzle flashes of `events`, the client events `viewModel` passed, its bones `bones`, at
     /// `time`; and forgets those shown long enough.
-    void flash(const ViewModel* viewModel, std::span<const nx::assets::StudioEvent* const> events,
+    void flash(const ViewModel* viewModel, std::span<const PassedEvent> events,
                std::span<const nx::Mat3x4> bones, nx::Seconds time);
 
     nx::render::BspWorld m_world;

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The mixer: sounds read at any rate and pitch without coloring or folding them, voices that stop,
-// end and loop, the gains, the limiter that keeps the mix under full scale, and the command queue.
+// end and loop, the gains, the limiter that keeps the mix under full scale, and the command queue,
+// its commands done at once or after a delay, to the frame.
 
 #include <gtest/gtest.h>
 
@@ -229,6 +230,80 @@ TEST(MixerTest, CommandsWaitInTheQueueUntilItIsFull) {
     ASSERT_FALSE(refused.has_value());
     EXPECT_EQ(refused.error().code, MixerError::QueueFull);
     std::ignore = render(mixer, 16);
+    EXPECT_TRUE(mixer.send(SetMasterGain{.gain = 1.0F}).has_value());
+}
+
+/// `frames` frames of the mix, as a delay.
+[[nodiscard]] auto delayOf(std::uint32_t frames) -> nx::Seconds {
+    return nx::Seconds{static_cast<float>(frames) / static_cast<float>(kMixRate)};
+}
+
+/// Whether `out`'s left channel is silent over frames [first, last).
+[[nodiscard]] auto isSilent(std::span<const float> out, std::size_t first, std::size_t last) -> bool {
+    return std::ranges::all_of(std::views::iota(first, last),
+                               [&out](std::size_t frame) { return out[frame * 2] == 0.0F; });
+}
+
+TEST(MixerTest, ADelayedPlayStartsAtItsFrame) {
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
+    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &level}, delayOf(100)).has_value());
+    const std::vector<float> out = render(mixer, 512);
+    // The kernel reaches back from the sound's first sample: the voice starts at frame 100, not before.
+    EXPECT_TRUE(isSilent(out, 0, 100));
+    EXPECT_NE(out[100 * 2], 0.0F);
+    EXPECT_NEAR(out[(100 + kSettled) * 2], 0.5F, 1e-3F);
+}
+
+TEST(MixerTest, ADelayPastTheBlockGoesOnInTheNext) {
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
+    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &level}, delayOf(300)).has_value());
+    const std::vector<float> first = render(mixer, 256);
+    EXPECT_TRUE(isSilent(first, 0, 256));
+    EXPECT_FALSE(mixer.isPlaying(0));
+    const std::vector<float> second = render(mixer, 256);
+    EXPECT_TRUE(isSilent(second, 0, 44));
+    EXPECT_NEAR(second[(44 + kSettled) * 2], 0.5F, 1e-3F);
+    EXPECT_TRUE(mixer.isPlaying(0));
+}
+
+TEST(MixerTest, ADelayedPlayReplacesItsVoicesSoundAtItsFrameNotBefore) {
+    // A shot's sound after the last on the weapon's channel: the last is heard until the next starts.
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    const Sound first = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
+    const Sound next = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.25F; });
+    send(mixer, PlayVoice{.voice = 0, .sound = &first});
+    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &next}, delayOf(200)).has_value());
+    const std::vector<float> out = render(mixer, 512);
+    EXPECT_NEAR(out[(200 - 1) * 2], 0.5F, 1e-3F);
+    EXPECT_NEAR(out[(200 + kSettled) * 2], 0.25F, 1e-3F);
+}
+
+TEST(MixerTest, CommandsAreDoneByWhenTheyAreDueThenInTheOrderSent) {
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    const Sound half = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
+    const Sound quarter = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.25F; });
+    const Sound eighth = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.125F; });
+    // Sent last but due first; then two due at the same frame, the later sent of which is heard.
+    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &half}, delayOf(300)).has_value());
+    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &quarter}, delayOf(300)).has_value());
+    send(mixer, PlayVoice{.voice = 0, .sound = &eighth});
+    const std::vector<float> out = render(mixer, 512);
+    EXPECT_NEAR(out[kSettled * 2], 0.125F, 1e-3F);
+    EXPECT_NEAR(out[(300 + kSettled) * 2], 0.25F, 1e-3F);
+}
+
+TEST(MixerTest, CommandsWaitingForTheirTimeCountAgainstTheQueue) {
+    Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
+    for (std::size_t command = 0; command < Mixer::kCommandCapacity; ++command) {
+        ASSERT_TRUE(mixer.send(SetMasterGain{.gain = 1.0F}, delayOf(1'000)).has_value()) << command;
+    }
+    std::ignore = render(mixer, 16); // taken, not yet due
+    const auto refused = mixer.send(SetMasterGain{.gain = 1.0F});
+    ASSERT_FALSE(refused.has_value());
+    EXPECT_EQ(refused.error().code, MixerError::QueueFull);
+    std::ignore = render(mixer, 1'000);
     EXPECT_TRUE(mixer.send(SetMasterGain{.gain = 1.0F}).has_value());
 }
 
