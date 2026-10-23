@@ -4,6 +4,7 @@
 nxAddTest(nxDataTests
     SOURCES
         documentTests.cpp
+        fieldsTests.cpp
         schemaTests.cpp
     DEPENDS
         nx::data)

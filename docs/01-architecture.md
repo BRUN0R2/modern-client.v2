@@ -279,6 +279,17 @@ the detail `"<file>:<line>:<column>: <key path>: <problem>"`, for example
 field's type keeps the conversion failure as its cause. The TOML library (toml++, built without
 exceptions) stays behind `nx::data::Document` and its views.
 
+A field of such a struct is also set and written by its **key path**, the keys a file gives it
+joined by dots (`nx.data:fields`): `nx::data::assignField(weapon, "firing.cycle", "0.08", "console")`
+reads the text as a file's value is read, with the field's type and Range (text and an enumerator's
+name as they are, or quoted; anything else as TOML: `[1, 2]`, `{ ammo = "9mm", clipSize = 30 }`),
+an absent optional table starting from its defaults, and leaves the struct as it was on a failure;
+`formatField` and `listFields` write a field, or every field that holds a value, as a file writes
+it. What the console and plugins change of a value made from data goes by the names its file gives
+it: one schema for both ([10 §7.5](10-counter-strike-gameplay.md#75-weapons-made-as-the-game-runs)).
+A failure of text given alone names no line or column (`console: spread: expected a number in
+[0, 1], got 2`).
+
 ## 9. Observability
 
 - **Structured logging** (`nx::log`) with categories and levels, with output to the console,

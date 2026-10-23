@@ -95,12 +95,16 @@ namespace detail {
 struct Location {
     std::string_view source;
     std::string path;
+    /// Whether the value is text given alone, not read from a file (nx.data:fields): its failures
+    /// name no line or column, which would be those of the document it was read as.
+    bool isGivenText = false;
 
     [[nodiscard]] auto child(std::string_view key) const -> Location;
     [[nodiscard]] auto element(std::size_t index) const -> Location;
 };
 
-/// "<source>:<line>:<column>: <path>: <message>", the detail of every failure.
+/// "<source>:<line>:<column>: <path>: <message>", the detail of every failure; "<source>: <path>:
+/// <message>" for text given alone, or at a position of line 0, none.
 [[nodiscard]] auto describeAt(const Location& at, SourcePosition position, std::string_view message)
     -> std::string;
 
@@ -356,6 +360,21 @@ template <DataTable Type>
 }
 
 } // namespace detail
+
+/// The enumerator of `Enum` that `text` names as data files write it ("counterTerrorists"); none.
+template <CountedEnum Enum>
+[[nodiscard]] auto enumeratorNamed(std::string_view text) -> std::optional<Enum> {
+    static constexpr auto kValues = enumerators<Enum>();
+    const auto found = std::ranges::find_if(
+        kValues, [text](Enum value) { return detail::isDataSpelling(enumName(value), text); });
+    return found == kValues.end() ? std::nullopt : std::optional{*found};
+}
+
+/// `value` as data files write it: its enumerator's name with a lowercase first letter.
+template <CountedEnum Enum>
+[[nodiscard]] auto dataNameOf(Enum value) -> std::string {
+    return detail::dataSpelling(enumName(value));
+}
 
 /// Reads `text`, the TOML file `sourceName` (named in failures), as a `Type`. Every key must be a
 /// field of `Type` (nested tables are described structs too), every field that is not
