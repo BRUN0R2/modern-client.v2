@@ -6,6 +6,7 @@ module cs.shared;
 import std;
 import nx.core;
 import nx.math;
+import nx.collision;
 import nx.game;
 
 namespace cs {
@@ -151,8 +152,8 @@ void Inventory::select(const UserCommand& command, const nx::game::TickTime& tim
     }
 }
 
-auto Inventory::frame(const UserCommand& command, Shooter& shooter, const nx::game::TickTime& time)
-    -> std::vector<Shot> {
+auto Inventory::frame(const UserCommand& command, Shooter& shooter, const WeaponTracer& tracer,
+                      const nx::game::TickTime& time) -> std::vector<Shot> {
     std::vector<Shot> shots;
     // As the original's PostThink, which counts the timers down once the frame is over, the command's
     // milliseconds made seconds in double, then float.
@@ -183,14 +184,21 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const nx::ga
         }
     }
     const bool attacks = command.buttons.test(Button::Attack);
-    // `Attack2` counts for a weapon with an alternate alone (HasSecondaryAttack).
-    const bool switches = weapon.alternate.has_value() && command.buttons.test(Button::Attack2);
-    if (switches && owned.nextSwitch <= 0.0F) {
-        switchAlternate(owned, weapon, time);
+    // `Attack2` counts for a weapon with an alternate or melee attacks alone (HasSecondaryAttack).
+    const bool switches =
+        (weapon.alternate.has_value() || weapon.melee.has_value()) && command.buttons.test(Button::Attack2);
+    if (switches && owned.nextSecondary <= 0.0F) {
+        if (weapon.melee) {
+            strike(owned, weapon.melee->stab, owned.stabs, shooter, tracer, time);
+        } else {
+            switchAlternate(owned, weapon, time);
+        }
         return over();
     }
     if (attacks && owned.nextShot <= 0.0F) {
-        if (firingOf(weapon, owned)) {
+        if (weapon.melee) {
+            strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time);
+        } else if (firingOf(weapon, owned)) {
             if (const std::optional<Shot> shot =
                     fire(owned, weapon, shooter, command.number.value, time, random)) {
                 shots.push_back(*shot);
@@ -329,7 +337,7 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     }
     --owned.clip;
     owned.nextShot = firing.cycle.count();
-    owned.nextSwitch = firing.cycle.count();
+    owned.nextSecondary = firing.cycle.count();
     m_nextIdle = firing.idleAfterShot.count();
     owned.followUpsLeft = firing.followUps ? firing.followUps->rounds : 0;
     const std::uint32_t sequence = owned.clip == 0 && firing.lastShotSequence
@@ -368,7 +376,7 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
 void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time) {
     const WeaponAlternate& alternate = *weapon.alternate;
     owned.isAlternate = !owned.isAlternate;
-    owned.nextSwitch = alternate.switchTime.count();
+    owned.nextSecondary = alternate.switchTime.count();
     if (alternate.onSequence && alternate.offSequence) {
         // A switch the view model plays holds the weapon's fire and its idle as long.
         m_animation =
@@ -377,6 +385,26 @@ void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const 
                           .start = time.now};
         owned.nextShot = alternate.switchTime.count();
         m_nextIdle = alternate.switchTime.count();
+    }
+}
+
+void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint32_t& count,
+                       const Shooter& shooter, const WeaponTracer& tracer, const nx::game::TickTime& time) {
+    // A line straight ahead along the view, without its kick, then a ducked player's hull.
+    const nx::Vec3 end = shooter.eye + (nx::angleVectors(shooter.view).forward * attack.reach.value());
+    nx::collision::Trace met = tracer(nx::collision::Hull::Point, shooter.eye, end);
+    if (met.fraction >= 1.0F) {
+        met = tracer(nx::collision::Hull::Ducked, shooter.eye, end);
+    }
+    const bool hits = met.fraction < 1.0F;
+    const std::vector<std::uint32_t>& sequences = hits ? attack.hitSequences : attack.missSequences;
+    m_animation = ViewAnimation{
+        .weapon = owned.weapon, .sequence = sequences[count++ % sequences.size()], .start = time.now};
+    const MeleeTiming& timing = hits ? attack.hit : attack.miss;
+    owned.nextShot = timing.primary.count();
+    owned.nextSecondary = timing.secondary.count();
+    if (attack.idleAfter) {
+        m_nextIdle = attack.idleAfter->count();
     }
 }
 
@@ -428,7 +456,7 @@ void Inventory::idle(const nx::game::TickTime& time, nx::Random& random) {
 void Inventory::countDown(float frameTime) noexcept {
     for (OwnedWeapon& owned : m_weapons) {
         owned.nextShot = std::max(owned.nextShot - frameTime, kLowestNextShot);
-        owned.nextSwitch = std::max(owned.nextSwitch - frameTime, kLowestTimer);
+        owned.nextSecondary = std::max(owned.nextSecondary - frameTime, kLowestTimer);
     }
     m_nextIdle = std::max(m_nextIdle - frameTime, kLowestTimer);
     m_nextAttack = std::max(m_nextAttack - frameTime, kLowestTimer);

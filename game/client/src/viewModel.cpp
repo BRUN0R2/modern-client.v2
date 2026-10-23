@@ -34,8 +34,8 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
     }
 }
 
-/// NoSequence when `weapon` plays a sequence `model` lacks: drawn, idling, firing, reloaded or
-/// switched, with its alternate on or off.
+/// NoSequence when `weapon` plays a sequence `model` lacks: drawn, idling, firing, reloaded,
+/// switched, with its alternate on or off, or slashing and stabbing.
 [[nodiscard]] auto checkSequences(const MdlView& model, const Weapon& weapon)
     -> nx::Result<void, ViewModelError> {
     std::vector<std::uint32_t> played;
@@ -48,6 +48,12 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
             if (switched) {
                 played.push_back(*switched);
             }
+        }
+    }
+    if (const std::optional<WeaponMelee>& melee = weapon.melee) {
+        for (const MeleeAttack* const attack : {&melee->slash, &melee->stab}) {
+            std::ranges::copy(attack->missSequences, std::back_inserter(played));
+            std::ranges::copy(attack->hitSequences, std::back_inserter(played));
         }
     }
     for (const std::uint32_t sequence : played) {

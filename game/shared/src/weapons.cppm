@@ -8,8 +8,8 @@
 /// recoil. The game's own are in data/cstrike/weapons/<weapon>.toml and data/cstrike/ammo.toml,
 /// with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
 ///
-/// Today: the guns' fire as it starts, the silencers and the Glock's burst; their damage and how far
-/// it reaches and the knife's attacks come next (TODO.md).
+/// Today: the guns' fire as it starts, the silencers, the Glock's burst and the knife's attacks; their
+/// damage and how far it reaches come next (TODO.md).
 export module cs.shared:weapons;
 
 import std;
@@ -189,6 +189,31 @@ struct WeaponReload {
     std::vector<std::uint32_t> sequences{}; ///< One of them, at random, as it reloads.
 };
 
+/// How long a melee attack holds the weapon's attacks: `+attack`'s, and `+attack2`'s.
+struct MeleeTiming {
+    nx::Seconds primary{};
+    nx::Seconds secondary{};
+};
+
+/// A melee attack (the knife's: Swing, Stab): it meets what is within `reach` straight ahead of the
+/// eye, along the view without its kick, a line first, then a ducked player's hull; it plays its miss
+/// or its hit sequences in turn, an attack after another, and holds the attacks as its miss or its
+/// hit says; it idles `idleAfter` after it, or when it would have otherwise.
+struct MeleeAttack {
+    nx::HammerUnits reach{};
+    std::vector<std::uint32_t> missSequences{};
+    std::vector<std::uint32_t> hitSequences{};
+    MeleeTiming miss{};
+    MeleeTiming hit{};
+    std::optional<nx::Seconds> idleAfter{};
+};
+
+/// A melee weapon's attacks: `+attack`'s slash, `+attack2`'s stab.
+struct WeaponMelee {
+    MeleeAttack slash{};
+    MeleeAttack stab{};
+};
+
 /// What `+attack2` switches a weapon to and back: the USP's and the M4A1's silencers, the Glock's
 /// burst. While on, its view, firing and reload are these, those not given the weapon's own.
 struct WeaponAlternate {
@@ -230,7 +255,8 @@ struct Weapon {
     WeaponView view{};
     std::optional<WeaponFiring> firing{};       ///< None: it fires nothing (the knife, until its attacks).
     std::optional<WeaponReload> reload{};       ///< None: it is not reloaded.
-    std::optional<WeaponAlternate> alternate{}; ///< None: `+attack2` does nothing with it.
+    std::optional<WeaponAlternate> alternate{}; ///< None: `+attack2` switches nothing.
+    std::optional<WeaponMelee> melee{};         ///< None: it has no melee attacks.
 };
 
 /// A weapon of a catalog, by its place in it.
@@ -248,7 +274,8 @@ struct WeaponIndex {
 /// of the game's files, a draw sequence and an idle at least, each idle's wait above 0 and the
 /// idles' shares adding up to 1; firing and reloading only with a magazine, a shoot sequence and a
 /// reload sequence at least, a cycle above 0, and one accuracy, by bursts or by pace; and the same of
-/// its alternate's, which plays both its switch's sequences or neither. Errors: DataInvalid.
+/// its alternate's, which plays both its switch's sequences or neither; melee attacks with a miss and
+/// a hit sequence at least, of a weapon with no alternate. Errors: DataInvalid.
 [[nodiscard]] auto readWeapon(std::string_view text, std::string_view sourceName)
     -> nx::Result<Weapon, WeaponError>;
 
@@ -460,6 +487,37 @@ struct nx::meta::Description<cs::WeaponReload> {
 };
 
 template <>
+struct nx::meta::Description<cs::MeleeTiming> {
+    static constexpr std::string_view kName = "cs::MeleeTiming";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::MeleeTiming::primary>("primary", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MeleeTiming::secondary>("secondary", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::MeleeAttack> {
+    static constexpr std::string_view kName = "cs::MeleeAttack";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::MeleeAttack::reach>("reach", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MeleeAttack::missSequences>("missSequences"),
+        nx::meta::field<&cs::MeleeAttack::hitSequences>("hitSequences"),
+        nx::meta::field<&cs::MeleeAttack::miss>("miss"),
+        nx::meta::field<&cs::MeleeAttack::hit>("hit"),
+        nx::meta::field<&cs::MeleeAttack::idleAfter>("idleAfter", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::WeaponMelee> {
+    static constexpr std::string_view kName = "cs::WeaponMelee";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponMelee::slash>("slash"),
+        nx::meta::field<&cs::WeaponMelee::stab>("stab"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponAlternate> {
     static constexpr std::string_view kName = "cs::WeaponAlternate";
     static constexpr std::tuple kFields{
@@ -500,5 +558,6 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::firing>("firing"),
         nx::meta::field<&cs::Weapon::reload>("reload"),
         nx::meta::field<&cs::Weapon::alternate>("alternate"),
+        nx::meta::field<&cs::Weapon::melee>("melee"),
     };
 };

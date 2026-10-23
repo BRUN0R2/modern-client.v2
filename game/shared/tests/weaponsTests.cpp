@@ -284,6 +284,23 @@ TEST(WeaponsTest, TheRepositorysAlternatesAreTheOriginals) {
     EXPECT_FALSE(catalog->findWeapon("ak47")->alternate.has_value());
 }
 
+TEST(WeaponsTest, TheRepositorysKnifeAttacksAsTheOriginals) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    const cs::WeaponMelee& knife = *catalog->findWeapon("knife")->melee;
+    EXPECT_EQ(knife.slash.reach, nx::HammerUnits{48.0F});
+    EXPECT_EQ(knife.slash.missSequences, (std::vector<std::uint32_t>{6, 7}));
+    EXPECT_EQ(knife.slash.miss.primary, nx::Seconds{0.35F});
+    EXPECT_EQ(knife.slash.hit.primary, nx::Seconds{0.4F});
+    EXPECT_EQ(knife.slash.hit.secondary, nx::Seconds{0.5F});
+    EXPECT_EQ(knife.slash.idleAfter, nx::Seconds{2.0F});
+    EXPECT_EQ(knife.stab.reach, nx::HammerUnits{32.0F});
+    EXPECT_EQ(knife.stab.missSequences, (std::vector<std::uint32_t>{5}));
+    EXPECT_EQ(knife.stab.hitSequences, (std::vector<std::uint32_t>{4}));
+    EXPECT_EQ(knife.stab.hit.primary, nx::Seconds{1.1F});
+    EXPECT_FALSE(knife.stab.idleAfter.has_value()) << "the original's stab leaves the idle as it was";
+}
+
 TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
     constexpr std::string_view kMagazine = "[magazine]\nammo = \"9mm\"\nclipSize = 20\n";
     const std::string firing = R"(

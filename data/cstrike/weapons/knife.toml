@@ -21,3 +21,18 @@ viewHand = "right"
 drawSequences = [3] # draw
 idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
 idlesWhenEmpty = true
+
+[melee.slash] # +attack (Swing): a miss and a hit play the same sequences, in turn
+reach = 48.0
+missSequences = [6, 7] # midslash1, midslash2
+hitSequences = [6, 7]
+miss = { primary = 0.35, secondary = 0.5 }
+hit = { primary = 0.4, secondary = 0.5 }
+idleAfter = 2.0
+
+[melee.stab] # +attack2 (Stab): it leaves the idle as it was
+reach = 32.0
+missSequences = [5] # stab_miss
+hitSequences = [4] # stab
+miss = { primary = 1.0, secondary = 1.0 }
+hit = { primary = 1.1, secondary = 1.1 }

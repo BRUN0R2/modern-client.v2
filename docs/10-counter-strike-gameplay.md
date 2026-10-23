@@ -226,6 +226,11 @@ it has while on, the weapon's own where it gives none. A firing's `followUps` ar
 fires after it on its own, one a weapon frame, each strayed by their `spread` (the Glock's burst:
 `{ rounds = 2, spread = 0.05 }`).
 
+A melee weapon has `[melee.slash]` (`+attack`) and `[melee.stab]` (`+attack2`): each its `reach`,
+its `missSequences` and `hitSequences`, played in turn an attack after another, how long a miss
+and a hit hold `+attack` and `+attack2` (`miss = { primary = 0.35, secondary = 0.5 }`), and
+`idleAfter` (absent: the idle stays as it was, as the original's stab leaves it).
+
 ```toml
 [[ammo]]
 id         = "762Nato"         # the original's name
@@ -244,8 +249,9 @@ original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds
 counter-terrorists a knife, a USP and 24 rounds of 45ACP, each weapon with a clip's worth.
 
 **Today:** the knife, the Glock 18, the USP, the AK-47 and the M4A1, how the guns fire and are
-reloaded, their silencers and burst, and the loadouts. Each next part of the weapons brings the data
-its code reads: damage, range modifier and penetration, the knife's attacks, and the armor ratio.
+reloaded, their silencers and burst, the knife's attacks, and the loadouts. Each next part of the
+weapons brings the data its code reads: damage, range modifier and penetration, the knife's damage
+and back stab, and the armor ratio.
 Which shoot sequence a gun's client plays is the project's choice until it is measured on the
 original.
 
@@ -303,6 +309,12 @@ original.
 - **Grenades:** bounce physics, detonation time, flashbang blindness by angle and distance,
   smoke with the original's duration and volume.
 - **Knife:** quick slash and heavy stab, with a multiplier from behind.
+  **Today:** `+attack` slashes and `+attack2` stabs (Swing, Stab): a line 48 units ahead of the eye
+  (32 for the stab), along the view without its kick, then a ducked player's hull, through the world
+  and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`); a miss and a hit
+  play their sequences and hold the attacks as the data says (a slash 0.35 or 0.4 seconds, the next
+  stab 0.5; a stab 1.0 or 1.1). What the blade hits, its damage and the back stab come with the
+  damage.
 
 ### 7.4 Damage
 
