@@ -7,6 +7,7 @@ nxAddTest(csClientTests
         mapTests.cpp
         hudTests.cpp
         muzzleFlashTests.cpp
+        decalsTests.cpp
     DEPENDS
         cs::client
         cs::shared

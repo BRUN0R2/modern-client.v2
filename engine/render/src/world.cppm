@@ -12,7 +12,8 @@
 /// Today: the lightmaps of each face's light styles, opaque, masked (`{`) and animated (`+0`...)
 /// textures, from the map or from its WADs, in the original's picture (nx.render:gamma), the sky,
 /// the brush entities' render modes and alternate textures, water and its waves, brush entities
-/// moved and turned by the game, and decals on the world's faces (nx.render:decals).
+/// moved and turned by the game, and decals on the faces of the world and of the brush entities
+/// (nx.render:decals).
 export module nx.render:world;
 
 import std;
@@ -77,6 +78,14 @@ struct DecalRun {
     std::uint32_t vertexCount = 0;
 };
 
+/// The decals of a face of a brush entity, a run each in the order stamped on it: a range of a frame's
+/// decal runs.
+struct FaceDecals {
+    std::uint32_t face = 0;
+    std::uint32_t firstRun = 0;
+    std::uint32_t runCount = 0;
+};
+
 /// What one frame in flight writes its uniform, its indices, its brush models' uniforms and its
 /// decals' triangles to.
 struct FrameSlot {
@@ -88,7 +97,10 @@ struct FrameSlot {
     rhi::OwnedBuffer decalVertices{};                ///< Grown as the decals need.
     std::uint64_t decalCapacity = 0;                 ///< Its bytes.
     std::optional<std::uint64_t> decalRevision{};    ///< Of the decals it holds: none, none yet.
+    /// The world's decals first, the first worldDecalRuns of them; then those of brush entities.
     std::vector<DecalRun> decalRuns{};
+    std::uint32_t worldDecalRuns = 0;
+    std::vector<FaceDecals> faceDecals{}; ///< Of the brush entities' faces with decals, by face.
 };
 
 } // namespace nx::render
@@ -153,6 +165,14 @@ struct ModelPlacement {
     bool showsAlternateTextures = false;
 };
 
+/// What a decal is stamped on: the world, or the brush entity of model `model` where the game puts it
+/// as it is stamped.
+struct DecalTarget {
+    assets::ModelIndex model = assets::kWorldModel;
+    Vec3 origin{};
+    EulerAngles angles{};
+};
+
 /// What a draw shows.
 struct WorldFrame {
     Camera camera{};
@@ -201,11 +221,14 @@ public:
     /// Records the brush entity of `index`, one of blendedDraws()'s, in the same render pass.
     void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
-    /// Stamps decal `decal`, of BspWorldDesc::decals, on the world's faces near `center`, as
-    /// DecalPool::shoot does; drawn from the next prepare on, over the faces, lit as they are, after
-    /// the world's faces as the original draws them. Returns the faces it was stamped on.
-    auto shootDecal(std::uint32_t decal, Vec3 center) -> std::uint32_t;
-    /// The world's decals.
+    /// Stamps decal `decal`, of BspWorldDesc::decals, near `center` on the faces of `on`, as
+    /// DecalPool::shoot does: the world's, or a brush entity's, the point taken into its model's space
+    /// where `on` puts it, as the original's R_DecalShoot takes it, so that the decal goes where the
+    /// game moves the entity. Drawn from the next prepare on, over the faces, as the original draws
+    /// them: the world's after the world's faces, lit as they are; a brush entity's after its own, as
+    /// its render mode draws them. Returns the faces it was stamped on.
+    auto shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on = {}) -> std::uint32_t;
+    /// The decals of the world and of its brush entities.
     [[nodiscard]] inline auto decals() const noexcept -> const DecalPool& { return *m_decals; }
 
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
@@ -224,8 +247,18 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// A brush entity drawn this frame, with the world or blended: its faces that face the camera, a
-    /// range of m_entityFaces.
+    /// A face of a brush entity drawn this frame: one that faces the camera, its triangles in
+    /// m_entityIndices; or one of a kRenderTransTexture entity seen from behind with decals, which
+    /// shows its decals alone, as the original keeps such a face for them and culls its polygon
+    /// (R_SortBrushModelSurfaces).
+    struct EntityFace {
+        std::uint32_t face = 0;
+        IndexRange triangles{};
+        bool isFromBehind = false;
+    };
+
+    /// A brush entity drawn this frame, with the world or blended: its faces drawn, a range of
+    /// m_entityFaces.
     struct EntityDraw {
         std::uint32_t model = 0; ///< In m_models.
         float distance = 0.0F;   ///< Squared, from the camera to its middle.
@@ -253,11 +286,21 @@ private:
     /// `camera`, in the order the original draws them.
     void addEntity(std::uint32_t model, const Camera& camera, const ModelPlacement& placement);
     [[nodiscard]] auto pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
+    /// The pipeline the decals of a brush entity drawn in `mode` are drawn with.
+    [[nodiscard]] auto decalPipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle;
     /// The frame slot the last prepare wrote.
     [[nodiscard]] auto preparedSlot() const noexcept -> const FrameSlot&;
-    /// Records the faces of `entity`, with the vertex and index buffers bound, each with its texture's
-    /// frame.
+    /// Records the faces of `entity`, with the index buffer bound, each with its texture's frame, and
+    /// their decals as the original draws them: a normal entity's after all its faces, as one batch;
+    /// another's after each face (DrawSurfaceDecals), as its render mode draws them, a face seen from
+    /// behind's newest first. Binds the vertex buffer each needs.
     void drawEntity(rhi::CommandList& commands, const EntityDraw& entity) const;
+    /// Records the decals of `runs`, with the decal vertices bound, in their order or the other way;
+    /// the pipeline and the bind groups but the texture's are set.
+    void drawDecalRuns(rhi::CommandList& commands, std::span<const DecalRun> runs, bool isReversed) const;
+    /// The decal runs of the face of a brush entity `face`, in the slot the last prepare wrote; none
+    /// without decals.
+    [[nodiscard]] auto decalRunsOf(std::uint32_t face) const -> std::span<const DecalRun>;
     /// The shader, the bind group layouts and the samplers, then a pipeline for each way faces are
     /// drawn.
     [[nodiscard]] auto createLayouts(std::span<const std::byte> shaderCode) -> Result<void, rhi::RhiError>;
@@ -288,11 +331,14 @@ private:
     rhi::OwnedBindGroupLayout m_entityLayout;
     rhi::OwnedRenderPipeline m_pipeline;
     rhi::OwnedRenderPipeline m_skyPipeline;
-    rhi::OwnedRenderPipeline m_solidPipeline;    ///< TransAlpha.
-    rhi::OwnedRenderPipeline m_texturePipeline;  ///< TransTexture and Glow.
-    rhi::OwnedRenderPipeline m_colorPipeline;    ///< TransColor.
-    rhi::OwnedRenderPipeline m_additivePipeline; ///< TransAdd.
-    rhi::OwnedRenderPipeline m_decalPipeline;
+    rhi::OwnedRenderPipeline m_solidPipeline;         ///< TransAlpha.
+    rhi::OwnedRenderPipeline m_texturePipeline;       ///< TransTexture and Glow.
+    rhi::OwnedRenderPipeline m_colorPipeline;         ///< TransColor.
+    rhi::OwnedRenderPipeline m_additivePipeline;      ///< TransAdd.
+    rhi::OwnedRenderPipeline m_decalPipeline;         ///< The world's, and a Normal or TransAlpha entity's.
+    rhi::OwnedRenderPipeline m_textureDecalPipeline;  ///< TransTexture and Glow.
+    rhi::OwnedRenderPipeline m_colorDecalPipeline;    ///< TransColor.
+    rhi::OwnedRenderPipeline m_additiveDecalPipeline; ///< TransAdd.
     rhi::OwnedSampler m_decalSampler;
     std::vector<rhi::OwnedBindGroup> m_decalGroups; ///< Of each decal's image, by its index.
     std::vector<DecalSize> m_decalSizes;
@@ -321,9 +367,8 @@ private:
     std::size_t m_animationStep = 0;      ///< The frame of each animated texture shown: this one of them.
     std::vector<EntityDraw> m_entityDraws;
     std::vector<BlendedDraw> m_blendedDraws; ///< Of m_entityDraws, by their index.
-    std::vector<std::uint32_t> m_entityFaces;
+    std::vector<EntityFace> m_entityFaces;
     std::vector<std::uint32_t> m_entityIndices;
-    std::vector<IndexRange> m_entityRanges; ///< Of each of m_entityFaces, in m_entityIndices.
     FrameStats m_lastFrame;
 };
 

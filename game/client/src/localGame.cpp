@@ -119,7 +119,8 @@ void LocalGame::tick(const UserCommand& command) {
     nx::game::touchTriggers(m_world, hulls, m_body);
     // The weapon in hand fires, is reloaded or idles once the command moved the player, as the
     // original's PostThink runs it; each shot goes as far as a bullet does, and where it meets the
-    // world it leaves its hole (its damage and how far it goes through come with damage).
+    // world or a brush entity it leaves its mark (its damage and how far it goes through come with
+    // damage).
     Shooter shooter{
         .eye = eyeOf(m_player),
         .view = command.viewAngles,
@@ -136,8 +137,8 @@ void LocalGame::tick(const UserCommand& command) {
         const nx::game::SolidHit hit =
             nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin,
                                      shot.origin + (shot.direction * kBulletReach));
-        if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid && !hit.entity) {
-            m_impacts.push_back(hit.trace.end);
+        if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
+            m_impacts.push_back(Impact{.position = hit.trace.end, .on = targetOf(hit.entity)});
         }
     }
     m_player.punch = shooter.punch;
@@ -145,6 +146,21 @@ void LocalGame::tick(const UserCommand& command) {
     nx::game::runPushers(m_world, hulls);
     m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;
     nx::game::advanceTick(m_world);
+}
+
+auto LocalGame::targetOf(std::optional<nx::ecs::Entity> entity) const -> nx::render::DecalTarget {
+    if (!entity) {
+        return {};
+    }
+    // What stops a shot is a solid brush entity: it has its model and its place.
+    const nx::game::BrushModel* const model = m_world.get<nx::game::BrushModel>(*entity);
+    const nx::game::Transform* const transform = m_world.get<nx::game::Transform>(*entity);
+    nx::expects(model != nullptr && transform != nullptr, "LocalGame: a shot stopped by a brush entity");
+    if (model == nullptr || transform == nullptr) {
+        return {};
+    }
+    return nx::render::DecalTarget{
+        .model = model->index, .origin = transform->origin, .angles = transform->angles};
 }
 
 auto LocalGame::toggleNoclip() -> bool {

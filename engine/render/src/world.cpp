@@ -936,8 +936,14 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
     };
     const auto first = narrow<std::uint32_t>(m_entityFaces.size());
     for (std::uint32_t face = drawn.firstFace; face < drawn.firstFace + drawn.faceCount; ++face) {
-        if (m_faces[face].bucket != kSkyBucket && isSeen(face, eye, true)) {
-            m_entityFaces.push_back(face);
+        if (m_faces[face].bucket == kSkyBucket || m_faces[face].indexCount == 0) {
+            continue;
+        }
+        if (isSeen(face, eye, true)) {
+            m_entityFaces.push_back(EntityFace{.face = face});
+            ++m_lastFrame.faces;
+        } else if (drawn.mode == RenderMode::TransTexture && m_decals->decalsOn(face) != 0) {
+            m_entityFaces.push_back(EntityFace{.face = face, .isFromBehind = true});
         }
     }
     const auto count = narrow<std::uint32_t>(m_entityFaces.size()) - first;
@@ -948,25 +954,26 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
         // R_SurfaceCompare: the farthest along the view first.
         const Vec3 forward = angleVectors(camera.angles).forward;
         std::ranges::stable_sort(std::span{m_entityFaces}.subspan(first, count), std::ranges::greater{},
-                                 [this, forward, &placed](std::uint32_t face) {
-                                     return dot(placed(m_faces[face].middle), forward);
+                                 [this, forward, &placed](const EntityFace& face) {
+                                     return dot(placed(m_faces[face.face].middle), forward);
                                  });
     }
-    for (const std::uint32_t face : std::span{m_entityFaces}.subspan(first, count)) {
-        const FaceDraw& draw = m_faces[face];
+    for (EntityFace& face : std::span{m_entityFaces}.subspan(first, count)) {
+        if (face.isFromBehind) {
+            continue;
+        }
+        const FaceDraw& draw = m_faces[face.face];
         const auto firstIndex = narrow<std::uint32_t>(m_entityIndices.size());
         const auto triangles = std::span{m_faceIndices}.subspan(draw.firstIndex, draw.indexCount);
         m_entityIndices.insert(m_entityIndices.end(), triangles.begin(), triangles.end());
-        m_entityRanges.push_back(
-            IndexRange{.firstIndex = firstIndex,
-                       .indexCount = narrow<std::uint32_t>(m_entityIndices.size()) - firstIndex});
+        face.triangles = IndexRange{.firstIndex = firstIndex,
+                                    .indexCount = narrow<std::uint32_t>(m_entityIndices.size()) - firstIndex};
     }
     m_entityDraws.push_back(
         EntityDraw{.model = model,
                    .distance = lengthSquared(drawn.bounds.center() + placement.origin - camera.position),
                    .firstFace = first,
                    .faceCount = count});
-    m_lastFrame.faces += count;
 }
 
 void BspWorld::gather(const Camera& camera, float aspect) {
@@ -979,7 +986,6 @@ void BspWorld::gather(const Camera& camera, float aspect) {
     m_blendedDraws.clear();
     m_entityFaces.clear();
     m_entityIndices.clear();
-    m_entityRanges.clear();
 
     // The leaves the camera's leaf may see, found again when it moves to another leaf.
     const assets::LeafIndex leaf = m_map->leafAt(camera.position);
@@ -1108,17 +1114,14 @@ void BspWorld::drawSolid(rhi::CommandList& commands) const {
         commands.setBindGroup(kTextureGroup, batch.textures);
         commands.drawIndexed(batch.indices.indexCount, 1, batch.indices.firstIndex, 0, 0);
     }
-    if (!slot.decalRuns.empty()) {
+    if (slot.worldDecalRuns != 0) {
         // The decals over the world's faces, oldest first, as the original draws them after its
         // textures and before its lightmaps.
         commands.setPipeline(m_decalPipeline.get());
         commands.setVertexBuffer(0, slot.decalVertices.get(), 0);
         commands.setBindGroup(kFrameGroup, slot.group.get());
         commands.setBindGroup(kEntityGroup, slot.entityGroups[0].get());
-        for (const DecalRun& run : slot.decalRuns) {
-            commands.setBindGroup(kTextureGroup, m_decalGroups[run.texture].get());
-            commands.draw(run.vertexCount, 1, run.firstVertex, 0);
-        }
+        drawDecalRuns(commands, std::span{slot.decalRuns}.first(slot.worldDecalRuns), false);
         commands.setVertexBuffer(0, m_vertices.get(), 0);
     }
     if (m_sky.indexCount != 0) {
@@ -1149,38 +1152,119 @@ void BspWorld::drawBlended(rhi::CommandList& commands, std::uint32_t index) cons
 void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) const {
     const FrameSlot& slot = preparedSlot();
     const RenderMode mode = m_models[entity.model].mode;
-    commands.setPipeline(pipelineOf(mode));
-    commands.setBindGroup(kFrameGroup, slot.group.get());
-    commands.setBindGroup(kEntityGroup, slot.entityGroups[std::size_t{entity.model} + 1].get());
+    const rhi::BindGroupHandle entityGroup = slot.entityGroups[std::size_t{entity.model} + 1].get();
+    const auto faces = std::span{m_entityFaces}.subspan(entity.firstFace, entity.faceCount);
+    const auto useDecals = [&] {
+        commands.setPipeline(decalPipelineOf(mode));
+        commands.setVertexBuffer(0, slot.decalVertices.get(), 0);
+        commands.setBindGroup(kFrameGroup, slot.group.get());
+        commands.setBindGroup(kEntityGroup, entityGroup);
+    };
+    const auto useFaces = [&] {
+        commands.setPipeline(pipelineOf(mode));
+        commands.setVertexBuffer(0, m_vertices.get(), 0);
+        commands.setBindGroup(kFrameGroup, slot.group.get());
+        commands.setBindGroup(kEntityGroup, entityGroup);
+    };
+    useFaces();
     const bool showsAlternates = m_placements[entity.model].showsAlternateTextures;
-    for (std::uint32_t face = entity.firstFace; face < entity.firstFace + entity.faceCount; ++face) {
-        if (mode != RenderMode::TransColor) {
-            const BucketFrames& bucket = m_bucketFrames[m_faces[m_entityFaces[face]].bucket];
-            const std::vector<rhi::OwnedBindGroup>& frames =
-                showsAlternates && !bucket.alternates.empty() ? bucket.alternates : bucket.frames;
-            commands.setBindGroup(kTextureGroup, frames[m_animationStep % frames.size()].get());
+    for (const EntityFace& face : faces) {
+        if (!face.isFromBehind) {
+            if (mode != RenderMode::TransColor) {
+                const BucketFrames& bucket = m_bucketFrames[m_faces[face.face].bucket];
+                const std::vector<rhi::OwnedBindGroup>& frames =
+                    showsAlternates && !bucket.alternates.empty() ? bucket.alternates : bucket.frames;
+                commands.setBindGroup(kTextureGroup, frames[m_animationStep % frames.size()].get());
+            }
+            commands.drawIndexed(face.triangles.indexCount, 1, m_firstEntityIndex + face.triangles.firstIndex,
+                                 0, 0);
         }
-        const IndexRange& range = m_entityRanges[face];
-        commands.drawIndexed(range.indexCount, 1, m_firstEntityIndex + range.firstIndex, 0, 0);
+        const std::span<const DecalRun> runs = decalRunsOf(face.face);
+        if (mode != RenderMode::Normal && !runs.empty()) {
+            // Drawn after their face, as R_RenderDecalsForSurface draws those of an entity not drawn
+            // normally.
+            useDecals();
+            drawDecalRuns(commands, runs, face.isFromBehind);
+            useFaces();
+        }
+    }
+    if (mode == RenderMode::Normal) {
+        // After all of its faces, as the original batches a normal entity's (DrawDecalsBatch).
+        const auto hasDecals = [this](const EntityFace& face) {
+            return !decalRunsOf(face.face).empty();
+        };
+        if (std::ranges::any_of(faces, hasDecals)) {
+            useDecals();
+            for (const EntityFace& face : faces | std::views::filter(hasDecals)) {
+                drawDecalRuns(commands, decalRunsOf(face.face), false);
+            }
+        }
     }
 }
 
-auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center) -> std::uint32_t {
+void BspWorld::drawDecalRuns(rhi::CommandList& commands, std::span<const DecalRun> runs,
+                             bool isReversed) const {
+    const auto drawRun = [&](const DecalRun& run) {
+        commands.setBindGroup(kTextureGroup, m_decalGroups[run.texture].get());
+        commands.draw(run.vertexCount, 1, run.firstVertex, 0);
+    };
+    if (isReversed) {
+        std::ranges::for_each(runs | std::views::reverse, drawRun);
+    } else {
+        std::ranges::for_each(runs, drawRun);
+    }
+}
+
+auto BspWorld::decalRunsOf(std::uint32_t face) const -> std::span<const DecalRun> {
+    const FrameSlot& slot = preparedSlot();
+    const auto found = std::ranges::lower_bound(slot.faceDecals, face, {}, &FaceDecals::face);
+    if (found == slot.faceDecals.end() || found->face != face) {
+        return {};
+    }
+    return std::span{slot.decalRuns}.subspan(found->firstRun, found->runCount);
+}
+
+auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on) -> std::uint32_t {
     expects(decal < m_decalSizes.size(), "BspWorld::shootDecal: one of BspWorldDesc::decals");
-    return m_decals->shoot(decal, m_decalSizes[decal], center);
+    Vec3 local = center;
+    if (on.model != assets::kWorldModel) {
+        // Into the model's space where the game puts it, as R_DecalShoot takes the point.
+        local = on.angles == EulerAngles{} ? center - on.origin
+                                           : intoAxes(angleVectors(on.angles), center - on.origin);
+    }
+    return m_decals->shoot(
+        DecalShot{.texture = decal, .size = m_decalSizes[decal], .model = on.model, .center = local});
 }
 
 auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
     if (slot.decalRevision == m_decals->revision()) {
         return {};
     }
-    // Each decal's fan as triangles, its run continued while the image stays the same.
+    // The world's first, in the order stamped, each run continued while the image stays the same; then
+    // those of the brush entities, a face after another, each face's in the order stamped on it, a run
+    // each so that a face seen from behind can draw them the other way.
+    std::vector<const PlacedDecal*> decals = m_decals->inOrder();
+    const auto ofEntities = std::ranges::stable_partition(
+        decals, [](const PlacedDecal* decal) { return decal->model == assets::kWorldModel; });
+    std::ranges::stable_sort(ofEntities, {}, [](const PlacedDecal* decal) { return decal->face; });
     std::vector<WorldVertex> vertices;
     std::vector<DecalRun> runs;
-    for (const PlacedDecal* const decal : m_decals->inOrder()) {
-        if (runs.empty() || runs.back().texture != decal->texture) {
+    std::vector<FaceDecals> faceDecals;
+    std::uint32_t worldRuns = 0;
+    for (const PlacedDecal* const decal : decals) {
+        const bool isOfTheWorld = decal->model == assets::kWorldModel;
+        if (!isOfTheWorld && (faceDecals.empty() || faceDecals.back().face != decal->face)) {
+            faceDecals.push_back(
+                FaceDecals{.face = decal->face, .firstRun = narrow<std::uint32_t>(runs.size())});
+        }
+        if (!isOfTheWorld || runs.empty() || runs.back().texture != decal->texture) {
             runs.push_back(
                 DecalRun{.texture = decal->texture, .firstVertex = narrow<std::uint32_t>(vertices.size())});
+            if (isOfTheWorld) {
+                ++worldRuns;
+            } else {
+                ++faceDecals.back().runCount;
+            }
         }
         const auto vertexOf = [](const DecalVertex& corner) {
             return WorldVertex{.position = corner.position,
@@ -1207,6 +1291,8 @@ auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
                                               .location = rhi::MemoryLocation::Upload});
         if (!buffer) {
             slot.decalRuns.clear();
+            slot.worldDecalRuns = 0;
+            slot.faceDecals.clear();
             return std::unexpected{std::move(buffer.error())};
         }
         slot.decalVertices = std::move(*buffer);
@@ -1216,6 +1302,8 @@ auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
         std::ranges::copy(bytes, m_device->mappedBytes(slot.decalVertices.get()).begin());
     }
     slot.decalRuns = std::move(runs);
+    slot.worldDecalRuns = worldRuns;
+    slot.faceDecals = std::move(faceDecals);
     slot.decalRevision = m_decals->revision();
     return {};
 }
@@ -1241,6 +1329,23 @@ auto BspWorld::pipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipeline
         break;
     }
     return m_texturePipeline.get();
+}
+
+auto BspWorld::decalPipelineOf(RenderMode mode) const noexcept -> rhi::RenderPipelineHandle {
+    switch (mode) {
+    case RenderMode::Normal:
+    case RenderMode::TransAlpha:
+        return m_decalPipeline.get();
+    case RenderMode::TransColor:
+        return m_colorDecalPipeline.get();
+    case RenderMode::TransAdd:
+        return m_additiveDecalPipeline.get();
+    case RenderMode::TransTexture:
+    case RenderMode::Glow:
+    case RenderMode::Count:
+        break;
+    }
+    return m_textureDecalPipeline.get();
 }
 
 auto BspWorld::createLayouts(std::span<const std::byte> shaderCode) -> Result<void, rhi::RhiError> {
@@ -1338,19 +1443,27 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
     auto additive = pipeline("world.additive", "vertexMain", "additiveFragmentMain", additiveBlend,
                              Depth::Tested, layouts);
     // Decals over the faces they lie on: blended, their depth tested against the faces' pulled toward
-    // the eye, not written.
+    // the eye; written only on a TransColor entity, whose mode leaves the original's depth writes on
+    // around its decals.
     const std::array decalTargets{rhi::ColorTarget{.format = colorFormat, .blend = alphaBlend}};
-    auto decal = device.createRenderPipeline(
-        {.label = "world.decal",
-         .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
-         .fragment = {.shader = m_shader.get(), .entryPoint = "decalFragmentMain"},
-         .vertexBuffers = vertexBuffers,
-         .colorTargets = decalTargets,
-         .depth = rhi::DepthState{.isWriteEnabled = false,
-                                  .compare = rhi::CompareOp::GreaterOrEqual,
-                                  .bias = kDecalBias},
-         .bindGroupLayouts = layouts});
-    for (auto* const created : {&opaque, &sky, &solid, &texture, &color, &additive, &decal}) {
+    const auto decalPipeline = [&](std::string_view label, std::string_view fragment, Depth depth) {
+        return device.createRenderPipeline(
+            {.label = label,
+             .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
+             .fragment = {.shader = m_shader.get(), .entryPoint = fragment},
+             .vertexBuffers = vertexBuffers,
+             .colorTargets = decalTargets,
+             .depth = rhi::DepthState{.isWriteEnabled = depth == Depth::TestedAndWritten,
+                                      .compare = rhi::CompareOp::GreaterOrEqual,
+                                      .bias = kDecalBias},
+             .bindGroupLayouts = layouts});
+    };
+    auto decal = decalPipeline("world.decal", "decalFragmentMain", Depth::Tested);
+    auto textureDecal = decalPipeline("world.decal.texture", "textureDecalFragmentMain", Depth::Tested);
+    auto colorDecal = decalPipeline("world.decal.color", "colorDecalFragmentMain", Depth::TestedAndWritten);
+    auto additiveDecal = decalPipeline("world.decal.additive", "additiveDecalFragmentMain", Depth::Tested);
+    for (auto* const created : {&opaque, &sky, &solid, &texture, &color, &additive, &decal, &textureDecal,
+                                &colorDecal, &additiveDecal}) {
         if (!*created) {
             return std::unexpected{std::move(created->error())};
         }
@@ -1362,6 +1475,9 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
     m_colorPipeline = std::move(*color);
     m_additivePipeline = std::move(*additive);
     m_decalPipeline = std::move(*decal);
+    m_textureDecalPipeline = std::move(*textureDecal);
+    m_colorDecalPipeline = std::move(*colorDecal);
+    m_additiveDecalPipeline = std::move(*additiveDecal);
     return {};
 }
 

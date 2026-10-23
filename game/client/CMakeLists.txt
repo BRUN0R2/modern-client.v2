@@ -15,6 +15,8 @@ nxAddModuleLibrary(csClient
         src/mapModels.cppm
         src/viewModel.cppm
         src/muzzleFlash.cppm
+        src/levelDecals.cppm
+        src/bulletMarks.cppm
         src/level.cppm
         src/scene.cppm
         src/localGame.cppm
@@ -30,6 +32,8 @@ nxAddModuleLibrary(csClient
         src/mapModels.cpp
         src/viewModel.cpp
         src/muzzleFlash.cpp
+        src/levelDecals.cpp
+        src/bulletMarks.cpp
         src/level.cpp
         src/scene.cpp
         src/localGame.cpp

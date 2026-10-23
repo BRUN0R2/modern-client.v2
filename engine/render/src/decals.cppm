@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Decals on the world (docs/05-rendering.md, section 8.3): images of decals.wad stamped on the faces a
-/// point is near, as the original's engine stamps a bullet hole (Xash3D's R_DecalShoot and its
-/// clipping, GPL, consulted: docs/20 section 3). A decal is cut to each face it touches, in the
-/// face's own texture directions, a texel a unit; the faces keep their decals, the newest drawn over
-/// the older, in a pool that reuses its oldest when full.
+/// Decals on the faces of a map's models (docs/05-rendering.md, section 8): images of decals.wad
+/// stamped on the faces a point is near, the world's or a brush entity's in its model's space, as the
+/// original's engine stamps a bullet hole (Xash3D's R_DecalShoot and its clipping, GPL, consulted:
+/// docs/20 section 3). A decal is cut to each face it touches, in the face's own texture directions, a
+/// texel a unit; the faces keep their decals, the newest drawn over the older, in one pool for every
+/// model that reuses its oldest when full.
 ///
-/// Today: the world's decals; those of brush entities, permanent ones (infodecal) and the decals of
+/// Today: decals on the world and on brush entities; permanent ones (infodecal) and the decals of
 /// masked (`{`) faces come with what stamps them (TODO.md).
 export module nx.render:decals;
 
@@ -65,30 +66,43 @@ struct DecalVertex {
                                                               assets::kNoLightStyle, assets::kNoLightStyle};
 };
 
-/// A decal on one face: its image, the face, and the part of it the decal covers, a convex fan.
+/// A decal on one face: its image, the face and its model, and the part of the face the decal covers, a
+/// convex fan in the model's space.
 struct PlacedDecal {
     std::uint32_t texture = 0;
     std::uint32_t face = 0;
+    assets::ModelIndex model{};
     std::vector<DecalVertex> polygon{};
 };
 
-/// The decals of a map's world: a pool of decals on faces, each a slot, reused in turn when full.
+/// What a shot stamps: image `texture`, of `size`, on the faces of `model` near `center`, a point in
+/// the model's own space, `scale` times smaller than its image.
+struct DecalShot {
+    std::uint32_t texture = 0;
+    DecalSize size{};
+    assets::ModelIndex model = assets::kWorldModel;
+    Vec3 center{};
+    float scale = 1.0F; ///< Held to 0.01 to 16.
+};
+
+/// The decals of a map: a pool of decals on the faces of its models, each a slot, reused in turn when
+/// full.
 class DecalPool {
 public:
     /// The most decals a pool holds (the original's MAX_RENDER_DECALS).
     static constexpr std::size_t kMostDecals = 4096;
 
-    /// A pool for the world of `map`, which must outlive it, `faces` its faces' by their index, of at
+    /// A pool for the models of `map`, which must outlive it, `faces` its faces' by their index, of at
     /// most `limit` decals on faces (kMostDecals at most; 0 holds none).
     DecalPool(const assets::BspView& map, std::vector<DecalFace> faces, std::size_t limit);
 
-    /// Stamps image `texture`, of `size`, on the faces of the world near `center`, `scale` times
-    /// smaller (from 0.01 to 16), as the original's R_DecalShoot: the faces on the planes of the nodes
-    /// it reaches within half the image's larger side that pass within 4 units of it, each cut to the
-    /// decal's square in the face's texture directions. On a face already under 6 decals each over
-    /// 60% covered by it, it replaces the one it covers least; otherwise it takes the pool's next slot,
-    /// whose decal goes. Returns the faces it was stamped on.
-    auto shoot(std::uint32_t texture, DecalSize size, Vec3 center, float scale = 1.0F) -> std::uint32_t;
+    /// Stamps `shot`, its model one of the map's, as the original's R_DecalShoot: the faces on the
+    /// planes of the nodes of the model's tree it reaches within half the image's larger side that pass
+    /// within 4 units of the center, each cut to the decal's square in the face's texture directions.
+    /// On a face already under 6 decals each over 60% covered by it, it replaces the one it covers
+    /// least; otherwise it takes the pool's next slot, whose decal goes. Returns the faces it was
+    /// stamped on.
+    auto shoot(const DecalShot& shot) -> std::uint32_t;
 
     /// Every decal, oldest first: the order they are drawn in, the newest over the older.
     [[nodiscard]] auto inOrder() const -> std::vector<const PlacedDecal*>;
@@ -108,21 +122,20 @@ private:
         DecalSize size{};
         std::uint64_t sequence = 0; ///< Its stamping's, in the order of all of them.
     };
-    /// What a shot stamps.
-    struct Shot {
-        std::uint32_t texture = 0;
-        DecalSize size{};
-        Vec3 center{};
-        float scale = 1.0F;
-        float reach = 0.0F; ///< Half the image's larger side, in texels: how far the walk looks.
+    /// A shot as the walk of its model's tree carries it: its scale held, and how far the walk looks
+    /// (half the image's larger side, in texels).
+    struct Walk {
+        DecalShot shot{};
+        float reach = 0.0F;
     };
 
-    void walk(assets::NodeIndex index, const Shot& shot, std::uint32_t& stamped);
+    void walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped);
     /// Stamps `shot` on face `face` when it touches it; returns whether it did.
-    auto stamp(std::uint32_t face, const Shot& shot) -> bool;
+    auto stamp(std::uint32_t face, const Walk& shot) -> bool;
     /// The slot a decal on `face` takes: the one it covers least of 6 or more it covers mostly, or
     /// the pool's next.
-    [[nodiscard]] auto slotFor(std::uint32_t face, const Shot& shot, Vec3 sAxis, Vec3 tAxis) -> std::size_t;
+    [[nodiscard]] auto slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis)
+        -> std::size_t;
     /// Empties slot `slot`, its decal leaving its face.
     void empty(std::size_t slot);
 

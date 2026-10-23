@@ -53,26 +53,17 @@ struct WadFiles {
     return files;
 }
 
-/// The decals of decals.wad a bullet leaves on the world, as the original's game names them for a
-/// surface drawn normally (DamageDecal: DECAL_GUNSHOT1 to 5); each the installation lacks is left out.
-constexpr auto kGunshotDecals =
-    std::to_array<std::string_view>({"{shot1", "{shot2", "{shot3", "{shot4", "{shot5"});
-
-/// The gunshot decals of `wad`, those it has and can read; the names of the others.
-[[nodiscard]] auto gunshotDecalsOf(const nx::assets::WadView& wad, std::vector<std::string_view>& absent)
-    -> std::vector<nx::assets::MipTexture> {
-    std::vector<nx::assets::MipTexture> decals;
-    for (const std::string_view name : kGunshotDecals) {
-        const nx::assets::WadEntry* const entry = wad.find(name);
-        auto texture = entry != nullptr ? nx::assets::readTexture(*entry)
-                                        : nx::Result<nx::assets::MipTexture, nx::assets::WadError>{};
-        if (entry == nullptr || !texture) {
-            absent.push_back(name);
-            continue;
+/// The mark a bullet leaves on each brush model of `map`: Gunshot on the world and on a model no entity
+/// is, bulletMarkOf its entity on the others.
+[[nodiscard]] auto bulletMarksOf(const nx::assets::BspView& map) -> std::vector<BulletMark> {
+    std::vector<BulletMark> marks(map.models().size(), BulletMark::Gunshot);
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::optional<nx::assets::ModelIndex> model = entity.findBrushModel();
+        if (model && *model != nx::assets::kWorldModel && model->value < marks.size()) {
+            marks[model->value] = bulletMarkOf(entity);
         }
-        decals.push_back(std::move(*texture));
     }
-    return decals;
+    return marks;
 }
 
 /// The sides of the sky `name`, gfx/env/<name><suffix>.tga; none when one is missing or unreadable.
@@ -278,24 +269,12 @@ auto Level::load(const GameContent& content, std::string_view name)
             level.m_wads.push_back(std::move(*wad));
         }
     }
-    // The bullets' decals, from the game's decals.wad, which holds Half-Life's too.
-    std::vector<std::string_view> absentDecals;
-    const auto decalWadPath = nx::assets::VfsPath::parse("decals.wad");
-    if (auto decalWad = decalWadPath ? content.vfs.readAll(*decalWadPath)
-                                     : nx::Result<std::vector<std::byte>, nx::assets::VfsError>{}) {
-        level.m_decalWadBytes = std::move(*decalWad);
-        if (auto wad = nx::assets::WadView::parse(level.m_decalWadBytes)) {
-            level.m_gunshotDecals = gunshotDecalsOf(*wad, absentDecals);
-        } else {
-            absentDecals.assign(kGunshotDecals.begin(), kGunshotDecals.end());
-        }
-    } else {
-        absentDecals.assign(kGunshotDecals.begin(), kGunshotDecals.end());
+    level.m_decals = LevelDecals::read(content.vfs, bulletDecals());
+    if (!level.m_decals->missing().empty()) {
+        nx::log::warning(kLog, "decals the bullets leave that cannot be read: {}",
+                         listed(level.m_decals->missing()));
     }
-    if (!absentDecals.empty()) {
-        nx::log::warning(kLog, "decals the bullets leave that the installation does not have: {}",
-                         listed(absentDecals));
-    }
+    level.m_bulletMarks = bulletMarksOf(bsp);
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
     if (!level.m_sprites->missing().empty()) {
@@ -327,6 +306,11 @@ auto Level::load(const GameContent& content, std::string_view name)
                          listed(level.m_muzzleFlashes->missing()));
     }
     return made;
+}
+
+auto Level::bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark {
+    nx::expects(model.value < m_bulletMarks.size(), "Level::bulletMarkOn: a brush model of the map");
+    return model.value < m_bulletMarks.size() ? m_bulletMarks[model.value] : BulletMark::None;
 }
 
 auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& classes, nx::ecs::World& world)

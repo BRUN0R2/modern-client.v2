@@ -19,6 +19,13 @@ import :viewModel;
 
 export namespace cs {
 
+/// Where a shot met what is solid: the point, and what it is on, the world or a brush entity where the
+/// game had it then, which a bullet leaves its mark on.
+struct Impact {
+    nx::Vec3 position{};
+    nx::render::DecalTarget on{};
+};
+
 /// The game of a level and its player, played by the client alone.
 class LocalGame {
     struct CreateToken {
@@ -70,9 +77,9 @@ public:
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_inventory; }
-    /// Where the player's shots met the world since the last call, in their order: what a bullet
-    /// leaves its hole at. What they meet of the brush entities comes with their decals (TODO.md).
-    [[nodiscard]] inline auto takeImpacts() -> std::vector<nx::Vec3> { return std::exchange(m_impacts, {}); }
+    /// Where the player's shots met the world and the brush entities since the last call, in their
+    /// order: where a bullet leaves its mark.
+    [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
     /// The sounds the player's weapons made since the last call (Inventory::takeSounds).
     [[nodiscard]] inline auto takeSounds() -> std::vector<const GameSound*> {
         return m_inventory.takeSounds();
@@ -84,11 +91,13 @@ private:
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;
     /// One tick of the game, `command` the player's.
     void tick(const UserCommand& command);
+    /// What a shot stopped by `entity` (none: the world) is on, where the game has it now.
+    [[nodiscard]] auto targetOf(std::optional<nx::ecs::Entity> entity) const -> nx::render::DecalTarget;
 
     const Level* m_level;
     nx::ecs::World m_world;
     nx::ecs::Entity m_body{};
-    std::vector<nx::Vec3> m_impacts; ///< Since takeImpacts.
+    std::vector<Impact> m_impacts; ///< Since takeImpacts.
     MovementState m_player{};
     PlayerStatus m_status{};
     Inventory m_inventory;
