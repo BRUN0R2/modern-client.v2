@@ -44,7 +44,7 @@ of the old modules is one of them.
 | **3. Methods and hooks** | Every action the game takes is a typed method of a kind; a type overrides it, any plugin hooks it | Ham Sandwich, ReAPI's hook chains, `register_forward`, `register_touch`/`register_think`, Orpheu |
 | **4. Actions** | Typed functions for what is not a property: give, change team, create, remove, precache, emit a sound | Most of `amxmodx`, `fun` and `cstrike`, `engfunc`/`dllfunc` |
 | **5. Queries** | Finding things with typed filters: players, entities in a radius or of a type, traces, navigation | `get_players` with string flags, `find_ent_*`, `engfunc(EngFunc_TraceLine)`, `fm_*` stocks |
-| **6. Messages and effects** | Typed structs sent to clients: the engine's effects, and messages plugins declare | `message_begin`/`write_*`, `register_message`, `set_msg_arg_*` |
+| **6. Messages, effects and the HUD** | Typed structs sent to clients: the engine's effects, messages plugins declare, and HUD elements, retained: made once, their values bound, redrawn by the client when one changes | `message_begin`/`write_*`, `register_message`, `set_msg_arg_*`; `set_hudmessage`/`show_hudmessage`, `set_dhudmessage` and the tasks that resend them every second |
 | **7. Commands, cvars and tasks** | Commands with typed arguments, typed cvars, tasks and coroutines on game time | `register_clcmd`/`read_argv`, `register_cvar`/`bind_pcvar_*`, `set_task` |
 | **8. Services** | Storage (KV, SQLite), HTTP, logging, localization, behind capabilities | nVault, SQLx, sockets, `log_amx`, dictionaries |
 
@@ -61,20 +61,30 @@ expressions, math and vectors with units (cell arrays, tries, `xs`, `json`, `reg
   parent**. Its behavior is its kind's, driven by the values it sets (a weapon's fire interval,
   damage, spread, clip, models and sounds make it fire, reload and sound as it does); what it needs
   beyond is composed: components (an agent part, waves, a pusher), `vars` of its own, and the
-  methods it overrides (§3). The resources it names are precached with it.
+  methods it overrides (§3). The resources it names are loaded as it names them, a map played or
+  not: no precache list to make before the map, nor its limits.
 - **`from:`** starts a type from another's values, copied once as it is made and linked to nothing
-  after: changing the AK-47 later does not change a weapon that started from it.
+  after: changing the AK-47 later does not change a weapon that started from it. Without it, a
+  type starts from none, incomplete until its values make one, and nothing gives an incomplete
+  type.
+- **Its `vars` are the key paths of its data** (`"magazine.clipSize"`, `"firing.cycle"`): one
+  schema for its file, the console and plugins, with no second catalog of names to keep in step.
 
 ```rook
 new Weapon:drakar = createWeapon("DrakarIII", WeaponType.Primary, from: WEAPON_AK47)?;
 set_weapon_var(drakar, "name", "Drakar III");
-set_weapon_var(drakar, "viewModel", precacheModel("models/rezombie/weapons/drakar/v.mdl")?);
-set_weapon_var(drakar, "maxClip", AmmoCount(45));
+set_weapon_var(drakar, "models.view", "models/rezombie/weapons/drakar/v.mdl");
+set_weapon_var(drakar, "magazine.clipSize", 45);
 overrideMethod(drakar, Weapon.primaryAttack, onDrakarAttack);
+replaceWeapon(WEAPON_AK47, drakar)?;   // the Drakar wherever the game would make an AK-47
 ```
 
 - The game's own weapons are types made the same way from its data: the AK-47 is one weapon among
-  others, and nothing inherits from it.
+  others, and nothing inherits from it. Changing the AK-47's values changes every AK-47; to put
+  another weapon in its place, `replaceWeapon` makes the replacement wherever the game makes the
+  original (buying, a loadout, a map's entity, `give`), one step, never a chain; a replacement
+  only for some (a team, a player) is a `Pre` hook on `Player.giveWeapon` that changes its `inout`
+  weapon.
 - Each copy of a type in the world or in an inventory is an entity of it, with the `vars` of a
   copy: an item of a weapon (`WeaponItem`: its clip, its owner, its reload), a rocket.
   `spawnEntity(ROCKET, at: origin, angles: view, vars: { speed: 1500ups })?` creates one whole, in
@@ -110,6 +120,28 @@ fn onDrakarAttack(item: WeaponItem, owner: Player) -> WeaponReturn {
   for each other stay forwards.
 - Dispatch is resolved when a method is overridden or hooked, never by a string at the call: a
   type's table points at the method's chain of hooks and its body.
+
+### 6. The HUD: retained, not resent
+
+A mod's HUD in AMX Mod X is text on one of four channels (`show_hudmessage`; eight for the
+director's `show_dhudmessage`), resent by a task every second to stay on screen: each resend a
+message to each player, the text laid out again, one channel's text erasing another's. Here a HUD
+element is a handle with `vars`, as anything else (§1): made once for a player or for many, its
+values bound by name, drawn by the client until it is removed or its player leaves.
+
+```rook
+new Hud:infected = createHud(allPlayers(), HudText {
+    text: "Infected: {count}",
+    position: HudPosition.TopCenter,
+})?;
+set_hud_var(infected, "count", 12);   // the clients draw the new value; nothing is sent until it changes
+```
+
+- A change sends the value that changed, once and reliably; nothing is sent while nothing
+  changes, and the client lays out only the element that changed.
+- No channels and no limit of elements: elements stack by their position, each in its own place.
+- The element's kinds are typed (text, a bar, an icon, a timer the client counts down itself), each
+  with its fields checked when the plugin compiles; a timer needs no task at all.
 
 ### Typed errors, no exceptions
 
@@ -157,6 +189,8 @@ Nothing throws, in Rook or in the engine ([ADR-0005](0005-typed-errors-without-e
   one call, its behavior in its values and in the methods it overrides, hooked by other plugins
   like any engine type.
 - ✅ The engine stays free to change: plugins see methods, handles and `vars`, never its structures.
+- ✅ A mod's HUD is made once and sends only what changes: no channels, no limit, no task resending
+  it every second.
 - ⚠️ Every hookable action must be a declared method of a kind, its arguments a typed struct.
   Mitigation: the annotation on the C++ function generates both; the CI's API check
   ([15 §10](../15-mod-api.md#10-versioning-and-stability)) keeps them stable.
@@ -169,4 +203,4 @@ Nothing throws, in Rook or in the engine ([ADR-0005](0005-typed-errors-without-e
 
 If accepted, the same change amends [03 §11](../03-ecs.md#11-prefabs-and-map-entities),
 [13 §2](../13-mod-system.md#2-vocabulary-and-equivalents), [14 §15](../14-rook-language.md#15-forwards-hooks-commands-and-cvars),
-[15 §2 to §5 and §9](../15-mod-api.md) and the M6 items of `TODO.md`.
+[15 §2 to §6.4 and §9](../15-mod-api.md) and the M6 items of `TODO.md`.
