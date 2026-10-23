@@ -109,7 +109,7 @@ void writeValue(std::string& out, const Value& value) {
         writeValue(out, value.value());
     } else if constexpr (kIsDuration<Value>) {
         writeValue(out, value.count());
-    } else if constexpr (kIsVector<Value>) {
+    } else if constexpr (kIsArray<Value>) {
         out += '[';
         std::string_view separator;
         for (const auto& element : value) {

@@ -269,11 +269,13 @@ struct with an `nx.meta` description. The keys of a table are the fields of its 
 (nested tables are described structs too), every field that is not `std::optional` is
 required, and a value must have the field's type: booleans, integers, `float` and `double`,
 quantities and durations (as their number), text, enums (the enumerator's name with a
-lowercase first letter, `GoldsrcInstall` → `"goldsrcInstall"`), tables and arrays of them. A
-`nx::data::Range` annotation bounds a number; a Range on a field without numbers, with its
-minimum above its maximum, or with inexact bounds on a whole-number field does not compile, and
-whole numbers compare against it exactly. The first problem is the failure
-(`DataError::Syntax`, `UnknownKey`, `MissingKey`, `WrongType`, `OutOfRange`, `UnknownName`), with
+lowercase first letter, `GoldsrcInstall` → `"goldsrcInstall"`), tables and arrays of them, of
+any length (`std::vector`) or of a fixed one (`std::array`, a color's `[0.04, 0.04, 0.04]`). A
+`nx::data::Range` annotation bounds a number, also each of an array's; a Range on a field without
+numbers, with its minimum above its maximum, or with inexact bounds on a whole-number field does
+not compile, and whole numbers compare against it exactly. The first problem is the failure
+(`DataError::Syntax`, `UnknownKey`, `MissingKey`, `WrongType`, `OutOfRange`, `UnknownName`,
+`WrongLength` for a fixed array of another length), with
 the detail `"<file>:<line>:<column>: <key path>: <problem>"`, for example
 `server.toml:3:14: maxPlayers: expected a whole number in [1, 64], got 65`; a number beyond its
 field's type keeps the conversion failure as its cause. The TOML library (toml++, built without

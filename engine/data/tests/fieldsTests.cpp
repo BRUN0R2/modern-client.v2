@@ -31,6 +31,7 @@ struct Gun {
     std::vector<std::uint32_t> sequences;
     std::optional<Clip> clip;
     Clip spare;
+    std::optional<std::array<float, 3>> tint;
 };
 
 } // namespace nx::test
@@ -57,6 +58,7 @@ struct nx::meta::Description<nx::test::Gun> {
         nx::meta::field<&nx::test::Gun::sequences>("sequences"),
         nx::meta::field<&nx::test::Gun::clip>("clip"),
         nx::meta::field<&nx::test::Gun::spare>("spare"),
+        nx::meta::field<&nx::test::Gun::tint>("tint", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
     };
 };
 
@@ -92,6 +94,7 @@ TEST(Fields, SetEveryKindOfValueAsADataFileReadsIt) {
     ASSERT_TRUE(set(value, "cycle", "0.08"));
     ASSERT_TRUE(set(value, "sequences", "[1, 2]"));
     ASSERT_TRUE(set(value, "spare.size", "45"));
+    ASSERT_TRUE(set(value, "tint", "[0.25, 0.5, 1.0]")) << "an array of a fixed length";
 
     EXPECT_EQ(value.name, "Drakar III");
     EXPECT_TRUE(value.isAutomatic);
@@ -102,6 +105,7 @@ TEST(Fields, SetEveryKindOfValueAsADataFileReadsIt) {
     EXPECT_EQ(value.sequences, (std::vector<std::uint32_t>{1, 2}));
     EXPECT_EQ(value.spare.size, 45U);
     EXPECT_EQ(value.spare.ammo, "762Nato");
+    EXPECT_EQ(value.tint, (std::array{0.25F, 0.5F, 1.0F}));
 }
 
 TEST(Fields, AnAbsentTableStartsFromItsDefaults) {
@@ -143,6 +147,10 @@ TEST(Fields, AFailureIsTypedAndLeavesTheValueAsItWas) {
          "console: clip.size: expected a whole number of at least 1, got 0"},
         {"text past the value", "price", "1\nother = 2", DataError::UnknownKey,
          "console: price: more than one value"},
+        {"fixed length", "tint", "[0.25, 0.5]", DataError::WrongLength,
+         "console: tint: expected 3 elements, got 2"},
+        {"fixed array element", "tint", "[0.25, 0.5, 2]", DataError::OutOfRange,
+         "console: tint[2]: expected a number in [0, 1], got 2"},
     };
     for (const Case& problem : cases) {
         SCOPED_TRACE(problem.description);
@@ -159,10 +167,12 @@ TEST(Fields, WriteAFieldAsADataFileWritesIt) {
     Gun value = gun();
     value.name = R"(The "Drakar" \ III)";
     value.sequences = {3, 4};
+    value.tint = {0.25F, 0.5F, 1.0F};
     EXPECT_EQ(get(value, "name"), R"("The \"Drakar\" \\ III")");
     EXPECT_EQ(get(value, "spread"), "0.5");
     EXPECT_EQ(get(value, "side"), R"("terrorists")");
     EXPECT_EQ(get(value, "sequences"), "[3, 4]");
+    EXPECT_EQ(get(value, "tint"), "[0.25, 0.5, 1]");
     EXPECT_EQ(get(value, "spare"), R"({ ammo = "762Nato", size = 30 })");
     EXPECT_EQ(get(value, "spare.size"), "30");
     EXPECT_EQ(get(value, "clip"), std::nullopt) << "an absent table";
@@ -178,6 +188,7 @@ TEST(Fields, WhatIsWrittenReadsBackTheSame) {
     value.name = "Line\nbreak\t\"quoted\"";
     value.clip = nx::test::Clip{.ammo = "9mm", .size = 17};
     value.cycle = nx::Seconds{0.0955F};
+    value.tint = {0.1F, 0.2F, 0.3F};
     Gun copy{};
     for (const FieldText& field : nx::data::listFields(value)) {
         ASSERT_TRUE(set(copy, field.keyPath, field.value)) << field.keyPath << " = " << field.value;
@@ -185,6 +196,7 @@ TEST(Fields, WhatIsWrittenReadsBackTheSame) {
     EXPECT_EQ(copy.name, value.name);
     EXPECT_EQ(copy.side, value.side);
     EXPECT_EQ(copy.cycle, value.cycle);
+    EXPECT_EQ(copy.tint, value.tint);
     EXPECT_EQ(nx::data::listFields(copy), nx::data::listFields(value));
 }
 
