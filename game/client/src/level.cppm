@@ -18,6 +18,8 @@ import :mapSprites;
 import :mapModels;
 import :viewModel;
 import :muzzleFlash;
+import :levelDecals;
+import :bulletMarks;
 
 export namespace cs {
 
@@ -50,8 +52,9 @@ struct GameContent {
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
-/// the game gives it, the sprites and studio models its entities show, and the view models of the
-/// game's weapons and the sprites of their muzzle flashes, read once. It stays where it is made: the views
+/// the game gives it, the sprites and studio models its entities show, the decals it shows and the mark
+/// a bullet leaves on each of its brush models, and the view models of the game's weapons and the
+/// sprites of their muzzle flashes, read once. It stays where it is made: the views
 /// point into it, and what is made of it (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
@@ -98,10 +101,11 @@ public:
     [[nodiscard]] inline auto viewModels() const noexcept -> std::span<const ViewModel> {
         return m_viewModels;
     }
-    /// The decals a bullet leaves on the world, of decals.wad: those of kGunshotDecals it has.
-    [[nodiscard]] inline auto gunshotDecals() const noexcept -> std::span<const nx::assets::MipTexture> {
-        return m_gunshotDecals;
-    }
+    /// The decals of decals.wad the level shows: those bullets leave (bulletDecals).
+    [[nodiscard]] inline auto decals() const noexcept -> const LevelDecals& { return *m_decals; }
+    /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
+    /// what bulletMarkOf says of its entity on a brush entity's (Gunshot without one).
+    [[nodiscard]] auto bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark;
 
 private:
     std::vector<std::byte> m_mapBytes;
@@ -109,8 +113,8 @@ private:
     nx::game::EntityClasses m_entityClasses;
     std::vector<std::vector<std::byte>> m_wadBytes;
     std::vector<nx::assets::WadView> m_wads;
-    std::vector<std::byte> m_decalWadBytes;
-    std::vector<nx::assets::MipTexture> m_gunshotDecals; ///< Views of m_decalWadBytes.
+    std::optional<LevelDecals> m_decals;
+    std::vector<BulletMark> m_bulletMarks; ///< By brush model.
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;

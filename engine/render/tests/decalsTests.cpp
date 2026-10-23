@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// Decals on the world, without a GPU: the BSP seed of the fuzz corpus, a 64-unit box whose one node
-// lies on the floor's plane (z = 0) and lists all six faces. The floor (face 0) is CRATE01, its
-// texture's s along x and t along y; faces 2 and 4 are CRATE01 too; faces 1, 3 and 5 are {BLUE,
-// masked, and take no decals. And the images decals are made of.
+// Decals on the faces of a map's models, without a GPU: the BSP seed of the fuzz corpus, a 64-unit box
+// whose one node lies on the floor's plane (z = 0) and lists all six faces. The floor (face 0) is
+// CRATE01, its texture's s along x and t along y; faces 2 and 4 are CRATE01 too; faces 1, 3 and 5 are
+// {BLUE, masked, and take no decals. The seed with an entity adds a func_wall, model 1: a square of
+// CRATE01 at x = 16 (face 6), the one face of its own tree. And the images decals are made of.
 
 #include <gtest/gtest.h>
 
@@ -15,27 +16,33 @@ import nx.platform;
 import nx.assets;
 import nx.render;
 
+#include "contractRecorder.hpp"
+
 namespace {
 
 using nx::render::DecalFace;
 using nx::render::DecalPool;
+using nx::render::DecalShot;
 using nx::render::DecalSize;
 using nx::render::PlacedDecal;
 
 constexpr DecalSize kShot{.width = 16, .height = 16};
 constexpr std::uint32_t kFloor = 0;
 constexpr float kTolerance = 1e-5F;
+/// The seed's faces, and its entity's square.
+constexpr std::size_t kBoxFaces = 6;
+constexpr std::uint32_t kSquare = 6;
+constexpr nx::assets::ModelIndex kWall{1};
 
-[[nodiscard]] auto readSeed() -> std::vector<std::byte> {
-    auto bytes =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+[[nodiscard]] auto readSeed(std::string_view name) -> std::vector<std::byte> {
+    auto bytes = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / name);
     EXPECT_TRUE(bytes.has_value()) << nx::describe(bytes.error());
     return bytes.value_or(std::vector<std::byte>{});
 }
 
-/// The faces of the box as decals see them: the CRATE01 ones take them, unlit.
-[[nodiscard]] auto boxFaces() -> std::vector<DecalFace> {
-    std::vector<DecalFace> faces(6);
+/// The faces of the box as decals see them, and `more` past them: the CRATE01 ones take them, unlit.
+[[nodiscard]] auto boxFaces(std::size_t more = 0) -> std::vector<DecalFace> {
+    std::vector<DecalFace> faces(kBoxFaces + more);
     for (const std::size_t crate : {0U, 2U, 4U}) {
         faces[crate].takesDecals = true;
     }
@@ -44,7 +51,7 @@ constexpr float kTolerance = 1e-5F;
 
 class DecalPoolTest : public testing::Test {
 protected:
-    DecalPoolTest() : m_file{readSeed()} {
+    explicit DecalPoolTest(std::string_view seed = "boxEmbedded.bsp") : m_file{readSeed(seed)} {
         auto map = nx::assets::BspView::parse(m_file);
         EXPECT_TRUE(map.has_value()) << nx::describe(map.error());
         m_map.emplace(std::move(*map));
@@ -83,7 +90,7 @@ struct Bounds {
 
 TEST_F(DecalPoolTest, ADecalIsCutToTheFaceItLiesOnATexelAUnit) {
     DecalPool decals = pool();
-    EXPECT_EQ(decals.shoot(3, kShot, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    EXPECT_EQ(decals.shoot({.texture = 3, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 1U);
     EXPECT_EQ(decals.decalsOn(kFloor), 1U);
     const std::vector<const PlacedDecal*> placed = decals.inOrder();
     ASSERT_EQ(placed.size(), 1U);
@@ -103,7 +110,10 @@ TEST_F(DecalPoolTest, ADecalIsCutToTheFaceItLiesOnATexelAUnit) {
 
 TEST_F(DecalPoolTest, ADecalHalfTwiceAsSmallCoversHalfTheUnits) {
     DecalPool decals = pool();
-    ASSERT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 0.0F}, 2.0F), 1U);
+    ASSERT_EQ(
+        decals.shoot(
+            {.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}, .scale = 2.0F}),
+        1U);
     const Bounds bounds = boundsOf(*decals.inOrder().front());
     EXPECT_EQ(bounds.positions.min, (nx::Vec3{.x = 28.0F, .y = 28.0F, .z = 0.0F}));
     EXPECT_EQ(bounds.positions.max, (nx::Vec3{.x = 36.0F, .y = 36.0F, .z = 0.0F}));
@@ -112,7 +122,7 @@ TEST_F(DecalPoolTest, ADecalHalfTwiceAsSmallCoversHalfTheUnits) {
 TEST_F(DecalPoolTest, AtAFacesEdgeTheDecalIsCutThere) {
     DecalPool decals = pool();
     // 4 units from the y = 0 edge of the floor: its square from y = -4 is cut at 0, a quarter in.
-    std::ignore = decals.shoot(0, kShot, {.x = 32.0F, .y = 4.0F, .z = 0.0F});
+    std::ignore = decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 4.0F, .z = 0.0F}});
     ASSERT_EQ(decals.decalsOn(kFloor), 1U);
     const std::vector<const PlacedDecal*> placed = decals.inOrder();
     const auto floor = std::ranges::find(placed, kFloor, &PlacedDecal::face);
@@ -125,16 +135,19 @@ TEST_F(DecalPoolTest, AtAFacesEdgeTheDecalIsCutThere) {
 
 TEST_F(DecalPoolTest, ANodesFacesAreTriedOnlyWhenItsPlanePassesWithinFourUnits) {
     DecalPool decals = pool();
-    EXPECT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 3.9F}), 1U) << "3.9 units above";
-    EXPECT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 4.0F}), 0U) << "4 units above";
-    EXPECT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 20.0F}), 0U) << "past the reach";
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 3.9F}}), 1U)
+        << "3.9 units above";
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 4.0F}}), 0U)
+        << "4 units above";
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 20.0F}}), 0U)
+        << "past the reach";
 }
 
 TEST_F(DecalPoolTest, AFaceThatTakesNoDecalsHasNone) {
     std::vector<DecalFace> faces = boxFaces();
     faces[kFloor].takesDecals = false;
     DecalPool decals = pool(DecalPool::kMostDecals, std::move(faces));
-    EXPECT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 0U);
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 0U);
     EXPECT_TRUE(decals.inOrder().empty());
 }
 
@@ -145,7 +158,7 @@ TEST_F(DecalPoolTest, ADecalIsLitAsItsFaceIs) {
     faces[kFloor].lightmapCorner = std::array<std::uint32_t, 2>{100, 7};
     faces[kFloor].styles = {0, 5, 255, 255};
     DecalPool decals = pool(DecalPool::kMostDecals, std::move(faces));
-    ASSERT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    ASSERT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 1U);
     for (const nx::render::DecalVertex& corner : decals.inOrder().front()->polygon) {
         // Luxel centers 16 texels apart from texturemins, past the face's corner in the atlas.
         EXPECT_FLOAT_EQ(corner.lightmapX, (corner.position.x / 16.0F) + 0.5F + 100.0F);
@@ -157,18 +170,20 @@ TEST_F(DecalPoolTest, ADecalIsLitAsItsFaceIs) {
 TEST_F(DecalPoolTest, OverSixDecalsItCoversMostlyADecalReplacesTheOneItCoversLeast) {
     DecalPool decals = pool();
     for (std::uint32_t texture = 0; texture < 6; ++texture) {
-        ASSERT_EQ(decals.shoot(texture, kShot, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+        ASSERT_EQ(
+            decals.shoot({.texture = texture, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}),
+            1U);
     }
     EXPECT_EQ(decals.decalsOn(kFloor), 6U);
     // A seventh 2 units aside covers 7/8 of each: it replaces the last of them, as the original.
-    ASSERT_EQ(decals.shoot(6, kShot, {.x = 34.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    ASSERT_EQ(decals.shoot({.texture = 6, .size = kShot, .center = {.x = 34.0F, .y = 32.0F, .z = 0.0F}}), 1U);
     EXPECT_EQ(decals.decalsOn(kFloor), 6U);
     const std::vector<std::uint32_t> textures =
         decals.inOrder() | std::views::transform(&PlacedDecal::texture) | std::ranges::to<std::vector>();
     EXPECT_EQ(textures, (std::vector<std::uint32_t>{0, 1, 2, 3, 4, 6}))
         << "the newest last, drawn over the others";
     // One covering less than 60% of them takes a slot of its own.
-    ASSERT_EQ(decals.shoot(7, kShot, {.x = 44.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    ASSERT_EQ(decals.shoot({.texture = 7, .size = kShot, .center = {.x = 44.0F, .y = 32.0F, .z = 0.0F}}), 1U);
     EXPECT_EQ(decals.decalsOn(kFloor), 7U);
 }
 
@@ -180,10 +195,11 @@ TEST_F(DecalPoolTest, AFullPoolReusesItsOldestSlot) {
     DecalPool decals = pool(3, std::move(faces));
     const std::uint64_t empty = decals.revision();
     for (const auto& [texture, x] : {std::pair{0U, 8.0F}, std::pair{1U, 32.0F}, std::pair{2U, 56.0F}}) {
-        ASSERT_EQ(decals.shoot(texture, kShot, {.x = x, .y = 8.0F, .z = 0.0F}), 1U);
+        ASSERT_EQ(decals.shoot({.texture = texture, .size = kShot, .center = {.x = x, .y = 8.0F, .z = 0.0F}}),
+                  1U);
     }
     EXPECT_NE(decals.revision(), empty);
-    ASSERT_EQ(decals.shoot(3, kShot, {.x = 32.0F, .y = 56.0F, .z = 0.0F}), 1U);
+    ASSERT_EQ(decals.shoot({.texture = 3, .size = kShot, .center = {.x = 32.0F, .y = 56.0F, .z = 0.0F}}), 1U);
     const std::vector<std::uint32_t> textures =
         decals.inOrder() | std::views::transform(&PlacedDecal::texture) | std::ranges::to<std::vector>();
     EXPECT_EQ(textures, (std::vector<std::uint32_t>{1, 2, 3})) << "the first went";
@@ -192,8 +208,83 @@ TEST_F(DecalPoolTest, AFullPoolReusesItsOldestSlot) {
 
 TEST_F(DecalPoolTest, APoolOfNoDecalsStampsNone) {
     DecalPool decals = pool(0);
-    EXPECT_EQ(decals.shoot(0, kShot, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 0U);
-    EXPECT_EQ(decals.shoot(0, DecalSize{}, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 0U);
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 0U);
+    EXPECT_EQ(
+        decals.shoot({.texture = 0, .size = DecalSize{}, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 0U);
+}
+
+TEST_F(DecalPoolTest, AShotAtAModelTheMapDoesNotHaveIsAContractViolation) {
+    DecalPool decals = pool();
+    const nx::test::ContractRecorder recorder;
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .model = kWall, .center = {.x = 16.0F}}), 0U);
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
+    EXPECT_TRUE(decals.inOrder().empty());
+}
+
+class EntityDecalPoolTest : public DecalPoolTest {
+protected:
+    EntityDecalPoolTest() : DecalPoolTest{"boxWithEntity.bsp"} {}
+
+    /// The box's faces and the square, CRATE01, which takes decals.
+    [[nodiscard]] static auto faces() -> std::vector<DecalFace> {
+        std::vector<DecalFace> all = boxFaces(1);
+        all[kSquare].takesDecals = true;
+        return all;
+    }
+};
+
+TEST_F(EntityDecalPoolTest, ADecalOnABrushEntityLiesOnItsModelsFacesInItsSpace) {
+    DecalPool decals = pool(DecalPool::kMostDecals, faces());
+    ASSERT_EQ(
+        decals.shoot(
+            {.texture = 2, .size = kShot, .model = kWall, .center = {.x = 16.0F, .y = 32.0F, .z = 32.0F}}),
+        1U);
+    ASSERT_EQ(decals.inOrder().size(), 1U);
+    const PlacedDecal& placed = *decals.inOrder().front();
+    EXPECT_EQ(placed.face, kSquare);
+    EXPECT_EQ(placed.model, kWall);
+    // 16 units square about the center, on the square's plane.
+    const Bounds bounds = boundsOf(placed);
+    EXPECT_NEAR(bounds.positions.min.x, 16.0F, kTolerance);
+    EXPECT_NEAR(bounds.positions.max.x, 16.0F, kTolerance);
+    EXPECT_NEAR(bounds.positions.min.y, 24.0F, kTolerance);
+    EXPECT_NEAR(bounds.positions.max.y, 40.0F, kTolerance);
+    EXPECT_NEAR(bounds.positions.min.z, 24.0F, kTolerance);
+    EXPECT_NEAR(bounds.positions.max.z, 40.0F, kTolerance);
+    EXPECT_EQ(decals.decalsOn(kSquare), 1U);
+}
+
+TEST_F(EntityDecalPoolTest, EachModelsDecalsComeFromItsOwnTree) {
+    DecalPool decals = pool(DecalPool::kMostDecals, faces());
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 16.0F, .y = 32.0F, .z = 32.0F}}), 0U)
+        << "the world's tree does not reach the square";
+    EXPECT_EQ(
+        decals.shoot(
+            {.texture = 0, .size = kShot, .model = kWall, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}),
+        0U)
+        << "nor the wall's the floor";
+    EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 1U);
+    EXPECT_EQ(decals.inOrder().front()->model, nx::assets::kWorldModel);
+}
+
+TEST_F(EntityDecalPoolTest, TheWorldAndTheBrushEntitiesShareThePool) {
+    // The floor and the square alone take decals.
+    std::vector<DecalFace> floorAndSquare = faces();
+    floorAndSquare[2].takesDecals = false;
+    floorAndSquare[4].takesDecals = false;
+    DecalPool decals = pool(2, std::move(floorAndSquare));
+    ASSERT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 1U);
+    for (const auto& [texture, height] : {std::pair{1U, 32.0F}, std::pair{2U, 20.0F}}) {
+        ASSERT_EQ(decals.shoot({.texture = texture,
+                                .size = kShot,
+                                .model = kWall,
+                                .center = {.x = 16.0F, .y = 32.0F, .z = height}}),
+                  1U);
+    }
+    const std::vector<std::uint32_t> textures =
+        decals.inOrder() | std::views::transform(&PlacedDecal::texture) | std::ranges::to<std::vector>();
+    EXPECT_EQ(textures, (std::vector<std::uint32_t>{1, 2})) << "the world's, the oldest, went";
+    EXPECT_EQ(decals.decalsOn(kFloor), 0U);
 }
 
 /// A 2 x 2 mip texture of `indices` with `palette`, levels of one texel past the first.

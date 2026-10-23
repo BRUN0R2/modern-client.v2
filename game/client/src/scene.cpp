@@ -19,8 +19,8 @@ namespace {
 constexpr std::uint8_t kFullAmount = 255;
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
-/// The most decals on the world's faces: the original's r_decals, which a multiplayer game holds to
-/// mp_decals' default, until the cvars come.
+/// The most decals on the faces of the world and of its brush entities: the original's r_decals, which
+/// a multiplayer game holds to mp_decals' default, until the cvars come.
 constexpr std::size_t kMultiplayerDecals = 300;
 
 } // namespace
@@ -59,7 +59,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                                                .colorFormat = format,
                                                .gamma = gamma,
                                                .sky = level.sky(),
-                                               .decals = level.gunshotDecals(),
+                                               .decals = level.decals().images(),
                                                .decalLimit = kMultiplayerDecals});
     if (!world) {
         return nx::fail(SceneError::CreateFailed, "the world", std::move(world.error()));
@@ -174,8 +174,9 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     return {};
 }
 
-auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position) -> std::uint32_t {
-    return m_world.shootDecal(decal, position);
+auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
+    -> std::uint32_t {
+    return m_world.shootDecal(decal, position, on);
 }
 
 void Scene::flash(const Level& level, const std::optional<ViewModelPose>& pose,

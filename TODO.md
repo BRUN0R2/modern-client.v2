@@ -277,7 +277,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Brush entities turned by the game (`ModelPlacement::angles`), culled as the original culls them
 - [ ] `renderfx` of brush entities
 - [x] Decals on the world's faces (`nx.render:decals`: images of `decals.wad` as the original makes them, stamped near a point on the faces its tree reaches, cut to each, lit as the face, the original's pool and overlap rule; drawn after the world's faces, pulled toward the eye; depth bias in `nx.rhi`)
-- [ ] Decals on brush entities, permanent decals (`infodecal`), decals on masked faces (stencil), `r_decals` and `mp_decals`
+- [x] Decals on brush entities (`BspWorld::shootDecal` on a `DecalTarget`: in the model's space, carried with it, drawn as its render mode draws them, a glass face's from behind too)
+- [ ] Permanent decals (`infodecal`), decals on masked faces (stencil), `r_decals` and `mp_decals`
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`
 - [ ] Studio models: animation evaluated in jobs, and the transitions between sequences
@@ -346,7 +347,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
-- [ ] What the shots hit: damage by distance, penetration, brush entities' decals (`{bproof1` on glass); the knife's damage
+- [x] The marks the shots leave on brush entities (`cs::bulletMarkOf`: `DamageDecal` by render mode, a breakable's by its material: `{bproof1`, `{break1` to `{break3`)
+- [ ] What the shots hit: damage by distance, penetration; the knife's damage
 - [ ] Hitgroups, kevlar and helmet
 - [ ] Penetration by material (`materials.txt`)
 

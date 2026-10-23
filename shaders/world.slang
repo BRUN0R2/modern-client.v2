@@ -6,7 +6,8 @@
 // style's brightness, goes through `lightgamma`, `brightness` and `gamma`, and the face blends the
 // four luxels around each point. Masked textures (`{`) discard their transparent texels; brush
 // entities are drawn as their render mode says, the water of those with waves rising and falling;
-// decals lie over the faces, lit as they are.
+// decals lie over the faces, lit as they are, those of a brush entity drawn otherwise as its mode
+// draws them.
 // The sky's faces show the side of the sky they are seen toward, projected as the original projects
 // it.
 
@@ -257,14 +258,41 @@ float4 solidFragmentMain(VertexOutput input) : SV_Target
     return litOrDiscarded(input, kSolidAlphaTest);
 }
 
-// A decal over the face it lies on (nx.render:decals): its texel lit as the face is there, blended
-// over the lit face as opaque as its alpha. The original draws its decals over the face's texture
-// and then multiplies both by the lightmap; lit first, they come out the same.
+// A decal over the face it lies on (nx.render:decals), of the world or of a brush entity drawn
+// normally or solid (kRenderTransAlpha): its texel lit as the face is there, blended over the lit
+// face as opaque as its alpha. The original draws its decals over the face's texture and then
+// multiplies both by the lightmap; lit first, they come out the same.
 [shader("fragment")]
 float4 decalFragmentMain(VertexOutput input) : SV_Target
 {
     const float4 color = albedo.Sample(albedoSampler, input.uv);
     return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), color.a);
+}
+
+// The decals of a brush entity drawn otherwise, unlit as its faces are, each texel times the color
+// the original's R_SetRenderMode leaves set for its faces, blended over them as opaque as its alpha.
+
+// kRenderTransTexture and kRenderGlow: the texel, as opaque as renderamt makes it.
+[shader("fragment")]
+float4 textureDecalFragmentMain(VertexOutput input) : SV_Target
+{
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb, color.a * entity.color.a);
+}
+
+// kRenderTransColor: the texel times rendercolor, as opaque as renderamt makes it.
+[shader("fragment")]
+float4 colorDecalFragmentMain(VertexOutput input) : SV_Target
+{
+    return albedo.Sample(albedoSampler, input.uv) * entity.color;
+}
+
+// kRenderTransAdd: the texel times renderamt, blended rather than added.
+[shader("fragment")]
+float4 additiveDecalFragmentMain(VertexOutput input) : SV_Target
+{
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb * entity.color.a, color.a);
 }
 
 // kRenderTransTexture and kRenderGlow: the texture, as opaque as renderamt makes it.

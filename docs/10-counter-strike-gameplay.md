@@ -294,11 +294,13 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   at random, each way the sum of two even draws from the command number's `spread` stream
   (`FireBullets3`). Each goes 8192 units, its direction as it strayed (not of length 1), through
   the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it);
-  where it meets the world it leaves a bullet hole, one of `{shot1` to `{shot5` of decals.wad at
-  random, as the original's `DamageDecal` names them for a surface drawn normally (the client
-  stamps them, `DecalGunshot` being empty on the server: docs/05 §8). What they meet of the brush
-  entities (their decals, `{bproof1` on glass), their damage and how far they go through come with
-  damage.
+  where it meets the world or a brush entity it leaves the mark the game names for it
+  (`cs::bulletMarkOf`, `DamageDecal`): on the world and on an entity drawn normally a bullet hole,
+  one of `{shot1` to `{shot5` of decals.wad at random; none on a solid one (`kRenderTransAlpha`);
+  `{bproof1` on one drawn otherwise; on a `func_breakable`, by its `material` first, one of
+  `{break1` to `{break3` on glass (its default) and `{bproof1` on unbreakable glass. The client
+  stamps them on what was hit, where the game had it (docs/05 §8), `DecalGunshot` being empty on the
+  server. Their damage and how far they go through come with damage.
 - **Spread:** a per-weapon function reproducing the original, depending on movement, being
   in the air, crouching, zoom and accumulated accuracy.
   **Today:** the data's terms (section 7.2), of the accuracy before the shot changes it: a burst's

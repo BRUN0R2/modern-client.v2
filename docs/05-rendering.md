@@ -281,31 +281,41 @@ front, `R_SurfaceCompare`) and `kRenderGlow`; the textures added to what is behi
 drawn (`R_AddEntity`); a mode the original does not know draws as its default does, as Glow.
 
 Decals (`nx.render:decals`, Xash3D's `R_DecalShoot` and its clipping, GPL, consulted:
-[20 §3](20-legal-and-licensing.md#3-clean-room)) are images of `decals.wad` stamped on the world's
-faces near a point. The image is made as the original's engine makes it of its mip texture, its
+[20 §3](20-legal-and-licensing.md#3-clean-room)) are images of `decals.wad` stamped on the faces of
+the world or of a brush entity near a point. The image is made as the original's engine makes it of its mip texture, its
 first level alone, its palette through `texgamma`: when the palette's last color is not pure blue
 (every decal of the game's), each texel that color, as opaque as its index, index 255 clear;
 otherwise each texel its palette's color, opaque, index 255 clear. It is mipmapped from that level
-and sampled clamped at its edges. A shot (`BspWorld::shootDecal`, `DecalPool::shoot`) walks the
-world's tree from its root, within half the image's larger side of each node's plane, and tries the
-faces of the nodes whose plane passes within 4 units of the point: those that take decals (neither
+and sampled clamped at its edges. A shot (`BspWorld::shootDecal`, `DecalPool::shoot`) is aimed
+at a model (`DecalTarget`): the world's, or a brush entity's, the point taken into the model's space
+where the game has the entity then (`R_DecalShoot`), so that the decal goes wherever the game moves
+it. It walks that model's tree from its root, within half the image's larger side of each node's
+plane, and tries the faces of the nodes whose plane passes within 4 units of the point: those that take decals (neither
 the sky, nor water, nor a conveyor, nor masked, and drawn), whose luxels the decal's box may reach.
 On each, the decal is a square in the face's own texture directions, a texel a unit at scale 1 (the
 scale held to 0.01 to 16), its middle at the point, and the face's outline is cut to it, side after
 side (Sutherland-Hodgman), lit by the face's lightmaps as the face's own vertices are. A face takes a
 slot of the pool for it before it is cut, as the original's does: the pool's next one, whose decal
 goes, unless 6 or more of the face's decals are each over 60% covered by the new one, which then
-replaces the one of them it covers least. The pool holds `BspWorldDesc::decalLimit` decals on faces,
-4096 at most (the original's `r_decals`, which a multiplayer game holds to `mp_decals`, 300). The
-decals are drawn right after the world's faces, oldest first so that the newest lies over the
-others, each texel lit as the face is there and blended over the lit face as opaque as its alpha:
-the original draws them over the face's texture before it multiplies both by the lightmap, which
-comes out the same. Their depth is tested against the faces' pulled toward the eye by the
-original's polygon offset (2 units of the depth's least step, plus the slope), and not written.
-In `next`, each shot that meets the world leaves its bullet hole (docs/10 §7.3), the level's
-gunshot decals (`{shot1` to `{shot5`) in a pool of 300, `mp_decals`' default, until the `r_decals`
-and `mp_decals` cvars come. The decals of brush entities, permanent ones (`infodecal`) and the
-decals of masked faces (which the original cuts with a stencil) come with what stamps them.
+replaces the one of them it covers least. One pool holds the decals of every model,
+`BspWorldDesc::decalLimit` decals on faces, 4096 at most (the original's `r_decals`, which a
+multiplayer game holds to `mp_decals`, 300). The world's decals are drawn right after the world's
+faces, oldest first so that the newest lies over the others, each texel lit as the face is there and
+blended over the lit face as opaque as its alpha: the original draws them over the face's texture
+before it multiplies both by the lightmap, which comes out the same. Their depth is tested against
+the faces' pulled toward the eye by the original's polygon offset (2 units of the depth's least
+step, plus the slope), and not written. A brush entity's decals are drawn with it, where it is drawn,
+on its faces drawn that frame: a normal one's after all of its faces, as one batch
+(`DrawDecalsBatch`); another's after each face (`DrawSurfaceDecals`), as its render mode leaves the
+original's color: lit as the world's for `kRenderTransAlpha`; unlit, as opaque as `renderamt` makes
+them, for `kRenderTransTexture` and `kRenderGlow`; times `rendercolor` and as opaque as `renderamt`
+for `kRenderTransColor`, writing their depth; times `renderamt` and blended for `kRenderTransAdd`.
+A `kRenderTransTexture` entity's face seen from behind that has decals shows them, newest first, its
+own polygon culled, as the original keeps such a face for them (`R_SortBrushModelSurfaces`), so that
+the cracks of a window show from both sides. In `next`, each shot leaves its mark where it meets the
+world or a brush entity (docs/10 §7.3), in a pool of 300, `mp_decals`' default, until the
+`r_decals` and `mp_decals` cvars come. Permanent decals (`infodecal`) and the decals of masked
+faces (which the original cuts with a stencil) come with what stamps them.
 
 On the Steam installation, de_dust2 is 5358 faces (1356 of them sky) in 41 textures and a 1024x404
 atlas, built in half a second; from the terrorists' spawn a frame draws 382 of them, in 83 leaves.

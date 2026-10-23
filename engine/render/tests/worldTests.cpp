@@ -513,6 +513,29 @@ TEST(BspWorldTest, EachSideOfTheSkyIsSeenUprightTowardItsAxis) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+/// A bullet hole's like: 16 x 16 texels, black, nearly opaque throughout (index 250 of 255).
+class HoleDecal {
+public:
+    static constexpr std::uint32_t kSide = 16;
+    static constexpr float kOpacity = 250.0F / 255.0F;
+
+    [[nodiscard]] auto textures() const -> std::array<nx::assets::MipTexture, 1> {
+        return {nx::assets::MipTexture{.name = "{shot1",
+                                       .width = kSide,
+                                       .height = kSide,
+                                       .levels = {m_indices, m_indices, m_indices, m_indices},
+                                       .palette = m_palette}};
+    }
+
+private:
+    std::vector<std::byte> m_indices = std::vector<std::byte>(std::size_t{kSide} * kSide, std::byte{250});
+    std::vector<std::byte> m_palette = std::vector<std::byte>(std::size_t{256} * 3, std::byte{0});
+};
+
+[[nodiscard]] auto sumOf(const Pixel& pixel) -> int {
+    return pixel[0] + pixel[1] + pixel[2];
+}
+
 TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
@@ -524,15 +547,8 @@ TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
     ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
-    // A bullet hole's like: 16 x 16 texels, black, nearly opaque throughout.
-    constexpr std::uint32_t kSide = 16;
-    const std::vector<std::byte> indices(std::size_t{kSide} * kSide, std::byte{250});
-    const std::vector<std::byte> palette(std::size_t{256} * 3, std::byte{0});
-    const std::array decals{nx::assets::MipTexture{.name = "{shot1",
-                                                   .width = kSide,
-                                                   .height = kSide,
-                                                   .levels = {indices, indices, indices, indices},
-                                                   .palette = palette}};
+    const HoleDecal hole;
+    const auto decals = hole.textures();
     auto world = createWorld(
         **device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm, .decals = decals});
     ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
@@ -543,14 +559,129 @@ TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
     EXPECT_EQ(world->shootDecal(0, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
     EXPECT_EQ(world->decals().decalsOn(0), 1U);
     const std::vector<std::byte> after = drawWorld(target, *world, camera);
-    const auto sum = [](const Pixel& pixel) {
-        return pixel[0] + pixel[1] + pixel[2];
-    };
     const Pixel lit = pixelAt(before, kExtent.width / 2, kExtent.height / 2);
     const Pixel holed = pixelAt(after, kExtent.width / 2, kExtent.height / 2);
-    EXPECT_GT(sum(lit), 0);
-    EXPECT_LT(sum(holed) * 10, sum(lit)) << "under the decal, the floor nearly black";
+    EXPECT_GT(sumOf(lit), 0);
+    EXPECT_LT(sumOf(holed) * 10, sumOf(lit)) << "under the decal, the floor nearly black";
     EXPECT_EQ(pixelAt(after, 2, 2), pixelAt(before, 2, 2)) << "away from it, as it was";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+/// The seed with the square of its func_wall, model 1 at x = 16, drawn in `mode` at `amount`, and the
+/// hole decal; the views point into it, which stays where it is made.
+struct WallWithDecals {
+    std::vector<std::byte> file;
+    std::optional<nx::assets::BspView> map;
+    HoleDecal hole;
+    std::array<nx::assets::MipTexture, 1> decals;
+
+    WallWithDecals(std::string_view mode, std::string_view amount)
+        : file{readSeed("boxWithEntity.bsp")}, decals{hole.textures()} {
+        replaceText(file, R"("rendermode" "1")", std::format(R"("rendermode" "{}")", mode));
+        replaceText(file, R"("renderamt" "255")", std::format(R"("renderamt" "{}")", amount));
+        auto parsed = nx::assets::BspView::parse(file);
+        EXPECT_TRUE(parsed.has_value());
+        if (parsed) {
+            map.emplace(std::move(*parsed));
+        }
+    }
+    WallWithDecals(const WallWithDecals&) = delete;
+    WallWithDecals(WallWithDecals&&) = delete;
+    auto operator=(const WallWithDecals&) -> WallWithDecals& = delete;
+    auto operator=(WallWithDecals&&) -> WallWithDecals& = delete;
+    ~WallWithDecals() = default;
+};
+
+/// Where the decals of the tests below are stamped: the middle of the square.
+constexpr nx::Vec3 kSquareMiddle{.x = 16.0F, .y = 32.0F, .z = 32.0F};
+constexpr nx::render::DecalTarget kOnTheWall{.model = {1}};
+
+TEST(BspWorldTest, ADecalOnABrushEntityGoesWhereTheGameMovesIt) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // The square covers the view, 0.75 units a pixel: the decal 21 pixels wide about the middle.
+    const WallWithDecals wall{"0", "255"};
+    ASSERT_TRUE(wall.map.has_value());
+    auto world = createWorld(
+        **device,
+        {.map = *wall.map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm, .decals = wall.decals});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    // Moved 8 units to the right of the view: 10.7 pixels.
+    const std::array moved{nx::render::ModelPlacement{.model = {1}, .origin = {.y = 8.0F}}};
+    const auto drawn = [&](std::span<const nx::render::ModelPlacement> placements) {
+        return drawWorld(target, *world, camera, normalStyles(), nx::Seconds{0.0F}, placements);
+    };
+    const std::vector<std::byte> plain = drawn({});
+    const std::vector<std::byte> movedPlain = drawn(moved);
+
+    ASSERT_EQ(world->shootDecal(0, kSquareMiddle, kOnTheWall), 1U);
+    const std::vector<std::byte> holed = drawn({});
+    const std::vector<std::byte> movedHoled = drawn(moved);
+    constexpr std::uint32_t kRow = 16;
+    constexpr std::uint32_t kLeft = 8;
+    constexpr std::uint32_t kRight = 29;
+    EXPECT_LT(sumOf(pixelAt(holed, kLeft, kRow)) * 10, sumOf(pixelAt(plain, kLeft, kRow)));
+    EXPECT_EQ(pixelAt(holed, kRight, kRow), pixelAt(plain, kRight, kRow));
+    EXPECT_EQ(pixelAt(movedHoled, kLeft, kRow), pixelAt(movedPlain, kLeft, kRow)) << "it went with the wall";
+    EXPECT_LT(sumOf(pixelAt(movedHoled, kRight, kRow)) * 10, sumOf(pixelAt(movedPlain, kRight, kRow)));
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(BspWorldTest, ADecalOnABrushEntityIsDrawnAsItsRenderModeDrawsIt) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    const nx::render::Camera inFront{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    const nx::render::Camera behind{.position = {.x = 8.0F, .y = 32.0F, .z = 32.0F}};
+    struct Drawn {
+        std::vector<std::byte> plain{};
+        std::vector<std::byte> holed{}; ///< Drawn again once the decal is stamped.
+    };
+    const auto drawnAs = [&](std::string_view mode, std::string_view amount,
+                             const nx::render::Camera& camera) {
+        const WallWithDecals wall{mode, amount};
+        EXPECT_TRUE(wall.map.has_value());
+        auto world = createWorld(**device, {.map = *wall.map,
+                                            .shaderCode = shader,
+                                            .colorFormat = Format::Rgba8Unorm,
+                                            .decals = wall.decals});
+        EXPECT_TRUE(world.has_value());
+        if (!wall.map || !world) {
+            return Drawn{};
+        }
+        Drawn drawn{.plain = drawWorld(target, *world, camera)};
+        EXPECT_EQ(world->shootDecal(0, kSquareMiddle, kOnTheWall), 1U);
+        drawn.holed = drawWorld(target, *world, camera);
+        return drawn;
+    };
+
+    // TransTexture at half: the decal over the square half as opaque as it is, as renderamt makes it.
+    const Drawn half = drawnAs("2", "128", inFront);
+    ASSERT_FALSE(half.plain.empty());
+    const Pixel under = pixelAt(half.plain, kExtent.width / 2, kExtent.height / 2);
+    const Pixel over = pixelAt(half.holed, kExtent.width / 2, kExtent.height / 2);
+    const float kept = 1.0F - (HoleDecal::kOpacity * (128.0F / 255.0F));
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        EXPECT_NEAR(static_cast<float>(over.at(channel)), static_cast<float>(under.at(channel)) * kept, 2.0F)
+            << "channel " << channel;
+    }
+
+    // From behind, a normal entity's face is not drawn, nor its decals; a TransTexture one's decals
+    // are, its face culled, as the original keeps such a face for them.
+    const Drawn normal = drawnAs("0", "255", behind);
+    EXPECT_EQ(normal.holed, normal.plain);
+    const Drawn glass = drawnAs("2", "255", behind);
+    EXPECT_LT(brightnessOf(glass.holed) * 2, brightnessOf(glass.plain));
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
