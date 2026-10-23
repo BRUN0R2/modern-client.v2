@@ -1,4 +1,4 @@
-# ADR-0021 — Rook accepts AMX Mod X's names through an `amxx` compatibility layer
+# ADR-0021 — Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer
 
 - **Status:** Proposed
 - **Date:** 2026-10-23
@@ -11,6 +11,11 @@ Rook has to be as easy to pick up as Pawn for the people who write AMX Mod X plu
 `client_print` and `set_task`. The maintainer asks that Rook accept those literal names, so that
 a plugin reads almost as it reads in Pawn, while keeping everything Rook adds: nominal types,
 typed errors, no null, exhaustive `match`, units, structs and enums with data.
+
+The same goes for the mods' own pattern: a plugin may write the variable accessors with
+underscores, as ReAPI's and ReZombie's (`get_entvar`, `set_class_var`, `set_props_var`) are written:
+`get_player_var`/`set_player_var`, `get_weapon_var`/`set_weapon_var`,
+`get_entity_var`/`set_entity_var`.
 
 Spelling is free to borrow: AMXX's names, its keywords and its plugin model are reused as an
 interface, and nothing of its code is copied. AMX Mod X is GPL-3.0-or-later, Metamod-R GPL-3.0
@@ -38,7 +43,8 @@ Accepting the literal names contradicts, as they are written today:
   keep one convention in the project.
 - [ADR-0006](0006-own-plugin-language-rook.md): "the AMXX lifecycle names written in camelCase".
 - [ADR-0012](0012-typed-get-set-vars-pattern.md): `get*Var`/`set*Var` is **the main way** to reach
-  a property; `get_user_health` and its kind are a second way to the same thing.
+  a property, its names in camelCase (`getEntityVar`); `get_user_health` and its kind are a second
+  way to the same thing, and `get_entity_var` a second spelling of it.
 - [14 §4](../14-rook-language.md#4-lexical-structure) and
   [§22](../14-rook-language.md#22-lints-and-magic-numbers): the reserved words do not include `new`
   and the `naming` lint is an error; [§19](../14-rook-language.md#19-modules-imports-and-visibility):
@@ -71,22 +77,34 @@ canonical, camelCase API, with every Rook guarantee kept.
    not an index, units, a function reference and not a callback's name, a `Result` where the
    canonical function returns one. There is no second implementation, and the layer's names are
    listed in [16 §3](../16-amxx-migration.md#3-api) beside their canonical forms.
-4. **The exception to ADR-0013** is this layer: AMXX's API is a contract imposed from outside,
-   like cvar names and map classnames. Its names are allowed in the `amxx.*` modules and in the
-   plugins that use them. The project's own Rook code (built-in mods, examples, documentation,
-   the API's tests) stays canonical; only the layer's conformance tests use it.
-5. **Lints.** A new `amxxName` lint (`info` by default) marks each literal name with its canonical
-   form, with an LSP quick fix and `rook fmt --canonical` to rewrite a file at once. In a file that
-   includes an AMXX header, `naming` is a warning instead of an error, so that a plugin carried
-   over with its own `g_data`-style names compiles; everywhere else it stays an error.
-6. **Diagnostics speak both:** a literal name used with Pawn's types is explained in AMXX's terms
+4. **The `vars` pattern with underscores.** For each handle with a `vars` catalog, the engine's
+   (`Entity`, `Player`, `Weapon`, `WeaponClass`, the game rules) and those plugins declare
+   (`Class`, `Props`...), the compiler generates `get_<handle>_var` and `set_<handle>_var` beside
+   `get<Handle>Var` and `set<Handle>Var`, the handle's name in `snake_case`: `get_player_var` and
+   `set_player_var`, `get_weapon_var` and `set_weapon_var`, `get_entity_var` and
+   `set_entity_var`, `get_weapon_class_var`, `get_class_var`. Each is the same function, its
+   literal key checked and its type inferred from the key in the same way
+   ([ADR-0012](0012-typed-get-set-vars-pattern.md)), and every plugin may use them, whether or not
+   it uses the rest of the layer.
+5. **The exception to ADR-0013** is this layer: AMXX's API and the mods' accessor pattern are
+   contracts imposed from outside, like cvar names and map classnames. Their names are allowed in
+   the `amxx.*` modules, as the generated accessors, and in the plugins that use them. The
+   project's own Rook code (built-in mods, examples, documentation, the API's tests) stays
+   canonical; only the layer's conformance tests use it.
+6. **Lints.** A new `compatName` lint (`info` by default) marks each AMXX name and each
+   `get_<handle>_var`/`set_<handle>_var` with its canonical form, with an LSP quick fix and
+   `rook fmt --canonical` to rewrite a file at once; the LSP offers the canonical form first. In a
+   file that includes an AMXX header, `naming` is a warning instead of an error, so that a plugin
+   carried over with its own `g_data`-style names compiles; everywhere else it stays an error.
+7. **Diagnostics speak both:** a literal name used with Pawn's types is explained in AMXX's terms
    (`get_user_health expects a Player: AMXX's player index is a Player handle in Rook`).
-7. **`rook migrate`** gains `--keep-amxx-names`: the converted plugin keeps the literal names and
-   `new`, changing only what typing requires, for the smallest diff; without it, it writes the
-   canonical forms as today.
+8. **`rook migrate`** gains `--keep-amxx-names`: the converted plugin keeps the literal names,
+   `new` and the `get_<handle>_var` spelling, changing only what typing requires, for the smallest
+   diff; without it, it writes the canonical forms as today.
 
-The `vars` keys (`"health"`, `"maxClip"`) and AMXX/ReAPI's variable names (`var_health`,
-`m_iAccount`) are outside this ADR: the catalogs keep their camelCase keys.
+The `vars` keys stay as the catalogs declare them (`"health"`, `"maxClip"`), whichever spelling of
+the accessor reaches them; accepting `"max_clip"` too would be a decision of its own. AMXX/ReAPI's
+variable names (`var_health`, `m_iAccount`) are outside this ADR.
 
 ## Alternatives considered
 
@@ -97,6 +115,7 @@ The `vars` keys (`"health"`, `"maxClip"`) and AMXX/ReAPI's variable names (`var_
 | A Pawn front end: `rookc` compiles `.sma` sources | Pawn's untyped cells give the compiler nothing to check: most plugins would be refused, or run in a mode without Rook's guarantees, against ADR-0006 and [ADR-0007](0007-own-vm-typed-bytecode.md) |
 | Tools only: the LSP completes `get_user_health` as `getEntityVar(player, "health")`, and "did you mean" diagnostics | No change to the language and the most predictable; but the code is still written in the canonical spelling, which is not what is asked |
 | Literal names mixed freely, without a layer or lints | No single place for them, no canonical form to converge on, and two names for every function in every listing |
+| `get_player_var` and its kind as the `vars` pattern's only spelling (ADR-0012 and ADR-0013 amended for it) | The accessors would be the one part of the API in `snake_case` beside `registerClcmd` and `precacheModel`, unless the whole API changes with them, which is the "AMXX's spelling only" alternative |
 
 ## Consequences
 
@@ -105,13 +124,14 @@ The `vars` keys (`"health"`, `"maxClip"`) and AMXX/ReAPI's variable names (`var_
 - ✅ One implementation of each function: the layer is Rook code over the canonical API, with its
   types and errors; nothing of AMXX's code is used.
 - ✅ Each literal name has a canonical form one quick fix away, so code can converge on it.
-- ⚠️ Two spellings of the same API. Mitigation: the documentation, the examples and the project's
-  own code use the canonical one; the layer is listed in one generated table.
+- ⚠️ Two spellings of the same API, the accessors of every catalog included. Mitigation: the
+  documentation, the examples and the project's own code use the canonical one, the LSP offers it
+  first, and the layer is listed in one generated table.
 - ⚠️ False familiarity: the names are AMXX's, the types are not (`get_user_health` takes a
-  `Player`, not an index). Mitigation: diagnostics in AMXX's terms (decision 6) and the
+  `Player`, not an index). Mitigation: diagnostics in AMXX's terms (decision 7) and the
   differences of [16 §5](../16-amxx-migration.md#5-important-behavior-differences).
 - ⚠️ ADR-0013's single convention gets a scoped exception, and `naming` a softer default in
-  files that include AMXX headers. Mitigation: the exception is the layer alone, and `amxxName`
+  files that include AMXX headers. Mitigation: the exception is the layer alone, and `compatName`
   points at every use.
 - ⚠️ A contextual keyword and a restricted `#include` in the grammar. Mitigation: both covered by
   the conformance suite, and `new` never reserved, so no existing name breaks.
@@ -119,6 +139,6 @@ The `vars` keys (`"health"`, `"maxClip"`) and AMXX/ReAPI's variable names (`var_
   ([15 §10](../15-mod-api.md#10-versioning-and-stability)) covers the `amxx.*` modules as it covers
   the rest.
 
-If accepted, the same change updates ADR-0013 (the exception), ADR-0006, [02 §3.1](../02-coding-standards.md#31-project-rule-camelcase),
+If accepted, the same change updates ADR-0013 (the exception), ADR-0006, ADR-0012, [02 §3.1](../02-coding-standards.md#31-project-rule-camelcase),
 [14 §4, §19 and §22](../14-rook-language.md), [15](../15-mod-api.md), [16 §2, §3 and §6](../16-amxx-migration.md)
 and the M6 items of `TODO.md`.
