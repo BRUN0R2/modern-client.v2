@@ -15,11 +15,12 @@
 // 2.0's, is a dielectric lit by the original's light or a metal whose color is what it reflects. A
 // painted surface's texels are a painting with its light painted in, a dark steel painted dark, a gold
 // with its shine: the painting stays, lit by the original's light and by the light painted for it by
-// direction, and the reflection its material gives is added over it. What a surface reflects is the
-// nearest probe's map, or the sky, times GGX's reflection integrated over the directions it gathers
-// (the split sum); the lights of the map near it give highlights by GGX with height-correlated Smith
-// visibility and Schlick's Fresnel, the roughness widened where the normal turns within a pixel so
-// that thin edges do not shimmer; and what a texture emits is added beyond 1, which the bloom spreads.
+// direction, and the reflection its material gives is added over it. What a surface reflects is the map
+// from its two nearest probes, blended, or the sky, times GGX's reflection integrated over the
+// directions it gathers (the split sum); the lights of the map near it give highlights by GGX with
+// height-correlated Smith visibility and Schlick's Fresnel, the roughness widened where the normal turns
+// within a pixel so that thin edges do not shimmer; and what a texture emits is added beyond 1, which
+// the bloom spreads.
 
 import colorEncoding;
 import skyDirection;
@@ -137,8 +138,11 @@ struct Instance
     uint lightCount;
     float4 lightPositions[kMostLights];
     float4 lightColors[kMostLights];
-    // The reflection probe it reflects; -1 for none, the sky then.
+    // The reflection probes it reflects: the first, -1 for none (the sky then); the second, and how
+    // much of it, the rest the first's.
     int probe;
+    int secondProbe;
+    float secondProbeShare;
 };
 
 [[vk::binding(0, 2)]]
@@ -348,10 +352,22 @@ float3 probeOf(uint probe, float3 direction, float roughness)
     return probes.SampleLevel(environmentSampler, float3(skyUvOf(point), layer), level).rgb;
 }
 
+// What the model's two probes show toward `direction`, blurred as a surface of `roughness` reflects them,
+// blended as they are shared.
+float3 probesOf(float3 direction, float roughness)
+{
+    const float3 first = probeOf(uint(instance.probe), direction, roughness);
+    if (instance.secondProbeShare <= 0.0)
+    {
+        return first;
+    }
+    return lerp(first, probeOf(uint(instance.secondProbe), direction, roughness), instance.secondProbeShare);
+}
+
 // What a surface of `roughness` and `reflectance` reflects toward the viewer of its surroundings: the
-// nearest probe's map, or the sky, toward `reflected`, blurred as it is rough, times GGX's reflection
-// integrated (specularIntegral), as Filament's sections 5.3.4 and 9.5 put them together; nothing
-// without either.
+// map from its two nearest probes, or the sky, toward `reflected`, blurred as it is rough, times GGX's
+// reflection integrated (specularIntegral), as Filament's sections 5.3.4 and 9.5 put them together;
+// nothing without either.
 float3 reflectionOf(float3 reflected, float roughness, float nDotV, float3 reflectance)
 {
     const bool hasProbe = instance.probe >= 0;
@@ -359,8 +375,7 @@ float3 reflectionOf(float3 reflected, float roughness, float nDotV, float3 refle
     {
         return float3(0.0);
     }
-    const float3 seen =
-        hasProbe ? probeOf(uint(instance.probe), reflected, roughness) : environmentOf(reflected, roughness);
+    const float3 seen = hasProbe ? probesOf(reflected, roughness) : environmentOf(reflected, roughness);
     const float2 integrated = specularIntegral.SampleLevel(environmentSampler, float2(nDotV, roughness), 0.0).rg;
     return seen * ((reflectance * integrated.x) + integrated.y);
 }

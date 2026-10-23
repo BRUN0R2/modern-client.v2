@@ -235,7 +235,9 @@ struct InstanceUniform {
     std::uint32_t lightCount = 0;
     std::array<Vec4, kMostStudioLights> lightPositions{}; ///< xyz where, w how far it reaches.
     std::array<Vec4, kMostStudioLights> lightColors{};
-    std::int32_t probe = -1; ///< The reflection probe it reflects; -1 for none.
+    std::int32_t probe = -1;       ///< The first reflection probe it reflects; -1 for none.
+    std::int32_t secondProbe = -1; ///< The second, which it reflects `secondProbeShare` of.
+    float secondProbeShare = 0.0F;
 };
 
 /// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
@@ -495,7 +497,11 @@ struct MaterialImages {
     const std::span<const StudioLight> lights =
         instance.lights.first(std::min(instance.lights.size(), kMostStudioLights));
     uniform.lightCount = narrow<std::uint32_t>(lights.size());
-    uniform.probe = instance.probe ? narrow<std::int32_t>(*instance.probe) : -1;
+    if (instance.probes) {
+        uniform.probe = narrow<std::int32_t>(instance.probes->first);
+        uniform.secondProbe = narrow<std::int32_t>(instance.probes->second);
+        uniform.secondProbeShare = instance.probes->secondShare;
+    }
     for (std::size_t index = 0; index < lights.size(); ++index) {
         uniform.lightPositions.at(index) = extend(lights[index].position, lights[index].reach);
         uniform.lightColors.at(index) = extend(lights[index].color, 0.0F);

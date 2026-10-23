@@ -455,8 +455,11 @@ latitude `acos(z) / π`), of display colors as textures are, sampled as light to
 surface reflects. A specular map is data, through neither `texgamma` nor sRGB; where its weight is 0
 neither the surroundings' reflection, at grazing angles too, nor highlights are added. Fullbright
 leaves out the map's light and its color alike; what a texture emits is light of its own. What a
-surface reflects is the nearest reflection probe's map, or the sky, times GGX's reflection integrated
-over the directions it gathers (Filament, sections 5.3.4 and 9.5). The lights of the map near a model
+surface reflects is the map from the two reflection probes nearest the model, or the sky, times GGX's
+reflection integrated over the directions it gathers (Filament, sections 5.3.4 and 9.5). The two probes
+are blended by `nx::render::probeBlendOf`: each weighs (d3 − d) / d, d its distance and d3 the third
+nearest's, so that a probe counts in full where it stands and for nothing as the third overtakes it,
+and the reflection changes as smoothly as the model moves, never at once. The lights of the map near a model
 give it highlights. A file fails with a typed error (`cs::ModelMaterialError`): `FileInvalid` for its
 schema (an unknown key, a key of the other surface, a `specularColor` that is not three shares from 0
 to 1), `TextureUnknown`, `TextureRepeated`, `SurfaceAmbiguous` for both surfaces, and

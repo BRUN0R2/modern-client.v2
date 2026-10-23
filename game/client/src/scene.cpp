@@ -230,7 +230,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         .depth = nx::render::StudioDepth::ViewModel,
         .isMirrored = viewModel->isMirrored(),
         .lights = lights,
-        .probe = m_probes ? m_probes->nearest(view.camera.position) : std::nullopt}};
+        .probes = m_probes ? m_probes->blendAt(view.camera.position) : std::nullopt}};
     if (auto drawn =
             m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
         !drawn) {

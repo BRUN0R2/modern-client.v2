@@ -11,6 +11,7 @@ nxAddTest(nxRenderTests
         lightStyleTests.cpp
         lightTests.cpp
         postTests.cpp
+        probeBlendTests.cpp
         probeTests.cpp
         screenTests.cpp
         spriteTests.cpp

@@ -21,6 +21,7 @@ namespace {
 
 using nx::Vec3;
 using nx::render::ColorEncoding;
+using nx::render::ProbeBlend;
 using nx::render::StudioLook;
 using nx::render::StudioMaterial;
 using nx::render::StudioMetallicRoughness;
@@ -163,7 +164,7 @@ void setSky(nx::rhi::Device& device, SurfaceScene& scene, int channel = kSkyChan
 
 [[nodiscard]] auto drawSurface(OffscreenTarget& target, SurfaceScene& scene, float ambient = 0.0F,
                                Vec3 direction = kNormalDirection,
-                               std::optional<std::uint32_t> probe = std::nullopt,
+                               std::optional<ProbeBlend> probes = std::nullopt,
                                std::span<const nx::render::StudioLight> lights = {},
                                SurfaceDrawOptions options = {}) -> std::vector<std::byte> {
     const std::vector bones(scene.model.boneCount(), nx::Mat3x4{});
@@ -176,12 +177,47 @@ void setSky(nx::rhi::Device& device, SurfaceScene& scene, int channel = kSkyChan
                                    .mode = options.mode,
                                    .amount = options.amount,
                                    .lights = lights,
-                                   .probe = probe});
+                                   .probes = probes});
     return target.draw([&](nx::rhi::CommandList& commands) {
         const auto drawn = scene.renderer.draw(
             commands, {.camera = cameraFrom(direction), .aspect = 1.0F, .instances = instances});
         EXPECT_TRUE(drawn.has_value()) << (drawn ? "" : nx::describe(drawn.error()));
     });
+}
+
+/// Probes of one level, each a constant light on its six sides, `lights[probe]` in each channel, as the
+/// renderer samples them (setProbes), in ShaderRead.
+[[nodiscard]] auto constantProbes(nx::rhi::Device& device, std::initializer_list<float> lights)
+    -> nx::Result<nx::rhi::OwnedTexture, nx::rhi::RhiError> {
+    auto probes = device.createTexture(
+        {.label = "test.constantProbes",
+         .format = nx::rhi::Format::Rgba8Unorm,
+         .extent = {.width = 1, .height = 1},
+         .arrayLayers = nx::narrow<std::uint32_t>(lights.size()) * nx::rhi::kCubeFaces,
+         .usage = {nx::rhi::TextureUsage::Sampled, nx::rhi::TextureUsage::RenderTarget}});
+    if (!probes) {
+        return probes;
+    }
+    const bool cleared = nx::test::inFrameOfItsOwn(device, [&](nx::rhi::CommandList& commands) {
+        commands.transition(probes->get(), nx::rhi::TextureState::Undefined,
+                            nx::rhi::TextureState::RenderTarget);
+        std::uint32_t layer = 0;
+        for (const float light : lights) {
+            for (std::uint32_t side = 0; side < nx::rhi::kCubeFaces; ++side) {
+                const std::array colors{
+                    nx::rhi::ColorAttachment{.texture = probes->get(),
+                                             .clear = {.red = light, .green = light, .blue = light},
+                                             .arrayLayer = layer++}};
+                commands.beginRendering({.colors = colors, .area = {.width = 1, .height = 1}});
+                commands.endRendering();
+            }
+        }
+        commands.transition(probes->get(), nx::rhi::TextureState::RenderTarget,
+                            nx::rhi::TextureState::ShaderRead);
+        return true;
+    });
+    EXPECT_TRUE(cleared);
+    return probes;
 }
 
 [[nodiscard]] auto centerOf(std::span<const std::byte> pixels) -> Pixel {
@@ -259,35 +295,42 @@ TEST(EnhancedStudioTest, AMetalReflectsAProbeWithoutASkyOrDiffuseLight) {
     }
     const auto scene = sceneOn(**device, metalOf(0.35F));
     ASSERT_NE(scene, nullptr);
-    auto probe = (*device)->createTexture(
-        {.label = "test.constantProbe",
-         .format = nx::rhi::Format::Rgba8Unorm,
-         .extent = {.width = 1, .height = 1},
-         .arrayLayers = nx::rhi::kCubeFaces,
-         .usage = {nx::rhi::TextureUsage::Sampled, nx::rhi::TextureUsage::RenderTarget}});
-    ASSERT_TRUE(probe.has_value());
-    const auto initialized = nx::test::inFrameOfItsOwn(**device, [&](nx::rhi::CommandList& commands) {
-        commands.transition(probe->get(), nx::rhi::TextureState::Undefined,
-                            nx::rhi::TextureState::RenderTarget);
-        for (std::uint32_t side = 0; side < nx::rhi::kCubeFaces; ++side) {
-            const std::array colors{
-                nx::rhi::ColorAttachment{.texture = probe->get(),
-                                         .clear = {.red = 1.0F, .green = 1.0F, .blue = 1.0F},
-                                         .arrayLayer = side}};
-            commands.beginRendering({.colors = colors, .area = {.width = 1, .height = 1}});
-            commands.endRendering();
-        }
-        commands.transition(probe->get(), nx::rhi::TextureState::RenderTarget,
-                            nx::rhi::TextureState::ShaderRead);
-        return true;
-    });
-    ASSERT_TRUE(initialized);
-    scene->renderer.setProbes(probe->get(), 1);
+    auto probes = constantProbes(**device, {1.0F});
+    ASSERT_TRUE(probes.has_value());
+    scene->renderer.setProbes(probes->get(), 1);
     OffscreenTarget target{**device};
     const Pixel without = centerOf(drawSurface(target, *scene));
-    const Pixel reflected = centerOf(drawSurface(target, *scene, 0.0F, kNormalDirection, 0));
+    const Pixel reflected = centerOf(drawSurface(target, *scene, 0.0F, kNormalDirection, ProbeBlend{}));
     EXPECT_EQ(without[0], 0);
     EXPECT_GT(reflected[0], 100);
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(EnhancedStudioTest, AMetalReflectsItsTwoProbesAsTheyAreShared) {
+    auto device = deviceForTests();
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const auto scene = sceneOn(**device, metalOf(0.35F));
+    ASSERT_NE(scene, nullptr);
+    auto probes = constantProbes(**device, {1.0F, 0.0F}); // a white probe and a black one
+    ASSERT_TRUE(probes.has_value());
+    scene->renderer.setProbes(probes->get(), 1);
+    OffscreenTarget target{**device};
+    const auto lightOf = [](const Pixel& pixel) {
+        return std::pow(pixel[0] / static_cast<double>(kChannelTop), kDisplayGamma);
+    };
+    const double whole = lightOf(centerOf(drawSurface(
+        target, *scene, 0.0F, kNormalDirection, ProbeBlend{.first = 0, .second = 1, .secondShare = 0.0F})));
+    ASSERT_GT(whole, 0.1);
+    for (const float share : {0.25F, 0.5F, 1.0F}) {
+        SCOPED_TRACE(share);
+        const double blended =
+            lightOf(centerOf(drawSurface(target, *scene, 0.0F, kNormalDirection,
+                                         ProbeBlend{.first = 0, .second = 1, .secondShare = share})));
+        EXPECT_NEAR(blended / whole, 1.0 - share, 0.04)
+            << "the second probe's share of the light, in linear light";
+    }
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

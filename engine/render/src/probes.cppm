@@ -5,13 +5,14 @@
 /// itself. Each probe is the world drawn from its place toward its six sides, laid out as the sky's
 /// sides are (shaders/skyDirection.slang), so that one lookup reads both; then each side's mip levels
 /// prefiltered for a rougher surface each (shaders/probe.slang). They are baked as the map is played,
-/// one a frame, the first the nearest the player starts at; a model reflects the nearest baked one.
+/// one a frame, the first the nearest the player starts at. A model reflects the two baked ones nearest
+/// it, blended (probeBlendOf) so that what it reflects changes as smoothly as it moves, never at once.
 /// Captures, prefiltering and stored mip levels all hold linear radiance, sampled without a display
 /// transfer by the consuming material.
 ///
 /// Today: the world and its sky, its brush entities as the game places them as each is baked; a
-/// reflection as from far away. Box projection, the blend of two probes and their cache on disk by
-/// the map's hash come next (ADR-0025).
+/// reflection as from far away. Box projection and their cache on disk by the map's hash come next
+/// (ADR-0025).
 export module nx.render:probes;
 
 import std;
@@ -34,6 +35,22 @@ inline constexpr std::uint32_t kProbeSideSize = 128;
 inline constexpr std::size_t kMostProbes = 32;
 /// The views the world prepares a frame while probes are baked: the player's, and a probe's six sides.
 inline constexpr std::uint32_t kBakingViewsPerFrame = 1 + rhi::kCubeFaces;
+
+/// What a place reflects: two probes, and how much of the second, from 0 to 1, the rest the first's.
+struct ProbeBlend {
+    std::uint32_t first = 0;
+    std::uint32_t second = 0;
+    float secondShare = 0.0F;
+
+    auto operator==(const ProbeBlend&) const -> bool = default;
+};
+
+/// The blend of the probes at `positions` that `point` reflects; none without probes. The two nearest,
+/// each weighed by (d3 - d) / d, d its distance and d3 the third nearest's: the nearer a probe the more
+/// it counts, all of it where it stands, and none as the third overtakes it, so that the blend is
+/// continuous wherever the point goes. With two probes, each weighed by 1 / d.
+[[nodiscard]] auto probeBlendOf(std::span<const Vec3> positions, Vec3 point) noexcept
+    -> std::optional<ProbeBlend>;
 
 struct ReflectionProbesDesc {
     /// shaders/probe.slang, compiled for the device (bin/shaders/probe.spv).
@@ -67,8 +84,8 @@ public:
     /// once every probe is baked. Each call is a frame's: the world prepares six views in it.
     void bakeNext(rhi::CommandList& commands, BspWorld& world, const WorldFrame& scene);
 
-    /// The baked probe nearest `point`; none before the first is baked.
-    [[nodiscard]] auto nearest(Vec3 point) const noexcept -> std::optional<std::uint32_t>;
+    /// What `point` reflects of the baked probes (probeBlendOf); none before the first is baked.
+    [[nodiscard]] auto blendAt(Vec3 point) const noexcept -> std::optional<ProbeBlend>;
     /// The probes' sides, layer probe * 6 + side, with their mip levels, for shaders to sample.
     [[nodiscard]] inline auto texture() const noexcept -> rhi::TextureHandle { return m_probes.get(); }
     [[nodiscard]] inline auto mipLevels() const noexcept -> std::uint32_t { return m_mipLevels; }

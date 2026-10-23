@@ -28,6 +28,11 @@ constexpr float kSamplesPerTexel = 64.0F;
 /// 90 degrees (Camera::fieldOfView), 2 atan(4 / 3).
 constexpr Degrees kSideFieldOfView{106.26020470831196F};
 
+/// A distance below which a probe counts as a unit away: a point on a probe reflects it, not infinity.
+constexpr float kLeastProbeDistance = 1.0F;
+/// The second probe's share when the three nearest are as near: as much as the first's.
+constexpr float kEvenShare = 0.5F;
+
 /// What a prefilter pass reads (shaders/probe.slang's Pass).
 struct PassUniform {
     float side = 0.0F;
@@ -216,17 +221,43 @@ void ReflectionProbes::bakeNext(rhi::CommandList& commands, BspWorld& world, con
     ++m_baked;
 }
 
-auto ReflectionProbes::nearest(Vec3 point) const noexcept -> std::optional<std::uint32_t> {
-    std::optional<std::uint32_t> found;
-    float closest = std::numeric_limits<float>::infinity();
-    for (std::size_t index = 0; index < m_baked; ++index) {
-        const float distance = lengthSquared(m_positions[index] - point);
-        if (distance < closest) {
-            closest = distance;
-            found = narrow<std::uint32_t>(index);
+auto probeBlendOf(std::span<const Vec3> positions, Vec3 point) noexcept -> std::optional<ProbeBlend> {
+    if (positions.empty()) {
+        return std::nullopt;
+    }
+    /// A probe, by its index, and its distance from the point.
+    struct Near {
+        std::uint32_t index = 0;
+        float distance = std::numeric_limits<float>::infinity();
+    };
+    std::array<Near, 3> nearest{}; // the three nearest, nearest first
+    for (std::size_t index = 0; index < positions.size(); ++index) {
+        Near candidate{.index = narrow<std::uint32_t>(index),
+                       .distance = std::max(length(positions[index] - point), kLeastProbeDistance)};
+        for (Near& kept : nearest) {
+            if (candidate.distance < kept.distance) {
+                std::swap(candidate, kept);
+            }
         }
     }
-    return found;
+    const auto& [first, second, third] = nearest;
+    if (positions.size() == 1) {
+        return ProbeBlend{.first = first.index, .second = first.index};
+    }
+    const auto weightOf = [&positions, &third](const Near& near) {
+        return positions.size() == 2 ? 1.0F / near.distance
+                                     : (third.distance - near.distance) / near.distance;
+    };
+    const float firstWeight = weightOf(first);
+    const float secondWeight = weightOf(second);
+    const float total = firstWeight + secondWeight;
+    return ProbeBlend{.first = first.index,
+                      .second = second.index,
+                      .secondShare = total > 0.0F ? secondWeight / total : kEvenShare};
+}
+
+auto ReflectionProbes::blendAt(Vec3 point) const noexcept -> std::optional<ProbeBlend> {
+    return probeBlendOf(std::span{m_positions}.first(m_baked), point);
 }
 
 } // namespace nx::render

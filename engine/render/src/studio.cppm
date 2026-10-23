@@ -35,6 +35,7 @@ import :world;
 import :light;
 import :renderMode;
 import :blendedOrder;
+import :probes;
 
 namespace nx::render {
 
@@ -274,8 +275,9 @@ struct StudioInstance {
     /// The lights near it, nearest first, which give it highlights in the enhanced look; the first
     /// kMostStudioLights count.
     std::span<const StudioLight> lights{};
-    /// The reflection probe it reflects in the enhanced look, of those setProbes gave; none: the sky.
-    std::optional<std::uint32_t> probe{};
+    /// The reflection probes it reflects in the enhanced look, of those setProbes gave (ReflectionProbes::
+    /// blendAt); none: the sky.
+    std::optional<ProbeBlend> probes{};
 };
 
 /// What a draw shows.
