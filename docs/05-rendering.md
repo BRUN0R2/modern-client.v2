@@ -584,6 +584,12 @@ Xash3D-FWGS project records from the original for its tests.
   when `0`.
 - In low-latency mode, the limiter waits **before** sampling input, so that the frame is
   built with the most recent input.
+- No empty window while the client loads: `next` opens its window hidden and shows it with its first
+  image (`WindowDesc::isShown`, `Window::show`). A map's scene, its textures and models on the GPU, is
+  made with the first image of it, and its game plays from the frame after: the player hears what
+  they see (the knife drawn as the map shows, not over a black window), and the loading is no time of
+  the game's. The CPU makes a texture's mip levels in place, the chain sized once, never a byte at a
+  time.
 - Exposed metrics: CPU time per phase, GPU time per pass (timestamps) and estimated latency
   from input to *present*.
 

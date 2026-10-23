@@ -106,7 +106,8 @@ struct Video {
 
 /// Opens the window and the GPU, presenting as `isVsync` asks. Errors: WindowUnavailable, GpuFailed.
 [[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync) -> nx::Result<Video, ClientError> {
-    auto window = nx::platform::Window::create({.title = "Modern-Client.v2"});
+    // Hidden until its first image (Client::drawFrame): never empty while the GPU starts and the map loads.
+    auto window = nx::platform::Window::create({.title = "Modern-Client.v2", .isShown = false});
     if (!window) {
         return nx::fail(ClientError::WindowUnavailable, std::move(window.error()));
     }
@@ -564,7 +565,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         startNextSession();
         const nx::Seconds elapsed = m_frameClock.restart();
         m_input->turn(m_camera.angles, elapsed);
-        if (m_session) {
+        // A session plays once its scene is made, from the frame after the first image of it: what the
+        // player hears of it, they see.
+        if (m_session && m_scene) {
             m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
             hearSession();
             stampBulletHoles();
@@ -608,6 +611,8 @@ void Client::startNextSession() {
     m_scene.reset();
     m_session = std::exchange(m_nextSession, std::nullopt);
     m_viewModelEvents = {}; // a new game's first play is new
+    m_viewPose.reset();     // what the old game showed went with its level
+    m_clientEvents.clear();
     m_camera = m_session->start;
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
 }
@@ -717,6 +722,11 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
     if (auto submitted = device.submitFrame(*m_video->swapchain); !submitted) {
         return nx::fail(ClientError::GpuFailed, std::move(submitted.error()));
     }
+    if (!m_video->window.isShown()) {
+        if (auto shown = m_video->window.show(); !shown) { // with its first image
+            return nx::fail(ClientError::WindowUnavailable, std::move(shown.error()));
+        }
+    }
     return {};
 }
 
@@ -772,7 +782,8 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
         m_scene.emplace(std::move(*scene));
-        std::ignore = m_mapClock.restart(); // the light styles start with the map
+        std::ignore = m_mapClock.restart();   // the light styles start with the map
+        std::ignore = m_frameClock.restart(); // the scene's loading is no time of the game's
     }
     if (m_scene) {
         // The weapons made or changed since: their view models, read and put on the GPU now.
