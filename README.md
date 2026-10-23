@@ -73,6 +73,13 @@ move, Space jumps, Ctrl ducks, Shift walks, E uses, the arrows turn); V flies th
 .\build\dev-windows-msvc\bin\nxview.exe --map cs_italy --screenshot cs_italy.bmp
 ```
 
+For local material comparisons, `nxview --look enhanced --user-folder <folder>` enables
+the enhanced renderer and that folder's `addons/cstrike/`; `--weapon <id>` selects a
+weapon from the data catalog. Reflection probes finish baking before the capture.
+A model's materials are in the file beside it, `<model>.material.toml`, texture by texture: its
+surface, metallic-roughness or painted with the light painted for it, what it emits and how it is
+drawn ([material file](docs/05-rendering.md#92-mdl-format-features-to-support)).
+
 ## License
 
 | Part | License |

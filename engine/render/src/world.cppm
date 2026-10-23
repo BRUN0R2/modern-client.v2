@@ -143,6 +143,11 @@ struct BspWorldDesc {
     /// The most decals on faces the world keeps, its oldest going first (DecalPool::kMostDecals at
     /// most): `r_decals`, which a multiplayer game holds to `mp_decals`.
     std::size_t decalLimit = DecalPool::kMostDecals;
+    /// The most views it prepares a frame: the player's, and the faces of a reflection probe being
+    /// baked in the enhanced look (nx.render:probes). Each has its own slot of each frame in flight.
+    std::uint32_t viewsPerFrame = 1;
+    /// How its colors reach the target it draws to: as the original draws them, or as linear light.
+    ColorEncoding encoding = ColorEncoding::Display;
 };
 
 /// What the world holds, for the log and r_speeds.
@@ -208,7 +213,8 @@ public:
     ~BspWorld() = default;
 
     /// Writes what `view` shows for the frame in flight, for drawInOrder to record with the other
-    /// renderers of the frame before the next prepare.
+    /// renderers of the frame before the next prepare; BspWorldDesc::viewsPerFrame times a frame at
+    /// most.
     void prepare(const WorldFrame& view);
     /// Draws `view` alone: prepares it, then records it (drawInOrder).
     void draw(rhi::CommandList& commands, const WorldFrame& view);
@@ -308,10 +314,11 @@ private:
     /// drawn.
     [[nodiscard]] auto createLayouts(std::span<const std::byte> shaderCode) -> Result<void, rhi::RhiError>;
     [[nodiscard]] auto createPipelines(rhi::Format colorFormat) -> Result<void, rhi::RhiError>;
-    /// The frames in flight's buffers and bind groups: the frame's uniform, which binds `lightmaps`,
-    /// `lightTable` and `sky`; its indices; its brush models' uniforms.
+    /// The buffers and bind groups of each view of each frame in flight: the frame's uniform, which
+    /// binds `lightmaps`, `lightTable` and `sky`; its indices; its brush models' uniforms.
     [[nodiscard]] auto createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle lightTable,
-                                        rhi::TextureHandle sky) -> Result<void, rhi::RhiError>;
+                                        rhi::TextureHandle sky, std::uint32_t viewsPerFrame)
+        -> Result<void, rhi::RhiError>;
     /// A bind group for each texture each bucket of `bucketTextures` shows.
     [[nodiscard]] auto createBucketGroups(std::span<const BucketTextures> bucketTextures)
         -> Result<void, rhi::RhiError>;
@@ -354,6 +361,7 @@ private:
     std::vector<std::uint32_t> m_faceIndices; ///< The triangles of every face, in the vertex buffer.
     std::vector<ModelDraw> m_models;
     Vec4 m_lighting{}; ///< The lightScale of the settings it was made with, and the lightmaps' size.
+    ColorEncoding m_encoding = ColorEncoding::Display;
     WorldStats m_stats;
 
     // What each frame gathers, kept to reuse the memory.

@@ -416,6 +416,65 @@ flowchart LR
 
 ### 9.2 MDL format features to support
 
+The enhanced look (`r_fidelity enhanced`, read when the map loads; `nxview --look enhanced` for
+captures that do not depend on the GPU's speed) shades each texture of a model by the material the
+file beside the model gives it (`<model>.material.toml`, `cs.client:modelMaterials`), texture by
+texture, a skin family's swap included:
+
+```toml
+[[textures]]
+texture = "gun_v01.bmp"                            # in any case, named once
+fullbright = true                                  # the map's light and its color left out
+metallicRoughness = { metallic = 1.0, roughness = 0.35 }
+
+[[textures]]
+texture = "gun_v02.bmp"
+baseColorMap = "models/texture/gun_v02_1024.tga"  # its texels, TGA or BMP, of any size
+[textures.painted]
+roughness = 0.35                                  # of the reflection added over the painting
+specularColor = [0.04, 0.04, 0.04]                # the reflection's color head on, in linear light
+specularWeight = 0.5                              # how much of it is added, grazing angles included
+specularMap = "models/gun_v02_specular.tga"       # by texel: rgb its color, alpha times its weight
+light = { map = "models/studioLight.tga", gain = 1.0 }
+
+[[textures]]
+texture = "gun_glow.bmp"
+emissive = 3.0                                    # its color times this: beyond 1 it blooms
+emissiveMask = "models/gun_glow_mask.tga"         # where it emits; none: everywhere
+blend = "additive"                                # opaque, masked or additive, in place of its flags
+```
+
+A texture has one surface at most (`nx::render::StudioSurface`, a variant); without one it is drawn
+as the original draws it, what it emits added. `metallicRoughness` is glTF 2.0's: its texels are its
+color, a dielectric's lit by the original's light, a metal's what it reflects. `painted` is for
+textures with their light painted in, as Counter-Strike Online paints its weapons: the painting stays,
+lit by the original's light and by its painted `light`, and the reflection its material gives is added
+over it, an artist's layer rather than a conductor that conserves energy. The painted light is an
+image of all around, equirectangular (across, the longitude `atan2(y, x) / 2π + 1/2`; down, the
+latitude `acos(z) / π`), of display colors as textures are, sampled as light toward the direction the
+surface reflects. A specular map is data, through neither `texgamma` nor sRGB; where its weight is 0
+neither the surroundings' reflection, at grazing angles too, nor highlights are added. Fullbright
+leaves out the map's light and its color alike; what a texture emits is light of its own. What a
+surface reflects is the nearest reflection probe's map, or the sky, times GGX's reflection integrated
+over the directions it gathers (Filament, sections 5.3.4 and 9.5). The lights of the map near a model
+give it highlights. A file fails with a typed error (`cs::ModelMaterialError`): `FileInvalid` for its
+schema (an unknown key, a key of the other surface, a `specularColor` that is not three shares from 0
+to 1), `TextureUnknown`, `TextureRepeated`, `SurfaceAmbiguous` for both surfaces, and
+`ImageUnreadable`. Nothing is inferred from the names of textures but Counter-Strike Online's
+`#WWWHHH` sizes.
+
+The renderers take how their colors reach the target (`nx::render::ColorEncoding`): `Display`, as the
+original draws them, or `Linear`, which the enhanced look's scene is drawn in. Drawn as linear light,
+the textures' colors, through their palettes' `texgamma`, are stored as sRGB, which the GPU decodes
+before it filters, and their mip levels average light; the light and colors the original gives as
+display colors are made light; masks, lightmaps and data stay as they are. The world, the models and
+the sprites blend into a target of half floats, the probes capture and blur light, the bloom keeps a
+constant image's light, and the shoulder scales a color's channels by one gain from its brightest, so
+that a bright gold stays gold. The colors are encoded for the screen once, before the HUD
+(`shaders/colorEncoding.slang` holds the display's gamma every shader converts by). The enhanced
+look's model textures are filtered anisotropically, by up to 16 texels as the device allows; the
+original's look keeps its own filtering.
+
 - *Chrome* textures (view-dependent coordinates in the shader), *flatshade*,
   *additive*, *masked* and *fullbright*.
 - External texture files (`*T.mdl`) and sequence groups (`*01.mdl`).

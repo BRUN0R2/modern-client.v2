@@ -6,11 +6,17 @@
 // (GL_MODULATE); a fragment whose alpha is not above the alpha test is discarded (GL_ALPHA_TEST). An
 // alpha-tested sprite the world lights is drawn again where it was, its light multiplying what is
 // there.
+// Drawn as linear light (colorEncoding.slang), the images are sampled from sRGB as light, and the
+// entity's color and the light as display colors made light too; how opaque, as it is.
+
+import colorEncoding;
 
 struct Frame
 {
     // The rows of the view-projection matrix: clip = (dot(row0, p), dot(row1, p), ...).
     float4 rows[4];
+    // How the colors reach the target: kDisplayEncoding or kLinearEncoding.
+    uint colorEncoding;
 };
 
 [[vk::binding(0, 0)]]
@@ -56,7 +62,8 @@ VertexOutput vertexMain(VertexInput input)
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
-    const float4 color = image.Sample(imageSampler, input.uv) * input.color;
+    const float4 texel = image.Sample(imageSampler, input.uv);
+    const float4 color = float4(texel.rgb * encodedOf(input.color.rgb, frame.colorEncoding), texel.a * input.color.a);
     if (color.a <= input.alphaTest)
     {
         discard;
@@ -68,5 +75,5 @@ float4 fragmentMain(VertexOutput input) : SV_Target
 [shader("fragment")]
 float4 lightFragmentMain(VertexOutput input) : SV_Target
 {
-    return input.color;
+    return float4(encodedOf(input.color.rgb, frame.colorEncoding), input.color.a);
 }

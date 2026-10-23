@@ -23,3 +23,4 @@ export import :studio;
 export import :sprite;
 export import :screen;
 export import :post;
+export import :probes;

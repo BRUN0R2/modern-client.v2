@@ -10,7 +10,10 @@
 // draws them.
 // The sky's faces show the side of the sky they are seen toward, projected as the original projects
 // it (skyDirection.slang).
+// Drawn as linear light (colorEncoding.slang), the textures are sampled from sRGB as light, and the
+// light and colors the original gives as display colors are made light too; how opaque, as it is.
 
+import colorEncoding;
 import skyDirection;
 
 // The styles the frame sets, four to an element of Frame::styles; the ones above keep the normal
@@ -29,6 +32,8 @@ struct Frame
     float4 eye;
     // The brightness of the light styles.
     float4 styles[kSetStyles / kStylesPerElement];
+    // How the colors reach the target: kDisplayEncoding or kLinearEncoding.
+    uint colorEncoding;
 };
 
 [[vk::binding(0, 0)]]
@@ -243,7 +248,7 @@ float4 litOrDiscarded(VertexOutput input, float alphaTest)
     {
         discard;
     }
-    return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), 1.0);
+    return float4(color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding), 1.0);
 }
 
 // The world and kRenderNormal: what has any alpha is drawn (the original's DEFAULT_ALPHATEST, 0).
@@ -268,7 +273,7 @@ float4 solidFragmentMain(VertexOutput input) : SV_Target
 float4 decalFragmentMain(VertexOutput input) : SV_Target
 {
     const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), color.a);
+    return float4(color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding), color.a);
 }
 
 // The decals of a brush entity drawn otherwise, unlit as its faces are, each texel times the color
@@ -286,7 +291,8 @@ float4 textureDecalFragmentMain(VertexOutput input) : SV_Target
 [shader("fragment")]
 float4 colorDecalFragmentMain(VertexOutput input) : SV_Target
 {
-    return albedo.Sample(albedoSampler, input.uv) * entity.color;
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb * encodedOf(entity.color.rgb, frame.colorEncoding), color.a * entity.color.a);
 }
 
 // kRenderTransAdd: the texel times renderamt, blended rather than added.
@@ -309,7 +315,7 @@ float4 textureFragmentMain(VertexOutput input) : SV_Target
 [shader("fragment")]
 float4 colorFragmentMain(VertexOutput input) : SV_Target
 {
-    return entity.color;
+    return float4(encodedOf(entity.color.rgb, frame.colorEncoding), entity.color.a);
 }
 
 // kRenderTransAdd: the texture times renderamt, added to what is behind.

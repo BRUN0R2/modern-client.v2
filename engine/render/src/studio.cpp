@@ -27,16 +27,29 @@ constexpr std::uint32_t kLightGammaBinding = 1;
 constexpr std::uint32_t kBonesBinding = 2;
 constexpr std::uint32_t kEnvironmentBinding = 3;
 constexpr std::uint32_t kEnvironmentSamplerBinding = 4;
+constexpr std::uint32_t kProbesBinding = 5;
+constexpr std::uint32_t kSpecularIntegralBinding = 6;
 constexpr std::uint32_t kAlbedoBinding = 0;
 constexpr std::uint32_t kAlbedoSamplerBinding = 1;
 constexpr std::uint32_t kSkinUniformBinding = 2;
 constexpr std::uint32_t kEmissiveMaskBinding = 3;
+constexpr std::uint32_t kSpecularMapBinding = 4;
+constexpr std::uint32_t kPaintedLightBinding = 5;
 constexpr std::uint32_t kInstanceUniformBinding = 0;
+
+/// The most texels the enhanced look's sampler takes along a texture seen aslant, so that a painting's
+/// detail stays on faces seen edge on; the device holds it to its own most.
+constexpr float kEnhancedAnisotropy = 16.0F;
 
 // Skin::flags, as the shader reads them.
 constexpr std::uint32_t kFlatShade = 1;
 constexpr std::uint32_t kChrome = 2;
 constexpr std::uint32_t kFullbright = 4;
+
+// Skin::surface, as the shader reads it: none, StudioMetallicRoughness or StudioPainted.
+constexpr std::uint32_t kOriginalSurface = 0;
+constexpr std::uint32_t kMetallicRoughnessSurface = 1;
+constexpr std::uint32_t kPaintedSurface = 2;
 
 /// The palette index a masked texture draws as transparent.
 constexpr std::uint8_t kTransparentIndex = 255;
@@ -47,6 +60,101 @@ constexpr std::size_t kRgbaBytes = 4;
 constexpr std::byte kFull{255};
 /// A channel at its brightest, as `renderamt` counts it.
 constexpr float kChannelTop = 255.0F;
+
+/// GGX's reflection integrated over the directions it gathers (the split sum's second factor), which
+/// does not depend on the surroundings: its texels, across the cosine of the view to the normal and down
+/// the roughness, each from the middle of its square; and the directions each integral samples.
+constexpr std::uint32_t kSpecularIntegralSize = 64;
+constexpr std::size_t kSpecularIntegralSamples = 256;
+constexpr float kTexelMiddle = 0.5F;
+/// Hammersley's points count their second coordinate in this base (the van der Corput sequence).
+constexpr std::uint32_t kRadicalBase = 2;
+/// A reflection's two: the light comes in at twice the angle between the view and the half vector.
+constexpr float kReflectionScale = 2.0F;
+constexpr float kSchlickPower = 5.0F;
+constexpr float kTwoPi = 2.0F * std::numbers::pi_v<float>;
+
+/// `index` with its digits in kRadicalBase mirrored about the point: the van der Corput sequence.
+[[nodiscard]] auto radicalInverseOf(std::uint32_t index) noexcept -> float {
+    float inverse = 0.0F;
+    float place = 1.0F / static_cast<float>(kRadicalBase);
+    while (index > 0) {
+        inverse += static_cast<float>(index % kRadicalBase) * place;
+        index /= kRadicalBase;
+        place /= static_cast<float>(kRadicalBase);
+    }
+    return inverse;
+}
+
+/// Half vectors about the normal (+Z) as GGX of `alphaSquared` distributes microfacet normals, at
+/// Hammersley's points.
+[[nodiscard]] auto halfVectorsOf(float alphaSquared) -> std::array<Vec3, kSpecularIntegralSamples> {
+    std::array<Vec3, kSpecularIntegralSamples> samples{};
+    for (std::size_t index = 0; index < samples.size(); ++index) {
+        const float azimuth = kTwoPi * static_cast<float>(index) / static_cast<float>(samples.size());
+        const float share = radicalInverseOf(narrow<std::uint32_t>(index));
+        const float cosine = std::sqrt((1.0F - share) / (1.0F + ((alphaSquared - 1.0F) * share)));
+        const float sine = std::sqrt(std::max(1.0F - (cosine * cosine), 0.0F));
+        samples[index] = {.x = std::cos(azimuth) * sine, .y = std::sin(azimuth) * sine, .z = cosine};
+    }
+    return samples;
+}
+
+/// GGX's reflection with height-correlated Smith visibility and Schlick's Fresnel, integrated over the
+/// directions it gathers for a view at `nDotV` to the normal (Filament, sections 5.3.4 and 9.5,
+/// https://google.github.io/filament/main/filament.html#annex/precomputinglforimage-basedlighting):
+/// the share of the reflectance head on (F0), and what grazing angles add; the mean of `halfVectors`,
+/// each weighted by how likely GGX made it.
+struct SpecularIntegral {
+    float scale = 0.0F;
+    float bias = 0.0F;
+};
+
+[[nodiscard]] auto specularIntegralOf(std::span<const Vec3> halfVectors, float nDotV, float alphaSquared)
+    -> SpecularIntegral {
+    const Vec3 view{.x = std::sqrt(1.0F - (nDotV * nDotV)), .z = nDotV};
+    SpecularIntegral integral{};
+    for (const Vec3 half : halfVectors) {
+        const float vDotH = std::clamp(dot(view, half), 0.0F, 1.0F);
+        const float nDotL = (kReflectionScale * vDotH * half.z) - nDotV;
+        if (nDotL <= 0.0F) {
+            continue;
+        }
+        const float visibilityView =
+            nDotL * std::sqrt((nDotV * nDotV * (1.0F - alphaSquared)) + alphaSquared);
+        const float visibilityLight =
+            nDotV * std::sqrt((nDotL * nDotL * (1.0F - alphaSquared)) + alphaSquared);
+        const float weight =
+            (kReflectionScale * nDotL * vDotH) / ((visibilityView + visibilityLight) * half.z);
+        const float fresnel = std::pow(1.0F - vDotH, kSchlickPower);
+        integral.scale += weight * (1.0F - fresnel);
+        integral.bias += weight * fresnel;
+    }
+    const float count = static_cast<float>(halfVectors.size());
+    return {.scale = integral.scale / count, .bias = integral.bias / count};
+}
+
+/// The texels of the specular integral's texture: red its scale, green its bias.
+[[nodiscard]] auto specularIntegralTexels() -> std::vector<std::byte> {
+    std::vector<std::byte> texels;
+    texels.reserve(std::size_t{kSpecularIntegralSize} * kSpecularIntegralSize * kRgbaBytes);
+    const auto channelOf = [](float share) {
+        return std::byte{narrow<std::uint8_t>(std::lround(std::clamp(share, 0.0F, 1.0F) * kChannelTop))};
+    };
+    for (std::uint32_t row = 0; row < kSpecularIntegralSize; ++row) {
+        const float roughness = (static_cast<float>(row) + kTexelMiddle) / kSpecularIntegralSize;
+        const float alpha = roughness * roughness;
+        const float alphaSquared = alpha * alpha;
+        const auto halfVectors = halfVectorsOf(alphaSquared);
+        for (std::uint32_t column = 0; column < kSpecularIntegralSize; ++column) {
+            const float nDotV = (static_cast<float>(column) + kTexelMiddle) / kSpecularIntegralSize;
+            const SpecularIntegral integral = specularIntegralOf(halfVectors, nDotV, alphaSquared);
+            texels.insert(texels.end(),
+                          {channelOf(integral.scale), channelOf(integral.bias), std::byte{0}, kFull});
+        }
+    }
+    return texels;
+}
 
 /// The depths of the view's own model: the nearest share of them (the original's
 /// VIEWMODEL_DEPTH_RANGE), reversed depth being 1 at the near plane.
@@ -86,13 +194,16 @@ constexpr std::array kStudioVertexAttributes{
                          .format = rhi::VertexFormat::Uint32,
                          .offset = offsetof(StudioVertex, normalBone)}}; // NOLINT
 
-/// The frame's uniform: the rows of the view-projection matrix, where the view is and its right, and
-/// the environment's last mip level and whether there is one.
+/// The frame's uniform: the rows of the view-projection matrix, where the view is and its right, the
+/// last mip levels of the environment and of the probes and whether the environment is a sky, and how
+/// colors reach the target and models are shaded.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 eye{};
     Vec4 right{};
     Vec4 environment{};
+    std::uint32_t colorEncoding = 0; ///< ColorEncoding's.
+    std::uint32_t look = 0;          ///< StudioLook's.
 };
 
 /// A texture's uniform: how its texels map to coordinates, how it is drawn, and its material.
@@ -100,11 +211,14 @@ struct SkinUniform {
     float texelWidth = 0.0F; ///< 1 / its width.
     float texelHeight = 0.0F;
     std::uint32_t flags = 0;
+    std::uint32_t surface = kOriginalSurface;
     float metallic = 0.0F;
     float roughness = 1.0F;
     float emissive = 0.0F;
-    float padding0 = 0.0F;
-    float padding1 = 0.0F;
+    std::uint32_t hasSpecularMap = 0;
+    Vec4 specular{}; ///< A painted surface's reflection: xyz its color head on, w how much is added.
+    std::uint32_t hasPaintedLight = 0;
+    float paintedLightGain = 1.0F;
 };
 
 /// A model's uniform: its light, how its depths are mapped, and where its bones start.
@@ -121,6 +235,7 @@ struct InstanceUniform {
     std::uint32_t lightCount = 0;
     std::array<Vec4, kMostStudioLights> lightPositions{}; ///< xyz where, w how far it reaches.
     std::array<Vec4, kMostStudioLights> lightColors{};
+    std::int32_t probe = -1; ///< The reflection probe it reflects; -1 for none.
 };
 
 /// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
@@ -184,9 +299,9 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
 }
 
 /// The texels of `texture` through `textureGamma`, a masked one's palette index 255 transparent, and
-/// its mip levels, unless it has none.
-[[nodiscard]] auto skinTexelsOf(const assets::StudioTexture& texture, const ChannelTable& textureGamma)
-    -> MipChain {
+/// its mip levels, unless it has none, as a color texture of `encoding` stores them.
+[[nodiscard]] auto skinTexelsOf(const assets::StudioTexture& texture, const ChannelTable& textureGamma,
+                                ColorEncoding encoding) -> MipChain {
     const bool isMasked = texture.flags.test(assets::StudioTextureFlag::Masked);
     std::vector<std::byte> texels;
     texels.reserve(texture.pixels.size() * kRgbaBytes);
@@ -200,9 +315,9 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
         texels.push_back(isTransparent ? std::byte{0} : kFull);
     }
     if (texture.flags.test(assets::StudioTextureFlag::NoMipmaps)) {
-        return MipChain{.texels = std::move(texels), .offsets = {0}};
+        return MipChain{.texels = colorTexelsOf(std::move(texels), encoding), .offsets = {0}};
     }
-    return mipChainOf(std::move(texels), texture.width, texture.height);
+    return colorMipChainOf(std::move(texels), texture.width, texture.height, encoding);
 }
 
 [[nodiscard]] auto meshKindOf(const assets::StudioTexture& texture,
@@ -225,6 +340,23 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     return texture.flags.test(assets::StudioTextureFlag::Additive) ? MeshKind::Additive : MeshKind::Opaque;
 }
 
+/// Writes a metallic-roughness surface to `uniform`.
+void addSurface(SkinUniform& uniform, const StudioMetallicRoughness& surface) noexcept {
+    uniform.surface = kMetallicRoughnessSurface;
+    uniform.metallic = surface.metallic;
+    uniform.roughness = surface.roughness;
+}
+
+/// Writes a painted surface to `uniform`.
+void addSurface(SkinUniform& uniform, const StudioPainted& surface) noexcept {
+    uniform.surface = kPaintedSurface;
+    uniform.roughness = surface.roughness;
+    uniform.specular = extend(surface.specularColor, surface.specularWeight);
+    uniform.hasSpecularMap = surface.specularMap ? 1U : 0U;
+    uniform.hasPaintedLight = surface.light ? 1U : 0U;
+    uniform.paintedLightGain = surface.light ? surface.light->gain : 1.0F;
+}
+
 /// The uniform of `texture`, of `material` in the enhanced look: its fullbright flag the material's
 /// when it says.
 [[nodiscard]] auto skinUniformOf(const assets::StudioTexture& texture,
@@ -242,9 +374,10 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
         }
     }
     if (material) {
-        uniform.metallic = material->metallic;
-        uniform.roughness = material->roughness;
         uniform.emissive = material->emissive;
+        if (material->surface) {
+            std::visit([&uniform](const auto& surface) { addSurface(uniform, surface); }, *material->surface);
+        }
         if (material->isFullbright) {
             uniform.flags =
                 *material->isFullbright ? (uniform.flags | kFullbright) : (uniform.flags & ~kFullbright);
@@ -253,15 +386,10 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     return uniform;
 }
 
-/// The RGBA texels of `image` and its mip levels.
-[[nodiscard]] auto imageMipChainOf(const assets::RgbaImage& image) -> MipChain {
-    return mipChainOf(image.pixels, image.width, image.height);
-}
-
 /// The texels of `image` in place of a texture's, through `textureGamma` as the model's are, and its
-/// mip levels.
-[[nodiscard]] auto baseColorTexelsOf(const assets::RgbaImage& image, const ChannelTable& textureGamma)
-    -> MipChain {
+/// mip levels, as a color texture of `encoding` stores them.
+[[nodiscard]] auto baseColorTexelsOf(const assets::RgbaImage& image, const ChannelTable& textureGamma,
+                                     ColorEncoding encoding) -> MipChain {
     std::vector<std::byte> texels = image.pixels;
     for (std::size_t at = 0; at < texels.size(); at += kRgbaBytes) {
         for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
@@ -269,7 +397,65 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
                 std::byte{textureGamma[std::to_integer<std::size_t>(texels[at + channel])]};
         }
     }
-    return mipChainOf(std::move(texels), image.width, image.height);
+    return colorMipChainOf(std::move(texels), image.width, image.height, encoding);
+}
+
+/// `chain`, the texels and mip levels of an image of `extent`, on the GPU as `format`.
+[[nodiscard]] auto uploadChain(Uploader& uploader, std::string_view label, rhi::Extent2d extent,
+                               const MipChain& chain, rhi::Format format)
+    -> Result<rhi::OwnedTexture, rhi::RhiError> {
+    return uploader.texture(label, extent, narrow<std::uint32_t>(chain.offsets.size()), 1, chain.texels,
+                            chain.offsets, format);
+}
+
+[[nodiscard]] auto extentOf(const assets::RgbaImage& image) noexcept -> rhi::Extent2d {
+    return {.width = image.width, .height = image.height};
+}
+
+/// The images of a texture's material on the GPU; each it lacks null, which binds the renderer's white.
+struct MaterialImages {
+    rhi::OwnedTexture emissiveMask{};
+    rhi::OwnedTexture specularMap{};
+    rhi::OwnedTexture paintedLight{};
+};
+
+/// The images of `material` on the GPU, labeled after its texture's `label`: its masks and maps as data,
+/// its painted light's map as light (sRGB, as a linear target's colors). Errors: those of the uploads.
+[[nodiscard]] auto uploadMaterialImages(Uploader& uploader, std::string_view label,
+                                        const StudioMaterial& material)
+    -> Result<MaterialImages, rhi::RhiError> {
+    const auto uploadData = [&uploader, label](std::string_view part, const assets::RgbaImage& image) {
+        return uploadChain(uploader, std::format("{}.{}", label, part), extentOf(image),
+                           mipChainOf(image.pixels, image.width, image.height), rhi::Format::Rgba8Unorm);
+    };
+    MaterialImages images;
+    if (material.emissiveMask) {
+        auto mask = uploadData("emissiveMask", *material.emissiveMask);
+        if (!mask) {
+            return std::unexpected{std::move(mask.error())};
+        }
+        images.emissiveMask = std::move(*mask);
+    }
+    const StudioPainted* const painted =
+        material.surface ? std::get_if<StudioPainted>(&*material.surface) : nullptr;
+    if (painted != nullptr && painted->specularMap) {
+        auto map = uploadData("specularMap", *painted->specularMap);
+        if (!map) {
+            return std::unexpected{std::move(map.error())};
+        }
+        images.specularMap = std::move(*map);
+    }
+    if (painted != nullptr && painted->light) {
+        const assets::RgbaImage& map = painted->light->map;
+        auto light = uploadChain(uploader, std::format("{}.paintedLight", label), extentOf(map),
+                                 colorMipChainOf(map.pixels, map.width, map.height, ColorEncoding::Linear),
+                                 colorFormatOf(ColorEncoding::Linear));
+        if (!light) {
+            return std::unexpected{std::move(light.error())};
+        }
+        images.paintedLight = std::move(*light);
+    }
+    return images;
 }
 
 /// How `mode` blends a model (GL_StudioSetRenderMode): any mode but Normal and TransAdd as blended.
@@ -309,6 +495,7 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     const std::span<const StudioLight> lights =
         instance.lights.first(std::min(instance.lights.size(), kMostStudioLights));
     uniform.lightCount = narrow<std::uint32_t>(lights.size());
+    uniform.probe = instance.probe ? narrow<std::int32_t>(*instance.probe) : -1;
     for (std::size_t index = 0; index < lights.size(); ++index) {
         uniform.lightPositions.at(index) = extend(lights[index].position, lights[index].reach);
         uniform.lightColors.at(index) = extend(lights[index].color, 0.0F);
@@ -325,6 +512,8 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
 auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, const StudioRendererDesc& desc)
     -> Result<StudioRenderer, StudioError> {
     StudioRenderer renderer{device};
+    renderer.m_look = desc.look;
+    renderer.m_encoding = desc.encoding;
     renderer.m_textureGamma = textureGammaTable(desc.gamma);
     std::vector<std::uint32_t> curve;
     std::ranges::copy(lightGammaTable(desc.gamma), std::back_inserter(curve));
@@ -338,7 +527,7 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
     if (auto made = renderer.createPipelines(desc.shaderCode, desc.colorFormat, desc.look); !made) {
         return fail(StudioError::GpuFailed, std::move(made.error()));
     }
-    // A material without an emissive mask emits everywhere; a renderer without a sky reflects none.
+    // A material without an image is white; a renderer without a sky or probes reflects none.
     constexpr std::array kWhite{std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255}};
     constexpr std::array kBlackSides = [] {
         std::array<std::byte, kRgbaBytes * rhi::kCubeFaces> sides{};
@@ -359,6 +548,21 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
     }
     renderer.m_whiteMask = std::move(*white);
     renderer.m_environment = std::move(*black);
+    if (desc.look == StudioLook::Enhanced) {
+        auto integral = uploader.texture("studio.specularIntegral",
+                                         {.width = kSpecularIntegralSize, .height = kSpecularIntegralSize}, 1,
+                                         1, specularIntegralTexels(), kOneLevel);
+        if (!integral) {
+            return fail(StudioError::GpuFailed, std::move(integral.error()));
+        }
+        renderer.m_specularIntegral = std::move(*integral);
+    }
+    auto noProbes = uploader.texture("studio.noProbes", {.width = 1, .height = 1}, 1, rhi::kCubeFaces,
+                                     kBlackSides, sideOffsets);
+    if (!noProbes) {
+        return fail(StudioError::GpuFailed, std::move(noProbes.error()));
+    }
+    renderer.m_noProbes = std::move(*noProbes);
     renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
     for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
         if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstBoneCapacity,
@@ -386,7 +590,12 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
         rhi::BindingLayout{
             .binding = kEnvironmentBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
         rhi::BindingLayout{
-            .binding = kEnvironmentSamplerBinding, .type = rhi::BindingType::Sampler, .stages = kFragment}};
+            .binding = kEnvironmentSamplerBinding, .type = rhi::BindingType::Sampler, .stages = kFragment},
+        rhi::BindingLayout{
+            .binding = kProbesBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
+        rhi::BindingLayout{.binding = kSpecularIntegralBinding,
+                           .type = rhi::BindingType::SampledTexture,
+                           .stages = kFragment}};
     const std::array skinBindings{
         rhi::BindingLayout{
             .binding = kAlbedoBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
@@ -395,7 +604,11 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
         rhi::BindingLayout{
             .binding = kSkinUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages},
         rhi::BindingLayout{
-            .binding = kEmissiveMaskBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment}};
+            .binding = kEmissiveMaskBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
+        rhi::BindingLayout{
+            .binding = kSpecularMapBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
+        rhi::BindingLayout{
+            .binding = kPaintedLightBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment}};
     const std::array instanceBindings{rhi::BindingLayout{
         .binding = kInstanceUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages}};
     auto shader = device.createShader({.label = "studio", .code = shaderCode});
@@ -403,7 +616,8 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     auto skinLayout = device.createBindGroupLayout({.label = "studio.skin", .bindings = skinBindings});
     auto instanceLayout =
         device.createBindGroupLayout({.label = "studio.instance", .bindings = instanceBindings});
-    auto sampler = device.createSampler({.label = "studio.skin"});
+    auto sampler = device.createSampler(
+        {.label = "studio.skin", .maxAnisotropy = look == StudioLook::Enhanced ? kEnhancedAnisotropy : 1.0F});
     auto environmentSampler =
         device.createSampler({.label = "studio.environment", .address = rhi::AddressMode::ClampToEdge});
     if (!shader || !frameLayout || !skinLayout || !instanceLayout || !sampler || !environmentSampler) {
@@ -425,7 +639,9 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     // triangles face away from it; mirrored, they face the other way, and the others are culled. Each
     // facing, each render mode's blending, and in it each kind of mesh, as
     // GL_StudioSetRenderMode and R_StudioDrawPoints set them: an additive mesh adds itself, as
-    // its texture's alpha says unless the model is solid; a masked one is cut at an alpha of 0.5.
+    // its texture's alpha says unless the model is solid; a masked one is cut at an alpha of 0.5. Drawn
+    // as linear light, an added model's additive mesh is added whole, its shader having scaled it by
+    // its blend once its colors are light.
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(StudioVertex), .attributes = kStudioVertexAttributes}};
     const std::array layouts{m_frameLayout.get(), m_skinLayout.get(), m_instanceLayout.get()};
@@ -458,7 +674,9 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
                       Way{.fragment = kWhole, .blend = addedByAlpha}}},
         WaysOfMeshes{{Way{.fragment = kWhole, .blend = added, .writesDepth = false},
                       Way{.fragment = kCut, .blend = added, .writesDepth = false},
-                      Way{.fragment = kWhole, .blend = addedByAlpha, .writesDepth = false}}},
+                      Way{.fragment = kWhole,
+                          .blend = m_encoding == ColorEncoding::Linear ? added : addedByAlpha,
+                          .writesDepth = false}}},
     }};
     for (const StudioFacing facing : EnumArray<StudioFacing, int>::keys()) {
         const rhi::CullMode culled =
@@ -518,7 +736,12 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
                          .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
             rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = buffer->get()}},
             rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
-            rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()}};
+            rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()},
+            rhi::Binding{.binding = kProbesBinding,
+                         .resource = m_probes.isNull() ? m_noProbes.get() : m_probes},
+            rhi::Binding{.binding = kSpecularIntegralBinding,
+                         .resource = m_specularIntegral.get().isNull() ? m_whiteMask.get()
+                                                                       : m_specularIntegral.get()}};
         auto group = device.createBindGroup(
             {.label = "studio.frame", .layout = m_frameLayout.get(), .bindings = bindings});
         if (!group) {
@@ -589,47 +812,43 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
         const std::optional<StudioMaterial> material =
             index < desc.materials.size() ? desc.materials[index] : std::nullopt;
         const bool hasBaseColor = material && material->baseColor;
-        const MipChain texels = hasBaseColor ? baseColorTexelsOf(*material->baseColor, m_textureGamma)
-                                             : skinTexelsOf(texture, m_textureGamma);
-        const rhi::Extent2d extent =
-            hasBaseColor
-                ? rhi::Extent2d{.width = material->baseColor->width, .height = material->baseColor->height}
-                : rhi::Extent2d{.width = texture.width, .height = texture.height};
+        const MipChain texels = hasBaseColor
+                                    ? baseColorTexelsOf(*material->baseColor, m_textureGamma, m_encoding)
+                                    : skinTexelsOf(texture, m_textureGamma, m_encoding);
+        const rhi::Extent2d extent = hasBaseColor
+                                         ? extentOf(*material->baseColor)
+                                         : rhi::Extent2d{.width = texture.width, .height = texture.height};
         const std::string label = std::format("studio.{}", texture.name);
-        auto uploaded = uploader.texture(label, extent, narrow<std::uint32_t>(texels.offsets.size()), 1,
-                                         texels.texels, texels.offsets);
+        auto uploaded = uploadChain(uploader, label, extent, texels, colorFormatOf(m_encoding));
         const SkinUniform skin = skinUniformOf(texture, material);
         auto uniform = uploader.buffer(label, rhi::BufferUsage::Uniform, rhi::BufferState::Uniform,
                                        std::as_bytes(std::span{&skin, 1}));
-        if (!uploaded || !uniform) {
-            return gpuFailure(std::move(!uploaded ? uploaded.error() : uniform.error()));
+        auto images = material ? uploadMaterialImages(uploader, label, *material) : MaterialImages{};
+        if (!uploaded || !uniform || !images) {
+            return gpuFailure(std::move(!uploaded  ? uploaded.error()
+                                        : !uniform ? uniform.error()
+                                                   : images.error()));
         }
-        rhi::OwnedTexture emissiveMask;
-        if (material && material->emissiveMask) {
-            const assets::RgbaImage& mask = *material->emissiveMask;
-            const MipChain maskTexels = imageMipChainOf(mask);
-            auto maskUploaded = uploader.texture(
-                std::format("{}.emissiveMask", label), {.width = mask.width, .height = mask.height},
-                narrow<std::uint32_t>(maskTexels.offsets.size()), 1, maskTexels.texels, maskTexels.offsets);
-            if (!maskUploaded) {
-                return gpuFailure(std::move(maskUploaded.error()));
-            }
-            emissiveMask = std::move(*maskUploaded);
-        }
+        const auto orWhite = [this](const rhi::OwnedTexture& image) {
+            return image.get().isNull() ? m_whiteMask.get() : image.get();
+        };
         const std::array bindings{
             rhi::Binding{.binding = kAlbedoBinding, .resource = uploaded->get()},
             rhi::Binding{.binding = kAlbedoSamplerBinding, .resource = m_sampler.get()},
             rhi::Binding{.binding = kSkinUniformBinding,
                          .resource = rhi::BufferBinding{.buffer = uniform->get()}},
-            rhi::Binding{.binding = kEmissiveMaskBinding,
-                         .resource = emissiveMask.get().isNull() ? m_whiteMask.get() : emissiveMask.get()}};
+            rhi::Binding{.binding = kEmissiveMaskBinding, .resource = orWhite(images->emissiveMask)},
+            rhi::Binding{.binding = kSpecularMapBinding, .resource = orWhite(images->specularMap)},
+            rhi::Binding{.binding = kPaintedLightBinding, .resource = orWhite(images->paintedLight)}};
         auto group =
             m_device->createBindGroup({.label = label, .layout = m_skinLayout.get(), .bindings = bindings});
         if (!group) {
             return gpuFailure(std::move(group.error()));
         }
         model.m_textures.push_back(StudioSkinDraw{.texture = std::move(*uploaded),
-                                                  .emissiveMask = std::move(emissiveMask),
+                                                  .emissiveMask = std::move(images->emissiveMask),
+                                                  .specularMap = std::move(images->specularMap),
+                                                  .paintedLight = std::move(images->paintedLight),
                                                   .uniform = std::move(*uniform),
                                                   .group = std::move(*group),
                                                   .kind = meshKindOf(texture, material)});
@@ -655,7 +874,8 @@ auto StudioRenderer::setEnvironment(rhi::CommandList& commands, std::span<const 
     std::vector<std::size_t> offsets;
     std::uint32_t levels = 0;
     for (const std::size_t side : kSkySideOfAxis) {
-        const MipChain chain = imageMipChainOf(sky[side]);
+        const MipChain chain =
+            colorMipChainOf(sky[side].pixels, sky[side].width, sky[side].height, m_encoding);
         levels = narrow<std::uint32_t>(chain.offsets.size());
         for (const std::size_t offset : chain.offsets) {
             offsets.push_back(texels.size() + offset);
@@ -663,9 +883,9 @@ auto StudioRenderer::setEnvironment(rhi::CommandList& commands, std::span<const 
         texels.insert(texels.end(), chain.texels.begin(), chain.texels.end());
     }
     Uploader uploader{*m_device, commands};
-    auto environment =
-        uploader.texture("studio.environment", {.width = sky.front().width, .height = sky.front().height},
-                         levels, narrow<std::uint32_t>(kSkySuffixes.size()), texels, offsets);
+    auto environment = uploader.texture(
+        "studio.environment", {.width = sky.front().width, .height = sky.front().height}, levels,
+        narrow<std::uint32_t>(kSkySuffixes.size()), texels, offsets, colorFormatOf(m_encoding));
     if (!environment) {
         return fail(StudioError::GpuFailed, std::move(environment.error()));
     }
@@ -677,6 +897,15 @@ auto StudioRenderer::setEnvironment(rhi::CommandList& commands, std::span<const 
         slot.group = {};
     }
     return {};
+}
+
+void StudioRenderer::setProbes(rhi::TextureHandle probes, std::uint32_t mipLevels) {
+    m_probes = probes;
+    m_probeLevels = std::max(mipLevels, 1U);
+    // Each frame's group names the probes: made again as each slot is next written.
+    for (StudioFrameSlot& slot : m_frameSlots) {
+        slot.group = {};
+    }
 }
 
 auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioError> {
@@ -699,8 +928,9 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
                                .right = extend(angleVectors(frame.camera.angles).right, 0.0F),
                                .environment = Vec4{.x = static_cast<float>(m_environmentLevels - 1),
                                                    .y = m_hasEnvironment ? 1.0F : 0.0F,
-                                                   .z = 0.0F,
-                                                   .w = 0.0F}};
+                                                   .z = static_cast<float>(m_probeLevels - 1)},
+                               .colorEncoding = std::to_underlying(m_encoding),
+                               .look = std::to_underlying(m_look)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 
     // Every model but the invisible ones (R_AddEntity): the solid ones drawn with the solid things of

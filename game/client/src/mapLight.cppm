@@ -34,6 +34,11 @@ export namespace cs {
 /// brighter it is.
 [[nodiscard]] auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render::StudioLight>;
 
+/// Where `map`'s reflection probes go (nx.render:probes), the first the first baked: at the eye of
+/// each spawn, the middle of each bomb site, buy zone and hostage rescue zone, then the middle of
+/// its empty leaves, each at least kProbeSpacing from those before it; nx::render::kMostProbes at most.
+[[nodiscard]] auto probePositionsOf(const nx::assets::BspView& map) -> std::vector<nx::Vec3>;
+
 /// The lights of `lights` that reach `point`, the nearest first, the first `count` of them.
 [[nodiscard]] auto nearestLights(std::span<const nx::render::StudioLight> lights, nx::Vec3 point,
                                  std::size_t count) -> std::vector<nx::render::StudioLight>;

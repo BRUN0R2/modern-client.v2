@@ -97,6 +97,10 @@ public:
         return m_lightStyles;
     }
     [[nodiscard]] inline auto skyLight() const noexcept -> const nx::render::SkyLight& { return m_skyLight; }
+    /// Where its reflection probes go (probePositionsOf), in the enhanced look.
+    [[nodiscard]] inline auto probePositions() const noexcept -> std::span<const nx::Vec3> {
+        return m_probePositions;
+    }
     /// The lights of its light entities, which give models highlights in the enhanced look.
     [[nodiscard]] inline auto lights() const noexcept -> std::span<const nx::render::StudioLight> {
         return m_lights;
@@ -137,6 +141,7 @@ private:
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;
     std::vector<nx::render::StudioLight> m_lights;
+    std::vector<nx::Vec3> m_probePositions;
     std::optional<nx::collision::BrushHulls> m_hulls;
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;

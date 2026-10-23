@@ -824,6 +824,9 @@ auto Client::drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::Swap
         }
         m_postSize = frame.size;
     }
+    // A reflection probe baked a frame, before the scene draws: the world prepares its views first.
+    m_scene->bakeReflections(list, *m_session->level, nx::Seconds{m_mapClock.elapsed()},
+                             m_session->game->placements());
     const nx::rhi::TextureHandle target = m_post->sceneTarget();
     list.transition(target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = target, .clear = kVoidColor}};

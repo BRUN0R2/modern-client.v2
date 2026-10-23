@@ -17,6 +17,24 @@ namespace {
 
 /// A muzzle flash is added in full (R_MuzzleFlash's renderamt).
 constexpr std::uint8_t kFullAmount = 255;
+
+/// The enhanced look's key light of the weapon in hand: where it is from the eye (above, to the left
+/// and behind), how far it reaches, and its light, warm white, in linear light.
+constexpr float kKeyLightAbove = 48.0F;
+constexpr float kKeyLightLeft = 40.0F;
+constexpr float kKeyLightBehind = 24.0F;
+constexpr float kKeyLightReach = 256.0F;
+constexpr nx::Vec3 kKeyLightColor{.x = 4200.0F, .y = 3900.0F, .z = 3500.0F};
+
+/// The key light of the weapon in hand of a player whose eye and view are `camera`'s.
+[[nodiscard]] auto viewModelLightOf(const nx::render::Camera& camera) -> nx::render::StudioLight {
+    const nx::AngleVectors axes = nx::angleVectors(camera.angles);
+    return nx::render::StudioLight{.position = camera.position + (axes.up * kKeyLightAbove) -
+                                               (axes.right * kKeyLightLeft) -
+                                               (axes.forward * kKeyLightBehind),
+                                   .reach = kKeyLightReach,
+                                   .color = kKeyLightColor};
+}
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
 /// The most decals on the faces of the world and of its brush entities: the original's r_decals, which
@@ -29,7 +47,7 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
     SceneShaders shaders;
     for (const auto& [file, code] :
          {std::pair{"world.spv", &shaders.world}, std::pair{"studio.spv", &shaders.studio},
-          std::pair{"sprite.spv", &shaders.sprite}}) {
+          std::pair{"sprite.spv", &shaders.sprite}, std::pair{"probe.spv", &shaders.probe}}) {
         auto read = nx::platform::readFile(folder / file);
         if (!read) {
             return nx::fail(SceneError::ShadersUnreadable, std::move(read.error()));
@@ -53,20 +71,28 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                    const SceneShaders& shaders, nx::rhi::Format format,
                    const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
     -> nx::Result<Scene, SceneError> {
-    auto world = nx::render::BspWorld::create(device, commands,
-                                              {.map = level.map(),
-                                               .wads = level.wads(),
-                                               .shaderCode = shaders.world,
-                                               .colorFormat = format,
-                                               .gamma = gamma,
-                                               .sky = level.sky(),
-                                               .decals = level.decals().images(),
-                                               .decalLimit = kMultiplayerDecals});
+    // The enhanced look draws linear light, to a target of half floats its post pass encodes (ADR-0025),
+    // and bakes the map's reflection probes, a view of their sides a frame besides the player's.
+    const bool isEnhanced = look == nx::render::StudioLook::Enhanced;
+    const nx::render::ColorEncoding encoding =
+        isEnhanced ? nx::render::ColorEncoding::Linear : nx::render::ColorEncoding::Display;
+    auto world =
+        nx::render::BspWorld::create(device, commands,
+                                     {.map = level.map(),
+                                      .wads = level.wads(),
+                                      .shaderCode = shaders.world,
+                                      .colorFormat = format,
+                                      .gamma = gamma,
+                                      .sky = level.sky(),
+                                      .decals = level.decals().images(),
+                                      .decalLimit = kMultiplayerDecals,
+                                      .viewsPerFrame = isEnhanced ? nx::render::kBakingViewsPerFrame : 1U,
+                                      .encoding = encoding});
     if (!world) {
         return nx::fail(SceneError::CreateFailed, "the world", std::move(world.error()));
     }
     auto sprites = nx::render::SpriteRenderer::create(
-        device, {.shaderCode = shaders.sprite, .colorFormat = format, .gamma = gamma});
+        device, {.shaderCode = shaders.sprite, .colorFormat = format, .gamma = gamma, .encoding = encoding});
     if (!sprites) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(sprites.error()));
     }
@@ -74,8 +100,11 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!spriteModels) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(spriteModels.error()));
     }
-    const nx::render::StudioRendererDesc studioDesc{
-        .shaderCode = shaders.studio, .colorFormat = format, .gamma = gamma, .look = look};
+    const nx::render::StudioRendererDesc studioDesc{.shaderCode = shaders.studio,
+                                                    .colorFormat = format,
+                                                    .gamma = gamma,
+                                                    .look = look,
+                                                    .encoding = encoding};
     auto studio = nx::render::StudioRenderer::create(device, commands, studioDesc);
     if (!studio) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(studio.error()));
@@ -85,7 +114,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
         return nx::fail(SceneError::CreateFailed, "the view's model", std::move(viewModels.error()));
     }
     // The enhanced look's metals reflect the map's sky.
-    if (look == nx::render::StudioLook::Enhanced) {
+    if (isEnhanced) {
         for (nx::render::StudioRenderer* const renderer : {&*studio, &*viewModels}) {
             if (auto set = renderer->setEnvironment(commands, level.sky()); !set) {
                 return nx::fail(SceneError::CreateFailed, "the sky models reflect", std::move(set.error()));
@@ -112,6 +141,19 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
         std::ranges::to<std::vector>();
     if (auto loaded = scene.loadWeapons(commands, level, all); !loaded) {
         return std::unexpected{std::move(loaded.error())};
+    }
+    // The enhanced look's reflection probes, baked as the map is played; the models reflect them.
+    if (isEnhanced) {
+        auto probes = nx::render::ReflectionProbes::create(
+            device, commands,
+            {.shaderCode = shaders.probe, .captureFormat = format, .positions = level.probePositions()});
+        if (!probes) {
+            return nx::fail(SceneError::CreateFailed, "the reflection probes", std::move(probes.error()));
+        }
+        scene.m_probes.emplace(std::move(*probes));
+        for (nx::render::StudioRenderer* const renderer : {&scene.m_studio, &scene.m_viewModels}) {
+            renderer->setProbes(scene.m_probes->texture(), scene.m_probes->mipLevels());
+        }
     }
     return scene;
 }
@@ -174,8 +216,11 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     if (bones.empty()) {
         return {};
     }
-    const std::vector<nx::render::StudioLight> lights =
-        nearestLights(level.lights(), view.camera.position, nx::render::kMostStudioLights);
+    // The weapon in hand is lit as modern shooters light theirs, readable whatever the map: a key light
+    // above it and behind the eye, carried with the view, first; then the map's lights nearest it.
+    std::vector<nx::render::StudioLight> lights{viewModelLightOf(view.camera)};
+    std::ranges::copy(nearestLights(level.lights(), view.camera.position, nx::render::kMostStudioLights - 1),
+                      std::back_inserter(lights));
     const std::array held{nx::render::StudioInstance{
         .model = *weaponModel,
         .bones = bones,
@@ -184,13 +229,24 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         .bodyChoices = viewModel->bodyChoices(),
         .depth = nx::render::StudioDepth::ViewModel,
         .isMirrored = viewModel->isMirrored(),
-        .lights = lights}};
+        .lights = lights,
+        .probe = m_probes ? m_probes->nearest(view.camera.position) : std::nullopt}};
     if (auto drawn =
             m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
         !drawn) {
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }
     return {};
+}
+
+void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
+                            std::span<const nx::render::ModelPlacement> placements) {
+    if (!m_probes || m_probes->isBaked()) {
+        return;
+    }
+    m_probes->bakeNext(
+        list, m_world,
+        {.time = time, .lightStyles = level.lightStyles().valuesAt(time), .placements = placements});
 }
 
 auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)

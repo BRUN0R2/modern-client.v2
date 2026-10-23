@@ -159,6 +159,70 @@ auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render
     return lights;
 }
 
+auto probePositionsOf(const nx::assets::BspView& map) -> std::vector<nx::Vec3> {
+    // How far apart two probes are at least, and how high a spawn's eye is above its origin.
+    constexpr float kProbeSpacing = 384.0F;
+    constexpr float kEyeHeight = 17.0F;
+    // An empty leaf this small holds no probe: a crack between brushes.
+    constexpr float kLeastLeafSide = 64.0F;
+    std::vector<nx::Vec3> positions;
+    const auto add = [&](nx::Vec3 point) {
+        if (positions.size() >= nx::render::kMostProbes ||
+            map.leaves()[map.leafAt(point).value].contents != nx::assets::Contents::Empty) {
+            return;
+        }
+        const bool isFarFromTheOthers = std::ranges::none_of(positions, [point](nx::Vec3 other) {
+            return nx::lengthSquared(other - point) < kProbeSpacing * kProbeSpacing;
+        });
+        if (isFarFromTheOthers) {
+            positions.push_back(point);
+        }
+    };
+    const auto middleOfModel = [&map](std::string_view model) -> std::optional<nx::Vec3> {
+        if (model.size() < 2 || model.front() != '*') {
+            return std::nullopt;
+        }
+        const std::optional<int> index = nx::assets::integerOfValue(model.substr(1));
+        if (!index || *index <= 0 || static_cast<std::size_t>(*index) >= map.models().size()) {
+            return std::nullopt;
+        }
+        const nx::Aabb& bounds = map.models()[static_cast<std::size_t>(*index)].bounds;
+        return (bounds.min + bounds.max) * 0.5F;
+    };
+    for (const std::string_view spawn : {"info_player_start", "info_player_deathmatch"}) {
+        for (const nx::assets::BspEntity& entity : map.entities()) {
+            if (entity.find("classname") == spawn) {
+                if (const std::optional<nx::Vec3> origin = entity.findVector("origin")) {
+                    add(*origin + nx::Vec3{.z = kEyeHeight});
+                }
+            }
+        }
+    }
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::optional<std::string_view> classname = entity.find("classname");
+        if (classname == "func_bomb_target" || classname == "func_buyzone" ||
+            classname == "func_hostage_rescue") {
+            if (const std::optional<std::string_view> model = entity.find("model")) {
+                if (const std::optional<nx::Vec3> middle = middleOfModel(*model)) {
+                    add(*middle);
+                }
+            }
+        } else if (classname == "info_bomb_target" || classname == "info_hostage_rescue") {
+            if (const std::optional<nx::Vec3> origin = entity.findVector("origin")) {
+                add(*origin + nx::Vec3{.z = kEyeHeight});
+            }
+        }
+    }
+    for (const nx::assets::BspLeaf& leaf : map.leaves()) {
+        const nx::Vec3 size = leaf.bounds.max - leaf.bounds.min;
+        if (leaf.contents == nx::assets::Contents::Empty && size.x >= kLeastLeafSide &&
+            size.y >= kLeastLeafSide && size.z >= kLeastLeafSide) {
+            add((leaf.bounds.min + leaf.bounds.max) * 0.5F);
+        }
+    }
+    return positions;
+}
+
 auto nearestLights(std::span<const nx::render::StudioLight> lights, nx::Vec3 point, std::size_t count)
     -> std::vector<nx::render::StudioLight> {
     std::vector<nx::render::StudioLight> reaching;

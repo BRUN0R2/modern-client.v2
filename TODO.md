@@ -582,7 +582,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Sandboxed client plugins and `cl_plugins`
 - [ ] Security audit of the VM on the client
 - [ ] `.nxspr` format (high-resolution RGBA sprites) in `nxbake` and in the renderer
-- [ ] `r_fidelity enhanced` mode
+- [ ] `r_fidelity enhanced` mode: material maps, calibrated effects and hardware performance validation; linear HDR scene blending/filtering/probes, GGX reflections, emission and color-preserving normalized bloom are implemented
 - [ ] Optional server occlusion (`sv_occlusion`)
 - [ ] Extended `.nxmap` map format, compiled from TrenchBroom maps
 - [ ] Repository and first `openContent` package (own map, player, weapons, HUD and sounds, original or CC0/CC-BY)

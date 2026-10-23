@@ -12,10 +12,12 @@
 /// unlit; or blended, lit, as opaque as `renderamt` says. The solid models are drawn with the solid
 /// things of the frame, the others among everything it draws blended (nx.render:blendedOrder).
 ///
-/// The enhanced look (docs/adr/0025-enhanced-rendering.md) shades each texture by its material
-/// (StudioMaterial): metals reflect the map's sky, the lights near a model give highlights, and what
-/// a texture emits goes beyond white, where the bloom spreads it; a texture without a material draws
-/// as in the original.
+/// The enhanced look (docs/adr/0025-enhanced-rendering.md) shades each texture by its surface
+/// (StudioMaterial::surface): a metallic-roughness one, glTF 2.0's, lit by the original's light and
+/// reflecting the map's probes or sky; a painted one, whose texels hold their light, kept as it is
+/// with the reflection its material gives added. The lights near a model give highlights, and what a
+/// texture emits goes beyond white, where the bloom spreads it; a texture without a surface draws as in
+/// the original.
 ///
 /// Today: the skins and body parts of models, a draw call for each mesh, the render modes, the view's
 /// own model kept out of walls, and models drawn mirrored. The render effects (renderfx), the players'
@@ -73,6 +75,8 @@ struct StudioMeshDraw {
 struct StudioSkinDraw {
     rhi::OwnedTexture texture{};
     rhi::OwnedTexture emissiveMask{}; ///< Its material's; none: the renderer's white.
+    rhi::OwnedTexture specularMap{};  ///< Its painted surface's; none: the renderer's white.
+    rhi::OwnedTexture paintedLight{}; ///< Its painted surface's light's map; none: the renderer's white.
     rhi::OwnedBuffer uniform{};
     rhi::OwnedBindGroup group{};
     MeshKind kind = MeshKind::Opaque;
@@ -140,6 +144,8 @@ struct StudioRendererDesc {
     rhi::Format colorFormat = rhi::Format::Undefined;
     GammaSettings gamma{};
     StudioLook look = StudioLook::Legacy;
+    /// How its colors reach the target it draws to: as the original draws them, or as linear light.
+    ColorEncoding encoding = ColorEncoding::Display;
 };
 
 /// How a texture's meshes are drawn: opaque, cut where its alpha is 0.5 or less, or added to what is
@@ -151,12 +157,45 @@ enum class StudioBlend : std::uint8_t {
     Count,
 };
 
-/// What a texture of a model is made of: in the enhanced look, glTF 2.0's metallic and roughness and
-/// what it emits; in both, its texels and the way it is drawn, where they replace the model's own. A
-/// texture without one is shaded as the original shades it.
-struct StudioMaterial {
+/// A physically based surface, glTF 2.0's metallic-roughness: its texels are its color, a dielectric's
+/// lit by the original's light, a metal's what it reflects.
+struct StudioMetallicRoughness {
     float metallic = 0.0F;  ///< From 0, a dielectric, to 1, a metal.
     float roughness = 1.0F; ///< From 0, a mirror, to 1.
+};
+
+/// The light painted for a painted surface by the direction it reflects, all around: an image,
+/// equirectangular (across, the longitude atan2(y, x) / 2π + 1/2; down, the latitude acos(z) / π), of
+/// display colors as the original's textures are, times `gain`.
+struct StudioPaintedLight {
+    assets::RgbaImage map{};
+    float gain = 1.0F; ///< Its scale, in linear light.
+};
+
+/// A surface whose texels are a painting with its light painted in, as Counter-Strike Online paints
+/// its weapons: the painting stays, lit by the original's light and by its painted light, and a
+/// reflection is added over it as its material gives it, an artist's layer, not a conductor's.
+struct StudioPainted {
+    float roughness = 1.0F; ///< Of its reflection, from 0, a mirror, to 1.
+    /// Its reflection's color head on (F0), in linear light.
+    Vec3 specularColor{.x = 0.04F, .y = 0.04F, .z = 0.04F};
+    /// How much of its reflection is added, grazing angles included, from 0, none, to 1.
+    float specularWeight = 1.0F;
+    /// Its reflection by texel: rgb its color head on in place of specularColor, alpha times
+    /// specularWeight; data, through neither `texgamma` nor sRGB.
+    std::optional<assets::RgbaImage> specularMap{};
+    /// The light painted for it by direction; none: the original's light alone.
+    std::optional<StudioPaintedLight> light{};
+};
+
+/// How the enhanced look shades a texture.
+using StudioSurface = std::variant<StudioMetallicRoughness, StudioPainted>;
+
+/// What a texture of a model is made of: in the enhanced look, its surface and what it emits; in both,
+/// its texels and the way it is drawn, where they replace the model's own.
+struct StudioMaterial {
+    /// How the enhanced look shades it; none: as the original shades it.
+    std::optional<StudioSurface> surface{};
     /// How bright what it emits is: its color times this, where emissiveMask says; 1 as bright as white,
     /// beyond 1 it blooms. GoldSrc's fullbright lights a whole texture as 1 does; this lights a part.
     float emissive = 0.0F;
@@ -235,6 +274,8 @@ struct StudioInstance {
     /// The lights near it, nearest first, which give it highlights in the enhanced look; the first
     /// kMostStudioLights count.
     std::span<const StudioLight> lights{};
+    /// The reflection probe it reflects in the enhanced look, of those setProbes gave; none: the sky.
+    std::optional<std::uint32_t> probe{};
 };
 
 /// What a draw shows.
@@ -269,6 +310,9 @@ public:
     /// Errors: BadTextures (sides that are not six of one size), GpuFailed.
     [[nodiscard]] auto setEnvironment(rhi::CommandList& commands, std::span<const assets::RgbaImage> sky)
         -> Result<void, StudioError>;
+    /// The reflection probes the enhanced look's models reflect (nx.render:probes): `probes`, which
+    /// must outlive the renderer, of `mipLevels` levels, sampled in ShaderRead. RGB is linear radiance.
+    void setProbes(rhi::TextureHandle probes, std::uint32_t mipLevels);
 
     /// Writes `frame`'s models for the frame in flight, for drawInOrder to record with the other
     /// renderers of the frame before the next prepare; the models must last until then. Each instance
@@ -314,10 +358,17 @@ private:
     rhi::OwnedSampler m_environmentSampler;
     EnumArray<StudioFacing, EnumArray<StudioBlending, EnumArray<MeshKind, rhi::OwnedRenderPipeline>>>
         m_pipelines;
-    rhi::OwnedTexture m_whiteMask;   ///< The emissive mask of a material without one.
+    rhi::OwnedTexture m_whiteMask; ///< The images of a material without them.
+    /// GGX's reflection integrated (shaders/studio.slang's specularIntegral), for the enhanced look.
+    rhi::OwnedTexture m_specularIntegral;
     rhi::OwnedTexture m_environment; ///< The sky's sides with their mip levels; one black texel without.
     std::uint32_t m_environmentLevels = 1;
     bool m_hasEnvironment = false;
+    StudioLook m_look = StudioLook::Legacy;
+    ColorEncoding m_encoding = ColorEncoding::Display;
+    rhi::OwnedTexture m_noProbes;  ///< Black sides: what the probes' binding holds without probes.
+    rhi::TextureHandle m_probes{}; ///< setProbes's; none: m_noProbes.
+    std::uint32_t m_probeLevels = 1;
     rhi::OwnedBuffer m_lightGamma;
     std::vector<StudioFrameSlot> m_frameSlots;
     std::uint64_t m_drawCount = 0;

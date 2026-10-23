@@ -26,7 +26,8 @@ namespace {
 constexpr int kExitUnusable = 2; // the arguments, the content or the GPU
 constexpr std::string_view kUsage =
     R"(usage: nxview --screenshot <file.bmp> [--map <name>] [--install <folder>]
-              [--data <folder>] [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
+              [--data <folder>] [--user-folder <folder>] [--look legacy|enhanced] [--weapon <id>]
+              [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
               [--time <seconds>] [--size <width>x<height>] [--hud] [--console <line>]...
               [--typing <text>] [--validation]
 
@@ -40,6 +41,10 @@ of the first spawn's team draws as it spawns. To play a map, run next.
   --install <folder>      the installation: the folder with cstrike/ and valve/ (default: the one
                           Steam installed)
   --data <folder>         the data/ folder of the project (default: the one next to nxview)
+  --user-folder <folder>  load local custom content from this folder's addons/cstrike/;
+                          omitted by default, without reading or writing the user's settings
+  --look <look>           legacy (default) or enhanced: HDR, bloom and baked map reflections
+  --weapon <id>           spawn with only this weapon of the catalog, by id or classname
   --position "<x> <y> <z>" where the camera is, the eye of the player (default: a standing
                           player's eye at the first spawn)
   --angles "<p> <y> <r>"  where it looks, in degrees: pitch (down is positive), yaw, roll (default:
@@ -67,7 +72,10 @@ struct Options {
     std::string map{kDefaultMap};
     std::optional<std::filesystem::path> install;
     std::optional<std::filesystem::path> data;
+    std::optional<std::filesystem::path> userFolder;
     std::optional<std::filesystem::path> screenshot;
+    std::optional<std::string> weapon;
+    nx::render::StudioLook look = nx::render::StudioLook::Legacy;
     std::optional<nx::Vec3> position;
     std::optional<nx::Vec3> angles; ///< Pitch, yaw and roll.
     nx::Seconds time{};             ///< Of the screenshot, after the map starts.
@@ -125,6 +133,16 @@ struct Options {
             options.install = nx::platform::fromUtf8(value);
         } else if (option == "--data") {
             options.data = nx::platform::fromUtf8(value);
+        } else if (option == "--user-folder") {
+            options.userFolder = nx::platform::fromUtf8(value);
+        } else if (option == "--weapon") {
+            options.weapon = std::string{value};
+        } else if (option == "--look") {
+            if (value != "legacy" && value != "enhanced") {
+                return std::nullopt;
+            }
+            options.look =
+                value == "enhanced" ? nx::render::StudioLook::Enhanced : nx::render::StudioLook::Legacy;
         } else if (option == "--screenshot") {
             options.screenshot = nx::platform::fromUtf8(value);
         } else if (option == "--time") {
@@ -259,7 +277,8 @@ constexpr std::size_t kBlue = 2;
 /// `screenShader`, when the options ask.
 [[nodiscard]] auto takeScreenshot(const Options& options, const cs::GameContent& content,
                                   const cs::Level& level, const cs::SceneShaders& shaders,
-                                  std::span<const std::byte> screenShader) -> int {
+                                  std::span<const std::byte> screenShader,
+                                  std::span<const std::byte> postShader) -> int {
     const nx::rhi::Extent2d extent = options.size;
     auto device = nx::rhi::vulkan::createDevice(
         {.applicationName = "nxview", .isValidationEnabled = options.isValidationEnabled});
@@ -286,9 +305,23 @@ constexpr std::size_t kBlue = 2;
     if (!commands) {
         return unusable(commands.error());
     }
-    nx::rhi::CommandList& list = commands->get();
-    auto scene = cs::Scene::create(**device, list, level, shaders, nx::rhi::Format::Rgba8Unorm,
-                                   nx::render::GammaSettings{}, nx::render::StudioLook::Legacy);
+    nx::rhi::CommandList& uploadCommands = commands->get();
+    std::optional<nx::render::PostRenderer> post;
+    if (options.look == nx::render::StudioLook::Enhanced) {
+        auto made = nx::render::PostRenderer::create(
+            **device, {.shaderCode = postShader, .outputFormat = nx::rhi::Format::Rgba8Unorm});
+        if (!made) {
+            return unusable(made.error());
+        }
+        post.emplace(std::move(*made));
+        if (auto resized = post->resize(extent); !resized) {
+            return unusable(resized.error());
+        }
+    }
+    const nx::rhi::Format sceneFormat =
+        post ? nx::render::PostRenderer::sceneFormat() : nx::rhi::Format::Rgba8Unorm;
+    auto scene = cs::Scene::create(**device, uploadCommands, level, shaders, sceneFormat,
+                                   nx::render::GammaSettings{}, options.look);
     if (!scene) {
         return unusable(scene.error());
     }
@@ -303,7 +336,7 @@ constexpr std::size_t kBlue = 2;
         screen.emplace(std::move(*made));
     }
     if (options.isHudShown) {
-        auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), *screen, list);
+        auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), *screen, uploadCommands);
         if (!loaded) {
             return unusable(loaded.error());
         }
@@ -329,7 +362,7 @@ constexpr std::size_t kBlue = 2;
             return unusable(atlas.error());
         }
         consoleAtlas.emplace(std::move(*atlas));
-        auto image = screen->loadImage(list, consoleAtlas->texels(), consoleAtlas->width(),
+        auto image = screen->loadImage(uploadCommands, consoleAtlas->texels(), consoleAtlas->width(),
                                        consoleAtlas->height(), "console");
         if (!image) {
             return unusable(image.error());
@@ -360,9 +393,27 @@ constexpr std::size_t kBlue = 2;
     cs::ViewModelEvents viewEvents;
     const std::vector<const nx::assets::StudioEvent*> clientEvents =
         viewEvents.passed(viewPose ? level.viewModel(viewPose->weapon) : nullptr, viewPose);
-    list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+    if (post) {
+        // Each bake owns a frame's world uniforms. Finish every probe at the screenshot's fixed time
+        // before drawing it, so the result does not depend on how quickly the GPU runs.
+        const std::size_t probeCount = std::min(level.probePositions().size(), nx::render::kMostProbes);
+        for (std::size_t probe = 0; probe < probeCount; ++probe) {
+            scene->bakeReflections(commands->get(), level, options.time, placements);
+            if (auto submitted = (*device)->submitFrame(); !submitted) {
+                return unusable(submitted.error());
+            }
+            (*device)->waitIdle();
+            commands = (*device)->beginFrame();
+            if (!commands) {
+                return unusable(commands.error());
+            }
+        }
+    }
+    nx::rhi::CommandList& list = commands->get();
+    const nx::rhi::TextureHandle sceneTarget = post ? post->sceneTarget() : target->get();
+    list.transition(sceneTarget, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = target->get(), .clear = kVoidColor}};
+    const std::array colors{nx::rhi::ColorAttachment{.texture = sceneTarget, .clear = kVoidColor}};
     list.beginRendering({.colors = colors,
                          .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
                          .area = extent});
@@ -376,6 +427,16 @@ constexpr std::size_t kBlue = 2;
                          .clientEvents = clientEvents});
         !drawn) {
         return unusable(drawn.error());
+    }
+    if (post) {
+        list.endRendering();
+        list.transition(sceneTarget, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
+        post->bloom(list);
+        list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+        const std::array screenColors{
+            nx::rhi::ColorAttachment{.texture = target->get(), .load = nx::rhi::LoadOp::DontCare}};
+        list.beginRendering({.colors = screenColors, .area = extent});
+        post->drawToneMapped(list);
     }
     if (screen) {
         std::vector<nx::render::ScreenQuad> quads;
@@ -437,15 +498,40 @@ auto main(int argumentCount, char** argumentValues) -> int {
         return unusable(executable.error());
     }
     const std::filesystem::path programFolder = executable->parent_path();
-    // No user's own content: a screenshot is the installation's and the repository's alone.
+    // Local custom content is opt-in; no settings are read or written by the screenshot tool.
+    const auto addons = options->userFolder.transform(
+        [](const std::filesystem::path& userFolder) { return cs::addonsFolderOf(userFolder); });
+    if (std::error_code error; addons && !std::filesystem::is_directory(*addons, error)) {
+        std::println(stderr, "nxview: no local custom content folder {}", nx::platform::toUtf8(*addons));
+        return kExitUnusable;
+    }
     auto content =
-        cs::openGameContent(options->data.value_or(programFolder / "data"), options->install, std::nullopt);
+        cs::openGameContent(options->data.value_or(programFolder / "data"), options->install, addons);
     if (!content) {
         return unusable(content.error());
+    }
+    std::optional<cs::WeaponIndex> selectedWeapon;
+    if (options->weapon) {
+        selectedWeapon = cs::findWeaponNamed(content->weapons, *options->weapon);
+        if (!selectedWeapon) {
+            std::println(stderr, "nxview: no weapon {:?} in the catalog", *options->weapon);
+            return kExitUnusable;
+        }
+        if (auto complete = content->weapons.checkComplete(*selectedWeapon); !complete) {
+            return unusable(complete.error());
+        }
+        // Keep the normal spawn and animation path, with an isolated in-memory loadout for the study.
+        const std::string& id = content->weapons.weapon(*selectedWeapon).id;
+        content->loadouts.loadouts = {{.team = cs::Team::Terrorists, .weapons = {id}},
+                                      {.team = cs::Team::CounterTerrorists, .weapons = {id}}};
     }
     auto level = cs::Level::load(*content, options->map);
     if (!level) {
         return unusable(level.error());
+    }
+    if (selectedWeapon && (*level)->viewModel(*selectedWeapon) == nullptr) {
+        std::println(stderr, "nxview: weapon {:?} has no readable view model", *options->weapon);
+        return kExitUnusable;
     }
     auto shaders = cs::readSceneShaders(programFolder / "shaders");
     if (!shaders) {
@@ -455,5 +541,13 @@ auto main(int argumentCount, char** argumentValues) -> int {
     if (!screenShader) {
         return unusable(screenShader.error());
     }
-    return takeScreenshot(*options, *content, **level, *shaders, *screenShader);
+    std::vector<std::byte> postShader;
+    if (options->look == nx::render::StudioLook::Enhanced) {
+        auto read = nx::platform::readFile(programFolder / "shaders" / "post.spv");
+        if (!read) {
+            return unusable(read.error());
+        }
+        postShader = std::move(*read);
+    }
+    return takeScreenshot(*options, *content, **level, *shaders, *screenShader, postShader);
 }

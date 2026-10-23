@@ -30,9 +30,10 @@ struct SceneShaders {
     std::vector<std::byte> world;
     std::vector<std::byte> studio;
     std::vector<std::byte> sprite;
+    std::vector<std::byte> probe; ///< The enhanced look's reflection probes'.
 };
 
-/// The shaders of the scene in `folder`: world.spv, studio.spv and sprite.spv. Errors:
+/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv and probe.spv. Errors:
 /// ShadersUnreadable.
 [[nodiscard]] auto readSceneShaders(const std::filesystem::path& folder)
     -> nx::Result<SceneShaders, SceneError>;
@@ -73,6 +74,13 @@ public:
     [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
                                    std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
 
+    /// Records the baking of the next of the level's reflection probes in the enhanced look, outside a
+    /// render pass and before the frame's draw: the world as the frame shows it at `time`, its brush
+    /// entities where `placements` puts them (nx::render::ReflectionProbes::bakeNext); nothing once they
+    /// are baked, or in the legacy look.
+    void bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
+                         std::span<const nx::render::ModelPlacement> placements);
+
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
     /// faces it was stamped on.
@@ -112,6 +120,7 @@ private:
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels; ///< Of sprites/muzzleflash1.spr to 3.
     std::vector<MuzzleFlash> m_flashes;                                ///< Those showing.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
+    std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
 };
 
 } // namespace cs

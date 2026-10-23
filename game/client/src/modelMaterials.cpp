@@ -49,6 +49,77 @@ constexpr std::size_t kSideDigits = 3;
     return std::move(*image);
 }
 
+/// The renderer's way of drawing a texture's meshes that a material file's `blend` names.
+[[nodiscard]] auto studioBlendOf(MaterialBlend blend) noexcept -> nx::render::StudioBlend {
+    switch (blend) {
+    case MaterialBlend::Masked:
+        return nx::render::StudioBlend::Masked;
+    case MaterialBlend::Additive:
+        return nx::render::StudioBlend::Additive;
+    case MaterialBlend::Opaque:
+    case MaterialBlend::Count:
+        break;
+    }
+    return nx::render::StudioBlend::Opaque;
+}
+
+[[nodiscard]] auto metallicRoughnessOf(const MetallicRoughnessData& data)
+    -> nx::render::StudioMetallicRoughness {
+    nx::render::StudioMetallicRoughness surface;
+    surface.metallic = data.metallic.value_or(surface.metallic);
+    surface.roughness = data.roughness.value_or(surface.roughness);
+    return surface;
+}
+
+/// The painted surface `data` gives, its images read from `vfs`. Errors: ImageUnreadable.
+[[nodiscard]] auto paintedOf(const nx::assets::Vfs& vfs, const PaintedData& data)
+    -> nx::Result<nx::render::StudioPainted, ModelMaterialError> {
+    nx::render::StudioPainted surface;
+    surface.roughness = data.roughness.value_or(surface.roughness);
+    if (data.specularColor) {
+        const auto& [red, green, blue] = *data.specularColor;
+        surface.specularColor = {.x = red, .y = green, .z = blue};
+    }
+    surface.specularWeight = data.specularWeight.value_or(surface.specularWeight);
+    if (data.specularMap) {
+        auto map = readImage(vfs, *data.specularMap);
+        if (!map) {
+            return std::unexpected{std::move(map.error())};
+        }
+        surface.specularMap = std::move(*map);
+    }
+    if (data.light) {
+        auto map = readImage(vfs, data.light->map);
+        if (!map) {
+            return std::unexpected{std::move(map.error())};
+        }
+        nx::render::StudioPaintedLight& light =
+            surface.light.emplace(nx::render::StudioPaintedLight{.map = std::move(*map)});
+        light.gain = data.light->gain.value_or(light.gain);
+    }
+    return surface;
+}
+
+/// The surface `named` gives its texture, its images read from `vfs`; none when it gives none.
+/// `where` names it in failures. Errors: SurfaceAmbiguous, ImageUnreadable.
+[[nodiscard]] auto surfaceOf(const nx::assets::Vfs& vfs, const TextureMaterialData& named,
+                             std::string_view where)
+    -> nx::Result<std::optional<nx::render::StudioSurface>, ModelMaterialError> {
+    if (named.metallicRoughness && named.painted) {
+        return nx::fail(ModelMaterialError::SurfaceAmbiguous,
+                        std::format("{}: {:?} has both metallicRoughness and painted", where, named.texture));
+    }
+    if (named.metallicRoughness) {
+        return std::optional<nx::render::StudioSurface>{metallicRoughnessOf(*named.metallicRoughness)};
+    }
+    if (named.painted) {
+        return paintedOf(vfs, *named.painted).transform([](nx::render::StudioPainted&& painted) {
+            return std::optional<nx::render::StudioSurface>{std::move(painted)};
+        });
+    }
+    return std::optional<nx::render::StudioSurface>{};
+}
+
 } // namespace
 
 auto namedSizeOf(std::string_view textureName) -> std::optional<nx::rhi::Extent2d> {
@@ -105,26 +176,38 @@ auto readModelMaterials(const nx::assets::Vfs& vfs, std::string_view modelPath,
     if (!data) {
         return nx::fail(ModelMaterialError::FileInvalid, std::move(data.error()));
     }
-    for (const TextureMaterialData& named : data->textures) {
+    std::unordered_set<std::size_t> namedTextures;
+    for (std::size_t entry = 0; entry < data->textures.size(); ++entry) {
+        const TextureMaterialData& named = data->textures[entry];
+        const std::string where = std::format("{}: textures[{}]", file, entry);
         const auto found =
             std::ranges::find_if(modelTextures, [&named](const nx::assets::StudioTexture& texture) {
                 return nx::equalsIgnoringCase(texture.name, named.texture);
             });
         if (found == modelTextures.end()) {
-            return nx::fail(ModelMaterialError::FileInvalid,
-                            std::format("{}: {:?} is no texture of the model", file, named.texture));
+            return nx::fail(ModelMaterialError::TextureUnknown,
+                            std::format("{}: {:?} is no texture of the model", where, named.texture));
         }
-        std::optional<nx::render::StudioMaterial>& slot =
-            materials[nx::narrow<std::size_t>(found - modelTextures.begin())];
-        nx::render::StudioMaterial& material = slot ? *slot : slot.emplace();
-        material.metallic = named.metallic.value_or(material.metallic);
-        material.roughness = named.roughness.value_or(material.roughness);
+        const auto index = nx::narrow<std::size_t>(found - modelTextures.begin());
+        if (!namedTextures.insert(index).second) {
+            return nx::fail(ModelMaterialError::TextureRepeated,
+                            std::format("{}: {:?} is named before", where, named.texture));
+        }
+        auto surface = surfaceOf(vfs, named, where);
+        if (!surface) {
+            return std::unexpected{std::move(surface.error())};
+        }
+        nx::render::StudioMaterial& material =
+            materials[index] ? *materials[index] : materials[index].emplace();
+        if (*surface) {
+            material.surface = std::move(*surface);
+        }
         material.emissive = named.emissive.value_or(material.emissive);
         if (named.fullbright) {
             material.isFullbright = named.fullbright;
         }
         if (named.blend) {
-            material.blend = named.blend;
+            material.blend = studioBlendOf(*named.blend);
         }
         for (const auto& [path, image] : {std::pair{&named.emissiveMask, &material.emissiveMask},
                                           std::pair{&named.baseColorMap, &material.baseColor}}) {

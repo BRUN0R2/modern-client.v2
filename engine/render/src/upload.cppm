@@ -8,6 +8,7 @@ export module nx.render:upload;
 import std;
 import nx.core;
 import nx.rhi;
+import :gamma;
 
 namespace nx::render {
 
@@ -22,9 +23,25 @@ struct MipChain {
 
 /// `texels`, the RGBA rows of a `width` x `height` texture, and its mip levels down to one texel, each
 /// texel the mean of the two by two above it, cut as the original's GL_MipMap cuts it, the last row or
-/// column of an odd size taken twice.
+/// column of an odd size taken twice: of a texture of data, or of display colors as the original
+/// makes them.
 [[nodiscard]] auto mipChainOf(std::vector<std::byte> texels, std::uint32_t width, std::uint32_t height)
     -> MipChain;
+
+/// The format of a color texture of `encoding`: Rgba8Unorm, its bytes as they are, or Rgba8Srgb,
+/// which the GPU decodes to linear light before it filters.
+[[nodiscard]] auto colorFormatOf(ColorEncoding encoding) noexcept -> rhi::Format;
+
+/// `texels`, RGBA rows of display colors, as a color texture of `encoding` stores them: as they are,
+/// or their color as sRGB (alpha as it is, a share, not a color).
+[[nodiscard]] auto colorTexelsOf(std::vector<std::byte> texels, ColorEncoding encoding)
+    -> std::vector<std::byte>;
+
+/// colorTexelsOf's texels of a `width` x `height` texture and its mip levels, cut as mipChainOf cuts
+/// them: each color the mean of the bytes above it as the original makes it, or, for Linear, of
+/// their light.
+[[nodiscard]] auto colorMipChainOf(std::vector<std::byte> texels, std::uint32_t width, std::uint32_t height,
+                                   ColorEncoding encoding) -> MipChain;
 
 /// What is uploaded while something is made, recorded in one command list: each upload's staging
 /// buffer is let go when the uploader ends, and the device keeps it until the copies are done.
@@ -36,7 +53,8 @@ public:
     /// each level of each layer starts in `texels`, layer after layer.
     [[nodiscard]] auto texture(std::string_view label, rhi::Extent2d extent, std::uint32_t mipLevels,
                                std::uint32_t layers, std::span<const std::byte> texels,
-                               std::span<const std::size_t> offsets)
+                               std::span<const std::size_t> offsets,
+                               rhi::Format format = rhi::Format::Rgba8Unorm)
         -> Result<rhi::OwnedTexture, rhi::RhiError>;
 
     /// A buffer in GPU memory for `usage`, holding `bytes`, left in `state`.

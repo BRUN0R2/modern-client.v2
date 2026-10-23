@@ -5,17 +5,21 @@
 // reduced into a chain of smaller images and enlarged back, as Call of Duty: Advanced Warfare's bloom
 // does (Jorge Jimenez, "Next Generation Post Processing in Call of Duty: Advanced Warfare", SIGGRAPH
 // 2014): thirteen reads a texel of the smaller image, its first level averaged by brightness so that a
-// single bright texel does not flicker, and a 3x3 tent as it is enlarged; then the scene, with a share
-// of its bloom, mapped to the screen by a shoulder: below the knee the light as it is, above it rolled
-// off towards white, its hue kept.
+// single bright texel does not flicker, and a 3x3 tent as it is enlarged. The sum is normalized by
+// the chain's level count so that bloom redistributes light without brightening a constant image.
+// The scene and bloom both store linear radiance. A single shoulder gain compresses the brightest
+// channel and scales all channels together, keeping chromaticity before the final display encoding.
 
-// What a pass reads: one over the size of its source, and for the tone pass the bloom's share and the
-// knee.
+import colorEncoding;
+
+// What a pass reads: one over the size of its source, and for the tone pass the bloom's share, the
+// knee and the normalization of the accumulated levels.
 struct Pass
 {
     float2 sourceTexelSize;
     float bloomStrength;
     float knee;
+    float bloomNormalization;
 };
 
 [[vk::binding(0, 0)]]
@@ -138,15 +142,20 @@ float shoulderOf(float value, float knee)
     return knee + (room * (1.0 - exp(-(value - knee) / room)));
 }
 
-// The scene with its share of bloom, its brightest channel through the shoulder and the others with
-// it, so that a bright color whitens no more than its hue allows.
+// Scatter a share of the scene's light through normalized bloom. The peak's shoulder controls one
+// common radiance gain, retaining neutral brightness response without washing colored HDR to white.
 [shader("fragment")]
 float4 toneMain(VertexOutput input) : SV_Target
 {
-    const float3 scene = source.SampleLevel(linearClamp, input.uv, 0.0).rgb;
-    const float3 blurred = bloom.SampleLevel(linearClamp, input.uv, 0.0).rgb;
-    const float3 color = lerp(scene, blurred, pass.bloomStrength);
-    const float peak = max(color.r, max(color.g, color.b));
-    const float3 mapped = peak > 0.0 ? color * (shoulderOf(peak, pass.knee) / peak) : color;
-    return float4(mapped, 1.0);
+    const float3 sceneLinear = source.SampleLevel(linearClamp, input.uv, 0.0).rgb;
+    const float3 bloomLinear = bloom.SampleLevel(linearClamp, input.uv, 0.0).rgb * pass.bloomNormalization;
+    const float3 colorLinear = max(lerp(sceneLinear, bloomLinear, pass.bloomStrength), 0.0);
+    const float peakLinear = max(colorLinear.r, max(colorLinear.g, colorLinear.b));
+    if (peakLinear <= 0.0)
+    {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+    const float peakDisplay = pow(peakLinear, 1.0 / kDisplayGamma);
+    const float mappedPeakLinear = pow(shoulderOf(peakDisplay, pass.knee), kDisplayGamma);
+    return float4(displayOf(colorLinear * (mappedPeakLinear / peakLinear)), 1.0);
 }

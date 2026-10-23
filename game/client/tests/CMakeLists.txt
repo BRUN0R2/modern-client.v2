@@ -7,6 +7,7 @@ nxAddTest(csClientTests
         mapTests.cpp
         hudTests.cpp
         muzzleFlashTests.cpp
+        modelMaterialsTests.cpp
         viewModelTests.cpp
         decalsTests.cpp
         weaponCommandsTests.cpp

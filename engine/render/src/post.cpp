@@ -32,6 +32,7 @@ struct PassUniform {
     float sourceTexelHeight = 0.0F;
     float bloomStrength = 0.0F;
     float knee = 0.0F;
+    float bloomNormalization = 0.0F;
 };
 
 /// The size of level `level` of the chain for a screen of `size`: half the one before, at least a texel.
@@ -143,7 +144,8 @@ auto PostRenderer::passGroup(std::size_t slot, rhi::TextureHandle source, rhi::E
     const PassUniform uniform{.sourceTexelWidth = 1.0F / static_cast<float>(sourceSize.width),
                               .sourceTexelHeight = 1.0F / static_cast<float>(sourceSize.height),
                               .bloomStrength = kBloomStrength,
-                              .knee = kToneKnee};
+                              .knee = kToneKnee,
+                              .bloomNormalization = 1.0F / static_cast<float>(kBloomLevels)};
     const std::uint64_t offset = kUniformStride * slot;
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}),
                       m_device->mappedBytes(m_uniforms.get()).subspan(narrow<std::size_t>(offset)).begin());

@@ -4,12 +4,14 @@
 /// The enhanced look's last passes (docs/adr/0025-enhanced-rendering.md): the scene, drawn to a
 /// target of half floats that keeps light beyond 1, bloomed and mapped to the screen
 /// (shaders/post.slang). The bloom is a chain of images of a half, a quarter... of the screen's size,
-/// each reduced from the one before and enlarged back into it, added; the tone curve keeps what is
-/// below its knee as it is and rolls the rest off towards white.
+/// each reduced from the one before and enlarged back into it, added. The accumulated levels are
+/// normalized before mixing so that constant colors keep their energy; the tone curve compresses
+/// the brightest channel and scales every channel together, preserving chromaticity.
 ///
-/// Today: the scene's surfaces draw the legacy look into it, as the screen shows it, and what the
-/// enhanced look adds (a metal's highlight, what glows) goes beyond 1; the surfaces' light converted
-/// to linear radiance in a target of four bytes a pixel comes next (ADR-0025).
+/// The scene and every intermediate image hold linear radiance: surfaces convert legacy colors
+/// before blending, while enhanced materials write their radiance directly. Only the tone pass
+/// encodes for presentation. The knee retains its display-domain meaning and the neutral curve's
+/// brightness response; the resulting gain applies to the linear RGB together (ADR-0025).
 export module nx.render:post;
 
 import std;
@@ -27,7 +29,7 @@ enum class PostError : std::uint8_t {
 inline constexpr std::size_t kBloomLevels = 5;
 /// How much of the bloom the tone pass mixes into the scene.
 inline constexpr float kBloomStrength = 0.04F;
-/// Below it, the tone curve keeps the light as it is.
+/// Below this display-domain peak, the tone curve keeps the light as it is.
 inline constexpr float kToneKnee = 0.8F;
 
 struct PostRendererDesc {
@@ -50,7 +52,7 @@ public:
     /// Its resources go with it, which the device keeps until the GPU is done with them.
     ~PostRenderer() = default;
 
-    /// The format of the scene's target, which the scene's pipelines draw to.
+    /// The format of the scene's linear-radiance target, which the scene's pipelines draw to.
     [[nodiscard]] static constexpr auto sceneFormat() noexcept -> rhi::Format {
         return rhi::Format::Rgba16Float;
     }
@@ -58,7 +60,7 @@ public:
     /// Makes the scene's target and the bloom's images for a screen of `size`, unless they are of it
     /// already: the GPU must be done with the frames that used the old ones. Errors: GpuFailed.
     [[nodiscard]] auto resize(rhi::Extent2d size) -> Result<void, PostError>;
-    /// The target the scene draws to, of the size given last, which bloom reads in ShaderRead.
+    /// The linear-radiance target the scene draws to, of the size given last, read in ShaderRead.
     [[nodiscard]] auto sceneTarget() const noexcept -> rhi::TextureHandle;
 
     /// Records the bloom, outside a render pass: the scene's target reduced into the chain and the

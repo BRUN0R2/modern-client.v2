@@ -263,6 +263,7 @@ auto Level::load(const GameContent& content, std::string_view name)
     level.m_lightStyles = mapLightStyles(bsp);
     level.m_skyLight = skyLightOf(bsp);
     level.m_lights = highlightLightsOf(bsp);
+    level.m_probePositions = probePositionsOf(bsp);
     auto hulls = nx::collision::BrushHulls::create(bsp);
     if (!hulls) {
         return nx::fail(LevelError::HullsInvalid, std::string{name}, std::move(hulls.error()));
