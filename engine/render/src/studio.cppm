@@ -142,8 +142,18 @@ struct StudioRendererDesc {
     StudioLook look = StudioLook::Legacy;
 };
 
-/// What a texture of a model is made of, in the enhanced look: glTF 2.0's metallic and roughness, and
-/// what it emits. A texture without one is shaded as the original shades it.
+/// How a texture's meshes are drawn: opaque, cut where its alpha is 0.5 or less, or added to what is
+/// behind; its flags' way without a material that says.
+enum class StudioBlend : std::uint8_t {
+    Opaque,
+    Masked,
+    Additive,
+    Count,
+};
+
+/// What a texture of a model is made of: in the enhanced look, glTF 2.0's metallic and roughness and
+/// what it emits; in both, its texels and the way it is drawn, where they replace the model's own. A
+/// texture without one is shaded as the original shades it.
 struct StudioMaterial {
     float metallic = 0.0F;  ///< From 0, a dielectric, to 1, a metal.
     float roughness = 1.0F; ///< From 0, a mirror, to 1.
@@ -154,6 +164,13 @@ struct StudioMaterial {
     std::optional<assets::RgbaImage> emissiveMask{};
     /// Whether the original's light reaches it, in place of its Fullbright flag; none: as its flags say.
     std::optional<bool> isFullbright{};
+    /// Its texels, of any size, in place of the model's; none: the model's.
+    std::optional<assets::RgbaImage> baseColor{};
+    /// The size its triangles' texture coordinates count in, when not the model's texture's: Counter-
+    /// Strike Online's textures named #WWWHHH, whose pixels in the model only stand in.
+    std::optional<rhi::Extent2d> coordinateSize{};
+    /// How its meshes are drawn, in place of its flags' way.
+    std::optional<StudioBlend> blend{};
 };
 
 struct StudioModelDesc {

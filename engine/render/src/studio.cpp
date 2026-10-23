@@ -205,7 +205,20 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
     return mipChainOf(std::move(texels), texture.width, texture.height);
 }
 
-[[nodiscard]] auto meshKindOf(const assets::StudioTexture& texture) noexcept -> MeshKind {
+[[nodiscard]] auto meshKindOf(const assets::StudioTexture& texture,
+                              const std::optional<StudioMaterial>& material) noexcept -> MeshKind {
+    if (material && material->blend) {
+        switch (*material->blend) {
+        case StudioBlend::Masked:
+            return MeshKind::Masked;
+        case StudioBlend::Additive:
+            return MeshKind::Additive;
+        case StudioBlend::Opaque:
+        case StudioBlend::Count:
+            break;
+        }
+        return MeshKind::Opaque;
+    }
     if (texture.flags.test(assets::StudioTextureFlag::Masked)) {
         return MeshKind::Masked;
     }
@@ -216,8 +229,11 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
 /// when it says.
 [[nodiscard]] auto skinUniformOf(const assets::StudioTexture& texture,
                                  const std::optional<StudioMaterial>& material) noexcept -> SkinUniform {
-    SkinUniform uniform{.texelWidth = 1.0F / static_cast<float>(texture.width),
-                        .texelHeight = 1.0F / static_cast<float>(texture.height)};
+    const rhi::Extent2d coordinates = material && material->coordinateSize
+                                          ? *material->coordinateSize
+                                          : rhi::Extent2d{.width = texture.width, .height = texture.height};
+    SkinUniform uniform{.texelWidth = 1.0F / static_cast<float>(coordinates.width),
+                        .texelHeight = 1.0F / static_cast<float>(coordinates.height)};
     for (const auto& [flag, bit] : {std::pair{assets::StudioTextureFlag::FlatShade, kFlatShade},
                                     std::pair{assets::StudioTextureFlag::Chrome, kChrome},
                                     std::pair{assets::StudioTextureFlag::Fullbright, kFullbright}}) {
@@ -240,6 +256,20 @@ void addTriangles(assets::Winding winding, std::uint32_t first, std::uint32_t co
 /// The RGBA texels of `image` and its mip levels.
 [[nodiscard]] auto imageMipChainOf(const assets::RgbaImage& image) -> MipChain {
     return mipChainOf(image.pixels, image.width, image.height);
+}
+
+/// The texels of `image` in place of a texture's, through `textureGamma` as the model's are, and its
+/// mip levels.
+[[nodiscard]] auto baseColorTexelsOf(const assets::RgbaImage& image, const ChannelTable& textureGamma)
+    -> MipChain {
+    std::vector<std::byte> texels = image.pixels;
+    for (std::size_t at = 0; at < texels.size(); at += kRgbaBytes) {
+        for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
+            texels[at + channel] =
+                std::byte{textureGamma[std::to_integer<std::size_t>(texels[at + channel])]};
+        }
+    }
+    return mipChainOf(std::move(texels), image.width, image.height);
 }
 
 /// How `mode` blends a model (GL_StudioSetRenderMode): any mode but Normal and TransAdd as blended.
@@ -558,11 +588,16 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
         const assets::StudioTexture& texture = textures[index];
         const std::optional<StudioMaterial> material =
             index < desc.materials.size() ? desc.materials[index] : std::nullopt;
-        const MipChain texels = skinTexelsOf(texture, m_textureGamma);
+        const bool hasBaseColor = material && material->baseColor;
+        const MipChain texels = hasBaseColor ? baseColorTexelsOf(*material->baseColor, m_textureGamma)
+                                             : skinTexelsOf(texture, m_textureGamma);
+        const rhi::Extent2d extent =
+            hasBaseColor
+                ? rhi::Extent2d{.width = material->baseColor->width, .height = material->baseColor->height}
+                : rhi::Extent2d{.width = texture.width, .height = texture.height};
         const std::string label = std::format("studio.{}", texture.name);
-        auto uploaded =
-            uploader.texture(label, {.width = texture.width, .height = texture.height},
-                             narrow<std::uint32_t>(texels.offsets.size()), 1, texels.texels, texels.offsets);
+        auto uploaded = uploader.texture(label, extent, narrow<std::uint32_t>(texels.offsets.size()), 1,
+                                         texels.texels, texels.offsets);
         const SkinUniform skin = skinUniformOf(texture, material);
         auto uniform = uploader.buffer(label, rhi::BufferUsage::Uniform, rhi::BufferState::Uniform,
                                        std::as_bytes(std::span{&skin, 1}));
@@ -597,7 +632,7 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
                                                   .emissiveMask = std::move(emissiveMask),
                                                   .uniform = std::move(*uniform),
                                                   .group = std::move(*group),
-                                                  .kind = meshKindOf(texture)});
+                                                  .kind = meshKindOf(texture, material)});
     }
     return model;
 }
