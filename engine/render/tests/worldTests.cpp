@@ -644,8 +644,8 @@ TEST(BspWorldTest, ADecalOnABrushEntityIsDrawnAsItsRenderModeDrawsIt) {
     const nx::render::Camera inFront{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
     const nx::render::Camera behind{.position = {.x = 8.0F, .y = 32.0F, .z = 32.0F}};
     struct Drawn {
-        std::vector<std::byte> plain;
-        std::vector<std::byte> holed;
+        std::vector<std::byte> plain{};
+        std::vector<std::byte> holed{}; ///< Drawn again once the decal is stamped.
     };
     const auto drawnAs = [&](std::string_view mode, std::string_view amount,
                              const nx::render::Camera& camera) {
