@@ -12,6 +12,7 @@ nxAddTest(csClientTests
         cs::client
         cs::shared
         nx::game
+        nx::ecs
         nx::console
         nx::assets
         nx::render

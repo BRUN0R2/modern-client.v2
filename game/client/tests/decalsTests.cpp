@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The decals a level shows, read from a decals.wad (the fuzz corpus' textures.wad: {BLUE and CRATE01),
-// and the mark a bullet leaves on what it meets, as the game names it.
+// what a decal is stamped on, and the mark a bullet leaves on what it meets, as the game names it.
 
 #include <gtest/gtest.h>
 
 import std;
 import nx.core;
+import nx.math;
 import nx.assets;
+import nx.ecs;
+import nx.render;
+import nx.game;
 import cs.client;
 
 #include "temporaryDirectory.hpp"
@@ -94,6 +98,25 @@ TEST(LevelDecalsTest, ReadsEachDecalNamedOnceAndFindsItWhateverItsCase) {
     EXPECT_EQ(decals.indexOf("{shot1"), std::nullopt);
     ASSERT_EQ(decals.missing().size(), 1U);
     EXPECT_TRUE(decals.missing().front().starts_with("{shot1 (")) << decals.missing().front();
+}
+
+TEST(DecalTargetTest, ADecalOnABrushEntityIsOnItsModelWhereTheGameHasIt) {
+    nx::ecs::World world;
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
+    const std::vector entities{nx::assets::BspEntity{
+        .keyValues = {{"classname", "func_wall"}, {"model", "*1"}, {"origin", "1 2 3"}}}};
+    const std::vector models{nx::assets::BspModel{}, nx::assets::BspModel{}};
+    const nx::game::EntityClasses classes{
+        .brushClasses = {nx::game::BrushClass{.classname = "func_wall", .solid = nx::game::Solid::Bsp}}};
+    ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, models, classes).has_value());
+    std::optional<nx::ecs::Entity> wall;
+    nx::ecs::Query<nx::ecs::Entity, const nx::game::BrushModel&>{world}.forEach(
+        [&wall](nx::ecs::Entity entity, const nx::game::BrushModel&) { wall = entity; });
+    ASSERT_TRUE(wall.has_value());
+    const nx::render::DecalTarget on = cs::decalTargetOf(world, wall);
+    EXPECT_EQ(on.model, nx::assets::ModelIndex{1});
+    EXPECT_EQ(on.origin, (nx::Vec3{.x = 1.0F, .y = 2.0F, .z = 3.0F}));
+    EXPECT_EQ(cs::decalTargetOf(world, std::nullopt).model, nx::assets::kWorldModel) << "the world";
 }
 
 TEST(LevelDecalsTest, WithoutDecalsWadEveryDecalIsLeftOut) {

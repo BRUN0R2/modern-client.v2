@@ -221,13 +221,14 @@ public:
     /// Records the brush entity of `index`, one of blendedDraws()'s, in the same render pass.
     void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
-    /// Stamps decal `decal`, of BspWorldDesc::decals, near `center` on the faces of `on`, as
-    /// DecalPool::shoot does: the world's, or a brush entity's, the point taken into its model's space
-    /// where `on` puts it, as the original's R_DecalShoot takes it, so that the decal goes where the
-    /// game moves the entity. Drawn from the next prepare on, over the faces, as the original draws
+    /// Stamps decal `decal`, of BspWorldDesc::decals, near `center` on the faces of `on`, for `life`,
+    /// as DecalPool::shoot does: the world's, or a brush entity's, the point taken into its model's
+    /// space where `on` puts it, as the original's R_DecalShoot takes it, so that the decal goes where
+    /// the game moves the entity. Drawn from the next prepare on, over the faces, as the original draws
     /// them: the world's after the world's faces, lit as they are; a brush entity's after its own, as
     /// its render mode draws them. Returns the faces it was stamped on.
-    auto shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on = {}) -> std::uint32_t;
+    auto shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on = {},
+                    DecalLife life = DecalLife::Temporary) -> std::uint32_t;
     /// The decals of the world and of its brush entities.
     [[nodiscard]] inline auto decals() const noexcept -> const DecalPool& { return *m_decals; }
 

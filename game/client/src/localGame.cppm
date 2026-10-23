@@ -91,8 +91,6 @@ private:
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;
     /// One tick of the game, `command` the player's.
     void tick(const UserCommand& command);
-    /// What a shot stopped by `entity` (none: the world) is on, where the game has it now.
-    [[nodiscard]] auto targetOf(std::optional<nx::ecs::Entity> entity) const -> nx::render::DecalTarget;
 
     const Level* m_level;
     nx::ecs::World m_world;

@@ -269,11 +269,6 @@ auto Level::load(const GameContent& content, std::string_view name)
             level.m_wads.push_back(std::move(*wad));
         }
     }
-    level.m_decals = LevelDecals::read(content.vfs, bulletDecals());
-    if (!level.m_decals->missing().empty()) {
-        nx::log::warning(kLog, "decals the bullets leave that cannot be read: {}",
-                         listed(level.m_decals->missing()));
-    }
     level.m_bulletMarks = bulletMarksOf(bsp);
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
@@ -292,6 +287,24 @@ auto Level::load(const GameContent& content, std::string_view name)
         return std::unexpected{std::move(spawned.error())};
     }
     level.m_models->dropToFloor(resting, *level.m_hulls);
+    // The decals: the bullets', and those the map stamps as its game starts, on what is there then.
+    const std::vector<nx::game::StaticDecal> stamped =
+        nx::game::staticDecalsOf(bsp.entities(), resting, *level.m_hulls);
+    std::vector<std::string_view> decalNames = bulletDecals();
+    std::ranges::transform(
+        stamped, std::back_inserter(decalNames),
+        [](const nx::game::StaticDecal& decal) -> std::string_view { return decal.texture; });
+    level.m_decals = LevelDecals::read(content.vfs, decalNames);
+    if (!level.m_decals->missing().empty()) {
+        nx::log::warning(kLog, "decals the bullets leave or the map stamps that cannot be read: {}",
+                         listed(level.m_decals->missing()));
+    }
+    for (const nx::game::StaticDecal& decal : stamped) {
+        if (const std::optional<std::uint32_t> index = level.m_decals->indexOf(decal.texture)) {
+            level.m_mapDecals.push_back(MapDecal{
+                .decal = *index, .origin = decal.origin, .on = decalTargetOf(resting, decal.entity)});
+        }
+    }
     for (const Weapon& weapon : content.weapons.weapons()) {
         auto viewModel = ViewModel::read(content.vfs, weapon);
         if (!viewModel) {

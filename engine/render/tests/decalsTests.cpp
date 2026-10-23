@@ -206,6 +206,65 @@ TEST_F(DecalPoolTest, AFullPoolReusesItsOldestSlot) {
     EXPECT_EQ(decals.decalsOn(kFloor), 3U);
 }
 
+/// The textures of the decals of `decals`, oldest first.
+[[nodiscard]] auto texturesOf(const DecalPool& decals) -> std::vector<std::uint32_t> {
+    return decals.inOrder() | std::views::transform(&PlacedDecal::texture) | std::ranges::to<std::vector>();
+}
+
+/// A shot of texture `texture` on the floor at `x`, 8 units from its side, for `life`.
+[[nodiscard]] auto onTheFloor(std::uint32_t texture, float x,
+                              nx::render::DecalLife life = nx::render::DecalLife::Temporary) -> DecalShot {
+    return DecalShot{.texture = texture, .size = kShot, .center = {.x = x, .y = 8.0F}, .life = life};
+}
+
+/// The box's faces, the floor alone taking decals: a decal near it takes one slot.
+[[nodiscard]] auto floorOnly() -> std::vector<DecalFace> {
+    std::vector<DecalFace> faces(kBoxFaces);
+    faces[kFloor].takesDecals = true;
+    return faces;
+}
+
+TEST_F(DecalPoolTest, APermanentDecalKeepsItsSlotWhileAnotherIsFree) {
+    DecalPool decals = pool(2, floorOnly());
+    ASSERT_EQ(decals.shoot(onTheFloor(0, 8.0F, nx::render::DecalLife::Permanent)), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(1, 32.0F)), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(2, 56.0F)), 1U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{0, 2})) << "the temporary one went";
+}
+
+TEST_F(DecalPoolTest, WhenEverySlotIsPermanentTheRingTakesTheLastItTried) {
+    DecalPool decals = pool(2, floorOnly());
+    ASSERT_EQ(decals.shoot(onTheFloor(0, 8.0F, nx::render::DecalLife::Permanent)), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(1, 32.0F, nx::render::DecalLife::Permanent)), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(2, 56.0F)), 1U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{0, 2})) << "as R_DecalAlloc gives up";
+}
+
+TEST_F(DecalPoolTest, NoDecalReplacesAPermanentOneItCovers) {
+    DecalPool decals = pool(DecalPool::kMostDecals, floorOnly());
+    for (std::uint32_t texture = 0; texture < 6; ++texture) {
+        ASSERT_EQ(decals.shoot(onTheFloor(texture, 32.0F, nx::render::DecalLife::Permanent)), 1U);
+    }
+    // Over six it covers mostly, which a temporary one would replace the last of.
+    ASSERT_EQ(decals.shoot(onTheFloor(6, 34.0F)), 1U);
+    EXPECT_EQ(decals.decalsOn(kFloor), 7U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{0, 1, 2, 3, 4, 5, 6}));
+}
+
+TEST_F(DecalPoolTest, APermanentDecalCutAwayLeavesItsSlotPermanent) {
+    // Its box reaches the floor, which takes the slot, but it lies past it: as the original, the slot
+    // keeps its flags, and the ring passes over it.
+    DecalPool decals = pool(2, floorOnly());
+    ASSERT_EQ(decals.shoot(DecalShot{.texture = 0,
+                                     .size = kShot,
+                                     .center = {.x = -12.0F, .y = 8.0F},
+                                     .life = nx::render::DecalLife::Permanent}),
+              0U);
+    ASSERT_EQ(decals.shoot(onTheFloor(1, 32.0F)), 1U);
+    ASSERT_EQ(decals.shoot(onTheFloor(2, 56.0F)), 1U);
+    EXPECT_EQ(texturesOf(decals), (std::vector<std::uint32_t>{2})) << "the second's slot went to the third";
+}
+
 TEST_F(DecalPoolTest, APoolOfNoDecalsStampsNone) {
     DecalPool decals = pool(0);
     EXPECT_EQ(decals.shoot({.texture = 0, .size = kShot, .center = {.x = 32.0F, .y = 32.0F, .z = 0.0F}}), 0U);
