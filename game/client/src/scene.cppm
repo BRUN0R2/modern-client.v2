@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// What the client draws of a level (docs/05-rendering.md): the world and the light it gives, the
-/// sprites and studio models of its entities, the blended ones of them all in one order, and the
-/// weapon in the player's hand, drawn last.
+/// sprites and studio models of its entities, the blended ones of them all in one order, the muzzle
+/// flashes of the weapon in the player's hand, and the weapon, drawn last.
 export module cs.client:scene;
 
 import std;
@@ -13,6 +13,7 @@ import nx.rhi;
 import nx.render;
 import :level;
 import :viewModel;
+import :muzzleFlash;
 
 export namespace cs {
 
@@ -56,8 +57,9 @@ public:
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
     /// sight does not reach hidden, the blended ones of them all in one order
-    /// (nx.render:blendedOrder); then the weapon in the player's hand, lit where the player's eye
-    /// is, as the original lights the view's own model. Errors: DrawFailed.
+    /// (nx.render:blendedOrder), among them the muzzle flashes of the client events the view model
+    /// passed since the last frame and those still showing; then the weapon in the player's hand, lit
+    /// where the player's eye is, as the original lights the view's own model. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
 
@@ -74,7 +76,13 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          std::vector<nx::render::StudioModel> weapons) noexcept;
+          std::vector<nx::render::StudioModel> weapons,
+          std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept;
+
+    /// Adds the muzzle flashes of the client events the view model of `level` passed from the last
+    /// frame's pose to `pose`, its bones `bones`, at `time`; and forgets those shown long enough.
+    void flash(const Level& level, const std::optional<ViewModelPose>& pose,
+               std::span<const nx::Mat3x4> bones, nx::Seconds time);
 
     nx::render::BspWorld m_world;
     nx::render::WorldLight m_light;
@@ -84,6 +92,10 @@ private:
     std::vector<nx::render::StudioModel> m_models; ///< Of the level's models, by file.
     nx::render::StudioRenderer m_viewModels;
     std::vector<nx::render::StudioModel> m_weapons; ///< The weapons' view models, by their WeaponIndex.
+    std::vector<std::optional<nx::render::SpriteModel>> m_flashModels; ///< Of sprites/muzzleflash1.spr to 3.
+    std::optional<ViewModelPose> m_lastPose; ///< The view model's in the last frame.
+    std::vector<MuzzleFlash> m_flashes;      ///< Those showing.
+    std::uint64_t m_flashCount = 0;          ///< The flashes made, which seed each one's chances.
 };
 
 } // namespace cs

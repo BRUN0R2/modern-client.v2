@@ -7,10 +7,22 @@ import std;
 import nx.core;
 import nx.math;
 import nx.platform;
+import nx.assets;
 import nx.rhi;
 import nx.render;
 
 namespace cs {
+
+namespace {
+
+/// A muzzle flash is added in full (R_MuzzleFlash's renderamt).
+constexpr std::uint8_t kFullAmount = 255;
+/// A sequence played anew plays the events of its first frame too (R_StudioClientEvents).
+constexpr float kBeforeTheFirstFrame = -0.01F;
+/// The stream of random numbers the muzzle flashes draw from.
+constexpr std::string_view kFlashStream = "muzzleFlash";
+
+} // namespace
 
 auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneShaders, SceneError> {
     SceneShaders shaders;
@@ -29,10 +41,12 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             std::vector<nx::render::StudioModel> weapons) noexcept
+             std::vector<nx::render::StudioModel> weapons,
+             std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
-      m_viewModels{std::move(viewModels)}, m_weapons{std::move(weapons)} {}
+      m_viewModels{std::move(viewModels)}, m_weapons{std::move(weapons)},
+      m_flashModels{std::move(flashModels)} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format,
@@ -78,10 +92,15 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
         }
         weapons.push_back(std::move(*loaded));
     }
+    auto flashModels = level.muzzleFlashes().load(*sprites, commands);
+    if (!flashModels) {
+        return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(flashModels.error()));
+    }
     return Scene{std::move(*world),      nx::render::WorldLight{level.map()},
                  std::move(*sprites),    std::move(*spriteModels),
                  std::move(*studio),     std::move(*models),
-                 std::move(*viewModels), std::move(weapons)};
+                 std::move(*viewModels), std::move(weapons),
+                 std::move(*flashModels)};
 }
 
 auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
@@ -98,11 +117,30 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }
+    // The view model's bones first: its client events show what the sprites draw.
+    std::vector<nx::Mat3x4> bones;
+    if (view.viewModel) {
+        nx::expects(view.viewModel->weapon.value < m_weapons.size(), "Scene::draw: a weapon of the level's");
+        bones = level.viewModels()[view.viewModel->weapon.value].pose(view.camera, view.viewModel->sequence,
+                                                                      view.viewModel->intoIt);
+    }
+    flash(level, view.viewModel, bones, view.time);
     std::vector<nx::render::SpriteInstance> sprites = level.sprites().instances(m_spriteModels, view.time);
     for (nx::render::SpriteInstance& sprite : sprites) {
         if (sprite.mode == nx::render::RenderMode::Glow) {
             sprite.isHidden = level.glowBlockers().hides(level.hulls(), view.placements, view.camera.position,
                                                          sprite.origin);
+        }
+    }
+    for (const MuzzleFlash& shown : m_flashes) {
+        if (const std::optional<nx::render::SpriteModel>& model = m_flashModels[shown.sprite]) {
+            sprites.push_back(nx::render::SpriteInstance{.model = *model,
+                                                         .origin = shown.origin,
+                                                         .angles = {.roll = shown.roll},
+                                                         .frame = shown.frame,
+                                                         .scale = shown.scale,
+                                                         .mode = nx::render::RenderMode::TransAdd,
+                                                         .amount = kFullAmount});
         }
     }
     if (auto prepared = m_sprites.prepare({.camera = view.camera,
@@ -119,9 +157,6 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return {};
     }
     const std::uint32_t weapon = view.viewModel->weapon.value;
-    nx::expects(weapon < m_weapons.size(), "Scene::draw: a weapon of the level's");
-    const std::vector<nx::Mat3x4> bones =
-        level.viewModels()[weapon].pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt);
     const std::array held{nx::render::StudioInstance{
         .model = m_weapons[weapon],
         .bones = bones,
@@ -134,6 +169,36 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }
     return {};
+}
+
+void Scene::flash(const Level& level, const std::optional<ViewModelPose>& pose,
+                  std::span<const nx::Mat3x4> bones, nx::Seconds time) {
+    std::erase_if(m_flashes, [time](const MuzzleFlash& shown) { return shown.until < time; });
+    if (!pose) {
+        m_lastPose.reset();
+        return;
+    }
+    const ViewModel& viewModel = level.viewModels()[pose->weapon.value];
+    const nx::assets::StudioSequence& sequence = viewModel.sequence(pose->sequence);
+    const float now = cs::sequenceFrameAt(sequence, pose->intoIt, 1.0F).value();
+    // A play already shown goes on from the frame it was at; a new one plays its events from its first.
+    const float before = m_lastPose && m_lastPose->isSamePlay(*pose)
+                             ? cs::sequenceFrameAt(sequence, m_lastPose->intoIt, 1.0F).value()
+                             : kBeforeTheFirstFrame;
+    m_lastPose = pose;
+    std::array<std::size_t, MuzzleFlashSprites::kCount> frameCounts{};
+    for (std::size_t index = 0; index < frameCounts.size(); ++index) {
+        frameCounts[index] = m_flashModels[index] ? m_flashModels[index]->frameCount() : 0;
+    }
+    for (const nx::assets::StudioEvent* const event : clientEventsBetween(sequence, before, now)) {
+        const std::optional<std::uint32_t> attachment = muzzleFlashAttachmentOf(event->event);
+        const std::optional<nx::Vec3> origin =
+            attachment ? viewModel.attachmentAt(bones, *attachment) : std::nullopt;
+        if (origin) {
+            nx::Random random{m_flashCount++, kFlashStream};
+            m_flashes.push_back(muzzleFlashOf(event->options, *origin, time, frameCounts, random));
+        }
+    }
 }
 
 } // namespace cs

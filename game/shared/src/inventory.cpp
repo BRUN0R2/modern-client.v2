@@ -178,8 +178,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     }
     if (owned.followUpsLeft > 0) {
         // The rounds a shot fires after it, one a frame, whatever the buttons (FireRemaining).
-        if (const std::optional<Shot> shot =
-                fireFollowUp(owned, weapon, shooter, command.number.value, time, random)) {
+        if (const std::optional<Shot> shot = fireFollowUp(owned, weapon, shooter, command.number.value)) {
             shots.push_back(*shot);
         }
     }
@@ -357,19 +356,15 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
 }
 
 auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter,
-                             std::uint32_t seed, const nx::game::TickTime& time, nx::Random& random)
-    -> std::optional<Shot> {
+                             std::uint32_t seed) -> std::optional<Shot> {
     const std::optional<WeaponFiring>& firing = firingOf(weapon, owned);
     if (owned.clip == 0 || !firing || !firing->followUps) {
         owned.followUpsLeft = 0;
         return std::nullopt;
     }
+    // The burst's sequence plays on: the view model's own events show each round.
     --owned.clip;
     --owned.followUpsLeft;
-    const std::uint32_t sequence = owned.clip == 0 && firing->lastShotSequence
-                                       ? *firing->lastShotSequence
-                                       : anyOf(firing->shootSequences, random);
-    m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
     return shotFrom(shooter, firing->followUps->spread, seed);
 }
 
