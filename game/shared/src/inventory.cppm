@@ -11,14 +11,15 @@
 /// counted down in float by each command's frame time once its weapon frame is over, so that a
 /// delay lasts as many commands as the original's does (0.15 seconds, 16 at 100 a second).
 ///
-/// Today: giving, choosing, drawing, idling, the guns' fire, accuracy, spread, kick and reload, and
-/// their alternates, the silencers and the Glock's burst; what the shots hit, the knife's attacks and
-/// dropping come next (TODO.md).
+/// Today: giving, choosing, drawing, idling, the guns' fire, accuracy, spread, kick and reload, their
+/// alternates, the silencers and the Glock's burst, and the knife's attacks; what the shots and the
+/// blades hit, and dropping, come next (TODO.md).
 export module cs.shared:inventory;
 
 import std;
 import nx.core;
 import nx.math;
+import nx.collision;
 import nx.game;
 import :movement;
 import :weapons;
@@ -48,8 +49,10 @@ struct OwnedWeapon {
     bool isBursting{};  ///< It fired since its button went up (m_bDelayFire).
     bool kicksLeft{};   ///< The side its next kick turns the view to (m_iDirection).
     bool isAlternate{}; ///< Its alternate is on: its silencer, its burst (m_iWeaponState).
-    /// Seconds until it may switch again (m_flNextSecondaryAttack), counted down to -0.001.
-    float nextSwitch{};
+    /// Seconds until `+attack2` may act again (m_flNextSecondaryAttack), counted down to -0.001.
+    float nextSecondary{};
+    std::uint32_t slashes{}; ///< The slashes it made, which play their sequences in turn (m_iSwing).
+    std::uint32_t stabs{};
     std::uint32_t followUpsLeft{}; ///< The rounds its last shot still fires, one a frame.
 };
 
@@ -70,6 +73,11 @@ struct Shooter {
     bool isOnGround{};
     bool isDucked{};
 };
+
+/// How a weapon's attacks meet what is solid: the server's way for a hull from a start to an end
+/// (UTIL_TraceLine, UTIL_TraceHull).
+using WeaponTracer =
+    std::function<nx::collision::Trace(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end)>;
 
 /// A shot fired: from where, the way it goes, and how far its bullet may stray.
 struct Shot {
@@ -108,13 +116,14 @@ public:
     /// `Attack` down it fires when its cycle allows (a click on an empty clip, and once a press for a
     /// gun that is not automatic), its accuracy and spread as it moves, kicking the shooter's view, a
     /// shot's follow-up rounds one a frame after it; with `Attack2` down it switches to its alternate
-    /// and back when it may, before it fires;
+    /// and back when it may, before it fires; a melee weapon slashes with `Attack` and stabs with
+    /// `Attack2`, meeting what `tracer` finds;
     /// with `Reload` down it is reloaded; with no fire button down its burst wanes (a pistol's at
     /// once), an empty clip is reloaded, or it idles; then the weapons' timers count down by the
     /// command's duration. Returns the shots it fired. The random numbers this draws are the command
     /// number's.
-    auto frame(const UserCommand& command, Shooter& shooter, const nx::game::TickTime& time)
-        -> std::vector<Shot>;
+    auto frame(const UserCommand& command, Shooter& shooter, const WeaponTracer& tracer,
+               const nx::game::TickTime& time) -> std::vector<Shot>;
 
     /// The weapon `lastinv` selects (SelectLastItem): the one the player held before, or else the
     /// newest of the first of its primary, secondary and knife slots whose newest it does not hold;
@@ -154,6 +163,10 @@ private:
                       const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
     /// The held `owned`, of `weapon`, switches to its alternate or back at `time` (SecondaryAttack).
     void switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
+    /// The held `owned` makes `attack`, the `count`th of its kind, at `time`, meeting what `tracer`
+    /// finds ahead of `shooter` (the knife's Swing, Stab).
+    void strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint32_t& count, const Shooter& shooter,
+                const WeaponTracer& tracer, const nx::game::TickTime& time);
     /// The held `owned`, of `weapon`, is reloaded at `time` when a round can go into its clip
     /// (DefaultReload, and the guns' Reload).
     void reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time, nx::Random& random);
