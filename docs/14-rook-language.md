@@ -633,13 +633,14 @@ import rezombie.prelude.*;                           // glob only for modules ma
 - Importing from another plugin creates the load dependency ([13 §3.2](13-mod-system.md#32-automatic-load-order)).
 - Glob imports (`*`) are only allowed for `prelude` modules, which gather the most common usage (the
   modern equivalent of `#include <rezombie_main>`).
-- The `amxx.*` modules of the SDK (`amxx.amxmodx`, then `amxx.amxmisc`, `amxx.fun`,
-  `amxx.cstrike`, `amxx.fakemeta`, `amxx.hamsandwich`, `amxx.reapi`) are preludes too: AMX Mod X's
-  natives that do what no catalog does, by their literal names, each a one-line function over the
-  canonical API with Rook's types (`register_clcmd` calls `registerClcmd`). `#include <amxmodx>`
-  imports `amxx.amxmodx.*` (§4). A native that only reads or writes a catalog's property is not in
-  them: `get_user_health(id)` is `get_player_var(player, "health")`
-  ([ADR-0021](adr/0021-rook-amxx-names.md)).
+- The two `amxx.*` modules of the SDK, `amxx.amxmodx` and `amxx.amxmisc`, are preludes too: AMX
+  Mod X's natives that do what no catalog does, by their literal names, each a one-line function
+  over the canonical API with Rook's types (`register_clcmd` calls `registerClcmd`).
+  `#include <amxmodx>` imports `amxx.amxmodx.*` (§4). A native that only reads or writes a
+  catalog's property is not in them: `get_user_health(id)` is `get_player_var(player, "health")`.
+  The engine's internals stay out: `fakemeta`, `engine`, `hamsandwich`, `reapi`, `orpheu`, `fun`
+  and `cstrike` are not provided, and `engfunc`, `set_entvar(entity, var_model, ...)` and their kind
+  are written with the typed API ([ADR-0021](adr/0021-rook-amxx-names.md)).
 
 ## 20. Errors, panics and failures
 

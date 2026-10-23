@@ -46,7 +46,7 @@ The API is the **stable facade** between Rook plugins and the engine/game. Princ
 | `cs.objectives` | Bomb, hostages, VIP, zones |
 | `cs.admin` | Typed permissions |
 | `cs.prelude` | Re-exports the most common usage (`import cs.prelude.*;`) |
-| `amxx.*` | AMX Mod X's natives that do what no catalog does, by their literal names, over the modules above (`amxx.amxmodx`, `amxx.fun`, `amxx.cstrike`…; [14 §19](14-rook-language.md#19-modules-imports-and-visibility)) |
+| `amxx.*` | `amxx.amxmodx` and `amxx.amxmisc`: AMX Mod X's natives that do what no catalog does, by their literal names, over the modules above; the engine's internals (`fakemeta`, `engine`, `hamsandwich`, `reapi`) stay out ([14 §19](14-rook-language.md#19-modules-imports-and-visibility)) |
 
 ## 3. Forwards
 

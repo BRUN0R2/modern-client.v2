@@ -104,6 +104,15 @@ spelling. `get_user_health(id)` is `get_player_var(player, "health")`, `is_user_
 `get_player_var(player, "isAlive")`, `cs_get_user_money(id)` is `get_player_var(player, "money")`;
 calling one of them is an error whose fix writes the accessor.
 
+The natives that reach the engine's internals are not kept either: `engfunc` and `dllfunc`, `pev`
+and `set_pev`, ReAPI's `get_entvar`/`set_entvar` and `get_member`/`set_member`,
+`rg_create_entity`, `RegisterHam` and `RegisterHookChain`, `message_begin` and `write_byte`.
+`#include <fakemeta>` and the other headers of the kind (`engine`, `hamsandwich`, `reapi`,
+`orpheu`, `fun`, `cstrike`) are errors; their calls become the typed API of the table above:
+`engfunc(EngFunc_SetModel, entity, "models/x.mdl")` and `set_entvar(entity, var_model, "...")`
+become `setEntityVar(entity, "model", precacheModel("models/x.mdl")?)`, and an entity is created
+whole through `nx.entity` ([15 §2](15-mod-api.md#2-module-organization)).
+
 ## 4. Converted examples (ReZombie)
 
 ### 4.1 Assassin class

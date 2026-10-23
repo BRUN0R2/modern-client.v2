@@ -60,9 +60,8 @@ documents in the same change.
 Rook accepts AMX Mod X's spelling **as a compatibility layer**, `amxx`, over the one canonical,
 camelCase API, with every Rook guarantee kept.
 
-1. **`#include <header>`** is accepted for the AMXX headers the layer provides (`amxmodx` first,
-   then `amxmisc`, `fun`, `cstrike`, `fakemeta`, `hamsandwich` and `reapi` as their natives are
-   covered), on a line of its own before the first declaration, and means
+1. **`#include <header>`** is accepted for the two AMXX headers the layer provides, `amxmodx` and
+   `amxmisc`, on a line of its own before the first declaration, and means
    `import amxx.<header>.*;`. There is no preprocessor and no textual inclusion: `#include
    "file"`, an unknown header and `#define` are errors whose fix rewrites them as an `import` or a
    `const`.
@@ -88,6 +87,18 @@ camelCase API, with every Rook guarantee kept.
    `get_player_var(player, "isAlive")`, `cs_get_user_money(id)` is
    `get_player_var(player, "money")`. Calling one of those natives is an error whose fix writes the
    accessor, and `rook migrate` writes it too.
+
+   **The engine's internals stay out**: the `fakemeta`, `engine`, `hamsandwich`, `reapi`,
+   `orpheu`, `fun` and `cstrike` headers are not provided. Their natives reach the engine's
+   structures by enum names, offsets and strings: `engfunc` and `dllfunc`
+   (`engfunc(EngFunc_SetModel, entity, "models/x.mdl")`), `pev` and `set_pev`, ReAPI's
+   `get_entvar`/`set_entvar` (`set_entvar(entity, var_model, "model")`) and
+   `get_member`/`set_member` (`m_iAccount`), `rg_create_entity`, `RegisterHam` and
+   `RegisterHookChain` by a callback's name, `message_begin` and `write_byte`. The typed API
+   replaces each: an entity is created whole through `nx.entity`, a model is a `Model` from
+   `precacheModel`, a property is reached through its accessor, hooks are bound by reference
+   ([16 §3](../16-amxx-migration.md#3-api)). Including one of those headers is an error whose fix
+   names the typed API; `rook migrate` converts their calls.
 4. **The `vars` pattern with underscores.** For each handle with a `vars` catalog, the engine's
    (`Entity`, `Player`, `Weapon`, `WeaponClass`, the game rules) and those plugins declare
    (`Class`, `Props`...), the compiler generates `get_<handle>_var` and `set_<handle>_var` beside
@@ -127,6 +138,7 @@ variable names (`var_health`, `m_iAccount`) are outside this ADR.
 | A Pawn front end: `rookc` compiles `.sma` sources | Pawn's untyped cells give the compiler nothing to check: most plugins would be refused, or run in a mode without Rook's guarantees, against ADR-0006 and [ADR-0007](0007-own-vm-typed-bytecode.md) |
 | Tools only: the LSP completes `register_clcmd` as `registerClcmd`, and "did you mean" diagnostics | No change to the language and the most predictable; but the code is still written in the canonical spelling, which is not what is asked |
 | Literal names mixed freely, without a layer or lints | No single place for them, no canonical form to converge on, and two names for every function in every listing |
+| The headers of the engine's internals in the layer too (`fakemeta`, `engine`, `hamsandwich`, `reapi`, `orpheu`, `fun`, `cstrike`) | They reach the engine by enum names, offsets and strings, a model by its path (`engfunc(EngFunc_SetModel, ...)`, `set_entvar(entity, var_model, ...)`): carrying them would bring Pawn's untyped model back beside the typed API that replaces them |
 | `get_player_var` and its kind as the `vars` pattern's only spelling (ADR-0012 and ADR-0013 amended for it) | The accessors would be the one part of the API in `snake_case` beside `registerClcmd` and `precacheModel`, unless the whole API changes with them, which is the "AMXX's spelling only" alternative |
 
 ## Consequences
