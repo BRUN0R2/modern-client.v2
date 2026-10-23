@@ -1,6 +1,6 @@
 # ADR-0021 — Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-23
 
 ## Context
@@ -34,7 +34,7 @@ covers the names too.
 
 ### Conflicts with accepted decisions
 
-Accepting the literal names contradicts, as they are written today:
+The literal names contradicted, as they were written before this ADR:
 
 - [ADR-0013](0013-camelcase-convention.md), [02 §3.1](../02-coding-standards.md#31-project-rule-camelcase)
   and [RULES §6.2](../RULES.md#62-names): camelCase for every function, variable and API name,
@@ -52,13 +52,13 @@ Accepting the literal names contradicts, as they are written today:
 - [16](../16-amxx-migration.md): migration renames every AMXX name to its camelCase form.
 
 A contradiction between documents is a defect that an ADR resolves before any implementation
-([RULES §1](../RULES.md#1-supreme-rule)). This ADR states it, and the decision below would amend
-those documents if accepted.
+([RULES §1](../RULES.md#1-supreme-rule)). This ADR states it, and the decision below amends those
+documents in the same change.
 
 ## Decision
 
-Proposed: Rook accepts AMX Mod X's spelling **as a compatibility layer**, `amxx`, over the one
-canonical, camelCase API, with every Rook guarantee kept.
+Rook accepts AMX Mod X's spelling **as a compatibility layer**, `amxx`, over the one canonical,
+camelCase API, with every Rook guarantee kept.
 
 1. **`#include <header>`** is accepted for the AMXX headers the layer provides (`amxmodx` first,
    then `amxmisc`, `fun`, `cstrike`, `fakemeta`, `hamsandwich` and `reapi` as their natives are
@@ -154,6 +154,7 @@ variable names (`var_health`, `m_iAccount`) are outside this ADR.
   ([15 §10](../15-mod-api.md#10-versioning-and-stability)) covers the `amxx.*` modules as it covers
   the rest.
 
-If accepted, the same change updates ADR-0013 (the exception), ADR-0006, ADR-0012, [02 §3.1](../02-coding-standards.md#31-project-rule-camelcase),
-[14 §4, §19 and §22](../14-rook-language.md), [15](../15-mod-api.md), [16 §2, §3 and §6](../16-amxx-migration.md)
-and the M6 items of `TODO.md`.
+The same change amended ADR-0013 (the exception), ADR-0006, ADR-0012,
+[02 §3.1](../02-coding-standards.md#31-project-rule-camelcase),
+[14 §1, §4, §13.2, §19 and §22](../14-rook-language.md), [15 §1, §2, §4 and §10](../15-mod-api.md),
+[16 §1, §2, §3, §6 and §7](../16-amxx-migration.md) and the M6 items of `TODO.md`.

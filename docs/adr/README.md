@@ -2,7 +2,8 @@
 
 Every relevant structural decision is recorded here. An **accepted** ADR prevails over the
 other documents. To change a decision, a new ADR is created that *supersedes* the previous
-one, without erasing the history.
+one, without erasing the history; one that only adds to it *amends* it, and the amended ADR
+says where.
 
 ## Index
 
@@ -13,14 +14,14 @@ one, without erasing the history.
 | [0003](0003-work-stealing-job-system.md) | Work-stealing Job System, no fibers in v1 | Accepted |
 | [0004](0004-vulkan-first-abstract-rhi.md) | Vulkan first, DirectX 11-compatible RHI, shaders in Slang | Accepted |
 | [0005](0005-typed-errors-without-exceptions.md) | Typed errors with `std::expected` and contracts, without exceptions | Accepted |
-| [0006](0006-own-plugin-language-rook.md) | Own plugin language (Rook) with its own compiler | Accepted |
+| [0006](0006-own-plugin-language-rook.md) | Own plugin language (Rook) with its own compiler | Accepted, amended by 0021 |
 | [0007](0007-own-vm-typed-bytecode.md) | Own VM with typed, verified bytecode | Accepted |
 | [0008](0008-own-network-protocol.md) | Own network protocol, not compatible with protocol 48 | Accepted |
 | [0009](0009-original-assets-from-the-user.md) | Original assets read from the user's installation | Superseded by 0015 |
 | [0010](0010-license.md) | License: GPL-3.0-or-later, MIT (Rook and SDK) and CC BY 4.0 (docs) | Accepted |
 | [0011](0011-player-limit-1024.md) | `maxplayers` from 1 to 1024 as a policy limit | Accepted |
-| [0012](0012-typed-get-set-vars-pattern.md) | `get*Var`/`set*Var` pattern with compile-time checked keys | Accepted |
-| [0013](0013-camelcase-convention.md) | camelCase convention across the project (C++ and Rook) | Accepted |
+| [0012](0012-typed-get-set-vars-pattern.md) | `get*Var`/`set*Var` pattern with compile-time checked keys | Accepted, amended by 0021 |
+| [0013](0013-camelcase-convention.md) | camelCase convention across the project (C++ and Rook) | Accepted, amended by 0021 |
 | [0014](0014-std-module-built-by-the-project.md) | `std` module built by the project, without CMake's experimental `import std` | Accepted |
 | [0015](0015-free-content-and-optional-original-assets.md) | Free content by default; original assets optional and configured locally | Accepted |
 | [0016](0016-english-documentation.md) | English as the default language of the documentation | Accepted |
@@ -28,14 +29,14 @@ one, without erasing the history.
 | [0018](0018-work-handed-down-is-not-a-callback.md) | Work handed down to a lower layer is not a forbidden callback | Accepted |
 | [0019](0019-launcher-and-automatic-updates.md) | Automatic, independent updates for the client and the server | Accepted |
 | [0020](0020-in-house-ui-toolkit.md) | In-house retained UI toolkit for the menus, the screens and the console | Accepted |
-| [0021](0021-rook-amxx-names.md) | Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer | Proposed |
+| [0021](0021-rook-amxx-names.md) | Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer | Accepted |
 
 ## Template
 
 ```markdown
 # ADR-NNNN — Title
 
-- **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Rejected
+- **Status:** Proposed | Accepted | Accepted, amended by ADR-XXXX | Superseded by ADR-XXXX | Rejected
 - **Date:** YYYY-MM-DD
 
 ## Context

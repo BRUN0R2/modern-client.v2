@@ -1,6 +1,6 @@
 # ADR-0013 — camelCase convention across the project (C++ and Rook)
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md)
 - **Date:** 2026-10-20
 
 ## Context
@@ -24,7 +24,10 @@ documentation harder. The maintainer decided to use camelCase across the whole p
   (`func_buyzone`), names required by tools (`CMakeLists.txt`, vcpkg triplets), conventional
   repository files, the documents in `docs/`, files of the original game, translation keys
   and names imposed by third parties
-  ([02 §3.1](../02-coding-standards.md#31-project-rule-camelcase)).
+  ([02 §3.1](../02-coding-standards.md#31-project-rule-camelcase)); in Rook, the names of AMX Mod X's
+  API in the `amxx` compatibility layer and the underscored accessors the compiler generates beside
+  the canonical ones (`get_player_var`), and the plugins that use them ([ADR-0021](0021-rook-amxx-names.md)). The
+  project's own code stays canonical.
 
 ## Alternatives considered
 

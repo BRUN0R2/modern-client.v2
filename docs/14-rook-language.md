@@ -8,7 +8,9 @@
 
 1. **Easy migration from Pawn/AMXX:** C-like syntax, semicolons, `forward`,
    the `get*Var`/`set*Var` pattern and the AMXX lifecycle names, written in camelCase
-   like the whole project (`getWeaponVar`, `pluginPrecache`, `pluginInit`).
+   like the whole project (`getWeaponVar`, `pluginPrecache`, `pluginInit`); and AMX Mod X's own
+   spelling, `#include <amxmodx>`, `new`, `register_clcmd`, `get_player_var`, through the `amxx`
+   compatibility layer ([ADR-0021](adr/0021-rook-amxx-names.md)).
 2. **Stronger typing than TypeScript:** nominal types, no `any`, no `null`, no
    implicit coercion, errors in the return type, exhaustive `match` and units of measure.
 3. **Safe by construction:** handles that never dangle, no raw memory access,
@@ -74,6 +76,7 @@ fn cmdHello(player: Player) -> PluginResult {
 | Types, enums, variants, interfaces | `PascalCase` | `WeaponClass`, `Team.Zombie` |
 | Constants | `SCREAMING_SNAKE_CASE` | `MAX_INFECTION_DELAY` |
 | Cvar and console command names (strings) | Classic console name | `"rz_infection_delay"`, `"say /menu"` |
+| AMX Mod X's API in the `amxx` layer, and the underscored accessors | As AMXX writes them | `register_clcmd`, `client_print`, `get_player_var` |
 
 - Literals:
 
@@ -92,6 +95,15 @@ fn cmdHello(player: Player) -> PluginResult {
   `super`, `self`, `interface`, `impl`, `newtype`, `suffix`, `handle`, `vars`, `readonly`,
   `component`, `forward`, `type`, `inout`, `is`, `true`, `false`, `none`, `some`, `ok`,
   `err`, `void`.
+- AMX Mod X's spelling ([ADR-0021](adr/0021-rook-amxx-names.md)):
+  - `new` is a **contextual** keyword: at the start of a declaration, `new x = 10;` is exactly
+    `var x = 10;`, with Rook's type syntax (`new speed: Speed = 250ups;`); a Pawn tag
+    (`new Float:speed`) is an error whose fix writes the type. Anywhere else `new` is a name, so
+    constructors (`PlayerMap.new()`) keep it.
+  - `#include <header>`, on a line of its own before the first declaration, is
+    `import amxx.<header>.*;` for an AMXX header the layer provides (§19). There is no
+    preprocessor: `#include "file"`, an unknown header and `#define` are errors whose fix writes an
+    `import` or a `const`.
 
 ## 5. Primitive types and conversions
 
@@ -446,6 +458,10 @@ let speed = getPropsVar(props, "speed");    // speed: Speed
 - The LSP autocompletes the keys and shows the type, default and documentation of each one.
 - The engine provides catalogs for `Entity`, `Player`, `Weapon`, `WeaponClass`,
   `WeaponDef` and others ([15 §4](15-mod-api.md#4-handles-and-var-catalogs)).
+- Beside `getPropsVar` and `setPropsVar` the compiler generates their underscored spelling,
+  `get_props_var` and `set_props_var`, the handle's name in `snake_case` (`get_player_var`,
+  `set_weapon_var`, `get_weapon_class_var`): the same functions, the key checked the same way
+  ([ADR-0021](adr/0021-rook-amxx-names.md)). The keys keep the catalog's spelling (`"maxClip"`).
 
 ## 14. Classes and interfaces
 
@@ -617,6 +633,13 @@ import rezombie.prelude.*;                           // glob only for modules ma
 - Importing from another plugin creates the load dependency ([13 §3.2](13-mod-system.md#32-automatic-load-order)).
 - Glob imports (`*`) are only allowed for `prelude` modules, which gather the most common usage (the
   modern equivalent of `#include <rezombie_main>`).
+- The `amxx.*` modules of the SDK (`amxx.amxmodx`, then `amxx.amxmisc`, `amxx.fun`,
+  `amxx.cstrike`, `amxx.fakemeta`, `amxx.hamsandwich`, `amxx.reapi`) are preludes too: AMX Mod X's
+  natives that do what no catalog does, by their literal names, each a one-line function over the
+  canonical API with Rook's types (`register_clcmd` calls `registerClcmd`). `#include <amxmodx>`
+  imports `amxx.amxmodx.*` (§4). A native that only reads or writes a catalog's property is not in
+  them: `get_user_health(id)` is `get_player_var(player, "health")`
+  ([ADR-0021](adr/0021-rook-amxx-names.md)).
 
 ## 20. Errors, panics and failures
 
@@ -655,7 +678,8 @@ fn assassinHasHighHealth() -> Result<void, TestError> {
 | `expectInGameplay` | warning | `.expect()` outside precache, init and tests |
 | `wildcardHidesVariants` | warning | `_` in `match` hides the plugin's own variants |
 | `unused` | warning | Unused variable, import, function or result |
-| `naming` | error | Naming outside the standard of [§4](#4-lexical-structure) |
+| `naming` | error (warning in a file that includes an AMXX header) | Naming outside the standard of [§4](#4-lexical-structure) |
+| `compatName` | info | An AMX Mod X name or an underscored accessor: its canonical form, with a quick fix (`rook fmt --canonical` rewrites a file) |
 
 ## 23. The `rookc` compiler
 
