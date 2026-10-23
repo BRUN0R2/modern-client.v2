@@ -77,6 +77,7 @@ viewHand = "left"
 constexpr std::string_view kGunKeys = R"(
 id = "gun"
 classname = "weapon_gun"
+name = "Gun"
 slot = "primary"
 position = 1
 weight = 25
@@ -86,9 +87,13 @@ maxSpeed = 221.0
 [[nodiscard]] auto gun(std::string id, WeaponSlot slot, std::uint32_t position) -> Weapon {
     return Weapon{.id = id,
                   .classname = "weapon_" + id,
+                  .name = id,
                   .slot = slot,
                   .position = position,
                   .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
+                  .models = cs::WeaponModels{.view = std::format("models/v_{}.mdl", id),
+                                             .player = std::format("models/p_{}.mdl", id),
+                                             .playerAnimation = "onehanded"},
                   .view = cs::WeaponView{
                       .drawSequences = {5},
                       .idles = {cs::WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
@@ -440,6 +445,7 @@ TEST(WeaponsTest, AWeaponWithoutWhatNamesOrShowsItIsInvalid) {
     constexpr std::string_view kNoId = R"(
 id = ""
 classname = "weapon_gun"
+name = "Gun"
 slot = "primary"
 position = 1
 weight = 25
@@ -488,10 +494,14 @@ TEST(WeaponsTest, AViewThatDrawsOrIdlesWithNothingIsInvalid) {
     }
 }
 
-TEST(WeaponsTest, AmmoWithoutAnIdOrRoundsIsInvalid) {
-    for (const std::string_view text : {
-             "[[ammo]]\nid = \"\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30",
-             "[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 0",
+TEST(WeaponsTest, AmmoWithoutAnIdRoundsOrAPictureIsInvalid) {
+    const std::string kPicture =
+        R"(picture = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 })";
+    for (const std::string& text : {
+             "[[ammo]]\nid = \"\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30\n" + kPicture,
+             "[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 0\n" + kPicture,
+             std::string{"[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30\n"
+                         "picture = { sprite = \"640hud7\", x = 72, y = 72, width = 24, height = 24 }"},
          }) {
         const auto ammo = cs::readAmmoTypes(text, "ammo.toml");
         ASSERT_FALSE(ammo.has_value()) << text;

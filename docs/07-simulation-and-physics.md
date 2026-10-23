@@ -66,7 +66,7 @@ the weapon it selects. The others arrive with what reads them.
 
 **Today** (`cs.client`): `cs::PlayerInput::nextCommand` makes a command from the player's `+`
 buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)),
-and the weapon `weapon_<name>` or `lastinv` selected since the last. `next` (`cs::LocalGame`) makes
+and the weapon `weapon_<id>` or `lastinv` selected since the last. `next` (`cs::LocalGame`) makes
 one each 10 ms, whatever its frame rate, numbered after the last; `cl_movement_rate` comes with the
 client.
 

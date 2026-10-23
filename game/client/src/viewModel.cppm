@@ -103,9 +103,9 @@ private:
 /// from the frame it was at in the last frame, or from before its first frame when a play starts.
 class ViewModelEvents {
 public:
-    /// The client events the view model of `pose`, among `viewModels`, passed since the last call's
-    /// pose; none without one.
-    [[nodiscard]] auto passed(std::span<const ViewModel> viewModels, const std::optional<ViewModelPose>& pose)
+    /// The client events `viewModel`, that of the weapon of `pose`, passed since the last call's pose;
+    /// none without either.
+    [[nodiscard]] auto passed(const ViewModel* viewModel, const std::optional<ViewModelPose>& pose)
         -> std::vector<const nx::assets::StudioEvent*>;
 
 private:

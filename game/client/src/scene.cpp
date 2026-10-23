@@ -42,7 +42,7 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             std::vector<nx::render::StudioModel> weapons,
+             std::vector<std::optional<nx::render::StudioModel>> weapons,
              std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
@@ -87,23 +87,24 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!models) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(models.error()));
     }
-    std::vector<nx::render::StudioModel> weapons;
-    for (const ViewModel& viewModel : level.viewModels()) {
-        auto loaded = viewModel.load(*viewModels, commands);
-        if (!loaded) {
-            return nx::fail(SceneError::CreateFailed, "a weapon's view model", std::move(loaded.error()));
-        }
-        weapons.push_back(std::move(*loaded));
-    }
+    std::vector<std::optional<nx::render::StudioModel>> weapons;
     auto flashModels = level.muzzleFlashes().load(*sprites, commands);
     if (!flashModels) {
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(flashModels.error()));
     }
-    return Scene{std::move(*world),      nx::render::WorldLight{level.map()},
-                 std::move(*sprites),    std::move(*spriteModels),
-                 std::move(*studio),     std::move(*models),
-                 std::move(*viewModels), std::move(weapons),
-                 std::move(*flashModels)};
+    Scene scene{std::move(*world),      nx::render::WorldLight{level.map()},
+                std::move(*sprites),    std::move(*spriteModels),
+                std::move(*studio),     std::move(*models),
+                std::move(*viewModels), std::move(weapons),
+                std::move(*flashModels)};
+    const std::vector<WeaponIndex> all =
+        std::views::iota(std::uint32_t{0}, nx::narrow<std::uint32_t>(level.weaponCount())) |
+        std::views::transform([](std::uint32_t index) { return WeaponIndex{index}; }) |
+        std::ranges::to<std::vector>();
+    if (auto loaded = scene.loadWeapons(commands, level, all); !loaded) {
+        return std::unexpected{std::move(loaded.error())};
+    }
+    return scene;
 }
 
 auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
@@ -120,14 +121,19 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }
-    // The view model's bones first: its client events show what the sprites draw.
+    // The view model's bones first: its client events show what the sprites draw. A weapon the level
+    // has no view model of is not seen in hand.
+    const ViewModel* const viewModel = view.viewModel ? level.viewModel(view.viewModel->weapon) : nullptr;
+    const nx::render::StudioModel* const weaponModel =
+        view.viewModel && view.viewModel->weapon.value < m_weapons.size() &&
+                m_weapons[view.viewModel->weapon.value]
+            ? &*m_weapons[view.viewModel->weapon.value]
+            : nullptr;
     std::vector<nx::Mat3x4> bones;
-    if (view.viewModel) {
-        nx::expects(view.viewModel->weapon.value < m_weapons.size(), "Scene::draw: a weapon of the level's");
-        bones = level.viewModels()[view.viewModel->weapon.value].pose(view.camera, view.viewModel->sequence,
-                                                                      view.viewModel->intoIt);
+    if (viewModel != nullptr && weaponModel != nullptr) {
+        bones = viewModel->pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt);
     }
-    flash(level, view.viewModel, view.clientEvents, bones, view.time);
+    flash(viewModel, view.clientEvents, bones, view.time);
     std::vector<nx::render::SpriteInstance> sprites = level.sprites().instances(m_spriteModels, view.time);
     for (nx::render::SpriteInstance& sprite : sprites) {
         if (sprite.mode == nx::render::RenderMode::Glow) {
@@ -156,16 +162,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
     }
     nx::render::drawInOrder(list, m_world, m_studio, m_sprites);
-    if (!view.viewModel) {
+    if (bones.empty()) {
         return {};
     }
-    const std::uint32_t weapon = view.viewModel->weapon.value;
     const std::array held{nx::render::StudioInstance{
-        .model = m_weapons[weapon],
+        .model = *weaponModel,
         .bones = bones,
         .light = m_light.modelLightAt({.origin = view.camera.position, .sky = level.skyLight()}, styles),
         .depth = nx::render::StudioDepth::ViewModel,
-        .isMirrored = level.viewModels()[weapon].isMirrored()}};
+        .isMirrored = viewModel->isMirrored()}};
     if (auto drawn =
             m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
         !drawn) {
@@ -179,14 +184,31 @@ auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render:
     return m_world.shootDecal(decal, position, on);
 }
 
-void Scene::flash(const Level& level, const std::optional<ViewModelPose>& pose,
-                  std::span<const nx::assets::StudioEvent* const> events, std::span<const nx::Mat3x4> bones,
-                  nx::Seconds time) {
+auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
+                        std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError> {
+    for (const WeaponIndex weapon : weapons) {
+        if (weapon.value >= m_weapons.size()) {
+            m_weapons.resize(weapon.value + 1);
+        }
+        std::optional<nx::render::StudioModel>& model = m_weapons[weapon.value];
+        model.reset();
+        if (const ViewModel* const viewModel = level.viewModel(weapon)) {
+            auto loaded = viewModel->load(m_viewModels, commands);
+            if (!loaded) {
+                return nx::fail(SceneError::CreateFailed, "a weapon's view model", std::move(loaded.error()));
+            }
+            model.emplace(std::move(*loaded));
+        }
+    }
+    return {};
+}
+
+void Scene::flash(const ViewModel* viewModel, std::span<const nx::assets::StudioEvent* const> events,
+                  std::span<const nx::Mat3x4> bones, nx::Seconds time) {
     std::erase_if(m_flashes, [time](const MuzzleFlash& shown) { return shown.until < time; });
-    if (!pose) {
+    if (viewModel == nullptr || bones.empty()) {
         return;
     }
-    const ViewModel& viewModel = level.viewModels()[pose->weapon.value];
     std::array<std::size_t, MuzzleFlashSprites::kCount> frameCounts{};
     for (std::size_t index = 0; index < frameCounts.size(); ++index) {
         frameCounts[index] = m_flashModels[index] ? m_flashModels[index]->frameCount() : 0;
@@ -194,7 +216,7 @@ void Scene::flash(const Level& level, const std::optional<ViewModelPose>& pose,
     for (const nx::assets::StudioEvent* const event : events) {
         const std::optional<std::uint32_t> attachment = muzzleFlashAttachmentOf(event->event);
         const std::optional<nx::Vec3> origin =
-            attachment ? viewModel.attachmentAt(bones, *attachment) : std::nullopt;
+            attachment ? viewModel->attachmentAt(bones, *attachment) : std::nullopt;
         if (origin) {
             nx::Random random{m_flashCount++, kFlashStream};
             m_flashes.push_back(muzzleFlashOf(event->options, *origin, time, frameCounts, random));

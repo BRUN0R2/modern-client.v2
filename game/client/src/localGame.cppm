@@ -77,6 +77,9 @@ public:
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_inventory; }
+    /// Gives the player `weapon` (its replacement, when it is replaced), which must be complete, as
+    /// its loadout gives one, drawn when heavier; the speed it runs at follows the weapon it holds.
+    void give(WeaponIndex weapon);
     /// Where the player's shots met the world and the brush entities since the last call, in their
     /// order: where a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }

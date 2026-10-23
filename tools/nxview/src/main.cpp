@@ -303,7 +303,7 @@ constexpr std::size_t kBlue = 2;
         screen.emplace(std::move(*made));
     }
     if (options.isHudShown) {
-        auto loaded = cs::Hud::load(content.vfs, content.weapons.weapons(), *screen, list);
+        auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), *screen, list);
         if (!loaded) {
             return unusable(loaded.error());
         }
@@ -359,7 +359,7 @@ constexpr std::size_t kBlue = 2;
     const std::optional<cs::ViewModelPose> viewPose = (*game)->viewModel();
     cs::ViewModelEvents viewEvents;
     const std::vector<const nx::assets::StudioEvent*> clientEvents =
-        viewEvents.passed(level.viewModels(), viewPose);
+        viewEvents.passed(viewPose ? level.viewModel(viewPose->weapon) : nullptr, viewPose);
     list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = target->get(), .clear = kVoidColor}};

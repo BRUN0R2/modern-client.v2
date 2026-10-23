@@ -292,13 +292,20 @@ auto Level::load(const GameContent& content, std::string_view name)
         return std::unexpected{std::move(spawned.error())};
     }
     level.m_models->dropToFloor(resting, *level.m_hulls);
-    for (const Weapon& weapon : content.weapons.weapons()) {
-        auto viewModel = ViewModel::read(content.vfs, weapon);
-        if (!viewModel) {
-            return nx::fail(LevelError::ViewModelUnreadable, weapon.models.view,
-                            std::move(viewModel.error()));
+    const WeaponCatalog& weapons = content.weapons;
+    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
+        const WeaponIndex weapon{index};
+        WeaponViewModel& viewModel =
+            level.m_viewModels.emplace_back(WeaponViewModel{.revision = weapons.revision(weapon)});
+        if (!weapons.isComplete(weapon)) {
+            continue; // shown once its values make a weapon
         }
-        level.m_viewModels.push_back(std::move(*viewModel));
+        auto read = ViewModel::read(content.vfs, weapons.weapon(weapon));
+        if (!read) {
+            return nx::fail(LevelError::ViewModelUnreadable, weapons.weapon(weapon).models.view,
+                            std::move(read.error()));
+        }
+        viewModel.model = std::move(*read);
     }
     level.m_muzzleFlashes = MuzzleFlashSprites::read(content.vfs);
     if (!level.m_muzzleFlashes->missing().empty()) {
@@ -306,6 +313,42 @@ auto Level::load(const GameContent& content, std::string_view name)
                          listed(level.m_muzzleFlashes->missing()));
     }
     return made;
+}
+
+auto Level::viewModel(WeaponIndex weapon) const noexcept -> const ViewModel* {
+    if (weapon.value >= m_viewModels.size() || !m_viewModels[weapon.value].model) {
+        return nullptr;
+    }
+    return &*m_viewModels[weapon.value].model;
+}
+
+auto Level::updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
+    -> std::vector<WeaponIndex> {
+    std::vector<WeaponIndex> updated;
+    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
+        const WeaponIndex weapon{index};
+        const std::uint32_t revision = weapons.revision(weapon);
+        if (index < m_viewModels.size() && m_viewModels[index].revision == revision) {
+            continue;
+        }
+        if (index == m_viewModels.size()) {
+            m_viewModels.emplace_back();
+        }
+        WeaponViewModel& viewModel = m_viewModels[index];
+        viewModel = WeaponViewModel{.revision = revision};
+        updated.push_back(weapon);
+        if (!weapons.isComplete(weapon)) {
+            continue;
+        }
+        const Weapon& made = weapons.weapon(weapon);
+        auto read = ViewModel::read(vfs, made);
+        if (!read) {
+            nx::log::warning(kLog, "{} is not seen in hand: {}", made.id, nx::describe(read.error()));
+            continue;
+        }
+        viewModel.model = std::move(*read);
+    }
+    return updated;
 }
 
 auto Level::bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark {

@@ -213,9 +213,11 @@ crosshair of the knife in hand is drawn by the table's rule (`crosshairRects`, i
 in the style `cl_crosshair_color`, `cl_crosshair_size` and `cl_crosshair_translucent` set
 (`HudCvars`; `nxview` draws Counter-Strike's default). The ammo of the weapon in hand, one that
 fires ammo (`HudAmmo`, `hudAmmoOf`), is drawn where the table puts it (`layoutAmmo`): its clip, the
-bar and the rounds of its kind the player carries, then the `ammo` picture of the weapon's list
-(`sprites/weapon_<name>.txt`, `ammoPictureOf`); a number of more digits widens its room to the
-left. The first row of each picture, the 320 entries for screens under 640 wide, the helmet, the
+bar and the rounds of its kind the player carries, then the picture of its kind of ammo
+(`AmmoType::picture`, the `ammo` entry of the original's weapon lists read once into
+`data/cstrike/ammo.toml`, [10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)),
+so that a weapon made as the game runs shows its ammo as the game's own do; a number of more digits
+widens its room to the left. The first row of each picture, the 320 entries for screens under 640 wide, the helmet, the
 flash of a number that changes, each weapon's crosshair (only the knife's is measured: it is drawn
 for every weapon) and its opening as the player moves (`cl_dynamiccrosshair`), the weapon menu,
 and the timer, status icons and radar come next.
@@ -468,8 +470,9 @@ one command, so that `+jump` on `MWHEELDOWN` jumps once a notch. `turn` turns th
 `+left` and `+right` (which move instead while `+strafe` is held), `+lookup` and `+lookdown`, up
 to 89 degrees. The other buttons come with what reads them; the mouse
 always looks, so `+mlook` and `+klook` are not there. `selectWeapon` makes the next command select
-a weapon: `next` registers `weapon_<name>` for each weapon (`weapon_knife`, `weapon_usp`), as the
-original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to
+a weapon: `next` registers `weapon_<id>` for each weapon (`weapon_knife`, `weapon_usp`, and those
+made as the game runs: [10 §7.5](10-counter-strike-gameplay.md#75-weapons-made-as-the-game-runs)),
+as the original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to
 `slot5`, `invnext` and `invprev` come with the weapon menu. `next` plays with them:
 Counter-Strike's binds, and `noclip` on `v`. `play <sound>` and `playvol <sound> <volume>` play
 a sound heard everywhere, as the original's do ([11 §2](11-audio.md#2-architecture)).

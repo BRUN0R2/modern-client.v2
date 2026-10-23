@@ -54,8 +54,9 @@ struct GameContent {
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
 /// the game gives it, the sprites and studio models its entities show, the decals it shows and the mark
 /// a bullet leaves on each of its brush models, and the view models of the game's weapons and the
-/// sprites of their muzzle flashes, read once. It stays where it is made: the views
-/// point into it, and what is made of it (the light of nx::render::WorldLight) to its map.
+/// sprites of their muzzle flashes, read once; the view model of a weapon made or changed as the
+/// game runs read then, as no precache limits it. It stays where it is made: the views point into
+/// it, and what is made of it (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -97,10 +98,16 @@ public:
     [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
         return *m_muzzleFlashes;
     }
-    /// The view models of the game's weapons, by their WeaponIndex.
-    [[nodiscard]] inline auto viewModels() const noexcept -> std::span<const ViewModel> {
-        return m_viewModels;
-    }
+    /// How many weapons the level read the view models of: those of the catalog as it last read it.
+    [[nodiscard]] inline auto weaponCount() const noexcept -> std::size_t { return m_viewModels.size(); }
+    /// The view model of `weapon`; none for one not complete, or whose view model could not be read
+    /// as it was changed.
+    [[nodiscard]] auto viewModel(WeaponIndex weapon) const noexcept -> const ViewModel*;
+    /// Reads the view model of each weapon of `weapons` made, or whose values were set, since the
+    /// level read it, from `vfs`: those weapons, in their order. One that cannot be read leaves its
+    /// weapon without one, logged, and the game plays on.
+    auto updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
+        -> std::vector<WeaponIndex>;
     /// The decals of decals.wad the level shows: those bullets leave (bulletDecals).
     [[nodiscard]] inline auto decals() const noexcept -> const LevelDecals& { return *m_decals; }
     /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
@@ -122,7 +129,13 @@ private:
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;
     std::optional<MapModels> m_models;
-    std::vector<ViewModel> m_viewModels;
+    /// A weapon's view model, as the revision of its values it was read from.
+    struct WeaponViewModel {
+        std::optional<ViewModel> model{};
+        std::uint32_t revision = 0;
+    };
+
+    std::vector<WeaponViewModel> m_viewModels; ///< By WeaponIndex.
     std::optional<MuzzleFlashSprites> m_muzzleFlashes;
 };
 

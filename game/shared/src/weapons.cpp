@@ -14,6 +14,10 @@ namespace {
 
 /// The shares of a weapon's idles add up to 1 within this much.
 constexpr double kShareTolerance = 1e-4;
+/// The keys of what the catalog knows a weapon by, which no var sets.
+constexpr std::array<std::string_view, 4> kReadOnlyVars{"id", "classname", "slot", "position"};
+/// The classname of a weapon made as the game runs: this, then its id.
+constexpr std::string_view kClassnamePrefix = "weapon_";
 
 /// DataInvalid when `path`, the `role` model of the weapon `id` of `sourceName`, is not a path of
 /// the game's files.
@@ -143,17 +147,61 @@ constexpr double kShareTolerance = 1e-4;
     return {};
 }
 
-/// DataInvalid when two of `items` have the same `key`, which names what they are: `what`.
+/// DataInvalid when two of `items` have the same `key`, in any case, which names what they are:
+/// `what`.
 template <class Item>
 [[nodiscard]] auto checkUnique(std::span<const Item> items, std::string Item::* key, std::string_view what)
     -> nx::Result<void, WeaponError> {
-    std::set<std::string_view> seen;
+    std::set<std::string> seen;
     for (const Item& item : items) {
-        if (!seen.insert(item.*key).second) {
+        if (!seen.insert(item.*key | std::views::transform(nx::toLowerAscii) | std::ranges::to<std::string>())
+                 .second) {
             return nx::fail(WeaponError::DataInvalid, std::format("{} {:?} twice", what, item.*key));
         }
     }
     return {};
+}
+
+/// DataInvalid when `weapon`, of `where` (a file, or the catalog), lacks an id, a classname, a name,
+/// a magazine's kind of ammo or its player's animation, or has a model path checkModelPath refuses,
+/// or a view or firing checkView or checkFiring refuses.
+[[nodiscard]] auto checkWeapon(const Weapon& weapon, std::string_view where)
+    -> nx::Result<void, WeaponError> {
+    if (weapon.id.empty() || weapon.classname.empty() || weapon.name.empty()) {
+        return nx::fail(WeaponError::DataInvalid,
+                        std::format("{}: a weapon without an id, a classname or a name", where));
+    }
+    if (weapon.magazine && weapon.magazine->ammo.empty()) {
+        return nx::fail(WeaponError::DataInvalid,
+                        std::format("{}: {:?} fires no kind of ammo", where, weapon.id));
+    }
+    if (weapon.models.playerAnimation.empty()) {
+        return nx::fail(WeaponError::DataInvalid,
+                        std::format("{}: {:?} without its player's animation", where, weapon.id));
+    }
+    if (auto checked = checkModelPath(weapon.models.view, "view", weapon.id, where); !checked) {
+        return checked;
+    }
+    if (auto checked = checkModelPath(weapon.models.player, "player", weapon.id, where); !checked) {
+        return checked;
+    }
+    if (auto checked = checkView(weapon.view, weapon.id, where); !checked) {
+        return checked;
+    }
+    return checkFiring(weapon, where);
+}
+
+/// Whether `id` is one of a weapon made as the game runs: letters and digits alone, one at least.
+[[nodiscard]] auto isWeaponId(std::string_view id) noexcept -> bool {
+    return !id.empty() && std::ranges::all_of(id, [](char character) {
+        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+               (character >= '0' && character <= '9');
+    });
+}
+
+/// The first key of `keyPath`.
+[[nodiscard]] auto firstKey(std::string_view keyPath) noexcept -> std::string_view {
+    return keyPath.substr(0, keyPath.find('.'));
 }
 
 } // namespace
@@ -167,6 +215,14 @@ auto readAmmoTypes(std::string_view text, std::string_view sourceName) -> nx::Re
         return nx::fail(WeaponError::DataInvalid,
                         std::format("{}: a kind of ammo without an id", sourceName));
     }
+    for (const AmmoType& type : types->ammo) {
+        if (auto parsed = nx::assets::VfsPath::parse(type.picture.sprite); !parsed) {
+            return nx::fail(
+                WeaponError::DataInvalid,
+                std::format("{}: the picture of {:?}, {:?}", sourceName, type.id, type.picture.sprite),
+                std::move(parsed.error()));
+        }
+    }
     return std::move(*types);
 }
 
@@ -175,35 +231,16 @@ auto readWeapon(std::string_view text, std::string_view sourceName) -> nx::Resul
     if (!weapon) {
         return nx::fail(WeaponError::DataInvalid, std::string{sourceName}, std::move(weapon.error()));
     }
-    if (weapon->id.empty() || weapon->classname.empty()) {
-        return nx::fail(WeaponError::DataInvalid,
-                        std::format("{}: a weapon without an id or a classname", sourceName));
-    }
-    if (weapon->magazine && weapon->magazine->ammo.empty()) {
-        return nx::fail(WeaponError::DataInvalid,
-                        std::format("{}: {:?} fires no kind of ammo", sourceName, weapon->id));
-    }
-    if (weapon->models.playerAnimation.empty()) {
-        return nx::fail(WeaponError::DataInvalid,
-                        std::format("{}: {:?} without its player's animation", sourceName, weapon->id));
-    }
-    if (auto checked = checkModelPath(weapon->models.view, "view", weapon->id, sourceName); !checked) {
-        return std::unexpected{std::move(checked.error())};
-    }
-    if (auto checked = checkModelPath(weapon->models.player, "player", weapon->id, sourceName); !checked) {
-        return std::unexpected{std::move(checked.error())};
-    }
-    if (auto checked = checkView(weapon->view, weapon->id, sourceName); !checked) {
-        return std::unexpected{std::move(checked.error())};
-    }
-    if (auto checked = checkFiring(*weapon, sourceName); !checked) {
+    if (auto checked = checkWeapon(*weapon, sourceName); !checked) {
         return std::unexpected{std::move(checked.error())};
     }
     return std::move(*weapon);
 }
 
 WeaponCatalog::WeaponCatalog(std::vector<AmmoType> ammo, std::vector<Weapon> weapons) noexcept
-    : m_ammo{std::move(ammo)}, m_weapons{std::move(weapons)} {}
+    : m_ammo{std::move(ammo)},
+      m_weapons{std::make_move_iterator(weapons.begin()), std::make_move_iterator(weapons.end())},
+      m_standings(m_weapons.size(), Standing{.isComplete = true}) {}
 
 auto WeaponCatalog::make(AmmoTypes ammo, std::vector<Weapon> weapons)
     -> nx::Result<WeaponCatalog, WeaponError> {
@@ -216,12 +253,10 @@ auto WeaponCatalog::make(AmmoTypes ammo, std::vector<Weapon> weapons)
     if (auto checked = checkUnique<Weapon>(weapons, &Weapon::classname, "the weapon class"); !checked) {
         return std::unexpected{std::move(checked.error())};
     }
+    WeaponCatalog catalog{std::move(ammo.ammo), std::move(weapons)};
     std::set<std::pair<WeaponSlot, std::uint32_t>> places;
-    for (const Weapon& weapon : weapons) {
-        if (auto checked = checkView(weapon.view, weapon.id, "the catalog"); !checked) {
-            return std::unexpected{std::move(checked.error())};
-        }
-        if (auto checked = checkFiring(weapon, "the catalog"); !checked) {
+    for (const Weapon& weapon : catalog.m_weapons) {
+        if (auto checked = catalog.check(weapon, "the catalog"); !checked) {
             return std::unexpected{std::move(checked.error())};
         }
         if (!places.emplace(weapon.slot, weapon.position).second) {
@@ -229,12 +264,8 @@ auto WeaponCatalog::make(AmmoTypes ammo, std::vector<Weapon> weapons)
                 WeaponError::DataInvalid,
                 std::format("{:?} at position {} of its slot, as another is", weapon.id, weapon.position));
         }
-        if (weapon.magazine && !std::ranges::contains(ammo.ammo, weapon.magazine->ammo, &AmmoType::id)) {
-            return nx::fail(WeaponError::DataInvalid, std::format("{:?} fires {:?}, not a kind of ammo",
-                                                                  weapon.id, weapon.magazine->ammo));
-        }
     }
-    return WeaponCatalog{std::move(ammo.ammo), std::move(weapons)};
+    return catalog;
 }
 
 auto WeaponCatalog::findAmmo(std::string_view id) const noexcept -> const AmmoType* {
@@ -258,6 +289,138 @@ auto WeaponCatalog::indexOf(std::string_view id) const noexcept -> std::optional
 auto WeaponCatalog::weapon(WeaponIndex index) const noexcept -> const Weapon& {
     nx::expects(index.value < m_weapons.size(), "WeaponCatalog::weapon: an index of the catalog");
     return m_weapons[index.value];
+}
+
+auto WeaponCatalog::create(const WeaponDraft& draft) -> nx::Result<WeaponIndex, WeaponError> {
+    if (!isWeaponId(draft.id)) {
+        return nx::fail(WeaponError::IdInvalid,
+                        std::format("{:?}: a weapon's id is letters and digits alone", draft.id));
+    }
+    const std::string classname = std::format("{}{}", kClassnamePrefix, draft.id);
+    if (std::ranges::any_of(m_weapons, [&](const Weapon& other) {
+            return nx::equalsIgnoringCase(other.id, draft.id) ||
+                   nx::equalsIgnoringCase(other.classname, classname);
+        })) {
+        return nx::fail(WeaponError::IdTaken,
+                        std::format("{:?}: a weapon of the catalog is so called", draft.id));
+    }
+    Weapon made = draft.from ? weapon(*draft.from) : Weapon{};
+    made.id = draft.id;
+    made.classname = classname;
+    made.name = draft.id;
+    made.slot = draft.slot;
+    made.position = 0;
+    for (const Weapon& other : m_weapons) {
+        if (other.slot == draft.slot) {
+            made.position = std::max(made.position, other.position + 1);
+        }
+    }
+    const bool isComplete = check(made, made.id).has_value();
+    m_weapons.push_back(std::move(made));
+    m_standings.push_back(Standing{.isComplete = isComplete});
+    return WeaponIndex{nx::narrow<std::uint32_t>(m_weapons.size() - 1)};
+}
+
+auto WeaponCatalog::setVar(WeaponIndex weapon, std::string_view keyPath, std::string_view text)
+    -> nx::Result<void, WeaponError> {
+    const Weapon& current = this->weapon(weapon);
+    if (std::ranges::contains(kReadOnlyVars, firstKey(keyPath))) {
+        return nx::fail(WeaponError::VarReadOnly,
+                        std::format("{}: {} is what the catalog knows it by", current.id, keyPath));
+    }
+    Weapon changed = current;
+    if (auto assigned = nx::data::assignField(changed, keyPath, text, current.id); !assigned) {
+        return nx::fail(WeaponError::VarInvalid, std::move(assigned.error()));
+    }
+    Standing& standing = m_standings[weapon.value];
+    auto checked = check(changed, changed.id);
+    if (standing.isComplete && !checked) {
+        return nx::fail(WeaponError::VarInvalid,
+                        std::format("{}: {} = {} leaves it incomplete", current.id, keyPath, text),
+                        std::move(checked.error()));
+    }
+    m_weapons[weapon.value] = std::move(changed);
+    standing.isComplete = checked.has_value();
+    ++standing.revision;
+    return {};
+}
+
+auto WeaponCatalog::var(WeaponIndex weapon, std::string_view keyPath) const
+    -> nx::Result<std::optional<std::string>, WeaponError> {
+    const Weapon& held = this->weapon(weapon);
+    auto written = nx::data::formatField(held, keyPath, held.id);
+    if (!written) {
+        return nx::fail(WeaponError::VarInvalid, std::move(written.error()));
+    }
+    return std::move(*written);
+}
+
+auto WeaponCatalog::vars(WeaponIndex weapon) const -> std::vector<nx::data::FieldText> {
+    return nx::data::listFields(this->weapon(weapon));
+}
+
+auto WeaponCatalog::isComplete(WeaponIndex weapon) const noexcept -> bool {
+    return standing(weapon).isComplete;
+}
+
+auto WeaponCatalog::checkComplete(WeaponIndex weapon) const -> nx::Result<void, WeaponError> {
+    const Weapon& held = this->weapon(weapon);
+    if (auto checked = check(held, held.id); !checked) {
+        return nx::fail(WeaponError::Incomplete, std::format("{}: not a weapon yet", held.id),
+                        std::move(checked.error()));
+    }
+    return {};
+}
+
+auto WeaponCatalog::revision(WeaponIndex weapon) const noexcept -> std::uint32_t {
+    return standing(weapon).revision;
+}
+
+auto WeaponCatalog::replace(WeaponIndex original, std::optional<WeaponIndex> replacement)
+    -> nx::Result<void, WeaponError> {
+    const Weapon& replaced = weapon(original);
+    if (replacement) {
+        const Weapon& made = weapon(*replacement);
+        const auto invalid = [&](std::string_view problem) {
+            return nx::fail(WeaponError::ReplacementInvalid,
+                            std::format("{} by {}: {}", replaced.id, made.id, problem));
+        };
+        if (*replacement == original) {
+            return invalid("a weapon replaced by itself");
+        }
+        if (standing(*replacement).replacement) {
+            return invalid("the replacement is replaced in its turn");
+        }
+        if (std::ranges::contains(m_standings, std::optional{original}, &Standing::replacement)) {
+            return invalid("the weapon replaces another");
+        }
+        if (!isComplete(*replacement)) {
+            return invalid("the replacement is incomplete");
+        }
+    }
+    m_standings[original.value].replacement = replacement;
+    return {};
+}
+
+auto WeaponCatalog::madeFor(WeaponIndex weapon) const noexcept -> WeaponIndex {
+    return standing(weapon).replacement.value_or(weapon);
+}
+
+auto WeaponCatalog::check(const Weapon& weapon, std::string_view where) const
+    -> nx::Result<void, WeaponError> {
+    if (auto checked = checkWeapon(weapon, where); !checked) {
+        return checked;
+    }
+    if (weapon.magazine && findAmmo(weapon.magazine->ammo) == nullptr) {
+        return nx::fail(WeaponError::DataInvalid, std::format("{}: {:?} fires {:?}, not a kind of ammo",
+                                                              where, weapon.id, weapon.magazine->ammo));
+    }
+    return {};
+}
+
+auto WeaponCatalog::standing(WeaponIndex weapon) const noexcept -> const Standing& {
+    nx::expects(weapon.value < m_standings.size(), "WeaponCatalog::standing: an index of the catalog");
+    return m_standings[weapon.value];
 }
 
 } // namespace cs

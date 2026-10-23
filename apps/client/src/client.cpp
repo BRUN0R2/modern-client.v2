@@ -199,8 +199,7 @@ public:
 private:
     [[nodiscard]] auto registerSettings() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
-    /// Registers `weapon_<name>` for each weapon of the game's content, as the original's game
-    /// takes them.
+    /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
@@ -210,7 +209,6 @@ private:
     [[nodiscard]] auto playSound(std::string_view name, float volume) -> nx::Result<void, ConsoleError>;
     void noclipCommand();
     void lastWeaponCommand();
-    void selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name);
     /// Opens the console's window, or closes it.
     void toggleConsole();
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
@@ -406,19 +404,25 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
 }
 
 auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
-    const cs::WeaponCatalog& weapons = m_content->weapons;
-    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
-        const cs::WeaponIndex weapon{index};
-        const std::string& name = weapons.weapon(weapon).classname;
-        if (auto registered = m_console.registerCommand(
-                {.name = std::string_view{name}, .description = "Draws the weapon, when the player has it."},
-                [this, weapon, name](nx::console::Console&, const nx::console::CommandLine&) {
-                    selectWeaponCommand(weapon, name);
-                    return nx::Result<void, ConsoleError>{};
-                });
-            !registered) {
-            return nx::fail(ClientError::SettingsUnavailable, registered.error());
-        }
+    cs::WeaponActions actions{.select =
+                                  [this](cs::WeaponIndex weapon) {
+                                      if (!m_session) {
+                                          return false;
+                                      }
+                                      m_input->selectWeapon(weapon);
+                                      return true;
+                                  },
+                              .give =
+                                  [this](cs::WeaponIndex weapon) {
+                                      if (!m_session) {
+                                          return false;
+                                      }
+                                      m_session->game->give(weapon);
+                                      return true;
+                                  }};
+    if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
+        !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     return {};
 }
@@ -485,14 +489,6 @@ void Client::lastWeaponCommand() {
     if (const std::optional<cs::WeaponIndex> last = m_session->game->inventory().lastWeapon()) {
         m_input->selectWeapon(*last);
     }
-}
-
-void Client::selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name) {
-    if (!m_session) {
-        m_console.print(std::format("Can't {:?}, not playing a map", name));
-        return;
-    }
-    m_input->selectWeapon(weapon);
 }
 
 void Client::toggleConsole() {
@@ -605,7 +601,8 @@ void Client::startNextSession() {
 
 void Client::hearSession() {
     m_viewPose = m_session->game->viewModel();
-    m_clientEvents = m_viewModelEvents.passed(m_session->level->viewModels(), m_viewPose);
+    m_clientEvents = m_viewModelEvents.passed(
+        m_viewPose ? m_session->level->viewModel(m_viewPose->weapon) : nullptr, m_viewPose);
     const std::vector<const cs::GameSound*> sounds = m_session->game->takeSounds();
     if (m_audio == nullptr) {
         return;
@@ -708,7 +705,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(screen.error()));
         }
         m_screen.emplace(std::move(*screen));
-        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.weapons(), *m_screen, list); hud) {
+        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.ammo(), *m_screen, list); hud) {
             m_hud.emplace(std::move(*hud));
         } else {
             nx::log::warning(kLog, "the HUD is not drawn: {}",
@@ -738,6 +735,17 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
         m_scene.emplace(std::move(*scene));
         std::ignore = m_mapClock.restart(); // the light styles start with the map
+    }
+    if (m_scene) {
+        // The weapons made or changed since: their view models, read and put on the GPU now.
+        const std::vector<cs::WeaponIndex> changed =
+            m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
+        if (!changed.empty()) {
+            m_video->device->waitIdle(); // the frames in flight may still draw a model replaced
+            if (auto loaded = m_scene->loadWeapons(list, *m_session->level, changed); !loaded) {
+                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+            }
+        }
     }
     return {};
 }

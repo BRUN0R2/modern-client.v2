@@ -6,6 +6,7 @@
 
 id = "m4a1"
 classname = "weapon_m4a1"
+name = "Maverick M4A1 Carbine" # as the original's buy menu shows it
 slot = "primary"
 position = 6
 weight = 25

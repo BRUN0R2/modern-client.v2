@@ -61,6 +61,13 @@ auto LocalGame::start(const GameContent& content, const Level& level, Team team,
     return game;
 }
 
+void LocalGame::give(WeaponIndex weapon) {
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
+    std::ignore = m_inventory.give(weapon, kAutoSwitch, time, random);
+    m_player.maxSpeed = m_inventory.maxSpeed();
+}
+
 auto LocalGame::play(PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
     m_pending = std::min(m_pending + elapsed, kMaxCatchUp);
     return run([&input, view, this] { return input.nextCommand(view, kCommandInterval, m_player.maxSpeed); });

@@ -112,8 +112,10 @@ void kickBack(const Kick& kick, std::uint32_t shots, bool& kicksLeft, nx::EulerA
 
 } // namespace
 
-auto Inventory::give(WeaponIndex weapon, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random)
+auto Inventory::give(WeaponIndex asked, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random)
     -> bool {
+    const WeaponIndex weapon = m_catalog->madeFor(asked);
+    nx::expects(m_catalog->isComplete(weapon), "Inventory::give: a complete weapon");
     const Weapon& given = m_catalog->weapon(weapon);
     const std::uint32_t rounds = given.magazine ? given.magazine->clipSize : 0;
     if (const std::optional<std::size_t> owned = find(weapon)) {
@@ -146,8 +148,12 @@ void Inventory::select(const UserCommand& command, const nx::game::TickTime& tim
         return;
     }
     nx::Random random{command.number.value, kRandomStream};
-    if (const std::optional<std::size_t> selected = find(*command.weaponSelect);
-        selected && selected != m_held) {
+    // A weapon given before it was replaced is still selected by its own name.
+    std::optional<std::size_t> selected = find(*command.weaponSelect);
+    if (!selected) {
+        selected = find(m_catalog->madeFor(*command.weaponSelect));
+    }
+    if (selected && selected != m_held) {
         draw(*selected, time, random);
     }
 }

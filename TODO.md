@@ -153,6 +153,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### `nx.data`
 - [x] TOML schemas derived from described structs (toml++ without exceptions), with typed failures that name the file, line, column and key path
 - [x] `Range` annotations checked when the description compiles: only on numbers, minimum <= maximum, exact whole-number bounds
+- [x] A field set and written by its key path (`nx.data:fields`: `assignField`, `formatField`, `listFields`), read as a file's value is, the struct as it was on a failure
 
 ---
 
@@ -337,7 +338,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The weapons' data: what each is (slot, team, price, ammo, clip, speed, models) for the knife, Glock, USP, AK-47 and M4A1 (`cs.shared:weapons`, `data/cstrike/weapons/`, `data/cstrike/ammo.toml`, [10 §7.2](docs/10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)); the knife's speed and view model from it
 - [ ] Player animation (torso sequence, gait, aim blends)
 - [ ] Viewmodel with its own FOV
-- [ ] Weapon class system (original and custom weapons in the same system)
+- [x] Weapons made as the game runs, the game's and a mod's in one catalog ([10 §7.5](docs/10-counter-strike-gameplay.md#75-weapons-made-as-the-game-runs)): standalone, from nothing or from another's values copied once, complete before they are given; their values set by the key paths of their data (`nx::data::assignField`); replaced wherever the game makes them; their view models read as they are made or changed; no limit of weapons nor of kinds of ammo; `create_weapon`, `set_weapon_var`, `get_weapon_var`, `list_weapons`, `replace_weapon`, `give`
+- [ ] A weapon's own behavior and hooks (overriding its attack, its reload) with Rook ([15](docs/15-mod-api.md)); kinds of ammo made as the game runs
 - [x] The player's weapons (`cs.shared:inventory`): given by its team's loadout (`data/cstrike/loadouts.toml`), drawn when heavier, chosen by `weapon_<name>` and `lastinv`, drawn and idling as their data says; each view model in the player's hand, the guns mirrored as the original draws them ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors), [05 §9](docs/05-rendering.md#9-studio-models-and-gpu-skinning))
 - [x] The guns' fire and reload (`cs::Inventory::frame`, the original's `ItemPostFrame`): cycle, once a press for a pistol, the empty click, burst and paced accuracy, the spread by movement, the rifles' `KickBack` and the USP's punch, dropped back in the movement, the reload and its timing; the timers counted down in float as the original's ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [x] `+attack2`: the USP's and the M4A1's silencers, the Glock's burst and its follow-up rounds ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
@@ -372,7 +374,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] HUD sprite and font renderer (`nx.render:screen`: pictures of sprites and WADs, console fonts, drawn as they are, added or blended, in pixels)
 - [x] Health, armor and money where the original draws them, measured on it (`cs.client:hud`, [12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution)); `hud_draw`
 - [x] The crosshair with the original cvars (`cl_crosshair_color`, `cl_crosshair_size`, `cl_crosshair_translucent`), drawn by the rule measured on the original ([12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution))
-- [x] The ammo of the weapon in hand: its clip, the bar, its reserve and its list's `ammo` picture, where the original draws a Glock's ([12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution))
+- [x] The ammo of the weapon in hand: its clip, the bar, its reserve and the picture of its kind of ammo (`data/cstrike/ammo.toml`, no weapon's list read), where the original draws a Glock's ([12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution))
 - [ ] Each weapon's crosshair (measured: the knife 7, the Glock and the Desert Eagle 8), opening as the player moves (`cl_dynamiccrosshair`); the weapon menu (`slot1`–`slot5`, `invnext`, `invprev`, `hud_fastswitch`), its layout measured on the original; the first row of each HUD picture, which the original leaves out
 - [x] Numbers without truncation: health above 255, armor, money and ammo ([12 §3.4](docs/12-ui-hud-and-console.md#34-no-value-truncation))
 - [x] HUD regression test with health 5000, 100000 and the type's maximum

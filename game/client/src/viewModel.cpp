@@ -143,13 +143,13 @@ auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from,
     return passed;
 }
 
-auto ViewModelEvents::passed(std::span<const ViewModel> viewModels, const std::optional<ViewModelPose>& pose)
+auto ViewModelEvents::passed(const ViewModel* viewModel, const std::optional<ViewModelPose>& pose)
     -> std::vector<const nx::assets::StudioEvent*> {
-    if (!pose) {
+    if (!pose || viewModel == nullptr) {
         m_lastPose.reset();
         return {};
     }
-    const nx::assets::StudioSequence& sequence = viewModels[pose->weapon.value].sequence(pose->sequence);
+    const nx::assets::StudioSequence& sequence = viewModel->sequence(pose->sequence);
     const float now = sequenceFrameAt(sequence, pose->intoIt, 1.0F).value();
     // A play already passed goes on from the frame it was at; a new one plays its events from its first.
     const float before = m_lastPose && m_lastPose->isSamePlay(*pose)

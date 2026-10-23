@@ -157,7 +157,8 @@ Readers today:
   1.1.0.0, whose size says so, a sixteenth of the picture's (`FONT0`); each of its 256 characters is
   at an offset into the picture, its own width wide and the font's row tall; its palette counts 256
   colors, or 768, as `fonts.wad` writes it; index 255 is where its characters show through.
-- Sprite lists (`nx.assets:spriteList`, `hud.txt` and the weapons' `sprites/weapon_<name>.txt`):
+- Sprite lists (`nx.assets:spriteList`, `hud.txt`; the weapons' `sprites/weapon_<name>.txt` give
+  the pictures the weapons' and the kinds of ammo's data name, read once into it):
   their count, then seven words an entry (its name, the screen width it is for, 320 or 640, its
   sprite, and the rectangle of the sprite it shows), split as the original splits them (whitespace,
   quotes, `//` comments). A count above the entries reads those there are: Counter-Strike's

@@ -95,21 +95,21 @@ public:
     /// An inventory of none of the weapons of `catalog`, which must outlive it.
     explicit Inventory(const WeaponCatalog& catalog) noexcept : m_catalog{&catalog} {}
 
-    /// Gives the player `weapon` with a clip's worth of rounds, in its clip (AddPlayerItem); and the
-    /// player draws it at `time` when it holds none, or when `autoSwitch` (the player's
-    /// _cl_autowepswitch) and it is heavier than the one it holds (FShouldSwitchWeapon). A weapon it
-    /// has already gives its rounds alone, to its clip when empty, else besides it (ExtractAmmo).
-    /// Returns whether the player had no such weapon.
-    auto give(WeaponIndex weapon, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random)
-        -> bool;
+    /// Gives the player the weapon the catalog makes for `asked` (its replacement, or itself), which
+    /// must be complete, with a clip's worth of rounds, in its clip (AddPlayerItem); and the player
+    /// draws it at `time` when it holds none, or when `autoSwitch` (the player's _cl_autowepswitch)
+    /// and it is heavier than the one it holds (FShouldSwitchWeapon). A weapon it has already gives
+    /// its rounds alone, to its clip when empty, else besides it (ExtractAmmo). Returns whether the
+    /// player had no such weapon.
+    auto give(WeaponIndex asked, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random) -> bool;
 
     /// Gives `rounds` of `ammo` besides the clips, as many as the player can carry of it: returns how
     /// many it took.
     auto giveAmmo(std::string_view ammo, std::uint32_t rounds) -> std::uint32_t;
 
     /// The part of `command` before it moves the player (CmdStart): the player draws the weapon it
-    /// selects at `time` when it has it and does not hold it (SelectItem). The random numbers this
-    /// draws are the command number's.
+    /// selects, or else that weapon's replacement, at `time` when it has it and does not hold it
+    /// (SelectItem). The random numbers this draws are the command number's.
     void select(const UserCommand& command, const nx::game::TickTime& time);
 
     /// The weapon held after `command` moved the player, at `time` (ItemPostFrame), `shooter` its

@@ -60,10 +60,14 @@ constexpr float kTolerance = 1e-5F;
                           std::optional<cs::WeaponMagazine> magazine, cs::WeaponView view) -> Weapon {
     return Weapon{.id = id,
                   .classname = "weapon_" + id,
+                  .name = id,
                   .slot = slot,
                   .weight = weight,
                   .maxSpeed = nx::UnitsPerSecond{maxSpeed},
                   .magazine = std::move(magazine),
+                  .models = cs::WeaponModels{.view = std::format("models/v_{}.mdl", id),
+                                             .player = std::format("models/p_{}.mdl", id),
+                                             .playerAnimation = "onehanded"},
                   .view = std::move(view)};
 }
 

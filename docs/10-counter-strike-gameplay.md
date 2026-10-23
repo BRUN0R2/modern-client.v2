@@ -170,6 +170,7 @@ kinds of ammo are `data/cstrike/ammo.toml`, read into `cs::AmmoTypes`. The value
 ```toml
 id        = "ak47"             # also the file's name, and the buy commands' name
 classname = "weapon_ak47"
+name      = "CV-47"            # what the game shows it as: the original's buy menu's
 slot      = "primary"          # primary, secondary, knife, grenade, bomb: the HUD's 1 to 5
 position  = 1                  # the order of the slot's weapons in the HUD's weapon menu
 weight    = 25                 # the game picks the heaviest when it picks a weapon for a player
@@ -244,12 +245,20 @@ id         = "762Nato"         # the original's name
 maxCarried = 90                # rounds a player carries besides the clips'
 boxPrice   = 80
 boxRounds  = 30
+picture    = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 } # the HUD's
 ```
 
-The catalog (`cs::WeaponCatalog`) refuses an id or a classname twice, two weapons at one position
-of a slot, a weapon whose ammo `ammo.toml` lacks, a view without a draw sequence or an idle, an
-idle that waits no time, or idles whose shares do not add up to 1, and firing or a reload without a
-magazine, a shoot or reload sequence, a cycle, or one accuracy.
+A kind of ammo's `picture` is the one the HUD shows beside its rounds: the `ammo` entry the
+original's weapon lists (`sprites/weapon_<name>.txt`) give each weapon that fires it, the same for
+every weapon of a kind, read once into the data, so that the HUD reads no weapon's list and a weapon
+made as the game runs shows its ammo as the game's own do.
+
+The catalog (`cs::WeaponCatalog`) refuses an id (in any case) or a classname twice, two weapons at
+one position of a slot, a weapon without a name or whose ammo `ammo.toml` lacks, a view without a
+draw sequence or an idle, an idle that waits no time, or idles whose shares do not add up to 1, and
+firing or a reload without a magazine, a shoot or reload sequence, a cycle, or one accuracy. It has
+no limit of weapons nor of kinds of ammo, where the original has 32 of each (its `m_rgAmmo` and
+the bits of `pev->weapons`), nor messages that number them in a byte.
 
 What a player of each team spawns with is `data/cstrike/loadouts.toml` (`cs::Loadouts`, the
 original's `GiveDefaultItems`): the terrorists a knife, a Glock 18 and 40 rounds of 9mm, the
@@ -278,7 +287,7 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   sequence, and the weapon idles 1.5 seconds later (`DefaultDeploy`), then after each idle's wait
   (`WeaponIdle`), the pistols not with an empty clip. The player runs at the speed of the weapon it
   holds, 240 with none (`ResetMaxSpeed`). `next` gives the player its team's loadout, its team
-  that of the spawn it starts at, and selects with `weapon_<name>` and `lastinv`; the slot keys
+  that of the spawn it starts at, and selects with `weapon_<id>` and `lastinv`; the slot keys
   and the weapon menu come with the HUD's.
   Once a command has moved the player, the weapon held runs its frame (`ItemPostFrame`): nothing
   while it is being drawn (0.75 seconds) or reloaded; a reload over fills the clip from what the
@@ -340,6 +349,54 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - Damage falloff by distance (`rangeModifier`).
 - Friendly fire with `mp_friendlyfire` and the penalty rules (`mp_tkpunish`).
 - All damage goes through the hookable `TakeDamage` action ([15](15-mod-api.md#5-hookable-actions)).
+
+### 7.5 Weapons made as the game runs
+
+A weapon is a type, standalone: the game's are read from its data (§7.2), and others are made as
+the game runs, by the same catalog and with the same rules, so that a mod's weapon is one weapon
+among the game's (its plugin API: [15](15-mod-api.md)).
+
+- **Made** (`WeaponCatalog::create`, a `WeaponDraft`): an id of letters and digits that no weapon
+  has in any case, its classname `weapon_<id>`, a slot, at the next position of its slot, its name
+  its id; with the values of the weapon it starts from (`from`), copied once and linked to it no
+  more: a change to the AK-47 later changes no weapon made from it. Without one it starts from no
+  values, **incomplete**, until its values make a weapon: what readWeapon would read from a file.
+  The game gives only complete weapons (`checkComplete` says what one lacks).
+- **Its values** are set and read by the key paths of its data (`setVar`, `var`, `vars`, through
+  `nx::data::assignField`, [01 §8](01-architecture.md#8-configuration-and-data)):
+  `magazine.clipSize`, `firing.cycle`, `models.view`, a table whole (`magazine`,
+  `{ ammo = "9mm", clipSize = 30 }`), one schema for the files, the console and plugins. Its id,
+  classname, slot and position are what the catalog knows it by, and no var sets them. A value its
+  type or Range refuses, or one that would leave a complete weapon incomplete (a kind of ammo the
+  catalog lacks, no draw sequence), is refused, and the weapon stays as it was. Each value set
+  counts a revision: the client reads a weapon's view model again when it changes.
+- **Replaced** (`replace`, `madeFor`): the game makes the replacement wherever it would make the
+  original (a loadout, `give`, and buying and the map's entities when they come), and `weapon_<id>`
+  of the original selects it, while a copy of the original given before is still selected by its
+  name. A replacement is complete, not the original, and not replaced in its turn: one step,
+  never a chain. Changing the AK-47 itself changes every AK-47; replacing it puts another weapon in
+  its place.
+- **Seen as soon as made:** the client reads the view model of a weapon made or changed while a map
+  is played and puts it on the GPU before the next frame (`Level::updateViewModels`,
+  `Scene::loadWeapons`), with no precache to make before the map, as the original requires; one
+  that cannot be read leaves the weapon unseen in hand, logged.
+
+The console's weapon commands (`cs.client:weaponCommands`) are named as a plugin's functions
+([15](15-mod-api.md)):
+
+| Command | What it does |
+|---------|--------------|
+| `create_weapon <id> <slot> [from weapon]` | Makes a weapon (`create_weapon DrakarIII primary ak47`), and its `weapon_<id>` |
+| `set_weapon_var <weapon> <key path> <value>` | Sets a value as its data writes it (`set_weapon_var DrakarIII name Drakar III`, `set_weapon_var DrakarIII firing.cycle 0.05`) |
+| `get_weapon_var <weapon> [key path]` | Prints a value, or all of them and what the weapon lacks |
+| `list_weapons` | Prints the weapons: id, classname, name, slot, position, and whether incomplete or replaced |
+| `replace_weapon <weapon> [replacement]` | The game makes the replacement for the weapon, or the weapon again |
+| `give <weapon>` | Gives the player a weapon, by its id or classname: its replacement, when it is replaced |
+
+**Today:** weapons made, set, replaced and given through the catalog and the console; their
+behavior is the weapons' own, driven by their values. A weapon's own behavior (overriding its
+attack, its reload) and hooks come with Rook ([14](14-rook-language.md), [15](15-mod-api.md));
+kinds of ammo made as the game runs, with the HUD's picture of each, come with them.
 
 ## 8. Buying
 

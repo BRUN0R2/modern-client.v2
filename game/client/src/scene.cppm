@@ -66,6 +66,12 @@ public:
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
 
+    /// Puts on the GPU the view models `level` has now of `weapons` (none for one it has none of), its
+    /// uploads recorded in `commands`. The GPU must be done with the frames that drew a model this
+    /// replaces. Errors: CreateFailed.
+    [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
+                                   std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
+
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
     /// faces it was stamped on.
@@ -85,14 +91,13 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          std::vector<nx::render::StudioModel> weapons,
+          std::vector<std::optional<nx::render::StudioModel>> weapons,
           std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept;
 
-    /// Adds the muzzle flashes of `events`, the client events the view model of `level` passed to
-    /// `pose`, its bones `bones`, at `time`; and forgets those shown long enough.
-    void flash(const Level& level, const std::optional<ViewModelPose>& pose,
-               std::span<const nx::assets::StudioEvent* const> events, std::span<const nx::Mat3x4> bones,
-               nx::Seconds time);
+    /// Adds the muzzle flashes of `events`, the client events `viewModel` passed, its bones `bones`, at
+    /// `time`; and forgets those shown long enough.
+    void flash(const ViewModel* viewModel, std::span<const nx::assets::StudioEvent* const> events,
+               std::span<const nx::Mat3x4> bones, nx::Seconds time);
 
     nx::render::BspWorld m_world;
     nx::render::WorldLight m_light;
@@ -101,7 +106,8 @@ private:
     nx::render::StudioRenderer m_studio;
     std::vector<nx::render::StudioModel> m_models; ///< Of the level's models, by file.
     nx::render::StudioRenderer m_viewModels;
-    std::vector<nx::render::StudioModel> m_weapons; ///< The weapons' view models, by their WeaponIndex.
+    /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
+    std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels; ///< Of sprites/muzzleflash1.spr to 3.
     std::vector<MuzzleFlash> m_flashes;                                ///< Those showing.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.

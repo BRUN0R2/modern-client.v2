@@ -23,6 +23,7 @@ nxAddModuleLibrary(csClient
         src/hud.cppm
         src/console.cppm
         src/audio.cppm
+        src/weaponCommands.cppm
     SOURCES
         src/input.cpp
         src/entityKeys.cpp
@@ -40,11 +41,13 @@ nxAddModuleLibrary(csClient
         src/hud.cpp
         src/console.cpp
         src/audio.cpp
+        src/weaponCommands.cpp
     DEPENDS
         nx::core
         nx::math
         nx::platform
         nx::console
+        nx::data
         nx::assets
         nx::rhi
         nx::render
