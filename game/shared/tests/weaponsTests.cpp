@@ -301,6 +301,47 @@ TEST(WeaponsTest, TheRepositorysKnifeAttacksAsTheOriginals) {
     EXPECT_FALSE(knife.stab.idleAfter.has_value()) << "the original's stab leaves the idle as it was";
 }
 
+TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    using Files = std::vector<std::string>;
+    const Weapon& knife = *catalog->findWeapon("knife");
+    ASSERT_TRUE(knife.view.drawSound.has_value());
+    EXPECT_EQ(knife.view.drawSound->files, Files{"weapons/knife_deploy1.wav"});
+    EXPECT_EQ(knife.view.drawSound->channel, cs::SoundChannel::Item);
+    EXPECT_FLOAT_EQ(knife.view.drawSound->volume, 0.3F);
+    for (const cs::MeleeAttack* const attack : {&knife.melee->slash, &knife.melee->stab}) {
+        ASSERT_TRUE(attack->missSound.has_value());
+        EXPECT_EQ(attack->missSound->files, (Files{"weapons/knife_slash1.wav", "weapons/knife_slash2.wav"}));
+        EXPECT_EQ(attack->missSound->channel, cs::SoundChannel::Weapon);
+        ASSERT_TRUE(attack->missSound->pitch.has_value());
+        EXPECT_EQ(attack->missSound->pitch->least, 94U);
+        EXPECT_EQ(attack->missSound->pitch->most, 94U);
+        ASSERT_TRUE(attack->hitSound.has_value());
+        EXPECT_EQ(attack->hitSound->files, Files{"weapons/knife_hitwall1.wav"});
+        EXPECT_EQ(attack->hitSound->channel, cs::SoundChannel::Item);
+        EXPECT_EQ(attack->hitSound->pitch->least, 98U);
+        EXPECT_EQ(attack->hitSound->pitch->most, 101U);
+    }
+    // PlayEmptySound: a pistol's click or a rifle's, at 0.8.
+    for (const auto& [id, click] :
+         {std::pair{"glock18", "weapons/dryfire_pistol.wav"}, std::pair{"usp", "weapons/dryfire_pistol.wav"},
+          std::pair{"ak47", "weapons/dryfire_rifle.wav"}, std::pair{"m4a1", "weapons/dryfire_rifle.wav"}}) {
+        const Weapon& gun = *catalog->findWeapon(id);
+        ASSERT_TRUE(gun.firing->emptySound.has_value()) << id;
+        EXPECT_EQ(gun.firing->emptySound->files, Files{click}) << id;
+        EXPECT_FLOAT_EQ(gun.firing->emptySound->volume, 0.8F) << id;
+        ASSERT_TRUE(gun.firing->sound.has_value()) << id;
+        EXPECT_EQ(gun.firing->sound->channel, cs::SoundChannel::Weapon) << id;
+    }
+    EXPECT_EQ(catalog->findWeapon("usp")->alternate->firing->sound->files,
+              (Files{"weapons/usp1.wav", "weapons/usp2.wav"}))
+        << "silenced";
+    EXPECT_EQ(catalog->findWeapon("m4a1")->firing->sound->files,
+              (Files{"weapons/m4a1_unsil-1.wav", "weapons/m4a1_unsil-2.wav"}))
+        << "without its silencer";
+}
+
 TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
     constexpr std::string_view kMagazine = "[magazine]\nammo = \"9mm\"\nclipSize = 20\n";
     const std::string firing = R"(
@@ -341,6 +382,11 @@ standing = { base = 0.0, scale = 0.1 }
                  replaced("minimum = 0.6, maximum = 0.92", "minimum = 0.95, maximum = 0.92"),
              std::string{kMagazine} + firing + "[reload]\ntime = 2.7\nsequences = []\n",
              std::string{kMagazine} + firing + "[alternate]\nswitchTime = 3.0\nonSequence = 7\n",
+             std::string{kMagazine} + firing +
+                 "[firing.sound]\nfiles = []\nchannel = \"weapon\"\nvolume = 1.0\n",
+             std::string{kMagazine} + firing +
+                 "[firing.emptySound]\nfiles = [\"a.wav\"]\nchannel = \"weapon\"\nvolume = 1.0\n"
+                 "pitch = { least = 101, most = 98 }\n",
          }) {
         const auto weapon = read(extra);
         ASSERT_FALSE(weapon.has_value()) << extra;

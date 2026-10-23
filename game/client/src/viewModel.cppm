@@ -47,6 +47,17 @@ struct ViewModelPose {
     }
 };
 
+/// The first number of the client's events; the game's own come before.
+inline constexpr std::int32_t kFirstClientEvent = 5000;
+/// The client event that plays a sound at full volume, its options the sound's name, a path under
+/// `sound/` (the reloads' and the draws' sounds of the original's view models).
+inline constexpr std::int32_t kSoundEvent = 5004;
+
+/// The client events of `sequence` its play passes from frame `from`, left out, to frame `to`,
+/// included, in their order.
+[[nodiscard]] auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
+    -> std::vector<const nx::assets::StudioEvent*>;
+
 /// A weapon's view model, its textures and the animations of its sequences.
 class ViewModel {
 public:
@@ -85,6 +96,20 @@ private:
     std::unique_ptr<ModelFiles> m_files;
     std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
     bool m_isMirrored;
+};
+
+/// The client events the view model passes, frame after frame, as the original's client plays them
+/// (Xash3D's R_StudioClientEvents, GPL, consulted: docs/20 section 3): those of the sequence it plays
+/// from the frame it was at in the last frame, or from before its first frame when a play starts.
+class ViewModelEvents {
+public:
+    /// The client events the view model of `pose`, among `viewModels`, passed since the last call's
+    /// pose; none without one.
+    [[nodiscard]] auto passed(std::span<const ViewModel> viewModels, const std::optional<ViewModelPose>& pose)
+        -> std::vector<const nx::assets::StudioEvent*>;
+
+private:
+    std::optional<ViewModelPose> m_lastPose; ///< The last call's.
 };
 
 } // namespace cs

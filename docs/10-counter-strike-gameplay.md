@@ -231,6 +231,13 @@ its `missSequences` and `hitSequences`, played in turn an attack after another, 
 and a hit hold `+attack` and `+attack2` (`miss = { primary = 0.35, secondary = 0.5 }`), and
 `idleAfter` (absent: the idle stays as it was, as the original's stab leaves it).
 
+A weapon's sounds are `cs::GameSound` tables (`files`, one at random; `channel`; `volume`; and an
+optional `pitch = { least, most }` in hundredths): a view's `drawSound` (the knife's Deploy), a
+firing's `sound`, as each round fires, and `emptySound`, as it clicks empty, and a melee attack's
+`missSound` and `hitSound` (on the world; flesh comes with the players to meet). The view model's
+own sounds (reloads, draws, silencers) are its sequences' events and need no data
+([11 §2](11-audio.md#2-architecture)).
+
 ```toml
 [[ammo]]
 id         = "762Nato"         # the original's name

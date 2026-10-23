@@ -15,6 +15,9 @@ namespace cs {
 
 namespace {
 
+/// A sequence played anew plays the events of its first frame too (R_StudioClientEvents).
+constexpr float kBeforeTheFirstFrame = -0.01F;
+
 using nx::assets::MdlView;
 using nx::assets::Vfs;
 
@@ -126,6 +129,34 @@ auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, n
     }
     return cs::poseBones(cs::skeletonOf(model), played, m_animations[sequence],
                          {.frame = cs::sequenceFrameAt(played, intoIt, 1.0F), .placement = placement});
+}
+
+auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
+    -> std::vector<const nx::assets::StudioEvent*> {
+    std::vector<const nx::assets::StudioEvent*> passed;
+    for (const nx::assets::StudioEvent& event : sequence.events) {
+        const auto frame = static_cast<float>(event.frame);
+        if (event.event >= kFirstClientEvent && frame > from && frame <= to) {
+            passed.push_back(&event);
+        }
+    }
+    return passed;
+}
+
+auto ViewModelEvents::passed(std::span<const ViewModel> viewModels, const std::optional<ViewModelPose>& pose)
+    -> std::vector<const nx::assets::StudioEvent*> {
+    if (!pose) {
+        m_lastPose.reset();
+        return {};
+    }
+    const nx::assets::StudioSequence& sequence = viewModels[pose->weapon.value].sequence(pose->sequence);
+    const float now = sequenceFrameAt(sequence, pose->intoIt, 1.0F).value();
+    // A play already passed goes on from the frame it was at; a new one plays its events from its first.
+    const float before = m_lastPose && m_lastPose->isSamePlay(*pose)
+                             ? sequenceFrameAt(sequence, m_lastPose->intoIt, 1.0F).value()
+                             : kBeforeTheFirstFrame;
+    m_lastPose = pose;
+    return clientEventsBetween(sequence, before, now);
 }
 
 } // namespace cs

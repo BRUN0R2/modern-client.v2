@@ -21,6 +21,7 @@ viewHand = "right"
 drawSequences = [3] # draw
 idles = [{ sequence = 0, wait = 20.0, share = 1.0 }] # idle
 idlesWhenEmpty = true
+drawSound = { files = ["weapons/knife_deploy1.wav"], channel = "item", volume = 0.3 } # Deploy
 
 [melee.slash] # +attack (Swing): a miss and a hit play the same sequences, in turn
 reach = 48.0
@@ -29,6 +30,9 @@ hitSequences = [6, 7]
 miss = { primary = 0.35, secondary = 0.5 }
 hit = { primary = 0.4, secondary = 0.5 }
 idleAfter = 2.0
+missSound = { files = ["weapons/knife_slash1.wav", "weapons/knife_slash2.wav"], channel = "weapon", volume = 1.0, pitch = { least = 94, most = 94 } }
+# on the world; its texture's sound comes with the materials
+hitSound = { files = ["weapons/knife_hitwall1.wav"], channel = "item", volume = 1.0, pitch = { least = 98, most = 101 } }
 
 [melee.stab] # +attack2 (Stab): it leaves the idle as it was
 reach = 32.0
@@ -36,3 +40,6 @@ missSequences = [5] # stab_miss
 hitSequences = [4] # stab
 miss = { primary = 1.0, secondary = 1.0 }
 hit = { primary = 1.1, secondary = 1.1 }
+missSound = { files = ["weapons/knife_slash1.wav", "weapons/knife_slash2.wav"], channel = "weapon", volume = 1.0, pitch = { least = 94, most = 94 } }
+# on the world; its texture's sound comes with the materials
+hitSound = { files = ["weapons/knife_hitwall1.wav"], channel = "item", volume = 1.0, pitch = { least = 98, most = 101 } }

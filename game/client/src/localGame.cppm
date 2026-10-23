@@ -70,6 +70,10 @@ public:
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_inventory; }
+    /// The sounds the player's weapons made since the last call (Inventory::takeSounds).
+    [[nodiscard]] inline auto takeSounds() -> std::vector<const GameSound*> {
+        return m_inventory.takeSounds();
+    }
 
 private:
     /// Plays the time pending a tick at a time, the commands made by `nextCommand`; returns the eye

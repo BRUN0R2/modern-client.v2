@@ -354,6 +354,12 @@ constexpr std::size_t kBlue = 2;
     }
     std::ignore = (*game)->wait(camera.angles, options.time);
     const std::vector<nx::render::ModelPlacement> placements = (*game)->placements();
+    // The client events of the play the view model is in, from its first frame: the muzzle flashes
+    // a shot shows.
+    const std::optional<cs::ViewModelPose> viewPose = (*game)->viewModel();
+    cs::ViewModelEvents viewEvents;
+    const std::vector<const nx::assets::StudioEvent*> clientEvents =
+        viewEvents.passed(level.viewModels(), viewPose);
     list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = target->get(), .clear = kVoidColor}};
@@ -366,7 +372,8 @@ constexpr std::size_t kBlue = 2;
                          .aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height),
                          .time = options.time,
                          .placements = placements,
-                         .viewModel = (*game)->viewModel()});
+                         .viewModel = viewPose,
+                         .clientEvents = clientEvents});
         !drawn) {
         return unusable(drawn.error());
     }

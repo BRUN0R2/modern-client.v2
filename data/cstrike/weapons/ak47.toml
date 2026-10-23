@@ -52,6 +52,16 @@ air = { upBase = 2.0, lateralBase = 1.0, upModifier = 0.5, lateralModifier = 0.3
 ducked = { upBase = 0.9, lateralBase = 0.35, upModifier = 0.15, lateralModifier = 0.025, upMax = 5.5, lateralMax = 1.5, directionChange = 9 }
 standing = { upBase = 1.0, lateralBase = 0.375, upModifier = 0.175, lateralModifier = 0.0375, upMax = 5.75, lateralMax = 1.75, directionChange = 8 }
 
+[firing.sound] # its client event plays one of them, which to be measured on the original
+files = ["weapons/ak47-1.wav", "weapons/ak47-2.wav"]
+channel = "weapon"
+volume = 1.0
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_rifle.wav"]
+channel = "weapon"
+volume = 0.8
+
 [reload]
 time = 2.45
 sequences = [1] # reload

@@ -37,7 +37,7 @@ full queue is a typed `QueueFull`, never a wait). Each voice reads its sound at
 crossings each way), narrowed when the sound is sped up so that nothing folds back: a sine at
 another rate comes out over 90 dB clean, and one sped up past the mix's band over 80 dB down.
 Voices sum in float; a master gain and a stereo-linked limiter (instant attack, 100 ms release)
-keep every sample under 0.98 of full scale. Choosing a voice (channels, priorities, stealing),
+keep every sample under 0.98 of full scale. A voice pool with priorities and stealing,
 spatialization, the room's DSP and streaming come with what plays sounds.
 
 `nx.platform:audio` opens the system's default output with SDL3 at its own rate, in two channels
@@ -54,6 +54,24 @@ Without an output the game plays on, silent, and says so once. The tests run on 
 which pulls at a real device's pace; the client was checked end to end on SDL's disk output: `play
 weapons/ak47-1` is the WAV resampled from 22 050 to 44 100 Hz at 0.7 of its level, to float
 precision at the WAV's own instants.
+
+The player's own sounds come from the game as data, `cs::GameSound` (`cs.shared:sounds`): its
+files, one at random, its channel of the player (`auto`, `weapon`, `voice`, `item`, `body`), its
+volume and its pitch range, in hundredths of the recorded speed (the original's 100 normal, 255 at
+most). The game says which sound it makes; `cs::ClientAudio` chooses the file and the pitch with its
+own random numbers, as the original's client and engine choose them, so that hearing never changes
+what the game draws. A sound on a channel other than `auto` replaces the one the player's channel
+plays (§3): an AK-47's shot cuts the last one's tail, as on `CHAN_WEAPON`. The weapons make theirs
+(`Inventory::takeSounds`, docs/10 §7.2): their draw (the knife's `knife_deploy1` at 0.3), each
+round fired (a burst's follow-ups too), the empty click (`dryfire_pistol` or `dryfire_rifle` at
+0.8, PlayEmptySound), and the knife's miss (`knife_slash1`/`2` at pitch 94) or its hit on the world
+(`knife_hitwall1` at 98 to 101), with ReGameDLL_CS's values. The guns' shots come from the
+original's client events, whose code is not free: their files are the ones it has, the choice among
+them to be measured on it. The view model's sound events (5004: the reloads', the draws' and the
+silencers' sounds of the original's models) play their sound at full volume as a frame passes them
+(`cs::ViewModelEvents`, docs/05 §9). Checked end to end on SDL's disk output: on de_dust2 the knife's
+draw, the USP's `usp_slideback` from its draw's event, and a shot's `usp_unsil-1` are heard in
+their order, each matching its file.
 
 ### 2.1 The original's audio problems and their causes
 

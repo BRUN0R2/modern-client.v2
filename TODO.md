@@ -351,7 +351,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### Audio
 - [x] The mixer (`nx.audio:mixer`): voices fed by a command queue, a windowed-sinc resampler from any rate and pitch, 32-bit float mixing with headroom and a limiter; sounds of any WAV layout (`nx.audio:sound`) ([11 §2](docs/11-audio.md#2-architecture))
 - [x] The mixer on the device's real-time thread (`nx.platform:audio`, SDL3's default output, followed when it changes), the game's sounds by name (`nx.audio:library`), `volume`, and the client's `play` and `playvol` ([11 §2](docs/11-audio.md#2-architecture))
-- [ ] The weapons' sounds: the view model's sound events and each weapon's fire sounds as data
+- [x] The weapons' sounds: the view model's sound events (5004), and each weapon's draw, fire, empty click and knife sounds as data (`cs::GameSound`), on the player's channels
+- [ ] The guns' fire sounds as the original's client events choose them (which file, what pitch): to be measured on the original
+- [ ] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) and the world's texture sounds (`materials.txt`), with what they meet
 - [ ] `s_device` and `s_play_unfocused`
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
 - [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device

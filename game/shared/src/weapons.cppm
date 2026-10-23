@@ -16,6 +16,7 @@ import std;
 import nx.core;
 import nx.meta;
 import nx.data;
+import :sounds;
 
 export namespace cs {
 
@@ -89,6 +90,8 @@ struct WeaponView {
     /// One of them, at random by their shares, once it is drawn and each time its wait is over.
     std::vector<WeaponIdle> idles{};
     bool idlesWhenEmpty{}; ///< Whether it idles with its clip empty: the pistols do not.
+    /// As it is drawn, besides those its view model's sequence plays (the knife's Deploy).
+    std::optional<GameSound> drawSound{};
 };
 
 /// A part of a shot's spread: `base`, plus `scale` times the weapon's inaccuracy.
@@ -181,6 +184,10 @@ struct WeaponFiring {
     WeaponSpread spread{};
     WeaponRecoil recoil{};
     std::optional<FollowUps> followUps{}; ///< None: a shot fires one round.
+    /// As it fires a round, a follow-up's too: the original's client event plays it, which chooses
+    /// among the files the original has, to be measured on it (TODO.md).
+    std::optional<GameSound> sound{};
+    std::optional<GameSound> emptySound{}; ///< As it clicks on an empty clip (PlayEmptySound).
 };
 
 /// How a weapon is reloaded (DefaultReload).
@@ -206,6 +213,9 @@ struct MeleeAttack {
     MeleeTiming miss{};
     MeleeTiming hit{};
     std::optional<nx::Seconds> idleAfter{};
+    std::optional<GameSound> missSound{};
+    /// As it meets the world; flesh comes with the players to meet.
+    std::optional<GameSound> hitSound{};
 };
 
 /// A melee weapon's attacks: `+attack`'s slash, `+attack2`'s stab.
@@ -363,6 +373,7 @@ struct nx::meta::Description<cs::WeaponView> {
         nx::meta::field<&cs::WeaponView::drawSequences>("drawSequences"),
         nx::meta::field<&cs::WeaponView::idles>("idles"),
         nx::meta::field<&cs::WeaponView::idlesWhenEmpty>("idlesWhenEmpty"),
+        nx::meta::field<&cs::WeaponView::drawSound>("drawSound"),
     };
 };
 
@@ -474,6 +485,8 @@ struct nx::meta::Description<cs::WeaponFiring> {
         nx::meta::field<&cs::WeaponFiring::spread>("spread"),
         nx::meta::field<&cs::WeaponFiring::recoil>("recoil"),
         nx::meta::field<&cs::WeaponFiring::followUps>("followUps"),
+        nx::meta::field<&cs::WeaponFiring::sound>("sound"),
+        nx::meta::field<&cs::WeaponFiring::emptySound>("emptySound"),
     };
 };
 
@@ -505,6 +518,8 @@ struct nx::meta::Description<cs::MeleeAttack> {
         nx::meta::field<&cs::MeleeAttack::miss>("miss"),
         nx::meta::field<&cs::MeleeAttack::hit>("hit"),
         nx::meta::field<&cs::MeleeAttack::idleAfter>("idleAfter", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MeleeAttack::missSound>("missSound"),
+        nx::meta::field<&cs::MeleeAttack::hitSound>("hitSound"),
     };
 };
 

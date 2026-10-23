@@ -13,6 +13,7 @@ import nx.core;
 import nx.math;
 import nx.platform;
 import nx.console;
+import nx.assets;
 import nx.settings;
 import nx.rhi;
 import nx.rhi.vulkan;
@@ -35,8 +36,10 @@ constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0
 constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
-/// The volume `play` plays a sound at: as it is.
+/// The volume `play` plays a sound at, and the view model's sound events: as it is.
 constexpr float kFullVolume = 1.0F;
+/// A sound that could not be played is reported once in this long, with how many others were not.
+constexpr std::chrono::seconds kSoundFailureInterval{5};
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -211,6 +214,11 @@ private:
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
     void startNextSession();
+    /// What the player hears of the frame the session played: the sounds its weapons made and its view
+    /// model's sound events; and the client events its view model passed, which the frame shows.
+    void hearSession();
+    /// Reports `played` when it failed, once in kSoundFailureInterval.
+    void reportSound(const nx::Result<void, cs::PlayError>& played);
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
@@ -239,6 +247,10 @@ private:
     std::vector<std::byte> m_screenShader;
     std::optional<Session> m_session;     ///< The map played.
     std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
+    cs::ViewModelEvents m_viewModelEvents;
+    std::optional<cs::ViewModelPose> m_viewPose;                ///< Of the frame played.
+    std::vector<const nx::assets::StudioEvent*> m_clientEvents; ///< Its view model passed in the frame.
+    nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene; ///< Of the session's level, made with the first image of it.
     std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
@@ -538,6 +550,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         m_input->turn(m_camera.angles, elapsed);
         if (m_session) {
             m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
+            hearSession();
         }
         if (auto drawn = drawFrame(); !drawn) {
             return drawn;
@@ -577,8 +590,33 @@ void Client::startNextSession() {
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
     m_session = std::exchange(m_nextSession, std::nullopt);
+    m_viewModelEvents = {}; // a new game's first play is new
     m_camera = m_session->start;
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
+}
+
+void Client::hearSession() {
+    m_viewPose = m_session->game->viewModel();
+    m_clientEvents = m_viewModelEvents.passed(m_session->level->viewModels(), m_viewPose);
+    const std::vector<const cs::GameSound*> sounds = m_session->game->takeSounds();
+    if (m_audio == nullptr) {
+        return;
+    }
+    for (const cs::GameSound* const sound : sounds) {
+        reportSound(m_audio->play(*sound));
+    }
+    for (const nx::assets::StudioEvent* const event : m_clientEvents) {
+        if (event->event == cs::kSoundEvent) {
+            reportSound(m_audio->playLocal(event->options, kFullVolume));
+        }
+    }
+}
+
+void Client::reportSound(const nx::Result<void, cs::PlayError>& played) {
+    if (!played && m_soundFailures.allow()) {
+        nx::log::warning(kLog, "a sound not played: {} ({} others not played since the last report)",
+                         nx::describe(played.error()), m_soundFailures.takeSuppressed());
+    }
 }
 
 auto Client::drawFrame() -> nx::Result<void, ClientError> {
@@ -699,7 +737,8 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
              .aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height),
              .time = nx::Seconds{m_mapClock.elapsed()},
              .placements = placements,
-             .viewModel = m_session->game->viewModel()});
+             .viewModel = m_viewPose,
+             .clientEvents = m_clientEvents});
         !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }

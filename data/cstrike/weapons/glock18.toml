@@ -54,6 +54,16 @@ standing = { base = 0.0, scale = 0.1 }
 
 [firing.recoil] # none
 
+[firing.sound] # its client event plays one of them, which to be measured on the original
+files = ["weapons/glock18-1.wav", "weapons/glock18-2.wav"]
+channel = "weapon"
+volume = 1.0
+
+[firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8
+
 [reload]
 time = 2.2
 sequences = [7, 12] # reload, reload2
@@ -81,3 +91,13 @@ ducked = { base = 0.0, scale = 0.095 }
 standing = { base = 0.0, scale = 0.3 }
 
 [alternate.firing.recoil] # none
+
+[alternate.firing.sound] # its client event plays one of them, which to be measured on the original
+files = ["weapons/glock18-1.wav", "weapons/glock18-2.wav"]
+channel = "weapon"
+volume = 1.0
+
+[alternate.firing.emptySound] # PlayEmptySound
+files = ["weapons/dryfire_pistol.wav"]
+channel = "weapon"
+volume = 0.8

@@ -28,18 +28,6 @@ constexpr std::uint64_t kOtherRolls = 360;
 
 } // namespace
 
-auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
-    -> std::vector<const nx::assets::StudioEvent*> {
-    std::vector<const nx::assets::StudioEvent*> passed;
-    for (const nx::assets::StudioEvent& event : sequence.events) {
-        const auto frame = static_cast<float>(event.frame);
-        if (event.event >= kFirstClientEvent && frame > from && frame <= to) {
-            passed.push_back(&event);
-        }
-    }
-    return passed;
-}
-
 auto muzzleFlashAttachmentOf(std::int32_t event) noexcept -> std::optional<std::uint32_t> {
     const std::int32_t step = event - kFirstMuzzleFlashEvent;
     if (step < 0 || step % kMuzzleFlashEventStep != 0) {

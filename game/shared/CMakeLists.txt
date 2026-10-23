@@ -11,12 +11,14 @@ nxAddModuleLibrary(csShared
         src/movement.cppm
         src/studio.cppm
         src/player.cppm
+        src/sounds.cppm
         src/weapons.cppm
         src/loadouts.cppm
         src/inventory.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
+        src/sounds.cpp
         src/weapons.cpp
         src/loadouts.cpp
         src/inventory.cpp

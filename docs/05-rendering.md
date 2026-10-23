@@ -373,8 +373,10 @@ flowchart LR
    `sprites/muzzleflash1.spr` to 3 at that attachment where the bones put it, chosen by its number's
    units, a tenth of its tens in size, half with none, added in full, at a frame and rolled at random
    (by 20 degrees at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`), among the
-   blended sprites of the frame (`cs.client:muzzleFlash`). The light it casts, the shells and the
-   sounds of the other events come with what draws and plays them. A
+   blended sprites of the frame (`cs.client:muzzleFlash`); a sound's (5004) plays the sound its
+   options name ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a
+   frame to the next, for the scene and the sound alike. The light a flash casts and the shells come
+   with what draws them. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
