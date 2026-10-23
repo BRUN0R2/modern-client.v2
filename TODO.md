@@ -275,6 +275,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Brush entities drawn where the game puts them each frame (`WorldFrame::placements`)
 - [x] Brush entities turned by the game (`ModelPlacement::angles`), culled as the original culls them
 - [ ] `renderfx` of brush entities
+- [x] Decals on the world's faces (`nx.render:decals`: images of `decals.wad` as the original makes them, stamped near a point on the faces its tree reaches, cut to each, lit as the face, the original's pool and overlap rule; drawn after the world's faces, pulled toward the eye; depth bias in `nx.rhi`)
+- [ ] Decals on brush entities, permanent decals (`infodecal`), decals on masked faces (stencil), `r_decals` and `mp_decals`
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`
 - [ ] Studio models: animation evaluated in jobs, and the transitions between sequences

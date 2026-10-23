@@ -513,4 +513,45 @@ TEST(BspWorldTest, EachSideOfTheSkyIsSeenUprightTowardItsAxis) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // A bullet hole's like: 16 x 16 texels, black, nearly opaque throughout.
+    constexpr std::uint32_t kSide = 16;
+    const std::vector<std::byte> indices(std::size_t{kSide} * kSide, std::byte{250});
+    const std::vector<std::byte> palette(std::size_t{256} * 3, std::byte{0});
+    const std::array decals{nx::assets::MipTexture{.name = "{shot1",
+                                                   .width = kSide,
+                                                   .height = kSide,
+                                                   .levels = {indices, indices, indices, indices},
+                                                   .palette = palette}};
+    auto world = createWorld(
+        **device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm, .decals = decals});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+
+    // Looking down at the floor of CRATE01 from the middle: 2 units a pixel, the decal 8 pixels wide.
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.pitch = nx::Degrees{90.0F}}};
+    const std::vector<std::byte> before = drawWorld(target, *world, camera);
+    EXPECT_EQ(world->shootDecal(0, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    EXPECT_EQ(world->decals().decalsOn(0), 1U);
+    const std::vector<std::byte> after = drawWorld(target, *world, camera);
+    const auto sum = [](const Pixel& pixel) {
+        return pixel[0] + pixel[1] + pixel[2];
+    };
+    const Pixel lit = pixelAt(before, kExtent.width / 2, kExtent.height / 2);
+    const Pixel holed = pixelAt(after, kExtent.width / 2, kExtent.height / 2);
+    EXPECT_GT(sum(lit), 0);
+    EXPECT_LT(sum(holed) * 10, sum(lit)) << "under the decal, the floor nearly black";
+    EXPECT_EQ(pixelAt(after, 2, 2), pixelAt(before, 2, 2)) << "away from it, as it was";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 } // namespace
