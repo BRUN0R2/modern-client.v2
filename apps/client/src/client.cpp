@@ -40,6 +40,9 @@ constexpr std::chrono::milliseconds kMinimizedWait{50};
 constexpr float kFullVolume = 1.0F;
 /// A sound that could not be played is reported once in this long, with how many others were not.
 constexpr std::chrono::seconds kSoundFailureInterval{5};
+/// The stream of random numbers that chooses which hole a bullet leaves, as the original's client
+/// chooses it among the gunshot decals.
+constexpr std::string_view kBulletHoleStream = "bulletHoles";
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -219,6 +222,9 @@ private:
     void hearSession();
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
+    /// Leaves a bullet's hole, one of the level's gunshot decals at random, where each of the session's
+    /// shots met the world in the frame, once the scene is drawn.
+    void stampBulletHoles();
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
@@ -251,6 +257,7 @@ private:
     std::optional<cs::ViewModelPose> m_viewPose;                ///< Of the frame played.
     std::vector<const nx::assets::StudioEvent*> m_clientEvents; ///< Its view model passed in the frame.
     nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
+    nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene; ///< Of the session's level, made with the first image of it.
     std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
@@ -551,6 +558,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         if (m_session) {
             m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
             hearSession();
+            stampBulletHoles();
         }
         if (auto drawn = drawFrame(); !drawn) {
             return drawn;
@@ -609,6 +617,17 @@ void Client::hearSession() {
         if (event->event == cs::kSoundEvent) {
             reportSound(m_audio->playLocal(event->options, kFullVolume));
         }
+    }
+}
+
+void Client::stampBulletHoles() {
+    const std::vector<nx::Vec3> impacts = m_session->game->takeImpacts();
+    const std::size_t decals = m_session->level->gunshotDecals().size();
+    if (!m_scene || decals == 0) {
+        return;
+    }
+    for (const nx::Vec3 impact : impacts) {
+        std::ignore = m_scene->shootDecal(nx::narrow<std::uint32_t>(m_bulletHoles.below(decals)), impact);
     }
 }
 

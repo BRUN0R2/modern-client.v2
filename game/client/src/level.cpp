@@ -53,6 +53,28 @@ struct WadFiles {
     return files;
 }
 
+/// The decals of decals.wad a bullet leaves on the world, as the original's game names them for a
+/// surface drawn normally (DamageDecal: DECAL_GUNSHOT1 to 5); each the installation lacks is left out.
+constexpr auto kGunshotDecals =
+    std::to_array<std::string_view>({"{shot1", "{shot2", "{shot3", "{shot4", "{shot5"});
+
+/// The gunshot decals of `wad`, those it has and can read; the names of the others.
+[[nodiscard]] auto gunshotDecalsOf(const nx::assets::WadView& wad, std::vector<std::string_view>& absent)
+    -> std::vector<nx::assets::MipTexture> {
+    std::vector<nx::assets::MipTexture> decals;
+    for (const std::string_view name : kGunshotDecals) {
+        const nx::assets::WadEntry* const entry = wad.find(name);
+        auto texture = entry != nullptr ? nx::assets::readTexture(*entry)
+                                        : nx::Result<nx::assets::MipTexture, nx::assets::WadError>{};
+        if (entry == nullptr || !texture) {
+            absent.push_back(name);
+            continue;
+        }
+        decals.push_back(std::move(*texture));
+    }
+    return decals;
+}
+
 /// The sides of the sky `name`, gfx/env/<name><suffix>.tga; none when one is missing or unreadable.
 [[nodiscard]] auto readSkySides(const nx::assets::Vfs& vfs, std::string_view name)
     -> std::optional<std::vector<nx::assets::RgbaImage>> {
@@ -255,6 +277,24 @@ auto Level::load(const GameContent& content, std::string_view name)
         if (auto wad = nx::assets::WadView::parse(bytes)) {
             level.m_wads.push_back(std::move(*wad));
         }
+    }
+    // The bullets' decals, from the game's decals.wad, which holds Half-Life's too.
+    std::vector<std::string_view> absentDecals;
+    const auto decalWadPath = nx::assets::VfsPath::parse("decals.wad");
+    if (auto decalWad = decalWadPath ? content.vfs.readAll(*decalWadPath)
+                                     : nx::Result<std::vector<std::byte>, nx::assets::VfsError>{}) {
+        level.m_decalWadBytes = std::move(*decalWad);
+        if (auto wad = nx::assets::WadView::parse(level.m_decalWadBytes)) {
+            level.m_gunshotDecals = gunshotDecalsOf(*wad, absentDecals);
+        } else {
+            absentDecals.assign(kGunshotDecals.begin(), kGunshotDecals.end());
+        }
+    } else {
+        absentDecals.assign(kGunshotDecals.begin(), kGunshotDecals.end());
+    }
+    if (!absentDecals.empty()) {
+        nx::log::warning(kLog, "decals the bullets leave that the installation does not have: {}",
+                         listed(absentDecals));
     }
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);

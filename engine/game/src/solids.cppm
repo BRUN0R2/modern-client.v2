@@ -43,4 +43,15 @@ export namespace nx::game {
 [[nodiscard]] auto traceSolids(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull,
                                Vec3 start, Vec3 end) -> collision::Trace;
 
+/// What a trace through what is solid met: the trace, and the brush entity that stopped it, none for
+/// the world or nothing (the original's TraceResult::pHit).
+struct SolidHit {
+    collision::Trace trace{};
+    std::optional<ecs::Entity> entity{};
+};
+
+/// traceSolids, and what stopped it.
+[[nodiscard]] auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull,
+                                  Vec3 start, Vec3 end) -> SolidHit;
+
 } // namespace nx::game
