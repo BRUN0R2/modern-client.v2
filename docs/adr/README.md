@@ -30,6 +30,7 @@ says where.
 | [0019](0019-launcher-and-automatic-updates.md) | Automatic, independent updates for the client and the server | Accepted |
 | [0020](0020-in-house-ui-toolkit.md) | In-house retained UI toolkit for the menus, the screens and the console | Accepted |
 | [0021](0021-rook-amxx-names.md) | Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer | Accepted |
+| [0025](0025-enhanced-rendering.md) | The enhanced look: physically based materials, the map's reflections, HDR and bloom, the same on every card | Proposed |
 
 ## Template
 

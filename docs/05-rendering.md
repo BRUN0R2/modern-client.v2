@@ -579,6 +579,14 @@ their consumers.
 Every visual improvement is **optional** and **does not change gameplay** (visibility through
 smoke, for example, must be identical).
 
+**Proposed** ([ADR-0025](adr/0025-enhanced-rendering.md)): `enhanced` as a physically based pipeline,
+forward rendered on the RHI's baseline, the same look on every card it runs on: a linear HDR scene
+in 4 bytes a pixel with a fixed exposure and a tone curve; an energy-conserving bloom; materials
+from data beside each model (metallic-roughness, normal maps, emissive per pixel, KTX2), derived
+from the GoldSrc flags when a model has none; reflections from probes baked from the map as it
+loads; highlights from the map's own lights. Its cost is bounded by design, within 2 ms a frame at
+1920×1080 on an integrated GPU.
+
 **Today** (`nx.render:gamma`): the original's picture, each curve where the original applies it.
 `texgamma` maps the palette of a texture when it loads (`pow(value, texgamma / gamma)`, truncated);
 the light of a luxel, its lightmaps' samples each scaled by its style's brightness (264 at the
