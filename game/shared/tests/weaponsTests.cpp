@@ -135,6 +135,59 @@ TEST(WeaponAppearanceSchemaTest, rejectsInvalidAppearanceIndexes) {
     }
 }
 
+TEST(WeaponAppearanceSchemaTest, readsAMuzzleFlashLook) {
+    const auto weapon = cs::readWeapon(weaponText(kGunKeys, "",
+                                                  std::format(R"({}
+[view.muzzleFlash]
+sprite = "sprites/muzzleflash341.spr"
+scale = 0.16
+firstFrame = 0
+frameRate = 30.0
+time = 0.4
+roll = 0.0
+brightness = 6.0
+light = {{ color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 }}
+)",
+                                                              kGunView)),
+                                       "gun.toml");
+    ASSERT_TRUE(weapon.has_value()) << nx::describe(weapon.error());
+    ASSERT_TRUE(weapon->view.muzzleFlash.has_value());
+    const cs::MuzzleFlashLook& look = *weapon->view.muzzleFlash;
+    EXPECT_EQ(look.sprite, "sprites/muzzleflash341.spr");
+    EXPECT_EQ(look.scale, 0.16F);
+    EXPECT_EQ(look.firstFrame, 0U);
+    EXPECT_EQ(look.frameRate, 30.0F);
+    EXPECT_EQ(look.time, nx::Seconds{0.4F});
+    EXPECT_EQ(look.roll, nx::Degrees{0.0F});
+    EXPECT_EQ(look.brightness, 6.0F);
+    ASSERT_TRUE(look.light.has_value());
+    EXPECT_EQ(look.light->color, (std::array{3000.0F, 1800.0F, 600.0F}));
+    EXPECT_EQ(look.light->reach, nx::HammerUnits{96.0F});
+    EXPECT_EQ(look.light->time, nx::Seconds{0.06F});
+
+    // Each value is its own: one alone styles the flash, the event's the others.
+    const auto bright = cs::readWeapon(
+        weaponText(kGunKeys, "", std::format("{}muzzleFlash = {{ brightness = 4.0 }}\n", kGunView)),
+        "gun.toml");
+    ASSERT_TRUE(bright.has_value()) << nx::describe(bright.error());
+    EXPECT_EQ(bright->view.muzzleFlash->brightness, 4.0F);
+    EXPECT_FALSE(bright->view.muzzleFlash->sprite.has_value());
+}
+
+TEST(WeaponAppearanceSchemaTest, rejectsAMuzzleFlashLookOutsideItsRanges) {
+    for (const std::string_view look :
+         {"scale = -0.5", "frameRate = -30.0", "time = -1.0", "roll = 360.0", "brightness = -1.0",
+          "firstFrame = -1", "glow = 2.0", "light = { color = [-1.0, 0.0, 0.0], reach = 1.0, time = 1.0 }",
+          "light = { color = [1.0, 1.0], reach = 1.0, time = 1.0 }",
+          "light = { color = [1.0, 1.0, 1.0], reach = -1.0, time = 1.0 }"}) {
+        SCOPED_TRACE(look);
+        const auto weapon = cs::readWeapon(
+            weaponText(kGunKeys, "", std::format("{}[view.muzzleFlash]\n{}\n", kGunView, look)), "gun.toml");
+        ASSERT_FALSE(weapon.has_value());
+        EXPECT_EQ(weapon.error().code, WeaponError::DataInvalid);
+    }
+}
+
 TEST(WeaponsTest, TheRepositoryHasTheOriginalsAmmo) {
     const std::optional<WeaponCatalog> catalog = repositoryCatalog();
     ASSERT_TRUE(catalog.has_value());

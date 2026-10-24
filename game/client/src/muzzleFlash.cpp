@@ -9,6 +9,7 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import cs.shared;
 
 namespace cs {
 
@@ -22,9 +23,100 @@ constexpr std::uint32_t kMuzzleFlashAttachments = 4;
 constexpr std::uint32_t kDecimalBase = 10;
 constexpr float kScalePerTen = 0.1F;
 constexpr float kScaleWithoutTens = 0.5F;
-/// The roll of the first sprite's flash, a rifle's, and of the others', at most, in whole degrees.
-constexpr std::uint64_t kRifleRolls = 21;
-constexpr std::uint64_t kOtherRolls = 360;
+/// The original's sprites, sprites/muzzleflash1.spr to 3.
+constexpr std::uint32_t kOriginalSprites = 3;
+/// The roll of the first sprite's flash, a rifle's, and of the others', at most.
+constexpr nx::Degrees kRifleRoll{20.0F};
+constexpr nx::Degrees kOtherRoll{359.0F};
+
+/// Counter-Strike Online's options start with this; then keys, a letter each, and their values, apart.
+constexpr char kKeyedOptions = '#';
+constexpr char kKeySeparator = ' ';
+constexpr char kSpriteKey = 'I';
+constexpr char kScaleKey = 'S';
+constexpr char kFirstFrameKey = 'F';
+constexpr char kFrameRateKey = 'P';
+constexpr char kTimeKey = 'T';
+
+/// The sprite of number `number`: sprites/muzzleflash<number>.spr.
+[[nodiscard]] auto spriteOf(std::uint32_t number) -> std::string {
+    return std::format("sprites/muzzleflash{}.spr", number);
+}
+
+/// `text` as a number of 0 or more, of `Number`; none when it is not one, whole.
+template <class Number>
+[[nodiscard]] auto numberOf(std::string_view text) noexcept -> std::optional<Number> {
+    Number value{};
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    if constexpr (std::floating_point<Number>) {
+        if (!(value >= Number{})) {
+            return std::nullopt; // below 0, or not a number
+        }
+    }
+    return value;
+}
+
+/// The style of the original's options `type`, a whole number (R_MuzzleFlash).
+[[nodiscard]] auto originalStyleOf(std::uint32_t type) -> MuzzleFlashStyle {
+    const std::uint32_t sprite = (type % kDecimalBase) % kOriginalSprites;
+    const float tens = static_cast<float>(type / kDecimalBase) * kScalePerTen;
+    return MuzzleFlashStyle{.sprite = spriteOf(sprite + 1),
+                            .scale = tens == 0.0F ? kScaleWithoutTens : tens,
+                            .firstFrame = std::nullopt,
+                            .frameRate = 0.0F,
+                            .time = kMuzzleFlashTime,
+                            .roll = sprite == 0 ? kRifleRoll : kOtherRoll,
+                            .brightness = 1.0F,
+                            .light = std::nullopt};
+}
+
+/// The style of Counter-Strike Online's `keys`, its options after the '#': each key it reads over
+/// `style`.
+void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
+    for (const auto part : std::views::split(keys, kKeySeparator)) {
+        const std::string_view token{part.begin(), part.end()};
+        if (token.empty()) {
+            continue;
+        }
+        const std::string_view value = token.substr(1);
+        switch (token.front()) {
+        case kSpriteKey:
+            if (const std::optional<std::uint32_t> number = numberOf<std::uint32_t>(value)) {
+                style.sprite = spriteOf(*number);
+            }
+            break;
+        case kScaleKey:
+            style.scale = numberOf<float>(value).value_or(style.scale);
+            break;
+        case kFirstFrameKey:
+            if (const std::optional<std::uint32_t> frame = numberOf<std::uint32_t>(value)) {
+                style.firstFrame = frame;
+            }
+            break;
+        case kFrameRateKey:
+            style.frameRate = numberOf<float>(value).value_or(style.frameRate);
+            break;
+        case kTimeKey:
+            if (const std::optional<float> seconds = numberOf<float>(value)) {
+                style.time = nx::Seconds{*seconds};
+            }
+            break;
+        default:
+            break; // a key whose meaning is unknown
+        }
+    }
+}
+
+/// `value` when given, else `otherwise`.
+template <class Value>
+void over(Value& otherwise, const std::optional<Value>& value) {
+    if (value) {
+        otherwise = *value;
+    }
+}
 
 } // namespace
 
@@ -37,56 +129,120 @@ auto muzzleFlashAttachmentOf(std::int32_t event) noexcept -> std::optional<std::
     return attachment < kMuzzleFlashAttachments ? std::optional{attachment} : std::nullopt;
 }
 
-auto muzzleFlashOf(std::string_view options, nx::Vec3 origin, nx::Seconds time,
-                   std::span<const std::size_t> frameCounts, nx::Random& random) -> MuzzleFlash {
-    std::uint32_t type = 0;
-    const auto [end, error] = std::from_chars(options.data(), options.data() + options.size(), type);
-    if (error != std::errc{} || end != options.data() + options.size()) {
-        type = 0;
+auto muzzleFlashStyleOf(std::string_view options, const std::optional<MuzzleFlashLook>& look)
+    -> MuzzleFlashStyle {
+    const bool isKeyed = options.starts_with(kKeyedOptions);
+    MuzzleFlashStyle style = originalStyleOf(isKeyed ? 0 : numberOf<std::uint32_t>(options).value_or(0));
+    if (isKeyed) {
+        readKeys(options.substr(1), style);
     }
-    const std::uint32_t sprite = (type % kDecimalBase) % MuzzleFlashSprites::kCount;
-    const float tens = static_cast<float>(type / kDecimalBase) * kScalePerTen;
-    const std::size_t frames = sprite < frameCounts.size() ? frameCounts[sprite] : 0;
-    const std::uint64_t rolls = sprite == 0 ? kRifleRolls : kOtherRolls;
-    return MuzzleFlash{.origin = origin,
-                       .sprite = sprite,
-                       .scale = tens == 0.0F ? kScaleWithoutTens : tens,
-                       .roll = nx::Degrees{static_cast<float>(random.below(rolls))},
-                       .frame = static_cast<float>(random.below(frames)),
-                       .until = time + kMuzzleFlashTime};
+    if (look) {
+        over(style.sprite, look->sprite);
+        over(style.scale, look->scale);
+        if (look->firstFrame) {
+            style.firstFrame = look->firstFrame;
+        }
+        over(style.frameRate, look->frameRate);
+        over(style.time, look->time);
+        over(style.roll, look->roll);
+        over(style.brightness, look->brightness);
+        if (look->light) {
+            style.light = look->light;
+        }
+    }
+    return style;
 }
 
-auto MuzzleFlashSprites::read(const nx::assets::Vfs& vfs) -> MuzzleFlashSprites {
-    MuzzleFlashSprites sprites;
-    for (std::size_t index = 0; index < kCount; ++index) {
-        const std::string path = std::format("sprites/muzzleflash{}.spr", index + 1);
+auto MuzzleFlash::frameAt(nx::Seconds time) const noexcept -> std::optional<float> {
+    if (time > until) {
+        return std::nullopt;
+    }
+    const float frame = firstFrame + (std::max((time - start).count(), 0.0F) * frameRate);
+    return frame < static_cast<float>(frameCount) ? std::optional{frame} : std::nullopt;
+}
+
+auto MuzzleFlash::lightAt(nx::Seconds time) const noexcept -> std::optional<nx::render::StudioLight> {
+    const float elapsed = std::max((time - start).count(), 0.0F);
+    if (!light || elapsed >= light->time.count()) {
+        return std::nullopt;
+    }
+    const float left = 1.0F - (elapsed / light->time.count());
+    return nx::render::StudioLight{
+        .position = origin,
+        .reach = light->reach.value(),
+        .color = nx::Vec3{.x = light->color[0], .y = light->color[1], .z = light->color[2]} * left};
+}
+
+auto MuzzleFlash::isOverAt(nx::Seconds time) const noexcept -> bool {
+    return !frameAt(time) && !lightAt(time);
+}
+
+auto muzzleFlashOf(const MuzzleFlashStyle& style, std::uint32_t sprite, std::size_t frameCount,
+                   nx::Vec3 origin, nx::Seconds time, nx::Random& random) -> std::optional<MuzzleFlash> {
+    const auto roll = nx::Degrees{static_cast<float>(random.below(
+        static_cast<std::uint64_t>(std::clamp(style.roll.value(), 0.0F, kOtherRoll.value())) + 1))};
+    const std::uint64_t frame = style.firstFrame ? *style.firstFrame : random.below(frameCount);
+    if (frame >= frameCount) {
+        return std::nullopt;
+    }
+    return MuzzleFlash{.origin = origin,
+                       .sprite = sprite,
+                       .scale = style.scale,
+                       .roll = roll,
+                       .brightness = style.brightness,
+                       .firstFrame = static_cast<float>(frame),
+                       .frameRate = style.frameRate,
+                       .frameCount = frameCount,
+                       .start = time,
+                       .until = time + style.time,
+                       .light = style.light};
+}
+
+auto MuzzleFlashSprites::read(const nx::assets::Vfs& vfs, std::span<const std::string> paths)
+    -> std::vector<std::string> {
+    std::vector<std::string> missing;
+    for (const std::string& path : paths) {
+        if (indexOf(path)) {
+            continue;
+        }
+        File& file = *m_files.emplace_back(std::make_unique<File>(File{.path = path}));
         auto bytes = nx::assets::VfsPath::parse(path).and_then(
             [&vfs](const nx::assets::VfsPath& at) { return vfs.readAll(at); });
         if (!bytes) {
-            sprites.m_missing.push_back(std::format("{} ({})", path, nx::describe(bytes.error())));
+            missing.push_back(std::format("{} ({})", path, nx::describe(bytes.error())));
             continue;
         }
-        auto file = std::make_unique<File>(File{.bytes = std::move(*bytes)});
-        auto view = nx::assets::SpriteView::parse(file->bytes);
+        file.bytes = std::move(*bytes);
+        auto view = nx::assets::SpriteView::parse(file.bytes);
         if (!view) {
-            sprites.m_missing.push_back(std::format("{} ({})", path, nx::describe(view.error())));
+            missing.push_back(std::format("{} ({})", path, nx::describe(view.error())));
             continue;
         }
-        file->view = std::move(*view);
-        sprites.m_files[index] = std::move(file);
+        file.view = std::move(*view);
     }
-    return sprites;
+    return missing;
 }
 
-auto MuzzleFlashSprites::load(nx::render::SpriteRenderer& renderer, nx::rhi::CommandList& commands) const
+auto MuzzleFlashSprites::indexOf(std::string_view path) const noexcept -> std::optional<std::uint32_t> {
+    const auto found = std::ranges::find_if(
+        m_files, [path](const std::unique_ptr<File>& file) { return file->path == path; });
+    if (found == m_files.end()) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(found - m_files.begin());
+}
+
+auto MuzzleFlashSprites::load(nx::render::SpriteRenderer& renderer, nx::rhi::CommandList& commands,
+                              std::size_t first) const
     -> nx::Result<std::vector<std::optional<nx::render::SpriteModel>>, nx::render::SpriteError> {
     std::vector<std::optional<nx::render::SpriteModel>> models;
-    for (std::size_t index = 0; index < kCount; ++index) {
-        if (!m_files[index]) {
+    for (std::size_t index = first; index < m_files.size(); ++index) {
+        const File& file = *m_files[index];
+        if (!file.view) {
             models.emplace_back();
             continue;
         }
-        auto model = renderer.load(commands, *m_files[index]->view, std::format("muzzleflash{}", index + 1));
+        auto model = renderer.load(commands, *file.view, file.path);
         if (!model) {
             return std::unexpected{std::move(model.error())};
         }

@@ -62,18 +62,19 @@ constexpr float kNearlyVertical = 0.999848F;
 /// An oriented sprite is drawn this far in front of its origin, against z-fighting.
 constexpr float kOrientedOffset = 0.01F;
 
-/// A corner of a sprite's quad: where it is, its texture coordinates, its color and opacity, and what
-/// its fragments' alpha must be above.
+/// A corner of a sprite's quad: where it is, its texture coordinates, its color and opacity, what its
+/// fragments' alpha must be above, and its brightness.
 struct SpriteVertex {
     Vec3 position{};
     float u = 0.0F;
     float v = 0.0F;
     Vec4 color{};
     float alphaTest = 0.0F;
+    float brightness = 1.0F;
 };
-/// The 4-byte words of a vertex: the position's three, the texture's two, the color's four and the
-/// alpha test.
-constexpr std::size_t kSpriteVertexWords = 10;
+/// The 4-byte words of a vertex: the position's three, the texture's two, the color's four, the alpha
+/// test and the brightness.
+constexpr std::size_t kSpriteVertexWords = 11;
 static_assert(sizeof(SpriteVertex) == kSpriteVertexWords * sizeof(float),
               "the vertex layout of the sprite pipelines");
 
@@ -86,7 +87,10 @@ constexpr std::array kSpriteVertexAttributes{
                          .offset = offsetof(SpriteVertex, color)}, // NOLINT
     rhi::VertexAttribute{.location = 3,
                          .format = rhi::VertexFormat::Float,
-                         .offset = offsetof(SpriteVertex, alphaTest)}}; // NOLINT
+                         .offset = offsetof(SpriteVertex, alphaTest)}, // NOLINT
+    rhi::VertexAttribute{.location = 4,
+                         .format = rhi::VertexFormat::Float,
+                         .offset = offsetof(SpriteVertex, brightness)}}; // NOLINT
 
 /// The frame's uniform: the rows of the view-projection matrix, and how colors reach the target.
 struct FrameUniform {
@@ -169,12 +173,25 @@ struct QuadAxes {
     return QuadAxes{.origin = instance.origin, .right = view.right, .up = view.up};
 }
 
-/// Appends the quad of `image` on `axes`, `scale` times its size, in `color` (R_DrawSpriteQuad).
+/// How a quad of a sprite is colored: its color and opacity, what its fragments' alpha must be above,
+/// and its brightness.
+struct QuadShade {
+    Vec4 color{};
+    float alphaTest = 0.0F;
+    float brightness = 1.0F;
+};
+
+/// Appends the quad of `image` on `axes`, `scale` times its size, shaded as `shade` (R_DrawSpriteQuad).
 void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, const QuadAxes& axes,
-             float scale, Vec4 color, float alphaTest) {
+             float scale, const QuadShade& shade) {
     const auto corner = [&](float along, float across, float u, float v) {
         const Vec3 point = axes.origin + (axes.up * (along * scale)) + (axes.right * (across * scale));
-        return SpriteVertex{.position = point, .u = u, .v = v, .color = color, .alphaTest = alphaTest};
+        return SpriteVertex{.position = point,
+                            .u = u,
+                            .v = v,
+                            .color = shade.color,
+                            .alphaTest = shade.alphaTest,
+                            .brightness = shade.brightness};
     };
     const SpriteVertex downLeft = corner(image.down, image.left, 0.0F, 1.0F);
     const SpriteVertex upLeft = corner(image.up, image.left, 0.0F, 0.0F);
@@ -192,6 +209,16 @@ void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, 
 
 auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& image,
                   const ChannelTable& textureGamma) -> std::vector<std::byte> {
+    if (image.format == assets::SpritePixels::Bc3) {
+        assets::RgbaImage decoded = assets::decodeBc3(image.pixels, image.width, image.height);
+        for (std::size_t texel = 0; texel < decoded.pixels.size(); texel += kRgbaBytes) {
+            for (std::size_t which = 0; which < kRgbBytes; ++which) {
+                std::byte& channel = decoded.pixels[texel + which];
+                channel = std::byte{textureGamma[std::to_integer<std::size_t>(channel)]};
+            }
+        }
+        return std::move(decoded.pixels);
+    }
     std::vector<std::byte> texels;
     texels.reserve(image.pixels.size() * kRgbaBytes);
     for (const std::byte pixel : image.pixels) {
@@ -478,18 +505,22 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
                                                         .w = blend};
         const SpriteImageDraw& image = model.m_images[imageOf(model.m_frames, instance.frame, draw.time)];
         const auto firstQuad = narrow<std::uint32_t>(m_quadCalls.size());
-        addQuad(vertices, image, *axes, scale, tint, isLit ? kLitAlphaTest : kDefaultAlphaTest);
+        addQuad(vertices, image, *axes, scale,
+                {.color = tint,
+                 .alphaTest = isLit ? kLitAlphaTest : kDefaultAlphaTest,
+                 .brightness = instance.brightness});
         m_quadCalls.push_back(
             SpriteQuadCall{.pipeline = pipelineOf(instance.mode), .image = image.group.get()});
         if (isLit) {
             const LightColor lit =
                 light.lightAlong(instance.origin, instance.origin - Vec3{.z = kLightReach}, draw.lightStyles);
             addQuad(vertices, image, *axes, scale,
-                    Vec4{.x = static_cast<float>(lit.red) / kChannelTop,
-                         .y = static_cast<float>(lit.green) / kChannelTop,
-                         .z = static_cast<float>(lit.blue) / kChannelTop,
-                         .w = blend},
-                    kDefaultAlphaTest);
+                    {.color = Vec4{.x = static_cast<float>(lit.red) / kChannelTop,
+                                   .y = static_cast<float>(lit.green) / kChannelTop,
+                                   .z = static_cast<float>(lit.blue) / kChannelTop,
+                                   .w = blend},
+                     .alphaTest = kDefaultAlphaTest,
+                     .brightness = 1.0F});
             m_quadCalls.push_back(
                 SpriteQuadCall{.pipeline = m_lightPipeline.get(), .image = image.group.get()});
         }

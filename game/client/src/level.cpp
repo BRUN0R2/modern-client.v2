@@ -319,11 +319,7 @@ auto Level::load(const GameContent& content, std::string_view name)
                             std::move(read.error()));
         }
         viewModel.model = std::move(*read);
-    }
-    level.m_muzzleFlashes = MuzzleFlashSprites::read(content.vfs);
-    if (!level.m_muzzleFlashes->missing().empty()) {
-        nx::log::warning(kLog, "muzzle flash sprites that cannot be read: {}",
-                         listed(level.m_muzzleFlashes->missing()));
+        level.readMuzzleFlashes(content.vfs, *viewModel.model);
     }
     return made;
 }
@@ -366,8 +362,16 @@ auto Level::updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& we
             continue;
         }
         viewModel.model = std::move(*read);
+        readMuzzleFlashes(vfs, *viewModel.model);
     }
     return updated;
+}
+
+void Level::readMuzzleFlashes(const nx::assets::Vfs& vfs, const ViewModel& viewModel) {
+    const std::vector<std::string> missing = m_muzzleFlashes.read(vfs, viewModel.muzzleFlashSprites());
+    if (!missing.empty()) {
+        nx::log::warning(kLog, "muzzle flash sprites that cannot be read: {}", listed(missing));
+    }
 }
 
 auto Level::bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark {

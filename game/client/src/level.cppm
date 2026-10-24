@@ -62,8 +62,9 @@ struct GameContent {
 /// the game gives it, the sprites and studio models its entities show, the decals it shows and the mark
 /// a bullet leaves on each of its brush models, and the view models of the game's weapons and the
 /// sprites of their muzzle flashes, read once; the view model of a weapon made or changed as the
-/// game runs read then, as no precache limits it. It stays where it is made: the views point into
-/// it, and what is made of it (the light of nx::render::WorldLight) to its map.
+/// game runs read then, with the sprites of its flashes the level lacks, as no precache limits them. It stays
+/// where it is made: the views point into it, and what is made of it (the light of nx::render::WorldLight) to
+/// its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -109,9 +110,10 @@ public:
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
-    /// The sprites of the weapons' muzzle flashes.
+    /// The sprites of the weapons' muzzle flashes: those their view models' events show, as their
+    /// weapons' data styles them.
     [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
-        return *m_muzzleFlashes;
+        return m_muzzleFlashes;
     }
     /// The weapons the level read the view models of: those of the catalog as it last read it.
     [[nodiscard]] auto weapons() const -> std::vector<WeaponIndex>;
@@ -119,8 +121,9 @@ public:
     /// as it was changed.
     [[nodiscard]] auto viewModel(WeaponIndex weapon) const noexcept -> const ViewModel*;
     /// Reads the view model of each weapon of `weapons` made, or whose values were set, since the
-    /// level read it, from `vfs`: those weapons, in their order. One that cannot be read leaves its
-    /// weapon without one, logged, and the game plays on.
+    /// level read it, from `vfs`, and the sprites of its muzzle flashes the level lacks: those weapons,
+    /// in their order. One that cannot be read leaves its weapon without one, logged, and the game
+    /// plays on; a sprite likewise its flashes.
     auto updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
         -> std::vector<WeaponIndex>;
     /// The decals of decals.wad the level shows: those bullets leave (bulletDecals).
@@ -152,8 +155,12 @@ private:
         std::uint32_t revision = 0;
     };
 
+    /// Reads the sprites the muzzle flashes of `viewModel` show that the level lacks, from `vfs`; logs
+    /// those it cannot.
+    void readMuzzleFlashes(const nx::assets::Vfs& vfs, const ViewModel& viewModel);
+
     std::vector<WeaponViewModel> m_viewModels; ///< By WeaponIndex.
-    std::optional<MuzzleFlashSprites> m_muzzleFlashes;
+    MuzzleFlashSprites m_muzzleFlashes;
 };
 
 /// Makes in `world` the game of `map` as it starts: the components of nx.game, and the map's brush

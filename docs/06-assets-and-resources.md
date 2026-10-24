@@ -139,6 +139,7 @@ yield `ContentError::MissingEssentialFiles` with the full list.
 | WAD3 | Textures, pictures and console fonts | `halflife.wad`, `cstrike.wad`, `decals.wad`, `tempdecal.wad` (sprays), WADs referenced by the `wad` key of `worldspawn`; the pictures (`CONBACK`, `LOADING`) and fonts (`CONCHARS`, `CREDITSFONT`, `FONT0` to `FONT2`) of `gfx.wad`, `fonts.wad` and `cached.wad` |
 | MDL v10 | Studio models | Bones, sequences, *blends*, hitboxes, attachments, events, textures (including `*T.mdl`) and sequence groups (`*01.mdl`) |
 | SPR v2 | Sprites | HUD, effects, smoke, crosshair |
+| SPR v3 (Counter-Strike Online's) | Sprites of its effects | Muzzle flashes: frames of BC3 (DXT5) blocks, from the user's own files |
 | WAV (8/16-bit PCM) | Sounds | *Cue* points for looping. Original rates (11/22/44 kHz) |
 | `sentences.txt` | Radio phrases and speech | Word composition with pitch/volume parameters |
 | `materials.txt` | Material type per texture | Footstep sounds and bullet penetration |
@@ -222,7 +223,10 @@ Readers today:
 - SPR v2 (`nx.assets:spr`): the orientation, the rendering (normal, additive, index-alpha,
   alpha-test), the sync type, the 256-color palette, and the frames: single images, or groups whose
   intervals rise from above zero. Each image has its origin, size and pixels as a view of the
-  file's bytes, every pixel a palette index.
+  file's bytes, every pixel a palette index. And Counter-Strike Online's version 3, as its files are
+  observed (all 1000 of an extraction alike): the same header without a palette, each frame a single
+  image, a DDS file of BC3 (DXT5) blocks of one level, centered on the sprite's origin; any other
+  DDS is refused. `nx.assets:blockCompression` decodes BC3 to RGBA as Direct3D decodes it.
 - MDL v10 (`nx.assets:mdl`): the skeleton (each bone after its parent, so it is posed in one
   pass and cannot cycle), the bone controllers (one axis each, looping or not), the hitboxes, the
   attachments, the body parts and their models (vertices and normals with their bones, meshes as

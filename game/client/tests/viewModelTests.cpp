@@ -23,6 +23,11 @@ constexpr std::size_t kBodyPartModelCountOffset = 64;
 constexpr std::size_t kBodyPartBytes = 76;
 constexpr std::size_t kModelRecordBytes = 112;
 constexpr std::size_t kMeshSkinReferenceOffset = 8;
+/// Where a sequence keeps its events, and an event its number and its options.
+constexpr std::size_t kSequenceEventsOffset = 52;
+constexpr std::size_t kEventNumberOffset = 4;
+constexpr std::size_t kEventOptionsOffset = 12;
+constexpr std::size_t kEventOptionsBytes = 64;
 
 /// A synthetic model with two skins and, when asked, two choices of its body part.
 class ViewModelAppearanceTest : public testing::Test {
@@ -222,21 +227,58 @@ TEST_F(ViewModelSoundsTest, AWeaponInHandSoundsAsItsDataAndItsViewModelsEventsSa
 }
 
 TEST_F(ViewModelAppearanceTest, RejectsStaticAppearanceInAlternateViews) {
-    for (const bool declaresSkin : {false, true}) {
-        SCOPED_TRACE(declaresSkin);
+    for (const std::string_view key : {"skin", "bodyChoices", "muzzleFlash"}) {
+        SCOPED_TRACE(key);
         cs::Weapon declared = weapon();
         declared.alternate.emplace();
         declared.alternate->view = declared.view;
-        if (declaresSkin) {
+        if (key == "skin") {
             declared.alternate->view->skin = 0;
-        } else {
+        } else if (key == "bodyChoices") {
             declared.alternate->view->bodyChoices = std::vector<std::uint32_t>{};
+        } else {
+            declared.alternate->view->muzzleFlash = cs::MuzzleFlashLook{.brightness = 2.0F};
         }
         const auto viewModel = read(declared);
         ASSERT_FALSE(viewModel.has_value());
         EXPECT_EQ(viewModel.error().code, cs::ViewModelError::NoAppearance);
         EXPECT_NE(nx::describe(viewModel.error()).find("alternate.view"), std::string::npos);
     }
+}
+
+/// The same model, whose "idle" shows a muzzle flash in place of its sound.
+class ViewModelMuzzleFlashTest : public ViewModelAppearanceTest {
+protected:
+    /// Its event a muzzle flash's at the first attachment, of `options`.
+    void flashes(std::string_view options) {
+        const std::size_t event = fieldAt(model.sequences + kSequenceEventsOffset);
+        model.put(event + kEventNumberOffset, std::int32_t{5001});
+        nx::test::Bytes written;
+        nx::test::appendName(written, options, kEventOptionsBytes);
+        std::ranges::copy(written,
+                          model.bytes.begin() + static_cast<std::ptrdiff_t>(event + kEventOptionsOffset));
+    }
+};
+
+TEST_F(ViewModelMuzzleFlashTest, ItsEventsNameTheSpritesTheirFlashesShowEachOnce) {
+    flashes("#I341 S0.16 F0 P30 T999");
+    const auto viewModel = read(weapon());
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    EXPECT_EQ(viewModel->muzzleFlashSprites(), (std::vector<std::string>{"sprites/muzzleflash341.spr"}));
+    EXPECT_TRUE(viewModel->soundEvents().empty()) << "its event is a flash's";
+}
+
+TEST_F(ViewModelMuzzleFlashTest, ItsWeaponsLookStylesItsFlashes) {
+    flashes("22");
+    cs::Weapon styled = weapon();
+    styled.view.muzzleFlash = cs::MuzzleFlashLook{.sprite = "sprites/goldFlash.spr", .brightness = 4.0F};
+    const auto viewModel = read(styled);
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    EXPECT_EQ(viewModel->muzzleFlashSprites(), (std::vector<std::string>{"sprites/goldFlash.spr"}));
+    const cs::MuzzleFlashStyle style = viewModel->muzzleFlashStyleOf(viewModel->sequence(0).events.front());
+    EXPECT_EQ(style.sprite, "sprites/goldFlash.spr");
+    EXPECT_FLOAT_EQ(style.scale, 0.2F) << "the event's";
+    EXPECT_FLOAT_EQ(style.brightness, 4.0F);
 }
 
 } // namespace

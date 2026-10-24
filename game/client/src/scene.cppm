@@ -63,14 +63,15 @@ public:
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
     /// sight does not reach hidden, the blended ones of them all in one order
     /// (nx.render:blendedOrder), among them the muzzle flashes of the view's client events and those
-    /// still showing; then the weapon in the player's hand, lit
-    /// where the player's eye is, as the original lights the view's own model. Errors: DrawFailed.
+    /// still showing, as bright as their styles make them in the enhanced look; then the weapon in the
+    /// player's hand, lit where the player's eye is, as the original lights the view's own model, and
+    /// in the enhanced look by the light of its flashes too. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
 
-    /// Puts on the GPU the view models `level` has now of `weapons` (none for one it has none of), its
-    /// uploads recorded in `commands`. The GPU must be done with the frames that drew a model this
-    /// replaces. Errors: CreateFailed.
+    /// Puts on the GPU the view models `level` has now of `weapons` (none for one it has none of), and
+    /// the sprites of the muzzle flashes it read since, its uploads recorded in `commands`. The GPU must
+    /// be done with the frames that drew a model this replaces. Errors: CreateFailed.
     [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
                                    std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
 
@@ -100,12 +101,11 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          std::vector<std::optional<nx::render::StudioModel>> weapons,
-          std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept;
+          bool isEnhanced) noexcept;
 
     /// Adds the muzzle flashes of `events`, the client events `viewModel` passed, its bones `bones`, at
-    /// `time`; and forgets those shown long enough.
-    void flash(const ViewModel* viewModel, std::span<const PassedEvent> events,
+    /// `time`, of the sprites of `level`; and forgets those over.
+    void flash(const Level& level, const ViewModel* viewModel, std::span<const PassedEvent> events,
                std::span<const nx::Mat3x4> bones, nx::Seconds time);
 
     nx::render::BspWorld m_world;
@@ -117,9 +117,11 @@ private:
     nx::render::StudioRenderer m_viewModels;
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
-    std::vector<std::optional<nx::render::SpriteModel>> m_flashModels; ///< Of sprites/muzzleflash1.spr to 3.
-    std::vector<MuzzleFlash> m_flashes;                                ///< Those showing.
-    std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
+    /// The sprites of the muzzle flashes, by their place in the level's MuzzleFlashSprites.
+    std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;
+    std::vector<MuzzleFlash> m_flashes; ///< Those showing, or their light.
+    std::uint64_t m_flashCount = 0;     ///< The flashes made, which seed each one's chances.
+    bool m_isEnhanced = false;          ///< Drawn in the enhanced look.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
 };
 

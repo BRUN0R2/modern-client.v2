@@ -111,6 +111,44 @@ void append(std::vector<std::byte>& bytes, Value value) {
     return bytes;
 }
 
+/// An SPR v3 file, Counter-Strike Online's, of one frame of 8 x 8 pixels of BC3 blocks, all of the
+/// 5-6-5 `color` and of `alpha`.
+[[nodiscard]] auto compressedSpriteFile(std::uint16_t color, std::uint8_t alpha) -> std::vector<std::byte> {
+    std::vector<std::byte> bytes{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}, std::byte{'P'}};
+    append(bytes, std::int32_t{3});
+    append(bytes, kParallel);
+    append(bytes, kNormal);
+    append(bytes, 8.0F);
+    append(bytes, kSize);
+    append(bytes, kSize);
+    append(bytes, std::int32_t{1}); // frames
+    append(bytes, 0.0F);
+    append(bytes, std::int32_t{1}); // at random
+    bytes.insert(bytes.end(), {std::byte{'D'}, std::byte{'D'}, std::byte{'S'}, std::byte{' '}});
+    std::vector<std::byte> header(124);
+    const auto put = [&header](std::size_t offset, std::uint32_t value) {
+        const auto raw = std::bit_cast<std::array<std::byte, sizeof(value)>>(value);
+        std::ranges::copy(raw, header.begin() + static_cast<std::ptrdiff_t>(offset));
+    };
+    put(0, 124);
+    put(8, static_cast<std::uint32_t>(kSize));
+    put(12, static_cast<std::uint32_t>(kSize));
+    put(24, 1);   // one level
+    put(72, 32);  // the pixel format's size
+    put(76, 0x4); // its FourCC is its format
+    std::ranges::copy(std::array{std::byte{'D'}, std::byte{'X'}, std::byte{'T'}, std::byte{'5'}},
+                      header.begin() + 80);
+    bytes.insert(bytes.end(), header.begin(), header.end());
+    for (std::size_t block = 0; block < 4; ++block) {
+        bytes.insert(bytes.end(), {std::byte{alpha}, std::byte{alpha}});
+        bytes.insert(bytes.end(), 6, std::byte{0}); // every pixel the first alpha
+        append(bytes, color);
+        append(bytes, color);
+        append(bytes, std::uint32_t{0}); // and the first color
+    }
+    return bytes;
+}
+
 [[nodiscard]] auto readFileOf(const std::filesystem::path& path) -> std::vector<std::byte> {
     auto bytes = nx::platform::readFile(path);
     EXPECT_TRUE(bytes.has_value() && !bytes->empty()) << path.string();
@@ -214,6 +252,55 @@ TEST(SpriteRendererTest, AnAddedSpriteAddsItsImageTimesItsColorAndAmount) {
     expectNear(pixelAt(scene.draw(target, cameraAt({}), added), kMiddle, kMiddle),
                {scaled(gamma[200], amount), scaled(gamma[100], 128.0F / 255.0F * amount), 0},
                "texgamma'd, times its color and its amount, added to black");
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, AnImageOfBc3BlocksIsDecodedItsColorsTexgammadItsAlphaItsOwn) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    Scene scene{**device};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    // 0x8410: 132, 130 and 132; an alpha of 128.
+    const nx::render::SpriteModel model = scene.load(compressedSpriteFile(0x8410, 128));
+    const std::array added{
+        SpriteInstance{.model = model, .origin = {.x = 20.0F}, .mode = RenderMode::TransAdd, .amount = 255}};
+
+    const auto gamma = nx::render::textureGammaTable({});
+    const float alpha = 128.0F / 255.0F;
+    expectNear(pixelAt(scene.draw(target, cameraAt({}), added), kMiddle, kMiddle),
+               {scaled(gamma[132], alpha), scaled(gamma[130], alpha), scaled(gamma[132], alpha)},
+               "texgamma'd, added as its alpha says");
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, ABrightnessMultipliesTheLightASpriteAdds) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    Scene scene{**device, nx::render::ColorEncoding::Linear};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    const std::array images{imageOf(kFirst, kFirst)};
+    const nx::render::SpriteModel model = scene.load(spriteFile(kParallel, kAdditive, images));
+    SpriteInstance instance{
+        .model = model, .origin = {.x = 20.0F}, .mode = RenderMode::TransAdd, .amount = 64};
+    const Pixel once = pixelAt(scene.draw(target, cameraAt({}), std::array{instance}), kMiddle, kMiddle);
+    // A target of bytes holds a fragment's color to 1 before it is added (the enhanced look's, of half
+    // floats, does not): a brightness that keeps the brightest channel, about 0.64, below.
+    constexpr float kBrightness = 1.5F;
+    instance.brightness = kBrightness;
+    const Pixel brighter = pixelAt(scene.draw(target, cameraAt({}), std::array{instance}), kMiddle, kMiddle);
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        EXPECT_GT(once.at(channel), 0) << "channel " << channel;
+        EXPECT_NEAR(brighter.at(channel), static_cast<float>(once.at(channel)) * kBrightness, 2.0F)
+            << "channel " << channel;
+    }
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

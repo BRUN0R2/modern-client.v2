@@ -3,9 +3,9 @@
 
 // Sprites (nx.render:sprite): each a quad the CPU turns as its sprite's orientation says, its image
 // times its entity's color, as opaque as its render mode makes it, as the original's GL draws it
-// (GL_MODULATE); a fragment whose alpha is not above the alpha test is discarded (GL_ALPHA_TEST). An
-// alpha-tested sprite the world lights is drawn again where it was, its light multiplying what is
-// there.
+// (GL_MODULATE), and times its brightness, as light; a fragment whose alpha is not above the alpha
+// test is discarded (GL_ALPHA_TEST). An alpha-tested sprite the world lights is drawn again where it
+// was, its light multiplying what is there.
 // Drawn as linear light (colorEncoding.slang), the images are sampled from sRGB as light, and the
 // entity's color and the light as display colors made light too; how opaque, as it is.
 
@@ -35,6 +35,8 @@ struct VertexInput
     [[vk::location(2)]] float4 color : COLOR0;
     // What a fragment's alpha must be above.
     [[vk::location(3)]] float alphaTest : TEXCOORD1;
+    // What its color is multiplied by once it is light: 1, or more for a glow.
+    [[vk::location(4)]] float brightness : TEXCOORD2;
 };
 
 struct VertexOutput
@@ -43,6 +45,7 @@ struct VertexOutput
     float2 uv : TEXCOORD0;
     float4 color : COLOR0;
     nointerpolation float alphaTest : TEXCOORD1;
+    nointerpolation float brightness : TEXCOORD2;
 };
 
 [shader("vertex")]
@@ -55,15 +58,17 @@ VertexOutput vertexMain(VertexInput input)
     output.uv = input.uv;
     output.color = input.color;
     output.alphaTest = input.alphaTest;
+    output.brightness = input.brightness;
     return output;
 }
 
-// The image times the color, cut by the alpha test.
+// The image times the color and the brightness, cut by the alpha test.
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
     const float4 texel = image.Sample(imageSampler, input.uv);
-    const float4 color = float4(texel.rgb * encodedOf(input.color.rgb, frame.colorEncoding), texel.a * input.color.a);
+    const float3 light = encodedOf(input.color.rgb, frame.colorEncoding) * input.brightness;
+    const float4 color = float4(texel.rgb * light, texel.a * input.color.a);
     if (color.a <= input.alphaTest)
     {
         discard;

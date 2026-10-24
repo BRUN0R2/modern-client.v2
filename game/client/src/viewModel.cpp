@@ -26,10 +26,12 @@ using nx::assets::Vfs;
 [[nodiscard]] auto checkAppearance(const MdlView& model, const MdlView& textures, const Weapon& weapon)
     -> nx::Result<void, ViewModelError> {
     if (weapon.alternate && weapon.alternate->view &&
-        (weapon.alternate->view->skin || weapon.alternate->view->bodyChoices)) {
-        return nx::fail(ViewModelError::NoAppearance,
-                        std::format("{}: alternate.view cannot declare static skin or bodyChoices; use view",
-                                    weapon.models.view));
+        (weapon.alternate->view->skin || weapon.alternate->view->bodyChoices ||
+         weapon.alternate->view->muzzleFlash)) {
+        return nx::fail(
+            ViewModelError::NoAppearance,
+            std::format("{}: alternate.view cannot declare static skin, bodyChoices or muzzleFlash; use view",
+                        weapon.models.view));
     }
     if (auto checked = model.checkTextures(textures); !checked) {
         return nx::fail(ViewModelError::NoAppearance, weapon.models.view, std::move(checked.error()));
@@ -111,9 +113,9 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
 
 ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
                      std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
-                     std::uint32_t skin, std::vector<std::uint32_t> bodyChoices) noexcept
+                     Appearance appearance) noexcept
     : m_files{std::move(files)}, m_animations{std::move(animations)}, m_materials{std::move(materials)},
-      m_isMirrored{isMirrored}, m_skin{skin}, m_bodyChoices{std::move(bodyChoices)} {}
+      m_isMirrored{isMirrored}, m_appearance{std::move(appearance)} {}
 
 auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
     auto files = readModelFiles(vfs, weapon.models.view);
@@ -141,12 +143,12 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
         nx::log::warning(kViewModelLog, "{}: shaded as the original shades it: {}", weapon.models.view,
                          nx::describe(materials.error()));
     }
-    return ViewModel{std::move(*files),
-                     std::move(animations),
+    return ViewModel{std::move(*files), std::move(animations),
                      std::move(materials).value_or(std::vector<std::optional<nx::render::StudioMaterial>>{}),
                      weapon.models.viewHand != kPlayerHand,
-                     weapon.view.skin.value_or(0),
-                     weapon.view.bodyChoices.value_or(std::vector<std::uint32_t>{})};
+                     Appearance{.skin = weapon.view.skin.value_or(0),
+                                .bodyChoices = weapon.view.bodyChoices.value_or(std::vector<std::uint32_t>{}),
+                                .muzzleFlash = weapon.view.muzzleFlash}};
 }
 
 auto ViewModel::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
@@ -179,6 +181,26 @@ auto ViewModel::soundEvents() const -> std::vector<std::string_view> {
         }
     }
     return sounds;
+}
+
+auto ViewModel::muzzleFlashStyleOf(const nx::assets::StudioEvent& event) const -> MuzzleFlashStyle {
+    return cs::muzzleFlashStyleOf(event.options, m_appearance.muzzleFlash);
+}
+
+auto ViewModel::muzzleFlashSprites() const -> std::vector<std::string> {
+    std::vector<std::string> sprites;
+    for (const nx::assets::StudioSequence& sequence : m_files->view->sequences()) {
+        for (const nx::assets::StudioEvent& event : sequence.events) {
+            if (!muzzleFlashAttachmentOf(event.event)) {
+                continue;
+            }
+            std::string sprite = muzzleFlashStyleOf(event).sprite;
+            if (!std::ranges::contains(sprites, sprite)) {
+                sprites.push_back(std::move(sprite));
+            }
+        }
+    }
+    return sprites;
 }
 
 auto soundFilesOf(const Weapon& weapon, const ViewModel* viewModel) -> std::vector<std::string_view> {

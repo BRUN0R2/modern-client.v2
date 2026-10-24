@@ -386,14 +386,27 @@ flowchart LR
    `R_AllowFlipViewModel`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). The
    view model's client events (5000 and above) fire as a frame passes them, a sequence played anew
    from its first frame (`R_StudioClientEvents`); a muzzle flash's (5001, 5011, 5021, 5031: the
-   first to fourth attachment, as GoldSrc's model events are documented) shows one of
-   `sprites/muzzleflash1.spr` to 3 at that attachment where the bones put it, chosen by its number's
-   units, a tenth of its tens in size, half with none, added in full, at a frame and rolled at random
-   (by 20 degrees at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`), among the
-   blended sprites of the frame (`cs.client:muzzleFlash`); a sound's (5004) plays the sound its
-   options name ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a
-   frame to the next, for the scene and the sound alike. The light a flash casts and the shells come
-   with what draws them. A
+   first to fourth attachment, as GoldSrc's model events are documented) shows a sprite at that
+   attachment where the bones put it, added in full among the blended sprites of the frame, as its
+   style says (`cs.client:muzzleFlash`): the event's options, then each value of the weapon's
+   `view.muzzleFlash` over them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   The original's options, a number, show one of `sprites/muzzleflash1.spr` to 3, chosen by its
+   units, a tenth of its tens in size, half with none, at a frame and rolled at random (by 20 degrees
+   at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`). Counter-Strike Online's, keys
+   and their values after a `#` (`#I341 S0.16 R2 F0 P30 T999 A1 L0 O0 X0`, as its models are
+   observed), show `sprites/muzzleflash<I>.spr` (its sprites of version 3, §10) at scale `S`, played
+   once from frame `F` at `P` frames a second, for `T` seconds at most; the keys whose meaning is
+   unknown are not read, and a key an option lacks is the original's of 0. A flash is over past its
+   time or past its sprite's last frame. In the enhanced look a style's `brightness` multiplies its
+   light beyond white, which the bloom spreads, and its `light` lights the weapon in hand from the
+   flash (a `StudioLight`, after the key light), dimming to nothing over its own time; the legacy
+   look draws every flash as the original does. The sprites a view model's flashes show are read
+   with it, by their paths (`cs::MuzzleFlashSprites`, `Level::updateViewModels`), and put on the GPU
+   with it (`Scene::loadWeapons`), so that no file is read as a frame plays: one missing is logged
+   and its flashes are not shown. A sound's (5004) plays the sound its options name
+   ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a frame to the
+   next, for the scene and the sound alike. The original's light of a shot on the world and its
+   models (`EF_MUZZLEFLASH`) comes with the dynamic lights, the shells with the temporary entities. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
@@ -530,13 +543,17 @@ same model become one draw call per submesh.
 `R_DrawSpriteModel` draws them, as Xash3D-FWGS reconstructs it. Each image of a sprite is a texture
 with its mip levels (`GL_MipMap`), its palette as its format makes it (`Mod_LoadSpriteModel`): normal
 and additive ones through `texgamma`, index-alpha ones the last color with the index as alpha,
-alpha-tested ones their own palette with index 255 transparent. Each sprite is a quad the CPU turns as
+alpha-tested ones their own palette with index 255 transparent; an image of Counter-Strike Online's
+sprites of version 3 is its BC3 blocks decoded, its colors through `texgamma` as a palette's, its
+alpha its own. Each sprite is a quad the CPU turns as
 its orientation says (`R_DrawSpriteModel`: parallel, parallel upright and not drawn within a degree of
 looking straight up or down, facing upright, oriented and nudged 0.01 toward its viewer, parallel
 oriented by its roll, which a parallel sprite with a roll becomes), the image of its frame (the frame
 cut to a whole number and held to the sprite's; a group's image by its loop's time,
 `R_GetSpriteFrame`) times `rendercolor` (black is white), as opaque as `renderamt` makes it, its
-fragments not above the alpha test discarded. The render modes blend as `R_DrawSpriteModel` sets
+fragments not above the alpha test discarded; times its brightness too, once its color is light: 1
+but for an effect that glows beyond white (`SpriteInstance::brightness`, a muzzle flash's in the
+enhanced look, §9). The render modes blend as `R_DrawSpriteModel` sets
 them: Normal opaque, TransColor and TransTexture blended and writing their depth, TransAlpha blended
 without it, TransAdd added, Glow added over everything; a glow off the screen or hidden by the game is
 not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squared distance (held from

@@ -232,6 +232,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] VGUI2's localized strings: the text of each token, found as layouts name them (`nx.assets:localization`), read by `nxcheck`
 - [x] MDL v10 reader (including `*T.mdl` and `*01.mdl`) with fuzzing (`nx.assets:mdl`, `fuzzMdl`): structure, geometry, textures, skins, sequences and animations decoded from the model or its sequence groups
 - [x] SPR v2 reader with fuzzing (`nx.assets:spr`, `fuzzSpr`)
+- [x] Counter-Strike Online's SPR v3, frames of BC3 (DXT5) blocks, decoded (`nx.assets:spr`, `nx.assets:blockCompression`, `fuzzSpr`)
 - [x] WAV reader (PCM 8/16, cue points) with fuzzing (`nx.assets:wav`, `fuzzWav`), and every other uncompressed layout (24/32-bit PCM, 32/64-bit float, extensible) at any rate and channel count
 - [x] TGA reader with fuzzing (`nx.assets:tga`, `fuzzTga`): color-mapped, true-color and grayscale, raw or run-length encoded, from any corner, to RGBA
 - [x] `nxcheck`: every file of the Counter-Strike 1.6 installation through the VFS and the readers, joins included (`*T.mdl`, sequence groups), on the Job System ([18](docs/18-testing-and-quality.md#real-content))
@@ -293,6 +294,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Model instancing
 - [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)
 - [x] The view model's client events, and the muzzle flashes they show (`cs.client:muzzleFlash`, [05 §9](docs/05-rendering.md#9-studio-models-and-gpu-skinning))
+- [x] Muzzle flashes styled by their events and their weapon's data: the original's numbers, Counter-Strike Online's keys (animated sprites of v3), a weapon's `view.muzzleFlash` over them, its brightness and its light on the weapon in hand in the enhanced look ([10 §7.2](docs/10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml))
 - [ ] The dynamic lights of studio models (*elights*, *dlights*), the muzzle flash's among them; the shells the guns eject
 - [x] A frame of a map to a file without a window (`nxview --screenshot`, placed with `--position` and `--angles`, at `--time`), as the client draws it; `next` plays the maps
 - [ ] Model viewer
