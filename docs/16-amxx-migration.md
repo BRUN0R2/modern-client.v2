@@ -8,20 +8,23 @@ and loose strings with types**. The compiler points out everything that was wron
 unnoticed in Pawn.
 
 The conversion can be done by hand with this guide or assisted by
-`rook migrate` ([§6](#6-rook-migrate)).
+`rook migrate` ([§6](#6-rook-migrate)). It may keep AMX Mod X's spelling: `#include <amxmodx>`,
+`new`, the natives of the `amxx` layer and the underscored accessors (`get_player_var`) compile as
+they read in Pawn, the types aside ([§3.1](#31-the-amxx-layer),
+[ADR-0021](adr/0021-rook-amxx-names.md)).
 
 ## 2. Syntax
 
 | Pawn | Rook |
 |------|------|
-| `#include <amxmodx>` | `import cs.prelude.*;` |
+| `#include <amxmodx>` | `import cs.prelude.*;`, or kept: it imports `amxx.amxmodx.*` ([§3.1](#31-the-amxx-layer)) |
 | `#include <rezombie_main>` | `import rezombie.prelude.*;` |
 | `#pragma semicolon 1` | Always mandatory |
 | `#pragma compress 1` | Unnecessary (packages are already compressed) |
 | `#define MAX_ZOMBIES 10` | `const MAX_ZOMBIES: i32 = 10;` |
 | `register_plugin("Name", VERSION, AUTHOR)` | `plugin { name: ..., version: ..., author: ... }` block |
-| `new x = 10;` | `let x = 10;` (immutable) or `var x = 10;` |
-| `new Float:speed = 250.0;` | `let speed: Speed = 250ups;` |
+| `new x = 10;` | `let x = 10;` (immutable) or `var x = 10;`; `new x = 10;` is kept as `var` |
+| `new Float:speed = 250.0;` | `let speed: Speed = 250ups;`, or kept with its type before the name: `new Speed:speed = 250ups;` |
 | `new Class:class = ...` (tag) | `let class: Class = ...` (nominal handle) |
 | `any:` | Generics (`fn f<T>(x: T)`) |
 | `_:value` (remove the tag) | `.value()` or an explicit conversion |
@@ -78,6 +81,37 @@ The conversion can be done by hand with this guide or assisted by
 | `SQL_MakeDbTuple` / `SQL_ThreadQuery` | `sqlOpen` + typed prepared queries (`await`) |
 | `set_fail_state("reason")` | `return err(MyError.Variant);` in the lifecycle forward |
 | `log_amx("...")` | `logInfo("...")` |
+
+### 3.1 The `amxx` layer
+
+A plugin may keep AMX Mod X's names: the `amxx.*` modules provide, by their literal names, the
+natives of the table above that do what no catalog does, each the canonical function with Rook's
+types ([ADR-0021](adr/0021-rook-amxx-names.md)):
+
+| Kept | Canonical |
+|------|-----------|
+| `register_clcmd("say /menu", cmd_menu)?` | `registerClcmd("say /menu", cmdMenu)?` |
+| `client_print(player, PrintTarget.Chat, "...")` | `clientPrint(player, PrintTarget.Chat, "...")` |
+| `client_print_color(player, "...")` | `clientPrintColor(player, "...")` |
+| `set_task(1s, task, owner: refOf(player))` / `remove_task(handle)` | `setTask(...)` / `removeTask(handle)` |
+| `precache_model("models/x.mdl")?` | `precacheModel("models/x.mdl")?` |
+| `log_amx("...")` | `logInfo("...")` |
+
+The types are Rook's: the handler by reference and not by its name, a `Player` and not an index,
+units, `Result`. A native that only reads or writes a property a catalog has is not in the layer,
+so that each property has one way: it is reached through its handle's accessor, in either
+spelling. `get_user_health(id)` is `get_player_var(player, "health")`, `is_user_alive(id)` is
+`get_player_var(player, "isAlive")`, `cs_get_user_money(id)` is `get_player_var(player, "money")`;
+calling one of them is an error whose fix writes the accessor.
+
+The natives that reach the engine's internals are not kept either: `engfunc` and `dllfunc`, `pev`
+and `set_pev`, ReAPI's `get_entvar`/`set_entvar` and `get_member`/`set_member`,
+`rg_create_entity`, `RegisterHam` and `RegisterHookChain`, `message_begin` and `write_byte`.
+`#include <fakemeta>` and the other headers of the kind (`engine`, `hamsandwich`, `reapi`,
+`orpheu`, `fun`, `cstrike`) are errors; their calls become the typed API of the table above:
+`engfunc(EngFunc_SetModel, entity, "models/x.mdl")` and `set_entvar(entity, var_model, "...")`
+become `setEntityVar(entity, "model", precacheModel("models/x.mdl")?)`, and an entity is created
+whole through `nx.entity` ([15 §2](15-mod-api.md#2-module-organization)).
 
 ## 4. Converted examples (ReZombie)
 
@@ -382,6 +416,10 @@ What the tool does:
 6. Generates a report with what was converted automatically, what needs review and what
    has no equivalent.
 
+With `--keep-amxx-names`, it keeps AMX Mod X's spelling (`#include`, `new`, the `amxx` layer's
+natives, the underscored accessors) and changes only what typing requires, for the smallest diff;
+the natives of a catalog's property still become its accessor.
+
 The tool **does not promise a 100% automatic conversion**. The goal is to eliminate the
 mechanical work and make explicit what needs to be thought through.
 
@@ -389,7 +427,7 @@ mechanical work and make explicit what needs to be thought through.
 
 - [ ] Imports and a `plugin` block in place of the includes and `register_plugin`.
 - [ ] Content IDs exported as `pub const` and imported by whoever depends on them.
-- [ ] Names converted to camelCase (`set_props_var` → `setPropsVar`, `"max_clip"` → `"maxClip"`).
+- [ ] Names converted to camelCase (`set_props_var` → `setPropsVar`), or kept with `--keep-amxx-names`; the keys in the catalog's spelling (`"max_clip"` → `"maxClip"`).
 - [ ] Every `get*Var`/`set*Var` key compiles, with units.
 - [ ] No ephemeral handle stored: use `Ref` or `PlayerMap`/`EntityMap`.
 - [ ] Callbacks by reference, without strings.

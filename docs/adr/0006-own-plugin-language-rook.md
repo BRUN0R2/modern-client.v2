@@ -1,6 +1,6 @@
 # ADR-0006 — Own plugin language (Rook) with its own compiler
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md)
 - **Date:** 2026-10-20
 
 ## Context
@@ -18,6 +18,8 @@ Create the **Rook** language (working name) and the **`rookc`** compiler
 
 - Familiar C-like syntax, with the AMXX lifecycle names written in camelCase
   (`pluginPrecache`, `pluginInit`, `forward`), like the whole project ([ADR-0013](0013-camelcase-convention.md)).
+  AMX Mod X's own spelling (`#include <amxmodx>`, `new`, `register_clcmd`) is accepted too, through
+  the `amxx` compatibility layer over that API ([ADR-0021](0021-rook-amxx-names.md)).
 - Nominal types, no `any` and no null, `Result` with `error enum`, exhaustive `match`, units
   of measure, ephemeral handles checked at compile time and `vars` catalogs with checked
   literal keys.

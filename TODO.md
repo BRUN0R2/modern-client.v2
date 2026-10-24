@@ -16,6 +16,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Project license: option A, GPL-3.0-or-later + MIT (Rook and SDK) + CC BY 4.0 (docs) ([ADR-0010](docs/adr/0010-license.md))
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
+- [x] Rook accepting AMX Mod X's literal names (`#include`, `new`, `register_clcmd`, `client_print`; a property's native such as `get_user_health` being its accessor, `get_player_var(player, "health")`) and the accessors with underscores (`get_player_var`, `set_weapon_var`, `get_entity_var`) through an `amxx` compatibility layer, an exception to ADR-0013 ([ADR-0021](docs/adr/0021-rook-amxx-names.md))
 - [ ] The enhanced look: physically based materials, the map's reflection probes, HDR and bloom, the same on every card ([ADR-0025](docs/adr/0025-enhanced-rendering.md), proposed)
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
 - [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
@@ -508,10 +509,11 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Exhaustive `match` with patterns, guards and tuples
 - [ ] Ephemeral handle analysis (no escaping and no `await`)
 - [ ] `pure fn` verification
-- [ ] `vars` catalogs with typed literal keys and `get*Var`/`set*Var` generation
+- [ ] `vars` catalogs with typed literal keys and `get*Var`/`set*Var` generation, and their underscored spelling (`get_player_var`)
+- [ ] AMX Mod X's spelling: `new` as a contextual keyword, `#include` of the `amxx` headers ([ADR-0021](docs/adr/0021-rook-amxx-names.md))
 - [ ] Known forwards with name and signature checking
 - [ ] Interpolated strings and checked translation keys
-- [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming…)
+- [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming, `compatibilityName`…)
 - [ ] RIR (typed SSA) and optimizations
 - [ ] `.rbc` bytecode generation with metadata and debug info
 - [ ] Query-driven incremental compilation
@@ -550,13 +552,14 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `nx.storage` (KV and SQLite) and `nx.http`
 - [ ] Plugin network messages
 - [ ] API compatibility check in CI
+- [ ] The `amxx.*` modules: AMX Mod X's natives that no catalog covers, over the canonical API ([ADR-0021](docs/adr/0021-rook-amxx-names.md))
 
 ### Tools
 - [ ] `rook new`, `build`, `check`, `test`, `fmt`, `lint`, `doc`, `pack`
 - [ ] `rookLsp` (`vars` key autocompletion, diagnostics, rename, go to definition)
 - [ ] DAP debugger
 - [ ] VS Code extension
-- [ ] `rook migrate` (Pawn → Rook) with a report
+- [ ] `rook migrate` (Pawn → Rook) with a report, and `--keep-amxx-names`
 
 ### Built-in mods
 - [ ] `admin` (with `admins.toml`, typed permissions and `users.ini` import)
