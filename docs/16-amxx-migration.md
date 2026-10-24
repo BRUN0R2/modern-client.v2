@@ -52,7 +52,7 @@ they read in Pawn, the types aside ([§3.1](#31-the-amxx-layer),
 | `set_pev(id, pev_health, 100.0)` / `set_entvar(...)` | `setEntityVar(entity, "health", 100hp);` |
 | `get_member(id, m_iAccount)` / `cs_get_user_money(id)` | `getPlayerVar(player, "money")` |
 | `set_member(id, m_iAccount, 800)` / `cs_set_user_money` | `setPlayerVar(player, "money", Money(800));` |
-| `get_user_health(id)` / `set_user_health(id, 100)` | `getEntityVar(player, "health")` / `setEntityVar(player, "health", 100hp)` |
+| `get_user_health(id)` / `set_user_health(id, 100)` | `getPlayerVar(player, "health")` / `setPlayerVar(player, "health", 100hp)` |
 | `is_user_alive(id)` | `getPlayerVar(player, "isAlive")` |
 | `get_user_team(id)` / `cs_get_user_team` | `getPlayerVar(player, "team")` |
 | `rg_set_user_team(id, TEAM_CT)` | `changeTeam(player, Team.CounterTerrorist)?` |
