@@ -161,31 +161,40 @@ auto MuzzleFlash::frameAt(nx::Seconds time) const noexcept -> std::optional<floa
     return frame < static_cast<float>(frameCount) ? std::optional{frame} : std::nullopt;
 }
 
-auto MuzzleFlash::lightAt(nx::Seconds time) const noexcept -> std::optional<nx::render::StudioLight> {
+auto MuzzleFlash::lightAt(nx::Seconds time, nx::Vec3 origin) const noexcept
+    -> std::optional<nx::render::StudioLight> {
+    const std::optional<float> left = lightLeftAt(time);
+    if (!left) {
+        return std::nullopt;
+    }
+    return nx::render::StudioLight{
+        .position = origin,
+        .reach = light->reach.value(),
+        .color = nx::Vec3{.x = light->color[0], .y = light->color[1], .z = light->color[2]} * *left};
+}
+
+auto MuzzleFlash::isOverAt(nx::Seconds time) const noexcept -> bool {
+    return !frameAt(time) && !lightLeftAt(time);
+}
+
+auto MuzzleFlash::lightLeftAt(nx::Seconds time) const noexcept -> std::optional<float> {
     const float elapsed = std::max((time - start).count(), 0.0F);
     if (!light || elapsed >= light->time.count()) {
         return std::nullopt;
     }
-    const float left = 1.0F - (elapsed / light->time.count());
-    return nx::render::StudioLight{
-        .position = origin,
-        .reach = light->reach.value(),
-        .color = nx::Vec3{.x = light->color[0], .y = light->color[1], .z = light->color[2]} * left};
-}
-
-auto MuzzleFlash::isOverAt(nx::Seconds time) const noexcept -> bool {
-    return !frameAt(time) && !lightAt(time);
+    return 1.0F - (elapsed / light->time.count());
 }
 
 auto muzzleFlashOf(const MuzzleFlashStyle& style, std::uint32_t sprite, std::size_t frameCount,
-                   nx::Vec3 origin, nx::Seconds time, nx::Random& random) -> std::optional<MuzzleFlash> {
+                   MuzzleFlashAnchor anchor, nx::Seconds time, nx::Random& random)
+    -> std::optional<MuzzleFlash> {
     const auto roll = nx::Degrees{static_cast<float>(random.below(
         static_cast<std::uint64_t>(std::clamp(style.roll.value(), 0.0F, kOtherRoll.value())) + 1))};
     const std::uint64_t frame = style.firstFrame ? *style.firstFrame : random.below(frameCount);
     if (frame >= frameCount) {
         return std::nullopt;
     }
-    return MuzzleFlash{.origin = origin,
+    return MuzzleFlash{.anchor = anchor,
                        .sprite = sprite,
                        .scale = style.scale,
                        .roll = roll,
@@ -196,6 +205,17 @@ auto muzzleFlashOf(const MuzzleFlashStyle& style, std::uint32_t sprite, std::siz
                        .start = time,
                        .until = time + style.time,
                        .light = style.light};
+}
+
+void MuzzleFlashes::show(MuzzleFlash flash) {
+    std::erase_if(m_flashes, [&flash](const MuzzleFlash& shown) { return shown.anchor == flash.anchor; });
+    m_flashes.push_back(std::move(flash));
+}
+
+void MuzzleFlashes::forget(nx::Seconds time, std::optional<WeaponIndex> inHand) {
+    std::erase_if(m_flashes, [time, inHand](const MuzzleFlash& shown) {
+        return shown.isOverAt(time) || inHand != shown.anchor.weapon;
+    });
 }
 
 auto MuzzleFlashSprites::read(const nx::assets::Vfs& vfs, std::span<const std::string> paths)

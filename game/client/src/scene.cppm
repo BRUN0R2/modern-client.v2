@@ -103,10 +103,11 @@ private:
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
           bool isEnhanced) noexcept;
 
-    /// Adds the muzzle flashes of `events`, the client events `viewModel` passed, its bones `bones`, at
-    /// `time`, of the sprites of `level`; and forgets those over.
-    void flash(const Level& level, const ViewModel* viewModel, std::span<const PassedEvent> events,
-               std::span<const nx::Mat3x4> bones, nx::Seconds time);
+    /// Forgets the muzzle flashes over at `time` or of another weapon than `inHand`'s; then adds those
+    /// of `events`, the client events passed by `viewModel`, that of `inHand` posed as `bones`, of the
+    /// sprites of `level`.
+    void flash(const Level& level, const ViewModel* viewModel, std::optional<WeaponIndex> inHand,
+               std::span<const PassedEvent> events, std::span<const nx::Mat3x4> bones, nx::Seconds time);
 
     nx::render::BspWorld m_world;
     nx::render::WorldLight m_light;
@@ -119,9 +120,9 @@ private:
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     /// The sprites of the muzzle flashes, by their place in the level's MuzzleFlashSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;
-    std::vector<MuzzleFlash> m_flashes; ///< Those showing, or their light.
-    std::uint64_t m_flashCount = 0;     ///< The flashes made, which seed each one's chances.
-    bool m_isEnhanced = false;          ///< Drawn in the enhanced look.
+    MuzzleFlashes m_flashes;        ///< Those showing, or their light.
+    std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
+    bool m_isEnhanced = false;      ///< Drawn in the enhanced look.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
 };
 

@@ -387,9 +387,12 @@ flowchart LR
    view model's client events (5000 and above) fire as a frame passes them, a sequence played anew
    from its first frame (`R_StudioClientEvents`); a muzzle flash's (5001, 5011, 5021, 5031: the
    first to fourth attachment, as GoldSrc's model events are documented) shows a sprite at that
-   attachment where the bones put it, added in full among the blended sprites of the frame, as its
-   style says (`cs.client:muzzleFlash`): the event's options, then each value of the weapon's
-   `view.muzzleFlash` over them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   attachment, added in full among the blended sprites of the frame, as its style says
+   (`cs.client:muzzleFlash`). A flash is anchored to its attachment (`cs::MuzzleFlashAnchor`): each
+   frame shows it where that frame's bones put the attachment, so that it stays at the muzzle as the
+   weapon moves, however long it lasts; a flash at an attachment replaces the one showing there, and
+   those of a weapon the player no longer holds are forgotten (`cs::MuzzleFlashes`). Its style is
+   the event's options, then each value of the weapon's `view.muzzleFlash` over them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
    The original's options, a number, show one of `sprites/muzzleflash1.spr` to 3, chosen by its
    units, a tenth of its tens in size, half with none, at a frame and rolled at random (by 20 degrees
    at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`). Counter-Strike Online's, keys

@@ -172,7 +172,13 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     if (viewModel != nullptr && weaponModel != nullptr) {
         bones = viewModel->pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt);
     }
-    flash(level, viewModel, view.clientEvents, bones, view.time);
+    const std::optional<WeaponIndex> inHand =
+        bones.empty() ? std::nullopt : std::optional{view.viewModel->weapon};
+    flash(level, viewModel, inHand, view.clientEvents, bones, view.time);
+    // A flash shows where its attachment is in this frame's pose: it follows the muzzle.
+    const auto whereIs = [viewModel, &bones](const MuzzleFlash& shown) {
+        return viewModel != nullptr ? viewModel->attachmentAt(bones, shown.anchor.attachment) : std::nullopt;
+    };
     std::vector<nx::render::SpriteInstance> sprites = level.sprites().instances(m_spriteModels, view.time);
     for (nx::render::SpriteInstance& sprite : sprites) {
         if (sprite.mode == nx::render::RenderMode::Glow) {
@@ -181,13 +187,14 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         }
     }
     // The brightness of a flash is the enhanced look's: the legacy look draws it as the original does.
-    for (const MuzzleFlash& shown : m_flashes) {
+    for (const MuzzleFlash& shown : m_flashes.shown()) {
         const std::optional<float> frame = shown.frameAt(view.time);
-        if (!frame) {
+        const std::optional<nx::Vec3> origin = whereIs(shown);
+        if (!frame || !origin) {
             continue; // only its light is left
         }
         sprites.push_back(nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
-                                                     .origin = shown.origin,
+                                                     .origin = *origin,
                                                      .angles = {.roll = shown.roll},
                                                      .frame = *frame,
                                                      .scale = shown.scale,
@@ -212,8 +219,10 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     // above it and behind the eye, carried with the view, first; then the light of its flashes, the
     // nearest; then the map's lights nearest it, in the room left.
     std::vector<nx::render::StudioLight> lights{viewModelLightOf(view.camera)};
-    for (const MuzzleFlash& shown : m_flashes) {
-        if (const std::optional<nx::render::StudioLight> light = shown.lightAt(view.time)) {
+    for (const MuzzleFlash& shown : m_flashes.shown()) {
+        const std::optional<nx::Vec3> origin = whereIs(shown);
+        if (const std::optional<nx::render::StudioLight> light =
+                origin ? shown.lightAt(view.time, *origin) : std::nullopt) {
             lights.push_back(*light);
         }
     }
@@ -277,19 +286,17 @@ auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
     return {};
 }
 
-void Scene::flash(const Level& level, const ViewModel* viewModel, std::span<const PassedEvent> events,
-                  std::span<const nx::Mat3x4> bones, nx::Seconds time) {
-    std::erase_if(m_flashes, [time](const MuzzleFlash& shown) { return shown.isOverAt(time); });
-    if (viewModel == nullptr || bones.empty()) {
+void Scene::flash(const Level& level, const ViewModel* viewModel, std::optional<WeaponIndex> inHand,
+                  std::span<const PassedEvent> events, std::span<const nx::Mat3x4> bones, nx::Seconds time) {
+    m_flashes.forget(time, inHand);
+    if (viewModel == nullptr || !inHand) {
         return;
     }
     for (const PassedEvent& passed : events) {
         const nx::assets::StudioEvent& event = *passed.event;
         const std::optional<std::uint32_t> attachment = muzzleFlashAttachmentOf(event.event);
-        const std::optional<nx::Vec3> origin =
-            attachment ? viewModel->attachmentAt(bones, *attachment) : std::nullopt;
-        if (!origin) {
-            continue;
+        if (!attachment || !viewModel->attachmentAt(bones, *attachment)) {
+            continue; // a model without that attachment shows no flash
         }
         // Its sprite was read with the view model; one that could not be, logged then, shows nothing.
         const MuzzleFlashStyle style = viewModel->muzzleFlashStyleOf(event);
@@ -298,9 +305,10 @@ void Scene::flash(const Level& level, const ViewModel* viewModel, std::span<cons
             continue;
         }
         nx::Random random{m_flashCount++, kFlashStream};
-        if (std::optional<MuzzleFlash> shown =
-                muzzleFlashOf(style, *sprite, m_flashModels[*sprite]->frameCount(), *origin, time, random)) {
-            m_flashes.push_back(std::move(*shown));
+        if (std::optional<MuzzleFlash> shown = muzzleFlashOf(
+                style, *sprite, m_flashModels[*sprite]->frameCount(),
+                MuzzleFlashAnchor{.weapon = *inHand, .attachment = *attachment}, time, random)) {
+            m_flashes.show(std::move(*shown));
         }
     }
 }

@@ -3,8 +3,8 @@
 
 // The client events a view model's sequence passes from a frame to another, the attachment of each
 // muzzle flash event, the style an event's options and its weapon's data give its flash (the
-// original's number, Counter-Strike Online's keys), the flash as it plays and the light it casts, and
-// the sprites the flashes show, read once by their paths.
+// original's number, Counter-Strike Online's keys), the flash as it plays and the light it casts, the
+// flashes showing, one at an anchor, and the sprites the flashes show, read once by their paths.
 
 #include <gtest/gtest.h>
 
@@ -41,11 +41,13 @@ constexpr std::string_view kDrakarOptions = "#I341 S0.16 R2 F0 P30 T999 A1 L0 O0
            std::ranges::to<std::vector>();
 }
 
-/// The flash `style` makes of a sprite of `frames` frames at `start`, which must make one.
+/// The first attachment of the view model of the weapon of index 2.
+constexpr cs::MuzzleFlashAnchor kAnchor{.weapon = cs::WeaponIndex{2}, .attachment = 0};
+
+/// The flash `style` makes of a sprite of `frames` frames at `start` at `anchor`, which must make one.
 [[nodiscard]] auto shown(const cs::MuzzleFlashStyle& style, std::size_t frames, nx::Seconds start,
-                         nx::Random& random) -> cs::MuzzleFlash {
-    const std::optional<cs::MuzzleFlash> flash =
-        cs::muzzleFlashOf(style, 4, frames, {.x = 1.0F}, start, random);
+                         nx::Random& random, cs::MuzzleFlashAnchor anchor = kAnchor) -> cs::MuzzleFlash {
+    const std::optional<cs::MuzzleFlash> flash = cs::muzzleFlashOf(style, 4, frames, anchor, start, random);
     EXPECT_TRUE(flash.has_value());
     return flash.value_or(cs::MuzzleFlash{});
 }
@@ -106,14 +108,14 @@ TEST(MuzzleFlashTest, AnOriginalFlashShowsAFrameAtRandomRolledAtRandomForAHundre
     }
     const cs::MuzzleFlash flash = shown(rifle, 3, nx::Seconds{5.0F}, random);
     EXPECT_EQ(flash.sprite, 4U);
-    EXPECT_EQ(flash.origin, (nx::Vec3{.x = 1.0F}));
+    EXPECT_EQ(flash.anchor, kAnchor);
     EXPECT_FLOAT_EQ(flash.scale, 0.1F);
     EXPECT_FLOAT_EQ(flash.until.count(), 5.01F);
     EXPECT_EQ(flash.frameAt(nx::Seconds{5.0F}), flash.firstFrame);
     EXPECT_EQ(flash.frameAt(nx::Seconds{5.009F}), flash.firstFrame) << "held";
     EXPECT_EQ(flash.frameAt(nx::Seconds{5.02F}), std::nullopt);
     EXPECT_TRUE(flash.isOverAt(nx::Seconds{5.02F}));
-    EXPECT_FALSE(flash.lightAt(nx::Seconds{5.0F}).has_value()) << "the original's casts none of its own";
+    EXPECT_FALSE(flash.lightAt(nx::Seconds{5.0F}, {}).has_value()) << "the original's casts none of its own";
     EXPECT_EQ(cs::muzzleFlashOf(rifle, 0, 0, {}, nx::Seconds{}, random), std::nullopt)
         << "a sprite of no frame";
 }
@@ -194,18 +196,47 @@ TEST(MuzzleFlashTest, ItsLightDimsToNothingOverItsTimeOutlastingItsFrames) {
     nx::Random random{3, "test"};
     const cs::MuzzleFlash flash = shown(style, 3, nx::Seconds{2.0F}, random);
 
-    const std::optional<nx::render::StudioLight> full = flash.lightAt(nx::Seconds{2.0F});
+    // From where its anchor is when it is drawn.
+    const nx::Vec3 muzzle{.x = 31.0F, .z = -1.0F};
+    const std::optional<nx::render::StudioLight> full = flash.lightAt(nx::Seconds{2.0F}, muzzle);
     ASSERT_TRUE(full.has_value());
-    EXPECT_EQ(full->position, flash.origin);
+    EXPECT_EQ(full->position, muzzle);
     EXPECT_FLOAT_EQ(full->reach, 128.0F);
     EXPECT_FLOAT_EQ(full->color.x, 1000.0F);
-    const std::optional<nx::render::StudioLight> half = flash.lightAt(nx::Seconds{2.05F});
+    const std::optional<nx::render::StudioLight> half = flash.lightAt(nx::Seconds{2.05F}, muzzle);
     ASSERT_TRUE(half.has_value());
     EXPECT_NEAR(half->color.y, 250.0F, 0.1F);
     EXPECT_EQ(flash.frameAt(nx::Seconds{2.05F}), std::nullopt) << "its sprite is over";
     EXPECT_FALSE(flash.isOverAt(nx::Seconds{2.05F})) << "its light is not";
-    EXPECT_EQ(flash.lightAt(nx::Seconds{2.11F}), std::nullopt);
+    EXPECT_EQ(flash.lightAt(nx::Seconds{2.11F}, muzzle), std::nullopt);
     EXPECT_TRUE(flash.isOverAt(nx::Seconds{2.11F}));
+}
+
+[[nodiscard]] auto anchorsOf(const cs::MuzzleFlashes& flashes) -> std::vector<cs::MuzzleFlashAnchor> {
+    return flashes.shown() | std::views::transform(&cs::MuzzleFlash::anchor) | std::ranges::to<std::vector>();
+}
+
+TEST(MuzzleFlashTest, AMuzzleShowsOneFlashAtATimeAndTheWeaponInHandsAlone) {
+    nx::Random random{4, "test"};
+    const cs::MuzzleFlashStyle drakar = cs::muzzleFlashStyleOf(kDrakarOptions, std::nullopt);
+    const cs::MuzzleFlashAnchor second{.weapon = kAnchor.weapon, .attachment = 1};
+    cs::MuzzleFlashes flashes;
+    flashes.show(shown(drakar, 12, nx::Seconds{1.0F}, random));
+    flashes.show(shown(drakar, 12, nx::Seconds{1.0F}, random, second));
+    flashes.show(shown(drakar, 12, nx::Seconds{1.1F}, random));
+    EXPECT_EQ(anchorsOf(flashes), (std::vector{second, kAnchor})) << "a shot restarts its muzzle's flash";
+    EXPECT_FLOAT_EQ(flashes.shown().back().start.count(), 1.1F);
+
+    flashes.forget(nx::Seconds{1.2F}, kAnchor.weapon);
+    EXPECT_EQ(flashes.shown().size(), 2U) << "both still playing";
+    flashes.forget(nx::Seconds{1.45F}, kAnchor.weapon);
+    EXPECT_EQ(anchorsOf(flashes), (std::vector{kAnchor})) << "the other muzzle's flash played its last frame";
+    flashes.forget(nx::Seconds{1.46F}, cs::WeaponIndex{3});
+    EXPECT_TRUE(flashes.shown().empty()) << "another weapon in hand";
+
+    flashes.show(shown(drakar, 12, nx::Seconds{2.0F}, random));
+    flashes.forget(nx::Seconds{2.0F}, std::nullopt);
+    EXPECT_TRUE(flashes.shown().empty()) << "no weapon in hand";
 }
 
 /// The bytes of an SPR v2 file of one frame of one pixel.

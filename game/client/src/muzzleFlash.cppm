@@ -11,7 +11,11 @@
 /// - Counter-Strike Online's, keys and their values after a '#' ("#I341 S0.16 F0 P30 T999"): its
 ///   sprite sprites/muzzleflash<I>.spr, S its scale, played from frame F at P frames a second, once,
 ///   for T seconds at most (as its files are observed); the keys whose meaning is unknown are not read.
-/// The sprites the styles show are read with the view model, before a frame shows them.
+/// A flash is anchored to its attachment: each frame shows it where that frame's bones put the
+/// attachment, so that it stays at the muzzle as the weapon moves, however long it lasts (the
+/// original's lasts a frame, where its temporary entity needs no following). A muzzle shows one
+/// flash at a time: a flash at an attachment replaces the one showing there. The sprites the styles
+/// show are read with the view model, before a frame shows them.
 ///
 /// Today: the muzzle flashes, and the light a weapon's data gives them on the weapon in hand in the
 /// enhanced look. The original's light of a shot on the world and its models (EF_MUZZLEFLASH) comes
@@ -56,9 +60,18 @@ struct MuzzleFlashStyle {
 [[nodiscard]] auto muzzleFlashStyleOf(std::string_view options, const std::optional<MuzzleFlashLook>& look)
     -> MuzzleFlashStyle;
 
+/// Where a muzzle flash shows: an attachment of the view model of a weapon, wherever the bones of the
+/// frame shown put it.
+struct MuzzleFlashAnchor {
+    WeaponIndex weapon{};
+    std::uint32_t attachment{};
+
+    [[nodiscard]] inline auto operator==(const MuzzleFlashAnchor&) const noexcept -> bool = default;
+};
+
 /// A muzzle flash shown: where, which sprite, how big, its roll, its frames, and when.
 struct MuzzleFlash {
-    nx::Vec3 origin{};
+    MuzzleFlashAnchor anchor{};
     std::uint32_t sprite{}; ///< Of the MuzzleFlashSprites.
     float scale{};
     nx::Degrees roll{};
@@ -72,19 +85,39 @@ struct MuzzleFlash {
 
     /// The frame it shows at `time`; none once it is over: past its time, or past its last frame.
     [[nodiscard]] auto frameAt(nx::Seconds time) const noexcept -> std::optional<float>;
-    /// The light it casts at `time` from where it is, dimming to nothing over the light's time; none
-    /// without one, or once that time is over.
-    [[nodiscard]] auto lightAt(nx::Seconds time) const noexcept -> std::optional<nx::render::StudioLight>;
+    /// The light it casts at `time` from `origin`, where its anchor is then, dimming to nothing over the
+    /// light's time; none without one, or once that time is over.
+    [[nodiscard]] auto lightAt(nx::Seconds time, nx::Vec3 origin) const noexcept
+        -> std::optional<nx::render::StudioLight>;
     /// Whether neither it nor its light shows at `time`.
     [[nodiscard]] auto isOverAt(nx::Seconds time) const noexcept -> bool;
+
+private:
+    /// How much of its light is left at `time`, from 1 down; none without one, or once it is out.
+    [[nodiscard]] auto lightLeftAt(nx::Seconds time) const noexcept -> std::optional<float>;
 };
 
-/// The muzzle flash of `style` shown at `origin` from `time`, of sprite `sprite`, which has
+/// The muzzle flash of `style` shown at `anchor` from `time`, of sprite `sprite`, which has
 /// `frameCount` frames: its roll, then its frame when the style leaves it to chance, drawn from
 /// `random`. None when the sprite has no such frame.
 [[nodiscard]] auto muzzleFlashOf(const MuzzleFlashStyle& style, std::uint32_t sprite, std::size_t frameCount,
-                                 nx::Vec3 origin, nx::Seconds time, nx::Random& random)
+                                 MuzzleFlashAnchor anchor, nx::Seconds time, nx::Random& random)
     -> std::optional<MuzzleFlash>;
+
+/// The muzzle flashes showing, one at an anchor at most.
+class MuzzleFlashes {
+public:
+    /// Shows `flash`, in place of the one showing at its anchor.
+    void show(MuzzleFlash flash);
+    /// Forgets those over at `time`, and those of another weapon than `inHand`, the one the player
+    /// holds; all of them when it holds none.
+    void forget(nx::Seconds time, std::optional<WeaponIndex> inHand);
+
+    [[nodiscard]] inline auto shown() const noexcept -> std::span<const MuzzleFlash> { return m_flashes; }
+
+private:
+    std::vector<MuzzleFlash> m_flashes;
+};
 
 /// The sprites the muzzle flashes show, each read once by its path, before a frame shows it.
 class MuzzleFlashSprites {
