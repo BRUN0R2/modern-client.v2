@@ -118,6 +118,41 @@ TEST(FontSizeTest, ReadsTheDeviceHeightsWindowsTakes) {
     EXPECT_TRUE(nx::ui::readDeviceHeights({}).empty());
 }
 
+TEST(FontSizeTest, ADeviceHeightWhoseLineIsLessThanHalfItsEmIsLeftOut) {
+    // A version 1 table for every ratio, one group of the records `records` (yPelHeight, yMax, yMin).
+    const auto table = [](std::span<const std::array<std::uint16_t, 3>> records) {
+        std::vector<std::byte> bytes;
+        const auto append = [&bytes](std::uint16_t value) {
+            bytes.push_back(static_cast<std::byte>(value >> 8U));
+            bytes.push_back(static_cast<std::byte>(value & 0xFFU));
+        };
+        for (const std::uint16_t value : {std::uint16_t{1}, std::uint16_t{1}, std::uint16_t{1}}) {
+            append(value); // version, numRecs, numRatios
+        }
+        bytes.insert(bytes.end(), {std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}}); // every ratio
+        append(12); // the group's offset
+        append(static_cast<std::uint16_t>(records.size()));
+        bytes.insert(bytes.end(), {std::byte{0}, std::byte{0xFF}}); // startsz, endsz
+        for (const std::array<std::uint16_t, 3>& record : records) {
+            for (const std::uint16_t value : record) {
+                append(value);
+            }
+        }
+        return bytes;
+    };
+    // Lines 20 (17 over -3), 19 (10 over -9) and 21: the last two of ems of 38, 40 and 64768.
+    constexpr std::uint16_t kMinusThree = 0xFFFD;
+    constexpr std::uint16_t kMinusNine = 0xFFF7;
+    const std::array records{std::array<std::uint16_t, 3>{16, 17, kMinusThree},
+                             std::array<std::uint16_t, 3>{38, 10, kMinusNine},
+                             std::array<std::uint16_t, 3>{40, 10, kMinusNine},
+                             std::array<std::uint16_t, 3>{64768, 18, kMinusThree}};
+    EXPECT_EQ(nx::ui::readDeviceHeights(table(records)),
+              (std::vector<FontDeviceHeight>{{.pixelsPerEm = 16, .top = 17, .bottom = -3},
+                                             {.pixelsPerEm = 38, .top = 10, .bottom = -9}}))
+        << "a line of half its em is one, less is none: 40 pixels per em in 19, 64768 in 21";
+}
+
 /// The square font, shared by the fonts the tests open.
 [[nodiscard]] auto squareFile(const nx::test::SquareFontDesc& desc = {})
     -> std::shared_ptr<const std::vector<std::byte>> {
@@ -220,6 +255,19 @@ TEST(FontTest, SmoothedOnlyWhereTheGaspTableSaysSo) {
     ASSERT_GT(smoothed->width, 0);
     EXPECT_GT(smoothed->coverage.front(), 0);
     EXPECT_LT(smoothed->coverage.front(), 255) << "its first column partly covered";
+}
+
+TEST(FontTest, ABrokenDeviceHeightCannotSizeAFaceBeyondItsCell) {
+    // A record of 30000 pixels per em in a line of 21 would have sized the face to it, its 'A' a
+    // square of 15000 pixels a side; left out, the face is sized by its scaled line.
+    const auto plain = Font::open(squareFile(), {.cellHeight = 28});
+    const auto broken = Font::open(squareFile({.deviceHeights = {{30000, 18, -3}}}), {.cellHeight = 28});
+    ASSERT_TRUE(plain.has_value()) << plain.error().detail;
+    ASSERT_TRUE(broken.has_value()) << broken.error().detail;
+    EXPECT_EQ(broken->metrics(), plain->metrics());
+    const auto square = broken->glyph(U'A');
+    ASSERT_TRUE(square.has_value()) << square.error().detail;
+    EXPECT_LE(square->width, broken->metrics().pixelsPerEm);
 }
 
 TEST(FontTest, GlyphsOfManyEmsAreRefused) {
