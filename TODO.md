@@ -16,6 +16,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Project license: option A, GPL-3.0-or-later + MIT (Rook and SDK) + CC BY 4.0 (docs) ([ADR-0010](docs/adr/0010-license.md))
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
+- [ ] The enhanced look: physically based materials, the map's reflection probes, HDR and bloom, the same on every card ([ADR-0025](docs/adr/0025-enhanced-rendering.md), proposed)
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
 - [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
 - [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; a device height whose line is less than half its em left out, so that a broken VDMX table cannot size a face beyond its cell; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
@@ -585,7 +586,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Sandboxed client plugins and `cl_plugins`
 - [ ] Security audit of the VM on the client
 - [ ] `.nxspr` format (high-resolution RGBA sprites) in `nxbake` and in the renderer
-- [ ] `r_fidelity enhanced` mode: material maps, calibrated effects and hardware performance validation; linear HDR scene blending/filtering/probes, GGX reflections, emission and color-preserving normalized bloom are implemented
+- [ ] `r_fidelity enhanced` mode ([ADR-0025](docs/adr/0025-enhanced-rendering.md), proposed): material maps, calibrated effects and hardware performance validation; linear HDR scene blending/filtering/probes, GGX reflections, emission and color-preserving normalized bloom are implemented
 - [ ] Optional server occlusion (`sv_occlusion`)
 - [ ] Extended `.nxmap` map format, compiled from TrenchBroom maps
 - [ ] Repository and first `openContent` package (own map, player, weapons, HUD and sounds, original or CC0/CC-BY)
