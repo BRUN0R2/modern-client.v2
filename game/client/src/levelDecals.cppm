@@ -2,14 +2,31 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The decals a level shows (docs/05-rendering.md, section 8): those of the game's decals.wad it names,
-/// read once, each found by its name as the original's decal list finds it, ignoring case.
+/// read once, each found by its name as the original's decal list finds it, ignoring case; and what a
+/// decal is stamped on, the world or a brush entity where the game has it.
 export module cs.client:levelDecals;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.assets;
+import nx.ecs;
+import nx.render;
 
 export namespace cs {
+
+/// What a decal stamped on `entity` of `world` is on: the world for none, else the entity's brush model
+/// where the game has it now.
+[[nodiscard]] auto decalTargetOf(const nx::ecs::World& world, std::optional<nx::ecs::Entity> entity)
+    -> nx::render::DecalTarget;
+
+/// A decal a map stamps for good as its game starts: which of the level's decals, near which point, and
+/// on what.
+struct MapDecal {
+    std::uint32_t decal = 0;
+    nx::Vec3 origin{};
+    nx::render::DecalTarget on{};
+};
 
 /// The decals of decals.wad a level shows: their images, and where each name is among them.
 class LevelDecals {

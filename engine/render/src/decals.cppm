@@ -6,10 +6,10 @@
 /// original's engine stamps a bullet hole (Xash3D's R_DecalShoot and its clipping, GPL, consulted:
 /// docs/20 section 3). A decal is cut to each face it touches, in the face's own texture directions, a
 /// texel a unit; the faces keep their decals, the newest drawn over the older, in one pool for every
-/// model that reuses its oldest when full.
+/// model that reuses its oldest when full, but for the permanent ones a map stamps.
 ///
-/// Today: decals on the world and on brush entities; permanent ones (infodecal) and the decals of
-/// masked (`{`) faces come with what stamps them (TODO.md).
+/// Today: decals on the world and on brush entities, temporary and permanent; the decals of masked
+/// (`{`) faces come with what cuts them (TODO.md).
 export module nx.render:decals;
 
 import std;
@@ -75,14 +75,21 @@ struct PlacedDecal {
     std::vector<DecalVertex> polygon{};
 };
 
+/// How long a decal stays: until the pool needs its slot for another, or for good.
+enum class DecalLife : std::uint8_t {
+    Temporary,
+    Permanent, ///< A map's (FDECAL_PERMANENT): no other decal takes its slot while another is free.
+};
+
 /// What a shot stamps: image `texture`, of `size`, on the faces of `model` near `center`, a point in
-/// the model's own space, `scale` times smaller than its image.
+/// the model's own space, `scale` times smaller than its image, for `life`.
 struct DecalShot {
     std::uint32_t texture = 0;
     DecalSize size{};
     assets::ModelIndex model = assets::kWorldModel;
     Vec3 center{};
     float scale = 1.0F; ///< Held to 0.01 to 16.
+    DecalLife life = DecalLife::Temporary;
 };
 
 /// The decals of a map: a pool of decals on the faces of its models, each a slot, reused in turn when
@@ -99,9 +106,10 @@ public:
     /// Stamps `shot`, its model one of the map's, as the original's R_DecalShoot: the faces on the
     /// planes of the nodes of the model's tree it reaches within half the image's larger side that pass
     /// within 4 units of the center, each cut to the decal's square in the face's texture directions.
-    /// On a face already under 6 decals each over 60% covered by it, it replaces the one it covers
-    /// least; otherwise it takes the pool's next slot, whose decal goes. Returns the faces it was
-    /// stamped on.
+    /// On a face already under 6 temporary decals each over 60% covered by it, it replaces the one it
+    /// covers least; otherwise it takes the pool's next slot not taken for good, whose decal goes, the
+    /// next whatever it is once every slot is. A slot taken for good stays so, even when its decal
+    /// misses the face, as the original's keeps its flags. Returns the faces it was stamped on.
     auto shoot(const DecalShot& shot) -> std::uint32_t;
 
     /// Every decal, oldest first: the order they are drawn in, the newest over the older.
@@ -121,6 +129,7 @@ private:
         float scale = 1.0F;
         DecalSize size{};
         std::uint64_t sequence = 0; ///< Its stamping's, in the order of all of them.
+        DecalLife life = DecalLife::Temporary;
     };
     /// A shot as the walk of its model's tree carries it: its scale held, and how far the walk looks
     /// (half the image's larger side, in texels).
@@ -132,12 +141,15 @@ private:
     void walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped);
     /// Stamps `shot` on face `face` when it touches it; returns whether it did.
     auto stamp(std::uint32_t face, const Walk& shot) -> bool;
-    /// The slot a decal on `face` takes: the one it covers least of 6 or more it covers mostly, or
-    /// the pool's next.
+    /// The slot a decal on `face` takes: the temporary one it covers least of 6 or more temporary ones
+    /// it covers mostly, or the pool's next not taken for good.
     [[nodiscard]] auto slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis)
         -> std::size_t;
     /// Empties slot `slot`, its decal leaving its face.
     void empty(std::size_t slot);
+    /// The pool's next slot not taken for good, the next whatever it is once every slot is
+    /// (R_DecalAlloc); the one after it next.
+    [[nodiscard]] auto nextSlot() -> std::size_t;
 
     const assets::BspView* m_map;
     std::vector<DecalFace> m_faces;
