@@ -17,21 +17,21 @@ enum class Side : std::uint8_t {
 };
 
 struct Clip {
-    std::string ammo;
+    std::string ammo{};
     std::uint32_t size = 0;
 };
 
 struct Gun {
-    std::string name;
+    std::string name{};
     bool isAutomatic = false;
     float spread = 0.0F;
     Side side = Side::Terrorists;
     nx::Money price{};
     nx::Seconds cycle{};
-    std::vector<std::uint32_t> sequences;
-    std::optional<Clip> clip;
-    Clip spare;
-    std::optional<std::array<float, 3>> tint;
+    std::vector<std::uint32_t> sequences{};
+    std::optional<Clip> clip{};
+    Clip spare{};
+    std::optional<std::array<float, 3>> tint{};
 };
 
 } // namespace nx::test

@@ -66,7 +66,7 @@ auto SincKernel::at(float t) const noexcept -> float {
 
 Mixer::Mixer(const MixerDesc& desc)
     : m_rate{desc.rate}, m_voices(desc.voices), m_playing{std::make_unique<std::atomic<bool>[]>(desc.voices)},
-      m_commands{std::make_unique<jobs::SpscQueue<Sent, kCommandCapacity>>()},
+      m_commands{std::make_unique<jobs::SpscQueue<SentCommand, kCommandCapacity>>()},
       m_limiterRelease{static_cast<float>(
           1.0 -
           std::exp(-1.0 / (kLimiterReleaseSeconds * static_cast<double>(std::max(desc.rate.value(), 1U)))))} {
@@ -83,7 +83,7 @@ auto Mixer::send(MixerCommand command, Seconds delay) -> Result<void, MixerError
     }
     const auto frames = static_cast<std::uint64_t>(std::llround(
         static_cast<double>(std::max(delay.count(), 0.0F)) * static_cast<double>(m_rate.value())));
-    if (auto sent = m_commands->push(Sent{.command = std::move(command), .delay = frames}); !sent) {
+    if (auto sent = m_commands->push(SentCommand{.command = std::move(command), .delay = frames}); !sent) {
         m_unfinished.fetch_sub(1, std::memory_order_acq_rel);
         return fail(MixerError::QueueFull, std::format("{} commands not taken yet", kCommandCapacity),
                     std::move(sent.error()));
@@ -96,7 +96,7 @@ auto Mixer::isPlaying(std::uint32_t voice) const noexcept -> bool {
 }
 
 void Mixer::render(std::span<float> out) noexcept {
-    while (std::optional<Sent> sent = m_commands->pop()) {
+    while (std::optional<SentCommand> sent = m_commands->pop()) {
         schedule(std::move(*sent));
     }
     std::ranges::fill(out, 0.0F);
@@ -113,11 +113,11 @@ void Mixer::render(std::span<float> out) noexcept {
     m_mixed += frames;
 }
 
-void Mixer::schedule(Sent sent) noexcept {
-    Scheduled scheduled{.command = std::move(sent.command), .frame = m_mixed + sent.delay};
+void Mixer::schedule(SentCommand sent) noexcept {
+    ScheduledCommand scheduled{.command = std::move(sent.command), .frame = m_mixed + sent.delay};
     // Before those due at the same frame, which were sent first: the next due is the last.
-    const auto at =
-        std::ranges::lower_bound(m_scheduled, scheduled.frame, std::ranges::greater{}, &Scheduled::frame);
+    const auto at = std::ranges::lower_bound(m_scheduled, scheduled.frame, std::ranges::greater{},
+                                             &ScheduledCommand::frame);
     m_scheduled.insert(at, std::move(scheduled));
 }
 

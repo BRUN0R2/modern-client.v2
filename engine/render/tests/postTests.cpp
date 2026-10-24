@@ -127,8 +127,10 @@ private:
 void expectConstant(std::span<const std::byte> pixels, ClearColor color) {
     ASSERT_EQ(pixels.size(), std::size_t{nx::test::kTargetExtent.width} * nx::test::kTargetExtent.height *
                                  nx::test::kPixelBytes);
-    const std::array expected{std::lround(color.red * kChannelTop), std::lround(color.green * kChannelTop),
-                              std::lround(color.blue * kChannelTop)};
+    const auto byteOf = [](float channel) {
+        return static_cast<int>(std::lround(channel * kChannelTop));
+    };
+    const std::array expected{byteOf(color.red), byteOf(color.green), byteOf(color.blue)};
     for (std::size_t offset = 0; offset < pixels.size(); offset += nx::test::kPixelBytes) {
         for (std::size_t channel = 0; channel < kRgbChannels; ++channel) {
             EXPECT_NEAR(std::to_integer<int>(pixels[offset + channel]), expected[channel], kByteTolerance)

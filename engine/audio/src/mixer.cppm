@@ -86,6 +86,29 @@ struct MixerDesc {
     std::uint32_t voices = 64;
 };
 
+} // namespace nx::audio
+
+namespace nx::audio {
+
+/// A command sent to the mixer, and the frames of the mix it waits from the start of the block that
+/// takes it. The mixer's own, out of it: the queue it goes through checks, where the mixer names it,
+/// that it is made without throwing, which a struct nested in the mixer cannot tell before the mixer
+/// ends (its member initializers are read there).
+struct SentCommand {
+    MixerCommand command;
+    std::uint64_t delay = 0;
+};
+
+/// A command the mixer took, and the frame of the mix it is due at.
+struct ScheduledCommand {
+    MixerCommand command;
+    std::uint64_t frame = 0;
+};
+
+} // namespace nx::audio
+
+export namespace nx::audio {
+
 /// Voices mixed into blocks of two channels: what the sound device plays.
 class Mixer final : public platform::AudioSource {
 public:
@@ -133,19 +156,8 @@ private:
         bool loops = false;
     };
 
-    /// A command sent, and the frames of the mix it waits from the start of the block that takes it.
-    struct Sent {
-        MixerCommand command;
-        std::uint64_t delay = 0;
-    };
-    /// A command taken, and the frame of the mix it is due at.
-    struct Scheduled {
-        MixerCommand command;
-        std::uint64_t frame = 0;
-    };
-
     /// Keeps `sent`, taken as the block that starts at m_mixed is mixed, until it is due.
-    void schedule(Sent sent) noexcept;
+    void schedule(SentCommand sent) noexcept;
     /// Does the commands due by `frame`, in their order.
     void doDue(std::uint64_t frame) noexcept;
     void apply(const MixerCommand& command) noexcept;
@@ -161,9 +173,9 @@ private:
     SincKernel m_kernel;
     std::vector<Voice> m_voices;
     std::unique_ptr<std::atomic<bool>[]> m_playing; ///< Of each voice, for the other threads.
-    std::unique_ptr<jobs::SpscQueue<Sent, kCommandCapacity>> m_commands;
+    std::unique_ptr<jobs::SpscQueue<SentCommand, kCommandCapacity>> m_commands;
     /// Taken and not yet due, the next due last: never more than kCommandCapacity, its room made once.
-    std::vector<Scheduled> m_scheduled;
+    std::vector<ScheduledCommand> m_scheduled;
     /// Sent and not yet done: what send holds to kCommandCapacity.
     std::atomic<std::size_t> m_unfinished{0};
     std::uint64_t m_mixed = 0; ///< Frames mixed so far.

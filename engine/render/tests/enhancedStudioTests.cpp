@@ -328,7 +328,7 @@ TEST(EnhancedStudioTest, AMetalReflectsItsTwoProbesAsTheyAreShared) {
         const double blended =
             lightOf(centerOf(drawSurface(target, *scene, 0.0F, kNormalDirection,
                                          ProbeBlend{.first = 0, .second = 1, .secondShare = share})));
-        EXPECT_NEAR(blended / whole, 1.0 - share, 0.04)
+        EXPECT_NEAR(blended / whole, 1.0 - static_cast<double>(share), 0.04)
             << "the second probe's share of the light, in linear light";
     }
     EXPECT_EQ((*device)->validationErrors(), 0U);
@@ -586,7 +586,7 @@ TEST(EnhancedStudioTest, APaintedLightIsSampledAsLightWithoutAReflection) {
         const double light = std::pow(
             ((kLightChannels[channel] / static_cast<double>(kChannelTop)) + kSrgbOffset) / kSrgbScale,
             kSrgbGamma);
-        EXPECT_NEAR(actual[channel], light * kGain * kChannelTop, 2.0);
+        EXPECT_NEAR(actual[channel], light * static_cast<double>(kGain) * kChannelTop, 2.0);
     }
     EXPECT_EQ(actual[3], kChannelTop);
     EXPECT_EQ((*device)->validationErrors(), 0U);
