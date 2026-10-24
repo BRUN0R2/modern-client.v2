@@ -8,8 +8,9 @@
 /// keys turn; the game's content and a level of it, what its entities show as the game sets them up
 /// until the server comes (the light of the map, its sprites and studio models, the weapon in hand and
 /// its muzzle flashes, its decals and the marks bullets leave); the scene that draws it; the level's
-/// game, played by the client alone; the HUD of its player; the console's window's font and place; and
-/// the sound output with the sounds the client plays.
+/// game, played by the client alone; the HUD of its player; the console's window's font and place;
+/// the sound output with the sounds the client plays; and the console's weapon commands, which make
+/// weapons and set their values as the game runs.
 export module cs.client;
 
 export import :input;
@@ -18,6 +19,7 @@ export import :modelFiles;
 export import :mapLight;
 export import :mapSprites;
 export import :mapModels;
+export import :modelMaterials;
 export import :viewModel;
 export import :muzzleFlash;
 export import :levelDecals;
@@ -28,3 +30,4 @@ export import :localGame;
 export import :hud;
 export import :console;
 export import :audio;
+export import :weaponCommands;

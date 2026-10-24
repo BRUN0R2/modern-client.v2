@@ -121,6 +121,10 @@ constexpr std::uint32_t kSamplersPerGroup = 2;
         return VK_FORMAT_B8G8R8A8_SRGB;
     case Format::Depth32Float:
         return VK_FORMAT_D32_SFLOAT;
+    case Format::Rg11b10Ufloat:
+        return VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+    case Format::Rgba16Float:
+        return VK_FORMAT_R16G16B16A16_SFLOAT;
     case Format::Undefined:
         break;
     }
@@ -129,8 +133,9 @@ constexpr std::uint32_t kSamplersPerGroup = 2;
 
 /// The Format of `format`; Undefined for a format the RHI does not name.
 [[nodiscard]] auto formatOf(VkFormat format) noexcept -> Format {
-    for (const Format candidate : {Format::Rgba8Unorm, Format::Bgra8Unorm, Format::Rgba8Srgb,
-                                   Format::Bgra8Srgb, Format::Depth32Float}) {
+    for (const Format candidate :
+         {Format::Rgba8Unorm, Format::Bgra8Unorm, Format::Rgba8Srgb, Format::Bgra8Srgb, Format::Depth32Float,
+          Format::Rg11b10Ufloat, Format::Rgba16Float}) {
         if (vulkanFormatOf(candidate) == format) {
             return candidate;
         }
@@ -639,14 +644,17 @@ public:
     }
 
     /// What the adapter lacks of what the engine requires: Vulkan 1.3 with dynamic rendering,
-    /// synchronization2, timeline semaphores and shader draw parameters; nullopt when nothing.
+    /// synchronization2, timeline semaphores, shader draw parameters and cube arrays (which every
+    /// Direct3D 11 card has); nullopt when nothing.
     [[nodiscard]] auto missingRequirement() const -> std::optional<std::string> {
         if (const std::uint32_t version = m_properties.properties.apiVersion; version < kRequiredApiVersion) {
             return std::format("Vulkan {}.{}", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version));
         }
         if (m_features13.dynamicRendering == VK_FALSE || m_features13.synchronization2 == VK_FALSE ||
-            m_features12.timelineSemaphore == VK_FALSE || m_features11.shaderDrawParameters == VK_FALSE) {
-            return "no dynamic rendering, synchronization2, timeline semaphores or shader draw parameters";
+            m_features12.timelineSemaphore == VK_FALSE || m_features11.shaderDrawParameters == VK_FALSE ||
+            m_features.features.imageCubeArray == VK_FALSE) {
+            return "no dynamic rendering, synchronization2, timeline semaphores, shader draw parameters or "
+                   "cube arrays";
         }
         return std::nullopt;
     }
@@ -701,6 +709,9 @@ struct VulkanBuffer {
 struct VulkanTexture {
     VkImage image = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
+    /// A render target of more than one mip level or layer: the view of each mip level of each layer,
+    /// which a pass draws to, at mipLevel * arrayLayers + arrayLayer. None otherwise.
+    std::vector<VkImageView> attachmentViews{};
     VmaAllocation allocation = VK_NULL_HANDLE; ///< None for a swapchain's image, which the swapchain owns.
     Format format = Format::Undefined;
     Extent2d extent;
@@ -1170,6 +1181,17 @@ void VulkanCommandList::transition(TextureHandle texture, TextureState before, T
     vkCmdPipelineBarrier2(m_commands, &dependency);
 }
 
+/// The view a pass draws `color` to, of `texture`: its own, or that of the mip level of the layer.
+[[nodiscard]] auto attachmentViewOf(const VulkanTexture& texture, const ColorAttachment& color)
+    -> VkImageView {
+    expects(color.mipLevel < texture.mipLevels && color.arrayLayer < texture.arrayLayers,
+            "CommandList::beginRendering: a mip level and a layer of the attachment");
+    if (texture.attachmentViews.empty()) {
+        return texture.view;
+    }
+    return texture.attachmentViews[(std::size_t{color.mipLevel} * texture.arrayLayers) + color.arrayLayer];
+}
+
 void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
     expects(desc.colors.size() <= kMaxColorAttachments,
             "CommandList::beginRendering: at most 8 color attachments");
@@ -1178,7 +1200,7 @@ void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
         const ColorAttachment& color = desc.colors[index];
         VkRenderingAttachmentInfo& attachment = attachments.at(index);
         attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        attachment.imageView = m_device->textures().get(color.texture).view;
+        attachment.imageView = attachmentViewOf(m_device->textures().get(color.texture), color);
         attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachment.resolveMode = VK_RESOLVE_MODE_NONE;
         attachment.loadOp = loadOpOf(color.load);
@@ -1612,6 +1634,7 @@ auto VulkanDevice::createLogicalDevice() -> Result<void, RhiError> {
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     features.pNext = &features13;
     features.features.samplerAnisotropy = m_hasAnisotropy ? VK_TRUE : VK_FALSE;
+    features.features.imageCubeArray = VK_TRUE;
     const std::array swapchainExtension{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     const bool hasSurface = m_surface != VK_NULL_HANDLE;
     const VkDeviceCreateInfo createInfo{
@@ -1948,6 +1971,9 @@ void VulkanDevice::destroyNow(RetiredResource::Resource& resource) noexcept {
             if constexpr (std::same_as<Held, VulkanBuffer>) {
                 vmaDestroyBuffer(m_allocator, held.buffer, held.allocation);
             } else if constexpr (std::same_as<Held, VulkanTexture>) {
+                for (const VkImageView attachmentView : held.attachmentViews) {
+                    vkDestroyImageView(m_device, attachmentView, nullptr);
+                }
                 vkDestroyImageView(m_device, held.view, nullptr);
                 if (held.allocation != VK_NULL_HANDLE) { // a swapchain's image is the swapchain's
                     vmaDestroyImage(m_allocator, held.image, held.allocation);
@@ -2014,15 +2040,23 @@ auto VulkanDevice::makeTexture(const TextureDesc& desc) -> Result<TextureHandle,
     expects(!desc.label.empty() && desc.extent.width > 0 && desc.extent.height > 0 && desc.mipLevels > 0 &&
                 desc.arrayLayers > 0,
             "rhi::Device::createTexture: a label, a size, a mip level and a layer");
-    expects(desc.arrayLayers == 1 ||
-                !(desc.usage.test(TextureUsage::RenderTarget) || desc.usage.test(TextureUsage::DepthTarget)),
-            "rhi::Device::createTexture: a render or depth target has one layer");
+    expects(desc.arrayLayers == 1 || !desc.usage.test(TextureUsage::DepthTarget),
+            "rhi::Device::createTexture: a depth target has one layer");
+    expects(!desc.isCube || (desc.arrayLayers % kCubeFaces == 0 && desc.extent.width == desc.extent.height),
+            "rhi::Device::createTexture: a cube's layers six by six, square");
     const VkFormat format = vulkanFormatOf(desc.format);
     const VkImageUsageFlags usage = imageUsageOf(desc.usage);
+    const VkImageCreateFlags createFlags = desc.isCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
     VkImageFormatProperties supported{};
-    if (format == VK_FORMAT_UNDEFINED ||
+    VkFormatProperties features{};
+    vkGetPhysicalDeviceFormatProperties(m_physicalDevice, format, &features);
+    // A render target is blended into: its format must be.
+    const bool isBlendable =
+        !desc.usage.test(TextureUsage::RenderTarget) ||
+        (features.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0;
+    if (format == VK_FORMAT_UNDEFINED || !isBlendable ||
         vkGetPhysicalDeviceImageFormatProperties(m_physicalDevice, format, VK_IMAGE_TYPE_2D,
-                                                 VK_IMAGE_TILING_OPTIMAL, usage, 0,
+                                                 VK_IMAGE_TILING_OPTIMAL, usage, createFlags,
                                                  &supported) != VK_SUCCESS ||
         desc.extent.width > supported.maxExtent.width || desc.extent.height > supported.maxExtent.height ||
         desc.mipLevels > supported.maxMipLevels || desc.arrayLayers > supported.maxArrayLayers) {
@@ -2034,7 +2068,7 @@ auto VulkanDevice::makeTexture(const TextureDesc& desc) -> Result<TextureHandle,
     const VkImageCreateInfo info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
-        .flags = 0,
+        .flags = createFlags,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = format,
         .extent = {.width = desc.extent.width, .height = desc.extent.height, .depth = 1},
@@ -2059,26 +2093,55 @@ auto VulkanDevice::makeTexture(const TextureDesc& desc) -> Result<TextureHandle,
         result != VK_SUCCESS) {
         return vulkanFailure(result, std::format("vmaCreateImage({:?})", desc.label));
     }
-    const VkImageViewCreateInfo viewInfo{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                         .pNext = nullptr,
-                                         .flags = 0,
-                                         .image = texture.image,
-                                         .viewType = desc.arrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
-                                                                          : VK_IMAGE_VIEW_TYPE_2D,
-                                         .format = format,
-                                         .components = {},
-                                         .subresourceRange = {.aspectMask = texture.aspect,
-                                                              .baseMipLevel = 0,
-                                                              .levelCount = desc.mipLevels,
-                                                              .baseArrayLayer = 0,
-                                                              .layerCount = desc.arrayLayers}};
-    if (const VkResult result = vkCreateImageView(m_device, &viewInfo, nullptr, &texture.view);
-        result != VK_SUCCESS) {
+    const VkImageViewType viewType =
+        desc.isCube
+            ? (desc.arrayLayers == kCubeFaces ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
+        : desc.arrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+                               : VK_IMAGE_VIEW_TYPE_2D;
+    const auto viewOf = [&](VkImageViewType type, std::uint32_t mip, std::uint32_t mips, std::uint32_t layer,
+                            std::uint32_t layers, VkImageView& view) {
+        const VkImageViewCreateInfo viewInfo{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                             .pNext = nullptr,
+                                             .flags = 0,
+                                             .image = texture.image,
+                                             .viewType = type,
+                                             .format = format,
+                                             .components = {},
+                                             .subresourceRange = {.aspectMask = texture.aspect,
+                                                                  .baseMipLevel = mip,
+                                                                  .levelCount = mips,
+                                                                  .baseArrayLayer = layer,
+                                                                  .layerCount = layers}};
+        return vkCreateImageView(m_device, &viewInfo, nullptr, &view);
+    };
+    const auto destroyViews = [&] {
+        for (const VkImageView attachmentView : texture.attachmentViews) {
+            vkDestroyImageView(m_device, attachmentView, nullptr);
+        }
+        vkDestroyImageView(m_device, texture.view, nullptr);
         vmaDestroyImage(m_allocator, texture.image, texture.allocation);
+    };
+    if (const VkResult result = viewOf(viewType, 0, desc.mipLevels, 0, desc.arrayLayers, texture.view);
+        result != VK_SUCCESS) {
+        destroyViews();
         return vulkanFailure(result, std::format("vkCreateImageView({:?})", desc.label));
     }
+    if (desc.usage.test(TextureUsage::RenderTarget) && (desc.mipLevels > 1 || desc.arrayLayers > 1)) {
+        texture.attachmentViews.resize(std::size_t{desc.mipLevels} * desc.arrayLayers, VK_NULL_HANDLE);
+        for (std::uint32_t mip = 0; mip < desc.mipLevels; ++mip) {
+            for (std::uint32_t layer = 0; layer < desc.arrayLayers; ++layer) {
+                VkImageView& view = texture.attachmentViews[(std::size_t{mip} * desc.arrayLayers) + layer];
+                if (const VkResult result = viewOf(VK_IMAGE_VIEW_TYPE_2D, mip, 1, layer, 1, view);
+                    result != VK_SUCCESS) {
+                    destroyViews();
+                    return vulkanFailure(
+                        result, std::format("vkCreateImageView({:?}, a mip level of a layer)", desc.label));
+                }
+            }
+        }
+    }
     name(VK_OBJECT_TYPE_IMAGE, objectHandleOf(texture.image), desc.label);
-    return m_textures.insert(texture);
+    return m_textures.insert(std::move(texture));
 }
 
 auto VulkanDevice::makeSampler(const SamplerDesc& desc) -> Result<SamplerHandle, RhiError> {

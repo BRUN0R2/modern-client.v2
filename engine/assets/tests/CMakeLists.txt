@@ -16,6 +16,7 @@ nxAddTest(nxAssetsTests
         localizationTests.cpp
         mdlTests.cpp
         tgaTests.cpp
+        bmpTests.cpp
     DEPENDS
         nx::assets)
 

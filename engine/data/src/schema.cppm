@@ -34,6 +34,16 @@ template <class Element, class Allocator>
 inline constexpr bool kIsVector<std::vector<Element, Allocator>> = true;
 
 template <class Type>
+inline constexpr bool kIsFixedArray = false;
+
+template <class Element, std::size_t Length>
+inline constexpr bool kIsFixedArray<std::array<Element, Length>> = true;
+
+/// An array of any length or of a fixed one: written alike, read with their own checks.
+template <class Type>
+inline constexpr bool kIsArray = kIsVector<Type> || kIsFixedArray<Type>;
+
+template <class Type>
 inline constexpr bool kIsOptional = false;
 
 template <class Value>
@@ -69,7 +79,7 @@ namespace detail {
 
 template <class Type>
 [[nodiscard]] consteval auto isDataValue() noexcept -> bool {
-    if constexpr (kIsVector<Type>) {
+    if constexpr (kIsArray<Type>) {
         return isDataValue<typename Type::value_type>();
     } else if constexpr (meta::Described<Type>) {
         return DataTable<Type>;
@@ -80,7 +90,8 @@ template <class Type>
 
 } // namespace detail
 
-/// What a key holds: a scalar, a table, or an array of them.
+/// What a key holds: a scalar, a table, or an array of them, of any length (std::vector) or of a
+/// fixed one (std::array).
 template <class Type>
 concept DataValue = detail::isDataValue<Type>();
 
@@ -95,12 +106,16 @@ namespace detail {
 struct Location {
     std::string_view source;
     std::string path;
+    /// Whether the value is text given alone, not read from a file (nx.data:fields): its failures
+    /// name no line or column, which would be those of the document it was read as.
+    bool isGivenText = false;
 
     [[nodiscard]] auto child(std::string_view key) const -> Location;
     [[nodiscard]] auto element(std::size_t index) const -> Location;
 };
 
-/// "<source>:<line>:<column>: <path>: <message>", the detail of every failure.
+/// "<source>:<line>:<column>: <path>: <message>", the detail of every failure; "<source>: <path>:
+/// <message>" for text given alone, or at a position of line 0, none.
 [[nodiscard]] auto describeAt(const Location& at, SourcePosition position, std::string_view message)
     -> std::string;
 
@@ -168,7 +183,7 @@ inline constexpr double kExactWholeLimit = 9'007'199'254'740'992.0;
 /// arrays and optionals.
 template <class Value>
 [[nodiscard]] consteval auto numberTypeOf() noexcept {
-    if constexpr (kIsVector<Value> || kIsOptional<Value>) {
+    if constexpr (kIsArray<Value> || kIsOptional<Value>) {
         return numberTypeOf<typename Value::value_type>();
     } else if constexpr (kIsQuantity<Value>) {
         return std::type_identity<typename Value::Representation>{};
@@ -272,6 +287,30 @@ template <class Value>
     return values;
 }
 
+template <class Value>
+    requires kIsFixedArray<Value>
+[[nodiscard]] auto readFixedArray(NodeView node, const Location& at, const std::optional<Range>& range)
+    -> Result<Value, DataError> {
+    const auto array = node.asArray();
+    if (!array) {
+        return wrongType(node, at, "an array");
+    }
+    const std::vector<NodeView> elements = array->elements();
+    if (elements.size() != std::tuple_size_v<Value>) {
+        return failAt(DataError::WrongLength, at, node.position(),
+                      std::format("expected {} elements, got {}", std::tuple_size_v<Value>, elements.size()));
+    }
+    Value values{};
+    for (std::size_t index = 0; index < elements.size(); ++index) {
+        auto value = readValue<typename Value::value_type>(elements[index], at.element(index), range);
+        if (!value) {
+            return std::unexpected(std::move(value.error()));
+        }
+        values[index] = std::move(*value);
+    }
+    return values;
+}
+
 template <DataTable Type>
 [[nodiscard]] auto readNestedTable(NodeView node, const Location& at) -> Result<Type, DataError> {
     const auto table = node.asTable();
@@ -304,6 +343,8 @@ template <DataValue Value>
         });
     } else if constexpr (kIsVector<Value>) {
         return readArray<Value>(node, at, range);
+    } else if constexpr (kIsFixedArray<Value>) {
+        return readFixedArray<Value>(node, at, range);
     } else {
         return readNestedTable<Value>(node, at);
     }
@@ -356,6 +397,21 @@ template <DataTable Type>
 }
 
 } // namespace detail
+
+/// The enumerator of `Enum` that `text` names as data files write it ("counterTerrorists"); none.
+template <CountedEnum Enum>
+[[nodiscard]] auto enumeratorNamed(std::string_view text) -> std::optional<Enum> {
+    static constexpr auto kValues = enumerators<Enum>();
+    const auto found = std::ranges::find_if(
+        kValues, [text](Enum value) { return detail::isDataSpelling(enumName(value), text); });
+    return found == kValues.end() ? std::nullopt : std::optional{*found};
+}
+
+/// `value` as data files write it: its enumerator's name with a lowercase first letter.
+template <CountedEnum Enum>
+[[nodiscard]] auto dataNameOf(Enum value) -> std::string {
+    return detail::dataSpelling(enumName(value));
+}
 
 /// Reads `text`, the TOML file `sourceName` (named in failures), as a `Type`. Every key must be a
 /// field of `Type` (nested tables are described structs too), every field that is not

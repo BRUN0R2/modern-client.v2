@@ -9,7 +9,12 @@
 // decals lie over the faces, lit as they are, those of a brush entity drawn otherwise as its mode
 // draws them.
 // The sky's faces show the side of the sky they are seen toward, projected as the original projects
-// it.
+// it (skyDirection.slang).
+// Drawn as linear light (colorEncoding.slang), the textures are sampled from sRGB as light, and the
+// light and colors the original gives as display colors are made light too; how opaque, as it is.
+
+import colorEncoding;
+import skyDirection;
 
 // The styles the frame sets, four to an element of Frame::styles; the ones above keep the normal
 // brightness, 'm'.
@@ -27,6 +32,8 @@ struct Frame
     float4 eye;
     // The brightness of the light styles.
     float4 styles[kSetStyles / kStylesPerElement];
+    // How the colors reach the target: kDisplayEncoding or kLinearEncoding.
+    uint colorEncoding;
 };
 
 [[vk::binding(0, 0)]]
@@ -241,7 +248,7 @@ float4 litOrDiscarded(VertexOutput input, float alphaTest)
     {
         discard;
     }
-    return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), 1.0);
+    return float4(color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding), 1.0);
 }
 
 // The world and kRenderNormal: what has any alpha is drawn (the original's DEFAULT_ALPHATEST, 0).
@@ -266,7 +273,7 @@ float4 solidFragmentMain(VertexOutput input) : SV_Target
 float4 decalFragmentMain(VertexOutput input) : SV_Target
 {
     const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb * lightAt(input.lightmapPosition, input.styles), color.a);
+    return float4(color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding), color.a);
 }
 
 // The decals of a brush entity drawn otherwise, unlit as its faces are, each texel times the color
@@ -284,7 +291,8 @@ float4 textureDecalFragmentMain(VertexOutput input) : SV_Target
 [shader("fragment")]
 float4 colorDecalFragmentMain(VertexOutput input) : SV_Target
 {
-    return albedo.Sample(albedoSampler, input.uv) * entity.color;
+    const float4 color = albedo.Sample(albedoSampler, input.uv);
+    return float4(color.rgb * encodedOf(entity.color.rgb, frame.colorEncoding), color.a * entity.color.a);
 }
 
 // kRenderTransAdd: the texel times renderamt, blended rather than added.
@@ -307,7 +315,7 @@ float4 textureFragmentMain(VertexOutput input) : SV_Target
 [shader("fragment")]
 float4 colorFragmentMain(VertexOutput input) : SV_Target
 {
-    return entity.color;
+    return float4(encodedOf(entity.color.rgb, frame.colorEncoding), entity.color.a);
 }
 
 // kRenderTransAdd: the texture times renderamt, added to what is behind.
@@ -332,53 +340,9 @@ SkyVertexOutput skyVertexMain(VertexInput input)
     return output;
 }
 
-/// Where a direction reaches the sky: a side, and a point of it.
-struct SkyPoint
-{
-    float side; // the layer of skySides
-    float2 st;  // s to the right and t up, from -1 to 1
-};
-
-// The layers of skySides, by the axis their side faces.
-static const float kSkyPositiveX = 0.0;
-static const float kSkyNegativeX = 1.0;
-static const float kSkyPositiveY = 2.0;
-static const float kSkyNegativeY = 3.0;
-static const float kSkyPositiveZ = 4.0;
-static const float kSkyNegativeZ = 5.0;
-// The least a direction's largest axis is divided by: a direction of zero reaches an edge of a side.
-static const float kLeastAxis = 1e-30;
-
-/// The side `direction` points at, by its largest axis with ties broken as the original breaks them,
-/// and the point it reaches there, as the original projects it (vec_to_st): from the middle of the
-/// sky, each side is seen upright and unmirrored, the top and bottom ones facing +X.
-SkyPoint skyPointOf(float3 direction)
-{
-    const float3 size = abs(direction);
-    SkyPoint point;
-    if (size.x > size.y && size.x > size.z)
-    {
-        point.side = direction.x > 0.0 ? kSkyPositiveX : kSkyNegativeX;
-        point.st = float2(-direction.y * sign(direction.x), direction.z) / size.x;
-    }
-    else if (size.y > size.z && size.y > size.x)
-    {
-        point.side = direction.y > 0.0 ? kSkyPositiveY : kSkyNegativeY;
-        point.st = float2(direction.x * sign(direction.y), direction.z) / size.y;
-    }
-    else
-    {
-        // A tie of x and y with no z ends here, as in the original: the edge of the side, not 0 / 0.
-        point.side = direction.z > 0.0 ? kSkyPositiveZ : kSkyNegativeZ;
-        point.st = float2(-direction.y, -direction.x * sign(direction.z)) / max(size.z, kLeastAxis);
-    }
-    return point;
-}
-
 [shader("fragment")]
 float4 skyFragmentMain(SkyVertexOutput input) : SV_Target
 {
     const SkyPoint point = skyPointOf(input.direction);
-    const float2 uv = float2(point.st.x + 1.0, 1.0 - point.st.y) * 0.5; // texture v is down
-    return float4(skySides.Sample(skySampler, float3(uv, point.side)).rgb, 1.0);
+    return float4(skySides.Sample(skySampler, float3(skyUvOf(point), point.side)).rgb, 1.0);
 }

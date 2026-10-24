@@ -114,6 +114,132 @@ auto mapLightStyles(const nx::assets::BspView& map) -> nx::render::LightStyles {
     return styles;
 }
 
+auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render::StudioLight> {
+    // The compilers' light without a `_light`: white, of 300.
+    constexpr std::array<float, 4> kDefaultLight{255.0F, 255.0F, 255.0F, 300.0F};
+    constexpr float kChannelTop = 255.0F;
+    constexpr float kDisplayGamma = 2.2F;
+    // How far a light of a brightness reaches, in units a brightness; and how bright its highlight is.
+    constexpr float kReachPerBrightness = 2.0F;
+    constexpr float kHighlightPerBrightness = 8.0F;
+    std::vector<nx::render::StudioLight> lights;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::optional<std::string_view> classname = entity.find("classname");
+        if (classname != "light" && classname != "light_spot") {
+            continue;
+        }
+        const std::optional<nx::Vec3> origin = entity.findVector("origin");
+        if (!origin) {
+            continue;
+        }
+        std::array<float, 4> light = kDefaultLight;
+        if (const std::optional<std::string_view> value = entity.find("_light")) {
+            std::size_t read = 0;
+            for (const auto word : std::views::split(*value, ' ')) {
+                const std::string_view number{word.begin(), word.end()};
+                if (number.empty() || read == light.size()) {
+                    continue;
+                }
+                light.at(read++) = nx::assets::numberOfValue(number).value_or(0.0F);
+            }
+        }
+        const float brightness = light[3];
+        if (brightness <= 0.0F) {
+            continue;
+        }
+        const auto linear = [&](float channel) {
+            return std::pow(std::clamp(channel / kChannelTop, 0.0F, 1.0F), kDisplayGamma) * brightness *
+                   kHighlightPerBrightness;
+        };
+        lights.push_back(nx::render::StudioLight{
+            .position = *origin,
+            .reach = brightness * kReachPerBrightness,
+            .color = {.x = linear(light[0]), .y = linear(light[1]), .z = linear(light[2])}});
+    }
+    return lights;
+}
+
+auto probePositionsOf(const nx::assets::BspView& map) -> std::vector<nx::Vec3> {
+    // How far apart two probes are at least, and how high a spawn's eye is above its origin.
+    constexpr float kProbeSpacing = 384.0F;
+    constexpr float kEyeHeight = 17.0F;
+    // An empty leaf this small holds no probe: a crack between brushes.
+    constexpr float kLeastLeafSide = 64.0F;
+    std::vector<nx::Vec3> positions;
+    const auto add = [&](nx::Vec3 point) {
+        if (positions.size() >= nx::render::kMostProbes ||
+            map.leaves()[map.leafAt(point).value].contents != nx::assets::Contents::Empty) {
+            return;
+        }
+        const bool isFarFromTheOthers = std::ranges::none_of(positions, [point](nx::Vec3 other) {
+            return nx::lengthSquared(other - point) < kProbeSpacing * kProbeSpacing;
+        });
+        if (isFarFromTheOthers) {
+            positions.push_back(point);
+        }
+    };
+    const auto middleOfModel = [&map](std::string_view model) -> std::optional<nx::Vec3> {
+        if (model.size() < 2 || model.front() != '*') {
+            return std::nullopt;
+        }
+        const std::optional<int> index = nx::assets::integerOfValue(model.substr(1));
+        if (!index || *index <= 0 || static_cast<std::size_t>(*index) >= map.models().size()) {
+            return std::nullopt;
+        }
+        const nx::Aabb& bounds = map.models()[static_cast<std::size_t>(*index)].bounds;
+        return (bounds.min + bounds.max) * 0.5F;
+    };
+    for (const std::string_view spawn : {"info_player_start", "info_player_deathmatch"}) {
+        for (const nx::assets::BspEntity& entity : map.entities()) {
+            if (entity.find("classname") == spawn) {
+                if (const std::optional<nx::Vec3> origin = entity.findVector("origin")) {
+                    add(*origin + nx::Vec3{.z = kEyeHeight});
+                }
+            }
+        }
+    }
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::optional<std::string_view> classname = entity.find("classname");
+        if (classname == "func_bomb_target" || classname == "func_buyzone" ||
+            classname == "func_hostage_rescue") {
+            if (const std::optional<std::string_view> model = entity.find("model")) {
+                if (const std::optional<nx::Vec3> middle = middleOfModel(*model)) {
+                    add(*middle);
+                }
+            }
+        } else if (classname == "info_bomb_target" || classname == "info_hostage_rescue") {
+            if (const std::optional<nx::Vec3> origin = entity.findVector("origin")) {
+                add(*origin + nx::Vec3{.z = kEyeHeight});
+            }
+        }
+    }
+    for (const nx::assets::BspLeaf& leaf : map.leaves()) {
+        const nx::Vec3 size = leaf.bounds.max - leaf.bounds.min;
+        if (leaf.contents == nx::assets::Contents::Empty && size.x >= kLeastLeafSide &&
+            size.y >= kLeastLeafSide && size.z >= kLeastLeafSide) {
+            add((leaf.bounds.min + leaf.bounds.max) * 0.5F);
+        }
+    }
+    return positions;
+}
+
+auto nearestLights(std::span<const nx::render::StudioLight> lights, nx::Vec3 point, std::size_t count)
+    -> std::vector<nx::render::StudioLight> {
+    std::vector<nx::render::StudioLight> reaching;
+    for (const nx::render::StudioLight& light : lights) {
+        if (nx::lengthSquared(light.position - point) < light.reach * light.reach) {
+            reaching.push_back(light);
+        }
+    }
+    const auto distance = [point](const nx::render::StudioLight& light) {
+        return nx::lengthSquared(light.position - point);
+    };
+    const std::size_t kept = std::min(count, reaching.size());
+    std::ranges::partial_sort(reaching, reaching.begin() + nx::narrow<std::ptrdiff_t>(kept), {}, distance);
+    reaching.resize(kept);
+    return reaching;
+}
+
 auto skyLightOf(const nx::assets::BspView& map) -> nx::render::SkyLight {
     nx::render::SkyLight sky;
     for (const nx::assets::BspEntity& entity : map.entities()) {

@@ -269,15 +269,28 @@ struct with an `nx.meta` description. The keys of a table are the fields of its 
 (nested tables are described structs too), every field that is not `std::optional` is
 required, and a value must have the field's type: booleans, integers, `float` and `double`,
 quantities and durations (as their number), text, enums (the enumerator's name with a
-lowercase first letter, `GoldsrcInstall` → `"goldsrcInstall"`), tables and arrays of them. A
-`nx::data::Range` annotation bounds a number; a Range on a field without numbers, with its
-minimum above its maximum, or with inexact bounds on a whole-number field does not compile, and
-whole numbers compare against it exactly. The first problem is the failure
-(`DataError::Syntax`, `UnknownKey`, `MissingKey`, `WrongType`, `OutOfRange`, `UnknownName`), with
+lowercase first letter, `GoldsrcInstall` → `"goldsrcInstall"`), tables and arrays of them, of
+any length (`std::vector`) or of a fixed one (`std::array`, a color's `[0.04, 0.04, 0.04]`). A
+`nx::data::Range` annotation bounds a number, also each of an array's; a Range on a field without
+numbers, with its minimum above its maximum, or with inexact bounds on a whole-number field does
+not compile, and whole numbers compare against it exactly. The first problem is the failure
+(`DataError::Syntax`, `UnknownKey`, `MissingKey`, `WrongType`, `OutOfRange`, `UnknownName`,
+`WrongLength` for a fixed array of another length), with
 the detail `"<file>:<line>:<column>: <key path>: <problem>"`, for example
 `server.toml:3:14: maxPlayers: expected a whole number in [1, 64], got 65`; a number beyond its
 field's type keeps the conversion failure as its cause. The TOML library (toml++, built without
 exceptions) stays behind `nx::data::Document` and its views.
+
+A field of such a struct is also set and written by its **key path**, the keys a file gives it
+joined by dots (`nx.data:fields`): `nx::data::assignField(weapon, "firing.cycle", "0.08", "console")`
+reads the text as a file's value is read, with the field's type and Range (text and an enumerator's
+name as they are, or quoted; anything else as TOML: `[1, 2]`, `{ ammo = "9mm", clipSize = 30 }`),
+an absent optional table starting from its defaults, and leaves the struct as it was on a failure;
+`formatField` and `listFields` write a field, or every field that holds a value, as a file writes
+it. What the console and plugins change of a value made from data goes by the names its file gives
+it: one schema for both ([10 §7.5](10-counter-strike-gameplay.md#75-weapons-made-as-the-game-runs)).
+A failure of text given alone names no line or column (`console: spread: expected a number in
+[0, 1], got 2`).
 
 ## 9. Observability
 

@@ -21,6 +21,14 @@ struct MouseCvars {
 };
 
 /// How frames are made and shown, and the original's picture (nx::render::GammaSettings).
+/// How the picture is made (r_fidelity): as Counter-Strike 1.6 makes it, or the enhanced look
+/// (docs/adr/0025-enhanced-rendering.md).
+enum class Fidelity : std::uint8_t {
+    Legacy,
+    Enhanced,
+    Count,
+};
+
 struct VideoCvars {
     console::Cvar<float> fpsMax; ///< `fps_max`: the most frames a second; 0 for no limit.
     console::Cvar<bool> vsync;   ///< `gl_vsync`: frames wait for the display's refresh.
@@ -29,6 +37,7 @@ struct VideoCvars {
     console::Cvar<float> textureGamma; ///< `texgamma`.
     console::Cvar<float> lightGamma;   ///< `lightgamma`.
     console::Cvar<bool> hudDraw;       ///< `hud_draw`: the HUD is drawn.
+    console::Cvar<Fidelity> fidelity;  ///< `r_fidelity`: read when a map is loaded.
 };
 
 /// What is heard.

@@ -61,6 +61,13 @@ auto LocalGame::start(const GameContent& content, const Level& level, Team team,
     return game;
 }
 
+void LocalGame::give(WeaponIndex weapon) {
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
+    std::ignore = m_inventory.give(weapon, kAutoSwitch, time, random);
+    m_player.maxSpeed = m_inventory.maxSpeed();
+}
+
 auto LocalGame::play(PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
     m_pending = std::min(m_pending + elapsed, kMaxCatchUp);
     return run([&input, view, this] { return input.nextCommand(view, kCommandInterval, m_player.maxSpeed); });
@@ -76,13 +83,21 @@ auto LocalGame::viewModel() const -> std::optional<ViewModelPose> {
     if (!animation) {
         return std::nullopt;
     }
-    // The time the eye is drawn at, a tick behind the game as the eye is.
+    return ViewModelPose{
+        .weapon = animation->weapon,
+        .sequence = animation->sequence,
+        .start = animation->start,
+        .intoIt =
+            std::max(shownTime().since(animation->start, nx::game::tickTimeOf(m_world).rate), nx::Seconds{})};
+}
+
+auto LocalGame::hearing() const -> Hearing {
+    return Hearing{.from = shownTime(), .rate = nx::game::tickTimeOf(m_world).rate};
+}
+
+auto LocalGame::shownTime() const -> nx::GameTime {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
-    const nx::GameTime shown = time.now.after(m_pending - kCommandInterval, time.rate);
-    return ViewModelPose{.weapon = animation->weapon,
-                         .sequence = animation->sequence,
-                         .start = animation->start,
-                         .intoIt = std::max(shown.since(animation->start, time.rate), nx::Seconds{})};
+    return time.now.after(m_pending - kCommandInterval, time.rate);
 }
 
 auto LocalGame::run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3 {

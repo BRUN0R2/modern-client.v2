@@ -5,8 +5,8 @@
 ///
 /// Today: the camera and its matrices, the original's picture (its gamma curves and light styles),
 /// the BSP world and its decals, the light it gives where things are, studio models and sprites, the order a
-/// frame draws them in, and the screen over them (the pictures and text of the HUD and the console). The
-/// render graph and effects come with their consumers.
+/// frame draws them in, the screen over them (the pictures and text of the HUD and the console), and
+/// the enhanced look's bloom and tone curve. The render graph and effects come with their consumers.
 export module nx.render;
 
 export import :camera;
@@ -22,3 +22,5 @@ export import :world;
 export import :studio;
 export import :sprite;
 export import :screen;
+export import :post;
+export import :probes;
