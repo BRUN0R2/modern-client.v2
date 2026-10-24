@@ -54,6 +54,11 @@ card draws the same look.
 - **Exposure is fixed per map**, calibrated so that a mid-grey surface is as bright as in legacy.
   No eye adaptation: a dark corner never brightens to reveal a player, nor dims one.
 - A tone curve (AgX) maps the scene to the screen; HDR10 output on HDR displays is a later option.
+- The additive effects made for the original's addition (a weapon's muzzle flashes; glows and
+  explosions as they come) are not added as light: they are drawn to a layer of display colors over
+  the scene's depths, which the last pass adds once the scene is mapped, each channel stopping at
+  white as the original adds them. A flame authored that way turns yellow, then white, as it was
+  made, where a curve that keeps a color's hue would keep it orange; its own light feeds the bloom.
 
 ### 2. Bloom, energy-conserving, without a threshold
 
