@@ -685,4 +685,150 @@ TEST(BspWorldTest, ADecalOnABrushEntityIsDrawnAsItsRenderModeDrawsIt) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+void paintTextures(std::vector<std::byte>& file, std::array<int, 3> color) {
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    for (const auto& texture : map->textures()) {
+        if (!texture || !texture->hasPixels()) {
+            continue;
+        }
+        const auto first = static_cast<std::size_t>(texture->palette.data() - file.data());
+        for (std::size_t offset = 0; offset < texture->palette.size(); ++offset) {
+            file[first + offset] = static_cast<std::byte>(color[offset % color.size()]);
+        }
+    }
+}
+
+TEST(BspWorldTest, DrawnAsLinearLightAFaceIsItsTextureTimesItsLightAsLight) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    std::vector<std::byte> file = readSeed();
+    paintTextures(file, {70, 40, 20});
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const auto shader = worldShader();
+    auto legacy =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    auto linear = createWorld(**device, {.map = *map,
+                                         .shaderCode = shader,
+                                         .colorFormat = Format::Rgba8Unorm,
+                                         .encoding = nx::render::ColorEncoding::Linear});
+    ASSERT_TRUE(legacy.has_value()) << nx::describe(legacy.error());
+    ASSERT_TRUE(linear.has_value()) << nx::describe(linear.error());
+    OffscreenTarget target{**device};
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    const auto displayPixels = drawWorld(target, *legacy, camera);
+    const auto linearPixels = drawWorld(target, *linear, camera);
+    ASSERT_EQ(displayPixels.size(), linearPixels.size());
+    constexpr std::array kSampleCoordinates{8U, 16U, 24U};
+    constexpr std::size_t kRgbChannels = 3;
+    constexpr double kChannelTop = 255.0;
+    constexpr double kDisplayGamma = 2.2;
+    for (const auto y : kSampleCoordinates) {
+        for (const auto x : kSampleCoordinates) {
+            const Pixel display = pixelAt(displayPixels, x, y);
+            const Pixel actual = pixelAt(linearPixels, x, y);
+            for (std::size_t channel = 0; channel < kRgbChannels; ++channel) {
+                const double expected = std::pow(display[channel] / kChannelTop, kDisplayGamma) * kChannelTop;
+                EXPECT_NEAR(actual[channel], expected, 2.0) << x << ", " << y << ", channel " << channel;
+            }
+            EXPECT_EQ(actual[3], display[3]);
+        }
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(BspWorldTest, DrawnAsLinearLightTheSkyIsFilteredAsLight) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    std::vector<std::byte> file = readSeed();
+    renameTexture(file, "CRATE01", "sky");
+    renameTexture(file, "{BLUE", "sky");
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const auto shader = worldShader();
+    // The center of each two-texel side is an equal mixture of black and white radiance.
+    const nx::assets::RgbaImage side{.width = 2,
+                                     .height = 1,
+                                     .pixels = {std::byte{0}, std::byte{0}, std::byte{0}, std::byte{255},
+                                                std::byte{255}, std::byte{255}, std::byte{255},
+                                                std::byte{255}}};
+    const std::vector sky(nx::render::kSkySuffixes.size(), side);
+    auto world = createWorld(**device, {.map = *map,
+                                        .shaderCode = shader,
+                                        .colorFormat = Format::Rgba8Unorm,
+                                        .sky = sky,
+                                        .encoding = nx::render::ColorEncoding::Linear});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    OffscreenTarget target{**device};
+    const auto pixels = drawWorld(target, *world, {.position = kMiddle});
+    constexpr std::uint32_t kPixelMiddle = kExtent.width / 2;
+    const Pixel left = pixelAt(pixels, kPixelMiddle - 1, kPixelMiddle);
+    const Pixel right = pixelAt(pixels, kPixelMiddle, kPixelMiddle);
+    constexpr double kHalfWhite = 127.5;
+    constexpr std::size_t kRgbChannels = 3;
+    for (std::size_t channel = 0; channel < kRgbChannels; ++channel) {
+        EXPECT_NEAR((left[channel] + right[channel]) / 2.0, kHalfWhite, 2.0);
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(BspWorldTest, DrawnAsLinearLightABrushsAmountScalesItsLight) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    constexpr std::array kColor{70, 40, 20};
+    const auto shader = worldShader();
+    OffscreenTarget target{**device};
+    const auto drawnAs = [&](std::string_view mode, std::string_view amount) -> std::vector<std::byte> {
+        auto file = readSeed("boxWithEntity.bsp");
+        paintTextures(file, kColor);
+        replaceText(file, R"("rendermode" "1")", std::format(R"("rendermode" "{}")", mode));
+        replaceText(file, R"("renderamt" "255")", std::format(R"("renderamt" "{}")", amount));
+        const auto map = nx::assets::BspView::parse(file);
+        EXPECT_TRUE(map.has_value());
+        if (!map) {
+            return {};
+        }
+        auto world = createWorld(**device, {.map = *map,
+                                            .shaderCode = shader,
+                                            .colorFormat = Format::Rgba8Unorm,
+                                            .encoding = nx::render::ColorEncoding::Linear});
+        EXPECT_TRUE(world.has_value()) << (world ? "" : nx::describe(world.error()));
+        if (!world) {
+            return {};
+        }
+        return drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
+    };
+    const auto hiddenPixels = drawnAs("2", "000");
+    ASSERT_FALSE(hiddenPixels.empty());
+    constexpr std::uint32_t kPixelMiddle = kExtent.width / 2;
+    const Pixel background = pixelAt(hiddenPixels, kPixelMiddle, kPixelMiddle);
+    const auto gamma = nx::render::textureGammaTable({});
+    constexpr double kChannelTop = 255.0;
+    constexpr double kDisplayGamma = 2.2;
+    constexpr double kAmount = 128.0 / kChannelTop;
+    for (const std::string_view mode : {"2", "5"}) {
+        const auto pixels = drawnAs(mode, "128");
+        ASSERT_EQ(pixels.size(), hiddenPixels.size());
+        const Pixel actual = pixelAt(pixels, kPixelMiddle, kPixelMiddle);
+        const double backgroundShare = mode == "5" ? 1.0 : 1.0 - kAmount;
+        for (std::size_t channel = 0; channel < kColor.size(); ++channel) {
+            const auto sourceByte = gamma[static_cast<std::size_t>(kColor[channel])];
+            const double source = std::pow(sourceByte / kChannelTop, kDisplayGamma);
+            const double expected = source * kAmount * kChannelTop + background[channel] * backgroundShare;
+            EXPECT_NEAR(actual[channel], expected, 3.0) << "mode " << mode << ", channel " << channel;
+        }
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 } // namespace

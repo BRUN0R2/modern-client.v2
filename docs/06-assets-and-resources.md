@@ -29,9 +29,13 @@ Search order (highest priority first), equivalent to the GoldSrc *search path*. 
 | 4 | The profile's game source: `<install>/cstrike/` + the base files Counter-Strike 1.6 loads from `<install>/valve/` (`classic`), `openContent` (`open`) or `devContent` (`dev`) | Game content | `goldsrcInstall`: **no**. The others: yes |
 | 5 | `engine/` (embedded) | Engine minimum: console font, fallback shaders, error screen | Yes |
 
-Today the VFS (`nx::assets::Vfs`) mounts directories, in the order it is given. The content
-sources and profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) and
-the embedded `engine/` mount are planned (M2, [TODO](../TODO.md)).
+Today the VFS (`nx::assets::Vfs`) mounts directories, in the order it is given: `next` mounts
+`addons/cstrike/` of the user's folder (`%APPDATA%\Modern-Client.v2` on Windows,
+[§2.5](#25-local-configuration)) above the installation when it exists (`cs::addonsFolderOf`),
+so that a model, a sound or a sprite put there is read instead of the installation's, or as a file
+it lacks; `nxview` mounts none, its screenshots the installation's alone. The content sources and
+profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) and the embedded
+`engine/` mount are planned (M2, [TODO](../TODO.md)).
 
 ### 2.2 Path rules
 
@@ -157,7 +161,8 @@ Readers today:
   1.1.0.0, whose size says so, a sixteenth of the picture's (`FONT0`); each of its 256 characters is
   at an offset into the picture, its own width wide and the font's row tall; its palette counts 256
   colors, or 768, as `fonts.wad` writes it; index 255 is where its characters show through.
-- Sprite lists (`nx.assets:spriteList`, `hud.txt` and the weapons' `sprites/weapon_<name>.txt`):
+- Sprite lists (`nx.assets:spriteList`, `hud.txt`; the weapons' `sprites/weapon_<name>.txt` give
+  the pictures the weapons' and the kinds of ammo's data name, read once into it):
   their count, then seven words an entry (its name, the screen width it is for, 320 or 640, its
   sprite, and the rectangle of the sprite it shows), split as the original splits them (whitespace,
   quotes, `//` comments). A count above the entries reads those there are: Counter-Strike's

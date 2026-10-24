@@ -120,7 +120,8 @@ void append(std::vector<std::byte>& bytes, Value value) {
 /// The renderer, the box's light, and the sprites drawn.
 class Scene {
 public:
-    explicit Scene(nx::rhi::Device& device)
+    explicit Scene(nx::rhi::Device& device,
+                   nx::render::ColorEncoding encoding = nx::render::ColorEncoding::Display)
         : m_device{&device},
           m_mapBytes{readFileOf(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp")},
           m_map{nx::assets::BspView::parse(m_mapBytes).value()}, m_light{m_map} {
@@ -129,7 +130,7 @@ public:
             executable ? readFileOf(executable->parent_path() / "shaders" / "sprite.spv")
                        : std::vector<std::byte>{};
         auto renderer = nx::render::SpriteRenderer::create(
-            device, {.shaderCode = shader, .colorFormat = nx::rhi::Format::Rgba8Unorm});
+            device, {.shaderCode = shader, .colorFormat = nx::rhi::Format::Rgba8Unorm, .encoding = encoding});
         EXPECT_TRUE(renderer.has_value()) << (renderer ? "" : nx::describe(renderer.error()));
         if (renderer) {
             m_renderer.emplace(std::move(*renderer));
@@ -334,6 +335,104 @@ TEST(SpriteRendererTest, AGroupShowsItsImagesAsItsLoopGoes) {
                     gamma[static_cast<std::size_t>(expected[1])],
                     gamma[static_cast<std::size_t>(expected[2])]},
                    std::format("{} seconds in", seconds));
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, DrawnAsLinearLightAnAddedSpriteAddsItsLightTimesItsAmountOnce) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    Scene scene{**device, nx::render::ColorEncoding::Linear};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    const std::array images{imageOf(kFirst, kFirst)};
+    const nx::render::SpriteModel model = scene.load(spriteFile(kParallel, kAdditive, images));
+    const SpriteInstance instance{.model = model,
+                                  .origin = {.x = 20.0F},
+                                  .mode = RenderMode::TransAdd,
+                                  .amount = 128,
+                                  .color = {.red = 255, .green = 128, .blue = 0}};
+    const std::array added{instance, instance};
+    const Pixel actual = pixelAt(scene.draw(target, cameraAt({}), added), kMiddle, kMiddle);
+    const auto gamma = nx::render::textureGammaTable({});
+    constexpr double kDisplayGamma = 2.2;
+    constexpr double kChannelTop = 255.0;
+    constexpr double kAmount = 128.0 / kChannelTop;
+    const std::array tint{1.0, kAmount, 0.0};
+    for (std::size_t channel = 0; channel < tint.size(); ++channel) {
+        const double source =
+            static_cast<double>(gamma[static_cast<std::size_t>(kColors[0][channel])]) / kChannelTop;
+        const double expected = 2.0 * std::pow(source, kDisplayGamma) *
+                                std::pow(tint[channel], kDisplayGamma) * kAmount * kChannelTop;
+        EXPECT_NEAR(actual[channel], expected, 2.0) << "channel " << channel;
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, DrawnAsLinearLightABlendedSpriteMixesTheLightOfBoth) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    Scene scene{**device, nx::render::ColorEncoding::Linear};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    const std::array foregroundImages{imageOf(kFirst, kFirst)};
+    const std::array backgroundImages{imageOf(kSecond, kSecond)};
+    const nx::render::SpriteModel foreground = scene.load(spriteFile(kParallel, kNormal, foregroundImages));
+    const nx::render::SpriteModel background = scene.load(spriteFile(kParallel, kNormal, backgroundImages));
+    const std::array shown{
+        SpriteInstance{.model = background, .origin = {.x = 24.0F}},
+        SpriteInstance{
+            .model = foreground, .origin = {.x = 20.0F}, .mode = RenderMode::TransTexture, .amount = 128}};
+    const Pixel actual = pixelAt(scene.draw(target, cameraAt({}), shown), kMiddle, kMiddle);
+    const auto gamma = nx::render::textureGammaTable({});
+    constexpr double kDisplayGamma = 2.2;
+    constexpr double kChannelTop = 255.0;
+    constexpr double kAmount = 128.0 / kChannelTop;
+    for (std::size_t channel = 0; channel < kColors[0].size(); ++channel) {
+        const auto linear = [&](std::size_t color) {
+            const auto index = static_cast<std::size_t>(kColors[color][channel]);
+            return std::pow(static_cast<double>(gamma[index]) / kChannelTop, kDisplayGamma);
+        };
+        const double expected = (linear(0) * kAmount + linear(1) * (1.0 - kAmount)) * kChannelTop;
+        EXPECT_NEAR(actual[channel], expected, 2.0) << "channel " << channel;
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, DrawnAsLinearLightALitSpriteTakesTheWorldsLightAsLight) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    Scene scene{**device, nx::render::ColorEncoding::Linear};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    const std::array images{imageOf(kLast, kFirst)};
+    const nx::render::SpriteModel model = scene.load(spriteFile(kParallel, kAlphaTest, images));
+    const std::array lit{SpriteInstance{.model = model,
+                                        .origin = {.x = 8.0F, .y = 8.0F, .z = 8.0F},
+                                        .mode = RenderMode::TransTexture,
+                                        .amount = 255}};
+    const nx::render::Camera camera{.position = {.x = 2.0F, .y = 8.0F, .z = 8.0F}};
+    const auto pixels = scene.draw(target, camera, lit);
+    EXPECT_EQ(pixelAt(pixels, kMiddle - 4, kMiddle)[3], 0);
+    const Pixel actual = pixelAt(pixels, kMiddle + 4, kMiddle);
+    constexpr std::array kFloorLight{129.0, 137.0, 144.0};
+    constexpr double kDisplayGamma = 2.2;
+    constexpr double kChannelTop = 255.0;
+    for (std::size_t channel = 0; channel < kFloorLight.size(); ++channel) {
+        const double source = static_cast<double>(kColors[0][channel]) / kChannelTop;
+        const double light = kFloorLight[channel] / kChannelTop;
+        const double expected =
+            std::pow(source, kDisplayGamma) * std::pow(light, kDisplayGamma) * kChannelTop;
+        EXPECT_NEAR(actual[channel], expected, 2.0) << "channel " << channel;
     }
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }

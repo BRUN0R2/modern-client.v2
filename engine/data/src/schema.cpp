@@ -51,18 +51,23 @@ namespace {
 
 auto Location::child(std::string_view key) const -> Location {
     return Location{.source = source,
-                    .path = path.empty() ? std::string{key} : std::format("{}.{}", path, key)};
+                    .path = path.empty() ? std::string{key} : std::format("{}.{}", path, key),
+                    .isGivenText = isGivenText};
 }
 
 auto Location::element(std::size_t index) const -> Location {
-    return Location{.source = source, .path = std::format("{}[{}]", path, index)};
+    return Location{.source = source, .path = std::format("{}[{}]", path, index), .isGivenText = isGivenText};
 }
 
 auto describeAt(const Location& at, SourcePosition position, std::string_view message) -> std::string {
+    // Lines count from 1: a position of line 0 is none.
+    const std::string place = at.isGivenText || position.line == 0
+                                  ? std::string{at.source}
+                                  : std::format("{}:{}:{}", at.source, position.line, position.column);
     if (at.path.empty()) {
-        return std::format("{}:{}:{}: {}", at.source, position.line, position.column, message);
+        return std::format("{}: {}", place, message);
     }
-    return std::format("{}:{}:{}: {}: {}", at.source, position.line, position.column, at.path, message);
+    return std::format("{}: {}: {}", place, at.path, message);
 }
 
 auto failAt(DataError code, const Location& at, SourcePosition position, std::string_view message)

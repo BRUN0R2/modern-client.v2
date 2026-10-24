@@ -382,6 +382,86 @@ TEST_F(DrawTest, TheDepthTestKeepsTheFirstOfTwoEqualDepths) {
     EXPECT_EQ(pixels, std::vector<Pixel>(16, kRed));
 }
 
+/// The float a half float's bits are.
+[[nodiscard]] auto floatOfHalf(std::uint16_t half) -> float {
+    constexpr int kMantissaBits = 10;
+    constexpr std::uint16_t kExponentMask = 0x1F;
+    constexpr std::uint16_t kMantissaMask = 0x3FF;
+    constexpr int kExponentBias = 15;
+    const int exponent = (half >> kMantissaBits) & kExponentMask;
+    const auto mantissa = static_cast<float>(half & kMantissaMask) / static_cast<float>(1 << kMantissaBits);
+    const float magnitude = exponent == 0 ? std::ldexp(mantissa, 1 - kExponentBias)
+                                          : std::ldexp(1.0F + mantissa, exponent - kExponentBias);
+    constexpr std::uint16_t kSignBit = 0x8000;
+    return (half & kSignBit) != 0 ? -magnitude : magnitude;
+}
+
+/// The color a pass clears `layer`'s `mip` of a cube texture of half floats to, read back.
+TEST_F(DrawTest, APassDrawsToAMipLevelOfALayerOfACube) {
+    constexpr Extent2d kFace{.width = 4, .height = 4};
+    constexpr Extent2d kMip{.width = 2, .height = 2};
+    constexpr std::uint32_t kLayer = 3;
+    auto cube = device().createTexture(
+        {.label = "test.cube",
+         .format = Format::Rgba16Float,
+         .extent = kFace,
+         .mipLevels = 2,
+         .arrayLayers = nx::rhi::kCubeFaces,
+         .usage = {TextureUsage::Sampled, TextureUsage::RenderTarget, TextureUsage::CopySource},
+         .isCube = true});
+    ASSERT_TRUE(cube.has_value()) << nx::describe(cube.error());
+    const std::uint64_t size =
+        std::uint64_t{kMip.width} * kMip.height * nx::rhi::bytesPerTexel(Format::Rgba16Float);
+    auto readback = device().createBuffer({.label = "test.readback",
+                                           .size = size,
+                                           .usage = {BufferUsage::CopyDestination},
+                                           .location = MemoryLocation::Readback});
+    ASSERT_TRUE(readback.has_value()) << nx::describe(readback.error());
+    runFrame([&](CommandList& commands) {
+        commands.transition(cube->get(), TextureState::Undefined, TextureState::RenderTarget);
+        const std::array colors{
+            nx::rhi::ColorAttachment{.texture = cube->get(),
+                                     .clear = {.red = 4.0F, .green = 1.5F, .blue = 0.25F, .alpha = 1.0F},
+                                     .mipLevel = 1,
+                                     .arrayLayer = kLayer}};
+        commands.beginRendering({.colors = colors, .area = kMip});
+        commands.endRendering();
+        commands.transition(cube->get(), TextureState::RenderTarget, TextureState::CopySource);
+        commands.transition(readback->get(), BufferState::Undefined, BufferState::CopyDestination);
+        commands.copyTextureToBuffer({.buffer = readback->get(),
+                                      .texture = cube->get(),
+                                      .mipLevel = 1,
+                                      .arrayLayer = kLayer,
+                                      .extent = kMip});
+        commands.transition(readback->get(), BufferState::CopyDestination, BufferState::HostRead);
+    });
+    const std::span<const std::byte> bytes = device().mappedBytes(readback->get());
+    std::vector<std::uint16_t> halves(nx::narrow<std::size_t>(size / sizeof(std::uint16_t)));
+    std::ranges::copy(bytes, std::as_writable_bytes(std::span{halves}).begin());
+    for (std::size_t texel = 0; texel < halves.size(); texel += 4) {
+        EXPECT_EQ(floatOfHalf(halves[texel]), 4.0F) << "light beyond 1 is kept";
+        EXPECT_EQ(floatOfHalf(halves[texel + 1]), 1.5F);
+        EXPECT_EQ(floatOfHalf(halves[texel + 2]), 0.25F);
+        EXPECT_EQ(floatOfHalf(halves[texel + 3]), 1.0F);
+    }
+}
+
+TEST_F(DrawTest, ACubeIsSquareItsLayersSixBySixAndAnHdrTargetIsBlendable) {
+    auto target = device().createTexture({.label = "test.hdr",
+                                          .format = Format::Rg11b10Ufloat,
+                                          .extent = {.width = 8, .height = 8},
+                                          .usage = {TextureUsage::Sampled, TextureUsage::RenderTarget}});
+    EXPECT_TRUE(target.has_value()) << "every desktop GPU blends to it: " << nx::describe(target.error());
+    auto cubes = device().createTexture({.label = "test.cubes",
+                                         .format = Format::Rg11b10Ufloat,
+                                         .extent = {.width = 8, .height = 8},
+                                         .mipLevels = 4,
+                                         .arrayLayers = 2 * nx::rhi::kCubeFaces,
+                                         .usage = {TextureUsage::Sampled, TextureUsage::RenderTarget},
+                                         .isCube = true});
+    EXPECT_TRUE(cubes.has_value()) << "a cube array: " << nx::describe(cubes.error());
+}
+
 TEST_F(DrawTest, ShaderCodeThatIsNotSpirvIsRefused) {
     const std::array code{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
     const auto shader = device().createShader({.label = "test.garbage", .code = code});

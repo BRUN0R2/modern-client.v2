@@ -59,12 +59,15 @@ struct RenderPipelineDesc {
     std::span<const BindGroupLayoutHandle> bindGroupLayouts{}; ///< Bind group 0, 1...
 };
 
-/// A color attachment of a render pass: its texture, and what the pass does with its content.
+/// A color attachment of a render pass: its texture, the mip level of the layer of it the pass draws
+/// to, and what the pass does with its content.
 struct ColorAttachment {
     TextureHandle texture{};
     LoadOp load = LoadOp::Clear;
     StoreOp store = StoreOp::Store;
     ClearColor clear{};
+    std::uint32_t mipLevel = 0;
+    std::uint32_t arrayLayer = 0;
 };
 
 /// The depth attachment of a render pass, as ColorAttachment.
@@ -75,7 +78,8 @@ struct DepthAttachment {
     float clear = 1.0F; ///< The far plane.
 };
 
-/// A render pass (CommandList::beginRendering): its attachments and the area it draws.
+/// A render pass (CommandList::beginRendering): its attachments and the area it draws, within the
+/// size of each attachment's mip level.
 struct RenderingDesc {
     std::span<const ColorAttachment> colors{};
     std::optional<DepthAttachment> depth{};
