@@ -16,13 +16,17 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Project license: option A, GPL-3.0-or-later + MIT (Rook and SDK) + CC BY 4.0 (docs) ([ADR-0010](docs/adr/0010-license.md))
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
+<<<<<<< HEAD
 - [ ] The plugin API as eight generic primitives (handles and `vars`, standalone types with no parent, methods and hooks, actions, queries, messages and effects, commands/cvars/tasks, services) in place of the old modules ([ADR-0022](docs/adr/0022-plugin-api-primitives.md), proposed)
 - [ ] Navigation meshes for every kind of agent, `nx.navigation` over Recast/Detour ([ADR-0023](docs/adr/0023-navigation.md), proposed)
 - [ ] Agents for bots, monsters and bosses: one brain, a player's or an entity's body, perception, memory and behaviors, `nx.agents` ([ADR-0024](docs/adr/0024-agents.md), proposed)
 - [x] Rook accepting AMX Mod X's literal names (`#include`, `new`, `register_clcmd`, `client_print`; a property's native such as `get_user_health` being its accessor, `get_player_var(player, "health")`) and the accessors with underscores (`get_player_var`, `set_weapon_var`, `get_entity_var`) through an `amxx` compatibility layer, an exception to ADR-0013 ([ADR-0021](docs/adr/0021-rook-amxx-names.md))
+=======
+- [ ] The enhanced look: physically based materials, the map's reflection probes, HDR and bloom, the same on every card ([ADR-0025](docs/adr/0025-enhanced-rendering.md), proposed)
+>>>>>>> 2a32c7e1dc0df9ae2b352aefe4b55ecf3f981c5b
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
 - [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
-- [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
+- [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; a device height whose line is less than half its em left out, so that a broken VDMX table cannot size a face beyond its cell; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
 - [x] `nx.ui` text: glyph atlases drawn by `nx.render:screen`, lines laid out as GDI's `TextOut` lays them out ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts)); UTF-8 in `nx.core`
 - [x] `nx.ui` font catalog: the system's fonts and a scheme's own, the face of a family by weight and italics as GDI chooses it, bold simulated as GDI simulates it ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
 - [x] `nx.ui` painting: panels' backgrounds and their children within them; labels placed by their alignment
@@ -282,7 +286,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `renderfx` of brush entities
 - [x] Decals on the world's faces (`nx.render:decals`: images of `decals.wad` as the original makes them, stamped near a point on the faces its tree reaches, cut to each, lit as the face, the original's pool and overlap rule; drawn after the world's faces, pulled toward the eye; depth bias in `nx.rhi`)
 - [x] Decals on brush entities (`BspWorld::shootDecal` on a `DecalTarget`: in the model's space, carried with it, drawn as its render mode draws them, a glass face's from behind too)
-- [ ] Permanent decals (`infodecal`), decals on masked faces (stencil), `r_decals` and `mp_decals`
+- [x] Permanent decals: the maps' `infodecal`s (`nx::game::staticDecalsOf`, `DecalLife::Permanent`), stamped as the scene is made
+- [ ] An `infodecal` with a `targetname`, stamped when it is used (`TriggerDecal`), with the game's decal events
+- [ ] Decals on masked faces (stencil), `r_decals` and `mp_decals`
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`
 - [ ] Studio models: animation evaluated in jobs, and the transitions between sequences
@@ -589,7 +595,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Sandboxed client plugins and `cl_plugins`
 - [ ] Security audit of the VM on the client
 - [ ] `.nxspr` format (high-resolution RGBA sprites) in `nxbake` and in the renderer
-- [ ] `r_fidelity enhanced` mode: material maps, calibrated effects and hardware performance validation; linear HDR scene blending/filtering/probes, GGX reflections, emission and color-preserving normalized bloom are implemented
+- [ ] `r_fidelity enhanced` mode ([ADR-0025](docs/adr/0025-enhanced-rendering.md), proposed): material maps, calibrated effects and hardware performance validation; linear HDR scene blending/filtering/probes, GGX reflections, emission and color-preserving normalized bloom are implemented
 - [ ] Optional server occlusion (`sv_occlusion`)
 - [ ] Extended `.nxmap` map format, compiled from TrenchBroom maps
 - [ ] Repository and first `openContent` package (own map, player, weapons, HUD and sounds, original or CC0/CC-BY)

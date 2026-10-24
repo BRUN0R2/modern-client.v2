@@ -25,6 +25,13 @@ namespace {
 /// One in Windows' fixed point: the scale from a face's units to pixels is a whole number of these.
 constexpr std::int64_t kFixedOne = 65536;
 
+/// Whether a line `line` tall can be one of a face of an em `em` big: a face's line is at least half its
+/// em. A table that breaks it is broken, or made to size a face beyond any cell and so exhaust the
+/// memory and the time of whoever draws its glyphs.
+[[nodiscard]] constexpr auto isLineOfItsEm(std::int64_t line, std::int64_t em) noexcept -> bool {
+    return 2 * line >= em;
+}
+
 /// `numerator / denominator`, both positive, rounded to the nearest whole number, halves up.
 [[nodiscard]] constexpr auto roundedQuotient(std::int64_t numerator, std::int64_t denominator) noexcept
     -> std::int64_t {
@@ -167,9 +174,12 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
         heights.reserve(count);
         for (std::size_t index = 0; index < count; ++index) {
             const std::span<const std::byte> entry = records.subspan(index * kRecordSize, kRecordSize);
-            heights.push_back({.pixelsPerEm = loadBigEndian<std::uint16_t>(entry),
-                               .top = loadBigEndian<std::int16_t>(entry.subspan(2)),
-                               .bottom = loadBigEndian<std::int16_t>(entry.subspan(4))});
+            const FontDeviceHeight height{.pixelsPerEm = loadBigEndian<std::uint16_t>(entry),
+                                          .top = loadBigEndian<std::int16_t>(entry.subspan(2)),
+                                          .bottom = loadBigEndian<std::int16_t>(entry.subspan(4))};
+            if (isLineOfItsEm(height.top - height.bottom, height.pixelsPerEm)) {
+                heights.push_back(height); // else no height of the face
+            }
         }
         std::ranges::stable_sort(heights, {},
                                  &FontDeviceHeight::pixelsPerEm); // sorted, as the table should be
@@ -181,7 +191,7 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
 auto fontMetricsFor(const FontVerticalMetrics& vertical, std::span<const FontDeviceHeight> deviceHeights,
                     std::int32_t cellHeight) -> FontMetrics {
     expects(cellHeight >= 1 && cellHeight <= kMaxCellHeight, "fontMetricsFor: a cell height in [1, 1024]");
-    expects(vertical.unitsPerEm > 0 && 2 * (vertical.ascent + vertical.descent) >= vertical.unitsPerEm,
+    expects(vertical.unitsPerEm > 0 && isLineOfItsEm(vertical.ascent + vertical.descent, vertical.unitsPerEm),
             "fontMetricsFor: a face whose line is at least half its em");
     expects(std::ranges::is_sorted(deviceHeights, {}, &FontDeviceHeight::pixelsPerEm),
             "fontMetricsFor: device heights in the order of their ems");
@@ -326,7 +336,7 @@ auto Font::open(std::shared_ptr<const std::vector<std::byte>> file, const FontRe
         vertical.ascent = windows->usWinAscent;
         vertical.descent = windows->usWinDescent;
     }
-    if (vertical.unitsPerEm <= 0 || 2 * (vertical.ascent + vertical.descent) < vertical.unitsPerEm) {
+    if (vertical.unitsPerEm <= 0 || !isLineOfItsEm(vertical.ascent + vertical.descent, vertical.unitsPerEm)) {
         return fail(FontError::NotAFont,
                     std::format("a line of {} units for an em of {}", vertical.ascent + vertical.descent,
                                 vertical.unitsPerEm));

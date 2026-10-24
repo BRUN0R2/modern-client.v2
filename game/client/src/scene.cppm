@@ -53,7 +53,8 @@ struct SceneView {
 class Scene {
 public:
     /// The scene of `level`, which must outlive it, for targets of `format`, drawn with `shaders`
-    /// and `gamma`, its uploads recorded in `commands`. Errors: CreateFailed.
+    /// and `gamma`, its uploads recorded in `commands`, the decals its map stamps for good as its game
+    /// starts stamped. Errors: CreateFailed.
     [[nodiscard]] static auto create(nx::rhi::Device& device, nx::rhi::CommandList& commands,
                                      const Level& level, const SceneShaders& shaders, nx::rhi::Format format,
                                      const nx::render::GammaSettings& gamma, nx::render::StudioLook look)

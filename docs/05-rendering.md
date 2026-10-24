@@ -314,8 +314,22 @@ A `kRenderTransTexture` entity's face seen from behind that has decals shows the
 own polygon culled, as the original keeps such a face for them (`R_SortBrushModelSurfaces`), so that
 the cracks of a window show from both sides. In `next`, each shot leaves its mark where it meets the
 world or a brush entity (docs/10 §7.3), in a pool of 300, `mp_decals`' default, until the
-`r_decals` and `mp_decals` cvars come. Permanent decals (`infodecal`) and the decals of masked
-faces (which the original cuts with a stencil) come with what stamps them.
+`r_decals` and `mp_decals` cvars come.
+
+A map stamps its own decals for good as its game starts (`DecalLife::Permanent`, the original's
+`FDECAL_PERMANENT`): the pool's ring passes over a slot taken for good while it has another
+(`R_DecalAlloc`, the last one tried once every slot is), the overlap rule never replaces such a
+decal, and the slot stays taken even when its decal misses the face, as the original keeps its
+flags. They are the map's `infodecal`s (`nx::game::staticDecalsOf`, ReGameDLL_CS's `CDecal`, GPL,
+consulted): each its `texture` at its `origin`, on the brush entity a line through what is solid
+meets from 5 units below the origin on each axis to 5 above (`UTIL_TraceLine`), the world when none,
+where the game has it at rest; those with a `targetname` wait to be used, and those marked not for
+deathmatch (spawnflag 2048) are left out, Counter-Strike's game being one. The level resolves them
+among its decals of decals.wad (`cs::Level::mapDecals`), the names of those decals.wad lacks logged,
+as the original's server drops them, and the scene stamps them as it is made, as the original's
+client stamps the static decals the server sends as it connects: de_cbble's bombsites show their
+`{siteA` and `{siteB` on its walls and crates. The decals of masked faces (which the original cuts
+with a stencil) come with what cuts them.
 
 On the Steam installation, de_dust2 is 5358 faces (1356 of them sky) in 41 textures and a 1024x404
 atlas, built in half a second; from the terrorists' spawn a frame draws 382 of them, in 83 leaves.
@@ -564,6 +578,14 @@ their consumers.
 
 Every visual improvement is **optional** and **does not change gameplay** (visibility through
 smoke, for example, must be identical).
+
+**Proposed** ([ADR-0025](adr/0025-enhanced-rendering.md)): `enhanced` as a physically based pipeline,
+forward rendered on the RHI's baseline, the same look on every card it runs on: a linear HDR scene
+in 4 bytes a pixel with a fixed exposure and a tone curve; an energy-conserving bloom; materials
+from data beside each model (metallic-roughness, normal maps, emissive per pixel, KTX2), derived
+from the GoldSrc flags when a model has none; reflections from probes baked from the map as it
+loads; highlights from the map's own lights. Its cost is bounded by design, within 2 ms a frame at
+1920×1080 on an integrated GPU.
 
 **Today** (`nx.render:gamma`): the original's picture, each curve where the original applies it.
 `texgamma` maps the palette of a texture when it loads (`pow(value, texgamma / gamma)`, truncated);
