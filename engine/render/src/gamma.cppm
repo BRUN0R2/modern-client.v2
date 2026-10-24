@@ -22,6 +22,17 @@ struct GammaSettings {
     float lightGamma = 2.5F;   ///< `lightgamma`, 1.8 to 3.
 };
 
+/// How the colors a renderer draws reach its target (shaders/colorEncoding.slang).
+enum class ColorEncoding : std::uint8_t {
+    /// As the original draws them: the colors its screen shows, blended as they are.
+    Display,
+    /// Linear light, for a target of half floats the enhanced look's post pass encodes for the screen
+    /// once (docs/adr/0025-enhanced-rendering.md): color textures are stored as sRGB, which the GPU
+    /// decodes before it filters, and colors blend as light adds.
+    Linear,
+    Count,
+};
+
 /// The entries of the light table: the summed light of a sample, from 0 to 1023.
 inline constexpr std::size_t kLightTableSize = 1024;
 

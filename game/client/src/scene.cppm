@@ -30,9 +30,10 @@ struct SceneShaders {
     std::vector<std::byte> world;
     std::vector<std::byte> studio;
     std::vector<std::byte> sprite;
+    std::vector<std::byte> probe; ///< The enhanced look's reflection probes'.
 };
 
-/// The shaders of the scene in `folder`: world.spv, studio.spv and sprite.spv. Errors:
+/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv and probe.spv. Errors:
 /// ShadersUnreadable.
 [[nodiscard]] auto readSceneShaders(const std::filesystem::path& folder)
     -> nx::Result<SceneShaders, SceneError>;
@@ -45,7 +46,7 @@ struct SceneView {
     std::span<const nx::render::ModelPlacement> placements{};
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
     /// The client events the view model passed since the last frame (ViewModelEvents).
-    std::span<const nx::assets::StudioEvent* const> clientEvents{};
+    std::span<const PassedEvent> clientEvents{};
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
@@ -56,7 +57,8 @@ public:
     /// starts stamped. Errors: CreateFailed.
     [[nodiscard]] static auto create(nx::rhi::Device& device, nx::rhi::CommandList& commands,
                                      const Level& level, const SceneShaders& shaders, nx::rhi::Format format,
-                                     const nx::render::GammaSettings& gamma) -> nx::Result<Scene, SceneError>;
+                                     const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
+        -> nx::Result<Scene, SceneError>;
 
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
@@ -66,6 +68,19 @@ public:
     /// where the player's eye is, as the original lights the view's own model. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
+
+    /// Puts on the GPU the view models `level` has now of `weapons` (none for one it has none of), its
+    /// uploads recorded in `commands`. The GPU must be done with the frames that drew a model this
+    /// replaces. Errors: CreateFailed.
+    [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
+                                   std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
+
+    /// Records the baking of the next of the level's reflection probes in the enhanced look, outside a
+    /// render pass and before the frame's draw: the world as the frame shows it at `time`, its brush
+    /// entities where `placements` puts them (nx::render::ReflectionProbes::bakeNext); nothing once they
+    /// are baked, or in the legacy look.
+    void bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
+                         std::span<const nx::render::ModelPlacement> placements);
 
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
@@ -86,14 +101,13 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          std::vector<nx::render::StudioModel> weapons,
+          std::vector<std::optional<nx::render::StudioModel>> weapons,
           std::vector<std::optional<nx::render::SpriteModel>> flashModels) noexcept;
 
-    /// Adds the muzzle flashes of `events`, the client events the view model of `level` passed to
-    /// `pose`, its bones `bones`, at `time`; and forgets those shown long enough.
-    void flash(const Level& level, const std::optional<ViewModelPose>& pose,
-               std::span<const nx::assets::StudioEvent* const> events, std::span<const nx::Mat3x4> bones,
-               nx::Seconds time);
+    /// Adds the muzzle flashes of `events`, the client events `viewModel` passed, its bones `bones`, at
+    /// `time`; and forgets those shown long enough.
+    void flash(const ViewModel* viewModel, std::span<const PassedEvent> events,
+               std::span<const nx::Mat3x4> bones, nx::Seconds time);
 
     nx::render::BspWorld m_world;
     nx::render::WorldLight m_light;
@@ -102,10 +116,12 @@ private:
     nx::render::StudioRenderer m_studio;
     std::vector<nx::render::StudioModel> m_models; ///< Of the level's models, by file.
     nx::render::StudioRenderer m_viewModels;
-    std::vector<nx::render::StudioModel> m_weapons; ///< The weapons' view models, by their WeaponIndex.
+    /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
+    std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels; ///< Of sprites/muzzleflash1.spr to 3.
     std::vector<MuzzleFlash> m_flashes;                                ///< Those showing.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
+    std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
 };
 
 } // namespace cs

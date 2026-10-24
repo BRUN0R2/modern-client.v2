@@ -7,7 +7,12 @@ nxAddTest(csClientTests
         mapTests.cpp
         hudTests.cpp
         muzzleFlashTests.cpp
+        modelMaterialsTests.cpp
+        viewModelTests.cpp
         decalsTests.cpp
+        weaponCommandsTests.cpp
+        hearingTests.cpp
+        audioTests.cpp
     DEPENDS
         cs::client
         cs::shared
@@ -16,7 +21,10 @@ nxAddTest(csClientTests
         nx::console
         nx::assets
         nx::render
-        nx::platform)
+        nx::platform
+    # Sound played to no device, in CI and on a developer's desktop alike.
+    ENVIRONMENT
+        SDL_AUDIO_DRIVER=dummy)
 
 # The maps of the tests are the BSP seed of the fuzz corpus, given other entities.
 target_compile_definitions(csClientTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")

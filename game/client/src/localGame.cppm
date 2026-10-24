@@ -26,6 +26,20 @@ struct Impact {
     nx::render::DecalTarget on{};
 };
 
+/// When a frame plays what the game made: what came after `from`, the moment of the game the frame
+/// before showed, is heard as long after the frame as it came after that moment. A frame that ran
+/// many ticks plays their sounds spread as they were made, not all at once: a weapon's cadence is
+/// heard the same at any frame rate, a frame later at most.
+struct Hearing {
+    nx::GameTime from{};
+    nx::TickRate rate{nx::kDefaultTickRate};
+
+    /// How long after the frame what was made at `made` is heard: at once when not after `from`.
+    [[nodiscard]] auto delayOf(nx::GameTime made) const noexcept -> nx::Seconds {
+        return std::max(made.since(from, rate), nx::Seconds{});
+    }
+};
+
 /// The game of a level and its player, played by the client alone.
 class LocalGame {
     struct CreateToken {
@@ -63,6 +77,9 @@ public:
 
     /// What the view model shows when the eye is drawn: none while the player holds no weapon.
     [[nodiscard]] auto viewModel() const -> std::optional<ViewModelPose>;
+    /// How the next frame hears what the game makes until it (Hearing): from the moment of the game
+    /// a frame shows now.
+    [[nodiscard]] auto hearing() const -> Hearing;
     /// The kick the player's weapon gave its view (punchangle), which the view is drawn turned by.
     [[nodiscard]] inline auto punch() const noexcept -> nx::EulerAngles { return m_player.punch; }
 
@@ -77,15 +94,20 @@ public:
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_inventory; }
+    /// Gives the player `weapon` (its replacement, when it is replaced), which must be complete, as
+    /// its loadout gives one, drawn when heavier; the speed it runs at follows the weapon it holds.
+    void give(WeaponIndex weapon);
     /// Where the player's shots met the world and the brush entities since the last call, in their
     /// order: where a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
-    /// The sounds the player's weapons made since the last call (Inventory::takeSounds).
-    [[nodiscard]] inline auto takeSounds() -> std::vector<const GameSound*> {
-        return m_inventory.takeSounds();
-    }
+    /// The sounds the player's weapons made since the last call, each with the moment of its tick
+    /// (Inventory::takeSounds).
+    [[nodiscard]] inline auto takeSounds() -> std::vector<SoundMade> { return m_inventory.takeSounds(); }
 
 private:
+    /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye
+    /// is drawn.
+    [[nodiscard]] auto shownTime() const -> nx::GameTime;
     /// Plays the time pending a tick at a time, the commands made by `nextCommand`; returns the eye
     /// as play() does.
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;

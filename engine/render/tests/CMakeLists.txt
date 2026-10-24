@@ -6,9 +6,13 @@ nxAddTest(nxRenderTests
         blendedOrderTests.cpp
         cameraTests.cpp
         decalsTests.cpp
+        enhancedStudioTests.cpp
         gammaTests.cpp
         lightStyleTests.cpp
         lightTests.cpp
+        postTests.cpp
+        probeBlendTests.cpp
+        probeTests.cpp
         screenTests.cpp
         spriteTests.cpp
         studioTests.cpp

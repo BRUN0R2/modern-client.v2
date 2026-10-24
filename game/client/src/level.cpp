@@ -180,7 +180,12 @@ template <class Names>
 
 } // namespace
 
-auto openGameContent(const std::filesystem::path& data, const std::optional<std::filesystem::path>& install)
+auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path {
+    return userFolder / "addons" / "cstrike";
+}
+
+auto openGameContent(const std::filesystem::path& data, const std::optional<std::filesystem::path>& install,
+                     const std::optional<std::filesystem::path>& addons)
     -> nx::Result<GameContent, LevelError> {
     const std::filesystem::path descriptionFile = data / "content" / "goldsrcCstrike.toml";
     auto text = nx::platform::readTextFile(descriptionFile);
@@ -197,7 +202,13 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!installation) {
         return nx::fail(LevelError::ContentUnavailable, std::move(installation.error()));
     }
-    auto vfs = nx::assets::Vfs::create(installation->mounts());
+    std::vector<std::filesystem::path> mounts;
+    if (std::error_code error; addons && std::filesystem::is_directory(*addons, error)) {
+        nx::log::info(kLog, "the user's own content: {}", nx::platform::toUtf8(*addons));
+        mounts.push_back(*addons);
+    }
+    std::ranges::copy(installation->mounts(), std::back_inserter(mounts));
+    auto vfs = nx::assets::Vfs::create(mounts);
     if (!vfs) {
         return nx::fail(LevelError::ContentUnavailable, std::move(vfs.error()));
     }
@@ -251,6 +262,8 @@ auto Level::load(const GameContent& content, std::string_view name)
     level.m_entityClasses = content.entityClasses;
     level.m_lightStyles = mapLightStyles(bsp);
     level.m_skyLight = skyLightOf(bsp);
+    level.m_lights = highlightLightsOf(bsp);
+    level.m_probePositions = probePositionsOf(bsp);
     auto hulls = nx::collision::BrushHulls::create(bsp);
     if (!hulls) {
         return nx::fail(LevelError::HullsInvalid, std::string{name}, std::move(hulls.error()));
@@ -305,13 +318,20 @@ auto Level::load(const GameContent& content, std::string_view name)
                 .decal = *index, .origin = decal.origin, .on = decalTargetOf(resting, decal.entity)});
         }
     }
-    for (const Weapon& weapon : content.weapons.weapons()) {
-        auto viewModel = ViewModel::read(content.vfs, weapon);
-        if (!viewModel) {
-            return nx::fail(LevelError::ViewModelUnreadable, weapon.models.view,
-                            std::move(viewModel.error()));
+    const WeaponCatalog& weapons = content.weapons;
+    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
+        const WeaponIndex weapon{index};
+        WeaponViewModel& viewModel =
+            level.m_viewModels.emplace_back(WeaponViewModel{.revision = weapons.revision(weapon)});
+        if (!weapons.isComplete(weapon)) {
+            continue; // shown once its values make a weapon
         }
-        level.m_viewModels.push_back(std::move(*viewModel));
+        auto read = ViewModel::read(content.vfs, weapons.weapon(weapon));
+        if (!read) {
+            return nx::fail(LevelError::ViewModelUnreadable, weapons.weapon(weapon).models.view,
+                            std::move(read.error()));
+        }
+        viewModel.model = std::move(*read);
     }
     level.m_muzzleFlashes = MuzzleFlashSprites::read(content.vfs);
     if (!level.m_muzzleFlashes->missing().empty()) {
@@ -319,6 +339,48 @@ auto Level::load(const GameContent& content, std::string_view name)
                          listed(level.m_muzzleFlashes->missing()));
     }
     return made;
+}
+
+auto Level::viewModel(WeaponIndex weapon) const noexcept -> const ViewModel* {
+    if (weapon.value >= m_viewModels.size() || !m_viewModels[weapon.value].model) {
+        return nullptr;
+    }
+    return &*m_viewModels[weapon.value].model;
+}
+
+auto Level::weapons() const -> std::vector<WeaponIndex> {
+    return std::views::iota(std::uint32_t{0}, nx::narrow<std::uint32_t>(m_viewModels.size())) |
+           std::views::transform([](std::uint32_t index) { return WeaponIndex{index}; }) |
+           std::ranges::to<std::vector>();
+}
+
+auto Level::updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
+    -> std::vector<WeaponIndex> {
+    std::vector<WeaponIndex> updated;
+    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
+        const WeaponIndex weapon{index};
+        const std::uint32_t revision = weapons.revision(weapon);
+        if (index < m_viewModels.size() && m_viewModels[index].revision == revision) {
+            continue;
+        }
+        if (index == m_viewModels.size()) {
+            m_viewModels.emplace_back();
+        }
+        WeaponViewModel& viewModel = m_viewModels[index];
+        viewModel = WeaponViewModel{.revision = revision};
+        updated.push_back(weapon);
+        if (!weapons.isComplete(weapon)) {
+            continue;
+        }
+        const Weapon& made = weapons.weapon(weapon);
+        auto read = ViewModel::read(vfs, made);
+        if (!read) {
+            nx::log::warning(kLog, "{} is not seen in hand: {}", made.id, nx::describe(read.error()));
+            continue;
+        }
+        viewModel.model = std::move(*read);
+    }
+    return updated;
 }
 
 auto Level::bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark {

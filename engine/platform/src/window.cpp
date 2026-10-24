@@ -98,6 +98,9 @@ auto Window::create(const WindowDesc& desc) -> Result<Window, WindowError> {
     if (desc.isResizable) {
         flags |= SDL_WINDOW_RESIZABLE;
     }
+    if (!desc.isShown) {
+        flags |= SDL_WINDOW_HIDDEN;
+    }
     SDL_Window* window =
         SDL_CreateWindow(title.c_str(), narrow<int>(desc.size.width), narrow<int>(desc.size.height), flags);
     if (window == nullptr) {
@@ -148,6 +151,17 @@ auto Window::nativeWindow() const -> Result<NativeWindow, WindowError> {
     }
     return fail(WindowError::NoNativeWindow,
                 std::format("the {:?} video driver has no window a GPU can draw to", driver));
+}
+
+auto Window::show() -> Result<void, WindowError> {
+    if (!SDL_ShowWindow(windowOf(m_window))) {
+        return fail(WindowError::ShowFailed, std::format("SDL_ShowWindow: {}", sdlError()));
+    }
+    return {};
+}
+
+auto Window::isShown() const noexcept -> bool {
+    return (SDL_GetWindowFlags(windowOf(m_window)) & SDL_WINDOW_HIDDEN) == 0;
 }
 
 auto Window::setMouseMode(MouseMode mode) -> Result<void, WindowError> {

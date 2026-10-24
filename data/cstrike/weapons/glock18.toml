@@ -6,6 +6,7 @@
 
 id = "glock18"
 classname = "weapon_glock18"
+name = "9x19mm Sidearm" # as the original's buy menu shows it
 slot = "secondary"
 position = 2
 weight = 5

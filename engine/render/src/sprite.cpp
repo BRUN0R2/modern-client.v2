@@ -88,9 +88,10 @@ constexpr std::array kSpriteVertexAttributes{
                          .format = rhi::VertexFormat::Float,
                          .offset = offsetof(SpriteVertex, alphaTest)}}; // NOLINT
 
-/// The frame's uniform: the rows of the view-projection matrix.
+/// The frame's uniform: the rows of the view-projection matrix, and how colors reach the target.
 struct FrameUniform {
     Mat4 viewProjection{};
+    std::uint32_t colorEncoding = 0; ///< ColorEncoding's.
 };
 
 /// The image of frame `frame` of `frames`, cut to a whole number and held to them, at `time`: the image
@@ -227,6 +228,7 @@ auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& i
 auto SpriteRenderer::create(rhi::Device& device, const SpriteRendererDesc& desc)
     -> Result<SpriteRenderer, SpriteError> {
     SpriteRenderer renderer{device};
+    renderer.m_encoding = desc.encoding;
     renderer.m_textureGamma = textureGammaTable(desc.gamma);
     if (auto made = renderer.createPipelines(desc.shaderCode, desc.colorFormat); !made) {
         return fail(SpriteError::GpuFailed, std::move(made.error()));
@@ -244,10 +246,10 @@ auto SpriteRenderer::create(rhi::Device& device, const SpriteRendererDesc& desc)
 auto SpriteRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat)
     -> Result<void, rhi::RhiError> {
     rhi::Device& device = *m_device;
-    constexpr Flags<rhi::ShaderStage> kVertex{rhi::ShaderStage::Vertex};
+    constexpr Flags<rhi::ShaderStage> kBothStages{rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment};
     constexpr Flags<rhi::ShaderStage> kFragment{rhi::ShaderStage::Fragment};
     const std::array frameBindings{rhi::BindingLayout{
-        .binding = kFrameUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kVertex}};
+        .binding = kFrameUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages}};
     const std::array imageBindings{
         rhi::BindingLayout{
             .binding = kImageBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
@@ -379,12 +381,12 @@ auto SpriteRenderer::load(rhi::CommandList& commands, const assets::SpriteView& 
         std::ranges::transform(frame.intervals, std::back_inserter(drawn.intervals),
                                [](Seconds interval) { return interval.count(); });
         for (const assets::SpriteImage& image : frame.images) {
-            const MipChain texels =
-                mipChainOf(spriteTexels(sprite, image, m_textureGamma), image.width, image.height);
+            const MipChain texels = colorMipChainOf(spriteTexels(sprite, image, m_textureGamma), image.width,
+                                                    image.height, m_encoding);
             const std::string name = std::format("sprite.{}.{}", label, model.m_images.size());
             auto texture = uploader.texture(name, {.width = image.width, .height = image.height},
                                             narrow<std::uint32_t>(texels.offsets.size()), 1, texels.texels,
-                                            texels.offsets);
+                                            texels.offsets, colorFormatOf(m_encoding));
             if (!texture) {
                 return fail(SpriteError::GpuFailed, std::move(texture.error()));
             }
@@ -415,7 +417,8 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
     m_blendedDraws.clear();
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     SpriteFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
-    const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect)};
+    const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect),
+                               .colorEncoding = std::to_underlying(m_encoding)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 
     // Each sprite's quad, and its light's after it when the world lights it: the solid ones drawn with

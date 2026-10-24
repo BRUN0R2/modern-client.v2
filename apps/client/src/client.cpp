@@ -106,7 +106,8 @@ struct Video {
 
 /// Opens the window and the GPU, presenting as `isVsync` asks. Errors: WindowUnavailable, GpuFailed.
 [[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync) -> nx::Result<Video, ClientError> {
-    auto window = nx::platform::Window::create({.title = "Modern-Client.v2"});
+    // Hidden until its first image (Client::drawFrame): never empty while the GPU starts and the map loads.
+    auto window = nx::platform::Window::create({.title = "Modern-Client.v2", .isShown = false});
     if (!window) {
         return nx::fail(ClientError::WindowUnavailable, std::move(window.error()));
     }
@@ -199,8 +200,7 @@ public:
 private:
     [[nodiscard]] auto registerSettings() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
-    /// Registers `weapon_<name>` for each weapon of the game's content, as the original's game
-    /// takes them.
+    /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
@@ -210,16 +210,23 @@ private:
     [[nodiscard]] auto playSound(std::string_view name, float volume) -> nx::Result<void, ConsoleError>;
     void noclipCommand();
     void lastWeaponCommand();
-    void selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name);
     /// Opens the console's window, or closes it.
     void toggleConsole();
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
     void startNextSession();
-    /// What the player hears of the frame the session played: the sounds its weapons made and its view
-    /// model's sound events; and the client events its view model passed, which the frame shows.
-    void hearSession();
+    /// Reads, before the session plays the frame, the view models of the weapons made or changed since
+    /// (cs::Level::updateViewModels), which upload puts on the GPU, and their sounds.
+    void updateWeapons();
+    /// Reads the sounds the player hears of `weapons` in hand (cs::soundFilesOf), so that no frame
+    /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
+    /// as it is made or changed. One that cannot be read is logged, and the game plays on.
+    void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
+    /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
+    /// weapons made and its view model's sound events, each as long after the frame as it came after
+    /// what the last frame showed; and the client events its view model passed, which the frame shows.
+    void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
     /// Leaves a bullet's mark where each of the session's shots met the world or a brush entity in the
@@ -231,6 +238,9 @@ private:
     [[nodiscard]] auto drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     /// The HUD and the console's window, over what is drawn.
+    /// The session's scene in the enhanced look, to the post renderer's target, then its bloom.
+    [[nodiscard]] auto drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+        -> nx::Result<void, ClientError>;
     [[nodiscard]] auto drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
         -> nx::Result<void, ClientError>;
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
@@ -251,15 +261,21 @@ private:
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::vector<std::byte> m_screenShader;
+    std::vector<std::byte> m_postShader;
     std::optional<Session> m_session;     ///< The map played.
     std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
+    /// Made or changed since the scene put their view models on the GPU.
+    std::vector<cs::WeaponIndex> m_changedWeapons;
     cs::ViewModelEvents m_viewModelEvents;
-    std::optional<cs::ViewModelPose> m_viewPose;                ///< Of the frame played.
-    std::vector<const nx::assets::StudioEvent*> m_clientEvents; ///< Its view model passed in the frame.
+    std::optional<cs::ViewModelPose> m_viewPose; ///< Of the frame played.
+    std::vector<cs::PassedEvent> m_clientEvents; ///< Its view model passed in the frame.
     nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
     std::optional<cs::Scene> m_scene; ///< Of the session's level, made with the first image of it.
+    /// Whether the scene draws the enhanced look (r_fidelity, read as it is made), through m_post.
+    bool m_isSceneEnhanced = false;
+    std::optional<nx::render::PostRenderer> m_post;     ///< Made with the first enhanced scene.
     std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
     std::optional<cs::Hud> m_hud;                       ///< None when its pictures could not be read.
     std::vector<nx::render::ScreenQuad> m_screenQuads;  ///< What the screen draws in a frame.
@@ -271,6 +287,7 @@ private:
     bool m_isConsoleOpen = false;
     std::optional<nx::rhi::OwnedTexture> m_depth;
     nx::rhi::Extent2d m_depthExtent{};
+    nx::rhi::Extent2d m_postSize{}; ///< The screen's size m_post's targets were made for.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
@@ -290,8 +307,8 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!executable) {
         return nx::fail(ClientError::ContentUnavailable, std::move(executable.error()));
     }
-    auto content =
-        cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"), m_options->install);
+    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"),
+                                       m_options->install, cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
@@ -309,6 +326,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(screenShader.error()));
     }
     m_screenShader = std::move(*screenShader);
+    auto postShader = nx::platform::readFile(executable->parent_path() / "shaders" / "post.spv");
+    if (!postShader) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(postShader.error()));
+    }
+    m_postShader = std::move(*postShader);
     if (auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume); audio) {
         m_audio = std::move(*audio);
     } else {
@@ -406,19 +428,25 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
 }
 
 auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
-    const cs::WeaponCatalog& weapons = m_content->weapons;
-    for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
-        const cs::WeaponIndex weapon{index};
-        const std::string& name = weapons.weapon(weapon).classname;
-        if (auto registered = m_console.registerCommand(
-                {.name = std::string_view{name}, .description = "Draws the weapon, when the player has it."},
-                [this, weapon, name](nx::console::Console&, const nx::console::CommandLine&) {
-                    selectWeaponCommand(weapon, name);
-                    return nx::Result<void, ConsoleError>{};
-                });
-            !registered) {
-            return nx::fail(ClientError::SettingsUnavailable, registered.error());
-        }
+    cs::WeaponActions actions{.select =
+                                  [this](cs::WeaponIndex weapon) {
+                                      if (!m_session) {
+                                          return false;
+                                      }
+                                      m_input->selectWeapon(weapon);
+                                      return true;
+                                  },
+                              .give =
+                                  [this](cs::WeaponIndex weapon) {
+                                      if (!m_session) {
+                                          return false;
+                                      }
+                                      m_session->game->give(weapon);
+                                      return true;
+                                  }};
+    if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
+        !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     return {};
 }
@@ -487,14 +515,6 @@ void Client::lastWeaponCommand() {
     }
 }
 
-void Client::selectWeaponCommand(cs::WeaponIndex weapon, std::string_view name) {
-    if (!m_session) {
-        m_console.print(std::format("Can't {:?}, not playing a map", name));
-        return;
-    }
-    m_input->selectWeapon(weapon);
-}
-
 void Client::toggleConsole() {
     if (m_consoleWindow == nullptr) {
         m_console.print("The console has no window: its font could not be found");
@@ -553,11 +573,15 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_audio->update();
         }
         startNextSession();
+        updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
         m_input->turn(m_camera.angles, elapsed);
-        if (m_session) {
+        // A session plays once its scene is made, from the frame after the first image of it: what the
+        // player hears of it, they see.
+        if (m_session && m_scene) {
+            const cs::Hearing hearing = m_session->game->hearing(); // from what the last frame showed
             m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
-            hearSession();
+            hearSession(hearing);
             stampBulletHoles();
         }
         if (auto drawn = drawFrame(); !drawn) {
@@ -599,23 +623,57 @@ void Client::startNextSession() {
     m_scene.reset();
     m_session = std::exchange(m_nextSession, std::nullopt);
     m_viewModelEvents = {}; // a new game's first play is new
+    m_viewPose.reset();     // what the old game showed went with its level
+    m_clientEvents.clear();
+    m_changedWeapons.clear(); // the new level read every weapon's view model
+    readWeaponSounds(m_session->level->weapons());
     m_camera = m_session->start;
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
 }
 
-void Client::hearSession() {
-    m_viewPose = m_session->game->viewModel();
-    m_clientEvents = m_viewModelEvents.passed(m_session->level->viewModels(), m_viewPose);
-    const std::vector<const cs::GameSound*> sounds = m_session->game->takeSounds();
+void Client::updateWeapons() {
+    if (!m_session) {
+        return;
+    }
+    const std::vector<cs::WeaponIndex> changed =
+        m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
+    readWeaponSounds(changed);
+    m_changedWeapons.insert(m_changedWeapons.end(), changed.begin(), changed.end());
+}
+
+void Client::readWeaponSounds(std::span<const cs::WeaponIndex> weapons) {
     if (m_audio == nullptr) {
         return;
     }
-    for (const cs::GameSound* const sound : sounds) {
-        reportSound(m_audio->play(*sound));
+    for (const cs::WeaponIndex weapon : weapons) {
+        if (!m_content->weapons.isComplete(weapon)) {
+            continue; // it makes no sound until its values make a weapon, which changes it again
+        }
+        const cs::Weapon& made = m_content->weapons.weapon(weapon);
+        for (const std::string_view file : cs::soundFilesOf(made, m_session->level->viewModel(weapon))) {
+            if (auto read = m_audio->preload(file); !read) {
+                nx::log::warning(kLog, "a sound of {} cannot be read: {}", made.id,
+                                 nx::describe(read.error()));
+            }
+        }
     }
-    for (const nx::assets::StudioEvent* const event : m_clientEvents) {
-        if (event->event == cs::kSoundEvent) {
-            reportSound(m_audio->playLocal(event->options, kFullVolume));
+}
+
+void Client::hearSession(const cs::Hearing& hearing) {
+    m_viewPose = m_session->game->viewModel();
+    m_clientEvents = m_viewModelEvents.passed(
+        m_viewPose ? m_session->level->viewModel(m_viewPose->weapon) : nullptr, m_viewPose);
+    const std::vector<cs::SoundMade> sounds = m_session->game->takeSounds();
+    if (m_audio == nullptr) {
+        return;
+    }
+    for (const cs::SoundMade& made : sounds) {
+        reportSound(m_audio->play(*made.sound, hearing.delayOf(made.at)));
+    }
+    for (const cs::PassedEvent& passed : m_clientEvents) {
+        if (passed.event->event == cs::kSoundEvent) {
+            const nx::GameTime at = m_viewPose->start.after(passed.intoPlay, hearing.rate);
+            reportSound(m_audio->playLocal(passed.event->options, kFullVolume, hearing.delayOf(at)));
         }
     }
 }
@@ -677,14 +735,27 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
     if (auto uploaded = upload(list, frame.format); !uploaded) {
         return uploaded;
     }
-    list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     list.transition(m_depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
-    list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
-                         .area = frame.size});
-    if (auto drawn = drawSession(list, frame); !drawn) {
-        return drawn;
+    if (m_session && m_isSceneEnhanced) {
+        // The enhanced look: the scene to its target of half floats, bloomed and through the tone
+        // curve to the screen, the screen's pictures over it.
+        if (auto drawn = drawEnhancedSession(list, frame); !drawn) {
+            return drawn;
+        }
+        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+        const std::array screen{
+            nx::rhi::ColorAttachment{.texture = frame.texture, .load = nx::rhi::LoadOp::DontCare}};
+        list.beginRendering({.colors = screen, .area = frame.size});
+        m_post->drawToneMapped(list);
+    } else {
+        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+        const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
+        list.beginRendering({.colors = colors,
+                             .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
+                             .area = frame.size});
+        if (auto drawn = drawSession(list, frame); !drawn) {
+            return drawn;
+        }
     }
     if (auto drawn = drawScreen(list, frame); !drawn) {
         return drawn;
@@ -693,6 +764,11 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
     list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
     if (auto submitted = device.submitFrame(*m_video->swapchain); !submitted) {
         return nx::fail(ClientError::GpuFailed, std::move(submitted.error()));
+    }
+    if (!m_video->window.isShown()) {
+        if (auto shown = m_video->window.show(); !shown) { // with its first image
+            return nx::fail(ClientError::WindowUnavailable, std::move(shown.error()));
+        }
     }
     return {};
 }
@@ -708,7 +784,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(screen.error()));
         }
         m_screen.emplace(std::move(*screen));
-        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.weapons(), *m_screen, list); hud) {
+        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.ammo(), *m_screen, list); hud) {
             m_hud.emplace(std::move(*hud));
         } else {
             nx::log::warning(kLog, "the HUD is not drawn: {}",
@@ -731,13 +807,35 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
     }
     if (m_session && !m_scene) {
-        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, format,
-                                       gammaOf(m_cvars->video));
+        m_isSceneEnhanced = m_cvars->video.fidelity.value() == nx::settings::Fidelity::Enhanced;
+        if (m_isSceneEnhanced && !m_post) {
+            auto post = nx::render::PostRenderer::create(
+                *m_video->device, {.shaderCode = m_postShader, .outputFormat = format});
+            if (!post) {
+                return nx::fail(ClientError::GpuFailed, std::move(post.error()));
+            }
+            m_post.emplace(std::move(*post));
+        }
+        const nx::rhi::Format sceneFormat =
+            m_isSceneEnhanced ? nx::render::PostRenderer::sceneFormat() : format;
+        auto scene = cs::Scene::create(
+            *m_video->device, list, *m_session->level, *m_shaders, sceneFormat, gammaOf(m_cvars->video),
+            m_isSceneEnhanced ? nx::render::StudioLook::Enhanced : nx::render::StudioLook::Legacy);
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
         m_scene.emplace(std::move(*scene));
-        std::ignore = m_mapClock.restart(); // the light styles start with the map
+        m_changedWeapons.clear();             // the scene put every weapon's view model on the GPU
+        std::ignore = m_mapClock.restart();   // the light styles start with the map
+        std::ignore = m_frameClock.restart(); // the scene's loading is no time of the game's
+    }
+    if (m_scene && !m_changedWeapons.empty()) {
+        // The weapons made or changed since (updateWeapons): their view models put on the GPU now.
+        m_video->device->waitIdle(); // the frames in flight may still draw a model replaced
+        if (auto loaded = m_scene->loadWeapons(list, *m_session->level, m_changedWeapons); !loaded) {
+            return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+        }
+        m_changedWeapons.clear();
     }
     return {};
 }
@@ -766,6 +864,33 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
         !drawn) {
         return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
     }
+    return {};
+}
+
+auto Client::drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
+    -> nx::Result<void, ClientError> {
+    if (m_postSize != frame.size) {
+        m_video->device->waitIdle(); // the frames in flight may still read the old targets
+        if (auto resized = m_post->resize(frame.size); !resized) {
+            return nx::fail(ClientError::GpuFailed, std::move(resized.error()));
+        }
+        m_postSize = frame.size;
+    }
+    // A reflection probe baked a frame, before the scene draws: the world prepares its views first.
+    m_scene->bakeReflections(list, *m_session->level, nx::Seconds{m_mapClock.elapsed()},
+                             m_session->game->placements());
+    const nx::rhi::TextureHandle target = m_post->sceneTarget();
+    list.transition(target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+    const std::array colors{nx::rhi::ColorAttachment{.texture = target, .clear = kVoidColor}};
+    list.beginRendering({.colors = colors,
+                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
+                         .area = frame.size});
+    if (auto drawn = drawSession(list, frame); !drawn) {
+        return drawn;
+    }
+    list.endRendering();
+    list.transition(target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
+    m_post->bloom(list);
     return {};
 }
 

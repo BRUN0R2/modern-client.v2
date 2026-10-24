@@ -41,6 +41,10 @@ struct Counter {
     std::int64_t value = 0;
 };
 
+struct Tint {
+    std::array<float, 3> color{};
+};
+
 } // namespace nx::test
 
 template <>
@@ -49,6 +53,14 @@ struct nx::meta::Description<nx::test::Counter> {
     static constexpr std::tuple kFields{
         nx::meta::field<&nx::test::Counter::value>("value",
                                                    nx::data::Range{.maximum = 9'007'199'254'740'992.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<nx::test::Tint> {
+    static constexpr std::string_view kName = "nx::test::Tint";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::test::Tint::color>("color", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
     };
 };
 
@@ -204,6 +216,29 @@ TEST(Schema, ATypeLimitFailureKeepsTheConversionAsItsCause) {
     ASSERT_FALSE(settings.has_value());
     ASSERT_EQ(settings.error().cause.size(), 1U);
     EXPECT_EQ(settings.error().cause.records().front().domain, "ConversionError");
+}
+
+TEST(Schema, AFixedArrayReadsExactlyItsLength) {
+    const auto tint = nx::data::parseToml<nx::test::Tint>("color = [0.25, 0.5, 1.0]", "tint.toml");
+    ASSERT_TRUE(tint.has_value()) << nx::describe(tint.error());
+    EXPECT_EQ(tint->color, (std::array{0.25F, 0.5F, 1.0F}));
+
+    const std::vector<std::tuple<std::string_view, DataError, std::string_view>> cases{
+        {"color = [0.25, 0.5]", DataError::WrongLength, "tint.toml:1:9: color: expected 3 elements, got 2"},
+        {"color = [0.25, 0.5, 1.0, 1.0]", DataError::WrongLength,
+         "tint.toml:1:9: color: expected 3 elements, got 4"},
+        {"color = [0.25, 0.5, 2.0]", DataError::OutOfRange,
+         "tint.toml:1:21: color[2]: expected a number in [0, 1], got 2"},
+        {"color = 0.5", DataError::WrongType,
+         "tint.toml:1:9: color: expected an array, got a number with a fraction"},
+    };
+    for (const auto& [text, code, detail] : cases) {
+        SCOPED_TRACE(text);
+        const auto wrong = nx::data::parseToml<nx::test::Tint>(text, "tint.toml");
+        ASSERT_FALSE(wrong.has_value());
+        EXPECT_EQ(wrong.error().code, code);
+        EXPECT_TRUE(wrong.error().detail.starts_with(detail)) << wrong.error().detail;
+    }
 }
 
 TEST(Schema, WholeNumberRangesCompareExactly) {

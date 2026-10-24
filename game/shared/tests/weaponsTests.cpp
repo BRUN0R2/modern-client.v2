@@ -77,6 +77,7 @@ viewHand = "left"
 constexpr std::string_view kGunKeys = R"(
 id = "gun"
 classname = "weapon_gun"
+name = "Gun"
 slot = "primary"
 position = 1
 weight = 25
@@ -86,9 +87,13 @@ maxSpeed = 221.0
 [[nodiscard]] auto gun(std::string id, WeaponSlot slot, std::uint32_t position) -> Weapon {
     return Weapon{.id = id,
                   .classname = "weapon_" + id,
+                  .name = id,
                   .slot = slot,
                   .position = position,
                   .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
+                  .models = cs::WeaponModels{.view = std::format("models/v_{}.mdl", id),
+                                             .player = std::format("models/p_{}.mdl", id),
+                                             .playerAnimation = "onehanded"},
                   .view = cs::WeaponView{
                       .drawSequences = {5},
                       .idles = {cs::WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
@@ -98,6 +103,36 @@ maxSpeed = 221.0
 [[nodiscard]] auto nineMillimeter() -> AmmoTypes {
     return AmmoTypes{
         .ammo = {AmmoType{.id = "9mm", .maxCarried = 120, .boxPrice = nx::Money{20}, .boxRounds = 30}}};
+}
+
+TEST(WeaponAppearanceSchemaTest, keepsOriginalDefaultsWhenAppearanceIsOmitted) {
+    const auto weapon = cs::readWeapon(weaponText(kGunKeys), "gun.toml");
+    ASSERT_TRUE(weapon.has_value()) << nx::describe(weapon.error());
+    EXPECT_FALSE(weapon->view.skin.has_value());
+    EXPECT_FALSE(weapon->view.bodyChoices.has_value());
+    EXPECT_EQ(weapon->view.skin.value_or(0), 0U);
+    EXPECT_TRUE(weapon->view.bodyChoices.value_or(std::vector<std::uint32_t>{}).empty());
+}
+
+TEST(WeaponAppearanceSchemaTest, readsDeclaredStaticAppearance) {
+    const auto weapon = cs::readWeapon(
+        weaponText(kGunKeys, "", std::format("{}skin = 5\nbodyChoices = [0, 2, 1]\n", kGunView)), "gun.toml");
+    ASSERT_TRUE(weapon.has_value()) << nx::describe(weapon.error());
+    EXPECT_EQ(weapon->view.skin, 5U);
+    ASSERT_TRUE(weapon->view.bodyChoices.has_value());
+    EXPECT_EQ(*weapon->view.bodyChoices, (std::vector<std::uint32_t>{0, 2, 1}));
+}
+
+TEST(WeaponAppearanceSchemaTest, rejectsInvalidAppearanceIndexes) {
+    for (const std::string_view appearance :
+         {"skin = -1", "skin = 1.5", "skin = 4294967296", "skin = \"gold\"", "bodyChoices = [-1]",
+          "bodyChoices = [0.5]", "bodyChoices = [4294967296]", "bodyChoices = [\"glow\"]"}) {
+        SCOPED_TRACE(appearance);
+        const auto weapon =
+            cs::readWeapon(weaponText(kGunKeys, "", std::format("{}{}\n", kGunView, appearance)), "gun.toml");
+        ASSERT_FALSE(weapon.has_value());
+        EXPECT_EQ(weapon.error().code, WeaponError::DataInvalid);
+    }
 }
 
 TEST(WeaponsTest, TheRepositoryHasTheOriginalsAmmo) {
@@ -342,6 +377,36 @@ TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
         << "without its silencer";
 }
 
+TEST(WeaponsTest, AWeaponMakesTheSoundOfEachPlaceOfItsDataThatGivesOne) {
+    const auto sound = [](std::string file) {
+        return cs::GameSound{.files = {std::move(file)}};
+    };
+    Weapon weapon = gun("gun", WeaponSlot::Primary, 1);
+    EXPECT_TRUE(cs::soundsOf(weapon).empty()) << "a weapon of no sound";
+    weapon.view.drawSound = sound("draw.wav");
+    weapon.firing = cs::WeaponFiring{.sound = sound("fire.wav"), .emptySound = sound("empty.wav")};
+    weapon.alternate =
+        cs::WeaponAlternate{.view = cs::WeaponView{.drawSound = sound("alternateDraw.wav")},
+                            .firing = cs::WeaponFiring{.sound = sound("alternateFire.wav"),
+                                                       .emptySound = sound("alternateEmpty.wav")}};
+    weapon.melee =
+        cs::WeaponMelee{.slash = {.missSound = sound("slashMiss.wav"), .hitSound = sound("slashHit.wav")},
+                        .stab = {.missSound = sound("stabMiss.wav"), .hitSound = sound("stabHit.wav")}};
+    const std::vector<const cs::GameSound*> sounds = cs::soundsOf(weapon);
+    const std::vector<std::string> files =
+        sounds | std::views::transform([](const cs::GameSound* made) { return made->files.front(); }) |
+        std::ranges::to<std::vector>();
+    EXPECT_EQ(files, (std::vector<std::string>{"draw.wav", "fire.wav", "empty.wav", "alternateDraw.wav",
+                                               "alternateFire.wav", "alternateEmpty.wav", "slashMiss.wav",
+                                               "slashHit.wav", "stabMiss.wav", "stabHit.wav"}));
+    ASSERT_FALSE(sounds.empty());
+    EXPECT_EQ(sounds.front(), &*weapon.view.drawSound) << "the weapon's own";
+    // An alternate without a view or a firing of its own makes none of its own.
+    weapon.alternate = cs::WeaponAlternate{};
+    weapon.melee.reset();
+    EXPECT_EQ(cs::soundsOf(weapon).size(), 3U);
+}
+
 TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
     constexpr std::string_view kMagazine = "[magazine]\nammo = \"9mm\"\nclipSize = 20\n";
     const std::string firing = R"(
@@ -440,6 +505,7 @@ TEST(WeaponsTest, AWeaponWithoutWhatNamesOrShowsItIsInvalid) {
     constexpr std::string_view kNoId = R"(
 id = ""
 classname = "weapon_gun"
+name = "Gun"
 slot = "primary"
 position = 1
 weight = 25
@@ -488,10 +554,14 @@ TEST(WeaponsTest, AViewThatDrawsOrIdlesWithNothingIsInvalid) {
     }
 }
 
-TEST(WeaponsTest, AmmoWithoutAnIdOrRoundsIsInvalid) {
-    for (const std::string_view text : {
-             "[[ammo]]\nid = \"\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30",
-             "[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 0",
+TEST(WeaponsTest, AmmoWithoutAnIdRoundsOrAPictureIsInvalid) {
+    const std::string kPicture =
+        R"(picture = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 })";
+    for (const std::string& text : {
+             "[[ammo]]\nid = \"\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30\n" + kPicture,
+             "[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 0\n" + kPicture,
+             std::string{"[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30\n"
+                         "picture = { sprite = \"640hud7\", x = 72, y = 72, width = 24, height = 24 }"},
          }) {
         const auto ammo = cs::readAmmoTypes(text, "ammo.toml");
         ASSERT_FALSE(ammo.has_value()) << text;

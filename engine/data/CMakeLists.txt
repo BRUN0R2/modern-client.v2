@@ -8,9 +8,11 @@ nxAddModuleLibrary(nxData
         src/nx.data.cppm
         src/document.cppm
         src/schema.cppm
+        src/fields.cppm
     SOURCES
         src/document.cpp
         src/schema.cpp
+        src/fields.cpp
     DEPENDS
         nx::core
         nx::meta)
