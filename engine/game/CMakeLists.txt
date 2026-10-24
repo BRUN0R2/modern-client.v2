@@ -20,6 +20,7 @@ nxAddModuleLibrary(nxGame
         src/brushEntities.cppm
         src/movers.cppm
         src/placement.cppm
+        src/decals.cppm
     SOURCES
         src/clock.cpp
         src/components.cpp
@@ -35,6 +36,7 @@ nxAddModuleLibrary(nxGame
         src/brushEntities.cpp
         src/movers.cpp
         src/placement.cpp
+        src/decals.cpp
     DEPENDS
         nx::core
         nx::math
