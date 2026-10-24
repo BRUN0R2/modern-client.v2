@@ -24,3 +24,4 @@ export import :scheme;
 export import :localization;
 export import :mdl;
 export import :tga;
+export import :bmp;

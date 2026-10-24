@@ -95,21 +95,21 @@ public:
     /// An inventory of none of the weapons of `catalog`, which must outlive it.
     explicit Inventory(const WeaponCatalog& catalog) noexcept : m_catalog{&catalog} {}
 
-    /// Gives the player `weapon` with a clip's worth of rounds, in its clip (AddPlayerItem); and the
-    /// player draws it at `time` when it holds none, or when `autoSwitch` (the player's
-    /// _cl_autowepswitch) and it is heavier than the one it holds (FShouldSwitchWeapon). A weapon it
-    /// has already gives its rounds alone, to its clip when empty, else besides it (ExtractAmmo).
-    /// Returns whether the player had no such weapon.
-    auto give(WeaponIndex weapon, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random)
-        -> bool;
+    /// Gives the player the weapon the catalog makes for `asked` (its replacement, or itself), which
+    /// must be complete, with a clip's worth of rounds, in its clip (AddPlayerItem); and the player
+    /// draws it at `time` when it holds none, or when `autoSwitch` (the player's _cl_autowepswitch)
+    /// and it is heavier than the one it holds (FShouldSwitchWeapon). A weapon it has already gives
+    /// its rounds alone, to its clip when empty, else besides it (ExtractAmmo). Returns whether the
+    /// player had no such weapon.
+    auto give(WeaponIndex asked, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random) -> bool;
 
     /// Gives `rounds` of `ammo` besides the clips, as many as the player can carry of it: returns how
     /// many it took.
     auto giveAmmo(std::string_view ammo, std::uint32_t rounds) -> std::uint32_t;
 
     /// The part of `command` before it moves the player (CmdStart): the player draws the weapon it
-    /// selects at `time` when it has it and does not hold it (SelectItem). The random numbers this
-    /// draws are the command number's.
+    /// selects, or else that weapon's replacement, at `time` when it has it and does not hold it
+    /// (SelectItem). The random numbers this draws are the command number's.
     void select(const UserCommand& command, const nx::game::TickTime& time);
 
     /// The weapon held after `command` moved the player, at `time` (ItemPostFrame), `shooter` its
@@ -145,9 +145,9 @@ public:
     /// How fast the weapon the player holds lets it run, kUnarmedSpeed with none (ResetMaxSpeed).
     [[nodiscard]] auto maxSpeed() const noexcept -> nx::UnitsPerSecond;
 
-    /// The sounds the player's weapons made since the last call, in their order, from the catalog: as
-    /// one was drawn, fired, clicked empty, missed or met the world.
-    [[nodiscard]] auto takeSounds() -> std::vector<const GameSound*>;
+    /// The sounds the player's weapons made since the last call, in their order, from the catalog, each
+    /// with the moment of its tick: as one was drawn, fired, clicked empty, missed or met the world.
+    [[nodiscard]] auto takeSounds() -> std::vector<SoundMade>;
 
 private:
     /// Where the player's `weapon` is among its weapons; none.
@@ -162,10 +162,10 @@ private:
     /// a round left it.
     auto fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter, std::uint32_t seed,
               const nx::game::TickTime& time, nx::Random& random) -> std::optional<Shot>;
-    /// The held `owned`, of `weapon`, fires the next of its last shot's follow-up rounds
+    /// The held `owned`, of `weapon`, fires the next of its last shot's follow-up rounds at `time`
     /// (FireRemaining): its shot, if a round was left for it.
-    auto fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter, std::uint32_t seed)
-        -> std::optional<Shot>;
+    auto fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Shooter& shooter, std::uint32_t seed,
+                      const nx::game::TickTime& time) -> std::optional<Shot>;
     /// The held `owned`, of `weapon`, switches to its alternate or back at `time` (SecondaryAttack).
     void switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
     /// The held `owned` makes `attack`, the `count`th of its kind, at `time`, meeting what `tracer`
@@ -180,8 +180,8 @@ private:
     /// Counts the timers down by `frameTime` seconds, as the original's PostThink does once the
     /// weapon frame is over.
     void countDown(float frameTime) noexcept;
-    /// Adds `sound`, when there is one, to those the weapons made.
-    void makeSound(const std::optional<GameSound>& sound);
+    /// Adds `sound`, when there is one, to those the weapons made, at `time`'s tick.
+    void makeSound(const std::optional<GameSound>& sound, const nx::game::TickTime& time);
 
     const WeaponCatalog* m_catalog;
     std::vector<OwnedWeapon> m_weapons; ///< In the order the player was given them.
@@ -194,8 +194,8 @@ private:
     /// Seconds until the weapon held does anything (the player's m_flNextAttack), counted down to
     /// -0.001.
     float m_nextAttack = 0.0F;
-    bool m_isReloading = false;             ///< (m_fInReload)
-    std::vector<const GameSound*> m_sounds; ///< Made since takeSounds.
+    bool m_isReloading = false;      ///< (m_fInReload)
+    std::vector<SoundMade> m_sounds; ///< Made since takeSounds.
 };
 
 } // namespace cs

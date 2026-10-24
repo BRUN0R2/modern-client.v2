@@ -11,6 +11,7 @@ import nx.assets;
 import nx.audio;
 
 #include "temporaryDirectory.hpp"
+#include "wavFile.hpp"
 
 namespace {
 
@@ -18,34 +19,7 @@ using nx::SampleRate;
 using nx::assets::Vfs;
 using nx::audio::SoundError;
 using nx::audio::SoundLibrary;
-
-/// A WAV file of `samples` 8-bit mono samples at 11 025 Hz.
-[[nodiscard]] auto wavFile(std::string_view samples) -> std::string {
-    std::string file;
-    const auto append32 = [&file](std::uint32_t value) {
-        for (int shift = 0; shift < 32; shift += 8) {
-            file.push_back(static_cast<char>((value >> shift) & 0xFFU));
-        }
-    };
-    const auto append16 = [&file](std::uint16_t value) {
-        file.push_back(static_cast<char>(value & 0xFFU));
-        file.push_back(static_cast<char>(value >> 8));
-    };
-    file += "RIFF";
-    append32(0); // the size, which the reader does not trust
-    file += "WAVEfmt ";
-    append32(16);
-    append16(1);      // PCM
-    append16(1);      // mono
-    append32(11'025); // frames a second
-    append32(11'025); // bytes a second
-    append16(1);      // bytes a frame
-    append16(8);      // bits a sample
-    file += "data";
-    append32(static_cast<std::uint32_t>(samples.size()));
-    file += samples;
-    return file;
-}
+using nx::test::wavFile;
 
 class SoundLibraryTest : public testing::Test {
 protected:

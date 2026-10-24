@@ -20,6 +20,7 @@ nxAddModuleLibrary(nxAssets
         src/localization.cppm
         src/mdl.cppm
         src/tga.cppm
+        src/bmp.cppm
     SOURCES
         src/binary.cpp
         src/vfs.cpp
@@ -35,6 +36,7 @@ nxAddModuleLibrary(nxAssets
         src/localization.cpp
         src/mdl.cpp
         src/tga.cpp
+        src/bmp.cpp
     DEPENDS
         nx::core
         nx::math

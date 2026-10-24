@@ -18,6 +18,7 @@ enum class DataError : std::uint8_t {
     WrongType,   ///< A value of another type than the field's.
     OutOfRange,  ///< A number outside the field's type or its Range, or not finite.
     UnknownName, ///< A string that names no enumerator of the field's enum.
+    WrongLength, ///< An array of another number of elements than the field's fixed one.
 };
 
 /// What a TOML value is.
