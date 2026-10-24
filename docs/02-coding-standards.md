@@ -163,10 +163,16 @@ Exceptions, because the name comes from outside the code or is required by a too
 - **Language tags** in translation files (`pt-BR.toml`).
 - **Translation keys** (`RZ_INFECTED_BY`).
 - **Names imposed by third parties** (standard library, Vulkan, file formats).
+- **AMX Mod X's spelling in Rook**: the names of its API in the `amxx` compatibility layer
+  (`register_clcmd`, `client_print`), `#include <amxmodx>` and `new`, and the underscored accessors
+  the compiler generates beside the canonical ones (`get_player_var`, `set_weapon_var`), in the
+  plugins that use them ([ADR-0021](adr/0021-rook-amxx-names.md)). The project's own Rook code (built-in mods, examples,
+  documentation, the API's tests) uses the canonical names.
 
 `.clang-tidy` encodes the rule for C++ (`readability-identifier-naming`, as an error); it runs
 in CI once a Clang build with modules exists (planned, [17 §7](17-build-and-tools.md#7-continuous-integration)).
-In Rook, the `naming` lint of `rookc` will check it.
+In Rook, the `naming` lint of `rookc` will check it, and the `compatibilityName` lint will point
+each AMX Mod X name at its canonical form ([14 §22](14-rook-language.md#22-lints-and-magic-numbers)).
 
 ### 3.2 Other naming rules
 
