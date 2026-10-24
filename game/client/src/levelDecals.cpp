@@ -6,6 +6,9 @@ module cs.client;
 import std;
 import nx.core;
 import nx.assets;
+import nx.ecs;
+import nx.render;
+import nx.game;
 
 namespace cs {
 
@@ -15,6 +18,22 @@ namespace {
 constexpr std::string_view kDecalWad = "decals.wad";
 
 } // namespace
+
+auto decalTargetOf(const nx::ecs::World& world, std::optional<nx::ecs::Entity> entity)
+    -> nx::render::DecalTarget {
+    if (!entity) {
+        return {};
+    }
+    // What a decal lies on is a solid brush entity: it has its model and its place.
+    const nx::game::BrushModel* const model = world.get<nx::game::BrushModel>(*entity);
+    const nx::game::Transform* const transform = world.get<nx::game::Transform>(*entity);
+    nx::expects(model != nullptr && transform != nullptr, "decalTargetOf: a brush entity");
+    if (model == nullptr || transform == nullptr) {
+        return {};
+    }
+    return nx::render::DecalTarget{
+        .model = model->index, .origin = transform->origin, .angles = transform->angles};
+}
 
 auto LevelDecals::read(const nx::assets::Vfs& vfs, std::span<const std::string_view> names) -> LevelDecals {
     LevelDecals decals;

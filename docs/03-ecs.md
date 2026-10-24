@@ -359,7 +359,9 @@ its class's `behavior` makes of it (`slidingDoor`, `rotatingDoor`: a `Door` and 
 [07 §5.1](07-simulation-and-physics.md#51-movement-types), and its `Waves`, an eighth of its
 `WaveHeight`, as `CBaseDoor::KeyValue` sets a door's `scale`); an entity of a brush model the map
 lacks is `GameError::UnknownModel`. `nx.assets` reads the values as
-the original does (`BspEntity::findInteger`, `findVector`, `findBrushModel`).
+the original does (`BspEntity::findInteger`, `findVector`, `findBrushModel`). Of the point entities,
+the `infodecal`s give the decals the map stamps as its game starts (`nx::game::staticDecalsOf`,
+[05 §8](05-rendering.md#8-bsp-world)), without an entity of their own.
 
 ## 12. Networking integration
 
