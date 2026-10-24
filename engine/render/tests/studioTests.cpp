@@ -24,8 +24,8 @@ namespace {
 
 using nx::Mat3x4;
 using nx::Vec3;
+using nx::render::DepthLayer;
 using nx::render::ModelLight;
-using nx::render::StudioDepth;
 using nx::render::StudioInstance;
 using nx::test::OffscreenTarget;
 using nx::test::Pixel;
@@ -232,7 +232,7 @@ TEST(StudioRendererTest, TheViewsOwnModelIsDrawnInFrontOfNearerOnes) {
         StudioInstance{.model = scene->model,
                        .bones = farBones,
                        .light = ambientLight(200.0F),
-                       .depth = StudioDepth::ViewModel}};
+                       .depth = DepthLayer::ViewModel}};
     expectNear(pixelAt(drawStudio(target, *scene, camera, withTheView), kMiddle, kMiddle), litPixel(200.0F),
                "the view's own, though farther");
     EXPECT_EQ((*device)->validationErrors(), 0U);

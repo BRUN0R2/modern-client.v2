@@ -387,8 +387,11 @@ flowchart LR
    view model's client events (5000 and above) fire as a frame passes them, a sequence played anew
    from its first frame (`R_StudioClientEvents`); a muzzle flash's (5001, 5011, 5021, 5031: the
    first to fourth attachment, as GoldSrc's model events are documented) shows a sprite at that
-   attachment, added in full among the blended sprites of the frame, as its style says
-   (`cs.client:muzzleFlash`). A flash is anchored to its attachment (`cs::MuzzleFlashAnchor`): each
+   attachment, added in full, as its style says (`cs.client:muzzleFlash`). The flashes are drawn
+   after the view's own model and in its depths (`DepthLayer::ViewModel`, a sprite renderer of their
+   own): over what of the weapon is behind them, under what is in front, and never hidden by a wall
+   or a crate the muzzle is pushed against, where the original draws them among the world's blended
+   sprites, which such a wall hides. A flash is anchored to its attachment (`cs::MuzzleFlashAnchor`): each
    frame shows it where that frame's bones put the attachment, so that it stays at the muzzle as the
    weapon moves, however long it lasts; a flash at an attachment replaces the one showing there, and
    those of a weapon the player no longer holds are forgotten (`cs::MuzzleFlashes`). Its style is
@@ -564,7 +567,8 @@ not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squa
 above 127, Normal, TransAlpha or TransTexture) is cut at an alpha of a third and lit: drawn again where
 it was, its light from the world under it (`R_LightPoint`) multiplying what is there. The solid sprites
 are drawn after the solid models, the others among everything the frame draws blended, by their
-origins (§7.1), before the view's own model. The client shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
+origins (§7.1), before the view's own model; those the view's own model shows (its muzzle flashes)
+are drawn after it, in its depths (`SpriteDraw::depth`, the layer `nx.render:camera` maps for both). The client shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
 sprite as the game makes them (ReGameDLL's `CSprite`, `CGlow`, `CCyclerSprite`): an `env_sprite`'s yaw
 alone is its roll, a named one that does not start on is off, and each animates ten times a second,
 its last frame index the end of its loop (one that plays once turning off past it); a glow the

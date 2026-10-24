@@ -155,7 +155,7 @@ void append(std::vector<std::byte>& bytes, Value value) {
     return bytes.value_or(std::vector<std::byte>{});
 }
 
-/// The renderer, the box's light, and the sprites drawn.
+/// The renderers, of the world's sprites and of the view model's, the box's light, and the sprites drawn.
 class Scene {
 public:
     explicit Scene(nx::rhi::Device& device,
@@ -167,23 +167,24 @@ public:
         const std::vector<std::byte> shader =
             executable ? readFileOf(executable->parent_path() / "shaders" / "sprite.spv")
                        : std::vector<std::byte>{};
-        auto renderer = nx::render::SpriteRenderer::create(
-            device, {.shaderCode = shader, .colorFormat = nx::rhi::Format::Rgba8Unorm, .encoding = encoding});
-        EXPECT_TRUE(renderer.has_value()) << (renderer ? "" : nx::describe(renderer.error()));
-        if (renderer) {
-            m_renderer.emplace(std::move(*renderer));
+        for (std::optional<nx::render::SpriteRenderer>* const made : {&m_renderer, &m_viewRenderer}) {
+            auto renderer = nx::render::SpriteRenderer::create(
+                device,
+                {.shaderCode = shader, .colorFormat = nx::rhi::Format::Rgba8Unorm, .encoding = encoding});
+            EXPECT_TRUE(renderer.has_value()) << (renderer ? "" : nx::describe(renderer.error()));
+            if (renderer) {
+                made->emplace(std::move(*renderer));
+            }
         }
     }
 
-    /// `file` on the GPU.
+    /// `file` on the GPU, for the world's renderer.
     [[nodiscard]] auto load(const std::vector<std::byte>& file) -> nx::render::SpriteModel {
-        auto view = nx::assets::SpriteView::parse(file);
-        EXPECT_TRUE(view.has_value()) << (view ? "" : nx::describe(view.error()));
-        auto model = nx::test::inFrameOfItsOwn(*m_device, [&](nx::rhi::CommandList& commands) {
-            return m_renderer->load(commands, *view, "test");
-        });
-        EXPECT_TRUE(model.has_value()) << (model ? "" : nx::describe(model.error()));
-        return std::move(model).value();
+        return loadOn(*m_renderer, file);
+    }
+    /// `file` on the GPU, for the view model's.
+    [[nodiscard]] auto loadInView(const std::vector<std::byte>& file) -> nx::render::SpriteModel {
+        return loadOn(*m_viewRenderer, file);
     }
 
     /// The pixels of `instances` seen by `camera` at `time`, the box's style 0 at 'm'.
@@ -204,14 +205,42 @@ public:
         });
     }
 
-    [[nodiscard]] auto isReady() const noexcept -> bool { return m_renderer.has_value(); }
+    /// The pixels of `world`'s sprites then `view`'s, in the view model's depths, seen by `camera`.
+    [[nodiscard]] auto drawWithView(OffscreenTarget& target, const nx::render::Camera& camera,
+                                    std::span<const SpriteInstance> world,
+                                    std::span<const SpriteInstance> view) -> std::vector<std::byte> {
+        return target.draw([&](nx::rhi::CommandList& list) {
+            for (const auto& [renderer, instances, depth] :
+                 {std::tuple{&*m_renderer, world, nx::render::DepthLayer::World},
+                  std::tuple{&*m_viewRenderer, view, nx::render::DepthLayer::ViewModel}}) {
+                const auto drawn = renderer->draw(
+                    list, {.camera = camera, .aspect = 1.0F, .instances = instances, .depth = depth},
+                    m_light);
+                EXPECT_TRUE(drawn.has_value()) << (drawn ? "" : nx::describe(drawn.error()));
+            }
+        });
+    }
+
+    [[nodiscard]] auto isReady() const noexcept -> bool { return m_renderer && m_viewRenderer; }
 
 private:
+    [[nodiscard]] auto loadOn(nx::render::SpriteRenderer& renderer, const std::vector<std::byte>& file)
+        -> nx::render::SpriteModel {
+        auto view = nx::assets::SpriteView::parse(file);
+        EXPECT_TRUE(view.has_value()) << (view ? "" : nx::describe(view.error()));
+        auto model = nx::test::inFrameOfItsOwn(*m_device, [&](nx::rhi::CommandList& commands) {
+            return renderer.load(commands, *view, "test");
+        });
+        EXPECT_TRUE(model.has_value()) << (model ? "" : nx::describe(model.error()));
+        return std::move(model).value();
+    }
+
     nx::rhi::Device* m_device;
     std::vector<std::byte> m_mapBytes;
     nx::assets::BspView m_map;
     nx::render::WorldLight m_light;
     std::optional<nx::render::SpriteRenderer> m_renderer;
+    std::optional<nx::render::SpriteRenderer> m_viewRenderer;
 };
 
 /// A camera at `eye` looking along +X.
@@ -370,6 +399,33 @@ TEST(SpriteRendererTest, AGlowShowsOverWhatIsInFrontUnlessTheGameHidesIt) {
     const std::array bright{undissipated};
     expectNear(pixelAt(scene.draw(target, cameraAt({}), bright), kMiddle, kMiddle), {0, 0, gamma[50]},
                "NoDissipation: as bright at any distance");
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, ASpriteInTheViewModelsDepthsIsNotHiddenByAWallNearerThanIt) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+    }
+    Scene scene{**device};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    const std::array images{imageOf(kFirst, kFirst)};
+    const nx::render::SpriteModel wall = scene.load(spriteFile(kParallel, kNormal, images));
+    const nx::render::SpriteModel flash = scene.loadInView(spriteFile(kParallel, kAdditive, images));
+    const auto gamma = nx::render::textureGammaTable({});
+    // A wall 16 units ahead, filling the view; a flash 30 units ahead, behind it, added in blue.
+    const std::array walls{SpriteInstance{.model = wall, .origin = {.x = 16.0F}, .scale = 6.0F}};
+    const std::array flashes{SpriteInstance{.model = flash,
+                                            .origin = {.x = 30.0F},
+                                            .mode = RenderMode::TransAdd,
+                                            .amount = 255,
+                                            .color = {.red = 0, .green = 0, .blue = 255}}};
+    expectNear(pixelAt(scene.drawWithView(target, cameraAt({}), walls, flashes), kMiddle, kMiddle),
+               {gamma[200], gamma[100], gamma[50] + gamma[50]}, "added over the wall in front of it");
+    expectNear(pixelAt(scene.draw(target, cameraAt({}), std::array{walls[0], flashes[0]}), kMiddle, kMiddle),
+               {gamma[200], gamma[100], gamma[50]}, "among the world's, the wall hides it");
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

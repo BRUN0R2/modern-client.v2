@@ -154,10 +154,6 @@ struct SpecularIntegral {
     return texels;
 }
 
-/// The depths of the view's own model: the nearest share of them (the original's
-/// VIEWMODEL_DEPTH_RANGE), reversed depth being 1 at the near plane.
-constexpr float kViewModelDepthShare = 0.3F;
-
 /// The room a frame starts with, which grows as the frames need: bones, and models.
 constexpr std::size_t kFirstBoneCapacity = 256;
 constexpr std::size_t kFirstInstanceCapacity = 16;
@@ -494,10 +490,9 @@ struct MaterialImages {
         uniform.lightPositions.at(index) = extend(lights[index].position, lights[index].reach);
         uniform.lightColors.at(index) = extend(lights[index].color, 0.0F);
     }
-    if (instance.depth == StudioDepth::ViewModel) {
-        uniform.depthScale = kViewModelDepthShare;
-        uniform.depthOffset = 1.0F - kViewModelDepthShare;
-    }
+    const DepthMapping depth = depthMappingOf(instance.depth);
+    uniform.depthScale = depth.scale;
+    uniform.depthOffset = depth.offset;
     return uniform;
 }
 

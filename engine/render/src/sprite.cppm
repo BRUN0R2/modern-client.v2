@@ -150,6 +150,9 @@ struct SpriteDraw {
     Seconds time{};      ///< Since the map started: groups of images play from it.
     LightStyleValues lightStyles{};
     std::span<const SpriteInstance> instances{};
+    /// Where their depths lie: the world's, or with the view's own model, what it shows (its muzzle
+    /// flashes), drawn after it.
+    DepthLayer depth = DepthLayer::World;
 };
 
 /// What draws sprites: their shader, pipelines and sampler, and what each frame in flight writes.

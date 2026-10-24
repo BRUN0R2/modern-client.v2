@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// What the client draws of a level (docs/05-rendering.md): the world and the light it gives, the
-/// sprites and studio models of its entities, the blended ones of them all in one order, the muzzle
-/// flashes of the weapon in the player's hand, and the weapon, drawn last.
+/// sprites and studio models of its entities, the blended ones of them all in one order, and the weapon
+/// in the player's hand and its muzzle flashes, drawn last in their own depths.
 export module cs.client:scene;
 
 import std;
@@ -62,10 +62,11 @@ public:
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
     /// sight does not reach hidden, the blended ones of them all in one order
-    /// (nx.render:blendedOrder), among them the muzzle flashes of the view's client events and those
-    /// still showing, as bright as their styles make them in the enhanced look; then the weapon in the
-    /// player's hand, lit where the player's eye is, as the original lights the view's own model, and
-    /// in the enhanced look by the light of its flashes too. Errors: DrawFailed.
+    /// (nx.render:blendedOrder); then the weapon in the player's hand, lit where the player's eye is, as
+    /// the original lights the view's own model, and in the enhanced look by the light of its flashes
+    /// too; then its muzzle flashes, those of the view's client events and those still showing, as
+    /// bright as their styles make them in the enhanced look, in the weapon's depths, so that a wall
+    /// the muzzle is pushed against hides neither. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
 
@@ -101,7 +102,7 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          bool isEnhanced) noexcept;
+          nx::render::SpriteRenderer viewSprites, bool isEnhanced) noexcept;
 
     /// Forgets the muzzle flashes over at `time` or of another weapon than `inHand`'s; then adds those
     /// of `events`, the client events passed by `viewModel`, that of `inHand` posed as `bones`, of the
@@ -116,9 +117,11 @@ private:
     nx::render::StudioRenderer m_studio;
     std::vector<nx::render::StudioModel> m_models; ///< Of the level's models, by file.
     nx::render::StudioRenderer m_viewModels;
+    nx::render::SpriteRenderer m_viewSprites; ///< What the weapon in hand shows: its muzzle flashes.
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
-    /// The sprites of the muzzle flashes, by their place in the level's MuzzleFlashSprites.
+    /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
+    /// MuzzleFlashSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;
     MuzzleFlashes m_flashes;        ///< Those showing, or their light.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.

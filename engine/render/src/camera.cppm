@@ -36,6 +36,26 @@ struct Camera {
 /// Map space to clip space.
 [[nodiscard]] auto viewProjectionMatrix(const Camera& camera, float aspect) noexcept -> Mat4;
 
+/// Where what a renderer draws lies among the depths.
+enum class DepthLayer : std::uint8_t {
+    World,     ///< Among the world's.
+    ViewModel, ///< The view's own model and what it shows (its muzzle flashes): in the nearest 0.3 of the
+               ///< depths, kept out of the walls it is pushed against, as the original keeps its model.
+};
+
+/// How a layer maps a depth of clip space: to the depth times `scale`, plus w times `offset`.
+struct DepthMapping {
+    float scale = 1.0F;
+    float offset = 0.0F;
+};
+
+/// The mapping of `layer`: the world's depths as they are; the view model's into the nearest 0.3 of
+/// them (the original's VIEWMODEL_DEPTH_RANGE), reversed depth being 1 at the near plane.
+[[nodiscard]] auto depthMappingOf(DepthLayer layer) noexcept -> DepthMapping;
+
+/// `viewProjection`, map space to clip space, its depths mapped as `layer` maps them.
+[[nodiscard]] auto inLayer(const Mat4& viewProjection, DepthLayer layer) noexcept -> Mat4;
+
 /// The left, right, bottom and top planes of what `camera` sees on a target of `aspect`, their fronts
 /// inward: what lies wholly behind one of them is out of view. The near plane, a few units from the
 /// eye, and the far one, at infinity, cull nothing worth a test.

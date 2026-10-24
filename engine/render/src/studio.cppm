@@ -122,13 +122,6 @@ enum class StudioError : std::uint8_t {
     BadTextures, ///< The textures given lack what a mesh is drawn with (cause: the MdlError).
 };
 
-/// Where a model's depths lie.
-enum class StudioDepth : std::uint8_t {
-    World,     ///< Among the world's.
-    ViewModel, ///< The view's own model: in the nearest 0.3 of the depths, kept out of walls as the original
-               ///< keeps it.
-};
-
 /// How studio models are shaded.
 enum class StudioLook : std::uint8_t {
     Legacy,   ///< As the original shades them.
@@ -264,7 +257,7 @@ struct StudioInstance {
     std::uint32_t skin = 0; ///< Its skin; one the model does not have is its first.
     /// The choice of each body part, by its index; those it leaves out are their first.
     std::span<const std::uint32_t> bodyChoices{};
-    StudioDepth depth = StudioDepth::World;
+    DepthLayer depth = DepthLayer::World;
     /// Whether its bones mirror its model (a view model held in the other hand than it was modeled
     /// in): its triangles face the other way, and the other way is culled.
     bool isMirrored = false;

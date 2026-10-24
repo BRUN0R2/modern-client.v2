@@ -60,10 +60,10 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             bool isEnhanced) noexcept
+             nx::render::SpriteRenderer viewSprites, bool isEnhanced) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
-      m_viewModels{std::move(viewModels)}, m_isEnhanced{isEnhanced} {}
+      m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)}, m_isEnhanced{isEnhanced} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format,
@@ -89,10 +89,15 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!world) {
         return nx::fail(SceneError::CreateFailed, "the world", std::move(world.error()));
     }
-    auto sprites = nx::render::SpriteRenderer::create(
-        device, {.shaderCode = shaders.sprite, .colorFormat = format, .gamma = gamma, .encoding = encoding});
+    const nx::render::SpriteRendererDesc spriteDesc{
+        .shaderCode = shaders.sprite, .colorFormat = format, .gamma = gamma, .encoding = encoding};
+    auto sprites = nx::render::SpriteRenderer::create(device, spriteDesc);
     if (!sprites) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(sprites.error()));
+    }
+    auto viewSprites = nx::render::SpriteRenderer::create(device, spriteDesc);
+    if (!viewSprites) {
+        return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(viewSprites.error()));
     }
     auto spriteModels = level.sprites().load(*sprites, commands);
     if (!spriteModels) {
@@ -123,10 +128,15 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!models) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(models.error()));
     }
-    Scene scene{std::move(*world),      nx::render::WorldLight{level.map()},
-                std::move(*sprites),    std::move(*spriteModels),
-                std::move(*studio),     std::move(*models),
-                std::move(*viewModels), isEnhanced};
+    Scene scene{std::move(*world),
+                nx::render::WorldLight{level.map()},
+                std::move(*sprites),
+                std::move(*spriteModels),
+                std::move(*studio),
+                std::move(*models),
+                std::move(*viewModels),
+                std::move(*viewSprites),
+                isEnhanced};
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
@@ -186,22 +196,6 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                                          sprite.origin);
         }
     }
-    // The brightness of a flash is the enhanced look's: the legacy look draws it as the original does.
-    for (const MuzzleFlash& shown : m_flashes.shown()) {
-        const std::optional<float> frame = shown.frameAt(view.time);
-        const std::optional<nx::Vec3> origin = whereIs(shown);
-        if (!frame || !origin) {
-            continue; // only its light is left
-        }
-        sprites.push_back(nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
-                                                     .origin = *origin,
-                                                     .angles = {.roll = shown.roll},
-                                                     .frame = *frame,
-                                                     .scale = shown.scale,
-                                                     .mode = nx::render::RenderMode::TransAdd,
-                                                     .amount = kFullAmount,
-                                                     .brightness = m_isEnhanced ? shown.brightness : 1.0F});
-    }
     if (auto prepared = m_sprites.prepare({.camera = view.camera,
                                            .aspect = view.aspect,
                                            .time = view.time,
@@ -235,7 +229,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         .light = m_light.modelLightAt({.origin = view.camera.position, .sky = level.skyLight()}, styles),
         .skin = viewModel->skin(),
         .bodyChoices = viewModel->bodyChoices(),
-        .depth = nx::render::StudioDepth::ViewModel,
+        .depth = nx::render::DepthLayer::ViewModel,
         .isMirrored = viewModel->isMirrored(),
         .lights = lights,
         .probes = m_probes ? m_probes->blendAt(view.camera.position) : std::nullopt}};
@@ -243,6 +237,36 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
             m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
         !drawn) {
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
+    }
+    // Its flashes after it, in its depths: added over what of it is behind them, hidden by what of it is
+    // in front, and never by a wall the muzzle is pushed against. Their brightness is the enhanced
+    // look's: the legacy look draws them as the original does.
+    std::vector<nx::render::SpriteInstance> flashes;
+    for (const MuzzleFlash& shown : m_flashes.shown()) {
+        const std::optional<float> frame = shown.frameAt(view.time);
+        const std::optional<nx::Vec3> origin = whereIs(shown);
+        if (!frame || !origin) {
+            continue; // only its light is left
+        }
+        flashes.push_back(nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
+                                                     .origin = *origin,
+                                                     .angles = {.roll = shown.roll},
+                                                     .frame = *frame,
+                                                     .scale = shown.scale,
+                                                     .mode = nx::render::RenderMode::TransAdd,
+                                                     .amount = kFullAmount,
+                                                     .brightness = m_isEnhanced ? shown.brightness : 1.0F});
+    }
+    if (auto drawn = m_viewSprites.draw(list,
+                                        {.camera = view.camera,
+                                         .aspect = view.aspect,
+                                         .time = view.time,
+                                         .lightStyles = styles,
+                                         .instances = flashes,
+                                         .depth = nx::render::DepthLayer::ViewModel},
+                                        m_light);
+        !drawn) {
+        return nx::fail(SceneError::DrawFailed, "the weapon's muzzle flashes", std::move(drawn.error()));
     }
     return {};
 }
@@ -278,7 +302,7 @@ auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
             model.emplace(std::move(*loaded));
         }
     }
-    auto flashModels = level.muzzleFlashes().load(m_sprites, commands, m_flashModels.size());
+    auto flashModels = level.muzzleFlashes().load(m_viewSprites, commands, m_flashModels.size());
     if (!flashModels) {
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(flashModels.error()));
     }

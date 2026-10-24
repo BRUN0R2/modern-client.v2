@@ -444,7 +444,8 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
     m_blendedDraws.clear();
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     SpriteFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
-    const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect),
+    const FrameUniform uniform{.viewProjection =
+                                   inLayer(viewProjectionMatrix(draw.camera, draw.aspect), draw.depth),
                                .colorEncoding = std::to_underlying(m_encoding)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 

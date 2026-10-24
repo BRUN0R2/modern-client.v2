@@ -40,6 +40,29 @@ TEST(CameraTest, DepthIsOneAtTheNearPlaneAndFallsTowardZero) {
     EXPECT_GT(depthAt(100.0F), depthAt(200.0F)) << "nearer is greater: reversed depth";
 }
 
+TEST(CameraTest, TheViewModelsLayerIsTheNearestDepthsAndKeepsItsPlaceOnTheScreen) {
+    const Camera camera{.angles = {.yaw = nx::Degrees{30.0F}}};
+    const nx::Mat4 world = nx::render::viewProjectionMatrix(camera, kFourByThree);
+    const nx::Mat4 viewModel = nx::render::inLayer(world, nx::render::DepthLayer::ViewModel);
+    EXPECT_EQ(nx::render::inLayer(world, nx::render::DepthLayer::World), world);
+    const auto projected = [](const nx::Mat4& matrix, Vec3 point) {
+        const Vec4 clip = matrix * nx::extend(point, 1.0F);
+        return Vec3{.x = clip.x / clip.w, .y = clip.y / clip.w, .z = clip.z / clip.w};
+    };
+    // A muzzle 30 units ahead, a wall the player is pushed against 16 units ahead (its hull's half).
+    const nx::AngleVectors axes = nx::angleVectors(camera.angles);
+    const Vec3 muzzle = (axes.forward * 30.0F) + (axes.right * 6.0F);
+    const Vec3 wall = axes.forward * 16.0F;
+    const Vec3 layered = projected(viewModel, muzzle);
+    const Vec3 asWorld = projected(world, muzzle);
+    EXPECT_GT(layered.z, projected(world, wall).z) << "nearer than the wall: not hidden by it";
+    EXPECT_NEAR(layered.z, 0.7F + (0.3F * asWorld.z), kTolerance) << "the nearest 0.3 of the depths";
+    EXPECT_NEAR(layered.x, asWorld.x, kTolerance) << "the same place on the screen";
+    EXPECT_NEAR(layered.y, asWorld.y, kTolerance);
+    const Vec3 far = projected(viewModel, axes.forward * 1.0e6F);
+    EXPECT_GT(far.z, 0.7F - kTolerance) << "even at its farthest";
+}
+
 TEST(CameraTest, RightIsPositiveXAndUpIsPositiveY) {
     const Camera camera{}; // looking along +X: +Y is to the left, +Z up
     const Vec3 left = project(camera, kFourByThree, {.x = 100.0F, .y = 10.0F});
