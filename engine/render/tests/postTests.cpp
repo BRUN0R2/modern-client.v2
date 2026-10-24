@@ -3,7 +3,9 @@
 
 // The real Vulkan post pipelines, with validation and synthetic HDR clears: constant colors retain
 // their energy across the accumulated bloom levels and resizing, while a bright patch scatters light
-// into a visible halo without taking excessive light from its center. No game assets are needed.
+// into a visible halo without taking excessive light from its center. The effects' layer is added over
+// the mapped scene as the original adds effects, each channel stopping at white, and glows in the
+// bloom. No game assets are needed.
 
 #include <gtest/gtest.h>
 
@@ -40,6 +42,12 @@ constexpr float kDisplayGamma = 2.2F;
 struct ScenePatch {
     Extent2d size;
     ClearColor color;
+};
+
+/// What a target holds: a color, and a patch of another at its top left.
+struct Fill {
+    ClearColor background{};
+    std::optional<ScenePatch> patch{};
 };
 
 class PostRendererTest : public ::testing::Test {
@@ -84,27 +92,16 @@ protected:
         return resized.has_value();
     }
 
-    [[nodiscard]] auto prepareScene(ClearColor background, std::optional<ScenePatch> patch = std::nullopt)
-        -> bool {
+    [[nodiscard]] auto prepareScene(ClearColor background, std::optional<ScenePatch> patch = std::nullopt,
+                                    const Fill& effects = {}) -> bool {
         auto frame = devicePtr->beginFrame();
         EXPECT_TRUE(frame.has_value()) << (frame ? "" : nx::describe(frame.error()));
         if (!frame) {
             return false;
         }
         auto& commands = frame->get();
-        const auto scene = postRenderer->sceneTarget();
-        commands.transition(scene, TextureState::Undefined, TextureState::RenderTarget);
-        const std::array colors{nx::rhi::ColorAttachment{.texture = scene, .clear = background}};
-        commands.beginRendering({.colors = colors, .area = sceneSize});
-        commands.endRendering();
-        if (patch) {
-            // A load-op clear affects only the render area, leaving the surrounding background.
-            commands.transition(scene, TextureState::RenderTarget, TextureState::RenderTarget);
-            const std::array patchColors{nx::rhi::ColorAttachment{.texture = scene, .clear = patch->color}};
-            commands.beginRendering({.colors = patchColors, .area = patch->size});
-            commands.endRendering();
-        }
-        commands.transition(scene, TextureState::RenderTarget, TextureState::ShaderRead);
+        fill(commands, postRenderer->sceneTarget(), {.background = background, .patch = patch});
+        fill(commands, postRenderer->effectsTarget(), effects);
         postRenderer->bloom(commands);
         const auto submitted = devicePtr->submitFrame();
         EXPECT_TRUE(submitted.has_value()) << (submitted ? "" : nx::describe(submitted.error()));
@@ -118,6 +115,23 @@ protected:
     }
 
 private:
+    /// Clears `texture` to `with`, and leaves it in ShaderRead.
+    void fill(nx::rhi::CommandList& commands, nx::rhi::TextureHandle texture, const Fill& with) const {
+        commands.transition(texture, TextureState::Undefined, TextureState::RenderTarget);
+        const std::array colors{nx::rhi::ColorAttachment{.texture = texture, .clear = with.background}};
+        commands.beginRendering({.colors = colors, .area = sceneSize});
+        commands.endRendering();
+        if (with.patch) {
+            // A load-op clear affects only the render area, leaving the surrounding background.
+            commands.transition(texture, TextureState::RenderTarget, TextureState::RenderTarget);
+            const std::array patchColors{
+                nx::rhi::ColorAttachment{.texture = texture, .clear = with.patch->color}};
+            commands.beginRendering({.colors = patchColors, .area = with.patch->size});
+            commands.endRendering();
+        }
+        commands.transition(texture, TextureState::RenderTarget, TextureState::ShaderRead);
+    }
+
     std::unique_ptr<nx::rhi::Device> devicePtr;
     std::optional<nx::render::PostRenderer> postRenderer;
     std::optional<nx::test::OffscreenTarget> target;
@@ -223,6 +237,46 @@ TEST_F(PostRendererTest, PreservesHdrGoldBlueAndNeutralChromaticityAcrossExposur
             EXPECT_EQ(pixel[3], 255);
         }
     }
+}
+
+TEST_F(PostRendererTest, AddsTheEffectsOverTheMappedSceneEachChannelStoppingAtWhite) {
+    // A golden flash, orange as its texture is, over the map's mid tones: the original's addition turns
+    // it yellow, red and green stopping at white, blue going on.
+    constexpr ClearColor kGray{.red = 0.4F, .green = 0.4F, .blue = 0.4F};
+    constexpr ClearColor kFlash{.red = 0.9F, .green = 0.7F, .blue = 0.2F};
+    ASSERT_TRUE(prepareScene(linearColorOf(kGray), std::nullopt, {.background = kFlash}));
+    const auto pixels = draw();
+    ASSERT_FALSE(pixels.empty());
+    const Pixel pixel = pixelAt(pixels, 0, 0);
+    // A constant layer's light reaches the bloom as a constant does: the scene's light, plus the
+    // bloom's share of the flash's own, through the curve's straight part, then the flash's colors added.
+    const std::array flash{kFlash.red, kFlash.green, kFlash.blue};
+    for (std::size_t channel = 0; channel < kRgbChannels; ++channel) {
+        const float light = std::pow(kGray.red, kDisplayGamma) +
+                            (nx::render::kBloomStrength * std::pow(flash.at(channel), kDisplayGamma));
+        const float expected = std::min(std::pow(light, 1.0F / kDisplayGamma) + flash.at(channel), 1.0F);
+        EXPECT_NEAR(pixel.at(channel), std::lround(expected * kChannelTop), kByteTolerance)
+            << "channel " << channel;
+    }
+    EXPECT_EQ(pixel[0], 255) << "red at white";
+    EXPECT_EQ(pixel[1], 255) << "green at white: yellow, where the flash alone is orange";
+    EXPECT_LT(pixel[2], 200);
+}
+
+TEST_F(PostRendererTest, AnEffectGlowsInTheBloomAboutIt) {
+    constexpr ScenePatch kFlash{.size = {.width = 8, .height = 8},
+                                .color = {.red = 1.0F, .green = 0.8F, .blue = 0.3F}};
+    ASSERT_TRUE(prepareScene({}, std::nullopt, {.patch = kFlash}));
+    const auto pixels = draw();
+    ASSERT_FALSE(pixels.empty());
+    const Pixel center = pixelAt(pixels, kFlash.size.width / 2, kFlash.size.height / 2);
+    const Pixel halo = pixelAt(pixels, kFlash.size.width + 1, kFlash.size.height / 2);
+    EXPECT_EQ(center[0], 255);
+    EXPECT_GT(halo[0], 0) << "its light, about it on a black scene";
+    EXPECT_GT(halo[0], halo[2]) << "of its color";
+
+    ASSERT_TRUE(prepareScene({}));
+    EXPECT_EQ(pixelAt(draw(), kFlash.size.width + 1, kFlash.size.height / 2)[0], 0) << "without it, none";
 }
 
 TEST_F(PostRendererTest, PresentationAlphaDoesNotModulateSceneRadiance) {

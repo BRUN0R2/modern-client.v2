@@ -32,6 +32,8 @@ constexpr nx::log::Category kLog{"client"};
 
 /// What no face covers: the void outside a map, seen through its leaks, and the screen without one.
 constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
+/// The effects' layer before the effects are drawn: nothing to add.
+constexpr nx::rhi::ClearColor kNoEffect{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.0F};
 /// The key `next` binds `noclip` to, which Counter-Strike leaves free.
 constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
@@ -756,6 +758,9 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
         if (auto drawn = drawSession(list, frame); !drawn) {
             return drawn;
         }
+        if (m_session) {
+            m_scene->drawEffects(list); // over the scene, in the screen's colors
+        }
     }
     if (auto drawn = drawScreen(list, frame); !drawn) {
         return drawn;
@@ -818,9 +823,12 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
         const nx::rhi::Format sceneFormat =
             m_isSceneEnhanced ? nx::render::PostRenderer::sceneFormat() : format;
-        auto scene = cs::Scene::create(
-            *m_video->device, list, *m_session->level, *m_shaders, sceneFormat, gammaOf(m_cvars->video),
-            m_isSceneEnhanced ? nx::render::StudioLook::Enhanced : nx::render::StudioLook::Legacy);
+        const nx::rhi::Format effectsFormat =
+            m_isSceneEnhanced ? nx::render::PostRenderer::effectsFormat() : format;
+        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, sceneFormat,
+                                       effectsFormat, gammaOf(m_cvars->video),
+                                       m_isSceneEnhanced ? nx::render::StudioLook::Enhanced
+                                                         : nx::render::StudioLook::Legacy);
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
@@ -883,13 +891,28 @@ auto Client::drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::Swap
     list.transition(target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = target, .clear = kVoidColor}};
     list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
+                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(),
+                                                           .store = nx::rhi::StoreOp::Store,
+                                                           .clear = 0.0F},
                          .area = frame.size});
     if (auto drawn = drawSession(list, frame); !drawn) {
         return drawn;
     }
     list.endRendering();
+    // The effects to their layer, display colors over the scene's depths, which the tone pass adds as the
+    // original adds them.
+    const nx::rhi::TextureHandle effects = m_post->effectsTarget();
+    list.transition(effects, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+    list.transition(m_depth->get(), nx::rhi::TextureState::DepthTarget, nx::rhi::TextureState::DepthTarget);
+    const std::array effectsColors{nx::rhi::ColorAttachment{.texture = effects, .clear = kNoEffect}};
+    list.beginRendering(
+        {.colors = effectsColors,
+         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .load = nx::rhi::LoadOp::Load},
+         .area = frame.size});
+    m_scene->drawEffects(list);
+    list.endRendering();
     list.transition(target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
+    list.transition(effects, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
     m_post->bloom(list);
     return {};
 }

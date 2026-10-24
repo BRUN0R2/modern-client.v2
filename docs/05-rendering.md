@@ -405,12 +405,15 @@ flowchart LR
    degrees a frame of it (the Drakar III's `R2` turns smoothly that way in Counter-Strike Online; the
    rate is the project's estimate until it is measured); the keys whose meaning is unknown are not
    read, and a key an option lacks is the original's of 0. A flash is over past its
-   time or past its sprite's last frame. The enhanced look adds a flash as light where the original
-   adds display colors: over the map's mid tones a flash the original adds up to white reaches 0.69 as
-   light. So a flash emits four times its light, as bright as the original's there, and its style's
-   `brightness` multiplies that, the bloom spreading what goes beyond white; its `light` lights the weapon in hand from the
-   flash (a `StudioLight`, after the key light), dimming to nothing over its own time. The legacy
-   look draws every flash as the original does. The sprites a view model's flashes show are read
+   time or past its sprite's last frame. A flash is added as the original adds it, in both looks: its
+   display colors, times its style's `brightness` (1 as made), each channel stopping at white, so
+   that an overexposed flame turns yellow, then white, as it was authored to (`Scene::drawEffects`):
+   in the legacy look onto the screen, after the weapon; in the enhanced look to the effects' layer,
+   which the tone pass adds over the scene once it is mapped to the screen, the layer's light glowing
+   in the bloom (`nx.render:post`); added as light and mapped with the scene, a flash would keep its
+   texture's orange where the original's turns yellow. In the enhanced look its `light` lights the
+   weapon in hand from the flash (a `StudioLight`, after the key light), dimming to nothing over its
+   own time. The sprites a view model's flashes show are read
    with it, by their paths (`cs::MuzzleFlashSprites`, `Level::updateViewModels`), and put on the GPU
    with it (`Scene::loadWeapons`), so that no file is read as a frame plays: one missing is logged
    and its flashes are not shown. A sound's (5004) plays the sound its options name
@@ -496,7 +499,10 @@ before it filters, and their mip levels average light; the light and colors the 
 display colors are made light; masks, lightmaps and data stay as they are. The world, the models and
 the sprites blend into a target of half floats, the probes capture and blur light, the bloom keeps a
 constant image's light, and the shoulder scales a color's channels by one gain from its brightest, so
-that a bright gold stays gold. The colors are encoded for the screen once, before the HUD
+that a bright gold stays gold. The additive effects (the weapon's muzzle flashes) are drawn apart, to
+a layer of display colors over the scene's depths, which the tone pass adds over the mapped scene,
+each channel stopping at white, as the original adds them, and whose own light the bloom spreads
+about them, as about any light. The colors are encoded for the screen once, before the HUD
 (`shaders/colorEncoding.slang` holds the display's gamma every shader converts by). The enhanced
 look's model textures are filtered anisotropically, by up to 16 texels as the device allows; the
 original's look keeps its own filtering.
@@ -561,9 +567,9 @@ looking straight up or down, facing upright, oriented and nudged 0.01 toward its
 oriented by its roll, which a parallel sprite with a roll becomes), the image of its frame (the frame
 cut to a whole number and held to the sprite's; a group's image by its loop's time,
 `R_GetSpriteFrame`) times `rendercolor` (black is white), as opaque as `renderamt` makes it, its
-fragments not above the alpha test discarded; times its brightness too, once its color is light: 1
-but for an effect that glows beyond white (`SpriteInstance::brightness`, a muzzle flash's in the
-enhanced look, §9). The render modes blend as `R_DrawSpriteModel` sets
+fragments not above the alpha test discarded; times its brightness too, once its color is encoded
+for its target: 1 but for an effect made brighter, each channel past white where its target holds it
+(`SpriteInstance::brightness`, a muzzle flash's, §9). The render modes blend as `R_DrawSpriteModel` sets
 them: Normal opaque, TransColor and TransTexture blended and writing their depth, TransAlpha blended
 without it, TransAdd added, Glow added over everything; a glow off the screen or hidden by the game is
 not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squared distance (held from

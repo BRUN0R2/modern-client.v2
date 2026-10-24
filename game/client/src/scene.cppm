@@ -3,7 +3,8 @@
 
 /// What the client draws of a level (docs/05-rendering.md): the world and the light it gives, the
 /// sprites and studio models of its entities, the blended ones of them all in one order, and the weapon
-/// in the player's hand and its muzzle flashes, drawn last in their own depths.
+/// in the player's hand, drawn last in its own depths; then its muzzle flashes, effects added as the
+/// original adds them, in those depths.
 export module cs.client:scene;
 
 import std;
@@ -52,23 +53,30 @@ struct SceneView {
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
 class Scene {
 public:
-    /// The scene of `level`, which must outlive it, for targets of `format`, drawn with `shaders`
-    /// and `gamma`, its uploads recorded in `commands`. Errors: CreateFailed.
+    /// The scene of `level`, which must outlive it, for targets of `format`, its effects for targets of
+    /// `effectsFormat` (drawEffects), drawn with `shaders` and `gamma`, its uploads recorded in
+    /// `commands`. Errors: CreateFailed.
     [[nodiscard]] static auto create(nx::rhi::Device& device, nx::rhi::CommandList& commands,
                                      const Level& level, const SceneShaders& shaders, nx::rhi::Format format,
-                                     const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
-        -> nx::Result<Scene, SceneError>;
+                                     nx::rhi::Format effectsFormat, const nx::render::GammaSettings& gamma,
+                                     nx::render::StudioLook look) -> nx::Result<Scene, SceneError>;
 
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
     /// sight does not reach hidden, the blended ones of them all in one order
     /// (nx.render:blendedOrder); then the weapon in the player's hand, lit where the player's eye is, as
     /// the original lights the view's own model, and in the enhanced look by the light of its flashes
-    /// too; then its muzzle flashes, those of the view's client events and those still showing, as
-    /// bright as their styles make them in the enhanced look, in the weapon's depths, so that a wall
-    /// the muzzle is pushed against hides neither. Errors: DrawFailed.
+    /// too. It prepares the muzzle flashes, those of the view's client events and those still showing,
+    /// for drawEffects to record. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
+    /// Records the effects the last draw prepared, the weapon's muzzle flashes, as the original adds
+    /// them: display colors, as bright as their styles make them, each channel stopping at white where
+    /// its target stops it; in the weapon's depths, so that a wall the muzzle is pushed against hides
+    /// none. In a render pass whose color target is of the effects' format, the screen in the legacy
+    /// look, nx::render::PostRenderer's effects' layer in the enhanced look, its depth target the one
+    /// draw drew with.
+    void drawEffects(nx::rhi::CommandList& list) const;
 
     /// Puts on the GPU the view models `level` has now of `weapons` (none for one it has none of), and
     /// the sprites of the muzzle flashes it read since, its uploads recorded in `commands`. The GPU must
@@ -102,7 +110,7 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          nx::render::SpriteRenderer viewSprites, bool isEnhanced) noexcept;
+          nx::render::SpriteRenderer viewSprites) noexcept;
 
     /// Forgets the muzzle flashes over at `time` or of another weapon than `inHand`'s; then adds those
     /// of `events`, the client events passed by `viewModel`, that of `inHand` posed as `bones`, of the
@@ -117,7 +125,8 @@ private:
     nx::render::StudioRenderer m_studio;
     std::vector<nx::render::StudioModel> m_models; ///< Of the level's models, by file.
     nx::render::StudioRenderer m_viewModels;
-    nx::render::SpriteRenderer m_viewSprites; ///< What the weapon in hand shows: its muzzle flashes.
+    /// What the weapon in hand shows, its muzzle flashes: the effects, as display colors.
+    nx::render::SpriteRenderer m_viewSprites;
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
@@ -125,7 +134,6 @@ private:
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;
     MuzzleFlashes m_flashes;        ///< Those showing, or their light.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
-    bool m_isEnhanced = false;      ///< Drawn in the enhanced look.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
 };
 

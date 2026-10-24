@@ -37,11 +37,6 @@ constexpr nx::Vec3 kKeyLightColor{.x = 4200.0F, .y = 3900.0F, .z = 3500.0F};
 }
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
-/// The enhanced look adds a flash as light, where the original adds its display colors: over the map's
-/// mid tones (a display value of 0.5, 0.22 in light) a flash of the same value reaches white in the
-/// original, but only 0.69 added as light; four times its light reaches white again, and the bloom
-/// spreads what goes beyond. So a flash shows as it shows in the original, even in the sun.
-constexpr float kFlashLight = 4.0F;
 /// The most decals on the faces of the world and of its brush entities: the original's r_decals, which
 /// a multiplayer game holds to mp_decals' default, until the cvars come.
 constexpr std::size_t kMultiplayerDecals = 300;
@@ -65,13 +60,13 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             nx::render::SpriteRenderer viewSprites, bool isEnhanced) noexcept
+             nx::render::SpriteRenderer viewSprites) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
-      m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)}, m_isEnhanced{isEnhanced} {}
+      m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
-                   const SceneShaders& shaders, nx::rhi::Format format,
+                   const SceneShaders& shaders, nx::rhi::Format format, nx::rhi::Format effectsFormat,
                    const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
     -> nx::Result<Scene, SceneError> {
     // The enhanced look draws linear light, to a target of half floats its post pass encodes (ADR-0025),
@@ -100,7 +95,12 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!sprites) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(sprites.error()));
     }
-    auto viewSprites = nx::render::SpriteRenderer::create(device, spriteDesc);
+    // The effects are display colors in either look, added as the original adds them.
+    auto viewSprites =
+        nx::render::SpriteRenderer::create(device, {.shaderCode = shaders.sprite,
+                                                    .colorFormat = effectsFormat,
+                                                    .gamma = gamma,
+                                                    .encoding = nx::render::ColorEncoding::Display});
     if (!viewSprites) {
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(viewSprites.error()));
     }
@@ -133,15 +133,10 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!models) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(models.error()));
     }
-    Scene scene{std::move(*world),
-                nx::render::WorldLight{level.map()},
-                std::move(*sprites),
-                std::move(*spriteModels),
-                std::move(*studio),
-                std::move(*models),
-                std::move(*viewModels),
-                std::move(*viewSprites),
-                isEnhanced};
+    Scene scene{std::move(*world),      nx::render::WorldLight{level.map()},
+                std::move(*sprites),    std::move(*spriteModels),
+                std::move(*studio),     std::move(*models),
+                std::move(*viewModels), std::move(*viewSprites)};
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
@@ -211,6 +206,34 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
     }
     nx::render::drawInOrder(list, m_world, m_studio, m_sprites);
+    // The weapon's flashes, for drawEffects, after it, in its depths: added over what of it is behind
+    // them, hidden by what of it is in front, and never by a wall the muzzle is pushed against.
+    std::vector<nx::render::SpriteInstance> flashes;
+    for (const MuzzleFlash& shown : m_flashes.shown()) {
+        const std::optional<float> frame = shown.frameAt(view.time);
+        const std::optional<nx::Vec3> origin = whereIs(shown);
+        if (!frame || !origin) {
+            continue; // only its light is left
+        }
+        flashes.push_back(nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
+                                                     .origin = *origin,
+                                                     .angles = {.roll = shown.rollAt(view.time)},
+                                                     .frame = *frame,
+                                                     .scale = shown.scale,
+                                                     .mode = nx::render::RenderMode::TransAdd,
+                                                     .amount = kFullAmount,
+                                                     .brightness = shown.brightness});
+    }
+    if (auto prepared = m_viewSprites.prepare({.camera = view.camera,
+                                               .aspect = view.aspect,
+                                               .time = view.time,
+                                               .lightStyles = styles,
+                                               .instances = flashes,
+                                               .depth = nx::render::DepthLayer::ViewModel},
+                                              m_light);
+        !prepared) {
+        return nx::fail(SceneError::DrawFailed, "the weapon's muzzle flashes", std::move(prepared.error()));
+    }
     if (bones.empty()) {
         return {};
     }
@@ -243,38 +266,11 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         !drawn) {
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }
-    // Its flashes after it, in its depths: added over what of it is behind them, hidden by what of it is
-    // in front, and never by a wall the muzzle is pushed against. Their light and brightness are the
-    // enhanced look's: the legacy look draws them as the original does.
-    std::vector<nx::render::SpriteInstance> flashes;
-    for (const MuzzleFlash& shown : m_flashes.shown()) {
-        const std::optional<float> frame = shown.frameAt(view.time);
-        const std::optional<nx::Vec3> origin = whereIs(shown);
-        if (!frame || !origin) {
-            continue; // only its light is left
-        }
-        flashes.push_back(
-            nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
-                                       .origin = *origin,
-                                       .angles = {.roll = shown.rollAt(view.time)},
-                                       .frame = *frame,
-                                       .scale = shown.scale,
-                                       .mode = nx::render::RenderMode::TransAdd,
-                                       .amount = kFullAmount,
-                                       .brightness = m_isEnhanced ? kFlashLight * shown.brightness : 1.0F});
-    }
-    if (auto drawn = m_viewSprites.draw(list,
-                                        {.camera = view.camera,
-                                         .aspect = view.aspect,
-                                         .time = view.time,
-                                         .lightStyles = styles,
-                                         .instances = flashes,
-                                         .depth = nx::render::DepthLayer::ViewModel},
-                                        m_light);
-        !drawn) {
-        return nx::fail(SceneError::DrawFailed, "the weapon's muzzle flashes", std::move(drawn.error()));
-    }
     return {};
+}
+
+void Scene::drawEffects(nx::rhi::CommandList& list) const {
+    nx::render::drawInOrder(list, m_viewSprites);
 }
 
 void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,

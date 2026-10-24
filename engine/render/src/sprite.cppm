@@ -134,8 +134,8 @@ struct SpriteInstance {
     RenderEffect effect = RenderEffect::None;
     std::uint8_t amount = 0; ///< `renderamt`.
     RenderColor color{};     ///< `rendercolor`; black is white, as the original takes it.
-    /// Its color times this, as light: 1 as the original draws it; beyond 1, brighter than white, which
-    /// the enhanced look's bloom spreads (an effect's glow).
+    /// Its color times this, once encoded for the target, as light or as a display color: 1 as the
+    /// original draws it; beyond 1 brighter, past white where the target holds it (an effect's glow).
     float brightness = 1.0F;
     /// A glowing sprite the view's line to stops 8 units or more short of (the original's trace,
     /// through all but glass and models), which the game finds.

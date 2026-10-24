@@ -294,7 +294,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Model instancing
 - [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)
 - [x] The view model's client events, and the muzzle flashes they show (`cs.client:muzzleFlash`, [05 §9](docs/05-rendering.md#9-studio-models-and-gpu-skinning))
-- [x] Muzzle flashes styled by their events and their weapon's data: the original's numbers, Counter-Strike Online's keys (animated sprites of v3), a weapon's `view.muzzleFlash` over them, its brightness and its light on the weapon in hand in the enhanced look ([10 §7.2](docs/10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml))
+- [x] Muzzle flashes styled by their events and their weapon's data: the original's numbers, Counter-Strike Online's keys (animated sprites of v3), a weapon's `view.muzzleFlash` over them, its brightness, added as the original adds them (the enhanced look's layer of effects), and its light on the weapon in hand in the enhanced look ([10 §7.2](docs/10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml))
 - [ ] The dynamic lights of studio models (*elights*, *dlights*), the muzzle flash's among them; the shells the guns eject
 - [x] A frame of a map to a file without a window (`nxview --screenshot`, placed with `--position` and `--angles`, at `--time`), as the client draws it; `next` plays the maps
 - [ ] Model viewer

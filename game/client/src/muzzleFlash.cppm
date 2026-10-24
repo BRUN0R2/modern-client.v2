@@ -51,7 +51,7 @@ struct MuzzleFlashStyle {
     nx::Seconds time{};              ///< It shows this long at most.
     nx::Degrees roll{};              ///< It is rolled at random, by a whole number of degrees up to this,
     nx::DegreesPerSecond rollRate{}; ///< and turns this fast as it shows, counter-clockwise.
-    float brightness = 1.0F;         ///< In the enhanced look: its light times this.
+    float brightness = 1.0F;         ///< Its colors times this.
     std::optional<MuzzleFlashLight> light{};
 };
 

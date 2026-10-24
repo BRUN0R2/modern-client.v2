@@ -67,6 +67,8 @@ constexpr std::string_view kDefaultMap = "de_dust2";
 constexpr nx::rhi::Extent2d kDefaultExtent{.width = 1280, .height = 720};
 /// What no face covers: the void outside a map, seen through its leaks.
 constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
+/// The effects' layer before the effects are drawn: nothing to add.
+constexpr nx::rhi::ClearColor kNoEffect{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.0F};
 
 struct Options {
     std::string map{kDefaultMap};
@@ -320,7 +322,9 @@ constexpr std::size_t kBlue = 2;
     }
     const nx::rhi::Format sceneFormat =
         post ? nx::render::PostRenderer::sceneFormat() : nx::rhi::Format::Rgba8Unorm;
-    auto scene = cs::Scene::create(**device, uploadCommands, level, shaders, sceneFormat,
+    const nx::rhi::Format effectsFormat =
+        post ? nx::render::PostRenderer::effectsFormat() : nx::rhi::Format::Rgba8Unorm;
+    auto scene = cs::Scene::create(**device, uploadCommands, level, shaders, sceneFormat, effectsFormat,
                                    nx::render::GammaSettings{}, options.look);
     if (!scene) {
         return unusable(scene.error());
@@ -415,7 +419,9 @@ constexpr std::size_t kBlue = 2;
     list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
     const std::array colors{nx::rhi::ColorAttachment{.texture = sceneTarget, .clear = kVoidColor}};
     list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .clear = 0.0F},
+                         .depth = nx::rhi::DepthAttachment{.texture = depth->get(),
+                                                           .store = nx::rhi::StoreOp::Store,
+                                                           .clear = 0.0F},
                          .area = extent});
     if (auto drawn =
             scene->draw(list, level,
@@ -430,13 +436,27 @@ constexpr std::size_t kBlue = 2;
     }
     if (post) {
         list.endRendering();
+        // The effects to their layer, display colors over the scene's depths (nx.render:post).
+        const nx::rhi::TextureHandle effects = post->effectsTarget();
+        list.transition(effects, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
+        list.transition(depth->get(), nx::rhi::TextureState::DepthTarget, nx::rhi::TextureState::DepthTarget);
+        const std::array effectsColors{nx::rhi::ColorAttachment{.texture = effects, .clear = kNoEffect}};
+        list.beginRendering(
+            {.colors = effectsColors,
+             .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .load = nx::rhi::LoadOp::Load},
+             .area = extent});
+        scene->drawEffects(list);
+        list.endRendering();
         list.transition(sceneTarget, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
+        list.transition(effects, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
         post->bloom(list);
         list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
         const std::array screenColors{
             nx::rhi::ColorAttachment{.texture = target->get(), .load = nx::rhi::LoadOp::DontCare}};
         list.beginRendering({.colors = screenColors, .area = extent});
         post->drawToneMapped(list);
+    } else {
+        scene->drawEffects(list); // over the scene, in the screen's colors
     }
     if (screen) {
         std::vector<nx::render::ScreenQuad> quads;

@@ -251,7 +251,7 @@ frameRate  = 30.0              # played once at this rate; 0 holds its first fra
 time       = 0.4               # it shows this long at most: less when its last frame is played
 roll       = 0.0               # rolled at random by a whole number of degrees up to this
 rollRate   = 60.0              # degrees a second it turns, counter-clockwise; the events' R times their P
-brightness = 1.5               # enhanced look: its light times this, over the look's own light of a flash
+brightness = 1.5               # its colors times this, as the original adds them: beyond 1, on to white
 light      = { color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 } # enhanced look: on the weapon in hand
 ```
 

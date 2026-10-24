@@ -133,8 +133,8 @@ struct MuzzleFlashLook {
     std::optional<nx::Degrees> roll{}; ///< It is rolled at random, by a whole number of degrees up to this.
     /// It turns this fast as it shows, counter-clockwise as the player sees it (clockwise below 0).
     std::optional<nx::DegreesPerSecond> rollRate{};
-    /// In the enhanced look, its light times this, over the look's own light of a flash (as bright as the
-    /// original's over the map's mid tones); the bloom spreads what goes beyond white.
+    /// Its colors times this, as the original adds them: 1 as made; beyond 1 brighter, each channel on
+    /// to white, and in the enhanced look the glow its light gives the bloom with it.
     std::optional<float> brightness{};
     std::optional<MuzzleFlashLight> light{}; ///< None: it casts none (the original's light comes later).
 };
