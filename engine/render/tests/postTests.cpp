@@ -255,8 +255,8 @@ TEST_F(PostRendererTest, AddsTheEffectsOverTheMappedSceneEachChannelStoppingAtWh
         const float light = std::pow(kGray.red, kDisplayGamma) +
                             (nx::render::kBloomStrength * std::pow(flash.at(channel), kDisplayGamma));
         const float expected = std::min(std::pow(light, 1.0F / kDisplayGamma) + flash.at(channel), 1.0F);
-        EXPECT_NEAR(pixel.at(channel), std::lround(expected * kChannelTop), kByteTolerance)
-            << "channel " << channel;
+        const auto expectedByte = static_cast<int>(std::lround(expected * kChannelTop));
+        EXPECT_NEAR(pixel.at(channel), expectedByte, kByteTolerance) << "channel " << channel;
     }
     EXPECT_EQ(pixel[0], 255) << "red at white";
     EXPECT_EQ(pixel[1], 255) << "green at white: yellow, where the flash alone is orange";
