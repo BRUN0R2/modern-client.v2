@@ -8,9 +8,12 @@
 /// weapon's data over them (cs::MuzzleFlashLook). The options are:
 /// - the original's, a number: one of sprites/muzzleflash1.spr to 3, chosen and sized by it, at a
 ///   frame and rolled at random, shown a hundredth of a second (R_MuzzleFlash);
-/// - Counter-Strike Online's, keys and their values after a '#' ("#I341 S0.16 F0 P30 T999"): its
+/// - Counter-Strike Online's, keys and their values after a '#' ("#I341 S0.16 R2 F0 P30 T999"): its
 ///   sprite sprites/muzzleflash<I>.spr, S its scale, played from frame F at P frames a second, once,
-///   for T seconds at most (as its files are observed); the keys whose meaning is unknown are not read.
+///   for T seconds at most (as its files are observed); turning counter-clockwise as it plays, R
+///   degrees a frame of it (the Drakar III's R2 turns smoothly that way, as the player sees it in
+///   Counter-Strike Online: the rate is the project's estimate until it is measured); the keys whose
+///   meaning is unknown are not read.
 /// A flash is anchored to its attachment: each frame shows it where that frame's bones put the
 /// attachment, so that it stays at the muzzle as the weapon moves, however long it lasts (the
 /// original's lasts a frame, where its temporary entity needs no following). A muzzle shows one
@@ -44,10 +47,11 @@ struct MuzzleFlashStyle {
     std::string sprite{};                      ///< A path of the game's files.
     float scale{};                             ///< Times its sprite's size; 0 is its own size.
     std::optional<std::uint32_t> firstFrame{}; ///< None: a frame at random.
-    float frameRate{};       ///< The frames a second it plays on at from its first, once; 0 holds it.
-    nx::Seconds time{};      ///< It shows this long at most.
-    nx::Degrees roll{};      ///< It is rolled at random, by a whole number of degrees up to this.
-    float brightness = 1.0F; ///< In the enhanced look: its color times this.
+    float frameRate{};               ///< The frames a second it plays on at from its first, once; 0 holds it.
+    nx::Seconds time{};              ///< It shows this long at most.
+    nx::Degrees roll{};              ///< It is rolled at random, by a whole number of degrees up to this,
+    nx::DegreesPerSecond rollRate{}; ///< and turns this fast as it shows, counter-clockwise.
+    float brightness = 1.0F;         ///< In the enhanced look: its light times this.
     std::optional<MuzzleFlashLight> light{};
 };
 
@@ -74,7 +78,8 @@ struct MuzzleFlash {
     MuzzleFlashAnchor anchor{};
     std::uint32_t sprite{}; ///< Of the MuzzleFlashSprites.
     float scale{};
-    nx::Degrees roll{};
+    nx::Degrees roll{};              ///< As it shows first,
+    nx::DegreesPerSecond rollRate{}; ///< turning this fast, counter-clockwise.
     float brightness = 1.0F;
     float firstFrame{};
     float frameRate{};
@@ -85,6 +90,8 @@ struct MuzzleFlash {
 
     /// The frame it shows at `time`; none once it is over: past its time, or past its last frame.
     [[nodiscard]] auto frameAt(nx::Seconds time) const noexcept -> std::optional<float>;
+    /// Its roll at `time`, turned as it shows.
+    [[nodiscard]] auto rollAt(nx::Seconds time) const noexcept -> nx::Degrees;
     /// The light it casts at `time` from `origin`, where its anchor is then, dimming to nothing over the
     /// light's time; none without one, or once that time is over.
     [[nodiscard]] auto lightAt(nx::Seconds time, nx::Vec3 origin) const noexcept

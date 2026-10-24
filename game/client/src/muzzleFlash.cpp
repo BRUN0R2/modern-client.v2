@@ -34,6 +34,7 @@ constexpr char kKeyedOptions = '#';
 constexpr char kKeySeparator = ' ';
 constexpr char kSpriteKey = 'I';
 constexpr char kScaleKey = 'S';
+constexpr char kRollKey = 'R';
 constexpr char kFirstFrameKey = 'F';
 constexpr char kFrameRateKey = 'P';
 constexpr char kTimeKey = 'T';
@@ -69,13 +70,15 @@ template <class Number>
                             .frameRate = 0.0F,
                             .time = kMuzzleFlashTime,
                             .roll = sprite == 0 ? kRifleRoll : kOtherRoll,
+                            .rollRate = nx::DegreesPerSecond{},
                             .brightness = 1.0F,
                             .light = std::nullopt};
 }
 
 /// The style of Counter-Strike Online's `keys`, its options after the '#': each key it reads over
-/// `style`.
+/// `style`; R, degrees a frame of its animation, its turn.
 void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
+    std::optional<float> rollPerFrame;
     for (const auto part : std::views::split(keys, kKeySeparator)) {
         const std::string_view token{part.begin(), part.end()};
         if (token.empty()) {
@@ -104,9 +107,17 @@ void readKeys(std::string_view keys, MuzzleFlashStyle& style) {
                 style.time = nx::Seconds{*seconds};
             }
             break;
+        case kRollKey:
+            if (const std::optional<float> perFrame = numberOf<float>(value)) {
+                rollPerFrame = perFrame;
+            }
+            break;
         default:
             break; // a key whose meaning is unknown
         }
+    }
+    if (rollPerFrame) {
+        style.rollRate = nx::DegreesPerSecond{*rollPerFrame * style.frameRate};
     }
 }
 
@@ -145,6 +156,7 @@ auto muzzleFlashStyleOf(std::string_view options, const std::optional<MuzzleFlas
         over(style.frameRate, look->frameRate);
         over(style.time, look->time);
         over(style.roll, look->roll);
+        over(style.rollRate, look->rollRate);
         over(style.brightness, look->brightness);
         if (look->light) {
             style.light = look->light;
@@ -159,6 +171,10 @@ auto MuzzleFlash::frameAt(nx::Seconds time) const noexcept -> std::optional<floa
     }
     const float frame = firstFrame + (std::max((time - start).count(), 0.0F) * frameRate);
     return frame < static_cast<float>(frameCount) ? std::optional{frame} : std::nullopt;
+}
+
+auto MuzzleFlash::rollAt(nx::Seconds time) const noexcept -> nx::Degrees {
+    return nx::Degrees{roll.value() + (rollRate.value() * std::max((time - start).count(), 0.0F))};
 }
 
 auto MuzzleFlash::lightAt(nx::Seconds time, nx::Vec3 origin) const noexcept
@@ -198,6 +214,7 @@ auto muzzleFlashOf(const MuzzleFlashStyle& style, std::uint32_t sprite, std::siz
                        .sprite = sprite,
                        .scale = style.scale,
                        .roll = roll,
+                       .rollRate = style.rollRate,
                        .brightness = style.brightness,
                        .firstFrame = static_cast<float>(frame),
                        .frameRate = style.frameRate,

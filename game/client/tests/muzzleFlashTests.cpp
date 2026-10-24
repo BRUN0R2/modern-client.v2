@@ -127,7 +127,8 @@ TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     EXPECT_EQ(drakar.firstFrame, 0U);
     EXPECT_FLOAT_EQ(drakar.frameRate, 30.0F);
     EXPECT_FLOAT_EQ(drakar.time.count(), 999.0F);
-    EXPECT_FLOAT_EQ(drakar.roll.value(), 20.0F) << "R is not read: the original's of 0";
+    EXPECT_FLOAT_EQ(drakar.roll.value(), 20.0F) << "rolled at first as the original's of 0";
+    EXPECT_FLOAT_EQ(drakar.rollRate.value(), 60.0F) << "R2: 2 degrees a frame of its 30 a second";
     EXPECT_FLOAT_EQ(drakar.brightness, 1.0F);
 
     // A key the options lack, or whose value is not a number of 0 or more, is the original's of 0.
@@ -137,6 +138,23 @@ TEST(MuzzleFlashTest, CounterStrikeOnlinesKeysStyleItsFlash) {
     EXPECT_FLOAT_EQ(partial.frameRate, 0.0F);
     EXPECT_FLOAT_EQ(partial.time.count(), 0.01F);
     EXPECT_EQ(partial.firstFrame, 2U);
+    EXPECT_FLOAT_EQ(partial.rollRate.value(), 0.0F) << "no R: it does not turn";
+    EXPECT_FLOAT_EQ(cs::muzzleFlashStyleOf("#R2 P30 Rfast", std::nullopt).rollRate.value(), 60.0F)
+        << "a value that is not a number leaves the one before";
+}
+
+TEST(MuzzleFlashTest, AFlashTurnsCounterClockwiseAsItShows) {
+    nx::Random random{5, "test"};
+    const cs::MuzzleFlash flash =
+        shown(cs::muzzleFlashStyleOf(kDrakarOptions, std::nullopt), 12, nx::Seconds{1.0F}, random);
+    EXPECT_FLOAT_EQ(flash.rollAt(nx::Seconds{1.0F}).value(), flash.roll.value());
+    EXPECT_NEAR(flash.rollAt(nx::Seconds{1.25F}).value(), flash.roll.value() + 15.0F, 1e-3F);
+    EXPECT_FLOAT_EQ(flash.rollAt(nx::Seconds{0.5F}).value(), flash.roll.value()) << "not before it shows";
+
+    cs::MuzzleFlashStyle clockwise = cs::muzzleFlashStyleOf("22", std::nullopt);
+    clockwise.rollRate = nx::DegreesPerSecond{-90.0F};
+    const cs::MuzzleFlash turned = shown(clockwise, 3, nx::Seconds{}, random);
+    EXPECT_NEAR(turned.rollAt(nx::Seconds{0.01F}).value(), turned.roll.value() - 0.9F, 1e-4F);
 }
 
 TEST(MuzzleFlashTest, AFlashPlaysItsFramesOnceAtItsRateForItsTimeAtMost) {
@@ -168,6 +186,7 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
                                    .firstFrame = 2,
                                    .frameRate = 0.0F,
                                    .roll = nx::Degrees{0.0F},
+                                   .rollRate = nx::DegreesPerSecond{-30.0F},
                                    .brightness = 6.0F,
                                    .light = light};
     const cs::MuzzleFlashStyle style = cs::muzzleFlashStyleOf(kDrakarOptions, look);
@@ -177,6 +196,7 @@ TEST(MuzzleFlashTest, AWeaponsLookIsOverItsEventsStyle) {
     EXPECT_FLOAT_EQ(style.frameRate, 0.0F) << "held";
     EXPECT_FLOAT_EQ(style.time.count(), 999.0F) << "the event's";
     EXPECT_FLOAT_EQ(style.roll.value(), 0.0F);
+    EXPECT_FLOAT_EQ(style.rollRate.value(), -30.0F) << "over the events' R";
     EXPECT_FLOAT_EQ(style.brightness, 6.0F);
     ASSERT_TRUE(style.light.has_value());
     EXPECT_EQ(style.light->color, light.color);

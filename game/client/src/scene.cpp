@@ -37,6 +37,11 @@ constexpr nx::Vec3 kKeyLightColor{.x = 4200.0F, .y = 3900.0F, .z = 3500.0F};
 }
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
+/// The enhanced look adds a flash as light, where the original adds its display colors: over the map's
+/// mid tones (a display value of 0.5, 0.22 in light) a flash of the same value reaches white in the
+/// original, but only 0.69 added as light; four times its light reaches white again, and the bloom
+/// spreads what goes beyond. So a flash shows as it shows in the original, even in the sun.
+constexpr float kFlashLight = 4.0F;
 /// The most decals on the faces of the world and of its brush entities: the original's r_decals, which
 /// a multiplayer game holds to mp_decals' default, until the cvars come.
 constexpr std::size_t kMultiplayerDecals = 300;
@@ -239,8 +244,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }
     // Its flashes after it, in its depths: added over what of it is behind them, hidden by what of it is
-    // in front, and never by a wall the muzzle is pushed against. Their brightness is the enhanced
-    // look's: the legacy look draws them as the original does.
+    // in front, and never by a wall the muzzle is pushed against. Their light and brightness are the
+    // enhanced look's: the legacy look draws them as the original does.
     std::vector<nx::render::SpriteInstance> flashes;
     for (const MuzzleFlash& shown : m_flashes.shown()) {
         const std::optional<float> frame = shown.frameAt(view.time);
@@ -248,14 +253,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         if (!frame || !origin) {
             continue; // only its light is left
         }
-        flashes.push_back(nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
-                                                     .origin = *origin,
-                                                     .angles = {.roll = shown.roll},
-                                                     .frame = *frame,
-                                                     .scale = shown.scale,
-                                                     .mode = nx::render::RenderMode::TransAdd,
-                                                     .amount = kFullAmount,
-                                                     .brightness = m_isEnhanced ? shown.brightness : 1.0F});
+        flashes.push_back(
+            nx::render::SpriteInstance{.model = *m_flashModels[shown.sprite],
+                                       .origin = *origin,
+                                       .angles = {.roll = shown.rollAt(view.time)},
+                                       .frame = *frame,
+                                       .scale = shown.scale,
+                                       .mode = nx::render::RenderMode::TransAdd,
+                                       .amount = kFullAmount,
+                                       .brightness = m_isEnhanced ? kFlashLight * shown.brightness : 1.0F});
     }
     if (auto drawn = m_viewSprites.draw(list,
                                         {.camera = view.camera,

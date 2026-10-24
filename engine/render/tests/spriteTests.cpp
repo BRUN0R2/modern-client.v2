@@ -284,7 +284,7 @@ TEST(SpriteRendererTest, AnAddedSpriteAddsItsImageTimesItsColorAndAmount) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
-TEST(SpriteRendererTest, AnImageOfBc3BlocksIsDecodedItsColorsTexgammadItsAlphaItsOwn) {
+TEST(SpriteRendererTest, AnImageOfBc3BlocksIsDrawnAsItsAuthorMadeItItsAlphaItsOwn) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
@@ -298,11 +298,10 @@ TEST(SpriteRendererTest, AnImageOfBc3BlocksIsDecodedItsColorsTexgammadItsAlphaIt
     const std::array added{
         SpriteInstance{.model = model, .origin = {.x = 20.0F}, .mode = RenderMode::TransAdd, .amount = 255}};
 
-    const auto gamma = nx::render::textureGammaTable({});
     const float alpha = 128.0F / 255.0F;
     expectNear(pixelAt(scene.draw(target, cameraAt({}), added), kMiddle, kMiddle),
-               {scaled(gamma[132], alpha), scaled(gamma[130], alpha), scaled(gamma[132], alpha)},
-               "texgamma'd, added as its alpha says");
+               {scaled(132, alpha), scaled(130, alpha), scaled(132, alpha)},
+               "no texgamma, a palette's, and added as its alpha says");
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

@@ -209,15 +209,10 @@ void addQuad(std::vector<SpriteVertex>& vertices, const SpriteImageDraw& image, 
 
 auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& image,
                   const ChannelTable& textureGamma) -> std::vector<std::byte> {
+    // texgamma is what GoldSrc gives the palettes of its 8-bit images: an image compressed as BC3
+    // reaches the GPU as its author made it.
     if (image.format == assets::SpritePixels::Bc3) {
-        assets::RgbaImage decoded = assets::decodeBc3(image.pixels, image.width, image.height);
-        for (std::size_t texel = 0; texel < decoded.pixels.size(); texel += kRgbaBytes) {
-            for (std::size_t which = 0; which < kRgbBytes; ++which) {
-                std::byte& channel = decoded.pixels[texel + which];
-                channel = std::byte{textureGamma[std::to_integer<std::size_t>(channel)]};
-            }
-        }
-        return std::move(decoded.pixels);
+        return assets::decodeBc3(image.pixels, image.width, image.height).pixels;
     }
     std::vector<std::byte> texels;
     texels.reserve(image.pixels.size() * kRgbaBytes);

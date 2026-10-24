@@ -66,9 +66,8 @@ struct SpriteCall {
 
 /// The RGBA texels of `image` of `sprite`, its palette as its format makes it (Mod_LoadSpriteModel):
 /// through `textureGamma` but for index-alpha sprites, the last color and the index as alpha, and
-/// alpha-tested ones, index 255 transparent; an image of BC3 blocks decoded, its colors through
-/// `textureGamma` as a palette's, its alpha its own. What the sprites of the world and of the screen
-/// show.
+/// alpha-tested ones, index 255 transparent; an image of BC3 blocks decoded as its author made it,
+/// `textureGamma` being a palette's. What the sprites of the world and of the screen show.
 [[nodiscard]] auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& image,
                                 const ChannelTable& textureGamma) -> std::vector<std::byte>;
 

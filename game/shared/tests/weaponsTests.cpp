@@ -145,6 +145,7 @@ firstFrame = 0
 frameRate = 30.0
 time = 0.4
 roll = 0.0
+rollRate = -45.0
 brightness = 6.0
 light = {{ color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 }}
 )",
@@ -159,6 +160,7 @@ light = {{ color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 }}
     EXPECT_EQ(look.frameRate, 30.0F);
     EXPECT_EQ(look.time, nx::Seconds{0.4F});
     EXPECT_EQ(look.roll, nx::Degrees{0.0F});
+    EXPECT_EQ(look.rollRate, nx::DegreesPerSecond{-45.0F}) << "clockwise";
     EXPECT_EQ(look.brightness, 6.0F);
     ASSERT_TRUE(look.light.has_value());
     EXPECT_EQ(look.light->color, (std::array{3000.0F, 1800.0F, 600.0F}));

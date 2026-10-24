@@ -131,8 +131,10 @@ struct MuzzleFlashLook {
     std::optional<float> frameRate{};  ///< The frames a second it plays on at, once; 0 holds its first.
     std::optional<nx::Seconds> time{}; ///< It shows this long at most: less when it plays its last frame.
     std::optional<nx::Degrees> roll{}; ///< It is rolled at random, by a whole number of degrees up to this.
-    /// In the enhanced look, its color times this: 1 as the original draws it, beyond 1 a glow the bloom
-    /// spreads.
+    /// It turns this fast as it shows, counter-clockwise as the player sees it (clockwise below 0).
+    std::optional<nx::DegreesPerSecond> rollRate{};
+    /// In the enhanced look, its light times this, over the look's own light of a flash (as bright as the
+    /// original's over the map's mid tones); the bloom spreads what goes beyond white.
     std::optional<float> brightness{};
     std::optional<MuzzleFlashLight> light{}; ///< None: it casts none (the original's light comes later).
 };
@@ -526,6 +528,7 @@ struct nx::meta::Description<cs::MuzzleFlashLook> {
         nx::meta::field<&cs::MuzzleFlashLook::time>("time", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::MuzzleFlashLook::roll>("roll",
                                                     nx::data::Range{.minimum = 0.0, .maximum = 359.0}),
+        nx::meta::field<&cs::MuzzleFlashLook::rollRate>("rollRate"),
         nx::meta::field<&cs::MuzzleFlashLook::brightness>("brightness", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::MuzzleFlashLook::light>("light"),
     };

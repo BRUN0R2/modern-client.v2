@@ -250,7 +250,8 @@ firstFrame = 0                 # the original's events show one at random
 frameRate  = 30.0              # played once at this rate; 0 holds its first frame
 time       = 0.4               # it shows this long at most: less when its last frame is played
 roll       = 0.0               # rolled at random by a whole number of degrees up to this
-brightness = 6.0               # enhanced look: its color times this; beyond 1 the bloom spreads it
+rollRate   = 60.0              # degrees a second it turns, counter-clockwise; the events' R times their P
+brightness = 1.5               # enhanced look: its light times this, over the look's own light of a flash
 light      = { color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 } # enhanced look: on the weapon in hand
 ```
 
@@ -259,7 +260,9 @@ of models have it (the key light of the weapon in hand is 4200, 3900 and 3500, r
 dimming to nothing over its `time`. `[alternate.view]` cannot declare `muzzleFlash` either: the
 flashes of both modes are those of the view model's own events, styled alike. As any value, it is
 set as the game runs: `set_weapon_var DrakarIII view.muzzleFlash.brightness 6`; the client reads
-the sprite a style names with the view model, before a frame shows it.
+the sprite a style names with the view model, before a frame shows it. Fired in the running game, a
+weapon's flash is tuned by eye: `view.muzzleFlash.rollRate`, `scale` and `brightness` set from the
+console show on the next shot.
 
 A melee weapon has `[melee.slash]` (`+attack`) and `[melee.stab]` (`+attack2`): each its `reach`,
 its `missSequences` and `hitSequences`, played in turn an attack after another, how long a miss
