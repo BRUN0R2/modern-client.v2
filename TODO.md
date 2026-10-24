@@ -18,7 +18,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Final name of the plugin language (provisional: **Rook**)
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
 - [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
-- [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
+- [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; a device height whose line is less than half its em left out, so that a broken VDMX table cannot size a face beyond its cell; [12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
 - [x] `nx.ui` text: glyph atlases drawn by `nx.render:screen`, lines laid out as GDI's `TextOut` lays them out ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts)); UTF-8 in `nx.core`
 - [x] `nx.ui` font catalog: the system's fonts and a scheme's own, the face of a family by weight and italics as GDI chooses it, bold simulated as GDI simulates it ([12 §2.1](docs/12-ui-hud-and-console.md#21-fonts))
 - [x] `nx.ui` painting: panels' backgrounds and their children within them; labels placed by their alignment

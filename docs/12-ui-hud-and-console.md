@@ -71,7 +71,12 @@ case):
   table made for the ANSI characters (the OpenType specification says Windows ignores the others;
   Tahoma's is one of those). When the table reaches past the cell, the em of the first device
   height whose line is exactly the cell, else the largest em whose line fits. Its line is the
-  device height's highest and lowest pixel.
+  device height's highest and lowest pixel. A device height whose line is less than half its em is
+  left out (`readDeviceHeights`): a face's line is at least half its em (`Font::open` refuses a face
+  whose isn't), so it is no height of the face, but a broken table, or one made to size the face to
+  tens of thousands of pixels per em in a small line and so exhaust whoever draws its glyphs (found
+  by fuzzing: a record of 64768 pixels per em in a line of 21 sized a face so, and drawing its
+  glyphs took 93 seconds in a debug build). The em is then never more than twice the cell.
 - Otherwise every em counts, each by its device height where it has one, else by its line,
   `usWinAscent + usWinDescent` scaled and rounded: again the first em whose line is exactly the
   cell, else the largest whose line fits. A scaled line is split as the cell is: the ascent and
