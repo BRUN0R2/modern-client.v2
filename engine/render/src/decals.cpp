@@ -269,6 +269,7 @@ auto DecalPool::stamp(std::uint32_t face, const Walk& walked) -> bool {
     }
     const std::size_t slot = slotFor(face, shot, sAxis, tAxis);
     empty(slot);
+    m_slots[slot].life = shot.life;
     // The face's corners on the decal: a texel a unit at scale 1, its middle at the decal's center.
     const float acrossScale = shot.scale / width;
     const float downScale = shot.scale / height;
@@ -302,7 +303,8 @@ auto DecalPool::stamp(std::uint32_t face, const Walk& walked) -> bool {
                          .center = shot.center,
                          .scale = shot.scale,
                          .size = shot.size,
-                         .sequence = m_sequence++};
+                         .sequence = m_sequence++,
+                         .life = shot.life};
     m_decalsOfFace[face].push_back(slot);
     ++m_revision;
     return true;
@@ -317,6 +319,9 @@ auto DecalPool::slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, V
     double least = std::numeric_limits<double>::max();
     for (const std::size_t slot : m_decalsOfFace[face]) {
         const Slot& under = m_slots[slot];
+        if (under.life == DecalLife::Permanent) {
+            continue; // never replaced
+        }
         const double across = double{under.scale} / static_cast<double>(under.size.width);
         const double down = double{under.scale} / static_cast<double>(under.size.height);
         const double alongS = double{dot(shot.center - under.center, sAxis)};
@@ -340,9 +345,17 @@ auto DecalPool::slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, V
     if (covered >= kMostCovered && leastCovered) {
         return *leastCovered;
     }
-    const std::size_t next = m_next;
-    m_next = (m_next + 1) % m_slots.size();
-    return next;
+    return nextSlot();
+}
+
+auto DecalPool::nextSlot() -> std::size_t {
+    for (std::size_t tried = 1;; ++tried) {
+        const std::size_t next = m_next;
+        m_next = (m_next + 1) % m_slots.size();
+        if (m_slots[next].life != DecalLife::Permanent || tried == m_slots.size()) {
+            return next;
+        }
+    }
 }
 
 void DecalPool::empty(std::size_t slot) {
