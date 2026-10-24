@@ -36,6 +36,11 @@ template <class Record>
     return made;
 }
 
+/// Attachments of an offscreen draw, matching the pipeline's declared formats.
+struct OffscreenDrawOptions {
+    bool hasDepth = true;
+};
+
 class OffscreenTarget {
 public:
     explicit OffscreenTarget(nx::rhi::Device& device) : m_device{&device} {
@@ -62,10 +67,10 @@ public:
     }
 
     /// Records what `record` draws in a frame of its own, in a render pass on the target cleared to an
-    /// alpha of 0 and its depth to 0, the far end of reversed depth; then the pixels, RGBA rows from
-    /// the top.
-    [[nodiscard]] auto draw(const std::function<void(nx::rhi::CommandList&)>& record)
-        -> std::vector<std::byte> {
+    /// alpha of 0 and, when requested, its depth to 0, the far end of reversed depth; then the pixels,
+    /// RGBA rows from the top. Pipelines without a depth format require `hasDepth = false`.
+    [[nodiscard]] auto draw(const std::function<void(nx::rhi::CommandList&)>& record,
+                            OffscreenDrawOptions options = {}) -> std::vector<std::byte> {
         using nx::rhi::BufferState;
         using nx::rhi::TextureState;
         auto commands = m_device->beginFrame();
@@ -75,10 +80,14 @@ public:
         }
         nx::rhi::CommandList& list = commands->get();
         list.transition(m_color.get(), TextureState::Undefined, TextureState::RenderTarget);
-        list.transition(m_depth.get(), TextureState::Undefined, TextureState::DepthTarget);
+        if (options.hasDepth) {
+            list.transition(m_depth.get(), TextureState::Undefined, TextureState::DepthTarget);
+        }
         const std::array colors{nx::rhi::ColorAttachment{.texture = m_color.get(), .clear = {.alpha = 0.0F}}};
         list.beginRendering({.colors = colors,
-                             .depth = nx::rhi::DepthAttachment{.texture = m_depth.get(), .clear = 0.0F},
+                             .depth = options.hasDepth ? std::optional{nx::rhi::DepthAttachment{
+                                                             .texture = m_depth.get(), .clear = 0.0F}}
+                                                       : std::nullopt,
                              .area = kTargetExtent});
         record(list);
         list.endRendering();

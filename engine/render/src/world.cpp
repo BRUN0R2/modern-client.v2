@@ -26,8 +26,6 @@ constexpr std::uint32_t kAtlasWidth = 1024;
 /// The checkerboard of a texture no WAD has: its size and its squares.
 constexpr std::uint32_t kCheckerSize = 16;
 constexpr std::uint32_t kCheckerSquare = 8;
-/// The palette index a masked (`{`) texture draws as transparent.
-constexpr std::uint8_t kTransparentIndex = 255;
 
 /// The bytes of a texel the world uploads, red, green, blue and alpha; of a lightmap sample and of a
 /// palette color, red, green and blue.
@@ -115,11 +113,9 @@ struct FrameUniform {
     Vec4 lighting{};
     Vec4 eye{};
     std::array<float, kLightStyleCount> styles{}; ///< Four to a float4 in the shader.
+    std::uint32_t colorEncoding = 0;              ///< ColorEncoding's.
 };
 
-/// The side of the sky the original draws toward +X, -X, +Y, -Y, +Z and -Z, by its place in
-/// kSkySuffixes (r_skyTexOrder): the layers of the sky's texture are in this order.
-constexpr std::array<std::size_t, kSkySuffixes.size()> kSkySideOfAxis{0, 2, 1, 3, 4, 5};
 /// The sky of a world without one: the original's stand-in, gray.
 constexpr std::byte kNoSkyLevel{128};
 /// The frames an animated texture shows in a second.
@@ -206,29 +202,27 @@ constexpr std::size_t kSequenceStart = 2;
     return {};
 }
 
-/// The RGBA texels of the mip levels of `texture`, level after level.
-struct TexelLevels {
-    std::vector<std::byte> bytes;
-    std::array<std::size_t, assets::kMipLevels> offsets{};
-};
+/// The RGBA texels of level `level` of `texture`, its palette through `textureGamma`; a masked one's
+/// transparent index transparent.
+[[nodiscard]] auto levelTexelsOf(const assets::MipTexture& texture, std::size_t level, bool isMasked,
+                                 const ChannelTable& textureGamma) -> std::vector<std::byte> {
+    return paletteTexelsOf(texture.levels.at(level), texture.palette, isMasked, textureGamma);
+}
 
+/// The texels of `texture` and its mip levels as a color texture of `encoding` stores them: the levels
+/// its file has, as the original draws them; for Linear, levels made from the first by their light.
 [[nodiscard]] auto texelsOf(const assets::MipTexture& texture, bool isMasked,
-                            const ChannelTable& textureGamma) -> TexelLevels {
-    TexelLevels result;
-    for (std::size_t level = 0; level < assets::kMipLevels; ++level) {
-        result.offsets.at(level) = result.bytes.size();
-        for (const std::byte index : texture.levels.at(level)) {
-            const auto entry = std::to_integer<std::size_t>(index);
-            const bool isTransparent = isMasked && entry == kTransparentIndex;
-            for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
-                const auto value =
-                    std::to_integer<std::size_t>(texture.palette[(entry * kRgbBytes) + channel]);
-                result.bytes.push_back(isTransparent ? std::byte{0} : std::byte{textureGamma[value]});
-            }
-            result.bytes.push_back(isTransparent ? std::byte{0} : kFull);
-        }
+                            const ChannelTable& textureGamma, ColorEncoding encoding) -> MipChain {
+    if (encoding == ColorEncoding::Linear) {
+        return colorMipChainOf(levelTexelsOf(texture, 0, isMasked, textureGamma), texture.width,
+                               texture.height, encoding);
     }
-    return result;
+    MipChain chain;
+    for (std::size_t level = 0; level < assets::kMipLevels; ++level) {
+        chain.offsets.push_back(chain.texels.size());
+        chain.texels.append_range(levelTexelsOf(texture, level, isMasked, textureGamma));
+    }
+    return chain;
 }
 
 /// A magenta and black checkerboard: the texture of a name no WAD has.
@@ -286,8 +280,9 @@ struct MapTextures {
 [[nodiscard]] auto loadTextures(Uploader& uploader, const BspWorldDesc& desc)
     -> Result<MapTextures, rhi::RhiError> {
     const ChannelTable textureGamma = textureGammaTable(desc.gamma);
+    const rhi::Format textureFormat = colorFormatOf(desc.encoding);
     auto checker = uploader.texture("world.missing", {.width = kCheckerSize, .height = kCheckerSize}, 1, 1,
-                                    checkerTexels(), kOneLevel);
+                                    colorTexelsOf(checkerTexels(), desc.encoding), kOneLevel, textureFormat);
     if (!checker) {
         return std::unexpected{std::move(checker.error())};
     }
@@ -314,10 +309,11 @@ struct MapTextures {
             textures.missing.push_back(slot->name);
             continue;
         }
-        const TexelLevels texels = texelsOf(*pixels, use.kind == SurfaceKind::Masked, textureGamma);
+        const MipChain texels =
+            texelsOf(*pixels, use.kind == SurfaceKind::Masked, textureGamma, desc.encoding);
         auto texture = uploader.texture(
             std::format("world.texture.{}", slot->name), {.width = pixels->width, .height = pixels->height},
-            narrow<std::uint32_t>(assets::kMipLevels), 1, texels.bytes, texels.offsets);
+            narrow<std::uint32_t>(texels.offsets.size()), 1, texels.texels, texels.offsets, textureFormat);
         if (!texture) {
             return std::unexpected{std::move(texture.error())};
         }
@@ -334,6 +330,16 @@ struct DecalTextures {
     std::vector<DecalSize> sizes;
 };
 
+/// The texels of decal `image` and its mip levels as a color texture of `encoding` stores them: those
+/// the original makes (decalLevelsOf); for Linear, levels made by their light.
+[[nodiscard]] auto decalTexelsOf(const assets::RgbaImage& image, ColorEncoding encoding) -> MipChain {
+    if (encoding == ColorEncoding::Linear) {
+        return colorMipChainOf(image.pixels, image.width, image.height, encoding);
+    }
+    DecalLevels levels = decalLevelsOf(image);
+    return {.texels = std::move(levels.bytes), .offsets = std::move(levels.offsets)};
+}
+
 /// The images of `desc.decals`, made as the original makes them, their palettes through `texgamma`,
 /// each with its levels. Errors: those of the uploads.
 [[nodiscard]] auto loadDecalTextures(Uploader& uploader, const BspWorldDesc& desc)
@@ -342,10 +348,11 @@ struct DecalTextures {
     DecalTextures decals;
     for (const assets::MipTexture& texture : desc.decals) {
         const assets::RgbaImage image = decalImageOf(texture, textureGamma);
-        const DecalLevels levels = decalLevelsOf(image);
-        auto uploaded = uploader.texture(
-            std::format("world.decal.{}", texture.name), {.width = image.width, .height = image.height},
-            narrow<std::uint32_t>(levels.offsets.size()), 1, levels.bytes, levels.offsets);
+        const MipChain levels = decalTexelsOf(image, desc.encoding);
+        auto uploaded = uploader.texture(std::format("world.decal.{}", texture.name),
+                                         {.width = image.width, .height = image.height},
+                                         narrow<std::uint32_t>(levels.offsets.size()), 1, levels.texels,
+                                         levels.offsets, colorFormatOf(desc.encoding));
         if (!uploaded) {
             return std::unexpected{std::move(uploaded.error())};
         }
@@ -734,15 +741,17 @@ struct SkyLayers {
     std::array<std::size_t, kSkySuffixes.size()> offsets{}; ///< Where each layer starts in texels.
 };
 
-/// The layers of `sky`, its sides in the order of kSkySuffixes; without sides, a gray texel each.
-/// Errors: BadSky.
-[[nodiscard]] auto skyLayersOf(std::span<const assets::RgbaImage> sky) -> Result<SkyLayers, WorldError> {
+/// The layers of `sky`, its sides in the order of kSkySuffixes, as color textures of `encoding` store
+/// them; without sides, a gray texel each. Errors: BadSky.
+[[nodiscard]] auto skyLayersOf(std::span<const assets::RgbaImage> sky, ColorEncoding encoding)
+    -> Result<SkyLayers, WorldError> {
     SkyLayers layers;
     if (sky.empty()) {
         layers.extent = {.width = 1, .height = 1};
         for (std::size_t& offset : layers.offsets) {
             offset = layers.texels.size();
-            layers.texels.insert(layers.texels.end(), {kNoSkyLevel, kNoSkyLevel, kNoSkyLevel, kFull});
+            layers.texels.append_range(
+                colorTexelsOf({kNoSkyLevel, kNoSkyLevel, kNoSkyLevel, kFull}, encoding));
         }
         return layers;
     }
@@ -758,8 +767,7 @@ struct SkyLayers {
     layers.extent = {.width = sky.front().width, .height = sky.front().height};
     for (std::size_t axis = 0; axis < kSkySideOfAxis.size(); ++axis) {
         layers.offsets.at(axis) = layers.texels.size();
-        const std::vector<std::byte>& pixels = sky[kSkySideOfAxis.at(axis)].pixels;
-        layers.texels.insert(layers.texels.end(), pixels.begin(), pixels.end());
+        layers.texels.append_range(colorTexelsOf(sky[kSkySideOfAxis.at(axis)].pixels, encoding));
     }
     return layers;
 }
@@ -767,8 +775,8 @@ struct SkyLayers {
 /// The textures of `atlas`, of the light table of `settings` and of `sky`, the sides of the sky in
 /// the order the shader picks them. Errors: those of the uploads.
 [[nodiscard]] auto uploadFrameTextures(Uploader& uploader, const LightmapAtlas& atlas,
-                                       const GammaSettings& settings, const SkyLayers& sky)
-    -> Result<FrameTextures, rhi::RhiError> {
+                                       const GammaSettings& settings, const SkyLayers& sky,
+                                       ColorEncoding encoding) -> Result<FrameTextures, rhi::RhiError> {
     auto lightmaps =
         uploader.texture("world.lightmaps", atlas.extent, 1, narrow<std::uint32_t>(assets::kFaceLightStyles),
                          atlas.texels, atlas.layerOffsets);
@@ -782,7 +790,7 @@ struct SkyLayers {
         return std::unexpected{std::move(lightTable.error())};
     }
     auto skySides = uploader.texture("world.sky", sky.extent, 1, narrow<std::uint32_t>(kSkySuffixes.size()),
-                                     sky.texels, sky.offsets);
+                                     sky.texels, sky.offsets, colorFormatOf(encoding));
     if (!skySides) {
         return std::unexpected{std::move(skySides.error())};
     }
@@ -796,7 +804,7 @@ struct SkyLayers {
 auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const BspWorldDesc& desc)
     -> Result<BspWorld, WorldError> {
     const assets::BspView& map = desc.map;
-    auto skyLayers = skyLayersOf(desc.sky);
+    auto skyLayers = skyLayersOf(desc.sky, desc.encoding);
     if (!skyLayers) {
         return std::unexpected{std::move(skyLayers.error())};
     }
@@ -804,6 +812,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
         return fail(WorldError::GpuFailed, std::move(failure));
     };
     BspWorld world{device, map};
+    world.m_encoding = desc.encoding;
     Uploader uploader{device, commands};
     auto textures = loadTextures(uploader, desc);
     if (!textures) {
@@ -817,7 +826,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     }
     world.m_decals.emplace(map, decalFacesOf(map, faces), desc.decalLimit);
     world.m_decalSizes = std::move(decalTextures->sizes);
-    auto frameTextures = uploadFrameTextures(uploader, atlas, desc.gamma, *skyLayers);
+    auto frameTextures = uploadFrameTextures(uploader, atlas, desc.gamma, *skyLayers, desc.encoding);
     if (!frameTextures) {
         return gpuFailure(std::move(frameTextures.error()));
     }
@@ -838,9 +847,9 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     if (auto made = world.createLayouts(desc.shaderCode)
                         .and_then([&] { return world.createPipelines(desc.colorFormat); })
                         .and_then([&] {
-                            return world.createFrameSlots(frameTextures->lightmaps.get(),
-                                                          frameTextures->lightTable.get(),
-                                                          frameTextures->sky.get());
+                            return world.createFrameSlots(
+                                frameTextures->lightmaps.get(), frameTextures->lightTable.get(),
+                                frameTextures->sky.get(), std::max(desc.viewsPerFrame, 1U));
                         })
                         .and_then([&] { return world.createBucketGroups(geometry.bucketTextures); })
                         .and_then([&] { return world.createDecalGroups(decalTextures->owned); });
@@ -1037,7 +1046,8 @@ void BspWorld::gather(const Camera& camera, float aspect) {
 }
 
 void BspWorld::prepare(const WorldFrame& view) {
-    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
+    // A ring of viewsPerFrame slots a frame in flight: the slot written now was last read frames in
+    // flight ago.
     FrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     if (auto written = writeDecals(slot); !written) {
         // The frame goes on without them; the next one tries again.
@@ -1045,7 +1055,8 @@ void BspWorld::prepare(const WorldFrame& view) {
     }
     FrameUniform frame{.viewProjection = viewProjectionMatrix(view.camera, view.aspect),
                        .lighting = m_lighting,
-                       .eye = extend(view.camera.position, 1.0F)};
+                       .eye = extend(view.camera.position, 1.0F),
+                       .colorEncoding = std::to_underlying(m_encoding)};
     std::ranges::transform(view.lightStyles, frame.styles.begin(),
                            [](std::uint16_t value) { return static_cast<float>(value); });
     frame.lighting.w = view.time.count(); // what turbulent faces warp with
@@ -1482,10 +1493,11 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
 }
 
 auto BspWorld::createFrameSlots(rhi::TextureHandle lightmaps, rhi::TextureHandle lightTable,
-                                rhi::TextureHandle sky) -> Result<void, rhi::RhiError> {
+                                rhi::TextureHandle sky, std::uint32_t viewsPerFrame)
+    -> Result<void, rhi::RhiError> {
     rhi::Device& device = *m_device;
     const std::size_t models = m_models.size() + 1; // and the world, model 0
-    for (std::uint32_t index = 0; index < rhi::kMaxFramesInFlight; ++index) {
+    for (std::uint32_t index = 0; index < viewsPerFrame * rhi::kMaxFramesInFlight; ++index) {
         FrameSlot& slot = m_frameSlots.emplace_back();
         auto buffer = device.createBuffer({.label = "world.frame",
                                            .size = sizeof(FrameUniform),

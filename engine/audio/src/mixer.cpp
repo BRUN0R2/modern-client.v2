@@ -66,15 +66,25 @@ auto SincKernel::at(float t) const noexcept -> float {
 
 Mixer::Mixer(const MixerDesc& desc)
     : m_rate{desc.rate}, m_voices(desc.voices), m_playing{std::make_unique<std::atomic<bool>[]>(desc.voices)},
-      m_commands{std::make_unique<jobs::SpscQueue<MixerCommand, kCommandCapacity>>()},
+      m_commands{std::make_unique<jobs::SpscQueue<SentCommand, kCommandCapacity>>()},
       m_limiterRelease{static_cast<float>(
           1.0 -
           std::exp(-1.0 / (kLimiterReleaseSeconds * static_cast<double>(std::max(desc.rate.value(), 1U)))))} {
     expects(desc.rate.value() > 0, "Mixer: a rate to mix at");
+    m_scheduled.reserve(kCommandCapacity); // the audio thread never makes room: send holds them to it
 }
 
-auto Mixer::send(MixerCommand command) -> Result<void, MixerError> {
-    if (auto sent = m_commands->push(std::move(command)); !sent) {
+auto Mixer::send(MixerCommand command, Seconds delay) -> Result<void, MixerError> {
+    expects(delay >= Seconds{}, "Mixer::send: a delay of no less than 0");
+    // Counted before it is queued: the audio thread may do it, and count it done, at once.
+    if (m_unfinished.fetch_add(1, std::memory_order_acq_rel) >= kCommandCapacity) {
+        m_unfinished.fetch_sub(1, std::memory_order_acq_rel);
+        return fail(MixerError::QueueFull, std::format("{} commands not done yet", kCommandCapacity));
+    }
+    const auto frames = static_cast<std::uint64_t>(std::llround(
+        static_cast<double>(std::max(delay.count(), 0.0F)) * static_cast<double>(m_rate.value())));
+    if (auto sent = m_commands->push(SentCommand{.command = std::move(command), .delay = frames}); !sent) {
+        m_unfinished.fetch_sub(1, std::memory_order_acq_rel);
         return fail(MixerError::QueueFull, std::format("{} commands not taken yet", kCommandCapacity),
                     std::move(sent.error()));
     }
@@ -86,10 +96,40 @@ auto Mixer::isPlaying(std::uint32_t voice) const noexcept -> bool {
 }
 
 void Mixer::render(std::span<float> out) noexcept {
-    while (const std::optional<MixerCommand> command = m_commands->pop()) {
-        apply(*command);
+    while (std::optional<SentCommand> sent = m_commands->pop()) {
+        schedule(std::move(*sent));
     }
     std::ranges::fill(out, 0.0F);
+    // The block mixed in parts, each from a frame a command is due at to the next.
+    const std::uint64_t frames = out.size() / kStereo;
+    std::uint64_t done = 0;
+    while (done < frames) {
+        doDue(m_mixed + done);
+        const std::uint64_t until =
+            m_scheduled.empty() ? frames : std::min(frames, m_scheduled.back().frame - m_mixed);
+        mixFrames(out.subspan(done * kStereo, (until - done) * kStereo));
+        done = until;
+    }
+    m_mixed += frames;
+}
+
+void Mixer::schedule(SentCommand sent) noexcept {
+    ScheduledCommand scheduled{.command = std::move(sent.command), .frame = m_mixed + sent.delay};
+    // Before those due at the same frame, which were sent first: the next due is the last.
+    const auto at = std::ranges::lower_bound(m_scheduled, scheduled.frame, std::ranges::greater{},
+                                             &ScheduledCommand::frame);
+    m_scheduled.insert(at, std::move(scheduled));
+}
+
+void Mixer::doDue(std::uint64_t frame) noexcept {
+    while (!m_scheduled.empty() && m_scheduled.back().frame <= frame) {
+        apply(m_scheduled.back().command);
+        m_scheduled.pop_back();
+        m_unfinished.fetch_sub(1, std::memory_order_acq_rel);
+    }
+}
+
+void Mixer::mixFrames(std::span<float> out) noexcept {
     for (std::size_t voice = 0; voice < m_voices.size(); ++voice) {
         if (m_voices[voice].sound != nullptr) {
             mixVoice(voice, out);

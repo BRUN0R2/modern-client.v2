@@ -250,23 +250,6 @@ void expectRect(const nx::render::ScreenRect& line, const nx::render::ScreenRect
     EXPECT_EQ(line.height, wanted.height) << which;
 }
 
-TEST(AmmoHudTest, TheAmmoPictureIsTheWeaponListsEntryForScreens640Wide) {
-    const auto entries = nx::assets::parseSpriteList(R"(3
-ammo    320 640hud7 48 72 24 24
-weapon  640 640hud1 0  45 170 45
-ammo    640 640hud7 48 72 24 24
-)");
-    ASSERT_TRUE(entries.has_value());
-    const auto picture = cs::ammoPictureOf(*entries);
-    ASSERT_TRUE(picture.has_value()) << nx::describe(picture.error());
-    EXPECT_EQ(picture->resolution, 640U);
-    EXPECT_EQ(picture->rect, (nx::assets::SpriteRect{.x = 48, .y = 72, .width = 24, .height = 24}));
-
-    const auto without = cs::ammoPictureOf(std::span{*entries}.first(2));
-    ASSERT_FALSE(without.has_value());
-    EXPECT_EQ(without.error().code, cs::HudError::PictureMissing);
-}
-
 TEST(AmmoHudTest, AGlocksAmmoIsWhereTheOriginalDrawsIt) {
     // Measured at 1280x720 (docs/12 section 3.2): the 9mm picture at W - 42, H - 40; "40" ending at it,
     // 37 from the bottom; the bar, 2 by 25, at W - 114; "20" ending ten before it.
@@ -306,15 +289,23 @@ TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
     const cs::WeaponView view{.drawSequences = {0},
                               .idles = {cs::WeaponIdle{.wait = nx::Seconds{20.0F}, .share = 1.0F}},
                               .idlesWhenEmpty = true};
+    const cs::WeaponModels models{
+        .view = "models/v_gun.mdl", .player = "models/p_gun.mdl", .playerAnimation = "onehanded"};
     auto catalog = cs::WeaponCatalog::make(
-        ammo,
-        {cs::Weapon{.id = "knife", .classname = "weapon_knife", .slot = cs::WeaponSlot::Knife, .view = view},
-         cs::Weapon{.id = "glock18",
-                    .classname = "weapon_glock18",
-                    .slot = cs::WeaponSlot::Secondary,
-                    .weight = 5,
-                    .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
-                    .view = view}});
+        ammo, {cs::Weapon{.id = "knife",
+                          .classname = "weapon_knife",
+                          .name = "Knife",
+                          .slot = cs::WeaponSlot::Knife,
+                          .models = models,
+                          .view = view},
+               cs::Weapon{.id = "glock18",
+                          .classname = "weapon_glock18",
+                          .name = "9x19mm Sidearm",
+                          .slot = cs::WeaponSlot::Secondary,
+                          .weight = 5,
+                          .magazine = cs::WeaponMagazine{.ammo = "9mm", .clipSize = 20},
+                          .models = models,
+                          .view = view}});
     ASSERT_TRUE(catalog.has_value()) << nx::describe(catalog.error());
     cs::Inventory inventory{*catalog};
     EXPECT_EQ(cs::hudAmmoOf(inventory, *catalog), std::nullopt);
@@ -325,7 +316,7 @@ TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
     std::ignore = inventory.giveAmmo("9mm", 40);
     const std::optional<cs::HudAmmo> shown = cs::hudAmmoOf(inventory, *catalog);
     ASSERT_TRUE(shown.has_value());
-    EXPECT_EQ(shown->weapon, cs::WeaponIndex{1});
+    EXPECT_EQ(shown->ammo, "9mm");
     EXPECT_EQ(shown->clip, 20U);
     EXPECT_EQ(shown->reserve, 40U);
 }

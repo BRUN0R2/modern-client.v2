@@ -19,6 +19,7 @@ enum class WindowError : std::uint8_t {
     RelativeMouseUnavailable, ///< The mouse could not be captured for relative motion.
     SizeUnavailable,          ///< The video driver did not tell the size of the window.
     TextInputUnavailable,     ///< Text input could not be turned on or off.
+    ShowFailed,               ///< The window could not be shown.
 };
 
 /// How the mouse reports itself to the window.
@@ -237,6 +238,9 @@ struct WindowDesc {
     std::string_view title;              ///< Shown in the title bar.
     PixelSize size = kDefaultWindowSize; ///< Of the drawable area, before the desktop's scaling.
     bool isResizable = true;             ///< Whether the user may resize the window.
+    /// Whether it shows as it opens. A program with nothing to draw yet opens it hidden, and shows it
+    /// with its first image (Window::show): no empty window while it loads.
+    bool isShown = true;
 };
 
 /// The program's window. There is one at a time, and it takes every event of the program: SDL
@@ -264,6 +268,11 @@ public:
 
     /// The handles a GPU backend makes its surface from. Errors: NoNativeWindow.
     [[nodiscard]] auto nativeWindow() const -> Result<NativeWindow, WindowError>;
+
+    /// Shows the window, opened hidden; one shown stays as it is. Errors: ShowFailed.
+    [[nodiscard]] auto show() -> Result<void, WindowError>;
+    /// Whether the window is shown.
+    [[nodiscard]] auto isShown() const noexcept -> bool;
 
     /// Puts the mouse in `mode`. Errors: RelativeMouseUnavailable.
     [[nodiscard]] auto setMouseMode(MouseMode mode) -> Result<void, WindowError>;

@@ -45,13 +45,31 @@ enum class Format : std::uint8_t {
     Rgba8Srgb,
     Bgra8Srgb,
     Depth32Float,
+    /// Light beyond 1 (high dynamic range): three unsigned floats of 11, 11 and 10 bits, no alpha, in
+    /// four bytes.
+    Rg11b10Ufloat,
+    /// Four half floats, in eight bytes.
+    Rgba16Float,
 };
 
-/// The bytes of one texel of `format`; 0 for Undefined. Every defined format has four channels of a
-/// byte, or one float.
+/// The bytes of one texel of `format`; 0 for Undefined.
 [[nodiscard]] constexpr auto bytesPerTexel(Format format) noexcept -> std::uint32_t {
     constexpr std::uint32_t kFourBytes = 4;
-    return format == Format::Undefined ? 0 : kFourBytes;
+    constexpr std::uint32_t kEightBytes = 8;
+    switch (format) {
+    case Format::Undefined:
+        return 0;
+    case Format::Rgba16Float:
+        return kEightBytes;
+    case Format::Rgba8Unorm:
+    case Format::Bgra8Unorm:
+    case Format::Rgba8Srgb:
+    case Format::Bgra8Srgb:
+    case Format::Depth32Float:
+    case Format::Rg11b10Ufloat:
+        break;
+    }
+    return kFourBytes;
 }
 
 /// What a texture is used for at a point of the frame. Moving a texture from one state to another
@@ -114,6 +132,9 @@ enum class TextureUsage : std::uint8_t {
     Count,
 };
 
+/// The faces of a cube texture, its layers six by six: +x, -x, +y, -y, +z and -z.
+inline constexpr std::uint32_t kCubeFaces = 6;
+
 /// A texture to create (Device::createTexture).
 struct TextureDesc {
     std::string_view label{}; ///< Required: it names the texture to the debug tools.
@@ -121,9 +142,12 @@ struct TextureDesc {
     Extent2d extent{};
     std::uint32_t mipLevels = 1;
     /// More than 1: layers of one size, each with its mip levels, sampled as a Texture2DArray. A
-    /// render or depth target has 1.
+    /// depth target has 1; a render target draws to one of them at a time (ColorAttachment).
     std::uint32_t arrayLayers = 1;
     Flags<TextureUsage> usage{};
+    /// Its layers are the faces of cubes, kCubeFaces a cube, square: sampled as a TextureCube (one
+    /// cube) or a TextureCubeArray.
+    bool isCube = false;
 };
 
 /// How a sampler reads between texels, or between mip levels.

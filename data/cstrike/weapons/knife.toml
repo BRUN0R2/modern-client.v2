@@ -6,6 +6,7 @@
 
 id = "knife"
 classname = "weapon_knife"
+name = "Knife" # as the original's buy menu shows it
 slot = "knife"
 position = 1
 weight = 0

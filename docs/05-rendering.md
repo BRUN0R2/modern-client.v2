@@ -373,7 +373,12 @@ flowchart LR
    weapons play since they started it (`cs::Inventory`: drawn, then idling,
    [10 §7.3](10-counter-strike-gameplay.md#73-behaviors)), posed by `cs::poseBones` at the frame
    `cs::sequenceFrameAt` gives, where the player looks from, lit by the world there and by the sky
-   the map's `light_environment` sets. A view model modeled in the other hand than the player's (its
+   the map's `light_environment` sets. Its main weapon data can select a static `view.skin` and
+   `view.bodyChoices`; `cs::ViewModel` validates and owns those values, and `cs::Scene` passes them
+   to `StudioInstance`. Their defaults keep skin zero and each body part's first choice. Appearance
+   indexes are checked against the actual model and its textures file before GPU upload; alternate
+   views cannot override them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   A view model modeled in the other hand than the player's (its
    `viewHand`; the player's is the right, `cl_righthand`'s default, until the cvar comes) is drawn
    mirrored, its left turned to its right (`StudioInstance::isMirrored`), the other faces culled as
    its triangles turn over: Counter-Strike's guns are modeled in the left hand and its knife in the
@@ -410,6 +415,68 @@ flowchart LR
    when the same model is drawn in several passes or with many instances.
 
 ### 9.2 MDL format features to support
+
+The enhanced look (`r_fidelity enhanced`, read when the map loads; `nxview --look enhanced` for
+captures that do not depend on the GPU's speed) shades each texture of a model by the material the
+file beside the model gives it (`<model>.material.toml`, `cs.client:modelMaterials`), texture by
+texture, a skin family's swap included:
+
+```toml
+[[textures]]
+texture = "gun_v01.bmp"                            # in any case, named once
+fullbright = true                                  # the map's light and its color left out
+metallicRoughness = { metallic = 1.0, roughness = 0.35 }
+
+[[textures]]
+texture = "gun_v02.bmp"
+baseColorMap = "models/texture/gun_v02_1024.tga"  # its texels, TGA or BMP, of any size
+[textures.painted]
+roughness = 0.35                                  # of the reflection added over the painting
+specularColor = [0.04, 0.04, 0.04]                # the reflection's color head on, in linear light
+specularWeight = 0.5                              # how much of it is added, grazing angles included
+specularMap = "models/gun_v02_specular.tga"       # by texel: rgb its color, alpha times its weight
+light = { map = "models/studioLight.tga", gain = 1.0 }
+
+[[textures]]
+texture = "gun_glow.bmp"
+emissive = 3.0                                    # its color times this: beyond 1 it blooms
+emissiveMask = "models/gun_glow_mask.tga"         # where it emits; none: everywhere
+blend = "additive"                                # opaque, masked or additive, in place of its flags
+```
+
+A texture has one surface at most (`nx::render::StudioSurface`, a variant); without one it is drawn
+as the original draws it, what it emits added. `metallicRoughness` is glTF 2.0's: its texels are its
+color, a dielectric's lit by the original's light, a metal's what it reflects. `painted` is for
+textures with their light painted in, as Counter-Strike Online paints its weapons: the painting stays,
+lit by the original's light and by its painted `light`, and the reflection its material gives is added
+over it, an artist's layer rather than a conductor that conserves energy. The painted light is an
+image of all around, equirectangular (across, the longitude `atan2(y, x) / 2π + 1/2`; down, the
+latitude `acos(z) / π`), of display colors as textures are, sampled as light toward the direction the
+surface reflects. A specular map is data, through neither `texgamma` nor sRGB; where its weight is 0
+neither the surroundings' reflection, at grazing angles too, nor highlights are added. Fullbright
+leaves out the map's light and its color alike; what a texture emits is light of its own. What a
+surface reflects is the map from the two reflection probes nearest the model, or the sky, times GGX's
+reflection integrated over the directions it gathers (Filament, sections 5.3.4 and 9.5). The two probes
+are blended by `nx::render::probeBlendOf`: each weighs (d3 − d) / d, d its distance and d3 the third
+nearest's, so that a probe counts in full where it stands and for nothing as the third overtakes it,
+and the reflection changes as smoothly as the model moves, never at once. The lights of the map near a model
+give it highlights. A file fails with a typed error (`cs::ModelMaterialError`): `FileInvalid` for its
+schema (an unknown key, a key of the other surface, a `specularColor` that is not three shares from 0
+to 1), `TextureUnknown`, `TextureRepeated`, `SurfaceAmbiguous` for both surfaces, and
+`ImageUnreadable`. Nothing is inferred from the names of textures but Counter-Strike Online's
+`#WWWHHH` sizes.
+
+The renderers take how their colors reach the target (`nx::render::ColorEncoding`): `Display`, as the
+original draws them, or `Linear`, which the enhanced look's scene is drawn in. Drawn as linear light,
+the textures' colors, through their palettes' `texgamma`, are stored as sRGB, which the GPU decodes
+before it filters, and their mip levels average light; the light and colors the original gives as
+display colors are made light; masks, lightmaps and data stay as they are. The world, the models and
+the sprites blend into a target of half floats, the probes capture and blur light, the bloom keeps a
+constant image's light, and the shoulder scales a color's channels by one gain from its brightest, so
+that a bright gold stays gold. The colors are encoded for the screen once, before the HUD
+(`shaders/colorEncoding.slang` holds the display's gamma every shader converts by). The enhanced
+look's model textures are filtered anisotropically, by up to 16 texels as the device allows; the
+original's look keeps its own filtering.
 
 - *Chrome* textures (view-dependent coordinates in the shader), *flatshade*,
   *additive*, *masked* and *fullbright*.
@@ -525,6 +592,12 @@ Xash3D-FWGS project records from the original for its tests.
   when `0`.
 - In low-latency mode, the limiter waits **before** sampling input, so that the frame is
   built with the most recent input.
+- No empty window while the client loads: `next` opens its window hidden and shows it with its first
+  image (`WindowDesc::isShown`, `Window::show`). A map's scene, its textures and models on the GPU, is
+  made with the first image of it, and its game plays from the frame after: the player hears what
+  they see (the knife drawn as the map shows, not over a black window), and the loading is no time of
+  the game's. The CPU makes a texture's mip levels in place, the chain sized once, never a byte at a
+  time.
 - Exposed metrics: CPU time per phase, GPU time per pass (timestamps) and estimated latency
   from input to *present*.
 

@@ -43,19 +43,27 @@ struct GameContent {
     Loadouts loadouts;
 };
 
+/// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its
+/// addons/cstrike/ folder, the original's cstrike_addon (docs/06-assets-and-resources.md, section
+/// 2.1).
+[[nodiscard]] auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path;
+
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, and
-/// the loadouts; and the installation at `install`, or the one Steam installed. Errors:
-/// ContentUnavailable.
+/// the loadouts; and the installation at `install`, or the one Steam installed, below `addons`, the
+/// user's own content (addonsFolderOf), when it is given and is a folder: a file there is read
+/// instead of the installation's. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
-                                   const std::optional<std::filesystem::path>& install)
+                                   const std::optional<std::filesystem::path>& install,
+                                   const std::optional<std::filesystem::path>& addons)
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
 /// the game gives it, the sprites and studio models its entities show, the decals it shows and the mark
 /// a bullet leaves on each of its brush models, and the view models of the game's weapons and the
-/// sprites of their muzzle flashes, read once. It stays where it is made: the views
-/// point into it, and what is made of it (the light of nx::render::WorldLight) to its map.
+/// sprites of their muzzle flashes, read once; the view model of a weapon made or changed as the
+/// game runs read then, as no precache limits it. It stays where it is made: the views point into
+/// it, and what is made of it (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -89,6 +97,14 @@ public:
         return m_lightStyles;
     }
     [[nodiscard]] inline auto skyLight() const noexcept -> const nx::render::SkyLight& { return m_skyLight; }
+    /// Where its reflection probes go (probePositionsOf), in the enhanced look.
+    [[nodiscard]] inline auto probePositions() const noexcept -> std::span<const nx::Vec3> {
+        return m_probePositions;
+    }
+    /// The lights of its light entities, which give models highlights in the enhanced look.
+    [[nodiscard]] inline auto lights() const noexcept -> std::span<const nx::render::StudioLight> {
+        return m_lights;
+    }
     [[nodiscard]] inline auto hulls() const noexcept -> const nx::collision::BrushHulls& { return *m_hulls; }
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
@@ -97,10 +113,16 @@ public:
     [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
         return *m_muzzleFlashes;
     }
-    /// The view models of the game's weapons, by their WeaponIndex.
-    [[nodiscard]] inline auto viewModels() const noexcept -> std::span<const ViewModel> {
-        return m_viewModels;
-    }
+    /// The weapons the level read the view models of: those of the catalog as it last read it.
+    [[nodiscard]] auto weapons() const -> std::vector<WeaponIndex>;
+    /// The view model of `weapon`; none for one not complete, or whose view model could not be read
+    /// as it was changed.
+    [[nodiscard]] auto viewModel(WeaponIndex weapon) const noexcept -> const ViewModel*;
+    /// Reads the view model of each weapon of `weapons` made, or whose values were set, since the
+    /// level read it, from `vfs`: those weapons, in their order. One that cannot be read leaves its
+    /// weapon without one, logged, and the game plays on.
+    auto updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
+        -> std::vector<WeaponIndex>;
     /// The decals of decals.wad the level shows: those bullets leave (bulletDecals).
     [[nodiscard]] inline auto decals() const noexcept -> const LevelDecals& { return *m_decals; }
     /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
@@ -118,11 +140,19 @@ private:
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;
+    std::vector<nx::render::StudioLight> m_lights;
+    std::vector<nx::Vec3> m_probePositions;
     std::optional<nx::collision::BrushHulls> m_hulls;
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;
     std::optional<MapModels> m_models;
-    std::vector<ViewModel> m_viewModels;
+    /// A weapon's view model, as the revision of its values it was read from.
+    struct WeaponViewModel {
+        std::optional<ViewModel> model{};
+        std::uint32_t revision = 0;
+    };
+
+    std::vector<WeaponViewModel> m_viewModels; ///< By WeaponIndex.
     std::optional<MuzzleFlashSprites> m_muzzleFlashes;
 };
 
