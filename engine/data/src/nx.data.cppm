@@ -6,8 +6,10 @@
 /// A TOML file is read into a described struct (nx.meta): its keys are the struct's fields, and
 /// an unknown key, a missing required key, a value of the wrong type or out of range is a typed
 /// failure that names the file, line, column and key path. The TOML library stays behind the
-/// Document views.
+/// Document views. A field of such a struct is set and written by its key path, as the console and
+/// plugins change values made from data (:fields).
 export module nx.data;
 
 export import :document;
 export import :schema;
+export import :fields;

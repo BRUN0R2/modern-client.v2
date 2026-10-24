@@ -32,6 +32,25 @@ TEST(WindowTest, OpensWithTheRequestedSize) {
     EXPECT_EQ(nx::platform::WindowDesc{}.size, nx::platform::kDefaultWindowSize);
 }
 
+TEST(WindowTest, AWindowOpenedHiddenShowsWhenItIsTold) {
+    auto window = Window::create({.title = "nxPlatformTests", .isResizable = false, .isShown = false});
+    ASSERT_TRUE(window.has_value()) << nx::describe(window.error());
+    EXPECT_FALSE(window->isShown()) << "hidden until it has something to show";
+    const auto shown = window->show();
+    ASSERT_TRUE(shown.has_value()) << nx::describe(shown.error());
+    EXPECT_TRUE(window->isShown());
+    const auto again = window->show();
+    ASSERT_TRUE(again.has_value()) << nx::describe(again.error());
+    EXPECT_TRUE(window->isShown()) << "one shown stays as it is";
+}
+
+TEST(WindowTest, AWindowShowsAsItOpensUnlessAskedNot) {
+    const auto window = openWindow();
+    ASSERT_TRUE(window.has_value());
+    EXPECT_TRUE(window->isShown());
+    EXPECT_TRUE(nx::platform::WindowDesc{}.isShown);
+}
+
 TEST(WindowTest, AnOffscreenWindowHasNothingAGpuCanDrawTo) {
     const auto window = openWindow();
     ASSERT_TRUE(window.has_value());

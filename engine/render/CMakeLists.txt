@@ -21,6 +21,8 @@ nxAddModuleLibrary(nxRender
         src/studio.cppm
         src/sprite.cppm
         src/screen.cppm
+        src/post.cppm
+        src/probes.cppm
     SOURCES
         src/camera.cpp
         src/gamma.cpp
@@ -34,6 +36,8 @@ nxAddModuleLibrary(nxRender
         src/studio.cpp
         src/sprite.cpp
         src/screen.cpp
+        src/post.cpp
+        src/probes.cpp
     DEPENDS
         nx::core
         nx::math

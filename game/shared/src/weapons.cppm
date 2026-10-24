@@ -8,6 +8,12 @@
 /// recoil. The game's own are in data/cstrike/weapons/<weapon>.toml and data/cstrike/ammo.toml,
 /// with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
 ///
+/// A weapon is a type, standalone (docs/10, section 7.5): the game's are read from data, others are
+/// made as the game runs, from nothing or from another's values, copied once; its values are set by
+/// the key paths of its data ("firing.cycle"), and the game makes another wherever it would make it
+/// once it is replaced. The catalog has no limit of weapons nor of kinds of ammo, as the original's
+/// 32 of each.
+///
 /// Today: the guns' fire as it starts, the silencers, the Glock's burst and the knife's attacks; their
 /// damage and how far it reaches come next (TODO.md).
 export module cs.shared:weapons;
@@ -22,8 +28,16 @@ export namespace cs {
 
 /// What can be wrong with the weapons' data.
 enum class WeaponError : std::uint8_t {
-    DataInvalid, ///< A file breaks its schema or the catalog's rules (cause: the DataError or the
-                 ///< VfsError, when there is one); the detail names the file, the weapon or the ammo.
+    DataInvalid,        ///< A file breaks its schema or the catalog's rules (cause: the DataError or the
+                        ///< VfsError, when there is one); the detail names the file, the weapon or the ammo.
+    IdInvalid,          ///< A new weapon's id is empty, or not letters and digits alone.
+    IdTaken,            ///< A weapon of that id, in any case, is in the catalog already.
+    VarReadOnly,        ///< Its id, classname, slot or position: what the catalog knows the weapon by.
+    VarInvalid,         ///< No value at that key path, one its type refuses (cause: the DataError), or one
+                        ///< that leaves a complete weapon incomplete (cause: DataInvalid).
+    Incomplete,         ///< A weapon whose values do not make a weapon yet (cause: DataInvalid).
+    ReplacementInvalid, ///< A weapon replaced by itself, by a weapon replaced in its turn, or by an
+                        ///< incomplete one.
 };
 
 /// The slots of a player's weapons, in the order the HUD's weapon menu numbers them, 1 to 5.
@@ -51,13 +65,26 @@ enum class Buyers : std::uint8_t {
     Count,
 };
 
-/// A kind of ammo: how much of it a player carries besides what the clips of its weapons hold, and
-/// how buying sells it.
+/// A picture of a sprite: the sprite, a path of the game's files, and the rectangle of its first
+/// frame the picture is, in pixels.
+struct SpritePicture {
+    std::string sprite{};
+    std::uint32_t x{};
+    std::uint32_t y{};
+    std::uint32_t width{};
+    std::uint32_t height{};
+};
+
+/// A kind of ammo: how much of it a player carries besides what the clips of its weapons hold, how
+/// buying sells it, and the picture the HUD shows of it.
 struct AmmoType {
     std::string id{};           ///< The original's name for it: "9mm", "762Nato".
     std::uint32_t maxCarried{}; ///< A player carries this many rounds of it at most.
     nx::Money boxPrice{};       ///< A box of it costs this much,
     std::uint32_t boxRounds{};  ///< and holds this many rounds.
+    /// Beside its rounds on the HUD, for screens 640 wide and more: the `ammo` picture of the lists
+    /// of the original's weapons that fire it (sprites/weapon_<name>.txt).
+    SpritePicture picture{};
 };
 
 /// data/cstrike/ammo.toml: the kinds of ammo.
@@ -84,7 +111,7 @@ struct WeaponIdle {
     float share{}; ///< How likely it is chosen, from 0 to 1: the shares of a weapon's idles add up to 1.
 };
 
-/// How a weapon's view model moves as it is drawn and held, by its sequences' numbers in the model.
+/// How a weapon's view model moves as it is drawn and held, and its declared static appearance.
 struct WeaponView {
     std::vector<std::uint32_t> drawSequences{}; ///< One of them, at random, as it is drawn.
     /// One of them, at random by their shares, once it is drawn and each time its wait is over.
@@ -92,6 +119,11 @@ struct WeaponView {
     bool idlesWhenEmpty{}; ///< Whether it idles with its clip empty: the pistols do not.
     /// As it is drawn, besides those its view model's sequence plays (the knife's Deploy).
     std::optional<GameSound> drawSound{};
+    /// Its fixed skin family, zero-based; none selects the first. Only the weapon's main view may set it.
+    std::optional<std::uint32_t> skin{};
+    /// Its fixed choices by body-part index, zero-based; omitted parts select their first choice.
+    /// Only the weapon's main view may set them; none is the original's empty selection.
+    std::optional<std::vector<std::uint32_t>> bodyChoices{};
 };
 
 /// A part of a shot's spread: `base`, plus `scale` times the weapon's inaccuracy.
@@ -253,6 +285,7 @@ struct WeaponModels {
 struct Weapon {
     std::string id{};        ///< Its name, as the buy commands and its file call it: "ak47".
     std::string classname{}; ///< The class of the entity the game makes of it: "weapon_ak47".
+    std::string name{};      ///< What the game shows it as: "CV-47".
     WeaponSlot slot{};
     std::uint32_t position{}; ///< The HUD's weapon menu lists a slot's weapons by it.
     /// When the game chooses a weapon for a player, as one runs out or is dropped, it chooses the
@@ -269,19 +302,27 @@ struct Weapon {
     std::optional<WeaponMelee> melee{};         ///< None: it has no melee attacks.
 };
 
-/// A weapon of a catalog, by its place in it.
+/// A weapon of a catalog, by its place in it, which it keeps.
 struct WeaponIndex {
     std::uint32_t value = 0;
 
     [[nodiscard]] inline auto operator==(const WeaponIndex&) const noexcept -> bool = default;
 };
 
-/// Reads `text`, the file `sourceName`: the kinds of ammo. Errors: DataInvalid.
+/// What a new weapon is made of: its id, its slot, and the weapon whose values it starts from.
+struct WeaponDraft {
+    std::string_view id{};
+    WeaponSlot slot{};
+    std::optional<WeaponIndex> from{}; ///< None: it starts from no values, incomplete.
+};
+
+/// Reads `text`, the file `sourceName`: the kinds of ammo, each with an id and its picture's sprite a
+/// path of the game's files. Errors: DataInvalid.
 [[nodiscard]] auto readAmmoTypes(std::string_view text, std::string_view sourceName)
     -> nx::Result<AmmoTypes, WeaponError>;
 
-/// Reads `text`, the file `sourceName`: a weapon, its id and classname not empty, its models paths
-/// of the game's files, a draw sequence and an idle at least, each idle's wait above 0 and the
+/// Reads `text`, the file `sourceName`: a weapon, its id, classname and name not empty, its models
+/// paths of the game's files, a draw sequence and an idle at least, each idle's wait above 0 and the
 /// idles' shares adding up to 1; firing and reloading only with a magazine, a shoot sequence and a
 /// reload sequence at least, a cycle above 0, and one accuracy, by bursts or by pace; and the same of
 /// its alternate's, which plays both its switch's sequences or neither; melee attacks with a miss and
@@ -289,32 +330,88 @@ struct WeaponIndex {
 [[nodiscard]] auto readWeapon(std::string_view text, std::string_view sourceName)
     -> nx::Result<Weapon, WeaponError>;
 
-/// The game's weapons and kinds of ammo, each checked against the others.
+/// Every sound `weapon` makes, from each place of its data that gives one: as it is drawn, as it fires
+/// and clicks on an empty clip, its alternate's as well, and as its melee attacks miss and hit. The
+/// weapon owns them: they last as long as its values stay.
+[[nodiscard]] auto soundsOf(const Weapon& weapon) -> std::vector<const GameSound*>;
+
+/// The game's weapons and kinds of ammo, each checked against the others; and the weapons made as
+/// the game runs, each standalone. A weapon keeps its place, and its values their address, as
+/// others are made.
 class WeaponCatalog {
 public:
-    /// The catalog of `ammo` and `weapons`, in their order. Errors: DataInvalid: an id twice (of a
-    /// kind of ammo, or of a weapon), a classname twice, two weapons at one position of a slot, a
-    /// weapon firing a kind of ammo `ammo` lacks, or a view, firing or reload readWeapon refuses.
+    /// The catalog of `ammo` and `weapons`, in their order, all complete. Errors: DataInvalid: an id
+    /// twice (of a kind of ammo, or of a weapon, in any case), a classname twice, two weapons at one
+    /// position of a slot, a weapon firing a kind of ammo `ammo` lacks, or one readWeapon refuses.
     [[nodiscard]] static auto make(AmmoTypes ammo, std::vector<Weapon> weapons)
         -> nx::Result<WeaponCatalog, WeaponError>;
 
     [[nodiscard]] inline auto ammo() const noexcept -> std::span<const AmmoType> { return m_ammo; }
-    [[nodiscard]] inline auto weapons() const noexcept -> std::span<const Weapon> { return m_weapons; }
+    [[nodiscard]] inline auto weapons() const noexcept -> const std::deque<Weapon>& { return m_weapons; }
 
     /// The kind of ammo `id` names; none when the catalog has none of that id.
     [[nodiscard]] auto findAmmo(std::string_view id) const noexcept -> const AmmoType*;
-    /// The weapon `id` names; none when the catalog has none of that id.
+    /// The weapon `id` names, in any case ("drakariii" names "DrakarIII"); none when the catalog has
+    /// none of that id.
     [[nodiscard]] auto findWeapon(std::string_view id) const noexcept -> const Weapon*;
-    /// Where the weapon `id` names is; none when the catalog has none of that id.
+    /// Where the weapon `id` names is, in any case; none when the catalog has none of that id.
     [[nodiscard]] auto indexOf(std::string_view id) const noexcept -> std::optional<WeaponIndex>;
     /// The weapon at `index`, which must be one of the catalog's.
     [[nodiscard]] auto weapon(WeaponIndex index) const noexcept -> const Weapon&;
 
+    /// Makes the weapon `draft` describes, its classname weapon_<id>, at the next position of its
+    /// slot, its name its id: with the values of the weapon it starts from, copied once and linked
+    /// to it no more; or with none, incomplete until its values make a weapon. Errors: IdInvalid,
+    /// IdTaken.
+    [[nodiscard]] auto create(const WeaponDraft& draft) -> nx::Result<WeaponIndex, WeaponError>;
+
+    /// Sets the value of `weapon` at `keyPath` ("magazine.clipSize") to `text`, read as its data file
+    /// reads it (nx::data::assignField): a complete weapon stays complete, an incomplete one becomes
+    /// complete when its values make a weapon. Errors: VarReadOnly, VarInvalid.
+    [[nodiscard]] auto setVar(WeaponIndex weapon, std::string_view keyPath, std::string_view text)
+        -> nx::Result<void, WeaponError>;
+    /// The value of `weapon` at `keyPath`, as its data file writes it; none when it has none there.
+    /// Errors: VarInvalid (no value at that key path).
+    [[nodiscard]] auto var(WeaponIndex weapon, std::string_view keyPath) const
+        -> nx::Result<std::optional<std::string>, WeaponError>;
+    /// Every value of `weapon`, by its key path.
+    [[nodiscard]] auto vars(WeaponIndex weapon) const -> std::vector<nx::data::FieldText>;
+
+    /// Whether `weapon`'s values make a weapon, which the game can give.
+    [[nodiscard]] auto isComplete(WeaponIndex weapon) const noexcept -> bool;
+    /// What `weapon` lacks to be complete. Errors: Incomplete (cause: what readWeapon would refuse).
+    [[nodiscard]] auto checkComplete(WeaponIndex weapon) const -> nx::Result<void, WeaponError>;
+    /// How many times `weapon`'s values were set since it was made: what is made of them (its view
+    /// model) is made again when it changes.
+    [[nodiscard]] auto revision(WeaponIndex weapon) const noexcept -> std::uint32_t;
+
+    /// The game makes `replacement` wherever it would make `original` (buying, a loadout, a map's
+    /// entity, `give`), and selecting `original` selects it; none: `original` again. Errors:
+    /// ReplacementInvalid (the replacement is `original`, is replaced in its turn, or incomplete).
+    [[nodiscard]] auto replace(WeaponIndex original, std::optional<WeaponIndex> replacement)
+        -> nx::Result<void, WeaponError>;
+    /// The weapon the game makes for `weapon`: its replacement, or itself.
+    [[nodiscard]] auto madeFor(WeaponIndex weapon) const noexcept -> WeaponIndex;
+
 private:
+    /// How a weapon of the catalog stands.
+    struct Standing {
+        bool isComplete = false;
+        std::uint32_t revision = 0;
+        std::optional<WeaponIndex> replacement{};
+    };
+
     WeaponCatalog(std::vector<AmmoType> ammo, std::vector<Weapon> weapons) noexcept;
 
+    /// DataInvalid when `weapon`, of `where` (a file, or the catalog), is not complete: what
+    /// readWeapon refuses, or a magazine of a kind of ammo the catalog lacks.
+    [[nodiscard]] auto check(const Weapon& weapon, std::string_view where) const
+        -> nx::Result<void, WeaponError>;
+    [[nodiscard]] auto standing(WeaponIndex weapon) const noexcept -> const Standing&;
+
     std::vector<AmmoType> m_ammo;
-    std::vector<Weapon> m_weapons;
+    std::deque<Weapon> m_weapons;      ///< A deque: making a weapon moves none of the others.
+    std::vector<Standing> m_standings; ///< Of each weapon, by its index.
 };
 
 } // namespace cs
@@ -327,6 +424,19 @@ struct nx::meta::Description<cs::AmmoType> {
         nx::meta::field<&cs::AmmoType::maxCarried>("maxCarried"),
         nx::meta::field<&cs::AmmoType::boxPrice>("boxPrice"),
         nx::meta::field<&cs::AmmoType::boxRounds>("boxRounds", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::AmmoType::picture>("picture"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::SpritePicture> {
+    static constexpr std::string_view kName = "cs::SpritePicture";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::SpritePicture::sprite>("sprite"),
+        nx::meta::field<&cs::SpritePicture::x>("x"),
+        nx::meta::field<&cs::SpritePicture::y>("y"),
+        nx::meta::field<&cs::SpritePicture::width>("width", nx::data::Range{.minimum = 1.0}),
+        nx::meta::field<&cs::SpritePicture::height>("height", nx::data::Range{.minimum = 1.0}),
     };
 };
 
@@ -374,6 +484,8 @@ struct nx::meta::Description<cs::WeaponView> {
         nx::meta::field<&cs::WeaponView::idles>("idles"),
         nx::meta::field<&cs::WeaponView::idlesWhenEmpty>("idlesWhenEmpty"),
         nx::meta::field<&cs::WeaponView::drawSound>("drawSound"),
+        nx::meta::field<&cs::WeaponView::skin>("skin"),
+        nx::meta::field<&cs::WeaponView::bodyChoices>("bodyChoices"),
     };
 };
 
@@ -562,6 +674,7 @@ struct nx::meta::Description<cs::Weapon> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::Weapon::id>("id"),
         nx::meta::field<&cs::Weapon::classname>("classname"),
+        nx::meta::field<&cs::Weapon::name>("name"),
         nx::meta::field<&cs::Weapon::slot>("slot"),
         nx::meta::field<&cs::Weapon::position>("position"),
         nx::meta::field<&cs::Weapon::weight>("weight"),

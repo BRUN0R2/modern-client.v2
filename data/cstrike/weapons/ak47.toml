@@ -6,6 +6,7 @@
 
 id = "ak47"
 classname = "weapon_ak47"
+name = "CV-47" # as the original's buy menu shows it
 slot = "primary"
 position = 1
 weight = 25

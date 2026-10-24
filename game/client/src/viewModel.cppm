@@ -17,6 +17,7 @@ import nx.rhi;
 import nx.render;
 import cs.shared;
 import :modelFiles;
+import :modelMaterials;
 
 export namespace cs {
 
@@ -26,8 +27,9 @@ inline constexpr std::uint32_t kKnifeCrosshairDistance = 7;
 
 /// Why a weapon's view model cannot be held.
 enum class ViewModelError : std::uint8_t {
-    FilesFailed, ///< A file of it cannot be read or used (cause: the model files' error).
-    NoSequence,  ///< It lacks a sequence its weapon's data plays.
+    FilesFailed,  ///< A file of it cannot be read or used (cause: the model files' error).
+    NoSequence,   ///< It lacks a sequence its weapon's data plays.
+    NoAppearance, ///< Its static skin/body choices cannot be bound, or its alternate declares them.
 };
 
 /// The hand the player holds its weapons in: cl_righthand's default, until the cvar comes.
@@ -53,17 +55,30 @@ inline constexpr std::int32_t kFirstClientEvent = 5000;
 /// `sound/` (the reloads' and the draws' sounds of the original's view models).
 inline constexpr std::int32_t kSoundEvent = 5004;
 
+/// A client event a view model's play passed, and how long into the play it comes: when it is heard
+/// and seen, though a frame passes many at once.
+struct PassedEvent {
+    const nx::assets::StudioEvent* event{};
+    nx::Seconds intoPlay{};
+};
+
 /// The client events of `sequence` its play passes from frame `from`, left out, to frame `to`,
 /// included, in their order.
 [[nodiscard]] auto clientEventsBetween(const nx::assets::StudioSequence& sequence, float from, float to)
     -> std::vector<const nx::assets::StudioEvent*>;
 
-/// A weapon's view model, its textures and the animations of its sequences.
+/// How long into a play of `sequence` its frame `frame` comes, the play `intoIt` into it at frame
+/// `now` (cs::sequenceFrameAt): from its start, or, in a loop, from the start of the turn `now` is
+/// in. A sequence of no rate stays at its first frame.
+[[nodiscard]] auto intoPlayOf(const nx::assets::StudioSequence& sequence, float frame, float now,
+                              nx::Seconds intoIt) -> nx::Seconds;
+
+/// A weapon's view model, its textures, validated static appearance and animations of its sequences.
 class ViewModel {
 public:
     /// Reads the view model of `weapon` from `vfs`, its `*T.mdl` when its textures are not in it, and
     /// the animations of each of its sequences, from their sequence group files. Errors: FilesFailed,
-    /// NoSequence (one the weapon's view plays).
+    /// NoSequence (one the weapon's view plays), NoAppearance (skin, textures or body choices).
     [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const Weapon& weapon)
         -> nx::Result<ViewModel, ViewModelError>;
 
@@ -81,6 +96,15 @@ public:
     /// Whether it is drawn mirrored: modeled in the other hand than the player's.
     [[nodiscard]] inline auto isMirrored() const noexcept -> bool { return m_isMirrored; }
 
+    /// Its validated static skin family, from the weapon's main view; zero when omitted.
+    [[nodiscard]] inline auto skin() const noexcept -> std::uint32_t { return m_skin; }
+
+    /// Its validated static body choices. The model owns them: the span lasts as long as it does.
+    /// Omitted parts select their first choice, also while the weapon's alternate is on.
+    [[nodiscard]] inline auto bodyChoices() const noexcept -> std::span<const std::uint32_t> {
+        return m_bodyChoices;
+    }
+
     /// Its sequence `sequence`, which must be one of its.
     [[nodiscard]] auto sequence(std::uint32_t sequence) const -> const nx::assets::StudioSequence&;
 
@@ -89,24 +113,39 @@ public:
     [[nodiscard]] auto attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t attachment) const
         -> std::optional<nx::Vec3>;
 
+    /// The names of the sounds its sound events (kSoundEvent) play, those of its sequences in their
+    /// order. The model owns them: the views last as long as it does.
+    [[nodiscard]] auto soundEvents() const -> std::vector<std::string_view>;
+
 private:
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
-              bool isMirrored) noexcept;
+              std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
+              std::uint32_t skin, std::vector<std::uint32_t> bodyChoices) noexcept;
 
     std::unique_ptr<ModelFiles> m_files;
     std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
+    /// Of each of its textures in the enhanced look, from its material file (cs.client:modelMaterials).
+    std::vector<std::optional<nx::render::StudioMaterial>> m_materials;
     bool m_isMirrored;
+    std::uint32_t m_skin = 0;
+    std::vector<std::uint32_t> m_bodyChoices;
 };
+
+/// The names of the sounds the player hears of `weapon` in hand: the files of each sound it makes
+/// (soundsOf), then those the sound events of `viewModel`, its view model, play; a name as often as
+/// they give it, and none of a view model when it has none. The views last as long as both do.
+[[nodiscard]] auto soundFilesOf(const Weapon& weapon, const ViewModel* viewModel)
+    -> std::vector<std::string_view>;
 
 /// The client events the view model passes, frame after frame, as the original's client plays them
 /// (Xash3D's R_StudioClientEvents, GPL, consulted: docs/20 section 3): those of the sequence it plays
 /// from the frame it was at in the last frame, or from before its first frame when a play starts.
 class ViewModelEvents {
 public:
-    /// The client events the view model of `pose`, among `viewModels`, passed since the last call's
-    /// pose; none without one.
-    [[nodiscard]] auto passed(std::span<const ViewModel> viewModels, const std::optional<ViewModelPose>& pose)
-        -> std::vector<const nx::assets::StudioEvent*>;
+    /// The client events `viewModel`, that of the weapon of `pose`, passed since the last call's pose,
+    /// each with how long into the play it comes; none without either.
+    [[nodiscard]] auto passed(const ViewModel* viewModel, const std::optional<ViewModelPose>& pose)
+        -> std::vector<PassedEvent>;
 
 private:
     std::optional<ViewModelPose> m_lastPose; ///< The last call's.

@@ -40,34 +40,43 @@ ClientAudio::ClientAudio(const nx::assets::Vfs& vfs, nx::console::Cvar<float> vo
     : m_volumeCvar{volume}, m_sounds{vfs}, m_mixer{nx::audio::MixerDesc{.rate = device.rate()}},
       m_device{std::move(device)}, m_random{0, kSoundStream} {}
 
-auto ClientAudio::playLocal(std::string_view name, float volume) -> nx::Result<void, PlayError> {
-    return playAuto(name, volume, 1.0F);
+auto ClientAudio::playLocal(std::string_view name, float volume, nx::Seconds delay)
+    -> nx::Result<void, PlayError> {
+    return playAuto(name, Playing{.volume = volume, .delay = delay});
 }
 
-auto ClientAudio::play(const GameSound& sound) -> nx::Result<void, PlayError> {
+auto ClientAudio::play(const GameSound& sound, nx::Seconds delay) -> nx::Result<void, PlayError> {
     const std::string& file = sound.files[nx::narrow<std::size_t>(m_random.below(sound.files.size()))];
     const std::uint32_t pitch =
         sound.pitch ? sound.pitch->least + nx::narrow<std::uint32_t>(m_random.below(
                                                std::uint64_t{sound.pitch->most} - sound.pitch->least + 1))
                     : kNormalPitch;
-    const float speed = static_cast<float>(pitch) / static_cast<float>(kNormalPitch);
+    const Playing playing{.volume = sound.volume,
+                          .pitch = static_cast<float>(pitch) / static_cast<float>(kNormalPitch),
+                          .delay = delay};
     if (sound.channel == SoundChannel::Auto) {
-        return playAuto(file, sound.volume, speed);
+        return playAuto(file, playing);
     }
     // The player's channels after Auto, a voice each.
-    return playIn(kLocalVoices + std::uint32_t{std::to_underlying(sound.channel)} - 1U, file, sound.volume,
-                  speed);
+    return playIn(kLocalVoices + std::uint32_t{std::to_underlying(sound.channel)} - 1U, file, playing);
 }
 
-auto ClientAudio::playAuto(std::string_view name, float volume, float pitch) -> nx::Result<void, PlayError> {
-    if (auto played = playIn(m_nextLocalVoice, name, volume, pitch); !played) {
+auto ClientAudio::preload(std::string_view name) -> nx::Result<void, PlayError> {
+    if (auto sound = m_sounds.load(name); !sound) {
+        return nx::fail(PlayError::NoSound, std::move(sound.error()));
+    }
+    return {};
+}
+
+auto ClientAudio::playAuto(std::string_view name, const Playing& playing) -> nx::Result<void, PlayError> {
+    if (auto played = playIn(m_nextLocalVoice, name, playing); !played) {
         return played;
     }
     m_nextLocalVoice = (m_nextLocalVoice + 1) % kLocalVoices;
     return {};
 }
 
-auto ClientAudio::playIn(std::uint32_t voice, std::string_view name, float volume, float pitch)
+auto ClientAudio::playIn(std::uint32_t voice, std::string_view name, const Playing& playing)
     -> nx::Result<void, PlayError> {
     auto sound = m_sounds.load(name);
     if (!sound) {
@@ -75,10 +84,10 @@ auto ClientAudio::playIn(std::uint32_t voice, std::string_view name, float volum
     }
     update();
     // A sound is never louder than it is, as the original bounds its volume.
-    const float gain = std::clamp(volume, 0.0F, 1.0F);
+    const float gain = std::clamp(playing.volume, 0.0F, 1.0F);
     const nx::audio::PlayVoice play{
-        .voice = voice, .sound = *sound, .gains = {.left = gain, .right = gain}, .pitch = pitch};
-    if (auto sent = m_mixer.send(play); !sent) {
+        .voice = voice, .sound = *sound, .gains = {.left = gain, .right = gain}, .pitch = playing.pitch};
+    if (auto sent = m_mixer.send(play, playing.delay); !sent) {
         return nx::fail(PlayError::QueueFull, std::move(sent.error()));
     }
     return {};

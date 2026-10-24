@@ -91,6 +91,8 @@ struct SpriteRendererDesc {
     std::span<const std::byte> shaderCode{};
     rhi::Format colorFormat = rhi::Format::Undefined;
     GammaSettings gamma{};
+    /// How its colors reach the target it draws to: as the original draws them, or as linear light.
+    ColorEncoding encoding = ColorEncoding::Display;
 };
 
 /// A sprite on the GPU, which a SpriteRenderer loads and draws.
@@ -198,6 +200,7 @@ private:
 
     rhi::Device* m_device;
     ChannelTable m_textureGamma{};
+    ColorEncoding m_encoding = ColorEncoding::Display;
     rhi::OwnedShader m_shader;
     rhi::OwnedBindGroupLayout m_frameLayout;
     rhi::OwnedBindGroupLayout m_imageLayout;

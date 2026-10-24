@@ -60,10 +60,14 @@ constexpr float kTolerance = 1e-5F;
                           std::optional<cs::WeaponMagazine> magazine, cs::WeaponView view) -> Weapon {
     return Weapon{.id = id,
                   .classname = "weapon_" + id,
+                  .name = id,
                   .slot = slot,
                   .weight = weight,
                   .maxSpeed = nx::UnitsPerSecond{maxSpeed},
                   .magazine = std::move(magazine),
+                  .models = cs::WeaponModels{.view = std::format("models/v_{}.mdl", id),
+                                             .player = std::format("models/p_{}.mdl", id),
+                                             .playerAnimation = "onehanded"},
                   .view = std::move(view)};
 }
 
@@ -695,13 +699,32 @@ TEST(MeleeTest, AnAttackMeetsALineAheadThenADuckedHull) {
 /// The first file of each sound `inventory` made since the last call, in their order.
 [[nodiscard]] auto soundsOf(Inventory& inventory) -> std::vector<std::string> {
     std::vector<std::string> files;
-    for (const cs::GameSound* const made : inventory.takeSounds()) {
-        files.push_back(made->files.front());
+    for (const cs::SoundMade& made : inventory.takeSounds()) {
+        files.push_back(made.sound->files.front());
     }
     return files;
 }
 
 using Files = std::vector<std::string>;
+
+TEST(SoundTest, EachSoundTakenCarriesTheTickItWasMadeAt) {
+    // Many ticks before the sounds are taken, as a long frame of the client runs them: each shot keeps
+    // the moment of its own tick.
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = inventory.takeSounds();
+    for (const std::int64_t press : {kReady, kReady + 20, kReady + 40}) {
+        std::ignore = frames(inventory, shooter, press, press, {Button::Attack});
+        std::ignore = frames(inventory, shooter, press + 1, press + 19);
+    }
+    const std::vector<cs::SoundMade> made = inventory.takeSounds();
+    ASSERT_EQ(made.size(), 3U);
+    EXPECT_EQ(made[0].at, nx::GameTime::atTick(kReady));
+    EXPECT_EQ(made[1].at, nx::GameTime::atTick(kReady + 20));
+    EXPECT_EQ(made[2].at, nx::GameTime::atTick(kReady + 40));
+}
 
 TEST(SoundTest, AWeaponDrawnMakesItsDrawSoundAndTheSoundsAreTakenOnce) {
     const WeaponCatalog weapons = catalog();

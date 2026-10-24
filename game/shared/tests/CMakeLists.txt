@@ -7,8 +7,10 @@ nxAddTest(csSharedTests
         movementTests.cpp
         studioTests.cpp
         weaponsTests.cpp
+        weaponTypesTests.cpp
     DEPENDS
         cs::shared
+        nx::data
         nx::game
         nx::platform)
 

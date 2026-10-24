@@ -45,6 +45,13 @@ struct GameSound {
     std::optional<PitchRange> pitch{};
 };
 
+/// A sound the game made, and the moment of the tick it made it at: what lets it be heard as it was
+/// made, though a frame of the client runs many ticks at once.
+struct SoundMade {
+    const GameSound* sound{};
+    nx::GameTime at{};
+};
+
 /// What is wrong with `sound`, when anything is: no file, or a pitch range whose least is above its
 /// most.
 [[nodiscard]] auto soundProblem(const GameSound& sound) -> std::optional<std::string_view>;

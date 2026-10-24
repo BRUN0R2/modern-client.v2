@@ -6,6 +6,7 @@
 
 id = "usp"
 classname = "weapon_usp"
+name = "K&M .45 Tactical" # as the original's buy menu shows it
 slot = "secondary"
 position = 4
 weight = 5
