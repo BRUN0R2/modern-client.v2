@@ -335,6 +335,12 @@ auto Level::viewModel(WeaponIndex weapon) const noexcept -> const ViewModel* {
     return &*m_viewModels[weapon.value].model;
 }
 
+auto Level::weapons() const -> std::vector<WeaponIndex> {
+    return std::views::iota(std::uint32_t{0}, nx::narrow<std::uint32_t>(m_viewModels.size())) |
+           std::views::transform([](std::uint32_t index) { return WeaponIndex{index}; }) |
+           std::ranges::to<std::vector>();
+}
+
 auto Level::updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
     -> std::vector<WeaponIndex> {
     std::vector<WeaponIndex> updated;

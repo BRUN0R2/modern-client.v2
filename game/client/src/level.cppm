@@ -113,8 +113,8 @@ public:
     [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
         return *m_muzzleFlashes;
     }
-    /// How many weapons the level read the view models of: those of the catalog as it last read it.
-    [[nodiscard]] inline auto weaponCount() const noexcept -> std::size_t { return m_viewModels.size(); }
+    /// The weapons the level read the view models of: those of the catalog as it last read it.
+    [[nodiscard]] auto weapons() const -> std::vector<WeaponIndex>;
     /// The view model of `weapon`; none for one not complete, or whose view model could not be read
     /// as it was changed.
     [[nodiscard]] auto viewModel(WeaponIndex weapon) const noexcept -> const ViewModel*;

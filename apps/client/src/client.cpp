@@ -216,6 +216,13 @@ private:
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
     void startNextSession();
+    /// Reads, before the session plays the frame, the view models of the weapons made or changed since
+    /// (cs::Level::updateViewModels), which upload puts on the GPU, and their sounds.
+    void updateWeapons();
+    /// Reads the sounds the player hears of `weapons` in hand (cs::soundFilesOf), so that no frame
+    /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
+    /// as it is made or changed. One that cannot be read is logged, and the game plays on.
+    void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
     /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
     /// weapons made and its view model's sound events, each as long after the frame as it came after
     /// what the last frame showed; and the client events its view model passed, which the frame shows.
@@ -257,6 +264,8 @@ private:
     std::vector<std::byte> m_postShader;
     std::optional<Session> m_session;     ///< The map played.
     std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
+    /// Made or changed since the scene put their view models on the GPU.
+    std::vector<cs::WeaponIndex> m_changedWeapons;
     cs::ViewModelEvents m_viewModelEvents;
     std::optional<cs::ViewModelPose> m_viewPose; ///< Of the frame played.
     std::vector<cs::PassedEvent> m_clientEvents; ///< Its view model passed in the frame.
@@ -564,6 +573,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_audio->update();
         }
         startNextSession();
+        updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
         m_input->turn(m_camera.angles, elapsed);
         // A session plays once its scene is made, from the frame after the first image of it: what the
@@ -615,8 +625,38 @@ void Client::startNextSession() {
     m_viewModelEvents = {}; // a new game's first play is new
     m_viewPose.reset();     // what the old game showed went with its level
     m_clientEvents.clear();
+    m_changedWeapons.clear(); // the new level read every weapon's view model
+    readWeaponSounds(m_session->level->weapons());
     m_camera = m_session->start;
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
+}
+
+void Client::updateWeapons() {
+    if (!m_session) {
+        return;
+    }
+    const std::vector<cs::WeaponIndex> changed =
+        m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
+    readWeaponSounds(changed);
+    m_changedWeapons.insert(m_changedWeapons.end(), changed.begin(), changed.end());
+}
+
+void Client::readWeaponSounds(std::span<const cs::WeaponIndex> weapons) {
+    if (m_audio == nullptr) {
+        return;
+    }
+    for (const cs::WeaponIndex weapon : weapons) {
+        if (!m_content->weapons.isComplete(weapon)) {
+            continue; // it makes no sound until its values make a weapon, which changes it again
+        }
+        const cs::Weapon& made = m_content->weapons.weapon(weapon);
+        for (const std::string_view file : cs::soundFilesOf(made, m_session->level->viewModel(weapon))) {
+            if (auto read = m_audio->preload(file); !read) {
+                nx::log::warning(kLog, "a sound of {} cannot be read: {}", made.id,
+                                 nx::describe(read.error()));
+            }
+        }
+    }
 }
 
 void Client::hearSession(const cs::Hearing& hearing) {
@@ -785,19 +825,17 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
         m_scene.emplace(std::move(*scene));
+        m_changedWeapons.clear();             // the scene put every weapon's view model on the GPU
         std::ignore = m_mapClock.restart();   // the light styles start with the map
         std::ignore = m_frameClock.restart(); // the scene's loading is no time of the game's
     }
-    if (m_scene) {
-        // The weapons made or changed since: their view models, read and put on the GPU now.
-        const std::vector<cs::WeaponIndex> changed =
-            m_session->level->updateViewModels(m_content->vfs, m_content->weapons);
-        if (!changed.empty()) {
-            m_video->device->waitIdle(); // the frames in flight may still draw a model replaced
-            if (auto loaded = m_scene->loadWeapons(list, *m_session->level, changed); !loaded) {
-                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
-            }
+    if (m_scene && !m_changedWeapons.empty()) {
+        // The weapons made or changed since (updateWeapons): their view models put on the GPU now.
+        m_video->device->waitIdle(); // the frames in flight may still draw a model replaced
+        if (auto loaded = m_scene->loadWeapons(list, *m_session->level, m_changedWeapons); !loaded) {
+            return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
         }
+        m_changedWeapons.clear();
     }
     return {};
 }

@@ -135,11 +135,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(weapons),
                 std::move(*flashModels)};
-    const std::vector<WeaponIndex> all =
-        std::views::iota(std::uint32_t{0}, nx::narrow<std::uint32_t>(level.weaponCount())) |
-        std::views::transform([](std::uint32_t index) { return WeaponIndex{index}; }) |
-        std::ranges::to<std::vector>();
-    if (auto loaded = scene.loadWeapons(commands, level, all); !loaded) {
+    if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
     // The enhanced look's reflection probes, baked as the map is played; the models reflect them.

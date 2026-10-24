@@ -386,10 +386,12 @@ among the game's (its plugin API: [15](15-mod-api.md)).
   name. A replacement is complete, not the original, and not replaced in its turn: one step,
   never a chain. Changing the AK-47 itself changes every AK-47; replacing it puts another weapon in
   its place.
-- **Seen as soon as made:** the client reads the view model of a weapon made or changed while a map
-  is played and puts it on the GPU before the next frame (`Level::updateViewModels`,
-  `Scene::loadWeapons`), with no precache to make before the map, as the original requires; one
-  that cannot be read leaves the weapon unseen in hand, logged.
+- **Seen as soon as made:** the client reads the view model and the sounds of a weapon made or
+  changed while a map is played before the game plays the next frame, and puts the view model on
+  the GPU before that frame is drawn (`Level::updateViewModels`, `cs::soundFilesOf`,
+  `Scene::loadWeapons`), with no precache to make before the map, as the original requires; a view
+  model that cannot be read leaves the weapon unseen in hand, logged, and a sound that cannot be
+  read is logged and not heard.
 
 The console's weapon commands (`cs.client:weaponCommands`) are named as a plugin's functions
 ([15](15-mod-api.md)):

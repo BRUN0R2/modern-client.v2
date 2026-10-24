@@ -237,6 +237,34 @@ auto readWeapon(std::string_view text, std::string_view sourceName) -> nx::Resul
     return std::move(*weapon);
 }
 
+auto soundsOf(const Weapon& weapon) -> std::vector<const GameSound*> {
+    std::vector<const std::optional<GameSound>*> places{&weapon.view.drawSound};
+    const auto addFiring = [&places](const std::optional<WeaponFiring>& firing) {
+        if (firing) {
+            places.insert(places.end(), {&firing->sound, &firing->emptySound});
+        }
+    };
+    addFiring(weapon.firing);
+    if (const std::optional<WeaponAlternate>& alternate = weapon.alternate) {
+        if (alternate->view) {
+            places.push_back(&alternate->view->drawSound);
+        }
+        addFiring(alternate->firing);
+    }
+    if (const std::optional<WeaponMelee>& melee = weapon.melee) {
+        for (const MeleeAttack* const attack : {&melee->slash, &melee->stab}) {
+            places.insert(places.end(), {&attack->missSound, &attack->hitSound});
+        }
+    }
+    std::vector<const GameSound*> sounds;
+    for (const std::optional<GameSound>* const place : places) {
+        if (*place) {
+            sounds.push_back(&**place);
+        }
+    }
+    return sounds;
+}
+
 WeaponCatalog::WeaponCatalog(std::vector<AmmoType> ammo, std::vector<Weapon> weapons) noexcept
     : m_ammo{std::move(ammo)},
       m_weapons{std::make_move_iterator(weapons.begin()), std::make_move_iterator(weapons.end())},

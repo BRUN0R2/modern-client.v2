@@ -76,6 +76,18 @@ silencers' sounds of the original's models) play their sound at full volume as a
 draw, the USP's `usp_slideback` from its draw's event, and a shot's `usp_unsil-1` are heard in
 their order, each matching its file.
 
+No frame waits on the file of a sound it plays. The client reads the sounds the player hears of a
+weapon in hand (`cs::soundFilesOf`: the files of each sound its data gives, `cs::soundsOf`, and its
+view model's sound events) with `ClientAudio::preload`: those of every weapon as a map starts, and
+those of a weapon as it is made or changed, before the game plays the next frame. Read as they were
+first played, they held up the frame of the first shot, draw or reload: a file the system has not
+cached took 8 to 11 ms to open and read (the disk, and the scan of the file as it opens), more than
+a frame at 100 a second, and a frame of the first shot took 11.6 ms where the others took 0.4. Read
+ahead, the first shot's frame takes what the others do; the map's start takes the time instead, 16
+ms for the 45 sounds of the five weapons and the Drakar III with the files cached, about 0.3 s
+without.
+`play` and `playvol` read theirs as they play, as the original's do.
+
 A frame runs as many ticks of the game as its time takes (docs/07 §2.2), so a slow one makes many
 sounds at once. Each sound comes with the moment of its tick (`cs::SoundMade`), each view model event
 with the moment of its play it comes at (`cs::PassedEvent`), and the client hears it as long after

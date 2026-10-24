@@ -169,6 +169,29 @@ auto ViewModel::attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t at
     return nx::transformPoint(bones[attachments[attachment].bone.value], attachments[attachment].origin);
 }
 
+auto ViewModel::soundEvents() const -> std::vector<std::string_view> {
+    std::vector<std::string_view> sounds;
+    for (const nx::assets::StudioSequence& sequence : m_files->view->sequences()) {
+        for (const nx::assets::StudioEvent& event : sequence.events) {
+            if (event.event == kSoundEvent) {
+                sounds.emplace_back(event.options);
+            }
+        }
+    }
+    return sounds;
+}
+
+auto soundFilesOf(const Weapon& weapon, const ViewModel* viewModel) -> std::vector<std::string_view> {
+    std::vector<std::string_view> files;
+    for (const GameSound* const sound : soundsOf(weapon)) {
+        std::ranges::copy(sound->files, std::back_inserter(files));
+    }
+    if (viewModel != nullptr) {
+        std::ranges::copy(viewModel->soundEvents(), std::back_inserter(files));
+    }
+    return files;
+}
+
 auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt) const
     -> std::vector<nx::Mat3x4> {
     const MdlView& model = *m_files->view;

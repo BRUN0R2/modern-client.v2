@@ -113,6 +113,10 @@ public:
     [[nodiscard]] auto attachmentAt(std::span<const nx::Mat3x4> bones, std::uint32_t attachment) const
         -> std::optional<nx::Vec3>;
 
+    /// The names of the sounds its sound events (kSoundEvent) play, those of its sequences in their
+    /// order. The model owns them: the views last as long as it does.
+    [[nodiscard]] auto soundEvents() const -> std::vector<std::string_view>;
+
 private:
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
               std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
@@ -126,6 +130,12 @@ private:
     std::uint32_t m_skin = 0;
     std::vector<std::uint32_t> m_bodyChoices;
 };
+
+/// The names of the sounds the player hears of `weapon` in hand: the files of each sound it makes
+/// (soundsOf), then those the sound events of `viewModel`, its view model, play; a name as often as
+/// they give it, and none of a view model when it has none. The views last as long as both do.
+[[nodiscard]] auto soundFilesOf(const Weapon& weapon, const ViewModel* viewModel)
+    -> std::vector<std::string_view>;
 
 /// The client events the view model passes, frame after frame, as the original's client plays them
 /// (Xash3D's R_StudioClientEvents, GPL, consulted: docs/20 section 3): those of the sequence it plays

@@ -377,6 +377,36 @@ TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
         << "without its silencer";
 }
 
+TEST(WeaponsTest, AWeaponMakesTheSoundOfEachPlaceOfItsDataThatGivesOne) {
+    const auto sound = [](std::string file) {
+        return cs::GameSound{.files = {std::move(file)}};
+    };
+    Weapon weapon = gun("gun", WeaponSlot::Primary, 1);
+    EXPECT_TRUE(cs::soundsOf(weapon).empty()) << "a weapon of no sound";
+    weapon.view.drawSound = sound("draw.wav");
+    weapon.firing = cs::WeaponFiring{.sound = sound("fire.wav"), .emptySound = sound("empty.wav")};
+    weapon.alternate =
+        cs::WeaponAlternate{.view = cs::WeaponView{.drawSound = sound("alternateDraw.wav")},
+                            .firing = cs::WeaponFiring{.sound = sound("alternateFire.wav"),
+                                                       .emptySound = sound("alternateEmpty.wav")}};
+    weapon.melee =
+        cs::WeaponMelee{.slash = {.missSound = sound("slashMiss.wav"), .hitSound = sound("slashHit.wav")},
+                        .stab = {.missSound = sound("stabMiss.wav"), .hitSound = sound("stabHit.wav")}};
+    const std::vector<const cs::GameSound*> sounds = cs::soundsOf(weapon);
+    const std::vector<std::string> files =
+        sounds | std::views::transform([](const cs::GameSound* made) { return made->files.front(); }) |
+        std::ranges::to<std::vector>();
+    EXPECT_EQ(files, (std::vector<std::string>{"draw.wav", "fire.wav", "empty.wav", "alternateDraw.wav",
+                                               "alternateFire.wav", "alternateEmpty.wav", "slashMiss.wav",
+                                               "slashHit.wav", "stabMiss.wav", "stabHit.wav"}));
+    ASSERT_FALSE(sounds.empty());
+    EXPECT_EQ(sounds.front(), &*weapon.view.drawSound) << "the weapon's own";
+    // An alternate without a view or a firing of its own makes none of its own.
+    weapon.alternate = cs::WeaponAlternate{};
+    weapon.melee.reset();
+    EXPECT_EQ(cs::soundsOf(weapon).size(), 3U);
+}
+
 TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
     constexpr std::string_view kMagazine = "[magazine]\nammo = \"9mm\"\nclipSize = 20\n";
     const std::string firing = R"(

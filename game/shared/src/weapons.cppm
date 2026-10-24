@@ -330,6 +330,11 @@ struct WeaponDraft {
 [[nodiscard]] auto readWeapon(std::string_view text, std::string_view sourceName)
     -> nx::Result<Weapon, WeaponError>;
 
+/// Every sound `weapon` makes, from each place of its data that gives one: as it is drawn, as it fires
+/// and clicks on an empty clip, its alternate's as well, and as its melee attacks miss and hit. The
+/// weapon owns them: they last as long as its values stay.
+[[nodiscard]] auto soundsOf(const Weapon& weapon) -> std::vector<const GameSound*>;
+
 /// The game's weapons and kinds of ammo, each checked against the others; and the weapons made as
 /// the game runs, each standalone. A weapon keeps its place, and its values their address, as
 /// others are made.

@@ -199,6 +199,28 @@ TEST_F(ViewModelAppearanceTest, KeepsStaticAppearanceWhileAlternateChangesSequen
     EXPECT_TRUE(std::ranges::equal(viewModel->bodyChoices(), std::array<std::uint32_t, 1>{1}));
 }
 
+/// The same model, whose "idle" plays a sound event: player/pl_step1.wav.
+class ViewModelSoundsTest : public ViewModelAppearanceTest {};
+
+TEST_F(ViewModelSoundsTest, ItsSoundEventsNameTheSoundsTheyPlay) {
+    const auto viewModel = read(weapon());
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    EXPECT_EQ(viewModel->soundEvents(), (std::vector<std::string_view>{"player/pl_step1.wav"}));
+}
+
+TEST_F(ViewModelSoundsTest, AWeaponInHandSoundsAsItsDataAndItsViewModelsEventsSay) {
+    cs::Weapon held = weapon();
+    held.view.drawSound = cs::GameSound{.files = {"weapons/draw1.wav", "weapons/draw2.wav"}};
+    const auto viewModel = read(held);
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    EXPECT_EQ(
+        cs::soundFilesOf(held, &*viewModel),
+        (std::vector<std::string_view>{"weapons/draw1.wav", "weapons/draw2.wav", "player/pl_step1.wav"}));
+    EXPECT_EQ(cs::soundFilesOf(held, nullptr),
+              (std::vector<std::string_view>{"weapons/draw1.wav", "weapons/draw2.wav"}))
+        << "a weapon not seen in hand";
+}
+
 TEST_F(ViewModelAppearanceTest, RejectsStaticAppearanceInAlternateViews) {
     for (const bool declaresSkin : {false, true}) {
         SCOPED_TRACE(declaresSkin);

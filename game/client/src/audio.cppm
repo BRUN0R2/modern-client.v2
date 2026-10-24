@@ -56,6 +56,12 @@ public:
     [[nodiscard]] auto play(const GameSound& sound, nx::Seconds delay = nx::Seconds{})
         -> nx::Result<void, PlayError>;
 
+    /// Reads the sound `name` names (nx::audio::SoundLibrary::load) without playing it, so that
+    /// playing it reads no file: a file read as a frame plays holds that frame up as long as the disk,
+    /// and whatever scans the files opened, take, longer than a frame lasts when it is not in the
+    /// system's cache. Errors: NoSound.
+    [[nodiscard]] auto preload(std::string_view name) -> nx::Result<void, PlayError>;
+
     /// Sends the mixer `volume`'s value when it changed since it was last sent: before each sound
     /// played, so that none is heard at another gain, and each frame, so that a change is heard
     /// while nothing new plays. A value the mixer could not take is sent again the next time.
