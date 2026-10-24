@@ -89,9 +89,14 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!world) {
         return nx::fail(SceneError::CreateFailed, "the world", std::move(world.error()));
     }
-    const nx::render::SpriteRendererDesc spriteDesc{
-        .shaderCode = shaders.sprite, .colorFormat = format, .gamma = gamma, .encoding = encoding};
-    auto sprites = nx::render::SpriteRenderer::create(device, spriteDesc);
+    // The decals the map stamps for good as its game starts, as the original's client stamps the static
+    // decals the server sends as it connects.
+    for (const MapDecal& decal : level.mapDecals()) {
+        std::ignore =
+            world->shootDecal(decal.decal, decal.origin, decal.on, nx::render::DecalLife::Permanent);
+    }
+    auto sprites = nx::render::SpriteRenderer::create(
+        device, {.shaderCode = shaders.sprite, .colorFormat = format, .gamma = gamma, .encoding = encoding});
     if (!sprites) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(sprites.error()));
     }

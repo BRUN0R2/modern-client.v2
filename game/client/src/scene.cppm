@@ -55,7 +55,7 @@ class Scene {
 public:
     /// The scene of `level`, which must outlive it, for targets of `format`, its effects for targets of
     /// `effectsFormat` (drawEffects), drawn with `shaders` and `gamma`, its uploads recorded in
-    /// `commands`. Errors: CreateFailed.
+    /// `commands`, the decals its map stamps for good as its game starts stamped. Errors: CreateFailed.
     [[nodiscard]] static auto create(nx::rhi::Device& device, nx::rhi::CommandList& commands,
                                      const Level& level, const SceneShaders& shaders, nx::rhi::Format format,
                                      nx::rhi::Format effectsFormat, const nx::render::GammaSettings& gamma,

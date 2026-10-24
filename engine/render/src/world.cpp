@@ -1235,7 +1235,8 @@ auto BspWorld::decalRunsOf(std::uint32_t face) const -> std::span<const DecalRun
     return std::span{slot.decalRuns}.subspan(found->firstRun, found->runCount);
 }
 
-auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on) -> std::uint32_t {
+auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on, DecalLife life)
+    -> std::uint32_t {
     expects(decal < m_decalSizes.size(), "BspWorld::shootDecal: one of BspWorldDesc::decals");
     Vec3 local = center;
     if (on.model != assets::kWorldModel) {
@@ -1243,8 +1244,8 @@ auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& o
         local = on.angles == EulerAngles{} ? center - on.origin
                                            : intoAxes(angleVectors(on.angles), center - on.origin);
     }
-    return m_decals->shoot(
-        DecalShot{.texture = decal, .size = m_decalSizes[decal], .model = on.model, .center = local});
+    return m_decals->shoot(DecalShot{
+        .texture = decal, .size = m_decalSizes[decal], .model = on.model, .center = local, .life = life});
 }
 
 auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {

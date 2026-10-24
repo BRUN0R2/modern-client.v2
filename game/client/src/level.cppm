@@ -59,12 +59,12 @@ struct GameContent {
     -> nx::Result<GameContent, LevelError>;
 
 /// A map as the client plays it: its world, the WADs of its textures, its sky, its hulls, the light
-/// the game gives it, the sprites and studio models its entities show, the decals it shows and the mark
-/// a bullet leaves on each of its brush models, and the view models of the game's weapons and the
-/// sprites of their muzzle flashes, read once; the view model of a weapon made or changed as the
-/// game runs read then, with the sprites of its flashes the level lacks, as no precache limits them. It stays
-/// where it is made: the views point into it, and what is made of it (the light of nx::render::WorldLight) to
-/// its map.
+/// the game gives it, the sprites and studio models its entities show, the decals it shows, those it
+/// stamps as it starts and the mark a bullet leaves on each of its brush models, and the view models of
+/// the game's weapons and the sprites of their muzzle flashes, read once; the view model of a weapon
+/// made or changed as the game runs read then, with the sprites of its flashes the level lacks, as no
+/// precache limits them. It stays where it is made: the views point into it, and what is made of it
+/// (the light of nx::render::WorldLight) to its map.
 class Level {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -126,8 +126,12 @@ public:
     /// plays on; a sprite likewise its flashes.
     auto updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
         -> std::vector<WeaponIndex>;
-    /// The decals of decals.wad the level shows: those bullets leave (bulletDecals).
+    /// The decals of decals.wad the level shows: those bullets leave (bulletDecals), and those its map
+    /// stamps as its game starts.
     [[nodiscard]] inline auto decals() const noexcept -> const LevelDecals& { return *m_decals; }
+    /// The decals its map stamps for good as its game starts (nx::game::staticDecalsOf), in their
+    /// order: those of decals.wad.
+    [[nodiscard]] inline auto mapDecals() const noexcept -> std::span<const MapDecal> { return m_mapDecals; }
     /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
     /// what bulletMarkOf says of its entity on a brush entity's (Gunshot without one).
     [[nodiscard]] auto bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark;
@@ -139,6 +143,7 @@ private:
     std::vector<std::vector<std::byte>> m_wadBytes;
     std::vector<nx::assets::WadView> m_wads;
     std::optional<LevelDecals> m_decals;
+    std::vector<MapDecal> m_mapDecals;
     std::vector<BulletMark> m_bulletMarks; ///< By brush model.
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
