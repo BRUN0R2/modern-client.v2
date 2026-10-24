@@ -179,6 +179,27 @@ TEST(WeaponTypesTest, VarsAreTheKeyPathsOfTheWeaponsData) {
     EXPECT_EQ(wrongType.error().code, WeaponError::VarInvalid);
 }
 
+TEST(WeaponTypesTest, AWeaponsMuzzleFlashIsSetByItsKeyPaths) {
+    WeaponCatalog weapons = catalog();
+    EXPECT_EQ(varOf(weapons, kAk, "view.muzzleFlash"), std::nullopt) << "as its view model's events say";
+    set(weapons, kAk, "view.muzzleFlash.sprite", "sprites/muzzleflash341.spr");
+    set(weapons, kAk, "view.muzzleFlash.brightness", "6");
+    set(weapons, kAk, "view.muzzleFlash.light",
+        "{ color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 }");
+    const cs::Weapon& ak = weapons.weapon(kAk);
+    ASSERT_TRUE(ak.view.muzzleFlash.has_value());
+    EXPECT_EQ(ak.view.muzzleFlash->sprite, "sprites/muzzleflash341.spr");
+    EXPECT_EQ(ak.view.muzzleFlash->brightness, 6.0F);
+    ASSERT_TRUE(ak.view.muzzleFlash->light.has_value());
+    EXPECT_EQ(ak.view.muzzleFlash->light->reach, nx::HammerUnits{96.0F});
+    EXPECT_EQ(varOf(weapons, kAk, "view.muzzleFlash.sprite"),
+              std::optional<std::string>{R"("sprites/muzzleflash341.spr")"});
+
+    const auto outOfRange = weapons.setVar(kAk, "view.muzzleFlash.roll", "400");
+    ASSERT_FALSE(outOfRange.has_value());
+    EXPECT_EQ(outOfRange.error().code, WeaponError::VarInvalid);
+}
+
 TEST(WeaponTypesTest, AnIdIsLettersAndDigitsNotTakenInAnyCase) {
     WeaponCatalog weapons = catalog();
     for (const std::string_view id : {"", "drakar iii", "drakar_iii", "drakar.iii"}) {

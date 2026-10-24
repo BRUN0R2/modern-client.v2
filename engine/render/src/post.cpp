@@ -17,13 +17,16 @@ constexpr std::uint32_t kUniformBinding = 0;
 constexpr std::uint32_t kSourceBinding = 1;
 constexpr std::uint32_t kSamplerBinding = 2;
 constexpr std::uint32_t kBloomBinding = 3;
+constexpr std::uint32_t kEffectsBinding = 4;
 
 /// The vertices of the triangle that covers a target.
 constexpr std::uint32_t kCoveringVertices = 3;
 /// Each pass's uniform is this far from the one before: any device's least offset alignment.
 constexpr std::uint64_t kUniformStride = 256;
-/// The passes with a uniform: each reduction, each enlargement, and the tone pass.
-constexpr std::size_t kPassCount = kBloomLevels + (kBloomLevels - 1) + 1;
+/// The passes with a uniform: each reduction, each enlargement, the effects' light into the first
+/// level, and the tone pass.
+constexpr std::size_t kPassCount = kBloomLevels + (kBloomLevels - 1) + 1 + 1;
+constexpr std::size_t kEffectsSlot = kPassCount - 2;
 constexpr std::size_t kToneSlot = kPassCount - 1;
 
 /// What a pass reads (shaders/post.slang's Pass).
@@ -73,10 +76,12 @@ auto PostRenderer::create(rhi::Device& device, const PostRendererDesc& desc)
             .binding = kSourceBinding, .type = rhi::BindingType::SampledTexture, .stages = fragment},
         rhi::BindingLayout{
             .binding = kSamplerBinding, .type = rhi::BindingType::Sampler, .stages = fragment}};
-    const std::array toneBindings{bloomBindings[0], bloomBindings[1], bloomBindings[2],
-                                  rhi::BindingLayout{.binding = kBloomBinding,
-                                                     .type = rhi::BindingType::SampledTexture,
-                                                     .stages = fragment}};
+    const std::array toneBindings{
+        bloomBindings[0], bloomBindings[1], bloomBindings[2],
+        rhi::BindingLayout{
+            .binding = kBloomBinding, .type = rhi::BindingType::SampledTexture, .stages = fragment},
+        rhi::BindingLayout{
+            .binding = kEffectsBinding, .type = rhi::BindingType::SampledTexture, .stages = fragment}};
     auto bloomLayout = device.createBindGroupLayout({.label = "post.bloom", .bindings = bloomBindings});
     auto toneLayout = device.createBindGroupLayout({.label = "post.tone", .bindings = toneBindings});
     if (!bloomLayout || !toneLayout) {
@@ -113,17 +118,20 @@ auto PostRenderer::create(rhi::Device& device, const PostRendererDesc& desc)
                                 .destinationAlpha = rhi::BlendFactor::One};
     auto reduceFirst = pipeline("post.reduceFirst", "reduceFirstMain", post.m_bloomFormat, std::nullopt,
                                 post.m_bloomLayout.get());
+    auto reduceEffects = pipeline("post.reduceEffects", "reduceEffectsMain", post.m_bloomFormat, added,
+                                  post.m_bloomLayout.get());
     auto reduce =
         pipeline("post.reduce", "reduceMain", post.m_bloomFormat, std::nullopt, post.m_bloomLayout.get());
     auto enlarge =
         pipeline("post.enlarge", "enlargeMain", post.m_bloomFormat, added, post.m_bloomLayout.get());
     auto tone = pipeline("post.tone", "toneMain", desc.outputFormat, std::nullopt, post.m_toneLayout.get());
-    for (auto* const made : {&reduceFirst, &reduce, &enlarge, &tone}) {
+    for (auto* const made : {&reduceFirst, &reduceEffects, &reduce, &enlarge, &tone}) {
         if (!*made) {
             return gpuFailed("a post pipeline", std::move(made->error()));
         }
     }
     post.m_reduceFirst = std::move(*reduceFirst);
+    post.m_reduceEffects = std::move(*reduceEffects);
     post.m_reduce = std::move(*reduce);
     post.m_enlarge = std::move(*enlarge);
     post.m_tone = std::move(*tone);
@@ -139,8 +147,7 @@ auto PostRenderer::create(rhi::Device& device, const PostRendererDesc& desc)
 }
 
 auto PostRenderer::passGroup(std::size_t slot, rhi::TextureHandle source, rhi::Extent2d sourceSize,
-                             std::optional<rhi::TextureHandle> bloom)
-    -> Result<rhi::OwnedBindGroup, rhi::RhiError> {
+                             std::optional<ToneSources> tone) -> Result<rhi::OwnedBindGroup, rhi::RhiError> {
     const PassUniform uniform{.sourceTexelWidth = 1.0F / static_cast<float>(sourceSize.width),
                               .sourceTexelHeight = 1.0F / static_cast<float>(sourceSize.height),
                               .bloomStrength = kBloomStrength,
@@ -156,11 +163,12 @@ auto PostRenderer::passGroup(std::size_t slot, rhi::TextureHandle source, rhi::E
                                                     .size = sizeof(PassUniform)}},
         rhi::Binding{.binding = kSourceBinding, .resource = source},
         rhi::Binding{.binding = kSamplerBinding, .resource = m_sampler.get()}};
-    if (bloom) {
-        bindings.push_back(rhi::Binding{.binding = kBloomBinding, .resource = *bloom});
+    if (tone) {
+        bindings.push_back(rhi::Binding{.binding = kBloomBinding, .resource = tone->bloom});
+        bindings.push_back(rhi::Binding{.binding = kEffectsBinding, .resource = tone->effects});
     }
     return m_device->createBindGroup({.label = "post.pass",
-                                      .layout = bloom ? m_toneLayout.get() : m_bloomLayout.get(),
+                                      .layout = tone ? m_toneLayout.get() : m_bloomLayout.get(),
                                       .bindings = bindings});
 }
 
@@ -170,6 +178,7 @@ auto PostRenderer::resize(rhi::Extent2d size) -> Result<void, PostError> {
         return {};
     }
     m_toneGroup = {};
+    m_effectsReduction = {};
     m_enlargements.clear();
     m_reductions.clear();
     m_levels.clear();
@@ -178,10 +187,17 @@ auto PostRenderer::resize(rhi::Extent2d size) -> Result<void, PostError> {
                                  .format = sceneFormat(),
                                  .extent = size,
                                  .usage = {rhi::TextureUsage::Sampled, rhi::TextureUsage::RenderTarget}});
-    if (!scene) {
-        return gpuFailed("the scene's target", std::move(scene.error()));
+    auto effects =
+        m_device->createTexture({.label = "post.effects",
+                                 .format = effectsFormat(),
+                                 .extent = size,
+                                 .usage = {rhi::TextureUsage::Sampled, rhi::TextureUsage::RenderTarget}});
+    if (!scene || !effects) {
+        return gpuFailed("the scene's target and the effects' layer",
+                         std::move(!scene ? scene.error() : effects.error()));
     }
     m_scene = std::move(*scene);
+    m_effects = std::move(*effects);
     for (std::size_t level = 0; level < kBloomLevels; ++level) {
         auto image =
             m_device->createTexture({.label = "post.bloom",
@@ -204,6 +220,12 @@ auto PostRenderer::resize(rhi::Extent2d size) -> Result<void, PostError> {
         m_reductions.push_back(BloomPass{
             .target = m_levels[level].get(), .size = levelSizeOf(size, level), .group = std::move(*group)});
     }
+    auto effectsGroup = passGroup(kEffectsSlot, m_effects.get(), size, std::nullopt);
+    if (!effectsGroup) {
+        return gpuFailed("the effects' bind group", std::move(effectsGroup.error()));
+    }
+    m_effectsReduction = BloomPass{
+        .target = m_levels.front().get(), .size = levelSizeOf(size, 0), .group = std::move(*effectsGroup)};
     for (std::size_t level = kBloomLevels - 1; level > 0; --level) {
         auto group = passGroup(slot++, m_levels[level].get(), levelSizeOf(size, level), std::nullopt);
         if (!group) {
@@ -213,7 +235,8 @@ auto PostRenderer::resize(rhi::Extent2d size) -> Result<void, PostError> {
                                            .size = levelSizeOf(size, level - 1),
                                            .group = std::move(*group)});
     }
-    auto tone = passGroup(kToneSlot, m_scene.get(), size, m_levels.front().get());
+    auto tone = passGroup(kToneSlot, m_scene.get(), size,
+                          ToneSources{.bloom = m_levels.front().get(), .effects = m_effects.get()});
     if (!tone) {
         return gpuFailed("the tone pass's bind group", std::move(tone.error()));
     }
@@ -224,6 +247,10 @@ auto PostRenderer::resize(rhi::Extent2d size) -> Result<void, PostError> {
 
 auto PostRenderer::sceneTarget() const noexcept -> rhi::TextureHandle {
     return m_scene.get();
+}
+
+auto PostRenderer::effectsTarget() const noexcept -> rhi::TextureHandle {
+    return m_effects.get();
 }
 
 void PostRenderer::bloom(rhi::CommandList& commands) const {
@@ -241,6 +268,12 @@ void PostRenderer::bloom(rhi::CommandList& commands) const {
         const BloomPass& pass = m_reductions[level];
         commands.transition(pass.target, rhi::TextureState::Undefined, rhi::TextureState::RenderTarget);
         run(pass, level == 0 ? m_reduceFirst.get() : m_reduce.get(), rhi::LoadOp::DontCare);
+        if (level == 0) {
+            // The effects' light, added to the scene's in the first level, from which the others reduce.
+            commands.transition(pass.target, rhi::TextureState::RenderTarget,
+                                rhi::TextureState::RenderTarget);
+            run(m_effectsReduction, m_reduceEffects.get(), rhi::LoadOp::Load);
+        }
         commands.transition(pass.target, rhi::TextureState::RenderTarget, rhi::TextureState::ShaderRead);
     }
     for (const BloomPass& pass : m_enlargements) {

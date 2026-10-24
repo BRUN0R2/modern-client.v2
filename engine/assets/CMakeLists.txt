@@ -13,6 +13,7 @@ nxAddModuleLibrary(nxAssets
         src/wad.cppm
         src/wav.cppm
         src/bsp.cppm
+        src/blockCompression.cppm
         src/spr.cppm
         src/spriteList.cppm
         src/keyValues.cppm
@@ -29,6 +30,7 @@ nxAddModuleLibrary(nxAssets
         src/wad.cpp
         src/wav.cpp
         src/bsp.cpp
+        src/blockCompression.cpp
         src/spr.cpp
         src/spriteList.cpp
         src/keyValues.cpp

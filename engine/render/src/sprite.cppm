@@ -3,9 +3,10 @@
 
 /// Sprites on the GPU (docs/05-rendering.md, section 10), drawn as the original's R_DrawSpriteModel
 /// draws them, as Xash3D-FWGS reconstructs it (GPL, consulted: docs/20 section 3): each image of a
-/// sprite a texture, its palette as its format makes it, with its mip levels; each sprite a quad turned
-/// as its orientation says, its frame's image, or the image of a group its time gives, times the
-/// entity's color, as opaque or as added as its render mode makes it. Glowing sprites show over
+/// sprite a texture, its palette as its format makes it (or its BC3 blocks decoded, Counter-Strike
+/// Online's), with its mip levels; each sprite a quad turned as its orientation says, its frame's
+/// image, or the image of a group its time gives, times the entity's color and its brightness, as
+/// opaque or as added as its render mode makes it. Glowing sprites show over
 /// everything, dimmer and larger the farther they are, unless the game hid them; alpha-tested ones
 /// drawn opaque enough are lit by the world's light at their origin.
 ///
@@ -65,7 +66,8 @@ struct SpriteCall {
 
 /// The RGBA texels of `image` of `sprite`, its palette as its format makes it (Mod_LoadSpriteModel):
 /// through `textureGamma` but for index-alpha sprites, the last color and the index as alpha, and
-/// alpha-tested ones, index 255 transparent. What the sprites of the world and of the screen show.
+/// alpha-tested ones, index 255 transparent; an image of BC3 blocks decoded as its author made it,
+/// `textureGamma` being a palette's. What the sprites of the world and of the screen show.
 [[nodiscard]] auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& image,
                                 const ChannelTable& textureGamma) -> std::vector<std::byte>;
 
@@ -132,6 +134,9 @@ struct SpriteInstance {
     RenderEffect effect = RenderEffect::None;
     std::uint8_t amount = 0; ///< `renderamt`.
     RenderColor color{};     ///< `rendercolor`; black is white, as the original takes it.
+    /// Its color times this, once encoded for the target, as light or as a display color: 1 as the
+    /// original draws it; beyond 1 brighter, past white where the target holds it (an effect's glow).
+    float brightness = 1.0F;
     /// A glowing sprite the view's line to stops 8 units or more short of (the original's trace,
     /// through all but glass and models), which the game finds.
     bool isHidden = false;
@@ -144,6 +149,9 @@ struct SpriteDraw {
     Seconds time{};      ///< Since the map started: groups of images play from it.
     LightStyleValues lightStyles{};
     std::span<const SpriteInstance> instances{};
+    /// Where their depths lie: the world's, or with the view's own model, what it shows (its muzzle
+    /// flashes), drawn after it.
+    DepthLayer depth = DepthLayer::World;
 };
 
 /// What draws sprites: their shader, pipelines and sampler, and what each frame in flight writes.

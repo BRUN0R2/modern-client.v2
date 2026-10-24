@@ -18,6 +18,7 @@ import nx.render;
 import cs.shared;
 import :modelFiles;
 import :modelMaterials;
+import :muzzleFlash;
 
 export namespace cs {
 
@@ -29,7 +30,8 @@ inline constexpr std::uint32_t kKnifeCrosshairDistance = 7;
 enum class ViewModelError : std::uint8_t {
     FilesFailed,  ///< A file of it cannot be read or used (cause: the model files' error).
     NoSequence,   ///< It lacks a sequence its weapon's data plays.
-    NoAppearance, ///< Its static skin/body choices cannot be bound, or its alternate declares them.
+    NoAppearance, ///< Its static skin/body choices cannot be bound, or its alternate declares them or
+                  ///< its muzzle flashes' look.
 };
 
 /// The hand the player holds its weapons in: cl_righthand's default, until the cvar comes.
@@ -78,7 +80,8 @@ class ViewModel {
 public:
     /// Reads the view model of `weapon` from `vfs`, its `*T.mdl` when its textures are not in it, and
     /// the animations of each of its sequences, from their sequence group files. Errors: FilesFailed,
-    /// NoSequence (one the weapon's view plays), NoAppearance (skin, textures or body choices).
+    /// NoSequence (one the weapon's view plays), NoAppearance (skin, textures or body choices, or an
+    /// alternate view that declares them or a muzzle flash look).
     [[nodiscard]] static auto read(const nx::assets::Vfs& vfs, const Weapon& weapon)
         -> nx::Result<ViewModel, ViewModelError>;
 
@@ -97,12 +100,12 @@ public:
     [[nodiscard]] inline auto isMirrored() const noexcept -> bool { return m_isMirrored; }
 
     /// Its validated static skin family, from the weapon's main view; zero when omitted.
-    [[nodiscard]] inline auto skin() const noexcept -> std::uint32_t { return m_skin; }
+    [[nodiscard]] inline auto skin() const noexcept -> std::uint32_t { return m_appearance.skin; }
 
     /// Its validated static body choices. The model owns them: the span lasts as long as it does.
     /// Omitted parts select their first choice, also while the weapon's alternate is on.
     [[nodiscard]] inline auto bodyChoices() const noexcept -> std::span<const std::uint32_t> {
-        return m_bodyChoices;
+        return m_appearance.bodyChoices;
     }
 
     /// Its sequence `sequence`, which must be one of its.
@@ -117,18 +120,30 @@ public:
     /// order. The model owns them: the views last as long as it does.
     [[nodiscard]] auto soundEvents() const -> std::vector<std::string_view>;
 
+    /// The style of its muzzle flash event `event` (muzzleFlashStyleOf): its options, under its
+    /// weapon's look.
+    [[nodiscard]] auto muzzleFlashStyleOf(const nx::assets::StudioEvent& event) const -> MuzzleFlashStyle;
+    /// The sprites its muzzle flash events show, each once, those of its sequences in their order.
+    [[nodiscard]] auto muzzleFlashSprites() const -> std::vector<std::string>;
+
 private:
+    /// What the weapon's data declares of its look, which its main view alone gives.
+    struct Appearance {
+        std::uint32_t skin = 0;
+        std::vector<std::uint32_t> bodyChoices{};
+        std::optional<MuzzleFlashLook> muzzleFlash{};
+    };
+
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
               std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
-              std::uint32_t skin, std::vector<std::uint32_t> bodyChoices) noexcept;
+              Appearance appearance) noexcept;
 
     std::unique_ptr<ModelFiles> m_files;
     std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
     /// Of each of its textures in the enhanced look, from its material file (cs.client:modelMaterials).
     std::vector<std::optional<nx::render::StudioMaterial>> m_materials;
     bool m_isMirrored;
-    std::uint32_t m_skin = 0;
-    std::vector<std::uint32_t> m_bodyChoices;
+    Appearance m_appearance;
 };
 
 /// The names of the sounds the player hears of `weapon` in hand: the files of each sound it makes

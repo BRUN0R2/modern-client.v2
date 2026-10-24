@@ -9,6 +9,7 @@ nxAddTest(nxAssetsTests
         wadTests.cpp
         wavTests.cpp
         bspTests.cpp
+        blockCompressionTests.cpp
         sprTests.cpp
         spriteListTests.cpp
         keyValuesTests.cpp

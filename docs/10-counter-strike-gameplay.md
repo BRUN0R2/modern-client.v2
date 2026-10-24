@@ -237,6 +237,33 @@ back to a different appearance. These values stay fixed during the weapon's alte
 an explicit `skin = 0` or `bodyChoices = []`. This is static presentation data, for offline and
 live rendering alike; it does not implement charge, transformation or other weapon state.
 
+The main `[view]` may also style the weapon's muzzle flashes (`cs::MuzzleFlashLook`). Its view
+model's flash events say where and when a flash shows, and what it looks like, the original's or
+Counter-Strike Online's way ([05 §9](05-rendering.md#9-studio-models-and-gpu-skinning)); each value
+given here replaces the events' one, the others stay theirs, so that one value alone is enough:
+
+```toml
+[view.muzzleFlash]             # optional; the Drakar III's, over its events' #I341 S0.16 F0 P30 T999
+sprite     = "sprites/muzzleflash341.spr" # any sprite: SPR v2, or Counter-Strike Online's v3
+scale      = 0.16              # times the sprite's size
+firstFrame = 0                 # the original's events show one at random
+frameRate  = 30.0              # played once at this rate; 0 holds its first frame
+time       = 0.4               # it shows this long at most: less when its last frame is played
+roll       = 0.0               # rolled at random by a whole number of degrees up to this
+rollRate   = 60.0              # degrees a second it turns, counter-clockwise; the events' R times their P
+brightness = 1.5               # its colors times this, as the original adds them: beyond 1, on to white
+light      = { color = [3000.0, 1800.0, 600.0], reach = 96.0, time = 0.06 } # enhanced look: on the weapon in hand
+```
+
+A flash's `light` is its light at a unit's distance in linear light, as the enhanced look's lights
+of models have it (the key light of the weapon in hand is 4200, 3900 and 3500, reaching 256),
+dimming to nothing over its `time`. `[alternate.view]` cannot declare `muzzleFlash` either: the
+flashes of both modes are those of the view model's own events, styled alike. As any value, it is
+set as the game runs: `set_weapon_var DrakarIII view.muzzleFlash.brightness 6`; the client reads
+the sprite a style names with the view model, before a frame shows it. Fired in the running game, a
+weapon's flash is tuned by eye: `view.muzzleFlash.rollRate`, `scale` and `brightness` set from the
+console show on the next shot.
+
 A melee weapon has `[melee.slash]` (`+attack`) and `[melee.stab]` (`+attack2`): each its `reach`,
 its `missSequences` and `hitSequences`, played in turn an attack after another, how long a miss
 and a hit hold `+attack` and `+attack2` (`miss = { primary = 0.35, secondary = 0.5 }`), and
@@ -399,7 +426,7 @@ The console's weapon commands (`cs.client:weaponCommands`) are named as a plugin
 | Command | What it does |
 |---------|--------------|
 | `create_weapon <id> <slot> [from weapon]` | Makes a weapon (`create_weapon DrakarIII primary ak47`), and its `weapon_<id>` |
-| `set_weapon_var <weapon> <key path> <value>` | Sets a value as its data writes it (`set_weapon_var DrakarIII name Drakar III`, `set_weapon_var DrakarIII firing.cycle 0.05`) |
+| `set_weapon_var <weapon> <key path> <value>` | Sets a value as its data writes it (`set_weapon_var DrakarIII name Drakar III`, `set_weapon_var DrakarIII firing.cycle 0.05`, `set_weapon_var DrakarIII view.muzzleFlash.brightness 6`) |
 | `get_weapon_var <weapon> [key path]` | Prints a value, or all of them and what the weapon lacks |
 | `list_weapons` | Prints the weapons: id, classname, name, slot, position, and whether incomplete or replaced |
 | `replace_weapon <weapon> [replacement]` | The game makes the replacement for the weapon, or the weapon again |

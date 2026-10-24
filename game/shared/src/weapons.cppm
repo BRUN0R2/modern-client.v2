@@ -4,9 +4,9 @@
 /// The weapons of Counter-Strike as data (docs/10-counter-strike-gameplay.md, section 7.2): what each
 /// is, the slot it takes, who buys it and for how much, the ammo it fires and how much of it its clip
 /// holds, how fast its holder runs, the models it is seen by, how its view model moves as it is
-/// drawn and held, and how it fires and is reloaded: its cycle, its accuracy, its spread and its
-/// recoil. The game's own are in data/cstrike/weapons/<weapon>.toml and data/cstrike/ammo.toml,
-/// with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
+/// drawn and held and what its muzzle flashes look like, and how it fires and is reloaded: its cycle,
+/// its accuracy, its spread and its recoil. The game's own are in data/cstrike/weapons/<weapon>.toml and
+/// data/cstrike/ammo.toml, with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3).
 ///
 /// A weapon is a type, standalone (docs/10, section 7.5): the game's are read from data, others are
 /// made as the game runs, from nothing or from another's values, copied once; its values are set by
@@ -111,6 +111,34 @@ struct WeaponIdle {
     float share{}; ///< How likely it is chosen, from 0 to 1: the shares of a weapon's idles add up to 1.
 };
 
+/// The light a weapon's muzzle flash casts on the weapon in hand in the enhanced look, from where the
+/// flash shows, dimming to nothing over its time.
+struct MuzzleFlashLight {
+    /// Its light at a unit's distance, red, green and blue, in linear light, as a light of the enhanced
+    /// look's models has it (the key light of the weapon in hand is 4200, 3900 and 3500, reaching 256).
+    std::array<float, 3> color{};
+    nx::HammerUnits reach{}; ///< How far its light goes.
+    nx::Seconds time{};
+};
+
+/// What a weapon's muzzle flashes look like, over what the events of its view model's sequences say
+/// (cs.client:muzzleFlash): each value given replaces the event's, the others are the event's.
+struct MuzzleFlashLook {
+    std::optional<std::string> sprite{}; ///< A path of the game's files: "sprites/muzzleflash341.spr".
+    std::optional<float> scale{};        ///< Times its sprite's size; 0 is its own size.
+    /// The frame it shows first; an event of the original's shows one at random.
+    std::optional<std::uint32_t> firstFrame{};
+    std::optional<float> frameRate{};  ///< The frames a second it plays on at, once; 0 holds its first.
+    std::optional<nx::Seconds> time{}; ///< It shows this long at most: less when it plays its last frame.
+    std::optional<nx::Degrees> roll{}; ///< It is rolled at random, by a whole number of degrees up to this.
+    /// It turns this fast as it shows, counter-clockwise as the player sees it (clockwise below 0).
+    std::optional<nx::DegreesPerSecond> rollRate{};
+    /// Its colors times this, as the original adds them: 1 as made; beyond 1 brighter, each channel on
+    /// to white, and in the enhanced look the glow its light gives the bloom with it.
+    std::optional<float> brightness{};
+    std::optional<MuzzleFlashLight> light{}; ///< None: it casts none (the original's light comes later).
+};
+
 /// How a weapon's view model moves as it is drawn and held, and its declared static appearance.
 struct WeaponView {
     std::vector<std::uint32_t> drawSequences{}; ///< One of them, at random, as it is drawn.
@@ -124,6 +152,9 @@ struct WeaponView {
     /// Its fixed choices by body-part index, zero-based; omitted parts select their first choice.
     /// Only the weapon's main view may set them; none is the original's empty selection.
     std::optional<std::vector<std::uint32_t>> bodyChoices{};
+    /// What its muzzle flashes look like, its alternate's too; none: as its view model's events say.
+    /// Only the weapon's main view may set it.
+    std::optional<MuzzleFlashLook> muzzleFlash{};
 };
 
 /// A part of a shot's spread: `base`, plus `scale` times the weapon's inaccuracy.
@@ -477,6 +508,33 @@ struct nx::meta::Description<cs::WeaponIdle> {
 };
 
 template <>
+struct nx::meta::Description<cs::MuzzleFlashLight> {
+    static constexpr std::string_view kName = "cs::MuzzleFlashLight";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::MuzzleFlashLight::color>("color", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MuzzleFlashLight::reach>("reach", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MuzzleFlashLight::time>("time", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::MuzzleFlashLook> {
+    static constexpr std::string_view kName = "cs::MuzzleFlashLook";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::MuzzleFlashLook::sprite>("sprite"),
+        nx::meta::field<&cs::MuzzleFlashLook::scale>("scale", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MuzzleFlashLook::firstFrame>("firstFrame"),
+        nx::meta::field<&cs::MuzzleFlashLook::frameRate>("frameRate", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MuzzleFlashLook::time>("time", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MuzzleFlashLook::roll>("roll",
+                                                    nx::data::Range{.minimum = 0.0, .maximum = 359.0}),
+        nx::meta::field<&cs::MuzzleFlashLook::rollRate>("rollRate"),
+        nx::meta::field<&cs::MuzzleFlashLook::brightness>("brightness", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MuzzleFlashLook::light>("light"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponView> {
     static constexpr std::string_view kName = "cs::WeaponView";
     static constexpr std::tuple kFields{
@@ -486,6 +544,7 @@ struct nx::meta::Description<cs::WeaponView> {
         nx::meta::field<&cs::WeaponView::drawSound>("drawSound"),
         nx::meta::field<&cs::WeaponView::skin>("skin"),
         nx::meta::field<&cs::WeaponView::bodyChoices>("bodyChoices"),
+        nx::meta::field<&cs::WeaponView::muzzleFlash>("muzzleFlash"),
     };
 };
 

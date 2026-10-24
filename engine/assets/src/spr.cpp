@@ -22,7 +22,8 @@ constexpr std::size_t kMaxHeightOffset = 24;
 constexpr std::size_t kFrameCountOffset = 28;
 constexpr std::size_t kBeamLengthOffset = 32;
 constexpr std::size_t kSyncOffset = 36;
-constexpr std::size_t kPaletteCountOffset = 40;
+constexpr std::size_t kHeaderBytes = 40;
+constexpr std::size_t kPaletteCountOffset = kHeaderBytes;
 constexpr std::size_t kPaletteOffset = kPaletteCountOffset + sizeof(std::uint16_t);
 constexpr std::size_t kFramesOffset = kPaletteOffset + kPaletteBytes;
 
@@ -35,6 +36,24 @@ constexpr std::size_t kImageOriginYOffset = 4;
 constexpr std::size_t kImageWidthOffset = 8;
 constexpr std::size_t kImageHeightOffset = 12;
 
+// A frame of version 3: "DDS ", then the DDS header (its own size, 124, at its start), then the
+// blocks. The header's height, width and level count; its pixel format's flags and its FourCC.
+constexpr std::array kDdsMagic{std::byte{'D'}, std::byte{'D'}, std::byte{'S'}, std::byte{' '}};
+constexpr std::uint32_t kDdsHeaderSize = 124;
+constexpr std::size_t kDdsHeaderBytes = kDdsMagic.size() + kDdsHeaderSize;
+constexpr std::size_t kDdsSizeOffset = 4;
+constexpr std::size_t kDdsHeightOffset = 12;
+constexpr std::size_t kDdsWidthOffset = 16;
+constexpr std::size_t kDdsLevelsOffset = 28;
+constexpr std::size_t kDdsFormatFlagsOffset = 80;
+constexpr std::size_t kDdsFourCcOffset = 84;
+constexpr std::uint32_t kDdsFourCcFlag = 0x4; ///< DDPF_FOURCC: the format is the FourCC's.
+constexpr std::array kDxt5{std::byte{'D'}, std::byte{'X'}, std::byte{'T'}, std::byte{'5'}};
+/// The most levels a frame has: one, written 0 or 1.
+constexpr std::uint32_t kMostDdsLevels = 1;
+/// The largest side of a frame of version 3: as large as any GPU's texture.
+constexpr std::uint32_t kLargestDdsSide = 16384;
+
 /// Reads the sprite from the start, `offset` moving past what each read takes.
 class SpriteReader {
 public:
@@ -43,18 +62,35 @@ public:
     /// The frames after the palette. Errors: BadValue, FrameOutOfBounds.
     [[nodiscard]] auto readFrames(std::uint32_t count) -> Result<std::vector<SpriteFrame>, SprError> {
         m_offset = kFramesOffset;
+        return readEach(count, [this](std::uint32_t frame) { return readFrame(frame); });
+    }
+
+    /// The frames of version 3, after the header. Errors: BadValue, FrameOutOfBounds.
+    [[nodiscard]] auto readCompressedFrames(std::uint32_t count)
+        -> Result<std::vector<SpriteFrame>, SprError> {
+        m_offset = kHeaderBytes;
+        return readEach(count, [this](std::uint32_t frame) {
+            return readCompressedImage(frame).transform(
+                [](SpriteImage image) { return SpriteFrame{.images = {image}, .intervals = {}}; });
+        });
+    }
+
+private:
+    /// The `count` frames `read` reads one after another. Errors: those of `read`.
+    template <class Read>
+    [[nodiscard]] static auto readEach(std::uint32_t count, Read read)
+        -> Result<std::vector<SpriteFrame>, SprError> {
         std::vector<SpriteFrame> frames;
         for (std::uint32_t frame = 0; frame < count; ++frame) {
-            auto read = readFrame(frame);
-            if (!read) {
-                return std::unexpected(std::move(read.error()));
+            auto made = read(frame);
+            if (!made) {
+                return std::unexpected(std::move(made.error()));
             }
-            frames.push_back(std::move(*read));
+            frames.push_back(std::move(*made));
         }
         return frames;
     }
 
-private:
     /// The next `size` bytes. Errors: FrameOutOfBounds.
     [[nodiscard]] auto take(std::uint64_t size, std::uint32_t frame)
         -> Result<std::span<const std::byte>, SprError> {
@@ -138,7 +174,43 @@ private:
                            .originY = loadLittleEndian<std::int32_t>(header->subspan(kImageOriginYOffset)),
                            .width = static_cast<std::uint32_t>(width),
                            .height = static_cast<std::uint32_t>(height),
+                           .format = SpritePixels::Indexed,
                            .pixels = *pixels};
+    }
+
+    /// A frame of version 3: a DDS of BC3 blocks of one level, centered. Errors: BadValue,
+    /// FrameOutOfBounds.
+    [[nodiscard]] auto readCompressedImage(std::uint32_t frame) -> Result<SpriteImage, SprError> {
+        const auto header = take(kDdsHeaderBytes, frame);
+        if (!header) {
+            return std::unexpected(header.error());
+        }
+        const auto size = loadLittleEndian<std::uint32_t>(header->subspan(kDdsSizeOffset));
+        const auto height = loadLittleEndian<std::uint32_t>(header->subspan(kDdsHeightOffset));
+        const auto width = loadLittleEndian<std::uint32_t>(header->subspan(kDdsWidthOffset));
+        const auto levels = loadLittleEndian<std::uint32_t>(header->subspan(kDdsLevelsOffset));
+        const auto formatFlags = loadLittleEndian<std::uint32_t>(header->subspan(kDdsFormatFlagsOffset));
+        const bool isBc3 = (formatFlags & kDdsFourCcFlag) != 0 &&
+                           std::ranges::equal(header->subspan(kDdsFourCcOffset, kDxt5.size()), kDxt5);
+        if (!std::ranges::equal(header->first(kDdsMagic.size()), kDdsMagic) || size != kDdsHeaderSize ||
+            !isBc3 || levels > kMostDdsLevels || width < 1 || height < 1 || width > kLargestDdsSide ||
+            height > kLargestDdsSide) {
+            return fail(
+                SprError::BadValue,
+                std::format("frame {}: not a DDS of BC3 blocks of one level (header size {}, {}x{}, {} "
+                            "levels, format flags {:#x})",
+                            frame, size, width, height, levels, formatFlags));
+        }
+        const auto blocks = take(bc3Bytes(width, height), frame);
+        if (!blocks) {
+            return std::unexpected(blocks.error());
+        }
+        return SpriteImage{.originX = -static_cast<std::int32_t>(width / 2),
+                           .originY = static_cast<std::int32_t>(height / 2),
+                           .width = width,
+                           .height = height,
+                           .format = SpritePixels::Bc3,
+                           .pixels = *blocks};
     }
 
     std::span<const std::byte> m_bytes;
@@ -158,16 +230,22 @@ template <CountedEnum Enum>
 } // namespace
 
 auto SpriteView::parse(std::span<const std::byte> bytes) -> Result<SpriteView, SprError> {
-    if (bytes.size() < kFramesOffset) {
-        return fail(SprError::TooSmall, std::format("{} bytes, less than the {} of the header and palette",
-                                                    bytes.size(), kFramesOffset));
+    if (bytes.size() < kHeaderBytes) {
+        return fail(SprError::TooSmall,
+                    std::format("{} bytes, less than the {} of the header", bytes.size(), kHeaderBytes));
     }
     if (!std::ranges::equal(bytes.first(kSpriteMagic.size()), kSpriteMagic)) {
         return fail(SprError::NotSprite, "the file does not start with \"IDSP\"");
     }
-    if (const auto version = loadLittleEndian<std::int32_t>(bytes.subspan(kVersionOffset));
-        version != kSpriteVersion) {
-        return fail(SprError::UnsupportedVersion, std::format("version {}, not {}", version, kSpriteVersion));
+    const auto version = loadLittleEndian<std::int32_t>(bytes.subspan(kVersionOffset));
+    if (version != kSpriteVersion && version != kCompressedSpriteVersion) {
+        return fail(SprError::UnsupportedVersion, std::format("version {}, neither {} nor {}", version,
+                                                              kSpriteVersion, kCompressedSpriteVersion));
+    }
+    const bool isCompressed = version == kCompressedSpriteVersion;
+    if (!isCompressed && bytes.size() < kFramesOffset) {
+        return fail(SprError::TooSmall, std::format("{} bytes, less than the {} of the header and palette",
+                                                    bytes.size(), kFramesOffset));
     }
     const auto orientation =
         enumOf<SpriteOrientation>(loadLittleEndian<std::int32_t>(bytes.subspan(kOrientationOffset)));
@@ -184,7 +262,8 @@ auto SpriteView::parse(std::span<const std::byte> bytes) -> Result<SpriteView, S
     const auto maxWidth = loadLittleEndian<std::int32_t>(bytes.subspan(kMaxWidthOffset));
     const auto maxHeight = loadLittleEndian<std::int32_t>(bytes.subspan(kMaxHeightOffset));
     const auto frameCount = loadLittleEndian<std::int32_t>(bytes.subspan(kFrameCountOffset));
-    const auto colors = loadLittleEndian<std::uint16_t>(bytes.subspan(kPaletteCountOffset));
+    const std::size_t colors =
+        isCompressed ? kPaletteColors : loadLittleEndian<std::uint16_t>(bytes.subspan(kPaletteCountOffset));
     if (!std::isfinite(radius) || !std::isfinite(beamLength) || maxWidth < 0 || maxHeight < 0 ||
         frameCount < 1 || colors != kPaletteColors) {
         return fail(
@@ -193,7 +272,9 @@ auto SpriteView::parse(std::span<const std::byte> bytes) -> Result<SpriteView, S
                 "radius {}, beam length {}, largest frame {}x{}, {} frames, {} palette colors (of {})",
                 radius, beamLength, maxWidth, maxHeight, frameCount, colors, kPaletteColors));
     }
-    auto frames = SpriteReader{bytes}.readFrames(static_cast<std::uint32_t>(frameCount));
+    SpriteReader reader{bytes};
+    auto frames = isCompressed ? reader.readCompressedFrames(static_cast<std::uint32_t>(frameCount))
+                               : reader.readFrames(static_cast<std::uint32_t>(frameCount));
     if (!frames) {
         return std::unexpected(std::move(frames.error()));
     }
@@ -204,7 +285,8 @@ auto SpriteView::parse(std::span<const std::byte> bytes) -> Result<SpriteView, S
                       .maxHeight = static_cast<std::uint32_t>(maxHeight),
                       .beamLength = beamLength,
                       .sync = *sync,
-                      .palette = bytes.subspan(kPaletteOffset, kPaletteBytes),
+                      .palette = isCompressed ? std::span<const std::byte>{}
+                                              : bytes.subspan(kPaletteOffset, kPaletteBytes),
                       .frames = std::move(*frames)};
 }
 

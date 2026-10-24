@@ -11,6 +11,7 @@ namespace {
 
 using nx::assets::SprError;
 using nx::assets::SpriteOrientation;
+using nx::assets::SpritePixels;
 using nx::assets::SpriteRendering;
 using nx::assets::SpriteSync;
 using nx::assets::SpriteView;
@@ -89,6 +90,58 @@ struct SpriteHeader {
     return frame;
 }
 
+/// A frame of version 3: a DDS of `width` by `height` pixels of BC3 blocks, each block's bytes
+/// counting up from `first`; `fourCc`, `levels` and `headerSize` as its header says them.
+struct CompressedFrame {
+    std::uint32_t width = 8;
+    std::uint32_t height = 4;
+    std::uint8_t first = 0;
+    std::string_view fourCc = "DXT5";
+    std::uint32_t levels = 1;
+    std::uint32_t headerSize = 124;
+};
+
+[[nodiscard]] auto compressedFrame(const CompressedFrame& frame) -> Bytes {
+    Bytes bytes{std::byte{'D'}, std::byte{'D'}, std::byte{'S'}, std::byte{' '}};
+    Bytes header(124);
+    const auto put = [&header](std::size_t offset, std::uint32_t value) {
+        const auto raw = std::bit_cast<std::array<std::byte, sizeof(value)>>(value);
+        std::ranges::copy(raw, header.begin() + static_cast<std::ptrdiff_t>(offset));
+    };
+    put(0, frame.headerSize);
+    put(8, frame.height);
+    put(12, frame.width);
+    put(24, frame.levels);
+    put(72, 32);  // the pixel format's size
+    put(76, 0x4); // its FourCC is its format
+    for (std::size_t index = 0; index < frame.fourCc.size(); ++index) {
+        header[80 + index] = static_cast<std::byte>(frame.fourCc[index]);
+    }
+    bytes.insert(bytes.end(), header.begin(), header.end());
+    const std::uint64_t blocks = nx::assets::bc3Bytes(frame.width, frame.height);
+    for (std::uint64_t index = 0; index < blocks; ++index) {
+        bytes.push_back(static_cast<std::byte>(frame.first + index));
+    }
+    return bytes;
+}
+
+/// A sprite of version 3 of `frames`, without a palette.
+[[nodiscard]] auto compressedFile(std::span<const CompressedFrame> frames) -> Bytes {
+    Bytes bytes = spriteFile({.version = 3,
+                              .rendering = 0,
+                              .maxWidth = 256,
+                              .maxHeight = 256,
+                              .frames = static_cast<std::int32_t>(frames.size()),
+                              .sync = 1},
+                             {});
+    bytes.resize(40); // the header alone
+    for (const CompressedFrame& frame : frames) {
+        const Bytes written = compressedFrame(frame);
+        bytes.insert(bytes.end(), written.begin(), written.end());
+    }
+    return bytes;
+}
+
 [[nodiscard]] auto parseError(const Bytes& file) -> SprError {
     const auto sprite = SpriteView::parse(file);
     EXPECT_FALSE(sprite.has_value());
@@ -136,12 +189,60 @@ TEST(SpriteTest, ReadsTimedGroupsAmongFrames) {
     EXPECT_EQ(timed.images[2].pixels[0], std::byte{20});
 }
 
+TEST(SpriteTest, ReadsCounterStrikeOnlinesFramesOfBc3Blocks) {
+    const std::array frames{CompressedFrame{.width = 8, .height = 4, .first = 1},
+                            CompressedFrame{.width = 5, .height = 3, .first = 100, .levels = 0}};
+    const Bytes file = compressedFile(frames);
+    const auto sprite = SpriteView::parse(file);
+    ASSERT_TRUE(sprite.has_value()) << nx::describe(sprite.error());
+    EXPECT_EQ(sprite->orientation, SpriteOrientation::Parallel);
+    EXPECT_EQ(sprite->rendering, SpriteRendering::Normal);
+    EXPECT_EQ(sprite->sync, SpriteSync::Random);
+    EXPECT_EQ(sprite->maxWidth, 256U);
+    EXPECT_TRUE(sprite->palette.empty());
+    ASSERT_EQ(sprite->frames.size(), 2U);
+
+    const auto& first = sprite->frames[0];
+    EXPECT_TRUE(first.intervals.empty());
+    ASSERT_EQ(first.images.size(), 1U);
+    EXPECT_EQ(first.images[0].format, SpritePixels::Bc3);
+    EXPECT_EQ(first.images[0].width, 8U);
+    EXPECT_EQ(first.images[0].height, 4U);
+    EXPECT_EQ(first.images[0].originX, -4) << "centered";
+    EXPECT_EQ(first.images[0].originY, 2);
+    ASSERT_EQ(first.images[0].pixels.size(), 32U) << "two blocks";
+    EXPECT_EQ(first.images[0].pixels[0], std::byte{1});
+    const auto& second = sprite->frames[1].images[0];
+    EXPECT_EQ(second.originX, -2);
+    EXPECT_EQ(second.originY, 1);
+    ASSERT_EQ(second.pixels.size(), 32U) << "the edges' blocks whole";
+    EXPECT_EQ(second.pixels[0], std::byte{100});
+}
+
+TEST(SpriteTest, RejectsAFrameOfVersion3ThatIsNotADdsOfBc3Blocks) {
+    EXPECT_EQ(parseError(compressedFile(std::array{CompressedFrame{.fourCc = "DXT1"}})), SprError::BadValue);
+    EXPECT_EQ(parseError(compressedFile(std::array{CompressedFrame{.levels = 2}})), SprError::BadValue)
+        << "levels past the first";
+    EXPECT_EQ(parseError(compressedFile(std::array{CompressedFrame{.headerSize = 100}})), SprError::BadValue);
+    EXPECT_EQ(parseError(compressedFile(std::array{CompressedFrame{.width = 0}})), SprError::BadValue);
+    Bytes notDds = compressedFile(std::array{CompressedFrame{}});
+    notDds[40] = std::byte{'X'};
+    EXPECT_EQ(parseError(notDds), SprError::BadValue);
+    Bytes cut = compressedFile(std::array{CompressedFrame{}});
+    cut.pop_back();
+    EXPECT_EQ(parseError(cut), SprError::FrameOutOfBounds);
+}
+
 TEST(SpriteTest, RejectsABrokenHeader) {
-    EXPECT_EQ(parseError(Bytes(100)), SprError::TooSmall);
+    Bytes withoutItsPalette = spriteFile({}, singleFrame(2, 2));
+    withoutItsPalette.resize(100);
+    EXPECT_EQ(parseError(withoutItsPalette), SprError::TooSmall);
+    EXPECT_EQ(parseError(Bytes(30)), SprError::TooSmall) << "less than a header";
     Bytes idpo = spriteFile({}, singleFrame(2, 2));
     idpo[3] = std::byte{'O'};
     EXPECT_EQ(parseError(idpo), SprError::NotSprite);
     EXPECT_EQ(parseError(spriteFile({.version = 1}, singleFrame(2, 2))), SprError::UnsupportedVersion);
+    EXPECT_EQ(parseError(spriteFile({.version = 4}, singleFrame(2, 2))), SprError::UnsupportedVersion);
 
     for (const SpriteHeader& header :
          {SpriteHeader{.orientation = 5}, SpriteHeader{.rendering = 4}, SpriteHeader{.sync = 2},

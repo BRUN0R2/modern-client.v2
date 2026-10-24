@@ -12,6 +12,12 @@
 /// before blending, while enhanced materials write their radiance directly. Only the tone pass
 /// encodes for presentation. The knee retains its display-domain meaning and the neutral curve's
 /// brightness response; the resulting gain applies to the linear RGB together (ADR-0025).
+///
+/// The additive effects (a weapon's muzzle flashes) are drawn apart, to a layer of display colors,
+/// which the tone pass adds over the scene once it is mapped to the screen, each channel stopping at
+/// white, as the original adds them: an effect authored for that addition shows as it was made (an
+/// overexposed flame turns yellow, then white, where a common gain would keep it orange). The layer's
+/// own light goes to the bloom too, a glow about each effect as about any light.
 export module nx.render:post;
 
 import std;
@@ -56,18 +62,28 @@ public:
     [[nodiscard]] static constexpr auto sceneFormat() noexcept -> rhi::Format {
         return rhi::Format::Rgba16Float;
     }
+    /// The format of the effects' layer, which the effects' pipelines draw to: display colors, added
+    /// beyond 1 until the tone pass stops each channel at white.
+    [[nodiscard]] static constexpr auto effectsFormat() noexcept -> rhi::Format {
+        return rhi::Format::Rgba16Float;
+    }
 
-    /// Makes the scene's target and the bloom's images for a screen of `size`, unless they are of it
-    /// already: the GPU must be done with the frames that used the old ones. Errors: GpuFailed.
+    /// Makes the scene's target, the effects' layer and the bloom's images for a screen of `size`, unless
+    /// they are of it already: the GPU must be done with the frames that used the old ones. Errors:
+    /// GpuFailed.
     [[nodiscard]] auto resize(rhi::Extent2d size) -> Result<void, PostError>;
     /// The linear-radiance target the scene draws to, of the size given last, read in ShaderRead.
     [[nodiscard]] auto sceneTarget() const noexcept -> rhi::TextureHandle;
+    /// The layer of display colors the additive effects draw to, cleared to black each frame, of the
+    /// size given last, read in ShaderRead.
+    [[nodiscard]] auto effectsTarget() const noexcept -> rhi::TextureHandle;
 
-    /// Records the bloom, outside a render pass: the scene's target reduced into the chain and the
-    /// chain enlarged back into its first image.
+    /// Records the bloom, outside a render pass: the scene's target reduced into the chain, the effects'
+    /// light added to its first image, and the chain enlarged back into it.
     void bloom(rhi::CommandList& commands) const;
-    /// Records the scene with its bloom through the tone curve, a triangle covering the target, in the
-    /// render pass under way, whose target is of PostRendererDesc::outputFormat.
+    /// Records the scene with its bloom through the tone curve and the effects added over it, each
+    /// channel stopping at white: a triangle covering the target, in the render pass under way, whose
+    /// target is of PostRendererDesc::outputFormat.
     void drawToneMapped(rhi::CommandList& commands) const;
 
 private:
@@ -78,12 +94,18 @@ private:
         rhi::OwnedBindGroup group{};
     };
 
+    /// What the tone pass reads besides the scene: the bloom, and the effects' layer.
+    struct ToneSources {
+        rhi::TextureHandle bloom{};
+        rhi::TextureHandle effects{};
+    };
+
     inline explicit PostRenderer(rhi::Device& device) noexcept : m_device{&device} {}
 
     /// The bind group reading `source`, one over `sourceSize` apart, through the uniform at `slot`,
-    /// with `bloom` too for the tone pass. Errors: those of the device.
+    /// with `tone`'s too for the tone pass. Errors: those of the device.
     [[nodiscard]] auto passGroup(std::size_t slot, rhi::TextureHandle source, rhi::Extent2d sourceSize,
-                                 std::optional<rhi::TextureHandle> bloom)
+                                 std::optional<ToneSources> tone)
         -> Result<rhi::OwnedBindGroup, rhi::RhiError>;
 
     rhi::Device* m_device;
@@ -92,6 +114,7 @@ private:
     rhi::OwnedBindGroupLayout m_bloomLayout; ///< A pass of the chain's: its uniform, source and sampler.
     rhi::OwnedBindGroupLayout m_toneLayout;  ///< The tone pass's: and the bloom.
     rhi::OwnedRenderPipeline m_reduceFirst;
+    rhi::OwnedRenderPipeline m_reduceEffects; ///< Adds the effects' light to what the first holds.
     rhi::OwnedRenderPipeline m_reduce;
     rhi::OwnedRenderPipeline m_enlarge; ///< Adds to what its target holds.
     rhi::OwnedRenderPipeline m_tone;
@@ -100,8 +123,10 @@ private:
 
     rhi::Extent2d m_size{};
     rhi::OwnedTexture m_scene;
+    rhi::OwnedTexture m_effects;
     std::vector<rhi::OwnedTexture> m_levels;
     std::vector<BloomPass> m_reductions;   ///< Level by level, the first from the scene.
+    BloomPass m_effectsReduction;          ///< The effects' light into the first level.
     std::vector<BloomPass> m_enlargements; ///< From the smallest level into the one before, up to the first.
     rhi::OwnedBindGroup m_toneGroup;
 };

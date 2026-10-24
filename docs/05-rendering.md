@@ -400,14 +400,42 @@ flowchart LR
    `R_AllowFlipViewModel`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). The
    view model's client events (5000 and above) fire as a frame passes them, a sequence played anew
    from its first frame (`R_StudioClientEvents`); a muzzle flash's (5001, 5011, 5021, 5031: the
-   first to fourth attachment, as GoldSrc's model events are documented) shows one of
-   `sprites/muzzleflash1.spr` to 3 at that attachment where the bones put it, chosen by its number's
-   units, a tenth of its tens in size, half with none, added in full, at a frame and rolled at random
-   (by 20 degrees at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`), among the
-   blended sprites of the frame (`cs.client:muzzleFlash`); a sound's (5004) plays the sound its
-   options name ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a
-   frame to the next, for the scene and the sound alike. The light a flash casts and the shells come
-   with what draws them. A
+   first to fourth attachment, as GoldSrc's model events are documented) shows a sprite at that
+   attachment, added in full, as its style says (`cs.client:muzzleFlash`). The flashes are drawn
+   after the view's own model and in its depths (`DepthLayer::ViewModel`, a sprite renderer of their
+   own): over what of the weapon is behind them, under what is in front, and never hidden by a wall
+   or a crate the muzzle is pushed against, where the original draws them among the world's blended
+   sprites, which such a wall hides. A flash is anchored to its attachment (`cs::MuzzleFlashAnchor`): each
+   frame shows it where that frame's bones put the attachment, so that it stays at the muzzle as the
+   weapon moves, however long it lasts; each event shows a flash of its own, as the original makes a
+   temporary entity of each, and flashes overlapping at a muzzle add up (Counter-Strike Online's, which
+   play longer than a shot's cycle, burn brighter as it fires, yellow, then white); those of a weapon the
+   player no longer holds are forgotten (`cs::MuzzleFlashes`). Its style is
+   the event's options, then each value of the weapon's `view.muzzleFlash` over them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   The original's options, a number, show one of `sprites/muzzleflash1.spr` to 3, chosen by its
+   units, a tenth of its tens in size, half with none, at a frame and rolled at random (by 20 degrees
+   at most for the first sprite), for 0.01 seconds (`R_MuzzleFlash`). Counter-Strike Online's, keys
+   and their values after a `#` (`#I341 S0.16 R2 F0 P30 T999 A1 L0 O0 X0`, as its models are
+   observed), show `sprites/muzzleflash<I>.spr` (its sprites of version 3, §10) at scale `S`, played
+   once from frame `F` at `P` frames a second, for `T` seconds at most, turning counter-clockwise `R`
+   degrees a frame of it (the Drakar III's `R2` turns smoothly that way in Counter-Strike Online; the
+   rate is the project's estimate until it is measured); the keys whose meaning is unknown are not
+   read, and a key an option lacks is the original's of 0. A flash is over past its
+   time or past its sprite's last frame. A flash is added as the original adds it, in both looks: its
+   display colors, times its style's `brightness` (1 as made), each channel stopping at white, so
+   that an overexposed flame turns yellow, then white, as it was authored to (`Scene::drawEffects`):
+   in the legacy look onto the screen, after the weapon; in the enhanced look to the effects' layer,
+   which the tone pass adds over the scene once it is mapped to the screen, the layer's light glowing
+   in the bloom (`nx.render:post`); added as light and mapped with the scene, a flash would keep its
+   texture's orange where the original's turns yellow. In the enhanced look its `light` lights the
+   weapon in hand from the flash (a `StudioLight`, after the key light), dimming to nothing over its
+   own time, the lights of a muzzle's flashes added into one. The sprites a view model's flashes show are read
+   with it, by their paths (`cs::MuzzleFlashSprites`, `Level::updateViewModels`), and put on the GPU
+   with it (`Scene::loadWeapons`), so that no file is read as a frame plays: one missing is logged
+   and its flashes are not shown. A sound's (5004) plays the sound its options name
+   ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a frame to the
+   next, for the scene and the sound alike. The original's light of a shot on the world and its
+   models (`EF_MUZZLEFLASH`) comes with the dynamic lights, the shells with the temporary entities. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
@@ -487,7 +515,10 @@ before it filters, and their mip levels average light; the light and colors the 
 display colors are made light; masks, lightmaps and data stay as they are. The world, the models and
 the sprites blend into a target of half floats, the probes capture and blur light, the bloom keeps a
 constant image's light, and the shoulder scales a color's channels by one gain from its brightest, so
-that a bright gold stays gold. The colors are encoded for the screen once, before the HUD
+that a bright gold stays gold. The additive effects (the weapon's muzzle flashes) are drawn apart, to
+a layer of display colors over the scene's depths, which the tone pass adds over the mapped scene,
+each channel stopping at white, as the original adds them, and whose own light the bloom spreads
+about them, as about any light. The colors are encoded for the screen once, before the HUD
 (`shaders/colorEncoding.slang` holds the display's gamma every shader converts by). The enhanced
 look's model textures are filtered anisotropically, by up to 16 texels as the device allows; the
 original's look keeps its own filtering.
@@ -544,13 +575,17 @@ same model become one draw call per submesh.
 `R_DrawSpriteModel` draws them, as Xash3D-FWGS reconstructs it. Each image of a sprite is a texture
 with its mip levels (`GL_MipMap`), its palette as its format makes it (`Mod_LoadSpriteModel`): normal
 and additive ones through `texgamma`, index-alpha ones the last color with the index as alpha,
-alpha-tested ones their own palette with index 255 transparent. Each sprite is a quad the CPU turns as
+alpha-tested ones their own palette with index 255 transparent; an image of Counter-Strike Online's
+sprites of version 3 is its BC3 blocks decoded as their author made them, `texgamma` being what
+GoldSrc gives the palettes of its 8-bit images. Each sprite is a quad the CPU turns as
 its orientation says (`R_DrawSpriteModel`: parallel, parallel upright and not drawn within a degree of
 looking straight up or down, facing upright, oriented and nudged 0.01 toward its viewer, parallel
 oriented by its roll, which a parallel sprite with a roll becomes), the image of its frame (the frame
 cut to a whole number and held to the sprite's; a group's image by its loop's time,
 `R_GetSpriteFrame`) times `rendercolor` (black is white), as opaque as `renderamt` makes it, its
-fragments not above the alpha test discarded. The render modes blend as `R_DrawSpriteModel` sets
+fragments not above the alpha test discarded; times its brightness too, once its color is encoded
+for its target: 1 but for an effect made brighter, each channel past white where its target holds it
+(`SpriteInstance::brightness`, a muzzle flash's, §9). The render modes blend as `R_DrawSpriteModel` sets
 them: Normal opaque, TransColor and TransTexture blended and writing their depth, TransAlpha blended
 without it, TransAdd added, Glow added over everything; a glow off the screen or hidden by the game is
 not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squared distance (held from
@@ -558,7 +593,8 @@ not drawn, and unless `renderfx` is NoDissipation it dims to 19000 over its squa
 above 127, Normal, TransAlpha or TransTexture) is cut at an alpha of a third and lit: drawn again where
 it was, its light from the world under it (`R_LightPoint`) multiplying what is there. The solid sprites
 are drawn after the solid models, the others among everything the frame draws blended, by their
-origins (§7.1), before the view's own model. The client shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
+origins (§7.1), before the view's own model; those the view's own model shows (its muzzle flashes)
+are drawn after it, in its depths (`SpriteDraw::depth`, the layer `nx.render:camera` maps for both). The client shows the sprites of `env_sprite`, `env_glow` and the `cycler_sprite`s of a
 sprite as the game makes them (ReGameDLL's `CSprite`, `CGlow`, `CCyclerSprite`): an `env_sprite`'s yaw
 alone is its roll, a named one that does not start on is off, and each animates ten times a second,
 its last frame index the end of its loop (one that plays once turning off past it); a glow the

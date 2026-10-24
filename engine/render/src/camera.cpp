@@ -14,6 +14,13 @@ namespace {
 /// The aspect ratio `fov` is defined at.
 constexpr float kFieldOfViewAspect = 4.0F / 3.0F;
 
+/// The depths of the view's own model: the nearest share of them (the original's
+/// VIEWMODEL_DEPTH_RANGE).
+constexpr float kViewModelDepthShare = 0.3F;
+/// The rows of a view-projection matrix that give a point's depth, and its w.
+constexpr std::size_t kDepthRow = 2;
+constexpr std::size_t kWRow = 3;
+
 /// How far the view reaches to the sides and up at a distance of 1.
 struct HalfExtents {
     float width = 0.0F;
@@ -48,6 +55,25 @@ auto projectionMatrix(Degrees fieldOfView, float aspect) noexcept -> Mat4 {
 
 auto viewProjectionMatrix(const Camera& camera, float aspect) noexcept -> Mat4 {
     return projectionMatrix(camera.fieldOfView, aspect) * viewMatrix(camera);
+}
+
+auto depthMappingOf(DepthLayer layer) noexcept -> DepthMapping {
+    if (layer == DepthLayer::ViewModel) {
+        return DepthMapping{.scale = kViewModelDepthShare, .offset = 1.0F - kViewModelDepthShare};
+    }
+    return DepthMapping{};
+}
+
+auto inLayer(const Mat4& viewProjection, DepthLayer layer) noexcept -> Mat4 {
+    const DepthMapping mapping = depthMappingOf(layer);
+    const Vec4& depth = viewProjection.rows.at(kDepthRow);
+    const Vec4& w = viewProjection.rows.at(kWRow);
+    Mat4 layered = viewProjection;
+    layered.rows.at(kDepthRow) = Vec4{.x = (depth.x * mapping.scale) + (w.x * mapping.offset),
+                                      .y = (depth.y * mapping.scale) + (w.y * mapping.offset),
+                                      .z = (depth.z * mapping.scale) + (w.z * mapping.offset),
+                                      .w = (depth.w * mapping.scale) + (w.w * mapping.offset)};
+    return layered;
 }
 
 auto frustumPlanes(const Camera& camera, float aspect) noexcept -> std::array<Plane, 4> {

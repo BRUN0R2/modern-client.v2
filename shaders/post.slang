@@ -9,6 +9,8 @@
 // the chain's level count so that bloom redistributes light without brightening a constant image.
 // The scene and bloom both store linear radiance. A single shoulder gain compresses the brightest
 // channel and scales all channels together, keeping chromaticity before the final display encoding.
+// The additive effects' layer holds display colors, added over the encoded scene with each channel
+// stopping at white, as the original adds them; its own light joins the bloom's first level.
 
 import colorEncoding;
 
@@ -31,6 +33,9 @@ SamplerState linearClamp;
 // The tone pass's bloom, the chain enlarged back to its first level.
 [[vk::binding(3, 0)]]
 Texture2D bloom;
+// The tone pass's additive effects, as display colors.
+[[vk::binding(4, 0)]]
+Texture2D effects;
 
 struct VertexOutput
 {
@@ -66,23 +71,30 @@ float karisWeightOf(float3 box)
     return 1.0 / (1.0 + luminanceOf(box));
 }
 
-// The thirteen reads: four boxes of four around the middle and the box at the middle, which counts
-// half; with `isFirst`, each box weighted by Karis's average.
-float3 reduce(float2 uv, bool isFirst)
+// A texel of the source as light: as it is, or, of the effects' layer, its display color made light.
+float3 lightAt(float2 uv, float2 offset, bool isEffects)
 {
-    const float3 a = read(uv, float2(-2.0, -2.0));
-    const float3 b = read(uv, float2(0.0, -2.0));
-    const float3 c = read(uv, float2(2.0, -2.0));
-    const float3 d = read(uv, float2(-2.0, 0.0));
-    const float3 e = read(uv, float2(0.0, 0.0));
-    const float3 f = read(uv, float2(2.0, 0.0));
-    const float3 g = read(uv, float2(-2.0, 2.0));
-    const float3 h = read(uv, float2(0.0, 2.0));
-    const float3 i = read(uv, float2(2.0, 2.0));
-    const float3 j = read(uv, float2(-1.0, -1.0));
-    const float3 k = read(uv, float2(1.0, -1.0));
-    const float3 l = read(uv, float2(-1.0, 1.0));
-    const float3 m = read(uv, float2(1.0, 1.0));
+    const float3 texel = read(uv, offset);
+    return isEffects ? linearOf(texel) : texel;
+}
+
+// The thirteen reads: four boxes of four around the middle and the box at the middle, which counts
+// half; with `isFirst`, each box weighted by Karis's average; of the effects' layer with `isEffects`.
+float3 reduce(float2 uv, bool isFirst, bool isEffects)
+{
+    const float3 a = lightAt(uv, float2(-2.0, -2.0), isEffects);
+    const float3 b = lightAt(uv, float2(0.0, -2.0), isEffects);
+    const float3 c = lightAt(uv, float2(2.0, -2.0), isEffects);
+    const float3 d = lightAt(uv, float2(-2.0, 0.0), isEffects);
+    const float3 e = lightAt(uv, float2(0.0, 0.0), isEffects);
+    const float3 f = lightAt(uv, float2(2.0, 0.0), isEffects);
+    const float3 g = lightAt(uv, float2(-2.0, 2.0), isEffects);
+    const float3 h = lightAt(uv, float2(0.0, 2.0), isEffects);
+    const float3 i = lightAt(uv, float2(2.0, 2.0), isEffects);
+    const float3 j = lightAt(uv, float2(-1.0, -1.0), isEffects);
+    const float3 k = lightAt(uv, float2(1.0, -1.0), isEffects);
+    const float3 l = lightAt(uv, float2(-1.0, 1.0), isEffects);
+    const float3 m = lightAt(uv, float2(1.0, 1.0), isEffects);
     const float3 middle = (j + k + l + m) * 0.25;
     const float3 topLeft = (a + b + d + e) * 0.25;
     const float3 topRight = (b + c + e + f) * 0.25;
@@ -107,14 +119,21 @@ float3 reduce(float2 uv, bool isFirst)
 [shader("fragment")]
 float4 reduceFirstMain(VertexOutput input) : SV_Target
 {
-    return float4(reduce(input.uv, true), 1.0);
+    return float4(reduce(input.uv, true, false), 1.0);
+}
+
+// The effects' light, added to the first level.
+[shader("fragment")]
+float4 reduceEffectsMain(VertexOutput input) : SV_Target
+{
+    return float4(reduce(input.uv, true, true), 1.0);
 }
 
 // Each level after, from the one before.
 [shader("fragment")]
 float4 reduceMain(VertexOutput input) : SV_Target
 {
-    return float4(reduce(input.uv, false), 1.0);
+    return float4(reduce(input.uv, false, false), 1.0);
 }
 
 // A level enlarged into the one before it, added to what that level holds: a 3x3 tent of reads a
@@ -142,20 +161,28 @@ float shoulderOf(float value, float knee)
     return knee + (room * (1.0 - exp(-(value - knee) / room)));
 }
 
-// Scatter a share of the scene's light through normalized bloom. The peak's shoulder controls one
-// common radiance gain, retaining neutral brightness response without washing colored HDR to white.
-[shader("fragment")]
-float4 toneMain(VertexOutput input) : SV_Target
+// The scene with a share of its light scattered through normalized bloom, as a display color. The
+// peak's shoulder controls one common radiance gain, retaining neutral brightness response without
+// washing colored HDR to white.
+float3 toneMappedSceneAt(float2 uv)
 {
-    const float3 sceneLinear = source.SampleLevel(linearClamp, input.uv, 0.0).rgb;
-    const float3 bloomLinear = bloom.SampleLevel(linearClamp, input.uv, 0.0).rgb * pass.bloomNormalization;
+    const float3 sceneLinear = source.SampleLevel(linearClamp, uv, 0.0).rgb;
+    const float3 bloomLinear = bloom.SampleLevel(linearClamp, uv, 0.0).rgb * pass.bloomNormalization;
     const float3 colorLinear = max(lerp(sceneLinear, bloomLinear, pass.bloomStrength), 0.0);
     const float peakLinear = max(colorLinear.r, max(colorLinear.g, colorLinear.b));
     if (peakLinear <= 0.0)
     {
-        return float4(0.0, 0.0, 0.0, 1.0);
+        return float3(0.0);
     }
     const float peakDisplay = pow(peakLinear, 1.0 / kDisplayGamma);
     const float mappedPeakLinear = pow(shoulderOf(peakDisplay, pass.knee), kDisplayGamma);
-    return float4(displayOf(colorLinear * (mappedPeakLinear / peakLinear)), 1.0);
+    return displayOf(colorLinear * (mappedPeakLinear / peakLinear));
+}
+
+// The tone-mapped scene, and the effects added over it, each channel stopping at white.
+[shader("fragment")]
+float4 toneMain(VertexOutput input) : SV_Target
+{
+    const float3 effectsDisplay = max(effects.SampleLevel(linearClamp, input.uv, 0.0).rgb, 0.0);
+    return float4(saturate(toneMappedSceneAt(input.uv) + effectsDisplay), 1.0);
 }
