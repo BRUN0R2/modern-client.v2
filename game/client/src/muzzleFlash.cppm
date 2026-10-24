@@ -16,9 +16,10 @@
 ///   meaning is unknown are not read.
 /// A flash is anchored to its attachment: each frame shows it where that frame's bones put the
 /// attachment, so that it stays at the muzzle as the weapon moves, however long it lasts (the
-/// original's lasts a frame, where its temporary entity needs no following). A muzzle shows one
-/// flash at a time: a flash at an attachment replaces the one showing there. The sprites the styles
-/// show are read with the view model, before a frame shows them.
+/// original's lasts a frame, where its temporary entity needs no following). Each event shows a flash of
+/// its own, as the original makes a temporary entity of each: flashes overlapping at a muzzle add up,
+/// so that Counter-Strike Online's, playing longer than a shot's cycle, burn brighter as it fires. The
+/// sprites the styles show are read with the view model, before a frame shows them.
 ///
 /// Today: the muzzle flashes, and the light a weapon's data gives them on the weapon in hand in the
 /// enhanced look. The original's light of a shot on the world and its models (EF_MUZZLEFLASH) comes
@@ -111,16 +112,23 @@ private:
                                  MuzzleFlashAnchor anchor, nx::Seconds time, nx::Random& random)
     -> std::optional<MuzzleFlash>;
 
-/// The muzzle flashes showing, one at an anchor at most.
+/// Where the attachment of an anchor is in the frame shown; none when it is nowhere.
+using AnchorPlace = std::function<std::optional<nx::Vec3>(const MuzzleFlashAnchor& anchor)>;
+
+/// The muzzle flashes showing, each event's its own.
 class MuzzleFlashes {
 public:
-    /// Shows `flash`, in place of the one showing at its anchor.
+    /// Shows `flash`, besides those showing.
     void show(MuzzleFlash flash);
     /// Forgets those over at `time`, and those of another weapon than `inHand`, the one the player
     /// holds; all of them when it holds none.
     void forget(nx::Seconds time, std::optional<WeaponIndex> inHand);
 
     [[nodiscard]] inline auto shown() const noexcept -> std::span<const MuzzleFlash> { return m_flashes; }
+    /// The light the flashes cast at `time`, one a muzzle, the lights of its flashes added (lights at
+    /// one place add up), from where `placeOf` puts its anchor; none from a muzzle it puts nowhere.
+    [[nodiscard]] auto lightsAt(nx::Seconds time, const AnchorPlace& placeOf) const
+        -> std::vector<nx::render::StudioLight>;
 
 private:
     std::vector<MuzzleFlash> m_flashes;

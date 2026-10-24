@@ -225,7 +225,6 @@ auto muzzleFlashOf(const MuzzleFlashStyle& style, std::uint32_t sprite, std::siz
 }
 
 void MuzzleFlashes::show(MuzzleFlash flash) {
-    std::erase_if(m_flashes, [&flash](const MuzzleFlash& shown) { return shown.anchor == flash.anchor; });
     m_flashes.push_back(std::move(flash));
 }
 
@@ -233,6 +232,28 @@ void MuzzleFlashes::forget(nx::Seconds time, std::optional<WeaponIndex> inHand) 
     std::erase_if(m_flashes, [time, inHand](const MuzzleFlash& shown) {
         return shown.isOverAt(time) || inHand != shown.anchor.weapon;
     });
+}
+
+auto MuzzleFlashes::lightsAt(nx::Seconds time, const AnchorPlace& placeOf) const
+    -> std::vector<nx::render::StudioLight> {
+    std::vector<std::pair<MuzzleFlashAnchor, nx::render::StudioLight>> byMuzzle;
+    for (const MuzzleFlash& shown : m_flashes) {
+        const std::optional<nx::Vec3> origin = placeOf(shown.anchor);
+        const std::optional<nx::render::StudioLight> light =
+            origin ? shown.lightAt(time, *origin) : std::nullopt;
+        if (!light) {
+            continue;
+        }
+        const auto same = std::ranges::find(byMuzzle, shown.anchor,
+                                            &std::pair<MuzzleFlashAnchor, nx::render::StudioLight>::first);
+        if (same == byMuzzle.end()) {
+            byMuzzle.emplace_back(shown.anchor, *light);
+            continue;
+        }
+        same->second.color = same->second.color + light->color;
+        same->second.reach = std::max(same->second.reach, light->reach);
+    }
+    return byMuzzle | std::views::values | std::ranges::to<std::vector>();
 }
 
 auto MuzzleFlashSprites::read(const nx::assets::Vfs& vfs, std::span<const std::string> paths)

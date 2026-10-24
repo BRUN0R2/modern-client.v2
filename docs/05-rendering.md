@@ -393,8 +393,10 @@ flowchart LR
    or a crate the muzzle is pushed against, where the original draws them among the world's blended
    sprites, which such a wall hides. A flash is anchored to its attachment (`cs::MuzzleFlashAnchor`): each
    frame shows it where that frame's bones put the attachment, so that it stays at the muzzle as the
-   weapon moves, however long it lasts; a flash at an attachment replaces the one showing there, and
-   those of a weapon the player no longer holds are forgotten (`cs::MuzzleFlashes`). Its style is
+   weapon moves, however long it lasts; each event shows a flash of its own, as the original makes a
+   temporary entity of each, and flashes overlapping at a muzzle add up (Counter-Strike Online's, which
+   play longer than a shot's cycle, burn brighter as it fires, yellow, then white); those of a weapon the
+   player no longer holds are forgotten (`cs::MuzzleFlashes`). Its style is
    the event's options, then each value of the weapon's `view.muzzleFlash` over them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
    The original's options, a number, show one of `sprites/muzzleflash1.spr` to 3, chosen by its
    units, a tenth of its tens in size, half with none, at a frame and rolled at random (by 20 degrees
@@ -413,7 +415,7 @@ flowchart LR
    in the bloom (`nx.render:post`); added as light and mapped with the scene, a flash would keep its
    texture's orange where the original's turns yellow. In the enhanced look its `light` lights the
    weapon in hand from the flash (a `StudioLight`, after the key light), dimming to nothing over its
-   own time. The sprites a view model's flashes show are read
+   own time, the lights of a muzzle's flashes added into one. The sprites a view model's flashes show are read
    with it, by their paths (`cs::MuzzleFlashSprites`, `Level::updateViewModels`), and put on the GPU
    with it (`Scene::loadWeapons`), so that no file is read as a frame plays: one missing is logged
    and its flashes are not shown. A sound's (5004) plays the sound its options name

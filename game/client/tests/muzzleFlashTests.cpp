@@ -4,7 +4,8 @@
 // The client events a view model's sequence passes from a frame to another, the attachment of each
 // muzzle flash event, the style an event's options and its weapon's data give its flash (the
 // original's number, Counter-Strike Online's keys), the flash as it plays and the light it casts, the
-// flashes showing, one at an anchor, and the sprites the flashes show, read once by their paths.
+// flashes showing, each event's its own, their lights added a muzzle, and the sprites the flashes show,
+// read once by their paths.
 
 #include <gtest/gtest.h>
 
@@ -236,7 +237,7 @@ TEST(MuzzleFlashTest, ItsLightDimsToNothingOverItsTimeOutlastingItsFrames) {
     return flashes.shown() | std::views::transform(&cs::MuzzleFlash::anchor) | std::ranges::to<std::vector>();
 }
 
-TEST(MuzzleFlashTest, AMuzzleShowsOneFlashAtATimeAndTheWeaponInHandsAlone) {
+TEST(MuzzleFlashTest, EachShotShowsAFlashOfItsOwnAndTheWeaponInHandsAlone) {
     nx::Random random{4, "test"};
     const cs::MuzzleFlashStyle drakar = cs::muzzleFlashStyleOf(kDrakarOptions, std::nullopt);
     const cs::MuzzleFlashAnchor second{.weapon = kAnchor.weapon, .attachment = 1};
@@ -244,19 +245,52 @@ TEST(MuzzleFlashTest, AMuzzleShowsOneFlashAtATimeAndTheWeaponInHandsAlone) {
     flashes.show(shown(drakar, 12, nx::Seconds{1.0F}, random));
     flashes.show(shown(drakar, 12, nx::Seconds{1.0F}, random, second));
     flashes.show(shown(drakar, 12, nx::Seconds{1.1F}, random));
-    EXPECT_EQ(anchorsOf(flashes), (std::vector{second, kAnchor})) << "a shot restarts its muzzle's flash";
-    EXPECT_FLOAT_EQ(flashes.shown().back().start.count(), 1.1F);
+    EXPECT_EQ(anchorsOf(flashes), (std::vector{kAnchor, second, kAnchor}))
+        << "a shot fired as its muzzle's flash plays adds its own, as the original's temporary entities";
 
     flashes.forget(nx::Seconds{1.2F}, kAnchor.weapon);
-    EXPECT_EQ(flashes.shown().size(), 2U) << "both still playing";
+    EXPECT_EQ(flashes.shown().size(), 3U) << "all still playing";
     flashes.forget(nx::Seconds{1.45F}, kAnchor.weapon);
-    EXPECT_EQ(anchorsOf(flashes), (std::vector{kAnchor})) << "the other muzzle's flash played its last frame";
+    EXPECT_EQ(anchorsOf(flashes), (std::vector{kAnchor})) << "the first two played their last frames";
+    EXPECT_FLOAT_EQ(flashes.shown().front().start.count(), 1.1F);
     flashes.forget(nx::Seconds{1.46F}, cs::WeaponIndex{3});
     EXPECT_TRUE(flashes.shown().empty()) << "another weapon in hand";
 
     flashes.show(shown(drakar, 12, nx::Seconds{2.0F}, random));
     flashes.forget(nx::Seconds{2.0F}, std::nullopt);
     EXPECT_TRUE(flashes.shown().empty()) << "no weapon in hand";
+}
+
+TEST(MuzzleFlashTest, TheLightsOfAMuzzlesFlashesAddUp) {
+    nx::Random random{6, "test"};
+    cs::MuzzleFlashStyle style = cs::muzzleFlashStyleOf(kDrakarOptions, std::nullopt);
+    style.light = cs::MuzzleFlashLight{
+        .color = {1000.0F, 500.0F, 250.0F}, .reach = nx::HammerUnits{128.0F}, .time = nx::Seconds{0.1F}};
+    const cs::MuzzleFlashAnchor second{.weapon = kAnchor.weapon, .attachment = 1};
+    const cs::MuzzleFlashAnchor nowhere{.weapon = kAnchor.weapon, .attachment = 2};
+    cs::MuzzleFlashes flashes;
+    flashes.show(shown(style, 12, nx::Seconds{2.0F}, random));
+    flashes.show(shown(style, 12, nx::Seconds{2.05F}, random));
+    flashes.show(shown(style, 12, nx::Seconds{2.05F}, random, second));
+    flashes.show(shown(style, 12, nx::Seconds{2.05F}, random, nowhere));
+    const nx::Vec3 muzzle{.x = 31.0F};
+    const nx::Vec3 otherMuzzle{.x = 31.0F, .y = 4.0F};
+    const std::vector<nx::render::StudioLight> lights = flashes.lightsAt(
+        nx::Seconds{2.05F}, [&](const cs::MuzzleFlashAnchor& anchor) -> std::optional<nx::Vec3> {
+            if (anchor == kAnchor) {
+                return muzzle;
+            }
+            if (anchor == second) {
+                return otherMuzzle;
+            }
+            return std::nullopt;
+        });
+    ASSERT_EQ(lights.size(), 2U) << "one a muzzle, none from a muzzle nowhere";
+    EXPECT_EQ(lights[0].position, muzzle);
+    EXPECT_NEAR(lights[0].color.x, 1500.0F, 0.5F) << "the newer's whole and the older's half";
+    EXPECT_FLOAT_EQ(lights[0].reach, 128.0F);
+    EXPECT_EQ(lights[1].position, otherMuzzle);
+    EXPECT_FLOAT_EQ(lights[1].color.x, 1000.0F);
 }
 
 /// The bytes of an SPR v2 file of one frame of one pixel.

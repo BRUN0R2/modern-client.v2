@@ -186,8 +186,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         bones.empty() ? std::nullopt : std::optional{view.viewModel->weapon};
     flash(level, viewModel, inHand, view.clientEvents, bones, view.time);
     // A flash shows where its attachment is in this frame's pose: it follows the muzzle.
-    const auto whereIs = [viewModel, &bones](const MuzzleFlash& shown) {
-        return viewModel != nullptr ? viewModel->attachmentAt(bones, shown.anchor.attachment) : std::nullopt;
+    const auto whereIs = [viewModel, &bones](const MuzzleFlashAnchor& anchor) {
+        return viewModel != nullptr ? viewModel->attachmentAt(bones, anchor.attachment) : std::nullopt;
     };
     std::vector<nx::render::SpriteInstance> sprites = level.sprites().instances(m_spriteModels, view.time);
     for (nx::render::SpriteInstance& sprite : sprites) {
@@ -211,7 +211,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     std::vector<nx::render::SpriteInstance> flashes;
     for (const MuzzleFlash& shown : m_flashes.shown()) {
         const std::optional<float> frame = shown.frameAt(view.time);
-        const std::optional<nx::Vec3> origin = whereIs(shown);
+        const std::optional<nx::Vec3> origin = whereIs(shown.anchor);
         if (!frame || !origin) {
             continue; // only its light is left
         }
@@ -238,16 +238,10 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return {};
     }
     // The weapon in hand is lit as modern shooters light theirs, readable whatever the map: a key light
-    // above it and behind the eye, carried with the view, first; then the light of its flashes, the
-    // nearest; then the map's lights nearest it, in the room left.
+    // above it and behind the eye, carried with the view, first; then the light of its flashes, one a
+    // muzzle, the nearest; then the map's lights nearest it, in the room left.
     std::vector<nx::render::StudioLight> lights{viewModelLightOf(view.camera)};
-    for (const MuzzleFlash& shown : m_flashes.shown()) {
-        const std::optional<nx::Vec3> origin = whereIs(shown);
-        if (const std::optional<nx::render::StudioLight> light =
-                origin ? shown.lightAt(view.time, *origin) : std::nullopt) {
-            lights.push_back(*light);
-        }
-    }
+    std::ranges::copy(m_flashes.lightsAt(view.time, whereIs), std::back_inserter(lights));
     const std::size_t room =
         nx::render::kMostStudioLights - std::min(lights.size(), nx::render::kMostStudioLights);
     std::ranges::copy(nearestLights(level.lights(), view.camera.position, room), std::back_inserter(lights));
