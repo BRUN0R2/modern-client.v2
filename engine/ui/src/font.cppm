@@ -69,7 +69,10 @@ struct FontMetrics {
 
 /// The device heights Windows sizes a face by, read from its VDMX table: the records of the group for
 /// a square pixel, when Windows takes them (a version 1 table, or a version 0 table made for the
-/// ANSI characters), in the order of their ems; none otherwise, or when the table is cut short.
+/// ANSI characters), in the order of their ems; none otherwise, or when the table is cut short. A
+/// record whose line is less than half its em is left out: a face's line is at least half its em,
+/// so it is no height of the face, but a table broken, or made to size the face far beyond the cell
+/// (tens of thousands of pixels per em) and so exhaust whoever draws its glyphs.
 [[nodiscard]] auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDeviceHeight>;
 
 /// The size Windows gives a face with `vertical` metrics (its line at least half its em) and
