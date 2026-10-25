@@ -74,6 +74,11 @@ public:
             .lightGamma = video.lightGamma.value()};
 }
 
+/// The most decals on faces the video cvars keep: `r_decals`, never negative.
+[[nodiscard]] auto decalLimitOf(const nx::settings::VideoCvars& video) -> std::size_t {
+    return nx::narrow<std::size_t>(video.decals.value());
+}
+
 /// `name` as the original's `play` reads it: a WAV file's when it has no extension.
 [[nodiscard]] auto soundFileOf(std::string_view name) -> std::string {
     const std::size_t dot = name.rfind('.');
@@ -217,6 +222,8 @@ private:
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
+    /// Plays the map the console asked for, if any: its scene is made with the next frame, and
+    /// r_decals is held as entering a game of more than one player holds it.
     void startNextSession();
     /// Reads, before the session plays the frame, the view models of the weapons made or changed since
     /// (cs::Level::updateViewModels), which upload puts on the GPU, and their sounds.
@@ -624,6 +631,11 @@ void Client::startNextSession() {
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
     m_session = std::exchange(m_nextSession, std::nullopt);
+    // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
+    // to mp_decals as the original's client holds it when it enters one.
+    if (auto held = nx::settings::enterMultiplayerGame(m_cvars->video); !held) {
+        nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
+    }
     m_viewModelEvents = {}; // a new game's first play is new
     m_viewPose.reset();     // what the old game showed went with its level
     m_clientEvents.clear();
@@ -685,6 +697,8 @@ void Client::stampBulletHoles() {
     if (!m_scene) {
         return;
     }
+    // r_decals as it is now, as the original reads it at each decal.
+    m_scene->setDecalLimit(decalLimitOf(m_cvars->video));
     const cs::Level& level = *m_session->level;
     for (const cs::Impact& impact : impacts) {
         const std::optional<std::string_view> name =
@@ -828,7 +842,8 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, sceneFormat,
                                        effectsFormat, gammaOf(m_cvars->video),
                                        m_isSceneEnhanced ? nx::render::StudioLook::Enhanced
-                                                         : nx::render::StudioLook::Legacy);
+                                                         : nx::render::StudioLook::Legacy,
+                                       decalLimitOf(m_cvars->video));
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }

@@ -54,12 +54,14 @@ struct SceneView {
 class Scene {
 public:
     /// The scene of `level`, which must outlive it, for targets of `format`, its effects for targets of
-    /// `effectsFormat` (drawEffects), drawn with `shaders` and `gamma`, its uploads recorded in
-    /// `commands`, the decals its map stamps for good as its game starts stamped. Errors: CreateFailed.
+    /// `effectsFormat` (drawEffects), drawn with `shaders` and `gamma` in `look`, its uploads recorded in
+    /// `commands`, keeping `decalLimit` decals on faces (setDecalLimit), the decals its map stamps for good
+    /// as its game starts stamped. Errors: CreateFailed.
     [[nodiscard]] static auto create(nx::rhi::Device& device, nx::rhi::CommandList& commands,
                                      const Level& level, const SceneShaders& shaders, nx::rhi::Format format,
                                      nx::rhi::Format effectsFormat, const nx::render::GammaSettings& gamma,
-                                     nx::render::StudioLook look) -> nx::Result<Scene, SceneError>;
+                                     nx::render::StudioLook look, std::size_t decalLimit)
+        -> nx::Result<Scene, SceneError>;
 
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
@@ -96,6 +98,9 @@ public:
     /// faces it was stamped on.
     auto shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
         -> std::uint32_t;
+    /// Takes the next decals within `limit`, as nx::render::BspWorld::setDecalLimit does: `r_decals` as
+    /// it is now.
+    inline void setDecalLimit(std::size_t limit) { m_world.setDecalLimit(limit); }
 
     /// What the world drew in its last frame.
     [[nodiscard]] inline auto lastFrame() const noexcept -> const nx::render::FrameStats& {
