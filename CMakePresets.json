@@ -56,6 +56,18 @@
       }
     },
     {
+      "name": "tools-windows-msvc",
+      "displayName": "Windows · MSVC · Tools",
+      "inherits": "windows-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NX_BUILD_TESTS": "OFF",
+        "NX_BUILD_BENCHMARKS": "OFF",
+        "NX_BUILD_CLIENT": "OFF",
+        "NX_BUILD_TOOLS": "ON"
+      }
+    },
+    {
       "name": "linux",
       "hidden": true,
       "inherits": "base",
@@ -73,6 +85,19 @@
       "displayName": "Linux · GCC · Release",
       "inherits": "linux",
       "cacheVariables": { "CMAKE_CXX_COMPILER": "g++", "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "tools-linux-gcc",
+      "displayName": "Linux · GCC · Tools",
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_BUILD_TYPE": "Release",
+        "NX_BUILD_TESTS": "OFF",
+        "NX_BUILD_BENCHMARKS": "OFF",
+        "NX_BUILD_CLIENT": "OFF",
+        "NX_BUILD_TOOLS": "ON"
+      }
     },
     {
       "name": "tsan-linux-gcc",
@@ -112,8 +137,10 @@
     { "name": "dev-windows-msvc", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "configurePreset": "release-windows-msvc" },
     { "name": "fuzz-windows-msvc", "configurePreset": "fuzz-windows-msvc" },
+    { "name": "tools-windows-msvc", "configurePreset": "tools-windows-msvc" },
     { "name": "dev-linux-gcc", "configurePreset": "dev-linux-gcc" },
     { "name": "release-linux-gcc", "configurePreset": "release-linux-gcc" },
+    { "name": "tools-linux-gcc", "configurePreset": "tools-linux-gcc" },
     { "name": "tsan-linux-gcc", "configurePreset": "tsan-linux-gcc" },
     { "name": "dev-linux-clang", "configurePreset": "dev-linux-clang" },
     { "name": "asan-linux-clang", "configurePreset": "asan-linux-clang" },

@@ -131,10 +131,11 @@ dialect is `/std:c++latest`.
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers with Clang (ASan + UBSan, TSan) | To be validated |
 | `fuzz-windows-msvc` | The fuzz targets and the libraries, with libFuzzer and AddressSanitizer, without the tests, benchmarks, tools and client: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus; an input that runs past `NX_FUZZ_INPUT_SECONDS` (30) is reported as a hang and kept | Validated; nightly in CI (`fuzz`) |
-| `server-headless`, `tools` | Only `nextds` or only the tools | Planned: `tools` is not defined yet (its tools, `nxcheck` and `nxview`, exist); `server-headless` with `nextds` |
+| `tools-windows-msvc` / `tools-linux-gcc` | Only the tools, `nxcheck` and `nxview`, and the libraries they link, in Release: no tests, benchmarks nor client | `tools-windows-msvc` validated; `tools-linux-gcc` to be validated |
+| `server-headless` | Only `nextds` | Planned, with `nextds` |
 
-Each configure preset has a build preset and a test preset with the same name. The build
-directory is `build/<preset>`.
+Each configure preset has a build preset with the same name, and a test preset but for the tools
+presets, which build no test. The build directory is `build/<preset>`.
 
 **Windows (command line):** the build uses Ninja + MSVC, which need the Visual Studio
 environment. The `scripts/devShell.ps1` script loads that environment and sets

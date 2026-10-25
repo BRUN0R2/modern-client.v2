@@ -91,7 +91,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `std` module built by the project (`nx::std`) from `modules.json`, without experimental CMake features ([ADR-0014](docs/adr/0014-std-module-built-by-the-project.md))
 - [x] CMake helpers: `nxAddModuleLibrary`, `nxAddTest`, per-target warning policy
 - [x] `CMakePresets.json`: dev/release MSVC, dev/release GCC, dev Clang, ASan + UBSan, TSan
-- [ ] `tools` preset (its targets, `nxcheck` and `nxview`, exist) and `server-headless` preset (once `nextds` exists)
+- [x] `tools` presets (`tools-windows-msvc`, `tools-linux-gcc`): `nxcheck` and `nxview` alone, in Release
+- [ ] `server-headless` preset (once `nextds` exists)
 - [ ] Windows presets with GCC (MinGW-w64) and Clang
 - [x] `vcpkg.json` with a pinned baseline and a `tests` feature
 - [x] `x64-windows-nx` and `x64-linux-nx` triplets (dependencies without exceptions and without RTTI)
