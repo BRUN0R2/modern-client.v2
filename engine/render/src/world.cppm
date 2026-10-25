@@ -123,6 +123,8 @@ inline constexpr std::array<std::size_t, kSkySuffixes.size()> kSkySideOfAxis{0, 
 /// The sky of a map whose worldspawn has no `skyname`, and the one the original falls back to.
 inline constexpr std::string_view kDefaultSkyName = "desert";
 
+/// What a world is made of (BspWorld::create): the map, its textures' WADs, its sky and its decals,
+/// and what it draws to.
 struct BspWorldDesc {
     /// Read every frame for its tree and visibility: it must outlive the world.
     const assets::BspView& map;
@@ -198,6 +200,8 @@ struct FrameStats {
     std::size_t triangles = 0;
 };
 
+/// A map's world on the GPU: the faces of its world and of its brush entities, their textures and
+/// lightmaps, its sky and its decals, drawn as the original culls and sorts them (section 8).
 class BspWorld {
 public:
     /// Builds the world of `desc.map` and records its uploads in `commands`: draw it from the same

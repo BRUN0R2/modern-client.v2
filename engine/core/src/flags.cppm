@@ -35,35 +35,42 @@ public:
     /// Every enumerator before Count.
     [[nodiscard]] static constexpr auto all() noexcept -> Flags { return ~Flags{}; }
 
+    /// Sets `flag`.
     constexpr auto set(Enum flag) noexcept -> Flags& {
         const auto [word, mask] = locate(flag);
         m_words[word] |= mask;
         return *this;
     }
 
+    /// Clears `flag`.
     constexpr auto reset(Enum flag) noexcept -> Flags& {
         const auto [word, mask] = locate(flag);
         m_words[word] &= ~mask;
         return *this;
     }
 
+    /// Sets `flag` when it is clear, else clears it.
     constexpr auto toggle(Enum flag) noexcept -> Flags& {
         const auto [word, mask] = locate(flag);
         m_words[word] ^= mask;
         return *this;
     }
 
+    /// Whether `flag` is set.
     [[nodiscard]] constexpr auto test(Enum flag) const noexcept -> bool {
         const auto [word, mask] = locate(flag);
         return (m_words[word] & mask) != 0;
     }
 
+    /// Whether a flag is set.
     [[nodiscard]] constexpr auto any() const noexcept -> bool {
         return std::ranges::any_of(m_words, [](Word word) { return word != 0; });
     }
 
+    /// Whether no flag is set.
     [[nodiscard]] constexpr auto none() const noexcept -> bool { return !any(); }
 
+    /// How many flags are set.
     [[nodiscard]] constexpr auto count() const noexcept -> std::size_t {
         std::size_t total = 0;
         for (const auto word : m_words) {

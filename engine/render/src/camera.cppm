@@ -18,6 +18,7 @@ inline constexpr Degrees kDefaultFieldOfView{90.0F};
 /// The nearest a camera sees, in map units: as close as a player's view comes to a wall.
 inline constexpr float kNearPlane = 4.0F;
 
+/// Where a view is drawn from and how wide it sees: the player's eye, its angles and its fov.
 struct Camera {
     Vec3 position{};
     EulerAngles angles{};

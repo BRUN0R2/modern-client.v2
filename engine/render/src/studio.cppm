@@ -132,6 +132,8 @@ enum class StudioLook : std::uint8_t {
 /// The most lights near a model it lights itself by, in the enhanced look.
 inline constexpr std::size_t kMostStudioLights = 4;
 
+/// What a studio renderer draws with (StudioRenderer::create): its shader, its target's format, the
+/// original's picture, its look, and how its meshes are blended when not as their flags say.
 struct StudioRendererDesc {
     /// shaders/studio.slang, compiled for the device (bin/shaders/studio.spv).
     std::span<const std::byte> shaderCode{};
@@ -206,6 +208,8 @@ struct StudioMaterial {
     std::optional<StudioBlend> blend{};
 };
 
+/// A studio model to put on the GPU (StudioRenderer::load): its file, the file of its textures, and
+/// the materials of its textures in the enhanced look.
 struct StudioModelDesc {
     const assets::MdlView& model;
     /// Where its textures and skins are: the model itself, or its `*T.mdl` (assets::texturesFilePath).

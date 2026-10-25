@@ -14,6 +14,7 @@ import :conversion;
 
 export namespace nx {
 
+/// What a quantity's value is stored as: a whole number or a floating-point one.
 template <class Rep>
 concept QuantityRepresentation = Integer<Rep> || std::floating_point<Rep>;
 

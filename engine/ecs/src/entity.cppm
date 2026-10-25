@@ -64,6 +64,7 @@ public:
     /// than kGenerationLimit exist to test retirement without four billion destructions.
     explicit EntityTable(std::uint32_t generationLimit) noexcept;
 
+    /// A live entity: the oldest slot given back, at its next generation, else a new slot.
     [[nodiscard]] auto create() -> Entity;
 
     /// `entity` must be alive.
