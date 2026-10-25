@@ -360,7 +360,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return std::unexpected{std::move(video.error())};
     }
     m_video = std::move(*video);
-    const auto size = m_video->window.pixelSize();
+    auto size = m_video->window.pixelSize();
     if (!size) {
         return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
@@ -823,7 +823,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 return nx::fail(ClientError::GpuFailed, std::move(image.error()));
             }
             m_consoleImage.emplace(std::move(*image));
-            const auto size = m_video->window.pixelSize();
+            auto size = m_video->window.pixelSize();
             if (!size) {
                 return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
             }
