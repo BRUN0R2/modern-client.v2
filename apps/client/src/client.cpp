@@ -294,6 +294,7 @@ private:
     nx::platform::Stopwatch m_mapClock; ///< Since the map started: the light styles' time.
     nx::platform::Instant m_frameStart = nx::platform::MonotonicClock::now();
     bool m_isRunning = true;
+    bool m_isFocused = true; ///< The window is, as it opens.
 };
 
 auto Client::start() -> nx::Result<void, ClientError> {
@@ -563,6 +564,9 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // What the keys queued, and what a `wait` left, before the frame's commands are made.
         std::ignore = m_console.execute();
         if (m_audio != nullptr) {
+            // The original is silent while its window is not focused.
+            const bool isHeard = m_isFocused || m_cvars->audio.playUnfocused.value();
+            m_audio->setMuting(isHeard ? cs::Muting::Off : cs::Muting::On);
             m_audio->update();
         }
         startNextSession();
@@ -591,6 +595,9 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
     m_events.clear();
     m_video->window.pollEvents(m_events);
     for (const nx::platform::WindowEvent& event : m_events) {
+        if (const auto* focus = std::get_if<nx::platform::FocusChanged>(&event)) {
+            m_isFocused = focus->isFocused;
+        }
         const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
         const bool isConsoleOpen = m_consoleWindow != nullptr && m_consoleWindow->isOpen();
         if (isConsoleOpen && !std::holds_alternative<nx::platform::CloseRequested>(event) &&

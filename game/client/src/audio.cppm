@@ -17,6 +17,12 @@ import cs.shared;
 
 export namespace cs {
 
+/// Whether everything heard is silenced, the sounds playing on in silence.
+enum class Muting : std::uint8_t {
+    Off,
+    On,
+};
+
 /// What can go wrong playing a sound.
 enum class PlayError : std::uint8_t {
     NoSound,   ///< The sound could not be read (cause: the SoundError).
@@ -70,10 +76,15 @@ public:
     /// system's cache. Errors: NoSound.
     [[nodiscard]] auto preload(std::string_view name) -> nx::Result<void, PlayError>;
 
-    /// Sends the mixer `volume`'s value when it changed since it was last sent: before each sound
-    /// played, so that none is heard at another gain, and each frame, so that a change is heard
-    /// while nothing new plays. A value the mixer could not take is sent again the next time.
+    /// Sends the mixer the gain of everything heard when it changed since it was last sent: `volume`'s
+    /// value, or none while muted (setMuting); before each sound played, so that none is heard at
+    /// another gain, and each frame, so that a change is heard while nothing new plays. A value the
+    /// mixer could not take is sent again the next time.
     void update();
+
+    /// Silences everything heard while `muting` is On, the sounds playing on in silence, from the next
+    /// update.
+    inline void setMuting(Muting muting) noexcept { m_muting = muting; }
 
     /// The rate the output plays at.
     [[nodiscard]] inline auto rate() const noexcept -> nx::SampleRate { return m_device.rate(); }
@@ -98,7 +109,8 @@ private:
     nx::platform::AudioDevice m_device; ///< Last: it stops reading the mixer before the mixer goes.
     std::uint32_t m_nextLocalVoice = 0; ///< Of the kLocalVoices, the first ones.
     std::optional<float> m_volume;      ///< The gain the mixer was last sent.
-    nx::Random m_random;                ///< What chooses the files and the pitches.
+    Muting m_muting = Muting::Off;
+    nx::Random m_random; ///< What chooses the files and the pitches.
 };
 
 } // namespace cs

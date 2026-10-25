@@ -178,7 +178,7 @@ streamed.
 | `s_max_voices` | new | Voice pool size |
 | `s_spatial`, `s_occlusion` | new | Spatialization and occlusion |
 | `s_device` | new | Output device |
-| `s_play_unfocused` | new | Whether the game is heard while its window is not focused |
+| `s_play_unfocused` | new | Whether the game is heard while its window is not focused: 0 by default, silent then, as the original is (today: `next` sets the mixer's gain to none, the sounds playing on in silence) |
 
 ## 9. Typed errors
 

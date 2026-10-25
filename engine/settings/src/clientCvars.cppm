@@ -65,6 +65,9 @@ struct PlayerCvars {
 /// What is heard.
 struct AudioCvars {
     console::Cvar<float> volume; ///< The gain of everything heard, 1 the sounds as they are.
+    /// `s_play_unfocused`: the game is heard while its window is not focused; else it is silent then,
+    /// as the original is.
+    console::Cvar<bool> playUnfocused;
 };
 
 /// The client's cvars, by what they set.
