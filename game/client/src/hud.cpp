@@ -322,13 +322,27 @@ auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars,
                                     .defaultValue = true,
                                     .description = "Whether the crosshair is added to what is behind it.",
                                     .flags = kArchived});
+    auto rightHand = console.registerCvar(nx::console::CvarDesc<bool>{
+        .name = "cl_righthand",
+        .defaultValue = true,
+        .description = "Whether the weapons are held in the right hand, else the left.",
+        .flags = kArchived});
     if (!color || !size) {
         return std::unexpected{std::move(!color ? color.error() : size.error())};
     }
-    if (!translucent) {
-        return std::unexpected{std::move(translucent.error())};
+    for (auto* const registered : {&translucent, &rightHand}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
     }
-    return HudCvars{.crosshairColor = *color, .crosshairSize = *size, .crosshairTranslucent = *translucent};
+    return HudCvars{.crosshairColor = *color,
+                    .crosshairSize = *size,
+                    .crosshairTranslucent = *translucent,
+                    .rightHand = *rightHand};
+}
+
+auto HudCvars::hand() const -> Hand {
+    return rightHand.value() ? Hand::Right : Hand::Left;
 }
 
 auto HudCvars::crosshair() const -> CrosshairStyle {

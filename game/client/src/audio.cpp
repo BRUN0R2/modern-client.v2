@@ -45,13 +45,14 @@ auto ClientAudio::playLocal(std::string_view name, float volume, nx::Seconds del
     return playAuto(name, Playing{.volume = volume, .delay = delay});
 }
 
-auto ClientAudio::play(const GameSound& sound, nx::Seconds delay) -> nx::Result<void, PlayError> {
+auto ClientAudio::play(const GameSound& sound, float volume, nx::Seconds delay)
+    -> nx::Result<void, PlayError> {
     const std::string& file = sound.files[nx::narrow<std::size_t>(m_random.below(sound.files.size()))];
     const std::uint32_t pitch =
         sound.pitch ? sound.pitch->least + nx::narrow<std::uint32_t>(m_random.below(
                                                std::uint64_t{sound.pitch->most} - sound.pitch->least + 1))
                     : kNormalPitch;
-    const Playing playing{.volume = sound.volume,
+    const Playing playing{.volume = volume,
                           .pitch = static_cast<float>(pitch) / static_cast<float>(kNormalPitch),
                           .delay = delay};
     if (sound.channel == SoundChannel::Auto) {

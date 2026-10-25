@@ -427,6 +427,18 @@ TEST(CrosshairTest, ItsCvarsAreTheOriginalsAndRefuseWhatItCannotDraw) {
     EXPECT_FALSE(changed.isTranslucent);
 }
 
+TEST(HudCvarsTest, ThePlayersHandIsCounterStrikesRightUntilClRighthandSaysOtherwise) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = cs::HudCvars::registerIn(console);
+    ASSERT_TRUE(cvars.has_value()) << nx::describe(cvars.error());
+    EXPECT_EQ(cvars->hand(), cs::Hand::Right);
+    EXPECT_NE(console.archivedCvars().find(R"(cl_righthand "1")"), std::string::npos);
+    EXPECT_TRUE(console.setCvar("cl_righthand", "0").has_value());
+    EXPECT_EQ(cvars->hand(), cs::Hand::Left);
+}
+
 TEST(CrosshairTest, ColorsAndSizesAreReadAsTheOriginalWritesThem) {
     EXPECT_EQ(cs::crosshairColorOf("50 250 50"),
               (nx::render::ScreenColor{.red = 50, .green = 250, .blue = 50}));

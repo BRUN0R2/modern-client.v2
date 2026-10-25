@@ -251,7 +251,7 @@ Readers today:
   runs of 128, is refused before anything is allocated.
 
 Every reader refuses malformed input with a typed error and is fuzzed
-([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`, `materials.txt`...) are planned with their consumers (M3), but the sprite lists and VGUI2's KeyValues, read today.
+([18](18-testing-and-quality.md#sanitizers-and-analysis)). The binary formats of the table above have their readers, but for the BMP of the overviews (with the spectator); the text formats (`sentences.txt`...) are planned with their consumers (M3), but the sprite lists, VGUI2's KeyValues and `materials.txt` (the game's `cs::TextureMaterials`, read as the original's movement reads it), read today. Where a map's faces lie is `nx.assets:bspSurfaces`: their corners and texture coordinates, the extent of their texels as the compilers measured them, and the first face a segment meets in a model's tree (`firstAlong`, `surfaceAt`: the original's `R_RecursiveLightPoint` and `SurfaceAtPoint`), which the light of the world and the texture a player stands on are found by.
 
 ### 3.2 Modern (for mods)
 

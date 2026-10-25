@@ -60,6 +60,10 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                                                     .flags = kServerCvar,
                                                     .minimum = 0,
                                                     .maximum = kMostRestartSeconds});
+    auto footsteps = console.registerCvar(CvarDesc<bool>{.name = "mp_footsteps",
+                                                         .defaultValue = true,
+                                                         .description = "Whether the players' steps sound.",
+                                                         .flags = kServerCvar});
     if (!freezeTime || !roundTime) {
         return std::unexpected{std::move(!freezeTime ? freezeTime.error() : roundTime.error())};
     }
@@ -68,11 +72,15 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
             return std::unexpected{std::move(registered->error())};
         }
     }
+    if (!footsteps) {
+        return std::unexpected{std::move(footsteps.error())};
+    }
     return GameCvars{.freezeTime = *freezeTime,
                      .roundTime = *roundTime,
                      .startMoney = *startMoney,
                      .restartRound = *restartRound,
-                     .restart = *restart};
+                     .restart = *restart,
+                     .footsteps = *footsteps};
 }
 
 auto GameCvars::roundLengths() const -> RoundLengths {

@@ -5,7 +5,8 @@
 /// brush entities as the game makes them, and the player among them, moved by the game's own
 /// movement one user command a tick (docs/07-simulation-and-physics.md, section 2.2), with the
 /// weapons a player of its team spawns with (cs::Inventory), in the rounds of the map (cs::Rounds),
-/// spawning again at its team's spawn points as each starts, paid by them (cs::TeamAccounts).
+/// spawning again at its team's spawn points as each starts, paid by them (cs::TeamAccounts); its
+/// feet sound by what it walks on (cs::StepVoice).
 export module cs.client:localGame;
 
 import std;
@@ -127,9 +128,9 @@ public:
     /// Where the player's shots met the world and the brush entities since the last call, in their
     /// order: where a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
-    /// The sounds the player's weapons made since the last call, each with the moment of its tick
-    /// (Inventory::takeSounds).
-    [[nodiscard]] inline auto takeSounds() -> std::vector<SoundMade> { return m_inventory.takeSounds(); }
+    /// The sounds the player made since the last call, each with the moment of its tick: its weapons'
+    /// (Inventory::takeSounds), then its feet's.
+    [[nodiscard]] auto takeSounds() -> std::vector<SoundMade>;
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye
@@ -140,6 +141,15 @@ private:
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;
     /// One tick of the game, `command` the player's.
     void tick(const UserCommand& command);
+    /// The sounds `sounds`, made by the player's movement at the tick of `command` among `entities`,
+    /// as the player hears them: each step by what it steps on (Level::materialAlong, in the space of
+    /// the entity it stands on), while mp_footsteps lets them sound; each splash.
+    void hearMovement(std::span<const MovementSound> sounds, std::span<const BrushEntity> entities,
+                      const UserCommand& command);
+    /// What the ground the player stood on at `ground` is made of: the texture kStepTextureDepth under
+    /// it, on the world or on the entity among `entities` it stood on (PM_CatagorizeTextureType).
+    [[nodiscard]] auto groundMaterial(const StepGround& ground, std::span<const BrushEntity> entities) const
+        -> TextureMaterial;
     /// The rules of the round at the tick (CHalfLifeMultiplay::Think): once a second the restart the
     /// cvars ask for (GameCvars::takeRestart); then Rounds::think, a round that starts as long as the
     /// cvars say. As the freeze ends the player's HUD is told the round's time and the player runs
@@ -177,6 +187,8 @@ private:
     GameCvars m_cvars;
     Rounds m_rounds;
     TeamAccounts m_accounts;
+    StepVoice m_stepVoice;
+    std::vector<SoundMade> m_movementSounds; ///< Since takeSounds.
     bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
     RoundTimer m_roundTimer{};     ///< What the player's HUD was told last.
     std::optional<std::size_t> m_lastSpawnPoint{}; ///< Of its team's, the one it last spawned at.

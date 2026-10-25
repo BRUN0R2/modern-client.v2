@@ -24,8 +24,8 @@ namespace nx::render {
 struct FaceLight {
     Vec4 s{}; ///< Its texture's axes: s = dot(point, s.xyz) + s.w.
     Vec4 t{};
-    std::optional<SurfaceExtent> extent{}; ///< None: no point is on it.
-    bool isSpecial = false;                ///< Sky, water and the like: the light passes it.
+    std::optional<assets::SurfaceExtent> extent{}; ///< None: no point is on it.
+    bool isSpecial = false;                        ///< Sky, water and the like: the light passes it.
     bool isSky = false;
     bool hasSamples = false; ///< As many as its extent and lightmaps need, in the file.
 };
