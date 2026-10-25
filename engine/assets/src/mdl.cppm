@@ -84,6 +84,8 @@ enum class BoneAxis : std::uint8_t {
     Count,
 };
 
+/// A bone of a studio model: its name, its parent, the controllers that drive it, its rest position
+/// and angles, and what animation units move it by.
 struct StudioBone {
     std::string name;
     std::optional<BoneIndex> parent{}; ///< Before this bone; none for a root.

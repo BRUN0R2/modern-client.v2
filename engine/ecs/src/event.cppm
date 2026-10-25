@@ -8,6 +8,7 @@ import std;
 
 export namespace nx::ecs {
 
+/// What an event of a world can be: an object of its own, moved and destroyed without throwing.
 template <class Type>
 concept Event = std::is_object_v<Type> && !std::is_const_v<Type> &&
                 std::is_nothrow_move_constructible_v<Type> && std::is_nothrow_destructible_v<Type>;
