@@ -19,6 +19,9 @@ namespace cs {
 namespace {
 
 constexpr std::string_view kSpriteExtension = ".spr";
+/// How much an entity's box grows each way as the engine links it (SV_LinkEdict), and a line's as it
+/// bounds the way (SV_MoveBounds).
+constexpr float kLinkMargin = 1.0F;
 /// The model of a hostage the map names none for (CHostage::Precache).
 constexpr std::string_view kDefaultHostageModel = "models/scientist.mdl";
 /// The activity a hostage idles in (ACT_IDLE).
@@ -143,6 +146,72 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
     return read;
 }
 
+auto MapModels::solidBoxes() const -> std::vector<SolidBox> {
+    std::vector<SolidBox> boxes;
+    for (const Entity& entity : m_entities) {
+        if (entity.model.kind == ModelClass::Hostage) {
+            boxes.push_back(SolidBox{.origin = entity.model.origin, .box = kHostageBox});
+        }
+    }
+    return boxes;
+}
+
+auto MapModels::traceHostages(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end, nx::Seconds sinceStart,
+                              const nx::collision::Trace& sofar) const
+    -> std::optional<nx::collision::Trace> {
+    const nx::Vec3 margin{.x = kLinkMargin, .y = kLinkMargin, .z = kLinkMargin};
+    const nx::Aabb traced = nx::collision::hullBoxOf(hull);
+    const nx::Aabb way{.min = nx::componentMin(start, end) + traced.min - margin,
+                       .max = nx::componentMax(start, end) + traced.max + margin};
+    nx::collision::Trace kept = sofar;
+    bool isMet = false;
+    for (const Entity& entity : m_entities) {
+        if (entity.model.kind != ModelClass::Hostage ||
+            !way.intersects(kHostageBox.translated(entity.model.origin).expanded(margin))) {
+            continue;
+        }
+        std::optional<nx::collision::Trace> hit = traceHostage(entity, hull, start, end, sinceStart);
+        if (hit && nx::collision::keepFirstStop(kept, *hit)) {
+            isMet = true;
+        }
+    }
+    return isMet ? std::optional{kept} : std::nullopt;
+}
+
+auto MapModels::traceHostage(const Entity& hostage, nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end,
+                             nx::Seconds sinceStart) const -> std::optional<nx::collision::Trace> {
+    const nx::Vec3 origin = hostage.model.origin;
+    if (hull != nx::collision::Hull::Point) {
+        nx::collision::Trace hit = nx::collision::traceBox(nx::collision::grownByHull(kHostageBox, hull),
+                                                           start - origin, end - origin);
+        hit.end = hit.end + origin;
+        return hit;
+    }
+    const nx::assets::MdlView& view = *m_files[hostage.file]->files->view;
+    if (view.hitboxes().empty()) {
+        return std::nullopt; // not met, where the original's would be all in the solid: the game's have them
+    }
+    const std::vector<nx::Mat3x4> bones = poseOf(hostage, sinceStart, SequenceMotion::Kept);
+    return nx::collision::traceHitboxes(cs::placedHitboxesOf(view.hitboxes(), bones), start, end).trace;
+}
+
+auto MapModels::poseOf(const Entity& entity, nx::Seconds sinceStart, SequenceMotion motion) const
+    -> std::vector<nx::Mat3x4> {
+    const File& file = *m_files[entity.file];
+    const nx::assets::MdlView& view = *file.files->view;
+    const nx::assets::StudioSequence& sequence = view.sequences()[entity.model.sequence];
+    // The engine's studio transform turns a model by its entity's angles, the pitch negated
+    // (R_StudioSetUpTransform's "stupid quake bug"), and so does the server's (R_StudioHull).
+    const nx::EulerAngles turn{.pitch = -entity.model.angles.pitch,
+                               .yaw = entity.model.angles.yaw,
+                               .roll = entity.model.angles.roll};
+    return cs::poseBones(cs::skeletonOf(view), sequence, file.animations.at(entity.model.sequence),
+                         {.frame = cs::sequenceFrameAt(sequence, sinceStart, entity.model.framerate),
+                          .controllers = entity.controllers,
+                          .motion = motion,
+                          .placement = nx::affine(nx::rotationMatrix(turn), entity.model.origin)});
+}
+
 void MapModels::dropToFloor(nx::ecs::World& world, const nx::collision::BrushHulls& hulls) {
     for (Entity& entity : m_entities) {
         if (entity.model.kind == ModelClass::Hostage) {
@@ -173,19 +242,7 @@ auto MapModels::posed(std::span<const nx::render::StudioModel> models, nx::Secon
     PosedModels posed;
     posed.bones.reserve(m_entities.size());
     for (const Entity& entity : m_entities) {
-        const File& file = *m_files[entity.file];
-        const nx::assets::MdlView& view = *file.files->view;
-        const nx::assets::StudioSequence& sequence = view.sequences()[entity.model.sequence];
-        // The engine's studio transform turns a model by its entity's angles, the pitch negated
-        // (R_StudioSetUpTransform's "stupid quake bug").
-        const nx::EulerAngles turn{.pitch = -entity.model.angles.pitch,
-                                   .yaw = entity.model.angles.yaw,
-                                   .roll = entity.model.angles.roll};
-        posed.bones.push_back(
-            cs::poseBones(cs::skeletonOf(view), sequence, file.animations.at(entity.model.sequence),
-                          {.frame = cs::sequenceFrameAt(sequence, sinceStart, entity.model.framerate),
-                           .controllers = entity.controllers,
-                           .placement = nx::affine(nx::rotationMatrix(turn), entity.model.origin)}));
+        posed.bones.push_back(poseOf(entity, sinceStart, SequenceMotion::Removed));
     }
     // The instances point into the bones, which no longer move.
     for (std::size_t index = 0; index < m_entities.size(); ++index) {

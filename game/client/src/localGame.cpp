@@ -45,8 +45,8 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_status{.money = m_cvars.startingMoney()},
-      m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_solidBoxes{level.models().solidBoxes()},
+      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -138,7 +138,8 @@ void LocalGame::tick(const UserCommand& command) {
     }
     m_lastButtons = command.buttons;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
-    const MovementResult moved = simulateMovement(m_player, command, MovementSettings{}, hulls, entities);
+    const MovementResult moved =
+        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, m_solidBoxes);
     m_player = moved.state;
     hearMovement(moved.sounds, entities, command);
     nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
@@ -158,14 +159,28 @@ void LocalGame::tick(const UserCommand& command) {
         .isOnGround = m_player.isOnGround,
         .isDucked = m_player.isDucked,
         .canAttack = !m_rounds.isFrozen()};
-    const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
-        return nx::game::traceSolids(m_world, hulls, hull, start, end);
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    const nx::Seconds sinceStart = time.now.since(nx::GameTime{}, time.rate);
+    // What the attacks meet: the world and its solid brush entities, then a hostage met first, a body.
+    const WeaponTracer tracer = [this, &hulls, sinceStart](nx::collision::Hull hull, nx::Vec3 start,
+                                                           nx::Vec3 end) {
+        const nx::collision::Trace solid = nx::game::traceSolids(m_world, hulls, hull, start, end);
+        if (std::optional<nx::collision::Trace> hostage =
+                m_level->models().traceHostages(hull, start, end, sinceStart, solid)) {
+            return WeaponHit{.trace = *hostage, .isBody = true};
+        }
+        return WeaponHit{.trace = solid};
     };
-    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, nx::game::tickTimeOf(m_world))) {
+    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
+        const nx::Vec3 end = shot.origin + (shot.direction * kBulletReach.value());
         const nx::game::SolidHit hit =
-            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin,
-                                     shot.origin + (shot.direction * kBulletReach.value()));
+            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin, end);
+        // A hostage the shot meets first stops it, and leaves no mark behind it.
+        if (m_level->models().traceHostages(nx::collision::Hull::Point, shot.origin, end, sinceStart,
+                                            hit.trace)) {
+            continue;
+        }
         if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
             m_impacts.push_back(Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
         }

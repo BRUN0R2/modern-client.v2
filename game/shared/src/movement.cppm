@@ -188,6 +188,11 @@ struct MovementState {
     nx::UnitsPerSecond fallSpeed{};
     /// Left until swimming up splashes again (flSwimTime).
     nx::Milliseconds swimTime{};
+    /// The next of the nudges a stuck player is tried at (rgStuckLast).
+    std::uint32_t stuckNudge = 0;
+    /// Since a stuck player was last tried at a nudge, while that is too recent to try the next one
+    /// (rgStuckCheckTime): none once it is not.
+    std::optional<nx::Milliseconds> sinceStuckCheck{};
 };
 
 /// What a brush entity is to a player's movement, as the game made it.
@@ -205,6 +210,13 @@ struct BrushEntity {
     nx::EulerAngles angles{};
     BrushRole role = BrushRole::Solid;
     nx::collision::Contents contents = nx::collision::Contents::Water; ///< What a Volume holds.
+};
+
+/// A box that stops a player, the original's SOLID_SLIDEBOX and SOLID_BBOX physents (a hostage,
+/// another player): `box` about `origin`, never turned.
+struct SolidBox {
+    nx::Vec3 origin{};
+    nx::Aabb box{};
 };
 
 /// The brush entities of `world`, made by nx.game, that movement meets, in the world's order, as the
@@ -226,10 +238,13 @@ struct MovementResult {
 };
 
 /// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `hulls`, among
-/// `entities`, brush models of the same hulls; where two stop the player at once, the first does, the
-/// world before them all. Pure: the result depends on the arguments alone.
+/// `entities`, brush models of the same hulls, and `boxes`, each grown by the player's box as the
+/// original grows a physent's (PM_HullForBox); where two stop the player at once, the first does, the
+/// world before them all and the brush entities before the boxes. Pure: the result depends on the
+/// arguments alone.
 [[nodiscard]] auto simulateMovement(const MovementState& state, const UserCommand& command,
                                     const MovementSettings& settings, const nx::collision::BrushHulls& hulls,
-                                    std::span<const BrushEntity> entities = {}) -> MovementResult;
+                                    std::span<const BrushEntity> entities = {},
+                                    std::span<const SolidBox> boxes = {}) -> MovementResult;
 
 } // namespace cs

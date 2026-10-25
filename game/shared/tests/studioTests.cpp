@@ -10,6 +10,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.assets;
+import nx.collision;
 import cs.shared;
 
 namespace {
@@ -212,6 +213,21 @@ TEST(StudioPoseTest, TheClientRemovesTheMotionOfTheMotionBoneAndTheServerKeepsIt
     const std::vector<Mat3x4> kept =
         cs::poseBones({.bones = bones}, sequence, animation, {.motion = cs::SequenceMotion::Kept});
     expectNear(originOf(kept[0]), {.x = 7.0F, .y = 8.0F});
+}
+
+TEST(StudioHitboxTest, AHitboxIsPlacedByItsBone) {
+    const std::vector bones{nx::affine(nx::Mat3{}, {.x = 1.0F}), nx::affine(nx::Mat3{}, {.y = 2.0F})};
+    const std::vector hitboxes{
+        nx::assets::Hitbox{
+            .bone = BoneIndex{1}, .group = 1, .bounds = {.min = {.x = -1.0F}, .max = {.x = 1.0F}}},
+        nx::assets::Hitbox{.bone = BoneIndex{0}, .group = 2, .bounds = {.max = {.z = 3.0F}}}};
+
+    const std::vector<nx::collision::PlacedBox> placed = cs::placedHitboxesOf(hitboxes, bones);
+    ASSERT_EQ(placed.size(), 2U);
+    EXPECT_EQ(placed[0].placement, bones[1]);
+    EXPECT_EQ(placed[0].bounds, hitboxes[0].bounds);
+    EXPECT_EQ(placed[1].placement, bones[0]);
+    EXPECT_EQ(placed[1].bounds, hitboxes[1].bounds);
 }
 
 } // namespace
