@@ -179,7 +179,7 @@ auto LocalGame::placements() -> std::vector<nx::render::ModelPlacement> {
             placed.push_back({.model = model.index,
                               .origin = transform.origin,
                               .angles = transform.angles,
-                              .waveHeight = waves != nullptr ? waves->height : 0.0F,
+                              .waveHeight = waves != nullptr ? waves->height : nx::HammerUnits{},
                               .showsAlternateTextures = textures != nullptr && textures->isShown});
         });
     return placed;

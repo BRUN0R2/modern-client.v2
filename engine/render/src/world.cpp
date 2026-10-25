@@ -946,7 +946,8 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
         if (isSeen(face, eye, true)) {
             m_entityFaces.push_back(EntityFace{.face = face});
             ++m_lastFrame.faces;
-        } else if (drawn.mode == RenderMode::TransTexture && m_decals->decalsOn(face) != 0) {
+        } else if (drawn.mode == RenderMode::TransTexture &&
+                   m_decals->decalsOn(assets::FaceIndex{face}) != 0) {
             m_entityFaces.push_back(EntityFace{.face = face, .isFromBehind = true});
         }
     }
@@ -1068,7 +1069,7 @@ void BspWorld::prepare(const WorldFrame& view) {
     for (std::size_t index = 0; index < m_models.size(); ++index) {
         const ModelPlacement& placement = m_placements[index];
         EntityUniform uniform{.color = m_models[index].color,
-                              .origin = extend(placement.origin, placement.waveHeight)};
+                              .origin = extend(placement.origin, placement.waveHeight.value())};
         if (placement.angles != EulerAngles{}) {
             const Mat3 turn = rotationMatrix(placement.angles);
             for (std::size_t row = 0; row < Mat3::kRowCount; ++row) {
@@ -1185,7 +1186,7 @@ void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) 
             commands.drawIndexed(face.triangles.indexCount, 1, m_firstEntityIndex + face.triangles.firstIndex,
                                  0, 0);
         }
-        const std::span<const DecalRun> runs = decalRunsOf(face.face);
+        const std::span<const DecalRun> runs = decalRunsOf(assets::FaceIndex{face.face});
         if (mode != RenderMode::Normal && !runs.empty()) {
             // Drawn after their face, as R_RenderDecalsForSurface draws those of an entity not drawn
             // normally.
@@ -1197,12 +1198,12 @@ void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) 
     if (mode == RenderMode::Normal) {
         // After all of its faces, as the original batches a normal entity's (DrawDecalsBatch).
         const auto hasDecals = [this](const EntityFace& face) {
-            return !decalRunsOf(face.face).empty();
+            return !decalRunsOf(assets::FaceIndex{face.face}).empty();
         };
         if (std::ranges::any_of(faces, hasDecals)) {
             useDecals();
             for (const EntityFace& face : faces | std::views::filter(hasDecals)) {
-                drawDecalRuns(commands, decalRunsOf(face.face), false);
+                drawDecalRuns(commands, decalRunsOf(assets::FaceIndex{face.face}), false);
             }
         }
     }
@@ -1211,7 +1212,7 @@ void BspWorld::drawEntity(rhi::CommandList& commands, const EntityDraw& entity) 
 void BspWorld::drawDecalRuns(rhi::CommandList& commands, std::span<const DecalRun> runs,
                              bool isReversed) const {
     const auto drawRun = [&](const DecalRun& run) {
-        commands.setBindGroup(kTextureGroup, m_decalGroups[run.texture].get());
+        commands.setBindGroup(kTextureGroup, m_decalGroups[run.image.value].get());
         commands.draw(run.vertexCount, 1, run.firstVertex, 0);
     };
     if (isReversed) {
@@ -1221,18 +1222,19 @@ void BspWorld::drawDecalRuns(rhi::CommandList& commands, std::span<const DecalRu
     }
 }
 
-auto BspWorld::decalRunsOf(std::uint32_t face) const -> std::span<const DecalRun> {
+auto BspWorld::decalRunsOf(assets::FaceIndex face) const -> std::span<const DecalRun> {
     const FrameSlot& slot = preparedSlot();
-    const auto found = std::ranges::lower_bound(slot.faceDecals, face, {}, &FaceDecals::face);
+    const auto found = std::ranges::lower_bound(slot.faceDecals, face.value, {},
+                                                [](const FaceDecals& decals) { return decals.face.value; });
     if (found == slot.faceDecals.end() || found->face != face) {
         return {};
     }
     return std::span{slot.decalRuns}.subspan(found->firstRun, found->runCount);
 }
 
-auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on, DecalLife life)
+auto BspWorld::shootDecal(DecalImageIndex image, Vec3 center, const DecalTarget& on, DecalLife life)
     -> std::uint32_t {
-    expects(decal < m_decalSizes.size(), "BspWorld::shootDecal: one of BspWorldDesc::decals");
+    expects(image.value < m_decalSizes.size(), "BspWorld::shootDecal: one of BspWorldDesc::decals");
     Vec3 local = center;
     if (on.model != assets::kWorldModel) {
         // Into the model's space where the game puts it, as R_DecalShoot takes the point.
@@ -1240,7 +1242,7 @@ auto BspWorld::shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& o
                                            : intoAxes(angleVectors(on.angles), center - on.origin);
     }
     return m_decals->shoot(DecalShot{
-        .texture = decal, .size = m_decalSizes[decal], .model = on.model, .center = local, .life = life});
+        .image = image, .size = m_decalSizes[image.value], .model = on.model, .center = local, .life = life});
 }
 
 auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
@@ -1253,7 +1255,7 @@ auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
     std::vector<const PlacedDecal*> decals = m_decals->inOrder();
     const auto ofEntities = std::ranges::stable_partition(
         decals, [](const PlacedDecal* decal) { return decal->model == assets::kWorldModel; });
-    std::ranges::stable_sort(ofEntities, {}, [](const PlacedDecal* decal) { return decal->face; });
+    std::ranges::stable_sort(ofEntities, {}, [](const PlacedDecal* decal) { return decal->face.value; });
     std::vector<WorldVertex> vertices;
     std::vector<DecalRun> runs;
     std::vector<FaceDecals> faceDecals;
@@ -1264,9 +1266,9 @@ auto BspWorld::writeDecals(FrameSlot& slot) -> Result<void, rhi::RhiError> {
             faceDecals.push_back(
                 FaceDecals{.face = decal->face, .firstRun = narrow<std::uint32_t>(runs.size())});
         }
-        if (!isOfTheWorld || runs.empty() || runs.back().texture != decal->texture) {
+        if (!isOfTheWorld || runs.empty() || runs.back().image != decal->image) {
             runs.push_back(
-                DecalRun{.texture = decal->texture, .firstVertex = narrow<std::uint32_t>(vertices.size())});
+                DecalRun{.image = decal->image, .firstVertex = narrow<std::uint32_t>(vertices.size())});
             if (isOfTheWorld) {
                 ++worldRuns;
             } else {

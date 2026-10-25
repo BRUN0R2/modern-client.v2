@@ -28,6 +28,12 @@ enum class MouseMode : std::uint8_t {
     Relative, ///< The cursor hides and stays in the window, which gets its raw motion (MouseMoved).
 };
 
+/// Whether the keys type text (TextEntered): while the console or a text entry is used.
+enum class TextInput : std::uint8_t {
+    Off,
+    On,
+};
+
 /// A size in pixels.
 struct PixelSize {
     std::uint32_t width = 0;
@@ -280,7 +286,7 @@ public:
     /// Turns text input on, for typing in the console and the menus' text entries, or off; it starts
     /// off. While it is on, pollEvents reports TextEntered, and the system may show its input method.
     /// Errors: TextInputUnavailable.
-    [[nodiscard]] auto setTextInput(bool isOn) -> Result<void, WindowError>;
+    [[nodiscard]] auto setTextInput(TextInput input) -> Result<void, WindowError>;
     /// Whether text input is on.
     [[nodiscard]] auto isTextInputOn() const noexcept -> bool;
 

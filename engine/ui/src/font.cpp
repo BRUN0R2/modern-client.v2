@@ -271,7 +271,7 @@ auto fontMetricsFor(const FontVerticalMetrics& vertical, std::span<const FontDev
 }
 
 struct Font::Face {
-    std::shared_ptr<const std::vector<std::byte>> file; // FreeType reads the face from it
+    std::shared_ptr<const std::vector<std::byte>> file; // FreeType reads the face from it (Font::open)
     FT_Library library = nullptr;
     FT_Face face = nullptr;
     bool isSmoothed = false;   ///< Its glyphs antialiased, at its size.

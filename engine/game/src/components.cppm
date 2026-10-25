@@ -92,7 +92,7 @@ struct Door {
 /// entity, which its renderer raises them by (EmitWaterPolys). A door's is an eighth of its
 /// "WaveHeight" (CBaseDoor::KeyValue), the key func_water sets.
 struct Waves {
-    float height = 0.0F;
+    HammerUnits height{};
 };
 
 /// Which of its textures' sequences a brush entity shows: the original's pev->frame, which shows each

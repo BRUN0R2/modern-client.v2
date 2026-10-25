@@ -286,7 +286,8 @@ the world or of a brush entity near a point. The image is made as the original's
 first level alone, its palette through `texgamma`: when the palette's last color is not pure blue
 (every decal of the game's), each texel that color, as opaque as its index, index 255 clear;
 otherwise each texel its palette's color, opaque, index 255 clear. It is mipmapped from that level
-and sampled clamped at its edges. A shot (`BspWorld::shootDecal`, `DecalPool::shoot`) is aimed
+and sampled clamped at its edges. A shot of one of them (a `DecalImageIndex`; `BspWorld::shootDecal`,
+`DecalPool::shoot`) is aimed
 at a model (`DecalTarget`): the world's, or a brush entity's, the point taken into the model's space
 where the game has the entity then (`R_DecalShoot`), so that the decal goes wherever the game moves
 it. It walks that model's tree from its root, within half the image's larger side of each node's

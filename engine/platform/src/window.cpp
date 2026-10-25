@@ -172,7 +172,8 @@ auto Window::setMouseMode(MouseMode mode) -> Result<void, WindowError> {
     return {};
 }
 
-auto Window::setTextInput(bool isOn) -> Result<void, WindowError> {
+auto Window::setTextInput(TextInput input) -> Result<void, WindowError> {
+    const bool isOn = input == TextInput::On;
     if (!(isOn ? SDL_StartTextInput(windowOf(m_window)) : SDL_StopTextInput(windowOf(m_window)))) {
         return fail(WindowError::TextInputUnavailable,
                     std::format("{}: {}", isOn ? "SDL_StartTextInput" : "SDL_StopTextInput", sdlError()));

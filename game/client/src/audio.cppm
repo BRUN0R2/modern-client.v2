@@ -82,7 +82,7 @@ private:
     };
 
     /// Plays the sound `name` names in `voice` as `playing` says.
-    [[nodiscard]] auto playIn(std::uint32_t voice, std::string_view name, const Playing& playing)
+    [[nodiscard]] auto playIn(nx::audio::VoiceId voice, std::string_view name, const Playing& playing)
         -> nx::Result<void, PlayError>;
     /// Plays the sound `name` names in the next of the kLocalVoices.
     [[nodiscard]] auto playAuto(std::string_view name, const Playing& playing) -> nx::Result<void, PlayError>;
@@ -91,9 +91,9 @@ private:
     nx::audio::SoundLibrary m_sounds;
     nx::audio::Mixer m_mixer;
     nx::platform::AudioDevice m_device; ///< Last: it stops reading the mixer before the mixer goes.
-    std::uint32_t m_nextLocalVoice = 0;
-    std::optional<float> m_volume; ///< The gain the mixer was last sent.
-    nx::Random m_random;           ///< What chooses the files and the pitches.
+    std::uint32_t m_nextLocalVoice = 0; ///< Of the kLocalVoices, the first ones.
+    std::optional<float> m_volume;      ///< The gain the mixer was last sent.
+    nx::Random m_random;                ///< What chooses the files and the pitches.
 };
 
 } // namespace cs

@@ -28,7 +28,7 @@ public:
     static constexpr std::string_view kFolder = "sound/";
 
     /// A library reading from `vfs`, which must outlive it.
-    explicit SoundLibrary(const assets::Vfs& vfs) noexcept : m_vfs{&vfs} {}
+    inline explicit SoundLibrary(const assets::Vfs& vfs) noexcept : m_vfs{&vfs} {}
 
     /// The sound `name` names ("weapons/ak47-1.wav", `\` a separator too, any case), read from
     /// kFolder the first time. A sound that could not be read is tried again the next time.

@@ -96,7 +96,7 @@ public:
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
     /// faces it was stamped on.
-    auto shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
+    auto shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position, const nx::render::DecalTarget& on)
         -> std::uint32_t;
     /// Takes the next decals within `limit`, as nx::render::BspWorld::setDecalLimit does: `r_decals` as
     /// it is now.

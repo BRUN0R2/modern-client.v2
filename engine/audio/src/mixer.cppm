@@ -29,6 +29,13 @@ enum class MixerError : std::uint8_t {
     QueueFull,
 };
 
+/// A voice of a mixer, from 0 to Mixer::voices(): what a command plays, stops or changes.
+struct VoiceId {
+    std::uint32_t value = 0;
+
+    [[nodiscard]] inline auto operator==(const VoiceId&) const noexcept -> bool = default;
+};
+
 /// How loud a voice is in each ear, 1 the sound as it is.
 struct VoiceGains {
     float left = 1.0F;
@@ -38,7 +45,7 @@ struct VoiceGains {
 /// Plays `sound`, which must outlive the play (until a StopVoice or another PlayVoice of the voice has
 /// been mixed, or the end of a sound that does not loop), in voice `voice`, replacing what it played.
 struct PlayVoice {
-    std::uint32_t voice = 0;
+    VoiceId voice{};
     const Sound* sound = nullptr;
     VoiceGains gains{};
     float pitch = 1.0F; ///< Its speed: 2 plays it an octave higher, in half the time.
@@ -47,12 +54,12 @@ struct PlayVoice {
 
 /// Stops voice `voice`.
 struct StopVoice {
-    std::uint32_t voice = 0;
+    VoiceId voice{};
 };
 
 /// Changes the gains of voice `voice`.
 struct SetVoiceGains {
-    std::uint32_t voice = 0;
+    VoiceId voice{};
     VoiceGains gains{};
 };
 
@@ -143,7 +150,7 @@ public:
     void render(std::span<float> out) noexcept override;
 
     /// Whether voice `voice` plays, as the audio thread last left it; from any thread.
-    [[nodiscard]] auto isPlaying(std::uint32_t voice) const noexcept -> bool;
+    [[nodiscard]] auto isPlaying(VoiceId voice) const noexcept -> bool;
 
     [[nodiscard]] inline auto voices() const noexcept -> std::uint32_t {
         return static_cast<std::uint32_t>(m_voices.size());
