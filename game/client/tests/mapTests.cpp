@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // What the client sets up as the game would: the light styles, the sky's light and the sprite entities of
-// a map, the BSP seed of the fuzz corpus given other entities, and how those sprites animate.
+// a map, its spawn points and what it is played for, the BSP seed of the fuzz corpus given other
+// entities, and how those sprites animate.
 
 #include <gtest/gtest.h>
 
@@ -12,6 +13,7 @@ import nx.math;
 import nx.platform;
 import nx.assets;
 import nx.render;
+import cs.shared;
 import cs.client;
 
 namespace {
@@ -126,6 +128,43 @@ TEST(LightStyleTest, ASwitchableLightStartsAsItsEntitySays) {
     EXPECT_EQ(values[32], 0) << "flagged to start off: a";
     EXPECT_EQ(values[33], 550) << "its pattern: z";
     EXPECT_EQ(values[34], 256) << "a light without a name cannot be switched: no pattern of its own";
+}
+
+TEST(SpawnPointTest, EachTeamsAreItsClassesWithAnOriginInTheirOrder) {
+    const MapOf map{R"({ "classname" "worldspawn" }
+{ "classname" "info_player_deathmatch" "origin" "1 2 3" "angles" "0 90 0" }
+{ "classname" "info_player_start" "origin" "4 5 6" }
+{ "classname" "info_player_deathmatch" "origin" "0 0 0" }
+{ "classname" "info_player_deathmatch" }
+{ "classname" "info_player_deathmatch" "origin" "7 8 9" "angles" "10 180 0" })"};
+    const std::vector<cs::SpawnPoint> terrorists{
+        {.origin = {.x = 1.0F, .y = 2.0F, .z = 3.0F}, .yaw = nx::Degrees{90.0F}},
+        {.origin = {.x = 7.0F, .y = 8.0F, .z = 9.0F}, .yaw = nx::Degrees{180.0F}}};
+    EXPECT_EQ(cs::spawnPointsOf(map.get(), cs::Team::Terrorists), terrorists);
+    const std::vector<cs::SpawnPoint> counterTerrorists{{.origin = {.x = 4.0F, .y = 5.0F, .z = 6.0F}}};
+    EXPECT_EQ(cs::spawnPointsOf(map.get(), cs::Team::CounterTerrorists), counterTerrorists);
+    // A player first stands at the first counter-terrorist spawn point, its eye at the view's height.
+    EXPECT_EQ(cs::spawnTeam(map.get()), cs::Team::CounterTerrorists);
+    EXPECT_EQ(cs::spawnView(map.get()).position, (nx::Vec3{.x = 4.0F, .y = 5.0F, .z = 6.0F + 17.0F}));
+}
+
+TEST(SpawnPointTest, WithoutCounterTerroristsAPlayerFirstStandsWithTheTerrorists) {
+    const MapOf map{R"({ "classname" "worldspawn" }
+{ "classname" "info_player_deathmatch" "origin" "1 2 3" "angles" "0 90 0" })"};
+    EXPECT_EQ(cs::spawnTeam(map.get()), cs::Team::Terrorists);
+    EXPECT_EQ(cs::spawnView(map.get()).angles.yaw, nx::Degrees{90.0F});
+}
+
+TEST(MapObjectiveTest, AMapIsPlayedForWhatItsEntitiesAre) {
+    const MapOf bomb{R"({ "classname" "worldspawn" }
+{ "classname" "func_buyzone" }
+{ "classname" "info_bomb_target" "origin" "1 2 3" }
+{ "classname" "hostage_entity" })"};
+    EXPECT_EQ(cs::mapObjectivesOf(bomb.get()),
+              (cs::MapObjectives{cs::MapObjective::BombTarget, cs::MapObjective::Hostages}));
+    const MapOf none{R"({ "classname" "worldspawn" }
+{ "classname" "info_player_start" "origin" "1 2 3" })"};
+    EXPECT_EQ(cs::mapObjectivesOf(none.get()), cs::MapObjectives{});
 }
 
 TEST(SkyLightTest, LightEnvironmentsLightIsMadeTheEnginesAndAimsByItsPitch) {

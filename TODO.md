@@ -455,8 +455,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ## M5 — Complete Counter-Strike
 
 ### Rules
-- [ ] Round state machine (game commencing, freeze, running, ended)
-- [ ] All round-end reasons per map type
+- [x] Rounds (`cs.shared:rounds`, [10 §3](docs/10-counter-strike-gameplay.md#3-match-and-round-flow)): each frozen for `mp_freezetime` (the first two seconds longer), the players barely moving and their attack held back, then running for `mp_roundtime`, ended as its time runs out by what the map is played for, the next five seconds later; `sv_restart` and `sv_restartround`; the local game's player spawning again at its team's spawn points in turn, the game restarted as it joined (`mp_startmoney`, `cs::GameCvars`)
+- [ ] Game Commencing, and the rounds' ends by elimination (with damage and death)
+- [ ] All round-end reasons per map type (the time run out's are done: `cs::timeOutReasonOf`)
 - [ ] `mp_timelimit`, `mp_maxrounds`, `mp_winlimit`, intermission and next map
 - [ ] Teams, characters, `mp_limitteams`, `mp_autoteambalance`
 - [ ] Economy with auditable transactions and validated values
@@ -486,7 +487,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Sprays
 
 ### Interface
-- [ ] Complete HUD (money, timer, status icons, radar, kill feed, progress bars, damage indicator)
+- [ ] Complete HUD (money, timer, status icons, radar, kill feed, progress bars, damage indicator): the round's time is drawn where the original draws it (`cs::layoutTimer`, [12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution)); its color as the round runs out and with the bomb planted are to be measured on the original
 - [ ] Scoreboard
 - [ ] Team and character menus
 - [ ] MOTD with restricted HTML

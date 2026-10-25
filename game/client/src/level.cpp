@@ -147,26 +147,16 @@ struct WadFiles {
     return std::move(*catalog);
 }
 
-/// The first spawn of a map with an origin, and the team it spawns.
-struct FirstSpawn {
-    const nx::assets::BspEntity* entity{};
-    nx::Vec3 origin{};
-    Team team{};
-};
+/// The class of the spawn points of each team.
+constexpr nx::EnumArray<Team, std::string_view> kSpawnClasses{
+    nx::EnumArray<Team, std::string_view>::Storage{"info_player_deathmatch", "info_player_start"}};
 
-/// The first spawn of `map` with an origin: a counter-terrorist one (info_player_start), else a
-/// terrorist one (info_player_deathmatch); none.
-[[nodiscard]] auto firstSpawnOf(const nx::assets::BspView& map) -> std::optional<FirstSpawn> {
-    for (const auto& [classname, team] :
-         {std::pair{std::string_view{"info_player_start"}, Team::CounterTerrorists},
-          std::pair{std::string_view{"info_player_deathmatch"}, Team::Terrorists}}) {
-        for (const nx::assets::BspEntity& entity : map.entities()) {
-            if (entity.find("classname") != classname) {
-                continue;
-            }
-            if (const std::optional<nx::Vec3> origin = entity.findVector("origin")) {
-                return FirstSpawn{.entity = &entity, .origin = *origin, .team = team};
-            }
+/// The first spawn point of `map` and its team: a counter-terrorist one, else a terrorist one; none.
+[[nodiscard]] auto firstSpawnOf(const nx::assets::BspView& map)
+    -> std::optional<std::pair<SpawnPoint, Team>> {
+    for (const Team team : {Team::CounterTerrorists, Team::Terrorists}) {
+        if (const std::vector<SpawnPoint> points = spawnPointsOf(map, team); !points.empty()) {
+            return std::pair{points.front(), team};
         }
     }
     return std::nullopt;
@@ -179,6 +169,33 @@ template <class Names>
 }
 
 } // namespace
+
+auto spawnPointsOf(const nx::assets::BspView& map, Team team) -> std::vector<SpawnPoint> {
+    std::vector<SpawnPoint> points;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        if (entity.find("classname") != kSpawnClasses[team]) {
+            continue;
+        }
+        const nx::Vec3 origin = entity.findVector("origin").value_or(nx::Vec3{});
+        if (origin == nx::Vec3{}) {
+            continue;
+        }
+        const std::optional<nx::Vec3> angles = entity.findVector("angles");
+        points.push_back({.origin = origin, .yaw = nx::Degrees{angles ? angles->y : 0.0F}});
+    }
+    return points;
+}
+
+auto mapObjectivesOf(const nx::assets::BspView& map) -> MapObjectives {
+    MapObjectives objectives;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        if (const std::optional<MapObjective> objective =
+                objectiveOfClass(entity.find("classname").value_or(""))) {
+            objectives.set(*objective);
+        }
+    }
+    return objectives;
+}
 
 auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path {
     return userFolder / "addons" / "cstrike";
@@ -293,6 +310,10 @@ auto Level::load(const GameContent& content, std::string_view name)
         }
     }
     level.m_bulletMarks = bulletMarksOf(bsp);
+    for (const Team team : nx::EnumArray<Team, std::vector<SpawnPoint>>::keys()) {
+        level.m_spawnPoints[team] = spawnPointsOf(bsp, team);
+    }
+    level.m_objectives = mapObjectivesOf(bsp);
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
     if (!level.m_sprites->missing().empty()) {
@@ -414,18 +435,17 @@ auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& cl
 }
 
 auto spawnView(const nx::assets::BspView& map) -> nx::render::Camera {
-    const std::optional<FirstSpawn> spawn = firstSpawnOf(map);
+    const auto spawn = firstSpawnOf(map);
     if (!spawn) {
         return nx::render::Camera{};
     }
-    const std::optional<nx::Vec3> angles = spawn->entity->findVector("angles");
-    return nx::render::Camera{.position = spawn->origin + nx::Vec3{.z = kStandingViewHeight.value()},
-                              .angles = {.yaw = nx::Degrees{angles ? angles->y : 0.0F}}};
+    return nx::render::Camera{.position = spawn->first.origin + nx::Vec3{.z = kStandingViewHeight.value()},
+                              .angles = {.yaw = spawn->first.yaw}};
 }
 
 auto spawnTeam(const nx::assets::BspView& map) -> Team {
-    const std::optional<FirstSpawn> spawn = firstSpawnOf(map);
-    return spawn ? spawn->team : Team::CounterTerrorists;
+    const auto spawn = firstSpawnOf(map);
+    return spawn ? spawn->second : Team::CounterTerrorists;
 }
 
 } // namespace cs

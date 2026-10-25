@@ -24,7 +24,7 @@ using cs::HudMark;
 using cs::HudPicture;
 
 /// The HUD's entries of Counter-Strike 1.6's hud.txt, one for the small screens first.
-constexpr std::string_view kHudList = R"(15
+constexpr std::string_view kHudList = R"(16
 number_0     320 320hud2 0   0  12 16
 number_0     640 640hud7 0   0  20 25
 number_1     640 640hud7 23  0  20 25
@@ -40,6 +40,7 @@ cross        640 640hud7 48  25 24 24
 suit_empty   640 640hud7 24  25 24 24
 suit_full    640 640hud7 0   25 24 24
 dollar       640 640hud7 192 25 18 25
+stopwatch    640 640hud7 144 72 24 24
 )";
 
 [[nodiscard]] auto sheet() -> cs::HudSheet {
@@ -319,6 +320,37 @@ TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
     EXPECT_EQ(shown->ammo, "9mm");
     EXPECT_EQ(shown->clip, 20U);
     EXPECT_EQ(shown->reserve, 40U);
+}
+
+TEST(TimerHudTest, TheRoundsTimeIsWhereTheOriginalDrawsIt) {
+    // Measured at 1280x720 (docs/12 section 3.2): the stopwatch at W / 2 - 64, H - 37; 4:39's minute
+    // at W / 2 - 20, its seconds at W / 2 + 6 and W / 2 + 26; the colon at W / 2 + 2, H - 28 and H - 22.
+    const cs::TimerLayout layout = cs::layoutTimer(279, sheet(), {.width = 1280, .height = 720});
+    const std::vector<HudMark> expected{{.picture = HudPicture::Stopwatch, .x = 576, .y = 683},
+                                        digit('4', 620, 683),
+                                        digit('3', 646, 683),
+                                        digit('9', 666, 683)};
+    EXPECT_EQ(layout.marks, expected);
+    for (const auto& [square, top] : std::views::zip(layout.colon, std::array{692.0F, 698.0F})) {
+        EXPECT_EQ(square.x, 642.0F);
+        EXPECT_EQ(square.y, top);
+        EXPECT_EQ(square.width, 2.0F);
+        EXPECT_EQ(square.height, 2.0F);
+    }
+
+    const cs::TimerLayout freeze = cs::layoutTimer(8, sheet(), {.width = 640, .height = 480});
+    EXPECT_EQ(numberAt(freeze.marks, 443), "008");
+    EXPECT_EQ(freeze.marks.front().x, 256);
+}
+
+TEST(TimerHudTest, MoreMinutesWidenTheirRoomPushingTheStopwatch) {
+    const cs::TimerLayout ten = cs::layoutTimer(600, sheet(), {.width = 1280, .height = 720});
+    EXPECT_EQ(numberAt(ten.marks, 683), "1000");
+    EXPECT_EQ(ten.marks.front().x, 576) << "two minutes' digits fit the room";
+    const cs::TimerLayout hundred = cs::layoutTimer(6000, sheet(), {.width = 1280, .height = 720});
+    EXPECT_EQ(numberAt(hundred.marks, 683), "10000");
+    EXPECT_EQ(hundred.marks[1].x, 580);
+    EXPECT_EQ(hundred.marks.front().x, 556);
 }
 
 TEST(CrosshairTest, TheLinesAreWhereTheOriginalDrawsThem) {

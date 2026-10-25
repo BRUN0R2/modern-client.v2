@@ -21,6 +21,7 @@ nxAddModuleLibrary(csClient
         src/level.cppm
         src/scene.cppm
         src/frame.cppm
+        src/gameCvars.cppm
         src/localGame.cppm
         src/hud.cppm
         src/console.cppm
@@ -41,6 +42,7 @@ nxAddModuleLibrary(csClient
         src/level.cpp
         src/scene.cpp
         src/frame.cpp
+        src/gameCvars.cpp
         src/localGame.cpp
         src/hud.cpp
         src/console.cpp

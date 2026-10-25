@@ -9,7 +9,8 @@
 /// until the server comes (the light of the map, its sprites and studio models, the weapon in hand and
 /// its muzzle flashes, its decals and the marks bullets leave); the scene that draws it, and how a frame
 /// of it and the screen over it are drawn (FrameRenderer); the level's
-/// game, played by the client alone; the HUD of its player; the console's window's font and place;
+/// game, played by the client alone in the map's rounds, and the cvars of its rules; the HUD of its
+/// player; the console's window's font and place;
 /// the sound output with the sounds the client plays; and the console's weapon commands, which make
 /// weapons and set their values as the game runs.
 export module cs.client;
@@ -28,6 +29,7 @@ export import :bulletMarks;
 export import :level;
 export import :scene;
 export import :frame;
+export import :gameCvars;
 export import :localGame;
 export import :hud;
 export import :console;
