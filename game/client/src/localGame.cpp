@@ -45,8 +45,8 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_status{.money = m_cvars.startingMoney()},
-      m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_solidBoxes{level.models().solidBoxes()},
+      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -138,7 +138,8 @@ void LocalGame::tick(const UserCommand& command) {
     }
     m_lastButtons = command.buttons;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
-    const MovementResult moved = simulateMovement(m_player, command, MovementSettings{}, hulls, entities);
+    const MovementResult moved =
+        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, m_solidBoxes);
     m_player = moved.state;
     hearMovement(moved.sounds, entities, command);
     nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);

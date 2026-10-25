@@ -505,6 +505,26 @@ TEST(MovementTest, ASolidEntityStopsThePlayerWhereItIsPlaced) {
     EXPECT_GT(repeat(walking, ahead, 20, hulls).origin.x, 50.0F) << "without the entity";
 }
 
+TEST(MovementTest, ASolidBoxStopsThePlayerGrownByItsBox) {
+    // A hostage's box standing on the floor, whose surface is 36 below a standing player's origin: grown
+    // by the player's box, it stops the player 26 units before its middle.
+    const BrushHulls floor = floorWorld();
+    const std::array hostage{cs::SolidBox{
+        .origin = {.x = 60.0F, .z = -36.0F},
+        .box = {.min = {.x = -10.0F, .y = -10.0F, .z = 0.0F}, .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}}}};
+    MovementState walking = standingOnTheFloor();
+    walking.velocity = Vec3{.x = kKnifeSpeed.value()};
+    const UserCommand ahead = command(forward(kKnifeSpeed.value()));
+    MovementState blocked = walking;
+    MovementState free = walking;
+    for (int tick = 0; tick < 40; ++tick) {
+        blocked = cs::simulateMovement(blocked, ahead, MovementSettings{}, floor, {}, hostage).state;
+        free = cs::simulateMovement(free, ahead, MovementSettings{}, floor, {}).state;
+    }
+    EXPECT_NEAR(blocked.origin.x, 60.0F - 26.0F - kOnTheFloor, kTolerance);
+    EXPECT_GT(free.origin.x, 90.0F) << "without the box";
+}
+
 TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
     // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
     const BrushHulls hulls = modelsOf(

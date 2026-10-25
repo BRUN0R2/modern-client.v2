@@ -220,6 +220,20 @@ private:
     return leaves[std::get<assets::LeafIndex>(child).value].contents;
 }
 
+/// What player movement makes of a trace from `start` to `end` that the tracer left (PM_PlayerTrace):
+/// one that starts in the solid stops there, and the end is found from the fraction again.
+void settleMovement(Trace& result, Vec3 start, Vec3 end) noexcept {
+    if (result.isAllSolid) {
+        result.startsSolid = true;
+    }
+    if (result.startsSolid) {
+        result.fraction = 0.0F;
+    }
+    if (result.fraction != 1.0F) {
+        result.end = ((end - start) * result.fraction) + start;
+    }
+}
+
 [[nodiscard]] auto childOf(assets::ClipNodeChild child) -> HullChild {
     if (const auto* node = std::get_if<assets::ClipNodeIndex>(&child)) {
         return HullNodeIndex{node->value};
@@ -401,18 +415,56 @@ auto BrushHulls::traceMovement(const HullTraceQuery& query) const noexcept -> Tr
     // Where it stopped, if it did, is in the result already.
     std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
                                 inModelSpace(query.end, query.offset, query.angles));
-    if (result.isAllSolid) {
-        result.startsSolid = true;
+    settleMovement(result, query.start, query.end);
+    if (result.fraction != 1.0F && query.angles != EulerAngles{}) {
+        result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
     }
-    if (result.startsSolid) {
-        result.fraction = 0.0F;
-    }
-    if (result.fraction != 1.0F) {
-        if (query.angles != EulerAngles{}) {
-            result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
+    return result;
+}
+
+namespace {
+
+/// A box made a tree of six nodes as the engine makes one (SV_InitBoxHull): a plane on each face, the
+/// box's most along an axis then its least; beyond each the empty, short of it the next node, short of
+/// the last one the solid.
+class BoxTree {
+public:
+    explicit BoxTree(const Aabb& box) noexcept
+        : m_planes{Plane{.normal = {.x = 1.0F}, .distance = box.max.x},
+                   Plane{.normal = {.x = 1.0F}, .distance = box.min.x},
+                   Plane{.normal = {.y = 1.0F}, .distance = box.max.y},
+                   Plane{.normal = {.y = 1.0F}, .distance = box.min.y},
+                   Plane{.normal = {.z = 1.0F}, .distance = box.max.z},
+                   Plane{.normal = {.z = 1.0F}, .distance = box.min.z}} {
+        for (std::uint32_t face = 0; face < kFaces; ++face) {
+            // The empty is in front of a most's plane and behind a least's.
+            const std::size_t outside = face % 2;
+            m_nodes[face].plane = PlaneIndex{face};
+            m_nodes[face].children[outside] = Contents::Empty;
+            m_nodes[face].children[outside ^ 1] =
+                face + 1 < kFaces ? HullChild{HullNodeIndex{face + 1}} : HullChild{Contents::Solid};
         }
-        result.end = ((query.end - query.start) * result.fraction) + query.start;
     }
+
+    [[nodiscard]] inline auto planes() const noexcept -> std::span<const Plane> { return m_planes; }
+    [[nodiscard]] inline auto nodes() const noexcept -> std::span<const HullNode> { return m_nodes; }
+    [[nodiscard]] static constexpr auto root() noexcept -> HullChild { return HullNodeIndex{0}; }
+
+private:
+    static constexpr std::uint32_t kFaces = 6;
+
+    std::array<Plane, kFaces> m_planes;
+    std::array<HullNode, kFaces> m_nodes{};
+};
+
+} // namespace
+
+auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace {
+    const BoxTree tree{box};
+    Trace result{.fraction = 1.0F, .end = end, .isAllSolid = true};
+    Tracer<Rules::Movement> tracer{tree.planes(), tree.nodes(), BoxTree::root(), result};
+    std::ignore = tracer.follow(BoxTree::root(), 0.0F, 1.0F, start, end);
+    settleMovement(result, start, end);
     return result;
 }
 

@@ -171,4 +171,9 @@ private:
     std::vector<BrushModel> m_models;
 };
 
+/// The way from `start` to `end` through `box`, solid within it and empty around it, made a hull as the
+/// engine makes one of a box (SV_InitBoxHull, PM_HullForBox): a node on each of its six faces, crossed
+/// as a map's hull's nodes are, by player movement's rules (BrushHulls::traceMovement).
+[[nodiscard]] auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace;
+
 } // namespace nx::collision

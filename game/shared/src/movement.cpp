@@ -223,8 +223,10 @@ auto normalize(Vec3& v) -> double {
 class PlayerMove {
 public:
     PlayerMove(const MovementState& state, const UserCommand& command, const MovementSettings& settings,
-               const BrushHulls& world, std::span<const BrushEntity> entities) noexcept
-        : m_player{state}, m_command{command}, m_settings{settings}, m_world{world}, m_entities{entities} {}
+               const BrushHulls& world, std::span<const BrushEntity> entities,
+               std::span<const SolidBox> boxes) noexcept
+        : m_player{state}, m_command{command}, m_settings{settings}, m_world{world}, m_entities{entities},
+          m_boxes{boxes} {}
 
     [[nodiscard]] auto run() -> MovementResult {
         prepare();
@@ -517,6 +519,21 @@ private:
         for (const BrushEntity& entity : m_entities) {
             if (entity.role == BrushRole::Solid) {
                 meet(entity.model, entity.origin, entity.angles, entity.model);
+            }
+        }
+        // A box grown by the player's in `hull` (player_mins, player_maxs), as PM_HullForBox grows a
+        // physent's, about its origin.
+        const nx::Aabb player = nx::collision::hullBoxOf(hull);
+        for (const SolidBox& solid : m_boxes) {
+            const nx::Aabb grown{.min = solid.box.min - player.max, .max = solid.box.max - player.min};
+            const nx::collision::Trace hit =
+                nx::collision::traceBoxMovement(grown, start - solid.origin, end - solid.origin);
+            if (hit.fraction < nearest.fraction) {
+                nearest = PlayerTrace{.fraction = hit.fraction,
+                                      .end = hit.end + solid.origin,
+                                      .normal = hit.plane.normal,
+                                      .startsSolid = hit.startsSolid,
+                                      .isAllSolid = hit.isAllSolid};
             }
         }
         return nearest;
@@ -1164,6 +1181,7 @@ private:
     const MovementSettings& m_settings;
     const BrushHulls& m_world;
     std::span<const BrushEntity> m_entities;
+    std::span<const SolidBox> m_boxes;
     std::vector<ModelIndex> m_touched;            ///< The models of the entities met, in order.
     std::vector<MovementSound> m_sounds;          ///< Made, in order.
     WaterLevel m_oldWaterLevel = WaterLevel::Dry; ///< As the command started.
@@ -1209,13 +1227,14 @@ auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds {
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,
                       const MovementSettings& settings, const BrushHulls& hulls,
-                      std::span<const BrushEntity> entities) -> MovementResult {
+                      std::span<const BrushEntity> entities, std::span<const SolidBox> boxes)
+    -> MovementResult {
     nx::expects(hulls.modelCount() > 0, "simulateMovement: the world is model 0 of its hulls");
     nx::expects(
         std::ranges::all_of(
             entities, [&](const BrushEntity& entity) { return entity.model.value < hulls.modelCount(); }),
         "simulateMovement: every entity is a model of the hulls");
-    return PlayerMove{state, command, settings, hulls, entities}.run();
+    return PlayerMove{state, command, settings, hulls, entities, boxes}.run();
 }
 
 } // namespace cs

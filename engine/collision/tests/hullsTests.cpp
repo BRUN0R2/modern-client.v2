@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// Traces through small trees of planes, by the server's rules and by player movement's, and through
-// the hulls of the BSP seed of the fuzz corpus.
+// Traces through small trees of planes, by the server's rules and by player movement's, through the
+// hulls of the BSP seed of the fuzz corpus, and through boxes made hulls.
 
 #include <gtest/gtest.h>
 
@@ -74,6 +74,35 @@ TEST(HullTraceTest, ATraceStopsAThirtySecondOfAUnitBeforeThePlane) {
     const Trace free = hulls.trace(standingQuery({.z = 10.0F}, {.z = 1.0F}));
     EXPECT_EQ(free.fraction, 1.0F);
     EXPECT_EQ(free.end, (Vec3{.z = 1.0F}));
+}
+
+TEST(BoxTraceTest, ABoxStopsATraceAThirtySecondOfAUnitBeforeItsFace) {
+    const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = 0.0F},
+                       .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}};
+    const Trace across =
+        nx::collision::traceBoxMovement(box, {.x = -30.0F, .z = 31.0F}, {.x = 30.0F, .z = 31.0F});
+    EXPECT_FLOAT_EQ(across.fraction, (20.0F - 0.03125F) / 60.0F);
+    EXPECT_NEAR(across.end.x, -10.03125F, kTolerance);
+    EXPECT_EQ(across.plane, (Plane{.normal = {.x = -1.0F}, .distance = 10.0F})) << "its least x, facing out";
+    EXPECT_FALSE(across.startsSolid);
+    const Trace over =
+        nx::collision::traceBoxMovement(box, {.x = -30.0F, .z = 70.0F}, {.x = 30.0F, .z = 70.0F});
+    EXPECT_EQ(over.fraction, 1.0F) << "above it";
+    const Trace onTop = nx::collision::traceBoxMovement(box, {.z = 70.0F}, {.z = 50.0F});
+    EXPECT_EQ(onTop.plane, (Plane{.normal = {.z = 1.0F}, .distance = 62.0F}));
+    EXPECT_NEAR(onTop.end.z, 62.03125F, kTolerance);
+}
+
+TEST(BoxTraceTest, ATraceFromInsideABoxStartsSolid) {
+    const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
+                       .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
+    const Trace leaving = nx::collision::traceBoxMovement(box, {}, {.x = 30.0F});
+    EXPECT_TRUE(leaving.startsSolid);
+    EXPECT_FALSE(leaving.isAllSolid) << "it leaves the box";
+    EXPECT_EQ(leaving.fraction, 0.0F) << "movement stops it where it starts";
+    EXPECT_EQ(leaving.end, Vec3{});
+    const Trace within = nx::collision::traceBoxMovement(box, {}, {.x = 5.0F});
+    EXPECT_TRUE(within.isAllSolid);
 }
 
 TEST(HullTraceTest, AnOffsetPlacesTheModel) {

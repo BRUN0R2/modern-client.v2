@@ -143,6 +143,16 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
     return read;
 }
 
+auto MapModels::solidBoxes() const -> std::vector<SolidBox> {
+    std::vector<SolidBox> boxes;
+    for (const Entity& entity : m_entities) {
+        if (entity.model.kind == ModelClass::Hostage) {
+            boxes.push_back(SolidBox{.origin = entity.model.origin, .box = kHostageBox});
+        }
+    }
+    return boxes;
+}
+
 void MapModels::dropToFloor(nx::ecs::World& world, const nx::collision::BrushHulls& hulls) {
     for (Entity& entity : m_entities) {
         if (entity.model.kind == ModelClass::Hostage) {

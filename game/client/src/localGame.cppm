@@ -189,6 +189,7 @@ private:
     TeamAccounts m_accounts;
     StepVoice m_stepVoice;
     std::vector<SoundMade> m_movementSounds; ///< Since takeSounds.
+    std::vector<SolidBox> m_solidBoxes;      ///< What stops the player besides the brushes: hostages.
     bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
     RoundTimer m_roundTimer{};     ///< What the player's HUD was told last.
     std::optional<std::size_t> m_lastSpawnPoint{}; ///< Of its team's, the one it last spawned at.

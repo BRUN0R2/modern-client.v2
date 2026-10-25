@@ -140,8 +140,12 @@ code** on the server (authoritative) and on the client (prediction).
   (`MoveType::Noclip`, which the `noclip` cheat sets): through everything, along the view at the
   speeds the command asks and up at its up speed, without gravity; as in the original, a player on
   the ground is still put back on the floor 2 units below, so that a slower rise stays there, and
-  pushers pass through it (`nx::game::Body::isPushed`). Observers, unsticking, boxes (players,
-  hostages, pushables), conveyors, pushes and currents come next ([TODO](../TODO.md)).
+  pushers pass through it (`nx::game::Body::isPushed`). Hostages stop the player as boxes
+  (`cs::SolidBox`, which `MapModels::solidBoxes` lists): each is grown by the player's box, as
+  PM_HullForBox grows a physent's, and traced as the engine traces a box's six-node hull
+  (`nx::collision::traceBoxMovement`), after the world and the brush entities. Observers,
+  unsticking, players and pushables as boxes, conveyors, pushes and currents come next
+  ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -230,7 +234,9 @@ from the original, to test these rules against, are pending
 The API below is planned, with entities and hitboxes. Today it is `BrushHulls::trace` and
 `traceMovement` (`nx.collision:hulls`), which take a `HullTraceQuery` (`model`, `hull`, `offset`,
 `angles`, `start`, `end`) and give a `Trace` (`fraction`, `end`, `plane`, `isAllSolid`,
-`startsSolid`, `isInOpen`, `isInWater`), against brush models only ([§4.1](#41-world)).
+`startsSolid`, `isInOpen`, `isInWater`), against brush models only ([§4.1](#41-world)), and
+`traceBoxMovement`, player movement's rules through one box made a hull as the engine makes one
+(SV_InitBoxHull, PM_HullForBox).
 
 ```cpp
 auto hit = collision.trace(nx::collision::TraceQuery{
