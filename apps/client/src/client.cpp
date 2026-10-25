@@ -247,6 +247,8 @@ private:
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
+    [[nodiscard]] auto listSoundOutputs() -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playVolumeCommand(const nx::console::CommandLine& line)
         -> nx::Result<void, ConsoleError>;
     /// Plays the sound `name` names at `volume`, heard everywhere, as `play` and `playvol` do.
@@ -261,6 +263,9 @@ private:
     /// Plays the map the console asked for, if any: its scene is made with the next frame, and
     /// r_decals is held as entering a game of more than one player holds it.
     void startNextSession();
+    /// Plays the sound on the output s_device names, when it names one: the system's default stays
+    /// when none has that name, logged.
+    void openNamedSoundOutput();
     /// Turns the view the way the session's game turned its player, if it did (the original's
     /// fixangle): as the player spawns.
     void turnAsTheGameDid();
@@ -408,10 +413,12 @@ auto Client::start() -> nx::Result<void, ClientError> {
     } else {
         nx::log::warning(kLog, "no sound: {}", nx::describe(audio.error()));
     }
-    // The player's files, then the command line's commands, as the original's valve.rc runs them.
+    // The player's files, then the command line's commands, as the original's valve.rc runs them; the
+    // output s_device names is opened once they ran, the default's sounds heard until then.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
+    openNamedSoundOutput();
     auto video = openVideo(*m_options, m_cvars->video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
@@ -471,6 +478,8 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                .description =
                    "Plays a sound heard everywhere at a volume from 0 to 1: playvol <sound> <volume>."},
               [this](Console&, const CommandLine& line) { return playVolumeCommand(line); }),
+          add({.name = "s_devices", .description = "Lists the sound outputs s_device can name."},
+              [this](Console&, const CommandLine&) { return listSoundOutputs(); }),
           add({.name = "noclip", .description = "Flies through everything, or walks again."},
               [this](Console&, const CommandLine&) {
                   noclipCommand();
@@ -531,6 +540,17 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
     }
     m_nextSession = std::move(*session);
+    return {};
+}
+
+auto Client::listSoundOutputs() -> nx::Result<void, ConsoleError> {
+    auto names = nx::platform::audioOutputNames();
+    if (!names) {
+        return nx::fail(ConsoleError::CommandFailed, "s_devices", std::move(names.error()));
+    }
+    for (const std::string& name : *names) {
+        m_console.print(std::format("\"{}\"", name));
+    }
     return {};
 }
 
@@ -687,6 +707,19 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
         }
     }
     return {};
+}
+
+void Client::openNamedSoundOutput() {
+    const std::string& name = m_cvars->audio.device.value();
+    if (name.empty()) {
+        return;
+    }
+    auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume, name);
+    if (!audio) {
+        nx::log::warning(kLog, "s_device {:?}: {}; the default plays", name, nx::describe(audio.error()));
+        return;
+    }
+    m_audio = std::move(*audio);
 }
 
 void Client::startNextSession() {
