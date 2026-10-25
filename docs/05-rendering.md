@@ -103,7 +103,7 @@ if (!lightmapAtlas) {
 | Memory | Vulkan Memory Allocator (VMA) |
 | Frames in flight | 2 (default) or 3, configurable (`r_frames_in_flight`) |
 | Present | `vid_vsync 0/1`, `r_present_mode immediate/mailbox/fifo` |
-| Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID |
+| Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID. Today: `next` gives the device what its GPU learned last time (`vulkan::DeviceDesc::pipelineCache`, from `pipelineCache.bin` in the cache folder, `nx::platform::cacheDirectory`: `%LOCALAPPDATA%\Modern-Client.v2`, or `$XDG_CACHE_HOME`/`~/.cache` `modern-client.v2`), kept only when its header names the same vendor, device and cache UUID, and writes what it learned there as it ends (`Device::pipelineCache`, written whole or not at all) |
 | Parallel recording | One `VkCommandPool` per worker per frame in flight |
 | Validation | Validation layers + sync validation in development builds (`--validation` in `next` and `nxview`; always in the tests) |
 | *Device lost* | Typed error. The renderer tries to recreate the device and resources once and, if that fails, produces a crash report |

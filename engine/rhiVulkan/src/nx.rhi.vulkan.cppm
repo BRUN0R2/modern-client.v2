@@ -27,6 +27,9 @@ struct DeviceDesc {
     /// warnings and errors are logged, and its errors counted (Device::validationErrors).
     bool isValidationEnabled = false;
     std::uint32_t framesInFlight = kMinFramesInFlight; ///< From kMinFramesInFlight to kMaxFramesInFlight.
+    /// What a device of the same GPU and driver learned building its pipelines (Device::pipelineCache);
+    /// what another GPU or driver wrote, or anything else, is left out.
+    std::span<const std::byte> pipelineCache{};
 };
 
 /// Opens the best GPU that has what the engine requires: Vulkan 1.3 with dynamic rendering,

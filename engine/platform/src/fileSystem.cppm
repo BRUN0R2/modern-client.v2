@@ -71,6 +71,13 @@ enum class FileError : std::uint8_t {
 /// ~/.config. It may not exist yet. Errors: NotFound (the system names no such folder).
 [[nodiscard]] auto userDirectory() -> Result<std::filesystem::path, FileError>;
 
+/// The folder of what Modern-Client.v2 keeps to start faster, which it can lose without harm: what
+/// the GPU learned building its pipelines. On Windows, Modern-Client.v2 in the user's local
+/// application data (%LOCALAPPDATA%), never roaming; elsewhere, modern-client.v2 in
+/// $XDG_CACHE_HOME, else in ~/.cache. It may not exist yet. Errors: NotFound (the system names no
+/// such folder).
+[[nodiscard]] auto cacheDirectory() -> Result<std::filesystem::path, FileError>;
+
 /// The folders the system keeps its fonts and the user's in, those that exist: on Windows its Fonts
 /// folder and the user's own (%LOCALAPPDATA%\Microsoft\Windows\Fonts); elsewhere the fonts
 /// folders of $XDG_DATA_HOME (else ~/.local/share) and of each of $XDG_DATA_DIRS (else
