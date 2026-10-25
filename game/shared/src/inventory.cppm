@@ -85,10 +85,12 @@ struct Shooter {
     bool canAttack = true;
 };
 
-/// What a weapon's attack met: its trace, and whether what stopped it is a body, which sounds as flesh:
-/// an entity of a class other than none and the machines' (Classify), a hostage today.
+/// What a weapon's attack met: its trace; whether what stopped it is the world or a brush entity
+/// (IsBSPModel); and whether it is a body, which sounds as flesh: an entity of a class other than
+/// none and the machines' (Classify), a hostage or a func_vehicle today.
 struct WeaponHit {
     nx::collision::Trace trace{};
+    bool isBrushModel = false;
     bool isBody = false;
 };
 

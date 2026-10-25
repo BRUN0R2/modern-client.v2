@@ -409,9 +409,14 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   (32 for the stab), along the view without its kick, then a ducked player's hull, through the world
   and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`) and the hostages,
   the line by their hitboxes and the hull by their boxes (`cs::MapModels::traceHostages`, as
-  `SV_HullForStudioModel` chooses); a miss and a hit play their sequences and hold the attacks as
-  the data says (a slash 0.35 or 0.4 seconds, the next stab 0.5; a stab 1.0 or 1.1). A hit on a body
-  (`cs::WeaponHit::isBody`: a hostage) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
+  `SV_HullForStudioModel` chooses); where the hull meets the world or a brush entity, it looks for
+  where it meets it as `FindHullIntersection` does: a line to twice as far as the hull stopped, else
+  of the lines to the corners of a ducked player's box about that end the nearest that meets
+  something, which may be a hostage; a miss and a hit play their sequences and hold the attacks as
+  the data says (a slash 0.35 or 0.4 seconds, the next stab 0.5; a stab 1.0 or 1.1), the slashes
+  from their first sequence again each time the knife is drawn. A hit on a body
+  (`cs::WeaponHit::isBody`: a hostage, or an entity of a class the original's `Classify` makes other
+  than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
   `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
   sound of what its texture is made of, as the original's multiplayer rules play none
   (`CHalfLifeMultiplay::PlayTextureSounds`). Its damage and the back stab come with the damage.
