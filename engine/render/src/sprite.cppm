@@ -88,6 +88,8 @@ enum class SpriteError : std::uint8_t {
     GpuFailed, ///< The GPU refused a resource (cause: the RhiError).
 };
 
+/// What a sprite renderer draws with (SpriteRenderer::create): its shader, its target's format, the
+/// original's picture and how its colors reach the target.
 struct SpriteRendererDesc {
     /// shaders/sprite.slang, compiled for the device (bin/shaders/sprite.spv).
     std::span<const std::byte> shaderCode{};

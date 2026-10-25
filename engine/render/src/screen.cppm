@@ -54,6 +54,8 @@ enum class ScreenError : std::uint8_t {
     GpuFailed, ///< The GPU refused a resource (cause: the RhiError).
 };
 
+/// What the screen's renderer draws with (ScreenRenderer::create): its shader, its pass's formats
+/// and the original's picture its pictures go through.
 struct ScreenRendererDesc {
     /// shaders/screen.slang, compiled for the device (bin/shaders/screen.spv).
     std::span<const std::byte> shaderCode{};

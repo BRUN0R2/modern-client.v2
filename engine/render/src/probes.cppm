@@ -52,6 +52,8 @@ struct ProbeBlend {
 [[nodiscard]] auto probeBlendOf(std::span<const Vec3> positions, Vec3 point) noexcept
     -> std::optional<ProbeBlend>;
 
+/// What a map's reflection probes are made of (ReflectionProbes::create): their shader, the format
+/// the world captures to, and where they are.
 struct ReflectionProbesDesc {
     /// shaders/probe.slang, compiled for the device (bin/shaders/probe.spv).
     std::span<const std::byte> shaderCode{};

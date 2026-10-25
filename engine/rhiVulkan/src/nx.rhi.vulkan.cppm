@@ -17,6 +17,8 @@ export namespace nx::rhi::vulkan {
 using rhi::kMaxFramesInFlight;
 using rhi::kMinFramesInFlight;
 
+/// What a Vulkan device is made for (createDevice): the program's name, the window it presents to,
+/// whether validation reports, and how many frames are in flight.
 struct DeviceDesc {
     std::string_view applicationName = "Modern-Client.v2";
     /// The window to present to (Device::createSwapchain); none for work that is never shown.

@@ -22,6 +22,7 @@ inline constexpr std::uint16_t kNormalLightStyleValue = 264;
 /// after 'a' (264 at 'm'), and 256 for a style without a pattern.
 using LightStyleValues = std::array<std::uint16_t, kLightStyleCount>;
 
+/// The pattern each light style plays, as the game sets them, and how bright each is at a moment.
 class LightStyles {
 public:
     /// Sets the pattern of `style` (below kLightStyleCount); a character outside 'a' to 'z' is taken

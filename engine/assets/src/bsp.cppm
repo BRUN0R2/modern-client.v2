@@ -117,6 +117,7 @@ enum class PlaneAxis : std::uint8_t {
     Count,
 };
 
+/// A plane of the map (the planes lump): faces and nodes lie on it.
 struct BspPlane {
     Plane plane{};
     PlaneAxis axis = PlaneAxis::X;
@@ -143,6 +144,8 @@ struct TextureInfo {
     bool isSpecial = false; ///< Sky, water and other animated surfaces: no lightmap, no subdivision.
 };
 
+/// A face of the map (the faces lump): its plane and side, its edges, its texture's placement and
+/// its lightmaps.
 struct BspFace {
     PlaneIndex plane{};
     bool isBackSide = false; ///< The face looks against the plane's normal.
@@ -170,6 +173,8 @@ struct BspNode {
     std::uint32_t faceCount = 0;
 };
 
+/// A leaf of the visible tree (the leaves lump): what it holds, what it sees, its bounds, its faces
+/// and the levels of its ambient sounds.
 struct BspLeaf {
     Contents contents = Contents::Empty;
     std::optional<std::uint32_t> visibilityOffset{}; ///< In BspView::visibility(); none sees everything.
