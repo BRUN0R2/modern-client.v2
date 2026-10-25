@@ -101,6 +101,7 @@ restartsEachRound = true # CleanUpMap restarts it as each round starts
 classname = "func_vehicle"
 solid = "bsp"
 notSolidFlags = 8 # passable
+classification = "vehicle" # CFuncVehicle::Classify: a knife sounds on it as on flesh
 restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]

@@ -275,6 +275,9 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
             break;
         }
         world.add(made, AlternateTextures{.isShown = entity.findNumber("frame").value_or(0.0F) != 0.0F});
+        if (brushClass->classification) {
+            world.add(made, Classified{.classification = *brushClass->classification});
+        }
         if (brushClass->restartsEachRound.value_or(false)) {
             world.add(made, RestartsEachRound{});
         }

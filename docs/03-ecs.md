@@ -354,7 +354,9 @@ make one not solid, whether a `skin` makes a door a volume, contents the class a
 `spawnBrushEntities` makes, in the map's order, an entity for each one of a listed class, with its
 `BrushModel` (its `nx::assets::ModelIndex`), its `Transform` and its `BrushSolidity` (the original's
 `solid`, and its `skin` as the contents that number names, `nx::assets::contentsNumbered`: a volume
-of water, slime or lava, a ladder, or nothing), and what
+of water, slime or lava, a ladder, or nothing), its `Classified` when its class's `classification`
+says what kind of thing it is to the game's rules (`func_vehicle`: a vehicle, as the original's
+`Classify`), and what
 its class's `behavior` makes of it (`slidingDoor`, `rotatingDoor`: a `Door` and its `Pusher`,
 [07 §5.1](07-simulation-and-physics.md#51-movement-types), and its `Waves`, an eighth of its
 `WaveHeight`, as `CBaseDoor::KeyValue` sets a door's `scale`), with its `RestartsEachRound` when its
