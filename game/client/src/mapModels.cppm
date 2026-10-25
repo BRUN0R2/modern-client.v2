@@ -73,6 +73,10 @@ public:
     /// `world` (DROP_TO_FLOOR), as the game does when it makes them.
     void dropToFloor(nx::ecs::World& world, const nx::collision::BrushHulls& hulls);
 
+    /// The boxes of its entities that stop a player (SOLID_SLIDEBOX): each hostage's, kHostageBox
+    /// about where it stands.
+    [[nodiscard]] auto solidBoxes() const -> std::vector<SolidBox>;
+
     /// Every model on the GPU of `renderer`, a model for each file, its uploads recorded in `commands`.
     /// Errors: those of StudioRenderer::load.
     [[nodiscard]] auto load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
