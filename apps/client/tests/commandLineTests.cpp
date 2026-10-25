@@ -34,12 +34,14 @@ TEST(ClientCommandLineTest, OptionsEndTheCommandBeforeThem) {
     EXPECT_EQ(options->install, std::filesystem::path{"C:/Games/Half-Life"});
     EXPECT_TRUE(options->isValidationEnabled);
     EXPECT_EQ(parse({"--data", "data"})->data, std::filesystem::path{"data"});
+    EXPECT_EQ(parse({"--content-config", "mine.toml"})->contentConfig, std::filesystem::path{"mine.toml"});
 }
 
 TEST(ClientCommandLineTest, WhatIsNotAnOptionIsRefused) {
     EXPECT_FALSE(parse({"de_dust2"}).has_value()) << "a word outside a command";
     EXPECT_FALSE(parse({"-game"}).has_value());
     EXPECT_FALSE(parse({"-basedir"}).has_value()) << "without its folder";
+    EXPECT_FALSE(parse({"--content-config"}).has_value()) << "without its file";
     EXPECT_FALSE(parse({"--validation", "--validation"}).has_value()) << "twice";
     EXPECT_FALSE(parse({"+sensitivity", "-1"}).has_value()) << "`-1` ends the command, as in the original";
 }
