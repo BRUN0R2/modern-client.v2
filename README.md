@@ -10,8 +10,8 @@ gameplay and servers identical to the original and **without the historical limi
 What the project builds, milestone by milestone ([roadmap](docs/19-roadmap.md); what exists
 today is under [Status](#status)):
 
-- **Modern engine:** archetype ECS and multithreaded Job System (done); Vulkan renderer with
-  GPU skinning (M2), DirectX 11 later.
+- **Modern engine:** archetype ECS and multithreaded Job System, a Vulkan renderer with GPU
+  skinning (done); DirectX 11 later.
 - **No limits:** entities, precache, players (up to 1024), messages, attachments,
   body groups, sprites and HUD values.
 - **Native plugins and mods:** the **Rook** language, strongly typed and familiar to anyone
@@ -26,20 +26,23 @@ today is under [Status](#status)):
 
 ## Status
 
-Milestone **M2 (Assets and visible world)** in progress, on top of the M0 foundation (build
-with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime core: `nx.core`
-(typed errors, contracts, strong types and units), `nx.meta` (reflection facade), `nx.data`
-(TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype ECS),
-`nx.math` (vectors, matrices, quaternions, GoldSrc angles), `nx.console` (typed cvars, commands
-and `.cfg`), `nx.platform` (clocks, the native file system, the window and its input), `nx.rhi`
-(the GPU interface, with its Vulkan backend), `nx.render` (the camera and the BSP world) and
-`nx.assets` (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and
-fuzzed readers of every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV, TGA), with tests, and
-`nxcheck`, which reads every file of a Counter-Strike 1.6 installation with those readers. M3
-has begun: `nx.collision` (traces through the hulls of a map), `nx.game` (the map's brush
-entities, as the game makes them, and the doors a touch opens) and `cs.shared` (player
-movement: walking, the air, jumps, ducking, stairs, water and ladders), with which the client,
-`next`, plays the maps alone.
+Milestones **M2 (Assets and visible world)** and **M3 (Local game)** in progress, on top of the
+M0 foundation (build with C++ modules and `import std`, presets, vcpkg and CI) and the M1 runtime
+core: `nx.core` (typed errors, contracts, strong types and units), `nx.meta` (reflection facade),
+`nx.data` (TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype
+ECS), `nx.math` (vectors, matrices, quaternions, GoldSrc angles) and `nx.console` (typed cvars,
+commands and `.cfg`). Above them: `nx.platform` (clocks, the native file system, the window, its
+input and the sound output), `nx.rhi` (the GPU interface, with its Vulkan backend), `nx.assets`
+(the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and fuzzed readers of
+every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV, TGA, and of VGUI2's schemes and fonts),
+`nx.render` (the BSP world with its lightmaps, sky, water and decals, studio models with GPU
+skinning, sprites, the HUD's screen, and the enhanced look), `nx.ui` (fonts as Windows sizes
+them, panels and the console's window), `nx.audio` (the mixer), `nx.settings` (the player's
+`.cfg` files, cvars and binds), `nx.collision` (traces through the hulls of a map), `nx.game`
+(the map's brush entities, doors, buttons and triggers) and `cs.shared` (player movement, and the
+knife, Glock 18, USP, AK-47 and M4A1 as the original fires them), with which the client, `next`,
+plays the maps alone. `nxcheck` reads every file of a Counter-Strike 1.6 installation with those
+readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
 
@@ -62,9 +65,11 @@ On Linux, use the `dev-linux-gcc` preset; the other presets and their status are
 With Counter-Strike 1.6 installed through Steam, `nxcheck` reads every file of the installation
 with the engine's readers and reports any it cannot read
 ([docs/18](docs/18-testing-and-quality.md#real-content)), and `next` plays one of its maps as a
-player with a knife: the mouse looks, and the keys do what Counter-Strike binds them to (W A S D
-move, Space jumps, Ctrl ducks, Shift walks, E uses, the arrows turn); V flies through everything
-(`noclip`), and Escape ends it. Its settings and binds are kept in `config.cfg`, in
+player with what its team spawns with (a knife and a pistol; `give ak47` gives a rifle): the mouse
+looks, and the keys do what Counter-Strike binds them to (W A S D move, Space jumps, Ctrl ducks,
+Shift walks, E uses, the arrows turn, the left button fires, the right one switches a silencer or
+a burst, R reloads, Q draws the last weapon, the tilde opens the console); V flies through
+everything (`noclip`), and Escape ends it. Its settings and binds are kept in `config.cfg`, in
 `%APPDATA%\Modern-Client.v2`. `nxview` renders one frame of a map into a BMP file:
 
 ```powershell

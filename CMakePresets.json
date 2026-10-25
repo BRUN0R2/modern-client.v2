@@ -49,6 +49,7 @@
         "NX_BUILD_TESTS": "OFF",
         "NX_BUILD_BENCHMARKS": "OFF",
         "NX_BUILD_TOOLS": "OFF",
+        "NX_BUILD_CLIENT": "OFF",
         "NX_FUZZ": "ON",
         "VCPKG_TARGET_TRIPLET": "x64-windows-nx-asan",
         "CMAKE_CXX_FLAGS": "/fsanitize=address /fsanitize=fuzzer"
