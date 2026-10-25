@@ -197,6 +197,13 @@ auto mapObjectivesOf(const nx::assets::BspView& map) -> MapObjectives {
     return objectives;
 }
 
+auto hostagesOf(const nx::assets::BspView& map) -> std::uint32_t {
+    return nx::narrow<std::uint32_t>(
+        std::ranges::count_if(map.entities(), [](const nx::assets::BspEntity& entity) {
+            return entity.find("classname") == kHostageClass;
+        }));
+}
+
 auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path {
     return userFolder / "addons" / "cstrike";
 }
@@ -260,11 +267,21 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!lightStyles) {
         return nx::fail(LevelError::ContentUnavailable, std::move(lightStyles.error()));
     }
+    const std::filesystem::path economyFile = data / "cstrike" / "economy.toml";
+    auto economyText = nx::platform::readTextFile(economyFile);
+    if (!economyText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(economyText.error()));
+    }
+    auto economy = readEconomyRules(*economyText, nx::platform::toUtf8(economyFile));
+    if (!economy) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(economy.error()));
+    }
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
                        .weapons = std::move(*weapons),
                        .loadouts = std::move(*loadouts),
-                       .lightStyles = std::move(*lightStyles)};
+                       .lightStyles = std::move(*lightStyles),
+                       .economy = std::move(*economy)};
 }
 
 auto Level::load(const GameContent& content, std::string_view name)
@@ -314,6 +331,7 @@ auto Level::load(const GameContent& content, std::string_view name)
         level.m_spawnPoints[team] = spawnPointsOf(bsp, team);
     }
     level.m_objectives = mapObjectivesOf(bsp);
+    level.m_hostages = hostagesOf(bsp);
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
     if (!level.m_sprites->missing().empty()) {

@@ -19,7 +19,7 @@ struct ObjectiveClass {
 constexpr std::array kObjectiveClasses{
     ObjectiveClass{.classname = "func_bomb_target", .objective = MapObjective::BombTarget},
     ObjectiveClass{.classname = "info_bomb_target", .objective = MapObjective::BombTarget},
-    ObjectiveClass{.classname = "hostage_entity", .objective = MapObjective::Hostages},
+    ObjectiveClass{.classname = kHostageClass, .objective = MapObjective::Hostages},
     ObjectiveClass{.classname = "func_escapezone", .objective = MapObjective::EscapeZone},
     ObjectiveClass{.classname = "func_vip_safetyzone", .objective = MapObjective::VipSafetyZone},
 };
