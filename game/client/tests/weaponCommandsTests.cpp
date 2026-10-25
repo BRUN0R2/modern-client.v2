@@ -80,16 +80,15 @@ public:
 class WeaponConsole {
 public:
     WeaponConsole() : console{output, files}, weapons{catalog()} {
-        const cs::WeaponActions actions{.select =
-                                            [this](WeaponIndex weapon) {
-                                                selected.push_back(weapon);
-                                                return true;
-                                            },
-                                        .give =
-                                            [this](WeaponIndex weapon) {
-                                                given.push_back(weapon);
-                                                return true;
-                                            }};
+        const cs::WeaponActions actions{
+            .select = [this](WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
+                selected.push_back(weapon);
+                return {};
+            },
+            .give = [this](WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
+                given.push_back(weapon);
+                return {};
+            }};
         nx::invariant(cs::registerWeaponCommands(console, weapons, actions).has_value(),
                       "the weapon commands");
     }

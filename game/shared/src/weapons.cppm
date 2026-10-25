@@ -203,12 +203,12 @@ struct WeaponAccuracy {
 /// shot of the burst after the first, to `upMax` at most; to its side likewise; the side it kicks to
 /// turned over once in `directionChange` + 1 shots, at random.
 struct Kick {
-    float upBase{};
-    float lateralBase{};
-    float upModifier{};
-    float lateralModifier{};
-    float upMax{};
-    float lateralMax{};
+    nx::Degrees upBase{};
+    nx::Degrees lateralBase{};
+    nx::Degrees upModifier{};      ///< Up, a shot of the burst.
+    nx::Degrees lateralModifier{}; ///< To the side, a shot of the burst.
+    nx::Degrees upMax{};
+    nx::Degrees lateralMax{};
     std::uint32_t directionChange{};
 };
 
@@ -377,7 +377,9 @@ public:
     [[nodiscard]] static auto make(AmmoTypes ammo, std::vector<Weapon> weapons)
         -> nx::Result<WeaponCatalog, WeaponError>;
 
+    /// The kinds of ammo, in the order ammo.toml lists them.
     [[nodiscard]] inline auto ammo() const noexcept -> std::span<const AmmoType> { return m_ammo; }
+    /// The weapons, by their WeaponIndex: the game's, then those made as it runs.
     [[nodiscard]] inline auto weapons() const noexcept -> const std::deque<Weapon>& { return m_weapons; }
 
     /// The kind of ammo `id` names; none when the catalog has none of that id.

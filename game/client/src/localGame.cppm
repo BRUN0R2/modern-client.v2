@@ -35,7 +35,7 @@ struct Hearing {
     nx::TickRate rate{nx::kDefaultTickRate};
 
     /// How long after the frame what was made at `made` is heard: at once when not after `from`.
-    [[nodiscard]] auto delayOf(nx::GameTime made) const noexcept -> nx::Seconds {
+    [[nodiscard]] inline auto delayOf(nx::GameTime made) const noexcept -> nx::Seconds {
         return std::max(made.since(from, rate), nx::Seconds{});
     }
 };
@@ -48,9 +48,10 @@ class LocalGame {
 
 public:
     /// The game of `level` of `content`, which must both outlive it, as it starts, and its player
-    /// standing with its eye at `eye`, given what a player of `team` spawns with, drawing the
-    /// heaviest. Errors: GameUnspawnable.
-    [[nodiscard]] static auto start(const GameContent& content, const Level& level, Team team, nx::Vec3 eye)
+    /// standing with its eye at `eye`, given what a player of `team` spawns with, drawing them as
+    /// `autoSwitch` says. Errors: GameUnspawnable.
+    [[nodiscard]] static auto start(const GameContent& content, const Level& level, Team team, nx::Vec3 eye,
+                                    AutoSwitch autoSwitch)
         -> nx::Result<std::unique_ptr<LocalGame>, LevelError>;
 
     /// Use start(). Public only so that start() can use std::make_unique.
@@ -95,8 +96,9 @@ public:
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_inventory; }
     /// Gives the player `weapon` (its replacement, when it is replaced), which must be complete, as
-    /// its loadout gives one, drawn when heavier; the speed it runs at follows the weapon it holds.
-    void give(WeaponIndex weapon);
+    /// its loadout gives one, drawn as `autoSwitch` says; the speed it runs at follows the weapon it
+    /// holds.
+    void give(WeaponIndex weapon, AutoSwitch autoSwitch);
     /// Where the player's shots met the world and the brush entities since the last call, in their
     /// order: where a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }

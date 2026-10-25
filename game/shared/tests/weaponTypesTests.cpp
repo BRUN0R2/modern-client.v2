@@ -251,9 +251,9 @@ TEST(WeaponTypesTest, ThePlayerIsGivenAndSelectsTheReplacement) {
     set(weapons, drakar, "magazine.clipSize", "60");
     Inventory inventory{weapons};
     nx::Random random{0, "test"};
-    ASSERT_TRUE(inventory.give(kKnife, true, {}, random));
+    ASSERT_TRUE(inventory.give(kKnife, cs::AutoSwitch::ToHeavier, {}, random));
     ASSERT_TRUE(weapons.replace(kAk, drakar).has_value());
-    ASSERT_TRUE(inventory.give(kAk, true, {}, random));
+    ASSERT_TRUE(inventory.give(kAk, cs::AutoSwitch::ToHeavier, {}, random));
     ASSERT_EQ(inventory.weapons().size(), 2U);
     EXPECT_EQ(inventory.weapons()[1].weapon, drakar);
     EXPECT_EQ(inventory.weapons()[1].clip, 60U);
@@ -289,7 +289,7 @@ TEST(WeaponTypesTest, TheCatalogHasNoLimitOfWeaponsNorOfKindsOfAmmo) {
     Inventory inventory{*weapons};
     nx::Random random{0, "test"};
     for (std::uint32_t index = 0; index <= kKinds; ++index) {
-        EXPECT_TRUE(inventory.give(WeaponIndex{index}, false, {}, random));
+        EXPECT_TRUE(inventory.give(WeaponIndex{index}, cs::AutoSwitch::Off, {}, random));
     }
     EXPECT_EQ(inventory.weapons().size(), kKinds + 1);
     EXPECT_EQ(inventory.giveAmmo("ammo299", 90), 90U);

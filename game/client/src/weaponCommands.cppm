@@ -14,10 +14,17 @@ import cs.shared;
 
 export namespace cs {
 
-/// What the weapon commands do to the game played: false when no map is played.
+/// Why a weapon command could not act on the game.
+enum class WeaponActionError : std::uint8_t {
+    NoMap, ///< No map is played.
+};
+
+/// What the weapon commands do to the game played.
 struct WeaponActions {
-    std::function<bool(WeaponIndex weapon)> select; ///< The player draws `weapon`, when it has it.
-    std::function<bool(WeaponIndex weapon)> give;   ///< The player is given `weapon`, which is complete.
+    /// The player draws `weapon`, when it has it. Errors: NoMap.
+    std::function<nx::Result<void, WeaponActionError>(WeaponIndex weapon)> select;
+    /// The player is given `weapon`, which is complete. Errors: NoMap.
+    std::function<nx::Result<void, WeaponActionError>(WeaponIndex weapon)> give;
 };
 
 /// The weapon `name` names in `weapons`: by its id, or by its classname, in any case, as the console
