@@ -66,11 +66,19 @@ struct DecalVertex {
                                                               assets::kNoLightStyle, assets::kNoLightStyle};
 };
 
+/// An image a decal pool's shots stamp: one of the images its world was made with
+/// (BspWorldDesc::decals), by its place among them.
+struct DecalImageIndex {
+    std::uint32_t value = 0;
+
+    [[nodiscard]] inline auto operator==(const DecalImageIndex&) const noexcept -> bool = default;
+};
+
 /// A decal on one face: its image, the face and its model, and the part of the face the decal covers, a
 /// convex fan in the model's space.
 struct PlacedDecal {
-    std::uint32_t texture = 0;
-    std::uint32_t face = 0;
+    DecalImageIndex image{};
+    assets::FaceIndex face{};
     assets::ModelIndex model{};
     std::vector<DecalVertex> polygon{};
 };
@@ -81,10 +89,10 @@ enum class DecalLife : std::uint8_t {
     Permanent, ///< A map's (FDECAL_PERMANENT): no other decal takes its slot while another is free.
 };
 
-/// What a shot stamps: image `texture`, of `size`, on the faces of `model` near `center`, a point in
-/// the model's own space, `scale` times smaller than its image, for `life`.
+/// What a shot stamps: `image`, of `size`, on the faces of `model` near `center`, a point in the
+/// model's own space, `scale` times smaller than its image, for `life`.
 struct DecalShot {
-    std::uint32_t texture = 0;
+    DecalImageIndex image{};
     DecalSize size{};
     assets::ModelIndex model = assets::kWorldModel;
     Vec3 center{};
@@ -123,7 +131,7 @@ public:
     [[nodiscard]] auto inOrder() const -> std::vector<const PlacedDecal*>;
 
     /// How many decals face `face` has.
-    [[nodiscard]] auto decalsOn(std::uint32_t face) const noexcept -> std::size_t;
+    [[nodiscard]] auto decalsOn(assets::FaceIndex face) const noexcept -> std::size_t;
 
     /// Changes each time a decal is stamped or goes: what draws them is redrawn then.
     [[nodiscard]] inline auto revision() const noexcept -> std::uint64_t { return m_revision; }
@@ -147,10 +155,10 @@ private:
 
     void walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& stamped);
     /// Stamps `shot` on face `face` when it touches it; returns whether it did.
-    auto stamp(std::uint32_t face, const Walk& shot) -> bool;
+    auto stamp(assets::FaceIndex face, const Walk& shot) -> bool;
     /// The slot a decal on `face` takes: the temporary one it covers least of 6 or more temporary ones
     /// it covers mostly, or the pool's next not taken for good.
-    [[nodiscard]] auto slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis)
+    [[nodiscard]] auto slotFor(assets::FaceIndex face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis)
         -> std::size_t;
     /// Empties slot `slot`, its decal leaving its face.
     void empty(std::size_t slot);

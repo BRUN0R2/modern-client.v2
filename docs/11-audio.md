@@ -31,7 +31,7 @@ flowchart LR
 Today: the mixer, on the system's default output. A `Sound` is a WAV file of any layout made
 32-bit floats, its first two channels, at its own rate, looping from its first cue point; the
 game owns it, so the audio thread never frees memory. The game sends the mixer `PlayVoice`,
-`StopVoice`, `SetVoiceGains` and `SetMasterGain` through an SPSC queue (`nx.jobs:spscQueue`; a
+`StopVoice`, `SetVoiceGains` and `SetMasterGain`, each of a voice by its `VoiceId`, through an SPSC queue (`nx.jobs:spscQueue`; a
 full queue is a typed `QueueFull`, never a wait), each done at once or a delay after the start of
 the block that takes it, to the frame: the block is mixed in parts, cut where a command is due, and
 commands due at the same frame are done in the order sent. `QueueFull` counts the commands waiting

@@ -111,7 +111,10 @@ struct FontRequest {
 class Font {
 public:
     /// The face of `file`, a TrueType or OpenType font, that `request` asks for, sized as Windows
-    /// sizes it. Errors: NotAFont, NotOutline, BadHeight.
+    /// sizes it. `file` is shared by every font opened from it, which FreeType reads it through: fonts
+    /// that may be used on different threads and outlive one another and the catalog that read the
+    /// file, the ownership truly shared between threads that docs/02 section 7 keeps std::shared_ptr
+    /// for. Errors: NotAFont, NotOutline, BadHeight.
     [[nodiscard]] static auto open(std::shared_ptr<const std::vector<std::byte>> file,
                                    const FontRequest& request) -> Result<Font, FontError>;
 

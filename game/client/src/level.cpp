@@ -234,10 +234,20 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!loadouts) {
         return nx::fail(LevelError::ContentUnavailable, std::move(loadouts.error()));
     }
+    const std::filesystem::path lightStylesFile = data / "cstrike" / "lightStyles.toml";
+    auto lightStylesText = nx::platform::readTextFile(lightStylesFile);
+    if (!lightStylesText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(lightStylesText.error()));
+    }
+    auto lightStyles = readWorldLightStyles(*lightStylesText, nx::platform::toUtf8(lightStylesFile));
+    if (!lightStyles) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(lightStyles.error()));
+    }
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
                        .weapons = std::move(*weapons),
-                       .loadouts = std::move(*loadouts)};
+                       .loadouts = std::move(*loadouts),
+                       .lightStyles = std::move(*lightStyles)};
 }
 
 auto Level::load(const GameContent& content, std::string_view name)
@@ -260,7 +270,7 @@ auto Level::load(const GameContent& content, std::string_view name)
     level.m_map = std::move(*map);
     const nx::assets::BspView& bsp = *level.m_map;
     level.m_entityClasses = content.entityClasses;
-    level.m_lightStyles = mapLightStyles(bsp);
+    level.m_lightStyles = mapLightStyles(bsp, content.lightStyles);
     level.m_skyLight = skyLightOf(bsp);
     level.m_lights = highlightLightsOf(bsp);
     level.m_probePositions = probePositionsOf(bsp);
@@ -313,7 +323,7 @@ auto Level::load(const GameContent& content, std::string_view name)
                          listed(level.m_decals->missing()));
     }
     for (const nx::game::StaticDecal& decal : stamped) {
-        if (const std::optional<std::uint32_t> index = level.m_decals->indexOf(decal.texture)) {
+        if (const std::optional<nx::render::DecalImageIndex> index = level.m_decals->indexOf(decal.texture)) {
             level.m_mapDecals.push_back(MapDecal{
                 .decal = *index, .origin = decal.origin, .on = decalTargetOf(resting, decal.entity)});
         }

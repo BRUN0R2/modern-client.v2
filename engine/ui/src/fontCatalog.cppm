@@ -31,6 +31,14 @@ struct FontFace {
 [[nodiscard]] auto readFontFaces(std::span<const std::byte> bytes, const std::filesystem::path& file = {})
     -> std::vector<FontFace>;
 
+/// What a scheme's font asks of a face: its family (any ASCII case), its weight (0 for 400) and
+/// whether it is italic.
+struct FontQuery {
+    std::string_view family{};
+    std::int32_t weight = 0;
+    bool isItalic = false;
+};
+
 /// The face chosen for a font a scheme asks for, and whether bold is simulated on it. The face is the
 /// catalog's: valid until faces are added to it.
 struct FontChoice {
@@ -45,17 +53,17 @@ public:
     /// the file system's), NotAFont (no face names a family).
     [[nodiscard]] auto addFile(const std::filesystem::path& path) -> Result<void, FontError>;
     /// Adds the faces of each font file (.ttf, .ttc, .otf) in `folder` and its subfolders, leaving out
-    /// those that cannot be read. Returns how many faces were added.
-    auto addFolder(const std::filesystem::path& folder) -> std::size_t;
+    /// those that cannot be read; returns how many faces were added. Errors: Unreadable (the folder
+    /// cannot be listed; cause: the file system's).
+    [[nodiscard]] auto addFolder(const std::filesystem::path& folder) -> Result<std::size_t, FontError>;
 
     [[nodiscard]] inline auto faces() const noexcept -> std::span<const FontFace> { return m_faces; }
 
-    /// The face for `family` (any ASCII case), `weight` (0 for 400) and `isItalic`, as GDI chooses it
-    /// among the family's faces: those as italic as asked if there are any; of them the heaviest that
-    /// is at most 88 heavier than asked, else the lightest. Bold is simulated on a face lighter than
-    /// 600 that is more than 150 lighter than asked. None when no face has the family.
-    [[nodiscard]] auto choose(std::string_view family, std::int32_t weight, bool isItalic) const
-        -> std::optional<FontChoice>;
+    /// The face for `query`, as GDI chooses it among the family's faces: those as italic as asked if
+    /// there are any; of them the heaviest that is at most 88 heavier than asked, else the lightest.
+    /// Bold is simulated on a face lighter than 600 that is more than 150 lighter than asked. None when
+    /// no face has the family.
+    [[nodiscard]] auto choose(const FontQuery& query) const -> std::optional<FontChoice>;
 
     /// The font of `choice` at what `request` asks for, its file read once and shared by the fonts
     /// opened from it. Errors: Unreadable, and those of Font::open.
@@ -63,7 +71,8 @@ public:
 
 private:
     std::vector<FontFace> m_faces;
-    std::map<std::filesystem::path, std::shared_ptr<const std::vector<std::byte>>> m_files; ///< Opened.
+    /// The files opened, each shared with the fonts opened from it (Font::open).
+    std::map<std::filesystem::path, std::shared_ptr<const std::vector<std::byte>>> m_files;
 };
 
 } // namespace nx::ui

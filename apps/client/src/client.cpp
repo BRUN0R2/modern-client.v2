@@ -524,7 +524,8 @@ void Client::toggleConsole() {
     }
     // The cursor shows and the keys type while it is open; the mouse turns the view again once closed.
     for (const auto& failure :
-         {m_video->window.setTextInput(m_isConsoleOpen),
+         {m_video->window.setTextInput(m_isConsoleOpen ? nx::platform::TextInput::On
+                                                       : nx::platform::TextInput::Off),
           m_video->window.setMouseMode(m_isConsoleOpen ? nx::platform::MouseMode::Absolute
                                                        : nx::platform::MouseMode::Relative)}) {
         if (!failure) {
@@ -693,7 +694,8 @@ void Client::stampBulletHoles() {
         const std::optional<std::string_view> name =
             cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles);
         // One the installation lacks was reported as the level was read.
-        if (const std::optional<std::uint32_t> decal = name ? level.decals().indexOf(*name) : std::nullopt) {
+        if (const std::optional<nx::render::DecalImageIndex> decal =
+                name ? level.decals().indexOf(*name) : std::nullopt) {
             std::ignore = m_scene->shootDecal(*decal, impact.position, impact.on);
         }
     }

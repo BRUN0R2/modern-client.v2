@@ -124,7 +124,7 @@ TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     nx::ecs::Query<const BrushModel&, nx::ecs::Optional<const Waves>>{world}.forEach(
         [&waves](const BrushModel& model, const Waves* entityWaves) {
             if (entityWaves != nullptr) {
-                waves.emplace(model.index.value, entityWaves->height);
+                waves.emplace(model.index.value, entityWaves->height.value());
             }
         });
     EXPECT_EQ(waves, (std::map<std::uint32_t, float>{{2, 0.0F}, {3, 3.2F / 8.0F}}));

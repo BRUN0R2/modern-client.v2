@@ -91,8 +91,8 @@ auto Mixer::send(MixerCommand command, Seconds delay) -> Result<void, MixerError
     return {};
 }
 
-auto Mixer::isPlaying(std::uint32_t voice) const noexcept -> bool {
-    return voice < m_voices.size() && m_playing[voice].load(std::memory_order_acquire);
+auto Mixer::isPlaying(VoiceId voice) const noexcept -> bool {
+    return voice.value < m_voices.size() && m_playing[voice.value].load(std::memory_order_acquire);
 }
 
 void Mixer::render(std::span<float> out) noexcept {
@@ -149,8 +149,8 @@ void Mixer::mixFrames(std::span<float> out) noexcept {
 }
 
 void Mixer::apply(const MixerCommand& command) noexcept {
-    const auto voiceOf = [this](std::uint32_t index) {
-        return index < m_voices.size() ? &m_voices[index] : nullptr;
+    const auto voiceOf = [this](VoiceId voice) {
+        return voice.value < m_voices.size() ? &m_voices[voice.value] : nullptr;
     };
     if (const auto* play = std::get_if<PlayVoice>(&command)) {
         Voice* const voice = voiceOf(play->voice);
@@ -169,11 +169,11 @@ void Mixer::apply(const MixerCommand& command) noexcept {
                        .cutoff = step > 1.0 ? static_cast<float>(1.0 / step) : 1.0F,
                        .gains = play->gains,
                        .loops = play->loops};
-        m_playing[play->voice].store(isPlayable, std::memory_order_release);
+        m_playing[play->voice.value].store(isPlayable, std::memory_order_release);
     } else if (const auto* stop = std::get_if<StopVoice>(&command)) {
         if (Voice* const voice = voiceOf(stop->voice)) {
             voice->sound = nullptr;
-            m_playing[stop->voice].store(false, std::memory_order_release);
+            m_playing[stop->voice.value].store(false, std::memory_order_release);
         }
     } else if (const auto* gains = std::get_if<SetVoiceGains>(&command)) {
         if (Voice* const voice = voiceOf(gains->voice)) {

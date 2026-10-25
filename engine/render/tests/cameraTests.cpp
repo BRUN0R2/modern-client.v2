@@ -35,8 +35,8 @@ TEST(CameraTest, DepthIsOneAtTheNearPlaneAndFallsTowardZero) {
     const auto depthAt = [&camera](float distance) {
         return project(camera, kFourByThree, {.x = distance}).z;
     };
-    EXPECT_NEAR(depthAt(nx::render::kNearPlane), 1.0F, kTolerance);
-    EXPECT_NEAR(depthAt(nx::render::kNearPlane * 1000.0F), 0.001F, kTolerance);
+    EXPECT_NEAR(depthAt(nx::render::kNearPlane.value()), 1.0F, kTolerance);
+    EXPECT_NEAR(depthAt(nx::render::kNearPlane.value() * 1000.0F), 0.001F, kTolerance);
     EXPECT_GT(depthAt(100.0F), depthAt(200.0F)) << "nearer is greater: reversed depth";
 }
 

@@ -232,7 +232,7 @@ void DecalPool::walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& s
     }
     if (std::abs(distance) < kNodeReach) {
         for (std::uint32_t offset = 0; offset < node.faceCount; ++offset) {
-            if (stamp(node.firstFace.value + offset, shot)) {
+            if (stamp(assets::FaceIndex{node.firstFace.value + offset}, shot)) {
                 ++stamped;
             }
         }
@@ -241,13 +241,13 @@ void DecalPool::walk(assets::NodeIndex index, const Walk& shot, std::uint32_t& s
     into(1);
 }
 
-auto DecalPool::stamp(std::uint32_t face, const Walk& walked) -> bool {
+auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
     const DecalShot& shot = walked.shot;
-    const DecalFace& about = m_faces[face];
+    const DecalFace& about = m_faces[face.value];
     if (!about.takesDecals) {
         return false;
     }
-    const assets::BspFace& bspFace = m_map->faces()[face];
+    const assets::BspFace& bspFace = m_map->faces()[face.value];
     const assets::TextureInfo& info = m_map->textureInfos()[bspFace.textureInfo.value];
     const Vec3 sAxis = normalized(withoutOffset(info.s));
     const Vec3 tAxis = normalized(withoutOffset(info.t));
@@ -289,7 +289,7 @@ auto DecalPool::stamp(std::uint32_t face, const Walk& walked) -> bool {
     if (cut.size() < kTriangleCorners) {
         return false; // its slot stays empty: its decal went all the same
     }
-    PlacedDecal placed{.texture = shot.texture, .face = face, .model = shot.model};
+    PlacedDecal placed{.image = shot.image, .face = face, .model = shot.model};
     for (const CutCorner& corner : cut) {
         DecalVertex vertex{.position = corner.position, .u = corner.u, .v = corner.v};
         if (about.extent && about.lightmapCorner) {
@@ -310,19 +310,20 @@ auto DecalPool::stamp(std::uint32_t face, const Walk& walked) -> bool {
                          .size = shot.size,
                          .sequence = m_sequence++,
                          .life = shot.life};
-    m_decalsOfFace[face].push_back(slot);
+    m_decalsOfFace[face.value].push_back(slot);
     ++m_revision;
     return true;
 }
 
-auto DecalPool::slotFor(std::uint32_t face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis) -> std::size_t {
+auto DecalPool::slotFor(assets::FaceIndex face, const DecalShot& shot, Vec3 sAxis, Vec3 tAxis)
+    -> std::size_t {
     // How much of each decal of the face the new one covers, in that decal's own square.
     const double halfWide = static_cast<double>(shot.size.width) / double{shot.scale} / 2.0;
     const double halfHigh = static_cast<double>(shot.size.height) / double{shot.scale} / 2.0;
     std::size_t covered = 0;
     std::optional<std::size_t> leastCovered;
     double least = std::numeric_limits<double>::max();
-    for (const std::size_t slot : m_decalsOfFace[face]) {
+    for (const std::size_t slot : m_decalsOfFace[face.value]) {
         const Slot& under = m_slots[slot];
         if (under.life == DecalLife::Permanent) {
             continue; // never replaced
@@ -370,7 +371,7 @@ void DecalPool::empty(std::size_t slot) {
     if (!decal) {
         return;
     }
-    std::erase(m_decalsOfFace[decal->face], slot);
+    std::erase(m_decalsOfFace[decal->face.value], slot);
     decal.reset();
     ++m_revision;
 }
@@ -387,8 +388,8 @@ auto DecalPool::inOrder() const -> std::vector<const PlacedDecal*> {
            std::ranges::to<std::vector>();
 }
 
-auto DecalPool::decalsOn(std::uint32_t face) const noexcept -> std::size_t {
-    return face < m_decalsOfFace.size() ? m_decalsOfFace[face].size() : 0;
+auto DecalPool::decalsOn(assets::FaceIndex face) const noexcept -> std::size_t {
+    return face.value < m_decalsOfFace.size() ? m_decalsOfFace[face.value].size() : 0;
 }
 
 } // namespace nx::render
