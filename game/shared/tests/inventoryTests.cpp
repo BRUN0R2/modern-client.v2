@@ -118,6 +118,7 @@ constexpr float kTolerance = 1e-5F;
     glock.firing =
         cs::WeaponFiring{.cycle = nx::Seconds{0.15F},
                          .isAutomatic = false,
+                         .reach = nx::HammerUnits{8192.0F},
                          .idleAfterShot = nx::Seconds{2.5F},
                          .shootSequences = {3, 4, 5},
                          .lastShotSequence = 6,
@@ -150,6 +151,7 @@ constexpr float kTolerance = 1e-5F;
     ak.firing = cs::WeaponFiring{
         .cycle = nx::Seconds{0.0955F},
         .isAutomatic = true,
+        .reach = nx::HammerUnits{8192.0F},
         .idleAfterShot = nx::Seconds{1.9F},
         .shootSequences = {3, 4, 5},
         .accuracy = {.initial = 0.2F,
@@ -173,6 +175,7 @@ constexpr float kTolerance = 1e-5F;
     usp.firing = cs::WeaponFiring{
         .cycle = nx::Seconds{0.15F},
         .isAutomatic = false,
+        .reach = nx::HammerUnits{4096.0F},
         .idleAfterShot = nx::Seconds{2.0F},
         .shootSequences = {9, 10, 11},
         .lastShotSequence = 12,
@@ -424,6 +427,18 @@ TEST(FiringTest, AnAutomaticGunFiresEachCycleWhileItsButtonIsDown) {
     ASSERT_TRUE(inventory.animation().has_value());
     EXPECT_GE(inventory.animation()->sequence, 3U);
     EXPECT_LE(inventory.animation()->sequence, 5U);
+}
+
+TEST(FiringTest, AShotGoesAsFarAsItsWeaponsRoundsGo) {
+    const WeaponCatalog weapons = catalog();
+    for (const auto& [gun, reach] : {std::pair{kGlock, 8192.0F}, std::pair{kUsp, 4096.0F}}) {
+        Inventory inventory = given(weapons, {gun});
+        Shooter shooter = standing();
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        const std::vector<Shot> shots = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+        ASSERT_EQ(shots.size(), 1U);
+        EXPECT_EQ(shots.front().reach, nx::HammerUnits{reach}) << "the USP's go half as far";
+    }
 }
 
 TEST(FiringTest, AGunThatIsNotAutomaticFiresOnceAPress) {

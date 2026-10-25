@@ -49,7 +49,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 
 /// Where a shot from `shooter` goes, strayed by `spread` at random from the stream of `seed`, along
 /// the view the punch turns: each way the sum of two even draws (FireBullets3).
-[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, std::uint32_t seed) -> Shot {
+[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach, std::uint32_t seed)
+    -> Shot {
     const nx::AngleVectors axes =
         nx::angleVectors(nx::EulerAngles{.pitch = shooter.view.pitch + shooter.punch.pitch,
                                          .yaw = shooter.view.yaw + shooter.punch.yaw,
@@ -62,7 +63,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
     const auto up = static_cast<float>(halfUnit() + halfUnit());
     return Shot{.origin = shooter.eye,
                 .direction = axes.forward + (axes.right * (right * spread)) + (axes.up * (up * spread)),
-                .spread = spread};
+                .spread = spread,
+                .reach = reach};
 }
 
 /// One of `sequences`, at random.
@@ -377,7 +379,7 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
 
     // The shot goes along the view the kick turned so far; then the kick.
-    const Shot shot = shotFrom(shooter, spread, seed);
+    const Shot shot = shotFrom(shooter, spread, firing.reach, seed);
     if (firing.recoil.kicks) {
         kickBack(kickOf(*firing.recoil.kicks, shooter), owned.shotsFired, owned.kicksLeft, shooter.punch,
                  random);
@@ -399,7 +401,7 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
     --owned.clip;
     --owned.followUpsLeft;
     makeSound(firing->sound, time);
-    return shotFrom(shooter, firing->followUps->spread, seed);
+    return shotFrom(shooter, firing->followUps->spread, firing->reach, seed);
 }
 
 void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time) {
