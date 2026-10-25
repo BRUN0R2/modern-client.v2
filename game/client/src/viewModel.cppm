@@ -34,9 +34,6 @@ enum class ViewModelError : std::uint8_t {
                   ///< its muzzle flashes' look.
 };
 
-/// The hand the player holds its weapons in: cl_righthand's default, until the cvar comes.
-inline constexpr Hand kPlayerHand = Hand::Right;
-
 /// What a frame shows of the view model: the weapon's, its sequence, when it started, and how far
 /// into it.
 struct ViewModelPose {
@@ -91,13 +88,14 @@ public:
         -> nx::Result<nx::render::StudioModel, nx::render::StudioError>;
 
     /// Its bones `intoIt` into its sequence `sequence`, which must be one of its, played from its
-    /// first frame (cs::sequenceFrameAt), in the hand of a player whose eye and view are `camera`'s:
-    /// from each bone's space to the world, mirrored across the view's right when isMirrored.
-    [[nodiscard]] auto pose(const nx::render::Camera& camera, std::uint32_t sequence,
-                            nx::Seconds intoIt) const -> std::vector<nx::Mat3x4>;
+    /// first frame (cs::sequenceFrameAt), in `hand` of a player whose eye and view are `camera`'s:
+    /// from each bone's space to the world, mirrored across the view's right when isMirroredIn it.
+    [[nodiscard]] auto pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt,
+                            Hand hand) const -> std::vector<nx::Mat3x4>;
 
-    /// Whether it is drawn mirrored: modeled in the other hand than the player's.
-    [[nodiscard]] inline auto isMirrored() const noexcept -> bool { return m_isMirrored; }
+    /// Whether it is drawn mirrored in the player's `hand`: modeled in the other one, its weapon's
+    /// `viewHand`.
+    [[nodiscard]] inline auto isMirroredIn(Hand hand) const noexcept -> bool { return m_hand != hand; }
 
     /// Its validated static skin family, from the weapon's main view; zero when omitted.
     [[nodiscard]] inline auto skin() const noexcept -> std::uint32_t { return m_appearance.skin; }
@@ -135,14 +133,14 @@ private:
     };
 
     ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
-              std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
+              std::vector<std::optional<nx::render::StudioMaterial>> materials, Hand hand,
               Appearance appearance) noexcept;
 
     std::unique_ptr<ModelFiles> m_files;
     std::vector<nx::assets::AnimationFrames> m_animations; ///< Of each of its sequences, in their order.
     /// Of each of its textures in the enhanced look, from its material file (cs.client:modelMaterials).
     std::vector<std::optional<nx::render::StudioMaterial>> m_materials;
-    bool m_isMirrored;
+    Hand m_hand; ///< The one it is modeled in.
     Appearance m_appearance;
 };
 

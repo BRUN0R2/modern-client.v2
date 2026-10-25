@@ -183,7 +183,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
             : nullptr;
     std::vector<nx::Mat3x4> bones;
     if (viewModel != nullptr && weaponModel != nullptr) {
-        bones = viewModel->pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt);
+        bones = viewModel->pose(view.camera, view.viewModel->sequence, view.viewModel->intoIt, view.hand);
     }
     const std::optional<WeaponIndex> inHand =
         bones.empty() ? std::nullopt : std::optional{view.viewModel->weapon};
@@ -255,7 +255,7 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         .skin = viewModel->skin(),
         .bodyChoices = viewModel->bodyChoices(),
         .depth = nx::render::DepthLayer::ViewModel,
-        .isMirrored = viewModel->isMirrored(),
+        .isMirrored = viewModel->isMirroredIn(view.hand),
         .lights = lights,
         .probes = m_probes ? m_probes->blendAt(view.camera.position) : std::nullopt}};
     if (auto drawn =

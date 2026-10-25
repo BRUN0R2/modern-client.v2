@@ -355,7 +355,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `+attack2`: the USP's and the M4A1's silencers, the Glock's burst and its follow-up rounds ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [x] The knife's slash and stab: what they meet (`nx::game::traceSolids`), their sequences and timings ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [ ] Weapon state machine: holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
-- [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
+- [x] `cl_righthand`: the player's hand (`cs::HudCvars`, archived, 1 the right), the view models mirrored by it each frame (`ViewModel::isMirroredIn`, `SceneView::hand`)
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
 - [x] The marks the shots leave on brush entities (`cs::bulletMarkOf`: `DamageDecal` by render mode, a breakable's by its material: `{bproof1`, `{break1` to `{break3`)
