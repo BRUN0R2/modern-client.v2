@@ -97,6 +97,18 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
             "How the picture is made: legacy, as Counter-Strike 1.6 makes it, or enhanced; read when a "
             "map is loaded.",
         .flags = kArchived});
+    auto decals = console.registerCvar(
+        CvarDesc<std::int32_t>{.name = "r_decals",
+                               .defaultValue = kDefaultDecals,
+                               .description = "The most decals on faces; 0 stamps no more.",
+                               .flags = kArchived,
+                               .minimum = 0});
+    auto multiplayerDecals = console.registerCvar(
+        CvarDesc<std::int32_t>{.name = "mp_decals",
+                               .defaultValue = kDefaultMultiplayerDecals,
+                               .description = "What r_decals is held to in a game of more than one player.",
+                               .flags = kArchived,
+                               .minimum = 0});
     auto volume = console.registerCvar(
         CvarDesc<float>{.name = "volume",
                         .defaultValue = kVolume,
@@ -114,6 +126,11 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
             return std::unexpected{std::move(registered->error())};
         }
     }
+    for (auto* const registered : {&decals, &multiplayerDecals}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
+    }
     if (!fidelity) {
         return std::unexpected{std::move(fidelity.error())};
     }
@@ -125,8 +142,14 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .textureGamma = *textureGamma,
                                  .lightGamma = *lightGamma,
                                  .hudDraw = *hudDraw,
-                                 .fidelity = *fidelity},
+                                 .fidelity = *fidelity,
+                                 .decals = *decals,
+                                 .multiplayerDecals = *multiplayerDecals},
                        .audio = {.volume = *volume}};
+}
+
+auto enterMultiplayerGame(const VideoCvars& video) -> Result<void, console::CvarError> {
+    return video.decals.set(decalsInMultiplayer(video.decals.value(), video.multiplayerDecals.value()));
 }
 
 } // namespace nx::settings

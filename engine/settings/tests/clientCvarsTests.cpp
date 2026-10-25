@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// The client's cvars: the original's names and starting values, what config.cfg keeps of them, and
-// the ranges the original holds the picture's cvars to.
+// The client's cvars: the original's names and starting values, what config.cfg keeps of them, the
+// ranges the original holds the picture's cvars to, and r_decals held as a game of more than one
+// player holds it.
 
 #include <gtest/gtest.h>
 
@@ -46,6 +47,8 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_FLOAT_EQ(cvars->video.textureGamma.value(), 2.0F);
     EXPECT_FLOAT_EQ(cvars->video.lightGamma.value(), 2.5F);
     EXPECT_TRUE(cvars->video.hudDraw.value());
+    EXPECT_EQ(cvars->video.decals.value(), 4096);
+    EXPECT_EQ(cvars->video.multiplayerDecals.value(), 300);
     EXPECT_FLOAT_EQ(cvars->audio.volume.value(), 0.7F);
     EXPECT_EQ(cvars->mouse.yaw.name(), "m_yaw");
     EXPECT_EQ(cvars->video.vsync.name(), "gl_vsync");
@@ -53,7 +56,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     // What config.cfg keeps: what the original archives, not texgamma nor lightgamma.
     const std::string archived = console.archivedCvars();
     for (const std::string_view name : {"sensitivity", "m_yaw", "m_pitch", "fps_max", "gl_vsync", "gamma",
-                                        "brightness", "hud_draw", "volume"}) {
+                                        "brightness", "hud_draw", "r_decals", "mp_decals", "volume"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }
     EXPECT_EQ(archived.find("texgamma"), std::string::npos);
@@ -74,6 +77,24 @@ TEST(ClientCvarsTest, ThePictureStaysInTheOriginalsRanges) {
     EXPECT_FALSE(console.setCvar("fps_max", "-1").has_value());
     EXPECT_TRUE(console.setCvar("fps_max", "0").has_value()) << "no limit";
     EXPECT_TRUE(console.setCvar("m_pitch", "-0.022").has_value()) << "an inverted mouse";
+}
+
+TEST(ClientCvarsTest, AGameOfMorePlayersHoldsDecalsToMpDecals) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = nx::settings::registerClientCvars(console);
+    ASSERT_TRUE(cvars.has_value());
+    EXPECT_FALSE(console.setCvar("r_decals", "-1").has_value());
+
+    ASSERT_TRUE(nx::settings::enterMultiplayerGame(cvars->video).has_value());
+    EXPECT_EQ(cvars->video.decals.value(), 300) << "4096 held to mp_decals' 300";
+    ASSERT_TRUE(console.setCvar("r_decals", "100").has_value());
+    ASSERT_TRUE(nx::settings::enterMultiplayerGame(cvars->video).has_value());
+    EXPECT_EQ(cvars->video.decals.value(), 100) << "below it, as it was";
+    ASSERT_TRUE(console.setCvar("mp_decals", "50").has_value());
+    ASSERT_TRUE(nx::settings::enterMultiplayerGame(cvars->video).has_value());
+    EXPECT_EQ(cvars->video.decals.value(), 50);
 }
 
 } // namespace

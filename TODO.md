@@ -286,7 +286,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Decals on brush entities (`BspWorld::shootDecal` on a `DecalTarget`: in the model's space, carried with it, drawn as its render mode draws them, a glass face's from behind too)
 - [x] Permanent decals: the maps' `infodecal`s (`nx::game::staticDecalsOf`, `DecalLife::Permanent`), stamped as the scene is made
 - [ ] An `infodecal` with a `targetname`, stamped when it is used (`TriggerDecal`), with the game's decal events
-- [ ] Decals on masked faces (stencil), `r_decals` and `mp_decals`
+- [x] `r_decals` and `mp_decals`: the pool's limit read at each decal, `r_decals` held to `mp_decals` as a game of more than one player is entered
+- [ ] Decals on masked faces (stencil)
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`
 - [ ] Studio models: animation evaluated in jobs, and the transitions between sequences

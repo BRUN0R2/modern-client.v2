@@ -15,6 +15,7 @@ nxAddProgram(nxview
         nx::rhiVulkan
         nx::render
         nx::ui
+        nx::settings
         cs::shared
         cs::client)
 
