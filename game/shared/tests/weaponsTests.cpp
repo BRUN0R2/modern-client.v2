@@ -468,6 +468,7 @@ TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
 [firing]
 cycle = 0.15
 isAutomatic = false
+reach = 4096.0
 idleAfterShot = 2.0
 shootSequences = [1]
 [firing.accuracy]
@@ -494,6 +495,7 @@ standing = { base = 0.0, scale = 0.1 }
              firing, // no magazine
              std::string{kMagazine} + replaced("shootSequences = [1]", "shootSequences = []"),
              std::string{kMagazine} + replaced("cycle = 0.15", "cycle = 0.0"),
+             std::string{kMagazine} + replaced("reach = 4096.0", "reach = 0.0"),
              std::string{kMagazine} +
                  replaced("paced = {", "burst = { divisor = 200, offset = 0.35, maximum = 1.25 }\npaced = {"),
              std::string{kMagazine} +

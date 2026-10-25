@@ -24,7 +24,6 @@ constexpr nx::Seconds kMaxCatchUp{0.25F};
 /// The stream of random numbers a spawn's weapons draw from.
 constexpr std::string_view kSpawnStream = "spawn";
 /// How far a bullet goes: FireBullets3's distance for every gun the game has.
-constexpr nx::HammerUnits kBulletReach{8192.0F};
 /// How far above its spawn point a player spawns (GetPlayerSpawnSpot).
 constexpr nx::HammerUnits kSpawnLift{1.0F};
 /// How often the rules look at the restart the cvars ask for (Think's periodic part).
@@ -173,7 +172,7 @@ void LocalGame::tick(const UserCommand& command) {
     };
     for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
-        const nx::Vec3 end = shot.origin + (shot.direction * kBulletReach.value());
+        const nx::Vec3 end = shot.origin + (shot.direction * shot.reach.value());
         const nx::game::SolidHit hit =
             nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin, end);
         // A hostage the shot meets first stops it, and leaves no mark behind it.

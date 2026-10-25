@@ -37,6 +37,7 @@ idlesWhenEmpty = false
 
 [firing]
 cycle = 0.15 # semi-automatic: the original's 0.2 less 0.05
+reach = 8192.0 # how far its rounds go (FireBullets3)
 isAutomatic = false
 idleAfterShot = 2.5
 shootSequences = [5] # shoot3: its model flashes once, a single shot
@@ -74,6 +75,7 @@ switchTime = 0.3
 
 [alternate.firing]
 cycle = 0.5
+reach = 8192.0 # how far its rounds go (FireBullets3)
 isAutomatic = true # in burst, holding the button fires again
 idleAfterShot = 2.5
 shootSequences = [3, 4] # shoot, shoot2: its model flashes three times, a burst

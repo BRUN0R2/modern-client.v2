@@ -235,8 +235,9 @@ struct FollowUps {
 
 /// How a gun fires.
 struct WeaponFiring {
-    nx::Seconds cycle{}; ///< From a shot to the next.
-    bool isAutomatic{};  ///< Holding its button fires again; else each press fires once.
+    nx::Seconds cycle{};     ///< From a shot to the next.
+    bool isAutomatic{};      ///< Holding its button fires again; else each press fires once.
+    nx::HammerUnits reach{}; ///< How far its rounds go (FireBullets3's distance).
     nx::Seconds idleAfterShot{};
     /// Its view model's sequences, by their numbers: one at random as it fires, and the one as it
     /// fires its clip's last round, when it has one. Its client chooses them, which is to be measured
@@ -653,6 +654,7 @@ struct nx::meta::Description<cs::WeaponFiring> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponFiring::cycle>("cycle"),
         nx::meta::field<&cs::WeaponFiring::isAutomatic>("isAutomatic"),
+        nx::meta::field<&cs::WeaponFiring::reach>("reach"),
         nx::meta::field<&cs::WeaponFiring::idleAfterShot>("idleAfterShot", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponFiring::shootSequences>("shootSequences"),
         nx::meta::field<&cs::WeaponFiring::lastShotSequence>("lastShotSequence"),
