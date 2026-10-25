@@ -126,7 +126,12 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
             return std::unexpected{std::move(registered->error())};
         }
     }
-    for (auto* const registered : {&vsync, &hudDraw, &autoWeaponSwitch}) {
+    auto playUnfocused = console.registerCvar(
+        CvarDesc<bool>{.name = "s_play_unfocused",
+                       .defaultValue = false,
+                       .description = "Whether the game is heard while its window is not focused.",
+                       .flags = kArchived});
+    for (auto* const registered : {&vsync, &hudDraw, &autoWeaponSwitch, &playUnfocused}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -159,7 +164,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .decals = *decals,
                                  .multiplayerDecals = *multiplayerDecals},
                        .player = {.autoWeaponSwitch = *autoWeaponSwitch},
-                       .audio = {.volume = *volume, .device = *device}};
+                       .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
 }
 
 auto enterMultiplayerGame(const VideoCvars& video) -> Result<void, console::CvarError> {

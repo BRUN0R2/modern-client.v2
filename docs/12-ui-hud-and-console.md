@@ -364,11 +364,11 @@ player holds `r_decals` to as it is entered, [05 §8](05-rendering.md#8-bsp-worl
 [10 §7.3](10-counter-strike-gameplay.md#73-behaviors)), `volume` (0.7,
 from 0, the gain of everything heard, [11 §8](11-audio.md#8-cvars)), `s_device` (empty: the
 system's default sound output; else one `s_devices` lists, opened once the startup files and the
-command line ran), all
-archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
+command line ran), `s_play_unfocused` (0: silent while the window is not focused, as the original
+is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
 effect as soon as what reads it reads it again: the mouse's as the mouse moves, `fps_max`,
-`hud_draw`, `r_decals` and `volume` with the next frame, `_cl_autowepswitch` with the next weapon
+`hud_draw`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
 given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the

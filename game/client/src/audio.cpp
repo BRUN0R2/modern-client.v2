@@ -96,7 +96,7 @@ auto ClientAudio::playIn(nx::audio::VoiceId voice, std::string_view name, const 
 }
 
 void ClientAudio::update() {
-    const float volume = m_volumeCvar.value();
+    const float volume = m_muting == Muting::On ? 0.0F : m_volumeCvar.value();
     if (m_volume == volume) {
         return;
     }
