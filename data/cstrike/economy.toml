@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The money of Counter-Strike 1.6's rounds (docs/10, section 6), read into cs::EconomyRules, with
+# ReGameDLL_CS's values (m_rgRewardAccountRules; GPL, consulted: docs/20 section 3), in dollars.
+# `loserBonus` is what the losers of a round get: `first` as a game starts, `afterStreak` once a team
+# wins after losing more than once in a row, and `step` more as each round starts while a team has
+# lost more than once in a row and the bonus is below `most`. `hostageBonus` is what the winners of a
+# round get as the next starts: `perHostage` for each hostage still held, while the sum is below
+# `upTo`. `roundEnds` gives, by why a round ended (cs::RoundEndReason), what its winners get, and
+# whether its losers alive as it ended are paid as the next round starts; a reason not listed gives
+# nothing, and pays its losers.
+
+[loserBonus]
+first = 1400
+afterStreak = 1500
+step = 500
+most = 3000
+
+[hostageBonus]
+perHostage = 150
+upTo = 2000
+
+[[roundEnds]]
+reason = "targetSaved"
+money = 3250
+paysLivingLosers = false
+
+[[roundEnds]]
+reason = "hostagesNotRescued"
+money = 3250
+paysLivingLosers = false
+
+[[roundEnds]]
+reason = "terroristsNotEscaped"
+money = 0
+paysLivingLosers = true
+
+[[roundEnds]]
+reason = "vipNotEscaped"
+money = 3250
+paysLivingLosers = true

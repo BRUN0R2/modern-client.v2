@@ -64,8 +64,8 @@ starts, the local game's player spawns again at its team's next spawn point (`cs
 as `EntSelectSpawnPoint` takes them in turn), one unit above it, turned the way it faces, its
 health whole, keeping its armor, weapons and money. The HUD counts down the whole seconds the game
 told it as the player spawned and as the freeze ended ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
-Game Commencing, the ends by elimination and by the objectives, the teams' scores, the money of the
-round's end, buying and the end of the match come next.
+Each end pays the teams as [§6](#6-economy) says. Game Commencing, the ends by elimination and by
+the objectives, the teams' scores, buying and the end of the match come next.
 
 ### 3.1 Round end reasons
 
@@ -137,13 +137,26 @@ key (planned, [18](18-testing-and-quality.md#parity-tests)). What the file holds
 
 - Values in `data/cstrike/economy.toml`. References: starting money `mp_startmoney` (800),
   money cap (16000), default reward per kill (300). The others (win by reason, consecutive
-  loss bonus, plant, defuse, hostages and *teamkill* penalties) are listed in the file and
-  need to be surveyed and validated against the original.
+  loss bonus, plant, defuse, hostages and *teamkill* penalties) are listed in the file as their
+  rules come, surveyed against the original.
 - Money is `nx::Money` (`nx.core`) with saturating arithmetic up to the cap
   (`nx::addSaturated` plus `clamp`), with no overflow.
 - Every transaction goes through a single auditable function
   (`Economy::apply(player, MoneyTransaction{reason, amount})`), which raises the
   `MoneyChanged` event for the HUD, the log and plugins.
+
+**Today** (`cs.shared:economy`, `data/cstrike/economy.toml`, ReGameDLL_CS's values and rules):
+the winners of a round get its end's money (`roundEnds`: 3250 for a target saved, hostages not
+rescued or the VIP not escaped, nothing for terrorists not escaped) and, as the next round starts,
+150 for each hostage still held while the sum is below 2000; the losers get the loser bonus, 1400
+as a game starts, 500 more each round while a team has lost more than once in a row up to 3400,
+1500 once a team wins after such a streak, never to the terrorists of a map with an escape zone
+(`cs::TeamAccounts`). As a round starts each player gets its team's account but those alive on the
+losing side of an end that does not pay them (a target saved, hostages not rescued); a player's
+money is held from none to 16000 (`cs::addMoney`, `kMostMoney`); a restarted game starts the
+accounts, the losses and the bonus over. The local game's player is paid so. The single auditable
+function and its event come with their first consumers (the HUD's flash of a changed number,
+plugins); the kills', the bomb's and the hostages' rescue money come with them.
 
 ## 7. Weapons and equipment
 

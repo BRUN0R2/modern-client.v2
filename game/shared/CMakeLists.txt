@@ -16,6 +16,7 @@ nxAddModuleLibrary(csShared
         src/loadouts.cppm
         src/inventory.cppm
         src/rounds.cppm
+        src/economy.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -24,6 +25,7 @@ nxAddModuleLibrary(csShared
         src/loadouts.cpp
         src/inventory.cpp
         src/rounds.cpp
+        src/economy.cpp
     DEPENDS
         nx::core
         nx::math

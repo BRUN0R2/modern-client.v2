@@ -43,7 +43,7 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -192,12 +192,15 @@ void LocalGame::thinkRules() {
     if (const std::optional<RoundEndReason> reason = m_rounds.end();
         events.test(RoundEvent::Ended) && reason) {
         nx::log::info(kLog, "the round is over: {}", nx::enumName(*reason));
+        roundEnded(*reason);
     }
     if (events.test(RoundEvent::RoundStarted)) {
         nx::log::info(kLog, "a round starts");
+        payForRound();
     }
     if (events.test(RoundEvent::GameRestarted)) {
         nx::log::info(kLog, "the game restarts");
+        m_accounts.restartGame();
         m_status = PlayerStatus{.money = m_cvars.startingMoney()};
         m_inventory.removeAll();
         equip();
@@ -207,10 +210,28 @@ void LocalGame::thinkRules() {
     }
 }
 
+void LocalGame::roundEnded(RoundEndReason reason) {
+    m_accounts.roundEnded(reason);
+    const std::optional<Team> winner = winnerOf(reason);
+    const bool isAlive = m_status.health > nx::HitPoints{};
+    if (winner && *winner != m_team && isAlive && !m_content->economy.roundEnd(reason).paysLivingLosers) {
+        m_isPaidNextRound = false;
+    }
+}
+
+void LocalGame::payForRound() {
+    const nx::EnumArray<Team, nx::Money> paid =
+        m_accounts.roundStarts(m_level->objectives(), m_level->hostages());
+    if (m_isPaidNextRound) {
+        m_status.money = addMoney(m_status.money, paid[m_team]);
+    }
+}
+
 void LocalGame::spawn() {
     const SpawnPoint point = nextSpawnPoint();
     standAt(point.origin + nx::Vec3{.z = kSpawnLift.value()});
     m_status.health = kSpawnHealth;
+    m_isPaidNextRound = true;
     m_turnedView = nx::EulerAngles{.yaw = point.yaw};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     m_roundTimer = m_rounds.timerAt(time.now, time.rate);
