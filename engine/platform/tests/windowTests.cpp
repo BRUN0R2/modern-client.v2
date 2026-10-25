@@ -76,10 +76,10 @@ TEST(WindowTest, TextInputTurnsOnAndOff) {
     auto window = openWindow();
     ASSERT_TRUE(window.has_value());
     EXPECT_FALSE(window->isTextInputOn()) << "off until something is typed in";
-    const auto on = window->setTextInput(true);
+    const auto on = window->setTextInput(nx::platform::TextInput::On);
     ASSERT_TRUE(on.has_value()) << nx::describe(on.error());
     EXPECT_TRUE(window->isTextInputOn());
-    const auto off = window->setTextInput(false);
+    const auto off = window->setTextInput(nx::platform::TextInput::Off);
     ASSERT_TRUE(off.has_value()) << nx::describe(off.error());
     EXPECT_FALSE(window->isTextInputOn());
 }

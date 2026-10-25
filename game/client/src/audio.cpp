@@ -57,7 +57,8 @@ auto ClientAudio::play(const GameSound& sound, nx::Seconds delay) -> nx::Result<
         return playAuto(file, playing);
     }
     // The player's channels after Auto, a voice each.
-    return playIn(kLocalVoices + std::uint32_t{std::to_underlying(sound.channel)} - 1U, file, playing);
+    return playIn(nx::audio::VoiceId{kLocalVoices + std::uint32_t{std::to_underlying(sound.channel)} - 1U},
+                  file, playing);
 }
 
 auto ClientAudio::preload(std::string_view name) -> nx::Result<void, PlayError> {
@@ -68,14 +69,14 @@ auto ClientAudio::preload(std::string_view name) -> nx::Result<void, PlayError> 
 }
 
 auto ClientAudio::playAuto(std::string_view name, const Playing& playing) -> nx::Result<void, PlayError> {
-    if (auto played = playIn(m_nextLocalVoice, name, playing); !played) {
+    if (auto played = playIn(nx::audio::VoiceId{m_nextLocalVoice}, name, playing); !played) {
         return played;
     }
     m_nextLocalVoice = (m_nextLocalVoice + 1) % kLocalVoices;
     return {};
 }
 
-auto ClientAudio::playIn(std::uint32_t voice, std::string_view name, const Playing& playing)
+auto ClientAudio::playIn(nx::audio::VoiceId voice, std::string_view name, const Playing& playing)
     -> nx::Result<void, PlayError> {
     auto sound = m_sounds.load(name);
     if (!sound) {

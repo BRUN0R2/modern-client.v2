@@ -139,6 +139,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(*viewSprites)};
+    scene.m_look = look;
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
@@ -279,8 +280,8 @@ void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::
         {.time = time, .lightStyles = level.lightStyles().valuesAt(time), .placements = placements});
 }
 
-auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
-    -> std::uint32_t {
+auto Scene::shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position,
+                       const nx::render::DecalTarget& on) -> std::uint32_t {
     return m_world.shootDecal(decal, position, on);
 }
 

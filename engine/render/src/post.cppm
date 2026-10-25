@@ -42,6 +42,10 @@ struct PostRendererDesc {
     /// shaders/post.slang, compiled for the device (bin/shaders/post.spv).
     std::span<const std::byte> shaderCode{};
     rhi::Format outputFormat = rhi::Format::Undefined; ///< The screen's.
+    /// The depth attachment of the render pass the tone curve is drawn in, which it neither tests nor
+    /// writes: the frame's, as the screen's pictures are drawn over it in the same pass
+    /// (ScreenRendererDesc::depthFormat); Undefined for a pass without one.
+    rhi::Format depthFormat = rhi::Format::Depth32Float;
 };
 
 /// The scene's target, its bloom and its tone curve.
@@ -83,7 +87,7 @@ public:
     void bloom(rhi::CommandList& commands) const;
     /// Records the scene with its bloom through the tone curve and the effects added over it, each
     /// channel stopping at white: a triangle covering the target, in the render pass under way, whose
-    /// target is of PostRendererDesc::outputFormat.
+    /// target is of PostRendererDesc::outputFormat and whose depth attachment is of its depthFormat.
     void drawToneMapped(rhi::CommandList& commands) const;
 
 private:

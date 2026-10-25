@@ -20,6 +20,7 @@ nxAddModuleLibrary(csClient
         src/bulletMarks.cppm
         src/level.cppm
         src/scene.cppm
+        src/frame.cppm
         src/localGame.cppm
         src/hud.cppm
         src/console.cppm
@@ -39,6 +40,7 @@ nxAddModuleLibrary(csClient
         src/bulletMarks.cpp
         src/level.cpp
         src/scene.cpp
+        src/frame.cpp
         src/localGame.cpp
         src/hud.cpp
         src/console.cpp

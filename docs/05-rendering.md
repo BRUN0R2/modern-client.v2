@@ -192,6 +192,17 @@ puts an RGBA picture on the GPU as it is, for what the interface makes itself (i
 clip, those of the panel a text scrolls in: the rectangles in a row drawn alike share a scissor, and
 the scissor covers the whole target again after them.
 
+**Today** (`cs.client:frame`, `FrameRenderer`): `next` and `nxview` draw a frame the same way, through
+one renderer that owns the screen's renderer, the depth the passes share, and the enhanced look's post
+renderer (made with the first frame of a scene of that look). In the legacy look the scene, its
+muzzle flashes added over it, and the screen's pictures go to the target in one pass with the frame's
+depth. In the enhanced look the next reflection probe is baked, the scene goes to the post renderer's
+target and its flashes to the effects' layer, both over the frame's depth, the bloom is recorded, and
+the tone curve goes to the target in a pass that has the frame's depth too, so that the screen's
+pictures are drawn over it there: the tone pipeline declares the depth (`PostRendererDesc::depthFormat`)
+as the screen's does, neither testing nor writing it, as a render pass and the pipelines drawn in it
+must agree on their attachments.
+
 ## 8. BSP world
 
 - **Visibility:** the camera's leaf, PVS data decompressed and cached per leaf, frustum
@@ -242,8 +253,9 @@ without lightmaps is fully bright, as the original draws a face without samples.
 brightness comes with each draw (`nx.render:lightStyle`): 22 for each letter of a style's pattern
 after `a` (264 at `m`, the normal one), ten letters a second, 256 for a style the game left unset,
 and 264 for the styles above the 64 the game sets. The client (`cs.client`) sets the world's patterns (flicker,
-candles, strobes, pulses...) as Quake's world.qc sets them, under the names the Half-Life FGDs give
-the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
+candles, strobes, pulses...) from `data/cstrike/lightStyles.toml` (`cs::WorldLightStyles`, each style
+once, in letters from `a` to `z`), as Quake's world.qc sets them, under the names the Half-Life FGDs
+give the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
 their entities, `a` for those that start off, else `m` or their `pattern`.
 
 The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
@@ -286,7 +298,8 @@ the world or of a brush entity near a point. The image is made as the original's
 first level alone, its palette through `texgamma`: when the palette's last color is not pure blue
 (every decal of the game's), each texel that color, as opaque as its index, index 255 clear;
 otherwise each texel its palette's color, opaque, index 255 clear. It is mipmapped from that level
-and sampled clamped at its edges. A shot (`BspWorld::shootDecal`, `DecalPool::shoot`) is aimed
+and sampled clamped at its edges. A shot of one of them (a `DecalImageIndex`; `BspWorld::shootDecal`,
+`DecalPool::shoot`) is aimed
 at a model (`DecalTarget`): the world's, or a brush entity's, the point taken into the model's space
 where the game has the entity then (`R_DecalShoot`), so that the decal goes wherever the game moves
 it. It walks that model's tree from its root, within half the image's larger side of each node's

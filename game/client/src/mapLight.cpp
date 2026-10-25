@@ -6,6 +6,7 @@ module cs.client;
 import std;
 import nx.core;
 import nx.math;
+import nx.data;
 import nx.assets;
 import nx.render;
 
@@ -74,24 +75,33 @@ constexpr double kEngineLevel = 264.0;
 
 } // namespace
 
-auto mapLightStyles(const nx::assets::BspView& map) -> nx::render::LightStyles {
+auto readWorldLightStyles(std::string_view text, std::string_view sourceName)
+    -> nx::Result<WorldLightStyles, LightStyleError> {
+    auto world = nx::data::parseToml<WorldLightStyles>(text, sourceName);
+    if (!world) {
+        return nx::fail(LightStyleError::DataInvalid, std::string{sourceName}, std::move(world.error()));
+    }
+    std::set<std::uint32_t> styles;
+    for (const WorldLightStyle& style : world->styles) {
+        if (style.pattern.empty() ||
+            !std::ranges::all_of(style.pattern, [](char letter) { return letter >= 'a' && letter <= 'z'; })) {
+            return nx::fail(LightStyleError::BadPattern,
+                            std::format("{}: style {}'s pattern {:?}, not letters from a to z", sourceName,
+                                        style.style, style.pattern));
+        }
+        if (!styles.insert(style.style).second) {
+            return nx::fail(LightStyleError::StyleTwice,
+                            std::format("{}: style {} twice", sourceName, style.style));
+        }
+    }
+    return std::move(*world);
+}
+
+auto mapLightStyles(const nx::assets::BspView& map, const WorldLightStyles& world)
+    -> nx::render::LightStyles {
     nx::render::LightStyles styles;
-    for (const auto [style, pattern] : std::to_array<std::pair<std::size_t, std::string_view>>({
-             {0, "m"},                                                   // normal
-             {1, "mmnmmommommnonmmonqnmmo"},                             // flicker
-             {2, "abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba"}, // slow strong pulse
-             {3, "mmmmmaaaaammmmmaaaaaabcdefgabcdefg"},                  // candle
-             {4, "mamamamamama"},                                        // fast strobe
-             {5, "jklmnopqrstuvwxyzyxwvutsrqponmlkj"},                   // gentle pulse
-             {6, "nmonqnmomnmomomno"},                                   // flicker
-             {7, "mmmaaaabcdefgmmmmaaaammmaamm"},                        // candle
-             {8, "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa"},          // candle
-             {9, "aaaaaaaazzzzzzzz"},                                    // slow strobe
-             {10, "mmamammmmammamamaaamammma"},                          // fluorescent flicker
-             {11, "abcdefghijklmnopqrrqponmlkjihgfedcba"},               // slow pulse, not to black
-             {63, "a"},
-         })) {
-        styles.set(style, pattern);
+    for (const WorldLightStyle& style : world.styles) {
+        styles.set(style.style, style.pattern);
     }
     // A light with a name and a style from 32 on can be switched: 'a' when it starts off, else 'm', as
     // Quake's light.qc sets them, or the `pattern` the FGDs document.

@@ -66,10 +66,6 @@ of the first spawn's team draws as it spawns. To play a map, run next.
 
 constexpr std::string_view kDefaultMap = "de_dust2";
 constexpr nx::rhi::Extent2d kDefaultExtent{.width = 1280, .height = 720};
-/// What no face covers: the void outside a map, seen through its leaks.
-constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
-/// The effects' layer before the effects are drawn: nothing to add.
-constexpr nx::rhi::ClearColor kNoEffect{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.0F};
 
 struct Options {
     std::string map{kDefaultMap};
@@ -274,14 +270,14 @@ constexpr std::size_t kBlue = 2;
     return file;
 }
 
-/// Renders one frame of `level` from the camera's start into options.screenshot, without a window,
-/// and the HUD and the console's window over it, its pictures from `content` and drawn with
-/// `screenShader`, when the options ask.
+/// Renders one frame of `level` from the camera's start into options.screenshot, without a window, as
+/// the client draws its frames (cs::FrameRenderer, drawing with `frameShaders`), and the HUD and the
+/// console's window over it, their pictures from `content`, when the options ask.
 [[nodiscard]] auto takeScreenshot(const Options& options, const cs::GameContent& content,
                                   const cs::Level& level, const cs::SceneShaders& shaders,
-                                  std::span<const std::byte> screenShader,
-                                  std::span<const std::byte> postShader) -> int {
+                                  cs::FrameShaders frameShaders) -> int {
     const nx::rhi::Extent2d extent = options.size;
+    constexpr nx::rhi::Format kFormat = nx::rhi::Format::Rgba8Unorm;
     auto device = nx::rhi::vulkan::createDevice(
         {.applicationName = "nxview", .isValidationEnabled = options.isValidationEnabled});
     if (!device) {
@@ -289,62 +285,40 @@ constexpr std::size_t kBlue = 2;
     }
     auto target = (*device)->createTexture(
         {.label = "nxview.screenshot",
-         .format = nx::rhi::Format::Rgba8Unorm,
+         .format = kFormat,
          .extent = extent,
          .usage = {nx::rhi::TextureUsage::RenderTarget, nx::rhi::TextureUsage::CopySource}});
-    auto depth = (*device)->createTexture({.label = "nxview.depth",
-                                           .format = nx::rhi::Format::Depth32Float,
-                                           .extent = extent,
-                                           .usage = {nx::rhi::TextureUsage::DepthTarget}});
     auto readback =
         (*device)->createBuffer({.label = "nxview.readback",
                                  .size = std::uint64_t{extent.width} * extent.height * nx::assets::kRgbaBytes,
                                  .usage = {nx::rhi::BufferUsage::CopyDestination},
                                  .location = nx::rhi::MemoryLocation::Readback});
-    if (!target || !depth || !readback) {
-        return unusable(!target ? target.error() : !depth ? depth.error() : readback.error());
+    if (!target || !readback) {
+        return unusable(!target ? target.error() : readback.error());
+    }
+    // The original's default settings.
+    auto frames =
+        cs::FrameRenderer::create(**device, std::move(frameShaders), kFormat, nx::render::GammaSettings{});
+    if (!frames) {
+        return unusable(frames.error());
     }
     auto commands = (*device)->beginFrame();
     if (!commands) {
         return unusable(commands.error());
     }
     nx::rhi::CommandList& uploadCommands = commands->get();
-    std::optional<nx::render::PostRenderer> post;
-    if (options.look == nx::render::StudioLook::Enhanced) {
-        auto made = nx::render::PostRenderer::create(
-            **device, {.shaderCode = postShader, .outputFormat = nx::rhi::Format::Rgba8Unorm});
-        if (!made) {
-            return unusable(made.error());
-        }
-        post.emplace(std::move(*made));
-        if (auto resized = post->resize(extent); !resized) {
-            return unusable(resized.error());
-        }
-    }
-    const nx::rhi::Format sceneFormat =
-        post ? nx::render::PostRenderer::sceneFormat() : nx::rhi::Format::Rgba8Unorm;
-    const nx::rhi::Format effectsFormat =
-        post ? nx::render::PostRenderer::effectsFormat() : nx::rhi::Format::Rgba8Unorm;
     // The original's default settings in a game of more than one player, as next plays it.
     const auto decalLimit = nx::narrow<std::size_t>(nx::settings::decalsInMultiplayer(
         nx::settings::kDefaultDecals, nx::settings::kDefaultMultiplayerDecals));
-    auto scene = cs::Scene::create(**device, uploadCommands, level, shaders, sceneFormat, effectsFormat,
+    auto scene = cs::Scene::create(**device, uploadCommands, level, shaders,
+                                   frames->sceneFormatOf(options.look), frames->effectsFormatOf(options.look),
                                    nx::render::GammaSettings{}, options.look, decalLimit);
     if (!scene) {
         return unusable(scene.error());
     }
-    std::optional<nx::render::ScreenRenderer> screen;
     std::optional<cs::Hud> hud;
-    if (options.isHudShown || options.isConsoleShown()) {
-        auto made = nx::render::ScreenRenderer::create(
-            **device, {.shaderCode = screenShader, .colorFormat = nx::rhi::Format::Rgba8Unorm});
-        if (!made) {
-            return unusable(made.error());
-        }
-        screen.emplace(std::move(*made));
-    }
     if (options.isHudShown) {
-        auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), *screen, uploadCommands);
+        auto loaded = cs::Hud::load(content.vfs, content.weapons.ammo(), frames->screen(), uploadCommands);
         if (!loaded) {
             return unusable(loaded.error());
         }
@@ -370,8 +344,8 @@ constexpr std::size_t kBlue = 2;
             return unusable(atlas.error());
         }
         consoleAtlas.emplace(std::move(*atlas));
-        auto image = screen->loadImage(uploadCommands, consoleAtlas->texels(), consoleAtlas->width(),
-                                       consoleAtlas->height(), "console");
+        auto image = frames->screen().loadImage(uploadCommands, consoleAtlas->texels(), consoleAtlas->width(),
+                                                consoleAtlas->height(), "console");
         if (!image) {
             return unusable(image.error());
         }
@@ -403,7 +377,7 @@ constexpr std::size_t kBlue = 2;
     cs::ViewModelEvents viewEvents;
     const std::vector<cs::PassedEvent> clientEvents =
         viewEvents.passed(viewPose ? level.viewModel(viewPose->weapon) : nullptr, viewPose);
-    if (post) {
+    if (options.look == nx::render::StudioLook::Enhanced) {
         // Each bake owns a frame's world uniforms. Finish every probe at the screenshot's fixed time
         // before drawing it, so the result does not depend on how quickly the GPU runs.
         const std::size_t probeCount = std::min(level.probePositions().size(), nx::render::kMostProbes);
@@ -419,71 +393,31 @@ constexpr std::size_t kBlue = 2;
             }
         }
     }
+    std::vector<nx::render::ScreenQuad> quads;
+    if (hud) {
+        const cs::PlayerStatus& status = (*game)->status();
+        hud->append(quads,
+                    {.health = status.health,
+                     .armor = status.armor,
+                     .money = status.money,
+                     .ammo = cs::hudAmmoOf((*game)->inventory(), content.weapons),
+                     .crosshairDistance = cs::kKnifeCrosshairDistance},
+                    cs::CrosshairStyle{}, extent);
+    }
+    if (consoleWindow) {
+        consoleWindow->paintTree(nx::ui::PanelPainter{quads, extent});
+    }
     nx::rhi::CommandList& list = commands->get();
-    const nx::rhi::TextureHandle sceneTarget = post ? post->sceneTarget() : target->get();
-    list.transition(sceneTarget, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-    list.transition(depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = sceneTarget, .clear = kVoidColor}};
-    list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = depth->get(),
-                                                           .store = nx::rhi::StoreOp::Store,
-                                                           .clear = 0.0F},
-                         .area = extent});
-    if (auto drawn =
-            scene->draw(list, level,
-                        {.camera = camera,
-                         .aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height),
-                         .time = options.time,
-                         .placements = placements,
-                         .viewModel = viewPose,
-                         .clientEvents = clientEvents});
-        !drawn) {
-        return unusable(drawn.error());
+    const std::optional<cs::FrameScene> shown{cs::FrameScene{.scene = *scene,
+                                                             .level = level,
+                                                             .view = {.camera = camera,
+                                                                      .time = options.time,
+                                                                      .placements = placements,
+                                                                      .viewModel = viewPose,
+                                                                      .clientEvents = clientEvents}}};
+    if (auto recorded = frames->record(list, target->get(), extent, shown, quads); !recorded) {
+        return unusable(recorded.error());
     }
-    if (post) {
-        list.endRendering();
-        // The effects to their layer, display colors over the scene's depths (nx.render:post).
-        const nx::rhi::TextureHandle effects = post->effectsTarget();
-        list.transition(effects, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-        list.transition(depth->get(), nx::rhi::TextureState::DepthTarget, nx::rhi::TextureState::DepthTarget);
-        const std::array effectsColors{nx::rhi::ColorAttachment{.texture = effects, .clear = kNoEffect}};
-        list.beginRendering(
-            {.colors = effectsColors,
-             .depth = nx::rhi::DepthAttachment{.texture = depth->get(), .load = nx::rhi::LoadOp::Load},
-             .area = extent});
-        scene->drawEffects(list);
-        list.endRendering();
-        list.transition(sceneTarget, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
-        list.transition(effects, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
-        post->bloom(list);
-        list.transition(target->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-        const std::array screenColors{
-            nx::rhi::ColorAttachment{.texture = target->get(), .load = nx::rhi::LoadOp::DontCare}};
-        list.beginRendering({.colors = screenColors, .area = extent});
-        post->drawToneMapped(list);
-    } else {
-        scene->drawEffects(list); // over the scene, in the screen's colors
-    }
-    if (screen) {
-        std::vector<nx::render::ScreenQuad> quads;
-        if (hud) {
-            const cs::PlayerStatus& status = (*game)->status();
-            hud->append(quads,
-                        {.health = status.health,
-                         .armor = status.armor,
-                         .money = status.money,
-                         .ammo = cs::hudAmmoOf((*game)->inventory(), content.weapons),
-                         .crosshairDistance = cs::kKnifeCrosshairDistance},
-                        cs::CrosshairStyle{}, extent);
-        }
-        if (consoleWindow) {
-            consoleWindow->paintTree(nx::ui::PanelPainter{quads, extent});
-        }
-        if (auto drawn = screen->draw(list, {.size = extent, .quads = quads}); !drawn) {
-            return unusable(drawn.error());
-        }
-    }
-    list.endRendering();
     list.transition(target->get(), nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::CopySource);
     list.transition(readback->get(), nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
     list.copyTextureToBuffer({.buffer = readback->get(), .texture = target->get(), .extent = extent});
@@ -563,17 +497,9 @@ auto main(int argumentCount, char** argumentValues) -> int {
     if (!shaders) {
         return unusable(shaders.error());
     }
-    auto screenShader = nx::platform::readFile(programFolder / "shaders" / "screen.spv");
-    if (!screenShader) {
-        return unusable(screenShader.error());
+    auto frameShaders = cs::readFrameShaders(programFolder / "shaders");
+    if (!frameShaders) {
+        return unusable(frameShaders.error());
     }
-    std::vector<std::byte> postShader;
-    if (options->look == nx::render::StudioLook::Enhanced) {
-        auto read = nx::platform::readFile(programFolder / "shaders" / "post.spv");
-        if (!read) {
-            return unusable(read.error());
-        }
-        postShader = std::move(*read);
-    }
-    return takeScreenshot(*options, *content, **level, *shaders, *screenShader, postShader);
+    return takeScreenshot(*options, *content, **level, *shaders, std::move(*frameShaders));
 }

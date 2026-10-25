@@ -78,13 +78,14 @@ auto LevelDecals::read(const nx::assets::Vfs& vfs, std::span<const std::string_v
     return decals;
 }
 
-auto LevelDecals::indexOf(std::string_view name) const noexcept -> std::optional<std::uint32_t> {
+auto LevelDecals::indexOf(std::string_view name) const noexcept
+    -> std::optional<nx::render::DecalImageIndex> {
     const auto found = std::ranges::find_if(
         m_names, [name](std::string_view had) { return nx::equalsIgnoringCase(had, name); });
     if (found == m_names.end()) {
         return std::nullopt;
     }
-    return nx::narrow<std::uint32_t>(found - m_names.begin());
+    return nx::render::DecalImageIndex{nx::narrow<std::uint32_t>(found - m_names.begin())};
 }
 
 } // namespace cs

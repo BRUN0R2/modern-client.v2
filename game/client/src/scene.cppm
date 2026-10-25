@@ -96,11 +96,14 @@ public:
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
     /// faces it was stamped on.
-    auto shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
+    auto shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position, const nx::render::DecalTarget& on)
         -> std::uint32_t;
     /// Takes the next decals within `limit`, as nx::render::BspWorld::setDecalLimit does: `r_decals` as
     /// it is now.
     inline void setDecalLimit(std::size_t limit) { m_world.setDecalLimit(limit); }
+
+    /// The look it was made in: what its frames are drawn through (cs::FrameRenderer).
+    [[nodiscard]] inline auto look() const noexcept -> nx::render::StudioLook { return m_look; }
 
     /// What the world drew in its last frame.
     [[nodiscard]] inline auto lastFrame() const noexcept -> const nx::render::FrameStats& {
@@ -140,6 +143,7 @@ private:
     MuzzleFlashes m_flashes;        ///< Those showing, or their light.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
+    nx::render::StudioLook m_look = nx::render::StudioLook::Legacy;
 };
 
 } // namespace cs

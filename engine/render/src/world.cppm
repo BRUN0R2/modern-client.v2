@@ -73,7 +73,7 @@ struct BucketFrames {
 /// Decals of one image that follow one another in the order they are drawn: their triangles, in a
 /// frame's decal vertices.
 struct DecalRun {
-    std::uint32_t texture = 0;
+    DecalImageIndex image{};
     std::uint32_t firstVertex = 0;
     std::uint32_t vertexCount = 0;
 };
@@ -81,7 +81,7 @@ struct DecalRun {
 /// The decals of a face of a brush entity, a run each in the order stamped on it: a range of a frame's
 /// decal runs.
 struct FaceDecals {
-    std::uint32_t face = 0;
+    assets::FaceIndex face{};
     std::uint32_t firstRun = 0;
     std::uint32_t runCount = 0;
 };
@@ -169,7 +169,7 @@ struct ModelPlacement {
     EulerAngles angles{};
     /// The entity's scale (func_water's an eighth of its "WaveHeight"): its turbulent faces rise and
     /// fall by up to about 29 times it, as the original's EmitWaterPolys raises them; 0 for none.
-    float waveHeight = 0.0F;
+    HammerUnits waveHeight{};
     /// Its frame is not 0: each of its faces shows its texture's alternate sequence (+a... for +0...,
     /// and back) when there is one (R_TextureAnimation).
     bool showsAlternateTextures = false;
@@ -234,13 +234,13 @@ public:
     /// Records the brush entity of `index`, one of blendedDraws()'s, in the same render pass.
     void drawBlended(rhi::CommandList& commands, std::uint32_t index) const;
 
-    /// Stamps decal `decal`, of BspWorldDesc::decals, near `center` on the faces of `on`, for `life`,
+    /// Stamps the decal of `image` near `center` on the faces of `on`, for `life`,
     /// as DecalPool::shoot does: the world's, or a brush entity's, the point taken into its model's
     /// space where `on` puts it, as the original's R_DecalShoot takes it, so that the decal goes where
     /// the game moves the entity. Drawn from the next prepare on, over the faces, as the original draws
     /// them: the world's after the world's faces, lit as they are; a brush entity's after its own, as
     /// its render mode draws them. Returns the faces it was stamped on.
-    auto shootDecal(std::uint32_t decal, Vec3 center, const DecalTarget& on = {},
+    auto shootDecal(DecalImageIndex image, Vec3 center, const DecalTarget& on = {},
                     DecalLife life = DecalLife::Temporary) -> std::uint32_t;
     /// The decals of the world and of its brush entities.
     [[nodiscard]] inline auto decals() const noexcept -> const DecalPool& { return *m_decals; }
@@ -316,7 +316,7 @@ private:
     void drawDecalRuns(rhi::CommandList& commands, std::span<const DecalRun> runs, bool isReversed) const;
     /// The decal runs of the face of a brush entity `face`, in the slot the last prepare wrote; none
     /// without decals.
-    [[nodiscard]] auto decalRunsOf(std::uint32_t face) const -> std::span<const DecalRun>;
+    [[nodiscard]] auto decalRunsOf(assets::FaceIndex face) const -> std::span<const DecalRun>;
     /// The shader, the bind group layouts and the samplers, then a pipeline for each way faces are
     /// drawn.
     [[nodiscard]] auto createLayouts(std::span<const std::byte> shaderCode) -> Result<void, rhi::RhiError>;

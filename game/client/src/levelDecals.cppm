@@ -23,7 +23,7 @@ export namespace cs {
 /// A decal a map stamps for good as its game starts: which of the level's decals, near which point, and
 /// on what.
 struct MapDecal {
-    std::uint32_t decal = 0;
+    nx::render::DecalImageIndex decal{};
     nx::Vec3 origin{};
     nx::render::DecalTarget on{};
 };
@@ -48,7 +48,8 @@ public:
         return m_images;
     }
     /// Where the decal `name` is among images(), its case ignored; none for one left out.
-    [[nodiscard]] auto indexOf(std::string_view name) const noexcept -> std::optional<std::uint32_t>;
+    [[nodiscard]] auto indexOf(std::string_view name) const noexcept
+        -> std::optional<nx::render::DecalImageIndex>;
     /// The decals left out, each with why.
     [[nodiscard]] inline auto missing() const noexcept -> std::span<const std::string> { return m_missing; }
 

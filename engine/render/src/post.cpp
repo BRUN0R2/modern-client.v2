@@ -99,10 +99,10 @@ auto PostRenderer::create(rhi::Device& device, const PostRendererDesc& desc)
                 .has_value()
             ? rhi::Format::Rg11b10Ufloat
             : rhi::Format::Rgba16Float;
-    const auto pipeline =
-        [&](std::string_view label, std::string_view entry, rhi::Format format,
-            std::optional<rhi::BlendState> blend,
-            rhi::BindGroupLayoutHandle layout) -> Result<rhi::OwnedRenderPipeline, rhi::RhiError> {
+    const auto pipeline = [&](std::string_view label, std::string_view entry, rhi::Format format,
+                              std::optional<rhi::BlendState> blend, rhi::BindGroupLayoutHandle layout,
+                              std::optional<rhi::DepthState> depth =
+                                  std::nullopt) -> Result<rhi::OwnedRenderPipeline, rhi::RhiError> {
         const std::array targets{rhi::ColorTarget{.format = format, .blend = blend}};
         const std::array layouts{layout};
         return device.createRenderPipeline(
@@ -110,6 +110,7 @@ auto PostRenderer::create(rhi::Device& device, const PostRendererDesc& desc)
              .vertex = {.shader = post.m_shader.get(), .entryPoint = "fullscreenMain"},
              .fragment = {.shader = post.m_shader.get(), .entryPoint = entry},
              .colorTargets = targets,
+             .depth = depth,
              .bindGroupLayouts = layouts});
     };
     const rhi::BlendState added{.sourceColor = rhi::BlendFactor::One,
@@ -124,7 +125,15 @@ auto PostRenderer::create(rhi::Device& device, const PostRendererDesc& desc)
         pipeline("post.reduce", "reduceMain", post.m_bloomFormat, std::nullopt, post.m_bloomLayout.get());
     auto enlarge =
         pipeline("post.enlarge", "enlargeMain", post.m_bloomFormat, added, post.m_bloomLayout.get());
-    auto tone = pipeline("post.tone", "toneMain", desc.outputFormat, std::nullopt, post.m_toneLayout.get());
+    // The tone pass shares its render pass with the screen's pictures: the frame's depth, neither tested
+    // nor written.
+    const std::optional<rhi::DepthState> frameDepth =
+        desc.depthFormat == rhi::Format::Undefined
+            ? std::nullopt
+            : std::optional{rhi::DepthState{
+                  .format = desc.depthFormat, .isWriteEnabled = false, .compare = rhi::CompareOp::Always}};
+    auto tone = pipeline("post.tone", "toneMain", desc.outputFormat, std::nullopt, post.m_toneLayout.get(),
+                         frameDepth);
     for (auto* const made : {&reduceFirst, &reduceEffects, &reduce, &enlarge, &tone}) {
         if (!*made) {
             return gpuFailed("a post pipeline", std::move(made->error()));

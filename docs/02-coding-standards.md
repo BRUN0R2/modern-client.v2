@@ -181,7 +181,9 @@ each AMX Mod X name at its canonical form ([14 §22](14-rook-language.md#22-lint
 - Booleans with a semantic prefix: `isAlive`, `hasDefuser`, `canBuy`.
 - Functions that can fail describe the action (`loadModel`). Functions that look up
   something optional use `find*` and return `std::optional`. Functions that require
-  existence use `require*` and return `Result`.
+  existence use `require*`: when its absence is an expected failure they return a `Result`; when it
+  is a contract violation (`World::requireComponentId`: a type registered in the world), they return
+  what they found and, after a violation under `observe`, none (§6.5).
 
 ## 4. Types
 

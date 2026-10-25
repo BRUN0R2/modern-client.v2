@@ -43,12 +43,13 @@ TEST(MixerOnADeviceTest, TheDevicesThreadTakesTheMixersCommandsAndMixes) {
     Mixer mixer{MixerDesc{.rate = device->rate(), .voices = 4}};
     // A tenth of a second at another rate than the device's, looping until it is stopped.
     const Sound hum{std::vector<float>(2'205, 0.25F), 1, SampleRate{22'050}};
-    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 3, .sound = &hum, .loops = true}).has_value());
+    ASSERT_TRUE(
+        mixer.send(PlayVoice{.voice = nx::audio::VoiceId{3}, .sound = &hum, .loops = true}).has_value());
     ASSERT_TRUE(device->play(mixer).has_value());
-    EXPECT_TRUE(waitUntil([&mixer] { return mixer.isPlaying(3); }));
+    EXPECT_TRUE(waitUntil([&mixer] { return mixer.isPlaying(nx::audio::VoiceId{3}); }));
 
-    ASSERT_TRUE(mixer.send(StopVoice{.voice = 3}).has_value());
-    EXPECT_TRUE(waitUntil([&mixer] { return !mixer.isPlaying(3); }));
+    ASSERT_TRUE(mixer.send(StopVoice{.voice = nx::audio::VoiceId{3}}).has_value());
+    EXPECT_TRUE(waitUntil([&mixer] { return !mixer.isPlaying(nx::audio::VoiceId{3}); }));
     ASSERT_TRUE(device->pause().has_value());
     EXPECT_EQ(device->lostBlocks(), 0U);
 }
