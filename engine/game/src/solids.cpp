@@ -47,13 +47,8 @@ namespace {
                                                                            .angles = solid.angles,
                                                                            .start = start,
                                                                            .end = end});
-        if (hit.isAllSolid || hit.startsSolid || hit.fraction < best.fraction) {
-            const bool startedSolid = best.startsSolid;
-            best = hit;
-            best.startsSolid = best.startsSolid || startedSolid;
+        if (collision::keepFirstStop(best, hit)) {
             found.entity = solid.entity;
-        } else if (hit.startsSolid) {
-            best.startsSolid = true;
         }
     }
     return found;

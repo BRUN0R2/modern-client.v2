@@ -372,8 +372,9 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - **Shots** (`cs::Shot`): from the eye, along the view turned by the punch, strayed by the spread
   at random, each way the sum of two even draws from the command number's `spread` stream
   (`FireBullets3`). Each goes 8192 units, its direction as it strayed (not of length 1), through
-  the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it);
-  where it meets the world or a brush entity it leaves the mark the game names for it
+  the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it)
+  and the hostages, by their hitboxes (`cs::MapModels::traceHostages`, [07 §4.2](07-simulation-and-physics.md#42-entities)):
+  a hostage it meets first stops it. Where it meets the world or a brush entity it leaves the mark the game names for it
   (`cs::bulletMarkOf`, `DamageDecal`): on the world and on an entity drawn normally a bullet hole,
   one of `{shot1` to `{shot5` of decals.wad at random; none on a solid one (`kRenderTransAlpha`);
   `{bproof1` on one drawn otherwise; on a `func_breakable`, by its `material` first, one of
