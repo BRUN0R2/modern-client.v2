@@ -33,6 +33,7 @@ idlesWhenEmpty = false
 
 [firing] # without its silencer
 cycle = 0.15 # semi-automatic: the original's 0.225 less 0.075
+reach = 4096.0 # how far its rounds go (FireBullets3)
 isAutomatic = false
 idleAfterShot = 2.0
 shootSequences = [9, 10, 11] # shoot1_unsil, shoot2_unsil, shoot3_unsil
@@ -78,6 +79,7 @@ idlesWhenEmpty = false
 
 [alternate.firing]
 cycle = 0.15
+reach = 4096.0 # how far its rounds go (FireBullets3)
 isAutomatic = false
 idleAfterShot = 2.0
 shootSequences = [1, 2, 3] # shoot1, shoot2, shoot3

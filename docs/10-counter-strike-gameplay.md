@@ -233,6 +233,7 @@ bodyChoices    = []            # optional, zero-based choice by body-part index;
 [firing]                       # absent: it fires nothing (the knife, until its attacks)
 cycle          = 0.0955        # seconds from a shot to the next
 isAutomatic    = true          # holding the button fires again; else once a press
+reach          = 8192.0        # how far its rounds go (FireBullets3's distance)
 idleAfterShot  = 1.9
 shootSequences = [3, 4, 5]     # one at random; lastShotSequence: the clip's last round's
 
@@ -371,7 +372,9 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   another weapon stops a reload.
 - **Shots** (`cs::Shot`): from the eye, along the view turned by the punch, strayed by the spread
   at random, each way the sum of two even draws from the command number's `spread` stream
-  (`FireBullets3`). Each goes 8192 units, its direction as it strayed (not of length 1), through
+  (`FireBullets3`). Each goes as far as its weapon's `reach` (`cs::Shot::reach`: 8192 units for the
+  Glock, the AK-47 and the M4A1, 4096 for the USP, as the original's fire them), its direction as it
+  strayed (not of length 1), through
   the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it)
   and the hostages, by their hitboxes (`cs::MapModels::traceHostages`, [07 §4.2](07-simulation-and-physics.md#42-entities)):
   a hostage it meets first stops it. Where it meets the world or a brush entity it leaves the mark the game names for it

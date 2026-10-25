@@ -33,6 +33,7 @@ idlesWhenEmpty = true
 
 [firing]
 cycle = 0.0955
+reach = 8192.0 # how far its rounds go (FireBullets3)
 isAutomatic = true
 idleAfterShot = 1.9
 shootSequences = [3, 4, 5] # shoot1, shoot2, shoot3

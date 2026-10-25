@@ -96,13 +96,16 @@ struct WeaponHit {
 /// (UTIL_TraceLine, UTIL_TraceHull), and what it met.
 using WeaponTracer = std::function<WeaponHit(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end)>;
 
-/// A shot fired: from where, the way it goes, and how far its bullet may stray.
+/// A shot fired: from where, the way it goes, how far its bullet may stray, and how far it goes.
 struct Shot {
     nx::Vec3 origin{};
     /// Forward, strayed by at most twice `spread` to the right and up, at random: not of length 1,
     /// as the original's (FireBullets3).
     nx::Vec3 direction{};
     float spread{};
+    /// Its weapon's (WeaponFiring::reach), along `direction`: its end is `origin` plus `direction` times
+    /// it, as the original's is.
+    nx::HammerUnits reach{};
 };
 
 /// The weapons a player has, the rounds it carries besides their clips, and the one it holds.
