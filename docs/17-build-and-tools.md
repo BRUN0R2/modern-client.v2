@@ -130,7 +130,7 @@ dialect is `/std:c++latest`.
 | `dev-linux-clang` | Development with `clangd`/`clang-tidy` | To be validated |
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers with Clang (ASan + UBSan, TSan) | To be validated |
-| `fuzz-windows-msvc` | Only the fuzz targets, with libFuzzer and AddressSanitizer: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus; an input that runs past `NX_FUZZ_INPUT_SECONDS` (30) is reported as a hang and kept | Validated; nightly in CI (`fuzz`) |
+| `fuzz-windows-msvc` | The fuzz targets and the libraries, with libFuzzer and AddressSanitizer, without the tests, benchmarks, tools and client: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus; an input that runs past `NX_FUZZ_INPUT_SECONDS` (30) is reported as a hang and kept | Validated; nightly in CI (`fuzz`) |
 | `server-headless`, `tools` | Only `nextds` or only the tools | Planned: `tools` is not defined yet (its tools, `nxcheck` and `nxview`, exist); `server-headless` with `nextds` |
 
 Each configure preset has a build preset and a test preset with the same name. The build
@@ -183,9 +183,10 @@ ctest --preset dev-linux-gcc
 | `NX_REFLECTION_BACKEND` | `auto` | `native` (P2996: adds `-freflection` and checks every `nx.meta` description against its type), `fallback` (descriptions as written) or `auto` (native where the compiler has it). `native` on a compiler without P2996 fails the configuration |
 | `NX_CONTRACT_SEMANTIC` | per module | `enforce` or `observe` ([02 §6.5](02-coding-standards.md#65-contracts)) |
 
-The options from `NX_BUILD_CLIENT` on arrive together with their modules. Today
-`NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS`, `NX_BUILD_TOOLS` and
-`NX_REFLECTION_BACKEND` exist, with `NX_FUZZ`, `NX_FUZZ_SECONDS` and `NX_FUZZ_INPUT_SECONDS`, which the fuzz preset uses.
+The options from `NX_BUILD_SERVER` on, but `NX_REFLECTION_BACKEND`, arrive together with their
+modules. Today `NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS`, `NX_BUILD_CLIENT`,
+`NX_BUILD_TOOLS` and `NX_REFLECTION_BACKEND` exist, with `NX_FUZZ`, `NX_FUZZ_SECONDS` and
+`NX_FUZZ_INPUT_SECONDS`, which the fuzz preset uses.
 
 ## 5. Dependencies
 
@@ -240,13 +241,13 @@ Rules:
 | Target | Description |
 |--------|-------------|
 | `nextLauncher` | Launcher: updates itself and the client, then starts `next` ([21](21-launcher-and-updates.md)). Planned (M4) |
-| `next` | Client (the listen server comes with `cs.server`). Today (`app.client`): the original's command line (`-basedir <folder>`, and the `+` commands it runs after the player's config files: `next +map de_dust2`), the player's settings and binds, and a map the `map` command loads, played alone in a window, the player walking with a knife as the binds ask; `noclip` flies, `quit` or Escape ends it; `--data` names the project's `data/` folder, `--validation` |
+| `next` | Client (the listen server comes with `cs.server`). Today (`app.client`): the original's command line (`-basedir <folder>`, and the `+` commands it runs after the player's config files: `next +map de_dust2`), the player's settings and binds, and a map the `map` command loads, played alone in a window, the player walking with what its team spawns with, firing and reloading as the binds ask; the console's window (`toggleconsole`), the weapons' commands and sounds; `noclip` flies, `quit` or Escape ends it; `--data` names the project's `data/` folder, `--validation` |
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
-| `nxview` | A frame of a map into a file, as the client draws it (`cs.client`): `--screenshot <file.bmp>` renders one 1280x720 frame of `--map <name>` (default: de_dust2) of the Counter-Strike 1.6 installation without a window, with the original's default settings, `--time <seconds>` after the map starts; `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--hud` draws the HUD over the frame, and `--console <line>` (once for each line, sent in it) and `--typing <text>` (left typed in it) the console's window; `--validation`. Playing a map is `next`'s |
+| `nxview` | A frame of a map into a file, as the client draws it (`cs.client`): `--screenshot <file.bmp>` renders one frame (`--size <width>x<height>`, 1280x720 by default) of `--map <name>` (default: de_dust2) of the Counter-Strike 1.6 installation without a window, with the original's default settings, `--time <seconds>` after the map starts; `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--look legacy|enhanced` the look, `--user-folder` the folder whose `addons/cstrike/` it reads, `--weapon <id>` the only weapon the player spawns with; `--hud` draws the HUD over the frame, and `--console <line>` (once for each line, sent in it) and `--typing <text>` (left typed in it) the console's window; `--validation`. Playing a map is `next`'s |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |

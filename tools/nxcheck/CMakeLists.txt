@@ -10,6 +10,7 @@ nxAddModuleLibrary(toolNxcheck
         src/check.cpp
     DEPENDS
         nx::core
+        nx::math
         nx::jobs
         nx::assets
         nx::collision

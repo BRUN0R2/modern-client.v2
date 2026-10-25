@@ -42,7 +42,8 @@ private:
 };
 
 /// Runs the player's configuration as the game starts: each of kStartupFiles that `files` has, in
-/// that order, then everything they queued. A file that is missing is not a failure; one that cannot
+/// that order, then the commands they queued, up to a `wait`, which leaves the rest for the console's
+/// next execute() (the game's next frame). A file that is missing is not a failure; one that cannot
 /// be read, or a command of one that fails, goes to the console's output.
 void runStartupFiles(console::Console& console, UserConfigFiles& files);
 
