@@ -340,6 +340,40 @@ private:
     bool m_isRunning = true;
 };
 
+/// The installation `options` name (`-basedir`), else the content configuration's
+/// (nx::assets::findContentConfig, from the working folder and `userFolder`); none when neither
+/// names one, for the one Steam installed. Errors: those of the configuration's finding and reading.
+[[nodiscard]] auto configuredInstall(const ClientOptions& options, const std::filesystem::path& userFolder)
+    -> nx::Result<std::optional<std::filesystem::path>, nx::assets::ContentError> {
+    if (options.install) {
+        return options.install;
+    }
+    // Empty when it cannot be told, so that content.toml is looked for relative to it all the same.
+    std::error_code error;
+    const std::filesystem::path workingFolder = std::filesystem::current_path(error);
+    auto file = nx::assets::findContentConfig(options.contentConfig, workingFolder, userFolder);
+    if (!file) {
+        return std::unexpected(std::move(file.error()));
+    }
+    if (!*file) {
+        return std::optional<std::filesystem::path>{};
+    }
+    const std::string name = nx::platform::toUtf8(**file);
+    auto text = nx::platform::readTextFile(**file);
+    if (!text) {
+        return nx::fail(nx::assets::ContentError::ConfigInvalid, name, std::move(text.error()));
+    }
+    auto config = nx::assets::readContentConfig(*text, name);
+    if (!config) {
+        return std::unexpected(std::move(config.error()));
+    }
+    nx::log::info(kLog, "the content configuration: {}", name);
+    if (!config->goldsrcInstall || config->goldsrcInstall->path.empty()) {
+        return std::optional<std::filesystem::path>{};
+    }
+    return std::optional{nx::platform::fromUtf8(config->goldsrcInstall->path)};
+}
+
 auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerSettings(); !registered) {
         return registered;
@@ -351,8 +385,12 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!executable) {
         return nx::fail(ClientError::ContentUnavailable, std::move(executable.error()));
     }
-    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"),
-                                       m_options->install, cs::addonsFolderOf(m_files.directory()));
+    auto install = configuredInstall(*m_options, m_files.directory());
+    if (!install) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(install.error()));
+    }
+    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"), *install,
+                                       cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
