@@ -323,7 +323,7 @@ auto Level::load(const GameContent& content, std::string_view name)
                          listed(level.m_decals->missing()));
     }
     for (const nx::game::StaticDecal& decal : stamped) {
-        if (const std::optional<std::uint32_t> index = level.m_decals->indexOf(decal.texture)) {
+        if (const std::optional<nx::render::DecalImageIndex> index = level.m_decals->indexOf(decal.texture)) {
             level.m_mapDecals.push_back(MapDecal{
                 .decal = *index, .origin = decal.origin, .on = decalTargetOf(resting, decal.entity)});
         }

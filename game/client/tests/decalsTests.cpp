@@ -92,8 +92,8 @@ TEST(LevelDecalsTest, ReadsEachDecalNamedOnceAndFindsItWhateverItsCase) {
                            std::string_view{"CRATE01"}};
     const LevelDecals decals = LevelDecals::read(vfs, names);
     ASSERT_EQ(decals.images().size(), 2U);
-    EXPECT_EQ(decals.indexOf("Crate01"), std::optional{0U});
-    EXPECT_EQ(decals.indexOf("{blue"), std::optional{1U});
+    EXPECT_EQ(decals.indexOf("Crate01"), std::optional{nx::render::DecalImageIndex{0}});
+    EXPECT_EQ(decals.indexOf("{blue"), std::optional{nx::render::DecalImageIndex{1}});
     EXPECT_TRUE(nx::equalsIgnoringCase(decals.images()[1].name, "{blue"));
     EXPECT_EQ(decals.indexOf("{shot1"), std::nullopt);
     ASSERT_EQ(decals.missing().size(), 1U);

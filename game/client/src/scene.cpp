@@ -279,8 +279,8 @@ void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::
         {.time = time, .lightStyles = level.lightStyles().valuesAt(time), .placements = placements});
 }
 
-auto Scene::shootDecal(std::uint32_t decal, nx::Vec3 position, const nx::render::DecalTarget& on)
-    -> std::uint32_t {
+auto Scene::shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position,
+                       const nx::render::DecalTarget& on) -> std::uint32_t {
     return m_world.shootDecal(decal, position, on);
 }
 

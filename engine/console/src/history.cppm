@@ -16,6 +16,7 @@ inline constexpr std::size_t kHistoryLines = 128;
 /// The lines sent from the console's input line, and where a walk through them is.
 class CommandHistory {
 public:
+    /// A history of `capacity` lines, at least one.
     explicit CommandHistory(std::size_t capacity = kHistoryLines) noexcept;
 
     /// Keeps `line`, unless it is blank or the newest line again; the oldest line goes when there is no

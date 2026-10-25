@@ -87,15 +87,24 @@ TEST(FontFacesTest, WhatIsNoFontHasNoFaces) {
 
 TEST_F(CatalogTest, AFoldersFontFilesAreItsFaces) {
     FontCatalog catalog;
-    EXPECT_EQ(catalog.addFolder(directory.path()), 4U) << "the text and the broken file left out";
+    const auto added = catalog.addFolder(directory.path());
+    ASSERT_TRUE(added.has_value()) << nx::describe(added.error());
+    EXPECT_EQ(*added, 4U) << "the text and the broken file left out";
     EXPECT_EQ(catalog.faces().size(), 4U);
+}
+
+TEST_F(CatalogTest, AFolderThatCannotBeListedIsUnreadable) {
+    FontCatalog catalog;
+    const auto added = catalog.addFolder(directory.path() / "missing");
+    ASSERT_FALSE(added.has_value());
+    EXPECT_EQ(added.error().code, nx::ui::FontError::Unreadable);
 }
 
 TEST_F(CatalogTest, AWeightGetsTheFaceGdiGivesIt) {
     FontCatalog catalog;
     std::ignore = catalog.addFolder(directory.path());
     const auto chosen = [&catalog](std::int32_t weight) {
-        const auto choice = catalog.choose("SQUARE", weight, false);
+        const auto choice = catalog.choose({.family = "SQUARE", .weight = weight, .isItalic = false});
         EXPECT_TRUE(choice.has_value()) << weight;
         return choice ? std::pair{choice->face->style, choice->isEmboldened}
                       : std::pair{std::string{}, false};
@@ -108,24 +117,25 @@ TEST_F(CatalogTest, AWeightGetsTheFaceGdiGivesIt) {
     EXPECT_EQ(chosen(612), (std::pair{std::string{"Bold"}, false})) << "the bold face within 88";
     EXPECT_EQ(chosen(1000), (std::pair{std::string{"Bold"}, false})) << "a bold face is not struck twice";
 
-    const auto italic = catalog.choose("Square", 700, true);
+    const auto italic = catalog.choose({.family = "Square", .weight = 700, .isItalic = true});
     ASSERT_TRUE(italic.has_value());
     EXPECT_EQ(italic->face->style, "Italic") << "the italic faces first";
     EXPECT_TRUE(italic->isEmboldened);
 
     const auto mark = [&catalog](std::int32_t weight) {
-        return catalog.choose("mark", weight, true)->isEmboldened;
+        return catalog.choose({.family = "mark", .weight = weight, .isItalic = true})->isEmboldened;
     };
     EXPECT_FALSE(mark(650)) << "500 is not 150 lighter than 650";
     EXPECT_TRUE(mark(651));
 
-    EXPECT_FALSE(catalog.choose("Square Bold", 0, false).has_value()) << "no family has that name";
+    EXPECT_FALSE(catalog.choose({.family = "Square Bold", .weight = 0, .isItalic = false}).has_value())
+        << "no family has that name";
 }
 
 TEST_F(CatalogTest, AChosenFaceOpensAsAFont) {
     FontCatalog catalog;
     std::ignore = catalog.addFolder(directory.path());
-    const auto choice = catalog.choose("Square", 600, false);
+    const auto choice = catalog.choose({.family = "Square", .weight = 600, .isItalic = false});
     ASSERT_TRUE(choice.has_value());
     auto font = catalog.open(*choice, {.cellHeight = 20});
     ASSERT_TRUE(font.has_value()) << nx::describe(font.error());

@@ -250,10 +250,11 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
             const MadeDoor door = *brushClass->behavior == BrushBehavior::SlidingDoor
                                       ? slidingDoorOf(entity, models[model->value].bounds, origin)
                                       : rotatingDoorOf(entity, origin);
-            made = world.spawn(
-                BrushModel{.index = *model}, Transform{.origin = door.origin, .angles = door.angles},
-                solidity, Pusher{}, door.door, targetsOf(entity),
-                Waves{.height = entity.findNumber("WaveHeight").value_or(0.0F) * kWaveHeightShare});
+            made = world.spawn(BrushModel{.index = *model},
+                               Transform{.origin = door.origin, .angles = door.angles}, solidity, Pusher{},
+                               door.door, targetsOf(entity),
+                               Waves{.height = HammerUnits{entity.findNumber("WaveHeight").value_or(0.0F) *
+                                                           kWaveHeightShare}});
             break;
         }
         case BrushBehavior::Button:

@@ -11,6 +11,7 @@ import nx.core;
 import nx.console;
 
 #include "consoleFixtures.hpp"
+#include "contractRecorder.hpp"
 
 namespace {
 
@@ -95,6 +96,17 @@ TEST(CompletionPrefixTest, IsTheNameOfTheLastCommandWhileItIsTyped) {
     EXPECT_FALSE(at("sv_gravity 4").has_value()) << "the name is typed: its arguments are";
     EXPECT_FALSE(at("echo \"a; b").has_value()) << "still in quotes";
     EXPECT_FALSE(at("sv_gravity ").has_value());
+}
+
+TEST(CommandHistoryTest, AHistoryWithoutRoomIsABugThatKeepsOneLine) {
+    const nx::test::ContractRecorder recorder;
+    nx::console::CommandHistory history{0};
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
+    history.add("one");
+    history.add("two");
+    EXPECT_EQ(std::vector<std::string>(history.lines().begin(), history.lines().end()),
+              (std::vector<std::string>{"two"}))
+        << "under observe, room for one line";
 }
 
 TEST(CommandHistoryTest, WalksTheLinesSentFromTheNewest) {

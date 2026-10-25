@@ -18,8 +18,10 @@ auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHei
             continue; // for other screens
         }
         tried.push_back(std::format("{:?} {}", candidate.face, candidate.tall));
-        const bool isItalic = candidate.flags.test(assets::FontFlag::Italic);
-        const std::optional<FontChoice> choice = catalog.choose(candidate.face, candidate.weight, isItalic);
+        const std::optional<FontChoice> choice =
+            catalog.choose({.family = candidate.face,
+                            .weight = candidate.weight,
+                            .isItalic = candidate.flags.test(assets::FontFlag::Italic)});
         if (!choice) {
             continue; // no such face: the candidates after it stand in
         }

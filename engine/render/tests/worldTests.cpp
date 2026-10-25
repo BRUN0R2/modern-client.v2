@@ -433,7 +433,8 @@ TEST(BspWorldTest, TheWaterOfABrushEntityRisesAndFallsInWaves) {
         if (!map || !world) {
             return std::vector<std::byte>{};
         }
-        const std::array placements{nx::render::ModelPlacement{.model = {1}, .waveHeight = waveHeight}};
+        const std::array placements{
+            nx::render::ModelPlacement{.model = {1}, .waveHeight = nx::HammerUnits{waveHeight}}};
         return drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}},
                          normalStyles(), nx::Seconds{0.0F}, placements);
     };
@@ -556,8 +557,8 @@ TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
     // Looking down at the floor of CRATE01 from the middle: 2 units a pixel, the decal 8 pixels wide.
     const nx::render::Camera camera{.position = kMiddle, .angles = {.pitch = nx::Degrees{90.0F}}};
     const std::vector<std::byte> before = drawWorld(target, *world, camera);
-    EXPECT_EQ(world->shootDecal(0, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
-    EXPECT_EQ(world->decals().decalsOn(0), 1U);
+    EXPECT_EQ(world->shootDecal(nx::render::DecalImageIndex{0}, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+    EXPECT_EQ(world->decals().decalsOn(nx::assets::FaceIndex{0}), 1U);
     const std::vector<std::byte> after = drawWorld(target, *world, camera);
     const Pixel lit = pixelAt(before, kExtent.width / 2, kExtent.height / 2);
     const Pixel holed = pixelAt(after, kExtent.width / 2, kExtent.height / 2);
@@ -620,7 +621,7 @@ TEST(BspWorldTest, ADecalOnABrushEntityGoesWhereTheGameMovesIt) {
     const std::vector<std::byte> plain = drawn({});
     const std::vector<std::byte> movedPlain = drawn(moved);
 
-    ASSERT_EQ(world->shootDecal(0, kSquareMiddle, kOnTheWall), 1U);
+    ASSERT_EQ(world->shootDecal(nx::render::DecalImageIndex{0}, kSquareMiddle, kOnTheWall), 1U);
     const std::vector<std::byte> holed = drawn({});
     const std::vector<std::byte> movedHoled = drawn(moved);
     constexpr std::uint32_t kRow = 16;
@@ -660,7 +661,7 @@ TEST(BspWorldTest, ADecalOnABrushEntityIsDrawnAsItsRenderModeDrawsIt) {
             return Drawn{};
         }
         Drawn drawn{.plain = drawWorld(target, *world, camera)};
-        EXPECT_EQ(world->shootDecal(0, kSquareMiddle, kOnTheWall), 1U);
+        EXPECT_EQ(world->shootDecal(nx::render::DecalImageIndex{0}, kSquareMiddle, kOnTheWall), 1U);
         drawn.holed = drawWorld(target, *world, camera);
         return drawn;
     };

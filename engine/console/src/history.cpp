@@ -8,8 +8,12 @@ import nx.core;
 
 namespace nx::console {
 
-CommandHistory::CommandHistory(std::size_t capacity) noexcept
-    : m_capacity{std::max<std::size_t>(capacity, 1)} {}
+CommandHistory::CommandHistory(std::size_t capacity) noexcept : m_capacity{capacity} {
+    expects(capacity > 0, "CommandHistory: room for a line at least");
+    if (m_capacity == 0) {
+        m_capacity = 1; // the handler let execution continue ("observe")
+    }
+}
 
 void CommandHistory::add(std::string_view line) {
     m_walk.reset();

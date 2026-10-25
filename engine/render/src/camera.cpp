@@ -50,7 +50,8 @@ auto projectionMatrix(Degrees fieldOfView, float aspect) noexcept -> Mat4 {
     const float xScale = 1.0F / half.width;
     const float yScale = 1.0F / half.height;
     // depth = near / z: 1 at the near plane, toward 0 at infinity.
-    return Mat4{.rows = {Vec4{.x = xScale}, Vec4{.y = yScale}, Vec4{.w = kNearPlane}, Vec4{.z = 1.0F}}};
+    return Mat4{
+        .rows = {Vec4{.x = xScale}, Vec4{.y = yScale}, Vec4{.w = kNearPlane.value()}, Vec4{.z = 1.0F}}};
 }
 
 auto viewProjectionMatrix(const Camera& camera, float aspect) noexcept -> Mat4 {

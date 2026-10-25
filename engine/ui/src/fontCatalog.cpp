@@ -265,10 +265,13 @@ auto FontCatalog::addFile(const std::filesystem::path& path) -> Result<void, Fon
     return {};
 }
 
-auto FontCatalog::addFolder(const std::filesystem::path& folder) -> std::size_t {
+auto FontCatalog::addFolder(const std::filesystem::path& folder) -> Result<std::size_t, FontError> {
     const std::size_t before = m_faces.size();
-    const auto files = platform::listFiles(folder);
-    for (const std::filesystem::path& file : files.value_or(std::vector<std::filesystem::path>{})) {
+    auto files = platform::listFiles(folder);
+    if (!files) {
+        return fail(FontError::Unreadable, platform::toUtf8(folder), std::move(files.error()));
+    }
+    for (const std::filesystem::path& file : *files) {
         if (isFontFile(file)) {
             std::ignore = addFile(folder / file); // a file that cannot be read is left out
         }
@@ -276,9 +279,10 @@ auto FontCatalog::addFolder(const std::filesystem::path& folder) -> std::size_t 
     return m_faces.size() - before;
 }
 
-auto FontCatalog::choose(std::string_view family, std::int32_t weight, bool isItalic) const
-    -> std::optional<FontChoice> {
-    const std::int32_t asked = weight > 0 ? weight : kRegularWeight;
+auto FontCatalog::choose(const FontQuery& query) const -> std::optional<FontChoice> {
+    const std::string_view family = query.family;
+    const bool isItalic = query.isItalic;
+    const std::int32_t asked = query.weight > 0 ? query.weight : kRegularWeight;
     std::vector<const FontFace*> candidates;
     for (const FontFace& face : m_faces) {
         if (std::ranges::any_of(face.families, [family](const std::string& name) {

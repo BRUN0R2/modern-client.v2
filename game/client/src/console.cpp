@@ -79,7 +79,9 @@ auto openConsoleFont(const nx::assets::Vfs& vfs, nx::ui::FontCatalog& catalog, s
         return std::nullopt;
     }
     for (const std::filesystem::path& folder : nx::platform::fontFolders()) {
-        std::ignore = catalog.addFolder(folder);
+        if (auto added = catalog.addFolder(folder); !added) {
+            nx::log::warning(kLog, "the fonts of a folder are left out: {}", nx::describe(added.error()));
+        }
     }
     auto opened = nx::ui::SchemeFontSet::open(*font, screenHeight, catalog);
     if (!opened) {

@@ -91,10 +91,11 @@ TEST(SincKernelTest, ItIsOneInItsMiddleAndZeroAtEveryOtherSample) {
 TEST(MixerTest, ASteadyLevelComesOutAsItIsInEachEarAtItsGain) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 4}};
     const Sound level = soundOf(22'050, 22'050, [](std::size_t) { return 0.5F; });
-    send(mixer, PlayVoice{.voice = 2, .sound = &level, .gains = {.left = 1.0F, .right = 0.25F}});
-    EXPECT_FALSE(mixer.isPlaying(2));
+    send(mixer,
+         PlayVoice{.voice = nx::audio::VoiceId{2}, .sound = &level, .gains = {.left = 1.0F, .right = 0.25F}});
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{2}));
     const std::vector<float> out = render(mixer, 1024);
-    EXPECT_TRUE(mixer.isPlaying(2));
+    EXPECT_TRUE(mixer.isPlaying(nx::audio::VoiceId{2}));
     for (std::size_t frame = kSettled; frame < 1024; ++frame) {
         EXPECT_NEAR(out[frame * 2], 0.5F, 1e-3F) << frame;
         EXPECT_NEAR(out[(frame * 2) + 1], 0.125F, 1e-3F) << frame;
@@ -108,7 +109,8 @@ TEST(MixerTest, AStereoSoundKeepsItsTwoChannels) {
         samples.insert(samples.end(), {0.5F, -0.25F});
     }
     const Sound stereo{std::move(samples), 2, SampleRate{kMixRate}};
-    send(mixer, PlayVoice{.voice = 0, .sound = &stereo, .gains = {.left = 1.0F, .right = 2.0F}});
+    send(mixer,
+         PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &stereo, .gains = {.left = 1.0F, .right = 2.0F}});
     const std::vector<float> out = render(mixer, 256);
     EXPECT_NEAR(out[kSettled * 2], 0.5F, 1e-3F);
     EXPECT_NEAR(out[(kSettled * 2) + 1], -0.5F, 1e-3F);
@@ -118,7 +120,7 @@ TEST(MixerTest, ASoundAtAnotherRateIsReadWithoutColoringIt) {
     // 1 kHz at 22 050 Hz, mixed at 48 kHz: the sine it was, at the mix's rate.
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound sine = sineOf(22'050, 1'000.0, 0.5F);
-    send(mixer, PlayVoice{.voice = 0, .sound = &sine});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &sine});
     const std::vector<float> out = render(mixer, 4'096);
     const double snr = signalToNoise(out, [](std::size_t frame) {
         return 0.5 * std::sin(2.0 * std::numbers::pi * 1'000.0 * static_cast<double>(frame) / kMixRate);
@@ -129,7 +131,7 @@ TEST(MixerTest, ASoundAtAnotherRateIsReadWithoutColoringIt) {
 TEST(MixerTest, APitchOfTwoPlaysItAnOctaveHigher) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound sine = sineOf(kMixRate, 1'000.0, 0.5F);
-    send(mixer, PlayVoice{.voice = 0, .sound = &sine, .pitch = 2.0F});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &sine, .pitch = 2.0F});
     const std::vector<float> out = render(mixer, 4'096);
     const double snr = signalToNoise(out, [](std::size_t frame) {
         return 0.5 * std::sin(2.0 * std::numbers::pi * 2'000.0 * static_cast<double>(frame) / kMixRate);
@@ -142,7 +144,7 @@ TEST(MixerTest, ASoundSpedUpPastTheMixsBandIsFilteredNotFoldedBack) {
     // back as 12 kHz if it were not filtered out first.
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound sine = sineOf(kMixRate, 18'000.0, 0.5F);
-    send(mixer, PlayVoice{.voice = 0, .sound = &sine, .pitch = 2.0F});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &sine, .pitch = 2.0F});
     const std::vector<float> out = render(mixer, 4'096);
     float loudest = 0.0F;
     for (std::size_t frame = kSettled; frame < 4'096; ++frame) {
@@ -154,9 +156,9 @@ TEST(MixerTest, ASoundSpedUpPastTheMixsBandIsFilteredNotFoldedBack) {
 TEST(MixerTest, ASoundThatDoesNotLoopEndsAndItsVoiceIsFree) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound click = soundOf(kMixRate, 100, [](std::size_t) { return 0.5F; });
-    send(mixer, PlayVoice{.voice = 0, .sound = &click});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &click});
     const std::vector<float> out = render(mixer, 256);
-    EXPECT_FALSE(mixer.isPlaying(0));
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{0}));
     EXPECT_NEAR(out[50 * 2], 0.5F, 1e-3F);
     for (std::size_t frame = 100; frame < 256; ++frame) {
         EXPECT_EQ(out[frame * 2], 0.0F) << frame;
@@ -169,9 +171,9 @@ TEST(MixerTest, ALoopingSoundGoesBackToItsLoopStart) {
         return static_cast<float>(frame) / 200.0F;
     };
     const Sound loop = soundOf(kMixRate, 100, ramp, SampleFrames{50});
-    send(mixer, PlayVoice{.voice = 0, .sound = &loop, .loops = true});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &loop, .loops = true});
     const std::vector<float> out = render(mixer, 400);
-    EXPECT_TRUE(mixer.isPlaying(0));
+    EXPECT_TRUE(mixer.isPlaying(nx::audio::VoiceId{0}));
     // At the mix's own rate the voice reads its sound sample by sample: 100 and on are 50 and on.
     for (const std::size_t frame : {std::size_t{70}, std::size_t{120}, std::size_t{199}, std::size_t{230}}) {
         const std::size_t inSound = frame < 100 ? frame : 50 + ((frame - 100) % 50);
@@ -182,20 +184,20 @@ TEST(MixerTest, ALoopingSoundGoesBackToItsLoopStart) {
 TEST(MixerTest, AStoppedVoiceIsSilent) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
-    send(mixer, PlayVoice{.voice = 0, .sound = &level});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level});
     std::ignore = render(mixer, 128);
-    send(mixer, StopVoice{.voice = 0});
+    send(mixer, StopVoice{.voice = nx::audio::VoiceId{0}});
     const std::vector<float> out = render(mixer, 128);
-    EXPECT_FALSE(mixer.isPlaying(0));
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{0}));
     EXPECT_TRUE(std::ranges::all_of(out, [](float sample) { return sample == 0.0F; }));
 }
 
 TEST(MixerTest, GainsChangeWhileItPlays) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
-    send(mixer, PlayVoice{.voice = 0, .sound = &level});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level});
     std::ignore = render(mixer, 128);
-    send(mixer, SetVoiceGains{.voice = 0, .gains = {.left = 0.5F, .right = 0.0F}});
+    send(mixer, SetVoiceGains{.voice = nx::audio::VoiceId{0}, .gains = {.left = 0.5F, .right = 0.0F}});
     send(mixer, SetMasterGain{.gain = 0.5F});
     const std::vector<float> out = render(mixer, 128);
     EXPECT_NEAR(out[0], 0.125F, 1e-3F);
@@ -206,8 +208,8 @@ TEST(MixerTest, TheLimiterKeepsTheMixUnderFullScaleAndLetsGo) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 2}};
     const Sound loud = sineOf(kMixRate, 440.0, 1.0F);
     const Sound quiet = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.25F; });
-    send(mixer, PlayVoice{.voice = 0, .sound = &loud});
-    send(mixer, PlayVoice{.voice = 1, .sound = &loud});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &loud});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{1}, .sound = &loud});
     const std::vector<float> limited = render(mixer, 4'800);
     // Within a rounding of the ceiling: the gain that brings a peak down to it is a float too.
     constexpr float kRounding = 1e-6F;
@@ -215,8 +217,8 @@ TEST(MixerTest, TheLimiterKeepsTheMixUnderFullScaleAndLetsGo) {
         limited, [](float sample) { return std::abs(sample) <= Mixer::kCeiling * (1.0F + kRounding); }));
     EXPECT_GT(std::ranges::max(limited), 0.9F);
 
-    send(mixer, StopVoice{.voice = 0});
-    send(mixer, PlayVoice{.voice = 1, .sound = &quiet});
+    send(mixer, StopVoice{.voice = nx::audio::VoiceId{0}});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{1}, .sound = &quiet});
     const std::vector<float> released = render(mixer, kMixRate);
     EXPECT_NEAR(released.back(), 0.25F, 1e-3F); // a second later: ten of the release's time constants
 }
@@ -247,7 +249,8 @@ TEST(MixerTest, CommandsWaitInTheQueueUntilItIsFull) {
 TEST(MixerTest, ADelayedPlayStartsAtItsFrame) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
-    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &level}, delayOf(100)).has_value());
+    ASSERT_TRUE(
+        mixer.send(PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level}, delayOf(100)).has_value());
     const std::vector<float> out = render(mixer, 512);
     // The kernel reaches back from the sound's first sample: the voice starts at frame 100, not before.
     EXPECT_TRUE(isSilent(out, 0, 100));
@@ -258,14 +261,15 @@ TEST(MixerTest, ADelayedPlayStartsAtItsFrame) {
 TEST(MixerTest, ADelayPastTheBlockGoesOnInTheNext) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
-    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &level}, delayOf(300)).has_value());
+    ASSERT_TRUE(
+        mixer.send(PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level}, delayOf(300)).has_value());
     const std::vector<float> first = render(mixer, 256);
     EXPECT_TRUE(isSilent(first, 0, 256));
-    EXPECT_FALSE(mixer.isPlaying(0));
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{0}));
     const std::vector<float> second = render(mixer, 256);
     EXPECT_TRUE(isSilent(second, 0, 44));
     EXPECT_NEAR(second[(44 + kSettled) * 2], 0.5F, 1e-3F);
-    EXPECT_TRUE(mixer.isPlaying(0));
+    EXPECT_TRUE(mixer.isPlaying(nx::audio::VoiceId{0}));
 }
 
 TEST(MixerTest, ADelayedPlayReplacesItsVoicesSoundAtItsFrameNotBefore) {
@@ -273,8 +277,9 @@ TEST(MixerTest, ADelayedPlayReplacesItsVoicesSoundAtItsFrameNotBefore) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 1}};
     const Sound first = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
     const Sound next = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.25F; });
-    send(mixer, PlayVoice{.voice = 0, .sound = &first});
-    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &next}, delayOf(200)).has_value());
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &first});
+    ASSERT_TRUE(
+        mixer.send(PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &next}, delayOf(200)).has_value());
     const std::vector<float> out = render(mixer, 512);
     EXPECT_NEAR(out[(200 - 1) * 2], 0.5F, 1e-3F);
     EXPECT_NEAR(out[(200 + kSettled) * 2], 0.25F, 1e-3F);
@@ -286,9 +291,11 @@ TEST(MixerTest, CommandsAreDoneByWhenTheyAreDueThenInTheOrderSent) {
     const Sound quarter = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.25F; });
     const Sound eighth = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.125F; });
     // Sent last but due first; then two due at the same frame, the later sent of which is heard.
-    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &half}, delayOf(300)).has_value());
-    ASSERT_TRUE(mixer.send(PlayVoice{.voice = 0, .sound = &quarter}, delayOf(300)).has_value());
-    send(mixer, PlayVoice{.voice = 0, .sound = &eighth});
+    ASSERT_TRUE(
+        mixer.send(PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &half}, delayOf(300)).has_value());
+    ASSERT_TRUE(
+        mixer.send(PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &quarter}, delayOf(300)).has_value());
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &eighth});
     const std::vector<float> out = render(mixer, 512);
     EXPECT_NEAR(out[kSettled * 2], 0.125F, 1e-3F);
     EXPECT_NEAR(out[(300 + kSettled) * 2], 0.25F, 1e-3F);
@@ -310,14 +317,14 @@ TEST(MixerTest, CommandsWaitingForTheirTimeCountAgainstTheQueue) {
 TEST(MixerTest, CommandsOfAVoiceItDoesNotHaveDoNothing) {
     Mixer mixer{MixerDesc{.rate = SampleRate{kMixRate}, .voices = 2}};
     const Sound level = soundOf(kMixRate, kMixRate, [](std::size_t) { return 0.5F; });
-    send(mixer, PlayVoice{.voice = 2, .sound = &level});
-    send(mixer, StopVoice{.voice = 7});
-    send(mixer, SetVoiceGains{.voice = 9});
-    send(mixer, PlayVoice{.voice = 0, .sound = &level, .pitch = 0.0F});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{2}, .sound = &level});
+    send(mixer, StopVoice{.voice = nx::audio::VoiceId{7}});
+    send(mixer, SetVoiceGains{.voice = nx::audio::VoiceId{9}});
+    send(mixer, PlayVoice{.voice = nx::audio::VoiceId{0}, .sound = &level, .pitch = 0.0F});
     const std::vector<float> out = render(mixer, 64);
     EXPECT_EQ(mixer.voices(), 2U);
-    EXPECT_FALSE(mixer.isPlaying(0));
-    EXPECT_FALSE(mixer.isPlaying(2));
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{0}));
+    EXPECT_FALSE(mixer.isPlaying(nx::audio::VoiceId{2}));
     EXPECT_TRUE(std::ranges::all_of(out, [](float sample) { return sample == 0.0F; }));
 }
 
