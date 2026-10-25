@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// What the client sets up as the game would: the sky's light and the sprite entities of a map, the BSP seed
-// of the fuzz corpus given other entities, and how those sprites animate.
+// What the client sets up as the game would: the light styles, the sky's light and the sprite entities of
+// a map, the BSP seed of the fuzz corpus given other entities, and how those sprites animate.
 
 #include <gtest/gtest.h>
 
@@ -63,6 +63,69 @@ void expectNear(nx::Vec3 actual, nx::Vec3 expected, std::string_view what = {}) 
     EXPECT_NEAR(actual.x, expected.x, kTolerance) << what;
     EXPECT_NEAR(actual.y, expected.y, kTolerance) << what;
     EXPECT_NEAR(actual.z, expected.z, kTolerance) << what;
+}
+
+/// The light styles of the repository's data/cstrike/lightStyles.toml.
+[[nodiscard]] auto gameLightStyles() -> cs::WorldLightStyles {
+    const std::filesystem::path file =
+        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "lightStyles.toml";
+    auto text = nx::platform::readTextFile(file);
+    EXPECT_TRUE(text.has_value());
+    auto styles = cs::readWorldLightStyles(text.value_or(std::string{}), "lightStyles.toml");
+    EXPECT_TRUE(styles.has_value()) << (styles ? "" : nx::describe(styles.error()));
+    return std::move(styles).value_or(cs::WorldLightStyles{});
+}
+
+TEST(LightStyleTest, TheGameSetsTheWorldsPatternsAsAMapStarts) {
+    const MapOf map{R"({ "classname" "worldspawn" })"};
+    const nx::render::LightStyles styles = cs::mapLightStyles(map.get(), gameLightStyles());
+    const nx::render::LightStyleValues start = styles.valuesAt(nx::Seconds{});
+    const nx::render::LightStyleValues later = styles.valuesAt(nx::Seconds{0.15F});
+    EXPECT_EQ(start[0], 264) << "normal: m";
+    EXPECT_EQ(start[4], 264) << "the fast strobe starts at m...";
+    EXPECT_EQ(later[4], 0) << "...then a";
+    EXPECT_EQ(start[9], 0) << "the slow strobe starts dark";
+    EXPECT_EQ(start[12], 256) << "the underwater mutation stays unset";
+    EXPECT_EQ(start[63], 0) << "testing: a";
+}
+
+TEST(LightStyleTest, AStyleIsGivenOnceInLettersFromAToZ) {
+    const auto errorOf = [](std::string_view text) {
+        const auto read = cs::readWorldLightStyles(text, "test");
+        return read ? std::nullopt : std::optional{read.error().code};
+    };
+    EXPECT_EQ(errorOf(R"([[styles]]
+style = 1
+pattern = "mM")"),
+              cs::LightStyleError::BadPattern);
+    EXPECT_EQ(errorOf(R"([[styles]]
+style = 1
+pattern = "")"),
+              cs::LightStyleError::BadPattern);
+    EXPECT_EQ(errorOf(R"([[styles]]
+style = 1
+pattern = "m"
+[[styles]]
+style = 1
+pattern = "a")"),
+              cs::LightStyleError::StyleTwice);
+    EXPECT_EQ(errorOf(R"([[styles]]
+style = 64
+pattern = "m")"),
+              cs::LightStyleError::DataInvalid)
+        << "the game sets 64 styles";
+}
+
+TEST(LightStyleTest, ASwitchableLightStartsAsItsEntitySays) {
+    const MapOf map{R"({ "classname" "worldspawn" }
+{ "classname" "light" "targetname" "lamp" "style" "32" "spawnflags" "1" }
+{ "classname" "light" "targetname" "sign" "style" "33" "pattern" "z" }
+{ "classname" "light" "style" "34" "pattern" "z" })"};
+    const nx::render::LightStyleValues values =
+        cs::mapLightStyles(map.get(), gameLightStyles()).valuesAt(nx::Seconds{});
+    EXPECT_EQ(values[32], 0) << "flagged to start off: a";
+    EXPECT_EQ(values[33], 550) << "its pattern: z";
+    EXPECT_EQ(values[34], 256) << "a light without a name cannot be switched: no pattern of its own";
 }
 
 TEST(SkyLightTest, LightEnvironmentsLightIsMadeTheEnginesAndAimsByItsPitch) {

@@ -242,8 +242,9 @@ without lightmaps is fully bright, as the original draws a face without samples.
 brightness comes with each draw (`nx.render:lightStyle`): 22 for each letter of a style's pattern
 after `a` (264 at `m`, the normal one), ten letters a second, 256 for a style the game left unset,
 and 264 for the styles above the 64 the game sets. The client (`cs.client`) sets the world's patterns (flicker,
-candles, strobes, pulses...) as Quake's world.qc sets them, under the names the Half-Life FGDs give
-the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
+candles, strobes, pulses...) from `data/cstrike/lightStyles.toml` (`cs::WorldLightStyles`, each style
+once, in letters from `a` to `z`), as Quake's world.qc sets them, under the names the Half-Life FGDs
+give the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
 their entities, `a` for those that start off, else `m` or their `pattern`.
 
 The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
