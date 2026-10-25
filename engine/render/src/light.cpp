@@ -36,78 +36,16 @@ constexpr float kGradientScale = 768.0F;
 constexpr float kMostAmbient = 128.0F;
 constexpr float kMostLight = 255.0F;
 
-/// The world's root: none in a map without models.
-[[nodiscard]] auto worldRoot(const assets::BspView& map) -> std::optional<assets::NodeChild> {
+/// The first thing `meets` finds along the segment from `start` to `end` in the world of `map`
+/// (assets::firstAlong); none in a map without models.
+template <class Found, class Meets>
+[[nodiscard]] auto firstAlongWorld(const assets::BspView& map, Vec3 start, Vec3 end, const Meets& meets)
+    -> std::optional<Found> {
     if (map.models().empty()) {
         return std::nullopt;
     }
-    return assets::NodeChild{map.models()[assets::kWorldModel.value].headNode};
-}
-
-/// Walks the segment from `start` to `end` down the tree of `map`'s world, the nearer side of each
-/// node first, as the original's R_RecursiveLightPoint and SurfaceAtPoint walk it, and gives `meets`
-/// each face of every node it crosses, with the point where it crosses the node's plane, until
-/// `meets` finds something: what the walk returns. The way ahead is kept on a stack of its own, not in
-/// recursion, however deep a file's tree.
-template <class Found, class Meets>
-[[nodiscard]] auto firstAlong(const assets::BspView& map, Vec3 start, Vec3 end, const Meets& meets)
-    -> std::optional<Found> {
-    /// A side of a node to walk from `start` to `end`.
-    struct Side {
-        assets::NodeChild child;
-        Vec3 start;
-        Vec3 end;
-    };
-    /// A node's faces, met where the segment crosses its plane.
-    struct Crossing {
-        assets::NodeIndex node;
-        Vec3 point;
-    };
-    const std::optional<assets::NodeChild> root = worldRoot(map);
-    if (!root) {
-        return std::nullopt;
-    }
-    std::vector<std::variant<Side, Crossing>> ahead{Side{.child = *root, .start = start, .end = end}};
-    while (!ahead.empty()) {
-        const std::variant<Side, Crossing> step = ahead.back();
-        ahead.pop_back();
-        if (const auto* crossing = std::get_if<Crossing>(&step)) {
-            const assets::BspNode& node = map.nodes()[crossing->node.value];
-            for (std::uint32_t offset = 0; offset < node.faceCount; ++offset) {
-                if (std::optional<Found> found =
-                        meets(assets::FaceIndex{node.firstFace.value + offset}, crossing->point)) {
-                    return found;
-                }
-            }
-            continue;
-        }
-        const Side& side = std::get<Side>(step);
-        const auto* index = std::get_if<assets::NodeIndex>(&side.child);
-        if (index == nullptr) {
-            continue; // a leaf: nothing is met in it
-        }
-        const assets::BspNode& node = map.nodes()[index->value];
-        const Plane& plane = map.planes()[node.plane.value].plane;
-        const float front = plane.signedDistance(side.start);
-        const float back = plane.signedDistance(side.end);
-        const std::size_t nearSide = front < 0.0F ? 1 : 0;
-        if ((back < 0.0F) == (nearSide == 1)) {
-            ahead.push_back(Side{.child = node.children[nearSide], .start = side.start, .end = side.end});
-            continue;
-        }
-        const Vec3 point = lerp(side.start, side.end, front / (front - back));
-        // Taken in reverse: the near side, then the node's faces, then the far side.
-        ahead.push_back(Side{.child = node.children[nearSide ^ 1], .start = point, .end = side.end});
-        ahead.push_back(Crossing{.node = *index, .point = point});
-        ahead.push_back(Side{.child = node.children[nearSide], .start = side.start, .end = point});
-    }
-    return std::nullopt;
-}
-
-/// The coordinate of `point` along a texture's axis `axis`, as the original computes it, in single
-/// precision.
-[[nodiscard]] auto coordinateOf(Vec3 point, Vec4 axis) noexcept -> float {
-    return dot(point, xyz(axis)) + axis.w;
+    return assets::firstAlong<Found>(map, assets::NodeChild{map.models()[assets::kWorldModel.value].headNode},
+                                     start, end, meets);
 }
 
 /// The brightness of `style` in `styles`: the normal one above the styles the game sets.
@@ -130,7 +68,7 @@ WorldLight::WorldLight(const assets::BspView& map) : m_map{&map} {
         const std::optional<assets::MipTexture>& texture = map.textures()[info.texture.value];
         FaceLight light{.s = info.s,
                         .t = info.t,
-                        .extent = surfaceExtentOf(map, face),
+                        .extent = assets::surfaceExtentOf(map, face),
                         .isSpecial = info.isSpecial,
                         .isSky = texture && surfaceKindOf(texture->name) == SurfaceKind::Sky};
         if (light.extent && face.lightmapOffset) {
@@ -151,9 +89,9 @@ auto WorldLight::lightAlong(Vec3 start, Vec3 end, const LightStyleValues& styles
         if (face.isSpecial || !face.extent) {
             return std::nullopt; // no lightmap: the light passes it
         }
-        const SurfaceExtent& extent = *face.extent;
-        const float s = coordinateOf(point, face.s);
-        const float t = coordinateOf(point, face.t);
+        const assets::SurfaceExtent& extent = *face.extent;
+        const float s = assets::engineTextureCoordinateOf(point, face.s);
+        const float t = assets::engineTextureCoordinateOf(point, face.t);
         const auto minS = static_cast<float>(extent.minS);
         const auto minT = static_cast<float>(extent.minT);
         if (s < minS || t < minT) {
@@ -161,7 +99,7 @@ auto WorldLight::lightAlong(Vec3 start, Vec3 end, const LightStyleValues& styles
         }
         const float ds = s - minS;
         const float dt = t - minT;
-        const auto luxelUnits = static_cast<float>(kLuxelUnits);
+        const auto luxelUnits = static_cast<float>(assets::kLuxelUnits);
         if (ds > static_cast<float>(extent.width - 1) * luxelUnits ||
             dt > static_cast<float>(extent.height - 1) * luxelUnits) {
             return std::nullopt;
@@ -188,26 +126,18 @@ auto WorldLight::lightAlong(Vec3 start, Vec3 end, const LightStyleValues& styles
         };
         return LightColor{.red = channelOf(0), .green = channelOf(1), .blue = channelOf(2)};
     };
-    return firstAlong<LightColor>(*m_map, start, end, meets).value_or(LightColor{});
+    return firstAlongWorld<LightColor>(*m_map, start, end, meets).value_or(LightColor{});
 }
 
 auto WorldLight::meetsSky(Vec3 start, Vec3 end) const -> bool {
     const auto meets = [this](assets::FaceIndex index, Vec3 point) -> std::optional<bool> {
         const FaceLight& face = m_faces[index.value];
-        if (!face.extent) {
-            return std::nullopt;
-        }
-        // The original truncates the coordinates to whole texels first.
-        const float ds = std::trunc(coordinateOf(point, face.s)) - static_cast<float>(face.extent->minS);
-        const float dt = std::trunc(coordinateOf(point, face.t)) - static_cast<float>(face.extent->minT);
-        const auto luxelUnits = static_cast<float>(kLuxelUnits);
-        if (ds < 0.0F || dt < 0.0F || ds > static_cast<float>(face.extent->width - 1) * luxelUnits ||
-            dt > static_cast<float>(face.extent->height - 1) * luxelUnits) {
+        if (!face.extent || !assets::isWithinExtent(point, face.s, face.t, *face.extent)) {
             return std::nullopt;
         }
         return face.isSky;
     };
-    return firstAlong<bool>(*m_map, start, end, meets).value_or(false);
+    return firstAlongWorld<bool>(*m_map, start, end, meets).value_or(false);
 }
 
 auto WorldLight::modelLightAt(const ModelLightQuery& query, const LightStyleValues& styles) const

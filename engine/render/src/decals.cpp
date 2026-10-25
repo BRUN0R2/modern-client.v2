@@ -262,10 +262,12 @@ auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
         const Vec3 t = withoutOffset(info.t);
         const float boxWidth = std::abs(unitsWide * dot(s, sAxis)) + std::abs(unitsHigh * dot(s, tAxis));
         const float boxHeight = std::abs(unitsWide * dot(t, sAxis)) + std::abs(unitsHigh * dot(t, tAxis));
-        const auto left = static_cast<float>(textureCoordinateOf(shot.center, info.s) - about.extent->minS) -
-                          (boxWidth / 2.0F);
-        const auto top = static_cast<float>(textureCoordinateOf(shot.center, info.t) - about.extent->minT) -
-                         (boxHeight / 2.0F);
+        const auto left =
+            static_cast<float>(assets::textureCoordinateOf(shot.center, info.s) - about.extent->minS) -
+            (boxWidth / 2.0F);
+        const auto top =
+            static_cast<float>(assets::textureCoordinateOf(shot.center, info.t) - about.extent->minT) -
+            (boxHeight / 2.0F);
         if (left <= -boxWidth || top <= -boxHeight ||
             left > static_cast<float>(about.extent->spanS) + boxWidth ||
             top > static_cast<float>(about.extent->spanT) + boxHeight) {
@@ -280,7 +282,7 @@ auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
     const float downScale = shot.scale / height;
     std::vector<CutCorner> outline;
     for (std::uint32_t edge = 0; edge < bspFace.edgeCount; ++edge) {
-        const Vec3 corner = cornerOf(*m_map, bspFace, edge);
+        const Vec3 corner = assets::cornerOf(*m_map, bspFace, edge);
         outline.push_back(CutCorner{.position = corner,
                                     .u = (acrossScale * dot(corner - shot.center, sAxis)) + kMiddle,
                                     .v = (downScale * dot(corner - shot.center, tAxis)) + kMiddle});
@@ -295,10 +297,12 @@ auto DecalPool::stamp(assets::FaceIndex face, const Walk& walked) -> bool {
         if (about.extent && about.lightmapCorner) {
             // As the face's own vertices are lit: luxel centers 16 texels apart from texturemins.
             vertex.lightmapX = static_cast<float>(
-                ((textureCoordinateOf(corner.position, info.s) - about.extent->minS) / kLuxelUnits) +
+                ((assets::textureCoordinateOf(corner.position, info.s) - about.extent->minS) /
+                 assets::kLuxelUnits) +
                 kLuxelCenter + (*about.lightmapCorner)[0]);
             vertex.lightmapY = static_cast<float>(
-                ((textureCoordinateOf(corner.position, info.t) - about.extent->minT) / kLuxelUnits) +
+                ((assets::textureCoordinateOf(corner.position, info.t) - about.extent->minT) /
+                 assets::kLuxelUnits) +
                 kLuxelCenter + (*about.lightmapCorner)[1]);
             vertex.styles = about.styles;
         }
