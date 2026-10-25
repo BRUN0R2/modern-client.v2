@@ -414,6 +414,17 @@ auto userDirectory() -> Result<std::filesystem::path, FileError> {
     return std::filesystem::path{folder} / kUserFolder;
 }
 
+auto cacheDirectory() -> Result<std::filesystem::path, FileError> {
+    PWSTR folder = nullptr;
+    const HRESULT found = SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT, nullptr, &folder);
+    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> owned{folder, &CoTaskMemFree};
+    if (FAILED(found)) {
+        return fail(FileError::NotFound, std::format("the user's local application data (error {:#x})",
+                                                     static_cast<std::uint32_t>(found)));
+    }
+    return std::filesystem::path{folder} / kUserFolder;
+}
+
 auto fontFolders() -> std::vector<std::filesystem::path> {
     const auto known = [](REFKNOWNFOLDERID id) -> std::optional<std::filesystem::path> {
         PWSTR folder = nullptr;
@@ -463,6 +474,18 @@ auto userDirectory() -> Result<std::filesystem::path, FileError> {
         return fail(FileError::NotFound, "the user's folders: neither XDG_CONFIG_HOME nor HOME is set");
     }
     return fromUtf8(home) / ".config" / kUserFolder;
+}
+
+auto cacheDirectory() -> Result<std::filesystem::path, FileError> {
+    // XDG Base Directory: a relative $XDG_CACHE_HOME is invalid and ignored.
+    if (const char* cache = std::getenv("XDG_CACHE_HOME"); cache != nullptr && *cache == '/') {
+        return fromUtf8(cache) / kUserFolder;
+    }
+    const char* home = std::getenv("HOME");
+    if (home == nullptr || *home == '\0') {
+        return fail(FileError::NotFound, "the user's cache: neither XDG_CACHE_HOME nor HOME is set");
+    }
+    return fromUtf8(home) / ".cache" / kUserFolder;
 }
 
 auto fontFolders() -> std::vector<std::filesystem::path> {

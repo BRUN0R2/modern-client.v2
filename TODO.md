@@ -260,7 +260,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] *Device lost*: recreate the device and its resources once, then a crash report
 - [ ] Parallel recording (one command pool per worker per frame)
 - [ ] Persistent staging ring
-- [ ] On-disk pipeline cache
+- [x] On-disk pipeline cache (`Device::pipelineCache`, `vulkan::DeviceDesc::pipelineCache`, `nx::platform::cacheDirectory`; [05 §4](docs/05-rendering.md#4-vulkan-backend))
 - [x] Slang shaders compiled to SPIR-V in the build (`nxAddShaders`, `bin/shaders/`)
 - [ ] Slang layout reflection checked against the C++ bind group layouts, and shader hot reload
 - [ ] Built-in fallback shaders with `#embed`

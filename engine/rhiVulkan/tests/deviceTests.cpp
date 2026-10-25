@@ -80,6 +80,33 @@ TEST(VulkanDeviceTest, TwoDevicesWorkAtOnce) {
     }
 }
 
+TEST(VulkanDeviceTest, APipelineCacheIsKeptForTheSameGpuAndAnotherOneLeftOut) {
+    const auto device = openTestDevice();
+    if (!device) {
+        GTEST_SKIP() << kNoVulkan;
+    }
+    const auto learned = device->pipelineCache();
+    ASSERT_TRUE(learned.has_value()) << nx::describe(learned.error());
+    constexpr std::size_t kHeaderBytes = 32; // VkPipelineCacheHeaderVersionOne
+    ASSERT_GE(learned->size(), kHeaderBytes);
+    // Another GPU's, by its vendor, and bytes of no cache at all, are left out: the device still opens.
+    std::vector<std::byte> foreign = *learned;
+    constexpr std::size_t kVendorOffset = 8;
+    foreign[kVendorOffset] ^= std::byte{0xFF};
+    const std::vector<std::byte> noise(7, std::byte{0x5A});
+    for (const std::span<const std::byte> given :
+         {std::span<const std::byte>{*learned}, std::span<const std::byte>{foreign},
+          std::span<const std::byte>{noise}}) {
+        auto again = nx::rhi::vulkan::createDevice(
+            {.applicationName = "nxRhiVulkanTests", .isValidationEnabled = true, .pipelineCache = given});
+        ASSERT_TRUE(again.has_value()) << nx::describe(again.error());
+        const auto kept = (*again)->pipelineCache();
+        ASSERT_TRUE(kept.has_value());
+        EXPECT_GE(kept->size(), kHeaderBytes);
+        EXPECT_EQ((*again)->validationErrors(), 0U);
+    }
+}
+
 TEST(VulkanDeviceTest, ADestroyedResourceLivesUntilItsFramesAreDone) {
     const auto device = openTestDevice();
     if (!device) {
