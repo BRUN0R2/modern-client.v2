@@ -589,6 +589,19 @@ TEST(MovementTest, TheServerLeavesAStuckPlayerASmallNudgeWouldFree) {
     EXPECT_LT(stuck.stuckNudge, 3U) << "the nudges start again once one frees it";
 }
 
+TEST(MovementTest, APlayerStandingOnABoxStandsOnABox) {
+    // A hostage's box under a standing player: it stands on it, which has no model (no texture).
+    const BrushHulls nothing = emptyWorld();
+    const std::array box{cs::SolidBox{.box = {.min = {.x = -10.0F, .y = -10.0F, .z = -100.0F},
+                                              .max = {.x = 10.0F, .y = 10.0F, .z = 0.0F}}}};
+    const MovementState above{.origin = {.z = 36.0F + kOnTheFloor}, .maxSpeed = kKnifeSpeed};
+    const cs::MovementResult result =
+        cs::simulateMovement(above, command(), MovementSettings{}, nothing, {}, box);
+    EXPECT_TRUE(result.state.isOnGround);
+    EXPECT_EQ(result.state.ground, cs::MovementSolid{cs::BoxSolid{}});
+    EXPECT_FALSE(cs::bodyOf(result.state).groundModel.has_value()) << "no pusher carries it";
+}
+
 TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
     // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
     const BrushHulls hulls = modelsOf(
@@ -603,14 +616,14 @@ TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
 
     const cs::MovementResult result = cs::simulateMovement(running, command(), {}, hulls, entities);
     EXPECT_TRUE(result.state.isOnGround);
-    EXPECT_EQ(result.state.groundModel, std::optional{ModelIndex{2}});
+    EXPECT_EQ(result.state.ground, cs::MovementSolid{ModelIndex{2}});
     EXPECT_EQ(result.touchedModels, (std::vector{ModelIndex{2}, ModelIndex{1}}))
         << "the floor, then the wall, each once";
 
     const cs::MovementResult onTheWorld =
         cs::simulateMovement(standingOnTheFloor(), command(), {}, floorWorld());
     EXPECT_TRUE(onTheWorld.state.isOnGround);
-    EXPECT_FALSE(onTheWorld.state.groundModel.has_value());
+    EXPECT_EQ(onTheWorld.state.ground, cs::MovementSolid{cs::WorldSolid{}});
     EXPECT_TRUE(onTheWorld.touchedModels.empty());
 }
 
@@ -674,14 +687,13 @@ TEST(MovementTest, JumpLeavesALadder) {
 }
 
 TEST(MovementTest, APlayersBodyIsItsBoxAndWhatItStandsOn) {
-    const nx::game::Body standing =
-        cs::bodyOf(MovementState{.isOnGround = true, .groundModel = ModelIndex{3}});
+    const nx::game::Body standing = cs::bodyOf(MovementState{.isOnGround = true, .ground = ModelIndex{3}});
     EXPECT_EQ(standing.hull, nx::collision::Hull::Standing);
     EXPECT_EQ(standing.box.min, (Vec3{.x = -16.0F, .y = -16.0F, .z = -36.0F}));
     EXPECT_EQ(standing.box.max, (Vec3{.x = 16.0F, .y = 16.0F, .z = 36.0F}));
     EXPECT_EQ(standing.groundModel, std::optional{ModelIndex{3}});
 
-    const nx::game::Body ducked = cs::bodyOf(MovementState{.isDucked = true, .groundModel = ModelIndex{3}});
+    const nx::game::Body ducked = cs::bodyOf(MovementState{.isDucked = true, .ground = ModelIndex{3}});
     EXPECT_EQ(ducked.hull, nx::collision::Hull::Ducked);
     EXPECT_EQ(ducked.box.max.z, 18.0F);
     EXPECT_FALSE(ducked.groundModel.has_value()) << "in the air, it stands on nothing";
@@ -754,7 +766,7 @@ TEST(FootstepTest, ARunnersFeetSoundInTurnEachThreeTenthsOfASecond) {
     EXPECT_EQ(first.share, 1.0F);
     EXPECT_FALSE(first.volume.has_value());
     ASSERT_TRUE(first.ground.has_value());
-    EXPECT_FALSE(first.ground->groundModel.has_value()) << "on the world";
+    EXPECT_EQ(first.ground->ground, cs::MovementSolid{cs::WorldSolid{}}) << "on the world";
 }
 
 TEST(FootstepTest, AWalkerOrADuckedPlayerIsQuieter) {

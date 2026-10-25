@@ -103,12 +103,28 @@ enum class StepPlace : std::uint8_t {
 /// How far under a player the texture it stands on is looked for (PM_CatagorizeTextureType).
 inline constexpr nx::HammerUnits kStepTextureDepth{64.0F};
 
+/// The world, as what a player's box meets.
+struct WorldSolid {
+    [[nodiscard]] constexpr auto operator==(const WorldSolid&) const noexcept -> bool = default;
+};
+
+/// A box (SolidBox), as what a player's box meets: it has no model, and so no texture.
+struct BoxSolid {
+    [[nodiscard]] constexpr auto operator==(const BoxSolid&) const noexcept -> bool = default;
+};
+
+/// What a player's box meets, as the original's physents are: the world, the brush model of an
+/// entity, or a box.
+using MovementSolid = std::variant<WorldSolid, nx::collision::ModelIndex, BoxSolid>;
+
+/// The brush model of `solid` when it is an entity's; none for the world and a box.
+[[nodiscard]] auto modelOf(const MovementSolid& solid) noexcept -> std::optional<nx::collision::ModelIndex>;
+
 /// Where a player stood on the ground as its feet sounded: the texture kStepTextureDepth under
-/// `origin`, on brush model `groundModel` of the entity it stood on (the world's without one), is
-/// what it stood on.
+/// `origin`, in what it stood on (`ground`), is what it stood on: none on a box, which has no model.
 struct StepGround {
     nx::Vec3 origin{};
-    std::optional<nx::collision::ModelIndex> groundModel{};
+    MovementSolid ground{};
 };
 
 /// A step of a player's feet (PM_PlayStepSound): where, with which foot, and how loud.
@@ -164,8 +180,8 @@ struct MovementState {
     /// Its own speed limit, that of the weapon it holds; zero leaves the server's (sv_maxspeed).
     nx::UnitsPerSecond maxSpeed{};
     bool isOnGround = false;
-    /// The brush model of the entity it stands on; none on the world or in the air.
-    std::optional<nx::collision::ModelIndex> groundModel{};
+    /// What it stands on while on the ground; the world while in the air.
+    MovementSolid ground{};
     WaterLevel waterLevel = WaterLevel::Dry;
     nx::collision::Contents waterType = nx::collision::Contents::Empty; ///< What it is in, when wet.
     /// Left of the slowdown a jump costs: the next jump is lower and walking slower while it lasts.

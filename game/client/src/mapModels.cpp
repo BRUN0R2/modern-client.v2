@@ -182,10 +182,7 @@ auto MapModels::traceHostage(const Entity& hostage, nx::collision::Hull hull, nx
                              nx::Seconds sinceStart) const -> std::optional<nx::collision::Trace> {
     const nx::Vec3 origin = hostage.model.origin;
     if (hull != nx::collision::Hull::Point) {
-        nx::collision::Trace hit = nx::collision::traceBox(nx::collision::grownByHull(kHostageBox, hull),
-                                                           start - origin, end - origin);
-        hit.end = hit.end + origin;
-        return hit;
+        return nx::collision::traceBox(nx::collision::grownByHull(kHostageBox, hull), origin, start, end);
     }
     const nx::assets::MdlView& view = *m_files[hostage.file]->files->view;
     if (view.hitboxes().empty()) {
