@@ -25,11 +25,6 @@ constexpr std::uint32_t kFrameUniformBinding = 0;
 constexpr std::uint32_t kImageBinding = 0;
 constexpr std::uint32_t kImageSamplerBinding = 1;
 
-/// The bytes of a palette color, red, green and blue; of a texel, red, green, blue and alpha.
-constexpr std::size_t kRgbBytes = 3;
-constexpr std::size_t kRgbaBytes = 4;
-/// A channel at its brightest, and an opaque alpha.
-constexpr std::byte kFull{255};
 /// The palette index an alpha-tested sprite draws as transparent, and the color an index-alpha one
 /// is drawn in: the last of its palette.
 constexpr std::size_t kLastIndex = 255;
@@ -215,11 +210,11 @@ auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& i
         return assets::decodeBc3(image.pixels, image.width, image.height).pixels;
     }
     std::vector<std::byte> texels;
-    texels.reserve(image.pixels.size() * kRgbaBytes);
+    texels.reserve(image.pixels.size() * assets::kRgbaBytes);
     for (const std::byte pixel : image.pixels) {
         const auto index = std::to_integer<std::size_t>(pixel);
         const auto channel = [&sprite](std::size_t entry, std::size_t which) {
-            return sprite.palette[(entry * kRgbBytes) + which];
+            return sprite.palette[(entry * assets::kRgbBytes) + which];
         };
         switch (sprite.rendering) {
         case assets::SpriteRendering::IndexAlpha:
@@ -228,19 +223,20 @@ auto spriteTexels(const assets::SpriteView& sprite, const assets::SpriteImage& i
             break;
         case assets::SpriteRendering::AlphaTest:
             if (index == kLastIndex) {
-                texels.insert(texels.end(), kRgbaBytes, std::byte{0});
+                texels.insert(texels.end(), assets::kRgbaBytes, std::byte{0});
             } else {
-                texels.insert(texels.end(), {channel(index, 0), channel(index, 1), channel(index, 2), kFull});
+                texels.insert(texels.end(), {channel(index, 0), channel(index, 1), channel(index, 2),
+                                             assets::kFullChannel});
             }
             break;
         case assets::SpriteRendering::Normal:
         case assets::SpriteRendering::Additive:
         case assets::SpriteRendering::Count:
-            for (std::size_t which = 0; which < kRgbBytes; ++which) {
+            for (std::size_t which = 0; which < assets::kRgbBytes; ++which) {
                 texels.push_back(
                     std::byte{textureGamma[std::to_integer<std::size_t>(channel(index, which))]});
             }
-            texels.push_back(kFull);
+            texels.push_back(assets::kFullChannel);
             break;
         }
     }

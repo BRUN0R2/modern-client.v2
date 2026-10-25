@@ -254,9 +254,7 @@ private:
     template <class State>
     static void applyOne(State& state, World& world, CommandStats& total) {
         if constexpr (std::same_as<State, Commands>) {
-            const CommandStats applied = state.apply(world);
-            total.applied += applied.applied;
-            total.skipped += applied.skipped;
+            total += state.apply(world);
         }
     }
 

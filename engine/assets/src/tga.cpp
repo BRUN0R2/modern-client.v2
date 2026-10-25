@@ -65,9 +65,6 @@ constexpr std::uint8_t kRunPacket = 0x80;
 constexpr std::uint8_t kPacketCount = 0x7F;
 constexpr std::uint64_t kMostPacketPixels = 128;
 
-constexpr std::size_t kRgbaBytes = 4;
-constexpr std::byte kOpaque{255};
-
 using Rgba = std::array<std::byte, kRgbaBytes>;
 
 /// How the pixels of an image are stored.
@@ -97,7 +94,7 @@ struct PixelFormat {
 /// The color of true color pixel `stored`: blue, green, red and, at its full depth, alpha.
 [[nodiscard]] auto trueColorOf(std::span<const std::byte> stored) noexcept -> Rgba {
     return Rgba{stored[kStoredRed], stored[kStoredGreen], stored[kStoredBlue],
-                stored.size() == bytesForBits(kRgbaDepth) ? stored[kStoredAlpha] : kOpaque};
+                stored.size() == bytesForBits(kRgbaDepth) ? stored[kStoredAlpha] : kFullChannel};
 }
 
 /// The colors of a color map: entries of 24 or 32 bits. Errors: Unsupported.
@@ -183,7 +180,7 @@ private:
             break;
         }
         const bool hasAlpha = m_format.bytesPerPixel == bytesForBits(kGrayAlphaDepth);
-        return Rgba{stored[0], stored[0], stored[0], hasAlpha ? stored[kStoredGrayAlpha] : kOpaque};
+        return Rgba{stored[0], stored[0], stored[0], hasAlpha ? stored[kStoredGrayAlpha] : kFullChannel};
     }
 
     PixelFormat m_format;

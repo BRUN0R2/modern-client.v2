@@ -261,9 +261,7 @@ auto Schedule::run(Phase phase, jobs::JobSystem& jobSystem) -> CommandStats {
     CommandStats total;
     for (Entry& entry : m_entries) {
         if (entry.phase == phase) {
-            const CommandStats applied = entry.system->applyCommands(*m_world);
-            total.applied += applied.applied;
-            total.skipped += applied.skipped;
+            total += entry.system->applyCommands(*m_world);
         }
     }
     return total;

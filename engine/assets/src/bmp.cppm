@@ -9,7 +9,7 @@ export module nx.assets:bmp;
 
 import std;
 import nx.core;
-import :tga;
+import :image;
 
 export namespace nx::assets {
 

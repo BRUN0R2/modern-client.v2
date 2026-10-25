@@ -14,8 +14,6 @@ namespace {
 
 /// The texels between two glyphs, and between a glyph and the atlas's edge.
 constexpr std::uint32_t kGap = 1;
-/// The bytes of an RGBA texel.
-constexpr std::size_t kTexelBytes = 4;
 /// The alpha of a texel: its last byte.
 constexpr std::size_t kAlphaByte = 3;
 
@@ -100,8 +98,9 @@ auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t
     atlas.m_height = y + rowHeight + kGap;
 
     // White texels everywhere, so that no edge darkens; each glyph's coverage its texels' alpha.
-    atlas.m_texels.assign(std::size_t{atlas.m_width} * atlas.m_height * kTexelBytes, std::byte{255});
-    for (std::size_t texel = kAlphaByte; texel < atlas.m_texels.size(); texel += kTexelBytes) {
+    atlas.m_texels.assign(std::size_t{atlas.m_width} * atlas.m_height * assets::kRgbaBytes,
+                          assets::kFullChannel);
+    for (std::size_t texel = kAlphaByte; texel < atlas.m_texels.size(); texel += assets::kRgbaBytes) {
         atlas.m_texels[texel] = std::byte{0};
     }
     atlas.m_glyphs.reserve(drawn.size());
@@ -111,7 +110,7 @@ auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t
         for (std::uint32_t row = 0; row < place.height; ++row) {
             for (std::uint32_t column = 0; column < place.width; ++column) {
                 const std::size_t texel = ((std::size_t{place.y} + row) * atlas.m_width) + place.x + column;
-                atlas.m_texels[(texel * kTexelBytes) + kAlphaByte] =
+                atlas.m_texels[(texel * assets::kRgbaBytes) + kAlphaByte] =
                     std::byte{glyph.coverage[(std::size_t{row} * place.width) + column]};
             }
         }

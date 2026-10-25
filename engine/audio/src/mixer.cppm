@@ -79,11 +79,16 @@ private:
     std::vector<float> m_table; ///< At 0, 1/kResolution, ... kZeroCrossings, and one more.
 };
 
+/// The rate a mixer mixes at unless told, the usual device's, and the voices it has until the voice
+/// pool's `s_max_voices` comes (docs/11-audio.md, section 4).
+inline constexpr SampleRate kDefaultMixRate{48'000};
+inline constexpr std::uint32_t kDefaultVoices = 64;
+
 /// What the mixer is made for: the rate it mixes at, the device's (platform::AudioDevice::rate), and
 /// how many voices it has.
 struct MixerDesc {
-    SampleRate rate{48'000};
-    std::uint32_t voices = 64;
+    SampleRate rate{kDefaultMixRate};
+    std::uint32_t voices = kDefaultVoices;
 };
 
 } // namespace nx::audio

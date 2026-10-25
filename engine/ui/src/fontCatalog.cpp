@@ -28,6 +28,16 @@ constexpr std::uint16_t kMaxTables = 256;
 constexpr std::size_t kFaceHeaderSize = 12;
 constexpr std::size_t kTableRecordSize = 16;
 constexpr std::size_t kCollectionHeaderSize = 12;
+/// Where the fields read are in the OpenType structures (the OpenType specification): in a face's
+/// header (sfntVersion, numTables), in a table record (tableTag, checksum, offset, length), in a
+/// collection's header (ttcTag, version, numFonts, then an offset to each face).
+constexpr std::size_t kTableCountAt = 4;
+constexpr std::size_t kTableOffsetAt = 8;
+constexpr std::size_t kTableLengthAt = 12;
+constexpr std::size_t kFaceCountAt = 8;
+/// A tag's bytes, and a collection's offset to a face's.
+constexpr std::size_t kTagBytes = sizeof(std::uint32_t);
+constexpr std::size_t kFaceOffsetBytes = sizeof(std::uint32_t);
 /// The most bytes of a name table read: names are short.
 constexpr std::size_t kMaxNameTableSize = std::size_t{1} << 20;
 
@@ -57,14 +67,14 @@ concept FontBytes = requires(const Read& read, std::uint64_t offset, std::size_t
     std::string text;
     for (std::size_t at = 0; at + 1 < bytes.size(); at += 2) {
         auto unit = static_cast<char32_t>(loadBigEndian<std::uint16_t>(bytes.subspan(at)));
-        if (unit >= 0xD800 && unit < 0xDC00 && at + 3 < bytes.size()) {
+        if (isHighSurrogate(unit) && at + 3 < bytes.size()) {
             const auto low = static_cast<char32_t>(loadBigEndian<std::uint16_t>(bytes.subspan(at + 2)));
-            if (low >= 0xDC00 && low < 0xE000) {
-                unit = static_cast<char32_t>(0x10000 + ((unit - 0xD800) << 10U) + (low - 0xDC00));
+            if (isLowSurrogate(low)) {
+                unit = characterOfSurrogates(unit, low);
                 at += 2;
             }
         }
-        appendUtf8(text, unit >= 0xD800 && unit < 0xE000 ? kReplacementCharacter : unit);
+        appendUtf8(text, isSurrogate(unit) ? kReplacementCharacter : unit);
     }
     return text;
 }
@@ -72,8 +82,17 @@ concept FontBytes = requires(const Read& read, std::uint64_t offset, std::size_t
 /// The families (name ID 1, English first) and the style (name ID 2, English when there is one) of a
 /// name table, from the records of the Windows and Unicode platforms.
 void readNames(std::span<const std::byte> table, FontFace& face) {
+    // The header (version, count, storageOffset), then the records (platformID, encodingID,
+    // languageID, nameID, length, stringOffset), of 16-bit fields; the names in UTF-16.
     constexpr std::size_t kHeaderSize = 6;
     constexpr std::size_t kRecordSize = 12;
+    constexpr std::size_t kCountAt = 2;
+    constexpr std::size_t kStorageAt = 4;
+    constexpr std::size_t kLanguageAt = 4;
+    constexpr std::size_t kNameIdAt = 6;
+    constexpr std::size_t kLengthAt = 8;
+    constexpr std::size_t kStringAt = 10;
+    constexpr std::size_t kUnitBytes = sizeof(std::uint16_t);
     constexpr std::uint16_t kUnicodePlatform = 0;
     constexpr std::uint16_t kWindowsPlatform = 3;
     constexpr std::uint16_t kEnglish = 0x0409;
@@ -82,21 +101,21 @@ void readNames(std::span<const std::byte> table, FontFace& face) {
     if (table.size() < kHeaderSize) {
         return;
     }
-    const std::size_t count = loadBigEndian<std::uint16_t>(table.subspan(2));
-    const std::size_t strings = loadBigEndian<std::uint16_t>(table.subspan(4));
+    const std::size_t count = loadBigEndian<std::uint16_t>(table.subspan(kCountAt));
+    const std::size_t strings = loadBigEndian<std::uint16_t>(table.subspan(kStorageAt));
     bool hasEnglishStyle = false;
     for (std::size_t index = 0; index < count && kHeaderSize + ((index + 1) * kRecordSize) <= table.size();
          ++index) {
         const std::span<const std::byte> record =
             table.subspan(kHeaderSize + (index * kRecordSize), kRecordSize);
         const auto platform = loadBigEndian<std::uint16_t>(record);
-        const auto language = loadBigEndian<std::uint16_t>(record.subspan(4));
-        const auto id = loadBigEndian<std::uint16_t>(record.subspan(6));
-        const std::size_t length = loadBigEndian<std::uint16_t>(record.subspan(8));
-        const std::size_t offset = strings + loadBigEndian<std::uint16_t>(record.subspan(10));
+        const auto language = loadBigEndian<std::uint16_t>(record.subspan(kLanguageAt));
+        const auto id = loadBigEndian<std::uint16_t>(record.subspan(kNameIdAt));
+        const std::size_t length = loadBigEndian<std::uint16_t>(record.subspan(kLengthAt));
+        const std::size_t offset = strings + loadBigEndian<std::uint16_t>(record.subspan(kStringAt));
         if ((platform != kWindowsPlatform && platform != kUnicodePlatform) ||
             (id != kFamilyName && id != kStyleName) || offset > table.size() ||
-            length > table.size() - offset || length > 2 * kMaxNameUnits) {
+            length > table.size() - offset || length > kUnitBytes * kMaxNameUnits) {
             continue;
         }
         std::string text = utf16Name(table.subspan(offset, length));
@@ -128,15 +147,17 @@ template <FontBytes Read>
     if (header.size() < kFaceHeaderSize) {
         return std::nullopt;
     }
-    const auto tableCount = std::min(loadBigEndian<std::uint16_t>(std::span{header}.subspan(4)), kMaxTables);
+    const auto tableCount =
+        std::min(loadBigEndian<std::uint16_t>(std::span{header}.subspan(kTableCountAt)), kMaxTables);
     const std::vector<std::byte> records =
         read(offset + kFaceHeaderSize, std::size_t{tableCount} * kTableRecordSize);
     const auto tableOf = [&](std::string_view letters, std::size_t limit) -> std::vector<std::byte> {
         for (std::size_t at = 0; at + kTableRecordSize <= records.size(); at += kTableRecordSize) {
             const std::span<const std::byte> record = std::span{records}.subspan(at, kTableRecordSize);
             if (loadBigEndian<std::uint32_t>(record) == tagOf(letters)) {
-                return read(loadBigEndian<std::uint32_t>(record.subspan(8)),
-                            std::min<std::size_t>(loadBigEndian<std::uint32_t>(record.subspan(12)), limit));
+                return read(loadBigEndian<std::uint32_t>(record.subspan(kTableOffsetAt)),
+                            std::min<std::size_t>(
+                                loadBigEndian<std::uint32_t>(record.subspan(kTableLengthAt)), limit));
             }
         }
         return {};
@@ -156,14 +177,15 @@ template <FontBytes Read>
     constexpr std::uint16_t kItalicStyle = 0x0002;
     constexpr std::uint16_t kBoldWeight = 700;
     constexpr std::uint16_t kHeaviest = 1000;
-    if (const std::vector<std::byte> windows = tableOf("OS/2", kSelectionOffset + 2);
-        windows.size() == kSelectionOffset + 2) {
+    constexpr std::size_t kWindowsBytes = kSelectionOffset + sizeof(std::uint16_t);
+    constexpr std::size_t kHeadBytes = kMacStyleOffset + sizeof(std::uint16_t);
+    if (const std::vector<std::byte> windows = tableOf("OS/2", kWindowsBytes);
+        windows.size() == kWindowsBytes) {
         face.weight = std::clamp(loadBigEndian<std::uint16_t>(std::span{windows}.subspan(kWeightOffset)),
                                  std::uint16_t{1}, kHeaviest);
         face.isItalic = (loadBigEndian<std::uint16_t>(std::span{windows}.subspan(kSelectionOffset)) &
                          kItalicSelection) != 0;
-    } else if (const std::vector<std::byte> head = tableOf("head", kMacStyleOffset + 2);
-               head.size() == kMacStyleOffset + 2) {
+    } else if (const std::vector<std::byte> head = tableOf("head", kHeadBytes); head.size() == kHeadBytes) {
         const auto style = loadBigEndian<std::uint16_t>(std::span{head}.subspan(kMacStyleOffset));
         face.weight = (style & kBoldStyle) != 0 ? kBoldWeight : std::uint16_t{kRegularWeight};
         face.isItalic = (style & kItalicStyle) != 0;
@@ -177,15 +199,18 @@ template <FontBytes Read>
 [[nodiscard]] auto readFaces(const Read& read, const std::filesystem::path& file) -> std::vector<FontFace> {
     std::vector<FontFace> faces;
     const std::vector<std::byte> header = read(0, kCollectionHeaderSize);
-    if (header.size() >= 4 && loadBigEndian<std::uint32_t>(header) == tagOf("ttcf")) {
+    if (header.size() >= kTagBytes && loadBigEndian<std::uint32_t>(header) == tagOf("ttcf")) {
         if (header.size() < kCollectionHeaderSize) {
             return faces;
         }
-        const auto count = std::min(loadBigEndian<std::uint32_t>(std::span{header}.subspan(8)), kMaxFaces);
-        const std::vector<std::byte> offsets = read(kCollectionHeaderSize, std::size_t{count} * 4);
-        for (std::uint32_t index = 0; (index + 1) * 4 <= offsets.size(); ++index) {
+        const auto count =
+            std::min(loadBigEndian<std::uint32_t>(std::span{header}.subspan(kFaceCountAt)), kMaxFaces);
+        const std::vector<std::byte> offsets =
+            read(kCollectionHeaderSize, std::size_t{count} * kFaceOffsetBytes);
+        for (std::uint32_t index = 0; (index + 1) * kFaceOffsetBytes <= offsets.size(); ++index) {
             if (auto face = readFace(
-                    read, loadBigEndian<std::uint32_t>(std::span{offsets}.subspan(index * 4)), file, index)) {
+                    read, loadBigEndian<std::uint32_t>(std::span{offsets}.subspan(index * kFaceOffsetBytes)),
+                    file, index)) {
                 faces.push_back(std::move(*face));
             }
         }

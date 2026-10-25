@@ -66,13 +66,17 @@ struct Fraction {
     std::uint64_t denominator = 1;
 };
 
+/// The factors of the small and the medium crosshair (docs/12 section 3.2): 0.625 and 0.8 of the large.
+constexpr Fraction kSmallFactor{.numerator = 5, .denominator = 8};
+constexpr Fraction kMediumFactor{.numerator = 4, .denominator = 5};
+
 /// The factor of `size`, which is not Auto.
 [[nodiscard]] auto factorOf(CrosshairSize size) noexcept -> Fraction {
     switch (size) {
     case CrosshairSize::Small:
-        return {.numerator = 5, .denominator = 8};
+        return kSmallFactor;
     case CrosshairSize::Medium:
-        return {.numerator = 4, .denominator = 5};
+        return kMediumFactor;
     default:
         return {};
     }

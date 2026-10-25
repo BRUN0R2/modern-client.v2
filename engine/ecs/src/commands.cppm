@@ -36,6 +36,13 @@ inline constexpr std::size_t kCommandPageBytes = kChunkBytes;
 struct CommandStats {
     std::size_t applied = 0;
     std::size_t skipped = 0;
+
+    /// Adds what another application did.
+    inline auto operator+=(const CommandStats& other) noexcept -> CommandStats& {
+        applied += other.applied;
+        skipped += other.skipped;
+        return *this;
+    }
 };
 
 /// Records spawn, destroy, add and remove for later. One buffer per system run; a buffer is used

@@ -24,7 +24,6 @@ constexpr std::uint32_t kColorIndexBits = 2;
 constexpr std::uint32_t kColorIndexMask = 0b11;
 constexpr std::uint32_t kBitsPerByte = 8;
 constexpr std::size_t kPixelsPerBlock = std::size_t{kBlockSide} * kBlockSide;
-constexpr std::size_t kRgbaBytes = 4;
 /// A block's palettes: its alphas, and its colors.
 constexpr std::size_t kAlphasPerBlock = 8;
 constexpr std::size_t kColorsPerBlock = 4;

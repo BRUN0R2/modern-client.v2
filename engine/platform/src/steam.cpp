@@ -16,27 +16,6 @@ namespace nx::platform {
 
 namespace {
 
-/// The folders of `candidates` that exist, each once: a link that leads to a folder already kept
-/// (`~/.steam/steam` usually leads to `~/.local/share/Steam`) is the same folder.
-[[nodiscard]] auto existingFolders(std::span<const std::filesystem::path> candidates)
-    -> std::vector<std::filesystem::path> {
-    std::vector<std::filesystem::path> folders;
-    for (const std::filesystem::path& candidate : candidates) {
-        std::error_code error;
-        if (!std::filesystem::is_directory(candidate, error)) {
-            continue;
-        }
-        const bool isKept = std::ranges::any_of(folders, [&candidate](const std::filesystem::path& folder) {
-            std::error_code ignored; // folders that cannot be compared are different folders
-            return std::filesystem::equivalent(folder, candidate, ignored);
-        });
-        if (!isKept) {
-            folders.push_back(candidate);
-        }
-    }
-    return folders;
-}
-
 #if defined(_WIN32)
 
 constexpr const wchar_t* kSteamKey = L"Software\\Valve\\Steam";

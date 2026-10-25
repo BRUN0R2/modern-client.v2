@@ -71,16 +71,19 @@ constexpr std::uint16_t kGaspDoGray = 0x0002;
     -> std::uint16_t {
     constexpr std::size_t kHeaderSize = 4; // version, numRanges
     constexpr std::size_t kRangeSize = 4;  // rangeMaxPPEM, rangeGaspBehavior
+    constexpr std::size_t kRangeCountAt = 2;
+    constexpr std::size_t kBehaviorAt = 2;
     if (table.size() < kHeaderSize) {
         return kGaspGridFit | kGaspDoGray;
     }
-    const std::size_t count = std::min<std::size_t>(loadBigEndian<std::uint16_t>(table.subspan(2)),
-                                                    (table.size() - kHeaderSize) / kRangeSize);
+    const std::size_t count =
+        std::min<std::size_t>(loadBigEndian<std::uint16_t>(table.subspan(kRangeCountAt)),
+                              (table.size() - kHeaderSize) / kRangeSize);
     for (std::size_t index = 0; index < count; ++index) {
         const std::span<const std::byte> range =
             table.subspan(kHeaderSize + (index * kRangeSize), kRangeSize);
         if (pixelsPerEm <= loadBigEndian<std::uint16_t>(range)) {
-            return loadBigEndian<std::uint16_t>(range.subspan(2));
+            return loadBigEndian<std::uint16_t>(range.subspan(kBehaviorAt));
         }
     }
     return kGaspGridFit | kGaspDoGray;
@@ -129,8 +132,14 @@ constexpr FT_Pos kSubpixels = 64;
 
 auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDeviceHeight> {
     // The header (version, numRecs, numRatios), the ratio records (bCharSet, xRatio, yStartRatio,
-    // yEndRatio), then an offset to the group of each.
+    // yEndRatio), then an offset to the group of each; a group's records are yPelHeight, yMax, yMin.
     constexpr std::size_t kHeaderSize = 6;
+    constexpr std::size_t kRatioCountAt = 4;
+    constexpr std::size_t kHorizontalRatioAt = 1;
+    constexpr std::size_t kFirstVerticalRatioAt = 2;
+    constexpr std::size_t kLastVerticalRatioAt = 3;
+    constexpr std::size_t kTopAt = 2;
+    constexpr std::size_t kBottomAt = 4;
     constexpr std::size_t kRatioSize = 4;
     constexpr std::size_t kOffsetSize = 2;
     constexpr std::size_t kGroupHeaderSize = 4;
@@ -141,7 +150,7 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
         return {};
     }
     const auto version = loadBigEndian<std::uint16_t>(header);
-    const auto ratioCount = loadBigEndian<std::uint16_t>(header.subspan(4));
+    const auto ratioCount = loadBigEndian<std::uint16_t>(header.subspan(kRatioCountAt));
     for (std::size_t ratio = 0; ratio < ratioCount; ++ratio) {
         const std::span<const std::byte> record =
             bytesAt(table, kHeaderSize + (ratio * kRatioSize), kRatioSize);
@@ -154,9 +163,9 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
         if (version == 0 && characters != kAnsiCharacters) {
             continue; // Windows ignores it
         }
-        if (!takesSquarePixels(loadBigEndian<std::uint8_t>(record.subspan(1)),
-                               loadBigEndian<std::uint8_t>(record.subspan(2)),
-                               loadBigEndian<std::uint8_t>(record.subspan(3)))) {
+        if (!takesSquarePixels(loadBigEndian<std::uint8_t>(record.subspan(kHorizontalRatioAt)),
+                               loadBigEndian<std::uint8_t>(record.subspan(kFirstVerticalRatioAt)),
+                               loadBigEndian<std::uint8_t>(record.subspan(kLastVerticalRatioAt)))) {
             continue;
         }
         const std::size_t groupOffset = loadBigEndian<std::uint16_t>(offset);
@@ -175,8 +184,8 @@ auto readDeviceHeights(std::span<const std::byte> table) -> std::vector<FontDevi
         for (std::size_t index = 0; index < count; ++index) {
             const std::span<const std::byte> entry = records.subspan(index * kRecordSize, kRecordSize);
             const FontDeviceHeight height{.pixelsPerEm = loadBigEndian<std::uint16_t>(entry),
-                                          .top = loadBigEndian<std::int16_t>(entry.subspan(2)),
-                                          .bottom = loadBigEndian<std::int16_t>(entry.subspan(4))};
+                                          .top = loadBigEndian<std::int16_t>(entry.subspan(kTopAt)),
+                                          .bottom = loadBigEndian<std::int16_t>(entry.subspan(kBottomAt))};
             if (isLineOfItsEm(height.top - height.bottom, height.pixelsPerEm)) {
                 heights.push_back(height); // else no height of the face
             }
@@ -330,8 +339,10 @@ auto Font::open(std::shared_ptr<const std::vector<std::byte>> file, const FontRe
     FontVerticalMetrics vertical{.unitsPerEm = face->face->units_per_EM,
                                  .ascent = face->face->ascender,
                                  .descent = -face->face->descender};
+    // FreeType's version of an OS/2 table a font lacks (an Apple font's).
+    constexpr FT_UShort kMissingTableVersion = 0xFFFF;
     const auto* windows = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(face->face, FT_SFNT_OS2));
-    if (windows != nullptr && windows->version != 0xFFFF &&
+    if (windows != nullptr && windows->version != kMissingTableVersion &&
         windows->usWinAscent + windows->usWinDescent > 0) {
         vertical.ascent = windows->usWinAscent;
         vertical.descent = windows->usWinDescent;
