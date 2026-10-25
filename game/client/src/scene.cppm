@@ -48,6 +48,7 @@ struct SceneView {
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
+    Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.

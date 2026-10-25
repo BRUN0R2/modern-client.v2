@@ -113,6 +113,7 @@ struct HudCvars {
     nx::console::Cvar<std::string> crosshairColor;
     nx::console::Cvar<std::string> crosshairSize;
     nx::console::Cvar<bool> crosshairTranslucent;
+    nx::console::Cvar<bool> rightHand; ///< `cl_righthand`: the weapons in the right hand, else the left.
 
     /// Registers them in `console`. Errors: those of Console::registerCvar.
     [[nodiscard]] static auto registerIn(nx::console::Console& console)
@@ -120,6 +121,8 @@ struct HudCvars {
 
     /// The crosshair they ask for.
     [[nodiscard]] auto crosshair() const -> CrosshairStyle;
+    /// The hand the player holds its weapons in.
+    [[nodiscard]] auto hand() const -> Hand;
 };
 
 /// Where the crosshair of a weapon `distance` from the middle is drawn in `crosshairSize` on a screen

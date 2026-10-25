@@ -364,7 +364,9 @@ given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
-`cl_crosshair_translucent` (1), archived, which each frame reads. `vid_vsync` as the name of
+`cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the
+left: the view models mirrored by it, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning)),
+archived, which each frame reads. `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.
 
 ### 5.3 The `nx.console` module
