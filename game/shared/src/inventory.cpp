@@ -49,7 +49,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 
 /// Where a shot from `shooter` goes, strayed by `spread` at random from the stream of `seed`, along
 /// the view the punch turns: each way the sum of two even draws (FireBullets3).
-[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, std::uint32_t seed) -> Shot {
+[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach, std::uint32_t seed)
+    -> Shot {
     const nx::AngleVectors axes =
         nx::angleVectors(nx::EulerAngles{.pitch = shooter.view.pitch + shooter.punch.pitch,
                                          .yaw = shooter.view.yaw + shooter.punch.yaw,
@@ -62,7 +63,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
     const auto up = static_cast<float>(halfUnit() + halfUnit());
     return Shot{.origin = shooter.eye,
                 .direction = axes.forward + (axes.right * (right * spread)) + (axes.up * (up * spread)),
-                .spread = spread};
+                .spread = spread,
+                .reach = reach};
 }
 
 /// One of `sequences`, at random.
@@ -327,6 +329,7 @@ void Inventory::draw(std::size_t index, const nx::game::TickTime& time, nx::Rand
     }
     owned.fewerShotsAt = time.now;
     owned.followUpsLeft = 0; // its alternate stays as it was
+    owned.slashes = 0;       // a knife drawn slashes from its first sequence again (CKnife::Deploy)
     const WeaponView& view = viewOf(weapon, owned);
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = anyOf(view.drawSequences, random), .start = time.now};
@@ -376,7 +379,7 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
 
     // The shot goes along the view the kick turned so far; then the kick.
-    const Shot shot = shotFrom(shooter, spread, seed);
+    const Shot shot = shotFrom(shooter, spread, firing.reach, seed);
     if (firing.recoil.kicks) {
         kickBack(kickOf(*firing.recoil.kicks, shooter), owned.shotsFired, owned.kicksLeft, shooter.punch,
                  random);
@@ -398,7 +401,7 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
     --owned.clip;
     --owned.followUpsLeft;
     makeSound(firing->sound, time);
-    return shotFrom(shooter, firing->followUps->spread, seed);
+    return shotFrom(shooter, firing->followUps->spread, firing->reach, seed);
 }
 
 void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time) {
@@ -416,6 +419,49 @@ void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const 
     }
 }
 
+namespace {
+
+/// Nearer than this, a corner's line is the nearest (FindHullIntersection's first distance).
+constexpr double kNoIntersection = 1.0e6;
+
+/// Where a hull's way that met the world or a brush entity at `hull` meets what it met, as the knife's
+/// FindHullIntersection approximates it: a line from `eye` to twice as far as the hull stopped, else
+/// of the lines to the corners of a ducked player's box about that end the one that meets something
+/// nearest (its distance in double precision, as the original's Length); else the hull's way.
+[[nodiscard]] auto hullIntersection(nx::Vec3 eye, const WeaponHit& hull, const WeaponTracer& tracer)
+    -> WeaponHit {
+    const nx::Vec3 hullEnd = eye + ((hull.trace.end - eye) * 2.0F);
+    if (WeaponHit line = tracer(nx::collision::Hull::Point, eye, hullEnd); line.trace.fraction < 1.0F) {
+        return line;
+    }
+    const nx::Aabb ducked = nx::collision::hullBoxOf(nx::collision::Hull::Ducked);
+    const std::array<nx::Vec3, 2> corners{ducked.min, ducked.max};
+    WeaponHit nearest = hull;
+    double distance = kNoIntersection;
+    for (const nx::Vec3& x : corners) {
+        for (const nx::Vec3& y : corners) {
+            for (const nx::Vec3& z : corners) {
+                const nx::Vec3 end{.x = hullEnd.x + x.x, .y = hullEnd.y + y.y, .z = hullEnd.z + z.z};
+                WeaponHit corner = tracer(nx::collision::Hull::Point, eye, end);
+                if (corner.trace.fraction >= 1.0F) {
+                    continue;
+                }
+                const nx::Vec3 along = corner.trace.end - eye;
+                const double length =
+                    std::sqrt((double{along.x} * double{along.x}) + (double{along.y} * double{along.y}) +
+                              (double{along.z} * double{along.z}));
+                if (length < distance) {
+                    nearest = std::move(corner);
+                    distance = length;
+                }
+            }
+        }
+    }
+    return nearest;
+}
+
+} // namespace
+
 void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint32_t& count,
                        const Shooter& shooter, const WeaponTracer& tracer, const nx::game::TickTime& time) {
     // A line straight ahead along the view, without its kick, then a ducked player's hull.
@@ -423,6 +469,9 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
     WeaponHit met = tracer(nx::collision::Hull::Point, shooter.eye, end);
     if (met.trace.fraction >= 1.0F) {
         met = tracer(nx::collision::Hull::Ducked, shooter.eye, end);
+        if (met.trace.fraction < 1.0F && met.isBrushModel) {
+            met = hullIntersection(shooter.eye, met, tracer);
+        }
     }
     const bool hits = met.trace.fraction < 1.0F;
     makeSound(!hits ? attack.missSound : met.isBody ? attack.bodySound : attack.hitSound, time);

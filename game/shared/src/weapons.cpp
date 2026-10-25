@@ -61,11 +61,11 @@ constexpr std::string_view kClassnamePrefix = "weapon_";
     return {};
 }
 
-/// What is wrong with `firing`, when anything is: no shoot sequence or cycle, not one accuracy, a
-/// paced accuracy whose minimum is above its maximum, or a sound soundProblem refuses.
+/// What is wrong with `firing`, when anything is: no shoot sequence, cycle or reach, not one
+/// accuracy, a paced accuracy whose minimum is above its maximum, or a sound soundProblem refuses.
 [[nodiscard]] auto firingProblem(const WeaponFiring& firing) -> std::optional<std::string_view> {
-    if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{}) {
-        return "fires without a shoot sequence or a cycle";
+    if (firing.shootSequences.empty() || firing.cycle <= nx::Seconds{} || firing.reach <= nx::HammerUnits{}) {
+        return "fires without a shoot sequence, a cycle or a reach";
     }
     if (firing.accuracy.burst.has_value() == firing.accuracy.paced.has_value()) {
         return "fires without one accuracy, by bursts or by pace";

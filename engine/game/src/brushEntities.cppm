@@ -50,6 +50,8 @@ struct BrushClass {
     std::optional<std::int32_t> contents{};
     /// What they do; nothing when absent: they stay as they are.
     std::optional<BrushBehavior> behavior{};
+    /// What kind of thing they are to the game's rules (Classify); none when absent.
+    std::optional<Classification> classification{};
 };
 
 /// data/cstrike/entities.toml: the classes of the entities of Counter-Strike's maps.
@@ -65,7 +67,8 @@ struct EntityClasses {
 /// `models`, that are of a class of `classes`, with their BrushModel, Transform and BrushSolidity,
 /// what their class does (a Door, its Pusher, its Waves and its Targets; a Button, its Pusher and its
 /// Targets; a Wall; a Trigger and its Targets), the textures they show (AlternateTextures, by their
-/// "frame"), and their name when they have one (Named); the others are left to what makes them.
+/// "frame"), what kind of thing their class is when it is one (Classified), and their name when they
+/// have one (Named); the others are left to what makes them.
 /// Returns how many it made. Errors: UnknownModel.
 [[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
                                       std::span<const assets::BspModel> models, const EntityClasses& classes)
@@ -86,6 +89,7 @@ struct nx::meta::Description<nx::game::BrushClass> {
             "contents", nx::data::Range{.minimum = std::to_underlying(nx::assets::Contents::Ladder),
                                         .maximum = std::to_underlying(nx::assets::Contents::Empty)}),
         nx::meta::field<&nx::game::BrushClass::behavior>("behavior"),
+        nx::meta::field<&nx::game::BrushClass::classification>("classification"),
     };
 };
 

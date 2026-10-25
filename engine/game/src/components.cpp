@@ -10,7 +10,8 @@ import nx.ecs;
 namespace nx::game {
 
 auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> {
-    const std::array registered{world.registerComponent<BrushModel>("nx::game::BrushModel"),
+    const std::array registered{world.registerComponent<Classified>("nx::game::Classified"),
+                                world.registerComponent<BrushModel>("nx::game::BrushModel"),
                                 world.registerComponent<Transform>("nx::game::Transform"),
                                 world.registerComponent<BrushSolidity>("nx::game::BrushSolidity"),
                                 world.registerComponent<Pusher>("nx::game::Pusher"),

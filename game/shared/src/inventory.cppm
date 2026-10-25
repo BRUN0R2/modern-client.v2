@@ -85,10 +85,12 @@ struct Shooter {
     bool canAttack = true;
 };
 
-/// What a weapon's attack met: its trace, and whether what stopped it is a body, which sounds as flesh:
-/// an entity of a class other than none and the machines' (Classify), a hostage today.
+/// What a weapon's attack met: its trace; whether what stopped it is the world or a brush entity
+/// (IsBSPModel); and whether it is a body, which sounds as flesh: an entity of a class other than
+/// none and the machines' (Classify), a hostage or a func_vehicle today.
 struct WeaponHit {
     nx::collision::Trace trace{};
+    bool isBrushModel = false;
     bool isBody = false;
 };
 
@@ -96,13 +98,16 @@ struct WeaponHit {
 /// (UTIL_TraceLine, UTIL_TraceHull), and what it met.
 using WeaponTracer = std::function<WeaponHit(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end)>;
 
-/// A shot fired: from where, the way it goes, and how far its bullet may stray.
+/// A shot fired: from where, the way it goes, how far its bullet may stray, and how far it goes.
 struct Shot {
     nx::Vec3 origin{};
     /// Forward, strayed by at most twice `spread` to the right and up, at random: not of length 1,
     /// as the original's (FireBullets3).
     nx::Vec3 direction{};
     float spread{};
+    /// Its weapon's (WeaponFiring::reach), along `direction`: its end is `origin` plus `direction` times
+    /// it, as the original's is.
+    nx::HammerUnits reach{};
 };
 
 /// The weapons a player has, the rounds it carries besides their clips, and the one it holds.

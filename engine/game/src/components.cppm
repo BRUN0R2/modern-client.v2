@@ -21,6 +21,19 @@ enum class Solid : std::uint8_t {
     Count,
 };
 
+/// What kind of thing an entity is to the game's rules, as the original's Classify answers: what a
+/// knife's strike sounds on, for one (not none, nor a machine, which come with their entities).
+enum class Classification : std::uint8_t {
+    None,    ///< CLASS_NONE: the world, a door, a wall.
+    Vehicle, ///< CLASS_VEHICLE: a func_vehicle.
+    Count,
+};
+
+/// An entity's Classification, when it is not None.
+struct Classified {
+    Classification classification = Classification::None;
+};
+
 /// A brush entity's shape: brush model `index` of the map ("model" "*3").
 struct BrushModel {
     assets::ModelIndex index{};

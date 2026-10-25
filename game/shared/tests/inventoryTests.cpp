@@ -118,6 +118,7 @@ constexpr float kTolerance = 1e-5F;
     glock.firing =
         cs::WeaponFiring{.cycle = nx::Seconds{0.15F},
                          .isAutomatic = false,
+                         .reach = nx::HammerUnits{8192.0F},
                          .idleAfterShot = nx::Seconds{2.5F},
                          .shootSequences = {3, 4, 5},
                          .lastShotSequence = 6,
@@ -150,6 +151,7 @@ constexpr float kTolerance = 1e-5F;
     ak.firing = cs::WeaponFiring{
         .cycle = nx::Seconds{0.0955F},
         .isAutomatic = true,
+        .reach = nx::HammerUnits{8192.0F},
         .idleAfterShot = nx::Seconds{1.9F},
         .shootSequences = {3, 4, 5},
         .accuracy = {.initial = 0.2F,
@@ -173,6 +175,7 @@ constexpr float kTolerance = 1e-5F;
     usp.firing = cs::WeaponFiring{
         .cycle = nx::Seconds{0.15F},
         .isAutomatic = false,
+        .reach = nx::HammerUnits{4096.0F},
         .idleAfterShot = nx::Seconds{2.0F},
         .shootSequences = {9, 10, 11},
         .lastShotSequence = 12,
@@ -424,6 +427,18 @@ TEST(FiringTest, AnAutomaticGunFiresEachCycleWhileItsButtonIsDown) {
     ASSERT_TRUE(inventory.animation().has_value());
     EXPECT_GE(inventory.animation()->sequence, 3U);
     EXPECT_LE(inventory.animation()->sequence, 5U);
+}
+
+TEST(FiringTest, AShotGoesAsFarAsItsWeaponsRoundsGo) {
+    const WeaponCatalog weapons = catalog();
+    for (const auto& [gun, reach] : {std::pair{kGlock, 8192.0F}, std::pair{kUsp, 4096.0F}}) {
+        Inventory inventory = given(weapons, {gun});
+        Shooter shooter = standing();
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        const std::vector<Shot> shots = frames(inventory, shooter, kReady, kReady, {Button::Attack});
+        ASSERT_EQ(shots.size(), 1U);
+        EXPECT_EQ(shots.front().reach, nx::HammerUnits{reach}) << "the USP's go half as far";
+    }
 }
 
 TEST(FiringTest, AGunThatIsNotAutomaticFiresOnceAPress) {
@@ -737,6 +752,94 @@ TEST(MeleeTest, AnAttackMeetsALineAheadThenADuckedHull) {
 }
 
 using Files = std::vector<std::string>;
+
+/// The sounds the knife's slash makes, as soundsOf takes them, from a fresh inventory through `tracer`.
+[[nodiscard]] auto slashSounds(const WeaponCatalog& weapons, const cs::WeaponTracer& tracer) -> Files {
+    Inventory inventory = given(weapons, {kKnife});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = soundsOf(inventory);
+    std::ignore = inventory.frame(command(1, {Button::Attack}), shooter, tracer, at(kReady));
+    return soundsOf(inventory);
+}
+
+TEST(MeleeTest, AHullThatMeetsABrushModelFindsWhereItMeetsItAsTheNearestCornerLine) {
+    // The line misses; the ducked hull meets a wall halfway; the line to twice as far misses too; then
+    // the lines to the corners of a ducked box about that end.
+    const WeaponCatalog weapons = catalog();
+    std::vector<std::pair<nx::collision::Hull, nx::Vec3>> traced;
+    const cs::WeaponTracer tracer = [&traced](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
+        traced.emplace_back(hull, end);
+        if (hull == nx::collision::Hull::Ducked) {
+            return cs::WeaponHit{.trace = {.fraction = 0.5F, .end = start + ((end - start) * 0.5F)},
+                                 .isBrushModel = true};
+        }
+        if (traced.size() > 3) {
+            // The nearer corners meet a body at 0.4 of their way, 16 units off; the farther ones a
+            // wall at 0.25 of theirs, 17 units off: the nearest by distance is the body.
+            const bool isNear = end.x < 48.0F;
+            const float fraction = isNear ? 0.4F : 0.25F;
+            return cs::WeaponHit{.trace = {.fraction = fraction, .end = start + ((end - start) * fraction)},
+                                 .isBrushModel = !isNear,
+                                 .isBody = isNear};
+        }
+        return cs::WeaponHit{};
+    };
+    EXPECT_EQ(slashSounds(weapons, tracer), Files{"weapons/knife_hit1.wav"}) << "flesh, not the wall";
+    ASSERT_EQ(traced.size(), 11U) << "the line, the hull, the line to twice its stop, then 8 corners";
+    EXPECT_EQ(traced[1].first, nx::collision::Hull::Ducked);
+    // The eye at the origin, the view along +x: the hull stopped at 24, the line goes to 48.
+    EXPECT_EQ(traced[2].first, nx::collision::Hull::Point);
+    EXPECT_NEAR(traced[2].second.x, 48.0F, kTolerance);
+    EXPECT_NEAR(traced[3].second.x, 48.0F - 16.0F, kTolerance) << "a corner of the ducked box";
+    EXPECT_NEAR(traced[3].second.z, -18.0F, kTolerance);
+}
+
+TEST(MeleeTest, TheLineToTwiceTheHullsStopIsTakenWhenItMeetsSomething) {
+    const WeaponCatalog weapons = catalog();
+    std::size_t traces = 0;
+    const cs::WeaponTracer tracer = [&traces](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
+        ++traces;
+        if (hull == nx::collision::Hull::Ducked) {
+            return cs::WeaponHit{.trace = {.fraction = 0.5F, .end = start + ((end - start) * 0.5F)},
+                                 .isBrushModel = true};
+        }
+        return traces == 3 ? cs::WeaponHit{.trace = {.fraction = 0.9F}, .isBody = true} : cs::WeaponHit{};
+    };
+    EXPECT_EQ(slashSounds(weapons, tracer), Files{"weapons/knife_hit1.wav"});
+    EXPECT_EQ(traces, 3U) << "no corner line after it";
+}
+
+TEST(MeleeTest, AHullThatMeetsABodyIsTakenAsItIs) {
+    const WeaponCatalog weapons = catalog();
+    std::size_t traces = 0;
+    const cs::WeaponTracer tracer = [&traces](nx::collision::Hull hull, nx::Vec3, nx::Vec3) {
+        ++traces;
+        return hull == nx::collision::Hull::Ducked
+                   ? cs::WeaponHit{.trace = {.fraction = 0.5F}, .isBody = true}
+                   : cs::WeaponHit{};
+    };
+    EXPECT_EQ(slashSounds(weapons, tracer), Files{"weapons/knife_hit1.wav"});
+    EXPECT_EQ(traces, 2U) << "only what is a brush model is looked for where it meets it";
+}
+
+TEST(MeleeTest, DrawingTheKnifeAgainSlashesFromItsFirstSequence) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife, kGlock});
+    inventory.select(command(1, {}, kKnife), at(0));
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = inventory.frame(command(2, {Button::Attack}), shooter, missAll(), at(kReady));
+    ASSERT_TRUE(inventory.animation().has_value());
+    EXPECT_EQ(inventory.animation()->sequence, 6U) << "midslash1";
+    inventory.select(command(3, {}, kGlock), at(kReady + 100));
+    inventory.select(command(4, {}, kKnife), at(kReady + 200));
+    std::ignore = frames(inventory, shooter, kReady + 200, kReady + 200 + kReady);
+    std::ignore =
+        inventory.frame(command(5, {Button::Attack}), shooter, missAll(), at(kReady + 201 + kReady));
+    ASSERT_TRUE(inventory.animation().has_value());
+    EXPECT_EQ(inventory.animation()->sequence, 6U) << "midslash1 again, not midslash2 (CKnife::Deploy)";
+}
 
 TEST(SoundTest, EachSoundTakenCarriesTheTickItWasMadeAt) {
     // Many ticks before the sounds are taken, as a long frame of the client runs them: each shot keeps
