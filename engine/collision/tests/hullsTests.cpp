@@ -105,6 +105,29 @@ TEST(BoxTraceTest, ATraceFromInsideABoxStartsSolid) {
     EXPECT_TRUE(within.isAllSolid);
 }
 
+TEST(BoxTraceTest, TheServersTraceStopsAThirtySecondOfAUnitBeforeAFaceAndGoesOnFromInside) {
+    const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
+                       .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
+    const Trace across = nx::collision::traceBox(box, {.x = -30.0F}, {.x = 30.0F});
+    EXPECT_FLOAT_EQ(across.fraction, (20.0F - 0.03125F) / 60.0F);
+    EXPECT_NEAR(across.end.x, -10.03125F, kTolerance);
+    EXPECT_FALSE(across.startsSolid);
+
+    const Trace leaving = nx::collision::traceBox(box, {}, {.x = 30.0F});
+    EXPECT_TRUE(leaving.startsSolid);
+    EXPECT_FALSE(leaving.isAllSolid) << "it leaves the box";
+    EXPECT_EQ(leaving.fraction, 1.0F) << "the server's rules let it go on, where movement's stop it";
+}
+
+TEST(BoxTraceTest, ABoxGrowsByAHullsBox) {
+    const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = 0.0F},
+                       .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}};
+    EXPECT_EQ(nx::collision::grownByHull(box, Hull::Ducked),
+              (nx::Aabb{.min = {.x = -26.0F, .y = -26.0F, .z = -18.0F},
+                        .max = {.x = 26.0F, .y = 26.0F, .z = 80.0F}}));
+    EXPECT_EQ(nx::collision::grownByHull(box, Hull::Point), box);
+}
+
 TEST(BoxTraceTest, ABoxHoldsItsLeastButNotItsMost) {
     const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
                        .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
