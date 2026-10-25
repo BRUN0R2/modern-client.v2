@@ -135,7 +135,7 @@ is made of by the installation's `sound/materials.txt` (`cs::TextureMaterials`, 
 original reads it: 1024 textures, 16 characters, its own sort and search), and plays the step of
 that kind (`cs::StepVoice`, `data/cstrike/footsteps.toml`: each foot's sounds and volume, the rare
 `pl_tile5`, the silent first of each four wading steps; the splash), on the player's `Body` channel,
-while `mp_footsteps` is 1. The weapons' and the bullets' sounds of the materials come with what they
+while `mp_footsteps` is not 0. The weapons' and the bullets' sounds of the materials come with what they
 hit.
 
 ## 4. Voices and priorities

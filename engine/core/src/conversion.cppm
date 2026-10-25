@@ -106,6 +106,17 @@ template <Integer To, std::floating_point From>
     return static_cast<To>(rounded);
 }
 
+/// `value` cut toward zero to a 32-bit integer as the x86 processors the original ran on cut it with
+/// `int(value)` (the SSE and x87 conversions): one not finite, or past the type's range, gives the
+/// "integer indefinite", the type's least, where C++ leaves such a conversion undefined.
+[[nodiscard]] inline auto truncateAsX86(float value) noexcept -> std::int32_t {
+    constexpr float kBound = 2147483648.0F; // 2^31, exactly a float
+    if (!(value >= -kBound && value < kBound)) {
+        return std::numeric_limits<std::int32_t>::min();
+    }
+    return static_cast<std::int32_t>(value);
+}
+
 /// `a + b`, or nullopt when the exact result does not fit in `Type`.
 template <Integer Type>
 [[nodiscard]] constexpr auto checkedAdd(Type a, Type b) noexcept -> std::optional<Type> {

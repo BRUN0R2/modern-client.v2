@@ -66,6 +66,17 @@ struct EconomyRules {
 [[nodiscard]] auto readEconomyRules(std::string_view text, std::string_view sourceName)
     -> nx::Result<EconomyRules, EconomyError>;
 
+/// mp_startmoney as the game reads it, and what it sets it to where it holds it (CheckStartMoney).
+struct StartMoney {
+    nx::Money money{kStartMoney};
+    std::optional<float> setTo{}; ///< What mp_startmoney is set to where it was held.
+};
+
+/// mp_startmoney's `value` read as CheckStartMoney reads it, then the money given: cut to whole money
+/// as the original's processors cut it (nx::truncateAsX86), held to kStartMoney to kMostMoney, the
+/// cvar then set to the bound.
+[[nodiscard]] auto readStartMoney(float value) noexcept -> StartMoney;
+
 /// `money` with `amount` added, held from none to kMostMoney (AddAccount).
 [[nodiscard]] auto addMoney(nx::Money money, nx::Money amount) noexcept -> nx::Money;
 
