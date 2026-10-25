@@ -5,6 +5,7 @@ nxAddTest(csSharedTests
     SOURCES
         inventoryTests.cpp
         movementTests.cpp
+        roundsTests.cpp
         studioTests.cpp
         weaponsTests.cpp
         weaponTypesTests.cpp

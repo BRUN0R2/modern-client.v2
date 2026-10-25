@@ -19,7 +19,7 @@ namespace {
 constexpr nx::EnumArray<HudPicture, std::string_view> kPictureNames{
     nx::EnumArray<HudPicture, std::string_view>::Storage{
         "number_0", "number_1", "number_2", "number_3", "number_4", "number_5", "number_6", "number_7",
-        "number_8", "number_9", "cross", "suit_empty", "suit_full", "dollar"}};
+        "number_8", "number_9", "cross", "suit_empty", "suit_full", "dollar", "stopwatch"}};
 /// The screens the HUD's entries of hud.txt are for, the widths they start at.
 constexpr std::uint32_t kResolution = 640;
 
@@ -49,6 +49,18 @@ constexpr std::int32_t kAmmoAbove = 37;            ///< The digits' and the bar'
 constexpr std::int32_t kAmmoBarGap = 10;           ///< Between the bar and each number's room.
 constexpr std::int32_t kAmmoBarWidth = 2;
 constexpr std::size_t kAmmoRoom = 3;
+// The round's time (docs/12 section 3.2, measured at 640x480, 1024x768 and 1280x720).
+constexpr std::int32_t kTimerAbove = 37;       ///< The stopwatch's top and the digits'.
+constexpr std::size_t kMinutesRoom = 2;        ///< Its room ends in the middle.
+constexpr std::int32_t kSecondsFromMiddle = 6; ///< Where the seconds' digits start.
+constexpr std::int32_t kColonFromMiddle = 2;   ///< The colon's left.
+constexpr std::int32_t kColonTopAbove = 28;    ///< Its upper square's top, from the bottom.
+constexpr std::int32_t kColonBottomAbove = 22; ///< Its lower square's.
+constexpr float kColonSide = 2.0F;
+constexpr std::uint32_t kSecondsPerMinute = 60;
+/// The HUD's color, as the colon of the round's time is added in it.
+constexpr nx::render::ScreenColor kColonColor{
+    .red = kHudColor.red, .green = kHudColor.green, .blue = kHudColor.blue, .alpha = kTimerColonAlpha};
 
 // The crosshair (docs/12 section 3.2, measured at 640x480 to 1600x900): its lines' length before its
 // scale, the screen width its scale is 1 at, and the widths auto turns medium and large at.
@@ -225,6 +237,36 @@ auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d si
                                         .height = static_cast<float>(sheet[HudPicture::Number0].rect.height)};
     std::ignore = addNumber(layout.digits, ammo.clip, barX - kAmmoBarGap);
     std::ranges::move(reserve, std::back_inserter(layout.digits));
+    return layout;
+}
+
+auto layoutTimer(std::uint32_t seconds, const HudSheet& sheet, nx::rhi::Extent2d size) -> TimerLayout {
+    const std::int32_t middle = sizeOf(size.width) / 2;
+    const std::int32_t height = sizeOf(size.height);
+    const std::int32_t y = height - kTimerAbove;
+    const std::int32_t digitWidth = sizeOf(sheet[HudPicture::Number0].rect.width);
+    TimerLayout layout;
+    const auto addDigits = [&](std::string_view digits, std::int32_t x) {
+        for (const char digit : digits) {
+            layout.marks.push_back({.picture = digitPicture(digit), .x = x, .y = y});
+            x += digitWidth;
+        }
+    };
+    const std::string minutes = std::to_string(seconds / kSecondsPerMinute);
+    const std::int32_t roomStart =
+        middle - (nx::narrow<std::int32_t>(std::max(minutes.size(), kMinutesRoom)) * digitWidth);
+    layout.marks.push_back({.picture = HudPicture::Stopwatch,
+                            .x = roomStart - sizeOf(sheet[HudPicture::Stopwatch].rect.width),
+                            .y = y});
+    addDigits(minutes, middle - (nx::narrow<std::int32_t>(minutes.size()) * digitWidth));
+    addDigits(std::format("{:02}", seconds % kSecondsPerMinute), middle + kSecondsFromMiddle);
+    const auto square = [&](std::int32_t above) {
+        return nx::render::ScreenRect{.x = static_cast<float>(middle + kColonFromMiddle),
+                                      .y = static_cast<float>(height - above),
+                                      .width = kColonSide,
+                                      .height = kColonSide};
+    };
+    layout.colon = {square(kColonTopAbove), square(kColonBottomAbove)};
     return layout;
 }
 
@@ -405,6 +447,14 @@ void Hud::append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view
                                                kHudColor, nx::render::ScreenBlend::Additive));
     };
     std::ranges::for_each(layoutHud(view, m_sheet, size), addMark);
+    if (view.roundTime) {
+        const TimerLayout timer = layoutTimer(*view.roundTime, m_sheet, size);
+        std::ranges::for_each(timer.marks, addMark);
+        for (const nx::render::ScreenRect& square : timer.colon) {
+            quads.push_back(nx::render::ScreenQuad{
+                .target = square, .color = kColonColor, .blend = nx::render::ScreenBlend::Additive});
+        }
+    }
     if (view.ammo) {
         const AmmoLayout ammo = layoutAmmo(*view.ammo, m_sheet, size);
         std::ranges::for_each(ammo.digits, addMark);

@@ -19,6 +19,8 @@ export namespace cs {
 inline constexpr nx::HitPoints kSpawnHealth{100.0F};
 /// The money a player starts with: mp_startmoney's default.
 inline constexpr nx::Money kStartMoney{800};
+/// The most money a player has (AddAccount's ceiling).
+inline constexpr nx::Money kMostMoney{16000};
 
 /// The teams a player plays in.
 enum class Team : std::uint8_t {

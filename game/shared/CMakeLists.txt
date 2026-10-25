@@ -15,6 +15,7 @@ nxAddModuleLibrary(csShared
         src/weapons.cppm
         src/loadouts.cppm
         src/inventory.cppm
+        src/rounds.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -22,6 +23,7 @@ nxAddModuleLibrary(csShared
         src/weapons.cpp
         src/loadouts.cpp
         src/inventory.cpp
+        src/rounds.cpp
     DEPENDS
         nx::core
         nx::math

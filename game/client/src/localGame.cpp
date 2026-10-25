@@ -25,6 +25,12 @@ constexpr nx::Seconds kMaxCatchUp{0.25F};
 constexpr std::string_view kSpawnStream = "spawn";
 /// How far a bullet goes: FireBullets3's distance for every gun the game has.
 constexpr nx::HammerUnits kBulletReach{8192.0F};
+/// How far above its spawn point a player spawns (GetPlayerSpawnSpot).
+constexpr nx::HammerUnits kSpawnLift{1.0F};
+/// How often the rules look at the restart the cvars ask for (Think's periodic part).
+constexpr nx::Seconds kPeriodicThinkInterval{1.0F};
+/// What the game's rules log, as the original's server logs the rounds.
+constexpr nx::log::Category kLog{"game"};
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -32,38 +38,43 @@ constexpr nx::HammerUnits kBulletReach{8192.0F};
 
 } // namespace
 
-LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Level& level, nx::Vec3 eye)
-    : m_level{&level}, m_player{.origin = eye - nx::Vec3{.z = kStandingViewHeight.value()}},
-      m_inventory{content.weapons}, m_previousEye{eye} {}
+LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Level& level, Team team,
+                     AutoSwitch autoSwitch, GameCvars cvars)
+    : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
+      // The first round starts with the map, the first moment of the game's clock.
+      m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
+      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
 
-auto LocalGame::start(const GameContent& content, const Level& level, Team team, nx::Vec3 eye,
-                      AutoSwitch autoSwitch) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
-    auto game = std::make_unique<LocalGame>(CreateToken{}, content, level, eye);
+auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
+                      GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
+    auto game =
+        std::make_unique<LocalGame>(CreateToken{}, content, level, team, autoSwitch, std::move(cvars));
     if (auto spawned = spawnGame(level.map(), level.entityClasses(), game->m_world); !spawned) {
         return std::unexpected{std::move(spawned.error())};
     }
-    game->m_body =
-        game->m_world.spawn(nx::game::Transform{.origin = game->m_player.origin}, bodyOf(game->m_player));
-    if (const Loadout* const loadout = content.loadouts.find(team)) {
-        const nx::game::TickTime& time = nx::game::tickTimeOf(game->m_world);
-        nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
-        for (const std::string& weapon : loadout->weapons) {
-            // readLoadouts checked that the catalog has each.
-            std::ignore = game->m_inventory.give(*content.weapons.indexOf(weapon), autoSwitch, time, random);
-        }
-        for (const LoadoutAmmo& ammo : loadout->ammo) {
-            std::ignore = game->m_inventory.giveAmmo(ammo.id, ammo.rounds);
-        }
-    }
-    game->m_player.maxSpeed = game->m_inventory.maxSpeed();
+    game->m_body = game->m_world.spawn(nx::game::Transform{}, bodyOf(game->m_player));
+    game->equip();
+    game->spawn();
     return game;
 }
 
-void LocalGame::give(WeaponIndex weapon, AutoSwitch autoSwitch) {
+void LocalGame::give(WeaponIndex weapon) {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
-    std::ignore = m_inventory.give(weapon, autoSwitch, time, random);
-    m_player.maxSpeed = m_inventory.maxSpeed();
+    std::ignore = m_inventory.give(weapon, m_autoSwitch, time, random);
+    m_player.maxSpeed = maxSpeed();
+}
+
+auto LocalGame::eye() const noexcept -> nx::Vec3 {
+    return eyeOf(m_player);
+}
+
+void LocalGame::placeEye(nx::Vec3 eye) {
+    standAt(eye - nx::Vec3{.z = m_player.viewHeight.value()});
+}
+
+auto LocalGame::roundTimeShown() const -> std::uint32_t {
+    return m_roundTimer.shownAt(shownTime(), nx::game::tickTimeOf(m_world).rate);
 }
 
 auto LocalGame::play(PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3 {
@@ -115,7 +126,7 @@ void LocalGame::tick(const UserCommand& command) {
     // The weapon the command selects is drawn before it moves the player, at the speed it allows, as
     // the original's CmdStart selects it.
     m_inventory.select(command, nx::game::tickTimeOf(m_world));
-    m_player.maxSpeed = m_inventory.maxSpeed();
+    m_player.maxSpeed = maxSpeed();
     if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
         // Before the command moves the player, as the original's PreThink uses.
         std::ignore = nx::game::playerUse(
@@ -141,7 +152,8 @@ void LocalGame::tick(const UserCommand& command) {
         .horizontalSpeed = nx::UnitsPerSecond{static_cast<float>(std::sqrt(double{
             (m_player.velocity.x * m_player.velocity.x) + (m_player.velocity.y * m_player.velocity.y)}))},
         .isOnGround = m_player.isOnGround,
-        .isDucked = m_player.isDucked};
+        .isDucked = m_player.isDucked,
+        .canAttack = !m_rounds.isFrozen()};
     const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
         return nx::game::traceSolids(m_world, hulls, hull, start, end);
     };
@@ -155,10 +167,91 @@ void LocalGame::tick(const UserCommand& command) {
         }
     }
     m_player.punch = shooter.punch;
+    thinkRules();
     nx::game::runThinks(m_world, hulls);
     nx::game::runPushers(m_world, hulls);
     m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;
     nx::game::advanceTick(m_world);
+}
+
+void LocalGame::thinkRules() {
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    if (time.now > m_nextPeriodicThink) {
+        if (const std::optional<nx::Seconds> delay = m_cvars.takeRestart()) {
+            nx::log::info(kLog, "the game restarts in {}", *delay);
+            m_rounds.restartGameIn(*delay, time.now, time.rate);
+        }
+        m_nextPeriodicThink = time.now.after(kPeriodicThinkInterval, time.rate);
+    }
+    const RoundEvents events = m_rounds.think(time.now, time.rate, m_cvars.roundLengths());
+    if (events.test(RoundEvent::FreezeEnded)) {
+        nx::log::info(kLog, "the round's freeze is over");
+        m_roundTimer = m_rounds.timerAt(time.now, time.rate);
+        m_player.maxSpeed = maxSpeed();
+    }
+    if (const std::optional<RoundEndReason> reason = m_rounds.end();
+        events.test(RoundEvent::Ended) && reason) {
+        nx::log::info(kLog, "the round is over: {}", nx::enumName(*reason));
+    }
+    if (events.test(RoundEvent::RoundStarted)) {
+        nx::log::info(kLog, "a round starts");
+    }
+    if (events.test(RoundEvent::GameRestarted)) {
+        nx::log::info(kLog, "the game restarts");
+        m_status = PlayerStatus{.money = m_cvars.startingMoney()};
+        m_inventory.removeAll();
+        equip();
+    }
+    if (events.test(RoundEvent::RoundStarted) || events.test(RoundEvent::GameRestarted)) {
+        spawn();
+    }
+}
+
+void LocalGame::spawn() {
+    const SpawnPoint point = nextSpawnPoint();
+    standAt(point.origin + nx::Vec3{.z = kSpawnLift.value()});
+    m_status.health = kSpawnHealth;
+    m_turnedView = nx::EulerAngles{.yaw = point.yaw};
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    m_roundTimer = m_rounds.timerAt(time.now, time.rate);
+}
+
+void LocalGame::equip() {
+    const Loadout* const loadout = m_content->loadouts.find(m_team);
+    if (loadout == nullptr) {
+        return;
+    }
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
+    for (const std::string& weapon : loadout->weapons) {
+        // readLoadouts checked that the catalog has each.
+        std::ignore = m_inventory.give(*m_content->weapons.indexOf(weapon), m_autoSwitch, time, random);
+    }
+    for (const LoadoutAmmo& ammo : loadout->ammo) {
+        std::ignore = m_inventory.giveAmmo(ammo.id, ammo.rounds);
+    }
+}
+
+auto LocalGame::nextSpawnPoint() -> SpawnPoint {
+    const std::span<const SpawnPoint> points = m_level->spawnPoints(m_team);
+    if (points.empty()) {
+        const std::span<const SpawnPoint> terrorists = m_level->spawnPoints(Team::Terrorists);
+        return terrorists.empty() ? SpawnPoint{} : terrorists.front();
+    }
+    m_lastSpawnPoint = m_lastSpawnPoint ? (*m_lastSpawnPoint + 1) % points.size() : 0;
+    return points[*m_lastSpawnPoint];
+}
+
+auto LocalGame::maxSpeed() const -> nx::UnitsPerSecond {
+    return m_rounds.isFrozen() ? kFreezeSpeed : m_inventory.maxSpeed();
+}
+
+void LocalGame::standAt(nx::Vec3 origin) {
+    m_player = MovementState{.origin = origin};
+    m_player.maxSpeed = maxSpeed();
+    m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
+    *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
+    m_previousEye = eyeOf(m_player);
 }
 
 auto LocalGame::toggleNoclip() -> bool {

@@ -10,10 +10,10 @@
 /// section 3.4): a number of more digits than the original's room for it widens it, and pushes away
 /// what is beside it.
 ///
-/// Today: health, armor, money and ammo as they rest, and the crosshair of a player standing, with
-/// the original's cvars. The round's time, the status icons, the radar, the weapon menu, the
-/// crosshair opening as the player moves, and the flash of a number that changes, come next
-/// (TODO.md).
+/// Today: health, armor, money and ammo as they rest, the round's time, and the crosshair of a player
+/// standing, with the original's cvars. The status icons, the radar, the weapon menu, the crosshair
+/// opening as the player moves, the timer's color as the round runs out, and the flash of a number
+/// that changes, come next (TODO.md).
 export module cs.client:hud;
 
 import std;
@@ -50,6 +50,7 @@ enum class HudPicture : std::uint8_t {
     SuitEmpty, ///< `suit_empty`, before the armor.
     SuitFull,  ///< `suit_full`, over suit_empty as far up as the armor reaches.
     Dollar,    ///< `dollar`, before the money.
+    Stopwatch, ///< `stopwatch`, before the round's time.
     Count,
 };
 
@@ -83,6 +84,8 @@ struct HudView {
     /// How far from the middle the crosshair of the weapon in hand is (cs::kKnifeCrosshairDistance);
     /// none without a crosshair.
     std::optional<std::uint32_t> crosshairDistance{};
+    /// The whole seconds the round's timer shows (cs::RoundTimer); none without a round.
+    std::optional<std::uint32_t> roundTime{};
 };
 
 /// The size of the crosshair, as `cl_crosshair_size` names it.
@@ -177,6 +180,27 @@ struct AmmoLayout {
 [[nodiscard]] auto layoutAmmo(const HudAmmo& ammo, const HudSheet& sheet, nx::rhi::Extent2d size)
     -> AmmoLayout;
 
+/// Where the HUD draws the round's time.
+struct TimerLayout {
+    std::vector<HudMark> marks{}; ///< The stopwatch, the minutes' digits, then the seconds'.
+    /// The colon between the minutes and the seconds: two squares, of the HUD's color at an alpha of
+    /// kTimerColonAlpha, added.
+    std::array<nx::render::ScreenRect, 2> colon{};
+};
+
+/// The alpha the colon of the round's time is added at, measured on the original: it adds (81, 50,
+/// 0) where the digits add (100, 62, 0) at most.
+inline constexpr std::uint8_t kTimerColonAlpha = 81;
+
+/// Where the HUD draws `seconds` of the round's time on a screen of size `size`, its pictures those of
+/// `sheet`, 37 pixels from the bottom (docs/12 section 3.2): its whole minutes aligned to the right
+/// of room for two that ends in the middle, the stopwatch right before that room; the colon, two
+/// squares two pixels wide, 2 right of the middle, 28 and 22 from the bottom; the seconds past the
+/// whole minutes in two digits, 6 right of the middle. More minutes widen their room to the left,
+/// pushing the stopwatch.
+[[nodiscard]] auto layoutTimer(std::uint32_t seconds, const HudSheet& sheet, nx::rhi::Extent2d size)
+    -> TimerLayout;
+
 /// The HUD's pictures on the GPU.
 class Hud {
 public:
@@ -187,9 +211,9 @@ public:
                                    nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
         -> nx::Result<Hud, HudError>;
 
-    /// Appends to `quads` the HUD of `view` on a screen of `size` (layoutHud, layoutAmmo), each picture
-    /// drawn as the original draws a HUD sprite, added in the HUD's color, the ammo's bar added in it,
-    /// the picture of its kind when the HUD has one;
+    /// Appends to `quads` the HUD of `view` on a screen of `size` (layoutHud, layoutAmmo,
+    /// layoutTimer), each picture drawn as the original draws a HUD sprite, added in the HUD's color,
+    /// the ammo's bar added in it, the picture of its kind when the HUD has one, and the timer's colon;
     /// then the crosshair in `crosshair`'s style (crosshairRects), added or drawn as it is. The quads
     /// point into the HUD.
     void append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
