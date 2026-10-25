@@ -64,6 +64,10 @@ struct UserCommand {
     std::optional<WeaponIndex> weaponSelect{}; ///< The weapon the player asks to draw.
 };
 
+/// The seconds `command` lasts, as the original makes its frame time of it: its milliseconds times a
+/// thousandth in double precision, then in float (pmove's frametime, the game's gpGlobals->frametime).
+[[nodiscard]] auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds;
+
 /// The movement cvars (docs/07, section 3.1), which the server replicates to its clients. The
 /// defaults are those Counter-Strike plays with.
 struct MovementSettings {

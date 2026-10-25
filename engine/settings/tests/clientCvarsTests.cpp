@@ -49,14 +49,16 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_TRUE(cvars->video.hudDraw.value());
     EXPECT_EQ(cvars->video.decals.value(), 4096);
     EXPECT_EQ(cvars->video.multiplayerDecals.value(), 300);
+    EXPECT_TRUE(cvars->player.autoWeaponSwitch.value());
     EXPECT_FLOAT_EQ(cvars->audio.volume.value(), 0.7F);
     EXPECT_EQ(cvars->mouse.yaw.name(), "m_yaw");
     EXPECT_EQ(cvars->video.vsync.name(), "gl_vsync");
 
     // What config.cfg keeps: what the original archives, not texgamma nor lightgamma.
     const std::string archived = console.archivedCvars();
-    for (const std::string_view name : {"sensitivity", "m_yaw", "m_pitch", "fps_max", "gl_vsync", "gamma",
-                                        "brightness", "hud_draw", "r_decals", "mp_decals", "volume"}) {
+    for (const std::string_view name :
+         {"sensitivity", "m_yaw", "m_pitch", "fps_max", "gl_vsync", "gamma", "brightness", "hud_draw",
+          "r_decals", "mp_decals", "_cl_autowepswitch", "volume"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }
     EXPECT_EQ(archived.find("texgamma"), std::string::npos);

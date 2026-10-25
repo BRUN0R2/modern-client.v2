@@ -389,7 +389,9 @@ constexpr std::size_t kBlue = 2;
     const nx::render::Camera camera = startCamera(options, level.map());
     // The brush entities where the game puts them, and the weapon the player drew as the map started,
     // the player standing still until the frame.
-    auto game = cs::LocalGame::start(content, level, cs::spawnTeam(level.map()), camera.position);
+    // The original's default setting: _cl_autowepswitch 1.
+    auto game = cs::LocalGame::start(content, level, cs::spawnTeam(level.map()), camera.position,
+                                     cs::AutoSwitch::ToHeavier);
     if (!game) {
         return unusable(game.error());
     }

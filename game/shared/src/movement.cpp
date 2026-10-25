@@ -282,7 +282,7 @@ private:
                               .up = nx::UnitsPerSecond{static_cast<float>(double{up} * share)}};
         }
 
-        m_frameTime = static_cast<float>(double{m_command.duration.count()} * kSecondsPerMillisecond);
+        m_frameTime = frameTimeOf(m_command).count();
         // The weapon's kick drops back, then turns the view the moves follow.
         m_player.punch = droppedPunch(m_player.punch, m_frameTime);
         const nx::EulerAngles kicked{.pitch = m_command.viewAngles.pitch + m_player.punch.pitch,
@@ -1044,6 +1044,10 @@ auto bodyOf(const MovementState& state) -> nx::game::Body {
                           .box = state.isDucked ? kDuckedBox : kStandingBox,
                           .groundModel = state.isOnGround ? state.groundModel : std::nullopt,
                           .isPushed = state.moveType == MoveType::Walk};
+}
+
+auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds {
+    return nx::Seconds{static_cast<float>(double{command.duration.count()} * kSecondsPerMillisecond)};
 }
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,

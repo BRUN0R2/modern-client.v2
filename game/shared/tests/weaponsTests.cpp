@@ -335,8 +335,8 @@ TEST(WeaponsTest, TheRepositorysGunsFireAsTheOriginals) {
     EXPECT_EQ(ak.spread.air.base, 0.04F);
     EXPECT_EQ(ak.spread.air.scale, 0.4F);
     ASSERT_TRUE(ak.recoil.kicks.has_value());
-    EXPECT_EQ(ak.recoil.kicks->standing.upBase, 1.0F);
-    EXPECT_EQ(ak.recoil.kicks->standing.upMax, 5.75F);
+    EXPECT_EQ(ak.recoil.kicks->standing.upBase, nx::Degrees{1.0F});
+    EXPECT_EQ(ak.recoil.kicks->standing.upMax, nx::Degrees{5.75F});
     EXPECT_EQ(ak.recoil.kicks->air.directionChange, 5U);
     const cs::WeaponFiring& usp = *catalog->findWeapon("usp")->firing;
     EXPECT_EQ(usp.accuracy.paced->threshold, nx::Seconds{0.3F});

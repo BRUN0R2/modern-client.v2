@@ -109,6 +109,11 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                .description = "What r_decals is held to in a game of more than one player.",
                                .flags = kArchived,
                                .minimum = 0});
+    auto autoWeaponSwitch = console.registerCvar(
+        CvarDesc<bool>{.name = "_cl_autowepswitch",
+                       .defaultValue = true,
+                       .description = "Whether a weapon given heavier than the one held is drawn.",
+                       .flags = kArchived});
     auto volume = console.registerCvar(
         CvarDesc<float>{.name = "volume",
                         .defaultValue = kVolume,
@@ -121,7 +126,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
             return std::unexpected{std::move(registered->error())};
         }
     }
-    for (auto* const registered : {&vsync, &hudDraw}) {
+    for (auto* const registered : {&vsync, &hudDraw, &autoWeaponSwitch}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -145,6 +150,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .fidelity = *fidelity,
                                  .decals = *decals,
                                  .multiplayerDecals = *multiplayerDecals},
+                       .player = {.autoWeaponSwitch = *autoWeaponSwitch},
                        .audio = {.volume = *volume}};
 }
 

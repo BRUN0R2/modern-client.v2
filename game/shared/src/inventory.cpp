@@ -18,14 +18,13 @@ namespace {
 constexpr std::string_view kRandomStream = "weapons";
 constexpr std::string_view kSpreadStream = "spread";
 
-/// A gun clicks on an empty clip, and fires no sooner than this after (PlayEmptySound), in seconds.
-constexpr float kEmptyClickDelay = 0.2F;
-/// A reloaded weapon idles this long after its reload is over (DefaultReload), in seconds.
-constexpr float kIdleAfterReload = 0.5F;
+/// A gun clicks on an empty clip, and fires no sooner than this after (PlayEmptySound).
+constexpr nx::Seconds kEmptyClickDelay{0.2F};
+/// A reloaded weapon idles this long after its reload is over (DefaultReload).
+constexpr nx::Seconds kIdleAfterReload{0.5F};
 /// The lowest the timers count down to (PostThink).
-constexpr float kLowestNextShot = -1.0F;
-constexpr float kLowestTimer = -0.001F;
-constexpr double kSecondsPerMillisecond = 0.001;
+constexpr nx::Seconds kLowestNextShot{-1.0F};
+constexpr nx::Seconds kLowestTimer{-0.001F};
 /// With its button up, a burst keeps this many shots at most, loses none for a while, then one a
 /// step (ItemPostFrame).
 constexpr std::uint32_t kBurstShotsKept = 15;
@@ -100,11 +99,13 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 void kickBack(const Kick& kick, std::uint32_t shots, bool& kicksLeft, nx::EulerAngles& punch,
               nx::Random& random) {
     const auto fired = static_cast<float>(shots);
-    const double up = shots == 1 ? double{kick.upBase} : double{(fired * kick.upModifier) + kick.upBase};
-    const float lateral = shots == 1 ? kick.lateralBase : (fired * kick.lateralModifier) + kick.lateralBase;
-    punch.pitch = nx::Degrees{std::max(static_cast<float>(double{punch.pitch.value()} - up), -kick.upMax)};
-    punch.yaw = kicksLeft ? nx::Degrees{std::min(punch.yaw.value() + lateral, kick.lateralMax)}
-                          : nx::Degrees{std::max(punch.yaw.value() - lateral, -kick.lateralMax)};
+    // Up is taken off the punch in double precision, as the original subtracts it.
+    const double up = double{(shots == 1 ? kick.upBase : (fired * kick.upModifier) + kick.upBase).value()};
+    const nx::Degrees lateral =
+        shots == 1 ? kick.lateralBase : (fired * kick.lateralModifier) + kick.lateralBase;
+    punch.pitch = std::max(nx::Degrees{static_cast<float>(double{punch.pitch.value()} - up)}, -kick.upMax);
+    punch.yaw = kicksLeft ? std::min(punch.yaw + lateral, kick.lateralMax)
+                          : std::max(punch.yaw - lateral, -kick.lateralMax);
     if (random.below(std::uint64_t{kick.directionChange} + 1) == 0) {
         kicksLeft = !kicksLeft;
     }
@@ -112,8 +113,8 @@ void kickBack(const Kick& kick, std::uint32_t shots, bool& kicksLeft, nx::EulerA
 
 } // namespace
 
-auto Inventory::give(WeaponIndex asked, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random)
-    -> bool {
+auto Inventory::give(WeaponIndex asked, AutoSwitch autoSwitch, const nx::game::TickTime& time,
+                     nx::Random& random) -> bool {
     const WeaponIndex weapon = m_catalog->madeFor(asked);
     nx::expects(m_catalog->isComplete(weapon), "Inventory::give: a complete weapon");
     const Weapon& given = m_catalog->weapon(weapon);
@@ -126,7 +127,8 @@ auto Inventory::give(WeaponIndex asked, bool autoSwitch, const nx::game::TickTim
         OwnedWeapon{.weapon = weapon, .accuracy = given.firing ? given.firing->accuracy.initial : 0.0F});
     const std::size_t index = m_weapons.size() - 1;
     takeRounds(index, rounds);
-    if (!m_held || (autoSwitch && given.weight > m_catalog->weapon(m_weapons[*m_held].weapon).weight)) {
+    if (!m_held || (autoSwitch == AutoSwitch::ToHeavier &&
+                    given.weight > m_catalog->weapon(m_weapons[*m_held].weapon).weight)) {
         draw(index, time, random);
     }
     return true;
@@ -161,14 +163,13 @@ void Inventory::select(const UserCommand& command, const nx::game::TickTime& tim
 auto Inventory::frame(const UserCommand& command, Shooter& shooter, const WeaponTracer& tracer,
                       const nx::game::TickTime& time) -> std::vector<Shot> {
     std::vector<Shot> shots;
-    // As the original's PostThink, which counts the timers down once the frame is over, the command's
-    // milliseconds made seconds in double, then float.
-    const auto frameTime = static_cast<float>(double{command.duration.count()} * kSecondsPerMillisecond);
+    // As the original's PostThink, which counts the timers down once the frame is over.
+    const nx::Seconds frameTime = frameTimeOf(command);
     const auto over = [&] {
         countDown(frameTime);
         return shots;
     };
-    if (!m_held || m_nextAttack > 0.0F) {
+    if (!m_held || m_nextAttack > nx::Seconds{}) {
         return over();
     }
     OwnedWeapon& owned = m_weapons[*m_held];
@@ -193,7 +194,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     // `Attack2` counts for a weapon with an alternate or melee attacks alone (HasSecondaryAttack).
     const bool switches =
         (weapon.alternate.has_value() || weapon.melee.has_value()) && command.buttons.test(Button::Attack2);
-    if (switches && owned.nextSecondary <= 0.0F) {
+    if (switches && owned.nextSecondary <= nx::Seconds{}) {
         if (weapon.melee) {
             strike(owned, weapon.melee->stab, owned.stabs, shooter, tracer, time);
         } else {
@@ -201,7 +202,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         }
         return over();
     }
-    if (attacks && owned.nextShot <= 0.0F) {
+    if (attacks && owned.nextShot <= nx::Seconds{}) {
         if (weapon.melee) {
             strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time);
         } else if (firingOf(weapon, owned)) {
@@ -213,7 +214,8 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         return over();
     }
     const bool canReload = reloadOf(weapon, owned).has_value() && owned.followUpsLeft == 0;
-    if (command.buttons.test(Button::Reload) && canReload && !m_isReloading && owned.nextShot < 0.0F) {
+    if (command.buttons.test(Button::Reload) && canReload && !m_isReloading &&
+        owned.nextShot < nx::Seconds{}) {
         reload(owned, weapon, time, random);
         return over();
     }
@@ -234,7 +236,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     }
     // An empty clip is reloaded once the weapon may fire again; else the weapon idles.
     const bool isUsable = !weapon.magazine || owned.clip > 0 || reserve(weapon.magazine->ammo) > 0;
-    if (isUsable && canReload && owned.clip == 0 && owned.nextShot < 0.0F) {
+    if (isUsable && canReload && owned.clip == 0 && owned.nextShot < nx::Seconds{}) {
         reload(owned, weapon, time, random);
         return over();
     }
@@ -355,9 +357,9 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     }
     --owned.clip;
     makeSound(firing.sound, time);
-    owned.nextShot = firing.cycle.count();
-    owned.nextSecondary = firing.cycle.count();
-    m_nextIdle = firing.idleAfterShot.count();
+    owned.nextShot = firing.cycle;
+    owned.nextSecondary = firing.cycle;
+    m_nextIdle = firing.idleAfterShot;
     owned.followUpsLeft = firing.followUps ? firing.followUps->rounds : 0;
     const std::uint32_t sequence = owned.clip == 0 && firing.lastShotSequence
                                        ? *firing.lastShotSequence
@@ -393,15 +395,15 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
 void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time) {
     const WeaponAlternate& alternate = *weapon.alternate;
     owned.isAlternate = !owned.isAlternate;
-    owned.nextSecondary = alternate.switchTime.count();
+    owned.nextSecondary = alternate.switchTime;
     if (alternate.onSequence && alternate.offSequence) {
         // A switch the view model plays holds the weapon's fire and its idle as long.
         m_animation =
             ViewAnimation{.weapon = owned.weapon,
                           .sequence = owned.isAlternate ? *alternate.onSequence : *alternate.offSequence,
                           .start = time.now};
-        owned.nextShot = alternate.switchTime.count();
-        m_nextIdle = alternate.switchTime.count();
+        owned.nextShot = alternate.switchTime;
+        m_nextIdle = alternate.switchTime;
     }
 }
 
@@ -419,10 +421,10 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = sequences[count++ % sequences.size()], .start = time.now};
     const MeleeTiming& timing = hits ? attack.hit : attack.miss;
-    owned.nextShot = timing.primary.count();
-    owned.nextSecondary = timing.secondary.count();
+    owned.nextShot = timing.primary;
+    owned.nextSecondary = timing.secondary;
     if (attack.idleAfter) {
-        m_nextIdle = attack.idleAfter->count();
+        m_nextIdle = *attack.idleAfter;
     }
 }
 
@@ -433,8 +435,8 @@ void Inventory::reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game:
         return;
     }
     const WeaponReload& reloading = *reloadOf(weapon, owned);
-    m_nextAttack = reloading.time.count();
-    m_nextIdle = reloading.time.count() + kIdleAfterReload;
+    m_nextAttack = reloading.time;
+    m_nextIdle = reloading.time + kIdleAfterReload;
     m_isReloading = true;
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = anyOf(reloading.sequences, random), .start = time.now};
@@ -448,7 +450,7 @@ void Inventory::reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game:
 }
 
 void Inventory::idle(const nx::game::TickTime& time, nx::Random& random) {
-    if (!m_held || m_nextIdle > 0.0F) {
+    if (!m_held || m_nextIdle > nx::Seconds{}) {
         return;
     }
     const OwnedWeapon& owned = m_weapons[*m_held];
@@ -468,10 +470,10 @@ void Inventory::idle(const nx::game::TickTime& time, nx::Random& random) {
         }
     }
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = chosen->sequence, .start = time.now};
-    m_nextIdle = chosen->wait.count();
+    m_nextIdle = chosen->wait;
 }
 
-void Inventory::countDown(float frameTime) noexcept {
+void Inventory::countDown(nx::Seconds frameTime) noexcept {
     for (OwnedWeapon& owned : m_weapons) {
         owned.nextShot = std::max(owned.nextShot - frameTime, kLowestNextShot);
         owned.nextSecondary = std::max(owned.nextSecondary - frameTime, kLowestTimer);

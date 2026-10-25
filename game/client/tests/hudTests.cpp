@@ -310,9 +310,9 @@ TEST(AmmoHudTest, TheAmmoShownIsTheHeldWeaponsWhenItFiresAny) {
     cs::Inventory inventory{*catalog};
     EXPECT_EQ(cs::hudAmmoOf(inventory, *catalog), std::nullopt);
     nx::Random random{0, "test"};
-    std::ignore = inventory.give(cs::WeaponIndex{0}, true, {}, random);
+    std::ignore = inventory.give(cs::WeaponIndex{0}, cs::AutoSwitch::ToHeavier, {}, random);
     EXPECT_EQ(cs::hudAmmoOf(inventory, *catalog), std::nullopt) << "the knife fires none";
-    std::ignore = inventory.give(cs::WeaponIndex{1}, true, {}, random);
+    std::ignore = inventory.give(cs::WeaponIndex{1}, cs::AutoSwitch::ToHeavier, {}, random);
     std::ignore = inventory.giveAmmo("9mm", 40);
     const std::optional<cs::HudAmmo> shown = cs::hudAmmoOf(inventory, *catalog);
     ASSERT_TRUE(shown.has_value());

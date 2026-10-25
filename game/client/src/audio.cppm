@@ -26,6 +26,10 @@ enum class PlayError : std::uint8_t {
 /// The sound output and what plays on it. It stays where it is made: the output's thread reads its
 /// mixer.
 class ClientAudio {
+    struct CreateToken {
+        explicit CreateToken() = default;
+    };
+
 public:
     /// Voices of the mixer the sounds on SoundChannel::Auto take in turn, the client's own among them:
     /// a sound played while all of them play takes the one that started first. The player's other
@@ -37,6 +41,10 @@ public:
     /// those of AudioDevice::open and AudioDevice::play.
     [[nodiscard]] static auto open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume)
         -> nx::Result<std::unique_ptr<ClientAudio>, nx::platform::AudioDeviceError>;
+
+    /// Use open(). Public only so that open() can use std::make_unique.
+    ClientAudio(CreateToken token, const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
+                nx::platform::AudioDevice device);
 
     ClientAudio(const ClientAudio&) = delete;
     auto operator=(const ClientAudio&) -> ClientAudio& = delete;
@@ -71,9 +79,6 @@ public:
     [[nodiscard]] inline auto rate() const noexcept -> nx::SampleRate { return m_device.rate(); }
 
 private:
-    ClientAudio(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
-                nx::platform::AudioDevice device);
-
     /// How a sound plays: at `volume` and `pitch` (1 as recorded), `delay` from now.
     struct Playing {
         float volume = 1.0F;

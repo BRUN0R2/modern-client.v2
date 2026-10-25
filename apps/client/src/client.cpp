@@ -74,6 +74,11 @@ public:
             .lightGamma = video.lightGamma.value()};
 }
 
+/// Whether the game draws a weapon given heavier than the one held, as `_cl_autowepswitch` says.
+[[nodiscard]] auto autoSwitchOf(const nx::settings::PlayerCvars& player) -> cs::AutoSwitch {
+    return player.autoWeaponSwitch.value() ? cs::AutoSwitch::ToHeavier : cs::AutoSwitch::Off;
+}
+
 /// The most decals on faces the video cvars keep: `r_decals`, never negative.
 [[nodiscard]] auto decalLimitOf(const nx::settings::VideoCvars& video) -> std::size_t {
     return nx::narrow<std::size_t>(video.decals.value());
@@ -156,16 +161,17 @@ struct Session {
     nx::render::Camera start{};
 };
 
-/// The map `name` of `content`, its game started at its first spawn. Errors: those of Level::load and
-/// LocalGame::start.
-[[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name)
-    -> nx::Result<Session, cs::LevelError> {
+/// The map `name` of `content`, its game started at its first spawn, its player's weapons drawn as
+/// `autoSwitch` says. Errors: those of Level::load and LocalGame::start.
+[[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
+                                cs::AutoSwitch autoSwitch) -> nx::Result<Session, cs::LevelError> {
     auto level = cs::Level::load(content, name);
     if (!level) {
         return std::unexpected{std::move(level.error())};
     }
     const nx::render::Camera start = cs::spawnView((*level)->map());
-    auto game = cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), start.position);
+    auto game =
+        cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), start.position, autoSwitch);
     if (!game) {
         return std::unexpected{std::move(game.error())};
     }
@@ -354,9 +360,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return std::unexpected{std::move(video.error())};
     }
     m_video = std::move(*video);
-    if (const auto size = m_video->window.pixelSize(); size) {
-        m_consoleFont = cs::openConsoleFont(m_content->vfs, m_fonts, size->height);
+    const auto size = m_video->window.pixelSize();
+    if (!size) {
+        return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
+    m_consoleFont = cs::openConsoleFont(m_content->vfs, m_fonts, size->height);
     if (m_consoleFont) {
         auto atlas = nx::ui::GlyphAtlas::build(*m_consoleFont, cs::consoleCharacters());
         if (atlas) {
@@ -437,22 +445,21 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
 }
 
 auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
-    cs::WeaponActions actions{.select =
-                                  [this](cs::WeaponIndex weapon) {
-                                      if (!m_session) {
-                                          return false;
-                                      }
-                                      m_input->selectWeapon(weapon);
-                                      return true;
-                                  },
-                              .give =
-                                  [this](cs::WeaponIndex weapon) {
-                                      if (!m_session) {
-                                          return false;
-                                      }
-                                      m_session->game->give(weapon);
-                                      return true;
-                                  }};
+    cs::WeaponActions actions{
+        .select = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
+            if (!m_session) {
+                return nx::fail(cs::WeaponActionError::NoMap);
+            }
+            m_input->selectWeapon(weapon);
+            return {};
+        },
+        .give = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
+            if (!m_session) {
+                return nx::fail(cs::WeaponActionError::NoMap);
+            }
+            m_session->game->give(weapon, autoSwitchOf(m_cvars->player));
+            return {};
+        }};
     if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
         !registered) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
@@ -465,7 +472,7 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name);
+    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player));
     if (!session) {
         return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
     }
@@ -817,10 +824,12 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             }
             m_consoleImage.emplace(std::move(*image));
             const auto size = m_video->window.pixelSize();
+            if (!size) {
+                return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
+            }
             m_consoleWindow = std::make_unique<nx::ui::ConsoleDialog>(
                 m_console,
-                cs::consoleBounds(size ? nx::rhi::Extent2d{.width = size->width, .height = size->height}
-                                       : nx::rhi::Extent2d{}));
+                cs::consoleBounds(nx::rhi::Extent2d{.width = size->width, .height = size->height}));
             m_consoleWindow->setFace({.atlas = &*m_consoleAtlas, .image = &*m_consoleImage});
             m_output.window = m_consoleWindow.get();
         }
