@@ -89,6 +89,94 @@ constexpr float kSinkSpeed = 60.0F;
 constexpr double kSwimSpeedShare = 0.8;
 /// Slower wishes do not move a swimmer.
 constexpr float kMinSwimSpeed = 0.1F;
+/// Slower than this, a player's feet make no sound, and its next step waits kQuietStepTime
+/// (PM_UpdateStepSound); a jump as fast sounds the ground at kJumpStepVolume (PM_Jump).
+constexpr float kStepSpeed = 150.0F;
+constexpr nx::Milliseconds kQuietStepTime{400.0F};
+constexpr float kJumpStepVolume = 1.0F;
+/// The time from a step to the next: on the ground or sloshing, on a ladder, and wading; ducked or
+/// on a ladder, this much more, and standing up takes as much off.
+constexpr nx::Milliseconds kStepTime{300.0F};
+constexpr nx::Milliseconds kLadderStepTime{350.0F};
+constexpr nx::Milliseconds kWadeStepTime{600.0F};
+constexpr nx::Milliseconds kSlowerStepTime{100.0F};
+/// A ducked player's steps are quiet once its duck has this much left (flDuckTime < 950).
+constexpr nx::Milliseconds kQuietDuckTime{950.0F};
+/// The share of a step's volume a ducked player's steps keep.
+constexpr float kQuietStepShare = 0.35F;
+/// A player's knees and feet, as shares of its box's height below its origin.
+constexpr double kKneeShare = 0.3;
+constexpr double kFeetShare = 0.5;
+/// Landings (PM_CheckFalling): falling at least this fast sounds and rolls the view; faster than the
+/// safest fall, at kHardLandingVolume, than half of it at kFirmLandingVolume, slower than the
+/// bounce speed in silence, and else at kSoftLandingVolume; in water, always the soft one.
+constexpr float kFallPunchSpeed = 250.0F;
+constexpr float kMostSafeFallSpeed = 580.0F;
+constexpr float kLeastBounceSpeed = 350.0F;
+constexpr float kSoftLandingVolume = 0.5F;
+constexpr float kFirmLandingVolume = 0.85F;
+constexpr float kHardLandingVolume = 1.0F;
+/// The view rolls this many degrees for each unit a second of the fall, and its pitch is held to this.
+constexpr double kLandingRollPerSpeed = 0.013;
+constexpr nx::Degrees kMostLandingPitch{8.0F};
+/// Swimming up splashes once in this long at most (flSwimTime).
+constexpr nx::Milliseconds kSwimSplashTime{1000.0F};
+/// A stuck player is tried at its next nudge once more than this has passed since the last
+/// (PM_CHECKSTUCK_MINTIME).
+constexpr nx::Milliseconds kStuckCheckInterval{50.0F};
+/// How many nudges a stuck player is tried at in turn (rgv3tStuckTable), and from which of them on
+/// the server moves it to one that frees it: it leaves the earlier ones, the smaller, to the client.
+constexpr std::uint32_t kStuckNudgeCount = 54;
+constexpr std::uint32_t kFirstServerNudge = kStuckNudgeCount / 2;
+/// The nudges of a stuck player, in turn, as PM_CreateStuckTable orders them: an eighth of a unit,
+/// the network's precision, along z, y and x, each less, none and more, then to each corner of that;
+/// then up by none, 1 and 6, along y and x by 2, each less, none and more, then at each of those
+/// heights each of those x with each of those y; the last none.
+constexpr std::array<Vec3, kStuckNudgeCount> kStuckNudges = [] {
+    constexpr float kSmall = 0.125F;
+    constexpr float kLarge = 2.0F;
+    constexpr std::array kSteps{-1.0F, 0.0F, 1.0F};
+    constexpr std::array kCorners{-1.0F, 1.0F};
+    constexpr std::array kHeights{0.0F, 1.0F, 6.0F};
+    std::array<Vec3, kStuckNudgeCount> nudges{};
+    std::size_t next = 0;
+    const auto add = [&nudges, &next](Vec3 nudge) {
+        nudges[next++] = nudge;
+    };
+    for (const float step : kSteps) {
+        add(Vec3{.z = step * kSmall});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.y = step * kSmall});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.x = step * kSmall});
+    }
+    for (const float x : kCorners) {
+        for (const float y : kCorners) {
+            for (const float z : kCorners) {
+                add(Vec3{.x = x * kSmall, .y = y * kSmall, .z = z * kSmall});
+            }
+        }
+    }
+    for (const float height : kHeights) {
+        add(Vec3{.z = height});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.y = step * kLarge});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.x = step * kLarge});
+    }
+    for (const float height : kHeights) {
+        for (const float x : kSteps) {
+            for (const float y : kSteps) {
+                add(Vec3{.x = x * kLarge, .y = y * kLarge, .z = height});
+            }
+        }
+    }
+    return nudges;
+}();
 /// The speed jump swims up at, by what the player is in.
 constexpr float kSwimUpInWater = 100.0F;
 constexpr float kSwimUpInSlime = 80.0F;
@@ -186,25 +274,45 @@ auto normalize(Vec3& v) -> double {
     return flat;
 }
 
+/// `box` grown by a player's box in `hull`, as PM_HullForBox grows a physent's: where the player's
+/// origin meets it.
+[[nodiscard]] auto grownFor(const nx::Aabb& box, Hull hull) noexcept -> nx::Aabb {
+    const nx::Aabb player = nx::collision::hullBoxOf(hull);
+    return nx::Aabb{.min = box.min - player.max, .max = box.max - player.min};
+}
+
 /// One command applied to one player: the original's steps, in its order, each reading and writing
 /// the player as it goes.
 class PlayerMove {
 public:
     PlayerMove(const MovementState& state, const UserCommand& command, const MovementSettings& settings,
-               const BrushHulls& world, std::span<const BrushEntity> entities) noexcept
-        : m_player{state}, m_command{command}, m_settings{settings}, m_world{world}, m_entities{entities} {}
+               const BrushHulls& world, std::span<const BrushEntity> entities,
+               std::span<const SolidBox> boxes) noexcept
+        : m_player{state}, m_command{command}, m_settings{settings}, m_world{world}, m_entities{entities},
+          m_boxes{boxes} {}
 
     [[nodiscard]] auto run() -> MovementResult {
         prepare();
+        // Parity: never stuck in noclip; stuck, the player does nothing else
+        if (m_player.moveType != MoveType::Noclip && isStuck()) {
+            return result();
+        }
         categorizePosition();
+        m_oldWaterLevel = m_player.waterLevel;
+        if (!m_player.isOnGround) {
+            m_player.fallSpeed = nx::UnitsPerSecond{-m_player.velocity.z};
+        }
         const BrushEntity* const ladder = ladderTouched();
         duck();
+        updateStepSound();
+        m_player.isOnLadder = false;
         if (m_player.moveType == MoveType::Noclip) {
             // Parity: a ladder does not hold a player in noclip, nor water, nor gravity
             noclip();
             return result();
         }
         if (ladder != nullptr && climb(*ladder)) {
+            m_player.isOnLadder = true;
             // Parity: no gravity on a ladder, and jump leaves it rather than jumping
             checkWater();
             if (!m_command.buttons.test(Button::Jump)) {
@@ -220,7 +328,7 @@ public:
             continueWaterJump();
             slide();
             checkWater();
-            return result();
+            return result(); // Parity: no splash as a jump out of water goes on
         }
         if (m_player.waterLevel >= WaterLevel::Waist) {
             if (m_player.waterLevel == WaterLevel::Waist) {
@@ -232,6 +340,7 @@ public:
             readJump(true);
             swim();
             categorizePosition();
+            splashAcrossTheSurface();
             return result();
         }
         readJump(ladder == nullptr);
@@ -253,12 +362,116 @@ public:
         if (m_player.isOnGround) {
             m_player.velocity.z = 0.0F;
         }
+        checkFalling();
+        splashAcrossTheSurface();
         return result();
     }
 
 private:
     [[nodiscard]] auto result() const -> MovementResult {
-        return MovementResult{.state = m_player, .touchedModels = m_touched};
+        return MovementResult{.state = m_player, .touchedModels = m_touched, .sounds = m_sounds};
+    }
+
+    /// Where the player stands now, for the texture under it; none in the air.
+    [[nodiscard]] auto groundNow() const -> std::optional<StepGround> {
+        if (!m_player.isOnGround) {
+            return std::nullopt;
+        }
+        return StepGround{.origin = m_player.origin, .groundModel = m_player.groundModel};
+    }
+
+    /// A step of the other foot (PM_PlayStepSound) at `place`, standing on `ground`, `share` of its
+    /// place's volume or `volume` of its own.
+    void step(StepPlace place, std::optional<StepGround> ground, float share,
+              std::optional<float> volume = std::nullopt) {
+        m_player.isLeftStep = !m_player.isLeftStep;
+        m_sounds.emplace_back(Footstep{.place = place,
+                                       .isLeftFoot = m_player.isLeftStep,
+                                       .share = share,
+                                       .volume = volume,
+                                       .ground = ground});
+    }
+
+    /// The feet sound when their time has come and the player runs on the ground or climbs
+    /// (PM_UpdateStepSound): on a ladder, wading, sloshing, or on the ground, each with the time until
+    /// the next; slower and quieter ducked. Slower than kStepSpeed, nothing sounds, and the next step
+    /// waits.
+    void updateStepSound() {
+        if (m_player.stepTime > nx::Milliseconds{}) {
+            return;
+        }
+        if (lengthOf(m_player.velocity) <= double{kStepSpeed}) {
+            m_player.stepTime = kQuietStepTime;
+            return;
+        }
+        const bool isClimbing = m_player.isOnLadder;
+        if (!isClimbing && !m_player.isOnGround) {
+            return;
+        }
+        const nx::Aabb& box = m_hull == Hull::Ducked ? kDuckedBox : kStandingBox;
+        const float height = box.max.z - box.min.z;
+        const Vec3& origin = m_player.origin;
+        const Vec3 knee{.x = origin.x,
+                        .y = origin.y,
+                        .z = static_cast<float>(double{origin.z} - (kKneeShare * double{height}))};
+        const Vec3 feet{.x = origin.x,
+                        .y = origin.y,
+                        .z = static_cast<float>(double{origin.z} - (kFeetShare * double{height}))};
+        StepPlace place = StepPlace::Ground;
+        if (isClimbing) {
+            place = StepPlace::Ladder;
+            m_player.stepTime = kLadderStepTime;
+        } else if (contentsAt(knee) == Contents::Water) {
+            place = StepPlace::Wade;
+            m_player.stepTime = kWadeStepTime;
+        } else if (contentsAt(feet) == Contents::Water) {
+            place = StepPlace::Slosh;
+            m_player.stepTime = kStepTime;
+        } else {
+            m_player.stepTime = kStepTime;
+        }
+        float share = 1.0F;
+        if (m_player.isDucked || isClimbing) {
+            m_player.stepTime += kSlowerStepTime;
+            if (m_player.isDucked && m_player.duckTime < kQuietDuckTime) {
+                share = kQuietStepShare;
+            }
+        }
+        step(place, groundNow(), share);
+    }
+
+    /// A landing hard enough sounds the step of the ground at a volume by how hard, and rolls the view
+    /// (PM_CheckFalling); then, on the ground, the fall is over.
+    void checkFalling() {
+        const float fall = m_player.fallSpeed.value();
+        if (m_player.isOnGround && fall >= kFallPunchSpeed) {
+            float volume = kSoftLandingVolume;
+            if (m_player.waterLevel == WaterLevel::Dry) {
+                if (fall > kMostSafeFallSpeed) {
+                    volume = kHardLandingVolume;
+                } else if (fall > kMostSafeFallSpeed / 2.0F) {
+                    volume = kFirmLandingVolume;
+                } else if (fall < kLeastBounceSpeed) {
+                    volume = 0.0F;
+                }
+            }
+            if (volume > 0.0F) {
+                step(StepPlace::Ground, groundNow(), 1.0F, volume);
+                m_player.stepTime = kStepTime;
+                m_player.punch.roll = nx::Degrees{static_cast<float>(double{fall} * kLandingRollPerSpeed)};
+                m_player.punch.pitch = std::min(m_player.punch.pitch, kMostLandingPitch);
+            }
+        }
+        if (m_player.isOnGround) {
+            m_player.fallSpeed = {};
+        }
+    }
+
+    /// Going into water or out of it splashes (PM_PlayWaterSounds).
+    void splashAcrossTheSurface() {
+        if ((m_oldWaterLevel == WaterLevel::Dry) != (m_player.waterLevel == WaterLevel::Dry)) {
+            m_sounds.emplace_back(Splash{});
+        }
     }
 
     /// The box, the speed limit, the command's moves capped by it, the frame time, the view and its
@@ -295,9 +508,17 @@ private:
         }
         m_axes = nx::angleVectors(view);
 
-        for (nx::Milliseconds* const timer : {&m_player.duckTime, &m_player.jumpPenalty}) {
+        for (nx::Milliseconds* const timer :
+             {&m_player.stepTime, &m_player.duckTime, &m_player.swimTime, &m_player.jumpPenalty}) {
             if (*timer > nx::Milliseconds{}) {
                 *timer = std::max(*timer - m_command.duration, nx::Milliseconds{});
+            }
+        }
+        // The commands' own time, which the original's clock keeps as they come in real time.
+        if (std::optional<nx::Milliseconds>& since = m_player.sinceStuckCheck) {
+            *since += m_command.duration;
+            if (*since > kStuckCheckInterval) {
+                since.reset();
             }
         }
     }
@@ -374,7 +595,64 @@ private:
                 meet(entity.model, entity.origin, entity.angles, entity.model);
             }
         }
+        for (const SolidBox& solid : m_boxes) {
+            const nx::collision::Trace hit = nx::collision::traceBoxMovement(
+                grownFor(solid.box, hull), start - solid.origin, end - solid.origin);
+            if (hit.fraction < nearest.fraction) {
+                nearest = PlayerTrace{.fraction = hit.fraction,
+                                      .end = hit.end + solid.origin,
+                                      .normal = hit.plane.normal,
+                                      .startsSolid = hit.startsSolid,
+                                      .isAllSolid = hit.isAllSolid};
+            }
+        }
         return nearest;
+    }
+
+    /// Whether the player's box at `point` is in the solid of the world, of a solid entity or of a box
+    /// (PM_TestPlayerPosition).
+    [[nodiscard]] auto isInSolidAt(Vec3 point) const -> bool {
+        const auto isSolidIn = [&](ModelIndex model, Vec3 offset, nx::EulerAngles angles) {
+            return m_world.movementContentsAt(model, m_hull, point, offset, angles) == Contents::Solid;
+        };
+        return isSolidIn(nx::collision::kWorldModel, Vec3{}, nx::EulerAngles{}) ||
+               std::ranges::any_of(m_entities,
+                                   [&](const BrushEntity& entity) {
+                                       return entity.role == BrushRole::Solid &&
+                                              isSolidIn(entity.model, entity.origin, entity.angles);
+                                   }) ||
+               std::ranges::any_of(m_boxes, [&](const SolidBox& solid) {
+                   return nx::collision::boxContentsAt(grownFor(solid.box, m_hull), point - solid.origin) ==
+                          Contents::Solid;
+               });
+    }
+
+    /// Whether the player is stuck in the solid, as the server's PM_CheckStuck finds it: once more
+    /// than kStuckCheckInterval has passed since its last try, a stuck player touches what it is in
+    /// and is tried at its next nudge, and one that frees it frees the player, which the nudges move
+    /// from kFirstServerNudge on.
+    [[nodiscard]] auto isStuck() -> bool {
+        if (!isInSolidAt(m_player.origin)) {
+            m_player.stuckNudge = 0;
+            return false;
+        }
+        if (m_player.sinceStuckCheck) {
+            return true;
+        }
+        m_player.sinceStuckCheck = nx::Milliseconds{};
+        touch(trace(m_player.origin, m_player.origin).model);
+        const std::uint32_t nudge = m_player.stuckNudge;
+        m_player.stuckNudge = (nudge + 1) % kStuckNudgeCount;
+        const Vec3 nudged = m_player.origin + kStuckNudges[nudge];
+        if (isInSolidAt(nudged)) {
+            return true;
+        }
+        m_player.stuckNudge = 0;
+        // Parity: the server leaves the smaller nudges, for the network's precision, to the client
+        if (nudge >= kFirstServerNudge) {
+            m_player.origin = nudged;
+        }
+        return false;
     }
 
     /// What `point` is in, as movement reads it: the world's contents, a current counted as water;
@@ -631,6 +909,7 @@ private:
         m_player.isDucking = false;
         m_player.viewHeight = kStandingViewHeight;
         m_player.duckTime = {};
+        m_player.stepTime = std::max(m_player.stepTime - kSlowerStepTime, nx::Milliseconds{});
         m_player.origin = standing;
         categorizePosition();
     }
@@ -670,6 +949,10 @@ private:
             m_player.velocity.z = m_player.waterType == Contents::Water   ? kSwimUpInWater
                                   : m_player.waterType == Contents::Slime ? kSwimUpInSlime
                                                                           : kSwimUpInLava;
+            if (m_player.swimTime <= nx::Milliseconds{}) {
+                m_player.swimTime = kSwimSplashTime;
+                m_sounds.emplace_back(Splash{});
+            }
             return;
         }
         if (!m_player.isOnGround) {
@@ -679,8 +962,13 @@ private:
         if (m_player.isJumpHeld) {
             return; // Parity: no jump again until the button is released
         }
+        // What it jumps off, before it leaves it.
+        const std::optional<StepGround> ground = groundNow();
         m_player.isOnGround = false;
         limitBunnyHop();
+        if (lengthOf(m_player.velocity) >= double{kStepSpeed}) {
+            step(StepPlace::Ground, ground, 1.0F, kJumpStepVolume);
+        }
         m_player.velocity.z = static_cast<float>(std::sqrt(2.0 * kJumpGravity * kJumpHeight));
         if (m_player.jumpPenalty > nx::Milliseconds{}) {
             m_player.velocity.z =
@@ -1009,8 +1297,11 @@ private:
     const MovementSettings& m_settings;
     const BrushHulls& m_world;
     std::span<const BrushEntity> m_entities;
-    std::vector<ModelIndex> m_touched; ///< The models of the entities met, in order.
-    Hull m_hull = Hull::Standing;      ///< The player's box.
+    std::span<const SolidBox> m_boxes;
+    std::vector<ModelIndex> m_touched;            ///< The models of the entities met, in order.
+    std::vector<MovementSound> m_sounds;          ///< Made, in order.
+    WaterLevel m_oldWaterLevel = WaterLevel::Dry; ///< As the command started.
+    Hull m_hull = Hull::Standing;                 ///< The player's box.
     float m_maxSpeed = 0.0F;
     float m_frameTime = 0.0F; ///< Seconds.
     nx::AngleVectors m_axes{};
@@ -1052,13 +1343,14 @@ auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds {
 
 auto simulateMovement(const MovementState& state, const UserCommand& command,
                       const MovementSettings& settings, const BrushHulls& hulls,
-                      std::span<const BrushEntity> entities) -> MovementResult {
+                      std::span<const BrushEntity> entities, std::span<const SolidBox> boxes)
+    -> MovementResult {
     nx::expects(hulls.modelCount() > 0, "simulateMovement: the world is model 0 of its hulls");
     nx::expects(
         std::ranges::all_of(
             entities, [&](const BrushEntity& entity) { return entity.model.value < hulls.modelCount(); }),
         "simulateMovement: every entity is a model of the hulls");
-    return PlayerMove{state, command, settings, hulls, entities}.run();
+    return PlayerMove{state, command, settings, hulls, entities, boxes}.run();
 }
 
 } // namespace cs

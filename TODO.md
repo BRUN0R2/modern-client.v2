@@ -91,7 +91,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `std` module built by the project (`nx::std`) from `modules.json`, without experimental CMake features ([ADR-0014](docs/adr/0014-std-module-built-by-the-project.md))
 - [x] CMake helpers: `nxAddModuleLibrary`, `nxAddTest`, per-target warning policy
 - [x] `CMakePresets.json`: dev/release MSVC, dev/release GCC, dev Clang, ASan + UBSan, TSan
-- [ ] `tools` preset (its targets, `nxcheck` and `nxview`, exist) and `server-headless` preset (once `nextds` exists)
+- [x] `tools` presets (`tools-windows-msvc`, `tools-linux-gcc`): `nxcheck` and `nxview` alone, in Release
+- [ ] `server-headless` preset (once `nextds` exists)
 - [ ] Windows presets with GCC (MinGW-w64) and Clang
 - [x] `vcpkg.json` with a pinned baseline and a `tests` feature
 - [x] `x64-windows-nx` and `x64-linux-nx` triplets (dependencies without exceptions and without RTTI)
@@ -320,11 +321,13 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)
 - [ ] Trace parity tests against traces recorded from the original
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
-- [ ] Traces against animated hitboxes
+- [x] Traces against animated hitboxes (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): the hostages' stop the shots (`cs::MapModels::traceHostages`)
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
-- [ ] pmove: observers and unsticking
-- [ ] pmove among entities: boxes (players, hostages, pushables), base velocity (conveyors, `trigger_push`, water currents)
+- [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order)
+- [ ] pmove: observers
+- [x] pmove among entities: hostages as boxes (`cs::SolidBox`, grown by the player's box and traced by `nx::collision::traceBoxMovement`)
+- [ ] pmove among entities: players and pushables as boxes (a player stuck in another one pushed out by force), base velocity (conveyors, `trigger_push`, water currents)
 - [x] Brush entities made by the game when the map starts (`nx.game`, by the classes of `data/cstrike/entities.toml`), listed for movement by `cs::brushEntitiesOf`
 - [ ] Parity: ground acceleration and friction (including `edgefriction`)
 - [ ] Parity: air acceleration and strafing
@@ -355,7 +358,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `+attack2`: the USP's and the M4A1's silencers, the Glock's burst and its follow-up rounds ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [x] The knife's slash and stab: what they meet (`nx::game::traceSolids`), their sequences and timings ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [ ] Weapon state machine: holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
-- [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
+- [x] `cl_righthand`: the player's hand (`cs::HudCvars`, archived, 1 the right), the view models mirrored by it each frame (`ViewModel::isMirroredIn`, `SceneView::hand`)
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
 - [x] The marks the shots leave on brush entities (`cs::bulletMarkOf`: `DamageDecal` by render mode, a breakable's by its material: `{bproof1`, `{break1` to `{break3`)
@@ -369,7 +372,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The weapons' sounds: the view model's sound events (5004), and each weapon's draw, fire, empty click and knife sounds as data (`cs::GameSound`), on the player's channels
 - [x] The weapons' sounds read before a frame plays them: every weapon's as a map starts, a weapon's as it is made or changed (`cs::soundFilesOf`, `ClientAudio::preload`), never in the frame of the first shot ([11 §2](docs/11-audio.md#2-architecture))
 - [ ] The guns' fire sounds as the original's client events choose them (which file, what pitch): to be measured on the original
-- [ ] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) and the world's texture sounds (`materials.txt`), with what they meet
+- [ ] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) and the world's texture sounds by what the textures are made of (`cs::TextureMaterials`, read today), with what they meet
 - [ ] `s_device` and `s_play_unfocused`
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
 - [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device
@@ -377,7 +380,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Attenuation, pitch and volume with parity
 - [ ] `room_type` DSP
 - [ ] Sentences (`sentences.txt`)
-- [ ] Footsteps by material
+- [x] Footsteps by material (`cs.shared:footsteps`, `data/cstrike/footsteps.toml`, the installation's `sound/materials.txt` read as `cs::TextureMaterials`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): each foot's step on the ground by what its texture is made of, on a ladder and in water, slower and quieter ducked, the jump's and the landing's (with its roll of the view), the splash in and out of water, `mp_footsteps`
 - [ ] Music (`mp3`): `media/*.mp3` streamed as a voice of the mixer (no second player), `bgmvolume` as its gain; the MP3 decoder fuzzed
 - [ ] Voice pool with priority and documented stealing
 
@@ -407,7 +410,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Interest management (PVS, PAS, owner audience, optional distance)
 - [ ] Per-client priority and budget, with the `net_budget_overflow` metric
 - [ ] Snapshots built in parallel per client
-- [ ] Local player prediction and reconciliation
+- [ ] Local player prediction and reconciliation (with the client's small nudges of a stuck player, `PM_CheckStuck`)
 - [ ] Interpolation (`cl_interp`/`ex_interp`) and jitter buffer
 - [ ] Lag compensation (`sv_unlag`, `sv_maxunlag`, `sv_unlagpush`)
 - [ ] Predicted weapon events not resent to the shooter

@@ -76,7 +76,7 @@ TEST_F(ClientAudioTest, ASoundReadBeforeItIsPlayedPlaysWithoutItsFile) {
     removeFile(kShot);
     removeFile(kClick);
     const auto shot =
-        audio->play(cs::GameSound{.files = {std::string{kShot}}, .channel = cs::SoundChannel::Weapon});
+        audio->play(cs::GameSound{.files = {std::string{kShot}}, .channel = cs::SoundChannel::Weapon}, 1.0F);
     EXPECT_TRUE(shot.has_value()) << "its file is not read again: " << nx::describe(shot.error());
     // One not read before is read as it plays, and its file is gone.
     const auto click = audio->playLocal(kClick, 1.0F);

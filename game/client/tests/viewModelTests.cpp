@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.assets;
+import nx.render;
 import cs.shared;
 import cs.client;
 
@@ -91,6 +92,31 @@ TEST_F(ViewModelAppearanceTest, KeepsOriginalDefaults) {
     ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
     EXPECT_EQ(viewModel->skin(), 0U);
     EXPECT_TRUE(viewModel->bodyChoices().empty());
+}
+
+TEST_F(ViewModelAppearanceTest, IsMirroredInTheHandItIsNotModeledIn) {
+    // Modeled in the left hand, as Counter-Strike's guns are: mirrored for a right-handed player
+    // (cl_righthand 1), as the original draws them, and drawn as it is for a left-handed one.
+    const auto viewModel = read(weapon());
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    EXPECT_TRUE(viewModel->isMirroredIn(cs::Hand::Right));
+    EXPECT_FALSE(viewModel->isMirroredIn(cs::Hand::Left));
+    const nx::render::Camera camera{};
+    const std::vector<nx::Mat3x4> right = viewModel->pose(camera, 0, nx::Seconds{}, cs::Hand::Right);
+    const std::vector<nx::Mat3x4> left = viewModel->pose(camera, 0, nx::Seconds{}, cs::Hand::Left);
+    ASSERT_EQ(right.size(), left.size());
+    ASSERT_FALSE(right.empty());
+    // At the view's origin, unturned, the view's right is the world's y: what the bone has along it
+    // turned over, the rest as it is.
+    const nx::Mat3x4& mirrored = right.front();
+    const nx::Mat3x4& asModeled = left.front();
+    for (std::size_t row = 0; row < asModeled.rows.size(); ++row) {
+        const float side = row == 1 ? -1.0F : 1.0F;
+        EXPECT_FLOAT_EQ(mirrored.rows[row].x, side * asModeled.rows[row].x) << row;
+        EXPECT_FLOAT_EQ(mirrored.rows[row].y, side * asModeled.rows[row].y) << row;
+        EXPECT_FLOAT_EQ(mirrored.rows[row].z, side * asModeled.rows[row].z) << row;
+        EXPECT_FLOAT_EQ(mirrored.rows[row].w, side * asModeled.rows[row].w) << row;
+    }
 }
 
 TEST_F(ViewModelAppearanceTest, BindsDeclaredSkinAndBodyChoice) {

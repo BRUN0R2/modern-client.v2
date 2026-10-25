@@ -220,6 +220,31 @@ private:
     return leaves[std::get<assets::LeafIndex>(child).value].contents;
 }
 
+/// Where a server's trace from `start` to `end` that the tracer left stops: found from its fraction
+/// again, in double precision as the original's.
+void settleServer(Trace& result, Vec3 start, Vec3 end) noexcept {
+    if (result.fraction != 1.0F) {
+        const auto along = [&result](float from, float to) {
+            return static_cast<float>((double{result.fraction} * double{to - from}) + double{from});
+        };
+        result.end = Vec3{.x = along(start.x, end.x), .y = along(start.y, end.y), .z = along(start.z, end.z)};
+    }
+}
+
+/// What player movement makes of a trace from `start` to `end` that the tracer left (PM_PlayerTrace):
+/// one that starts in the solid stops there, and the end is found from the fraction again.
+void settleMovement(Trace& result, Vec3 start, Vec3 end) noexcept {
+    if (result.isAllSolid) {
+        result.startsSolid = true;
+    }
+    if (result.startsSolid) {
+        result.fraction = 0.0F;
+    }
+    if (result.fraction != 1.0F) {
+        result.end = ((end - start) * result.fraction) + start;
+    }
+}
+
 [[nodiscard]] auto childOf(assets::ClipNodeChild child) -> HullChild {
     if (const auto* node = std::get_if<assets::ClipNodeIndex>(&child)) {
         return HullNodeIndex{node->value};
@@ -373,18 +398,10 @@ auto BrushHulls::trace(const HullTraceQuery& query) const noexcept -> Trace {
     // Where it stopped, if it did, is in the result already.
     std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
                                 inModelSpace(query.end, query.offset, query.angles));
-    if (result.fraction != 1.0F) {
-        if (query.angles != EulerAngles{}) {
-            result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
-        }
-        // The end, from the fraction, in double precision as the original's.
-        const auto along = [&result](float from, float to) {
-            return static_cast<float>((double{result.fraction} * double{to - from}) + double{from});
-        };
-        result.end = Vec3{.x = along(query.start.x, query.end.x),
-                          .y = along(query.start.y, query.end.y),
-                          .z = along(query.start.z, query.end.z)};
+    if (result.fraction != 1.0F && query.angles != EulerAngles{}) {
+        result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
     }
+    settleServer(result, query.start, query.end);
     return result;
 }
 
@@ -401,19 +418,101 @@ auto BrushHulls::traceMovement(const HullTraceQuery& query) const noexcept -> Tr
     // Where it stopped, if it did, is in the result already.
     std::ignore = tracer.follow(root, 0.0F, 1.0F, inModelSpace(query.start, query.offset, query.angles),
                                 inModelSpace(query.end, query.offset, query.angles));
-    if (result.isAllSolid) {
-        result.startsSolid = true;
-    }
-    if (result.startsSolid) {
-        result.fraction = 0.0F;
-    }
-    if (result.fraction != 1.0F) {
-        if (query.angles != EulerAngles{}) {
-            result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
-        }
-        result.end = ((query.end - query.start) * result.fraction) + query.start;
+    settleMovement(result, query.start, query.end);
+    if (result.fraction != 1.0F && query.angles != EulerAngles{}) {
+        result.plane.normal = outOfAxes(angleVectors(query.angles), result.plane.normal);
     }
     return result;
+}
+
+namespace {
+
+/// A box made a tree of six nodes as the engine makes one (SV_InitBoxHull, SV_InitStudioHull): a
+/// plane on each face, along each of the box's axes its most then its least (SV_SetStudioHullPlane);
+/// beyond each the empty, short of it the next node, short of the last one the solid.
+class BoxTree {
+public:
+    explicit BoxTree(const PlacedBox& box) noexcept {
+        const auto& [r0, r1, r2] = box.placement.rows;
+        const Vec3 origin{.x = r0.w, .y = r1.w, .z = r2.w};
+        const std::array<Vec3, kAxes> axes{Vec3{.x = r0.x, .y = r1.x, .z = r2.x},
+                                           Vec3{.x = r0.y, .y = r1.y, .z = r2.y},
+                                           Vec3{.x = r0.z, .y = r1.z, .z = r2.z}};
+        const std::array<float, kAxes> most{box.bounds.max.x, box.bounds.max.y, box.bounds.max.z};
+        const std::array<float, kAxes> least{box.bounds.min.x, box.bounds.min.y, box.bounds.min.z};
+        for (std::size_t axis = 0; axis < kAxes; ++axis) {
+            const Vec3& normal = axes[axis];
+            // Parity: summed from z, as the engine sums it
+            const float along = (normal.z * origin.z) + (normal.y * origin.y) + (normal.x * origin.x);
+            m_planes[axis * kSides] = Plane{.normal = normal, .distance = along + most[axis]};
+            m_planes[(axis * kSides) + 1] = Plane{.normal = normal, .distance = along + least[axis]};
+        }
+        for (std::uint32_t face = 0; face < kFaces; ++face) {
+            // The empty is in front of a most's plane and behind a least's.
+            const std::size_t outside = face % 2;
+            m_nodes[face].plane = PlaneIndex{face};
+            m_nodes[face].children[outside] = Contents::Empty;
+            m_nodes[face].children[outside ^ 1] =
+                face + 1 < kFaces ? HullChild{HullNodeIndex{face + 1}} : HullChild{Contents::Solid};
+        }
+    }
+
+    [[nodiscard]] inline auto planes() const noexcept -> std::span<const Plane> { return m_planes; }
+    [[nodiscard]] inline auto nodes() const noexcept -> std::span<const HullNode> { return m_nodes; }
+    [[nodiscard]] static constexpr auto root() noexcept -> HullChild { return HullNodeIndex{0}; }
+
+private:
+    static constexpr std::size_t kAxes = 3;
+    static constexpr std::size_t kSides = 2;
+    static constexpr std::uint32_t kFaces = kAxes * kSides;
+
+    std::array<Plane, kFaces> m_planes{};
+    std::array<HullNode, kFaces> m_nodes{};
+};
+
+} // namespace
+
+auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace {
+    const BoxTree tree{PlacedBox{.bounds = box}};
+    Trace result{.fraction = 1.0F, .end = end, .isAllSolid = true};
+    Tracer<Rules::Movement> tracer{tree.planes(), tree.nodes(), BoxTree::root(), result};
+    std::ignore = tracer.follow(BoxTree::root(), 0.0F, 1.0F, start, end);
+    settleMovement(result, start, end);
+    return result;
+}
+
+auto boxContentsAt(const Aabb& box, Vec3 point) noexcept -> Contents {
+    const BoxTree tree{PlacedBox{.bounds = box}};
+    return contentsUnder(tree.planes(), tree.nodes(), BoxTree::root(), point);
+}
+
+auto traceHitboxes(std::span<const PlacedBox> hitboxes, Vec3 start, Vec3 end) noexcept -> HitboxTrace {
+    expects(!hitboxes.empty(), "traceHitboxes: a hitbox at least");
+    const auto traceOf = [start, end](const PlacedBox& hitbox) {
+        const BoxTree tree{hitbox};
+        Trace result{.fraction = 1.0F, .end = end, .isAllSolid = true};
+        Tracer<Rules::Server> tracer{tree.planes(), tree.nodes(), BoxTree::root(), result};
+        std::ignore = tracer.follow(BoxTree::root(), 0.0F, 1.0F, start, end);
+        return result;
+    };
+    HitboxTrace found{.trace = traceOf(hitboxes.front())};
+    for (std::size_t index = 1; index < hitboxes.size(); ++index) {
+        if (keepFirstStop(found.trace, traceOf(hitboxes[index]))) {
+            found.hitbox = index;
+        }
+    }
+    settleServer(found.trace, start, end);
+    return found;
+}
+
+auto keepFirstStop(Trace& kept, const Trace& trace) noexcept -> bool {
+    if (!trace.isAllSolid && !trace.startsSolid && trace.fraction >= kept.fraction) {
+        return false;
+    }
+    const bool startedSolid = kept.startsSolid;
+    kept = trace;
+    kept.startsSolid = kept.startsSolid || startedSolid;
+    return true;
 }
 
 } // namespace nx::collision

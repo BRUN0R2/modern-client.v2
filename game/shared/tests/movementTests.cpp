@@ -505,6 +505,90 @@ TEST(MovementTest, ASolidEntityStopsThePlayerWhereItIsPlaced) {
     EXPECT_GT(repeat(walking, ahead, 20, hulls).origin.x, 50.0F) << "without the entity";
 }
 
+TEST(MovementTest, ASolidBoxStopsThePlayerGrownByItsBox) {
+    // A hostage's box standing on the floor, whose surface is 36 below a standing player's origin: grown
+    // by the player's box, it stops the player 26 units before its middle.
+    const BrushHulls floor = floorWorld();
+    const std::array hostage{cs::SolidBox{
+        .origin = {.x = 60.0F, .z = -36.0F},
+        .box = {.min = {.x = -10.0F, .y = -10.0F, .z = 0.0F}, .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}}}};
+    MovementState walking = standingOnTheFloor();
+    walking.velocity = Vec3{.x = kKnifeSpeed.value()};
+    const UserCommand ahead = command(forward(kKnifeSpeed.value()));
+    MovementState blocked = walking;
+    MovementState free = walking;
+    for (int tick = 0; tick < 40; ++tick) {
+        blocked = cs::simulateMovement(blocked, ahead, MovementSettings{}, floor, {}, hostage).state;
+        free = cs::simulateMovement(free, ahead, MovementSettings{}, floor, {}).state;
+    }
+    EXPECT_NEAR(blocked.origin.x, 60.0F - 26.0F - kOnTheFloor, kTolerance);
+    EXPECT_GT(free.origin.x, 90.0F) << "without the box";
+}
+
+TEST(MovementTest, AStuckPlayerIsTriedAtANudgeEachSixtyMilliseconds) {
+    // Two boxes, grown by a standing player's, solid for its origin from x = -1 on and below y = 1: the
+    // first nudge that frees a player at the origin is its 29th, (-2, 2, 0), one the server moves it
+    // by, tried 28 tries after the first, each more than 50 ms after the last.
+    constexpr float kFar = 1000.0F;
+    const std::array boxes{cs::SolidBox{.box = {.min = {.x = 15.0F, .y = -kFar, .z = -kFar},
+                                                .max = {.x = kFar, .y = kFar, .z = kFar}}},
+                           cs::SolidBox{.box = {.min = {.x = -kFar, .y = -kFar, .z = -kFar},
+                                                .max = {.x = kFar, .y = -15.0F, .z = kFar}}}};
+    const BrushHulls nothing = emptyWorld();
+    constexpr std::uint32_t kFreeingNudge = 28;
+    constexpr int kCommandsPerTry = 6;
+    MovementState stuck{.maxSpeed = kKnifeSpeed};
+    for (std::uint32_t tick = 0; tick < kFreeingNudge * kCommandsPerTry; ++tick) {
+        stuck = cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, boxes).state;
+    }
+    EXPECT_EQ(stuck.origin, Vec3{}) << "it does nothing else";
+    EXPECT_EQ(stuck.velocity, Vec3{});
+    EXPECT_EQ(stuck.stuckNudge, kFreeingNudge);
+
+    const MovementState freed =
+        cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, boxes).state;
+    EXPECT_FLOAT_EQ(freed.origin.x, -2.0F);
+    EXPECT_FLOAT_EQ(freed.origin.y, 2.0F);
+    EXPECT_EQ(freed.stuckNudge, 0U);
+}
+
+TEST(MovementTest, AStuckPlayerTouchesWhatItIsInAtEachTry) {
+    // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
+    const BrushHulls hulls = modelsOf(
+        {facingUp(0.0F), facingX(10.0F)},
+        {ModelTrees{},
+         ModelTrees{.standing = {HullNode{.plane = {1}, .children = {Contents::Solid, Contents::Empty}}}},
+         ModelTrees{.standing = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}}}});
+    const std::array entities{cs::BrushEntity{.model = {1}}, cs::BrushEntity{.model = {2}}};
+    MovementState stuck = standingOnTheFloor();
+    stuck.origin.x = 20.0F;
+    std::vector<int> touching;
+    for (int tick = 1; tick <= 13; ++tick) {
+        const cs::MovementResult result = cs::simulateMovement(stuck, command(), {}, hulls, entities);
+        stuck = result.state;
+        if (!result.touchedModels.empty()) {
+            EXPECT_EQ(result.touchedModels, std::vector{ModelIndex{1}});
+            touching.push_back(tick);
+        }
+    }
+    EXPECT_EQ(touching, (std::vector{1, 7, 13})) << "a try each sixth command of 10 ms";
+    EXPECT_EQ(stuck.origin.x, 20.0F) << "deeper in than any nudge";
+}
+
+TEST(MovementTest, TheServerLeavesAStuckPlayerASmallNudgeWouldFree) {
+    // A box whose top, grown by a standing player's box, is at z = 36: a player a tenth of a unit
+    // below it is freed by the nudge of an eighth of a unit up, which the server leaves to the client.
+    const std::array box{cs::SolidBox{.box = {.min = {.x = -10.0F, .y = -10.0F, .z = -100.0F},
+                                              .max = {.x = 10.0F, .y = 10.0F, .z = 0.0F}}}};
+    const BrushHulls nothing = emptyWorld();
+    MovementState stuck{.origin = {.z = 35.9F}, .maxSpeed = kKnifeSpeed};
+    for (int tick = 0; tick < 100; ++tick) {
+        stuck = cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, box).state;
+    }
+    EXPECT_EQ(stuck.origin, (Vec3{.z = 35.9F})) << "never nudged";
+    EXPECT_LT(stuck.stuckNudge, 3U) << "the nudges start again once one frees it";
+}
+
 TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
     // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
     const BrushHulls hulls = modelsOf(
@@ -626,6 +710,104 @@ TEST(MovementTest, TheGamesBrushEntitiesAreMetAsTheEngineListsThem) {
     EXPECT_EQ(met[2].model, ModelIndex{4});
     EXPECT_EQ(met[2].role, cs::BrushRole::Volume);
     EXPECT_EQ(met[2].contents, Contents::Slime);
+}
+
+/// The footsteps among `sounds`.
+[[nodiscard]] auto footstepsOf(std::span<const cs::MovementSound> sounds) -> std::vector<cs::Footstep> {
+    std::vector<cs::Footstep> steps;
+    for (const cs::MovementSound& sound : sounds) {
+        if (const auto* step = std::get_if<cs::Footstep>(&sound)) {
+            steps.push_back(*step);
+        }
+    }
+    return steps;
+}
+
+/// A player running on the floor at `speed`, its next step due.
+[[nodiscard]] auto runningOnTheFloor(float speed) -> MovementState {
+    MovementState state = standingOnTheFloor();
+    state.velocity = Vec3{.x = speed};
+    return state;
+}
+
+TEST(FootstepTest, ARunnersFeetSoundInTurnEachThreeTenthsOfASecond) {
+    const BrushHulls floor = floorWorld();
+    MovementState state = runningOnTheFloor(250.0F);
+    const UserCommand run = command(forward(250.0F));
+    std::vector<std::pair<int, cs::Footstep>> steps;
+    for (int tick = 0; tick < 70; ++tick) {
+        const cs::MovementResult moved = cs::simulateMovement(state, run, MovementSettings{}, floor, {});
+        for (const cs::Footstep& step : footstepsOf(moved.sounds)) {
+            steps.emplace_back(tick, step);
+        }
+        state = moved.state;
+    }
+    ASSERT_EQ(steps.size(), 3U);
+    EXPECT_EQ(steps[0].first, 0);
+    EXPECT_EQ(steps[1].first, 30);
+    EXPECT_EQ(steps[2].first, 60);
+    EXPECT_TRUE(steps[0].second.isLeftFoot) << "the left foot first, as iStepLeft turns from 0";
+    EXPECT_FALSE(steps[1].second.isLeftFoot);
+    EXPECT_TRUE(steps[2].second.isLeftFoot);
+    const cs::Footstep& first = steps[0].second;
+    EXPECT_EQ(first.place, cs::StepPlace::Ground);
+    EXPECT_EQ(first.share, 1.0F);
+    EXPECT_FALSE(first.volume.has_value());
+    ASSERT_TRUE(first.ground.has_value());
+    EXPECT_FALSE(first.ground->groundModel.has_value()) << "on the world";
+}
+
+TEST(FootstepTest, AWalkerOrADuckedPlayerIsQuieter) {
+    const BrushHulls floor = floorWorld();
+    const cs::MovementResult walking = cs::simulateMovement(
+        runningOnTheFloor(140.0F), command(forward(140.0F)), MovementSettings{}, floor, {});
+    EXPECT_TRUE(footstepsOf(walking.sounds).empty()) << "no faster than 150: silent";
+    EXPECT_EQ(walking.state.stepTime, nx::Milliseconds{400.0F});
+
+    MovementState ducked = duckedOnTheFloor();
+    ducked.velocity = Vec3{.x = 200.0F};
+    const cs::MovementResult crouching =
+        cs::simulateMovement(ducked, command(forward(200.0F), {Button::Duck}), MovementSettings{}, floor, {});
+    const std::vector<cs::Footstep> steps = footstepsOf(crouching.sounds);
+    ASSERT_EQ(steps.size(), 1U);
+    EXPECT_FLOAT_EQ(steps.front().share, 0.35F);
+    EXPECT_EQ(crouching.state.stepTime, nx::Milliseconds{400.0F}) << "300, and 100 more ducked";
+}
+
+TEST(FootstepTest, AHardLandingSoundsLoudAndRollsTheView) {
+    const BrushHulls floor = floorWorld();
+    MovementState falling{.origin = {.z = 5.0F}, .velocity = {.z = -600.0F}, .maxSpeed = kKnifeSpeed};
+    const cs::MovementResult landed = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
+    ASSERT_TRUE(landed.state.isOnGround);
+    const std::vector<cs::Footstep> steps = footstepsOf(landed.sounds);
+    ASSERT_EQ(steps.size(), 1U);
+    EXPECT_EQ(steps.front().volume, 1.0F) << "faster than the safest fall, 580";
+    EXPECT_NEAR(landed.state.punch.roll.value(), 600.0F * 0.013F, kTolerance);
+    EXPECT_EQ(landed.state.fallSpeed, nx::UnitsPerSecond{}) << "on the ground, the fall is over";
+    EXPECT_EQ(landed.state.stepTime, nx::Milliseconds{300.0F});
+
+    falling.velocity.z = -300.0F;
+    const cs::MovementResult firm = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
+    ASSERT_EQ(footstepsOf(firm.sounds).size(), 1U);
+    EXPECT_EQ(footstepsOf(firm.sounds).front().volume, 0.85F) << "faster than half the safest fall, 290";
+    falling.velocity.z = -270.0F;
+    const cs::MovementResult soft = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
+    EXPECT_TRUE(footstepsOf(soft.sounds).empty()) << "no faster than 290 and slower than 350: silent";
+    EXPECT_NEAR(soft.state.punch.roll.value(), 0.0F, kTolerance) << "silent: no roll either";
+    falling.velocity.z = -200.0F;
+    EXPECT_EQ(
+        cs::simulateMovement(falling, command(), MovementSettings{}, floor, {}).state.punch.roll.value(),
+        0.0F)
+        << "slower than 250: no roll";
+}
+
+TEST(FootstepTest, GoingIntoWaterSplashes) {
+    MovementState falling{.origin = {.z = 36.0F}, .velocity = {.z = -200.0F}, .maxSpeed = kKnifeSpeed};
+    const cs::MovementResult moved =
+        cs::simulateMovement(falling, command(), MovementSettings{}, waterWorld(0.0F), {});
+    EXPECT_EQ(moved.state.waterLevel, WaterLevel::Feet);
+    ASSERT_EQ(moved.sounds.size(), 1U);
+    EXPECT_TRUE(std::holds_alternative<cs::Splash>(moved.sounds.front()));
 }
 
 } // namespace

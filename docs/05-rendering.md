@@ -411,7 +411,8 @@ flowchart LR
    indexes are checked against the actual model and its textures file before GPU upload; alternate
    views cannot override them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
    A view model modeled in the other hand than the player's (its
-   `viewHand`; the player's is the right, `cl_righthand`'s default, until the cvar comes) is drawn
+   `viewHand`; the player's is `cl_righthand`'s, the right at its default of 1, the left at 0,
+   `SceneView::hand`, read each frame) is drawn
    mirrored, its left turned to its right (`StudioInstance::isMirrored`), the other faces culled as
    its triangles turn over: Counter-Strike's guns are modeled in the left hand and its knife in the
    right, and the original draws them all in the right (observed on it; Xash3D's

@@ -123,7 +123,14 @@ code** on the server (authoritative) and on the client (prediction).
   a jump or by backing off them on the floor), among the world and the brush entities, where the
   game puts and turns them; and the weapon's kick to the view (`MovementState::punch`), dropped
   back each move (`PM_DropPunchAngle`: its length less 10 and half of itself a second) and added to
-  the view the move follows.
+  the view the move follows. The sounds of the feet (`MovementResult::sounds`): a step of the other
+  foot each 0.3 s on the ground or wading in shallow water, 0.35 s on a ladder and 0.6 s wading
+  deeper, 0.1 s slower and at 35% ducked, none slower than 150 units a second
+  (`PM_UpdateStepSound`); the ground's step as a jump leaves it (`PM_Jump`) and as a fall lands on it,
+  louder the harder it lands, rolling the view 0.013 degrees for each unit a second of the fall
+  (`PM_CheckFalling`); and a splash entering water, leaving it or swimming up
+  (`PM_PlayWaterSounds`). A step says where the player stood, which the game looks up the texture
+  under, and what it is made of ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
   `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
@@ -133,8 +140,18 @@ code** on the server (authoritative) and on the client (prediction).
   (`MoveType::Noclip`, which the `noclip` cheat sets): through everything, along the view at the
   speeds the command asks and up at its up speed, without gravity; as in the original, a player on
   the ground is still put back on the floor 2 units below, so that a slower rise stays there, and
-  pushers pass through it (`nx::game::Body::isPushed`). Observers, unsticking, boxes (players,
-  hostages, pushables), conveyors, pushes and currents come next ([TODO](../TODO.md)).
+  pushers pass through it (`nx::game::Body::isPushed`). Hostages stop the player as boxes
+  (`cs::SolidBox`, which `MapModels::solidBoxes` lists): each is grown by the player's box, as
+  PM_HullForBox grows a physent's, and traced as the engine traces a box's six-node hull
+  (`nx::collision::traceBoxMovement`), after the world and the brush entities. A player whose box
+  is in the solid is stuck, as the server's PM_CheckStuck finds it, and does nothing else (but in
+  noclip): once more than 50 ms have passed since its last try (PM_CHECKSTUCK_MINTIME), it touches
+  what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
+  frees it frees the player, and moves it from the 28th on, the server leaving the smaller ones, for
+  the network's precision, to the client's prediction. The time is the commands' own, which the
+  original's clock keeps as they come in real time. Observers, players and pushables as boxes (and a
+  player stuck in another one pushed out by force), conveyors, pushes and currents come next
+  ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -217,13 +234,25 @@ from the original, to test these rules against, are pending
 - Players collide with each other using the hull box.
 - Bullet traces test the studio model's **hitboxes** (animated bones) to get the
   *hitgroup*.
+  **Today** (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): each hitbox is its bounds
+  along its bone's axes, made a hull of a node on each face as R_StudioHull makes it, and crossed by
+  the server's rules; of a model's hitboxes the first's trace is kept, then each later one's that is
+  all in the solid, starts in it or stops sooner (SV_SingleClipMoveToEntity), the same rule that
+  keeps the trace of what stops a move first among what it is clipped against
+  (`nx::collision::keepFirstStop`, SV_ClipToLinks). The hostages' are met so by the shots
+  (`cs::MapModels::traceHostages`), each whose box, a unit more each way, the shot's meets, its
+  bones posed with its sequence's motion kept as the server poses them; posed when the shot is
+  fired, where the original's server poses a hostage as its last think left it, at most a thirtieth
+  of a second before.
 
 ### 4.3 API
 
 The API below is planned, with entities and hitboxes. Today it is `BrushHulls::trace` and
 `traceMovement` (`nx.collision:hulls`), which take a `HullTraceQuery` (`model`, `hull`, `offset`,
 `angles`, `start`, `end`) and give a `Trace` (`fraction`, `end`, `plane`, `isAllSolid`,
-`startsSolid`, `isInOpen`, `isInWater`), against brush models only ([§4.1](#41-world)).
+`startsSolid`, `isInOpen`, `isInWater`), against brush models only ([§4.1](#41-world)), and
+`traceBoxMovement`, player movement's rules through one box made a hull as the engine makes one
+(SV_InitBoxHull, PM_HullForBox).
 
 ```cpp
 auto hit = collision.trace(nx::collision::TraceQuery{

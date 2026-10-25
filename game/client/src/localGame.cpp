@@ -29,6 +29,8 @@ constexpr nx::HammerUnits kBulletReach{8192.0F};
 constexpr nx::HammerUnits kSpawnLift{1.0F};
 /// How often the rules look at the restart the cvars ask for (Think's periodic part).
 constexpr nx::Seconds kPeriodicThinkInterval{1.0F};
+/// The stream of random numbers the sounds of a command's steps draw from.
+constexpr std::string_view kFootstepStream = "footsteps";
 /// What the game's rules log, as the original's server logs the rounds.
 constexpr nx::log::Category kLog{"game"};
 
@@ -43,7 +45,8 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy}, m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_solidBoxes{level.models().solidBoxes()},
+      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -135,8 +138,10 @@ void LocalGame::tick(const UserCommand& command) {
     }
     m_lastButtons = command.buttons;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
-    const MovementResult moved = simulateMovement(m_player, command, MovementSettings{}, hulls, entities);
+    const MovementResult moved =
+        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, m_solidBoxes);
     m_player = moved.state;
+    hearMovement(moved.sounds, entities, command);
     nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
     m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
     *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
@@ -157,11 +162,17 @@ void LocalGame::tick(const UserCommand& command) {
     const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
         return nx::game::traceSolids(m_world, hulls, hull, start, end);
     };
-    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, nx::game::tickTimeOf(m_world))) {
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
+        const nx::Vec3 end = shot.origin + (shot.direction * kBulletReach.value());
         const nx::game::SolidHit hit =
-            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin,
-                                     shot.origin + (shot.direction * kBulletReach.value()));
+            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin, end);
+        // A hostage the shot meets first stops it, and leaves no mark behind it.
+        if (m_level->models().traceHostages(shot.origin, end, time.now.since(nx::GameTime{}, time.rate),
+                                            hit.trace)) {
+            continue;
+        }
         if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
             m_impacts.push_back(Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
         }
@@ -273,6 +284,55 @@ void LocalGame::standAt(nx::Vec3 origin) {
     m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
     *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
     m_previousEye = eyeOf(m_player);
+}
+
+auto LocalGame::takeSounds() -> std::vector<SoundMade> {
+    std::vector<SoundMade> sounds = m_inventory.takeSounds();
+    std::ranges::move(m_movementSounds, std::back_inserter(sounds));
+    m_movementSounds.clear();
+    return sounds;
+}
+
+void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<const BrushEntity> entities,
+                             const UserCommand& command) {
+    const nx::GameTime now = nx::game::tickTimeOf(m_world).now;
+    nx::Random random{command.number.value, kFootstepStream};
+    for (const MovementSound& sound : sounds) {
+        if (std::holds_alternative<Splash>(sound)) {
+            const GameSound& splash = m_content->footsteps.splash;
+            m_movementSounds.push_back(SoundMade{.sound = &splash, .at = now, .volume = splash.volume});
+            continue;
+        }
+        if (!m_cvars.footsteps.value()) {
+            continue;
+        }
+        const Footstep& step = std::get<Footstep>(sound);
+        const TextureMaterial ground =
+            step.ground ? groundMaterial(*step.ground, entities) : TextureMaterial::Concrete;
+        if (const std::optional<SoundMade> made = m_stepVoice.soundOf(step, ground, now, random)) {
+            m_movementSounds.push_back(*made);
+        }
+    }
+}
+
+auto LocalGame::groundMaterial(const StepGround& ground, std::span<const BrushEntity> entities) const
+    -> TextureMaterial {
+    const nx::Vec3 below = ground.origin - nx::Vec3{.z = kStepTextureDepth.value()};
+    if (!ground.groundModel) {
+        return m_level->materialAlong(m_content->materials, nx::assets::kWorldModel, ground.origin, below);
+    }
+    const auto entity = std::ranges::find(entities, *ground.groundModel, &BrushEntity::model);
+    if (entity == entities.end()) {
+        return TextureMaterial::Concrete; // what it stood on is gone: the original finds no texture
+    }
+    // Into the space of the entity's model, as TraceTexture turns the segment.
+    const auto inModelSpace = [&entity](nx::Vec3 point) {
+        const nx::Vec3 moved = point - entity->origin;
+        return entity->angles == nx::EulerAngles{} ? moved
+                                                   : nx::intoAxes(nx::angleVectors(entity->angles), moved);
+    };
+    return m_level->materialAlong(m_content->materials, entity->model, inModelSpace(ground.origin),
+                                  inModelSpace(below));
 }
 
 auto LocalGame::toggleNoclip() -> bool {

@@ -171,4 +171,38 @@ private:
     std::vector<BrushModel> m_models;
 };
 
+/// The way from `start` to `end` through `box`, solid within it and empty around it, made a hull as the
+/// engine makes one of a box (SV_InitBoxHull, PM_HullForBox): a node on each of its six faces, crossed
+/// as a map's hull's nodes are, by player movement's rules (BrushHulls::traceMovement).
+[[nodiscard]] auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace;
+
+/// What `point` is in within `box` made the same hull: the solid from its least along each axis to
+/// short of its most, the empty elsewhere (PM_HullPointContents of a box's hull).
+[[nodiscard]] auto boxContentsAt(const Aabb& box, Vec3 point) noexcept -> Contents;
+
+/// A box turned and placed as a bone places its hitbox: `bounds` along the axes of `placement`, the
+/// columns of its rotation, about its translation.
+struct PlacedBox {
+    Mat3x4 placement{};
+    Aabb bounds{};
+};
+
+/// What a trace through hitboxes met: the trace, and the hitbox that gave it, by its index.
+struct HitboxTrace {
+    Trace trace{};
+    std::size_t hitbox = 0;
+};
+
+/// The server's way from `start` to `end` through `hitboxes`, one at least, each made a hull of a
+/// node on each face as the engine makes a studio model's (R_StudioHull), crossed by the server's
+/// rules (BrushHulls::trace): the first hitbox's trace, then each later one's that keepFirstStop
+/// keeps (SV_SingleClipMoveToEntity).
+[[nodiscard]] auto traceHitboxes(std::span<const PlacedBox> hitboxes, Vec3 start, Vec3 end) noexcept
+    -> HitboxTrace;
+
+/// Keeps in `kept` the trace of what stops a move first, as the engine keeps it among what it clips
+/// the move against (SV_ClipToLinks): `trace` takes its place when it is all in the solid, starts in
+/// it or stops sooner, and then starts in the solid when either did. Returns whether it took it.
+auto keepFirstStop(Trace& kept, const Trace& trace) noexcept -> bool;
+
 } // namespace nx::collision

@@ -311,7 +311,7 @@ void Inventory::takeRounds(std::size_t index, std::uint32_t rounds) {
 
 void Inventory::makeSound(const std::optional<GameSound>& sound, const nx::game::TickTime& time) {
     if (sound) {
-        m_sounds.push_back(SoundMade{.sound = &*sound, .at = time.now});
+        m_sounds.push_back(SoundMade{.sound = &*sound, .at = time.now, .volume = sound->volume});
     }
 }
 

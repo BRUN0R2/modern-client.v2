@@ -92,6 +92,45 @@ enum class WaterLevel : std::uint8_t {
     Eyes,
 };
 
+/// Where a step of a player's feet sounds (PM_UpdateStepSound): what it steps on or in.
+enum class StepPlace : std::uint8_t {
+    Ground, ///< The ground, by what its texture is made of.
+    Ladder,
+    Wade,  ///< Water up to its knees.
+    Slosh, ///< Water at its feet.
+};
+
+/// How far under a player the texture it stands on is looked for (PM_CatagorizeTextureType).
+inline constexpr nx::HammerUnits kStepTextureDepth{64.0F};
+
+/// Where a player stood on the ground as its feet sounded: the texture kStepTextureDepth under
+/// `origin`, on brush model `groundModel` of the entity it stood on (the world's without one), is
+/// what it stood on.
+struct StepGround {
+    nx::Vec3 origin{};
+    std::optional<nx::collision::ModelIndex> groundModel{};
+};
+
+/// A step of a player's feet (PM_PlayStepSound): where, with which foot, and how loud.
+struct Footstep {
+    StepPlace place = StepPlace::Ground;
+    bool isLeftFoot = false;
+    /// The share of the place's volume it has (a ground's by what it is made of): 1, less while the
+    /// player ducks (PM_UpdateStepSound).
+    float share = 1.0F;
+    /// A volume of its own instead, from 0 to 1, as the player jumps or lands (PM_Jump,
+    /// PM_CheckFalling).
+    std::optional<float> volume{};
+    /// What it stood on; none in the air, where no texture is under it.
+    std::optional<StepGround> ground{};
+};
+
+/// A splash: the player went into water or out of it, or swam up (PM_PlayWaterSounds, PM_Jump).
+struct Splash {};
+
+/// A sound a player's movement makes.
+using MovementSound = std::variant<Footstep, Splash>;
+
 /// The box of a standing player about its origin, and of a ducked one: the boxes the map compilers
 /// grow hulls 1 and 3 by.
 inline constexpr nx::Aabb kStandingBox{.min = {.x = -16.0F, .y = -16.0F, .z = -36.0F},
@@ -139,6 +178,21 @@ struct MovementState {
     /// The kick its weapon gave its view (punchangle): added to the view its moves follow and its
     /// shots aim along, and dropped back a little each move.
     nx::EulerAngles punch{};
+    /// It climbed a ladder in its last move (the original's MOVETYPE_FLY).
+    bool isOnLadder = false;
+    /// Left until its feet may sound again (flTimeStepSound).
+    nx::Milliseconds stepTime{};
+    /// Its last step was of its left foot (iStepLeft).
+    bool isLeftStep = false;
+    /// How fast it was falling when last in the air (flFallVelocity), down positive.
+    nx::UnitsPerSecond fallSpeed{};
+    /// Left until swimming up splashes again (flSwimTime).
+    nx::Milliseconds swimTime{};
+    /// The next of the nudges a stuck player is tried at (rgStuckLast).
+    std::uint32_t stuckNudge = 0;
+    /// Since a stuck player was last tried at a nudge, while that is too recent to try the next one
+    /// (rgStuckCheckTime): none once it is not.
+    std::optional<nx::Milliseconds> sinceStuckCheck{};
 };
 
 /// What a brush entity is to a player's movement, as the game made it.
@@ -158,6 +212,13 @@ struct BrushEntity {
     nx::collision::Contents contents = nx::collision::Contents::Water; ///< What a Volume holds.
 };
 
+/// A box that stops a player, the original's SOLID_SLIDEBOX and SOLID_BBOX physents (a hostage,
+/// another player): `box` about `origin`, never turned.
+struct SolidBox {
+    nx::Vec3 origin{};
+    nx::Aabb box{};
+};
+
 /// The brush entities of `world`, made by nx.game, that movement meets, in the world's order, as the
 /// original's engine lists them for it: the solid ones, and the others that hold contents, a ladder
 /// or a volume.
@@ -167,18 +228,23 @@ struct BrushEntity {
 /// brush model it stands on.
 [[nodiscard]] auto bodyOf(const MovementState& state) -> nx::game::Body;
 
-/// What a command did: the player after it, and the brush entities it ran into or stood on, by their
-/// models, in the order it met them, each once (the original's touch list): the game has them touched.
+/// What a command did: the player after it, the brush entities it ran into or stood on, by their
+/// models, in the order it met them, each once (the original's touch list): the game has them touched;
+/// and the sounds its movement made, in their order.
 struct MovementResult {
     MovementState state{};
     std::vector<nx::collision::ModelIndex> touchedModels{};
+    std::vector<MovementSound> sounds{};
 };
 
 /// `state` after `command`, under `settings`, in the world whose hulls are model 0 of `hulls`, among
-/// `entities`, brush models of the same hulls; where two stop the player at once, the first does, the
-/// world before them all. Pure: the result depends on the arguments alone.
+/// `entities`, brush models of the same hulls, and `boxes`, each grown by the player's box as the
+/// original grows a physent's (PM_HullForBox); where two stop the player at once, the first does, the
+/// world before them all and the brush entities before the boxes. Pure: the result depends on the
+/// arguments alone.
 [[nodiscard]] auto simulateMovement(const MovementState& state, const UserCommand& command,
                                     const MovementSettings& settings, const nx::collision::BrushHulls& hulls,
-                                    std::span<const BrushEntity> entities = {}) -> MovementResult;
+                                    std::span<const BrushEntity> entities = {},
+                                    std::span<const SolidBox> boxes = {}) -> MovementResult;
 
 } // namespace cs
