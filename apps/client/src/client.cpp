@@ -112,8 +112,42 @@ struct Video {
     nx::platform::SleepTimer sleepTimer;
 };
 
-/// Opens the window and the GPU, presenting as `isVsync` asks. Errors: WindowUnavailable, GpuFailed.
-[[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync) -> nx::Result<Video, ClientError> {
+/// The file of the cache folder (nx::platform::cacheDirectory) that keeps what the GPU learned
+/// building next's pipelines.
+constexpr std::string_view kPipelineCacheFile = "pipelineCache.bin";
+
+/// What the GPU learned building the pipelines the last time next ran; nothing the first time, or
+/// when the file cannot be read.
+[[nodiscard]] auto readPipelineCache() -> std::vector<std::byte> {
+    const auto folder = nx::platform::cacheDirectory();
+    if (!folder) {
+        return {};
+    }
+    return nx::platform::readFile(*folder / kPipelineCacheFile).value_or(std::vector<std::byte>{});
+}
+
+/// Keeps what `device` learned building its pipelines for the next run; logs what fails.
+void savePipelineCache(const nx::rhi::Device& device) {
+    auto learned = device.pipelineCache();
+    auto folder = nx::platform::cacheDirectory();
+    if (!learned || !folder) {
+        nx::log::warning(kLog, "the pipeline cache is not kept: {}",
+                         !learned ? nx::describe(learned.error()) : nx::describe(folder.error()));
+        return;
+    }
+    if (auto made = nx::platform::createDirectories(*folder); !made) {
+        nx::log::warning(kLog, "the pipeline cache is not kept: {}", nx::describe(made.error()));
+        return;
+    }
+    if (auto written = nx::platform::writeFile(*folder / kPipelineCacheFile, *learned); !written) {
+        nx::log::warning(kLog, "the pipeline cache is not kept: {}", nx::describe(written.error()));
+    }
+}
+
+/// Opens the window and the GPU, presenting as `isVsync` asks, the device given what the GPU learned
+/// building the pipelines before (`pipelineCache`). Errors: WindowUnavailable, GpuFailed.
+[[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync,
+                             std::span<const std::byte> pipelineCache) -> nx::Result<Video, ClientError> {
     // Hidden until its first image (Client::drawFrame): never empty while the GPU starts and the map loads.
     auto window = nx::platform::Window::create({.title = "Modern-Client.v2", .isShown = false});
     if (!window) {
@@ -125,8 +159,10 @@ struct Video {
         return !native ? nx::fail(ClientError::WindowUnavailable, std::move(native.error()))
                        : nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
-    auto device = nx::rhi::vulkan::createDevice(
-        {.applicationName = "next", .window = *native, .isValidationEnabled = options.isValidationEnabled});
+    auto device = nx::rhi::vulkan::createDevice({.applicationName = "next",
+                                                 .window = *native,
+                                                 .isValidationEnabled = options.isValidationEnabled,
+                                                 .pipelineCache = pipelineCache});
     if (!device) {
         return nx::fail(ClientError::GpuFailed, std::move(device.error()));
     }
@@ -338,7 +374,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
-    auto video = openVideo(*m_options, m_cvars->video.vsync.value());
+    auto video = openVideo(*m_options, m_cvars->video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
     }
@@ -868,6 +904,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
 
 auto Client::finish() -> nx::Result<void, ClientError> {
     m_video->device->waitIdle();
+    savePipelineCache(*m_video->device);
     if (auto saved = nx::settings::saveConfig(m_console, m_bindings, m_files); !saved) {
         nx::log::warning(kLog, "{}", nx::describe(saved.error()));
     }
