@@ -80,6 +80,9 @@ struct Shooter {
     nx::UnitsPerSecond horizontalSpeed{};
     bool isOnGround{};
     bool isDucked{};
+    /// Whether `Attack` fires or strikes: not while the round is frozen, as the original's
+    /// m_bCanShoot and IsFreezePeriod hold it back (`Attack2` still switches and stabs).
+    bool canAttack = true;
 };
 
 /// How a weapon's attacks meet what is solid: the server's way for a hull from a start to an end
@@ -113,6 +116,9 @@ public:
     /// Gives `rounds` of `ammo` besides the clips, as many as the player can carry of it: returns how
     /// many it took.
     auto giveAmmo(std::string_view ammo, std::uint32_t rounds) -> std::uint32_t;
+    /// Takes every weapon and every round from the player (RemoveAllItems): it holds none, and its
+    /// view model shows nothing. The sounds its weapons made stay, to be taken.
+    void removeAll();
 
     /// The part of `command` before it moves the player (CmdStart): the player draws the weapon it
     /// selects, or else that weapon's replacement, at `time` when it has it and does not hold it
@@ -128,8 +134,9 @@ public:
     /// `Attack2`, meeting what `tracer` finds;
     /// with `Reload` down it is reloaded; with no fire button down its burst wanes (a pistol's at
     /// once), an empty clip is reloaded, or it idles; then the weapons' timers count down by the
-    /// command's duration. Returns the shots it fired. The random numbers this draws are the command
-    /// number's.
+    /// command's duration. With `Attack` down and its cycle allowing, a weapon whose shooter may not
+    /// attack does nothing more. Returns the shots it fired. The random numbers this draws are the
+    /// command number's.
     auto frame(const UserCommand& command, Shooter& shooter, const WeaponTracer& tracer,
                const nx::game::TickTime& time) -> std::vector<Shot>;
 

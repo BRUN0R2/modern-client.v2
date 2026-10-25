@@ -203,6 +203,9 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         return over();
     }
     if (attacks && owned.nextShot <= nx::Seconds{}) {
+        if (!shooter.canAttack) {
+            return over(); // the frame is spent on the press all the same
+        }
         if (weapon.melee) {
             strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time);
         } else if (firingOf(weapon, owned)) {
@@ -278,6 +281,12 @@ auto Inventory::maxSpeed() const noexcept -> nx::UnitsPerSecond {
 
 auto Inventory::takeSounds() -> std::vector<SoundMade> {
     return std::exchange(m_sounds, {});
+}
+
+void Inventory::removeAll() {
+    std::vector<SoundMade> sounds = std::move(m_sounds);
+    *this = Inventory{*m_catalog};
+    m_sounds = std::move(sounds);
 }
 
 auto Inventory::find(WeaponIndex weapon) const noexcept -> std::optional<std::size_t> {

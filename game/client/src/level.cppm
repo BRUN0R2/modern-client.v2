@@ -51,6 +51,22 @@ struct GameContent {
 /// 2.1).
 [[nodiscard]] auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path;
 
+/// A place a player of a team spawns at, where it stands and the way it faces.
+struct SpawnPoint {
+    nx::Vec3 origin{};
+    nx::Degrees yaw{};
+
+    [[nodiscard]] inline auto operator==(const SpawnPoint&) const noexcept -> bool = default;
+};
+
+/// The spawn points of `team` on `map`, in the order of its entities: its class's
+/// (`info_player_deathmatch` for the terrorists, `info_player_start` for the counter-terrorists)
+/// with an origin other than the world's, as SelectSpawnSpot takes them.
+[[nodiscard]] auto spawnPointsOf(const nx::assets::BspView& map, Team team) -> std::vector<SpawnPoint>;
+
+/// What `map` is played for: the objectives the classes of its entities give it (objectiveOfClass).
+[[nodiscard]] auto mapObjectivesOf(const nx::assets::BspView& map) -> MapObjectives;
+
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, the
 /// loadouts and the light styles; and the installation at `install`, or the one Steam installed, below
@@ -144,6 +160,12 @@ public:
     /// The decals its map stamps for good as its game starts (nx::game::staticDecalsOf), in their
     /// order: those of decals.wad.
     [[nodiscard]] inline auto mapDecals() const noexcept -> std::span<const MapDecal> { return m_mapDecals; }
+    /// The spawn points of `team` (spawnPointsOf).
+    [[nodiscard]] inline auto spawnPoints(Team team) const noexcept -> std::span<const SpawnPoint> {
+        return m_spawnPoints[team];
+    }
+    /// What its rounds are played for (mapObjectivesOf).
+    [[nodiscard]] inline auto objectives() const noexcept -> MapObjectives { return m_objectives; }
     /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
     /// what bulletMarkOf says of its entity on a brush entity's (Gunshot without one).
     [[nodiscard]] auto bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark;
@@ -157,6 +179,8 @@ private:
     std::optional<LevelDecals> m_decals;
     std::vector<MapDecal> m_mapDecals;
     std::vector<BulletMark> m_bulletMarks; ///< By brush model.
+    nx::EnumArray<Team, std::vector<SpawnPoint>> m_spawnPoints;
+    MapObjectives m_objectives;
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;
@@ -185,11 +209,11 @@ private:
 [[nodiscard]] auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& classes,
                              nx::ecs::World& world) -> nx::Result<void, LevelError>;
 
-/// Where a player of `map` first stands, its eye and the way it looks: at the first
-/// counter-terrorist spawn, else the first terrorist one; the origin without either.
+/// The view of a player standing at the first spawn point of `map`, its eye and the way it looks: a
+/// counter-terrorist one, else a terrorist one; the origin without either.
 [[nodiscard]] auto spawnView(const nx::assets::BspView& map) -> nx::render::Camera;
 
-/// The team of the spawn spawnView stands a player at: the counter-terrorists' without either.
+/// The team of the spawn point spawnView stands a player at: the counter-terrorists' without either.
 [[nodiscard]] auto spawnTeam(const nx::assets::BspView& map) -> Team;
 
 } // namespace cs

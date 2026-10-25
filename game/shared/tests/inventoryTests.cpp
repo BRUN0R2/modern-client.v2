@@ -394,6 +394,24 @@ TEST(FiringTest, AWeaponBeingDrawnDoesNotFire) {
     EXPECT_EQ(frames(inventory, shooter, kReady, kReady, {Button::Attack}).size(), 1U);
 }
 
+TEST(FiringTest, AShooterThatMayNotAttackNeitherFiresNorReloadsButSwitches) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife, kUsp});
+    EXPECT_EQ(inventory.giveAmmo("45ACP", 12), 12U);
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    EXPECT_EQ(frames(inventory, shooter, kReady, kReady, {Button::Attack}).size(), 1U);
+    std::ignore = frames(inventory, shooter, kReady + 1, kReady + 50);
+    Shooter frozen = standing();
+    frozen.canAttack = false;
+    // Three seconds with both held, longer than a reload: nothing fired, nothing reloaded.
+    EXPECT_TRUE(
+        frames(inventory, frozen, kReady + 51, kReady + 350, {Button::Attack, Button::Reload}).empty());
+    EXPECT_EQ(inventory.held()->clip, 11U);
+    std::ignore = frames(inventory, frozen, kReady + 351, kReady + 351, {Button::Attack2});
+    EXPECT_TRUE(inventory.held()->isAlternate);
+}
+
 TEST(FiringTest, AnAutomaticGunFiresEachCycleWhileItsButtonIsDown) {
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kAk});
@@ -746,6 +764,18 @@ TEST(SoundTest, AWeaponDrawnMakesItsDrawSoundAndTheSoundsAreTakenOnce) {
     nx::Random random{0, "test"};
     EXPECT_TRUE(inventory.give(kGlock, cs::AutoSwitch::ToHeavier, at(1), random));
     EXPECT_EQ(soundsOf(inventory), Files{}) << "the Glock's view model plays its own";
+}
+
+TEST(SoundTest, RemovingEveryWeaponLeavesNoneNorAnyRoundButTheSoundsMade) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife, kGlock});
+    EXPECT_EQ(inventory.giveAmmo("9mm", 40), 40U);
+    inventory.removeAll();
+    EXPECT_TRUE(inventory.weapons().empty());
+    EXPECT_EQ(inventory.held(), nullptr);
+    EXPECT_FALSE(inventory.animation().has_value());
+    EXPECT_EQ(inventory.reserve("9mm"), 0U);
+    EXPECT_EQ(soundsOf(inventory), Files{"weapons/knife_deploy1.wav"});
 }
 
 TEST(SoundTest, AGunSoundsEachRoundItFiresAndClicksEmpty) {

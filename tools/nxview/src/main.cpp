@@ -328,6 +328,11 @@ constexpr std::size_t kBlue = 2;
     WindowOutput output;
     NoFiles files;
     nx::console::Console console{output, files};
+    // The rules the game is played by, which the console's lines may set.
+    auto gameCvars = cs::GameCvars::registerIn(console);
+    if (!gameCvars) {
+        return unusable(gameCvars.error());
+    }
     nx::ui::FontCatalog fonts;
     std::optional<nx::ui::SchemeFontSet> consoleFont;
     std::optional<nx::ui::GlyphAtlas> consoleAtlas;
@@ -362,12 +367,15 @@ constexpr std::size_t kBlue = 2;
     }
     const nx::render::Camera camera = startCamera(options, level.map());
     // The brush entities where the game puts them, and the weapon the player drew as the map started,
-    // the player standing still until the frame.
+    // the player standing still until the frame, its eye where the options put the camera.
     // The original's default setting: _cl_autowepswitch 1.
-    auto game = cs::LocalGame::start(content, level, cs::spawnTeam(level.map()), camera.position,
-                                     cs::AutoSwitch::ToHeavier);
+    auto game = cs::LocalGame::start(content, level, cs::spawnTeam(level.map()), cs::AutoSwitch::ToHeavier,
+                                     *gameCvars);
     if (!game) {
         return unusable(game.error());
+    }
+    if (options.position) {
+        (*game)->placeEye(camera.position);
     }
     std::ignore = (*game)->wait(camera.angles, options.time);
     const std::vector<nx::render::ModelPlacement> placements = (*game)->placements();
@@ -401,7 +409,8 @@ constexpr std::size_t kBlue = 2;
                      .armor = status.armor,
                      .money = status.money,
                      .ammo = cs::hudAmmoOf((*game)->inventory(), content.weapons),
-                     .crosshairDistance = cs::kKnifeCrosshairDistance},
+                     .crosshairDistance = cs::kKnifeCrosshairDistance,
+                     .roundTime = (*game)->roundTimeShown()},
                     cs::CrosshairStyle{}, extent);
     }
     if (consoleWindow) {

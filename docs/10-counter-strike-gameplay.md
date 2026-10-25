@@ -48,9 +48,29 @@ stateDiagram-v2
 - **End of match:** `mp_timelimit`, `mp_maxrounds`, `mp_winlimit`, with an intermission
   (`mp_chattime`) and the next map from `mapcycle.txt`.
 
+**Today** (`cs.shared:rounds`, `cs::Rounds`, as ReGameDLL_CS's `CHalfLifeMultiplay` plays them,
+GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)): a map's rounds start as it starts, each
+frozen for `mp_freezetime` (the first two seconds longer), its players at 1 unit a second at most
+(`cs::kFreezeSpeed`) and their `+attack` held back (`+attack2` still switches and stabs), then
+running for `mp_roundtime`, both read as the round starts and cut to whole seconds. A round whose
+time runs out ends by what its map is played for (`cs::mapObjectivesOf`: the classes of its
+entities), the first of a bomb target (`TargetSaved`), hostages (`HostagesNotRescued`), an escape
+zone (`TerroristsNotEscaped`) and a VIP safety zone (`VipNotEscaped`); the rounds of a map played
+for none run on. The next round starts five seconds after the end. `sv_restartround`, else
+`sv_restart`, read once a second, restarts the game that many seconds later, the round playing on
+until then (or until five seconds after it ends): the players spawn as they joined, with
+`mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). As a round
+starts, the local game's player spawns again at its team's next spawn point (`cs::spawnPointsOf`,
+as `EntSelectSpawnPoint` takes them in turn), one unit above it, turned the way it faces, its
+health whole, keeping its armor, weapons and money. The HUD counts down the whole seconds the game
+told it as the player spawned and as the freeze ended ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
+Game Commencing, the ends by elimination and by the objectives, the teams' scores, the money of the
+round's end, buying and the end of the match come next.
+
 ### 3.1 Round end reasons
 
-`enum class RoundEndReason` with parity with the original's reasons:
+`enum class RoundEndReason` with parity with the original's reasons (today the four ends of a time
+run out, with the team each is won by: `cs::winnerOf`):
 
 | Reason | Maps |
 |--------|------|

@@ -201,7 +201,7 @@ armor, the dollar and the money is where these rules put it, to the pixel:
 | Armor | `suit_empty` at (W / 5, H − 37), `suit_full` over it; the digits right after the suit, at the right of room for three, y H − 37 |
 | Money | The digits at the right of room for five that ends 16 from the right edge, y H − 75; `dollar` right before that room (W − 134) |
 | Ammo (a Glock, 20 and 40) | The weapon list's `ammo` icon at (W − 42, H − 40); the reserve's digits ending at the icon, y H − 37; a 2 by 25 rectangle of the HUD's color added (`FillRGBA`) at (W − 114, H − 37); the clip's digits ending 10 before it |
-| Round timer | `stopwatch` at (W / 2 − 64, H − 37); the minutes' digit at W / 2 − 20, the seconds' at W / 2 + 6 and W / 2 + 26, y H − 37; the colon two 2 by 2 rectangles, dimmer, at (W / 2 + 2, H − 28) and (W / 2 + 2, H − 22) |
+| Round timer | `stopwatch` at (W / 2 − 64, H − 37); the minutes' digit at W / 2 − 20, the seconds' at W / 2 + 6 and W / 2 + 26, y H − 37; the colon two 2 by 2 rectangles of the HUD's color added at an alpha of 81 (they add (81, 50, 0) where the digits add (100, 62, 0) at most; 640x480, 1024x768 and 1280x720), at (W / 2 + 2, H − 28) and (W / 2 + 2, H − 22) |
 | Status icons | Added green; at 1280x720 `buyzone` at (12, 286) and `c4` at (12, 323) |
 | Radar | `radar` in the top left corner |
 | Crosshair | Four rectangles of `cl_crosshair_color` (50 250 50), a pixel thick, about (W / 2, H / 2): added at full alpha (`FillRGBA`) with `cl_crosshair_translucent` 1, drawn as they are with 0. With s = W / 640 and f the size's factor (`cl_crosshair_size` `small` 0.625, `medium` 0.8, `large` 1; `auto` small at 640 wide, medium at 800, large from 1024), each is ⌊5·s·f⌋ long and the gap ⌊d·s·f⌋, d the weapon's distance (standing: the knife 7, the Glock and the Desert Eagle 8): the left one ends at W / 2 − gap and the right one starts at W / 2 + gap, the top and bottom ones likewise. Running opens the gap (at 1280x720 the Glock's to 24). NextClient draws it itself (`cl_crosshair_type` 0, the cross), to be checked against Valve's client |
@@ -222,10 +222,16 @@ bar and the rounds of its kind the player carries, then the picture of its kind 
 (`AmmoType::picture`, the `ammo` entry of the original's weapon lists read once into
 `data/cstrike/ammo.toml`, [10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)),
 so that a weapon made as the game runs shows its ammo as the game's own do; a number of more digits
-widens its room to the left. The first row of each picture, the 320 entries for screens under 640 wide, the helmet, the
+widens its room to the left. The round's time is drawn where the table puts it (`layoutTimer`):
+the whole seconds the game told the HUD as the player spawned and as the freeze ended, counted down
+as the original's client counts them (`cs::RoundTimer`, [10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)),
+its minutes at the right of room for two that ends in the middle, the stopwatch right before it (more
+minutes widen the room to the left, pushing the stopwatch), the colon, and the seconds in two digits.
+The first row of each picture, the 320 entries for screens under 640 wide, the helmet, the
 flash of a number that changes, each weapon's crosshair (only the knife's is measured: it is drawn
 for every weapon) and its opening as the player moves (`cl_dynamiccrosshair`), the weapon menu,
-and the timer, status icons and radar come next.
+the timer's color as the round runs out and the planted bomb's (to be measured on the original),
+the status icons and the radar come next.
 
 ### 3.3 Visual parity of numbers
 
@@ -362,7 +368,13 @@ given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
-`cl_crosshair_translucent` (1), archived, which each frame reads. `vid_vsync` as the name of
+`cl_crosshair_translucent` (1), archived, which each frame reads. `cs::GameCvars` registers the
+cvars of the game's rules a server sets, which the local game plays by until the server comes, not
+archived and told to the players (`Notify`): `mp_freezetime` (6 seconds, from 0 to 60),
+`mp_roundtime` (5 minutes, from 1 to 9), read as each round starts, `mp_startmoney` (800, from 800
+to 16000), given as the player joins and as the game restarts, and `sv_restartround` and
+`sv_restart` (0, up to 60 seconds), read once a second and set back to 0
+([10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.
 
 ### 5.3 The `nx.console` module

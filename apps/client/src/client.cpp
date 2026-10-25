@@ -149,29 +149,27 @@ struct Video {
                  .sleepTimer = std::move(*sleepTimer)};
 }
 
-/// A map being played: its level, the game of it, and the view its player first had. The game goes
-/// before the level it plays.
+/// A map being played: its level, and the game of it, which goes before the level it plays.
 struct Session {
     std::unique_ptr<cs::Level> level;
     std::unique_ptr<cs::LocalGame> game;
-    nx::render::Camera start{};
 };
 
-/// The map `name` of `content`, its game started at its first spawn, its player's weapons drawn as
-/// `autoSwitch` says. Errors: those of Level::load and LocalGame::start.
+/// The map `name` of `content`, its game started by the rules `cvars` set, its player of the team of
+/// its first spawn point, its weapons drawn as `autoSwitch` says. Errors: those of Level::load and
+/// LocalGame::start.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
-                                cs::AutoSwitch autoSwitch) -> nx::Result<Session, cs::LevelError> {
+                                cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
+    -> nx::Result<Session, cs::LevelError> {
     auto level = cs::Level::load(content, name);
     if (!level) {
         return std::unexpected{std::move(level.error())};
     }
-    const nx::render::Camera start = cs::spawnView((*level)->map());
-    auto game =
-        cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), start.position, autoSwitch);
+    auto game = cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), autoSwitch, cvars);
     if (!game) {
         return std::unexpected{std::move(game.error())};
     }
-    return Session{.level = std::move(*level), .game = std::move(*game), .start = start};
+    return Session{.level = std::move(*level), .game = std::move(*game)};
 }
 
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
@@ -227,6 +225,9 @@ private:
     /// Plays the map the console asked for, if any: its scene is made with the next frame, and
     /// r_decals is held as entering a game of more than one player holds it.
     void startNextSession();
+    /// Turns the view the way the session's game turned its player, if it did (the original's
+    /// fixangle): as the player spawns.
+    void turnAsTheGameDid();
     /// Reads, before the session plays the frame, the view models of the weapons made or changed since
     /// (cs::Level::updateViewModels), which upload puts on the GPU, and their sounds.
     void updateWeapons();
@@ -265,6 +266,7 @@ private:
     std::optional<nx::settings::ClientCvars> m_cvars;
     std::optional<cs::PlayerInput> m_input;
     std::optional<cs::HudCvars> m_hudCvars;
+    std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::GameContent> m_content;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
@@ -374,6 +376,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(hudCvars.error()));
     }
     m_hudCvars = std::move(*hudCvars);
+    auto gameCvars = cs::GameCvars::registerIn(m_console);
+    if (!gameCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
+    }
+    m_gameCvars = std::move(*gameCvars);
     // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
     const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
     nx::invariant(noclipKey.has_value(), "Client: the noclip key has a name");
@@ -439,7 +446,7 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
             if (!m_session) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
-            m_session->game->give(weapon, autoSwitchOf(m_cvars->player));
+            m_session->game->give(weapon);
             return {};
         }};
     if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
@@ -454,7 +461,7 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player));
+    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
     if (!session) {
         return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
     }
@@ -579,7 +586,10 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // player hears of it, they see.
         if (m_session && m_scene) {
             const cs::Hearing hearing = m_session->game->hearing(); // from what the last frame showed
+            // The player's own setting, as its client tells the server of it.
+            m_session->game->setAutoSwitch(autoSwitchOf(m_cvars->player));
             m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
+            turnAsTheGameDid();
             hearSession(hearing);
             stampBulletHoles();
         }
@@ -631,8 +641,15 @@ void Client::startNextSession() {
     m_clientEvents.clear();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
-    m_camera = m_session->start;
+    m_camera.position = m_session->game->eye();
+    turnAsTheGameDid();
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
+}
+
+void Client::turnAsTheGameDid() {
+    if (const std::optional<nx::EulerAngles> turned = m_session->game->takeTurnedView()) {
+        m_camera.angles = *turned;
+    }
 }
 
 void Client::updateWeapons() {
@@ -842,7 +859,8 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
                        .armor = status.armor,
                        .money = status.money,
                        .ammo = cs::hudAmmoOf(m_session->game->inventory(), m_content->weapons),
-                       .crosshairDistance = cs::kKnifeCrosshairDistance},
+                       .crosshairDistance = cs::kKnifeCrosshairDistance,
+                       .roundTime = m_session->game->roundTimeShown()},
                       m_hudCvars->crosshair(), size);
     }
     if (m_consoleWindow != nullptr) {
