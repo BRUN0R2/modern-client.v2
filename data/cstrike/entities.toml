@@ -94,6 +94,7 @@ notSolidFlags = 8 # passable
 classname = "func_vehicle"
 solid = "bsp"
 notSolidFlags = 8 # passable
+classification = "vehicle" # CFuncVehicle::Classify: a knife sounds on it as on flesh
 
 [[brushClasses]]
 classname = "func_conveyor"

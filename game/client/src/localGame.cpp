@@ -163,12 +163,17 @@ void LocalGame::tick(const UserCommand& command) {
     // What the attacks meet: the world and its solid brush entities, then a hostage met first, a body.
     const WeaponTracer tracer = [this, &hulls, sinceStart](nx::collision::Hull hull, nx::Vec3 start,
                                                            nx::Vec3 end) {
-        const nx::collision::Trace solid = nx::game::traceSolids(m_world, hulls, hull, start, end);
+        const nx::game::SolidHit solid = nx::game::traceSolidsHit(m_world, hulls, hull, start, end);
         if (std::optional<nx::collision::Trace> hostage =
-                m_level->models().traceHostages(hull, start, end, sinceStart, solid)) {
+                m_level->models().traceHostages(hull, start, end, sinceStart, solid.trace)) {
             return WeaponHit{.trace = *hostage, .isBody = true};
         }
-        return WeaponHit{.trace = solid};
+        const nx::game::Classified* const classified =
+            solid.entity ? m_world.get<nx::game::Classified>(*solid.entity) : nullptr;
+        return WeaponHit{.trace = solid.trace,
+                         .isBrushModel = true,
+                         .isBody = classified != nullptr &&
+                                   classified->classification != nx::game::Classification::None};
     };
     for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
@@ -325,10 +330,14 @@ void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<co
 auto LocalGame::groundMaterial(const StepGround& ground, std::span<const BrushEntity> entities) const
     -> TextureMaterial {
     const nx::Vec3 below = ground.origin - nx::Vec3{.z = kStepTextureDepth.value()};
-    if (!ground.groundModel) {
+    if (std::holds_alternative<BoxSolid>(ground.ground)) {
+        return TextureMaterial::Concrete; // a box has no model, so no texture (PM_TraceTexture)
+    }
+    const std::optional<nx::collision::ModelIndex> model = modelOf(ground.ground);
+    if (!model) {
         return m_level->materialAlong(m_content->materials, nx::assets::kWorldModel, ground.origin, below);
     }
-    const auto entity = std::ranges::find(entities, *ground.groundModel, &BrushEntity::model);
+    const auto entity = std::ranges::find(entities, *model, &BrushEntity::model);
     if (entity == entities.end()) {
         return TextureMaterial::Concrete; // what it stood on is gone: the original finds no texture
     }

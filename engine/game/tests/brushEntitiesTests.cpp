@@ -86,6 +86,25 @@ TEST(BrushEntityTest, RefusesBrokenClasses) {
         << "an unknown solid";
 }
 
+TEST(BrushEntityTest, AVehicleIsClassifiedAsOne) {
+    nx::ecs::World world;
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
+    const std::vector entities{
+        entity({{"classname", "worldspawn"}}),
+        entity({{"classname", "func_vehicle"}, {"model", "*1"}}),
+        entity({{"classname", "func_wall"}, {"model", "*2"}}),
+    };
+    ASSERT_TRUE(nx::game::spawnBrushEntities(world, entities, models(3), repositoryClasses()).has_value());
+    std::map<std::uint32_t, nx::game::Classification> classified;
+    nx::ecs::Query<const BrushModel&, nx::ecs::Optional<const nx::game::Classified>>{world}.forEach(
+        [&classified](const BrushModel& model, const nx::game::Classified* entityClass) {
+            classified.emplace(model.index.value, entityClass != nullptr ? entityClass->classification
+                                                                         : nx::game::Classification::None);
+        });
+    EXPECT_EQ(classified.at(1), nx::game::Classification::Vehicle) << "CFuncVehicle::Classify";
+    EXPECT_EQ(classified.at(2), nx::game::Classification::None);
+}
+
 TEST(BrushEntityTest, MakesTheBrushEntitiesAsTheGameDoes) {
     nx::ecs::World world;
     ASSERT_TRUE(nx::game::registerComponents(world).has_value());
