@@ -370,13 +370,16 @@ given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again.
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
-`cl_crosshair_translucent` (1), archived, which each frame reads. `cs::GameCvars` registers the
+`cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the
+left: the view models mirrored by it, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning)),
+archived, which each frame reads. `cs::GameCvars` registers the
 cvars of the game's rules a server sets, which the local game plays by until the server comes, not
 archived and told to the players (`Notify`): `mp_freezetime` (6 seconds, from 0 to 60),
 `mp_roundtime` (5 minutes, from 1 to 9), read as each round starts, `mp_startmoney` (800, from 800
-to 16000), given as the player joins and as the game restarts, and `sv_restartround` and
+to 16000), given as the player joins and as the game restarts, `sv_restartround` and
 `sv_restart` (0, up to 60 seconds), read once a second and set back to 0
-([10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)). `vid_vsync` as the name of
+([10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), and `mp_footsteps` (1), read at
+each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.
 
 ### 5.3 The `nx.console` module

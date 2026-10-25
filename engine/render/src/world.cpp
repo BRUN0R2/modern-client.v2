@@ -358,7 +358,7 @@ struct DecalTextures {
 
 /// Where a face's lightmaps lie on it, and how many it has: one for each of its styles.
 struct LightmapExtent {
-    SurfaceExtent area{};
+    assets::SurfaceExtent area{};
     std::uint32_t maps = 0;
 };
 
@@ -403,7 +403,7 @@ struct FaceToDraw {
     if (entry.isSky || entry.isTurbulent || info.isSpecial || !entry.face->lightmapOffset) {
         return std::nullopt;
     }
-    const std::optional<SurfaceExtent> area = surfaceExtentOf(map, *entry.face);
+    const std::optional<assets::SurfaceExtent> area = assets::surfaceExtentOf(map, *entry.face);
     if (!area || area->width > kAtlasWidth || area->height > kAtlasWidth) {
         return std::nullopt;
     }
@@ -451,7 +451,7 @@ struct LightmapAtlas {
 /// `atlas`, a layer each, at its corner.
 void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, LightmapAtlas& atlas) {
     const std::span<const std::byte> samples = map.lighting().subspan(*entry.face->lightmapOffset);
-    const SurfaceExtent& area = entry.lightmap->area;
+    const assets::SurfaceExtent& area = entry.lightmap->area;
     const std::size_t mapSamples = std::size_t{area.width} * area.height;
     for (std::size_t lightmap = 0; lightmap < entry.lightmap->maps; ++lightmap) {
         for (std::uint32_t y = 0; y < area.height; ++y) {
@@ -505,11 +505,12 @@ void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, Lightmap
         }
         DecalFace& face = decalFaces[entry.index];
         face.takesDecals = true;
-        if (const std::optional<SurfaceExtent> area = surfaceExtentOf(map, *entry.face)) {
-            face.extent = DecalFaceExtent{.minS = area->minS,
-                                          .minT = area->minT,
-                                          .spanS = static_cast<double>(area->width - 1) * kLuxelUnits,
-                                          .spanT = static_cast<double>(area->height - 1) * kLuxelUnits};
+        if (const std::optional<assets::SurfaceExtent> area = assets::surfaceExtentOf(map, *entry.face)) {
+            face.extent =
+                DecalFaceExtent{.minS = area->minS,
+                                .minT = area->minT,
+                                .spanS = static_cast<double>(area->width - 1) * assets::kLuxelUnits,
+                                .spanT = static_cast<double>(area->height - 1) * assets::kLuxelUnits};
         }
         if (entry.lightmap) {
             face.lightmapCorner = entry.corner;
@@ -591,17 +592,17 @@ void cutAlongTheGrid(const std::vector<Vec3>& polygon, std::vector<std::vector<V
         vertex.flags = kTurbulent;
         return vertex;
     }
-    const double s = textureCoordinateOf(point, info.s);
-    const double t = textureCoordinateOf(point, info.t);
+    const double s = assets::textureCoordinateOf(point, info.s);
+    const double t = assets::textureCoordinateOf(point, info.t);
     vertex.u = static_cast<float>(s / double{use.width});
     vertex.v = static_cast<float>(t / double{use.height});
     if (entry.lightmap) {
         // Luxel centers: the first luxel's s is minS, 16 texels apart.
-        const SurfaceExtent& area = entry.lightmap->area;
+        const assets::SurfaceExtent& area = entry.lightmap->area;
         vertex.lightmapX =
-            static_cast<float>(((s - area.minS) / kLuxelUnits) + kLuxelCenter + entry.corner[0]);
+            static_cast<float>(((s - area.minS) / assets::kLuxelUnits) + kLuxelCenter + entry.corner[0]);
         vertex.lightmapY =
-            static_cast<float>(((t - area.minT) / kLuxelUnits) + kLuxelCenter + entry.corner[1]);
+            static_cast<float>(((t - area.minT) / assets::kLuxelUnits) + kLuxelCenter + entry.corner[1]);
         vertex.styles = entry.face->lightStyles;
     }
     return vertex;
@@ -628,7 +629,7 @@ struct Geometry {
         const assets::TextureInfo& info = map.textureInfos()[entry.face->textureInfo.value];
         std::vector<Vec3> outline;
         for (std::uint32_t edge = 0; edge < entry.face->edgeCount; ++edge) {
-            outline.push_back(cornerOf(map, *entry.face, edge));
+            outline.push_back(assets::cornerOf(map, *entry.face, edge));
         }
         Aabb bounds{.min = outline.front(), .max = outline.front()};
         for (const Vec3 point : outline) {

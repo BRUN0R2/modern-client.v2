@@ -5,7 +5,8 @@
 /// section 1.1): player movement, weapons and the rules they share. Compiled once, into the one
 /// library both link (docs/07-simulation-and-physics.md, section 6).
 ///
-/// Today: player movement in the world, what a player has as it spawns, what each weapon is, the
+/// Today: player movement in the world and the sounds of its feet, by what the textures are made of,
+/// what a player has as it spawns, what each weapon is, the
 /// weapons a player has (given, drawn, idling, fired, reloaded, switched to their alternates and
 /// striking), the sounds the game makes, as data, the rounds of a map: their freeze, their time
 /// and its end, and the money they pay.
@@ -20,3 +21,5 @@ export import :loadouts;
 export import :inventory;
 export import :rounds;
 export import :economy;
+export import :materials;
+export import :footsteps;

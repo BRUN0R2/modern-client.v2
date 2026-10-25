@@ -58,10 +58,11 @@ public:
     [[nodiscard]] auto playLocal(std::string_view name, float volume, nx::Seconds delay = nx::Seconds{})
         -> nx::Result<void, PlayError>;
 
-    /// Plays `sound` as the player makes it, `delay` from now: one of its files and a pitch of its
-    /// range at random, as the original's client and engine choose them, on its channel of the player,
+    /// Plays `sound` as the player makes it, at `volume` (from 0 to 1: the sound's own, or what the
+    /// game made it at, cs::SoundMade), `delay` from now: one of its files and a pitch of its range at
+    /// random, as the original's client and engine choose them, on its channel of the player,
     /// replacing what that channel plays as it starts. Errors: NoSound, QueueFull.
-    [[nodiscard]] auto play(const GameSound& sound, nx::Seconds delay = nx::Seconds{})
+    [[nodiscard]] auto play(const GameSound& sound, float volume, nx::Seconds delay = nx::Seconds{})
         -> nx::Result<void, PlayError>;
 
     /// Reads the sound `name` names (nx::audio::SoundLibrary::load) without playing it, so that
