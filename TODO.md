@@ -385,6 +385,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] `room_type` DSP
 - [ ] Sentences (`sentences.txt`)
 - [x] Footsteps by material (`cs.shared:footsteps`, `data/cstrike/footsteps.toml`, the installation's `sound/materials.txt` read as `cs::TextureMaterials`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): each foot's step on the ground by what its texture is made of, on a ladder and in water, slower and quieter ducked, the jump's and the landing's (with its roll of the view), the splash in and out of water, `mp_footsteps`
+- [x] The breath in water (`cs::Breath`, `data/cstrike/breath.toml`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): the gasp of a player coming up after a while under water and once its air ran out, and the bubbles under it, the likelier the less air is left (`CBasePlayer::WaterMove`)
+- [ ] Drowning, its health given back, and the harm of slime and lava (`CBasePlayer::WaterMove`): with a player's damage
 - [ ] Music (`mp3`): `media/*.mp3` streamed as a voice of the mixer (no second player), `bgmvolume` as its gain; the MP3 decoder fuzzed
 - [ ] Voice pool with priority and documented stealing
 

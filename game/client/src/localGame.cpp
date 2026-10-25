@@ -30,6 +30,7 @@ constexpr nx::HammerUnits kSpawnLift{1.0F};
 constexpr nx::Seconds kPeriodicThinkInterval{1.0F};
 /// The stream of random numbers the sounds of a command's steps draw from.
 constexpr std::string_view kFootstepStream = "footsteps";
+constexpr std::string_view kBreathStream = "breath";
 /// What the game's rules log, as the original's server logs the rounds.
 constexpr nx::log::Category kLog{"game"};
 
@@ -44,8 +45,9 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_solidBoxes{level.models().solidBoxes()},
-      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_breath{content.breath},
+      m_solidBoxes{level.models().solidBoxes()}, m_status{.money = m_cvars.startingMoney()},
+      m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -136,6 +138,13 @@ void LocalGame::tick(const UserCommand& command) {
             {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
     }
     m_lastButtons = command.buttons;
+    // The player breathes in the water the last command left it in, before this one moves it, as the
+    // original's PreThink has it breathe (WaterMove).
+    nx::Random breathRandom{command.number.value, kBreathStream};
+    if (const std::optional<SoundMade> breath = m_breath.breathe(
+            m_player.waterLevel, m_player.moveType, nx::game::tickTimeOf(m_world), breathRandom)) {
+        m_movementSounds.push_back(*breath);
+    }
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
     const MovementResult moved =
         simulateMovement(m_player, command, MovementSettings{}, hulls, entities, m_solidBoxes);
@@ -257,6 +266,7 @@ void LocalGame::spawn() {
     m_isPaidNextRound = true;
     m_turnedView = nx::EulerAngles{.yaw = point.yaw};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    m_breath.fill(time);
     m_roundTimer = m_rounds.timerAt(time.now, time.rate);
 }
 

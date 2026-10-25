@@ -304,6 +304,15 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!footsteps) {
         return nx::fail(LevelError::ContentUnavailable, std::move(footsteps.error()));
     }
+    const std::filesystem::path breathFile = data / "cstrike" / "breath.toml";
+    auto breathText = nx::platform::readTextFile(breathFile);
+    if (!breathText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(breathText.error()));
+    }
+    auto breath = readBreathRules(*breathText, nx::platform::toUtf8(breathFile));
+    if (!breath) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(breath.error()));
+    }
     TextureMaterials materials = readTextureMaterials(*vfs);
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
@@ -312,6 +321,7 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
                        .lightStyles = std::move(*lightStyles),
                        .economy = std::move(*economy),
                        .footsteps = std::move(*footsteps),
+                       .breath = std::move(*breath),
                        .materials = std::move(materials)};
 }
 

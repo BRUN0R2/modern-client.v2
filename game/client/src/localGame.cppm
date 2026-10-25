@@ -129,7 +129,7 @@ public:
     /// order: where a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
     /// The sounds the player made since the last call, each with the moment of its tick: its weapons'
-    /// (Inventory::takeSounds), then its feet's.
+    /// (Inventory::takeSounds), then its breath's and its feet's.
     [[nodiscard]] auto takeSounds() -> std::vector<SoundMade>;
 
 private:
@@ -188,6 +188,7 @@ private:
     Rounds m_rounds;
     TeamAccounts m_accounts;
     StepVoice m_stepVoice;
+    Breath m_breath;
     std::vector<SoundMade> m_movementSounds; ///< Since takeSounds.
     std::vector<SolidBox> m_solidBoxes;      ///< What stops the player besides the brushes: hostages.
     bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).

@@ -19,6 +19,7 @@ nxAddModuleLibrary(csShared
         src/economy.cppm
         src/materials.cppm
         src/footsteps.cppm
+        src/breath.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -30,6 +31,7 @@ nxAddModuleLibrary(csShared
         src/economy.cpp
         src/materials.cpp
         src/footsteps.cpp
+        src/breath.cpp
     DEPENDS
         nx::core
         nx::math
