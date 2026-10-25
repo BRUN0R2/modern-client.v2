@@ -235,6 +235,9 @@ private:
     /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
     /// as it is made or changed. One that cannot be read is logged, and the game plays on.
     void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
+    /// Reads the sounds of the player's feet (cs::FootstepRules::soundFiles) as a session starts, so
+    /// that no step waits on its file. One that cannot be read is logged, and the game plays on.
+    void readFootstepSounds();
     /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
     /// weapons made and its view model's sound events, each as long after the frame as it came after
     /// what the last frame showed; and the client events its view model passed, which the frame shows.
@@ -636,6 +639,7 @@ void Client::startNextSession() {
     m_clientEvents.clear();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
+    readFootstepSounds();
     m_camera.position = m_session->game->eye();
     turnAsTheGameDid();
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
@@ -675,6 +679,17 @@ void Client::readWeaponSounds(std::span<const cs::WeaponIndex> weapons) {
     }
 }
 
+void Client::readFootstepSounds() {
+    if (m_audio == nullptr) {
+        return;
+    }
+    for (const std::string_view file : m_content->footsteps.soundFiles()) {
+        if (auto read = m_audio->preload(file); !read) {
+            nx::log::warning(kLog, "a sound of the footsteps cannot be read: {}", nx::describe(read.error()));
+        }
+    }
+}
+
 void Client::hearSession(const cs::Hearing& hearing) {
     m_viewPose = m_session->game->viewModel();
     m_clientEvents = m_viewModelEvents.passed(
@@ -684,7 +699,7 @@ void Client::hearSession(const cs::Hearing& hearing) {
         return;
     }
     for (const cs::SoundMade& made : sounds) {
-        reportSound(m_audio->play(*made.sound, hearing.delayOf(made.at)));
+        reportSound(m_audio->play(*made.sound, made.volume, hearing.delayOf(made.at)));
     }
     for (const cs::PassedEvent& passed : m_clientEvents) {
         if (passed.event->event == cs::kSoundEvent) {
@@ -834,7 +849,8 @@ auto Client::sessionView() -> cs::SceneView {
             .time = nx::Seconds{m_mapClock.elapsed()},
             .placements = m_placements,
             .viewModel = m_viewPose,
-            .clientEvents = m_clientEvents};
+            .clientEvents = m_clientEvents,
+            .hand = m_hudCvars->hand()};
 }
 
 void Client::appendScreen(nx::rhi::Extent2d size) {

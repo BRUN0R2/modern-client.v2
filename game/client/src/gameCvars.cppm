@@ -15,15 +15,17 @@ import cs.shared;
 
 export namespace cs {
 
-/// The cvars of the rounds and of the money a game starts with: `mp_freezetime` (6 seconds, 0 to 60),
-/// `mp_roundtime` (5 minutes, 1 to 9), `mp_startmoney` (800, 800 to 16000), and `sv_restartround` and
-/// `sv_restart` (0: the seconds to restart the game in, up to 60).
+/// The cvars of the rounds, of the money a game starts with and of the players' steps: `mp_freezetime`
+/// (6 seconds, 0 to 60), `mp_roundtime` (5 minutes, 1 to 9), `mp_startmoney` (800, 800 to 16000),
+/// `sv_restartround` and `sv_restart` (0: the seconds to restart the game in, up to 60), and
+/// `mp_footsteps` (1: the players' steps sound).
 struct GameCvars {
     nx::console::Cvar<float> freezeTime;
     nx::console::Cvar<float> roundTime;
     nx::console::Cvar<std::int32_t> startMoney;
     nx::console::Cvar<std::int32_t> restartRound; ///< `sv_restartround`, read before sv_restart.
     nx::console::Cvar<std::int32_t> restart;      ///< `sv_restart`.
+    nx::console::Cvar<bool> footsteps;            ///< `mp_footsteps`, read at each step.
 
     /// Registers them in `console`. Errors: those of Console::registerCvar.
     [[nodiscard]] static auto registerIn(nx::console::Console& console)

@@ -147,6 +147,9 @@ struct WadFiles {
     return std::move(*catalog);
 }
 
+/// What the installation says its textures are made of.
+constexpr std::string_view kMaterialsFile = "sound/materials.txt";
+
 /// The class of the spawn points of each team.
 constexpr nx::EnumArray<Team, std::string_view> kSpawnClasses{
     nx::EnumArray<Team, std::string_view>::Storage{"info_player_deathmatch", "info_player_start"}};
@@ -160,6 +163,22 @@ constexpr nx::EnumArray<Team, std::string_view> kSpawnClasses{
         }
     }
     return std::nullopt;
+}
+
+/// What the textures of `vfs`'s installation are made of: its sound/materials.txt; none tagged, and
+/// logged, without it, as the original carries on.
+[[nodiscard]] auto readTextureMaterials(const nx::assets::Vfs& vfs) -> TextureMaterials {
+    auto bytes = nx::assets::VfsPath::parse(kMaterialsFile).and_then([&vfs](const nx::assets::VfsPath& path) {
+        return vfs.readAll(path);
+    });
+    if (!bytes) {
+        nx::log::warning(kLog, "{} is missing or unreadable: every texture sounds as concrete",
+                         kMaterialsFile);
+        return TextureMaterials{};
+    }
+    return TextureMaterials::read(*bytes | std::views::transform([](std::byte value) {
+        return static_cast<char>(value);
+    }) | std::ranges::to<std::string>());
 }
 
 /// `names`, separated by commas.
@@ -276,12 +295,24 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!economy) {
         return nx::fail(LevelError::ContentUnavailable, std::move(economy.error()));
     }
+    const std::filesystem::path footstepsFile = data / "cstrike" / "footsteps.toml";
+    auto footstepsText = nx::platform::readTextFile(footstepsFile);
+    if (!footstepsText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(footstepsText.error()));
+    }
+    auto footsteps = readFootstepRules(*footstepsText, nx::platform::toUtf8(footstepsFile));
+    if (!footsteps) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(footsteps.error()));
+    }
+    TextureMaterials materials = readTextureMaterials(*vfs);
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
                        .weapons = std::move(*weapons),
                        .loadouts = std::move(*loadouts),
                        .lightStyles = std::move(*lightStyles),
-                       .economy = std::move(*economy)};
+                       .economy = std::move(*economy),
+                       .footsteps = std::move(*footsteps),
+                       .materials = std::move(materials)};
 }
 
 auto Level::load(const GameContent& content, std::string_view name)
@@ -332,6 +363,7 @@ auto Level::load(const GameContent& content, std::string_view name)
     }
     level.m_objectives = mapObjectivesOf(bsp);
     level.m_hostages = hostagesOf(bsp);
+    level.m_surfaceExtents = nx::assets::surfaceExtentsOf(bsp);
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
     if (!level.m_sprites->missing().empty()) {
@@ -450,6 +482,19 @@ auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& cl
         return nx::fail(LevelError::GameUnspawnable, std::move(spawned.error()));
     }
     return {};
+}
+
+auto Level::materialAlong(const TextureMaterials& materials, nx::assets::ModelIndex model, nx::Vec3 start,
+                          nx::Vec3 end) const -> TextureMaterial {
+    const nx::assets::BspView& map = *m_map;
+    const std::optional<nx::assets::FaceIndex> face =
+        nx::assets::surfaceAt(map, m_surfaceExtents, model, start, end);
+    if (!face) {
+        return TextureMaterial::Concrete;
+    }
+    const nx::assets::TextureInfo& info = map.textureInfos()[map.faces()[face->value].textureInfo.value];
+    const std::optional<nx::assets::MipTexture>& texture = map.textures()[info.texture.value];
+    return texture ? materials.materialOf(lookedUpTextureName(texture->name)) : TextureMaterial::Concrete;
 }
 
 auto spawnView(const nx::assets::BspView& map) -> nx::render::Camera {

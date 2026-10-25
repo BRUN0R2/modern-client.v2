@@ -355,7 +355,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] `+attack2`: the USP's and the M4A1's silencers, the Glock's burst and its follow-up rounds ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [x] The knife's slash and stab: what they meet (`nx::game::traceSolids`), their sequences and timings ([10 §7.3](docs/10-counter-strike-gameplay.md#73-behaviors))
 - [ ] Weapon state machine: holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
-- [ ] `cl_righthand`: the player's hand (the right today), the view models mirrored by it
+- [x] `cl_righthand`: the player's hand (`cs::HudCvars`, archived, 1 the right), the view models mirrored by it each frame (`ViewModel::isMirroredIn`, `SceneView::hand`)
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
 - [x] The marks the shots leave on brush entities (`cs::bulletMarkOf`: `DamageDecal` by render mode, a breakable's by its material: `{bproof1`, `{break1` to `{break3`)
@@ -369,7 +369,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The weapons' sounds: the view model's sound events (5004), and each weapon's draw, fire, empty click and knife sounds as data (`cs::GameSound`), on the player's channels
 - [x] The weapons' sounds read before a frame plays them: every weapon's as a map starts, a weapon's as it is made or changed (`cs::soundFilesOf`, `ClientAudio::preload`), never in the frame of the first shot ([11 §2](docs/11-audio.md#2-architecture))
 - [ ] The guns' fire sounds as the original's client events choose them (which file, what pitch): to be measured on the original
-- [ ] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) and the world's texture sounds (`materials.txt`), with what they meet
+- [ ] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) and the world's texture sounds by what the textures are made of (`cs::TextureMaterials`, read today), with what they meet
 - [x] `s_play_unfocused` (0: silent while the window is not focused, as the original is; [11 §8](docs/11-audio.md#8-cvars))
 - [ ] `s_device`: the output device by name, and listing them
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
@@ -378,7 +378,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Attenuation, pitch and volume with parity
 - [ ] `room_type` DSP
 - [ ] Sentences (`sentences.txt`)
-- [ ] Footsteps by material
+- [x] Footsteps by material (`cs.shared:footsteps`, `data/cstrike/footsteps.toml`, the installation's `sound/materials.txt` read as `cs::TextureMaterials`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): each foot's step on the ground by what its texture is made of, on a ladder and in water, slower and quieter ducked, the jump's and the landing's (with its roll of the view), the splash in and out of water, `mp_footsteps`
 - [ ] Music (`mp3`): `media/*.mp3` streamed as a voice of the mixer (no second player), `bgmvolume` as its gain; the MP3 decoder fuzzed
 - [ ] Voice pool with priority and documented stealing
 

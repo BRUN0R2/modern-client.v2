@@ -123,7 +123,14 @@ code** on the server (authoritative) and on the client (prediction).
   a jump or by backing off them on the floor), among the world and the brush entities, where the
   game puts and turns them; and the weapon's kick to the view (`MovementState::punch`), dropped
   back each move (`PM_DropPunchAngle`: its length less 10 and half of itself a second) and added to
-  the view the move follows.
+  the view the move follows. The sounds of the feet (`MovementResult::sounds`): a step of the other
+  foot each 0.3 s on the ground or wading in shallow water, 0.35 s on a ladder and 0.6 s wading
+  deeper, 0.1 s slower and at 35% ducked, none slower than 150 units a second
+  (`PM_UpdateStepSound`); the ground's step as a jump leaves it (`PM_Jump`) and as a fall lands on it,
+  louder the harder it lands, rolling the view 0.013 degrees for each unit a second of the fall
+  (`PM_CheckFalling`); and a splash entering water, leaving it or swimming up
+  (`PM_PlayWaterSounds`). A step says where the player stood, which the game looks up the texture
+  under, and what it is made of ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
   `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch

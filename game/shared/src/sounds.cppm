@@ -45,11 +45,12 @@ struct GameSound {
     std::optional<PitchRange> pitch{};
 };
 
-/// A sound the game made, and the moment of the tick it made it at: what lets it be heard as it was
-/// made, though a frame of the client runs many ticks at once.
+/// A sound the game made, the moment of the tick it made it at, and how loud: what lets it be heard
+/// as it was made, though a frame of the client runs many ticks at once.
 struct SoundMade {
     const GameSound* sound{};
     nx::GameTime at{};
+    float volume{1.0F}; ///< From 0 to 1: the sound's own, or less, as a ducked player's steps.
 };
 
 /// What is wrong with `sound`, when anything is: no file, or a pitch range whose least is above its

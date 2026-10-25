@@ -37,7 +37,9 @@ enum class LevelError : std::uint8_t {
 /// the map's entities by (data/cstrike/entities.toml), its weapons (data/cstrike/ammo.toml and
 /// data/cstrike/weapons/<id>.toml), what a player of each team spawns with
 /// (data/cstrike/loadouts.toml), the light styles it sets as a map starts
-/// (data/cstrike/lightStyles.toml), and the money of its rounds (data/cstrike/economy.toml).
+/// (data/cstrike/lightStyles.toml), the money of its rounds (data/cstrike/economy.toml), the sounds of
+/// a player's feet (data/cstrike/footsteps.toml), and what the textures are made of (the
+/// installation's sound/materials.txt; none tagged without it).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
@@ -45,6 +47,8 @@ struct GameContent {
     Loadouts loadouts;
     WorldLightStyles lightStyles;
     EconomyRules economy;
+    FootstepRules footsteps;
+    TextureMaterials materials;
 };
 
 /// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its
@@ -73,7 +77,8 @@ struct SpawnPoint {
 
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, the
-/// loadouts, the light styles and the money of the rounds; and the installation at `install`, or the one
+/// loadouts, the light styles, the money of the rounds and the footsteps; what the textures are made
+/// of, from the installation; and the installation at `install`, or the one
 /// Steam installed, below `addons`, the user's own content (addonsFolderOf), when it is given and is a
 /// folder: a file there is read instead of the installation's. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
@@ -172,6 +177,11 @@ public:
     [[nodiscard]] inline auto objectives() const noexcept -> MapObjectives { return m_objectives; }
     /// How many hostages it holds as it starts (hostagesOf).
     [[nodiscard]] inline auto hostages() const noexcept -> std::uint32_t { return m_hostages; }
+    /// What the texture of the face of brush model `model` the segment from `start` to `end`, in the
+    /// model's own space, first meets (nx::assets::surfaceAt) is made of, by `materials`: concrete when
+    /// it meets none (PM_TraceTexture).
+    [[nodiscard]] auto materialAlong(const TextureMaterials& materials, nx::assets::ModelIndex model,
+                                     nx::Vec3 start, nx::Vec3 end) const -> TextureMaterial;
     /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
     /// what bulletMarkOf says of its entity on a brush entity's (Gunshot without one).
     [[nodiscard]] auto bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark;
@@ -188,6 +198,7 @@ private:
     nx::EnumArray<Team, std::vector<SpawnPoint>> m_spawnPoints;
     MapObjectives m_objectives;
     std::uint32_t m_hostages = 0;
+    std::vector<std::optional<nx::assets::SurfaceExtent>> m_surfaceExtents; ///< By face.
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;

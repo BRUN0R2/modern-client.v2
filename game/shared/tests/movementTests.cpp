@@ -628,4 +628,102 @@ TEST(MovementTest, TheGamesBrushEntitiesAreMetAsTheEngineListsThem) {
     EXPECT_EQ(met[2].contents, Contents::Slime);
 }
 
+/// The footsteps among `sounds`.
+[[nodiscard]] auto footstepsOf(std::span<const cs::MovementSound> sounds) -> std::vector<cs::Footstep> {
+    std::vector<cs::Footstep> steps;
+    for (const cs::MovementSound& sound : sounds) {
+        if (const auto* step = std::get_if<cs::Footstep>(&sound)) {
+            steps.push_back(*step);
+        }
+    }
+    return steps;
+}
+
+/// A player running on the floor at `speed`, its next step due.
+[[nodiscard]] auto runningOnTheFloor(float speed) -> MovementState {
+    MovementState state = standingOnTheFloor();
+    state.velocity = Vec3{.x = speed};
+    return state;
+}
+
+TEST(FootstepTest, ARunnersFeetSoundInTurnEachThreeTenthsOfASecond) {
+    const BrushHulls floor = floorWorld();
+    MovementState state = runningOnTheFloor(250.0F);
+    const UserCommand run = command(forward(250.0F));
+    std::vector<std::pair<int, cs::Footstep>> steps;
+    for (int tick = 0; tick < 70; ++tick) {
+        const cs::MovementResult moved = cs::simulateMovement(state, run, MovementSettings{}, floor, {});
+        for (const cs::Footstep& step : footstepsOf(moved.sounds)) {
+            steps.emplace_back(tick, step);
+        }
+        state = moved.state;
+    }
+    ASSERT_EQ(steps.size(), 3U);
+    EXPECT_EQ(steps[0].first, 0);
+    EXPECT_EQ(steps[1].first, 30);
+    EXPECT_EQ(steps[2].first, 60);
+    EXPECT_TRUE(steps[0].second.isLeftFoot) << "the left foot first, as iStepLeft turns from 0";
+    EXPECT_FALSE(steps[1].second.isLeftFoot);
+    EXPECT_TRUE(steps[2].second.isLeftFoot);
+    const cs::Footstep& first = steps[0].second;
+    EXPECT_EQ(first.place, cs::StepPlace::Ground);
+    EXPECT_EQ(first.share, 1.0F);
+    EXPECT_FALSE(first.volume.has_value());
+    ASSERT_TRUE(first.ground.has_value());
+    EXPECT_FALSE(first.ground->groundModel.has_value()) << "on the world";
+}
+
+TEST(FootstepTest, AWalkerOrADuckedPlayerIsQuieter) {
+    const BrushHulls floor = floorWorld();
+    const cs::MovementResult walking = cs::simulateMovement(
+        runningOnTheFloor(140.0F), command(forward(140.0F)), MovementSettings{}, floor, {});
+    EXPECT_TRUE(footstepsOf(walking.sounds).empty()) << "no faster than 150: silent";
+    EXPECT_EQ(walking.state.stepTime, nx::Milliseconds{400.0F});
+
+    MovementState ducked = duckedOnTheFloor();
+    ducked.velocity = Vec3{.x = 200.0F};
+    const cs::MovementResult crouching =
+        cs::simulateMovement(ducked, command(forward(200.0F), {Button::Duck}), MovementSettings{}, floor, {});
+    const std::vector<cs::Footstep> steps = footstepsOf(crouching.sounds);
+    ASSERT_EQ(steps.size(), 1U);
+    EXPECT_FLOAT_EQ(steps.front().share, 0.35F);
+    EXPECT_EQ(crouching.state.stepTime, nx::Milliseconds{400.0F}) << "300, and 100 more ducked";
+}
+
+TEST(FootstepTest, AHardLandingSoundsLoudAndRollsTheView) {
+    const BrushHulls floor = floorWorld();
+    MovementState falling{.origin = {.z = 5.0F}, .velocity = {.z = -600.0F}, .maxSpeed = kKnifeSpeed};
+    const cs::MovementResult landed = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
+    ASSERT_TRUE(landed.state.isOnGround);
+    const std::vector<cs::Footstep> steps = footstepsOf(landed.sounds);
+    ASSERT_EQ(steps.size(), 1U);
+    EXPECT_EQ(steps.front().volume, 1.0F) << "faster than the safest fall, 580";
+    EXPECT_NEAR(landed.state.punch.roll.value(), 600.0F * 0.013F, kTolerance);
+    EXPECT_EQ(landed.state.fallSpeed, nx::UnitsPerSecond{}) << "on the ground, the fall is over";
+    EXPECT_EQ(landed.state.stepTime, nx::Milliseconds{300.0F});
+
+    falling.velocity.z = -300.0F;
+    const cs::MovementResult firm = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
+    ASSERT_EQ(footstepsOf(firm.sounds).size(), 1U);
+    EXPECT_EQ(footstepsOf(firm.sounds).front().volume, 0.85F) << "faster than half the safest fall, 290";
+    falling.velocity.z = -270.0F;
+    const cs::MovementResult soft = cs::simulateMovement(falling, command(), MovementSettings{}, floor, {});
+    EXPECT_TRUE(footstepsOf(soft.sounds).empty()) << "no faster than 290 and slower than 350: silent";
+    EXPECT_NEAR(soft.state.punch.roll.value(), 0.0F, kTolerance) << "silent: no roll either";
+    falling.velocity.z = -200.0F;
+    EXPECT_EQ(
+        cs::simulateMovement(falling, command(), MovementSettings{}, floor, {}).state.punch.roll.value(),
+        0.0F)
+        << "slower than 250: no roll";
+}
+
+TEST(FootstepTest, GoingIntoWaterSplashes) {
+    MovementState falling{.origin = {.z = 36.0F}, .velocity = {.z = -200.0F}, .maxSpeed = kKnifeSpeed};
+    const cs::MovementResult moved =
+        cs::simulateMovement(falling, command(), MovementSettings{}, waterWorld(0.0F), {});
+    EXPECT_EQ(moved.state.waterLevel, WaterLevel::Feet);
+    ASSERT_EQ(moved.sounds.size(), 1U);
+    EXPECT_TRUE(std::holds_alternative<cs::Splash>(moved.sounds.front()));
+}
+
 } // namespace
