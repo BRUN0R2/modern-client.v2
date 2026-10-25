@@ -1428,6 +1428,8 @@ auto VulkanDevice::createPipelineCache(std::span<const std::byte> learned) -> Re
         log::info(kLog, "the pipeline cache is another GPU's or driver's: the pipelines are built anew");
     }
     const VkPipelineCacheCreateInfo info{.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+                                         .pNext = nullptr,
+                                         .flags = 0,
                                          .initialDataSize = isKept ? learned.size() : 0,
                                          .pInitialData = isKept ? learned.data() : nullptr};
     if (const VkResult result = vkCreatePipelineCache(m_device, &info, nullptr, &m_pipelineCache);
