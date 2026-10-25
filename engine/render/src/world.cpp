@@ -27,12 +27,6 @@ constexpr std::uint32_t kAtlasWidth = 1024;
 constexpr std::uint32_t kCheckerSize = 16;
 constexpr std::uint32_t kCheckerSquare = 8;
 
-/// The bytes of a texel the world uploads, red, green, blue and alpha; of a lightmap sample and of a
-/// palette color, red, green and blue.
-constexpr std::size_t kRgbaBytes = 4;
-constexpr std::size_t kRgbBytes = 3;
-/// A channel at its brightest, and an opaque alpha.
-constexpr std::byte kFull{255};
 /// The corners of a triangle.
 constexpr std::uint32_t kTriangleCorners = 3;
 
@@ -231,8 +225,8 @@ constexpr std::size_t kSequenceStart = 2;
     for (std::uint32_t y = 0; y < kCheckerSize; ++y) {
         for (std::uint32_t x = 0; x < kCheckerSize; ++x) {
             const bool isMagenta = (((x / kCheckerSquare) + (y / kCheckerSquare)) & 1U) == 0;
-            const std::byte level = isMagenta ? kFull : std::byte{0};
-            texels.insert(texels.end(), {level, std::byte{0}, level, kFull});
+            const std::byte level = isMagenta ? assets::kFullChannel : std::byte{0};
+            texels.insert(texels.end(), {level, std::byte{0}, level, assets::kFullChannel});
         }
     }
     return texels;
@@ -414,7 +408,7 @@ struct FaceToDraw {
         return std::nullopt;
     }
     const std::uint32_t maps = lightmapCountOf(*entry.face);
-    const std::size_t sampleBytes = std::size_t{area->width} * area->height * kRgbBytes;
+    const std::size_t sampleBytes = std::size_t{area->width} * area->height * assets::kRgbBytes;
     if (*entry.face->lightmapOffset + (sampleBytes * maps) > map.lighting().size()) {
         return std::nullopt;
     }
@@ -463,13 +457,13 @@ void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, Lightmap
         for (std::uint32_t y = 0; y < area.height; ++y) {
             for (std::uint32_t x = 0; x < area.width; ++x) {
                 const std::size_t from =
-                    ((lightmap * mapSamples) + (std::size_t{y} * area.width) + x) * kRgbBytes;
+                    ((lightmap * mapSamples) + (std::size_t{y} * area.width) + x) * assets::kRgbBytes;
                 const std::size_t texel =
                     (std::size_t{entry.corner[1] + y} * atlas.extent.width) + entry.corner[0] + x;
-                const std::size_t to = atlas.layerOffsets.at(lightmap) + (texel * kRgbaBytes);
-                std::ranges::copy(samples.subspan(from, kRgbBytes),
+                const std::size_t to = atlas.layerOffsets.at(lightmap) + (texel * assets::kRgbaBytes);
+                std::ranges::copy(samples.subspan(from, assets::kRgbBytes),
                                   atlas.texels.begin() + narrow<std::ptrdiff_t>(to));
-                atlas.texels[to + kRgbBytes] = kFull;
+                atlas.texels[to + assets::kRgbBytes] = assets::kFullChannel;
             }
         }
     }
@@ -486,7 +480,7 @@ void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, Lightmap
         }
     }
     LightmapAtlas atlas{.extent = {.width = kAtlasWidth, .height = std::max(packer.height(), 1U)}};
-    const std::size_t layerBytes = std::size_t{atlas.extent.width} * atlas.extent.height * kRgbaBytes;
+    const std::size_t layerBytes = std::size_t{atlas.extent.width} * atlas.extent.height * assets::kRgbaBytes;
     for (std::size_t layer = 0; layer < atlas.layerOffsets.size(); ++layer) {
         atlas.layerOffsets.at(layer) = layer * layerBytes;
     }
@@ -528,9 +522,10 @@ void copyLightmaps(const assets::BspView& map, const FaceToDraw& entry, Lightmap
 /// The light table: what the summed light of a sample is drawn as (nx.render:gamma), gray texels.
 [[nodiscard]] auto lightTableTexels(const GammaSettings& settings) -> std::vector<std::byte> {
     std::vector<std::byte> texels;
-    texels.reserve(kLightTableSize * kRgbaBytes);
+    texels.reserve(kLightTableSize * assets::kRgbaBytes);
     for (const std::uint8_t level : lightTable(settings)) {
-        texels.insert(texels.end(), {std::byte{level}, std::byte{level}, std::byte{level}, kFull});
+        texels.insert(texels.end(),
+                      {std::byte{level}, std::byte{level}, std::byte{level}, assets::kFullChannel});
     }
     return texels;
 }
@@ -751,13 +746,13 @@ struct SkyLayers {
         for (std::size_t& offset : layers.offsets) {
             offset = layers.texels.size();
             layers.texels.append_range(
-                colorTexelsOf({kNoSkyLevel, kNoSkyLevel, kNoSkyLevel, kFull}, encoding));
+                colorTexelsOf({kNoSkyLevel, kNoSkyLevel, kNoSkyLevel, assets::kFullChannel}, encoding));
         }
         return layers;
     }
     const auto isOfTheFirstsSize = [&sky](const assets::RgbaImage& side) {
         return side.width == sky.front().width && side.height == sky.front().height &&
-               side.pixels.size() == std::size_t{side.width} * side.height * kRgbaBytes;
+               side.pixels.size() == std::size_t{side.width} * side.height * assets::kRgbaBytes;
     };
     if (sky.size() != kSkySuffixes.size() || sky.front().width == 0 || sky.front().height == 0 ||
         !std::ranges::all_of(sky, isOfTheFirstsSize)) {

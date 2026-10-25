@@ -56,12 +56,11 @@ public:
 
 private:
     static constexpr std::size_t kMask = Capacity - 1;
-    /// Apart, so that the two threads do not share a cache line.
-    static constexpr std::size_t kCacheLine = 64;
 
     std::array<Element, Capacity> m_elements{};
-    alignas(kCacheLine) std::atomic<std::size_t> m_head{0}; ///< The consumer's: the next to take.
-    alignas(kCacheLine) std::atomic<std::size_t> m_tail{0}; ///< The producer's: the next to fill.
+    // Apart, so that the two threads do not share a cache line.
+    alignas(kCacheLineSize) std::atomic<std::size_t> m_head{0}; ///< The consumer's: the next to take.
+    alignas(kCacheLineSize) std::atomic<std::size_t> m_tail{0}; ///< The producer's: the next to fill.
 };
 
 } // namespace nx::jobs

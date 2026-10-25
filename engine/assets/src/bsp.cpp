@@ -110,8 +110,6 @@ constexpr std::size_t kAxes = 3;
 /// How far from 1 the length of a stored normal may be: compilers write unit normals in floats.
 constexpr float kUnitLengthTolerance = 1.0e-3F;
 
-constexpr std::size_t kRgbBytes = 3;
-
 /// "<lump> <record>": where a failure is.
 [[nodiscard]] auto where(Lump lump, std::size_t record) -> std::string {
     return std::format("{} {}", enumName(lump), record);

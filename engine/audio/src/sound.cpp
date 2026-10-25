@@ -19,7 +19,6 @@ constexpr double kSigned8Scale = 128.0;
 constexpr double kSigned16Scale = 32'768.0;
 constexpr double kSigned24Scale = 8'388'608.0;
 constexpr double kSigned32Scale = 2'147'483'648.0;
-constexpr std::size_t kBytes24 = 3;
 constexpr unsigned kBitsPerByte = 8;
 
 /// The sample of `format` at the start of `bytes`, as a float.
@@ -34,7 +33,7 @@ constexpr unsigned kBitsPerByte = 8;
                                   kSigned16Scale);
     case assets::SampleFormat::Signed24: {
         std::uint32_t bits = 0;
-        for (std::size_t index = 0; index < kBytes24; ++index) {
+        for (std::size_t index = 0; index < assets::bytesPerSample(format); ++index) {
             bits |= std::to_integer<std::uint32_t>(bytes[index]) << (index * kBitsPerByte);
         }
         // Signed: the top byte repeats the 24th bit.
@@ -56,30 +55,12 @@ constexpr unsigned kBitsPerByte = 8;
     return 0.0F;
 }
 
-/// The bytes a sample of `format` takes.
-[[nodiscard]] auto bytesOf(assets::SampleFormat format) noexcept -> std::size_t {
-    switch (format) {
-    case assets::SampleFormat::Unsigned8:
-        return 1;
-    case assets::SampleFormat::Signed16:
-        return 2;
-    case assets::SampleFormat::Signed24:
-        return kBytes24;
-    case assets::SampleFormat::Signed32:
-    case assets::SampleFormat::Float32:
-        return 4;
-    case assets::SampleFormat::Float64:
-        return 8;
-    }
-    return 1;
-}
-
 } // namespace
 
 auto Sound::of(const assets::WavSound& wav) -> Sound {
     const std::uint16_t inFile = wav.channels.value();
     const std::uint16_t kept = std::min(inFile, kMaxChannels);
-    const std::size_t sampleBytes = bytesOf(wav.format);
+    const std::size_t sampleBytes = assets::bytesPerSample(wav.format);
     const std::size_t frameBytes = sampleBytes * inFile;
     std::vector<float> samples;
     samples.reserve(std::size_t{wav.length.value()} * kept);

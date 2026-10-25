@@ -196,12 +196,6 @@ private:
     std::size_t m_at = 0;
 };
 
-constexpr std::uint32_t kHighSurrogates = 0xD800U;
-constexpr std::uint32_t kLowSurrogates = 0xDC00U;
-constexpr std::uint32_t kSurrogatesEnd = 0xE000U;
-constexpr std::uint32_t kSupplementaryPlanes = 0x10000U;
-constexpr std::uint32_t kSurrogateBits = 10U;
-
 } // namespace
 
 auto KeyValuesEntry::find(std::string_view name) const noexcept -> const KeyValuesEntry* {
@@ -240,28 +234,26 @@ auto keyValuesText(std::span<const std::byte> bytes) -> Result<std::string, KeyV
         return fail(KeyValuesError::BadEncoding, "UTF-16 of an odd number of bytes");
     }
     const auto unitAt = [units](std::size_t index) {
-        return std::to_integer<std::uint32_t>(units[index]) |
-               (std::to_integer<std::uint32_t>(units[index + 1]) << 8U);
+        return static_cast<char32_t>(loadLittleEndian<std::uint16_t>(units.subspan(index)));
     };
     std::string text;
     text.reserve(units.size() / 2);
     for (std::size_t index = 0; index < units.size(); index += 2) {
-        std::uint32_t code = unitAt(index);
-        if (code >= kLowSurrogates && code < kSurrogatesEnd) {
+        char32_t code = unitAt(index);
+        if (isLowSurrogate(code)) {
             return fail(KeyValuesError::BadEncoding,
                         std::format("a low surrogate alone at byte {}", index + 2));
         }
-        if (code >= kHighSurrogates && code < kLowSurrogates) {
-            const std::uint32_t low = index + 3 < units.size() ? unitAt(index + 2) : 0;
-            if (low < kLowSurrogates || low >= kSurrogatesEnd) {
+        if (isHighSurrogate(code)) {
+            const char32_t low = index + 3 < units.size() ? unitAt(index + 2) : char32_t{};
+            if (!isLowSurrogate(low)) {
                 return fail(KeyValuesError::BadEncoding,
                             std::format("a high surrogate alone at byte {}", index + 2));
             }
-            code =
-                kSupplementaryPlanes + ((code - kHighSurrogates) << kSurrogateBits) + (low - kLowSurrogates);
+            code = characterOfSurrogates(code, low);
             index += 2;
         }
-        appendUtf8(text, static_cast<char32_t>(code));
+        appendUtf8(text, code);
     }
     return text;
 }

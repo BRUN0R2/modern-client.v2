@@ -7,7 +7,7 @@ export module nx.assets:blockCompression;
 
 import std;
 import nx.core;
-import :tga;
+import :image;
 
 export namespace nx::assets {
 

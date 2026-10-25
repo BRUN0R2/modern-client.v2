@@ -23,6 +23,7 @@
 // the bloom spreads.
 
 import colorEncoding;
+import numbers;
 import skyDirection;
 
 struct Frame
@@ -321,7 +322,6 @@ float4 maskedFragmentMain(VertexOutput input) : SV_Target
 
 // --- The enhanced look -------------------------------------------------------------------------
 
-static const float kPi = 3.14159265;
 // How much light a dielectric reflects head on.
 static const float kDielectricReflectance = 0.04;
 // The smoothest a surface is shaded as: a mirror's highlight would be a single point.

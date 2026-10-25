@@ -6,14 +6,12 @@ module nx.render;
 import std;
 import nx.core;
 import nx.rhi;
+import nx.assets;
 
 namespace nx::render {
 
 namespace {
 
-/// The bytes of an RGBA texel, and of its color.
-constexpr std::size_t kRgbaBytes = 4;
-constexpr std::size_t kColorBytes = 3;
 /// The texels a texel of the next mip level is the mean of, two by two, and the bits that divide by
 /// them.
 constexpr std::uint32_t kMipStep = 2;
@@ -21,8 +19,6 @@ constexpr std::uint32_t kMipMeanShift = 2;
 constexpr float kMipTexels = static_cast<float>(kMipStep * kMipStep);
 /// A channel at its brightest.
 constexpr float kChannelTop = 255.0F;
-/// An opaque alpha.
-constexpr std::byte kOpaque{255};
 /// The palette index a masked texture draws as transparent.
 constexpr std::uint8_t kTransparentIndex = 255;
 /// The gamma of the display the original's colors are made for (shaders/colorEncoding.slang).
@@ -76,7 +72,7 @@ struct SrgbTables {
 
 /// The mean of the light of sRGB colors, as sRGB; of alpha, a share, as byteMeanOf takes it.
 [[nodiscard]] auto lightMeanOf(std::size_t channel, const MipQuad& above) -> std::byte {
-    if (channel >= kColorBytes) {
+    if (channel >= assets::kRgbBytes) {
         return byteMeanOf(channel, above);
     }
     const std::array<float, kChannelValues>& light = srgbTables().lightOfSrgb;
@@ -86,7 +82,7 @@ struct SrgbTables {
 /// The bytes of the level `level` of a `width` x `height` texture.
 [[nodiscard]] auto levelBytesOf(std::uint32_t width, std::uint32_t height, std::uint32_t level) noexcept
     -> std::size_t {
-    return std::size_t{std::max(width >> level, 1U)} * std::max(height >> level, 1U) * kRgbaBytes;
+    return std::size_t{std::max(width >> level, 1U)} * std::max(height >> level, 1U) * assets::kRgbaBytes;
 }
 
 /// Writes to `below` the level under the `width` x `height` one `above` holds, each channel of each texel
@@ -103,10 +99,11 @@ void makeMipLevel(std::span<const std::byte> above, std::uint32_t width, std::ui
         for (std::uint32_t x = 0; x < lowerWidth; ++x) {
             const std::size_t left = std::min(x * kMipStep, width - 1);
             const std::size_t right = std::min((x * kMipStep) + 1, width - 1);
-            const std::array corners{(top + left) * kRgbaBytes, (top + right) * kRgbaBytes,
-                                     (bottom + left) * kRgbaBytes, (bottom + right) * kRgbaBytes};
-            const std::size_t at = ((std::size_t{y} * lowerWidth) + x) * kRgbaBytes;
-            for (std::size_t channel = 0; channel < kRgbaBytes; ++channel) {
+            const std::array corners{(top + left) * assets::kRgbaBytes, (top + right) * assets::kRgbaBytes,
+                                     (bottom + left) * assets::kRgbaBytes,
+                                     (bottom + right) * assets::kRgbaBytes};
+            const std::size_t at = ((std::size_t{y} * lowerWidth) + x) * assets::kRgbaBytes;
+            for (std::size_t channel = 0; channel < assets::kRgbaBytes; ++channel) {
                 const MipQuad quad{std::to_integer<std::uint32_t>(above[corners[0] + channel]),
                                    std::to_integer<std::uint32_t>(above[corners[1] + channel]),
                                    std::to_integer<std::uint32_t>(above[corners[2] + channel]),
@@ -144,18 +141,19 @@ template <class ChannelMean>
 
 auto paletteTexelsOf(std::span<const std::byte> indices, std::span<const std::byte> palette, bool isMasked,
                      const ChannelTable& textureGamma) -> std::vector<std::byte> {
-    std::vector<std::byte> texels(indices.size() * kRgbaBytes); // a transparent texel stays as it is made
+    std::vector<std::byte> texels(indices.size() *
+                                  assets::kRgbaBytes); // a transparent texel stays as it is made
     for (std::size_t texel = 0; texel < indices.size(); ++texel) {
         const auto entry = std::to_integer<std::size_t>(indices[texel]);
         if (isMasked && entry == kTransparentIndex) {
             continue;
         }
-        const std::size_t at = texel * kRgbaBytes;
-        for (std::size_t channel = 0; channel < kColorBytes; ++channel) {
-            const auto value = std::to_integer<std::size_t>(palette[(entry * kColorBytes) + channel]);
+        const std::size_t at = texel * assets::kRgbaBytes;
+        for (std::size_t channel = 0; channel < assets::kRgbBytes; ++channel) {
+            const auto value = std::to_integer<std::size_t>(palette[(entry * assets::kRgbBytes) + channel]);
             texels[at + channel] = std::byte{textureGamma[value]};
         }
-        texels[at + kColorBytes] = kOpaque;
+        texels[at + assets::kRgbBytes] = assets::kFullChannel;
     }
     return texels;
 }
@@ -173,8 +171,8 @@ auto colorTexelsOf(std::vector<std::byte> texels, ColorEncoding encoding) -> std
         return texels;
     }
     const std::array<std::byte, kChannelValues>& srgb = srgbTables().srgbOfDisplay;
-    for (std::size_t at = 0; at < texels.size(); at += kRgbaBytes) {
-        for (std::size_t channel = 0; channel < kColorBytes; ++channel) {
+    for (std::size_t at = 0; at < texels.size(); at += assets::kRgbaBytes) {
+        for (std::size_t channel = 0; channel < assets::kRgbBytes; ++channel) {
             texels[at + channel] = srgb[std::to_integer<std::size_t>(texels[at + channel])];
         }
     }

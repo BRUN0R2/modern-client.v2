@@ -29,10 +29,7 @@ constexpr float kMiddle = 0.5F;
 /// The palette index a decal draws clear, and the color whose last place in a palette makes a decal
 /// masked rather than tinted: pure blue.
 constexpr std::size_t kClearIndex = 255;
-constexpr std::array<std::uint8_t, 3> kMaskedColor{0, 0, 255};
-constexpr std::size_t kRgbBytes = 3;
-constexpr std::size_t kRgbaBytes = 4;
-constexpr std::byte kOpaque{255};
+constexpr std::array<std::uint8_t, assets::kRgbBytes> kMaskedColor{0, 0, 255};
 /// A luxel's center, from its corner, in luxels.
 constexpr double kLuxelCenter = 0.5;
 /// The prefix of a conveyor's texture: its faces take no decals (SURF_CONVEYOR).
@@ -121,25 +118,25 @@ enum class Side : std::uint8_t { Left, Right, Top, Bottom };
 
 auto decalImageOf(const assets::MipTexture& texture, const ChannelTable& textureGamma) -> assets::RgbaImage {
     const auto paletteByte = [&texture](std::size_t entry, std::size_t channel) {
-        return std::to_integer<std::uint8_t>(texture.palette[(entry * kRgbBytes) + channel]);
+        return std::to_integer<std::uint8_t>(texture.palette[(entry * assets::kRgbBytes) + channel]);
     };
     const bool isMasked =
-        std::ranges::all_of(std::views::iota(std::size_t{0}, kRgbBytes), [&](std::size_t channel) {
+        std::ranges::all_of(std::views::iota(std::size_t{0}, assets::kRgbBytes), [&](std::size_t channel) {
             return paletteByte(kClearIndex, channel) == kMaskedColor.at(channel);
         });
     assets::RgbaImage image{.width = texture.width, .height = texture.height};
-    image.pixels.reserve(texture.levels.front().size() * kRgbaBytes);
+    image.pixels.reserve(texture.levels.front().size() * assets::kRgbaBytes);
     for (const std::byte index : texture.levels.front()) {
         const auto entry = std::to_integer<std::size_t>(index);
         // A tinted decal is its last color throughout, as opaque as each index; a masked one each
         // index's color; index 255 is clear in both.
         const std::size_t color = isMasked ? entry : kClearIndex;
-        for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
+        for (std::size_t channel = 0; channel < assets::kRgbBytes; ++channel) {
             image.pixels.push_back(entry == kClearIndex && isMasked
                                        ? std::byte{0}
                                        : std::byte{textureGamma[paletteByte(color, channel)]});
         }
-        image.pixels.push_back(entry == kClearIndex ? std::byte{0} : isMasked ? kOpaque : index);
+        image.pixels.push_back(entry == kClearIndex ? std::byte{0} : isMasked ? assets::kFullChannel : index);
     }
     return image;
 }
@@ -157,15 +154,16 @@ auto decalLevelsOf(const assets::RgbaImage& image) -> DecalLevels {
         levels.offsets.push_back(levels.bytes.size());
         for (std::uint32_t y = 0; y < nextHeight; ++y) {
             for (std::uint32_t x = 0; x < nextWidth; ++x) {
-                for (std::size_t channel = 0; channel < kRgbaBytes; ++channel) {
+                for (std::size_t channel = 0; channel < assets::kRgbaBytes; ++channel) {
                     std::uint32_t sum = 0;
                     for (const std::uint32_t row :
                          {std::min(y * 2, height - 1), std::min((y * 2) + 1, height - 1)}) {
                         for (const std::uint32_t column :
                              {std::min(x * 2, width - 1), std::min((x * 2) + 1, width - 1)}) {
                             sum += std::to_integer<std::uint32_t>(
-                                levels.bytes[from + ((((std::size_t{row} * width) + column) * kRgbaBytes) +
-                                                     channel)]);
+                                levels.bytes[from +
+                                             ((((std::size_t{row} * width) + column) * assets::kRgbaBytes) +
+                                              channel)]);
                         }
                     }
                     levels.bytes.push_back(static_cast<std::byte>((sum + kHalfTexels) / kAveragedTexels));

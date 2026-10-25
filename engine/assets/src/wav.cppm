@@ -47,6 +47,33 @@ enum class SampleFormat : std::uint8_t {
     Float64, ///< IEEE 754, silence at 0 and full scale at ±1.
 };
 
+/// The bits a sample of a format takes in a file, which its name says.
+struct SampleBits {
+    SampleFormat format = SampleFormat::Unsigned8;
+    std::uint16_t bits = 0;
+};
+inline constexpr std::array kSampleBits{
+    SampleBits{.format = SampleFormat::Unsigned8, .bits = 8},
+    SampleBits{.format = SampleFormat::Signed16, .bits = 16},
+    SampleBits{.format = SampleFormat::Signed24, .bits = 24},
+    SampleBits{.format = SampleFormat::Signed32, .bits = 32},
+    SampleBits{.format = SampleFormat::Float32, .bits = 32},
+    SampleBits{.format = SampleFormat::Float64, .bits = 64},
+};
+
+/// The bits a sample of `format` takes in a file (kSampleBits), and its bytes, an eighth of them.
+[[nodiscard]] constexpr auto bitsPerSample(SampleFormat format) noexcept -> std::uint16_t {
+    for (const SampleBits& entry : kSampleBits) {
+        if (entry.format == format) {
+            return entry.bits;
+        }
+    }
+    return 0; // a value from outside the enumerators is no format
+}
+[[nodiscard]] constexpr auto bytesPerSample(SampleFormat format) noexcept -> std::size_t {
+    return bitsPerSample(format) / std::size_t{std::numeric_limits<std::uint8_t>::digits};
+}
+
 /// An uncompressed sound: its format and views of its samples in the bytes it was parsed from,
 /// which must outlive it.
 struct WavSound {
