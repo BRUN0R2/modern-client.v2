@@ -37,9 +37,6 @@ constexpr nx::Vec3 kKeyLightColor{.x = 4200.0F, .y = 3900.0F, .z = 3500.0F};
 }
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
-/// The most decals on the faces of the world and of its brush entities: the original's r_decals, which
-/// a multiplayer game holds to mp_decals' default, until the cvars come.
-constexpr std::size_t kMultiplayerDecals = 300;
 
 } // namespace
 
@@ -67,8 +64,8 @@ Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::rende
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format, nx::rhi::Format effectsFormat,
-                   const nx::render::GammaSettings& gamma, nx::render::StudioLook look)
-    -> nx::Result<Scene, SceneError> {
+                   const nx::render::GammaSettings& gamma, nx::render::StudioLook look,
+                   std::size_t decalLimit) -> nx::Result<Scene, SceneError> {
     // The enhanced look draws linear light, to a target of half floats its post pass encodes (ADR-0025),
     // and bakes the map's reflection probes, a view of their sides a frame besides the player's.
     const bool isEnhanced = look == nx::render::StudioLook::Enhanced;
@@ -83,7 +80,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                                       .gamma = gamma,
                                       .sky = level.sky(),
                                       .decals = level.decals().images(),
-                                      .decalLimit = kMultiplayerDecals,
+                                      .decalLimit = decalLimit,
                                       .viewsPerFrame = isEnhanced ? nx::render::kBakingViewsPerFrame : 1U,
                                       .encoding = encoding});
     if (!world) {

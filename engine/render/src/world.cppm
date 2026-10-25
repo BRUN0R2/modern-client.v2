@@ -140,8 +140,8 @@ struct BspWorldDesc {
     /// The decals the world can show, by their index (shootDecal's): images of decals.wad, made as
     /// decalImageOf makes them.
     std::span<const assets::MipTexture> decals{};
-    /// The most decals on faces the world keeps, its oldest going first (DecalPool::kMostDecals at
-    /// most): `r_decals`, which a multiplayer game holds to `mp_decals`.
+    /// The most decals on faces the world takes, its oldest going first (DecalPool::setLimit):
+    /// `r_decals`, which a game of more than one player holds to `mp_decals`. setDecalLimit changes it.
     std::size_t decalLimit = DecalPool::kMostDecals;
     /// The most views it prepares a frame: the player's, and the faces of a reflection probe being
     /// baked in the enhanced look (nx.render:probes). Each has its own slot of each frame in flight.
@@ -240,6 +240,8 @@ public:
                     DecalLife life = DecalLife::Temporary) -> std::uint32_t;
     /// The decals of the world and of its brush entities.
     [[nodiscard]] inline auto decals() const noexcept -> const DecalPool& { return *m_decals; }
+    /// Takes the next decals within `limit`, as DecalPool::setLimit does: `r_decals` as it is now.
+    inline void setDecalLimit(std::size_t limit) { m_decals->setLimit(limit); }
 
     [[nodiscard]] inline auto stats() const noexcept -> const WorldStats& { return m_stats; }
     [[nodiscard]] inline auto lastFrame() const noexcept -> const FrameStats& { return m_lastFrame; }

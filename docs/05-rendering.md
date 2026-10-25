@@ -297,9 +297,11 @@ scale held to 0.01 to 16), its middle at the point, and the face's outline is cu
 side (Sutherland-Hodgman), lit by the face's lightmaps as the face's own vertices are. A face takes a
 slot of the pool for it before it is cut, as the original's does: the pool's next one, whose decal
 goes, unless 6 or more of the face's decals are each over 60% covered by the new one, which then
-replaces the one of them it covers least. One pool holds the decals of every model,
-`BspWorldDesc::decalLimit` decals on faces, 4096 at most (the original's `r_decals`, which a
-multiplayer game holds to `mp_decals`, 300). The world's decals are drawn right after the world's
+replaces the one of them it covers least. One pool holds the decals of every model: it takes a
+decal in the first `r_decals` of its slots, 4096 at most (`DecalPool::setLimit`,
+`BspWorld::setDecalLimit`), reading the limit at each decal as the original's `R_DecalAlloc` does,
+so that decals past a lowered limit stay until their slots come back into the ring, and 0 stamps
+no more. The world's decals are drawn right after the world's
 faces, oldest first so that the newest lies over the others, each texel lit as the face is there and
 blended over the lit face as opaque as its alpha: the original draws them over the face's texture
 before it multiplies both by the lightmap, which comes out the same. Their depth is tested against
@@ -313,8 +315,11 @@ for `kRenderTransColor`, writing their depth; times `renderamt` and blended for 
 A `kRenderTransTexture` entity's face seen from behind that has decals shows them, newest first, its
 own polygon culled, as the original keeps such a face for them (`R_SortBrushModelSurfaces`), so that
 the cracks of a window show from both sides. In `next`, each shot leaves its mark where it meets the
-world or a brush entity (docs/10 §7.3), in a pool of 300, `mp_decals`' default, until the
-`r_decals` and `mp_decals` cvars come.
+world or a brush entity (docs/10 §7.3). Its game is one of more than one player, as a
+Counter-Strike server's: as it starts, `r_decals` is held to `mp_decals` (`enterMultiplayerGame`,
+as the original's client holds it when it enters such a game, which Xash3D documents: 300 with the
+original's settings), and each frame's marks take the limit `r_decals` has then; `nxview` draws
+with the original's default settings in such a game, 300.
 
 A map stamps its own decals for good as its game starts (`DecalLife::Permanent`, the original's
 `FDECAL_PERMANENT`): the pool's ring passes over a slot taken for good while it has another
