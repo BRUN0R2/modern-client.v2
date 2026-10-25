@@ -5,7 +5,7 @@
 /// brush entities as the game makes them, and the player among them, moved by the game's own
 /// movement one user command a tick (docs/07-simulation-and-physics.md, section 2.2), with the
 /// weapons a player of its team spawns with (cs::Inventory), in the rounds of the map (cs::Rounds),
-/// spawning again at its team's spawn points as each starts.
+/// spawning again at its team's spawn points as each starts, paid by them (cs::TeamAccounts).
 export module cs.client:localGame;
 
 import std;
@@ -146,9 +146,17 @@ private:
     /// again; as a round starts the player spawns again (spawn); as the game restarts it spawns as it
     /// joined: with mp_startmoney, without armor, and with its team's loadout alone.
     void thinkRules();
+    /// What the end of a round by `reason` does to the money (TerminateRound): what its winners get
+    /// goes to their team's account, and the player, alive on the losing team, is not paid as the next
+    /// round starts when the end does not pay its living losers.
+    void roundEnded(RoundEndReason reason);
+    /// Pays the player what its team gets as a round starts (RestartRound), unless the last end left
+    /// it unpaid.
+    void payForRound();
     /// Spawns the player at the next spawn point of its team (nextSpawnPoint), as Spawn does: one
     /// unit above it, standing still and turned the way it faces (takeTurnedView), its health whole;
-    /// it keeps its armor, its weapons and its money. Its HUD is told the round's time.
+    /// it keeps its armor, its weapons and its money, and is paid as the next round starts. Its HUD is
+    /// told the round's time.
     void spawn();
     /// Gives the player what a player of its team spawns with, drawn as its _cl_autowepswitch says.
     void equip();
@@ -168,7 +176,9 @@ private:
     AutoSwitch m_autoSwitch;
     GameCvars m_cvars;
     Rounds m_rounds;
-    RoundTimer m_roundTimer{};                     ///< What the player's HUD was told last.
+    TeamAccounts m_accounts;
+    bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
+    RoundTimer m_roundTimer{};     ///< What the player's HUD was told last.
     std::optional<std::size_t> m_lastSpawnPoint{}; ///< Of its team's, the one it last spawned at.
     std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
     nx::GameTime m_nextPeriodicThink{};            ///< When the rules look at the restart cvars next.

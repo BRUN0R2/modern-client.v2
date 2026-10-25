@@ -24,6 +24,8 @@ inline constexpr nx::UnitsPerSecond kFreezeSpeed{1.0F};
 inline constexpr nx::Seconds kRestartDelay{5.0F};
 /// How much longer than mp_freezetime the first freeze of a map lasts.
 inline constexpr nx::Seconds kFirstFreezeExtra{2.0F};
+/// The class of a map's hostages.
+inline constexpr std::string_view kHostageClass = "hostage_entity";
 
 /// What a map's rounds are played for, as the game tells it from the classes of its entities
 /// (CheckMapConditions, and CheckRoundTimeExpired's search for a hostage).

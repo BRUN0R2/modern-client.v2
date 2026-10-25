@@ -36,14 +36,15 @@ enum class LevelError : std::uint8_t {
 /// The game's files: the Counter-Strike 1.6 installation through its VFS, the classes the game makes
 /// the map's entities by (data/cstrike/entities.toml), its weapons (data/cstrike/ammo.toml and
 /// data/cstrike/weapons/<id>.toml), what a player of each team spawns with
-/// (data/cstrike/loadouts.toml), and the light styles it sets as a map starts
-/// (data/cstrike/lightStyles.toml).
+/// (data/cstrike/loadouts.toml), the light styles it sets as a map starts
+/// (data/cstrike/lightStyles.toml), and the money of its rounds (data/cstrike/economy.toml).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
     WeaponCatalog weapons;
     Loadouts loadouts;
     WorldLightStyles lightStyles;
+    EconomyRules economy;
 };
 
 /// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its
@@ -67,11 +68,14 @@ struct SpawnPoint {
 /// What `map` is played for: the objectives the classes of its entities give it (objectiveOfClass).
 [[nodiscard]] auto mapObjectivesOf(const nx::assets::BspView& map) -> MapObjectives;
 
+/// How many hostages `map` holds as it starts: its entities of kHostageClass.
+[[nodiscard]] auto hostagesOf(const nx::assets::BspView& map) -> std::uint32_t;
+
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, the
-/// loadouts and the light styles; and the installation at `install`, or the one Steam installed, below
-/// `addons`, the user's own content (addonsFolderOf), when it is given and is a folder: a file there is read
-/// instead of the installation's. Errors: ContentUnavailable.
+/// loadouts, the light styles and the money of the rounds; and the installation at `install`, or the one
+/// Steam installed, below `addons`, the user's own content (addonsFolderOf), when it is given and is a
+/// folder: a file there is read instead of the installation's. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
                                    const std::optional<std::filesystem::path>& install,
                                    const std::optional<std::filesystem::path>& addons)
@@ -166,6 +170,8 @@ public:
     }
     /// What its rounds are played for (mapObjectivesOf).
     [[nodiscard]] inline auto objectives() const noexcept -> MapObjectives { return m_objectives; }
+    /// How many hostages it holds as it starts (hostagesOf).
+    [[nodiscard]] inline auto hostages() const noexcept -> std::uint32_t { return m_hostages; }
     /// The mark a bullet leaves on brush model `model` of the map, one it has: Gunshot on the world,
     /// what bulletMarkOf says of its entity on a brush entity's (Gunshot without one).
     [[nodiscard]] auto bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletMark;
@@ -181,6 +187,7 @@ private:
     std::vector<BulletMark> m_bulletMarks; ///< By brush model.
     nx::EnumArray<Team, std::vector<SpawnPoint>> m_spawnPoints;
     MapObjectives m_objectives;
+    std::uint32_t m_hostages = 0;
     std::vector<nx::assets::RgbaImage> m_sky;
     nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;
