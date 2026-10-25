@@ -234,6 +234,16 @@ from the original, to test these rules against, are pending
 - Players collide with each other using the hull box.
 - Bullet traces test the studio model's **hitboxes** (animated bones) to get the
   *hitgroup*.
+  **Today** (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): each hitbox is its bounds
+  along its bone's axes, made a hull of a node on each face as R_StudioHull makes it, and crossed by
+  the server's rules; of a model's hitboxes the first's trace is kept, then each later one's that is
+  all in the solid, starts in it or stops sooner (SV_SingleClipMoveToEntity), the same rule that
+  keeps the trace of what stops a move first among what it is clipped against
+  (`nx::collision::keepFirstStop`, SV_ClipToLinks). The hostages' are met so by the shots
+  (`cs::MapModels::traceHostages`), each whose box, a unit more each way, the shot's meets, its
+  bones posed with its sequence's motion kept as the server poses them; posed when the shot is
+  fired, where the original's server poses a hostage as its last think left it, at most a thirtieth
+  of a second before.
 
 ### 4.3 API
 

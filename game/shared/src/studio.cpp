@@ -309,4 +309,17 @@ auto controllerSettingOf(const BoneController& controller, float value) noexcept
     return static_cast<std::uint8_t>(std::min(std::trunc(setting), static_cast<float>(kControllerTop)));
 }
 
+auto placedHitboxesOf(std::span<const nx::assets::Hitbox> hitboxes, std::span<const nx::Mat3x4> bones)
+    -> std::vector<nx::collision::PlacedBox> {
+    nx::expects(std::ranges::all_of(
+                    hitboxes,
+                    [&bones](const nx::assets::Hitbox& hitbox) { return hitbox.bone.value < bones.size(); }),
+                "placedHitboxesOf: each hitbox on one of the bones");
+    return hitboxes | std::views::transform([&bones](const nx::assets::Hitbox& hitbox) {
+               return nx::collision::PlacedBox{.placement = bones[hitbox.bone.value],
+                                               .bounds = hitbox.bounds};
+           }) |
+           std::ranges::to<std::vector>();
+}
+
 } // namespace cs

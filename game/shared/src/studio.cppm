@@ -16,6 +16,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.assets;
+import nx.collision;
 
 export namespace cs {
 
@@ -82,5 +83,11 @@ struct Skeleton {
 [[nodiscard]] auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
                              const nx::assets::AnimationFrames& animation, const PoseQuery& query)
     -> std::vector<nx::Mat3x4>;
+
+/// The `hitboxes` of a model on its bones posed as `bones` (poseBones's, by index), as the server places
+/// them for its traces (R_StudioHull): each its bounds along its bone's axes.
+[[nodiscard]] auto placedHitboxesOf(std::span<const nx::assets::Hitbox> hitboxes,
+                                    std::span<const nx::Mat3x4> bones)
+    -> std::vector<nx::collision::PlacedBox>;
 
 } // namespace cs
