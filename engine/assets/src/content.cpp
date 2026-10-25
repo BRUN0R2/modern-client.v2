@@ -110,4 +110,34 @@ auto GoldsrcInstall::open(const GoldsrcInstallDesc& desc, std::filesystem::path 
     return GoldsrcInstall{std::move(folder), std::move(*mounts)};
 }
 
+auto readContentConfig(std::string_view text, std::string_view sourceName)
+    -> Result<ContentConfig, ContentError> {
+    auto config = data::parseToml<ContentConfig>(text, sourceName);
+    if (!config) {
+        return fail(ContentError::ConfigInvalid, std::string{sourceName}, std::move(config.error()));
+    }
+    return std::move(*config);
+}
+
+auto findContentConfig(const std::optional<std::filesystem::path>& named,
+                       const std::filesystem::path& workingFolder, const std::filesystem::path& userFolder)
+    -> Result<std::optional<std::filesystem::path>, ContentError> {
+    const auto isThere = [](const std::filesystem::path& file) {
+        std::error_code error;
+        return std::filesystem::is_regular_file(file, error);
+    };
+    if (named) {
+        if (!isThere(*named)) {
+            return fail(ContentError::ConfigMissing, platform::toUtf8(*named));
+        }
+        return named;
+    }
+    for (const std::filesystem::path& folder : {workingFolder, userFolder}) {
+        if (std::filesystem::path file = folder / platform::fromUtf8(kContentConfigFile); isThere(file)) {
+            return std::optional{std::move(file)};
+        }
+    }
+    return std::optional<std::filesystem::path>{};
+}
+
 } // namespace nx::assets

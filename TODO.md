@@ -223,11 +223,13 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### Assets
 - [x] VFS with mounts, priority, case-insensitive lookup and path validation (`nx.assets`), over the native file system of `nx.platform`
 - [ ] Content sources (`engine`, `devContent`, `openContent`, `goldsrcInstall`, mods) with a redistribution flag
-- [ ] `classic`, `open`, `dev` and `custom` profiles, and reading of `content.toml` (order: `--content-config`, working directory, user profile)
+- [x] Reading of `content.toml` (order: `--content-config`, working directory, user profile): the `classic` profile and its `goldsrcInstall.path` (`nx::assets::readContentConfig`, `findContentConfig`)
+- [ ] `open`, `dev` and `custom` profiles, with their content
 - [x] Steam installation detection (registry and `libraryfolders.vdf` on Windows; `~/.steam`, `~/.local/share/Steam` and Flatpak on Linux): `nx::platform::steamFolders`, `nx::assets::detectGoldsrcInstall`
 - [x] Validation against `data/content/goldsrcCstrike.toml` with `ContentError::MissingEssentialFiles` (`GoldsrcInstall::open`)
 - [ ] First-start wizard ("use the original assets?") that writes `content.toml`
-- [ ] `--content`, `-basedir` and `--content-config` options
+- [x] `-basedir` and `--content-config` options
+- [ ] `--content <profile>`, with the profiles
 - [ ] `content_list`, `content_scan`, `content_add`, `content_profile` commands
 - [ ] Code-generated `devContent`: grid textures, test map, capsule player, simple weapons, synthesized sounds
 - [x] BSP v30 reader (all lumps) with fuzzing (`nx.assets:bsp`, `fuzzBsp`): every index checked, the visible tree checked to be a tree, the collision hulls to have no cycle (clip nodes shared as VHLT writes them)
