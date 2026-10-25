@@ -12,6 +12,7 @@
 export module nx.assets;
 
 export import :binary; // nothing exported: what the readers share
+export import :image;
 export import :vfs;
 export import :content;
 export import :steam;

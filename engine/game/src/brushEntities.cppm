@@ -82,8 +82,9 @@ struct nx::meta::Description<nx::game::BrushClass> {
         nx::meta::field<&nx::game::BrushClass::notSolidFlags>("notSolidFlags",
                                                               nx::data::Range{.minimum = 1.0}),
         nx::meta::field<&nx::game::BrushClass::skinMakesNotSolid>("skinMakesNotSolid"),
-        nx::meta::field<&nx::game::BrushClass::contents>("contents",
-                                                         nx::data::Range{.minimum = -16.0, .maximum = -1.0}),
+        nx::meta::field<&nx::game::BrushClass::contents>(
+            "contents", nx::data::Range{.minimum = std::to_underlying(nx::assets::Contents::Ladder),
+                                        .maximum = std::to_underlying(nx::assets::Contents::Empty)}),
         nx::meta::field<&nx::game::BrushClass::behavior>("behavior"),
     };
 };

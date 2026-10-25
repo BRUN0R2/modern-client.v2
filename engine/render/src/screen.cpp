@@ -24,11 +24,7 @@ constexpr std::uint32_t kFrameUniformBinding = 0;
 constexpr std::uint32_t kImageBinding = 0;
 constexpr std::uint32_t kImageSamplerBinding = 1;
 
-/// The bytes of a palette color, red, green and blue; of a texel, red, green, blue and alpha.
-constexpr std::size_t kRgbBytes = 3;
-constexpr std::size_t kRgbaBytes = 4;
-/// An opaque alpha, and the palette index a masked picture shows through at.
-constexpr std::byte kOpaque{255};
+/// The palette index a masked picture shows through at.
 constexpr std::size_t kMaskedIndex = 255;
 constexpr float kChannelTop = 255.0F;
 
@@ -73,18 +69,18 @@ struct FrameUniform {
                                  PictureMask mask, const ChannelTable& textureGamma)
     -> std::vector<std::byte> {
     std::vector<std::byte> texels;
-    texels.reserve(pixels.size() * kRgbaBytes);
+    texels.reserve(pixels.size() * assets::kRgbaBytes);
     for (const std::byte pixel : pixels) {
         const auto index = std::to_integer<std::size_t>(pixel);
         if (mask == PictureMask::Masked && index == kMaskedIndex) {
-            texels.insert(texels.end(), kRgbaBytes, std::byte{0});
+            texels.insert(texels.end(), assets::kRgbaBytes, std::byte{0});
             continue;
         }
-        for (std::size_t which = 0; which < kRgbBytes; ++which) {
-            texels.push_back(
-                std::byte{textureGamma[std::to_integer<std::size_t>(palette[(index * kRgbBytes) + which])]});
+        for (std::size_t which = 0; which < assets::kRgbBytes; ++which) {
+            texels.push_back(std::byte{
+                textureGamma[std::to_integer<std::size_t>(palette[(index * assets::kRgbBytes) + which])]});
         }
-        texels.push_back(kOpaque);
+        texels.push_back(assets::kFullChannel);
     }
     return texels;
 }
@@ -383,7 +379,7 @@ auto ScreenRenderer::loadFont(rhi::CommandList& commands, const assets::FontView
 auto ScreenRenderer::loadImage(rhi::CommandList& commands, std::span<const std::byte> texels,
                                std::uint32_t width, std::uint32_t height, std::string_view label)
     -> Result<ScreenImage, ScreenError> {
-    expects(texels.size() == std::size_t{width} * height * 4,
+    expects(texels.size() == std::size_t{width} * height * assets::kRgbaBytes,
             "ScreenRenderer::loadImage: RGBA texels of its size");
     return upload(commands, texels, width, height, std::format("screen.{}", label));
 }

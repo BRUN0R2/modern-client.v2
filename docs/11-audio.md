@@ -184,9 +184,12 @@ streamed.
 
 | Enum | Examples |
 |------|----------|
-| `AudioDeviceError` | `NoDevice`, `FormatUnsupported`, `DeviceLost` |
-| `SoundError` | `DecodeFailed`, `UnsupportedEncoding`, `CuePointInvalid` |
-| `SentenceError` | `UnknownSentence`, `MissingWord` |
+| `AudioDeviceError` (`nx.platform:audio`) | `Unavailable` (no audio driver), `NoDevice` (the default output could not be opened), `StartFailed` |
+| `SoundError` (`nx.audio:library`) | `NotFound`, `ReadFailed`, `DecodeFailed` (cause: the `WavError`) |
+| `MixerError` (`nx.audio:mixer`) | `QueueFull` |
+| `SentenceError` (planned, with sentences) | `UnknownSentence`, `MissingWord` |
 
-Losing the device (e.g. headphones unplugged) makes the mixer try to reopen the system
-default and emits a diagnostic event. The game keeps running without audio meanwhile.
+Today the output is the system's default, and SDL moves the stream to the new default when it
+changes. Planned ([TODO](../TODO.md)): losing the device (headphones unplugged) reopens the
+system's default and resumes every voice and stream where it was, with a diagnostic event; the
+game keeps running without audio meanwhile.

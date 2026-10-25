@@ -13,21 +13,16 @@ namespace {
 /// The key `text` sets, in the document it is read from.
 constexpr std::string_view kValueKey = "value";
 
-/// Below this, a character is a control character, written as an escape.
-constexpr unsigned char kFirstPrintable = 0x20;
-constexpr unsigned char kDelete = 0x7F;
-
 } // namespace
 
 auto quotedText(std::string_view text) -> std::string {
     std::string quoted{'"'};
     for (const char character : text) {
-        const auto code = static_cast<unsigned char>(character);
         if (character == '"' || character == '\\') {
             quoted += '\\';
             quoted += character;
-        } else if (code < kFirstPrintable || code == kDelete) {
-            std::format_to(std::back_inserter(quoted), "\\u{:04X}", code);
+        } else if (isAsciiControl(character)) { // written as an escape
+            std::format_to(std::back_inserter(quoted), "\\u{:04X}", static_cast<unsigned char>(character));
         } else {
             quoted += character;
         }

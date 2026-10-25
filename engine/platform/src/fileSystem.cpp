@@ -257,20 +257,6 @@ template <FileBuffer Buffer>
 
 #endif
 
-/// The folders of `candidates` that are folders, each once, in their order.
-[[nodiscard]] auto existingFolders(std::span<const std::filesystem::path> candidates)
-    -> std::vector<std::filesystem::path> {
-    std::vector<std::filesystem::path> folders;
-    for (const std::filesystem::path& candidate : candidates) {
-        std::error_code error;
-        if (std::filesystem::is_directory(candidate, error) &&
-            std::ranges::find(folders, candidate) == folders.end()) {
-            folders.push_back(candidate);
-        }
-    }
-    return folders;
-}
-
 /// readFile, readTextFile and readFilePart: checks that `path` is a regular file, then reads `part` of it.
 template <FileBuffer Buffer>
 [[nodiscard]] auto readCheckedFile(const std::filesystem::path& path, FilePart part = {})
@@ -290,6 +276,25 @@ template <FileBuffer Buffer>
 }
 
 } // namespace
+
+auto existingFolders(std::span<const std::filesystem::path> candidates)
+    -> std::vector<std::filesystem::path> {
+    std::vector<std::filesystem::path> folders;
+    for (const std::filesystem::path& candidate : candidates) {
+        std::error_code error;
+        if (!std::filesystem::is_directory(candidate, error)) {
+            continue;
+        }
+        const bool isKept = std::ranges::any_of(folders, [&candidate](const std::filesystem::path& folder) {
+            std::error_code ignored; // folders that cannot be compared are different folders
+            return std::filesystem::equivalent(folder, candidate, ignored);
+        });
+        if (!isKept) {
+            folders.push_back(candidate);
+        }
+    }
+    return folders;
+}
 
 auto toUtf8(const std::filesystem::path& path) -> std::string {
     return path.generic_u8string() |

@@ -59,10 +59,13 @@ float3 read(float2 uv, float2 offset)
     return source.SampleLevel(linearClamp, uv + (offset * pass.sourceTexelSize), 0.0).rgb;
 }
 
+// How much each of red, green and blue makes a color bright to the eye (ITU-R BT.709).
+static const float3 kLuminanceWeights = float3(0.2126, 0.7152, 0.0722);
+
 // How bright a color is to the eye.
 float luminanceOf(float3 color)
 {
-    return dot(color, float3(0.2126, 0.7152, 0.0722));
+    return dot(color, kLuminanceWeights);
 }
 
 // A box's weight, Karis's average: the brighter, the less, so that one bright texel cannot flash.

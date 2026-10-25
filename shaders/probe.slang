@@ -7,6 +7,7 @@
 // averaged over GGX's spread of normals by importance sampling, as Karis's split sum prefilters them
 // ("Real Shading in Unreal Engine 4", 2013), the view taken along the reflection.
 
+import numbers;
 import skyDirection;
 
 // What a pass draws: the side, the roughness of its level, and how many directions it averages.
@@ -26,7 +27,11 @@ Texture2DArray capture;
 [[vk::binding(2, 0)]]
 SamplerState linearClamp;
 
-static const float kPi = 3.14159265;
+// The radical inverse of a 32-bit index is its bits reversed over 2 to the 32nd.
+static const float kRadicalInverseScale = 1.0 / 4294967296.0;
+// A normal at least this close to +Z takes +X as the up its tangent is made from: +Z would be along it.
+static const float kNearlyAlongZ = 0.999;
+
 struct VertexOutput
 {
     float4 position : SV_Position;
@@ -75,7 +80,7 @@ float3 captured(float3 direction)
 // The `index`th of `count` points of Hammersley's sequence.
 float2 hammersleyOf(uint index, uint count)
 {
-    return float2(float(index) / float(count), float(reversebits(index)) * 2.3283064365386963e-10);
+    return float2(float(index) / float(count), float(reversebits(index)) * kRadicalInverseScale);
 }
 
 // A normal of GGX's spread around `normal`, for the point `xi`.
@@ -86,7 +91,7 @@ float3 sampledNormalOf(float2 xi, float3 normal, float roughness)
     const float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (((alpha * alpha) - 1.0) * xi.y)));
     const float sinTheta = sqrt(1.0 - (cosTheta * cosTheta));
     const float3 h = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
-    const float3 up = abs(normal.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    const float3 up = abs(normal.z) < kNearlyAlongZ ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
     const float3 tangent = normalize(cross(up, normal));
     const float3 bitangent = cross(normal, tangent);
     return normalize((tangent * h.x) + (bitangent * h.y) + (normal * h.z));

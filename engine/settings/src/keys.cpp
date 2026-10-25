@@ -114,12 +114,9 @@ constexpr auto kKeyNames = std::to_array<KeyName>({
     {"PAUSE", 255},
 });
 
-/// The ASCII character after the printable ones, which no name views: the original's BACKSPACE.
-constexpr char kDeleteCharacter = '\x7F';
-
 /// Every ASCII character at its own number: what a one-character name views.
 constexpr auto kAscii = [] {
-    std::array<char, 128> characters{};
+    std::array<char, kAsciiCount> characters{};
     for (std::size_t number = 0; number < characters.size(); ++number) {
         characters[number] = static_cast<char>(number);
     }
@@ -305,7 +302,8 @@ auto keyNamed(std::string_view name) noexcept -> std::optional<console::KeyId> {
 
 auto nameOf(console::KeyId key) noexcept -> std::optional<std::string_view> {
     const std::uint32_t number = std::to_underlying(key);
-    const bool isPrintable = number > std::uint32_t{' '} && number < std::uint32_t{kDeleteCharacter};
+    // DEL, after the printable characters, is named by no character: the original's BACKSPACE.
+    const bool isPrintable = number > std::uint32_t{' '} && number < std::uint32_t{kAsciiDelete};
     if (isPrintable && number != std::uint32_t{'"'} && number != std::uint32_t{';'}) {
         return std::string_view{&kAscii[number], 1};
     }

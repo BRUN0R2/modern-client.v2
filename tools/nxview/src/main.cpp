@@ -230,8 +230,7 @@ constexpr auto kBmpBitsPerPixel =
 constexpr std::uint32_t kBmpUncompressed = 0;
 constexpr std::int32_t kBmpPixelsPerMeter = 2835; // 72 dpi
 constexpr std::uint32_t kBmpRowAlignment = 4;
-/// The bytes of a pixel of the readback, and where its red, green and blue are among them.
-constexpr std::size_t kRgbaBytes = 4;
+/// Where a pixel of the readback, of nx::assets::kRgbaBytes, has its red, green and blue.
 constexpr std::size_t kRed = 0;
 constexpr std::size_t kGreen = 1;
 constexpr std::size_t kBlue = 2;
@@ -266,8 +265,8 @@ constexpr std::size_t kBlue = 2;
     put(std::uint32_t{0}); // every color matters
     for (std::uint32_t row = extent.height; row-- > 0;) {
         for (std::uint32_t x = 0; x < extent.width; ++x) {
-            const auto rgba =
-                pixels.subspan(((std::size_t{row} * extent.width) + x) * kRgbaBytes, kRgbaBytes);
+            const auto rgba = pixels.subspan(((std::size_t{row} * extent.width) + x) * nx::assets::kRgbaBytes,
+                                             nx::assets::kRgbaBytes);
             file.insert(file.end(), {rgba[kBlue], rgba[kGreen], rgba[kRed]});
         }
         file.resize(file.size() + (rowBytes - (extent.width * kBmpBytesPerPixel)), std::byte{0});
@@ -297,10 +296,11 @@ constexpr std::size_t kBlue = 2;
                                            .format = nx::rhi::Format::Depth32Float,
                                            .extent = extent,
                                            .usage = {nx::rhi::TextureUsage::DepthTarget}});
-    auto readback = (*device)->createBuffer({.label = "nxview.readback",
-                                             .size = std::uint64_t{extent.width} * extent.height * kRgbaBytes,
-                                             .usage = {nx::rhi::BufferUsage::CopyDestination},
-                                             .location = nx::rhi::MemoryLocation::Readback});
+    auto readback =
+        (*device)->createBuffer({.label = "nxview.readback",
+                                 .size = std::uint64_t{extent.width} * extent.height * nx::assets::kRgbaBytes,
+                                 .usage = {nx::rhi::BufferUsage::CopyDestination},
+                                 .location = nx::rhi::MemoryLocation::Readback});
     if (!target || !depth || !readback) {
         return unusable(!target ? target.error() : !depth ? depth.error() : readback.error());
     }

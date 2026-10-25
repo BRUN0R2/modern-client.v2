@@ -62,6 +62,7 @@ void runStartupFiles(console::Console& console, UserConfigFiles& files) {
         }
         console.addText(*text);
     }
+    // Whether a `wait` left commands buffered matters to no one here: the game's frames run them.
     std::ignore = console.execute();
 }
 

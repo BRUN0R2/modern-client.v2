@@ -47,6 +47,7 @@ nxAddModuleLibrary(csClient
     DEPENDS
         nx::core
         nx::math
+        nx::meta
         nx::platform
         nx::console
         nx::data

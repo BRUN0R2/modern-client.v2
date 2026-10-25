@@ -51,11 +51,6 @@ constexpr std::uint32_t kOriginalSurface = 0;
 constexpr std::uint32_t kMetallicRoughnessSurface = 1;
 constexpr std::uint32_t kPaintedSurface = 2;
 
-/// The bytes of a palette color, red, green and blue; of a texel, red, green, blue and alpha.
-constexpr std::size_t kRgbBytes = 3;
-constexpr std::size_t kRgbaBytes = 4;
-/// A channel at its brightest, and an opaque alpha.
-constexpr std::byte kFull{255};
 /// A channel at its brightest, as `renderamt` counts it.
 constexpr float kChannelTop = 255.0F;
 
@@ -135,7 +130,7 @@ struct SpecularIntegral {
 /// The texels of the specular integral's texture: red its scale, green its bias.
 [[nodiscard]] auto specularIntegralTexels() -> std::vector<std::byte> {
     std::vector<std::byte> texels;
-    texels.reserve(std::size_t{kSpecularIntegralSize} * kSpecularIntegralSize * kRgbaBytes);
+    texels.reserve(std::size_t{kSpecularIntegralSize} * kSpecularIntegralSize * assets::kRgbaBytes);
     const auto channelOf = [](float share) {
         return std::byte{narrow<std::uint8_t>(std::lround(std::clamp(share, 0.0F, 1.0F) * kChannelTop))};
     };
@@ -147,8 +142,8 @@ struct SpecularIntegral {
         for (std::uint32_t column = 0; column < kSpecularIntegralSize; ++column) {
             const float nDotV = (static_cast<float>(column) + kTexelMiddle) / kSpecularIntegralSize;
             const SpecularIntegral integral = specularIntegralOf(halfVectors, nDotV, alphaSquared);
-            texels.insert(texels.end(),
-                          {channelOf(integral.scale), channelOf(integral.bias), std::byte{0}, kFull});
+            texels.insert(texels.end(), {channelOf(integral.scale), channelOf(integral.bias), std::byte{0},
+                                         assets::kFullChannel});
         }
     }
     return texels;
@@ -377,8 +372,8 @@ void addSurface(SkinUniform& uniform, const StudioPainted& surface) noexcept {
 [[nodiscard]] auto baseColorTexelsOf(const assets::RgbaImage& image, const ChannelTable& textureGamma,
                                      ColorEncoding encoding) -> MipChain {
     std::vector<std::byte> texels = image.pixels;
-    for (std::size_t at = 0; at < texels.size(); at += kRgbaBytes) {
-        for (std::size_t channel = 0; channel < kRgbBytes; ++channel) {
+    for (std::size_t at = 0; at < texels.size(); at += assets::kRgbaBytes) {
+        for (std::size_t channel = 0; channel < assets::kRgbBytes; ++channel) {
             texels[at + channel] =
                 std::byte{textureGamma[std::to_integer<std::size_t>(texels[at + channel])]};
         }
@@ -517,17 +512,18 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
         return fail(StudioError::GpuFailed, std::move(made.error()));
     }
     // A material without an image is white; a renderer without a sky or probes reflects none.
-    constexpr std::array kWhite{std::byte{255}, std::byte{255}, std::byte{255}, std::byte{255}};
+    constexpr std::array kWhite{assets::kFullChannel, assets::kFullChannel, assets::kFullChannel,
+                                assets::kFullChannel};
     constexpr std::array kBlackSides = [] {
-        std::array<std::byte, kRgbaBytes * rhi::kCubeFaces> sides{};
+        std::array<std::byte, assets::kRgbaBytes * rhi::kCubeFaces> sides{};
         for (std::size_t side = 0; side < rhi::kCubeFaces; ++side) {
-            sides.at((side * kRgbaBytes) + kRgbBytes) = kFull;
+            sides.at((side * assets::kRgbaBytes) + assets::kRgbBytes) = assets::kFullChannel;
         }
         return sides;
     }();
     std::array<std::size_t, rhi::kCubeFaces> sideOffsets{};
     for (std::size_t side = 0; side < sideOffsets.size(); ++side) {
-        sideOffsets.at(side) = side * kRgbaBytes;
+        sideOffsets.at(side) = side * assets::kRgbaBytes;
     }
     auto white = uploader.texture("studio.whiteMask", {.width = 1, .height = 1}, 1, 1, kWhite, kOneLevel);
     auto black = uploader.texture("studio.noEnvironment", {.width = 1, .height = 1}, 1, rhi::kCubeFaces,
@@ -852,7 +848,7 @@ auto StudioRenderer::setEnvironment(rhi::CommandList& commands, std::span<const 
     }
     const auto isOfTheFirstsSize = [&sky](const assets::RgbaImage& side) {
         return side.width == sky.front().width && side.height == sky.front().height &&
-               side.pixels.size() == std::size_t{side.width} * side.height * kRgbaBytes;
+               side.pixels.size() == std::size_t{side.width} * side.height * assets::kRgbaBytes;
     };
     if (sky.size() != kSkySuffixes.size() || sky.front().width == 0 || sky.front().height == 0 ||
         !std::ranges::all_of(sky, isOfTheFirstsSize)) {

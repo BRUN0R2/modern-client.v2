@@ -354,7 +354,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     // The player's files, then the command line's commands, as the original's valve.rc runs them.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
-    std::ignore = m_console.execute();
+    std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
     auto video = openVideo(*m_options, m_cvars->video.vsync.value());
     if (!video) {
         return std::unexpected{std::move(video.error())};

@@ -412,17 +412,24 @@ auto MapLoader::load(MapName name) -> nx::Result<Map, MapLoadError> {
 
 ### 6.5 Contracts
 
+Today the checks are the `nx.core` functions, called first in the function they guard; each names
+the function and the rule it holds:
+
 ```cpp
-auto Chunk::row(RowIndex row) const -> RowView
-    pre(row.value() < m_count)
-{
-    return RowView{m_columns, row};
+auto Commands::apply(World& world) -> CommandStats {
+    expects(&world == m_world, "Commands::apply: the buffer belongs to another world");
+    // ...
 }
 
-auto JobSystem::submit(JobDesc desc) -> JobHandle
-    pre(desc.function != nullptr)
-    post(handle : handle.isValid());
+EntityTable::EntityTable(std::uint32_t generationLimit) noexcept : m_generationLimit{generationLimit} {
+    expects(generationLimit > 0, "EntityTable: the generation limit must allow at least one generation");
+    if (m_generationLimit == 0) {
+        m_generationLimit = 1; // the handler let execution continue ("observe")
+    }
+}
 ```
+
+With native contracts, the same checks become the declarations' own (`pre(&world == m_world)`).
 
 - A violation calls the project's contract handler. The default one (`nx::enforceContract`)
   writes the violation and the *stack trace* (`nx::currentStackTrace`) to `stderr`, stops in

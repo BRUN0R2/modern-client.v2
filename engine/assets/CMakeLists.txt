@@ -7,6 +7,7 @@ nxAddModuleLibrary(nxAssets
     MODULES
         src/nx.assets.cppm
         src/binary.cppm
+        src/image.cppm
         src/vfs.cppm
         src/content.cppm
         src/steam.cppm
