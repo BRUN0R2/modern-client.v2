@@ -57,15 +57,29 @@ struct InputCvars {
     nx::console::Cvar<float> angleSpeedKey; ///< `cl_anglespeedkey`: the share of each turn with +speed.
 };
 
-/// How much of a command a button was held, as the original's CL_KeyState counts it: all of it
-/// when down throughout, half when it went down during the command, none when it came up; a quarter
-/// when it went down and came up again, three quarters when it came up and went down again.
-[[nodiscard]] constexpr auto heldShare(bool isDown, nx::console::ButtonEdges edges) noexcept -> float {
+/// Where a button is at the end of a command.
+enum class ButtonPosition : std::uint8_t {
+    Up,
+    Down,
+};
+
+/// The shares of a command the original's CL_KeyState counts a button held for, besides all of it and
+/// none: half when it went down during the command, a quarter when it went down and came up again,
+/// three quarters when it came up and went down again.
+inline constexpr float kPressedShare = 0.5F;
+inline constexpr float kTappedShare = 0.25F;
+inline constexpr float kPressedAgainShare = 0.75F;
+
+/// How much of a command a button now at `position`, whose `edges` the command saw, was held, as the
+/// original's CL_KeyState counts it: all of it when down throughout, none when it came up.
+[[nodiscard]] constexpr auto heldShare(ButtonPosition position, nx::console::ButtonEdges edges) noexcept
+    -> float {
+    const bool isDown = position == ButtonPosition::Down;
     if (edges.pressed && edges.released) {
-        return isDown ? 0.75F : 0.25F;
+        return isDown ? kPressedAgainShare : kTappedShare;
     }
     if (edges.pressed) {
-        return isDown ? 0.5F : 0.0F;
+        return isDown ? kPressedShare : 0.0F;
     }
     if (edges.released) {
         return 0.0F;
@@ -103,7 +117,9 @@ public:
     /// ask.
     inline void selectWeapon(WeaponIndex weapon) noexcept { m_weaponSelect = weapon; }
 
+    /// The `+` buttons the binds and the console hold.
     [[nodiscard]] inline auto buttons() const noexcept -> const InputButtons& { return m_buttons; }
+    /// The speeds the buttons ask for, by the original's cvars.
     [[nodiscard]] inline auto cvars() const noexcept -> const InputCvars& { return m_cvars; }
 
 private:

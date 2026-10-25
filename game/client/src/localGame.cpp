@@ -21,12 +21,10 @@ namespace {
 /// does not run away.
 constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
-/// Whether a weapon given heavier than the one held is drawn: _cl_autowepswitch's default.
-constexpr bool kAutoSwitch = true;
 /// The stream of random numbers a spawn's weapons draw from.
 constexpr std::string_view kSpawnStream = "spawn";
 /// How far a bullet goes: FireBullets3's distance for every gun the game has.
-constexpr float kBulletReach = 8192.0F;
+constexpr nx::HammerUnits kBulletReach{8192.0F};
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -38,8 +36,8 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_level{&level}, m_player{.origin = eye - nx::Vec3{.z = kStandingViewHeight.value()}},
       m_inventory{content.weapons}, m_previousEye{eye} {}
 
-auto LocalGame::start(const GameContent& content, const Level& level, Team team, nx::Vec3 eye)
-    -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
+auto LocalGame::start(const GameContent& content, const Level& level, Team team, nx::Vec3 eye,
+                      AutoSwitch autoSwitch) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
     auto game = std::make_unique<LocalGame>(CreateToken{}, content, level, eye);
     if (auto spawned = spawnGame(level.map(), level.entityClasses(), game->m_world); !spawned) {
         return std::unexpected{std::move(spawned.error())};
@@ -51,7 +49,7 @@ auto LocalGame::start(const GameContent& content, const Level& level, Team team,
         nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
         for (const std::string& weapon : loadout->weapons) {
             // readLoadouts checked that the catalog has each.
-            std::ignore = game->m_inventory.give(*content.weapons.indexOf(weapon), kAutoSwitch, time, random);
+            std::ignore = game->m_inventory.give(*content.weapons.indexOf(weapon), autoSwitch, time, random);
         }
         for (const LoadoutAmmo& ammo : loadout->ammo) {
             std::ignore = game->m_inventory.giveAmmo(ammo.id, ammo.rounds);
@@ -61,10 +59,10 @@ auto LocalGame::start(const GameContent& content, const Level& level, Team team,
     return game;
 }
 
-void LocalGame::give(WeaponIndex weapon) {
+void LocalGame::give(WeaponIndex weapon, AutoSwitch autoSwitch) {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
-    std::ignore = m_inventory.give(weapon, kAutoSwitch, time, random);
+    std::ignore = m_inventory.give(weapon, autoSwitch, time, random);
     m_player.maxSpeed = m_inventory.maxSpeed();
 }
 
@@ -151,7 +149,7 @@ void LocalGame::tick(const UserCommand& command) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
         const nx::game::SolidHit hit =
             nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin,
-                                     shot.origin + (shot.direction * kBulletReach));
+                                     shot.origin + (shot.direction * kBulletReach.value()));
         if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
             m_impacts.push_back(Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
         }

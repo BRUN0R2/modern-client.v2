@@ -26,8 +26,7 @@ auto ClientAudio::open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volu
     if (!device) {
         return std::unexpected{std::move(device.error())};
     }
-    // Made here: its constructor is private.
-    std::unique_ptr<ClientAudio> audio{new ClientAudio{vfs, volume, std::move(*device)}};
+    auto audio = std::make_unique<ClientAudio>(CreateToken{}, vfs, volume, std::move(*device));
     audio->update();
     if (auto played = audio->m_device.play(audio->m_mixer); !played) {
         return std::unexpected{std::move(played.error())};
@@ -35,7 +34,7 @@ auto ClientAudio::open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volu
     return audio;
 }
 
-ClientAudio::ClientAudio(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
+ClientAudio::ClientAudio(CreateToken /*token*/, const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
                          nx::platform::AudioDevice device)
     : m_volumeCvar{volume}, m_sounds{vfs}, m_mixer{nx::audio::MixerDesc{.rate = device.rate()}},
       m_device{std::move(device)}, m_random{0, kSoundStream} {}

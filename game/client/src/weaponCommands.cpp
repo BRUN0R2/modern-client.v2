@@ -61,28 +61,28 @@ constexpr std::string_view kWhitespace = " \t";
     return line;
 }
 
-/// The commands, each a member: they share the console, the catalog and the actions, and live as
-/// long as a handler of the console's holds them.
-class WeaponCommands : public std::enable_shared_from_this<WeaponCommands> {
+/// The commands, each a member, and what they act with: the console and the catalog, which outlive
+/// them, and the actions. Each of the console's handlers holds a copy of its own.
+class WeaponCommands {
 public:
     WeaponCommands(Console& console, WeaponCatalog& weapons, WeaponActions actions) noexcept
         : m_console{&console}, m_weapons{&weapons}, m_actions{std::move(actions)} {}
 
     /// Registers `weapon_<id>`, which draws `weapon`.
-    [[nodiscard]] auto registerSelect(WeaponIndex weapon) -> nx::Result<void, ConsoleError> {
+    [[nodiscard]] auto registerSelect(WeaponIndex weapon) const -> nx::Result<void, ConsoleError> {
         const std::string& classname = m_weapons->weapon(weapon).classname;
         return m_console->registerCommand(
             {.name = std::string_view{classname}, .description = "Draws the weapon, when the player has it."},
-            [self = shared_from_this(), weapon,
-             classname](Console&, const CommandLine&) -> nx::Result<void, ConsoleError> {
-                if (!self->m_actions.select(weapon)) {
-                    self->m_console->print(noMap(classname));
+            [self = *this, weapon, classname](Console&,
+                                              const CommandLine&) -> nx::Result<void, ConsoleError> {
+                if (auto selected = self.m_actions.select(weapon); !selected) {
+                    self.m_console->print(noMap(classname));
                 }
                 return {};
             });
     }
 
-    auto create(const CommandLine& line) -> nx::Result<void, ConsoleError> {
+    [[nodiscard]] auto create(const CommandLine& line) const -> nx::Result<void, ConsoleError> {
         const std::span<const std::string> words = line.arguments();
         if (words.size() != 2 && words.size() != 3) {
             return nx::fail(ConsoleError::InvalidArguments, "usage: create_weapon <id> <slot> [from weapon]");
@@ -110,7 +110,7 @@ public:
         return {};
     }
 
-    auto setVar(const CommandLine& line) -> nx::Result<void, ConsoleError> {
+    [[nodiscard]] auto setVar(const CommandLine& line) const -> nx::Result<void, ConsoleError> {
         const std::span<const std::string> words = line.arguments();
         if (words.size() < 3) {
             return nx::fail(ConsoleError::InvalidArguments,
@@ -130,7 +130,7 @@ public:
         return {};
     }
 
-    auto getVar(const CommandLine& line) -> nx::Result<void, ConsoleError> {
+    [[nodiscard]] auto getVar(const CommandLine& line) const -> nx::Result<void, ConsoleError> {
         const std::span<const std::string> words = line.arguments();
         if (words.size() != 1 && words.size() != 2) {
             return nx::fail(ConsoleError::InvalidArguments, "usage: get_weapon_var <weapon> [key path]");
@@ -156,13 +156,13 @@ public:
         return {};
     }
 
-    void list() {
+    void list() const {
         for (std::uint32_t index = 0; index < m_weapons->weapons().size(); ++index) {
             m_console->print(describeWeapon(*m_weapons, WeaponIndex{index}));
         }
     }
 
-    auto replace(const CommandLine& line) -> nx::Result<void, ConsoleError> {
+    [[nodiscard]] auto replace(const CommandLine& line) const -> nx::Result<void, ConsoleError> {
         const std::span<const std::string> words = line.arguments();
         if (words.size() != 1 && words.size() != 2) {
             return nx::fail(ConsoleError::InvalidArguments, "usage: replace_weapon <weapon> [replacement]");
@@ -186,7 +186,7 @@ public:
         return {};
     }
 
-    auto give(const CommandLine& line) -> nx::Result<void, ConsoleError> {
+    [[nodiscard]] auto give(const CommandLine& line) const -> nx::Result<void, ConsoleError> {
         const std::span<const std::string> words = line.arguments();
         if (words.size() != 1) {
             return nx::fail(ConsoleError::InvalidArguments, "usage: give <weapon>");
@@ -198,7 +198,7 @@ public:
         if (auto complete = m_weapons->checkComplete(m_weapons->madeFor(*weapon)); !complete) {
             return failed("give", std::move(complete.error()));
         }
-        if (!m_actions.give(*weapon)) {
+        if (auto given = m_actions.give(*weapon); !given) {
             m_console->print(noMap("give"));
         }
         return {};
@@ -246,9 +246,9 @@ auto textAfterWords(std::string_view argumentText, std::size_t words) noexcept -
 
 auto registerWeaponCommands(Console& console, WeaponCatalog& weapons, WeaponActions actions)
     -> nx::Result<void, ConsoleError> {
-    auto commands = std::make_shared<WeaponCommands>(console, weapons, std::move(actions));
+    const WeaponCommands commands{console, weapons, std::move(actions)};
     for (std::uint32_t index = 0; index < weapons.weapons().size(); ++index) {
-        if (auto registered = commands->registerSelect(WeaponIndex{index}); !registered) {
+        if (auto registered = commands.registerSelect(WeaponIndex{index}); !registered) {
             return registered;
         }
     }
@@ -259,26 +259,26 @@ auto registerWeaponCommands(Console& console, WeaponCatalog& weapons, WeaponActi
              add({.name = "create_weapon",
                   .description = "Makes a weapon: create_weapon <id> <slot> [from weapon], its values the "
                                  "other's, copied once, or none."},
-                 [commands](Console&, const CommandLine& line) { return commands->create(line); }),
+                 [commands](Console&, const CommandLine& line) { return commands.create(line); }),
              add({.name = "set_weapon_var",
                   .description = "Sets a weapon's value by the key path of its data: set_weapon_var <weapon> "
                                  "<key path> <value>."},
-                 [commands](Console&, const CommandLine& line) { return commands->setVar(line); }),
+                 [commands](Console&, const CommandLine& line) { return commands.setVar(line); }),
              add({.name = "get_weapon_var",
                   .description = "Prints a weapon's value by its key path, or all of them: get_weapon_var "
                                  "<weapon> [key path]."},
-                 [commands](Console&, const CommandLine& line) { return commands->getVar(line); }),
+                 [commands](Console&, const CommandLine& line) { return commands.getVar(line); }),
              add({.name = "list_weapons", .description = "Prints the weapons."},
                  [commands](Console&, const CommandLine&) {
-                     commands->list();
+                     commands.list();
                      return nx::Result<void, ConsoleError>{};
                  }),
              add({.name = "replace_weapon",
                   .description = "Makes a weapon wherever the game makes another, or stops: replace_weapon "
                                  "<weapon> [replacement]."},
-                 [commands](Console&, const CommandLine& line) { return commands->replace(line); }),
+                 [commands](Console&, const CommandLine& line) { return commands.replace(line); }),
              add({.name = "give", .description = "Gives the player a weapon: give <weapon>."},
-                 [commands](Console&, const CommandLine& line) { return commands->give(line); }),
+                 [commands](Console&, const CommandLine& line) { return commands.give(line); }),
          }) {
         if (!registered) {
             return registered;

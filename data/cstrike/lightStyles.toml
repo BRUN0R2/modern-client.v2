@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The light styles the game sets as a map starts (docs/05, section 8), read into cs::WorldLightStyles:
+# each `style`, from 0 to 63, plays its `pattern`, a letter a tenth of a second, from "a" (dark)
+# through "m" (normal) to "z". The patterns are those Quake's world.qc sets, as Half-Life's world sets
+# them (GPL, consulted for behavior: docs/20 section 3), named as the Half-Life FGDs name the styles of
+# a light. Styles 32 to 62 are the switchable lights', which their entities set; style 12, the FGDs'
+# underwater mutation, has no public pattern and stays unset.
+
+[[styles]]
+style = 0
+pattern = "m" # normal
+
+[[styles]]
+style = 1
+pattern = "mmnmmommommnonmmonqnmmo" # flicker
+
+[[styles]]
+style = 2
+pattern = "abcdefghijklmnopqrstuvwxyzyxwvutsrqponmlkjihgfedcba" # slow strong pulse
+
+[[styles]]
+style = 3
+pattern = "mmmmmaaaaammmmmaaaaaabcdefgabcdefg" # candle
+
+[[styles]]
+style = 4
+pattern = "mamamamamama" # fast strobe
+
+[[styles]]
+style = 5
+pattern = "jklmnopqrstuvwxyzyxwvutsrqponmlkj" # gentle pulse
+
+[[styles]]
+style = 6
+pattern = "nmonqnmomnmomomno" # flicker
+
+[[styles]]
+style = 7
+pattern = "mmmaaaabcdefgmmmmaaaammmaamm" # candle
+
+[[styles]]
+style = 8
+pattern = "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa" # candle
+
+[[styles]]
+style = 9
+pattern = "aaaaaaaazzzzzzzz" # slow strobe
+
+[[styles]]
+style = 10
+pattern = "mmamammmmammamamaaamammma" # fluorescent flicker
+
+[[styles]]
+style = 11
+pattern = "abcdefghijklmnopqrrqponmlkjihgfedcba" # slow pulse, not fading to black
+
+[[styles]]
+style = 63
+pattern = "a" # testing: dark

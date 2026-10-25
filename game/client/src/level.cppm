@@ -14,6 +14,7 @@ import nx.collision;
 import nx.ecs;
 import nx.game;
 import cs.shared;
+import :mapLight;
 import :mapSprites;
 import :mapModels;
 import :viewModel;
@@ -34,13 +35,15 @@ enum class LevelError : std::uint8_t {
 
 /// The game's files: the Counter-Strike 1.6 installation through its VFS, the classes the game makes
 /// the map's entities by (data/cstrike/entities.toml), its weapons (data/cstrike/ammo.toml and
-/// data/cstrike/weapons/<id>.toml), and what a player of each team spawns with
-/// (data/cstrike/loadouts.toml).
+/// data/cstrike/weapons/<id>.toml), what a player of each team spawns with
+/// (data/cstrike/loadouts.toml), and the light styles it sets as a map starts
+/// (data/cstrike/lightStyles.toml).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
     WeaponCatalog weapons;
     Loadouts loadouts;
+    WorldLightStyles lightStyles;
 };
 
 /// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its
@@ -49,9 +52,9 @@ struct GameContent {
 [[nodiscard]] auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path;
 
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
-/// installation's files, the entity classes, the weapons, each in the file named after its id, and
-/// the loadouts; and the installation at `install`, or the one Steam installed, below `addons`, the
-/// user's own content (addonsFolderOf), when it is given and is a folder: a file there is read
+/// installation's files, the entity classes, the weapons, each in the file named after its id, the
+/// loadouts and the light styles; and the installation at `install`, or the one Steam installed, below
+/// `addons`, the user's own content (addonsFolderOf), when it is given and is a folder: a file there is read
 /// instead of the installation's. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
                                    const std::optional<std::filesystem::path>& install,
@@ -79,7 +82,7 @@ public:
         -> nx::Result<std::unique_ptr<Level>, LevelError>;
 
     /// Use load(). Public only so that load() can use std::make_unique.
-    explicit Level(CreateToken /*token*/) noexcept {}
+    inline explicit Level(CreateToken /*token*/) noexcept {}
 
     Level(const Level&) = delete;
     auto operator=(const Level&) -> Level& = delete;
@@ -87,16 +90,21 @@ public:
     auto operator=(Level&&) -> Level& = delete;
     ~Level() = default;
 
+    /// Its BSP, read whole.
     [[nodiscard]] inline auto map() const noexcept -> const nx::assets::BspView& { return *m_map; }
+    /// The classes the game makes its entities by.
     [[nodiscard]] inline auto entityClasses() const noexcept -> const nx::game::EntityClasses& {
         return m_entityClasses;
     }
+    /// The WADs its textures are in, those the installation has.
     [[nodiscard]] inline auto wads() const noexcept -> std::span<const nx::assets::WadView> { return m_wads; }
     /// Its sides, in the order of nx::render::kSkySuffixes; none when no sky could be read.
     [[nodiscard]] inline auto sky() const noexcept -> std::span<const nx::assets::RgbaImage> { return m_sky; }
+    /// The patterns its light styles play.
     [[nodiscard]] inline auto lightStyles() const noexcept -> const nx::render::LightStyles& {
         return m_lightStyles;
     }
+    /// The sky's light, its light_environment's.
     [[nodiscard]] inline auto skyLight() const noexcept -> const nx::render::SkyLight& { return m_skyLight; }
     /// Where its reflection probes go (probePositionsOf), in the enhanced look.
     [[nodiscard]] inline auto probePositions() const noexcept -> std::span<const nx::Vec3> {
@@ -106,9 +114,13 @@ public:
     [[nodiscard]] inline auto lights() const noexcept -> std::span<const nx::render::StudioLight> {
         return m_lights;
     }
+    /// The hulls of its brush models, which its traces go through.
     [[nodiscard]] inline auto hulls() const noexcept -> const nx::collision::BrushHulls& { return *m_hulls; }
+    /// What hides a glow from the eye.
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
+    /// The sprites its entities show.
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
+    /// The studio models its entities show.
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
     /// The sprites of the weapons' muzzle flashes: those their view models' events show, as their
     /// weapons' data styles them.

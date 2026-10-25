@@ -115,7 +115,7 @@ constexpr float kAngleSpeedKey = 0.67F;
 /// The share of the time since its edges were last taken that `button` was held; takes them.
 [[nodiscard]] auto takeShare(const Button& button) -> float {
     const nx::console::ButtonEdges edges = button.takeEdges();
-    return heldShare(button.isDown(), edges);
+    return heldShare(button.isDown() ? ButtonPosition::Down : ButtonPosition::Up, edges);
 }
 
 /// Whether `button` is down, or went down since its edges were last taken; takes them.

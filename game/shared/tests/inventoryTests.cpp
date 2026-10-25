@@ -56,6 +56,18 @@ constexpr float kTolerance = 1e-5F;
     return cs::GameSound{.files = {std::move(file)}, .channel = channel};
 }
 
+/// KickBack's seven numbers, the angles in degrees.
+[[nodiscard]] auto kick(float upBase, float lateralBase, float upModifier, float lateralModifier, float upMax,
+                        float lateralMax, std::uint32_t directionChange) -> cs::Kick {
+    return cs::Kick{.upBase = nx::Degrees{upBase},
+                    .lateralBase = nx::Degrees{lateralBase},
+                    .upModifier = nx::Degrees{upModifier},
+                    .lateralModifier = nx::Degrees{lateralModifier},
+                    .upMax = nx::Degrees{upMax},
+                    .lateralMax = nx::Degrees{lateralMax},
+                    .directionChange = directionChange};
+}
+
 [[nodiscard]] auto weapon(std::string id, WeaponSlot slot, std::uint32_t weight, float maxSpeed,
                           std::optional<cs::WeaponMagazine> magazine, cs::WeaponView view) -> Weapon {
     return Weapon{.id = id,
@@ -146,10 +158,10 @@ constexpr float kTolerance = 1e-5F;
                    .moving = {.base = 0.04F, .scale = 0.07F},
                    .standing = {.scale = 0.0275F}},
         .recoil = {.kicks =
-                       cs::KickByMovement{.moving = {1.5F, 0.45F, 0.225F, 0.05F, 6.5F, 2.5F, 7},
-                                          .air = {2.0F, 1.0F, 0.5F, 0.35F, 9.0F, 6.0F, 5},
-                                          .ducked = {0.9F, 0.35F, 0.15F, 0.025F, 5.5F, 1.5F, 9},
-                                          .standing = {1.0F, 0.375F, 0.175F, 0.0375F, 5.75F, 1.75F, 8}}}};
+                       cs::KickByMovement{.moving = kick(1.5F, 0.45F, 0.225F, 0.05F, 6.5F, 2.5F, 7),
+                                          .air = kick(2.0F, 1.0F, 0.5F, 0.35F, 9.0F, 6.0F, 5),
+                                          .ducked = kick(0.9F, 0.35F, 0.15F, 0.025F, 5.5F, 1.5F, 9),
+                                          .standing = kick(1.0F, 0.375F, 0.175F, 0.0375F, 5.75F, 1.75F, 8)}}};
     ak.reload = cs::WeaponReload{.time = nx::Seconds{2.45F}, .sequences = {1}};
     Weapon usp =
         weapon("usp", WeaponSlot::Secondary, 5, 250.0F, cs::WeaponMagazine{.ammo = "45ACP", .clipSize = 12},
@@ -225,7 +237,7 @@ constexpr float kTolerance = 1e-5F;
     Inventory inventory{weapons};
     nx::Random random{0, "test"};
     for (const WeaponIndex index : indices) {
-        EXPECT_TRUE(inventory.give(index, true, at(0), random));
+        EXPECT_TRUE(inventory.give(index, cs::AutoSwitch::ToHeavier, at(0), random));
     }
     return inventory;
 }
@@ -249,14 +261,14 @@ TEST(InventoryTest, TheFirstWeaponAndEachHeavierOneAreDrawn) {
     EXPECT_EQ(inventory.maxSpeed(), cs::kUnarmedSpeed);
     nx::Random random{0, "test"};
 
-    EXPECT_TRUE(inventory.give(kKnife, true, at(0), random));
+    EXPECT_TRUE(inventory.give(kKnife, cs::AutoSwitch::ToHeavier, at(0), random));
     ASSERT_NE(inventory.held(), nullptr);
     EXPECT_EQ(inventory.held()->weapon, kKnife);
     ASSERT_TRUE(inventory.animation().has_value());
     EXPECT_EQ(inventory.animation()->sequence, 3U);
     EXPECT_EQ(inventory.maxSpeed(), nx::UnitsPerSecond{250.0F});
 
-    EXPECT_TRUE(inventory.give(kGlock, true, at(10), random));
+    EXPECT_TRUE(inventory.give(kGlock, cs::AutoSwitch::ToHeavier, at(10), random));
     EXPECT_EQ(inventory.held()->weapon, kGlock);
     EXPECT_EQ(inventory.held()->clip, 20U);
     EXPECT_EQ(inventory.held()->accuracy, 0.9F);
@@ -274,7 +286,7 @@ TEST(InventoryTest, ALighterWeaponOrOneGivenWithoutAutoSwitchIsNotDrawn) {
 
     Inventory knifeFirst = given(weapons, {kKnife});
     nx::Random random{0, "test"};
-    EXPECT_TRUE(knifeFirst.give(kAk, false, at(0), random));
+    EXPECT_TRUE(knifeFirst.give(kAk, cs::AutoSwitch::Off, at(0), random));
     EXPECT_EQ(knifeFirst.held()->weapon, kKnife);
 }
 
@@ -282,7 +294,7 @@ TEST(InventoryTest, AWeaponHadAlreadyGivesItsRoundsAndAmmoStopsAtWhatIsCarried) 
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kGlock});
     nx::Random random{0, "test"};
-    EXPECT_FALSE(inventory.give(kGlock, true, at(0), random));
+    EXPECT_FALSE(inventory.give(kGlock, cs::AutoSwitch::ToHeavier, at(0), random));
     EXPECT_EQ(inventory.weapons().size(), 1U);
     EXPECT_EQ(inventory.held()->clip, 20U);
     EXPECT_EQ(inventory.reserve("9mm"), 20U);
@@ -317,8 +329,8 @@ TEST(InventoryTest, LastinvWithoutAWeaponBeforeTakesTheNewestOfTheFirstSlotWithA
 
     Inventory inventory = given(weapons, {kAk});
     nx::Random random{0, "test"};
-    std::ignore = inventory.give(kKnife, true, at(0), random); // lighter: not drawn
-    std::ignore = inventory.give(kGlock, true, at(0), random);
+    std::ignore = inventory.give(kKnife, cs::AutoSwitch::ToHeavier, at(0), random); // lighter: not drawn
+    std::ignore = inventory.give(kGlock, cs::AutoSwitch::ToHeavier, at(0), random);
     // The primary slot's newest is held, the secondary's is the Glock.
     EXPECT_EQ(inventory.lastWeapon(), kGlock);
 }
@@ -426,7 +438,7 @@ TEST(FiringTest, TheLastRoundPlaysItsOwnSequenceAndAnEmptyClipClicks) {
     // Empty, with nothing to reload with: a click, and the next no sooner than 0.2 seconds after,
     // counted down by the click's command already.
     EXPECT_TRUE(frames(inventory, shooter, tick, tick, {Button::Attack}).empty());
-    EXPECT_NEAR(inventory.held()->nextShot, 0.19F, kTolerance);
+    EXPECT_NEAR(inventory.held()->nextShot.count(), 0.19F, kTolerance);
     EXPECT_FALSE(inventory.isReloading());
 }
 
@@ -649,13 +661,13 @@ TEST(MeleeTest, TheKnifeSlashesItsSequencesInTurnHeldByItsMissOrHit) {
     std::ignore = inventory.frame(command(1, {Button::Attack}), shooter, missAll(), at(kReady));
     EXPECT_EQ(inventory.animation()->sequence, 6U);
     // A miss holds a slash 0.35 seconds and a stab 0.5, already counted down by its command.
-    EXPECT_NEAR(inventory.held()->nextShot, 0.34F, kTolerance);
-    EXPECT_NEAR(inventory.held()->nextSecondary, 0.49F, kTolerance);
+    EXPECT_NEAR(inventory.held()->nextShot.count(), 0.34F, kTolerance);
+    EXPECT_NEAR(inventory.held()->nextSecondary.count(), 0.49F, kTolerance);
 
     std::ignore = frames(inventory, shooter, kReady + 1, kReady + 40);
     std::ignore = inventory.frame(command(2, {Button::Attack}), shooter, hitAll(), at(kReady + 41));
     EXPECT_EQ(inventory.animation()->sequence, 7U) << "the next of the two";
-    EXPECT_NEAR(inventory.held()->nextShot, 0.39F, kTolerance) << "a hit holds it 0.4";
+    EXPECT_NEAR(inventory.held()->nextShot.count(), 0.39F, kTolerance) << "a hit holds it 0.4";
 }
 
 TEST(MeleeTest, TheKnifeStabsWithAttack2ItsMissOrHitSequence) {
@@ -667,8 +679,8 @@ TEST(MeleeTest, TheKnifeStabsWithAttack2ItsMissOrHitSequence) {
         std::ignore =
             inventory.frame(command(1, {Button::Attack2}), shooter, hits ? hitAll() : missAll(), at(kReady));
         EXPECT_EQ(inventory.animation()->sequence, hits ? 4U : 5U);
-        EXPECT_NEAR(inventory.held()->nextShot, hits ? 1.09F : 0.99F, kTolerance);
-        EXPECT_NEAR(inventory.held()->nextSecondary, hits ? 1.09F : 0.99F, kTolerance);
+        EXPECT_NEAR(inventory.held()->nextShot.count(), hits ? 1.09F : 0.99F, kTolerance);
+        EXPECT_NEAR(inventory.held()->nextSecondary.count(), hits ? 1.09F : 0.99F, kTolerance);
     }
 }
 
@@ -732,7 +744,7 @@ TEST(SoundTest, AWeaponDrawnMakesItsDrawSoundAndTheSoundsAreTakenOnce) {
     EXPECT_EQ(soundsOf(inventory), Files{"weapons/knife_deploy1.wav"});
     EXPECT_EQ(soundsOf(inventory), Files{});
     nx::Random random{0, "test"};
-    EXPECT_TRUE(inventory.give(kGlock, true, at(1), random));
+    EXPECT_TRUE(inventory.give(kGlock, cs::AutoSwitch::ToHeavier, at(1), random));
     EXPECT_EQ(soundsOf(inventory), Files{}) << "the Glock's view model plays its own";
 }
 
