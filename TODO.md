@@ -223,11 +223,13 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ### Assets
 - [x] VFS with mounts, priority, case-insensitive lookup and path validation (`nx.assets`), over the native file system of `nx.platform`
 - [ ] Content sources (`engine`, `devContent`, `openContent`, `goldsrcInstall`, mods) with a redistribution flag
-- [ ] `classic`, `open`, `dev` and `custom` profiles, and reading of `content.toml` (order: `--content-config`, working directory, user profile)
+- [x] Reading of `content.toml` (order: `--content-config`, working directory, user profile): the `classic` profile and its `goldsrcInstall.path` (`nx::assets::readContentConfig`, `findContentConfig`)
+- [ ] `open`, `dev` and `custom` profiles, with their content
 - [x] Steam installation detection (registry and `libraryfolders.vdf` on Windows; `~/.steam`, `~/.local/share/Steam` and Flatpak on Linux): `nx::platform::steamFolders`, `nx::assets::detectGoldsrcInstall`
 - [x] Validation against `data/content/goldsrcCstrike.toml` with `ContentError::MissingEssentialFiles` (`GoldsrcInstall::open`)
 - [ ] First-start wizard ("use the original assets?") that writes `content.toml`
-- [ ] `--content`, `-basedir` and `--content-config` options
+- [x] `-basedir` and `--content-config` options
+- [ ] `--content <profile>`, with the profiles
 - [ ] `content_list`, `content_scan`, `content_add`, `content_profile` commands
 - [ ] Code-generated `devContent`: grid textures, test map, capsule player, simple weapons, synthesized sounds
 - [x] BSP v30 reader (all lumps) with fuzzing (`nx.assets:bsp`, `fuzzBsp`): every index checked, the visible tree checked to be a tree, the collision hulls to have no cycle (clip nodes shared as VHLT writes them)
@@ -260,7 +262,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] *Device lost*: recreate the device and its resources once, then a crash report
 - [ ] Parallel recording (one command pool per worker per frame)
 - [ ] Persistent staging ring
-- [ ] On-disk pipeline cache
+- [x] On-disk pipeline cache (`Device::pipelineCache`, `vulkan::DeviceDesc::pipelineCache`, `nx::platform::cacheDirectory`; [05 §4](docs/05-rendering.md#4-vulkan-backend))
 - [x] Slang shaders compiled to SPIR-V in the build (`nxAddShaders`, `bin/shaders/`)
 - [ ] Slang layout reflection checked against the C++ bind group layouts, and shader hot reload
 - [ ] Built-in fallback shaders with `#embed`
@@ -374,8 +376,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] The guns' fire sounds as the original's client events choose them (which file, what pitch): to be measured on the original
 - [x] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) as it meets a hostage (`cs::WeaponHit`); on the world `knife_hitwall1` alone, as the original's multiplayer rules play no texture sound (`CHalfLifeMultiplay::PlayTextureSounds`)
 - [ ] The bullets' sounds where they hit, as the original's client events choose them: to be measured on the original
+- [x] `s_device`: the sound output by its name, which `s_devices` lists, the system's default without one ([11 §8](docs/11-audio.md#8-cvars))
 - [x] `s_play_unfocused` (0: silent while the window is not focused, as the original is; [11 §8](docs/11-audio.md#8-cvars))
-- [ ] `s_device`: the output device by name, and listing them
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
 - [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device
 - [ ] Per-entity channels with replacement as in the original

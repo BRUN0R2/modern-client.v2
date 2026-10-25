@@ -3,7 +3,8 @@
 
 /// Content sources (ADR-0015, docs/06-assets-and-resources.md, section 2.4). Today: the user's
 /// own Counter-Strike 1.6 installation, described by data/content/goldsrcCstrike.toml and checked
-/// against it before the `classic` profile mounts it.
+/// against it before the `classic` profile mounts it; and the player's content.toml, which names
+/// the profile and where the installation is (section 2.5).
 export module nx.assets:content;
 
 import std;
@@ -20,6 +21,7 @@ enum class ContentError : std::uint8_t {
     InstallNotFound,       ///< A directory of the installation is missing or unreadable (cause: the
                            ///< VfsError).
     MissingEssentialFiles, ///< The installation lacks essential files; the detail lists every one.
+    ConfigMissing,         ///< The content configuration named is not there; the detail names it.
 };
 
 /// data/content/goldsrcCstrike.toml: the Counter-Strike 1.6 installation as a content source.
@@ -36,6 +38,39 @@ struct GoldsrcInstallDesc {
 /// Reads `text`, the description file `sourceName`. Errors: ConfigInvalid (cause: the DataError).
 [[nodiscard]] auto readGoldsrcInstallDesc(std::string_view text, std::string_view sourceName)
     -> Result<GoldsrcInstallDesc, ContentError>;
+
+/// The content profiles of docs/06 section 2.4 that have their content today: `open`, `dev` and
+/// `custom` come with theirs.
+enum class ContentProfile : std::uint8_t {
+    Classic, ///< The original assets, of the player's own Counter-Strike 1.6 installation.
+    Count,
+};
+
+/// Where the `classic` profile finds the installation.
+struct GoldsrcInstallConfig {
+    std::string path; ///< The folder with cstrike/ and valve/; empty: the one Steam installed.
+};
+
+/// The player's content.toml (docs/06, section 2.5): the content profile, and its sources' settings.
+struct ContentConfig {
+    ContentProfile profile = ContentProfile::Classic;
+    std::optional<GoldsrcInstallConfig> goldsrcInstall{}; ///< None: the one Steam installed.
+};
+
+/// The name of the content configuration's file.
+inline constexpr std::string_view kContentConfigFile = "content.toml";
+
+/// Reads `text`, the content configuration `sourceName`. Errors: ConfigInvalid (cause: the DataError).
+[[nodiscard]] auto readContentConfig(std::string_view text, std::string_view sourceName)
+    -> Result<ContentConfig, ContentError>;
+
+/// The content configuration to read, the first there is (docs/06, section 2.5): `named`, the
+/// command line's, which must be there; else content.toml in `workingFolder`, for development; else in
+/// `userFolder`. None when neither of those is there. Errors: ConfigMissing.
+[[nodiscard]] auto findContentConfig(const std::optional<std::filesystem::path>& named,
+                                     const std::filesystem::path& workingFolder,
+                                     const std::filesystem::path& userFolder)
+    -> Result<std::optional<std::filesystem::path>, ContentError>;
 
 /// A Counter-Strike 1.6 installation that has every essential file of its description.
 class GoldsrcInstall {
@@ -82,5 +117,22 @@ struct nx::meta::Description<nx::assets::GoldsrcInstallDesc> {
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::steamInstallFolder>("steamInstallFolder"),
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::mounts>("mounts"),
         nx::meta::field<&nx::assets::GoldsrcInstallDesc::essentialFiles>("essentialFiles"),
+    };
+};
+
+template <>
+struct nx::meta::Description<nx::assets::GoldsrcInstallConfig> {
+    static constexpr std::string_view kName = "nx::assets::GoldsrcInstallConfig";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::assets::GoldsrcInstallConfig::path>("path"),
+    };
+};
+
+template <>
+struct nx::meta::Description<nx::assets::ContentConfig> {
+    static constexpr std::string_view kName = "nx::assets::ContentConfig";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::assets::ContentConfig::profile>("profile"),
+        nx::meta::field<&nx::assets::ContentConfig::goldsrcInstall>("goldsrcInstall"),
     };
 };

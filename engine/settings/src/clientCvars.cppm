@@ -65,6 +65,9 @@ struct PlayerCvars {
 /// What is heard.
 struct AudioCvars {
     console::Cvar<float> volume; ///< The gain of everything heard, 1 the sounds as they are.
+    /// `s_device`: the name of the sound output to play on (nx::platform::audioOutputNames); empty
+    /// for the system's default.
+    console::Cvar<std::string> device;
     /// `s_play_unfocused`: the game is heard while its window is not focused; else it is silent then,
     /// as the original is.
     console::Cvar<bool> playUnfocused;

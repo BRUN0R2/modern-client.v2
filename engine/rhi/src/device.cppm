@@ -288,6 +288,11 @@ public:
     /// builds), which the device also logs. Zero without validation.
     [[nodiscard]] virtual auto validationErrors() const noexcept -> std::uint64_t = 0;
 
+    /// What the device learned building its pipelines, as its driver keeps it: given to a device of
+    /// the same GPU and driver as it is made (the backend's DeviceDesc), it builds them faster.
+    /// Errors: OutOfHostMemory, DriverRefused.
+    [[nodiscard]] virtual auto pipelineCache() const -> Result<std::vector<std::byte>, RhiError> = 0;
+
 protected:
     // What a backend implements: each resource created, which the create functions give an owner,
     // and destroyed, when its owner lets it go.

@@ -112,8 +112,42 @@ struct Video {
     nx::platform::SleepTimer sleepTimer;
 };
 
-/// Opens the window and the GPU, presenting as `isVsync` asks. Errors: WindowUnavailable, GpuFailed.
-[[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync) -> nx::Result<Video, ClientError> {
+/// The file of the cache folder (nx::platform::cacheDirectory) that keeps what the GPU learned
+/// building next's pipelines.
+constexpr std::string_view kPipelineCacheFile = "pipelineCache.bin";
+
+/// What the GPU learned building the pipelines the last time next ran; nothing the first time, or
+/// when the file cannot be read.
+[[nodiscard]] auto readPipelineCache() -> std::vector<std::byte> {
+    const auto folder = nx::platform::cacheDirectory();
+    if (!folder) {
+        return {};
+    }
+    return nx::platform::readFile(*folder / kPipelineCacheFile).value_or(std::vector<std::byte>{});
+}
+
+/// Keeps what `device` learned building its pipelines for the next run; logs what fails.
+void savePipelineCache(const nx::rhi::Device& device) {
+    auto learned = device.pipelineCache();
+    auto folder = nx::platform::cacheDirectory();
+    if (!learned || !folder) {
+        nx::log::warning(kLog, "the pipeline cache is not kept: {}",
+                         !learned ? nx::describe(learned.error()) : nx::describe(folder.error()));
+        return;
+    }
+    if (auto made = nx::platform::createDirectories(*folder); !made) {
+        nx::log::warning(kLog, "the pipeline cache is not kept: {}", nx::describe(made.error()));
+        return;
+    }
+    if (auto written = nx::platform::writeFile(*folder / kPipelineCacheFile, *learned); !written) {
+        nx::log::warning(kLog, "the pipeline cache is not kept: {}", nx::describe(written.error()));
+    }
+}
+
+/// Opens the window and the GPU, presenting as `isVsync` asks, the device given what the GPU learned
+/// building the pipelines before (`pipelineCache`). Errors: WindowUnavailable, GpuFailed.
+[[nodiscard]] auto openVideo(const ClientOptions& options, bool isVsync,
+                             std::span<const std::byte> pipelineCache) -> nx::Result<Video, ClientError> {
     // Hidden until its first image (Client::drawFrame): never empty while the GPU starts and the map loads.
     auto window = nx::platform::Window::create({.title = "Modern-Client.v2", .isShown = false});
     if (!window) {
@@ -125,8 +159,10 @@ struct Video {
         return !native ? nx::fail(ClientError::WindowUnavailable, std::move(native.error()))
                        : nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
-    auto device = nx::rhi::vulkan::createDevice(
-        {.applicationName = "next", .window = *native, .isValidationEnabled = options.isValidationEnabled});
+    auto device = nx::rhi::vulkan::createDevice({.applicationName = "next",
+                                                 .window = *native,
+                                                 .isValidationEnabled = options.isValidationEnabled,
+                                                 .pipelineCache = pipelineCache});
     if (!device) {
         return nx::fail(ClientError::GpuFailed, std::move(device.error()));
     }
@@ -211,6 +247,8 @@ private:
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
+    [[nodiscard]] auto listSoundOutputs() -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playVolumeCommand(const nx::console::CommandLine& line)
         -> nx::Result<void, ConsoleError>;
     /// Plays the sound `name` names at `volume`, heard everywhere, as `play` and `playvol` do.
@@ -225,6 +263,9 @@ private:
     /// Plays the map the console asked for, if any: its scene is made with the next frame, and
     /// r_decals is held as entering a game of more than one player holds it.
     void startNextSession();
+    /// Plays the sound on the output s_device names, when it names one: the system's default stays
+    /// when none has that name, logged.
+    void openNamedSoundOutput();
     /// Turns the view the way the session's game turned its player, if it did (the original's
     /// fixangle): as the player spawns.
     void turnAsTheGameDid();
@@ -300,6 +341,40 @@ private:
     bool m_isFocused = true; ///< The window is, as it opens.
 };
 
+/// The installation `options` name (`-basedir`), else the content configuration's
+/// (nx::assets::findContentConfig, from the working folder and `userFolder`); none when neither
+/// names one, for the one Steam installed. Errors: those of the configuration's finding and reading.
+[[nodiscard]] auto configuredInstall(const ClientOptions& options, const std::filesystem::path& userFolder)
+    -> nx::Result<std::optional<std::filesystem::path>, nx::assets::ContentError> {
+    if (options.install) {
+        return options.install;
+    }
+    // Empty when it cannot be told, so that content.toml is looked for relative to it all the same.
+    std::error_code error;
+    const std::filesystem::path workingFolder = std::filesystem::current_path(error);
+    auto file = nx::assets::findContentConfig(options.contentConfig, workingFolder, userFolder);
+    if (!file) {
+        return std::unexpected(std::move(file.error()));
+    }
+    if (!*file) {
+        return std::optional<std::filesystem::path>{};
+    }
+    const std::string name = nx::platform::toUtf8(**file);
+    auto text = nx::platform::readTextFile(**file);
+    if (!text) {
+        return nx::fail(nx::assets::ContentError::ConfigInvalid, name, std::move(text.error()));
+    }
+    auto config = nx::assets::readContentConfig(*text, name);
+    if (!config) {
+        return std::unexpected(std::move(config.error()));
+    }
+    nx::log::info(kLog, "the content configuration: {}", name);
+    if (!config->goldsrcInstall || config->goldsrcInstall->path.empty()) {
+        return std::optional<std::filesystem::path>{};
+    }
+    return std::optional{nx::platform::fromUtf8(config->goldsrcInstall->path)};
+}
+
 auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerSettings(); !registered) {
         return registered;
@@ -311,8 +386,12 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!executable) {
         return nx::fail(ClientError::ContentUnavailable, std::move(executable.error()));
     }
-    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"),
-                                       m_options->install, cs::addonsFolderOf(m_files.directory()));
+    auto install = configuredInstall(*m_options, m_files.directory());
+    if (!install) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(install.error()));
+    }
+    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"), *install,
+                                       cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
@@ -335,11 +414,13 @@ auto Client::start() -> nx::Result<void, ClientError> {
     } else {
         nx::log::warning(kLog, "no sound: {}", nx::describe(audio.error()));
     }
-    // The player's files, then the command line's commands, as the original's valve.rc runs them.
+    // The player's files, then the command line's commands, as the original's valve.rc runs them; the
+    // output s_device names is opened once they ran, the default's sounds heard until then.
     nx::settings::runStartupFiles(m_console, m_files);
     m_console.addText(m_options->bootCommands);
     std::ignore = m_console.execute(); // what a `wait` leaves runs with the frames
-    auto video = openVideo(*m_options, m_cvars->video.vsync.value());
+    openNamedSoundOutput();
+    auto video = openVideo(*m_options, m_cvars->video.vsync.value(), readPipelineCache());
     if (!video) {
         return std::unexpected{std::move(video.error())};
     }
@@ -398,6 +479,8 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                .description =
                    "Plays a sound heard everywhere at a volume from 0 to 1: playvol <sound> <volume>."},
               [this](Console&, const CommandLine& line) { return playVolumeCommand(line); }),
+          add({.name = "s_devices", .description = "Lists the sound outputs s_device can name."},
+              [this](Console&, const CommandLine&) { return listSoundOutputs(); }),
           add({.name = "noclip", .description = "Flies through everything, or walks again."},
               [this](Console&, const CommandLine&) {
                   noclipCommand();
@@ -458,6 +541,17 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
     }
     m_nextSession = std::move(*session);
+    return {};
+}
+
+auto Client::listSoundOutputs() -> nx::Result<void, ConsoleError> {
+    auto names = nx::platform::audioOutputNames();
+    if (!names) {
+        return nx::fail(ConsoleError::CommandFailed, "s_devices", std::move(names.error()));
+    }
+    for (const std::string& name : *names) {
+        m_console.print(std::format("\"{}\"", name));
+    }
     return {};
 }
 
@@ -620,6 +714,19 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
         }
     }
     return {};
+}
+
+void Client::openNamedSoundOutput() {
+    const std::string& name = m_cvars->audio.device.value();
+    if (name.empty()) {
+        return;
+    }
+    auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume, name);
+    if (!audio) {
+        nx::log::warning(kLog, "s_device {:?}: {}; the default plays", name, nx::describe(audio.error()));
+        return;
+    }
+    m_audio = std::move(*audio);
 }
 
 void Client::startNextSession() {
@@ -875,6 +982,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
 
 auto Client::finish() -> nx::Result<void, ClientError> {
     m_video->device->waitIdle();
+    savePipelineCache(*m_video->device);
     if (auto saved = nx::settings::saveConfig(m_console, m_bindings, m_files); !saved) {
         nx::log::warning(kLog, "{}", nx::describe(saved.error()));
     }

@@ -67,8 +67,8 @@ profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) 
 The CS 1.6 installation is **optional** ([ADR-0015](adr/0015-free-content-and-optional-original-assets.md)). When the profile is `classic`, it
 is searched for in this order:
 
-1. Explicit option: `-basedir <path>` on the command line or `goldsrcInstall.path` in
-   `content.toml`.
+1. Explicit option: `-basedir <path>` on the command line, else `goldsrcInstall.path` in
+   `content.toml` ([§2.5](#25-local-configuration)).
 2. Steam on Windows: the Steam path in the registry (`HKCU\Software\Valve\Steam`, value
    `SteamPath`), plus the libraries listed in `steamapps/libraryfolders.vdf`.
 3. Steam on Linux: `~/.steam/steam`, `~/.local/share/Steam` and the Flatpak installation
@@ -125,6 +125,16 @@ yield `ContentError::MissingEssentialFiles` with the full list.
   commented template `content.example.toml`.
 - **Command line:** `--content <profile>`, `-basedir <path>`,
   `--content-config <file>`.
+
+**Today** (`nx::assets::findContentConfig`, `readContentConfig`): `next` reads the first content
+configuration there is, `--content-config <file>` (which must be there: `ContentError::ConfigMissing`
+otherwise), else `content.toml` in the working folder, else in the user's folder; a file that is
+there but breaks its schema stops the start (`ConfigInvalid`, an unknown key among its causes), as
+with any other configuration. It holds the `profile`, `classic` alone until the other profiles'
+content comes (an `open`, `dev` or `custom` one is invalid), and `[goldsrcInstall] path`, the
+installation, used when `-basedir` names none; empty, or without the table, the one Steam
+installed (§2.3). The first-start wizard comes with the menus, and the `content_*` commands with
+the profiles they switch between.
 - **Console:** `content_list` (mounted sources, order and origin), `content_scan` (reruns
   detection), `content_add <path>` (registers an installation and validates it),
   `content_profile <profile>` (switches the profile; takes effect on the next map load).

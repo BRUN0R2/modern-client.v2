@@ -136,6 +136,14 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
             return std::unexpected{std::move(registered->error())};
         }
     }
+    auto device = console.registerCvar(CvarDesc<std::string>{
+        .name = "s_device",
+        .defaultValue = "",
+        .description = "The sound output to play on, by its name; empty for the system's default.",
+        .flags = kArchived});
+    if (!device) {
+        return std::unexpected{std::move(device.error())};
+    }
     for (auto* const registered : {&decals, &multiplayerDecals}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
@@ -156,7 +164,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .decals = *decals,
                                  .multiplayerDecals = *multiplayerDecals},
                        .player = {.autoWeaponSwitch = *autoWeaponSwitch},
-                       .audio = {.volume = *volume, .playUnfocused = *playUnfocused}};
+                       .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
 }
 
 auto enterMultiplayerGame(const VideoCvars& video) -> Result<void, console::CvarError> {

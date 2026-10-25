@@ -52,16 +52,60 @@ void SDLCALL pull(void* userdata, SDL_AudioStream* stream, int additionalAmount,
     }
 }
 
+/// The system's playback outputs, the audio subsystem started.
+[[nodiscard]] auto playbackOutputs() -> std::vector<SDL_AudioDeviceID> {
+    int count = 0;
+    SDL_AudioDeviceID* const outputs = SDL_GetAudioPlaybackDevices(&count);
+    if (outputs == nullptr) {
+        return {};
+    }
+    std::vector<SDL_AudioDeviceID> listed(outputs, outputs + std::max(count, 0));
+    SDL_free(outputs);
+    return listed;
+}
+
+/// The name of `output`; none when the system tells none.
+[[nodiscard]] auto nameOf(SDL_AudioDeviceID output) -> std::optional<std::string_view> {
+    const char* const name = SDL_GetAudioDeviceName(output);
+    return name != nullptr ? std::optional<std::string_view>{name} : std::nullopt;
+}
+
 } // namespace
 
-auto AudioDevice::open() -> Result<AudioDevice, AudioDeviceError> {
+auto audioOutputNames() -> Result<std::vector<std::string>, AudioDeviceError> {
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         return fail(AudioDeviceError::Unavailable,
                     std::format("SDL_InitSubSystem(SDL_INIT_AUDIO): {}", SDL_GetError()));
     }
+    std::vector<std::string> names;
+    for (const SDL_AudioDeviceID output : playbackOutputs()) {
+        if (const std::optional<std::string_view> name = nameOf(output)) {
+            names.emplace_back(*name);
+        }
+    }
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    return names;
+}
+
+auto AudioDevice::open(std::optional<std::string_view> name) -> Result<AudioDevice, AudioDeviceError> {
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+        return fail(AudioDeviceError::Unavailable,
+                    std::format("SDL_InitSubSystem(SDL_INIT_AUDIO): {}", SDL_GetError()));
+    }
+    SDL_AudioDeviceID output = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+    if (name) {
+        const std::vector<SDL_AudioDeviceID> outputs = playbackOutputs();
+        const auto found = std::ranges::find_if(
+            outputs, [name](SDL_AudioDeviceID candidate) { return nameOf(candidate) == *name; });
+        if (found == outputs.end()) {
+            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            return fail(AudioDeviceError::UnknownOutput, std::string{*name});
+        }
+        output = *found;
+    }
     SDL_AudioSpec device{};
     int deviceFrames = 0;
-    if (!SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &device, &deviceFrames)) {
+    if (!SDL_GetAudioDeviceFormat(output, &device, &deviceFrames)) {
         std::string error = SDL_GetError();
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
         return fail(AudioDeviceError::NoDevice, std::format("SDL_GetAudioDeviceFormat: {}", error));
@@ -71,7 +115,7 @@ auto AudioDevice::open() -> Result<AudioDevice, AudioDeviceError> {
                              .channels = static_cast<int>(kChannels),
                              .freq = device.freq > 0 ? device.freq : kFallbackRate};
     auto feed = std::make_unique<AudioFeed>();
-    feed->stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, pull, feed.get());
+    feed->stream = SDL_OpenAudioDeviceStream(output, &spec, pull, feed.get());
     if (feed->stream == nullptr) {
         std::string error = SDL_GetError();
         SDL_QuitSubSystem(SDL_INIT_AUDIO);

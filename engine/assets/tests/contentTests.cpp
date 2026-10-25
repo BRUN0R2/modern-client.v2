@@ -12,7 +12,9 @@ import nx.assets;
 
 namespace {
 
+using nx::assets::ContentConfig;
 using nx::assets::ContentError;
+using nx::assets::ContentProfile;
 using nx::assets::GoldsrcInstall;
 using nx::assets::GoldsrcInstallDesc;
 using nx::assets::readGoldsrcInstallDesc;
@@ -145,6 +147,73 @@ TEST(GoldsrcInstallTest, AnUnknownKeyIsInvalid) {
     EXPECT_EQ(desc.error().code, ContentError::ConfigInvalid);
     ASSERT_FALSE(desc.error().cause.empty());
     EXPECT_EQ(desc.error().cause.records()[0].code, "UnknownKey");
+}
+
+TEST(ContentConfigTest, TheShippedTemplateIsValid) {
+    const auto text = nx::platform::readTextFile(nx::platform::fromUtf8(NX_DATA_DIRECTORY).parent_path() /
+                                                 "content.example.toml");
+    ASSERT_TRUE(text.has_value()) << nx::describe(text.error());
+    const auto config = nx::assets::readContentConfig(*text, "content.example.toml");
+    ASSERT_TRUE(config.has_value()) << nx::describe(config.error());
+    EXPECT_EQ(config->profile, ContentProfile::Classic);
+    ASSERT_TRUE(config->goldsrcInstall.has_value());
+    EXPECT_TRUE(config->goldsrcInstall->path.empty()) << "the one Steam installed";
+}
+
+TEST(ContentConfigTest, ReadsTheProfileAndTheInstallation) {
+    const auto config = nx::assets::readContentConfig(
+        "profile = \"classic\"\n[goldsrcInstall]\npath = \"D:/Games/Half-Life\"\n", "content.toml");
+    ASSERT_TRUE(config.has_value()) << nx::describe(config.error());
+    EXPECT_EQ(config->profile, ContentProfile::Classic);
+    ASSERT_TRUE(config->goldsrcInstall.has_value());
+    EXPECT_EQ(config->goldsrcInstall->path, "D:/Games/Half-Life");
+
+    const auto bare = nx::assets::readContentConfig("profile = \"classic\"\n", "content.toml");
+    ASSERT_TRUE(bare.has_value()) << nx::describe(bare.error());
+    EXPECT_FALSE(bare->goldsrcInstall.has_value());
+}
+
+TEST(ContentConfigTest, AProfileWithoutItsContentOrNoneIsInvalid) {
+    for (const std::string_view text :
+         {"profile = \"open\"\n", "profile = \"dev\"\n", "[goldsrcInstall]\npath = \"\"\n"}) {
+        const auto config = nx::assets::readContentConfig(text, "content.toml");
+        ASSERT_FALSE(config.has_value()) << text;
+        EXPECT_EQ(config.error().code, ContentError::ConfigInvalid);
+        EXPECT_EQ(config.error().detail, "content.toml");
+    }
+}
+
+TEST(ContentConfigTest, TheNamedOneComesFirstThenTheWorkingFolderThenTheUsers) {
+    const nx::test::TemporaryDirectory working;
+    const nx::test::TemporaryDirectory user;
+    const auto none = nx::assets::findContentConfig(std::nullopt, working.path(), user.path());
+    ASSERT_TRUE(none.has_value());
+    EXPECT_FALSE(none->has_value()) << "neither is there";
+
+    user.write("content.toml", "");
+    const auto users = nx::assets::findContentConfig(std::nullopt, working.path(), user.path());
+    ASSERT_TRUE(users.has_value());
+    EXPECT_EQ(*users, std::optional{user.path() / "content.toml"});
+
+    working.write("content.toml", "");
+    const auto workings = nx::assets::findContentConfig(std::nullopt, working.path(), user.path());
+    ASSERT_TRUE(workings.has_value());
+    EXPECT_EQ(*workings, std::optional{working.path() / "content.toml"});
+
+    user.write("mine.toml", "");
+    const auto named = nx::assets::findContentConfig(user.path() / "mine.toml", working.path(), user.path());
+    ASSERT_TRUE(named.has_value());
+    EXPECT_EQ(*named, std::optional{user.path() / "mine.toml"});
+}
+
+TEST(ContentConfigTest, TheNamedOneMustBeThere) {
+    const nx::test::TemporaryDirectory folder;
+    folder.write("content.toml", "");
+    const auto missing =
+        nx::assets::findContentConfig(folder.path() / "other.toml", folder.path(), folder.path());
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_EQ(missing.error().code, ContentError::ConfigMissing);
+    EXPECT_EQ(missing.error().detail, nx::platform::toUtf8(folder.path() / "other.toml"));
 }
 
 } // namespace
