@@ -139,6 +139,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(*viewSprites)};
+    scene.m_look = look;
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }

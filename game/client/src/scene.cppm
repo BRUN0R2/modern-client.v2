@@ -102,6 +102,9 @@ public:
     /// it is now.
     inline void setDecalLimit(std::size_t limit) { m_world.setDecalLimit(limit); }
 
+    /// The look it was made in: what its frames are drawn through (cs::FrameRenderer).
+    [[nodiscard]] inline auto look() const noexcept -> nx::render::StudioLook { return m_look; }
+
     /// What the world drew in its last frame.
     [[nodiscard]] inline auto lastFrame() const noexcept -> const nx::render::FrameStats& {
         return m_world.lastFrame();
@@ -140,6 +143,7 @@ private:
     MuzzleFlashes m_flashes;        ///< Those showing, or their light.
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
+    nx::render::StudioLook m_look = nx::render::StudioLook::Legacy;
 };
 
 } // namespace cs

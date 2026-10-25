@@ -192,6 +192,17 @@ puts an RGBA picture on the GPU as it is, for what the interface makes itself (i
 clip, those of the panel a text scrolls in: the rectangles in a row drawn alike share a scissor, and
 the scissor covers the whole target again after them.
 
+**Today** (`cs.client:frame`, `FrameRenderer`): `next` and `nxview` draw a frame the same way, through
+one renderer that owns the screen's renderer, the depth the passes share, and the enhanced look's post
+renderer (made with the first frame of a scene of that look). In the legacy look the scene, its
+muzzle flashes added over it, and the screen's pictures go to the target in one pass with the frame's
+depth. In the enhanced look the next reflection probe is baked, the scene goes to the post renderer's
+target and its flashes to the effects' layer, both over the frame's depth, the bloom is recorded, and
+the tone curve goes to the target in a pass that has the frame's depth too, so that the screen's
+pictures are drawn over it there: the tone pipeline declares the depth (`PostRendererDesc::depthFormat`)
+as the screen's does, neither testing nor writing it, as a render pass and the pipelines drawn in it
+must agree on their attachments.
+
 ## 8. BSP world
 
 - **Visibility:** the camera's leaf, PVS data decompressed and cached per leaf, frustum
