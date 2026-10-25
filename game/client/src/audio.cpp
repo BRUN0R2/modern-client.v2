@@ -20,9 +20,10 @@ constexpr std::string_view kSoundStream = "sounds";
 
 } // namespace
 
-auto ClientAudio::open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume)
+auto ClientAudio::open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
+                       std::optional<std::string_view> output)
     -> nx::Result<std::unique_ptr<ClientAudio>, nx::platform::AudioDeviceError> {
-    auto device = nx::platform::AudioDevice::open();
+    auto device = nx::platform::AudioDevice::open(output);
     if (!device) {
         return std::unexpected{std::move(device.error())};
     }

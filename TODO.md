@@ -370,7 +370,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The weapons' sounds read before a frame plays them: every weapon's as a map starts, a weapon's as it is made or changed (`cs::soundFilesOf`, `ClientAudio::preload`), never in the frame of the first shot ([11 §2](docs/11-audio.md#2-architecture))
 - [ ] The guns' fire sounds as the original's client events choose them (which file, what pitch): to be measured on the original
 - [ ] The knife's sounds on flesh (`knife_hit1`-`4`, `knife_stab`) and the world's texture sounds (`materials.txt`), with what they meet
-- [ ] `s_device` and `s_play_unfocused`
+- [x] `s_device`: the sound output by its name, which `s_devices` lists, the system's default without one ([11 §8](docs/11-audio.md#8-cvars))
+- [ ] `s_play_unfocused`
 - [ ] Streaming ahead in jobs with a prefetch margin: an underrun is survived, counted (`snd_stats`) and reported, never a silent stop; tested with slow, simulated I/O
 - [ ] Device loss and change: reopen the default and resume every voice and stream where it was; tested with a fake device
 - [ ] Per-entity channels with replacement as in the original

@@ -36,10 +36,11 @@ public:
     /// channels have a voice each, after them.
     static constexpr std::uint32_t kLocalVoices = 8;
 
-    /// Opens the system's default output and plays the mixer on it, everything heard at `volume`'s
-    /// gain; sounds are read from `vfs`, which must outlive it, as `volume`'s console must. Errors:
-    /// those of AudioDevice::open and AudioDevice::play.
-    [[nodiscard]] static auto open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume)
+    /// Opens the output named `output`, or the system's default one without a name, and plays the
+    /// mixer on it, everything heard at `volume`'s gain; sounds are read from `vfs`, which must outlive
+    /// it, as `volume`'s console must. Errors: those of AudioDevice::open and AudioDevice::play.
+    [[nodiscard]] static auto open(const nx::assets::Vfs& vfs, nx::console::Cvar<float> volume,
+                                   std::optional<std::string_view> output = std::nullopt)
         -> nx::Result<std::unique_ptr<ClientAudio>, nx::platform::AudioDeviceError>;
 
     /// Use open(). Public only so that open() can use std::make_unique.
