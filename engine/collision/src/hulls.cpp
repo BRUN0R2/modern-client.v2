@@ -468,4 +468,9 @@ auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace {
     return result;
 }
 
+auto boxContentsAt(const Aabb& box, Vec3 point) noexcept -> Contents {
+    const BoxTree tree{box};
+    return contentsUnder(tree.planes(), tree.nodes(), BoxTree::root(), point);
+}
+
 } // namespace nx::collision

@@ -176,4 +176,8 @@ private:
 /// as a map's hull's nodes are, by player movement's rules (BrushHulls::traceMovement).
 [[nodiscard]] auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace;
 
+/// What `point` is in within `box` made the same hull: the solid from its least along each axis to
+/// short of its most, the empty elsewhere (PM_HullPointContents of a box's hull).
+[[nodiscard]] auto boxContentsAt(const Aabb& box, Vec3 point) noexcept -> Contents;
+
 } // namespace nx::collision
