@@ -472,6 +472,20 @@ private:
 
 } // namespace
 
+auto grownByHull(const Aabb& box, Hull hull) noexcept -> Aabb {
+    const Aabb traced = hullBoxOf(hull);
+    return Aabb{.min = box.min - traced.max, .max = box.max - traced.min};
+}
+
+auto traceBox(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace {
+    const BoxTree tree{PlacedBox{.bounds = box}};
+    Trace result{.fraction = 1.0F, .end = end, .isAllSolid = true};
+    Tracer<Rules::Server> tracer{tree.planes(), tree.nodes(), BoxTree::root(), result};
+    std::ignore = tracer.follow(BoxTree::root(), 0.0F, 1.0F, start, end);
+    settleServer(result, start, end);
+    return result;
+}
+
 auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace {
     const BoxTree tree{PlacedBox{.bounds = box}};
     Trace result{.fraction = 1.0F, .end = end, .isAllSolid = true};

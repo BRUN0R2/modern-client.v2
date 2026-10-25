@@ -101,7 +101,8 @@ constexpr float kTolerance = 1e-5F;
                                   .hit = {.primary = nx::Seconds{0.4F}, .secondary = nx::Seconds{0.5F}},
                                   .idleAfter = nx::Seconds{2.0F},
                                   .missSound = sound("weapons/knife_slash1.wav", cs::SoundChannel::Weapon),
-                                  .hitSound = sound("weapons/knife_hitwall1.wav", cs::SoundChannel::Item)},
+                                  .hitSound = sound("weapons/knife_hitwall1.wav", cs::SoundChannel::Item),
+                                  .bodySound = sound("weapons/knife_hit1.wav", cs::SoundChannel::Weapon)},
                         .stab = {.reach = nx::HammerUnits{32.0F},
                                  .missSequences = {5},
                                  .hitSequences = {4},
@@ -215,14 +216,14 @@ constexpr float kTolerance = 1e-5F;
 /// A tracer that meets nothing.
 [[nodiscard]] auto missAll() -> cs::WeaponTracer {
     return [](nx::collision::Hull, nx::Vec3, nx::Vec3) {
-        return nx::collision::Trace{};
+        return cs::WeaponHit{};
     };
 }
 
-/// A tracer that meets something halfway, whatever the hull.
-[[nodiscard]] auto hitAll() -> cs::WeaponTracer {
-    return [](nx::collision::Hull, nx::Vec3, nx::Vec3) {
-        return nx::collision::Trace{.fraction = 0.5F};
+/// A tracer that meets something halfway, whatever the hull: the world, or a body.
+[[nodiscard]] auto hitAll(bool isBody = false) -> cs::WeaponTracer {
+    return [isBody](nx::collision::Hull, nx::Vec3, nx::Vec3) {
+        return cs::WeaponHit{.trace = {.fraction = 0.5F}, .isBody = isBody};
     };
 }
 
@@ -714,7 +715,7 @@ TEST(MeleeTest, AnAttackMeetsALineAheadThenADuckedHull) {
     const cs::WeaponTracer tracer = [&traced](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
         EXPECT_EQ(start, (nx::Vec3{.x = 10.0F, .z = 64.0F}));
         traced.emplace_back(hull, end);
-        return nx::collision::Trace{};
+        return cs::WeaponHit{};
     };
     std::ignore = inventory.frame(command(1, {Button::Attack}), shooter, tracer, at(kReady));
     ASSERT_EQ(traced.size(), 2U);
@@ -823,6 +824,16 @@ TEST(SoundTest, TheKnifeSoundsItsMissOrItsHitOnTheWorld) {
         EXPECT_EQ(soundsOf(inventory),
                   Files{hits ? "weapons/knife_hitwall1.wav" : "weapons/knife_slash1.wav"});
     }
+}
+
+TEST(SoundTest, TheKnifeSoundsAsFleshOnABodyAndNotAsTheWorld) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    std::ignore = soundsOf(inventory);
+    std::ignore = inventory.frame(command(1, {Button::Attack}), shooter, hitAll(true), at(kReady));
+    EXPECT_EQ(soundsOf(inventory), Files{"weapons/knife_hit1.wav"}) << "not the world's knife_hitwall1";
 }
 
 TEST(FiringTest, DrawingAnotherWeaponStopsAReload) {

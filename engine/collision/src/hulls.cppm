@@ -171,9 +171,16 @@ private:
     std::vector<BrushModel> m_models;
 };
 
+/// `box` grown by the box of `hull` (hullBoxOf), as the engine grows an entity's box by what is traced
+/// against it (SV_HullForEntity, PM_HullForBox): where the hull's center meets it.
+[[nodiscard]] auto grownByHull(const Aabb& box, Hull hull) noexcept -> Aabb;
+
 /// The way from `start` to `end` through `box`, solid within it and empty around it, made a hull as the
-/// engine makes one of a box (SV_InitBoxHull, PM_HullForBox): a node on each of its six faces, crossed
-/// as a map's hull's nodes are, by player movement's rules (BrushHulls::traceMovement).
+/// engine makes one of a box (SV_InitBoxHull, SV_HullForBox): a node on each of its six faces, crossed
+/// as a map's hull's nodes are, by the server's rules (BrushHulls::trace).
+[[nodiscard]] auto traceBox(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace;
+
+/// The same by player movement's rules (BrushHulls::traceMovement, PM_HullForBox).
 [[nodiscard]] auto traceBoxMovement(const Aabb& box, Vec3 start, Vec3 end) noexcept -> Trace;
 
 /// What `point` is in within `box` made the same hull: the solid from its least along each axis to
