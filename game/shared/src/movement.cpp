@@ -121,6 +121,62 @@ constexpr double kLandingRollPerSpeed = 0.013;
 constexpr nx::Degrees kMostLandingPitch{8.0F};
 /// Swimming up splashes once in this long at most (flSwimTime).
 constexpr nx::Milliseconds kSwimSplashTime{1000.0F};
+/// A stuck player is tried at its next nudge once more than this has passed since the last
+/// (PM_CHECKSTUCK_MINTIME).
+constexpr nx::Milliseconds kStuckCheckInterval{50.0F};
+/// How many nudges a stuck player is tried at in turn (rgv3tStuckTable), and from which of them on
+/// the server moves it to one that frees it: it leaves the earlier ones, the smaller, to the client.
+constexpr std::uint32_t kStuckNudgeCount = 54;
+constexpr std::uint32_t kFirstServerNudge = kStuckNudgeCount / 2;
+/// The nudges of a stuck player, in turn, as PM_CreateStuckTable orders them: an eighth of a unit,
+/// the network's precision, along z, y and x, each less, none and more, then to each corner of that;
+/// then up by none, 1 and 6, along y and x by 2, each less, none and more, then at each of those
+/// heights each of those x with each of those y; the last none.
+constexpr std::array<Vec3, kStuckNudgeCount> kStuckNudges = [] {
+    constexpr float kSmall = 0.125F;
+    constexpr float kLarge = 2.0F;
+    constexpr std::array kSteps{-1.0F, 0.0F, 1.0F};
+    constexpr std::array kCorners{-1.0F, 1.0F};
+    constexpr std::array kHeights{0.0F, 1.0F, 6.0F};
+    std::array<Vec3, kStuckNudgeCount> nudges{};
+    std::size_t next = 0;
+    const auto add = [&nudges, &next](Vec3 nudge) {
+        nudges[next++] = nudge;
+    };
+    for (const float step : kSteps) {
+        add(Vec3{.z = step * kSmall});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.y = step * kSmall});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.x = step * kSmall});
+    }
+    for (const float x : kCorners) {
+        for (const float y : kCorners) {
+            for (const float z : kCorners) {
+                add(Vec3{.x = x * kSmall, .y = y * kSmall, .z = z * kSmall});
+            }
+        }
+    }
+    for (const float height : kHeights) {
+        add(Vec3{.z = height});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.y = step * kLarge});
+    }
+    for (const float step : kSteps) {
+        add(Vec3{.x = step * kLarge});
+    }
+    for (const float height : kHeights) {
+        for (const float x : kSteps) {
+            for (const float y : kSteps) {
+                add(Vec3{.x = x * kLarge, .y = y * kLarge, .z = height});
+            }
+        }
+    }
+    return nudges;
+}();
 /// The speed jump swims up at, by what the player is in.
 constexpr float kSwimUpInWater = 100.0F;
 constexpr float kSwimUpInSlime = 80.0F;
@@ -218,6 +274,13 @@ auto normalize(Vec3& v) -> double {
     return flat;
 }
 
+/// `box` grown by a player's box in `hull`, as PM_HullForBox grows a physent's: where the player's
+/// origin meets it.
+[[nodiscard]] auto grownFor(const nx::Aabb& box, Hull hull) noexcept -> nx::Aabb {
+    const nx::Aabb player = nx::collision::hullBoxOf(hull);
+    return nx::Aabb{.min = box.min - player.max, .max = box.max - player.min};
+}
+
 /// One command applied to one player: the original's steps, in its order, each reading and writing
 /// the player as it goes.
 class PlayerMove {
@@ -230,6 +293,10 @@ public:
 
     [[nodiscard]] auto run() -> MovementResult {
         prepare();
+        // Parity: never stuck in noclip; stuck, the player does nothing else
+        if (m_player.moveType != MoveType::Noclip && isStuck()) {
+            return result();
+        }
         categorizePosition();
         m_oldWaterLevel = m_player.waterLevel;
         if (!m_player.isOnGround) {
@@ -447,6 +514,13 @@ private:
                 *timer = std::max(*timer - m_command.duration, nx::Milliseconds{});
             }
         }
+        // The commands' own time, which the original's clock keeps as they come in real time.
+        if (std::optional<nx::Milliseconds>& since = m_player.sinceStuckCheck) {
+            *since += m_command.duration;
+            if (*since > kStuckCheckInterval) {
+                since.reset();
+            }
+        }
     }
 
     /// `punch` dropped back over `frameTime` seconds, as PM_DropPunchAngle drops it: its length less
@@ -521,13 +595,9 @@ private:
                 meet(entity.model, entity.origin, entity.angles, entity.model);
             }
         }
-        // A box grown by the player's in `hull` (player_mins, player_maxs), as PM_HullForBox grows a
-        // physent's, about its origin.
-        const nx::Aabb player = nx::collision::hullBoxOf(hull);
         for (const SolidBox& solid : m_boxes) {
-            const nx::Aabb grown{.min = solid.box.min - player.max, .max = solid.box.max - player.min};
-            const nx::collision::Trace hit =
-                nx::collision::traceBoxMovement(grown, start - solid.origin, end - solid.origin);
+            const nx::collision::Trace hit = nx::collision::traceBoxMovement(
+                grownFor(solid.box, hull), start - solid.origin, end - solid.origin);
             if (hit.fraction < nearest.fraction) {
                 nearest = PlayerTrace{.fraction = hit.fraction,
                                       .end = hit.end + solid.origin,
@@ -537,6 +607,52 @@ private:
             }
         }
         return nearest;
+    }
+
+    /// Whether the player's box at `point` is in the solid of the world, of a solid entity or of a box
+    /// (PM_TestPlayerPosition).
+    [[nodiscard]] auto isInSolidAt(Vec3 point) const -> bool {
+        const auto isSolidIn = [&](ModelIndex model, Vec3 offset, nx::EulerAngles angles) {
+            return m_world.movementContentsAt(model, m_hull, point, offset, angles) == Contents::Solid;
+        };
+        return isSolidIn(nx::collision::kWorldModel, Vec3{}, nx::EulerAngles{}) ||
+               std::ranges::any_of(m_entities,
+                                   [&](const BrushEntity& entity) {
+                                       return entity.role == BrushRole::Solid &&
+                                              isSolidIn(entity.model, entity.origin, entity.angles);
+                                   }) ||
+               std::ranges::any_of(m_boxes, [&](const SolidBox& solid) {
+                   return nx::collision::boxContentsAt(grownFor(solid.box, m_hull), point - solid.origin) ==
+                          Contents::Solid;
+               });
+    }
+
+    /// Whether the player is stuck in the solid, as the server's PM_CheckStuck finds it: once more
+    /// than kStuckCheckInterval has passed since its last try, a stuck player touches what it is in
+    /// and is tried at its next nudge, and one that frees it frees the player, which the nudges move
+    /// from kFirstServerNudge on.
+    [[nodiscard]] auto isStuck() -> bool {
+        if (!isInSolidAt(m_player.origin)) {
+            m_player.stuckNudge = 0;
+            return false;
+        }
+        if (m_player.sinceStuckCheck) {
+            return true;
+        }
+        m_player.sinceStuckCheck = nx::Milliseconds{};
+        touch(trace(m_player.origin, m_player.origin).model);
+        const std::uint32_t nudge = m_player.stuckNudge;
+        m_player.stuckNudge = (nudge + 1) % kStuckNudgeCount;
+        const Vec3 nudged = m_player.origin + kStuckNudges[nudge];
+        if (isInSolidAt(nudged)) {
+            return true;
+        }
+        m_player.stuckNudge = 0;
+        // Parity: the server leaves the smaller nudges, for the network's precision, to the client
+        if (nudge >= kFirstServerNudge) {
+            m_player.origin = nudged;
+        }
+        return false;
     }
 
     /// What `point` is in, as movement reads it: the world's contents, a current counted as water;

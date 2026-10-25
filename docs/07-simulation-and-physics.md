@@ -143,8 +143,14 @@ code** on the server (authoritative) and on the client (prediction).
   pushers pass through it (`nx::game::Body::isPushed`). Hostages stop the player as boxes
   (`cs::SolidBox`, which `MapModels::solidBoxes` lists): each is grown by the player's box, as
   PM_HullForBox grows a physent's, and traced as the engine traces a box's six-node hull
-  (`nx::collision::traceBoxMovement`), after the world and the brush entities. Observers,
-  unsticking, players and pushables as boxes, conveyors, pushes and currents come next
+  (`nx::collision::traceBoxMovement`), after the world and the brush entities. A player whose box
+  is in the solid is stuck, as the server's PM_CheckStuck finds it, and does nothing else (but in
+  noclip): once more than 50 ms have passed since its last try (PM_CHECKSTUCK_MINTIME), it touches
+  what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
+  frees it frees the player, and moves it from the 28th on, the server leaving the smaller ones, for
+  the network's precision, to the client's prediction. The time is the commands' own, which the
+  original's clock keeps as they come in real time. Observers, players and pushables as boxes (and a
+  player stuck in another one pushed out by force), conveyors, pushes and currents come next
   ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved

@@ -324,9 +324,10 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Traces against animated hitboxes
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
-- [ ] pmove: observers and unsticking
+- [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order)
+- [ ] pmove: observers
 - [x] pmove among entities: hostages as boxes (`cs::SolidBox`, grown by the player's box and traced by `nx::collision::traceBoxMovement`)
-- [ ] pmove among entities: players and pushables as boxes, base velocity (conveyors, `trigger_push`, water currents)
+- [ ] pmove among entities: players and pushables as boxes (a player stuck in another one pushed out by force), base velocity (conveyors, `trigger_push`, water currents)
 - [x] Brush entities made by the game when the map starts (`nx.game`, by the classes of `data/cstrike/entities.toml`), listed for movement by `cs::brushEntitiesOf`
 - [ ] Parity: ground acceleration and friction (including `edgefriction`)
 - [ ] Parity: air acceleration and strafing
@@ -409,7 +410,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Interest management (PVS, PAS, owner audience, optional distance)
 - [ ] Per-client priority and budget, with the `net_budget_overflow` metric
 - [ ] Snapshots built in parallel per client
-- [ ] Local player prediction and reconciliation
+- [ ] Local player prediction and reconciliation (with the client's small nudges of a stuck player, `PM_CheckStuck`)
 - [ ] Interpolation (`cl_interp`/`ex_interp`) and jitter buffer
 - [ ] Lag compensation (`sv_unlag`, `sv_maxunlag`, `sv_unlagpush`)
 - [ ] Predicted weapon events not resent to the shooter

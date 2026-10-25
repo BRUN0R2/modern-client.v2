@@ -105,6 +105,15 @@ TEST(BoxTraceTest, ATraceFromInsideABoxStartsSolid) {
     EXPECT_TRUE(within.isAllSolid);
 }
 
+TEST(BoxTraceTest, ABoxHoldsItsLeastButNotItsMost) {
+    const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
+                       .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
+    EXPECT_EQ(nx::collision::boxContentsAt(box, {}), Contents::Solid);
+    EXPECT_EQ(nx::collision::boxContentsAt(box, {.x = -10.0F}), Contents::Solid) << "its least";
+    EXPECT_EQ(nx::collision::boxContentsAt(box, {.x = 10.0F}), Contents::Empty) << "its most";
+    EXPECT_EQ(nx::collision::boxContentsAt(box, {.z = -10.5F}), Contents::Empty);
+}
+
 TEST(HullTraceTest, AnOffsetPlacesTheModel) {
     const BrushHulls hulls = floorHull();
     HullTraceQuery query = standingQuery({.z = 110.0F}, {.z = 90.0F});
