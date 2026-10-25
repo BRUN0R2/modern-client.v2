@@ -372,8 +372,9 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - **Shots** (`cs::Shot`): from the eye, along the view turned by the punch, strayed by the spread
   at random, each way the sum of two even draws from the command number's `spread` stream
   (`FireBullets3`). Each goes 8192 units, its direction as it strayed (not of length 1), through
-  the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it);
-  where it meets the world or a brush entity it leaves the mark the game names for it
+  the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it)
+  and the hostages, by their hitboxes (`cs::MapModels::traceHostages`, [07 §4.2](07-simulation-and-physics.md#42-entities)):
+  a hostage it meets first stops it. Where it meets the world or a brush entity it leaves the mark the game names for it
   (`cs::bulletMarkOf`, `DamageDecal`): on the world and on an entity drawn normally a bullet hole,
   one of `{shot1` to `{shot5` of decals.wad at random; none on a solid one (`kRenderTransAlpha`);
   `{bproof1` on one drawn otherwise; on a `func_breakable`, by its `material` first, one of
@@ -406,10 +407,14 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - **Knife:** quick slash and heavy stab, with a multiplier from behind.
   **Today:** `+attack` slashes and `+attack2` stabs (Swing, Stab): a line 48 units ahead of the eye
   (32 for the stab), along the view without its kick, then a ducked player's hull, through the world
-  and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`); a miss and a hit
-  play their sequences and hold the attacks as the data says (a slash 0.35 or 0.4 seconds, the next
-  stab 0.5; a stab 1.0 or 1.1). What the blade hits, its damage and the back stab come with the
-  damage.
+  and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`) and the hostages,
+  the line by their hitboxes and the hull by their boxes (`cs::MapModels::traceHostages`, as
+  `SV_HullForStudioModel` chooses); a miss and a hit play their sequences and hold the attacks as
+  the data says (a slash 0.35 or 0.4 seconds, the next stab 0.5; a stab 1.0 or 1.1). A hit on a body
+  (`cs::WeaponHit::isBody`: a hostage) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
+  `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
+  sound of what its texture is made of, as the original's multiplayer rules play none
+  (`CHalfLifeMultiplay::PlayTextureSounds`). Its damage and the back stab come with the damage.
 
 ### 7.4 Damage
 

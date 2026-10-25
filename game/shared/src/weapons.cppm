@@ -277,8 +277,10 @@ struct MeleeAttack {
     MeleeTiming hit{};
     std::optional<nx::Seconds> idleAfter{};
     std::optional<GameSound> missSound{};
-    /// As it meets the world; flesh comes with the players to meet.
+    /// As it meets the world or a brush entity, with no sound of what its texture is made of: the
+    /// original's multiplayer rules play none (CHalfLifeMultiplay::PlayTextureSounds).
     std::optional<GameSound> hitSound{};
+    std::optional<GameSound> bodySound{}; ///< As it meets a body (WeaponHit::isBody), instead.
 };
 
 /// A melee weapon's attacks: `+attack`'s slash, `+attack2`'s stab.
@@ -693,6 +695,7 @@ struct nx::meta::Description<cs::MeleeAttack> {
         nx::meta::field<&cs::MeleeAttack::idleAfter>("idleAfter", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::MeleeAttack::missSound>("missSound"),
         nx::meta::field<&cs::MeleeAttack::hitSound>("hitSound"),
+        nx::meta::field<&cs::MeleeAttack::bodySound>("bodySound"),
     };
 };
 

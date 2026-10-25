@@ -420,12 +420,12 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
                        const Shooter& shooter, const WeaponTracer& tracer, const nx::game::TickTime& time) {
     // A line straight ahead along the view, without its kick, then a ducked player's hull.
     const nx::Vec3 end = shooter.eye + (nx::angleVectors(shooter.view).forward * attack.reach.value());
-    nx::collision::Trace met = tracer(nx::collision::Hull::Point, shooter.eye, end);
-    if (met.fraction >= 1.0F) {
+    WeaponHit met = tracer(nx::collision::Hull::Point, shooter.eye, end);
+    if (met.trace.fraction >= 1.0F) {
         met = tracer(nx::collision::Hull::Ducked, shooter.eye, end);
     }
-    const bool hits = met.fraction < 1.0F;
-    makeSound(hits ? attack.hitSound : attack.missSound, time);
+    const bool hits = met.trace.fraction < 1.0F;
+    makeSound(!hits ? attack.missSound : met.isBody ? attack.bodySound : attack.hitSound, time);
     const std::vector<std::uint32_t>& sequences = hits ? attack.hitSequences : attack.missSequences;
     m_animation = ViewAnimation{
         .weapon = owned.weapon, .sequence = sequences[count++ % sequences.size()], .start = time.now};
