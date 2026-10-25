@@ -125,6 +125,8 @@ auto Rounds::think(nx::GameTime now, nx::TickRate rate, const RoundLengths& leng
             m_restartAt = now.after(kRestartDelay, rate);
             events.set(RoundEvent::Ended);
         }
+        // A map played for nothing too: its round runs out again after its length and the grace.
+        m_startedAt = now.after(kTimeOutGrace, rate);
     }
     if (m_restartAt && *m_restartAt <= now) {
         events.set(m_restartsGame ? RoundEvent::GameRestarted : RoundEvent::RoundStarted);

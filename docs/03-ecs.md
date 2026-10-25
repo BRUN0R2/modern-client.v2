@@ -357,7 +357,9 @@ make one not solid, whether a `skin` makes a door a volume, contents the class a
 of water, slime or lava, a ladder, or nothing), and what
 its class's `behavior` makes of it (`slidingDoor`, `rotatingDoor`: a `Door` and its `Pusher`,
 [07 §5.1](07-simulation-and-physics.md#51-movement-types), and its `Waves`, an eighth of its
-`WaveHeight`, as `CBaseDoor::KeyValue` sets a door's `scale`); an entity of a brush model the map
+`WaveHeight`, as `CBaseDoor::KeyValue` sets a door's `scale`), with its `RestartsEachRound` when its
+class's `restartsEachRound` says the game restarts it as each round starts
+(`restartBrushEntities`, CleanUpMap's `UTIL_RestartOther`: a door closes again); an entity of a brush model the map
 lacks is `GameError::UnknownModel`. `nx.assets` reads the values as
 the original does (`BspEntity::findInteger`, `findVector`, `findBrushModel`). Of the point entities,
 the `infodecal`s give the decals the map stamps as its game starts (`nx::game::staticDecalsOf`,

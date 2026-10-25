@@ -275,12 +275,24 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
             break;
         }
         world.add(made, AlternateTextures{.isShown = entity.findNumber("frame").value_or(0.0F) != 0.0F});
+        if (brushClass->restartsEachRound.value_or(false)) {
+            world.add(made, RestartsEachRound{});
+        }
         if (const std::string_view name = entity.find("targetname").value_or(""); !name.empty()) {
             world.add(made, Named{.name = std::string{name}});
         }
         ++spawned;
     }
     return spawned;
+}
+
+void restartBrushEntities(ecs::World& world, const collision::BrushHulls& hulls) {
+    std::vector<ecs::Entity> doors;
+    ecs::Query<ecs::Entity, const Door&, ecs::With<RestartsEachRound>>{world}.forEach(
+        [&doors](ecs::Entity entity, const Door&) { doors.push_back(entity); });
+    for (const ecs::Entity door : doors) {
+        restartDoor(world, hulls, door);
+    }
 }
 
 } // namespace nx::game

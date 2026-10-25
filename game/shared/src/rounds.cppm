@@ -22,6 +22,9 @@ export namespace cs {
 inline constexpr nx::UnitsPerSecond kFreezeSpeed{1.0F};
 /// How long after a round ends the next starts (GetRoundRestartDelay).
 inline constexpr nx::Seconds kRestartDelay{5.0F};
+/// How far past a time-out its round's start is put (CheckRoundTimeExpired's m_fRoundStartTime): the
+/// round's remaining time is its length and this again, so that it does not run out at once.
+inline constexpr nx::Seconds kTimeOutGrace{60.0F};
 /// How much longer than mp_freezetime the first freeze of a map lasts.
 inline constexpr nx::Seconds kFirstFreezeExtra{2.0F};
 /// The class of a map's hostages.

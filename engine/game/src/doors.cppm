@@ -21,6 +21,11 @@ void openDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
 /// Door `entity` starts closing (CBaseDoor::DoorGoDown).
 void closeDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);
 
+/// Door `entity` restarts as a round starts (CBaseDoor::Restart): taken as closed, it closes from where
+/// it is, as DoorGoDown closes it, arriving at once where it is closed already; a touch opens it again
+/// meanwhile, unless only use does.
+void restartDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);
+
 /// Door `entity` reached where it was going (CBaseDoor::DoorHitTop and DoorHitBottom): it waits or
 /// rests, and fires its targets for what moved it.
 void doorArrived(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity);

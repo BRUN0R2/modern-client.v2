@@ -105,6 +105,9 @@ struct AlternateTextures {
 /// A func_wall: used, it shows its other textures (CFuncWall::Use).
 struct Wall {};
 
+/// A brush entity the game restarts as each round starts (CleanUpMap's UTIL_RestartOther).
+struct RestartsEachRound {};
+
 /// A body a pusher moves out of its way, and carries while it stands on it: a player's box (the
 /// original's MOVETYPE_WALK).
 struct Body {
