@@ -5,7 +5,8 @@
 // their energy across the accumulated bloom levels and resizing, while a bright patch scatters light
 // into a visible halo without taking excessive light from its center. The effects' layer is added over
 // the mapped scene as the original adds effects, each channel stopping at white, and glows in the
-// bloom. No game assets are needed.
+// bloom. The tone curve is drawn in a pass with the frame's depth, as the screen's pictures are drawn
+// over it. No game assets are needed.
 
 #include <gtest/gtest.h>
 
@@ -109,10 +110,18 @@ protected:
         return submitted.has_value();
     }
 
-    [[nodiscard]] auto draw() -> std::vector<std::byte> {
-        return target->draw([&](nx::rhi::CommandList& commands) { postRenderer->drawToneMapped(commands); },
-                            {.hasDepth = false});
+    /// The tone curve to the target, in a pass with the frame's depth; then what `after` records in it.
+    [[nodiscard]] auto draw(const std::function<void(nx::rhi::CommandList&)>& after = {})
+        -> std::vector<std::byte> {
+        return target->draw([&](nx::rhi::CommandList& commands) {
+            postRenderer->drawToneMapped(commands);
+            if (after) {
+                after(commands);
+            }
+        });
     }
+
+    [[nodiscard]] auto device() -> nx::rhi::Device& { return *devicePtr; }
 
 private:
     /// Clears `texture` to `with`, and leaves it in ShaderRead.
@@ -290,6 +299,34 @@ TEST_F(PostRendererTest, PresentationAlphaDoesNotModulateSceneRadiance) {
             {.red = kRadiance.red, .green = kRadiance.green, .blue = kRadiance.blue, .alpha = alpha}));
         EXPECT_EQ(draw(), opaque);
     }
+}
+
+TEST_F(PostRendererTest, TheScreensPicturesAreDrawnOverTheToneCurveInItsPass) {
+    // As the client draws the HUD over the enhanced look: the tone curve and the screen's rectangles in
+    // one pass, which has the frame's depth that both pipelines declare (validation reports a pipeline
+    // whose depth format the pass lacks).
+    const auto executable = nx::platform::executablePath();
+    ASSERT_TRUE(executable.has_value()) << nx::describe(executable.error());
+    const auto shader = nx::platform::readFile(executable->parent_path() / "shaders" / "screen.spv");
+    ASSERT_TRUE(shader.has_value()) << nx::describe(shader.error());
+    auto screen = nx::render::ScreenRenderer::create(
+        device(), {.shaderCode = *shader, .colorFormat = nx::rhi::Format::Rgba8Unorm});
+    ASSERT_TRUE(screen.has_value()) << nx::describe(screen.error());
+    constexpr ClearColor kGray{.red = 0.4F, .green = 0.4F, .blue = 0.4F};
+    ASSERT_TRUE(prepareScene(linearColorOf(kGray)));
+    const std::array quads{nx::render::ScreenQuad{.target = {.width = 4.0F, .height = 4.0F},
+                                                  .color = {.red = 255, .green = 0, .blue = 0}}};
+    const std::vector<std::byte> pixels = draw([&](nx::rhi::CommandList& commands) {
+        const auto drawn = screen->draw(commands, {.size = nx::test::kTargetExtent, .quads = quads});
+        EXPECT_TRUE(drawn.has_value()) << (drawn ? "" : nx::describe(drawn.error()));
+    });
+    const Pixel corner = pixelAt(pixels, 0, 0);
+    EXPECT_EQ(corner[0], 255) << "the rectangle over the scene";
+    EXPECT_EQ(corner[1], 0);
+    const Pixel middle =
+        pixelAt(pixels, nx::test::kTargetExtent.width / 2, nx::test::kTargetExtent.height / 2);
+    EXPECT_NEAR(middle[1], static_cast<int>(std::lround(kGray.green * kChannelTop)), kByteTolerance)
+        << "the scene through the tone curve beside it";
 }
 
 } // namespace

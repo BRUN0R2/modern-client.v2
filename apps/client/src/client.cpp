@@ -30,10 +30,6 @@ using nx::console::ConsoleError;
 
 constexpr nx::log::Category kLog{"client"};
 
-/// What no face covers: the void outside a map, seen through its leaks, and the screen without one.
-constexpr nx::rhi::ClearColor kVoidColor{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
-/// The effects' layer before the effects are drawn: nothing to add.
-constexpr nx::rhi::ClearColor kNoEffect{.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.0F};
 /// The key `next` binds `noclip` to, which Counter-Strike leaves free.
 constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
@@ -250,14 +246,11 @@ private:
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
-    [[nodiscard]] auto drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-        -> nx::Result<void, ClientError>;
-    /// The HUD and the console's window, over what is drawn.
-    /// The session's scene in the enhanced look, to the post renderer's target, then its bloom.
-    [[nodiscard]] auto drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-        -> nx::Result<void, ClientError>;
-    [[nodiscard]] auto drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-        -> nx::Result<void, ClientError>;
+    /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
+    /// gave it, the brush entities where the game puts them, and the weapon in hand.
+    [[nodiscard]] auto sessionView() -> cs::SceneView;
+    /// The screen's pictures over the frame, of `size`: the HUD, and the console's window when open.
+    void appendScreen(nx::rhi::Extent2d size);
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
 
     const ClientOptions* m_options;
@@ -275,10 +268,9 @@ private:
     std::optional<cs::GameContent> m_content;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
-    std::vector<std::byte> m_screenShader;
-    std::vector<std::byte> m_postShader;
-    std::optional<Session> m_session;     ///< The map played.
-    std::optional<Session> m_nextSession; ///< The map `map` loaded, played from the next frame.
+    std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
+    std::optional<Session> m_session;               ///< The map played.
+    std::optional<Session> m_nextSession;           ///< The map `map` loaded, played from the next frame.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
     cs::ViewModelEvents m_viewModelEvents;
@@ -287,22 +279,17 @@ private:
     nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
-    std::optional<cs::Scene> m_scene; ///< Of the session's level, made with the first image of it.
-    /// Whether the scene draws the enhanced look (r_fidelity, read as it is made), through m_post.
-    bool m_isSceneEnhanced = false;
-    std::optional<nx::render::PostRenderer> m_post;     ///< Made with the first enhanced scene.
-    std::optional<nx::render::ScreenRenderer> m_screen; ///< What draws the HUD, made with the first image.
-    std::optional<cs::Hud> m_hud;                       ///< None when its pictures could not be read.
-    std::vector<nx::render::ScreenQuad> m_screenQuads;  ///< What the screen draws in a frame.
+    std::optional<cs::Scene> m_scene;          ///< Of the session's level, made with the first image of it.
+    std::optional<cs::FrameRenderer> m_frames; ///< What draws the frames, made with the first image.
+    std::optional<cs::Hud> m_hud;              ///< None when its pictures could not be read.
+    std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
+    std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
     nx::ui::FontCatalog m_fonts;
     std::optional<nx::ui::SchemeFontSet> m_consoleFont; ///< None when the console has no window.
     std::optional<nx::ui::GlyphAtlas> m_consoleAtlas;
     std::optional<nx::render::ScreenImage> m_consoleImage;  ///< The atlas on the GPU, with the screen.
     std::unique_ptr<nx::ui::ConsoleDialog> m_consoleWindow; ///< Made with its atlas.
     bool m_isConsoleOpen = false;
-    std::optional<nx::rhi::OwnedTexture> m_depth;
-    nx::rhi::Extent2d m_depthExtent{};
-    nx::rhi::Extent2d m_postSize{}; ///< The screen's size m_post's targets were made for.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
@@ -336,16 +323,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(shaders.error()));
     }
     m_shaders = std::move(*shaders);
-    auto screenShader = nx::platform::readFile(executable->parent_path() / "shaders" / "screen.spv");
-    if (!screenShader) {
-        return nx::fail(ClientError::ContentUnavailable, std::move(screenShader.error()));
+    auto frameShaders = cs::readFrameShaders(executable->parent_path() / "shaders");
+    if (!frameShaders) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(frameShaders.error()));
     }
-    m_screenShader = std::move(*screenShader);
-    auto postShader = nx::platform::readFile(executable->parent_path() / "shaders" / "post.spv");
-    if (!postShader) {
-        return nx::fail(ClientError::ContentUnavailable, std::move(postShader.error()));
-    }
-    m_postShader = std::move(*postShader);
+    m_frameShaders = std::move(*frameShaders);
     if (auto audio = cs::ClientAudio::open(m_content->vfs, m_cvars->audio.volume); audio) {
         m_audio = std::move(*audio);
     } else {
@@ -744,49 +726,17 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
         return {};
     }
     const nx::rhi::SwapchainImage& frame = **image;
-    if (!m_depth || m_depthExtent != frame.size) {
-        auto created = device.createTexture({.label = "next.depth",
-                                             .format = nx::rhi::Format::Depth32Float,
-                                             .extent = frame.size,
-                                             .usage = {nx::rhi::TextureUsage::DepthTarget}});
-        if (!created) {
-            return nx::fail(ClientError::GpuFailed, std::move(created.error()));
-        }
-        m_depth = std::move(*created); // the old one, if any, goes
-        m_depthExtent = frame.size;
-    }
     if (auto uploaded = upload(list, frame.format); !uploaded) {
         return uploaded;
     }
-    list.transition(m_depth->get(), nx::rhi::TextureState::Undefined, nx::rhi::TextureState::DepthTarget);
-    if (m_session && m_isSceneEnhanced) {
-        // The enhanced look: the scene to its target of half floats, bloomed and through the tone
-        // curve to the screen, the screen's pictures over it.
-        if (auto drawn = drawEnhancedSession(list, frame); !drawn) {
-            return drawn;
-        }
-        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-        const std::array screen{
-            nx::rhi::ColorAttachment{.texture = frame.texture, .load = nx::rhi::LoadOp::DontCare}};
-        list.beginRendering({.colors = screen, .area = frame.size});
-        m_post->drawToneMapped(list);
-    } else {
-        list.transition(frame.texture, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-        const std::array colors{nx::rhi::ColorAttachment{.texture = frame.texture, .clear = kVoidColor}};
-        list.beginRendering({.colors = colors,
-                             .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .clear = 0.0F},
-                             .area = frame.size});
-        if (auto drawn = drawSession(list, frame); !drawn) {
-            return drawn;
-        }
-        if (m_session) {
-            m_scene->drawEffects(list); // over the scene, in the screen's colors
-        }
+    appendScreen(frame.size);
+    std::optional<cs::FrameScene> scene;
+    if (m_session) {
+        scene.emplace(cs::FrameScene{.scene = *m_scene, .level = *m_session->level, .view = sessionView()});
     }
-    if (auto drawn = drawScreen(list, frame); !drawn) {
-        return drawn;
+    if (auto recorded = m_frames->record(list, frame.texture, frame.size, scene, m_screenQuads); !recorded) {
+        return nx::fail(ClientError::GpuFailed, std::move(recorded.error()));
     }
-    list.endRendering();
     list.transition(frame.texture, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::Present);
     if (auto submitted = device.submitFrame(*m_video->swapchain); !submitted) {
         return nx::fail(ClientError::GpuFailed, std::move(submitted.error()));
@@ -800,25 +750,27 @@ auto Client::drawFrame() -> nx::Result<void, ClientError> {
 }
 
 /// Puts on the GPU what the frame draws that is not there yet, its uploads recorded in `list` before
-/// the frame renders: the screen and the HUD's pictures, and the scene of the map played.
+/// the frame renders: what draws the frames, the HUD's pictures and the console's atlas, and the scene
+/// of the map played.
 auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::Result<void, ClientError> {
-    if (!m_screen) {
-        auto screen = nx::render::ScreenRenderer::create(
-            *m_video->device,
-            {.shaderCode = m_screenShader, .colorFormat = format, .gamma = gammaOf(m_cvars->video)});
-        if (!screen) {
-            return nx::fail(ClientError::GpuFailed, std::move(screen.error()));
+    if (!m_frames) {
+        auto frames = cs::FrameRenderer::create(*m_video->device,
+                                                std::move(*std::exchange(m_frameShaders, std::nullopt)),
+                                                format, gammaOf(m_cvars->video));
+        if (!frames) {
+            return nx::fail(ClientError::GpuFailed, std::move(frames.error()));
         }
-        m_screen.emplace(std::move(*screen));
-        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.ammo(), *m_screen, list); hud) {
+        m_frames.emplace(std::move(*frames));
+        if (auto hud = cs::Hud::load(m_content->vfs, m_content->weapons.ammo(), m_frames->screen(), list);
+            hud) {
             m_hud.emplace(std::move(*hud));
         } else {
             nx::log::warning(kLog, "the HUD is not drawn: {}",
                              nx::describe(hud.error())); // the game plays on
         }
         if (m_consoleAtlas) {
-            auto image = m_screen->loadImage(list, m_consoleAtlas->texels(), m_consoleAtlas->width(),
-                                             m_consoleAtlas->height(), "console");
+            auto image = m_frames->screen().loadImage(list, m_consoleAtlas->texels(), m_consoleAtlas->width(),
+                                                      m_consoleAtlas->height(), "console");
             if (!image) {
                 return nx::fail(ClientError::GpuFailed, std::move(image.error()));
             }
@@ -835,24 +787,14 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
     }
     if (m_session && !m_scene) {
-        m_isSceneEnhanced = m_cvars->video.fidelity.value() == nx::settings::Fidelity::Enhanced;
-        if (m_isSceneEnhanced && !m_post) {
-            auto post = nx::render::PostRenderer::create(
-                *m_video->device, {.shaderCode = m_postShader, .outputFormat = format});
-            if (!post) {
-                return nx::fail(ClientError::GpuFailed, std::move(post.error()));
-            }
-            m_post.emplace(std::move(*post));
-        }
-        const nx::rhi::Format sceneFormat =
-            m_isSceneEnhanced ? nx::render::PostRenderer::sceneFormat() : format;
-        const nx::rhi::Format effectsFormat =
-            m_isSceneEnhanced ? nx::render::PostRenderer::effectsFormat() : format;
-        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders, sceneFormat,
-                                       effectsFormat, gammaOf(m_cvars->video),
-                                       m_isSceneEnhanced ? nx::render::StudioLook::Enhanced
-                                                         : nx::render::StudioLook::Legacy,
-                                       decalLimitOf(m_cvars->video));
+        // r_fidelity, read as the map's scene is made.
+        const nx::render::StudioLook look =
+            m_cvars->video.fidelity.value() == nx::settings::Fidelity::Enhanced
+                ? nx::render::StudioLook::Enhanced
+                : nx::render::StudioLook::Legacy;
+        auto scene = cs::Scene::create(*m_video->device, list, *m_session->level, *m_shaders,
+                                       m_frames->sceneFormatOf(look), m_frames->effectsFormatOf(look),
+                                       gammaOf(m_cvars->video), look, decalLimitOf(m_cvars->video));
         if (!scene) {
             return nx::fail(ClientError::GpuFailed, std::move(scene.error()));
         }
@@ -872,12 +814,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
     return {};
 }
 
-auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-    -> nx::Result<void, ClientError> {
-    if (!m_session) {
-        return {}; // no map: the void
-    }
-    const std::vector<nx::render::ModelPlacement> placements = m_session->game->placements();
+auto Client::sessionView() -> cs::SceneView {
     // The view is drawn turned by the kick the player's weapon gave it, as the original's client adds
     // the punch to it.
     nx::render::Camera kicked = m_camera;
@@ -885,64 +822,15 @@ auto Client::drawSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainIma
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
-    if (auto drawn = m_scene->draw(
-            list, *m_session->level,
-            {.camera = kicked,
-             .aspect = static_cast<float>(frame.size.width) / static_cast<float>(frame.size.height),
-             .time = nx::Seconds{m_mapClock.elapsed()},
-             .placements = placements,
-             .viewModel = m_viewPose,
-             .clientEvents = m_clientEvents});
-        !drawn) {
-        return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
-    }
-    return {};
+    m_placements = m_session->game->placements();
+    return {.camera = kicked,
+            .time = nx::Seconds{m_mapClock.elapsed()},
+            .placements = m_placements,
+            .viewModel = m_viewPose,
+            .clientEvents = m_clientEvents};
 }
 
-auto Client::drawEnhancedSession(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-    -> nx::Result<void, ClientError> {
-    if (m_postSize != frame.size) {
-        m_video->device->waitIdle(); // the frames in flight may still read the old targets
-        if (auto resized = m_post->resize(frame.size); !resized) {
-            return nx::fail(ClientError::GpuFailed, std::move(resized.error()));
-        }
-        m_postSize = frame.size;
-    }
-    // A reflection probe baked a frame, before the scene draws: the world prepares its views first.
-    m_scene->bakeReflections(list, *m_session->level, nx::Seconds{m_mapClock.elapsed()},
-                             m_session->game->placements());
-    const nx::rhi::TextureHandle target = m_post->sceneTarget();
-    list.transition(target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-    const std::array colors{nx::rhi::ColorAttachment{.texture = target, .clear = kVoidColor}};
-    list.beginRendering({.colors = colors,
-                         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(),
-                                                           .store = nx::rhi::StoreOp::Store,
-                                                           .clear = 0.0F},
-                         .area = frame.size});
-    if (auto drawn = drawSession(list, frame); !drawn) {
-        return drawn;
-    }
-    list.endRendering();
-    // The effects to their layer, display colors over the scene's depths, which the tone pass adds as the
-    // original adds them.
-    const nx::rhi::TextureHandle effects = m_post->effectsTarget();
-    list.transition(effects, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
-    list.transition(m_depth->get(), nx::rhi::TextureState::DepthTarget, nx::rhi::TextureState::DepthTarget);
-    const std::array effectsColors{nx::rhi::ColorAttachment{.texture = effects, .clear = kNoEffect}};
-    list.beginRendering(
-        {.colors = effectsColors,
-         .depth = nx::rhi::DepthAttachment{.texture = m_depth->get(), .load = nx::rhi::LoadOp::Load},
-         .area = frame.size});
-    m_scene->drawEffects(list);
-    list.endRendering();
-    list.transition(target, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
-    list.transition(effects, nx::rhi::TextureState::RenderTarget, nx::rhi::TextureState::ShaderRead);
-    m_post->bloom(list);
-    return {};
-}
-
-auto Client::drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImage& frame)
-    -> nx::Result<void, ClientError> {
+void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
     if (m_session && m_hud && m_cvars->video.hudDraw.value()) {
         // The HUD, over the scene, the knife's crosshair in the middle.
@@ -953,22 +841,15 @@ auto Client::drawScreen(nx::rhi::CommandList& list, const nx::rhi::SwapchainImag
                        .money = status.money,
                        .ammo = cs::hudAmmoOf(m_session->game->inventory(), m_content->weapons),
                        .crosshairDistance = cs::kKnifeCrosshairDistance},
-                      m_hudCvars->crosshair(), frame.size);
+                      m_hudCvars->crosshair(), size);
     }
     if (m_consoleWindow != nullptr) {
         m_logSink->showIn(*m_consoleWindow);
         if (m_isConsoleOpen) {
-            m_consoleWindow->setBounds(cs::consoleBounds(frame.size));
-            m_consoleWindow->paintTree(nx::ui::PanelPainter{m_screenQuads, frame.size});
+            m_consoleWindow->setBounds(cs::consoleBounds(size));
+            m_consoleWindow->paintTree(nx::ui::PanelPainter{m_screenQuads, size});
         }
     }
-    if (m_screenQuads.empty()) {
-        return {};
-    }
-    if (auto drawn = m_screen->draw(list, {.size = frame.size, .quads = m_screenQuads}); !drawn) {
-        return nx::fail(ClientError::GpuFailed, std::move(drawn.error()));
-    }
-    return {};
 }
 
 auto Client::finish() -> nx::Result<void, ClientError> {
