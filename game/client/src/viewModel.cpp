@@ -112,10 +112,10 @@ void addPlayed(std::vector<std::uint32_t>& played, const WeaponView& view,
 } // namespace
 
 ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::AnimationFrames> animations,
-                     std::vector<std::optional<nx::render::StudioMaterial>> materials, bool isMirrored,
+                     std::vector<std::optional<nx::render::StudioMaterial>> materials, Hand hand,
                      Appearance appearance) noexcept
     : m_files{std::move(files)}, m_animations{std::move(animations)}, m_materials{std::move(materials)},
-      m_isMirrored{isMirrored}, m_appearance{std::move(appearance)} {}
+      m_hand{hand}, m_appearance{std::move(appearance)} {}
 
 auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
     auto files = readModelFiles(vfs, weapon.models.view);
@@ -145,7 +145,7 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
     }
     return ViewModel{std::move(*files), std::move(animations),
                      std::move(materials).value_or(std::vector<std::optional<nx::render::StudioMaterial>>{}),
-                     weapon.models.viewHand != kPlayerHand,
+                     weapon.models.viewHand,
                      Appearance{.skin = weapon.view.skin.value_or(0),
                                 .bodyChoices = weapon.view.bodyChoices.value_or(std::vector<std::uint32_t>{}),
                                 .muzzleFlash = weapon.view.muzzleFlash}};
@@ -214,15 +214,15 @@ auto soundFilesOf(const Weapon& weapon, const ViewModel* viewModel) -> std::vect
     return files;
 }
 
-auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt) const
-    -> std::vector<nx::Mat3x4> {
+auto ViewModel::pose(const nx::render::Camera& camera, std::uint32_t sequence, nx::Seconds intoIt,
+                     Hand hand) const -> std::vector<nx::Mat3x4> {
     const MdlView& model = *m_files->view;
     nx::expects(sequence < m_animations.size(), "ViewModel::pose: a sequence of the model");
     const nx::assets::StudioSequence& played = model.sequences()[sequence];
     // The view's own model turns as the view does: the client gives it the view's angles with the pitch
     // negated, which the engine's studio transform negates back.
     nx::Mat3x4 placement = nx::affine(nx::rotationMatrix(camera.angles), camera.position);
-    if (m_isMirrored) {
+    if (isMirroredIn(hand)) {
         // Its left, the placement's second column, turned to its right.
         for (nx::Vec4& row : placement.rows) {
             row.y = -row.y;

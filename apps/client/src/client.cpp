@@ -842,7 +842,8 @@ auto Client::sessionView() -> cs::SceneView {
             .time = nx::Seconds{m_mapClock.elapsed()},
             .placements = m_placements,
             .viewModel = m_viewPose,
-            .clientEvents = m_clientEvents};
+            .clientEvents = m_clientEvents,
+            .hand = m_hudCvars->hand()};
 }
 
 void Client::appendScreen(nx::rhi::Extent2d size) {
