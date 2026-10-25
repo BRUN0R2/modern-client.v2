@@ -82,7 +82,7 @@ public:
         -> nx::Result<std::unique_ptr<Level>, LevelError>;
 
     /// Use load(). Public only so that load() can use std::make_unique.
-    explicit Level(CreateToken /*token*/) noexcept {}
+    inline explicit Level(CreateToken /*token*/) noexcept {}
 
     Level(const Level&) = delete;
     auto operator=(const Level&) -> Level& = delete;
@@ -90,16 +90,21 @@ public:
     auto operator=(Level&&) -> Level& = delete;
     ~Level() = default;
 
+    /// Its BSP, read whole.
     [[nodiscard]] inline auto map() const noexcept -> const nx::assets::BspView& { return *m_map; }
+    /// The classes the game makes its entities by.
     [[nodiscard]] inline auto entityClasses() const noexcept -> const nx::game::EntityClasses& {
         return m_entityClasses;
     }
+    /// The WADs its textures are in, those the installation has.
     [[nodiscard]] inline auto wads() const noexcept -> std::span<const nx::assets::WadView> { return m_wads; }
     /// Its sides, in the order of nx::render::kSkySuffixes; none when no sky could be read.
     [[nodiscard]] inline auto sky() const noexcept -> std::span<const nx::assets::RgbaImage> { return m_sky; }
+    /// The patterns its light styles play.
     [[nodiscard]] inline auto lightStyles() const noexcept -> const nx::render::LightStyles& {
         return m_lightStyles;
     }
+    /// The sky's light, its light_environment's.
     [[nodiscard]] inline auto skyLight() const noexcept -> const nx::render::SkyLight& { return m_skyLight; }
     /// Where its reflection probes go (probePositionsOf), in the enhanced look.
     [[nodiscard]] inline auto probePositions() const noexcept -> std::span<const nx::Vec3> {
@@ -109,9 +114,13 @@ public:
     [[nodiscard]] inline auto lights() const noexcept -> std::span<const nx::render::StudioLight> {
         return m_lights;
     }
+    /// The hulls of its brush models, which its traces go through.
     [[nodiscard]] inline auto hulls() const noexcept -> const nx::collision::BrushHulls& { return *m_hulls; }
+    /// What hides a glow from the eye.
     [[nodiscard]] inline auto glowBlockers() const noexcept -> const GlowBlockers& { return *m_glowBlockers; }
+    /// The sprites its entities show.
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
+    /// The studio models its entities show.
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
     /// The sprites of the weapons' muzzle flashes: those their view models' events show, as their
     /// weapons' data styles them.

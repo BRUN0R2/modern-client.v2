@@ -56,14 +56,22 @@ inline constexpr std::int32_t kDefaultMultiplayerDecals = 300;
     return std::min(decals, multiplayerDecals);
 }
 
+/// The player's own settings, which the game reads.
+struct PlayerCvars {
+    /// `_cl_autowepswitch`: a weapon given heavier than the one held is drawn.
+    console::Cvar<bool> autoWeaponSwitch;
+};
+
 /// What is heard.
 struct AudioCvars {
     console::Cvar<float> volume; ///< The gain of everything heard, 1 the sounds as they are.
 };
 
+/// The client's cvars, by what they set.
 struct ClientCvars {
     MouseCvars mouse;
     VideoCvars video;
+    PlayerCvars player;
     AudioCvars audio;
 };
 

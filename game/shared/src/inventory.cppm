@@ -30,9 +30,16 @@ export namespace cs {
 /// How fast a player runs with no weapon in hand.
 inline constexpr nx::UnitsPerSecond kUnarmedSpeed{240.0F};
 /// A weapon drawn first idles this long after it was drawn, and it neither fires nor is reloaded
-/// for this long (DefaultDeploy): seconds, counted down.
-inline constexpr float kIdleAfterDraw = 1.5F;
-inline constexpr float kAttackAfterDraw = 0.75F;
+/// for this long (DefaultDeploy): counted down.
+inline constexpr nx::Seconds kIdleAfterDraw{1.5F};
+inline constexpr nx::Seconds kAttackAfterDraw{0.75F};
+
+/// Whether a weapon given heavier than the one the player holds is drawn: the player's
+/// `_cl_autowepswitch`.
+enum class AutoSwitch : std::uint8_t {
+    Off,
+    ToHeavier,
+};
 
 /// A weapon a player has, the rounds in its clip, and how it fires now.
 struct OwnedWeapon {
@@ -43,15 +50,15 @@ struct OwnedWeapon {
     /// (m_iShotsFired).
     std::uint32_t shotsFired{};
     std::optional<nx::GameTime> lastShot{}; ///< None before its first (m_flLastFire).
-    /// Seconds until it may fire again: at 0 and below (m_flNextPrimaryAttack), counted down to -1.
-    float nextShot{};
+    /// Until it may fire again: at 0 and below (m_flNextPrimaryAttack), counted down to -1 second.
+    nx::Seconds nextShot{};
     /// While its button is up, its burst loses a shot from then on (m_flDecreaseShotsFired).
     nx::GameTime fewerShotsAt{};
     bool isBursting{};  ///< It fired since its button went up (m_bDelayFire).
     bool kicksLeft{};   ///< The side its next kick turns the view to (m_iDirection).
     bool isAlternate{}; ///< Its alternate is on: its silencer, its burst (m_iWeaponState).
-    /// Seconds until `+attack2` may act again (m_flNextSecondaryAttack), counted down to -0.001.
-    float nextSecondary{};
+    /// Until `+attack2` may act again (m_flNextSecondaryAttack), counted down to -0.001 second.
+    nx::Seconds nextSecondary{};
     std::uint32_t slashes{}; ///< The slashes it made, which play their sequences in turn (m_iSwing).
     std::uint32_t stabs{};
     std::uint32_t followUpsLeft{}; ///< The rounds its last shot still fires, one a frame.
@@ -93,15 +100,15 @@ struct Shot {
 class Inventory {
 public:
     /// An inventory of none of the weapons of `catalog`, which must outlive it.
-    explicit Inventory(const WeaponCatalog& catalog) noexcept : m_catalog{&catalog} {}
+    inline explicit Inventory(const WeaponCatalog& catalog) noexcept : m_catalog{&catalog} {}
 
     /// Gives the player the weapon the catalog makes for `asked` (its replacement, or itself), which
     /// must be complete, with a clip's worth of rounds, in its clip (AddPlayerItem); and the player
-    /// draws it at `time` when it holds none, or when `autoSwitch` (the player's _cl_autowepswitch)
-    /// and it is heavier than the one it holds (FShouldSwitchWeapon). A weapon it has already gives
-    /// its rounds alone, to its clip when empty, else besides it (ExtractAmmo). Returns whether the
-    /// player had no such weapon.
-    auto give(WeaponIndex asked, bool autoSwitch, const nx::game::TickTime& time, nx::Random& random) -> bool;
+    /// draws it at `time` when it holds none, or when `autoSwitch` is ToHeavier and it is heavier than
+    /// the one it holds (FShouldSwitchWeapon). A weapon it has already gives its rounds alone, to its
+    /// clip when empty, else besides it (ExtractAmmo). Returns whether the player had no such weapon.
+    auto give(WeaponIndex asked, AutoSwitch autoSwitch, const nx::game::TickTime& time, nx::Random& random)
+        -> bool;
 
     /// Gives `rounds` of `ammo` besides the clips, as many as the player can carry of it: returns how
     /// many it took.
@@ -177,9 +184,9 @@ private:
     void reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time, nx::Random& random);
     /// The weapon the player holds idles at `time` when its wait is over (WeaponIdle).
     void idle(const nx::game::TickTime& time, nx::Random& random);
-    /// Counts the timers down by `frameTime` seconds, as the original's PostThink does once the
-    /// weapon frame is over.
-    void countDown(float frameTime) noexcept;
+    /// Counts the timers down by `frameTime`, as the original's PostThink does once the weapon frame
+    /// is over.
+    void countDown(nx::Seconds frameTime) noexcept;
     /// Adds `sound`, when there is one, to those the weapons made, at `time`'s tick.
     void makeSound(const std::optional<GameSound>& sound, const nx::game::TickTime& time);
 
@@ -189,11 +196,11 @@ private:
     std::optional<std::size_t> m_held;
     std::optional<std::size_t> m_before; ///< The one the player held before.
     std::optional<ViewAnimation> m_animation;
-    /// Seconds until the weapon held idles (m_flTimeWeaponIdle), counted down to -0.001.
-    float m_nextIdle = 0.0F;
-    /// Seconds until the weapon held does anything (the player's m_flNextAttack), counted down to
-    /// -0.001.
-    float m_nextAttack = 0.0F;
+    /// Until the weapon held idles (m_flTimeWeaponIdle), counted down to -0.001 second.
+    nx::Seconds m_nextIdle{};
+    /// Until the weapon held does anything (the player's m_flNextAttack), counted down to -0.001
+    /// second.
+    nx::Seconds m_nextAttack{};
     bool m_isReloading = false;      ///< (m_fInReload)
     std::vector<SoundMade> m_sounds; ///< Made since takeSounds.
 };

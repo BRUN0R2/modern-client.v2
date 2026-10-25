@@ -66,12 +66,13 @@ public:
 };
 
 TEST(PlayerInputTest, AButtonCountsForTheShareOfTheCommandItWasHeld) {
-    EXPECT_EQ(heldShare(true, {}), 1.0F) << "held throughout";
-    EXPECT_EQ(heldShare(false, {}), 0.0F);
-    EXPECT_EQ(heldShare(true, ButtonEdges{.pressed = true}), 0.5F) << "pressed during it";
-    EXPECT_EQ(heldShare(false, ButtonEdges{.released = true}), 0.0F) << "released during it";
-    EXPECT_EQ(heldShare(false, ButtonEdges{.pressed = true, .released = true}), 0.25F) << "tapped";
-    EXPECT_EQ(heldShare(true, ButtonEdges{.pressed = true, .released = true}), 0.75F)
+    using enum cs::ButtonPosition;
+    EXPECT_EQ(heldShare(Down, {}), 1.0F) << "held throughout";
+    EXPECT_EQ(heldShare(Up, {}), 0.0F);
+    EXPECT_EQ(heldShare(Down, ButtonEdges{.pressed = true}), 0.5F) << "pressed during it";
+    EXPECT_EQ(heldShare(Up, ButtonEdges{.released = true}), 0.0F) << "released during it";
+    EXPECT_EQ(heldShare(Up, ButtonEdges{.pressed = true, .released = true}), 0.25F) << "tapped";
+    EXPECT_EQ(heldShare(Down, ButtonEdges{.pressed = true, .released = true}), 0.75F)
         << "let go and pressed again";
 }
 
