@@ -85,10 +85,16 @@ struct Shooter {
     bool canAttack = true;
 };
 
+/// What a weapon's attack met: its trace, and whether what stopped it is a body, which sounds as flesh:
+/// an entity of a class other than none and the machines' (Classify), a hostage today.
+struct WeaponHit {
+    nx::collision::Trace trace{};
+    bool isBody = false;
+};
+
 /// How a weapon's attacks meet what is solid: the server's way for a hull from a start to an end
-/// (UTIL_TraceLine, UTIL_TraceHull).
-using WeaponTracer =
-    std::function<nx::collision::Trace(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end)>;
+/// (UTIL_TraceLine, UTIL_TraceHull), and what it met.
+using WeaponTracer = std::function<WeaponHit(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end)>;
 
 /// A shot fired: from where, the way it goes, and how far its bullet may stray.
 struct Shot {

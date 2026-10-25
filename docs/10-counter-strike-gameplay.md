@@ -407,10 +407,14 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - **Knife:** quick slash and heavy stab, with a multiplier from behind.
   **Today:** `+attack` slashes and `+attack2` stabs (Swing, Stab): a line 48 units ahead of the eye
   (32 for the stab), along the view without its kick, then a ducked player's hull, through the world
-  and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`); a miss and a hit
-  play their sequences and hold the attacks as the data says (a slash 0.35 or 0.4 seconds, the next
-  stab 0.5; a stab 1.0 or 1.1). What the blade hits, its damage and the back stab come with the
-  damage.
+  and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`) and the hostages,
+  the line by their hitboxes and the hull by their boxes (`cs::MapModels::traceHostages`, as
+  `SV_HullForStudioModel` chooses); a miss and a hit play their sequences and hold the attacks as
+  the data says (a slash 0.35 or 0.4 seconds, the next stab 0.5; a stab 1.0 or 1.1). A hit on a body
+  (`cs::WeaponHit::isBody`: a hostage) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
+  `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
+  sound of what its texture is made of, as the original's multiplayer rules play none
+  (`CHalfLifeMultiplay::PlayTextureSounds`). Its damage and the back stab come with the damage.
 
 ### 7.4 Damage
 

@@ -274,13 +274,6 @@ auto normalize(Vec3& v) -> double {
     return flat;
 }
 
-/// `box` grown by a player's box in `hull`, as PM_HullForBox grows a physent's: where the player's
-/// origin meets it.
-[[nodiscard]] auto grownFor(const nx::Aabb& box, Hull hull) noexcept -> nx::Aabb {
-    const nx::Aabb player = nx::collision::hullBoxOf(hull);
-    return nx::Aabb{.min = box.min - player.max, .max = box.max - player.min};
-}
-
 /// One command applied to one player: the original's steps, in its order, each reading and writing
 /// the player as it goes.
 class PlayerMove {
@@ -597,7 +590,7 @@ private:
         }
         for (const SolidBox& solid : m_boxes) {
             const nx::collision::Trace hit = nx::collision::traceBoxMovement(
-                grownFor(solid.box, hull), start - solid.origin, end - solid.origin);
+                nx::collision::grownByHull(solid.box, hull), start - solid.origin, end - solid.origin);
             if (hit.fraction < nearest.fraction) {
                 nearest = PlayerTrace{.fraction = hit.fraction,
                                       .end = hit.end + solid.origin,
@@ -622,8 +615,8 @@ private:
                                               isSolidIn(entity.model, entity.origin, entity.angles);
                                    }) ||
                std::ranges::any_of(m_boxes, [&](const SolidBox& solid) {
-                   return nx::collision::boxContentsAt(grownFor(solid.box, m_hull), point - solid.origin) ==
-                          Contents::Solid;
+                   return nx::collision::boxContentsAt(nx::collision::grownByHull(solid.box, m_hull),
+                                                       point - solid.origin) == Contents::Solid;
                });
     }
 
