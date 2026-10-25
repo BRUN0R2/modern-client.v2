@@ -53,7 +53,7 @@ constexpr std::uint32_t kHostageControllers = 4;
         made.framerate = entity.findNumber("framerate").value_or(0.0F);
         return made;
     }
-    if (classname == "hostage_entity") {
+    if (classname == kHostageClass) {
         made.model = std::string{model.empty() ? kDefaultHostageModel : model};
         made.kind = ModelClass::Hostage;
         made.framerate = 1.0F; // ResetSequenceInfo

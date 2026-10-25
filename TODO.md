@@ -461,7 +461,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] All round-end reasons per map type (the time run out's are done: `cs::timeOutReasonOf`)
 - [ ] `mp_timelimit`, `mp_maxrounds`, `mp_winlimit`, intermission and next map
 - [ ] Teams, characters, `mp_limitteams`, `mp_autoteambalance`
-- [ ] Economy with auditable transactions and validated values
+- [x] The money of the rounds (`cs.shared:economy`, `data/cstrike/economy.toml`, [10 §6](docs/10-counter-strike-gameplay.md#6-economy)): each end's money to its winners, the hostages still held, the loser bonus and its series, the living losers left unpaid, a player's money held from none to 16000; the local game's player paid as each round starts
+- [ ] Economy with auditable transactions (`Economy::apply`, `MoneyChanged`), and the kills', the bomb's and the hostages' money
 
 ### Objectives
 - [ ] C4: handout, planting, timer, defuse with and without a kit, explosion
