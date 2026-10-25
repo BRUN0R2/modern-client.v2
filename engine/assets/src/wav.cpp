@@ -52,20 +52,20 @@ constexpr std::array kSubformatTail{std::byte{0x00}, std::byte{0x00}, std::byte{
                                     std::byte{0x00}, std::byte{0xAA}, std::byte{0x00}, std::byte{0x38},
                                     std::byte{0x9B}, std::byte{0x71}};
 
-/// A sample layout WAV defines: a format tag, the bits of a sample, and how they read.
+/// A sample layout WAV defines: a format tag, and how samples of it read, by their bits
+/// (bitsPerSample).
 struct SampleLayout {
     std::uint16_t tag = 0;
-    std::uint16_t bits = 0;
     SampleFormat format = SampleFormat::Unsigned8;
 };
 
 constexpr std::array kSampleLayouts{
-    SampleLayout{.tag = kPcmFormatTag, .bits = 8, .format = SampleFormat::Unsigned8},
-    SampleLayout{.tag = kPcmFormatTag, .bits = 16, .format = SampleFormat::Signed16},
-    SampleLayout{.tag = kPcmFormatTag, .bits = 24, .format = SampleFormat::Signed24},
-    SampleLayout{.tag = kPcmFormatTag, .bits = 32, .format = SampleFormat::Signed32},
-    SampleLayout{.tag = kFloatFormatTag, .bits = 32, .format = SampleFormat::Float32},
-    SampleLayout{.tag = kFloatFormatTag, .bits = 64, .format = SampleFormat::Float64},
+    SampleLayout{.tag = kPcmFormatTag, .format = SampleFormat::Unsigned8},
+    SampleLayout{.tag = kPcmFormatTag, .format = SampleFormat::Signed16},
+    SampleLayout{.tag = kPcmFormatTag, .format = SampleFormat::Signed24},
+    SampleLayout{.tag = kPcmFormatTag, .format = SampleFormat::Signed32},
+    SampleLayout{.tag = kFloatFormatTag, .format = SampleFormat::Float32},
+    SampleLayout{.tag = kFloatFormatTag, .format = SampleFormat::Float64},
 };
 
 // The cue chunk: a count, then cue points of an id, a play order, a chunk id, a chunk start, a block
@@ -164,7 +164,7 @@ struct Format {
         tag = *named;
     }
     const auto layout = std::ranges::find_if(kSampleLayouts, [tag, bits](const SampleLayout& candidate) {
-        return candidate.tag == tag && candidate.bits == bits;
+        return candidate.tag == tag && bitsPerSample(candidate.format) == bits;
     });
     if (layout == kSampleLayouts.end()) {
         return fail(

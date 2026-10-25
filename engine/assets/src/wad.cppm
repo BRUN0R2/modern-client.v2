@@ -8,6 +8,7 @@ export module nx.assets:wad;
 
 import std;
 import nx.core;
+import :image;
 
 export namespace nx::assets {
 
@@ -16,7 +17,7 @@ inline constexpr std::size_t kMipLevels = 4;
 
 /// A texture palette: 256 RGB colors.
 inline constexpr std::size_t kPaletteColors = 256;
-inline constexpr std::size_t kPaletteBytes = kPaletteColors * 3;
+inline constexpr std::size_t kPaletteBytes = kPaletteColors * kRgbBytes;
 
 /// The name field of WAD3 entries and mip textures: up to 15 characters and a terminator.
 inline constexpr std::size_t kTextureNameBytes = 16;

@@ -36,12 +36,10 @@ constexpr std::uint16_t kRgbxDepth = 32;
 constexpr std::uint32_t kMostColors = 256;
 /// A palette entry: blue, green, red and a reserved byte.
 constexpr std::size_t kPaletteEntryBytes = 4;
-constexpr std::size_t kRgbaBytes = 4;
 /// Rows are padded to a multiple of this many bytes.
 constexpr std::size_t kRowAlignment = 4;
 /// The largest side a BMP is read at: as large as any GPU's texture.
 constexpr std::int32_t kLargestSide = 16384;
-constexpr std::byte kOpaque{255};
 
 } // namespace
 
@@ -110,7 +108,7 @@ auto readBmp(std::span<const std::byte> bytes) -> Result<RgbaImage, BmpError> {
             image.pixels[at] = blueGreenRed[2];
             image.pixels[at + 1] = blueGreenRed[1];
             image.pixels[at + 2] = blueGreenRed[0];
-            image.pixels[at + 3] = kOpaque;
+            image.pixels[at + kRgbBytes] = kFullChannel;
         }
     }
     return image;

@@ -82,3 +82,13 @@ enum class FileError : std::uint8_t {
 [[nodiscard]] auto executablePath() -> Result<std::filesystem::path, FileError>;
 
 } // namespace nx::platform
+
+namespace nx::platform {
+
+/// The folders of `candidates` that exist, each once, in their order: a link that leads to a folder
+/// already kept (`~/.steam/steam` usually leads to `~/.local/share/Steam`) is the same folder. Shared
+/// by the module's searches for folders (fonts, Steam), not exported.
+[[nodiscard]] auto existingFolders(std::span<const std::filesystem::path> candidates)
+    -> std::vector<std::filesystem::path>;
+
+} // namespace nx::platform

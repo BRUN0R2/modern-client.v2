@@ -8,6 +8,7 @@ export module nx.assets:tga;
 
 import std;
 import nx.core;
+export import :image;
 
 export namespace nx::assets {
 
@@ -17,13 +18,6 @@ enum class TgaError : std::uint8_t {
     Unsupported, ///< An image type, pixel depth or color map entry size that is not decoded.
     BadValue,    ///< A header value outside its domain, or a pixel's color outside the color map.
     Truncated,   ///< The pixels end before the image does.
-};
-
-/// An image of 8-bit red, green, blue and alpha, row by row from the top-left corner.
-struct RgbaImage {
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::vector<std::byte> pixels{}; ///< width * height * 4 bytes.
 };
 
 /// The image of a TGA file: color-mapped (8-bit indices into 24- or 32-bit colors), true-color (24
