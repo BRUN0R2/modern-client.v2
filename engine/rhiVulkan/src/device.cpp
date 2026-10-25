@@ -825,6 +825,7 @@ public:
     [[nodiscard]] auto validationErrors() const noexcept -> std::uint64_t override {
         return m_validationErrors.load();
     }
+    [[nodiscard]] auto pipelineCache() const -> Result<std::vector<std::byte>, RhiError> override;
 
     [[nodiscard]] auto physicalDevice() const noexcept -> VkPhysicalDevice { return m_physicalDevice; }
     [[nodiscard]] auto handle() const noexcept -> VkDevice { return m_device; }
@@ -875,6 +876,11 @@ private:
     [[nodiscard]] auto createLogicalDevice() -> Result<void, RhiError>;
     [[nodiscard]] auto createFrames(std::uint32_t count) -> Result<void, RhiError>;
     [[nodiscard]] auto createAllocator() -> Result<void, RhiError>;
+    /// The pipeline cache, holding `learned` when this GPU and driver wrote it (fitsThisDevice).
+    [[nodiscard]] auto createPipelineCache(std::span<const std::byte> learned) -> Result<void, RhiError>;
+    /// Whether `learned` is a pipeline cache this GPU and driver wrote: its header's version, vendor,
+    /// device and cache UUID theirs.
+    [[nodiscard]] auto fitsThisDevice(std::span<const std::byte> learned) const noexcept -> bool;
     [[nodiscard]] auto submit(VulkanSwapchain* presentTo) -> Result<void, RhiError>;
 
     /// The layout of the bind groups of `desc`.
@@ -905,6 +911,7 @@ private:
     std::size_t m_frameIndex = 0;
     bool m_isRecording = false;
     VmaAllocator m_allocator = VK_NULL_HANDLE;
+    VkPipelineCache m_pipelineCache = VK_NULL_HANDLE;
     std::vector<VkDescriptorPool> m_descriptorPools; ///< The last one has room, or the next set adds one.
     bool m_hasAnisotropy = false;
     float m_maxAnisotropy = 1.0F;
@@ -1389,6 +1396,9 @@ auto VulkanDevice::create(const DeviceDesc& desc) -> Result<std::unique_ptr<Vulk
     if (auto allocator = device->createAllocator(); !allocator) {
         return std::unexpected{std::move(allocator.error())};
     }
+    if (auto cache = device->createPipelineCache(desc.pipelineCache); !cache) {
+        return std::unexpected{std::move(cache.error())};
+    }
     if (auto frames = device->createFrames(desc.framesInFlight); !frames) {
         return std::unexpected{std::move(frames.error())};
     }
@@ -1396,6 +1406,52 @@ auto VulkanDevice::create(const DeviceDesc& desc) -> Result<std::unique_ptr<Vulk
               enumName(device->m_adapter.kind), device->m_adapter.driver, desc.framesInFlight,
               device->m_messenger != VK_NULL_HANDLE ? "on" : "off");
     return device;
+}
+
+auto VulkanDevice::fitsThisDevice(std::span<const std::byte> learned) const noexcept -> bool {
+    VkPipelineCacheHeaderVersionOne header{};
+    if (learned.size() < sizeof(header)) {
+        return false;
+    }
+    std::memcpy(&header, learned.data(), sizeof(header));
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+    return header.headerSize >= sizeof(header) && header.headerSize <= learned.size() &&
+           header.headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+           header.vendorID == properties.vendorID && header.deviceID == properties.deviceID &&
+           std::ranges::equal(header.pipelineCacheUUID, properties.pipelineCacheUUID);
+}
+
+auto VulkanDevice::createPipelineCache(std::span<const std::byte> learned) -> Result<void, RhiError> {
+    const bool isKept = fitsThisDevice(learned);
+    if (!learned.empty() && !isKept) {
+        log::info(kLog, "the pipeline cache is another GPU's or driver's: the pipelines are built anew");
+    }
+    const VkPipelineCacheCreateInfo info{.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+                                         .pNext = nullptr,
+                                         .flags = 0,
+                                         .initialDataSize = isKept ? learned.size() : 0,
+                                         .pInitialData = isKept ? learned.data() : nullptr};
+    if (const VkResult result = vkCreatePipelineCache(m_device, &info, nullptr, &m_pipelineCache);
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkCreatePipelineCache");
+    }
+    return {};
+}
+
+auto VulkanDevice::pipelineCache() const -> Result<std::vector<std::byte>, RhiError> {
+    std::size_t size = 0;
+    if (const VkResult result = vkGetPipelineCacheData(m_device, m_pipelineCache, &size, nullptr);
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkGetPipelineCacheData");
+    }
+    std::vector<std::byte> learned(size);
+    if (const VkResult result = vkGetPipelineCacheData(m_device, m_pipelineCache, &size, learned.data());
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkGetPipelineCacheData");
+    }
+    learned.resize(size);
+    return learned;
 }
 
 auto VulkanDevice::createInstance(const DeviceDesc& desc) -> Result<void, RhiError> {
@@ -1735,6 +1791,7 @@ VulkanDevice::~VulkanDevice() {
             vkDestroyCommandPool(m_device, frame.pool, nullptr);
         }
         vkDestroySemaphore(m_device, m_timeline, nullptr);
+        vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
         vkDestroyDevice(m_device, nullptr);
     }
     if (m_surface != VK_NULL_HANDLE) {
@@ -2346,7 +2403,7 @@ auto VulkanDevice::makeRenderPipeline(const RenderPipelineDesc& desc)
                                             .basePipelineHandle = VK_NULL_HANDLE,
                                             .basePipelineIndex = -1};
     if (const VkResult result =
-            vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &info, nullptr, &pipeline.pipeline);
+            vkCreateGraphicsPipelines(m_device, m_pipelineCache, 1, &info, nullptr, &pipeline.pipeline);
         result != VK_SUCCESS) {
         vkDestroyPipelineLayout(m_device, pipeline.layout, nullptr);
         return vulkanFailure(result, std::format("vkCreateGraphicsPipelines({:?})", desc.label));

@@ -188,6 +188,11 @@ struct MovementState {
     nx::UnitsPerSecond fallSpeed{};
     /// Left until swimming up splashes again (flSwimTime).
     nx::Milliseconds swimTime{};
+    /// The next of the nudges a stuck player is tried at (rgStuckLast).
+    std::uint32_t stuckNudge = 0;
+    /// Since a stuck player was last tried at a nudge, while that is too recent to try the next one
+    /// (rgStuckCheckTime): none once it is not.
+    std::optional<nx::Milliseconds> sinceStuckCheck{};
 };
 
 /// What a brush entity is to a player's movement, as the game made it.

@@ -525,6 +525,70 @@ TEST(MovementTest, ASolidBoxStopsThePlayerGrownByItsBox) {
     EXPECT_GT(free.origin.x, 90.0F) << "without the box";
 }
 
+TEST(MovementTest, AStuckPlayerIsTriedAtANudgeEachSixtyMilliseconds) {
+    // Two boxes, grown by a standing player's, solid for its origin from x = -1 on and below y = 1: the
+    // first nudge that frees a player at the origin is its 29th, (-2, 2, 0), one the server moves it
+    // by, tried 28 tries after the first, each more than 50 ms after the last.
+    constexpr float kFar = 1000.0F;
+    const std::array boxes{cs::SolidBox{.box = {.min = {.x = 15.0F, .y = -kFar, .z = -kFar},
+                                                .max = {.x = kFar, .y = kFar, .z = kFar}}},
+                           cs::SolidBox{.box = {.min = {.x = -kFar, .y = -kFar, .z = -kFar},
+                                                .max = {.x = kFar, .y = -15.0F, .z = kFar}}}};
+    const BrushHulls nothing = emptyWorld();
+    constexpr std::uint32_t kFreeingNudge = 28;
+    constexpr int kCommandsPerTry = 6;
+    MovementState stuck{.maxSpeed = kKnifeSpeed};
+    for (std::uint32_t tick = 0; tick < kFreeingNudge * kCommandsPerTry; ++tick) {
+        stuck = cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, boxes).state;
+    }
+    EXPECT_EQ(stuck.origin, Vec3{}) << "it does nothing else";
+    EXPECT_EQ(stuck.velocity, Vec3{});
+    EXPECT_EQ(stuck.stuckNudge, kFreeingNudge);
+
+    const MovementState freed =
+        cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, boxes).state;
+    EXPECT_FLOAT_EQ(freed.origin.x, -2.0F);
+    EXPECT_FLOAT_EQ(freed.origin.y, 2.0F);
+    EXPECT_EQ(freed.stuckNudge, 0U);
+}
+
+TEST(MovementTest, AStuckPlayerTouchesWhatItIsInAtEachTry) {
+    // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
+    const BrushHulls hulls = modelsOf(
+        {facingUp(0.0F), facingX(10.0F)},
+        {ModelTrees{},
+         ModelTrees{.standing = {HullNode{.plane = {1}, .children = {Contents::Solid, Contents::Empty}}}},
+         ModelTrees{.standing = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}}}}});
+    const std::array entities{cs::BrushEntity{.model = {1}}, cs::BrushEntity{.model = {2}}};
+    MovementState stuck = standingOnTheFloor();
+    stuck.origin.x = 20.0F;
+    std::vector<int> touching;
+    for (int tick = 1; tick <= 13; ++tick) {
+        const cs::MovementResult result = cs::simulateMovement(stuck, command(), {}, hulls, entities);
+        stuck = result.state;
+        if (!result.touchedModels.empty()) {
+            EXPECT_EQ(result.touchedModels, std::vector{ModelIndex{1}});
+            touching.push_back(tick);
+        }
+    }
+    EXPECT_EQ(touching, (std::vector{1, 7, 13})) << "a try each sixth command of 10 ms";
+    EXPECT_EQ(stuck.origin.x, 20.0F) << "deeper in than any nudge";
+}
+
+TEST(MovementTest, TheServerLeavesAStuckPlayerASmallNudgeWouldFree) {
+    // A box whose top, grown by a standing player's box, is at z = 36: a player a tenth of a unit
+    // below it is freed by the nudge of an eighth of a unit up, which the server leaves to the client.
+    const std::array box{cs::SolidBox{.box = {.min = {.x = -10.0F, .y = -10.0F, .z = -100.0F},
+                                              .max = {.x = 10.0F, .y = 10.0F, .z = 0.0F}}}};
+    const BrushHulls nothing = emptyWorld();
+    MovementState stuck{.origin = {.z = 35.9F}, .maxSpeed = kKnifeSpeed};
+    for (int tick = 0; tick < 100; ++tick) {
+        stuck = cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, box).state;
+    }
+    EXPECT_EQ(stuck.origin, (Vec3{.z = 35.9F})) << "never nudged";
+    EXPECT_LT(stuck.stuckNudge, 3U) << "the nudges start again once one frees it";
+}
+
 TEST(MovementTest, WhatThePlayerRunsIntoOrStandsOnIsTouched) {
     // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
     const BrushHulls hulls = modelsOf(

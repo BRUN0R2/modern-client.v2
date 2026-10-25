@@ -143,8 +143,14 @@ code** on the server (authoritative) and on the client (prediction).
   pushers pass through it (`nx::game::Body::isPushed`). Hostages stop the player as boxes
   (`cs::SolidBox`, which `MapModels::solidBoxes` lists): each is grown by the player's box, as
   PM_HullForBox grows a physent's, and traced as the engine traces a box's six-node hull
-  (`nx::collision::traceBoxMovement`), after the world and the brush entities. Observers,
-  unsticking, players and pushables as boxes, conveyors, pushes and currents come next
+  (`nx::collision::traceBoxMovement`), after the world and the brush entities. A player whose box
+  is in the solid is stuck, as the server's PM_CheckStuck finds it, and does nothing else (but in
+  noclip): once more than 50 ms have passed since its last try (PM_CHECKSTUCK_MINTIME), it touches
+  what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
+  frees it frees the player, and moves it from the 28th on, the server leaving the smaller ones, for
+  the network's precision, to the client's prediction. The time is the commands' own, which the
+  original's clock keeps as they come in real time. Observers, players and pushables as boxes (and a
+  player stuck in another one pushed out by force), conveyors, pushes and currents come next
   ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
@@ -228,6 +234,16 @@ from the original, to test these rules against, are pending
 - Players collide with each other using the hull box.
 - Bullet traces test the studio model's **hitboxes** (animated bones) to get the
   *hitgroup*.
+  **Today** (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): each hitbox is its bounds
+  along its bone's axes, made a hull of a node on each face as R_StudioHull makes it, and crossed by
+  the server's rules; of a model's hitboxes the first's trace is kept, then each later one's that is
+  all in the solid, starts in it or stops sooner (SV_SingleClipMoveToEntity), the same rule that
+  keeps the trace of what stops a move first among what it is clipped against
+  (`nx::collision::keepFirstStop`, SV_ClipToLinks). The hostages' are met so by the shots
+  (`cs::MapModels::traceHostages`), each whose box, a unit more each way, the shot's meets, its
+  bones posed with its sequence's motion kept as the server poses them; posed when the shot is
+  fired, where the original's server poses a hostage as its last think left it, at most a thirtieth
+  of a second before.
 
 ### 4.3 API
 

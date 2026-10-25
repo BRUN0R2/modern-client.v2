@@ -159,14 +159,28 @@ void LocalGame::tick(const UserCommand& command) {
         .isOnGround = m_player.isOnGround,
         .isDucked = m_player.isDucked,
         .canAttack = !m_rounds.isFrozen()};
-    const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
-        return nx::game::traceSolids(m_world, hulls, hull, start, end);
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    const nx::Seconds sinceStart = time.now.since(nx::GameTime{}, time.rate);
+    // What the attacks meet: the world and its solid brush entities, then a hostage met first, a body.
+    const WeaponTracer tracer = [this, &hulls, sinceStart](nx::collision::Hull hull, nx::Vec3 start,
+                                                           nx::Vec3 end) {
+        const nx::collision::Trace solid = nx::game::traceSolids(m_world, hulls, hull, start, end);
+        if (std::optional<nx::collision::Trace> hostage =
+                m_level->models().traceHostages(hull, start, end, sinceStart, solid)) {
+            return WeaponHit{.trace = *hostage, .isBody = true};
+        }
+        return WeaponHit{.trace = solid};
     };
-    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, nx::game::tickTimeOf(m_world))) {
+    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
+        const nx::Vec3 end = shot.origin + (shot.direction * kBulletReach.value());
         const nx::game::SolidHit hit =
-            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin,
-                                     shot.origin + (shot.direction * kBulletReach.value()));
+            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin, end);
+        // A hostage the shot meets first stops it, and leaves no mark behind it.
+        if (m_level->models().traceHostages(nx::collision::Hull::Point, shot.origin, end, sinceStart,
+                                            hit.trace)) {
+            continue;
+        }
         if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
             m_impacts.push_back(Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
         }

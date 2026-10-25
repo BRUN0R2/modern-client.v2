@@ -77,6 +77,17 @@ public:
     /// about where it stands.
     [[nodiscard]] auto solidBoxes() const -> std::vector<SolidBox>;
 
+    /// The server's way of `hull` from `start` to `end` through the hostages `sinceStart` after the map
+    /// started, where it takes the place of `sofar`, what the way met otherwise (keepFirstStop): each
+    /// hostage whose box (kHostageBox, a unit more each way, as the engine links it) the way's box
+    /// meets (SV_ClipToLinks) is met as SV_HullForStudioModel chooses, a line by its hitboxes, its
+    /// bones posed with its sequence's motion kept, and a hull by its box grown by the hull's. Posed
+    /// when the way is traced, where the original's server poses a hostage as its last think left it,
+    /// at most a thirtieth of a second before. None when no hostage takes its place.
+    [[nodiscard]] auto traceHostages(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end,
+                                     nx::Seconds sinceStart, const nx::collision::Trace& sofar) const
+        -> std::optional<nx::collision::Trace>;
+
     /// Every model on the GPU of `renderer`, a model for each file, its uploads recorded in `commands`.
     /// Errors: those of StudioRenderer::load.
     [[nodiscard]] auto load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
@@ -103,6 +114,16 @@ private:
     };
 
     MapModels() = default;
+
+    /// traceHostages' way through `hostage` alone, before what it met is weighed; none for a model
+    /// without hitboxes, which a line does not meet.
+    [[nodiscard]] auto traceHostage(const Entity& hostage, nx::collision::Hull hull, nx::Vec3 start,
+                                    nx::Vec3 end, nx::Seconds sinceStart) const
+        -> std::optional<nx::collision::Trace>;
+
+    /// The bones of `entity` `sinceStart` after the map started, its sequence's motion as `motion` says.
+    [[nodiscard]] auto poseOf(const Entity& entity, nx::Seconds sinceStart, SequenceMotion motion) const
+        -> std::vector<nx::Mat3x4>;
 
     std::vector<std::unique_ptr<File>> m_files;
     std::vector<Entity> m_entities;

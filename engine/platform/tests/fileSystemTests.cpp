@@ -156,6 +156,20 @@ TEST(FileSystemTest, TheUserDirectoryIsTheGamesFolderOfTheUsersSettings) {
 #endif
 }
 
+TEST(FileSystemTest, TheCacheDirectoryIsTheGamesFolderOfWhatItCanLose) {
+    const auto path = nx::platform::cacheDirectory();
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_TRUE(path->is_absolute());
+    const auto settings = nx::platform::userDirectory();
+    ASSERT_TRUE(settings.has_value());
+    EXPECT_NE(*path, *settings) << "a cache is not the user's settings, nor roams with them";
+#if defined(_WIN32)
+    EXPECT_EQ(path->filename(), "Modern-Client.v2");
+#else
+    EXPECT_EQ(path->filename(), "modern-client.v2");
+#endif
+}
+
 TEST(FileSystemTest, WritingWhereNoFileCanBeFails) {
     const nx::test::TemporaryDirectory directory;
     directory.makeDirectory("maps");

@@ -135,7 +135,8 @@ constexpr std::string_view kClassnamePrefix = "weapon_";
             if (attack->missSequences.empty() || attack->hitSequences.empty()) {
                 return invalid("attacks without a miss or a hit sequence");
             }
-            for (const std::optional<GameSound>* const sound : {&attack->missSound, &attack->hitSound}) {
+            for (const std::optional<GameSound>* const sound :
+                 {&attack->missSound, &attack->hitSound, &attack->bodySound}) {
                 if (*sound) {
                     if (const std::optional<std::string_view> problem = soundProblem(**sound)) {
                         return invalid(*problem);
@@ -253,7 +254,7 @@ auto soundsOf(const Weapon& weapon) -> std::vector<const GameSound*> {
     }
     if (const std::optional<WeaponMelee>& melee = weapon.melee) {
         for (const MeleeAttack* const attack : {&melee->slash, &melee->stab}) {
-            places.insert(places.end(), {&attack->missSound, &attack->hitSound});
+            places.insert(places.end(), {&attack->missSound, &attack->hitSound, &attack->bodySound});
         }
     }
     std::vector<const GameSound*> sounds;
