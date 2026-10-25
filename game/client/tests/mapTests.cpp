@@ -162,9 +162,11 @@ TEST(MapObjectiveTest, AMapIsPlayedForWhatItsEntitiesAre) {
 { "classname" "hostage_entity" })"};
     EXPECT_EQ(cs::mapObjectivesOf(bomb.get()),
               (cs::MapObjectives{cs::MapObjective::BombTarget, cs::MapObjective::Hostages}));
+    EXPECT_EQ(cs::hostagesOf(bomb.get()), 1U);
     const MapOf none{R"({ "classname" "worldspawn" }
 { "classname" "info_player_start" "origin" "1 2 3" })"};
     EXPECT_EQ(cs::mapObjectivesOf(none.get()), cs::MapObjectives{});
+    EXPECT_EQ(cs::hostagesOf(none.get()), 0U);
 }
 
 TEST(SkyLightTest, LightEnvironmentsLightIsMadeTheEnginesAndAimsByItsPitch) {

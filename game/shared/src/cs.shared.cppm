@@ -7,8 +7,8 @@
 ///
 /// Today: player movement in the world, what a player has as it spawns, what each weapon is, the
 /// weapons a player has (given, drawn, idling, fired, reloaded, switched to their alternates and
-/// striking), the sounds the game makes, as data, and the rounds of a map: their freeze, their time
-/// and its end.
+/// striking), the sounds the game makes, as data, the rounds of a map: their freeze, their time
+/// and its end, and the money they pay.
 export module cs.shared;
 
 export import :movement;
@@ -19,3 +19,4 @@ export import :weapons;
 export import :loadouts;
 export import :inventory;
 export import :rounds;
+export import :economy;
