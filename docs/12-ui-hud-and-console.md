@@ -308,7 +308,9 @@ closes it with the same keys or Escape: while it is open the keys and the typed 
 keys held for the game are let go and the cursor shows. Its font is the `Default` of the scheme of
 the installation's windows (`resource/TrackerScheme.res`, Tahoma 16 at 768 lines and up: 13 pixels
 per em, not smoothed), found among the system's fonts (`cs.client:console`); without the scheme or
-the face the console has no window, and the reason is logged. What is logged and what the console
+the face the console has no window, and the reason is logged. `cs::ConsoleWindow` is the window
+`next` and `nxview` both show: the font, the atlas of its characters put on the GPU with the screen's
+pictures, and the dialog, painted while it is open. What is logged and what the console
 replies show in it as well as where they always went. Failures read as the player reads them:
 what failed, then each cause by its name and detail (`map de_dust3 (NotFound: maps/de_dust3.bsp)`).
 `nxview --console <line>` and `--typing <text>` draw the window over a frame. Its place (the middle

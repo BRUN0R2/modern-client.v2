@@ -329,36 +329,25 @@ constexpr std::size_t kBlue = 2;
     NoFiles files;
     nx::console::Console console{output, files};
     nx::ui::FontCatalog fonts;
-    std::optional<nx::ui::SchemeFontSet> consoleFont;
-    std::optional<nx::ui::GlyphAtlas> consoleAtlas;
-    std::optional<nx::render::ScreenImage> consoleImage;
-    std::optional<nx::ui::ConsoleDialog> consoleWindow;
+    std::unique_ptr<cs::ConsoleWindow> consoleWindow;
     if (options.isConsoleShown()) {
-        consoleFont = cs::openConsoleFont(content.vfs, fonts, extent.height);
-        if (!consoleFont) {
+        consoleWindow = cs::ConsoleWindow::open(content.vfs, fonts, console, extent.height);
+        if (consoleWindow == nullptr) {
             std::println(stderr, "nxview: the console has no window");
             return kExitUnusable;
         }
-        auto atlas = nx::ui::GlyphAtlas::build(*consoleFont, cs::consoleCharacters());
-        if (!atlas) {
-            return unusable(atlas.error());
+        if (auto loaded = consoleWindow->load(frames->screen(), uploadCommands, extent); !loaded) {
+            return unusable(loaded.error());
         }
-        consoleAtlas.emplace(std::move(*atlas));
-        auto image = frames->screen().loadImage(uploadCommands, consoleAtlas->texels(), consoleAtlas->width(),
-                                                consoleAtlas->height(), "console");
-        if (!image) {
-            return unusable(image.error());
-        }
-        consoleImage.emplace(std::move(*image));
-        consoleWindow.emplace(console, cs::consoleBounds(extent));
-        consoleWindow->setFace({.atlas = &*consoleAtlas, .image = &*consoleImage});
-        output.window = &*consoleWindow;
+        std::ignore = consoleWindow->toggle(); // open, as the frame shows it
+        nx::ui::ConsoleDialog& dialog = *consoleWindow->dialog();
+        output.window = &dialog;
         for (const std::string& line : options.consoleLines) {
-            consoleWindow->insertText(line);
-            std::ignore = consoleWindow->pressKey(nx::platform::Key::Enter);
-            std::ignore = console.execute();
+            dialog.insertText(line);
+            std::ignore = dialog.pressKey(nx::platform::Key::Enter); // Enter, which it takes
+            std::ignore = console.execute();                         // its lines run as they are sent
         }
-        consoleWindow->insertText(options.typing.value_or(std::string{}));
+        dialog.insertText(options.typing.value_or(std::string{}));
     }
     const nx::render::Camera camera = startCamera(options, level.map());
     // The brush entities where the game puts them, and the weapon the player drew as the map started,
@@ -404,8 +393,8 @@ constexpr std::size_t kBlue = 2;
                      .crosshairDistance = cs::kKnifeCrosshairDistance},
                     cs::CrosshairStyle{}, extent);
     }
-    if (consoleWindow) {
-        consoleWindow->paintTree(nx::ui::PanelPainter{quads, extent});
+    if (consoleWindow != nullptr) {
+        consoleWindow->paint(quads, extent);
     }
     nx::rhi::CommandList& list = commands->get();
     const std::optional<cs::FrameScene> shown{cs::FrameScene{.scene = *scene,

@@ -285,11 +285,7 @@ private:
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
     std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
     nx::ui::FontCatalog m_fonts;
-    std::optional<nx::ui::SchemeFontSet> m_consoleFont; ///< None when the console has no window.
-    std::optional<nx::ui::GlyphAtlas> m_consoleAtlas;
-    std::optional<nx::render::ScreenImage> m_consoleImage;  ///< The atlas on the GPU, with the screen.
-    std::unique_ptr<nx::ui::ConsoleDialog> m_consoleWindow; ///< Made with its atlas.
-    bool m_isConsoleOpen = false;
+    std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
@@ -346,15 +342,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!size) {
         return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
-    m_consoleFont = cs::openConsoleFont(m_content->vfs, m_fonts, size->height);
-    if (m_consoleFont) {
-        auto atlas = nx::ui::GlyphAtlas::build(*m_consoleFont, cs::consoleCharacters());
-        if (atlas) {
-            m_consoleAtlas.emplace(std::move(*atlas));
-        } else {
-            nx::log::warning(kLog, "the console has no window: {}", nx::describe(atlas.error()));
-        }
-    }
+    m_consoleWindow = cs::ConsoleWindow::open(m_content->vfs, m_fonts, m_console, size->height);
     return {};
 }
 
@@ -514,20 +502,19 @@ void Client::lastWeaponCommand() {
 }
 
 void Client::toggleConsole() {
-    if (m_consoleWindow == nullptr) {
+    if (m_consoleWindow == nullptr || m_consoleWindow->dialog() == nullptr) {
         m_console.print("The console has no window: its font could not be found");
         return;
     }
-    m_isConsoleOpen = !m_isConsoleOpen;
-    if (m_isConsoleOpen) {
+    const bool isOpen = m_consoleWindow->toggle();
+    if (isOpen) {
         m_keys.releaseAll(); // the keys held for the game are let go
     }
     // The cursor shows and the keys type while it is open; the mouse turns the view again once closed.
     for (const auto& failure :
-         {m_video->window.setTextInput(m_isConsoleOpen ? nx::platform::TextInput::On
-                                                       : nx::platform::TextInput::Off),
-          m_video->window.setMouseMode(m_isConsoleOpen ? nx::platform::MouseMode::Absolute
-                                                       : nx::platform::MouseMode::Relative)}) {
+         {m_video->window.setTextInput(isOpen ? nx::platform::TextInput::On : nx::platform::TextInput::Off),
+          m_video->window.setMouseMode(isOpen ? nx::platform::MouseMode::Absolute
+                                              : nx::platform::MouseMode::Relative)}) {
         if (!failure) {
             nx::log::warning(kLog, "{}", nx::describe(failure.error()));
         }
@@ -536,7 +523,7 @@ void Client::toggleConsole() {
 
 void Client::handleInConsole(const nx::platform::WindowEvent& event) {
     if (const auto* typed = std::get_if<nx::platform::TextEntered>(&event)) {
-        m_consoleWindow->insertText(typed->text);
+        m_consoleWindow->dialog()->insertText(typed->text);
         return;
     }
     const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
@@ -550,7 +537,7 @@ void Client::handleInConsole(const nx::platform::WindowEvent& event) {
         toggleConsole();
         return;
     }
-    std::ignore = m_consoleWindow->pressKey(key->key);
+    std::ignore = m_consoleWindow->dialog()->pressKey(key->key); // a key it does not take does nothing
 }
 
 auto Client::run() -> nx::Result<void, ClientError> {
@@ -595,7 +582,8 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
     m_video->window.pollEvents(m_events);
     for (const nx::platform::WindowEvent& event : m_events) {
         const auto* key = std::get_if<nx::platform::KeyChanged>(&event);
-        if (m_isConsoleOpen && !std::holds_alternative<nx::platform::CloseRequested>(event) &&
+        const bool isConsoleOpen = m_consoleWindow != nullptr && m_consoleWindow->isOpen();
+        if (isConsoleOpen && !std::holds_alternative<nx::platform::CloseRequested>(event) &&
             !std::holds_alternative<nx::platform::Resized>(event)) {
             handleInConsole(event);
         } else if (std::holds_alternative<nx::platform::CloseRequested>(event) ||
@@ -770,22 +758,15 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             nx::log::warning(kLog, "the HUD is not drawn: {}",
                              nx::describe(hud.error())); // the game plays on
         }
-        if (m_consoleAtlas) {
-            auto image = m_frames->screen().loadImage(list, m_consoleAtlas->texels(), m_consoleAtlas->width(),
-                                                      m_consoleAtlas->height(), "console");
-            if (!image) {
-                return nx::fail(ClientError::GpuFailed, std::move(image.error()));
-            }
-            m_consoleImage.emplace(std::move(*image));
+        if (m_consoleWindow != nullptr) {
             auto size = m_video->window.pixelSize();
             if (!size) {
                 return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
             }
-            m_consoleWindow = std::make_unique<nx::ui::ConsoleDialog>(
-                m_console,
-                cs::consoleBounds(nx::rhi::Extent2d{.width = size->width, .height = size->height}));
-            m_consoleWindow->setFace({.atlas = &*m_consoleAtlas, .image = &*m_consoleImage});
-            m_output.window = m_consoleWindow.get();
+            if (auto loaded = m_consoleWindow->load(m_frames->screen(), list, extentOf(*size)); !loaded) {
+                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+            }
+            m_output.window = m_consoleWindow->dialog();
         }
     }
     if (m_session && !m_scene) {
@@ -845,12 +826,9 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
                        .crosshairDistance = cs::kKnifeCrosshairDistance},
                       m_hudCvars->crosshair(), size);
     }
-    if (m_consoleWindow != nullptr) {
-        m_logSink->showIn(*m_consoleWindow);
-        if (m_isConsoleOpen) {
-            m_consoleWindow->setBounds(cs::consoleBounds(size));
-            m_consoleWindow->paintTree(nx::ui::PanelPainter{m_screenQuads, size});
-        }
+    if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
+        m_logSink->showIn(*m_consoleWindow->dialog());
+        m_consoleWindow->paint(m_screenQuads, size);
     }
 }
 

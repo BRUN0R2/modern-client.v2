@@ -6,8 +6,10 @@ module cs.client;
 import std;
 import nx.core;
 import nx.platform;
+import nx.console;
 import nx.assets;
 import nx.rhi;
+import nx.render;
 import nx.ui;
 
 namespace cs {
@@ -99,6 +101,45 @@ auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PanelBounds {
             .y = tall / kMargin,
             .wide = wide - (2 * (wide / kMargin)),
             .tall = tall - (2 * (tall / kMargin))};
+}
+
+auto ConsoleWindow::open(const nx::assets::Vfs& vfs, nx::ui::FontCatalog& catalog,
+                         nx::console::Console& console, std::uint32_t screenHeight)
+    -> std::unique_ptr<ConsoleWindow> {
+    std::optional<nx::ui::SchemeFontSet> font = openConsoleFont(vfs, catalog, screenHeight);
+    if (!font) {
+        return nullptr; // openConsoleFont logged why
+    }
+    auto atlas = nx::ui::GlyphAtlas::build(*font, consoleCharacters());
+    if (!atlas) {
+        logNoWindow(atlas.error());
+        return nullptr;
+    }
+    return std::make_unique<ConsoleWindow>(CreateToken{}, console, std::move(*font), std::move(*atlas));
+}
+
+ConsoleWindow::ConsoleWindow(CreateToken /*token*/, nx::console::Console& console, nx::ui::SchemeFontSet font,
+                             nx::ui::GlyphAtlas atlas) noexcept
+    : m_console{&console}, m_font{std::move(font)}, m_atlas{std::move(atlas)} {}
+
+auto ConsoleWindow::load(nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands,
+                         nx::rhi::Extent2d size) -> nx::Result<void, nx::render::ScreenError> {
+    auto image = screen.loadImage(commands, m_atlas.texels(), m_atlas.width(), m_atlas.height(), "console");
+    if (!image) {
+        return std::unexpected{std::move(image.error())};
+    }
+    m_image.emplace(std::move(*image));
+    m_dialog.emplace(*m_console, consoleBounds(size));
+    m_dialog->setFace({.atlas = &m_atlas, .image = &*m_image});
+    return {};
+}
+
+void ConsoleWindow::paint(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size) {
+    if (!m_dialog || !m_isOpen) {
+        return;
+    }
+    m_dialog->setBounds(consoleBounds(size));
+    m_dialog->paintTree(nx::ui::PanelPainter{quads, size});
 }
 
 } // namespace cs
