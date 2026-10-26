@@ -166,7 +166,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
 
 auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
     -> nx::Result<void, SceneError> {
-    const nx::render::LightStyleValues styles = level.lightStyles().valuesAt(view.time);
+    const nx::render::LightStyleValues& styles = view.lightStyles;
     m_world.prepare({.camera = view.camera,
                      .aspect = view.aspect,
                      .time = view.time,
@@ -253,11 +253,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     // The weapon in hand is lit as modern shooters light theirs, readable whatever the map: a key light
     // above it and behind the eye, carried with the view, first; then the light of its flashes, one a
     // muzzle, the nearest; then the map's lights nearest it, in the room left.
-    std::vector<nx::render::StudioLight> lights{viewModelLightOf(view.camera)};
-    std::ranges::copy(m_flashes.lightsAt(view.time, whereIs), std::back_inserter(lights));
-    const std::size_t room =
-        nx::render::kMostStudioLights - std::min(lights.size(), nx::render::kMostStudioLights);
-    std::ranges::copy(nearestLights(level.lights(), view.camera.position, room), std::back_inserter(lights));
+    std::vector<nx::render::StudioLight> lights;
+    if (m_look == nx::render::StudioLook::Enhanced) {
+        lights.push_back(viewModelLightOf(view.camera));
+        std::ranges::copy(m_flashes.lightsAt(view.time, whereIs), std::back_inserter(lights));
+        const std::size_t room =
+            nx::render::kMostStudioLights - std::min(lights.size(), nx::render::kMostStudioLights);
+        std::ranges::copy(nearestLights(level.lights(), view.camera.position, room),
+                          std::back_inserter(lights));
+    }
     const std::array held{nx::render::StudioInstance{
         .model = *weaponModel,
         .bones = bones,
@@ -280,14 +284,12 @@ void Scene::drawEffects(nx::rhi::CommandList& list) const {
     nx::render::drawInOrder(list, m_viewSprites);
 }
 
-void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
-                            std::span<const nx::render::ModelPlacement> placements) {
+void Scene::bakeReflections(nx::rhi::CommandList& list, const SceneView& view) {
     if (!m_probes || m_probes->isBaked()) {
         return;
     }
-    m_probes->bakeNext(
-        list, m_world,
-        {.time = time, .lightStyles = level.lightStyles().valuesAt(time), .placements = placements});
+    m_probes->bakeNext(list, m_world,
+                       {.time = view.time, .lightStyles = view.lightStyles, .placements = view.placements});
 }
 
 auto Scene::shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position,

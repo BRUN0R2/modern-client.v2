@@ -6,7 +6,7 @@
 # repository.
 
 id = "cstrikeOriginal"
-isRedistributable = false          # never sent to clients; they need their own copy
+isRedistributable = false        # never sent to clients; they need their own copy
 steamAppId = 10                  # Counter-Strike on Steam
 steamInstallFolder = "Half-Life" # Steam names the folder after the base game of CS 1.6
 # Directories of the installation, mounted in this order, highest priority first: valve/ holds the

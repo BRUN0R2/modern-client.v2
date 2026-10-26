@@ -6,7 +6,7 @@
 /// ends; the client's cvars, by the original's names and with its values; and the binds, the
 /// commands the player's keys run, by the original's key names.
 ///
-/// Today: config.cfg, userconfig.cfg and autoexec.cfg; the mouse's and the video's cvars; the binds.
+/// Today: config.cfg, userconfig.cfg and autoexec.cfg; the keyboard's, mouse's and video's cvars; the binds.
 /// video.toml and audio.toml come with their consumers.
 export module nx.settings;
 

@@ -105,26 +105,12 @@ template <class Names>
 
 } // namespace
 
-auto readClientContent(const std::filesystem::path& data) -> nx::Result<ClientContent, LevelError> {
-    const std::filesystem::path lightStylesFile = data / "cstrike" / "lightStyles.toml";
-    auto lightStylesText = nx::platform::readTextFile(lightStylesFile);
-    if (!lightStylesText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(lightStylesText.error()));
-    }
-    auto lightStyles = readWorldLightStyles(*lightStylesText, nx::platform::toUtf8(lightStylesFile));
-    if (!lightStyles) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(lightStyles.error()));
-    }
-    return ClientContent{.lightStyles = std::move(*lightStyles)};
-}
-
-auto Level::load(const GameContent& content, const ClientContent& client, const GameMap& map)
+auto Level::load(const GameContent& content, const GameMap& map)
     -> nx::Result<std::unique_ptr<Level>, LevelError> {
     auto made = std::make_unique<Level>(CreateToken{});
     Level& level = *made;
     level.m_gameMap = &map;
     const nx::assets::BspView& bsp = map.map();
-    level.m_lightStyles = mapLightStyles(bsp, client.lightStyles);
     level.m_skyLight = skyLightOf(bsp);
     level.m_lights = highlightLightsOf(bsp);
     level.m_probePositions = probePositionsOf(bsp);

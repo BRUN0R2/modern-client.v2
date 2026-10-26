@@ -95,15 +95,6 @@ auto readModelFiles(const Vfs& vfs, std::string_view path, ModelTextures texture
     return files;
 }
 
-auto animationOf(const Vfs& vfs, const ModelFiles& files, nx::assets::SequenceIndex sequence)
-    -> nx::Result<nx::assets::AnimationFrames, ModelFileError> {
-    auto groupBytes = groupBytesOf(vfs, files, files.view->sequences()[sequence.value].group.value, sequence);
-    if (!groupBytes) {
-        return std::unexpected{std::move(groupBytes.error())};
-    }
-    return decodedIn(files, sequence, *groupBytes);
-}
-
 auto animationsOf(const Vfs& vfs, const ModelFiles& files)
     -> nx::Result<std::vector<nx::assets::AnimationFrames>, ModelFileError> {
     const std::span<const nx::assets::StudioSequence> sequences = files.view->sequences();

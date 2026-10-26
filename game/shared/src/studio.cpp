@@ -414,16 +414,17 @@ auto posePlayerBones(const nx::assets::MdlView& model,
     const auto poseOf = [&](std::uint32_t blend) {
         return localPoseOf(skeleton, animation, blend, whole, fraction, adjustments);
     };
-    LocalPose pose = poseOf(0);
+    LocalPose pose;
     if (animation.blendCount != kAimBlends) {
+        pose = poseOf(0);
         if (animation.blendCount > 1) {
             // pev->blending[0]: the yaw's blend cut to a whole one.
             blendPoses(pose, poseOf(1), std::trunc(query.yawBlend) / kBlendingTop);
         }
     } else {
         // The four blends around the aim, three by three, and each blend's share of its half, in double.
-        double yaw = query.yawBlend;
-        double pitch = query.pitchBlend;
+        double yaw = static_cast<double>(query.yawBlend);
+        double pitch = static_cast<double>(query.pitchBlend);
         const std::uint32_t right = yaw <= kBlendMiddle ? 0 : 1;
         const std::uint32_t down = pitch <= kBlendMiddle ? 0 : 1;
         yaw = right == 0 ? yaw * kBlendHalves : kBlendHalves * (yaw - kBlendMiddle);

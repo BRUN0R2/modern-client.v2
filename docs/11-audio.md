@@ -215,6 +215,6 @@ streamed.
 | `SentenceError` (planned, with sentences) | `UnknownSentence`, `MissingWord` |
 
 Today the output is the system's default, and SDL moves the stream to the new default when it
-changes. Planned ([TODO](../TODO.md)): losing the device (headphones unplugged) reopens the
+changes. Planned ([TODO](TODO.md)): losing the device (headphones unplugged) reopens the
 system's default and resumes every voice and stream where it was, with a diagnostic event; the
 game keeps running without audio meanwhile.

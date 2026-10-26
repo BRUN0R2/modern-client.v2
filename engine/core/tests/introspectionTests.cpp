@@ -36,6 +36,24 @@ enum class Signed : std::int8_t {
 
 } // namespace sample
 
+namespace {
+
+enum class LocalMode : std::uint8_t {
+    Off,
+    On,
+    Count,
+};
+
+} // namespace
+
+TEST(Introspection, AnonymousNamespaceEnumeratorsAreNamedButCastsAreNot) {
+    static_assert(nx::enumName(LocalMode::Off) == "Off");
+    static_assert(nx::enumName(LocalMode::On) == "On");
+    static_assert(nx::enumName(static_cast<LocalMode>(5)).empty());
+    static_assert(nx::enumerators<LocalMode>() == std::array{LocalMode::Off, LocalMode::On});
+    SUCCEED();
+}
+
 TEST(Introspection, NamesEveryEnumeratorOfACountedEnum) {
     EXPECT_EQ(nx::enumName(sample::Weapon::Knife), "Knife");
     EXPECT_EQ(nx::enumName(sample::Weapon::Glock), "Glock");

@@ -111,6 +111,12 @@ public:
     /// most `limit` decals on faces (setLimit).
     DecalPool(const assets::BspView& map, std::vector<DecalFace> faces, std::size_t limit);
 
+    DecalPool(const DecalPool&);
+    auto operator=(const DecalPool&) -> DecalPool&;
+    DecalPool(DecalPool&&) noexcept;
+    auto operator=(DecalPool&&) noexcept -> DecalPool&;
+    ~DecalPool();
+
     /// Takes the next decals in the first `limit` slots, kMostDecals at most; 0 stamps none. As the
     /// original's R_DecalAlloc reads r_decals at each decal: those past a lower limit stay until the
     /// overlap rule replaces them or a higher one brings their slots back into the ring.

@@ -197,18 +197,18 @@ struct Session {
     cs::ClientGame client;
 };
 
-/// The map `name` of `content`, the client's level of it read with `client`, its game started by the
+/// The map `name` of `content`, its client's level read, its game started by the
 /// rules `cvars` set, the client's player joined in the team of its first spawn point, its weapons
 /// drawn as `autoSwitch` says. Errors: CommandFailed, with the cause.
-[[nodiscard]] auto startSession(const cs::GameContent& content, const cs::ClientContent& client,
-                                std::string_view name, cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
+[[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
+                                cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
     -> nx::Result<Session, ConsoleError> {
     const std::string failed = std::format("map {}", name);
     auto map = cs::GameMap::load(content.vfs, name);
     if (!map) {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(map.error()));
     }
-    auto level = cs::Level::load(content, client, **map);
+    auto level = cs::Level::load(content, **map);
     if (!level) {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));
     }
@@ -339,7 +339,6 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::GameContent> m_content;
-    std::optional<cs::ClientContent> m_clientContent;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
@@ -428,11 +427,6 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
     m_content = std::move(*content);
-    auto clientContent = cs::readClientContent(data);
-    if (!clientContent) {
-        return nx::fail(ClientError::ContentUnavailable, std::move(clientContent.error()));
-    }
-    m_clientContent = std::move(*clientContent);
     if (auto registered = registerWeaponCommands(); !registered) {
         return registered;
     }
@@ -573,8 +567,7 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session =
-        startSession(*m_content, *m_clientContent, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
+    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
     if (!session) {
         return std::unexpected{std::move(session.error())};
     }
@@ -737,7 +730,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(m_cvars->player));
             playSession(elapsed);
             m_camera.position = m_session->client.eye();
-            m_players = m_session->client.updatePlayers(elapsed);
+            m_session->client.updatePlayers(elapsed, m_players);
             turnAsTheGameDid();
             hearSession(hearing);
             stampBulletHoles();
@@ -771,7 +764,7 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
                 return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
             }
         } else {
-            m_keys.handle(event);
+            m_keys.handle(event, m_cvars->keyboard.keymap.value());
         }
     }
     return {};
@@ -1033,10 +1026,12 @@ auto Client::sessionView() -> cs::SceneView {
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
-    m_placements = m_session->client.placements();
-    m_hostages = m_session->client.hostages();
+    m_session->client.writePlacements(m_placements);
+    m_session->client.writeHostages(m_hostages);
+    const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
-            .time = nx::Seconds{m_mapClock.elapsed()},
+            .time = time,
+            .lightStyles = m_session->client.lightStylesAt(time),
             .placements = m_placements,
             .hostages = m_hostages,
             .players = m_players,

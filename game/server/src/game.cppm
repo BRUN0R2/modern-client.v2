@@ -249,6 +249,7 @@ private:
     nx::ecs::World m_world;
     std::vector<Player> m_players;
     std::vector<Impact> m_impacts; ///< Of the tick.
+    MapLightStyles lightStyles;    ///< Owned by this game; copied into each client's snapshot.
 };
 
 } // namespace cs

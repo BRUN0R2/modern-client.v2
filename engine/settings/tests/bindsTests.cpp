@@ -140,11 +140,14 @@ TEST(BoundInputTest, AButtonIsHeldWhileItsKeyIsDown) {
     keys.run("bind SPACE +jump");
     nx::settings::BoundInput input{keys.console, keys.bindings};
 
-    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::Space, .isDown = true});
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::Space, .isDown = true},
+                 nx::settings::KeyMapping::Scancode);
     keys.run("");
     EXPECT_TRUE(keys.jump.isDown());
-    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::Space, .isDown = true, .isRepeat = true});
-    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::Space, .isDown = false});
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::Space, .isDown = true, .isRepeat = true},
+                 nx::settings::KeyMapping::Scancode);
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::Space, .isDown = false},
+                 nx::settings::KeyMapping::Scancode);
     keys.run("");
     EXPECT_FALSE(keys.jump.isDown()) << "the repeat held nothing more";
     EXPECT_TRUE(keys.output.failures.empty());
@@ -175,15 +178,123 @@ TEST(BoundInputTest, TheKeysNumberFollowsTheWholeCommand) {
     EXPECT_EQ(keys.output.lines, std::vector<std::string>{"pressed"}) << "once, as it went down";
 }
 
+TEST(BoundInputTest, BothControlKeysKeepTheirButtonDownUntilBothAreReleased) {
+    Keys keys;
+    keys.run("bind CTRL +jump");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::LeftControl, .isDown = true},
+                 nx::settings::KeyMapping::Scancode);
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::RightControl, .isDown = true},
+                 nx::settings::KeyMapping::Scancode);
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::LeftControl, .isDown = false},
+                 nx::settings::KeyMapping::Scancode);
+    keys.run("");
+    EXPECT_TRUE(keys.jump.isDown());
+    input.handle(nx::platform::KeyChanged{.key = nx::platform::Key::RightControl, .isDown = false},
+                 nx::settings::KeyMapping::Scancode);
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown());
+}
+
+TEST(BoundInputTest, UnbindingAHeldKeyStillReleasesTheButtonItPressed) {
+    Keys keys;
+    keys.run("bind SPACE +jump");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.press(named("SPACE"));
+    keys.run("unbind SPACE");
+    ASSERT_TRUE(keys.jump.isDown());
+    input.release(named("SPACE"));
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown());
+}
+
+TEST(BoundInputTest, AReleaseKeepsItsPressedMappingAcrossLayoutAndModeChanges) {
+    using nx::platform::Key;
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    Keys keys;
+    keys.run("bind z +jump; bind w echo wrong");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.handle(KeyChanged{.key = Key::W, .isDown = true, .character = U'z'}, KeyMapping::Keycode);
+    keys.run("");
+    ASSERT_TRUE(keys.jump.isDown());
+    input.handle(KeyChanged{.key = Key::W, .isDown = false, .character = U'w'}, KeyMapping::Scancode);
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown());
+    EXPECT_TRUE(keys.output.lines.empty());
+    EXPECT_TRUE(keys.output.failures.empty());
+}
+
+TEST(BoundInputTest, RepeatsAndRebindingDoNotChangeWhatAHeldKeyMustRelease) {
+    using nx::platform::Key;
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    Keys keys;
+    keys.run("bind z +jump; bind w echo wrong");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.handle(KeyChanged{.key = Key::W, .isDown = true, .character = U'z'}, KeyMapping::Keycode);
+    keys.run("bind z echo changed");
+    input.handle(KeyChanged{.key = Key::W, .isDown = true, .isRepeat = true, .character = U'w'},
+                 KeyMapping::Scancode);
+    input.handle(KeyChanged{.key = Key::W, .isDown = false}, KeyMapping::Keycode);
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown());
+    EXPECT_TRUE(keys.output.lines.empty());
+    EXPECT_TRUE(keys.output.failures.empty());
+}
+
+TEST(BoundInputTest, SharedLayoutKeysStayDownUntilTheLastPhysicalKeyIsReleased) {
+    using nx::platform::Key;
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    Keys keys;
+    keys.run("bind z +jump");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.handle(KeyChanged{.key = Key::W, .isDown = true, .character = U'z'}, KeyMapping::Keycode);
+    input.handle(KeyChanged{.key = Key::Z, .isDown = true, .character = U'z'}, KeyMapping::Keycode);
+    input.handle(KeyChanged{.key = Key::W, .isDown = false}, KeyMapping::Keycode);
+    keys.run("");
+    EXPECT_TRUE(keys.jump.isDown());
+    input.handle(nx::platform::FocusChanged{.isFocused = false}, KeyMapping::Keycode);
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown());
+    input.handle(KeyChanged{.key = Key::Z, .isDown = true, .isRepeat = true, .character = U'z'},
+                 KeyMapping::Keycode);
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown()) << "a repeat after focus loss does not synthesize a press";
+    input.handle(KeyChanged{.key = Key::Z, .isDown = false}, KeyMapping::Keycode);
+    input.handle(KeyChanged{.key = Key::Z, .isDown = true, .character = U'z'}, KeyMapping::Keycode);
+    keys.run("");
+    EXPECT_TRUE(keys.jump.isDown()) << "a fresh press works after focus returns";
+}
+
+TEST(BoundInputTest, AnUnmappedPressStaysUnmappedUntilThePhysicalKeyComesUp) {
+    using nx::platform::Key;
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    Keys keys;
+    keys.run("bind w +jump");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.handle(KeyChanged{.key = Key::W, .isDown = true, .character = U'\u00e9'}, KeyMapping::Keycode);
+    input.handle(KeyChanged{.key = Key::W, .isDown = true}, KeyMapping::Scancode);
+    keys.run("");
+    EXPECT_FALSE(keys.jump.isDown()) << "a mode change cannot turn a duplicate down into a new press";
+    input.handle(KeyChanged{.key = Key::W, .isDown = false}, KeyMapping::Scancode);
+    input.handle(KeyChanged{.key = Key::W, .isDown = true}, KeyMapping::Scancode);
+    keys.run("");
+    EXPECT_TRUE(keys.jump.isDown());
+}
+
 TEST(BoundInputTest, AWheelNotchPressesAndReleasesItsKey) {
+    constexpr float kHalfNotchDown = -0.5F;
     Keys keys;
     keys.run("bind MWHEELDOWN +jump");
     nx::settings::BoundInput input{keys.console, keys.bindings};
 
-    input.handle(nx::platform::MouseWheelMoved{.dy = -0.5F});
+    input.handle(nx::platform::MouseWheelMoved{.dy = kHalfNotchDown}, nx::settings::KeyMapping::Scancode);
     keys.run("");
     EXPECT_FALSE(keys.jump.takeEdges().pressed) << "half a notch";
-    input.handle(nx::platform::MouseWheelMoved{.dy = -0.5F});
+    input.handle(nx::platform::MouseWheelMoved{.dy = kHalfNotchDown}, nx::settings::KeyMapping::Scancode);
     keys.run("");
     const nx::console::ButtonEdges edges = keys.jump.takeEdges();
     EXPECT_TRUE(edges.pressed);
@@ -196,11 +307,11 @@ TEST(BoundInputTest, KeysComeUpWhenTheWindowLosesTheKeyboard) {
     keys.run("bind MOUSE2 +jump");
     nx::settings::BoundInput input{keys.console, keys.bindings};
 
-    input.handle(
-        nx::platform::MouseButtonChanged{.button = nx::platform::MouseButton::Right, .isDown = true});
+    input.handle(nx::platform::MouseButtonChanged{.button = nx::platform::MouseButton::Right, .isDown = true},
+                 nx::settings::KeyMapping::Scancode);
     keys.run("");
     EXPECT_TRUE(keys.jump.isDown());
-    input.handle(nx::platform::FocusChanged{.isFocused = false});
+    input.handle(nx::platform::FocusChanged{.isFocused = false}, nx::settings::KeyMapping::Scancode);
     keys.run("");
     EXPECT_FALSE(keys.jump.isDown());
 }

@@ -9,6 +9,7 @@ nxAddTest(nxPlatformTests
         windowTests.cpp
     DEPENDS
         nx::platform
+        SDL3::SDL3
     # Windows without a display and sound played to no device, in CI and on a developer's desktop
     # alike: SDL's dummy output takes blocks at the pace of a real one.
     ENVIRONMENT

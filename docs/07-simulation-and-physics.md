@@ -70,6 +70,12 @@ and the weapon `weapon_<id>` or `lastinv` selected since the last. `next` (`cs::
 one each 10 ms, whatever its frame rate, numbered after the last, and the server's game (`cs::Game`)
 runs each in a tick; `cl_movement_rate` comes with the client.
 
+Frame extraction writes into caller-owned vectors (`ClientGame::writePlacements`, `writeHostages`
+and `updatePlayers`), replacing the previous frame's contents while retaining their capacity. Each
+received snapshot indexes the preceding snapshot's player origins by `PlayerIndex`; interpolation
+then looks up each origin in constant time, independent of the order or gaps in the snapshot. An
+origin absent from the preceding snapshot is not interpolated from older visibility.
+
 ### 2.3 Shared seed
 
 Spread and other weapon randomness use a **seed derived from the command number**,
@@ -162,7 +168,7 @@ code** on the server (authoritative) and on the client (prediction).
   pushers no longer push it, as the original's corpse once its death is played (`MOVETYPE_NONE`).
   Observers, the body of a player killed by another (tossed, `PM_Physics_Toss`), players and
   pushables as boxes (and a player stuck in another one pushed out by force), conveyors, pushes and
-  currents come next ([TODO](../TODO.md)).
+  currents come next ([TODO](TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 

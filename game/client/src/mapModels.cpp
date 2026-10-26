@@ -90,9 +90,11 @@ auto mapModelsOf(const nx::assets::BspView& map) -> std::vector<MapModel> {
 auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map) -> MapModels {
     MapModels read;
     std::map<std::string, std::optional<std::size_t>, std::less<>> files; // by path; none: left out
-    std::uint32_t hostagesSeen = 0; // a hostage's index among the map's: its spawn's, read or not
     for (MapModel& model : mapModelsOf(map)) {
-        const std::uint32_t spawn = model.kind == ModelClass::Hostage ? hostagesSeen++ : 0;
+        const std::size_t spawn = read.hostagesBySpawn.size();
+        if (model.kind == ModelClass::Hostage) {
+            read.hostagesBySpawn.emplace_back();
+        }
         auto [found, isNew] = files.try_emplace(model.model | std::views::transform(nx::toLowerAscii) |
                                                 std::ranges::to<std::string>()); // the VFS ignores case
         if (isNew) {
@@ -112,15 +114,14 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
             model.sequence = cyclerSequenceOf(model, *read.m_files[file].files->view).value;
             read.m_cyclers.push_back(Entity{.model = std::move(model), .file = file});
         } else {
-            read.m_hostages.push_back(Entity{.model = std::move(model), .file = file, .spawn = spawn});
+            read.hostagesBySpawn[spawn] = Entity{.model = std::move(model), .file = file};
         }
     }
     return read;
 }
 
 auto MapModels::hostageOf(std::uint32_t spawn) const noexcept -> const Entity* {
-    const auto found = std::ranges::find(m_hostages, spawn, &Entity::spawn);
-    return found != m_hostages.end() ? &*found : nullptr;
+    return spawn < hostagesBySpawn.size() && hostagesBySpawn[spawn] ? &*hostagesBySpawn[spawn] : nullptr;
 }
 
 auto MapModels::hostageModel(std::uint32_t spawn) const noexcept -> const nx::assets::MdlView* {

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// What the client sets up as the game would: the light styles, the sky's light and the sprite entities of
+// What the client sets up as the game would: the sky's light and the sprite entities of
 // a map, the view of a player at its first spawn point, the BSP seed of the fuzz corpus given other
 // entities, and how those sprites animate.
 
@@ -17,6 +17,8 @@ import cs.shared;
 import cs.client;
 
 #include "boxMap.hpp"
+#include "temporaryDirectory.hpp"
+#include "triangleModel.hpp"
 
 namespace {
 
@@ -53,69 +55,6 @@ void expectNear(nx::Vec3 actual, nx::Vec3 expected, std::string_view what = {}) 
     EXPECT_NEAR(actual.x, expected.x, kTolerance) << what;
     EXPECT_NEAR(actual.y, expected.y, kTolerance) << what;
     EXPECT_NEAR(actual.z, expected.z, kTolerance) << what;
-}
-
-/// The light styles of the repository's data/cstrike/lightStyles.toml.
-[[nodiscard]] auto gameLightStyles() -> cs::WorldLightStyles {
-    const std::filesystem::path file =
-        std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "lightStyles.toml";
-    auto text = nx::platform::readTextFile(file);
-    EXPECT_TRUE(text.has_value());
-    auto styles = cs::readWorldLightStyles(text.value_or(std::string{}), "lightStyles.toml");
-    EXPECT_TRUE(styles.has_value()) << (styles ? "" : nx::describe(styles.error()));
-    return std::move(styles).value_or(cs::WorldLightStyles{});
-}
-
-TEST(LightStyleTest, TheGameSetsTheWorldsPatternsAsAMapStarts) {
-    const MapOf map{R"({ "classname" "worldspawn" })"};
-    const nx::render::LightStyles styles = cs::mapLightStyles(map.get(), gameLightStyles());
-    const nx::render::LightStyleValues start = styles.valuesAt(nx::Seconds{});
-    const nx::render::LightStyleValues later = styles.valuesAt(nx::Seconds{0.15F});
-    EXPECT_EQ(start[0], 264) << "normal: m";
-    EXPECT_EQ(start[4], 264) << "the fast strobe starts at m...";
-    EXPECT_EQ(later[4], 0) << "...then a";
-    EXPECT_EQ(start[9], 0) << "the slow strobe starts dark";
-    EXPECT_EQ(start[12], 256) << "the underwater mutation stays unset";
-    EXPECT_EQ(start[63], 0) << "testing: a";
-}
-
-TEST(LightStyleTest, AStyleIsGivenOnceInLettersFromAToZ) {
-    const auto errorOf = [](std::string_view text) {
-        const auto read = cs::readWorldLightStyles(text, "test");
-        return read ? std::nullopt : std::optional{read.error().code};
-    };
-    EXPECT_EQ(errorOf(R"([[styles]]
-style = 1
-pattern = "mM")"),
-              cs::LightStyleError::BadPattern);
-    EXPECT_EQ(errorOf(R"([[styles]]
-style = 1
-pattern = "")"),
-              cs::LightStyleError::BadPattern);
-    EXPECT_EQ(errorOf(R"([[styles]]
-style = 1
-pattern = "m"
-[[styles]]
-style = 1
-pattern = "a")"),
-              cs::LightStyleError::StyleTwice);
-    EXPECT_EQ(errorOf(R"([[styles]]
-style = 64
-pattern = "m")"),
-              cs::LightStyleError::DataInvalid)
-        << "the game sets 64 styles";
-}
-
-TEST(LightStyleTest, ASwitchableLightStartsAsItsEntitySays) {
-    const MapOf map{R"({ "classname" "worldspawn" }
-{ "classname" "light" "targetname" "lamp" "style" "32" "spawnflags" "1" }
-{ "classname" "light" "targetname" "sign" "style" "33" "pattern" "z" }
-{ "classname" "light" "style" "34" "pattern" "z" })"};
-    const nx::render::LightStyleValues values =
-        cs::mapLightStyles(map.get(), gameLightStyles()).valuesAt(nx::Seconds{});
-    EXPECT_EQ(values[32], 0) << "flagged to start off: a";
-    EXPECT_EQ(values[33], 550) << "its pattern: z";
-    EXPECT_EQ(values[34], 256) << "a light without a name cannot be switched: no pattern of its own";
 }
 
 TEST(SpawnViewTest, ThePlayersEyeIsAtTheFirstCounterTerroristSpawnPoint) {
@@ -233,6 +172,62 @@ TEST(MapModelTest, ModelEntitiesAreReadAsTheGameMakesThem) {
 
     EXPECT_EQ(models[2].model, "models/scientist.mdl") << "a hostage without a model";
     EXPECT_EQ(models[2].skin, 0U) << "a negative skin is 0";
+}
+
+TEST(MapModelsTest, MissingModelsKeepTheirSpawnPositionsAndFrameStorageIsReused) {
+    constexpr std::size_t kFirstPresentSpawn = 1;
+    constexpr std::size_t kMissingSpawn = 2;
+    constexpr std::size_t kLastPresentSpawn = 3;
+    constexpr float kFirstPresentX = 10.0F;
+    constexpr float kLastPresentX = 30.0F;
+    nx::test::TemporaryDirectory files;
+    const nx::test::TriangleModel model;
+    const auto write = [&files](std::string_view path, std::span<const std::byte> bytes) {
+        const std::string text =
+            bytes | std::views::transform([](std::byte value) { return static_cast<char>(value); }) |
+            std::ranges::to<std::string>();
+        files.write(path, text);
+    };
+    write("models/triangle.mdl", model.bytes);
+    write("models/triangle01.mdl", model.groupFile);
+    auto vfs = nx::assets::Vfs::create(std::array{files.path()});
+    ASSERT_TRUE(vfs.has_value()) << nx::describe(vfs.error());
+    const MapOf map{R"({ "classname" "worldspawn" }
+{ "classname" "hostage_entity" "model" "models/missing.mdl" }
+{ "classname" "cycler_sprite" "model" "models/triangle.mdl" }
+{ "classname" "hostage_entity" "model" "models/triangle.mdl" }
+{ "classname" "hostage_entity" "model" "models/missing.mdl" }
+{ "classname" "hostage_entity" "model" "models/triangle.mdl" })"};
+    const cs::MapModels models = cs::MapModels::read(*vfs, map.get());
+    EXPECT_EQ(models.missing().size(), 1U) << "one report for the shared missing file";
+    EXPECT_EQ(models.hostageModel(0), nullptr);
+    ASSERT_NE(models.hostageModel(1), nullptr);
+    EXPECT_EQ(models.hostageModel(2), nullptr);
+    EXPECT_EQ(models.hostageModel(3), models.hostageModel(1));
+    EXPECT_EQ(models.hostageModel(4), nullptr);
+
+    const auto weapons = cs::WeaponCatalog::make({}, {});
+    ASSERT_TRUE(weapons.has_value()) << nx::describe(weapons.error());
+    const cs::PlayerModels playerModels = cs::PlayerModels::read(*vfs, {}, *weapons);
+    cs::PlayerSnapshot first{.inventory = cs::Inventory{*weapons}};
+    first.hostages = {cs::HostageState{.spawn = kLastPresentSpawn, .origin = {.x = kLastPresentX}},
+                      cs::HostageState{.spawn = kMissingSpawn},
+                      cs::HostageState{.spawn = kFirstPresentSpawn, .origin = {.x = kFirstPresentX}}};
+    cs::ClientGame client{models, playerModels, std::move(first)};
+    std::vector<cs::ShownHostage> shown;
+    client.writeHostages(shown);
+    ASSERT_EQ(shown.size(), 2U);
+    EXPECT_EQ(shown[0].spawn, 3U);
+    EXPECT_FLOAT_EQ(shown[0].origin.x, 30.0F);
+    EXPECT_EQ(shown[1].spawn, 1U);
+    EXPECT_FLOAT_EQ(shown[1].origin.x, 10.0F);
+    const cs::ShownHostage* const storage = shown.data();
+    client.writeHostages(shown);
+    EXPECT_EQ(shown.data(), storage);
+    EXPECT_EQ(shown.size(), 2U);
+    client.receive(cs::PlayerSnapshot{.inventory = cs::Inventory{*weapons}});
+    client.writeHostages(shown);
+    EXPECT_TRUE(shown.empty());
 }
 
 } // namespace

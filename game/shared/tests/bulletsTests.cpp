@@ -85,6 +85,19 @@ TEST(BulletsTest, ItsDamageIsItsRangeModifiersPowerOfTheDistanceItWent) {
     EXPECT_TRUE(hits[0].isBrushModel);
 }
 
+TEST(BulletsTest, RangeDecayKeepsTheFloatProductBeforeIntegerTruncation) {
+    Shot shot = akShot();
+    shot.reach = nx::HammerUnits{1000.0F};
+    shot.round.damage = nx::Damage{30.0F};
+    shot.round.rangeModifier = 0.7F;
+    std::vector<Traced> traced;
+    const std::vector<BulletHit> hits = cs::followRound(
+        shot, tracerOf({wallAt(500.0F, 0.0F, 1000.0F)}, traced), madeOf(TextureMaterial::Dirt));
+    ASSERT_EQ(hits.size(), 1U);
+    EXPECT_EQ(hits[0].damage.value(), 21.0F)
+        << "the float product rounds to 21; promoting its operands would truncate to 20";
+}
+
 TEST(BulletsTest, ARoundGoesOnThroughABrushModelAsFarAsItsMaterialLetsIt) {
     std::vector<Traced> traced;
     // Concrete at x = 100 keeps a quarter of 39, 9, and leaves the default half of the damage.
@@ -99,7 +112,8 @@ TEST(BulletsTest, ARoundGoesOnThroughABrushModelAsFarAsItsMaterialLetsIt) {
     EXPECT_EQ(hits[0].damage.value(), static_cast<float>(first));
     const float travelled = (300.0F - 109.0F);
     const auto second = static_cast<std::int32_t>(
-        static_cast<float>(static_cast<std::int32_t>(first * 0.5F)) * std::pow(0.98F, travelled / 500.0F));
+        static_cast<float>(static_cast<std::int32_t>(static_cast<float>(first) * 0.5F)) *
+        std::pow(0.98F, travelled / 500.0F));
     EXPECT_EQ(hits[1].damage.value(), static_cast<float>(second));
 }
 

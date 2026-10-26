@@ -53,6 +53,25 @@ TEST(KeysTest, TheKeyboardsKeysHaveTheOriginalsNumbers) {
     }
 }
 
+TEST(KeysTest, KeyboardMappingSelectsThePositionOrTheLayoutsBaseCharacter) {
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    const KeyChanged frenchW{.key = Key::W, .character = U'z'};
+    EXPECT_EQ(keyOf(frenchW, KeyMapping::Scancode), key('w'));
+    EXPECT_EQ(keyOf(frenchW, KeyMapping::Keycode), key('z'));
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::Y, .character = U'Z'}, KeyMapping::Keycode), key('z'));
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::Digit1, .character = U'&'}, KeyMapping::Keycode), key('&'));
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::Semicolon, .character = U';'}, KeyMapping::Keycode), key(';'));
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::A, .character = U'\u00e9'}, KeyMapping::Keycode), std::nullopt);
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::A}, KeyMapping::Keycode), std::nullopt)
+        << "an unknown layout character is not silently mapped by position";
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::LeftControl}, KeyMapping::Keycode), key(133));
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::Space}, KeyMapping::Keycode), key(32));
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::Keypad4, .character = U'4'}, KeyMapping::Keycode),
+              keyOf(Key::Keypad4))
+        << "the keypad retains its KP_ keys even when SDL hides the numpad distinction";
+}
+
 TEST(KeysTest, TheMousesButtonsAreMouse1ToMouse5) {
     EXPECT_EQ(keyOf(MouseButton::Left), keyNamed("MOUSE1"));
     EXPECT_EQ(keyOf(MouseButton::Right), keyNamed("MOUSE2"));

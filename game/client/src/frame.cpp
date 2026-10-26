@@ -161,7 +161,7 @@ auto FrameRenderer::record(nx::rhi::CommandList& list, nx::rhi::TextureHandle ta
 auto FrameRenderer::recordEnhancedScene(nx::rhi::CommandList& list, nx::rhi::Extent2d extent,
                                         const FrameScene& scene) -> nx::Result<void, FrameError> {
     // A reflection probe baked a frame, before the scene draws: the world prepares its views first.
-    scene.scene.bakeReflections(list, scene.level, scene.view.time, scene.view.placements);
+    scene.scene.bakeReflections(list, scene.view);
     const nx::rhi::TextureHandle sceneTarget = m_post->sceneTarget();
     const nx::rhi::TextureHandle depth = m_depth->get();
     list.transition(sceneTarget, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);

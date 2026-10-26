@@ -6,7 +6,7 @@
 ///
 /// Today: the player's input, the buttons the binds hold, the commands they make and the view the
 /// keys turn; a level of the game's map, what its entities show as the game sets them up until the
-/// server tells them (the light of the map, its sprites and studio models, the weapon in hand and its
+/// server tells them (its sprites and studio models, the weapon in hand and its
 /// muzzle flashes, its decals and the marks bullets leave), and the models the other players are drawn
 /// with; the scene that draws it, and how a frame
 /// of it and the screen over it are drawn (FrameRenderer); the game as its player's client knows it,

@@ -7,6 +7,8 @@ import std;
 import nx.core;
 import nx.render;
 
+#include "contractRecorder.hpp"
+
 namespace {
 
 using nx::Seconds;
@@ -46,6 +48,31 @@ TEST(LightStyleTest, CharactersOutsideTheLettersAreHeldToThem) {
     EXPECT_EQ(styles.valuesAt(Seconds{0.1F})[0], 550) << "'~' is after 'z'";
     styles.set(0, "");
     EXPECT_EQ(styles.valuesAt(Seconds{0.0F})[0], 256) << "unset again";
+}
+
+TEST(LightStyleTest, ReplacingPatternsClearsAbsentStylesAndOwnsTheNewPatterns) {
+    LightStyles styles;
+    styles.set(32, "z");
+    std::array<std::string, nx::render::kLightStyleCount> patterns{};
+    patterns[4] = "ma";
+    patterns[33] = "M~";
+    styles.setPatterns(patterns);
+    patterns[4] = "a";
+    EXPECT_EQ(styles.valuesAt(Seconds{})[4], 264);
+    EXPECT_EQ(styles.valuesAt(Seconds{0.15F})[4], 0);
+    EXPECT_EQ(styles.valuesAt(Seconds{})[32], 256) << "the old pattern was removed";
+    EXPECT_EQ(styles.valuesAt(Seconds{})[33], 0);
+    EXPECT_EQ(styles.valuesAt(Seconds{0.15F})[33], 550) << "normalized as set normalizes";
+}
+
+TEST(LightStyleTest, AnObservedInvalidStyleLeavesEveryPatternUntouched) {
+    const nx::test::ContractRecorder recorder;
+    LightStyles styles;
+    styles.set(0, "m");
+    const auto before = styles.valuesAt(Seconds{});
+    styles.set(nx::render::kLightStyleCount, "z");
+    EXPECT_EQ(nx::test::ContractRecorder::count(), 1);
+    EXPECT_EQ(styles.valuesAt(Seconds{}), before);
 }
 
 } // namespace

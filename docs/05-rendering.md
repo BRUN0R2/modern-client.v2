@@ -56,6 +56,10 @@ express**. The vocabulary is close to WebGPU's.
   device's create functions give and which destroys it when it lets it go or ends; destruction is
   deferred until the GPU finishes the frame that used the resource.
 - Every creation error returns `nx::Result<T, RhiError>`
+- A Vulkan device requested with validation requires the Khronos layer and debug messenger
+  extension. Missing validation returns `RhiError::ValidationUnavailable`; device creation never
+  silently drops the request. Tests cover both validation errors and unavailable validation
+  ([18](18-testing-and-quality.md#c-test-conventions)).
   (`OutOfDeviceMemory`, `UnsupportedFormat`, `DeviceLost`, `SurfaceLost`…).
 - Debug names are mandatory (`.label`), propagated to RenderDoc and the validation layers.
 - A device is created for the window it presents to (or for none): the swapchain then needs only
@@ -252,11 +256,16 @@ luxels around each point, as the original's bilinear filter blends its light tex
 without lightmaps is fully bright, as the original draws a face without samples. The styles'
 brightness comes with each draw (`nx.render:lightStyle`): 22 for each letter of a style's pattern
 after `a` (264 at `m`, the normal one), ten letters a second, 256 for a style the game left unset,
-and 264 for the styles above the 64 the game sets. The client (`cs.client`) sets the world's patterns (flicker,
+and 264 for the styles above the 64 the game sets. The server (`cs::Game`) sets the world's patterns (flicker,
 candles, strobes, pulses...) from `data/cstrike/lightStyles.toml` (`cs::WorldLightStyles`, each style
 once, in letters from `a` to `z`), as Quake's world.qc sets them, under the names the Half-Life FGDs
 give the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
-their entities, `a` for those that start off, else `m` or their `pattern`.
+their entities, `a` for those that start off, else `m` or their `pattern`. The data is read once
+with `cs::GameContent` (`cs.shared:lightStyles`), and the server owns a `cs::MapLightStyles` for
+its map and sends a copy in each `cs::PlayerSnapshot`. The client evaluates these patterns at
+the frame's map time (`ClientGame::lightStylesAt`), replacing removed patterns as well as changed
+ones. `SceneView::lightStyles` supplies the same values to the world, models, sprites and
+reflection baking; neither `Level` nor the scene reconstructs game state from local data.
 
 The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
 infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
@@ -386,6 +395,10 @@ flowchart LR
    (`models/p_<weapon>.mdl`) takes the bones of the player's of the same names (`cs::mergeBones`, the
    engine's `StudioMergeBones`), its others posed at its first sequence's first frame. The transitions
    between sequences and the jobs come later.
+   Only the four aim blends needed by the query are evaluated; there is no discarded first pose.
+   View models decode their sequences through `cs::animationsOf`, the same reader as the map's and
+   players' models: each external sequence group is read once per model load, however many sequences
+   use it, with the same typed failures for a missing or invalid animation.
 2. **Bone palette:** `Mat3x4` (48 bytes) per bone, written straight into the persistent
    mapped upload ring. Each instance keeps a `paletteOffset`.
 3. **Vertex shader:** fetches `bones[paletteOffset + vertex.boneIndex]`. The MDL v10 format
@@ -476,7 +489,10 @@ flowchart LR
    controllers straight ahead (`SetController` of 0 degrees, `cs::controllerSettingOf`); each turned by
    its entity's angles, the pitch negated as the engine's studio transform negates it, lit where it
    is. The render effects, the players' colors, the bob of the view's model and instancing come with
-   their consumers.
+   their consumers. Hostage models are indexed by their map spawn, including absent models, so each
+   frame looks them up in constant time. Highlight lights are selected only for the enhanced look,
+   with working storage bounded by the remaining light budget; a zero budget does not scan the map's
+   lights.
 4. **Modern formats (glTF)** use up to 4 influences (`joints: u8x4/u16x4`,
    `weights: unorm8x4`), in the same pipeline with another permutation.
 5. **Compute skinning** (`r_skinning compute`): pre-transforms vertices once per frame

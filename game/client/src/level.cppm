@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// A map as the client draws it (docs/06-assets-and-resources.md): the map as the game plays it
-/// (cs::GameMap), and what its world and entities show, read once, which the views point into; and the
-/// content only the client reads besides the game's.
+/// (cs::GameMap), and what its world and entities show, read once, which the views point into.
 export module cs.client:level;
 
 import std;
@@ -27,21 +26,9 @@ export namespace cs {
 
 /// Why the client's content or a map of it could not be read.
 enum class LevelError : std::uint8_t {
-    ContentUnavailable,  ///< The project's data could not be read (cause).
     GameUnspawnable,     ///< The map's entities could not be made (cause).
     ViewModelUnreadable, ///< A weapon's view model could not be read (cause).
 };
-
-/// What only the client reads of the project's data besides the game's content: the light styles the
-/// game sets as a map starts (data/cstrike/lightStyles.toml), which the client sets until its server
-/// tells them (TODO.md).
-struct ClientContent {
-    WorldLightStyles lightStyles;
-};
-
-/// Reads the client's content from `data`, the project's data/ folder. Errors: ContentUnavailable.
-[[nodiscard]] auto readClientContent(const std::filesystem::path& data)
-    -> nx::Result<ClientContent, LevelError>;
 
 /// A map as the client draws it: the map as the game plays it, the WADs of its textures, its sky, the
 /// light the game gives it, the sprites and studio models its entities show, the decals it shows, those
@@ -56,11 +43,11 @@ class Level {
     };
 
 public:
-    /// The level of `map` of `content`, which must both outlive it, lit by the light styles of `client`.
+    /// The level of `map` of `content`, which must both outlive it.
     /// A WAD, the sky, a sprite or a studio model the installation lacks is left out and logged, as the
     /// original carries on without it. Errors: GameUnspawnable, ViewModelUnreadable.
-    [[nodiscard]] static auto load(const GameContent& content, const ClientContent& client,
-                                   const GameMap& map) -> nx::Result<std::unique_ptr<Level>, LevelError>;
+    [[nodiscard]] static auto load(const GameContent& content, const GameMap& map)
+        -> nx::Result<std::unique_ptr<Level>, LevelError>;
 
     /// Use load(). Public only so that load() can use std::make_unique.
     inline explicit Level(CreateToken /*token*/) noexcept {}
@@ -79,10 +66,6 @@ public:
     [[nodiscard]] inline auto wads() const noexcept -> std::span<const nx::assets::WadView> { return m_wads; }
     /// Its sides, in the order of nx::render::kSkySuffixes; none when no sky could be read.
     [[nodiscard]] inline auto sky() const noexcept -> std::span<const nx::assets::RgbaImage> { return m_sky; }
-    /// The patterns its light styles play.
-    [[nodiscard]] inline auto lightStyles() const noexcept -> const nx::render::LightStyles& {
-        return m_lightStyles;
-    }
     /// The sky's light, its light_environment's.
     [[nodiscard]] inline auto skyLight() const noexcept -> const nx::render::SkyLight& { return m_skyLight; }
     /// Where its reflection probes go (probePositionsOf), in the enhanced look.
@@ -139,7 +122,6 @@ private:
     std::vector<MapDecal> m_mapDecals;
     std::vector<BulletMark> m_bulletMarks; ///< By brush model.
     std::vector<nx::assets::RgbaImage> m_sky;
-    nx::render::LightStyles m_lightStyles;
     nx::render::SkyLight m_skyLight;
     std::vector<nx::render::StudioLight> m_lights;
     std::vector<nx::Vec3> m_probePositions;

@@ -3,6 +3,9 @@
 /out/
 /install/
 
+# Local agent settings and worktrees, which have their own dependencies and build output.
+/.claude/
+
 # vcpkg manifest-mode output
 /vcpkg_installed/
 

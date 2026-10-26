@@ -413,7 +413,8 @@ TEST(EnhancedStudioTest, AConstantSkyReflectsAsAnIntegralOfGgxOfItsOwn) {
         setSky(**device, *scene);
         const Pixel actual = centerOf(drawSurface(target, *scene));
         const double expected =
-            kSkyChannel * std::pow(referenceReflectance(roughness, f0), 1.0 / kDisplayGamma);
+            kSkyChannel *
+            std::pow(referenceReflectance(static_cast<double>(roughness), f0), 1.0 / kDisplayGamma);
         EXPECT_NEAR(actual[0], expected, 3.0) << "roughness " << roughness;
         EXPECT_EQ(actual[0], actual[1]);
         EXPECT_EQ(actual[1], actual[2]);
@@ -666,7 +667,8 @@ TEST(EnhancedStudioTest, ASpecularMapGivesTheReflectionsColorAndWeightAsData) {
         const Pixel actual = centerOf(drawSurface(target, *scene));
         for (std::size_t channel = 0; channel < kReflectanceChannels.size(); ++channel) {
             const double f0 = kReflectanceChannels[channel] / static_cast<double>(kChannelTop);
-            EXPECT_NEAR(actual[channel], weight * referenceReflectance(kRoughness, f0), 3.0)
+            EXPECT_NEAR(actual[channel], weight * referenceReflectance(static_cast<double>(kRoughness), f0),
+                        3.0)
                 << "its color and weight through neither texgamma nor sRGB, in place of specularColor";
         }
         EXPECT_GT(actual[0], actual[1]);

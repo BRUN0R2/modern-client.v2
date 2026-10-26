@@ -20,9 +20,18 @@ constexpr float kLettersPerSecond = 10.0F;
 
 void LightStyles::set(std::size_t style, std::string_view pattern) {
     expects(style < kLightStyleCount, "LightStyles::set: a style below kLightStyleCount");
+    if (style >= kLightStyleCount) {
+        return; // the contract handler observed the invalid index
+    }
     m_patterns[style] = pattern |
                         std::views::transform([](char letter) { return std::clamp(letter, 'a', 'z'); }) |
                         std::ranges::to<std::string>();
+}
+
+void LightStyles::setPatterns(std::span<const std::string, kLightStyleCount> patterns) {
+    for (std::size_t style = 0; style < patterns.size(); ++style) {
+        set(style, patterns[style]);
+    }
 }
 
 auto LightStyles::valuesAt(Seconds time) const noexcept -> LightStyleValues {

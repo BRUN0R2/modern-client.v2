@@ -102,6 +102,30 @@ TEST_F(ClientGameTest, AFrameBringsATickDueForEachHundredthOfASecondAQuarterOfAS
     EXPECT_EQ(whole.ticksDue(kTick * 100.5F, cs::CatchUp::Whole), 100U);
 }
 
+TEST_F(ClientGameTest, TheServerSetsTheLightStylesAndAnUpdateClearsRemovedPatterns) {
+    constexpr std::size_t kAnimatedStyle = 4;
+    constexpr std::size_t kSwitchableStyle = 32;
+    constexpr std::int64_t kUnchangedTick = 2;
+    cs::PlayerSnapshot first = snapshotAt(0, {});
+    first.lightStyles.patterns[kAnimatedStyle] = "ma";
+    first.lightStyles.patterns[kSwitchableStyle] = "z";
+    cs::ClientGame client{models(), playerModels(), std::move(first)};
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[kAnimatedStyle], 264);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{0.15F})[kAnimatedStyle], 0);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[kSwitchableStyle], 550);
+
+    cs::PlayerSnapshot changed = snapshotAt(1, {});
+    changed.lightStyles.patterns[kAnimatedStyle] = "az";
+    client.receive(changed);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[kAnimatedStyle], 0);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{0.15F})[kAnimatedStyle], 550);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[kSwitchableStyle], 256);
+    changed.time = nx::GameTime::atTick(kUnchangedTick);
+    client.receive(std::move(changed));
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{0.15F})[kAnimatedStyle], 550)
+        << "the phase follows the map's time, including when the patterns are unchanged";
+}
+
 TEST_F(ClientGameTest, ItsCommandsAreNumberedOneAfterTheOther) {
     cs::ClientGame client{models(), playerModels(), snapshotAt(0, {})};
     const nx::EulerAngles view{.yaw = nx::Degrees{45.0F}};
@@ -169,14 +193,17 @@ TEST_F(ClientGameTest, BrushEntitiesAreDrawnWhereTheServerSaysTheyAre) {
                                                .waveHeight = nx::HammerUnits{2.0F},
                                                .showsAlternateTextures = true}};
     const cs::ClientGame client{models(), playerModels(), std::move(told)};
-    const std::vector<nx::render::ModelPlacement> placements = client.placements();
+    std::vector<nx::render::ModelPlacement> placements;
+    client.writePlacements(placements);
     ASSERT_EQ(placements.size(), 1U);
     EXPECT_EQ(placements[0].model, nx::assets::ModelIndex{3});
     EXPECT_EQ(placements[0].origin, (nx::Vec3{.x = 1.0F, .y = 2.0F, .z = 3.0F}));
     EXPECT_EQ(placements[0].angles.yaw, nx::Degrees{90.0F});
     EXPECT_EQ(placements[0].waveHeight, nx::HammerUnits{2.0F});
     EXPECT_TRUE(placements[0].showsAlternateTextures);
-    EXPECT_TRUE(client.hostages().empty()) << "no hostage told of";
+    std::vector<cs::ShownHostage> hostages(1);
+    client.writeHostages(hostages);
+    EXPECT_TRUE(hostages.empty()) << "no hostage told of, and nothing left from the previous frame";
 }
 
 /// What the server tells of another player standing at `origin`, its body facing `yaw`, aiming the knife.
@@ -194,7 +221,8 @@ TEST_F(ClientGameTest, AnotherPlayerIsShownBetweenTheLastTwoTicksItsLegsFacingIt
     cs::PlayerSnapshot first = snapshotAt(0, {});
     first.players = {otherAt({.x = 100.0F}, 90.0F)};
     cs::ClientGame client{models(), playerModels(), std::move(first)};
-    const std::vector<cs::ShownPlayer> seen = client.updatePlayers(kTick);
+    std::vector<cs::ShownPlayer> seen;
+    client.updatePlayers(kTick, seen);
     ASSERT_EQ(seen.size(), 1U);
     EXPECT_EQ(seen[0].character, cs::CharacterIndex{4});
     EXPECT_EQ(seen[0].origin, (nx::Vec3{.x = 100.0F}));
@@ -206,12 +234,80 @@ TEST_F(ClientGameTest, AnotherPlayerIsShownBetweenTheLastTwoTicksItsLegsFacingIt
     second.players = {otherAt({.x = 110.0F}, 90.0F)};
     ASSERT_EQ(client.ticksDue(kTick * 1.5F, cs::CatchUp::Limited), 1U);
     client.receive(std::move(second));
-    const std::vector<cs::ShownPlayer> moving = client.updatePlayers(kTick);
+    std::vector<cs::ShownPlayer> moving;
+    client.updatePlayers(kTick, moving);
     ASSERT_EQ(moving.size(), 1U);
     EXPECT_NEAR(moving[0].origin.x, 105.0F, kTolerance) << "halfway, as the eye";
     // Its legs turn the way it moves, its aim to its body's left of them.
     EXPECT_NEAR(moving[0].angles.yaw.value(), 0.0F, kTolerance);
     EXPECT_NEAR(moving[0].yawBlend, 0.0F, kTolerance);
+}
+
+TEST_F(ClientGameTest, FrameExtractionReusesItsStorageAndReplacesWhatItShowedBefore) {
+    constexpr float kPlayerX = 100.0F;
+    cs::PlayerSnapshot first = snapshotAt(0, {});
+    first.players = {otherAt({.x = kPlayerX}, 0.0F)};
+    first.brushEntities = {cs::BrushEntityState{.model = nx::assets::ModelIndex{1}}};
+    cs::ClientGame client{models(), playerModels(), first};
+    std::vector<cs::ShownPlayer> players;
+    std::vector<nx::render::ModelPlacement> placements;
+    client.updatePlayers(kTick, players);
+    client.writePlacements(placements);
+    const cs::ShownPlayer* const playerStorage = players.data();
+    const nx::render::ModelPlacement* const placementStorage = placements.data();
+
+    client.updatePlayers(kTick, players);
+    client.writePlacements(placements);
+    ASSERT_EQ(players.size(), 1U);
+    ASSERT_EQ(placements.size(), 1U);
+    EXPECT_EQ(players.data(), playerStorage);
+    EXPECT_EQ(placements.data(), placementStorage);
+
+    client.receive(snapshotAt(1, {}));
+    client.updatePlayers(kTick, players);
+    client.writePlacements(placements);
+    EXPECT_TRUE(players.empty());
+    EXPECT_TRUE(placements.empty());
+}
+
+TEST_F(ClientGameTest, PlayerInterpolationFollowsSparseIdentitiesAcrossReorderingAndVisibilityChanges) {
+    constexpr cs::PlayerIndex kNearPlayer{3};
+    constexpr cs::PlayerIndex kFarPlayer{1023};
+    constexpr float kNearStartX = 100.0F;
+    constexpr float kNearNextX = 120.0F;
+    constexpr float kFarStartX = 400.0F;
+    constexpr float kFarNextX = 440.0F;
+    constexpr float kReturnedX = 900.0F;
+    constexpr std::int64_t kAbsentTick = 2;
+    constexpr std::int64_t kReturnedTick = 3;
+    cs::PlayerEntityState near = otherAt({.x = kNearStartX}, 0.0F);
+    near.player = kNearPlayer;
+    cs::PlayerEntityState far = otherAt({.x = kFarStartX}, 0.0F);
+    far.player = kFarPlayer;
+    cs::PlayerSnapshot first = snapshotAt(0, {});
+    first.players = {near, far};
+    cs::ClientGame client{models(), playerModels(), std::move(first)};
+    near.origin.x = kNearNextX;
+    far.origin.x = kFarNextX;
+    cs::PlayerSnapshot second = snapshotAt(1, {});
+    second.players = {far, near};
+    ASSERT_EQ(client.ticksDue(kTick * 1.5F, cs::CatchUp::Whole), 1U);
+    client.receive(std::move(second));
+    std::vector<cs::ShownPlayer> shown;
+    client.updatePlayers(kTick, shown);
+    ASSERT_EQ(shown.size(), 2U);
+    EXPECT_NEAR(shown[0].origin.x, 420.0F, kTolerance);
+    EXPECT_NEAR(shown[1].origin.x, 110.0F, kTolerance);
+
+    client.receive(snapshotAt(kAbsentTick, {}));
+    near.origin.x = kReturnedX;
+    cs::PlayerSnapshot returned = snapshotAt(kReturnedTick, {});
+    returned.players = {near};
+    client.receive(std::move(returned));
+    std::vector<cs::ShownPlayer> seenAgain;
+    client.updatePlayers(kTick, seenAgain);
+    ASSERT_EQ(seenAgain.size(), 1U);
+    EXPECT_FLOAT_EQ(seenAgain[0].origin.x, 900.0F) << "no interpolation from a snapshot where it was absent";
 }
 
 } // namespace

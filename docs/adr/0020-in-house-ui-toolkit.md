@@ -10,7 +10,7 @@ The classic HUD is drawn ([12 §3](../12-ui-hud-and-console.md#3-hud), `nx.rende
 the server browser, the team and character selection, the buy menu, the scoreboard, the MOTD and
 the console ([12 §4](../12-ui-hud-and-console.md#4-game-menus-and-screens),
 [§5](../12-ui-hud-and-console.md#5-console)). [12 §2](../12-ui-hud-and-console.md#2-ui-components)
-names an in-house retained toolkit for them, and the [TODO](../../TODO.md) keeps the choice open
+names an in-house retained toolkit for them, and the [TODO](../TODO.md) keeps the choice open
 against RmlUi, to be weighed by visual fidelity, performance and ease for plugins.
 
 What decides it:

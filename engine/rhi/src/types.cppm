@@ -22,6 +22,7 @@ enum class RhiError : std::uint8_t {
     UnsupportedFormat, ///< The device cannot use the format as the description asks.
     InvalidShader,     ///< The shader code is not of the device's shader format, or the driver refused it.
     DriverRefused,     ///< The driver refused an operation for another reason; the detail has its result.
+    ValidationUnavailable, ///< Requested validation lacks its layer or debug messenger extension.
 };
 
 /// The fewest and the most frames a device records while the GPU runs the ones before

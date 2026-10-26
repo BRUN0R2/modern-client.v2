@@ -404,9 +404,12 @@ constexpr std::size_t kBlue = 2;
         (*game)->tick(playerCommands);
         client.receive((*game)->snapshotFor(player));
     }
-    const std::vector<nx::render::ModelPlacement> placements = client.placements();
-    const std::vector<cs::ShownHostage> hostages = client.hostages();
-    const std::vector<cs::ShownPlayer> players = client.updatePlayers(options.time);
+    std::vector<nx::render::ModelPlacement> placements;
+    std::vector<cs::ShownHostage> hostages;
+    std::vector<cs::ShownPlayer> players;
+    client.writePlacements(placements);
+    client.writeHostages(hostages);
+    client.updatePlayers(options.time, players);
     // The client events of the play the view model is in, from its first frame: the muzzle flashes
     // a shot shows.
     const std::optional<cs::ViewModelPose> viewPose = client.viewModel();
@@ -418,7 +421,9 @@ constexpr std::size_t kBlue = 2;
         // before drawing it, so the result does not depend on how quickly the GPU runs.
         const std::size_t probeCount = std::min(level.probePositions().size(), nx::render::kMostProbes);
         for (std::size_t probe = 0; probe < probeCount; ++probe) {
-            scene->bakeReflections(commands->get(), level, options.time, placements);
+            scene->bakeReflections(commands->get(), {.time = options.time,
+                                                     .lightStyles = client.lightStylesAt(options.time),
+                                                     .placements = placements});
             if (auto submitted = (*device)->submitFrame(); !submitted) {
                 return unusable(submitted.error());
             }
@@ -448,15 +453,17 @@ constexpr std::size_t kBlue = 2;
         consoleWindow->paint(quads, extent);
     }
     nx::rhi::CommandList& list = commands->get();
-    const std::optional<cs::FrameScene> shown{cs::FrameScene{.scene = *scene,
-                                                             .level = level,
-                                                             .view = {.camera = camera,
-                                                                      .time = options.time,
-                                                                      .placements = placements,
-                                                                      .hostages = hostages,
-                                                                      .players = players,
-                                                                      .viewModel = viewPose,
-                                                                      .clientEvents = clientEvents}}};
+    const std::optional<cs::FrameScene> shown{
+        cs::FrameScene{.scene = *scene,
+                       .level = level,
+                       .view = {.camera = camera,
+                                .time = options.time,
+                                .lightStyles = client.lightStylesAt(options.time),
+                                .placements = placements,
+                                .hostages = hostages,
+                                .players = players,
+                                .viewModel = viewPose,
+                                .clientEvents = clientEvents}}};
     if (auto recorded = frames->record(list, target->get(), extent, shown, quads); !recorded) {
         return unusable(recorded.error());
     }
@@ -512,10 +519,6 @@ auto main(int argumentCount, char** argumentValues) -> int {
     if (!content) {
         return unusable(content.error());
     }
-    auto clientContent = cs::readClientContent(data);
-    if (!clientContent) {
-        return unusable(clientContent.error());
-    }
     std::optional<cs::WeaponIndex> selectedWeapon;
     if (options->weapon) {
         selectedWeapon = cs::findWeaponNamed(content->weapons, *options->weapon);
@@ -535,7 +538,7 @@ auto main(int argumentCount, char** argumentValues) -> int {
     if (!map) {
         return unusable(map.error());
     }
-    auto level = cs::Level::load(*content, *clientContent, **map);
+    auto level = cs::Level::load(*content, **map);
     if (!level) {
         return unusable(level.error());
     }

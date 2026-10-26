@@ -8,7 +8,7 @@ Thank you for helping. This guide covers the workflow; the rules themselves live
 - Read [docs/RULES.md](docs/RULES.md), the
   [coding standards](docs/02-coding-standards.md) and the
   [definition of done](docs/18-testing-and-quality.md#definition-of-done).
-- Pick an item from [TODO.md](TODO.md) or open an issue first for anything that is not there.
+- Pick an item from [TODO.md](docs/TODO.md) or open an issue first for anything that is not there.
   A relevant structural decision needs an [ADR](docs/adr/README.md) before the code.
 - Never send Valve assets or code derived from leaked or incompatible sources: the project is
   a clean room ([docs/20 §3](docs/20-legal-and-licensing.md#3-clean-room)).
@@ -34,6 +34,10 @@ ctest --preset dev-linux-gcc
 ```
 
 Concurrent code also runs under ThreadSanitizer (`tsan-linux-gcc`).
+
+For Clang on Windows, install LLVM 23.1.4, enter the same developer shell, put its `bin`
+directory first on `PATH` and use `dev-windows-clang`. Static analysis needs that complete build's
+module interfaces and `compile_commands.json`; see [analysis](docs/18-testing-and-quality.md#sanitizers-and-analysis).
 
 ## Local checks
 

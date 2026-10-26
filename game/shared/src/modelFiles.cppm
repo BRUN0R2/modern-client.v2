@@ -43,12 +43,6 @@ struct ModelFiles {
 [[nodiscard]] auto readModelFiles(const nx::assets::Vfs& vfs, std::string_view path, ModelTextures textures)
     -> nx::Result<std::unique_ptr<ModelFiles>, ModelFileError>;
 
-/// The decoded frames of sequence `sequence` of the model of `files`, from its file or its sequence
-/// group's. Errors: ReadFailed, Invalid.
-[[nodiscard]] auto animationOf(const nx::assets::Vfs& vfs, const ModelFiles& files,
-                               nx::assets::SequenceIndex sequence)
-    -> nx::Result<nx::assets::AnimationFrames, ModelFileError>;
-
 /// The decoded frames of every sequence of the model of `files`, by index, each sequence group's file
 /// read once. Errors: ReadFailed, Invalid.
 [[nodiscard]] auto animationsOf(const nx::assets::Vfs& vfs, const ModelFiles& files)

@@ -59,7 +59,7 @@ public:
     [[nodiscard]] inline auto missing() const noexcept -> std::span<const std::string> { return m_missing; }
 
     /// The model the map's hostage `spawn` plays (HostageSpawn::spawn); none for one whose model it could
-    /// not read, or that the map lacks.
+    /// not read, or that the map lacks. Lookup is constant time, including missing models.
     [[nodiscard]] auto hostageModel(std::uint32_t spawn) const noexcept -> const nx::assets::MdlView*;
 
     /// Every model on the GPU of `renderer`, a model for each file, its uploads recorded in `commands`.
@@ -76,11 +76,10 @@ public:
                              const nx::render::LightStyleValues& styles) const -> PosedModels;
 
 private:
-    /// An entity and its file's index; a hostage, which of the map's it is (HostageSpawn::spawn).
+    /// An entity and its file's index.
     struct Entity {
         MapModel model{};
         std::size_t file = 0;
-        std::uint32_t spawn = 0;
     };
 
     MapModels() = default;
@@ -105,7 +104,8 @@ private:
 
     std::vector<AnimatedModel> m_files;
     std::vector<Entity> m_cyclers;
-    std::vector<Entity> m_hostages; ///< Of models it read, in the map's order.
+    /// By HostageSpawn::spawn; none where the model could not be read.
+    std::vector<std::optional<Entity>> hostagesBySpawn;
     std::vector<std::string> m_missing;
 };
 

@@ -84,7 +84,7 @@ Game::Game(CreateToken /*token*/, const GameContent& content, const GameMap& map
     : m_content{&content}, m_map{&map}, m_cvars{std::move(cvars)}, m_models{std::move(models)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(map.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy} {}
+      m_accounts{content.economy}, lightStyles{mapLightStyles(map.map(), content.lightStyles)} {}
 
 auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars)
     -> nx::Result<std::unique_ptr<Game>, GameError> {
@@ -243,7 +243,8 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .impacts = m_impacts,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
-                          .players = std::move(others)};
+                          .players = std::move(others),
+                          .lightStyles = lightStyles};
 }
 
 void Game::tick(std::span<const PlayerCommand> commands) {

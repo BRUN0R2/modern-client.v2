@@ -48,15 +48,19 @@ jobs:
             exit 1
           fi
 
-  windows-msvc:
-    name: Windows · MSVC · ${{ matrix.preset }}
+  windows:
+    name: Windows · ${{ matrix.compiler }} · ${{ matrix.preset }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        preset: [dev-windows-msvc, release-windows-msvc]
+        include:
+          - { preset: dev-windows-msvc, compiler: MSVC }
+          - { preset: release-windows-msvc, compiler: MSVC }
+          - { preset: dev-windows-clang, compiler: Clang }
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+      LLVM_VERSION: "23.1.4"
     steps:
       - uses: actions/checkout@v7
 
@@ -66,6 +70,15 @@ jobs:
 
       - name: Install CMake and Ninja
         run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
+
+      - name: Install LLVM
+        if: matrix.compiler == 'Clang'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "LLVM-$env:LLVM_VERSION-win64.msi"
+          Invoke-WebRequest "https://github.com/llvm/llvm-project/releases/download/llvmorg-$env:LLVM_VERSION/LLVM-$env:LLVM_VERSION-win64.msi" -OutFile $installer
+          $installed = Start-Process msiexec.exe -ArgumentList @('/i', "`"$installer`"", '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
+          if ($installed.ExitCode -ne 0) { throw "LLVM installation failed: $($installed.ExitCode)" }
 
       - name: Bootstrap vcpkg
         shell: pwsh
@@ -80,7 +93,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}\..\vcpkg-cache
-          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
           restore-keys: vcpkg-windows-
 
       - name: Configure, build and test
@@ -91,6 +104,10 @@ jobs:
           $cmakeDirectory = Split-Path (Get-Command cmake).Source
           . ./scripts/devShell.ps1
           $env:PATH = "$cmakeDirectory;$env:PATH"
+          if ('${{ matrix.compiler }}' -eq 'Clang') {
+            $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+            clang++ --version
+          }
           cmake --version
           cmake --preset ${{ matrix.preset }}
           cmake --build --preset ${{ matrix.preset }}
@@ -99,9 +116,7 @@ jobs:
   linux-gcc:
     name: Linux · GCC 16 · ${{ matrix.preset }}
     runs-on: ubuntu-latest
-    # GCC 16.2.0 cannot read back some of the module interfaces it compiles (docs/17, section 2.2):
-    # 16.1.0 until a 16.2.x reads them.
-    container: gcc:16.1.0
+    container: gcc:16
     strategy:
       fail-fast: false
       matrix:
@@ -141,7 +156,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/vcpkg-cache
-          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
           restore-keys: vcpkg-linux-gcc-
 
       - name: Configure

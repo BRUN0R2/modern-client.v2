@@ -23,7 +23,6 @@ using cs::PlayerAction;
 using nx::test::playerSequenceIndex;
 
 constexpr float kTolerance = 1e-3F;
-constexpr nx::TickRate kRate = nx::kDefaultTickRate;
 
 /// A model of playerSequences, read, with the decoded frames of each of its sequences.
 class PlayerModelTest : public ::testing::Test {

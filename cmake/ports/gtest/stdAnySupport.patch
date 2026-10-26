@@ -1,0 +1,19 @@
+diff --git a/googletest/include/gtest/gtest-printers.h b/googletest/include/gtest/gtest-printers.h
+--- a/googletest/include/gtest/gtest-printers.h
++++ b/googletest/include/gtest/gtest-printers.h
+@@ -913,6 +913,7 @@ template <typename T>
+ class [[nodiscard]] UniversalPrinter<const T> : public UniversalPrinter<T> {};
+
+ // Printer for std::any
++#if defined(__cpp_lib_any)
+ template <>
+ class [[nodiscard]] UniversalPrinter<std::any> {
+  public:
+@@ -935,6 +936,7 @@ class [[nodiscard]] UniversalPrinter<std::any> {
+ #endif  // GTEST_HAS_RTTI
+   }
+ };
++#endif  // defined(__cpp_lib_any)
+
+ // Printer for std::optional
+ template <typename T>

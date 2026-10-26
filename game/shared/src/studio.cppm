@@ -36,6 +36,8 @@ inline constexpr std::size_t kControllerChannels = 4;
 struct ControllerSettings {
     std::array<std::uint8_t, kControllerChannels> channels{};
     std::uint8_t mouth = 0; ///< How far the mouth opens: fully from 64 on.
+
+    [[nodiscard]] inline auto operator==(const ControllerSettings&) const noexcept -> bool = default;
 };
 
 /// What becomes of the motion of a sequence's motion bone along the axes the sequence moves the

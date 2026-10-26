@@ -19,6 +19,7 @@ import :sounds;
 import :hostages;
 import :weapons;
 import :characters;
+import :lightStyles;
 
 export namespace cs {
 
@@ -76,7 +77,7 @@ struct PlayerEntityState {
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
 /// what the tick did to it and made it make; where the tick's shots met what is solid; and the world
-/// it sees: the brush entities, the hostages and the other players.
+/// it sees: the brush entities, the hostages, the other players and the light-style patterns.
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
     nx::TickRate rate{nx::kDefaultTickRate};
@@ -97,6 +98,7 @@ struct PlayerSnapshot {
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
+    MapLightStyles lightStyles{}; ///< The server's current patterns, evaluated by the client.
 };
 
 } // namespace cs
