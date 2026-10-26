@@ -134,8 +134,10 @@ code** on the server (authoritative) and on the client (prediction).
   `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
-  list), which the game touches, a door opening; the player keeps the entity it stands on
-  (`groundModel`), which a pusher carries. A solid entity turned by its angles is met turned, as
+  list), which the game touches, a door opening; the player keeps what it stands on
+  (`MovementState::ground`, a `cs::MovementSolid`: the world, an entity's brush model, which a pusher
+  carries, or a box, which has no model and so no texture under it, its steps sounding as concrete
+  as the original's do on a physent without a model). A solid entity turned by its angles is met turned, as
   the original turns a trace into its space and the plane it meets back out. Noclip too
   (`MoveType::Noclip`, which the `noclip` cheat sets): through everything, along the view at the
   speeds the command asks and up at its up speed, without gravity; as in the original, a player on
@@ -143,7 +145,10 @@ code** on the server (authoritative) and on the client (prediction).
   pushers pass through it (`nx::game::Body::isPushed`). Hostages stop the player as boxes
   (`cs::SolidBox`, which `MapModels::solidBoxes` lists): each is grown by the player's box, as
   PM_HullForBox grows a physent's, and traced as the engine traces a box's six-node hull
-  (`nx::collision::traceBoxMovement`), after the world and the brush entities. A player whose box
+  (`nx::collision::traceBoxMovement`, about the box's origin, its end found along the world's way as
+  _PM_PlayerTrace finds it), after the world and the brush entities; a player that ducks into the
+  solid is raised out of it by the same test of where it is, boxes included
+  (PM_FixPlayerCrouchStuck, PM_TestPlayerPosition). A player whose box
   is in the solid is stuck, as the server's PM_CheckStuck finds it, and does nothing else (but in
   noclip): once more than 50 ms have passed since its last try (PM_CHECKSTUCK_MINTIME), it touches
   what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
@@ -251,8 +256,8 @@ The API below is planned, with entities and hitboxes. Today it is `BrushHulls::t
 `traceMovement` (`nx.collision:hulls`), which take a `HullTraceQuery` (`model`, `hull`, `offset`,
 `angles`, `start`, `end`) and give a `Trace` (`fraction`, `end`, `plane`, `isAllSolid`,
 `startsSolid`, `isInOpen`, `isInWater`), against brush models only ([§4.1](#41-world)), and
-`traceBoxMovement`, player movement's rules through one box made a hull as the engine makes one
-(SV_InitBoxHull, PM_HullForBox).
+`traceBox` and `traceBoxMovement`, the server's and player movement's rules through one box about
+an offset, made a hull as the engine makes one (SV_InitBoxHull, SV_HullForBox, PM_HullForBox).
 
 ```cpp
 auto hit = collision.trace(nx::collision::TraceQuery{

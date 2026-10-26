@@ -202,7 +202,7 @@ struct PlayerTrace {
     Vec3 normal{};
     bool startsSolid = false;
     bool isAllSolid = false;
-    std::optional<ModelIndex> model{}; ///< Of the entity that stopped it; none for the world.
+    MovementSolid met{}; ///< What stopped it; the world when nothing did.
 };
 
 /// Length as the original measures it: each square in single precision, their sum in double.
@@ -370,7 +370,7 @@ private:
         if (!m_player.isOnGround) {
             return std::nullopt;
         }
-        return StepGround{.origin = m_player.origin, .groundModel = m_player.groundModel};
+        return StepGround{.origin = m_player.origin, .ground = m_player.ground};
     }
 
     /// A step of the other foot (PM_PlayStepSound) at `place`, standing on `ground`, `share` of its
@@ -393,7 +393,8 @@ private:
         if (m_player.stepTime > nx::Milliseconds{}) {
             return;
         }
-        if (lengthOf(m_player.velocity) <= double{kStepSpeed}) {
+        // Parity: the length kept in single precision before it is compared
+        if (static_cast<float>(lengthOf(m_player.velocity)) <= kStepSpeed) {
             m_player.stepTime = kQuietStepTime;
             return;
         }
@@ -564,8 +565,7 @@ private:
     /// it soonest; all the way when none does.
     [[nodiscard]] auto trace(Vec3 start, Vec3 end, Hull hull) const -> PlayerTrace {
         PlayerTrace nearest{.end = end};
-        const auto meet = [&](ModelIndex model, Vec3 offset, nx::EulerAngles angles,
-                              std::optional<ModelIndex> entity) {
+        const auto meet = [&](ModelIndex model, Vec3 offset, nx::EulerAngles angles, MovementSolid solid) {
             const nx::collision::Trace hit =
                 m_world.traceMovement(nx::collision::HullTraceQuery{.model = model,
                                                                     .hull = hull,
@@ -579,10 +579,10 @@ private:
                                       .normal = hit.plane.normal,
                                       .startsSolid = hit.startsSolid,
                                       .isAllSolid = hit.isAllSolid,
-                                      .model = entity};
+                                      .met = solid};
             }
         };
-        meet(nx::collision::kWorldModel, Vec3{}, nx::EulerAngles{}, std::nullopt);
+        meet(nx::collision::kWorldModel, Vec3{}, nx::EulerAngles{}, WorldSolid{});
         for (const BrushEntity& entity : m_entities) {
             if (entity.role == BrushRole::Solid) {
                 meet(entity.model, entity.origin, entity.angles, entity.model);
@@ -590,13 +590,14 @@ private:
         }
         for (const SolidBox& solid : m_boxes) {
             const nx::collision::Trace hit = nx::collision::traceBoxMovement(
-                nx::collision::grownByHull(solid.box, hull), start - solid.origin, end - solid.origin);
+                nx::collision::grownByHull(solid.box, hull), solid.origin, start, end);
             if (hit.fraction < nearest.fraction) {
                 nearest = PlayerTrace{.fraction = hit.fraction,
-                                      .end = hit.end + solid.origin,
+                                      .end = hit.end,
                                       .normal = hit.plane.normal,
                                       .startsSolid = hit.startsSolid,
-                                      .isAllSolid = hit.isAllSolid};
+                                      .isAllSolid = hit.isAllSolid,
+                                      .met = BoxSolid{}};
             }
         }
         return nearest;
@@ -633,7 +634,7 @@ private:
             return true;
         }
         m_player.sinceStuckCheck = nx::Milliseconds{};
-        touch(trace(m_player.origin, m_player.origin).model);
+        touch(modelOf(trace(m_player.origin, m_player.origin).met));
         const std::uint32_t nudge = m_player.stuckNudge;
         m_player.stuckNudge = (nudge + 1) % kStuckNudgeCount;
         const Vec3 nudged = m_player.origin + kStuckNudges[nudge];
@@ -671,17 +672,6 @@ private:
     }
 
     /// Whether the player's box at `origin` is in solid: the world's or a solid entity's.
-    [[nodiscard]] auto isStuckAt(Vec3 origin) const -> bool {
-        if (m_world.movementContentsAt(nx::collision::kWorldModel, m_hull, origin) == Contents::Solid) {
-            return true;
-        }
-        return std::ranges::any_of(m_entities, [&](const BrushEntity& entity) {
-            return entity.role == BrushRole::Solid &&
-                   m_world.movementContentsAt(entity.model, m_hull, origin, entity.origin, entity.angles) ==
-                       Contents::Solid;
-        });
-    }
-
     /// The first ladder the player's box touches, or none.
     [[nodiscard]] auto ladderTouched() const -> const BrushEntity* {
         const auto touched = std::ranges::find_if(m_entities, [this](const BrushEntity& entity) {
@@ -773,19 +763,19 @@ private:
         const Vec3 below = m_player.origin - Vec3{.z = kGroundProbeDepth};
         if (m_player.velocity.z > kLiftOffSpeed) {
             m_player.isOnGround = false;
-            m_player.groundModel = std::nullopt;
+            m_player.ground = WorldSolid{};
             return;
         }
         const PlayerTrace ground = trace(m_player.origin, below);
         m_player.isOnGround = ground.normal.z >= kMinGroundNormalZ;
-        m_player.groundModel = m_player.isOnGround ? ground.model : std::nullopt;
+        m_player.ground = m_player.isOnGround ? ground.met : MovementSolid{WorldSolid{}};
         if (m_player.isOnGround) {
             m_player.waterJumpTime = {};
             if (!isSwimming() && !ground.startsSolid && !ground.isAllSolid) {
                 m_player.origin = ground.end;
             }
         }
-        touch(ground.model);
+        touch(modelOf(ground.met));
     }
 
     /// Remembers that the player met the entity of `model`, when there is one, once.
@@ -909,13 +899,13 @@ private:
 
     /// A player that ducking put into solid is raised out of it, a unit at a time; or left as it is.
     void unstickCrouch() {
-        if (!isStuckAt(m_player.origin)) {
+        if (!isInSolidAt(m_player.origin)) {
             return;
         }
         Vec3 raised = m_player.origin;
         for (int step = 0; step < kMaxCrouchUnstick; ++step) {
             raised.z += 1.0F;
-            if (!isStuckAt(raised)) {
+            if (!isInSolidAt(raised)) {
                 m_player.origin = raised;
                 return;
             }
@@ -1157,7 +1147,7 @@ private:
             if (hit.fraction == 1.0F) {
                 break;
             }
-            touch(hit.model);
+            touch(modelOf(hit.met));
             timeLeft -= timeLeft * hit.fraction;
             if (planeCount >= kMaxClipPlanes) {
                 velocity = {};
@@ -1323,10 +1313,15 @@ auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
     return entities;
 }
 
+auto modelOf(const MovementSolid& solid) noexcept -> std::optional<ModelIndex> {
+    const ModelIndex* const model = std::get_if<ModelIndex>(&solid);
+    return model != nullptr ? std::optional{*model} : std::nullopt;
+}
+
 auto bodyOf(const MovementState& state) -> nx::game::Body {
     return nx::game::Body{.hull = state.isDucked ? Hull::Ducked : Hull::Standing,
                           .box = state.isDucked ? kDuckedBox : kStandingBox,
-                          .groundModel = state.isOnGround ? state.groundModel : std::nullopt,
+                          .groundModel = state.isOnGround ? modelOf(state.ground) : std::nullopt,
                           .isPushed = state.moveType == MoveType::Walk};
 }
 

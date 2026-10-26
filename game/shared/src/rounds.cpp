@@ -53,6 +53,14 @@ constexpr float kSecondsPerMinute = 60.0F;
 }
 
 /// The whole seconds of `time`, cut, none below 0, the most a std::uint32_t holds above it.
+/// The bounds ReadMultiplayCvars holds a round's and a freeze's lengths to, and what it sets
+/// mp_roundtime to where it holds a round.
+constexpr std::int32_t kLeastRoundSeconds = 60;
+constexpr std::int32_t kMostRoundSeconds = 540;
+constexpr float kLeastRoundMinutes = 1.0F;
+constexpr float kMostRoundMinutes = 9.0F;
+constexpr std::int32_t kMostFreezeSeconds = 60;
+
 [[nodiscard]] auto wholeSecondsOf(nx::Seconds time) noexcept -> std::uint32_t {
     return nx::tryRound<std::uint32_t>(std::trunc(std::max(time.count(), 0.0F)))
         .value_or(std::numeric_limits<std::uint32_t>::max());
@@ -75,9 +83,38 @@ auto timeOutReasonOf(MapObjectives objectives) noexcept -> std::optional<RoundEn
     return found != kTimeOuts.end() ? std::optional{found->reason} : std::nullopt;
 }
 
-auto roundLengthsOf(float freezeSeconds, float roundMinutes) noexcept -> RoundLengths {
-    return {.freeze = nx::Seconds{std::trunc(freezeSeconds)},
-            .round = nx::Seconds{std::trunc(roundMinutes * kSecondsPerMinute)}};
+auto readRoundCvars(float freezeSeconds, float roundMinutes) noexcept -> RoundCvars {
+    RoundCvars read;
+    std::int32_t round = nx::truncateAsX86(roundMinutes * kSecondsPerMinute);
+    if (round > kMostRoundSeconds) {
+        read.roundMinutes = kMostRoundMinutes;
+        round = kMostRoundSeconds;
+    } else if (round < kLeastRoundSeconds) {
+        read.roundMinutes = kLeastRoundMinutes;
+        round = kLeastRoundSeconds;
+    }
+    std::int32_t freeze = nx::truncateAsX86(freezeSeconds);
+    if (freeze > kMostFreezeSeconds) {
+        read.freezeSeconds = static_cast<float>(kMostFreezeSeconds);
+        freeze = kMostFreezeSeconds;
+    } else if (freeze < 0) {
+        read.freezeSeconds = 0.0F;
+        freeze = 0;
+    }
+    read.lengths = {.freeze = nx::Seconds{static_cast<float>(freeze)},
+                    .round = nx::Seconds{static_cast<float>(round)}};
+    return read;
+}
+
+auto restartDelayOf(float restartRound, float restart) noexcept -> std::optional<nx::Seconds> {
+    std::int32_t seconds = nx::truncateAsX86(restartRound);
+    if (seconds == 0) {
+        seconds = nx::truncateAsX86(restart);
+    }
+    if (seconds <= 0) {
+        return std::nullopt;
+    }
+    return std::min(nx::Seconds{static_cast<float>(seconds)}, kMostRestart);
 }
 
 auto RoundTimer::shownAt(nx::GameTime now, nx::TickRate rate) const noexcept -> std::uint32_t {

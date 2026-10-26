@@ -80,15 +80,15 @@ TEST(BoxTraceTest, ABoxStopsATraceAThirtySecondOfAUnitBeforeItsFace) {
     const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = 0.0F},
                        .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}};
     const Trace across =
-        nx::collision::traceBoxMovement(box, {.x = -30.0F, .z = 31.0F}, {.x = 30.0F, .z = 31.0F});
+        nx::collision::traceBoxMovement(box, {}, {.x = -30.0F, .z = 31.0F}, {.x = 30.0F, .z = 31.0F});
     EXPECT_FLOAT_EQ(across.fraction, (20.0F - 0.03125F) / 60.0F);
     EXPECT_NEAR(across.end.x, -10.03125F, kTolerance);
     EXPECT_EQ(across.plane, (Plane{.normal = {.x = -1.0F}, .distance = 10.0F})) << "its least x, facing out";
     EXPECT_FALSE(across.startsSolid);
     const Trace over =
-        nx::collision::traceBoxMovement(box, {.x = -30.0F, .z = 70.0F}, {.x = 30.0F, .z = 70.0F});
+        nx::collision::traceBoxMovement(box, {}, {.x = -30.0F, .z = 70.0F}, {.x = 30.0F, .z = 70.0F});
     EXPECT_EQ(over.fraction, 1.0F) << "above it";
-    const Trace onTop = nx::collision::traceBoxMovement(box, {.z = 70.0F}, {.z = 50.0F});
+    const Trace onTop = nx::collision::traceBoxMovement(box, {}, {.z = 70.0F}, {.z = 50.0F});
     EXPECT_EQ(onTop.plane, (Plane{.normal = {.z = 1.0F}, .distance = 62.0F}));
     EXPECT_NEAR(onTop.end.z, 62.03125F, kTolerance);
 }
@@ -96,27 +96,45 @@ TEST(BoxTraceTest, ABoxStopsATraceAThirtySecondOfAUnitBeforeItsFace) {
 TEST(BoxTraceTest, ATraceFromInsideABoxStartsSolid) {
     const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
                        .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
-    const Trace leaving = nx::collision::traceBoxMovement(box, {}, {.x = 30.0F});
+    const Trace leaving = nx::collision::traceBoxMovement(box, {}, {}, {.x = 30.0F});
     EXPECT_TRUE(leaving.startsSolid);
     EXPECT_FALSE(leaving.isAllSolid) << "it leaves the box";
     EXPECT_EQ(leaving.fraction, 0.0F) << "movement stops it where it starts";
     EXPECT_EQ(leaving.end, Vec3{});
-    const Trace within = nx::collision::traceBoxMovement(box, {}, {.x = 5.0F});
+    const Trace within = nx::collision::traceBoxMovement(box, {}, {}, {.x = 5.0F});
     EXPECT_TRUE(within.isAllSolid);
 }
 
 TEST(BoxTraceTest, TheServersTraceStopsAThirtySecondOfAUnitBeforeAFaceAndGoesOnFromInside) {
     const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
                        .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
-    const Trace across = nx::collision::traceBox(box, {.x = -30.0F}, {.x = 30.0F});
+    const Trace across = nx::collision::traceBox(box, {}, {.x = -30.0F}, {.x = 30.0F});
     EXPECT_FLOAT_EQ(across.fraction, (20.0F - 0.03125F) / 60.0F);
     EXPECT_NEAR(across.end.x, -10.03125F, kTolerance);
     EXPECT_FALSE(across.startsSolid);
 
-    const Trace leaving = nx::collision::traceBox(box, {}, {.x = 30.0F});
+    const Trace leaving = nx::collision::traceBox(box, {}, {}, {.x = 30.0F});
     EXPECT_TRUE(leaving.startsSolid);
     EXPECT_FALSE(leaving.isAllSolid) << "it leaves the box";
     EXPECT_EQ(leaving.fraction, 1.0F) << "the server's rules let it go on, where movement's stop it";
+}
+
+TEST(BoxTraceTest, ABoxAboutAnOffsetEndsItsTraceInTheWorldsSpace) {
+    const nx::Aabb box{.min = {.x = -10.0F, .y = -10.0F, .z = -10.0F},
+                       .max = {.x = 10.0F, .y = 10.0F, .z = 10.0F}};
+    const Vec3 offset{.x = 1000.3F, .y = -77.7F, .z = 13.1F};
+    const Vec3 start = offset + Vec3{.x = -30.0F};
+    const Vec3 end = offset + Vec3{.x = 30.0F};
+    for (const Trace& hit : {nx::collision::traceBoxMovement(box, offset, start, end),
+                             nx::collision::traceBox(box, offset, start, end)}) {
+        // The fraction is found about the box, its sums in single precision so far from the origin.
+        EXPECT_NEAR(hit.fraction, (20.0F - 0.03125F) / 60.0F, 1.0e-6F);
+        // Found from the fraction along the world's way, as the original's: not moved there after.
+        EXPECT_EQ(hit.end.y, start.y);
+        EXPECT_NEAR(hit.end.x, offset.x - 10.03125F, 1.0e-3F);
+    }
+    const Trace movement = nx::collision::traceBoxMovement(box, offset, start, end);
+    EXPECT_EQ(movement.end, ((end - start) * movement.fraction) + start);
 }
 
 TEST(BoxTraceTest, ABoxGrowsByAHullsBox) {

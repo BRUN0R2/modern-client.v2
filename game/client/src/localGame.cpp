@@ -319,7 +319,7 @@ void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<co
             m_movementSounds.push_back(SoundMade{.sound = &splash, .at = now, .volume = splash.volume});
             continue;
         }
-        if (!m_cvars.footsteps.value()) {
+        if (!m_cvars.doStepsSound()) {
             continue;
         }
         const Footstep& step = std::get<Footstep>(sound);
@@ -334,10 +334,14 @@ void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<co
 auto LocalGame::groundMaterial(const StepGround& ground, std::span<const BrushEntity> entities) const
     -> TextureMaterial {
     const nx::Vec3 below = ground.origin - nx::Vec3{.z = kStepTextureDepth.value()};
-    if (!ground.groundModel) {
+    if (std::holds_alternative<BoxSolid>(ground.ground)) {
+        return TextureMaterial::Concrete; // a box has no model, so no texture (PM_TraceTexture)
+    }
+    const std::optional<nx::collision::ModelIndex> model = modelOf(ground.ground);
+    if (!model) {
         return m_level->materialAlong(m_content->materials, nx::assets::kWorldModel, ground.origin, below);
     }
-    const auto entity = std::ranges::find(entities, *ground.groundModel, &BrushEntity::model);
+    const auto entity = std::ranges::find(entities, *model, &BrushEntity::model);
     if (entity == entities.end()) {
         return TextureMaterial::Concrete; // what it stood on is gone: the original finds no texture
     }
