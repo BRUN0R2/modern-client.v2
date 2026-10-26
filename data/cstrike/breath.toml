@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# How a player breathes in water (docs/11, section 3), read into cs::BreathRules, with ReGameDLL_CS's
+# sounds and volumes (CBasePlayer::WaterMove; GPL, consulted: docs/20 section 3). A player coming up
+# for air gasps: `shortGasp` with less than 9 of its 12 seconds of air left, `longGasp` once they ran
+# out; with its head under water it lets go `bubbles`, one of their files at random, the likelier the
+# less air it has left.
+
+shortGasp = { files = ["player/pl_wade2.wav"], channel = "voice", volume = 1.0 }
+longGasp = { files = ["player/pl_wade1.wav"], channel = "voice", volume = 1.0 }
+bubbles = { files = ["player/pl_swim1.wav", "player/pl_swim2.wav", "player/pl_swim3.wav", "player/pl_swim4.wav"], channel = "body", volume = 0.8 }

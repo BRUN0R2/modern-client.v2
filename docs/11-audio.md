@@ -139,6 +139,17 @@ of each four wading steps; the splash), on the player's `Body` channel,
 while `mp_footsteps` is not 0. The weapons' and the bullets' sounds of the materials come with what they
 hit.
 
+**Today**, the breath in water, as the original's `CBasePlayer::WaterMove` has it before each
+command moves the player (`cs::Breath`, `data/cstrike/breath.toml`): with its head out of water its
+12 seconds of air are whole again, and coming up with less than 9 of them left it gasps, `pl_wade2`
+on its `Voice` channel, `pl_wade1` once they ran out; with its head under, it bubbles one breath in
+32, then as likely as a whole second from 0 to 11 drawn at random is the whole seconds of its air
+left or more (`pl_swim1` to `pl_swim4`, at 0.8, on its `Body` channel). A noclipping player holds
+its breath as it was. Drowning, and the harm of slime and lava, come with a player's damage. The
+original's float time sometimes makes the air a little less than whole, so that one wading within 12
+seconds before a power of two of seconds bubbles now and then; the game's time does not
+([07 §1](07-simulation-and-physics.md#1-time-and-tick)).
+
 ## 4. Voices and priorities
 
 - A voice pool with a configurable size (`s_max_voices`), with no format ceiling.
