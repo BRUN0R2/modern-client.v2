@@ -5,27 +5,12 @@ module cs.client;
 
 import std;
 import nx.core;
-import nx.platform;
 import nx.console;
-import nx.assets;
 import nx.rhi;
 import nx.render;
 import nx.ui;
 
 namespace cs {
-
-namespace {
-
-/// What the console's window logs under.
-constexpr nx::log::Category kLog{"console"};
-
-/// Logs that the console has no window, and why.
-template <class Code>
-void logNoWindow(const nx::Failure<Code>& failure) {
-    nx::log::warning(kLog, "the console has no window: {}", nx::describe(failure));
-}
-
-} // namespace
 
 auto consoleCharacters() -> std::u32string {
     std::u32string characters;
@@ -48,51 +33,6 @@ auto consoleCharacters() -> std::u32string {
     return characters;
 }
 
-auto openConsoleFont(const nx::assets::Vfs& vfs, nx::ui::FontCatalog& catalog, std::uint32_t screenHeight)
-    -> std::optional<nx::ui::SchemeFontSet> {
-    const auto path = nx::assets::VfsPath::parse(kWindowScheme);
-    if (!path) {
-        logNoWindow(path.error());
-        return std::nullopt;
-    }
-    const auto bytes = vfs.readAll(*path);
-    if (!bytes) {
-        logNoWindow(bytes.error());
-        return std::nullopt;
-    }
-    const auto text = nx::assets::keyValuesText(*bytes);
-    if (!text) {
-        logNoWindow(text.error());
-        return std::nullopt;
-    }
-    const auto entries = nx::assets::parseKeyValues(*text);
-    if (!entries) {
-        logNoWindow(entries.error());
-        return std::nullopt;
-    }
-    const auto scheme = nx::assets::readScheme(*entries);
-    if (!scheme) {
-        logNoWindow(scheme.error());
-        return std::nullopt;
-    }
-    const nx::assets::SchemeFont* font = scheme->font(kConsoleFont);
-    if (font == nullptr) {
-        nx::log::warning(kLog, "the console has no window: {} has no font {:?}", kWindowScheme, kConsoleFont);
-        return std::nullopt;
-    }
-    for (const std::filesystem::path& folder : nx::platform::fontFolders()) {
-        if (auto added = catalog.addFolder(folder); !added) {
-            nx::log::warning(kLog, "the fonts of a folder are left out: {}", nx::describe(added.error()));
-        }
-    }
-    auto opened = nx::ui::SchemeFontSet::open(*font, screenHeight, catalog);
-    if (!opened) {
-        logNoWindow(opened.error());
-        return std::nullopt;
-    }
-    return std::move(*opened);
-}
-
 auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PanelBounds {
     constexpr std::int32_t kMargin = 8; // an eighth of the screen on each side
     const auto wide = nx::narrow<std::int32_t>(size.width);
@@ -103,17 +43,15 @@ auto consoleBounds(nx::rhi::Extent2d size) -> nx::ui::PanelBounds {
             .tall = tall - (2 * (tall / kMargin))};
 }
 
-auto ConsoleWindow::open(const nx::assets::Vfs& vfs, nx::ui::FontCatalog& catalog,
-                         nx::console::Console& console, std::uint32_t screenHeight)
-    -> std::unique_ptr<ConsoleWindow> {
-    std::optional<nx::ui::SchemeFontSet> font = openConsoleFont(vfs, catalog, screenHeight);
+auto ConsoleWindow::open(const WindowFonts& fonts, nx::console::Console& console, std::uint32_t screenHeight)
+    -> nx::Result<std::unique_ptr<ConsoleWindow>, WindowFontError> {
+    auto font = fonts.font(kConsoleFont, screenHeight);
     if (!font) {
-        return nullptr; // openConsoleFont logged why
+        return std::unexpected{std::move(font.error())};
     }
     auto atlas = nx::ui::GlyphAtlas::build(*font, consoleCharacters());
     if (!atlas) {
-        logNoWindow(atlas.error());
-        return nullptr;
+        return nx::fail(WindowFontError::Unusable, std::string{kConsoleFont}, std::move(atlas.error()));
     }
     return std::make_unique<ConsoleWindow>(CreateToken{}, console, std::move(*font), std::move(*atlas));
 }

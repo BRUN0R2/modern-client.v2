@@ -24,8 +24,9 @@ enum class ClientError : std::uint8_t {
 /// settings from the user's folder (config.cfg, userconfig.cfg, autoexec.cfg), then the command
 /// line's `+` commands; a map once `map <name>` loads it, the player walking through it with the
 /// weapons its team spawns with, firing, reloading and drawing them as the binds ask, `noclip`
-/// making it fly, its health, armor, money and ammo on the HUD while `hud_draw` says so; the
-/// console's window as `toggleconsole` opens it; the weapons' sounds, `play` and `playvol` heard on
+/// making it fly, its health, armor, money and ammo on the HUD while `hud_draw` says so, the frames a
+/// second in the top left corner while `cl_showfps` does; the console's window as `toggleconsole` opens
+/// it; the weapons' sounds, `play` and `playvol` heard on
 /// the system's sound output at `volume`.
 /// config.cfg is written as it ends. A map that cannot be loaded, a HUD whose pictures cannot be, or
 /// a sound output that cannot be opened, is reported, and the client goes on. Errors: SettingsUnavailable,

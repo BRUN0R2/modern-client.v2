@@ -405,6 +405,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Each weapon's crosshair (measured: the knife 7, the Glock and the Desert Eagle 8), opening as the player moves (`cl_dynamiccrosshair`); the weapon menu (`slot1`–`slot5`, `invnext`, `invprev`, `hud_fastswitch`), its layout measured on the original; the first row of each HUD picture, which the original leaves out
 - [x] Numbers without truncation: health above 255, armor, money and ammo ([12 §3.4](docs/12-ui-hud-and-console.md#34-no-value-truncation))
 - [x] HUD regression test with health 5000, 100000 and the type's maximum
+- [x] `cl_showfps`: the frames a second where, and as, the original writes them, measured on it to the pixel (`cs.client:fpsLabel`, VGUI2's drop shadow in `nx.ui`), one measure of the frame rate for it and `net_graph` (`nx::platform::FrameRateMeter`, [12 §3.2](docs/12-ui-hud-and-console.md#32-scale-and-resolution))
 
 ---
 

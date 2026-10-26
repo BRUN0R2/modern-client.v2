@@ -17,6 +17,20 @@ constexpr std::uint32_t kGap = 1;
 /// The alpha of a texel: its last byte.
 constexpr std::size_t kAlphaByte = 3;
 
+/// The rectangle that draws `glyph` from `image`, `offset` right and down of its place, in `color`.
+[[nodiscard]] auto glyphQuad(const render::ScreenImage& image, const PlacedGlyph& glyph, float offset,
+                             render::ScreenColor color) -> render::ScreenQuad {
+    return {.image = &image,
+            .source = glyph.source,
+            .target = {.x = glyph.x + offset,
+                       .y = glyph.y + offset,
+                       .width = static_cast<float>(glyph.source.width),
+                       .height = static_cast<float>(glyph.source.height)},
+            .color = color,
+            .blend = render::ScreenBlend::Translucent,
+            .filter = render::ScreenFilter::Nearest};
+}
+
 /// The glyphs `source` draws for `characters`, each once, in the order of their characters; those it
 /// has none for left out.
 template <class Source>
@@ -58,7 +72,11 @@ auto GlyphAtlas::build(const SchemeFontSet& fonts, std::u32string_view character
     if (!drawn) {
         return std::unexpected{std::move(drawn.error())};
     }
-    return pack(fonts.metrics(), std::move(*drawn), width);
+    GlyphAtlas atlas = pack(fonts.metrics(), std::move(*drawn), width);
+    for (auto& [character, glyph] : atlas.m_glyphs) {
+        glyph.hasDropShadow = fonts.hasDropShadow(character);
+    }
+    return atlas;
 }
 
 auto GlyphAtlas::pack(const FontMetrics& metrics, std::vector<std::pair<char32_t, Glyph>> drawn,
@@ -139,7 +157,8 @@ auto layoutText(const GlyphAtlas& atlas, std::string_view text, float x, float y
         if (glyph->source.width > 0) {
             placed.push_back({.source = glyph->source,
                               .x = x + static_cast<float>(glyph->left),
-                              .y = baseline - static_cast<float>(glyph->top)});
+                              .y = baseline - static_cast<float>(glyph->top),
+                              .hasDropShadow = glyph->hasDropShadow});
         }
         x += static_cast<float>(glyph->advance);
     }
@@ -149,16 +168,16 @@ auto layoutText(const GlyphAtlas& atlas, std::string_view text, float x, float y
 auto appendText(std::vector<render::ScreenQuad>& quads, const GlyphAtlas& atlas,
                 const render::ScreenImage& image, std::string_view text, float x, float y,
                 render::ScreenColor color) -> float {
-    for (const PlacedGlyph& glyph : layoutText(atlas, text, x, y)) {
-        quads.push_back({.image = &image,
-                         .source = glyph.source,
-                         .target = {.x = glyph.x,
-                                    .y = glyph.y,
-                                    .width = static_cast<float>(glyph.source.width),
-                                    .height = static_cast<float>(glyph.source.height)},
-                         .color = color,
-                         .blend = render::ScreenBlend::Translucent,
-                         .filter = render::ScreenFilter::Nearest});
+    const std::vector<PlacedGlyph> placed = layoutText(atlas, text, x, y);
+    // Every shadow first: none falls over a glyph of the line, as the original's text shows them.
+    const render::ScreenColor shadow{.red = 0, .green = 0, .blue = 0, .alpha = color.alpha};
+    for (const PlacedGlyph& glyph : placed) {
+        if (glyph.hasDropShadow) {
+            quads.push_back(glyphQuad(image, glyph, kDropShadowOffset, shadow));
+        }
+    }
+    for (const PlacedGlyph& glyph : placed) {
+        quads.push_back(glyphQuad(image, glyph, 0.0F, color));
     }
     return x + static_cast<float>(widthOf(atlas, text));
 }

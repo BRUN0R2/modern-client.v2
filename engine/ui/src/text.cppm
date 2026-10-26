@@ -18,13 +18,17 @@ export namespace nx::ui {
 
 /// How wide an atlas is made, in texels, unless a glyph is wider.
 inline constexpr std::uint32_t kAtlasWidth = 256;
+/// How far VGUI2's drop shadow falls from its glyph, right and down, in pixels, as Counter-Strike 1.6
+/// shows it (docs/12-ui-hud-and-console.md, section 2.1).
+inline constexpr float kDropShadowOffset = 1.0F;
 
-/// A glyph in an atlas: where its bitmap is, and where the pen puts it.
+/// A glyph in an atlas: where its bitmap is, where the pen puts it, and whether it casts a shadow.
 struct AtlasGlyph {
     assets::SpriteRect source{}; ///< Its bitmap in the atlas; empty for a glyph without one (a space).
     std::int32_t left = 0;       ///< From the pen to the bitmap's left edge.
     std::int32_t top = 0;        ///< From the baseline up to the bitmap's top edge.
     std::int32_t advance = 0;    ///< How far the pen moves past the glyph.
+    bool hasDropShadow = false;  ///< Casts VGUI2's drop shadow (kDropShadowOffset).
 };
 
 /// The glyphs of a font for a set of characters, packed into one picture of white texels, each as
@@ -37,7 +41,7 @@ public:
     [[nodiscard]] static auto build(const Font& font, std::u32string_view characters,
                                     std::uint32_t width = kAtlasWidth) -> Result<GlyphAtlas, FontError>;
     /// The same of a scheme's font, each character's glyph from the font of the set that draws it,
-    /// the line the set's.
+    /// casting a drop shadow when that font does, the line the set's.
     [[nodiscard]] static auto build(const SchemeFontSet& fonts, std::u32string_view characters,
                                     std::uint32_t width = kAtlasWidth) -> Result<GlyphAtlas, FontError>;
 
@@ -63,11 +67,13 @@ private:
     std::vector<std::pair<char32_t, AtlasGlyph>> m_glyphs; ///< In the order of their characters.
 };
 
-/// A glyph of a line of text, placed: its bitmap in the atlas, and the bitmap's top left on the screen.
+/// A glyph of a line of text, placed: its bitmap in the atlas, the bitmap's top left on the screen, and
+/// whether it casts a drop shadow.
 struct PlacedGlyph {
     assets::SpriteRect source{};
     float x = 0.0F;
     float y = 0.0F;
+    bool hasDropShadow = false;
 };
 
 /// The glyphs of the UTF-8 `text` from `atlas`, the line's top at `y` and the pen from `x`: each
@@ -77,8 +83,9 @@ struct PlacedGlyph {
     -> std::vector<PlacedGlyph>;
 
 /// Appends to `quads` the glyphs of the UTF-8 `text` laid out by layoutText from `atlas`, whose picture
-/// on the GPU is `image`, in `color` as opaque as each glyph covers each pixel. Returns where the pen
-/// ends.
+/// on the GPU is `image`, in `color` as opaque as each glyph covers each pixel. A glyph that casts a drop
+/// shadow casts it under the whole line: its own shape in black, as opaque as `color`, kDropShadowOffset
+/// right and down. Returns where the pen ends.
 auto appendText(std::vector<render::ScreenQuad>& quads, const GlyphAtlas& atlas,
                 const render::ScreenImage& image, std::string_view text, float x, float y,
                 render::ScreenColor color) -> float;

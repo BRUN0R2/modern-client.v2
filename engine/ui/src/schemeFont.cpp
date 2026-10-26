@@ -32,7 +32,9 @@ auto SchemeFontSet::open(const assets::SchemeFont& font, std::uint32_t screenHei
         if (!opened) {
             continue; // it fails to load: the candidates after it stand in
         }
-        parts.push_back({.font = std::move(*opened), .characters = candidate.characters});
+        parts.push_back({.font = std::move(*opened),
+                         .characters = candidate.characters,
+                         .hasDropShadow = candidate.flags.test(assets::FontFlag::DropShadow)});
     }
     if (parts.empty()) {
         return fail(FontError::NoFace,
@@ -49,11 +51,21 @@ auto SchemeFontSet::metrics() const noexcept -> const FontMetrics& {
     return m_parts.front().font.metrics();
 }
 
-auto SchemeFontSet::fontFor(char32_t character) const noexcept -> const Font* {
+auto SchemeFontSet::partFor(char32_t character) const noexcept -> const Part* {
     const auto found = std::ranges::find_if(m_parts, [character](const Part& part) {
         return !part.characters || part.characters->contains(character);
     });
-    return found != m_parts.end() ? &found->font : nullptr;
+    return found != m_parts.end() ? &*found : nullptr;
+}
+
+auto SchemeFontSet::fontFor(char32_t character) const noexcept -> const Font* {
+    const Part* part = partFor(character);
+    return part != nullptr ? &part->font : nullptr;
+}
+
+auto SchemeFontSet::hasDropShadow(char32_t character) const noexcept -> bool {
+    const Part* part = partFor(character);
+    return part != nullptr && part->hasDropShadow;
 }
 
 auto SchemeFontSet::glyph(char32_t character) const -> Result<Glyph, FontError> {

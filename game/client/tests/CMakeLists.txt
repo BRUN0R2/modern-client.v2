@@ -13,6 +13,7 @@ nxAddTest(csClientTests
         weaponCommandsTests.cpp
         hearingTests.cpp
         audioTests.cpp
+        windowFontsTests.cpp
     DEPENDS
         cs::client
         cs::shared
@@ -21,6 +22,7 @@ nxAddTest(csClientTests
         nx::console
         nx::assets
         nx::render
+        nx::ui
         nx::platform
     # Sound played to no device, in CI and on a developer's desktop alike.
     ENVIRONMENT

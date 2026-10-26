@@ -257,6 +257,10 @@ private:
     void lastWeaponCommand();
     /// Opens the console's window, or closes it.
     void toggleConsole();
+    /// Opens the console's window and cl_showfps's label for a screen `screenHeight` pixels tall, in the
+    /// fonts of the installation's windows; one that cannot be had is logged, and the client goes on
+    /// without it.
+    void openWindowText(std::uint32_t screenHeight);
     [[nodiscard]] auto readInput() -> nx::Result<void, ClientError>;
     /// What `event` does in the console's window, open.
     void handleInConsole(const nx::platform::WindowEvent& event);
@@ -295,7 +299,8 @@ private:
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
     /// gave it, the brush entities where the game puts them, and the weapon in hand.
     [[nodiscard]] auto sessionView() -> cs::SceneView;
-    /// The screen's pictures over the frame, of `size`: the HUD, and the console's window when open.
+    /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, and the console's
+    /// window when open.
     void appendScreen(nx::rhi::Extent2d size);
     [[nodiscard]] auto finish() -> nx::Result<void, ClientError>;
 
@@ -334,6 +339,8 @@ private:
     std::vector<cs::ShownHostage> m_hostages;             ///< How the frame shows the game's hostages.
     nx::ui::FontCatalog m_fonts;
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
+    std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
+    nx::platform::FrameRateMeter m_frameRate;           ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
@@ -431,7 +438,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!size) {
         return nx::fail(ClientError::WindowUnavailable, std::move(size.error()));
     }
-    m_consoleWindow = cs::ConsoleWindow::open(m_content->vfs, m_fonts, m_console, size->height);
+    openWindowText(size->height);
     return {};
 }
 
@@ -608,6 +615,25 @@ void Client::lastWeaponCommand() {
     }
 }
 
+void Client::openWindowText(std::uint32_t screenHeight) {
+    auto fonts = cs::WindowFonts::open(m_content->vfs, m_fonts);
+    if (!fonts) {
+        nx::log::warning(kLog, "the console has no window, and cl_showfps shows nothing: {}",
+                         nx::describe(fonts.error()));
+        return;
+    }
+    if (auto window = cs::ConsoleWindow::open(*fonts, m_console, screenHeight); window) {
+        m_consoleWindow = std::move(*window);
+    } else {
+        nx::log::warning(kLog, "the console has no window: {}", nx::describe(window.error()));
+    }
+    if (auto label = cs::FpsLabel::open(*fonts, screenHeight); label) {
+        m_fpsLabel.emplace(std::move(*label));
+    } else {
+        nx::log::warning(kLog, "cl_showfps shows nothing: {}", nx::describe(label.error()));
+    }
+}
+
 void Client::toggleConsole() {
     if (m_consoleWindow == nullptr || m_consoleWindow->dialog() == nullptr) {
         m_console.print("The console has no window: its font could not be found");
@@ -658,6 +684,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         m_video->sleepTimer.sleepUntil(
             m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
         m_frameStart = nx::platform::MonotonicClock::now();
+        m_frameRate.frameStarted(m_frameStart);
         if (auto read = readInput(); !read) {
             return read;
         }
@@ -921,6 +948,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             }
             m_output.window = m_consoleWindow->dialog();
         }
+        if (m_fpsLabel) {
+            if (auto loaded = m_fpsLabel->load(m_frames->screen(), list); !loaded) {
+                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+            }
+        }
     }
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
@@ -982,6 +1014,12 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
                        .crosshairDistance = cs::kKnifeCrosshairDistance,
                        .roundTime = m_session->game->roundTimeShown()},
                       m_hudCvars->crosshair(), size);
+    }
+    // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
+    // client's HUD, while a map is played.
+    const std::optional<double> framesPerSecond = m_frameRate.framesPerSecond();
+    if (m_session && m_fpsLabel && framesPerSecond && m_cvars->video.showFps.value()) {
+        m_fpsLabel->append(m_screenQuads, *framesPerSecond);
     }
     if (m_consoleWindow != nullptr && m_consoleWindow->dialog() != nullptr) {
         m_logSink->showIn(*m_consoleWindow->dialog());
