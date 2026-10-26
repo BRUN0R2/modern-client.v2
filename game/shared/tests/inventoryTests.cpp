@@ -620,6 +620,25 @@ TEST(FiringTest, AReloadFillsTheClipOnceItsTimeIsOverAndAnEmptyClipIsReloadedOnI
     EXPECT_TRUE(inventory.isReloading());
 }
 
+TEST(FiringTest, ThePlayerIsHeldBackWhileItsWeaponIsDrawnOrReloaded) {
+    // The player's m_flNextAttack, which holds its use back too (ItemPostFrame).
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kAk});
+    std::ignore = inventory.giveAmmo("762Nato", 90);
+    Shooter shooter = standing();
+    EXPECT_TRUE(inventory.isHeldBack()) << "being drawn";
+    std::ignore = frames(inventory, shooter, 0, kReady - 2);
+    EXPECT_TRUE(inventory.isHeldBack());
+    std::ignore = frames(inventory, shooter, kReady - 1, kReady - 1);
+    EXPECT_FALSE(inventory.isHeldBack()) << "it may act from the next command on";
+    std::ignore = frames(inventory, shooter, kReady, kReady + 9, {Button::Attack});
+    ASSERT_EQ(inventory.held()->clip, 29U);
+    std::ignore = frames(inventory, shooter, kReady + 10, kReady + 10, {Button::Reload});
+    EXPECT_TRUE(inventory.isHeldBack()) << "reloading";
+    inventory.spawned();
+    EXPECT_FALSE(inventory.isHeldBack()) << "as it spawns";
+}
+
 TEST(AlternateTest, TheUspsSilencerGoesOnHoldingItsFireAndIdleAsLong) {
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kKnife, kUsp});

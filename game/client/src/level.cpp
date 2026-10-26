@@ -331,6 +331,15 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!playerHarm) {
         return nx::fail(LevelError::ContentUnavailable, std::move(playerHarm.error()));
     }
+    const std::filesystem::path useFile = data / "cstrike" / "use.toml";
+    auto useText = nx::platform::readTextFile(useFile);
+    if (!useText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(useText.error()));
+    }
+    auto use = readUseRules(*useText, nx::platform::toUtf8(useFile));
+    if (!use) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(use.error()));
+    }
     TextureMaterials materials = readTextureMaterials(*vfs);
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
@@ -342,6 +351,7 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
                        .breath = std::move(*breath),
                        .hitGroups = std::move(*hitGroups),
                        .playerHarm = std::move(*playerHarm),
+                       .use = std::move(*use),
                        .materials = std::move(materials)};
 }
 

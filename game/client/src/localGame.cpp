@@ -146,7 +146,6 @@ void LocalGame::tick(const UserCommand& command) {
     m_inventory.select(command, nx::game::tickTimeOf(m_world));
     m_player.maxSpeed = maxSpeed();
     preThink(command);
-    m_lastButtons = command.buttons;
     // After PreThink, which may kill it, as the original's returns then, and its PostThink skips the dead.
     const bool isAlive = m_status.isAlive();
     const MovementState before = m_player;
@@ -165,6 +164,8 @@ void LocalGame::tick(const UserCommand& command) {
         nx::game::touchTriggers(m_world, hulls, m_body);
         postThink(command, before);
     }
+    // As the original's PostThink ends, dead or alive (m_afButtonLast).
+    m_lastButtons = command.buttons;
     thinkRules();
     nx::game::runThinks(m_world, hulls);
     nx::game::runPushers(m_world, hulls);
@@ -175,11 +176,6 @@ void LocalGame::tick(const UserCommand& command) {
 void LocalGame::preThink(const UserCommand& command) {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     if (m_status.isAlive()) {
-        if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
-            std::ignore = nx::game::playerUse(
-                m_world, m_level->hulls(), m_body,
-                {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
-        }
         nx::Random breathRandom{command.number.value, kBreathStream};
         for (const BreathEvent& event :
              m_breath.breathe(m_player.waterLevel, m_player.waterType, m_player.moveType, m_timedHarms, time,
@@ -223,6 +219,11 @@ void LocalGame::postThink(const UserCommand& command, const MovementState& befor
                          .isBody = classified != nullptr &&
                                    classified->classification != nx::game::Classification::None};
     };
+    // ItemPostFrame: unless the player is held back, the use key going down uses what is in front
+    // (ImpulseCommands), before the weapon's frame.
+    if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use) && !m_inventory.isHeldBack()) {
+        use(command);
+    }
     const WeaponAttacks attacks = m_inventory.frame(command, shooter, tracer, time);
     for (const Blow& blow : attacks.blows) {
         attackEntity(blow.entity, nx::game::Attack{.attacker = m_body,
@@ -254,6 +255,13 @@ void LocalGame::postThink(const UserCommand& command, const MovementState& befor
             landingDamageOf(m_content->playerHarm.fall, before, m_player)) {
         land(*damage);
     }
+}
+
+void LocalGame::use(const UserCommand& command) {
+    const std::optional<nx::ecs::Entity> used = nx::game::playerUse(
+        m_world, m_level->hulls(), m_body,
+        {.eye = eyeOf(m_player), .forward = nx::angleVectors(command.viewAngles).forward});
+    makeSound(used ? m_content->use.found : m_content->use.nothing);
 }
 
 void LocalGame::land(nx::Damage damage) {

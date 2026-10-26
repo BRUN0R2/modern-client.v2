@@ -201,6 +201,9 @@ public:
     }
     /// Whether the weapon held is being reloaded.
     [[nodiscard]] inline auto isReloading() const noexcept -> bool { return m_isReloading; }
+    /// Whether the player is held back from acting, the weapon it holds being drawn or reloaded (the
+    /// player's m_flNextAttack): its ItemPostFrame neither uses what is in front nor runs the weapon.
+    [[nodiscard]] inline auto isHeldBack() const noexcept -> bool { return m_nextAttack > nx::Seconds{}; }
     /// How fast the weapon the player holds lets it run, kUnarmedSpeed with none (ResetMaxSpeed).
     [[nodiscard]] auto maxSpeed() const noexcept -> nx::UnitsPerSecond;
 
