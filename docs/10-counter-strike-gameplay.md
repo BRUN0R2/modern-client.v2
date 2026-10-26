@@ -611,11 +611,26 @@ kinds of ammo made as the game runs, with the HUD's picture of each, come with t
 
 ## 11. Bots (milestone M7)
 
-- Bots with behavior equivalent to the official CS 1.6 bots, on a navigation mesh (with
-  import of existing `.nav` files).
+Counter-Strike 1.6 has no bots of its own; its players know Condition Zero's, which ReGameDLL_CS
+reconstructs (GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). The project's bot
+plays by those rules, on the agents every kind shares ([ADR-0024](adr/0024-agents.md)) and on
+navigation meshes ([ADR-0023](adr/0023-navigation.md)):
+
+- One module, `cs.bots`: a bot is a player of the server's game, which it joins as a client does
+  and drives by user commands alone, with no gameplay shortcut; offline, it plays in the local
+  server.
+- Smarter than Condition Zero's by its memory, never by cheating: where each enemy was last seen or
+  heard and where it may have gone since along the mesh, what its team reported over the radio,
+  and where players died on the map before. It knows only what it perceived or was told.
+- Quick to decide: perception and decisions within a budget per tick, path queries in batches in
+  jobs. How soon it reacts and how well it aims are `bot_difficulty`'s values, in data.
 - Familiar commands and cvars: `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick`,
   `bot_quota`, `bot_difficulty`, `bot_chatter`.
-- Bots use the same intent API as players (usercmds), with no gameplay shortcuts.
+- A map's `.nav` file of Condition Zero's format may give its places and hiding spots; the mesh
+  itself is always built.
+
+The kinds a mod makes, such as zombies and bosses, are modules of the mod over the same agents,
+in Rook ([15 §2](15-mod-api.md#2-module-organization)).
 
 ## 12. Data organization
 
@@ -633,6 +648,7 @@ data/cstrike/
 ├── hitGroups.toml
 ├── playerHarm.toml     # how a player is hurt and killed: its falls, its pain and death
 ├── movement.toml       # derived constants not exposed as cvars
+├── navigation.toml     # the agents' profiles: the size and moves of each (ADR-0023)
 ├── entities.toml       # classname -> prefab + keyvalue schema
 ├── teams.toml          # teams, characters, models
 ├── ammo.toml           # kinds of ammo: carried, box price and rounds

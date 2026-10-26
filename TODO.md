@@ -17,8 +17,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
 - [ ] The plugin API as eight generic primitives (handles and `vars`, standalone types with no parent, methods and hooks, actions, queries, messages and effects, commands/cvars/tasks, services) in place of the old modules ([ADR-0022](docs/adr/0022-plugin-api-primitives.md), proposed)
-- [ ] Navigation meshes for every kind of agent, `nx.navigation` over Recast/Detour ([ADR-0023](docs/adr/0023-navigation.md), proposed)
-- [ ] Agents for bots, monsters and bosses: one brain, a player's or an entity's body, perception, memory and behaviors, `nx.agents` ([ADR-0024](docs/adr/0024-agents.md), proposed)
+- [x] Navigation meshes for every kind of agent, `nx.navigation` over Recast/Detour ([ADR-0023](docs/adr/0023-navigation.md))
+- [x] Agents for bots, monsters and bosses: one brain, a player's or an entity's body, perception, memory and behaviors, `nx.agents`, each kind its own module over it: `cs.bots`, a mod's zombies and bosses in Rook ([ADR-0024](docs/adr/0024-agents.md))
 - [x] Rook accepting AMX Mod X's literal names (`#include`, `new`, `register_clcmd`, `client_print`; a property's native such as `get_user_health` being its accessor, `get_player_var(player, "health")`) and the accessors with underscores (`get_player_var`, `set_weapon_var`, `get_entity_var`) through an `amxx` compatibility layer, an exception to ADR-0013 ([ADR-0021](docs/adr/0021-rook-amxx-names.md))
 - [ ] The enhanced look: physically based materials, the map's reflection probes, HDR and bloom, the same on every card ([ADR-0025](docs/adr/0025-enhanced-rendering.md), proposed)
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](docs/adr/0020-in-house-ui-toolkit.md))
@@ -605,14 +605,17 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Port the modes (Infection, Nemesis, Survivor, Assassin, Sniper)
 - [ ] Port the weapons (Cold Steel, Drakar III, USP, AK-47) with prediction (`shared`)
 - [ ] Port the HUD, menus and core
+- [ ] Zombies and bosses as kinds of agents of the mod, each its own module over `nx.agents` ([ADR-0024](docs/adr/0024-agents.md))
 - [ ] Freeze the 1.0 API
 
 ---
 
 ## M7 — Fine parity and ecosystem
 
-- [ ] Bots with a navigation mesh and `.nav` import
-- [ ] Bot commands and cvars (`bot_add`, `bot_quota`, `bot_difficulty`…)
+- [ ] `nx.navigation` ([ADR-0023](docs/adr/0023-navigation.md)): meshes of convex polygons by Recast and Detour for each profile of `data/cstrike/navigation.toml`, built from a map's walkable geometry and cached by its content hash; `findPath`, `nearestPoint`, `raycast`, `randomPoint`, `isReachable` and the corridor that follows an agent; `nav_generate`, `nav_draw` and `nav_check`
+- [ ] Navigation in a match: ladders, jumps, drops and teleporters as links; doors and breakables turning their areas and links on and off; the tactical layer (hiding, sniper and encounter spots, places); a `.nav` file's places and hiding spots; `nav_edit`
+- [ ] `nx.agents` ([ADR-0024](docs/adr/0024-agents.md)): perception (sight within a budget, the game's sounds heard, damage), memory (perceived records whose confidence falls, a typed working board, a team's board fed by the radio, the danger learned on a map), behaviors (a state machine chosen by utility), steering along the corridor with local avoidance, intents alone; benchmarks at 64, 256 and 1024 agents
+- [ ] `cs.bots` ([10 §11](docs/10-counter-strike-gameplay.md#11-bots-milestone-m7)): Counter-Strike's bot, a player of the server's game driven by its commands: moving, fighting, buying, the objectives and the radio, by `bot_difficulty`; `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick`, `bot_quota`, `bot_difficulty`, `bot_chatter`
 - [ ] Demos (`record`, `playdemo`, `timedemo`)
 - [ ] Spectator relay (HLTV equivalent)
 - [ ] Sandboxed client plugins and `cl_plugins`
