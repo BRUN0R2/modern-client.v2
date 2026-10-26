@@ -56,13 +56,22 @@ running for `mp_roundtime`, both read as the round starts and cut to whole secon
 time runs out ends by what its map is played for (`cs::mapObjectivesOf`: the classes of its
 entities), the first of a bomb target (`TargetSaved`), hostages (`HostagesNotRescued`), an escape
 zone (`TerroristsNotEscaped`) and a VIP safety zone (`VipNotEscaped`); the rounds of a map played
-for none run on. The next round starts five seconds after the end. `sv_restartround`, else
+for none run on; a time-out puts its round's start 60 seconds on, as CheckRoundTimeExpired does, so
+that a player spawning before the next round is told the round's length and those 60 seconds less
+the time since (and a map played for nothing runs out again that much later). The next round starts
+five seconds after the end. `sv_restartround`, else
 `sv_restart`, read once a second, restarts the game that many seconds later, the round playing on
 until then (or until five seconds after it ends): the players spawn as they joined, with
 `mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). As a round
 starts, the local game's player spawns again at its team's next spawn point (`cs::spawnPointsOf`,
 as `EntSelectSpawnPoint` takes them in turn), one unit above it, turned the way it faces, its
-health whole, keeping its armor, weapons and money. The HUD counts down the whole seconds the game
+health whole, keeping its armor, weapons and money, and what it may do next with its weapon it may
+do now (`cs::Inventory::spawned`, `m_flNextAttack = 0`: a reload under way completes); then the map
+is cleaned up as `CleanUpMap` does after the players spawn: the brush entities whose class restarts
+each round restart (`nx::game::restartBrushEntities`), a door closing again from where it is, a
+touch opening it again meanwhile (`CBaseDoor::Restart`); the original's client clears the decals then
+(its `decal_reset` event), which is to be measured on the original. `sv_restart` is read after the
+round's checks, as the original's Think reads it last. The HUD counts down the whole seconds the game
 told it as the player spawned and as the freeze ended ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
 Each end pays the teams as [§6](#6-economy) says. Game Commencing, the ends by elimination and by
 the objectives, the teams' scores, buying and the end of the match come next.

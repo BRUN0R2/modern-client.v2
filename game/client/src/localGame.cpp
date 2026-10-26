@@ -199,13 +199,6 @@ void LocalGame::tick(const UserCommand& command) {
 
 void LocalGame::thinkRules() {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
-    if (time.now > m_nextPeriodicThink) {
-        if (const std::optional<nx::Seconds> delay = m_cvars.takeRestart()) {
-            nx::log::info(kLog, "the game restarts in {}", *delay);
-            m_rounds.restartGameIn(*delay, time.now, time.rate);
-        }
-        m_nextPeriodicThink = time.now.after(kPeriodicThinkInterval, time.rate);
-    }
     const RoundEvents events = m_rounds.think(time.now, time.rate, m_cvars.roundLengths());
     if (events.test(RoundEvent::FreezeEnded)) {
         nx::log::info(kLog, "the round's freeze is over");
@@ -230,6 +223,16 @@ void LocalGame::thinkRules() {
     }
     if (events.test(RoundEvent::RoundStarted) || events.test(RoundEvent::GameRestarted)) {
         spawn();
+        // After the players spawn, as the original's RestartRound cleans the map up (CleanUpMap).
+        nx::game::restartBrushEntities(m_world, m_level->hulls());
+    }
+    // Last, as the original's Think reads them once a second after the round's checks.
+    if (time.now > m_nextPeriodicThink) {
+        if (const std::optional<nx::Seconds> delay = m_cvars.takeRestart()) {
+            nx::log::info(kLog, "the game restarts in {}", *delay);
+            m_rounds.restartGameIn(*delay, time.now, time.rate);
+        }
+        m_nextPeriodicThink = time.now.after(kPeriodicThinkInterval, time.rate);
     }
 }
 
@@ -255,6 +258,7 @@ void LocalGame::spawn() {
     standAt(point.origin + nx::Vec3{.z = kSpawnLift.value()});
     m_status.health = kSpawnHealth;
     m_isPaidNextRound = true;
+    m_inventory.spawned();
     m_turnedView = nx::EulerAngles{.yaw = point.yaw};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     m_roundTimer = m_rounds.timerAt(time.now, time.rate);

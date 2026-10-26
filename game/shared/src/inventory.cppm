@@ -127,6 +127,10 @@ public:
     /// Gives `rounds` of `ammo` besides the clips, as many as the player can carry of it: returns how
     /// many it took.
     auto giveAmmo(std::string_view ammo, std::uint32_t rounds) -> std::uint32_t;
+    /// The player spawned (CBasePlayer::Spawn): what it may do next with its weapon it may do now
+    /// (m_flNextAttack = 0), a reload under way completed on its next frame.
+    void spawned() noexcept;
+
     /// Takes every weapon and every round from the player (RemoveAllItems): it holds none, and its
     /// view model shows nothing. The sounds its weapons made stay, to be taken.
     void removeAll();

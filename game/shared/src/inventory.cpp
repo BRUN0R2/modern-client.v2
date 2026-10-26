@@ -317,6 +317,10 @@ void Inventory::makeSound(const std::optional<GameSound>& sound, const nx::game:
     }
 }
 
+void Inventory::spawned() noexcept {
+    m_nextAttack = nx::Seconds{};
+}
+
 void Inventory::draw(std::size_t index, const nx::game::TickTime& time, nx::Random& random) {
     m_before = m_held;
     m_held = index;

@@ -13,6 +13,7 @@ import nx.meta;
 import nx.data;
 import nx.ecs;
 import nx.assets;
+import nx.collision;
 import :components;
 
 export namespace nx::game {
@@ -52,6 +53,8 @@ struct BrushClass {
     std::optional<BrushBehavior> behavior{};
     /// What kind of thing they are to the game's rules (Classify); none when absent.
     std::optional<Classification> classification{};
+    /// The game restarts them as each round starts (CleanUpMap); not when absent.
+    std::optional<bool> restartsEachRound{};
 };
 
 /// data/cstrike/entities.toml: the classes of the entities of Counter-Strike's maps.
@@ -67,12 +70,19 @@ struct EntityClasses {
 /// `models`, that are of a class of `classes`, with their BrushModel, Transform and BrushSolidity,
 /// what their class does (a Door, its Pusher, its Waves and its Targets; a Button, its Pusher and its
 /// Targets; a Wall; a Trigger and its Targets), the textures they show (AlternateTextures, by their
-/// "frame"), what kind of thing their class is when it is one (Classified), and their name when they
-/// have one (Named); the others are left to what makes them.
+/// "frame"), what kind of thing their class is when it is one (Classified), whether their class
+/// restarts each round (RestartsEachRound), and their name when they have one (Named); the others
+/// are left to what makes them.
 /// Returns how many it made. Errors: UnknownModel.
 [[nodiscard]] auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> entities,
                                       std::span<const assets::BspModel> models, const EntityClasses& classes)
     -> Result<std::size_t, GameError>;
+
+/// Restarts the brush entities of `world`, a map's whose hulls are `hulls`, whose class restarts each
+/// round, as the game's CleanUpMap restarts them as a round starts, in their order: a door closes
+/// again from where it is (CBaseDoor::Restart). The others of those classes (func_breakable, the
+/// trains, func_vehicle) restart with their behaviors.
+void restartBrushEntities(ecs::World& world, const collision::BrushHulls& hulls);
 
 } // namespace nx::game
 
@@ -90,6 +100,7 @@ struct nx::meta::Description<nx::game::BrushClass> {
                                         .maximum = std::to_underlying(nx::assets::Contents::Empty)}),
         nx::meta::field<&nx::game::BrushClass::behavior>("behavior"),
         nx::meta::field<&nx::game::BrushClass::classification>("classification"),
+        nx::meta::field<&nx::game::BrushClass::restartsEachRound>("restartsEachRound"),
     };
 };
 

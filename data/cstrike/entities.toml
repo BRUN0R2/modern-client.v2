@@ -11,7 +11,8 @@
 # original numbers contents (nx::assets::Contents: -3 water, -16 a ladder); `behavior` is what
 # they do ("slidingDoor", "rotatingDoor": a touch opens them, or what names them; "button": a
 # player's use presses them; "wall": what names them changes their textures; "trigger",
-# "triggerOnce": a player walking into them fires their targets). A class not listed makes no
+# "triggerOnce": a player walking into them fires their targets); `restartsEachRound` marks those
+# the game restarts as each round starts (CleanUpMap: a door closes again). A class not listed makes no
 # brush entity yet: the other triggers, zones, and func_pushable, which the game makes a box.
 
 [[brushClasses]]
@@ -27,6 +28,7 @@ notSolidFlags = 1 # starts off
 [[brushClasses]]
 classname = "func_breakable"
 solid = "bsp"
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_door"
@@ -34,6 +36,7 @@ solid = "bsp"
 notSolidFlags = 8 # passable
 skinMakesNotSolid = true
 behavior = "slidingDoor"
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_water" # a door
@@ -41,12 +44,14 @@ solid = "bsp"
 notSolidFlags = 8
 skinMakesNotSolid = true
 behavior = "slidingDoor"
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_door_rotating"
 solid = "bsp"
 notSolidFlags = 8 # passable
 behavior = "rotatingDoor"
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_illusionary" # its "skin" makes it a volume, or a ladder (-16)
@@ -84,17 +89,20 @@ solid = "bsp"
 classname = "func_train"
 solid = "bsp"
 notSolidFlags = 8 # passable
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_tracktrain"
 solid = "bsp"
 notSolidFlags = 8 # passable
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_vehicle"
 solid = "bsp"
 notSolidFlags = 8 # passable
 classification = "vehicle" # CFuncVehicle::Classify: a knife sounds on it as on flesh
+restartsEachRound = true # CleanUpMap restarts it as each round starts
 
 [[brushClasses]]
 classname = "func_conveyor"
