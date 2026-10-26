@@ -40,7 +40,8 @@ constexpr std::array kTimeOuts{
 
 constexpr nx::EnumArray<RoundEndReason, std::optional<Team>> kWinners{
     nx::EnumArray<RoundEndReason, std::optional<Team>>::Storage{
-        Team::CounterTerrorists, Team::Terrorists, Team::CounterTerrorists, Team::Terrorists, std::nullopt}};
+        Team::CounterTerrorists, Team::Terrorists, Team::CounterTerrorists, Team::Terrorists, std::nullopt,
+        Team::CounterTerrorists, Team::Terrorists, std::nullopt}};
 
 constexpr float kSecondsPerMinute = 60.0F;
 
@@ -121,19 +122,25 @@ auto RoundTimer::shownAt(nx::GameTime now, nx::TickRate rate) const noexcept -> 
     return wholeSecondsOf(nx::Seconds{static_cast<float>(seconds)} - now.since(toldAt, rate));
 }
 
-Rounds::Rounds(MapObjectives objectives, const RoundLengths& lengths, nx::GameTime now) noexcept
-    : m_objectives{objectives}, m_roundLength{lengths.round}, m_startedAt{now}, m_length{lengths.freeze} {}
+Rounds::Rounds(MapObjectives objectives, const RoundLengths& lengths, nx::GameTime now,
+               bool isGameStarted) noexcept
+    : m_objectives{objectives}, m_roundLength{lengths.round}, m_startedAt{now}, m_length{lengths.freeze},
+      m_isGameStarted{isGameStarted} {}
 
 auto Rounds::start(MapObjectives objectives, const RoundLengths& lengths, nx::GameTime now) noexcept
     -> Rounds {
     nx::expects(areLengths(lengths), "Rounds::start: lengths finite and not negative");
-    Rounds rounds{objectives, lengths, now};
+    Rounds rounds{objectives, lengths, now, false};
     rounds.m_length += kFirstFreezeExtra;
     return rounds;
 }
 
 auto Rounds::remainingAt(nx::GameTime now, nx::TickRate rate) const noexcept -> nx::Seconds {
     return m_length - now.since(m_startedAt, rate);
+}
+
+auto Rounds::sinceStartAt(nx::GameTime now, nx::TickRate rate) const noexcept -> nx::Seconds {
+    return now.since(m_startedAt, rate);
 }
 
 auto Rounds::timerAt(nx::GameTime now, nx::TickRate rate) const noexcept -> RoundTimer {
@@ -153,6 +160,40 @@ auto Rounds::endRound(RoundEndReason reason, nx::GameTime now, nx::TickRate rate
     m_end = reason;
     m_restartAt = now.after(kRestartDelay, rate);
     return true;
+}
+
+auto Rounds::checkWinConditions(const TeamCounts& counts, nx::GameTime now, nx::TickRate rate) noexcept
+    -> std::optional<RoundEndReason> {
+    // The original's own condition: a game not started weighs its round again though it ended.
+    if (m_isGameStarted && m_end) {
+        return std::nullopt;
+    }
+    const TeamCount& terrorists = counts[Team::Terrorists];
+    const TeamCount& counterTerrorists = counts[Team::CounterTerrorists];
+    const bool hasBothTeams = terrorists.players() > 0 && counterTerrorists.players() > 0;
+    // NeededPlayersCheck.
+    if (!hasBothTeams) {
+        m_isGameStarted = false;
+    } else if (!m_isGameStarted) {
+        m_end = RoundEndReason::GameCommencing;
+        m_restartAt = now.after(kCommenceDelay, rate);
+        m_restartsGame = true;
+        m_isFrozen = false;
+        m_isGameStarted = true;
+        return m_end;
+    }
+    // TeamExterminationCheck.
+    std::optional<RoundEndReason> reason;
+    if (hasBothTeams) {
+        if (terrorists.alive == 0 && terrorists.dead != 0 && counterTerrorists.alive > 0) {
+            reason = RoundEndReason::CounterTerroristsWin;
+        } else if (counterTerrorists.alive == 0 && counterTerrorists.dead != 0) {
+            reason = RoundEndReason::TerroristsWin;
+        }
+    } else if (counterTerrorists.alive == 0 && terrorists.alive == 0) {
+        reason = RoundEndReason::RoundDraw;
+    }
+    return reason && endRound(*reason, now, rate) ? reason : std::nullopt;
 }
 
 auto Rounds::think(nx::GameTime now, nx::TickRate rate, const RoundLengths& lengths) noexcept -> RoundEvents {
@@ -175,7 +216,7 @@ auto Rounds::think(nx::GameTime now, nx::TickRate rate, const RoundLengths& leng
     }
     if (m_restartAt && *m_restartAt <= now) {
         events.set(m_restartsGame ? RoundEvent::GameRestarted : RoundEvent::RoundStarted);
-        *this = Rounds{m_objectives, lengths, now};
+        *this = Rounds{m_objectives, lengths, now, m_isGameStarted};
     }
     return events;
 }

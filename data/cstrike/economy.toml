@@ -8,9 +8,11 @@
 # lost more than once in a row and the bonus is below `most`. `hostageBonus` is what the winners of a
 # round get as the next starts: `perHostage` for each hostage still held, while the sum is below
 # `upTo`. `hostageHarm` is what a player who hurts a hostage loses (CHostage::TakeDamage): `perDamage`
-# for each whole point of the damage it took, and `perKill` more when it killed it. `roundEnds` gives, by why a round ended (cs::RoundEndReason), what its winners get, and
-# whether its losers alive as it ended are paid as the next round starts; a reason not listed gives
-# nothing, and pays its losers.
+# for each whole point of the damage it took, and `perKill` more when it killed it. `roundEnds` gives,
+# by why a round ended (cs::RoundEndReason), what its winners get, and `bombTargetMoney` instead on a
+# map with a bomb target, where the original pays the bomb's rewards for a team eliminated
+# (Round_Cts, Round_Ts), and whether its losers alive as it ended are paid as the next round starts; a
+# reason not listed gives nothing, and pays its losers.
 
 [loserBonus]
 first = 1400
@@ -44,4 +46,16 @@ paysLivingLosers = true
 [[roundEnds]]
 reason = "vipNotEscaped"
 money = 3250
+paysLivingLosers = true
+
+[[roundEnds]]
+reason = "counterTerroristsWin"
+money = 3000           # RR_CTS_WIN
+bombTargetMoney = 3250 # RR_BOMB_DEFUSED
+paysLivingLosers = true
+
+[[roundEnds]]
+reason = "terroristsWin"
+money = 3000           # RR_TERRORISTS_WIN
+bombTargetMoney = 3250 # RR_BOMB_EXPLODED
 paysLivingLosers = true

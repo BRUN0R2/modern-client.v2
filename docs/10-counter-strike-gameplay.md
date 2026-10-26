@@ -61,15 +61,27 @@ that a player spawning before the next round is told the round's length and thos
 the time since (and a map played for nothing runs out again that much later). A round ends, too, by
 what the players do (`cs::Rounds::endRound`, TerminateRound), once at most: a round that ended ends
 no more, as CheckWinConditions looks no further once a started game's round is decided, nor does
-its time run out after; today, in a draw (`RoundDraw`, won by nobody), as TeamExterminationCheck ends
-the round of a game with players on one team alone once none of them is alive: the local game's
-player killed ([§7.4](#74-damage)), frozen or not. The next round starts five seconds after the end.
+its time run out after. The server's game weighs the round's end as the original's
+CheckWinConditions does (`cs::Rounds::checkWinConditions`), whenever a player joins or dies
+([§7.4](#74-damage)), frozen or not, by the players alive and dead of each team (`cs::TeamCounts`;
+one that joined and has not spawned counts as dead): the first time both teams have players, and
+again after a team had none, the game commences (`GameCommencing`, NeededPlayersCheck): the round
+ends unfrozen and the game restarts three seconds later (`cs::kCommenceDelay`); then
+TeamExterminationCheck: with players on both teams, every terrorist dead and a counter-terrorist
+alive is the counter-terrorists' win (`CounterTerroristsWin`), else every counter-terrorist dead the
+terrorists' (`TerroristsWin`, both dead at once included); with players on one team alone, none of
+them alive is a draw (`RoundDraw`, won by nobody). The next round starts five seconds after the end.
 `sv_restartround`, else
 `sv_restart`, read once a second, restarts the game that many seconds later, the round playing on
 until then (or until five seconds after it ends): the players spawn as they joined, with
-`mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). As a round
-starts, the local game's player spawns again at its team's next spawn point (`cs::spawnPointsOf`,
-as `EntSelectSpawnPoint` takes them in turn), one unit above it, turned the way it faces, its
+`mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). A player joins
+a team (`cs::Game::join`, JoiningThink) with `mp_startmoney` and spawns at once, unless it spawned in
+the round already or, the game having players on both teams, the round started more than 20 seconds
+before (`cs::kJoinSpawnWindow`, FPlayerCanRespawn, from the start of its freeze, then of its time):
+it then watches, dead, from its team's next spawn point until the next round. As a round starts,
+every player spawns again at its team's next spawn point (`cs::spawnPointsOf`, as
+`EntSelectSpawnPoint` takes each team's in turn, for all its players), one unit above it, turned
+the way it faces, its
 health whole, keeping its armor, weapons and money, and what it may do next with its weapon it may
 do now (`cs::Inventory::spawned`, `m_flNextAttack = 0`: a reload under way completes); killed, it
 keeps its money alone, without armor, given its team's loadout (`Spawn`, `GiveDefaultItems`); then the map
@@ -79,14 +91,15 @@ touch opening it again meanwhile (`CBaseDoor::Restart`); the original's client c
 (its `decal_reset` event), which is to be measured on the original. `sv_restart` is read after the
 round's checks, as the original's Think reads it last. The HUD counts down the whole seconds the game
 told it as the player spawned and as the freeze ended ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
-Each end pays the teams as [§6](#6-economy) says (a draw pays nobody, a team's losses in a row still
-raising the loser bonus). Game Commencing, the ends of a team eliminated by the other and by the
-objectives, the teams' scores, buying and the end of the match come next.
+Each end pays the teams as [§6](#6-economy) says (a draw and Game Commencing pay nobody, a team's
+losses in a row still raising the loser bonus). The ends by the objectives, the teams' scores, buying
+and the end of the match come next.
 
 ### 3.1 Round end reasons
 
 `enum class RoundEndReason` with parity with the original's reasons (today the four ends of a time
-run out and the draw, with the team each is won by: `cs::winnerOf`):
+run out, the draw, the two ends of a team eliminated and Game Commencing, with the team each is won
+by: `cs::winnerOf`):
 
 | Reason | Maps |
 |--------|------|
@@ -97,7 +110,7 @@ run out and the draw, with the team each is won by: `cs::winnerOf`):
 | `HostagesNotRescued` (time ran out) | `cs_` |
 | `VipEscaped` / `VipAssassinated` / `VipNotEscaped` | `as_` |
 | `TerroristsEscaped` / `CTsPreventEscape` / `EscapingTerroristsNeutralized` / `TerroristsNotEscaped` | `es_` |
-| `CTsWin` / `TerroristsWin` (elimination) | All |
+| `CounterTerroristsWin` / `TerroristsWin` (elimination) | All |
 | `RoundDraw` | All |
 | `GameCommencing` | All |
 
@@ -192,14 +205,16 @@ key (planned, [18](18-testing-and-quality.md#parity-tests)). What the file holds
 
 **Today** (`cs.shared:economy`, `data/cstrike/economy.toml`, ReGameDLL_CS's values and rules):
 the winners of a round get its end's money (`roundEnds`: 3250 for a target saved, hostages not
-rescued or the VIP not escaped, nothing for terrorists not escaped) and, as the next round starts,
+rescued or the VIP not escaped, nothing for terrorists not escaped; 3000 for a team eliminated, 3250
+on a map with a bomb target, where the original pays the bomb's rewards for it, `bombTargetMoney`)
+and, as the next round starts,
 150 for each hostage still held while the sum is below 2000; the losers get the loser bonus, 1400
 as a game starts, 500 more each round while a team has lost more than once in a row up to 3400,
 1500 once a team wins after such a streak, never to the terrorists of a map with an escape zone
 (`cs::TeamAccounts`). As a round starts each player gets its team's account but those alive on the
 losing side of an end that does not pay them (a target saved, hostages not rescued); a player's
 money is held from none to 16000 (`cs::addMoney`, `kMostMoney`); a restarted game starts the
-accounts, the losses and the bonus over. The local game's player is paid so. The single auditable
+accounts, the losses and the bonus over, Game Commencing too. The server's players are paid so. The single auditable
 function and its event come with their first consumers (the HUD's flash of a changed number,
 plugins); the kills', the bomb's and the hostages' rescue money come with them.
 
@@ -524,8 +539,8 @@ pitch of its kick is gone. With no health left it
 is killed (`Killed`): its death is heard (`die1` to `die3`, `death6`, on its `Voice` channel, the
 pain's replaced), its weapons go with it (`PackDeadPlayerItems`; the box it drops comes with dropping),
 it does nothing more until it spawns again (killed by nothing, it observes its own body, which moves no
-more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), and its round ends in a draw
-(§3), the local game's other team having no player. What a dead player sees and its HUD (the
+more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), no longer solid, and the round's
+end is weighed (§3): its team eliminated loses it. What a dead player sees and its HUD (the
 original's client follows its body, `OBS_CHASE_FREE`, then spectates), its body's death played, the
 attacks of other players, their hit groups and the armor's share (of slime's and lava's harm too), and
 `trigger_hurt` come with what they need ([TODO](../TODO.md)).

@@ -4,8 +4,10 @@
 // The game of a map as its server plays it: a player joining at its team's spawn point with its loadout
 // and the starting money, moved by its commands tick by tick once the first freeze is over, the round
 // ended in a draw by its death and its spawn again as the next starts, the game's restart, and what each
-// tick's snapshot tells its client; on the BSP seed of the fuzz corpus given other entities, by the
-// repository's data.
+// tick's snapshot tells its client; players of both teams: each team's spawn points in turn, Game
+// Commencing, a team eliminated and its winners paid, a player joining late watching until the next
+// round, and players solid to each other; on the BSP seed of the fuzz corpus (a floor at z = 0 in its
+// hulls) given other entities, by the repository's data.
 
 #include <gtest/gtest.h>
 
@@ -24,11 +26,12 @@ import cs.server;
 
 namespace {
 
-/// The box's counter-terrorist spawn points, low and far up, and a terrorist one.
+/// The box's counter-terrorist spawn points, low and far up, and two terrorist ones far from them.
 constexpr std::string_view kEntities = R"({ "classname" "worldspawn" }
 { "classname" "info_player_start" "origin" "32 32 8" "angles" "0 90 0" }
 { "classname" "info_player_start" "origin" "16 16 2000" "angles" "0 180 0" }
-{ "classname" "info_player_deathmatch" "origin" "48 48 8" "angles" "0 270 0" })";
+{ "classname" "info_player_deathmatch" "origin" "300 300 8" "angles" "0 270 0" }
+{ "classname" "info_player_deathmatch" "origin" "600 300 8" "angles" "0 0 0" })";
 
 constexpr float kTolerance = 1e-3F;
 /// Ticks past the first freeze of a map: mp_freezetime's default and its extra two seconds, 800 ticks.
@@ -37,6 +40,14 @@ constexpr std::uint32_t kPastTheFirstFreeze = 810;
 constexpr std::uint32_t kPastTheRestartDelay = 501;
 /// Ticks past a restart sv_restart asks for one second on, read once a second.
 constexpr std::uint32_t kPastARestart = 250;
+/// Ticks past the restart Game Commencing asks for (kCommenceDelay, 300 ticks).
+constexpr std::uint32_t kPastTheCommence = 301;
+/// Ticks past a round's freeze, mp_freezetime's default (600 ticks).
+constexpr std::uint32_t kPastAFreeze = 610;
+/// Ticks past the time a player joining still spawns in its round (kJoinSpawnWindow, 2000 ticks).
+constexpr std::uint32_t kPastTheJoinWindow = 2010;
+/// Above a floor: a fall from there kills.
+constexpr float kDeadlyHeight = 2000.0F;
 
 /// A game of the box, with the repository's data and an installation of no files.
 class GameTest : public ::testing::Test {
@@ -73,6 +84,26 @@ protected:
             m_game->tick(commands);
         }
         return m_game->snapshotFor(player);
+    }
+
+    /// Plays `ticks` ticks of no player's command.
+    void idle(std::uint32_t ticks) {
+        for (std::uint32_t tick = 0; tick < ticks; ++tick) {
+            m_game->tick({});
+        }
+    }
+
+    /// Kills `player` by a fall from kDeadlyHeight; returns the snapshot of its death.
+    auto killByFall(cs::PlayerIndex player) -> cs::PlayerSnapshot {
+        const cs::PlayerSnapshot before = m_game->snapshotFor(player);
+        m_game->placeEye(player,
+                         {.x = before.player.origin.x, .y = before.player.origin.y, .z = kDeadlyHeight});
+        cs::PlayerSnapshot fallen = play(player, 1);
+        for (std::uint32_t tick = 0; tick < kPastAFreeze && fallen.status.isAlive(); ++tick) {
+            fallen = play(player, 1);
+        }
+        EXPECT_FALSE(fallen.status.isAlive()) << "killed by its landing";
+        return fallen;
     }
 
     [[nodiscard]] auto game() -> cs::Game& { return *m_game; }
@@ -181,12 +212,85 @@ TEST_F(GameTest, SvRestartRestartsTheGameWithTheStartingMoney) {
     }
     ASSERT_TRUE(restarted.has_value());
     EXPECT_EQ(cvars().restart.value(), 0.0F) << "set back to 0 as it is asked for";
-    EXPECT_EQ(restarted->player.origin, (nx::Vec3{.x = 48.0F, .y = 48.0F, .z = 9.0F}))
-        << "the terrorists' only spawn point";
+    EXPECT_EQ(restarted->player.origin, (nx::Vec3{.x = 600.0F, .y = 300.0F, .z = 9.0F}))
+        << "the terrorists' next spawn point";
     EXPECT_EQ(restarted->status.money, cs::kStartMoney);
     EXPECT_FALSE(std::ranges::contains(restarted->inventory.weapons(), *ak47, &cs::OwnedWeapon::weapon))
         << "with its team's loadout alone";
     EXPECT_TRUE(game().rounds().isFrozen()) << "a restarted game starts frozen";
+}
+
+TEST_F(GameTest, EachPlayerOfATeamSpawnsAtItsTeamsNextSpawnPoint) {
+    const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex second = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex third = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    EXPECT_EQ(game().snapshotFor(first).player.origin, (nx::Vec3{.x = 32.0F, .y = 32.0F, .z = 9.0F}));
+    EXPECT_EQ(game().snapshotFor(second).player.origin, (nx::Vec3{.x = 16.0F, .y = 16.0F, .z = 2001.0F}));
+    EXPECT_EQ(game().snapshotFor(third).player.origin, (nx::Vec3{.x = 32.0F, .y = 32.0F, .z = 9.0F}))
+        << "the first after the last";
+    EXPECT_FALSE(game().rounds().isGameStarted()) << "no terrorists yet";
+}
+
+TEST_F(GameTest, TheSecondTeamsFirstPlayerCommencesTheGame) {
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    EXPECT_EQ(game().rounds().end(), cs::RoundEndReason::GameCommencing);
+    EXPECT_TRUE(game().rounds().isGameStarted());
+    EXPECT_FALSE(game().rounds().isFrozen()) << "unfrozen until the restart";
+    idle(kPastTheCommence);
+    EXPECT_TRUE(game().rounds().isFrozen()) << "the restarted game's first round";
+    EXPECT_EQ(game().rounds().end(), std::nullopt);
+    for (const cs::PlayerIndex player : {counterTerrorist, terrorist}) {
+        const cs::PlayerSnapshot restarted = game().snapshotFor(player);
+        EXPECT_TRUE(restarted.status.isAlive());
+        EXPECT_EQ(restarted.status.money, cs::kStartMoney);
+    }
+}
+
+TEST_F(GameTest, ATeamEliminatedLosesTheRoundAndItsWinnersArePaid) {
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence);
+    std::ignore = killByFall(terrorist);
+    EXPECT_EQ(game().rounds().end(), cs::RoundEndReason::CounterTerroristsWin);
+    idle(kPastTheRestartDelay);
+    // The box has no bomb target: RR_CTS_WIN for the winners, the first loser bonus for the losers.
+    EXPECT_EQ(game().snapshotFor(counterTerrorist).status.money, nx::Money{cs::kStartMoney.value() + 3000});
+    EXPECT_EQ(game().snapshotFor(terrorist).status.money, nx::Money{cs::kStartMoney.value() + 1400});
+    EXPECT_TRUE(game().snapshotFor(terrorist).status.isAlive()) << "spawned again";
+
+    std::ignore = killByFall(counterTerrorist);
+    EXPECT_EQ(game().rounds().end(), cs::RoundEndReason::TerroristsWin);
+}
+
+TEST_F(GameTest, APlayerJoiningLateWatchesUntilTheNextRound) {
+    std::ignore = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    const cs::PlayerIndex early = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    EXPECT_TRUE(game().snapshotFor(early).status.isAlive()) << "within 20 seconds of the round's start";
+    idle(kPastTheJoinWindow);
+    const cs::PlayerIndex late = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerSnapshot watching = game().snapshotFor(late);
+    EXPECT_FALSE(watching.status.isAlive());
+    EXPECT_TRUE(watching.player.isDead);
+    EXPECT_TRUE(watching.inventory.weapons().empty());
+    EXPECT_EQ(game().rounds().end(), std::nullopt) << "its team's others alive";
+    EXPECT_EQ(watching.status.money, cs::kStartMoney);
+}
+
+TEST_F(GameTest, PlayersAreSolidToEachOther) {
+    const cs::PlayerIndex walker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex standing = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    // On the floor, a box's width and a half apart along x.
+    game().placeEye(walker, {.y = 1000.0F, .z = cs::kStandingViewHeight.value() + 1.0F});
+    game().placeEye(standing, {.x = 48.0F, .y = 1000.0F, .z = cs::kStandingViewHeight.value() + 1.0F});
+    const cs::PlayerSnapshot walked = play(walker, 50, {.forward = nx::UnitsPerSecond{250.0F}});
+    EXPECT_GT(walked.player.origin.x, 1.0F) << "it walked";
+    EXPECT_LE(walked.player.origin.x, 16.0F + kTolerance) << "stopped by the other's box";
 }
 
 TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {

@@ -7,10 +7,10 @@
 /// what its map is played for ends it, or its time runs out; the next starts kRestartDelay after it
 /// ends. sv_restart restarts the game when it asks, the round playing on until then.
 ///
-/// Today: rounds ended by their time running out, and by what the game ends them for (the draw of a
-/// game whose only team has no player alive); the other ends that what the players do brings (a team
-/// eliminated by the other, the bomb, the hostages, the VIP, the escape), Game Commencing, the teams'
-/// scores and the end of the map come with them (TODO.md).
+/// Today: rounds ended by their time running out, by a team eliminated by the other or nobody left alive
+/// (TeamExterminationCheck), and by Game Commencing as both teams first have players
+/// (NeededPlayersCheck); the ends the bomb, the hostages, the VIP and the escape bring, the teams' scores
+/// and the end of the map come with them (TODO.md).
 export module cs.shared:rounds;
 
 import std;
@@ -28,6 +28,11 @@ inline constexpr nx::Seconds kRestartDelay{5.0F};
 inline constexpr nx::Seconds kTimeOutGrace{60.0F};
 /// How much longer than mp_freezetime the first freeze of a map lasts.
 inline constexpr nx::Seconds kFirstFreezeExtra{2.0F};
+/// How long after Game Commencing the game restarts (NeededPlayersCheck's TerminateRound).
+inline constexpr nx::Seconds kCommenceDelay{3.0F};
+/// How long after its round's start a player that joins still spawns in it, once the game has players
+/// of both teams (FPlayerCanRespawn's 20 seconds).
+inline constexpr nx::Seconds kJoinSpawnWindow{20.0F};
 /// The class of a map's hostages.
 inline constexpr std::string_view kHostageClass = "hostage_entity";
 
@@ -55,8 +60,25 @@ enum class RoundEndReason : std::uint8_t {
     VipNotEscaped,        ///< Its time ran out on a map with a VIP safety zone.
     /// Nobody was alive, a team having no player (TeamExterminationCheck's draw).
     RoundDraw,
+    CounterTerroristsWin, ///< Every terrorist died, a counter-terrorist alive (ROUND_CTS_WIN).
+    TerroristsWin,        ///< Every counter-terrorist died (ROUND_TERRORISTS_WIN).
+    /// Both teams have players for the first time, or again (ROUND_GAME_COMMENCE): the game restarts.
+    GameCommencing,
     Count,
 };
+
+/// How many players of a team are alive and how many dead, as the game counts them for the round's end
+/// (InitializePlayerCounts): one that joined and has not spawned yet counts as dead.
+struct TeamCount {
+    std::uint32_t alive = 0;
+    std::uint32_t dead = 0;
+
+    /// How many players the team has.
+    [[nodiscard]] constexpr auto players() const noexcept -> std::uint32_t { return alive + dead; }
+    [[nodiscard]] inline auto operator==(const TeamCount&) const noexcept -> bool = default;
+};
+
+using TeamCounts = nx::EnumArray<Team, TeamCount>;
 
 /// The team a round ended by `reason` was won by; none for a draw.
 [[nodiscard]] auto winnerOf(RoundEndReason reason) noexcept -> std::optional<Team>;
@@ -130,6 +152,9 @@ public:
     /// Whether the round is frozen: its players barely move (kFreezeSpeed) and do not fire. A round
     /// that ended may be: its freeze still runs out.
     [[nodiscard]] inline auto isFrozen() const noexcept -> bool { return m_isFrozen; }
+    /// Whether the game started (m_bGameStarted): it had players of both teams since it last had none
+    /// of one, Game Commencing then.
+    [[nodiscard]] inline auto isGameStarted() const noexcept -> bool { return m_isGameStarted; }
     /// Why the round ended; none while it plays.
     [[nodiscard]] inline auto end() const noexcept -> std::optional<RoundEndReason> { return m_end; }
     /// When the next round starts: none before the round ends or a restart is asked for.
@@ -140,6 +165,10 @@ public:
     /// How long the round has left at `now`, the game running at `rate`: of its freeze while frozen,
     /// else of its time; below 0 once it ran out.
     [[nodiscard]] auto remainingAt(nx::GameTime now, nx::TickRate rate) const noexcept -> nx::Seconds;
+    /// How long before `now` the round started, the game running at `rate`, as the original's
+    /// m_fRoundStartTime counts it: its freeze while frozen, else its time; after a time-out, from
+    /// kTimeOutGrace on.
+    [[nodiscard]] auto sinceStartAt(nx::GameTime now, nx::TickRate rate) const noexcept -> nx::Seconds;
     /// What the game tells a player's HUD at `now` of the round's time (SyncRoundTimer): its whole
     /// seconds left, none below 0.
     [[nodiscard]] auto timerAt(nx::GameTime now, nx::TickRate rate) const noexcept -> RoundTimer;
@@ -155,6 +184,17 @@ public:
     /// original's CheckWinConditions looks no further once the round of a started game is decided.
     [[nodiscard]] auto endRound(RoundEndReason reason, nx::GameTime now, nx::TickRate rate) noexcept -> bool;
 
+    /// Weighs the round's end by `counts`, the players of each team, at `now`, the game running at
+    /// `rate`, as the original's CheckWinConditions does (GPL, consulted: docs/20 section 3): nothing once
+    /// a started game's round ended; then, both teams having players, a game not started commences
+    /// (Game Commencing: the round ends, unfrozen, and the game restarts kCommenceDelay after); a team
+    /// without players stops the game (its next players of both teams commence it again). Then
+    /// TeamExterminationCheck: with players of both teams, every terrorist dead and a counter-terrorist
+    /// alive is the counter-terrorists' win, else every counter-terrorist dead the terrorists'; without,
+    /// nobody alive is a draw; the next round kRestartDelay after. Returns why the round ended now.
+    auto checkWinConditions(const TeamCounts& counts, nx::GameTime now, nx::TickRate rate) noexcept
+        -> std::optional<RoundEndReason>;
+
     /// Plays the rules at `now`, the game running at `rate`, in the original's order (Think): a
     /// freeze that ran out lets the round's time run; a time that ran out ends the round as its map's
     /// objectives say (timeOutReasonOf), the next round kRestartDelay after; then the next round
@@ -162,7 +202,8 @@ public:
     auto think(nx::GameTime now, nx::TickRate rate, const RoundLengths& lengths) noexcept -> RoundEvents;
 
 private:
-    Rounds(MapObjectives objectives, const RoundLengths& lengths, nx::GameTime now) noexcept;
+    Rounds(MapObjectives objectives, const RoundLengths& lengths, nx::GameTime now,
+           bool isGameStarted) noexcept;
 
     MapObjectives m_objectives;
     nx::Seconds m_roundLength; ///< Of the round's time, after its freeze.
@@ -171,7 +212,8 @@ private:
     bool m_isFrozen = true;
     std::optional<RoundEndReason> m_end{};
     std::optional<nx::GameTime> m_restartAt{};
-    bool m_restartsGame = false; ///< The next round restarts the game (sv_restart).
+    bool m_restartsGame = false;  ///< The next round restarts the game (sv_restart, Game Commencing).
+    bool m_isGameStarted = false; ///< Kept from round to round.
 };
 
 } // namespace cs

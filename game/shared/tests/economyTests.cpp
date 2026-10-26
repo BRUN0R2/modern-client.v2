@@ -51,6 +51,14 @@ TEST(EconomyTest, TheRepositorysMoneyIsTheOriginals) {
     EXPECT_EQ(rules.roundEnd(RoundEndReason::TerroristsNotEscaped).money, nx::Money{});
     EXPECT_EQ(rules.roundEnd(RoundEndReason::VipNotEscaped).money, nx::Money{3250});
     EXPECT_TRUE(rules.roundEnd(RoundEndReason::VipNotEscaped).paysLivingLosers);
+    // A team eliminated: RR_CTS_WIN and RR_TERRORISTS_WIN, the bomb's rewards on a map with a bomb target.
+    for (const RoundEndReason win : {RoundEndReason::CounterTerroristsWin, RoundEndReason::TerroristsWin}) {
+        EXPECT_EQ(rules.roundEnd(win).moneyOn({}), nx::Money{3000}) << nx::enumName(win);
+        EXPECT_EQ(rules.roundEnd(win).moneyOn({MapObjective::BombTarget}), nx::Money{3250})
+            << nx::enumName(win);
+        EXPECT_TRUE(rules.roundEnd(win).paysLivingLosers) << nx::enumName(win);
+    }
+    EXPECT_EQ(rules.roundEnd(RoundEndReason::GameCommencing).money, nx::Money{}) << "listed nowhere";
     // CHostage::TakeDamage: 20 for each point of damage, and 20 times 25 more for a kill.
     EXPECT_EQ(rules.hostageHarm.perDamage, nx::Money{20});
     EXPECT_EQ(rules.hostageHarm.perKill, nx::Money{500});
@@ -92,9 +100,18 @@ TEST(EconomyTest, APlayersMoneyIsHeldFromNoneTo16000) {
 TEST(EconomyTest, TheWinnersGetTheirEndsMoneyAndTheLosersTheBonus) {
     const EconomyRules rules = repositoryRules();
     TeamAccounts accounts{rules};
-    accounts.roundEnded(RoundEndReason::TargetSaved);
+    accounts.roundEnded(RoundEndReason::TargetSaved, {MapObjective::BombTarget});
     EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 0), paid(1400, 3250));
     EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 0), paid(0, 0)) << "paid once";
+}
+
+TEST(EconomyTest, ATeamEliminatedPaysItsWinnersAsTheMapIsPlayed) {
+    const EconomyRules rules = repositoryRules();
+    TeamAccounts accounts{rules};
+    accounts.roundEnded(RoundEndReason::TerroristsWin, {MapObjective::Hostages});
+    EXPECT_EQ(accounts.roundStarts({MapObjective::Hostages}, 0), paid(3000, 1400));
+    accounts.roundEnded(RoundEndReason::CounterTerroristsWin, {MapObjective::BombTarget});
+    EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 0), paid(1400, 3250));
 }
 
 TEST(EconomyTest, TheBonusGrowsWithTheLossesInARowAndStartsOverAfterAStreak) {
@@ -104,7 +121,7 @@ TEST(EconomyTest, TheBonusGrowsWithTheLossesInARowAndStartsOverAfterAStreak) {
     TeamAccounts accounts{rules};
     std::vector<std::int32_t> bonuses;
     for (int round = 0; round < 6; ++round) {
-        accounts.roundEnded(RoundEndReason::TargetSaved); // the terrorists lose
+        accounts.roundEnded(RoundEndReason::TargetSaved, {MapObjective::BombTarget}); // the terrorists lose
         bonuses.push_back(accounts.roundStarts({MapObjective::BombTarget}, 0)[Team::Terrorists].value());
     }
     EXPECT_EQ(bonuses, (std::vector<std::int32_t>{1400, 1900, 2400, 2900, 3400, 3400}));
@@ -112,7 +129,8 @@ TEST(EconomyTest, TheBonusGrowsWithTheLossesInARowAndStartsOverAfterAStreak) {
 
     bonuses.clear();
     for (int round = 0; round < 5; ++round) {
-        accounts.roundEnded(RoundEndReason::HostagesNotRescued); // the counter-terrorists lose
+        accounts.roundEnded(RoundEndReason::HostagesNotRescued,
+                            {MapObjective::Hostages}); // the counter-terrorists lose
         bonuses.push_back(accounts.roundStarts({MapObjective::Hostages}, 0)[Team::CounterTerrorists].value());
     }
     EXPECT_EQ(bonuses, (std::vector<std::int32_t>{1500, 2000, 2500, 3000, 3000}));
@@ -122,26 +140,26 @@ TEST(EconomyTest, TheBonusGrowsWithTheLossesInARowAndStartsOverAfterAStreak) {
 TEST(EconomyTest, TheWinnersGetABonusForTheHostagesStillHeld) {
     const EconomyRules rules = repositoryRules();
     TeamAccounts accounts{rules};
-    accounts.roundEnded(RoundEndReason::HostagesNotRescued);
+    accounts.roundEnded(RoundEndReason::HostagesNotRescued, {MapObjective::Hostages});
     EXPECT_EQ(accounts.roundStarts({MapObjective::Hostages}, 4), paid(3250 + 600, 1400));
     // Counted while the sum is below 2000: 14 of them at most, 2100.
-    accounts.roundEnded(RoundEndReason::HostagesNotRescued);
+    accounts.roundEnded(RoundEndReason::HostagesNotRescued, {MapObjective::Hostages});
     EXPECT_EQ(accounts.roundStarts({MapObjective::Hostages}, 20)[Team::Terrorists], nx::Money{3250 + 2100});
 }
 
 TEST(EconomyTest, ADrawPaysNobodyButAStreakStillRaisesTheBonus) {
     const EconomyRules rules = repositoryRules();
     TeamAccounts accounts{rules};
-    accounts.roundEnded(RoundEndReason::RoundDraw);
+    accounts.roundEnded(RoundEndReason::RoundDraw, {MapObjective::BombTarget});
     EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 4), paid(0, 0));
     EXPECT_EQ(accounts.loserBonus(), nx::Money{1400});
     // The terrorists lost twice: the draw that follows raises their bonus, which no one gets yet.
     for (int round = 0; round < 2; ++round) {
-        accounts.roundEnded(RoundEndReason::TargetSaved);
+        accounts.roundEnded(RoundEndReason::TargetSaved, {MapObjective::BombTarget});
         std::ignore = accounts.roundStarts({MapObjective::BombTarget}, 0);
     }
     EXPECT_EQ(accounts.loserBonus(), nx::Money{1900});
-    accounts.roundEnded(RoundEndReason::RoundDraw);
+    accounts.roundEnded(RoundEndReason::RoundDraw, {MapObjective::BombTarget});
     EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 0), paid(0, 0));
     EXPECT_EQ(accounts.loserBonus(), nx::Money{2400});
     EXPECT_EQ(accounts.lossesInARow(Team::Terrorists), 2U);
@@ -150,7 +168,7 @@ TEST(EconomyTest, ADrawPaysNobodyButAStreakStillRaisesTheBonus) {
 TEST(EconomyTest, TheTerroristsOfAnEscapeMapGetNoBonus) {
     const EconomyRules rules = repositoryRules();
     TeamAccounts accounts{rules};
-    accounts.roundEnded(RoundEndReason::TerroristsNotEscaped);
+    accounts.roundEnded(RoundEndReason::TerroristsNotEscaped, {MapObjective::EscapeZone});
     EXPECT_EQ(accounts.roundStarts({MapObjective::EscapeZone}, 0), paid(0, 0));
 }
 
@@ -158,10 +176,10 @@ TEST(EconomyTest, ARestartedGameStartsTheMoneyOver) {
     const EconomyRules rules = repositoryRules();
     TeamAccounts accounts{rules};
     for (int round = 0; round < 3; ++round) {
-        accounts.roundEnded(RoundEndReason::TargetSaved);
+        accounts.roundEnded(RoundEndReason::TargetSaved, {MapObjective::BombTarget});
         std::ignore = accounts.roundStarts({MapObjective::BombTarget}, 0);
     }
-    accounts.roundEnded(RoundEndReason::TargetSaved);
+    accounts.roundEnded(RoundEndReason::TargetSaved, {MapObjective::BombTarget});
     accounts.restartGame();
     EXPECT_EQ(accounts.loserBonus(), nx::Money{1400});
     EXPECT_EQ(accounts.lossesInARow(Team::Terrorists), 0U);
