@@ -769,7 +769,7 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
                 return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
             }
         } else {
-            m_keys.handle(event);
+            m_keys.handle(event, m_cvars->keyboard.keymap.value());
         }
     }
     return {};

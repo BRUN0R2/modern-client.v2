@@ -62,7 +62,7 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
 | `nx.jobs` | 1 | Job System, counters, dependency graphs, and the lock-free queues between long-lived threads (today: SPSC). Planned: a `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks, the sound output (SDL3's default output, on its real-time thread). Planned: OS threads | core |
+| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface; physical keys and their layout characters), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks, the sound output (SDL3's default output, on its real-time thread). Planned: OS threads | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math (today: core) |

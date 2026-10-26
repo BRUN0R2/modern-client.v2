@@ -214,7 +214,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Log levels per cvar (`log_level_<category>`, [02 §10](docs/02-coding-standards.md#10-logging))
 - [x] The player's settings (`nx.settings`): the user's folder (`nx::platform::userDirectory`), `config.cfg`, `userconfig.cfg` and `autoexec.cfg` run at startup and `config.cfg` written at exit, whole or not at all; the mouse's and the video's cvars with the original's names and values, read by `next`
 - [x] Binds (`nx.settings`): `bind`, `unbind`, `unbindall` and `bindlist` by the original's key names and numbers, Counter-Strike 1.6's binds, written to `config.cfg`, and the keys, mouse buttons and wheel running them as the original does; the player's `+` buttons making the user command (`cs.client`: `CL_CreateMove`'s shares and speeds, `CL_AdjustAngles`'s turning), read by `next`
-- [ ] `in_keymap`: binds by the layout's characters; `+attack`, `+reload` and the other buttons with what reads them
+- [ ] `in_keymap`: typed, archived `keycode`/`scancode` mapping, latched per physical press; shared keys, focus loss and binding changes release the actions they pressed (implemented; awaiting CI)
 - [x] Determinism test with 0, 1, 3 and 15 workers (`nxIntegrationTests`: `nx.math` in parallel ECS systems, world *hash* every tick)
 
 ---

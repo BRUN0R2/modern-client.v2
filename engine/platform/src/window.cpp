@@ -46,6 +46,14 @@ static_assert(std::to_underlying(MouseButton::Left) == SDL_BUTTON_LEFT &&
     return count;
 }
 
+/// SDL's base character, as opposed to its flagged codes for keys that do not type characters.
+[[nodiscard]] auto characterOf(SDL_Keycode code) noexcept -> std::optional<char32_t> {
+    if ((code & (SDLK_SCANCODE_MASK | SDLK_EXTENDED_MASK)) != 0 || code < SDLK_SPACE || code == SDLK_DELETE) {
+        return std::nullopt;
+    }
+    return static_cast<char32_t>(code);
+}
+
 /// The event `event` is, or nullopt for events the window does not report.
 [[nodiscard]] auto translate(const SDL_Event& event) -> std::optional<WindowEvent> {
     switch (static_cast<SDL_EventType>(event.type)) {
@@ -67,7 +75,8 @@ static_assert(std::to_underlying(MouseButton::Left) == SDL_BUTTON_LEFT &&
     case SDL_EVENT_KEY_UP:
         return KeyChanged{.key = Key{narrow<std::uint16_t>(std::to_underlying(event.key.scancode))},
                           .isDown = event.key.down,
-                          .isRepeat = event.key.repeat};
+                          .isRepeat = event.key.repeat,
+                          .character = characterOf(event.key.key)};
     case SDL_EVENT_MOUSE_MOTION:
         return MouseMoved{.dx = event.motion.xrel, .dy = event.motion.yrel};
     case SDL_EVENT_MOUSE_BUTTON_DOWN:

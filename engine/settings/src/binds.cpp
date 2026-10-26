@@ -225,7 +225,7 @@ auto registerBindCommands(Console& console, KeyBindings& bindings) -> Result<voi
         });
 }
 
-void BoundInput::handle(const platform::WindowEvent& event) {
+void BoundInput::handle(const platform::WindowEvent& event, KeyMapping mapping) {
     const auto change = [this](std::optional<KeyId> key, bool isDown) {
         if (!key) {
             return; // a key the original has no number for
@@ -237,7 +237,7 @@ void BoundInput::handle(const platform::WindowEvent& event) {
         }
     };
     if (const auto* key = std::get_if<platform::KeyChanged>(&event)) {
-        change(keyOf(key->key), key->isDown);
+        changeKey(*key, mapping);
     } else if (const auto* button = std::get_if<platform::MouseButtonChanged>(&event)) {
         change(keyOf(button->button), button->isDown);
     } else if (const auto* wheel = std::get_if<platform::MouseWheelMoved>(&event)) {
@@ -258,15 +258,38 @@ void BoundInput::handle(const platform::WindowEvent& event) {
     }
 }
 
+void BoundInput::changeKey(const platform::KeyChanged& event, KeyMapping mapping) {
+    const auto held = std::ranges::find(m_pressedKeys, event.key, &PressedKey::position);
+    if (event.isDown) {
+        if (event.isRepeat || held != m_pressedKeys.end()) {
+            return;
+        }
+        const std::optional<KeyId> binding = keyOf(event, mapping);
+        m_pressedKeys.push_back({.position = event.key, .binding = binding});
+        if (binding) {
+            press(*binding);
+        }
+    } else if (held != m_pressedKeys.end()) {
+        const std::optional<KeyId> binding = held->binding;
+        m_pressedKeys.erase(held);
+        if (binding && std::ranges::none_of(m_pressedKeys, [binding](const PressedKey& key) {
+                return key.binding == binding;
+            })) {
+            release(*binding);
+        }
+    }
+}
+
 void BoundInput::press(KeyId key) {
     const std::size_t index = indexOf(key);
     expects(index < kKeyCount, "BoundInput::press: a key of the original");
-    if (m_down.test(index)) {
+    if (index >= kKeyCount || m_down.test(index)) {
         return;
     }
     m_down.set(index);
     const std::string_view command = m_bindings->commandOf(key);
     if (command.starts_with('+')) {
+        m_releases[index] = std::format("-{} {}", command.substr(1), index);
         m_console->addText(std::format("{} {}", command, index));
     } else if (!command.empty()) {
         m_console->addText(command);
@@ -276,12 +299,13 @@ void BoundInput::press(KeyId key) {
 void BoundInput::release(KeyId key) {
     const std::size_t index = indexOf(key);
     expects(index < kKeyCount, "BoundInput::release: a key of the original");
-    if (!m_down.test(index)) {
+    if (index >= kKeyCount || !m_down.test(index)) {
         return; // it went down before the input was read here, or while another view had the keys
     }
     m_down.reset(index);
-    if (const std::string_view command = m_bindings->commandOf(key); command.starts_with('+')) {
-        m_console->addText(std::format("-{} {}", command.substr(1), index));
+    if (!m_releases[index].empty()) {
+        m_console->addText(m_releases[index]);
+        m_releases[index].clear();
     }
 }
 
@@ -289,6 +313,7 @@ void BoundInput::releaseAll() {
     for (std::uint32_t number = 0; number < kKeyCount; ++number) {
         release(KeyId{number});
     }
+    m_pressedKeys.clear();
 }
 
 } // namespace nx::settings

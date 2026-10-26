@@ -4,6 +4,7 @@
 // These run on SDL's offscreen video driver (SDL_VIDEODRIVER=offscreen, set by CMakeLists.txt):
 // real windows, without a display.
 
+#include <SDL3/SDL.h>
 #include <gtest/gtest.h>
 
 import std;
@@ -82,6 +83,41 @@ TEST(WindowTest, TextInputTurnsOnAndOff) {
     const auto off = window->setTextInput(nx::platform::TextInput::Off);
     ASSERT_TRUE(off.has_value()) << nx::describe(off.error());
     EXPECT_FALSE(window->isTextInputOn());
+}
+
+TEST(WindowTest, KeyboardEventsKeepThePositionAndTheLayoutsBaseCharacter) {
+    auto window = openWindow();
+    ASSERT_TRUE(window.has_value());
+    std::vector<WindowEvent> events;
+    window->pollEvents(events);
+    events.clear();
+    SDL_Event typed{};
+    typed.key.type = SDL_EVENT_KEY_DOWN;
+    typed.key.scancode = SDL_SCANCODE_A;
+    typed.key.key = SDLK_Q;
+    typed.key.mod = SDL_KMOD_SHIFT | SDL_KMOD_CAPS;
+    typed.key.down = true;
+    typed.key.repeat = true;
+    ASSERT_TRUE(SDL_PushEvent(&typed));
+    SDL_Event control = typed;
+    control.key.scancode = SDL_SCANCODE_F1;
+    control.key.key = SDLK_F1;
+    control.key.repeat = false;
+    ASSERT_TRUE(SDL_PushEvent(&control));
+    window->pollEvents(events);
+    std::vector<nx::platform::KeyChanged> keys;
+    for (const WindowEvent& event : events) {
+        if (const auto* key = std::get_if<nx::platform::KeyChanged>(&event)) {
+            keys.push_back(*key);
+        }
+    }
+    ASSERT_EQ(keys.size(), 2);
+    EXPECT_EQ(keys[0].key, nx::platform::Key::A);
+    EXPECT_EQ(keys[0].character, U'q');
+    EXPECT_TRUE(keys[0].isDown);
+    EXPECT_TRUE(keys[0].isRepeat);
+    EXPECT_EQ(keys[1].key, nx::platform::Key::F1);
+    EXPECT_FALSE(keys[1].character.has_value());
 }
 
 TEST(WindowTest, AMovedWindowStaysOpenUntilItsLastOwnerCloses) {

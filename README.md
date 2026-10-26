@@ -32,7 +32,7 @@ core: `nx.core` (typed errors, contracts, strong types and units), `nx.meta` (re
 `nx.data` (TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype
 ECS), `nx.math` (vectors, matrices, quaternions, GoldSrc angles) and `nx.console` (typed cvars,
 commands and `.cfg`). Above them: `nx.platform` (clocks, the native file system, the window, its
-input and the sound output), `nx.rhi` (the GPU interface, with its Vulkan backend), `nx.assets`
+input by position and layout, and the sound output), `nx.rhi` (the GPU interface, with its Vulkan backend), `nx.assets`
 (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and fuzzed readers of
 every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV, TGA, and of VGUI2's schemes and fonts),
 `nx.render` (the BSP world with its lightmaps, sky, water and decals, studio models with GPU
@@ -71,7 +71,9 @@ looks, and the keys do what Counter-Strike binds them to (W A S D move, Space ju
 Shift walks, E uses, the arrows turn, the left button fires, the right one switches a silencer or
 a burst, R reloads, Q draws the last weapon, the tilde opens the console); V flies through
 everything (`noclip`), and Escape ends it. Its settings and binds are kept in `config.cfg`, in
-`%APPDATA%\Modern-Client.v2`. `nxview` renders one frame of a map into a BMP file:
+`%APPDATA%\Modern-Client.v2`. Keyboard binds follow the layout by default (`in_keymap keycode`);
+`in_keymap scancode` selects physical US positions instead. The mode can also be set on the command
+line with `+in_keymap scancode`. `nxview` renders one frame of a map into a BMP file:
 
 ```powershell
 .\build\dev-windows-msvc\bin\nxcheck.exe

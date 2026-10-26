@@ -378,7 +378,8 @@ unreadable one is printed. `exec` reads `.cfg` files of that folder by relative 
 file is written beside its place and then moved there, so a crash leaves the old settings or
 the new ones, never a part. The original ends its `config.cfg` with `exec userconfig.cfg`;
 here the startup runs that file itself. `registerClientCvars` registers the client's cvars of
-§5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
+§5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values, and the
+project's keyboard mapping choice (`in_keymap`, §6):
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, held as the original holds it,
 [05 §12](05-rendering.md#12-latency-and-frame-pacing)), `fps_override` (0: `fps_max` at most 100),
 `gl_vsync` (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `cl_showfps`
@@ -393,7 +394,8 @@ system's default sound output; else one `s_devices` lists, opened once the start
 command line ran), `s_play_unfocused` (0: silent while the window is not focused, as the original
 is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
-effect as soon as what reads it reads it again: the mouse's as the mouse moves, `fps_max`,
+effect as soon as what reads it reads it again: `in_keymap` with the next key press, the mouse's
+as the mouse moves, `fps_max`,
 `fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
 given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again
@@ -488,7 +490,8 @@ category the application passes in (`log_level_net debug`, or the level's number
 ## 6. Input
 
 - **SDL3** for keyboard, mouse and gamepad, behind `nx::platform::Window`: keys arrive by
-  physical position (`Key`, the USB HID usage code), the mouse as relative motion in its own
+  physical position (`Key`, the USB HID usage code) and their layout's base character
+  (`KeyChanged::character`, from SDL's keycode), the mouse as relative motion in its own
   counts (`MouseMoved`), and the window gives a GPU backend its native handles. Typed text arrives
   apart from the keys, as the keyboard's layout and the system's input method make it
   (`TextEntered`, UTF-8), while text input is on (`Window::setTextInput`): the console and the
@@ -509,9 +512,14 @@ the original's own (`UPARROW` 128, `MWHEELUP` 240, `MOUSE1` 241). `keyOf` gives 
 position of a US keyboard: both Ctrl keys are `CTRL`, both Shift `SHIFT`, both Alt `ALT`, and
 the keypad's keys are its `KP_` keys whatever Num Lock says; the keys the original has no number
 for (Print Screen, Scroll Lock, Num Lock, the system keys) run nothing. The platform reports
-positions only, so binds follow them until `in_keymap` brings the layout's characters. `bind
-<key> [command]`, `unbind`, `unbindall` and `bindlist` set and list them: a key is one ASCII
-character (a letter in either case) or one of the original's names in any case (`keyNamed`), and
+each position with its layout's base character, separately from typed text. `in_keymap keycode`
+(the default, also 1) selects the layout's printable ASCII character; `in_keymap scancode`
+(also 0) selects the US position. Both keep the named controls and the keypad's `KP_` keys,
+regardless of Num Lock or SDL's keypad hints. A character outside the original's bind names,
+or an unknown character, runs nothing in keycode mode; scancode mode remains an explicit choice.
+Like the other enum cvars, the mode is archived by number. `bind <key> [command]`, `unbind`,
+`unbindall` and `bindlist` set and list them: a key is one ASCII character (a letter in either
+case) or one of the original's names in any case (`keyNamed`), and
 a command holds no `"`, so that `config.cfg` reads it back. `defaultBindings` are Counter-Strike
 1.6's, those its options restore, and `config.cfg` keeps the binds: `unbindall`, then a `bind
 "<key>" "<command>"` line per bound key. `BoundInput` runs them as the original does: a key
@@ -520,7 +528,12 @@ going down queues its command, followed by the key's number when it starts with 
 commands. The number follows the whole command, as in the original: a key bound to `+jump;
 wait; -jump` queues `+jump; wait; -jump 32`. A key the system repeats queues nothing more, a key
 that comes up without having gone down here queues nothing, and every key down comes up when the
-window loses the keyboard. Each notch of the wheel presses its key and releases it at once.
+window loses the keyboard. Each physical key keeps the logical key it selected on its press,
+even if the layout or `in_keymap` changes before release. Several physical keys selecting one
+logical key (both Ctrl keys, for example) hold its action until the last comes up. A press keeps
+its own release command, so rebinding or unbinding a held key cannot leave its action stuck.
+A repeated down event received without its initial press does nothing, including after focus
+loss. Each notch of the wheel presses its key and releases it at once.
 
 `cs::PlayerInput` (`cs.client`) registers the player's buttons, `+forward`, `+back`,
 `+moveleft`, `+moveright`, `+moveup`, `+movedown`, `+left`, `+right`, `+lookup`, `+lookdown`,
