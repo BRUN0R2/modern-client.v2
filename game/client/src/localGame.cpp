@@ -51,8 +51,7 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
       m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_breath{content.breath},
-      m_status{.money = m_cvars.startingMoney()},
-      m_inventory{content.weapons} {}
+      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
