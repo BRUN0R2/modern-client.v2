@@ -42,7 +42,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_FLOAT_EQ(cvars->mouse.pitch.value(), 0.022F);
     EXPECT_FLOAT_EQ(cvars->video.fpsMax.value(), 100.0F);
     EXPECT_FALSE(cvars->video.fpsOverride.value());
-    EXPECT_TRUE(cvars->video.vsync.value());
+    EXPECT_FALSE(cvars->video.vsync.value()) << "off, where the original starts it on";
     EXPECT_FLOAT_EQ(cvars->video.gamma.value(), 2.5F);
     EXPECT_FLOAT_EQ(cvars->video.brightness.value(), 1.0F);
     EXPECT_FLOAT_EQ(cvars->video.textureGamma.value(), 2.0F);

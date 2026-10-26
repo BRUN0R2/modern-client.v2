@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The client's cvars (docs/12-ui-hud-and-console.md, section 5.1), by the original's names, with the
-/// values Counter-Strike 1.6 starts with and archived as it archives them.
+/// values Counter-Strike 1.6 starts with (but gl_vsync, off) and archived as it archives them.
 export module nx.settings:clientCvars;
 
 import std;
