@@ -45,7 +45,7 @@ freeze, their time, its end and the money they pay, and a player hurt by its fal
 and lava, and killed), with which the client, `next`, plays the maps alone, round after round.
 `nxcheck` reads every file of a Counter-Strike 1.6 installation with those readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
-[`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
+[`docs/RULES.md`](docs/RULES.md) and the backlog in [`docs/TODO.md`](docs/TODO.md).
 
 ## Building
 

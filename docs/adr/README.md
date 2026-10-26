@@ -34,6 +34,7 @@ says where.
 | [0023](0023-navigation.md) | Navigation meshes for every kind of agent, in `nx.navigation` | Accepted |
 | [0024](0024-agents.md) | Agents: one system for bots, monsters, bosses and every character the game moves | Accepted |
 | [0025](0025-enhanced-rendering.md) | The enhanced look: physically based materials, the map's reflections, HDR and bloom, the same on every card | Proposed |
+| [0026](0026-clean-room-source-policy.md) | One clean room source policy, with consultation of public open-source references | Accepted |
 
 ## Template
 

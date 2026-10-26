@@ -543,7 +543,7 @@ more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), no longe
 end is weighed (§3): its team eliminated loses it. What a dead player sees and its HUD (the
 original's client follows its body, `OBS_CHASE_FREE`, then spectates), its body's death played, the
 attacks of other players, their hit groups and the armor's share (of slime's and lava's harm too), and
-`trigger_hurt` come with what they need ([TODO](../TODO.md)).
+`trigger_hurt` come with what they need ([TODO](TODO.md)).
 
 ### 7.5 Weapons made as the game runs
 

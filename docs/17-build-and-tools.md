@@ -66,8 +66,8 @@ modern-client.v2/
 │   └── bench/
 ├── scripts/
 │   └── devShell.ps1           # loads the Visual Studio x64 environment for CLI builds
-├── docs/
-└── TODO.md
+└── docs/
+    └── TODO.md                # actionable backlog
 ```
 
 This is the target layout: a directory arrives with its first code, so the modules, games,
@@ -321,7 +321,7 @@ image.
 ## 9. Development environment
 
 - **VS Code** with `clangd` and CMake Tools, and the Rook extension (syntax, LSP, debugger) once
-  it exists ([TODO](../TODO.md)). The
+  it exists ([TODO](TODO.md)). The
   repository ships `.vscode/` with the recommended extensions and settings: CMake Tools uses
   the presets and copies the active preset's `compile_commands.json` to `build/`, where
   `clangd` reads it (with its module support on); formatting follows `.clang-format` on save.

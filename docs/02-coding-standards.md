@@ -544,7 +544,7 @@ if (m_budgetWarnings.allow()) {
 // removing this breaks bunny-hop feel. Covered by tests/parity/movement/bhopPenalty.
 ```
 
-- `TODO` only with a reference to the [TODO.md](../TODO.md) item or to an issue.
+- `TODO` only with a reference to the [TODO.md](TODO.md) item or to an issue.
 
 ## 12. Formatting and static analysis
 

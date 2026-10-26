@@ -46,7 +46,7 @@ only within them.
 | — | [Glossary](glossary.md) | GoldSrc, engine and Rook terms |
 | — | [ADRs](adr/README.md) | Architecture decision records |
 
-The project's actionable backlog lives in [`../TODO.md`](../TODO.md).
+The project's actionable backlog lives in [`TODO.md`](TODO.md).
 
 ## Conventions of this documentation
 
