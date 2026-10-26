@@ -80,10 +80,10 @@ struct SpawnPoint {
 
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, the
-/// loadouts, the light styles, the money of the rounds, the footsteps, the breath and the hit groups; what the textures
-/// are made of, from the installation; and the installation at `install`, or the one Steam installed,
-/// below `addons`, the user's own content (addonsFolderOf), when it is given and is a folder: a file
-/// there is read instead of the installation's. Errors: ContentUnavailable.
+/// loadouts, the light styles, the money of the rounds, the footsteps, the breath and the hit groups;
+/// what the textures are made of, from the installation; and the installation at `install`, or the one
+/// Steam installed, below `addons`, the user's own content (addonsFolderOf), when it is given and is a
+/// folder: a file there is read instead of the installation's. Errors: ContentUnavailable.
 [[nodiscard]] auto openGameContent(const std::filesystem::path& data,
                                    const std::optional<std::filesystem::path>& install,
                                    const std::optional<std::filesystem::path>& addons)
