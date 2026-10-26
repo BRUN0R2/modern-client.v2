@@ -126,14 +126,17 @@ complete competitive match played and assessed.
 - Forwards, hooks, `vars`, typed commands, cvars, tasks and coroutines.
 - Hot reload, `rookLsp`, DAP debugger, `rook test`, `rook fmt`/`lint`/`doc`/`pack`.
 - Built-in mods (admin, votes, maps, chat, stats) and `rook migrate`.
-- **Port of ReZombie** as the reference mod.
+- **Port of ReZombie** as the reference mod; zombies and bosses as kinds of agents of a mod
+  ([ADR-0024](adr/0024-agents.md)).
 
 **Exit:** ReZombie ported and working, built-in mods replacing the default AMXX plugins and
 API 1.0 frozen.
 
 ## M7 — Fine parity and ecosystem
 
-- Bots with navigation (`.nav` import).
+- Counter-Strike's bot (`cs.bots`) on agents and navigation meshes
+  ([ADR-0023](adr/0023-navigation.md), [ADR-0024](adr/0024-agents.md)), brought forward at the
+  maintainer's choice.
 - Demos, `timedemo` and spectator relay.
 - Sandboxed client plugins and predicted custom weapons.
 - `.nxspr` sprites, `r_fidelity enhanced` mode, high-resolution packages.
