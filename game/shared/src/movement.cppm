@@ -155,6 +155,10 @@ inline constexpr nx::Aabb kStandingBox{.min = {.x = -16.0F, .y = -16.0F, .z = -3
 inline constexpr nx::Aabb kDuckedBox{.min = {.x = -16.0F, .y = -16.0F, .z = -18.0F},
                                      .max = {.x = 16.0F, .y = 16.0F, .z = 18.0F}};
 
+/// Ground faces up at least this much, the least upward share of its plane's unit normal; on a steeper
+/// plane a player slides. The player's navigation profile stands on the same (data/cstrike/navigation.toml).
+inline constexpr float kMinGroundNormalZ = 0.7F;
+
 /// The height of a standing player's eyes above its origin, and of a ducked player's.
 inline constexpr nx::HammerUnits kStandingViewHeight{17.0F};
 inline constexpr nx::HammerUnits kDuckedViewHeight{12.0F};

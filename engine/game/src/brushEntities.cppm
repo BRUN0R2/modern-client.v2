@@ -20,8 +20,9 @@ export namespace nx::game {
 
 /// What can be wrong with the game's entities.
 enum class GameError : std::uint8_t {
-    ConfigInvalid, ///< The entity classes break their schema or their rules (cause: the DataError,
-                   ///< when there is one); the detail names the file or the class.
+    ConfigInvalid, ///< The entity classes or the navigation's data break their schema or their rules
+                   ///< (cause: the DataError or the MeshBuildError, when there is one); the detail names
+                   ///< the file or the class.
     UnknownModel,  ///< An entity is a brush model the map does not have; the detail names it.
 };
 

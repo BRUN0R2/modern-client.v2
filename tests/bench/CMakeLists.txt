@@ -14,3 +14,9 @@ nxAddBenchmark(nxBenchEcs
         ecsBench.cpp
     DEPENDS
         nx::ecs)
+
+nxAddBenchmark(nxBenchNavigation
+    SOURCES
+        navigationBench.cpp
+    DEPENDS
+        nx::navigation)

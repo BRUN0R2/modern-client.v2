@@ -380,6 +380,9 @@ Loading a map involves:
 6. Reading the map's `.res` and building the resource manifest.
 7. Loading the optional parts: detail textures, overview, and the navigation meshes of the
    agents' profiles, read from their cache or built in jobs ([ADR-0023](adr/0023-navigation.md)).
+   Today the meshes are built when `nav_generate` asks, in jobs, from the faces of the world and of
+   its solid brush entities as the map starts (`nx::game::navigationGeometryOf`); their cache is
+   planned.
 
 Loading runs as a job graph. The goal is to load `de_dust2` in under 1 second from a warm
 cache.

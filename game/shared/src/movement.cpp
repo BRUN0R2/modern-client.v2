@@ -28,8 +28,6 @@ constexpr double kDuckDrop = double{kStandingHalfHeight - kDuckedHalfHeight};
 
 // The thresholds of the original's movement, each a behavior a player feels.
 
-/// Ground faces up at least this much; on a steeper plane a player slides.
-constexpr float kMinGroundNormalZ = 0.7F;
 /// Faster upwards, a player has left the ground.
 constexpr float kLiftOffSpeed = 180.0F;
 /// How far below a player the ground is looked for.

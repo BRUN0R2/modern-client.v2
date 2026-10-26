@@ -174,6 +174,13 @@ first, then the farthest middle of its bounds first, at one distance by mode (`R
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
 of its own.
 
+**Today** (`nx.render:overlay`): before the view's own model, `OverlayRenderer` draws what the tools
+show over the scene, `nav_draw`'s navigation mesh first ([ADR-0023](adr/0023-navigation.md)):
+triangles and lines (`PrimitiveTopology::LineList`) in the map's space, each vertex of its own display
+color, blended by its alpha over what the scene drew, behind what the scene drew in front of them,
+whose depth they test and never write; in the enhanced look their colors made linear light as the
+others' are.
+
 **Today** (`nx.render:screen`, the `Hud` pass): `ScreenRenderer` draws rectangles in pixels of the
 target from its top left, over everything the frame drew, its depth neither tested nor written: a
 part of a picture stretched over a rectangle, times a color, or a color alone, in the order given,
@@ -682,6 +689,8 @@ Xash3D-FWGS project records from the original for its tests.
 ## 13. Debugging tools
 
 - RenderDoc integration (`r_capture`).
+- `nav_draw`: a navigation mesh's polygons, see-through in the color of their kind of area, and their
+  edges, over the scene (`nx.render:overlay`, [ADR-0023](adr/0023-navigation.md)).
 - `r_speeds` (draws, triangles, time per pass), `r_drawentities`, `r_wireframe`,
   `r_showtris`, `r_lightmap`, `r_fullbright`, `r_drawviewmodel` and overdraw visualization.
 - ImGui overlay with the frame's render graph (passes, resources, aliasing).

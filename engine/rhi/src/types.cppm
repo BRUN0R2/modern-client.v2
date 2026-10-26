@@ -238,10 +238,11 @@ struct VertexBufferLayout {
     std::span<const VertexAttribute> attributes{};
 };
 
-/// How a render pipeline joins its vertices into triangles.
+/// How a render pipeline joins its vertices into triangles, or lines.
 enum class PrimitiveTopology : std::uint8_t {
     TriangleList,  ///< Every three vertices a triangle.
     TriangleStrip, ///< Each vertex a triangle with the two before it.
+    LineList,      ///< Every two vertices a line, a pixel wide.
 };
 
 /// Which triangles a render pipeline leaves out.

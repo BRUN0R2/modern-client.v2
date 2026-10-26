@@ -10,6 +10,7 @@ nxAddTest(csSharedTests
         hostagesTests.cpp
         inventoryTests.cpp
         movementTests.cpp
+        navigationProfileTests.cpp
         playerHarmTests.cpp
         roundsTests.cpp
         studioTests.cpp
@@ -20,8 +21,9 @@ nxAddTest(csSharedTests
         cs::shared
         nx::data
         nx::game
+        nx::navigation
         nx::platform)
 
 # Tests read the repository's data/cstrike/ammo.toml, breath.toml, economy.toml, footsteps.toml,
-# loadouts.toml, playerHarm.toml, use.toml and weapons/.
+# loadouts.toml, navigation.toml, playerHarm.toml, use.toml and weapons/.
 target_compile_definitions(csSharedTests PRIVATE NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")

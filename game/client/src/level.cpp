@@ -340,6 +340,15 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!use) {
         return nx::fail(LevelError::ContentUnavailable, std::move(use.error()));
     }
+    const std::filesystem::path navigationFile = data / "cstrike" / "navigation.toml";
+    auto navigationText = nx::platform::readTextFile(navigationFile);
+    if (!navigationText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(navigationText.error()));
+    }
+    auto navigation = nx::game::readNavigationData(*navigationText, nx::platform::toUtf8(navigationFile));
+    if (!navigation) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(navigation.error()));
+    }
     TextureMaterials materials = readTextureMaterials(*vfs);
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
@@ -352,6 +361,7 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
                        .hitGroups = std::move(*hitGroups),
                        .playerHarm = std::move(*playerHarm),
                        .use = std::move(*use),
+                       .navigation = std::move(*navigation),
                        .materials = std::move(materials)};
 }
 

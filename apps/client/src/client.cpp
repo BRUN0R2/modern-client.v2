@@ -319,6 +319,7 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::GameContent> m_content;
+    std::optional<cs::NavigationTools> m_navigation; ///< Of m_content's profiles.
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
@@ -408,6 +409,13 @@ auto Client::start() -> nx::Result<void, ClientError> {
     m_content = std::move(*content);
     if (auto registered = registerWeaponCommands(); !registered) {
         return registered;
+    }
+    auto navigation = cs::NavigationTools::create(m_content->navigation, m_content->entityClasses);
+    if (!navigation) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(navigation.error()));
+    }
+    if (auto registered = m_navigation.emplace(std::move(*navigation)).registerIn(m_console); !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     auto shaders = cs::readSceneShaders(executable->parent_path() / "shaders");
     if (!shaders) {
@@ -767,6 +775,7 @@ void Client::startNextSession() {
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
     m_session = std::exchange(m_nextSession, std::nullopt);
+    m_navigation->play(m_session->level->map());
     // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
     // to mp_decals as the original's client holds it when it enters one.
     if (auto held = nx::settings::enterMultiplayerGame(m_cvars->video); !held) {
@@ -1001,7 +1010,8 @@ auto Client::sessionView() -> cs::SceneView {
             .hostages = m_hostages,
             .viewModel = m_viewPose,
             .clientEvents = m_clientEvents,
-            .hand = m_hudCvars->hand()};
+            .hand = m_hudCvars->hand(),
+            .overlay = m_navigation->overlay()};
 }
 
 void Client::appendScreen(nx::rhi::Extent2d size) {

@@ -11,6 +11,7 @@ nxAddTest(csClientTests
         viewModelTests.cpp
         decalsTests.cpp
         weaponCommandsTests.cpp
+        navigationToolsTests.cpp
         hearingTests.cpp
         audioTests.cpp
         windowFontsTests.cpp
@@ -18,6 +19,7 @@ nxAddTest(csClientTests
         cs::client
         cs::shared
         nx::game
+        nx::navigation
         nx::ecs
         nx::console
         nx::assets
@@ -28,7 +30,8 @@ nxAddTest(csClientTests
     ENVIRONMENT
         SDL_AUDIO_DRIVER=dummy)
 
-# The maps of the tests are the BSP seed of the fuzz corpus, given other entities; the light styles are
-# the repository's data/cstrike/lightStyles.toml.
+# The maps of the tests are the BSP seeds of the fuzz corpus, given other entities; the light styles, the
+# navigation profiles and the brush classes are the repository's data/cstrike/lightStyles.toml,
+# navigation.toml and entities.toml.
 target_compile_definitions(csClientTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus"
                                                  NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")

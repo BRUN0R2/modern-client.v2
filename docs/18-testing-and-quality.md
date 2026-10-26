@@ -9,7 +9,7 @@
 | Unit | GoogleTest | Isolated functions and types (`nx.core`, parsers, ECS, math) | Every PR |
 | Integration | GoogleTest (`nxIntegrationTests`) | Modules together: a world moved by parallel ECS systems, the same with any number of workers ([below](#determinism)) | Every PR |
 | Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
-| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`) | ECS and Job System hot paths | Built on every PR, run by hand ([below](#performance)) |
+| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchNavigation`) | ECS, Job System and navigation hot paths | Built on every PR, run by hand ([below](#performance)) |
 | Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
 | Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 
@@ -147,6 +147,7 @@ readers expected, and the readers now follow them
 | Client frame time in `timedemo` | `nxBenchClient` (planned) | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
 | Job System throughput | `nxBenchJobs` | 5% |
+| Navigation queries (a way across a map, the nearest point, a corridor's corners) and a mesh's build | `nxBenchNavigation` | 5% |
 | Map loading (warm cache) | `nxBenchAssets` (planned) | 10% |
 | Rook compile time per 1000 lines | `rookBench` (planned) | 10% |
 

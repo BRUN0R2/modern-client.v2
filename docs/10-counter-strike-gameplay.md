@@ -629,6 +629,12 @@ navigation meshes ([ADR-0023](adr/0023-navigation.md)):
 - A map's `.nav` file of Condition Zero's format may give its places and hiding spots; the mesh
   itself is always built.
 
+Today the navigation is there for them: the player's profile in `data/cstrike/navigation.toml` (the
+movement's box, step and ground, a test holding them equal, and the jump of Condition Zero's bots),
+the mesh of a map built by `nav_generate` from the faces of its world and of its solid brush entities
+as the map starts, its doors closed, and drawn over the scene by `nav_draw [profile]`, its floor
+green, the room only crouching fits yellow and what is under water blue.
+
 The kinds a mod makes, such as zombies and bosses, are modules of the mod over the same agents,
 in Rook ([15 §2](15-mod-api.md#2-module-organization)).
 

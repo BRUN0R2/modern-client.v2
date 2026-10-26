@@ -45,6 +45,7 @@ find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(Freetype REQUIRED)
+find_package(recastnavigation CONFIG REQUIRED)
 
 if(NX_BUILD_TESTS)
     enable_testing()
