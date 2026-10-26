@@ -14,3 +14,12 @@ nxAddBenchmark(nxBenchEcs
         ecsBench.cpp
     DEPENDS
         nx::ecs)
+
+nxAddBenchmark(nxBenchLightStyles
+    SOURCES
+        lightStylesBench.cpp
+    DEPENDS
+        nx::core
+        nx::assets
+        nx::render
+        cs::shared)

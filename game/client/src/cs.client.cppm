@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// cs.client — what only Counter-Strike's client runs (docs/01-architecture.md, section 1.1): the
+/// cs.client â€” what only Counter-Strike's client runs (docs/01-architecture.md, section 1.1): the
 /// player's input, the HUD, menus, effects, prediction and interpolation.
 ///
 /// Today: the player's input, the buttons the binds hold, the commands they make and the view the
 /// keys turn; a level of the game's map, what its entities show as the game sets them up until the
-/// server tells them (the light of the map, its sprites and studio models, the weapon in hand and its
+/// server tells them (its sprites and studio models, the weapon in hand and its
 /// muzzle flashes, its decals and the marks bullets leave); the scene that draws it, and how a frame
 /// of it and the screen over it are drawn (FrameRenderer); the game as its player's client knows it,
 /// from what its server tells after each tick (ClientGame); the HUD of its player; the fonts of the

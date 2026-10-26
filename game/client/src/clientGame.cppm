@@ -59,6 +59,9 @@ public:
     /// turn of the view kept with those not yet taken.
     void receive(PlayerSnapshot snapshot);
 
+    /// The server's light-style patterns at `time`, the time the scene shows.
+    [[nodiscard]] auto lightStylesAt(nx::Seconds time) const noexcept -> nx::render::LightStyleValues;
+
     /// The player's eye, between where the last two ticks left it by the time left over; where the game
     /// placed it, at once.
     [[nodiscard]] auto eye() const noexcept -> nx::Vec3;
@@ -103,6 +106,7 @@ private:
     [[nodiscard]] auto numbered(UserCommand command) -> UserCommand;
 
     const MapModels* m_models;
+    nx::render::LightStyles m_lightStyles;         ///< The last snapshot's patterns, owned here.
     PlayerSnapshot m_last;                         ///< What the server told last.
     nx::Vec3 m_previousEye{};                      ///< Before the last tick.
     nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.

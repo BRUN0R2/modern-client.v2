@@ -231,7 +231,8 @@ private:
     const GameContent* m_content;
     const GameMap* m_map;
     GameCvars m_cvars;
-    GameModels m_models; ///< What the world's hostages play: they point into it.
+    MapLightStyles m_lightStyles; ///< The patterns the server tells each client.
+    GameModels m_models;          ///< What the world's hostages play: they point into it.
     Rounds m_rounds;
     TeamAccounts m_accounts;
     nx::GameTime m_nextPeriodicThink{}; ///< When the rules look at the restart cvars next.

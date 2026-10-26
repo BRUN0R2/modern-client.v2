@@ -158,4 +158,25 @@ TEST_F(ClientGameTest, BrushEntitiesAreDrawnWhereTheServerSaysTheyAre) {
     EXPECT_TRUE(client.hostages().empty()) << "no hostage told of";
 }
 
+TEST_F(ClientGameTest, TheServerSetsTheLightStylesAndAnUpdateClearsRemovedPatterns) {
+    cs::PlayerSnapshot first = snapshotAt(0, {});
+    first.lightStyles.patterns[4] = "ma";
+    first.lightStyles.patterns[32] = "z";
+    cs::ClientGame client{models(), std::move(first)};
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[4], 264);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{0.15F})[4], 0);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[32], 550);
+
+    cs::PlayerSnapshot changed = snapshotAt(1, {});
+    changed.lightStyles.patterns[4] = "az";
+    client.receive(changed);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[4], 0);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{0.15F})[4], 550);
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{})[32], 256);
+    changed.time = nx::GameTime::atTick(2);
+    client.receive(std::move(changed));
+    EXPECT_EQ(client.lightStylesAt(nx::Seconds{0.15F})[4], 550)
+        << "the phase follows the map's time, including when the patterns are unchanged";
+}
+
 } // namespace

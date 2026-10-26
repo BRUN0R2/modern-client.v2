@@ -19,6 +19,7 @@ import :breath;
 import :hitGroups;
 import :playerHarm;
 import :use;
+import :lightStyles;
 
 export namespace cs {
 
@@ -33,8 +34,9 @@ enum class GameContentError : std::uint8_t {
 /// (data/cstrike/loadouts.toml), the money of its rounds (data/cstrike/economy.toml), the sounds of a
 /// player's feet (data/cstrike/footsteps.toml) and of its breath in water (data/cstrike/breath.toml),
 /// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), how a player is hurt
-/// and killed (data/cstrike/playerHarm.toml), what it hears as it uses (data/cstrike/use.toml), and
-/// what the textures are made of (the installation's sound/materials.txt; none tagged without it).
+/// and killed (data/cstrike/playerHarm.toml), what it hears as it uses (data/cstrike/use.toml), the
+/// world's light styles (data/cstrike/lightStyles.toml), and what the textures are made of (the
+/// installation's sound/materials.txt; none tagged without it).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
@@ -47,6 +49,7 @@ struct GameContent {
     PlayerHarmRules playerHarm;
     UseRules use;
     TextureMaterials materials;
+    WorldLightStyles lightStyles;
 };
 
 /// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its
@@ -65,8 +68,8 @@ struct GameContent {
 
 /// The game's content of `vfs`, the installation's files: from `data`, the project's data/ folder, the
 /// entity classes, the weapons, each in the file named after its id, the loadouts, the money of the
-/// rounds, the footsteps, the breath, the hit groups, the player's harm and its use; what the textures
-/// are made of, from `vfs`. Errors: Unavailable.
+/// rounds, the footsteps, the breath, the hit groups, the player's harm, its use and the world's light
+/// styles; what the textures are made of, from `vfs`. Errors: Unavailable.
 [[nodiscard]] auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     -> nx::Result<GameContent, GameContentError>;
 

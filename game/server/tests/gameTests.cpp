@@ -28,6 +28,8 @@ namespace {
 
 /// The box's counter-terrorist spawn points, low and far up, and two terrorist ones far from them.
 constexpr std::string_view kEntities = R"({ "classname" "worldspawn" }
+{ "classname" "light" "targetname" "lamp" "style" "32" "spawnflags" "1" }
+{ "classname" "light_spot" "targetname" "sign" "style" "33" "pattern" "za" }
 { "classname" "info_player_start" "origin" "32 32 8" "angles" "0 90 0" }
 { "classname" "info_player_start" "origin" "16 16 2000" "angles" "0 180 0" }
 { "classname" "info_player_deathmatch" "origin" "300 300 8" "angles" "0 270 0" }
@@ -309,6 +311,22 @@ TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {
     EXPECT_TRUE(placed.wasPlaced);
     EXPECT_EQ(placed.player.origin + nx::Vec3{.z = placed.player.viewHeight.value()},
               (nx::Vec3{.x = 10.0F, .y = 20.0F, .z = 100.0F}));
+}
+
+TEST_F(GameTest, EveryClientReceivesTheGamesWorldAndSwitchableLightPatterns) {
+    const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    cs::PlayerSnapshot snapshot = game().snapshotFor(first);
+    EXPECT_EQ(snapshot.lightStyles.patterns[0], "m");
+    EXPECT_EQ(snapshot.lightStyles.patterns[4], "mamamamamama");
+    EXPECT_EQ(snapshot.lightStyles.patterns[32], "a");
+    EXPECT_EQ(snapshot.lightStyles.patterns[33], "za");
+    EXPECT_TRUE(snapshot.lightStyles.patterns[34].empty());
+    EXPECT_EQ(game().snapshotFor(second).lightStyles, snapshot.lightStyles);
+    snapshot.lightStyles.patterns[32] = "z";
+    idle(1);
+    EXPECT_EQ(game().snapshotFor(first).lightStyles.patterns[32], "a")
+        << "a snapshot owns its copy and cannot mutate the game";
 }
 
 } // namespace

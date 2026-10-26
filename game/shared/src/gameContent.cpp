@@ -169,6 +169,10 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     if (!use) {
         return std::unexpected{std::move(use.error())};
     }
+    auto lightStyles = readDataFile(gameDataOf(data) / "lightStyles.toml", readWorldLightStyles);
+    if (!lightStyles) {
+        return std::unexpected{std::move(lightStyles.error())};
+    }
     TextureMaterials materials = readTextureMaterials(vfs);
     return GameContent{.vfs = std::move(vfs),
                        .entityClasses = std::move(*classes),
@@ -180,7 +184,8 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
                        .hitGroups = std::move(*hitGroups),
                        .playerHarm = std::move(*playerHarm),
                        .use = std::move(*use),
-                       .materials = std::move(materials)};
+                       .materials = std::move(materials),
+                       .lightStyles = std::move(*lightStyles)};
 }
 
 } // namespace cs

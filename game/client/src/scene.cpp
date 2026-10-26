@@ -161,7 +161,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
 
 auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
     -> nx::Result<void, SceneError> {
-    const nx::render::LightStyleValues styles = level.lightStyles().valuesAt(view.time);
+    const nx::render::LightStyleValues& styles = view.lightStyles;
     m_world.prepare({.camera = view.camera,
                      .aspect = view.aspect,
                      .time = view.time,
@@ -271,14 +271,12 @@ void Scene::drawEffects(nx::rhi::CommandList& list) const {
     nx::render::drawInOrder(list, m_viewSprites);
 }
 
-void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
-                            std::span<const nx::render::ModelPlacement> placements) {
+void Scene::bakeReflections(nx::rhi::CommandList& list, const SceneView& view) {
     if (!m_probes || m_probes->isBaked()) {
         return;
     }
-    m_probes->bakeNext(
-        list, m_world,
-        {.time = time, .lightStyles = level.lightStyles().valuesAt(time), .placements = placements});
+    m_probes->bakeNext(list, m_world,
+                       {.time = view.time, .lightStyles = view.lightStyles, .placements = view.placements});
 }
 
 auto Scene::shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position,

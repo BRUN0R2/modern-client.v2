@@ -33,6 +33,7 @@ export import :hostages;
 export import :playerHarm;
 export import :use;
 export import :modelFiles;
+export import :lightStyles;
 export import :gameContent;
 export import :gameMap;
 export import :snapshot;
