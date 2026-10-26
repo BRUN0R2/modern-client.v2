@@ -10,7 +10,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Project name: **Modern-Client.v2**
 - [x] Player limit: 1 to 1024, default 32 ([ADR-0011](adr/0011-player-limit-1024.md))
 - [x] Typed `get*Var`/`set*Var` pattern for plugins ([ADR-0012](adr/0012-typed-get-set-vars-pattern.md))
-- [x] camelCase convention across the whole project, C++ and Rook ([ADR-0013](adr/0013-camelcase-convention.md))
+- [x] camelCase convention across the whole project, C++ and Rook ([ADR-0013](adr/0013-camelcase-convention.md), [ADR-0027](adr/0027-private-member-camelcase.md): private members without a prefix)
 - [x] Files, directories, build targets and scripts also in camelCase (`contractsTests.cpp`)
 - [x] C++ test framework: GoogleTest (official support for builds without exceptions)
 - [x] Project license: option A, GPL-3.0-or-later + MIT (Rook and SDK) + CC BY 4.0 (docs) ([ADR-0010](adr/0010-license.md))
@@ -46,7 +46,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ## Documentation
 
 - [x] Project rules (`docs/RULES.md`): priorities, principles and forbidden patterns
-- [ ] One clean room source policy, with open-source reference consultation ([ADR-0026](adr/0026-clean-room-source-policy.md); documented, awaiting required CI and review)
+- [x] One clean room source policy, with open-source reference consultation ([ADR-0026](adr/0026-clean-room-source-policy.md))
 - [x] Documentation in English ([ADR-0016](adr/0016-english-documentation.md))
 - [x] Documentation index (`docs/README.md`)
 - [x] 00 — Overview and removed limits

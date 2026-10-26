@@ -136,7 +136,9 @@ inconsistency. The code stays understandable months later without historical con
 
 - camelCase across the project, including files and directories
   ([ADR-0013](adr/0013-camelcase-convention.md)); `PascalCase` for types and enumerators,
-  `kPascalCase` for constants and `m_camelCase` for private members.
+  `kPascalCase` for constants, and ordinary camelCase without a prefix for private members
+  ([ADR-0027](adr/0027-private-member-camelcase.md)). Apply it to new or renamed identifiers;
+  existing `m_` names are known inconsistencies, without unrelated renames.
 - Clear, descriptive names, without obscure abbreviations or artificial prefixes and
   suffixes. `snake_case` only where imposed from outside (cvars, commands, map classnames).
 
