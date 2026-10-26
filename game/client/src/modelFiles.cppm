@@ -40,4 +40,9 @@ struct ModelFiles {
                                nx::assets::SequenceIndex sequence)
     -> nx::Result<nx::assets::AnimationFrames, ModelFileError>;
 
+/// The decoded frames of every sequence of the model of `files`, by index, each sequence group's file
+/// read once. Errors: ReadFailed, Invalid.
+[[nodiscard]] auto animationsOf(const nx::assets::Vfs& vfs, const ModelFiles& files)
+    -> nx::Result<std::vector<nx::assets::AnimationFrames>, ModelFileError>;
+
 } // namespace cs

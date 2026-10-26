@@ -44,8 +44,8 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_solidBoxes{level.models().solidBoxes()},
-      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_status{.money = m_cvars.startingMoney()},
+      m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -54,6 +54,10 @@ auto LocalGame::start(const GameContent& content, const Level& level, Team team,
     if (auto spawned = spawnGame(level.map(), level.entityClasses(), game->m_world); !spawned) {
         return std::unexpected{std::move(spawned.error())};
     }
+    if (auto registered = registerHostages(game->m_world, level.models().playedModels()); !registered) {
+        return nx::fail(LevelError::GameUnspawnable, std::move(registered.error()));
+    }
+    spawnHostages(game->m_world, level.hulls(), level.models().hostageSpawns());
     game->m_body = game->m_world.spawn(nx::game::Transform{}, bodyOf(game->m_player));
     game->equip();
     game->spawn();
@@ -106,6 +110,10 @@ auto LocalGame::hearing() const -> Hearing {
     return Hearing{.from = shownTime(), .rate = nx::game::tickTimeOf(m_world).rate};
 }
 
+auto LocalGame::hostages() -> std::vector<ShownHostage> {
+    return hostagesShownAt(m_world, shownTime());
+}
+
 auto LocalGame::shownTime() const -> nx::GameTime {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     return time.now.after(m_pending - kCommandInterval, time.rate);
@@ -138,7 +146,7 @@ void LocalGame::tick(const UserCommand& command) {
     m_lastButtons = command.buttons;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
     const MovementResult moved =
-        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, m_solidBoxes);
+        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, hostageBoxes(m_world));
     m_player = moved.state;
     hearMovement(moved.sounds, entities, command);
     nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
@@ -159,13 +167,11 @@ void LocalGame::tick(const UserCommand& command) {
         .isDucked = m_player.isDucked,
         .canAttack = !m_rounds.isFrozen()};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
-    const nx::Seconds sinceStart = time.now.since(nx::GameTime{}, time.rate);
     // What the attacks meet: the world and its solid brush entities, then a hostage met first, a body.
-    const WeaponTracer tracer = [this, &hulls, sinceStart](nx::collision::Hull hull, nx::Vec3 start,
-                                                           nx::Vec3 end) {
+    const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
         const nx::game::SolidHit solid = nx::game::traceSolidsHit(m_world, hulls, hull, start, end);
         if (std::optional<nx::collision::Trace> hostage =
-                m_level->models().traceHostages(hull, start, end, sinceStart, solid.trace)) {
+                traceHostages(m_world, hull, start, end, solid.trace)) {
             return WeaponHit{.trace = *hostage, .isBody = true};
         }
         const nx::game::Classified* const classified =
@@ -181,8 +187,7 @@ void LocalGame::tick(const UserCommand& command) {
         const nx::game::SolidHit hit =
             nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin, end);
         // A hostage the shot meets first stops it, and leaves no mark behind it.
-        if (m_level->models().traceHostages(nx::collision::Hull::Point, shot.origin, end, sinceStart,
-                                            hit.trace)) {
+        if (traceHostages(m_world, nx::collision::Hull::Point, shot.origin, end, hit.trace)) {
             continue;
         }
         if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
@@ -216,6 +221,10 @@ void LocalGame::thinkRules() {
         events.test(RoundEvent::Ended) && reason) {
         nx::log::info(kLog, "the round is over: {}", nx::enumName(*reason));
         roundEnded(*reason);
+    }
+    if (events.test(RoundEvent::RoundStarted) || events.test(RoundEvent::GameRestarted)) {
+        // RestartRound puts the hostages back as it counts what they bring, before it pays.
+        repositionHostages(m_world, m_level->hulls(), m_content->economy.hostageBonus);
     }
     if (events.test(RoundEvent::RoundStarted)) {
         nx::log::info(kLog, "a round starts");

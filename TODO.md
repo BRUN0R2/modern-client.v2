@@ -299,6 +299,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Sprites (`nx.render:sprite`: every orientation and format, groups, the render modes, glows hidden, dimmed and grown, alpha-tested sprites lit by the world), and `nxview` showing the maps' `env_sprite`, `env_glow` and `cycler_sprite` as the game animates them
 - [x] Blended sprites, brush entities and models sorted together, as the original's one list of blended entities (`nx.render:blendedOrder`: each renderer prepared, then the solid things of each and the blended things of all in one order)
 - [x] The maps' studio models in `nxview`: `cycler_sprite` models at their framerate, hostages idling, their heads straight ahead, dropped to the floor (`nx.game:placement`)
+- [x] The hostages as entities of the game's world (`cs.shared:hostages`, [10 §4.2](docs/10-counter-strike-gameplay.md#42-hostages)): an idle sequence drawn by weight (`LookupActivity`), its frame advanced by the server a thirtieth of a second apart (`StudioFrameAdvance`, the kinds' `nx::game::ThinkMethod`) and shown as the client estimates it, put back where it started as each round starts (`RePosition`), the shots meeting its hitboxes where its last think left them
 - [x] The render modes of studio models (`rendermode`, `renderamt`: solid, blended and added, the blended ones from the farthest)
 - [ ] The render effects of studio models (`renderfx`), the players' colors, the bob of the view's model
 - [ ] Optional compute skinning
@@ -323,7 +324,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)
 - [ ] Trace parity tests against traces recorded from the original
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
-- [x] Traces against animated hitboxes (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): the hostages' stop the shots (`cs::MapModels::traceHostages`)
+- [x] Traces against animated hitboxes (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): the hostages' stop the shots (`cs::traceHostages`)
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
 - [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order)

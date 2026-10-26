@@ -167,7 +167,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                      .time = view.time,
                      .lightStyles = styles,
                      .placements = view.placements});
-    const PosedModels models = level.models().posed(m_models, view.time, m_light, level.skyLight(), styles);
+    const PosedModels models =
+        level.models().posed(m_models, view.time, view.hostages, m_light, level.skyLight(), styles);
     if (auto prepared =
             m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
         !prepared) {

@@ -112,6 +112,21 @@ run out, with the team each is won by: `cs::winnerOf`):
 - Penalties for damaging and killing hostages (`mp_hostagepenalty`, money).
 - Rescue in a zone, with rewards for the team.
 
+**Today** (`cs.shared:hostages`, ReGameDLL's `CHostage`): the hostages are entities of the game's
+world (`cs::Hostage`), made as the map starts (`cs::spawnHostages`, `CHostage::Spawn`): each plays its
+map's model, or `scientist.mdl`, idling in a sequence drawn among its model's idle ones as likely as
+its weight (`cs::lookupActivity`, `LookupActivity`: `hostage.mdl`'s looping `idle1` 50 times in 65,
+and its other idles, which play once and hold their last frame, the rest), from its first frame;
+its head's controllers straight ahead; dropped to the floor ([07 §5](07-simulation-and-physics.md)).
+It thinks first in 0.1 to 0.2 seconds, then a thirtieth of a second apart (`IdleThink`), its frame
+advanced by the server as it thinks (`cs::advanceFrame`, `StudioFrameAdvance`), which the client
+shows on from as it estimates it (`cs::estimatedFrameOf`, `R_StudioEstimateFrame`) and the shots meet
+its hitboxes at. As each round starts, before its money is paid, each is put back where it started,
+turned as it was, thinking again in 0.1 to 0.2 seconds (`cs::repositionHostages`, `RePosition`), the
+rest left where they are once the bonus counted for them reaches its most, as `RestartRound`'s loop
+stops there. Its box stops the players (`cs::hostageBoxes`). Following, rescue, damage and death come
+with what they need.
+
 ## 5. Map entities
 
 Mandatory support so that **every official map** loads without warnings:
@@ -376,7 +391,7 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   Glock, the AK-47 and the M4A1, 4096 for the USP, as the original's fire them), its direction as it
   strayed (not of length 1), through
   the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it)
-  and the hostages, by their hitboxes (`cs::MapModels::traceHostages`, [07 §4.2](07-simulation-and-physics.md#42-entities)):
+  and the hostages, by their hitboxes (`cs::traceHostages`, [07 §4.2](07-simulation-and-physics.md#42-entities)):
   a hostage it meets first stops it. Where it meets the world or a brush entity it leaves the mark the game names for it
   (`cs::bulletMarkOf`, `DamageDecal`): on the world and on an entity drawn normally a bullet hole,
   one of `{shot1` to `{shot5` of decals.wad at random; none on a solid one (`kRenderTransAlpha`);
@@ -411,7 +426,7 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   **Today:** `+attack` slashes and `+attack2` stabs (Swing, Stab): a line 48 units ahead of the eye
   (32 for the stab), along the view without its kick, then a ducked player's hull, through the world
   and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`) and the hostages,
-  the line by their hitboxes and the hull by their boxes (`cs::MapModels::traceHostages`, as
+  the line by their hitboxes and the hull by their boxes (`cs::traceHostages`, as
   `SV_HullForStudioModel` chooses); where the hull meets the world or a brush entity, it looks for
   where it meets it as `FindHullIntersection` does: a line to twice as far as the hull stopped, else
   of the lines to the corners of a ducked player's box about that end the nearest that meets

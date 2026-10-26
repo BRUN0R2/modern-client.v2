@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The studio models the map's entities show (docs/05-rendering.md, section 9), as the game makes them
-/// until its server spawns its entities: the cycler_sprite of a model and the hostage_entity, as
-/// ReGameDLL's CCyclerSprite and CHostage make them (GPL, consulted: docs/20 section 3).
+/// The studio models the map's entities show (docs/05-rendering.md, section 9): the cycler_sprite of a
+/// model, as the client shows it until the game makes it (ReGameDLL's CCyclerSprite; GPL, consulted:
+/// docs/20 section 3), and the hostage_entity, which the game makes (cs::spawnHostages) and plays, the
+/// client showing it as the game says; and the files of their models, which the game plays too.
 export module cs.client:mapModels;
 
 import std;
@@ -12,8 +13,6 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
-import nx.ecs;
-import nx.collision;
 import cs.shared;
 import :modelFiles;
 
@@ -22,13 +21,9 @@ export namespace cs {
 /// Which entity of the game shows a studio model: how it plays it.
 enum class ModelClass : std::uint8_t {
     Cycler,  ///< cycler_sprite: its sequence at its framerate, from when the map starts.
-    Hostage, ///< hostage_entity: its idle sequence at its own speed, its head straight ahead, dropped to
-             ///< the floor; scientist.mdl when the map names no model.
+    Hostage, ///< hostage_entity: as the game plays it (cs::Hostage); scientist.mdl when the map names no
+             ///< model.
 };
-
-/// A hostage's box about its origin, at its feet (VEC_HOSTAGE_HULL_MIN, VEC_HOSTAGE_HULL_MAX).
-inline constexpr nx::Aabb kHostageBox{.min = {.x = -10.0F, .y = -10.0F, .z = 0.0F},
-                                      .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}};
 
 /// A studio model entity of the map, as the game spawns it.
 struct MapModel {
@@ -69,24 +64,15 @@ public:
     /// The models left out: missing or unreadable, with why.
     [[nodiscard]] inline auto missing() const noexcept -> std::span<const std::string> { return m_missing; }
 
-    /// Drops the hostages to the floor of the world of `hulls` and of the solid brush entities of
-    /// `world` (DROP_TO_FLOOR), as the game does when it makes them.
-    void dropToFloor(nx::ecs::World& world, const nx::collision::BrushHulls& hulls);
+    /// Its models as the game plays them, by the index of their file: each file's and the frames of each
+    /// of its sequences.
+    [[nodiscard]] inline auto playedModels() const noexcept -> std::span<const cs::PlayedModel> {
+        return m_played;
+    }
 
-    /// The boxes of its entities that stop a player (SOLID_SLIDEBOX): each hostage's, kHostageBox
-    /// about where it stands.
-    [[nodiscard]] auto solidBoxes() const -> std::vector<SolidBox>;
-
-    /// The server's way of `hull` from `start` to `end` through the hostages `sinceStart` after the map
-    /// started, where it takes the place of `sofar`, what the way met otherwise (keepFirstStop): each
-    /// hostage whose box (kHostageBox, a unit more each way, as the engine links it) the way's box
-    /// meets (SV_ClipToLinks) is met as SV_HullForStudioModel chooses, a line by its hitboxes, its
-    /// bones posed with its sequence's motion kept, and a hull by its box grown by the hull's. Posed
-    /// when the way is traced, where the original's server poses a hostage as its last think left it,
-    /// at most a thirtieth of a second before. None when no hostage takes its place.
-    [[nodiscard]] auto traceHostages(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end,
-                                     nx::Seconds sinceStart, const nx::collision::Trace& sofar) const
-        -> std::optional<nx::collision::Trace>;
+    /// The map's hostages, of models it read, in the map's order, for the game to make (cs::spawnHostages):
+    /// their models among playedModels, where they are, and how they are turned.
+    [[nodiscard]] auto hostageSpawns() const -> std::vector<HostageSpawn>;
 
     /// Every model on the GPU of `renderer`, a model for each file, its uploads recorded in `commands`.
     /// Errors: those of StudioRenderer::load.
@@ -94,39 +80,47 @@ public:
         -> nx::Result<std::vector<nx::render::StudioModel>, nx::render::StudioError>;
 
     /// The models `sinceStart` after the map started, drawn with `models`, what load gave, each lit
-    /// where its entity is by `light`, the sky's `sky` and the styles' `styles`.
+    /// where its entity is by `light`, the sky's `sky` and the styles' `styles`: the cyclers, then the
+    /// hostages as `hostages` shows them (cs::hostagesShownAt).
     [[nodiscard]] auto posed(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
-                             const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
+                             std::span<const ShownHostage> hostages, const nx::render::WorldLight& light,
+                             const nx::render::SkyLight& sky,
                              const nx::render::LightStyleValues& styles) const -> PosedModels;
 
 private:
-    /// A model's files, and the animations its entities play.
+    /// A model's files, and the decoded frames of each of its sequences, by index.
     struct File {
         std::unique_ptr<ModelFiles> files{};
-        std::map<std::uint32_t, nx::assets::AnimationFrames> animations{}; ///< By sequence.
+        std::vector<nx::assets::AnimationFrames> animations{};
     };
 
-    /// An entity, its file's index, and the settings of its controllers.
+    /// An entity and its file's index.
     struct Entity {
         MapModel model{};
         std::size_t file = 0;
-        cs::ControllerSettings controllers{};
     };
 
     MapModels() = default;
 
-    /// traceHostages' way through `hostage` alone, before what it met is weighed; none for a model
-    /// without hitboxes, which a line does not meet.
-    [[nodiscard]] auto traceHostage(const Entity& hostage, nx::collision::Hull hull, nx::Vec3 start,
-                                    nx::Vec3 end, nx::Seconds sinceStart) const
-        -> std::optional<nx::collision::Trace>;
-
-    /// The bones of `entity` `sinceStart` after the map started, its sequence's motion as `motion` says.
-    [[nodiscard]] auto poseOf(const Entity& entity, nx::Seconds sinceStart, SequenceMotion motion) const
+    /// The bones of `cycler` `sinceStart` after the map started.
+    [[nodiscard]] auto cyclerPoseOf(const Entity& cycler, nx::Seconds sinceStart) const
         -> std::vector<nx::Mat3x4>;
 
+    /// The bones of `hostage`, as `shown` shows it.
+    [[nodiscard]] auto hostagePoseOf(const Entity& hostage, const ShownHostage& shown) const
+        -> std::vector<nx::Mat3x4>;
+
+    /// A model's instance of `entity`, posed as `bones`, drawn with `models`, lit where it is.
+    [[nodiscard]] auto instanceOf(const Entity& entity, nx::Vec3 origin, std::span<const nx::Mat3x4> bones,
+                                  std::span<const nx::render::StudioModel> models,
+                                  const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
+                                  const nx::render::LightStyleValues& styles) const
+        -> std::optional<nx::render::StudioInstance>;
+
     std::vector<std::unique_ptr<File>> m_files;
-    std::vector<Entity> m_entities;
+    std::vector<cs::PlayedModel> m_played; ///< One for each file.
+    std::vector<Entity> m_cyclers;
+    std::vector<Entity> m_hostages; ///< In the map's order: the game's hostages' spawns.
     std::vector<std::string> m_missing;
 };
 

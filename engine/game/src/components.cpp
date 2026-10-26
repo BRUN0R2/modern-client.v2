@@ -21,6 +21,7 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<Wall>("nx::game::Wall"),
                                 world.registerComponent<Body>("nx::game::Body"),
                                 world.registerComponent<NextThink>("nx::game::NextThink"),
+                                world.registerComponent<ThinkMethod>("nx::game::ThinkMethod"),
                                 world.registerComponent<Named>("nx::game::Named"),
                                 world.registerComponent<Targets>("nx::game::Targets"),
                                 world.registerComponent<DelayedUse>("nx::game::DelayedUse"),

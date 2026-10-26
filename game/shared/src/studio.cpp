@@ -48,6 +48,10 @@ constexpr float kHalfTurn = 180.0F;
 
 /// How far short of its last frame a sequence that does not loop stops.
 constexpr double kShortOfTheLastFrame = 1.001;
+/// StudioFrameAdvance leaves a frame where it is when less time than this passed, or as much.
+constexpr double kLeastFrameAdvance = 0.001;
+/// Where a frame that does not loop stops past its sequence's end: its last whole 256th.
+constexpr float kLastFrameOfScale = 255.0F;
 
 /// The position and the rotation of every bone of a pose, in its parent's space.
 struct LocalPose {
@@ -220,18 +224,104 @@ auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton {
 
 auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed,
                      float framerate) noexcept -> SequenceFrame {
+    return estimatedFrameOf(sequence, 0.0F, elapsed, framerate);
+}
+
+auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, float frame, nx::Seconds elapsed,
+                      float framerate) noexcept -> SequenceFrame {
     if (sequence.frameCount <= 1) {
         return SequenceFrame{0.0F};
     }
-    const auto last = static_cast<double>(sequence.frameCount - 1);
-    double frame = std::max(static_cast<double>(elapsed.count()), 0.0) * static_cast<double>(framerate) *
-                   static_cast<double>(sequence.fps);
+    const auto lastFrames = static_cast<float>(sequence.frameCount - 1);
+    const auto last = static_cast<double>(lastFrames);
+    // The frame sent, of the sequence in single precision, then what passed since, in double.
+    double estimated = static_cast<double>(frame * lastFrames / kFrameScale) +
+                       (std::max(static_cast<double>(elapsed.count()), 0.0) * static_cast<double>(framerate) *
+                        static_cast<double>(sequence.fps));
     if (sequence.isLooping) {
-        frame -= std::trunc(frame / last) * last;
+        estimated -= std::trunc(estimated / last) * last;
+        if (estimated < 0.0) {
+            estimated += last;
+        }
     } else {
-        frame = std::min(frame, static_cast<double>(sequence.frameCount) - kShortOfTheLastFrame);
+        estimated =
+            std::clamp(estimated, 0.0, static_cast<double>(sequence.frameCount) - kShortOfTheLastFrame);
     }
-    return SequenceFrame{static_cast<float>(frame)};
+    return SequenceFrame{static_cast<float>(estimated)};
+}
+
+auto serverFrameOf(const nx::assets::StudioSequence& sequence, float frame) noexcept -> SequenceFrame {
+    return SequenceFrame{
+        sequence.frameCount > 1 ? static_cast<float>(sequence.frameCount - 1) * frame / kFrameScale : 0.0F};
+}
+
+auto lookupActivity(std::span<const nx::assets::StudioSequence> sequences, Activity activity,
+                    nx::Random& random) -> std::optional<nx::assets::SequenceIndex> {
+    const std::int32_t wanted = std::to_underlying(activity);
+    const auto isOfIt = [wanted](const nx::assets::StudioSequence& sequence) {
+        return sequence.activity == wanted;
+    };
+    std::int64_t weights = 0;
+    std::uint64_t count = 0;
+    for (const nx::assets::StudioSequence& sequence : sequences | std::views::filter(isOfIt)) {
+        weights += sequence.activityWeight;
+        ++count;
+    }
+    if (count == 0) {
+        return std::nullopt;
+    }
+    if (weights == 0) {
+        std::uint64_t chosen = random.below(count);
+        for (std::size_t index = 0; index < sequences.size(); ++index) {
+            if (isOfIt(sequences[index]) && chosen-- == 0) {
+                return nx::assets::SequenceIndex{nx::narrow<std::uint32_t>(index)};
+            }
+        }
+        return std::nullopt;
+    }
+    const auto drawn =
+        weights > 0 ? static_cast<std::int64_t>(random.below(static_cast<std::uint64_t>(weights))) : 0;
+    std::int64_t passed = 0;
+    for (std::size_t index = 0; index < sequences.size(); ++index) {
+        if (isOfIt(sequences[index])) {
+            passed += sequences[index].activityWeight;
+            if (passed > drawn) {
+                return nx::assets::SequenceIndex{nx::narrow<std::uint32_t>(index)};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+void resetSequence(Animation& animation, const nx::assets::StudioSequence& sequence,
+                   nx::GameTime now) noexcept {
+    animation.frameSpeed = sequence.frameCount <= 1
+                               ? kFrameScale
+                               : sequence.fps * kFrameScale / static_cast<float>(sequence.frameCount - 1);
+    animation.isLooping = sequence.isLooping;
+    animation.advancedAt = now;
+    animation.framerate = 1.0F;
+    animation.isFinished = false;
+}
+
+void advanceFrame(Animation& animation, nx::GameTime now, nx::TickRate rate) noexcept {
+    const float interval = now.since(animation.advancedAt, rate).count();
+    animation.advancedAt = now;
+    if (static_cast<double>(interval) <= kLeastFrameAdvance) {
+        return;
+    }
+    animation.frame += interval * animation.frameSpeed * animation.framerate;
+    if (animation.frame < 0.0F || animation.frame >= kFrameScale) {
+        if (animation.isLooping) {
+            const auto scale = static_cast<double>(kFrameScale);
+            animation.frame =
+                static_cast<float>(static_cast<double>(animation.frame) -
+                                   (std::trunc(static_cast<double>(animation.frame) / scale) * scale));
+        } else {
+            animation.frame = animation.frame < 0.0F ? 0.0F : kLastFrameOfScale;
+        }
+        animation.isFinished = true;
+    }
 }
 
 auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
