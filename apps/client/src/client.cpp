@@ -20,6 +20,7 @@ import nx.rhi.vulkan;
 import nx.render;
 import nx.ui;
 import cs.shared;
+import cs.server;
 import cs.client;
 
 namespace app {
@@ -185,27 +186,43 @@ void savePipelineCache(const nx::rhi::Device& device) {
                  .sleepTimer = std::move(*sleepTimer)};
 }
 
-/// A map being played: its level, and the game of it, which goes before the level it plays.
+/// A map being played, as a listen server plays it (docs/01-architecture.md, section 3): the map as the
+/// game plays it; the level the client draws of it; the game its server plays of it, and the player the
+/// client plays in it; and the game as the client knows it. Each goes before what it points into.
 struct Session {
+    std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Level> level;
-    std::unique_ptr<cs::LocalGame> game;
+    std::unique_ptr<cs::Game> game;
+    cs::PlayerIndex player;
+    cs::ClientGame client;
 };
 
-/// The map `name` of `content`, its game started by the rules `cvars` set, its player of the team of
-/// its first spawn point, its weapons drawn as `autoSwitch` says. Errors: those of Level::load and
-/// LocalGame::start.
-[[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
-                                cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
-    -> nx::Result<Session, cs::LevelError> {
-    auto level = cs::Level::load(content, name);
+/// The map `name` of `content`, the client's level of it read with `client`, its game started by the
+/// rules `cvars` set, the client's player joined in the team of its first spawn point, its weapons
+/// drawn as `autoSwitch` says. Errors: CommandFailed, with the cause.
+[[nodiscard]] auto startSession(const cs::GameContent& content, const cs::ClientContent& client,
+                                std::string_view name, cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
+    -> nx::Result<Session, ConsoleError> {
+    const std::string failed = std::format("map {}", name);
+    auto map = cs::GameMap::load(content.vfs, name);
+    if (!map) {
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(map.error()));
+    }
+    auto level = cs::Level::load(content, client, **map);
     if (!level) {
-        return std::unexpected{std::move(level.error())};
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));
     }
-    auto game = cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), autoSwitch, cvars);
+    auto game = cs::Game::start(content, **map, cvars);
     if (!game) {
-        return std::unexpected{std::move(game.error())};
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(game.error()));
     }
-    return Session{.level = std::move(*level), .game = std::move(*game)};
+    const cs::PlayerIndex player = (*game)->join(cs::spawnTeam((*map)->map()), autoSwitch);
+    cs::ClientGame known{(*level)->models(), (*game)->snapshotFor(player)};
+    return Session{.map = std::move(*map),
+                   .level = std::move(*level),
+                   .game = std::move(*game),
+                   .player = player,
+                   .client = std::move(known)};
 }
 
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
@@ -270,6 +287,9 @@ private:
     /// Plays the sound on the output s_device names, when it names one: the system's default stays
     /// when none has that name, logged.
     void openNamedSoundOutput();
+    /// Plays `elapsed` of the session's game, as a listen server plays it: each tick due, the command the
+    /// player's input makes is the server's game's tick, whose snapshot the client's game takes.
+    void playSession(nx::Seconds elapsed);
     /// Turns the view the way the session's game turned its player, if it did (the original's
     /// fixangle): as the player spawns.
     void turnAsTheGameDid();
@@ -319,6 +339,7 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::GameContent> m_content;
+    std::optional<cs::ClientContent> m_clientContent;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
@@ -400,12 +421,17 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!install) {
         return nx::fail(ClientError::ContentUnavailable, std::move(install.error()));
     }
-    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"), *install,
-                                       cs::addonsFolderOf(m_files.directory()));
+    const std::filesystem::path data = m_options->data.value_or(executable->parent_path() / "data");
+    auto content = cs::openGameContent(data, *install, cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
     m_content = std::move(*content);
+    auto clientContent = cs::readClientContent(data);
+    if (!clientContent) {
+        return nx::fail(ClientError::ContentUnavailable, std::move(clientContent.error()));
+    }
+    m_clientContent = std::move(*clientContent);
     if (auto registered = registerWeaponCommands(); !registered) {
         return registered;
     }
@@ -531,7 +557,7 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
             if (!m_session) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
-            m_session->game->give(weapon);
+            m_session->game->give(m_session->player, weapon);
             return {};
         }};
     if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
@@ -546,9 +572,10 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
+    auto session =
+        startSession(*m_content, *m_clientContent, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
     if (!session) {
-        return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
+        return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
     return {};
@@ -603,7 +630,7 @@ void Client::noclipCommand() {
         m_console.print("Can't \"noclip\", not playing a map");
         return;
     }
-    m_console.print(m_session->game->toggleNoclip() ? "noclip ON" : "noclip OFF");
+    m_console.print(m_session->game->toggleNoclip(m_session->player) ? "noclip ON" : "noclip OFF");
 }
 
 void Client::lastWeaponCommand() {
@@ -611,7 +638,7 @@ void Client::lastWeaponCommand() {
         m_console.print("Can't \"lastinv\", not playing a map");
         return;
     }
-    if (const std::optional<cs::WeaponIndex> last = m_session->game->inventory().lastWeapon()) {
+    if (const std::optional<cs::WeaponIndex> last = m_session->client.inventory().lastWeapon()) {
         m_input->selectWeapon(*last);
     }
 }
@@ -704,10 +731,11 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // A session plays once its scene is made, from the frame after the first image of it: what the
         // player hears of it, they see.
         if (m_session && m_scene) {
-            const cs::Hearing hearing = m_session->game->hearing(); // from what the last frame showed
+            const cs::Hearing hearing = m_session->client.hearing(); // from what the last frame showed
             // The player's own setting, as its client tells the server of it.
-            m_session->game->setAutoSwitch(autoSwitchOf(m_cvars->player));
-            m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
+            m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(m_cvars->player));
+            playSession(elapsed);
+            m_camera.position = m_session->client.eye();
             turnAsTheGameDid();
             hearSession(hearing);
             stampBulletHoles();
@@ -778,13 +806,23 @@ void Client::startNextSession() {
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
     readPlayerSounds();
-    m_camera.position = m_session->game->eye();
+    m_camera.position = m_session->client.eye();
     turnAsTheGameDid();
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
 }
 
+void Client::playSession(nx::Seconds elapsed) {
+    Session& session = *m_session;
+    for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited); due > 0; --due) {
+        const std::array commands{cs::PlayerCommand{
+            .player = session.player, .command = session.client.nextCommand(*m_input, m_camera.angles)}};
+        session.game->tick(commands);
+        session.client.receive(session.game->snapshotFor(session.player));
+    }
+}
+
 void Client::turnAsTheGameDid() {
-    if (const std::optional<nx::EulerAngles> turned = m_session->game->takeTurnedView()) {
+    if (const std::optional<nx::EulerAngles> turned = m_session->client.takeTurnedView()) {
         m_camera.angles = *turned;
     }
 }
@@ -835,10 +873,10 @@ void Client::readPlayerSounds() {
 }
 
 void Client::hearSession(const cs::Hearing& hearing) {
-    m_viewPose = m_session->game->viewModel();
+    m_viewPose = m_session->client.viewModel();
     m_clientEvents = m_viewModelEvents.passed(
         m_viewPose ? m_session->level->viewModel(m_viewPose->weapon) : nullptr, m_viewPose);
-    const std::vector<cs::SoundMade> sounds = m_session->game->takeSounds();
+    const std::vector<cs::SoundMade> sounds = m_session->client.takeSounds();
     if (m_audio == nullptr) {
         return;
     }
@@ -854,7 +892,7 @@ void Client::hearSession(const cs::Hearing& hearing) {
 }
 
 void Client::stampBulletHoles() {
-    const std::vector<cs::Impact> impacts = m_session->game->takeImpacts();
+    const std::vector<cs::Impact> impacts = m_session->client.takeImpacts();
     if (!m_scene) {
         return;
     }
@@ -867,7 +905,7 @@ void Client::stampBulletHoles() {
         // One the installation lacks was reported as the level was read.
         if (const std::optional<nx::render::DecalImageIndex> decal =
                 name ? level.decals().indexOf(*name) : std::nullopt) {
-            std::ignore = m_scene->shootDecal(*decal, impact.position, impact.on);
+            std::ignore = m_scene->shootDecal(*decal, impact.position, cs::decalTargetOf(impact.on));
         }
     }
 }
@@ -989,12 +1027,12 @@ auto Client::sessionView() -> cs::SceneView {
     // The view is drawn turned by the kick the player's weapon gave it, as the original's client adds
     // the punch to it.
     nx::render::Camera kicked = m_camera;
-    const nx::EulerAngles punch = m_session->game->punch();
+    const nx::EulerAngles punch = m_session->client.punch();
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
-    m_placements = m_session->game->placements();
-    m_hostages = m_session->game->hostages();
+    m_placements = m_session->client.placements();
+    m_hostages = m_session->client.hostages();
     return {.camera = kicked,
             .time = nx::Seconds{m_mapClock.elapsed()},
             .placements = m_placements,
@@ -1008,14 +1046,14 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
     if (m_session && m_hud && m_cvars->video.hudDraw.value()) {
         // The HUD, over the scene, the knife's crosshair in the middle.
-        const cs::PlayerStatus& status = m_session->game->status();
+        const cs::PlayerStatus& status = m_session->client.status();
         m_hud->append(m_screenQuads,
                       {.health = status.health,
                        .armor = status.armor,
                        .money = status.money,
-                       .ammo = cs::hudAmmoOf(m_session->game->inventory(), m_content->weapons),
+                       .ammo = cs::hudAmmoOf(m_session->client.inventory(), m_content->weapons),
                        .crosshairDistance = cs::kKnifeCrosshairDistance,
-                       .roundTime = m_session->game->roundTimeShown()},
+                       .roundTime = m_session->client.roundTimeShown()},
                       m_hudCvars->crosshair(), size);
     }
     // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its

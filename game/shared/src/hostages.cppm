@@ -17,6 +17,7 @@ export module cs.shared:hostages;
 import std;
 import nx.core;
 import nx.math;
+import nx.assets;
 import nx.ecs;
 import nx.collision;
 import nx.game;
@@ -32,17 +33,33 @@ inline constexpr nx::Aabb kHostageBox{.min = {.x = -10.0F, .y = -10.0F, .z = 0.0
                                       .max = {.x = 10.0F, .y = 10.0F, .z = 62.0F}};
 /// The health a hostage is made and put back with (its max_health).
 inline constexpr nx::HitPoints kHostageHealth{100.0F};
+/// The model of a hostage the map names none for (CHostage::Precache).
+inline constexpr std::string_view kDefaultHostageModel = "models/scientist.mdl";
 
-/// A hostage of the map, as the game makes it: the model it plays, by its index among the played
-/// models, where it is, and how it is turned.
+/// A hostage entity of a map, as the game reads it: the model it plays, its "model" or
+/// kDefaultHostageModel without one, where it is, how it is turned, and its skin.
+struct MapHostage {
+    std::string model{};
+    nx::Vec3 origin{};
+    nx::EulerAngles angles{};
+    std::uint32_t skin = 0;
+};
+
+/// The hostage entities of `map`, in its order: the index of each is its spawn's (HostageSpawn).
+[[nodiscard]] auto mapHostagesOf(const nx::assets::BspView& map) -> std::vector<MapHostage>;
+
+/// A hostage of the map, as the game makes it: which of the map's it is, by its index among the map's
+/// hostages (mapHostagesOf), which the server and its clients name it by; the model it plays, by its
+/// index among the played models; where it is; and how it is turned.
 struct HostageSpawn {
+    std::uint32_t spawn = 0;
     std::uint32_t model = 0;
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
 };
 
-/// A hostage of the game's world, as the original's CHostage keeps it: which of the map's it is, by
-/// the index of its spawn; the model it plays; where it started and how it was turned (m_vStart,
+/// A hostage of the game's world, as the original's CHostage keeps it: which of the map's it is
+/// (HostageSpawn::spawn); the model it plays; where it started and how it was turned (m_vStart,
 /// m_vStartAngles); what it does (m_Activity), none until it is set; its controllers, its head
 /// straight ahead; its health; the hit group the last attack met it in (m_LastHitGroup); until when it
 /// flinches (m_flFlinchTime); when it thinks its tenth of a second's part next (m_flNextFullThink);
@@ -68,7 +85,24 @@ struct HostageData {
     const HitGroupRules* hitGroups = nullptr;
 };
 
-/// How a hostage of the world shows: which of the map's it is, by the index of its spawn; where it is
+/// What the server tells its clients of a hostage of its world after a tick, as the original's entity
+/// state carries it: which of the map's it is (HostageSpawn::spawn); where it is and how it is
+/// turned; the sequence it plays, where in it its last think left it, when (animtime) and at what
+/// framerate; and its controllers.
+struct HostageState {
+    std::uint32_t spawn = 0;
+    nx::Vec3 origin{};
+    nx::EulerAngles angles{};
+    nx::assets::SequenceIndex sequence{};
+    float frame = 0.0F; ///< Of kFrameScale.
+    nx::GameTime advancedAt{};
+    float framerate = 1.0F;
+    ControllerSettings controllers{};
+
+    [[nodiscard]] inline auto operator==(const HostageState&) const noexcept -> bool = default;
+};
+
+/// How a hostage of the world shows: which of the map's it is (HostageSpawn::spawn); where it is
 /// and how it is turned; the sequence it plays and where in it the client estimates it is; and its
 /// controllers.
 struct ShownHostage {
@@ -125,8 +159,12 @@ void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls
 auto repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                         const HostageBonus& bonus) -> std::uint32_t;
 
-/// How each hostage of `world` shows at `time`, in the world's order: its frame where the client
-/// estimates it from its last think's (estimatedFrameOf).
-[[nodiscard]] auto hostagesShownAt(nx::ecs::World& world, nx::GameTime time) -> std::vector<ShownHostage>;
+/// What the server tells of each hostage of `world` after a tick, in the world's order.
+[[nodiscard]] auto hostageStatesOf(nx::ecs::World& world) -> std::vector<HostageState>;
+
+/// How the hostage `state` tells of shows at `time`, of the game's ticks at `rate`, playing `sequence`
+/// of its model: its frame where the client estimates it from its last think's (estimatedFrameOf).
+[[nodiscard]] auto shownHostageOf(const HostageState& state, const nx::assets::StudioSequence& sequence,
+                                  nx::GameTime time, nx::TickRate rate) -> ShownHostage;
 
 } // namespace cs

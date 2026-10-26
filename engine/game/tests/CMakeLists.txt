@@ -8,12 +8,14 @@ nxAddTest(nxGameTests
         damageTests.cpp
         decalsTests.cpp
         doorTests.cpp
+        entityKeysTests.cpp
         placementTests.cpp
         solidsTests.cpp
         thinkingTests.cpp
         triggerTests.cpp
     DEPENDS
         nx::game
+        nx::assets
         nx::platform)
 
 # A test reads the repository's data/cstrike/entities.toml.

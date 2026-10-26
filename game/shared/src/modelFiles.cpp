@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-module cs.client;
+module cs.shared;
 
 import std;
 import nx.core;
@@ -61,7 +61,7 @@ auto ModelFiles::texturesView() const -> const MdlView& {
     return textures ? *textures : *view;
 }
 
-auto readModelFiles(const Vfs& vfs, std::string_view path)
+auto readModelFiles(const Vfs& vfs, std::string_view path, ModelTextures textures)
     -> nx::Result<std::unique_ptr<ModelFiles>, ModelFileError> {
     // The engine's file system reads a leading slash as the game's folder.
     const std::string_view relative = path.substr(std::min(path.find_first_not_of("/\\"), path.size()));
@@ -77,7 +77,7 @@ auto readModelFiles(const Vfs& vfs, std::string_view path)
         return nx::fail(ModelFileError::Invalid, std::string{path}, std::move(view.error()));
     }
     files->view = std::move(*view);
-    if (files->view->textures().empty()) {
+    if (textures == ModelTextures::Read && files->view->textures().empty()) {
         auto texturesBytes = readFile(
             vfs, at.and_then([](const VfsPath& found) { return nx::assets::texturesFilePath(found); }),
             std::format("the textures file of {:?}", path));
@@ -85,12 +85,12 @@ auto readModelFiles(const Vfs& vfs, std::string_view path)
             return std::unexpected{std::move(texturesBytes.error())};
         }
         files->texturesBytes = std::move(*texturesBytes);
-        auto textures = MdlView::parse(files->texturesBytes);
-        if (!textures) {
+        auto texturesView = MdlView::parse(files->texturesBytes);
+        if (!texturesView) {
             return nx::fail(ModelFileError::Invalid, std::format("the textures file of {:?}", path),
-                            std::move(textures.error()));
+                            std::move(texturesView.error()));
         }
-        files->textures = std::move(*textures);
+        files->textures = std::move(*texturesView);
     }
     return files;
 }

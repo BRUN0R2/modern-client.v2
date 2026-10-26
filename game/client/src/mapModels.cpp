@@ -9,6 +9,7 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import nx.game;
 import cs.shared;
 
 namespace cs {
@@ -16,8 +17,6 @@ namespace cs {
 namespace {
 
 constexpr std::string_view kSpriteExtension = ".spr";
-/// The model of a hostage the map names none for (CHostage::Precache).
-constexpr std::string_view kDefaultHostageModel = "models/scientist.mdl";
 
 /// Whether `model` names a sprite.
 [[nodiscard]] auto isSprite(std::string_view model) noexcept -> bool {
@@ -29,7 +28,7 @@ constexpr std::string_view kDefaultHostageModel = "models/scientist.mdl";
 [[nodiscard]] auto mapModelOf(const nx::assets::BspEntity& entity) -> std::optional<MapModel> {
     const std::string_view classname = entity.find("classname").value_or("");
     const std::string_view model = entity.find("model").value_or("");
-    const nx::Vec3 angles = anglesOf(entity);
+    const nx::Vec3 angles = nx::game::anglesOf(entity);
     MapModel made{.origin = entity.findVector("origin").value_or(nx::Vec3{}),
                   .angles = {.pitch = nx::Degrees{angles.x},
                              .yaw = nx::Degrees{angles.y},
@@ -91,11 +90,13 @@ auto mapModelsOf(const nx::assets::BspView& map) -> std::vector<MapModel> {
 auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map) -> MapModels {
     MapModels read;
     std::map<std::string, std::optional<std::size_t>, std::less<>> files; // by path; none: left out
+    std::uint32_t hostagesSeen = 0; // a hostage's index among the map's: its spawn's, read or not
     for (MapModel& model : mapModelsOf(map)) {
+        const std::uint32_t spawn = model.kind == ModelClass::Hostage ? hostagesSeen++ : 0;
         auto [found, isNew] = files.try_emplace(model.model | std::views::transform(nx::toLowerAscii) |
                                                 std::ranges::to<std::string>()); // the VFS ignores case
         if (isNew) {
-            auto modelFiles = readModelFiles(vfs, model.model);
+            auto modelFiles = readModelFiles(vfs, model.model, ModelTextures::Read);
             if (!modelFiles) {
                 read.m_missing.push_back(
                     std::format("{} ({})", model.model, nx::describe(modelFiles.error())));
@@ -119,26 +120,20 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
             model.sequence = cyclerSequenceOf(model, *read.m_files[file]->files->view).value;
             read.m_cyclers.push_back(Entity{.model = std::move(model), .file = file});
         } else {
-            read.m_hostages.push_back(Entity{.model = std::move(model), .file = file});
+            read.m_hostages.push_back(Entity{.model = std::move(model), .file = file, .spawn = spawn});
         }
-    }
-    // The files no longer move: what the game plays points into them.
-    read.m_played.reserve(read.m_files.size());
-    for (const std::unique_ptr<File>& file : read.m_files) {
-        read.m_played.push_back(cs::PlayedModel{.view = &*file->files->view, .animations = file->animations});
     }
     return read;
 }
 
-auto MapModels::hostageSpawns() const -> std::vector<HostageSpawn> {
-    std::vector<HostageSpawn> spawns;
-    spawns.reserve(m_hostages.size());
-    for (const Entity& hostage : m_hostages) {
-        spawns.push_back(HostageSpawn{.model = nx::narrow<std::uint32_t>(hostage.file),
-                                      .origin = hostage.model.origin,
-                                      .angles = hostage.model.angles});
-    }
-    return spawns;
+auto MapModels::hostageOf(std::uint32_t spawn) const noexcept -> const Entity* {
+    const auto found = std::ranges::find(m_hostages, spawn, &Entity::spawn);
+    return found != m_hostages.end() ? &*found : nullptr;
+}
+
+auto MapModels::hostageModel(std::uint32_t spawn) const noexcept -> const nx::assets::MdlView* {
+    const Entity* const hostage = hostageOf(spawn);
+    return hostage != nullptr ? &*m_files[hostage->file]->files->view : nullptr;
 }
 
 auto MapModels::cyclerPoseOf(const Entity& cycler, nx::Seconds sinceStart) const -> std::vector<nx::Mat3x4> {
@@ -190,12 +185,12 @@ auto MapModels::posed(std::span<const nx::render::StudioModel> models, nx::Secon
         drawn.push_back(Drawn{.entity = &cycler, .origin = cycler.model.origin});
     }
     for (const ShownHostage& shown : hostages) {
-        if (shown.spawn >= m_hostages.size()) {
-            continue; // the contract's observe path: a hostage of another map
+        const Entity* const hostage = hostageOf(shown.spawn);
+        if (hostage == nullptr) {
+            continue; // one whose model it could not read, which it listed
         }
-        const Entity& hostage = m_hostages[shown.spawn];
-        posed.bones.push_back(hostagePoseOf(hostage, shown));
-        drawn.push_back(Drawn{.entity = &hostage, .origin = shown.origin});
+        posed.bones.push_back(hostagePoseOf(*hostage, shown));
+        drawn.push_back(Drawn{.entity = hostage, .origin = shown.origin});
     }
     // The instances point into the bones, which no longer move.
     for (std::size_t index = 0; index < drawn.size(); ++index) {

@@ -9,6 +9,7 @@ import nx.math;
 import nx.data;
 import nx.assets;
 import nx.render;
+import nx.game;
 
 namespace cs {
 
@@ -260,7 +261,7 @@ auto skyLightOf(const nx::assets::BspView& map) -> nx::render::SkyLight {
         // (ED_ParseEdict), the game `pitch` and `_light`.
         nx::Vec3 angles{};
         for (const auto& [key, value] : entity.keyValues) {
-            if (const std::optional<nx::Vec3> turned = anglesAfter(angles, key, value)) {
+            if (const std::optional<nx::Vec3> turned = nx::game::anglesAfter(angles, key, value)) {
                 angles = *turned;
             } else if (key == "pitch") {
                 angles.x = nx::assets::numberOfValue(value).value_or(0.0F);

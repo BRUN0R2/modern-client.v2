@@ -4,7 +4,7 @@
 /// The studio models the map's entities show (docs/05-rendering.md, section 9): the cycler_sprite of a
 /// model, as the client shows it until the game makes it (ReGameDLL's CCyclerSprite; GPL, consulted:
 /// docs/20 section 3), and the hostage_entity, which the game makes (cs::spawnHostages) and plays, the
-/// client showing it as the game says; and the files of their models, which the game plays too.
+/// client showing it as its server tells (cs::HostageState); and the files of their models.
 export module cs.client:mapModels;
 
 import std;
@@ -14,7 +14,6 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import cs.shared;
-import :modelFiles;
 
 export namespace cs {
 
@@ -64,15 +63,9 @@ public:
     /// The models left out: missing or unreadable, with why.
     [[nodiscard]] inline auto missing() const noexcept -> std::span<const std::string> { return m_missing; }
 
-    /// Its models as the game plays them, by the index of their file: each file's and the frames of each
-    /// of its sequences.
-    [[nodiscard]] inline auto playedModels() const noexcept -> std::span<const cs::PlayedModel> {
-        return m_played;
-    }
-
-    /// The map's hostages, of models it read, in the map's order, for the game to make (cs::spawnHostages):
-    /// their models among playedModels, where they are, and how they are turned.
-    [[nodiscard]] auto hostageSpawns() const -> std::vector<HostageSpawn>;
+    /// The model the map's hostage `spawn` plays (HostageSpawn::spawn); none for one whose model it could
+    /// not read, or that the map lacks.
+    [[nodiscard]] auto hostageModel(std::uint32_t spawn) const noexcept -> const nx::assets::MdlView*;
 
     /// Every model on the GPU of `renderer`, a model for each file, its uploads recorded in `commands`.
     /// Errors: those of StudioRenderer::load.
@@ -81,7 +74,7 @@ public:
 
     /// The models `sinceStart` after the map started, drawn with `models`, what load gave, each lit
     /// where its entity is by `light`, the sky's `sky` and the styles' `styles`: the cyclers, then the
-    /// hostages as `hostages` shows them (cs::hostagesShownAt).
+    /// hostages as `hostages` shows them (cs::shownHostageOf), each of the map's hostage it names.
     [[nodiscard]] auto posed(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
                              std::span<const ShownHostage> hostages, const nx::render::WorldLight& light,
                              const nx::render::SkyLight& sky,
@@ -94,10 +87,11 @@ private:
         std::vector<nx::assets::AnimationFrames> animations{};
     };
 
-    /// An entity and its file's index.
+    /// An entity and its file's index; a hostage, which of the map's it is (HostageSpawn::spawn).
     struct Entity {
         MapModel model{};
         std::size_t file = 0;
+        std::uint32_t spawn = 0;
     };
 
     MapModels() = default;
@@ -105,6 +99,9 @@ private:
     /// The bones of `cycler` `sinceStart` after the map started.
     [[nodiscard]] auto cyclerPoseOf(const Entity& cycler, nx::Seconds sinceStart) const
         -> std::vector<nx::Mat3x4>;
+
+    /// The hostage of the map `spawn` names; none for one whose model it could not read.
+    [[nodiscard]] auto hostageOf(std::uint32_t spawn) const noexcept -> const Entity*;
 
     /// The bones of `hostage`, as `shown` shows it.
     [[nodiscard]] auto hostagePoseOf(const Entity& hostage, const ShownHostage& shown) const
@@ -118,9 +115,8 @@ private:
         -> std::optional<nx::render::StudioInstance>;
 
     std::vector<std::unique_ptr<File>> m_files;
-    std::vector<cs::PlayedModel> m_played; ///< One for each file.
     std::vector<Entity> m_cyclers;
-    std::vector<Entity> m_hostages; ///< In the map's order: the game's hostages' spawns.
+    std::vector<Entity> m_hostages; ///< Of models it read, in the map's order.
     std::vector<std::string> m_missing;
 };
 

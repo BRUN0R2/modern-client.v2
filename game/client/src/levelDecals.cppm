@@ -12,6 +12,7 @@ import nx.math;
 import nx.assets;
 import nx.ecs;
 import nx.render;
+import cs.shared;
 
 export namespace cs {
 
@@ -19,6 +20,11 @@ export namespace cs {
 /// where the game has it now.
 [[nodiscard]] auto decalTargetOf(const nx::ecs::World& world, std::optional<nx::ecs::Entity> entity)
     -> nx::render::DecalTarget;
+
+/// What a decal stamped on what the server told of, `target`, is on.
+[[nodiscard]] inline auto decalTargetOf(const StampTarget& target) noexcept -> nx::render::DecalTarget {
+    return nx::render::DecalTarget{.model = target.model, .origin = target.origin, .angles = target.angles};
+}
 
 /// A decal a map stamps for good as its game starts: which of the level's decals, near which point, and
 /// on what.

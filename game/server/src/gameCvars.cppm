@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The cvars of the game's rules (docs/12-ui-hud-and-console.md, section 5.2), by the original's
-/// names, which a server sets and tells its players of, as the local game plays them until its
-/// server comes (cs.server): numbers, any of them, as the original's are; the game holds them as it
-/// reads them, where the original does, and sets them back as it does. Their values and when and how
-/// the game reads them are ReGameDLL_CS's (game.cpp, ReadMultiplayCvars, CheckStartMoney and
-/// CheckRestartRound, GPL, consulted: docs/20 section 3).
-export module cs.client:gameCvars;
+/// names, which a server sets and tells its players of: numbers, any of them, as the original's are;
+/// the game holds them as it reads them, where the original does, and sets them back as it does. Their
+/// values and when and how the game reads them are ReGameDLL_CS's (game.cpp, ReadMultiplayCvars,
+/// CheckStartMoney and CheckRestartRound, GPL, consulted: docs/20 section 3).
+export module cs.server:gameCvars;
 
 import std;
 import nx.core;

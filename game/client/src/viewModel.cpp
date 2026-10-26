@@ -118,7 +118,7 @@ ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::
       m_hand{hand}, m_appearance{std::move(appearance)} {}
 
 auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
-    auto files = readModelFiles(vfs, weapon.models.view);
+    auto files = readModelFiles(vfs, weapon.models.view, ModelTextures::Read);
     if (!files) {
         return nx::fail(ViewModelError::FilesFailed, std::move(files.error()));
     }
