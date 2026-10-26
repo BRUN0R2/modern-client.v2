@@ -622,8 +622,9 @@ kinds of ammo made as the game runs, with the HUD's picture of each, come with t
 The planned layout; today `entities.toml`
 ([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml`, `weapons/` (section 7.2), `loadouts.toml`,
 `lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml` and
-`playerHarm.toml` (section 7.4), and `footsteps.toml` and `breath.toml`
-([11 §3](11-audio.md#3-original-semantics-to-preserve)) exist. The hull sizes are not data:
+`playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
+([11 §3](11-audio.md#3-original-semantics-to-preserve)), and `use.toml`
+([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) exist. The hull sizes are not data:
 `cs.shared` holds them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
 ```
@@ -640,6 +641,7 @@ data/cstrike/
 ├── lightStyles.toml    # the light styles the game sets as a map starts
 ├── footsteps.toml      # the sounds of a player's feet
 ├── breath.toml         # the sounds of a player's breath in water
+├── use.toml            # the sounds of a player's use key
 ├── weapons/
 │   ├── ak47.toml
 │   └── ...

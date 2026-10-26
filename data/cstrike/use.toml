@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# What a player hears as its use key goes down (docs/07, section 5.2), read into cs::UseRules, with
+# ReGameDLL_CS's sounds (CBasePlayer::PlayerUse and UseEmpty; GPL, consulted: docs/20 section 3):
+# `found` with something to use in front of it, `nothing` with nothing.
+
+found = { files = ["common/wpn_select.wav"], channel = "item", volume = 0.4 }
+nothing = { files = ["common/wpn_denyselect.wav"], channel = "item", volume = 0.4 }

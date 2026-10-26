@@ -349,6 +349,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Rotating doors (`func_door_rotating`): opened away from the player, turned by the pusher physics (`SV_PushRotate`), met turned by movement and the server's traces
 - [x] Doors opened by others: used by the targets that name them (`CBaseDoor::Use`), firing their own targets when they arrive
 - [x] Buttons (`nx.game:buttons`: `func_button` used, touched or used by targets, toggles, waits, firing their targets) and a player's use (`playerUse`), the moves of doors and buttons shared (`nx.game:toggles`)
+- [x] The player's use as the original's `ImpulseCommands` runs it in `ItemPostFrame` ([07 §5.2](docs/07-simulation-and-physics.md#52-think-touch-and-triggers)): after the command moved it, before the weapon's frame, not while it is held back (`m_flNextAttack`, `cs::Inventory::isHeldBack`), heard finding something to use or nothing (`data/cstrike/use.toml`)
 - [ ] Platforms, trains, `func_rotating`, `func_rot_button`; `master` (multisource); shot buttons; a blocked door's damage; the player's view turned with a door that carries it
 - [ ] Entity movement types (`TOSS`, `BOUNCE`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`; `PUSH` beyond doors)
 - [x] Deterministic think and targets (`nx.game:thinking`: `NextThink` on the game's clock, by time then entity; `nx.game:targets`: names, `FireTargets`, delays, kill targets) and `trigger_multiple` / `trigger_once` (`nx.game:triggers`, `SV_TouchLinks`)

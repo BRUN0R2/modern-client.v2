@@ -24,6 +24,7 @@ nxAddModuleLibrary(csShared
         src/hitGroups.cppm
         src/hostages.cppm
         src/playerHarm.cppm
+        src/use.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -40,6 +41,7 @@ nxAddModuleLibrary(csShared
         src/hitGroups.cpp
         src/hostages.cpp
         src/playerHarm.cpp
+        src/use.cpp
     DEPENDS
         nx::core
         nx::math

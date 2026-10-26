@@ -71,10 +71,10 @@ public:
 
     /// Gives `elapsed` to the game, tick by tick, catching up on a quarter of a second at most: the
     /// next command of `input`, looking along `view`, numbered after the last, draws the weapon it
-    /// selects, moves the player among the brush entities at the speed of the weapon it holds, the use
-    /// button using what is in front as it goes down, and the doors it meets and the triggers it is in
-    /// are touched; the weapon in hand fires, is reloaded or idles (cs::Inventory::frame), and a hard
-    /// landing hurts the player; then the rules of the round play (thinkRules), what is due acts, and
+    /// selects, moves the player among the brush entities at the speed of the weapon it holds, and the
+    /// doors it meets and the triggers it is in are touched; the use button going down uses what is in
+    /// front, the weapon in hand fires, is reloaded or idles (cs::Inventory::frame), and a hard landing
+    /// hurts the player; then the rules of the round play (thinkRules), what is due acts, and
     /// the pushers move, pushing the player's body. While the round is frozen the player moves at
     /// kFreezeSpeed at most, and its attack is held back; dead, it does nothing until it spawns again.
     /// Returns the player's eye, between where the last two ticks left it by the time left.
@@ -145,15 +145,19 @@ private:
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;
     /// One tick of the game, `command` the player's.
     void tick(const UserCommand& command);
-    /// What the player does before `command` moves it (PreThink): alive, it uses what is in front as
-    /// the use button goes down, and breathes in the water the last command left it in
-    /// (Breath::breathe), hurt as it drowns and by harmful water; then the harms it keeps over time are
-    /// looked at, and what drowning took given back to it alive (TimedHarms::check).
+    /// What the player does before `command` moves it (PreThink): alive, it breathes in the water the
+    /// last command left it in (Breath::breathe), hurt as it drowns and by harmful water; then the harms
+    /// it keeps over time are looked at, and what drowning took given back to it alive
+    /// (TimedHarms::check).
     void preThink(const UserCommand& command);
-    /// What a living player does once `command` moved it from `before` (PostThink): the weapon in hand
-    /// fires, is reloaded or idles, its attacks dealt to what they meet; then its landing hurts it
-    /// (landingDamageOf).
+    /// What a living player does once `command` moved it from `before` (PostThink): unless it is held
+    /// back (Inventory::isHeldBack), the use key going down uses what is in front (use), then the weapon
+    /// in hand fires, is reloaded or idles, its attacks dealt to what they meet (ItemPostFrame); then
+    /// its landing hurts it (landingDamageOf).
     void postThink(const UserCommand& command, const MovementState& before);
+    /// The player uses what is in front of it, looking along `command`'s view from where the move left
+    /// its eye (CBasePlayer::PlayerUse), heard finding something to use or nothing (UseEmpty).
+    void use(const UserCommand& command);
     /// The player lands, hurt by `damage` (PostThink): it splats when the damage is more than its
     /// health, is hurt by its fall (hurt), and loses the pitch of its kick.
     void land(nx::Damage damage);

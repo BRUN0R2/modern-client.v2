@@ -280,9 +280,10 @@ private:
     /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
     /// as it is made or changed. One that cannot be read is logged, and the game plays on.
     void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
-    /// Reads the sounds of the player's feet, breath, pain and death (cs::FootstepRules::soundFiles,
-    /// cs::BreathRules::soundFiles, cs::PlayerHarmRules::soundFiles) as a session starts, so that none
-    /// waits on its file. One that cannot be read is logged, and the game plays on.
+    /// Reads the sounds of the player's feet, breath, pain, death and use (cs::FootstepRules::soundFiles,
+    /// cs::BreathRules::soundFiles, cs::PlayerHarmRules::soundFiles, cs::UseRules::soundFiles) as a
+    /// session starts, so that none waits on its file. One that cannot be read is logged, and the game
+    /// plays on.
     void readPlayerSounds();
     /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
     /// weapons made and its view model's sound events, each as long after the frame as it came after
@@ -822,7 +823,8 @@ void Client::readPlayerSounds() {
     }
     for (const auto& [what, files] : {std::pair{"footsteps", m_content->footsteps.soundFiles()},
                                       std::pair{"breath", m_content->breath.soundFiles()},
-                                      std::pair{"harm", m_content->playerHarm.soundFiles()}}) {
+                                      std::pair{"harm", m_content->playerHarm.soundFiles()},
+                                      std::pair{"use", m_content->use.soundFiles()}}) {
         for (const std::string_view file : files) {
             if (auto read = m_audio->preload(file); !read) {
                 nx::log::warning(kLog, "a sound of the {} cannot be read: {}", what,
