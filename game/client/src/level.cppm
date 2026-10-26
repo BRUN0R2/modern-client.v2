@@ -17,6 +17,7 @@ import cs.shared;
 import :mapLight;
 import :mapSprites;
 import :mapModels;
+import :playerModels;
 import :viewModel;
 import :muzzleFlash;
 import :levelDecals;
@@ -102,6 +103,8 @@ public:
     [[nodiscard]] inline auto sprites() const noexcept -> const MapSprites& { return *m_sprites; }
     /// The studio models its entities show.
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
+    /// The models the players are drawn with: the characters', and the weapons' player models.
+    [[nodiscard]] inline auto players() const noexcept -> const PlayerModels& { return *m_players; }
     /// The sprites of the weapons' muzzle flashes: those their view models' events show, as their
     /// weapons' data styles them.
     [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
@@ -112,10 +115,10 @@ public:
     /// The view model of `weapon`; none for one not complete, or whose view model could not be read
     /// as it was changed.
     [[nodiscard]] auto viewModel(WeaponIndex weapon) const noexcept -> const ViewModel*;
-    /// Reads the view model of each weapon of `weapons` made, or whose values were set, since the
-    /// level read it, from `vfs`, and the sprites of its muzzle flashes the level lacks: those weapons,
-    /// in their order. One that cannot be read leaves its weapon without one, logged, and the game
-    /// plays on; a sprite likewise its flashes.
+    /// Reads the view model and the player model of each weapon of `weapons` made, or whose values were
+    /// set, since the level read it, from `vfs`, and the sprites of its muzzle flashes the level lacks:
+    /// those weapons, in their order. One that cannot be read leaves its weapon without one, logged, and
+    /// the game plays on; a sprite likewise its flashes.
     auto updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
         -> std::vector<WeaponIndex>;
     /// The decals of decals.wad the level shows: those bullets leave (bulletDecals), and those its map
@@ -143,6 +146,7 @@ private:
     std::optional<GlowBlockers> m_glowBlockers;
     std::optional<MapSprites> m_sprites;
     std::optional<MapModels> m_models;
+    std::optional<PlayerModels> m_players;
     /// A weapon's view model, as the revision of its values it was read from.
     struct WeaponViewModel {
         std::optional<ViewModel> model{};

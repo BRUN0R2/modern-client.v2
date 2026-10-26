@@ -397,7 +397,7 @@ constexpr std::size_t kBlue = 2;
     if (options.position) {
         (*game)->placeEye(player, camera.position);
     }
-    cs::ClientGame client{level.models(), (*game)->snapshotFor(player)};
+    cs::ClientGame client{level.models(), level.players(), (*game)->snapshotFor(player)};
     for (std::uint32_t due = client.ticksDue(options.time, cs::CatchUp::Whole); due > 0; --due) {
         const std::array playerCommands{
             cs::PlayerCommand{.player = player, .command = client.standingCommand(camera.angles)}};
@@ -406,6 +406,7 @@ constexpr std::size_t kBlue = 2;
     }
     const std::vector<nx::render::ModelPlacement> placements = client.placements();
     const std::vector<cs::ShownHostage> hostages = client.hostages();
+    const std::vector<cs::ShownPlayer> players = client.updatePlayers(options.time);
     // The client events of the play the view model is in, from its first frame: the muzzle flashes
     // a shot shows.
     const std::optional<cs::ViewModelPose> viewPose = client.viewModel();
@@ -453,6 +454,7 @@ constexpr std::size_t kBlue = 2;
                                                                       .time = options.time,
                                                                       .placements = placements,
                                                                       .hostages = hostages,
+                                                                      .players = players,
                                                                       .viewModel = viewPose,
                                                                       .clientEvents = clientEvents}}};
     if (auto recorded = frames->record(list, target->get(), extent, shown, quads); !recorded) {

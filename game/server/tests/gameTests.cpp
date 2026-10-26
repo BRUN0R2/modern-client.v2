@@ -6,8 +6,9 @@
 // ended in a draw by its death and its spawn again as the next starts, the game's restart, and what each
 // tick's snapshot tells its client; players of both teams: each team's spawn points in turn, Game
 // Commencing, a team eliminated and its winners paid, a player joining late watching until the next
-// round, and players solid to each other; on the BSP seed of the fuzz corpus (a floor at z = 0 in its
-// hulls) given other entities, by the repository's data.
+// round, and players solid to each other; what a client is told of the other players, and how their models
+// play; on the BSP seed of the fuzz corpus (a floor at z = 0 in its hulls) given other entities, by the
+// repository's data, each character's model of the shape of Counter-Strike's.
 
 #include <gtest/gtest.h>
 
@@ -22,6 +23,7 @@ import cs.server;
 
 #include "boxMap.hpp"
 #include "consoleFixtures.hpp"
+#include "playerModel.hpp"
 #include "temporaryDirectory.hpp"
 
 namespace {
@@ -49,10 +51,22 @@ constexpr std::uint32_t kPastTheJoinWindow = 2010;
 /// Above a floor: a fall from there kills.
 constexpr float kDeadlyHeight = 2000.0F;
 
-/// A game of the box, with the repository's data and an installation of no files.
+/// A game of the box, with the repository's data and an installation of the characters' models alone.
 class GameTest : public ::testing::Test {
 protected:
     GameTest() {
+        const std::filesystem::path charactersFile =
+            std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "characters.toml";
+        auto characters = cs::readCharacters(
+            nx::platform::readTextFile(charactersFile).value_or(std::string{}), "characters.toml");
+        EXPECT_TRUE(characters.has_value());
+        const std::string model =
+            nx::test::playerModelOf(nx::test::playerSequences()) |
+            std::views::transform([](std::byte value) { return static_cast<char>(value); }) |
+            std::ranges::to<std::string>();
+        for (const cs::Character& character : characters.value_or(cs::Characters{}).characters) {
+            m_installation.write(cs::modelOf(character), model);
+        }
         auto vfs = nx::assets::Vfs::create(std::array{m_installation.path()});
         EXPECT_TRUE(vfs.has_value());
         auto content = cs::readGameContent(NX_DATA_DIRECTORY, std::move(vfs).value());
@@ -291,6 +305,42 @@ TEST_F(GameTest, PlayersAreSolidToEachOther) {
     const cs::PlayerSnapshot walked = play(walker, 50, {.forward = nx::UnitsPerSecond{250.0F}});
     EXPECT_GT(walked.player.origin.x, 1.0F) << "it walked";
     EXPECT_LE(walked.player.origin.x, 16.0F + kTolerance) << "stopped by the other's box";
+}
+
+TEST_F(GameTest, AClientIsToldOfTheOtherPlayersAsTheirModelsPlay) {
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence);
+    std::ignore = play(terrorist, 1, {}, {.pitch = nx::Degrees{30.0F}, .yaw = nx::Degrees{45.0F}});
+    const cs::PlayerSnapshot seen = game().snapshotFor(counterTerrorist);
+    ASSERT_EQ(seen.players.size(), 1U) << "the other player alone";
+    const cs::PlayerEntityState& other = seen.players.front();
+    EXPECT_EQ(other.player, terrorist);
+    EXPECT_EQ(content().characters.character(other.character).team, cs::Team::Terrorists);
+    ASSERT_TRUE(other.weapon.has_value());
+    EXPECT_EQ(content().weapons.weapon(*other.weapon).id, "glock18") << "the heavier of its loadout, drawn";
+    EXPECT_EQ(other.origin, game().snapshotFor(terrorist).player.origin);
+    EXPECT_FLOAT_EQ(other.angles.pitch.value(), -10.0F) << "a third of the view's, negated";
+    EXPECT_FLOAT_EQ(other.angles.yaw.value(), 45.0F);
+    // Standing with the Glock: it aims it one-handed, its legs idle.
+    EXPECT_EQ(other.sequence.value, nx::test::playerSequenceIndex("ref_aim_onehanded"));
+    EXPECT_EQ(other.gaitSequence.value, nx::test::playerSequenceIndex("idle1"));
+}
+
+TEST_F(GameTest, AKilledPlayersModelPlaysADeathItsLegsNoGait) {
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence);
+    std::ignore = killByFall(terrorist);
+    const cs::PlayerSnapshot seen = game().snapshotFor(counterTerrorist);
+    ASSERT_EQ(seen.players.size(), 1U);
+    const cs::PlayerEntityState& dead = seen.players.front();
+    EXPECT_GE(dead.sequence.value, nx::test::playerSequenceIndex("death1"));
+    EXPECT_LE(dead.sequence.value, nx::test::playerSequenceIndex("crouch_die"));
+    EXPECT_EQ(dead.gaitSequence.value, 0U);
+    EXPECT_FALSE(dead.weapon.has_value()) << "its weapons gone with it";
 }
 
 TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {

@@ -153,6 +153,11 @@ auto Level::load(const GameContent& content, const ClientContent& client, const 
         nx::log::warning(kLog, "models the map's entities show that cannot be read: {}",
                          listed(level.m_models->missing()));
     }
+    level.m_players = PlayerModels::read(content.vfs, content.characters, content.weapons);
+    if (!level.m_players->missing().empty()) {
+        nx::log::warning(kLog, "models the players are drawn with that cannot be read: {}",
+                         listed(level.m_players->missing()));
+    }
     // The decals: the bullets', and those the map stamps as its game starts, on what is there then.
     nx::ecs::World resting;
     if (auto spawned = spawnGame(bsp, content.entityClasses, resting); !spawned) {
@@ -222,6 +227,7 @@ auto Level::updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& we
         WeaponViewModel& viewModel = m_viewModels[index];
         viewModel = WeaponViewModel{.revision = revision};
         updated.push_back(weapon);
+        m_players->readWeapon(vfs, weapons, weapon);
         if (!weapons.isComplete(weapon)) {
             continue;
         }

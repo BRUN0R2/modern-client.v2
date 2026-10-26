@@ -377,8 +377,15 @@ flowchart LR
    the mouth's from 0 to 64); the first two blends mixed by the first blending; the motion bone's
    motion kept (the server's hitboxes) or removed (the client's drawing); each bone placed in its
    parent, the roots in the entity's transform. `nxcheck` poses every sequence of every model of the
-   installation ([18](18-testing-and-quality.md#real-content)). The nine aim blends and the gait of
-   the players' models, the transitions between sequences and the jobs come with player animation.
+   installation ([18](18-testing-and-quality.md#real-content)). A player's model (`cs::posePlayerBones`,
+   as ReGameDLL_CS's `SV_StudioSetupBones` poses one): a sequence of nine blends by the four around the
+   aim's yaw and pitch blends, the yaw's shares first; another by its first blending; the bones from the
+   root to the spine and from each child of the pelvis on (its legs) playing the gait sequence, but in
+   the deaths and the swimming sequences; turned by its legs' yaw, its pitch the aim's blend
+   ([10 §2](10-counter-strike-gameplay.md#2-teams-and-characters)). The model of the weapon in its hands
+   (`models/p_<weapon>.mdl`) takes the bones of the player's of the same names (`cs::mergeBones`, the
+   engine's `StudioMergeBones`), its others posed at its first sequence's first frame. The transitions
+   between sequences and the jobs come later.
 2. **Bone palette:** `Mat3x4` (48 bytes) per bone, written straight into the persistent
    mapped upload ring. Each instance keeps a `paletteOffset`.
 3. **Vertex shader:** fetches `bones[paletteOffset + vertex.boneIndex]`. The MDL v10 format

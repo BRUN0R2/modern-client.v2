@@ -28,6 +28,8 @@ nxAddModuleLibrary(csShared
         src/modelFiles.cppm
         src/gameContent.cppm
         src/gameMap.cppm
+        src/characters.cppm
+        src/playerAnimation.cppm
         src/snapshot.cppm
     SOURCES
         src/movement.cpp
@@ -49,6 +51,8 @@ nxAddModuleLibrary(csShared
         src/modelFiles.cpp
         src/gameContent.cpp
         src/gameMap.cpp
+        src/characters.cpp
+        src/playerAnimation.cpp
     DEPENDS
         nx::core
         nx::math

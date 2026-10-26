@@ -217,7 +217,7 @@ struct Session {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(game.error()));
     }
     const cs::PlayerIndex player = (*game)->join(cs::spawnTeam((*map)->map()), autoSwitch);
-    cs::ClientGame known{(*level)->models(), (*game)->snapshotFor(player)};
+    cs::ClientGame known{(*level)->models(), (*level)->players(), (*game)->snapshotFor(player)};
     return Session{.map = std::move(*map),
                    .level = std::move(*level),
                    .game = std::move(*game),
@@ -359,6 +359,7 @@ private:
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
     std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
     std::vector<cs::ShownHostage> m_hostages;             ///< How the frame shows the game's hostages.
+    std::vector<cs::ShownPlayer> m_players;               ///< How the frame shows the other players.
     nx::ui::FontCatalog m_fonts;
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
@@ -736,6 +737,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(m_cvars->player));
             playSession(elapsed);
             m_camera.position = m_session->client.eye();
+            m_players = m_session->client.updatePlayers(elapsed);
             turnAsTheGameDid();
             hearSession(hearing);
             stampBulletHoles();
@@ -1037,6 +1039,7 @@ auto Client::sessionView() -> cs::SceneView {
             .time = nx::Seconds{m_mapClock.elapsed()},
             .placements = m_placements,
             .hostages = m_hostages,
+            .players = m_players,
             .viewModel = m_viewPose,
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};

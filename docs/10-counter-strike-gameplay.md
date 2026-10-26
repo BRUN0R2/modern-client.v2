@@ -27,6 +27,25 @@
 - Rules: `mp_limitteams`, `mp_autoteambalance`, full team, team changes limited per round,
   `allow_spectators`.
 
+**Today** (`cs.shared:characters`, `data/cstrike/characters.toml`): each team's four characters, in the
+order its menu offers them, each playing the model `models/player/<name>/<name>.mdl`; a player that
+joins a team is given one of its characters at random, as the menu's auto-select gives one (the menus
+come with the menus). Its model plays as ReGameDLL_CS's `CBasePlayer` animates it
+(`cs.shared:playerAnimation`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)): its
+torso's sequence by what it does and the weapon it holds (`SetAnimation`, `GetAnimDesired`:
+`ref_aim_<weapon>`, `crouch_shoot_<weapon>`, `ref_reload_<weapon>`, the weapon's `playerAnimation`),
+a shot started from its first frame and kept while the player runs within 4 seconds of it; its legs'
+gait sequence by whether it ducks and how fast it moves (idling, walking, running beyond 135 units a
+second, crouching, jumping, swimming and hovering in water); a death of a hit of no group, or
+`crouch_die` ducked, its legs then playing none; and each frame its gait (`StudioProcessGait`): its legs
+turned along the way it moves, or after its body while it stands (slowly when it nearly faces ahead,
+fast when it faces away), turned around and moving backwards when it faces more than 120 degrees from
+the way it moves; the aim's yaw blend from the angle between its body and its legs, its pitch blend
+from its view's pitch, from 45 degrees up to 45 down. The server animates its players so, and each
+client the others it draws ([05 §9.1](05-rendering.md#91-pipeline)): it is told their sequences, and
+turns their legs and their aim itself. The flinches and the deaths by where a shot met a player come
+with the attacks of players.
+
 ## 3. Match and round flow
 
 ```mermaid
@@ -653,8 +672,9 @@ The planned layout; today `entities.toml`
 ([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml`, `weapons/` (section 7.2), `loadouts.toml`,
 `lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml` and
 `playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
-([11 §3](11-audio.md#3-original-semantics-to-preserve)), and `use.toml`
-([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) exist. The hull sizes are not data:
+([11 §3](11-audio.md#3-original-semantics-to-preserve)), `use.toml`
+([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) and `characters.toml` (section 2)
+exist. The hull sizes are not data:
 `cs.shared` holds them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
 ```
@@ -666,7 +686,7 @@ data/cstrike/
 ├── movement.toml       # derived constants not exposed as cvars
 ├── navigation.toml     # the agents' profiles: the size and moves of each (ADR-0023)
 ├── entities.toml       # classname -> prefab + keyvalue schema
-├── teams.toml          # teams, characters, models
+├── characters.toml     # each team's characters, in its menu's order: their models
 ├── ammo.toml           # kinds of ammo: carried, box price and rounds
 ├── loadouts.toml       # what each team spawns with
 ├── lightStyles.toml    # the light styles the game sets as a map starts

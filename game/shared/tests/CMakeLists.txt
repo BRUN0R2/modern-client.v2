@@ -11,6 +11,7 @@ nxAddTest(csSharedTests
         hostagesTests.cpp
         inventoryTests.cpp
         movementTests.cpp
+        playerAnimationTests.cpp
         playerHarmTests.cpp
         roundsTests.cpp
         studioTests.cpp

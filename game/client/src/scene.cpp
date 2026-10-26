@@ -135,11 +135,16 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!models) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(models.error()));
     }
+    auto playerModels = level.players().load(*studio, commands);
+    if (!playerModels) {
+        return nx::fail(SceneError::CreateFailed, "the players' models", std::move(playerModels.error()));
+    }
     Scene scene{std::move(*world),      nx::render::WorldLight{level.map()},
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(*viewSprites)};
     scene.m_look = look;
+    scene.m_playerModels = std::move(*playerModels);
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
@@ -169,8 +174,12 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                      .placements = view.placements});
     const PosedModels models =
         level.models().posed(m_models, view.time, view.hostages, m_light, level.skyLight(), styles);
+    const PosedModels players =
+        level.players().posed(m_playerModels, view.players, m_light, level.skyLight(), styles);
+    std::vector<nx::render::StudioInstance> instances = models.instances;
+    std::ranges::copy(players.instances, std::back_inserter(instances));
     if (auto prepared =
-            m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
+            m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = instances});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }
@@ -300,6 +309,9 @@ auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
                 return nx::fail(SceneError::CreateFailed, "a weapon's view model", std::move(loaded.error()));
             }
             model.emplace(std::move(*loaded));
+        }
+        if (auto loaded = level.players().loadWeapon(m_studio, commands, weapon, m_playerModels); !loaded) {
+            return nx::fail(SceneError::CreateFailed, "a weapon's player model", std::move(loaded.error()));
         }
     }
     auto flashModels = level.muzzleFlashes().load(m_viewSprites, commands, m_flashModels.size());

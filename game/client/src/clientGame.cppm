@@ -4,7 +4,8 @@
 /// The game as its player's client knows it (docs/07-simulation-and-physics.md, section 2.2;
 /// docs/08-networking.md): the user commands it makes, one a tick, and what its server tells it after
 /// each (PlayerSnapshot), which a frame shows between the last two ticks, by the time left over; the
-/// sounds, the marks and the turns of the view the ticks brought, kept until the frame takes them.
+/// sounds, the marks and the turns of the view the ticks brought, kept until the frame takes them; and
+/// the other players, whose legs and aim it turns itself each frame, as the original's client does.
 export module cs.client:clientGame;
 
 import std;
@@ -14,6 +15,7 @@ import nx.render;
 import cs.shared;
 import :input;
 import :mapModels;
+import :playerModels;
 import :viewModel;
 
 export namespace cs {
@@ -42,9 +44,9 @@ enum class CatchUp : std::uint8_t {
 /// The game as its player's client knows it.
 class ClientGame {
 public:
-    /// The game whose map's studio models are `models`, which must outlive it, as its server told of it
-    /// first, `first`.
-    ClientGame(const MapModels& models, PlayerSnapshot first);
+    /// The game whose map's studio models are `models` and whose players' are `players`, which must both
+    /// outlive it, as its server told of it first, `first`.
+    ClientGame(const MapModels& models, const PlayerModels& players, PlayerSnapshot first);
 
     /// Gives `elapsed` to the game, as `catchUp` says: how many ticks are due now, a command each
     /// (docs/07, section 2.2), the classic 100 a second.
@@ -83,6 +85,12 @@ public:
     /// the client read: what the scene draws them by.
     [[nodiscard]] auto hostages() const -> std::vector<ShownHostage>;
 
+    /// How the other players show in a frame of `frameTime`, at the moment it shows: each between where
+    /// the last two ticks left it; its legs and its aim turned by the frame (processGait), from its legs
+    /// facing its body as it stands when it is first seen; its torso's frame where the client estimates it
+    /// from what the server told; those whose model the client read.
+    [[nodiscard]] auto updatePlayers(nx::Seconds frameTime) -> std::vector<ShownPlayer>;
+
     /// The way the game last turned the player's view since the last call, as the original's fixangle
     /// turns it: the way the spawn point it last spawned at faces; none.
     [[nodiscard]] inline auto takeTurnedView() -> std::optional<nx::EulerAngles> {
@@ -103,13 +111,16 @@ private:
     [[nodiscard]] auto numbered(UserCommand command) -> UserCommand;
 
     const MapModels* m_models;
-    PlayerSnapshot m_last;                         ///< What the server told last.
-    nx::Vec3 m_previousEye{};                      ///< Before the last tick.
-    nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.
-    CommandNumber m_lastCommand{};                 ///< The number of the last command the player made.
-    std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
-    std::vector<SoundMade> m_sounds;               ///< Since takeSounds.
-    std::vector<Impact> m_impacts;                 ///< Since takeImpacts.
+    const PlayerModels* m_players;
+    PlayerSnapshot m_last;                            ///< What the server told last.
+    std::vector<PlayerEntityState> m_previousPlayers; ///< What the server told of them before.
+    std::vector<std::optional<Gait>> m_gaits;         ///< By PlayerIndex: none for one not seen yet.
+    nx::Vec3 m_previousEye{};                         ///< Before the last tick.
+    nx::Seconds m_pending{};                          ///< Of the time given to the game, what no tick took.
+    CommandNumber m_lastCommand{};                    ///< The number of the last command the player made.
+    std::optional<nx::EulerAngles> m_turnedView{};    ///< Since takeTurnedView.
+    std::vector<SoundMade> m_sounds;                  ///< Since takeSounds.
+    std::vector<Impact> m_impacts;                    ///< Since takeImpacts.
 };
 
 } // namespace cs

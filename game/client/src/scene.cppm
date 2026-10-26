@@ -14,6 +14,7 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import :level;
+import :playerModels;
 import :viewModel;
 import :muzzleFlash;
 
@@ -46,6 +47,7 @@ struct SceneView {
     nx::Seconds time{}; ///< Since the map started.
     std::span<const nx::render::ModelPlacement> placements{};
     std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (ClientGame::hostages).
+    std::span<const ShownPlayer> players{};   ///< How the other players show (ClientGame::updatePlayers).
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
@@ -139,6 +141,7 @@ private:
     nx::render::SpriteRenderer m_viewSprites;
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
+    PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.
     /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
     /// MuzzleFlashSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;

@@ -196,6 +196,14 @@ void blendPoses(LocalPose& pose, const LocalPose& other, float share) {
     }
 }
 
+/// The names of the bones of a player's model its gait does not play from (Bip01 Spine) and plays from
+/// again the children of (Bip01 Pelvis).
+constexpr std::string_view kSpineBone = "Bip01 Spine";
+constexpr std::string_view kPelvisBone = "Bip01 Pelvis";
+/// Where the aim's blends turn from their first half to their second, and how the halves are counted.
+constexpr double kBlendMiddle = 127.0;
+constexpr double kBlendHalves = 2.0;
+
 /// The transform of a bone, its rotation `q` and its position `position` in its parent's space, as the
 /// original's QuaternionMatrix builds it: each entry in float, in its order.
 [[nodiscard]] auto boneTransformOf(Quat q, Vec3 position) noexcept -> nx::Mat3x4 {
@@ -216,7 +224,46 @@ void blendPoses(LocalPose& pose, const LocalPose& other, float share) {
                       }};
 }
 
+/// The bones of `skeleton` in `pose`, each after its parent, as the reader checked: placed in it, or the
+/// roots in `placement`.
+[[nodiscard]] auto placedBonesOf(const Skeleton& skeleton, const LocalPose& pose, const nx::Mat3x4& placement)
+    -> std::vector<nx::Mat3x4> {
+    std::vector<nx::Mat3x4> transforms;
+    transforms.reserve(skeleton.bones.size());
+    for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
+        const std::optional<nx::assets::BoneIndex> parent = skeleton.bones[bone].parent;
+        const nx::Mat3x4& placedIn = parent ? transforms[parent->value] : placement;
+        transforms.push_back(placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]));
+    }
+    return transforms;
+}
+
+/// The whole frame of `frame` of `animation` and its fraction, as the original splits it; a frame
+/// outside the sequence's is a broken contract, held to it.
+[[nodiscard]] auto splitFrame(const nx::assets::AnimationFrames& animation, SequenceFrame frame) noexcept
+    -> std::pair<std::uint32_t, float> {
+    const float last = static_cast<float>(animation.frameCount - 1);
+    float value = frame.value();
+    if (!(value >= 0.0F && value <= last)) {
+        nx::expects(false, "a frame of the sequence");
+        value = value > last ? last : 0.0F; // not a number too
+    }
+    const auto whole = static_cast<std::uint32_t>(value);
+    return {whole, value - static_cast<float>(whole)};
+}
+
 } // namespace
+
+auto lookupSequence(std::span<const nx::assets::StudioSequence> sequences, std::string_view label)
+    -> std::optional<nx::assets::SequenceIndex> {
+    const auto found = std::ranges::find_if(sequences, [label](const nx::assets::StudioSequence& sequence) {
+        return nx::equalsIgnoringCase(sequence.label, label);
+    });
+    if (found == sequences.end()) {
+        return std::nullopt;
+    }
+    return nx::assets::SequenceIndex{nx::narrow<std::uint32_t>(found - sequences.begin())};
+}
 
 auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton {
     return Skeleton{.bones = model.bones(), .controllers = model.boneControllers()};
@@ -330,15 +377,7 @@ auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& seque
     nx::expects(animation.boneCount == skeleton.bones.size() && animation.frameCount == sequence.frameCount &&
                     animation.blendCount == sequence.blendCount,
                 "poseBones: the animation of the sequence, for the skeleton's bones");
-    const float last = static_cast<float>(animation.frameCount - 1);
-    float frame = query.frame.value();
-    if (!(frame >= 0.0F && frame <= last)) {
-        nx::expects(false, "poseBones: a frame of the sequence");
-        frame = frame > last ? last : 0.0F; // not a number too
-    }
-    // As the original splits it: the frame cut to a whole one, and its fraction.
-    const auto whole = static_cast<std::uint32_t>(frame);
-    const float fraction = frame - static_cast<float>(whole);
+    const auto [whole, fraction] = splitFrame(animation, query.frame);
     const std::vector<float> adjustments = adjustmentsOf(skeleton.controllers, query.controllers);
 
     LocalPose pose = localPoseOf(skeleton, animation, 0, whole, fraction, adjustments);
@@ -353,12 +392,99 @@ auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& seque
         motion.z = (sequence.motionType & kMotionZ) != 0 ? 0.0F : motion.z;
     }
 
-    // Each bone after its parent, as the reader checked: placed in it, or the roots in the placement.
+    return placedBonesOf(skeleton, pose, query.placement);
+}
+
+auto posePlayerBones(const nx::assets::MdlView& model,
+                     std::span<const nx::assets::AnimationFrames> animations,
+                     nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query)
+    -> std::vector<nx::Mat3x4> {
+    const std::span<const nx::assets::StudioSequence> sequences = model.sequences();
+    nx::expects(animations.size() == sequences.size(),
+                "posePlayerBones: the animations of the model's sequences");
+    // As the original bounds them: a sequence the model lacks is its first.
+    if (sequence.value >= sequences.size()) {
+        sequence = nx::assets::SequenceIndex{};
+    }
+    const Skeleton skeleton = skeletonOf(model);
+    const nx::assets::AnimationFrames& animation = animations[sequence.value];
+    const auto [whole, fraction] = splitFrame(animation, query.frame);
+    // A player's controllers are none: their adjustments are each one's at 0.
+    const std::vector<float> adjustments = adjustmentsOf(skeleton.controllers, ControllerSettings{});
+    const auto poseOf = [&](std::uint32_t blend) {
+        return localPoseOf(skeleton, animation, blend, whole, fraction, adjustments);
+    };
+    LocalPose pose = poseOf(0);
+    if (animation.blendCount != kAimBlends) {
+        if (animation.blendCount > 1) {
+            // pev->blending[0]: the yaw's blend cut to a whole one.
+            blendPoses(pose, poseOf(1), std::trunc(query.yawBlend) / kBlendingTop);
+        }
+    } else {
+        // The four blends around the aim, three by three, and each blend's share of its half, in double.
+        double yaw = query.yawBlend;
+        double pitch = query.pitchBlend;
+        const std::uint32_t right = yaw <= kBlendMiddle ? 0 : 1;
+        const std::uint32_t down = pitch <= kBlendMiddle ? 0 : 1;
+        yaw = right == 0 ? yaw * kBlendHalves : kBlendHalves * (yaw - kBlendMiddle);
+        pitch = down == 0 ? pitch * kBlendHalves : kBlendHalves * (pitch - kBlendMiddle);
+        constexpr std::uint32_t kRow = 3;
+        const std::uint32_t first = right + (down * kRow);
+        pose = poseOf(first);
+        const LocalPose second = poseOf(first + 1);
+        LocalPose third = poseOf(first + kRow);
+        const LocalPose fourth = poseOf(first + kRow + 1);
+        const auto yawShare = static_cast<float>(yaw / double{kBlendingTop});
+        const auto pitchShare = static_cast<float>(pitch / double{kBlendingTop});
+        blendPoses(pose, second, yawShare);
+        blendPoses(third, fourth, yawShare);
+        blendPoses(pose, third, pitchShare);
+    }
+    const bool playsGait = animation.blendCount == kAimBlends && sequence.value < kFirstDeathSequence.value &&
+                           !std::ranges::contains(kSwimSequences, sequence);
+    if (playsGait) {
+        const nx::assets::SequenceIndex gait =
+            query.gaitSequence.value < sequences.size() ? query.gaitSequence : nx::assets::SequenceIndex{};
+        const nx::assets::AnimationFrames& gaitAnimation = animations[gait.value];
+        // The gait's frame wraps at its sequence's frame count: the part past its last frame stays on it.
+        const auto lastGaitFrame = static_cast<float>(gaitAnimation.frameCount - 1);
+        const auto [gaitWhole, gaitFraction] =
+            splitFrame(gaitAnimation, SequenceFrame{std::min(query.gaitFrame.value(), lastGaitFrame)});
+        const LocalPose legs = localPoseOf(skeleton, gaitAnimation, 0, gaitWhole, gaitFraction, adjustments);
+        bool isCopied = true;
+        for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
+            const std::optional<nx::assets::BoneIndex> parent = skeleton.bones[bone].parent;
+            if (skeleton.bones[bone].name == kSpineBone) {
+                isCopied = false;
+            } else if (parent && skeleton.bones[parent->value].name == kPelvisBone) {
+                isCopied = true;
+            }
+            if (isCopied) {
+                pose.positions[bone] = legs.positions[bone];
+                pose.rotations[bone] = legs.rotations[bone];
+            }
+        }
+    }
+    return placedBonesOf(skeleton, pose, query.placement);
+}
+
+auto mergeBones(const nx::assets::MdlView& model, const nx::assets::AnimationFrames& firstSequence,
+                const Skeleton& ontoSkeleton, std::span<const nx::Mat3x4> onto, const nx::Mat3x4& placement)
+    -> std::vector<nx::Mat3x4> {
+    nx::expects(onto.size() == ontoSkeleton.bones.size(), "mergeBones: the other model's bones posed");
+    const Skeleton skeleton = skeletonOf(model);
+    const std::vector<float> adjustments = adjustmentsOf(skeleton.controllers, ControllerSettings{});
+    const LocalPose pose = localPoseOf(skeleton, firstSequence, 0, 0, 0.0F, adjustments);
     std::vector<nx::Mat3x4> transforms;
     transforms.reserve(skeleton.bones.size());
     for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
+        const auto same = std::ranges::find(ontoSkeleton.bones, skeleton.bones[bone].name, &StudioBone::name);
+        if (same != ontoSkeleton.bones.end()) {
+            transforms.push_back(onto[static_cast<std::size_t>(same - ontoSkeleton.bones.begin())]);
+            continue;
+        }
         const std::optional<nx::assets::BoneIndex> parent = skeleton.bones[bone].parent;
-        const nx::Mat3x4& placedIn = parent ? transforms[parent->value] : query.placement;
+        const nx::Mat3x4& placedIn = parent ? transforms[parent->value] : placement;
         transforms.push_back(placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]));
     }
     return transforms;

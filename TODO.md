@@ -361,7 +361,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Player and weapons
 - [x] The weapons' data: what each is (slot, team, price, ammo, clip, speed, models) for the knife, Glock, USP, AK-47 and M4A1 (`cs.shared:weapons`, `data/cstrike/weapons/`, `data/cstrike/ammo.toml`, [10 §7.2](docs/10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)); the knife's speed and view model from it
-- [ ] Player animation (torso sequence, gait, aim blends)
+- [x] Player animation (`cs.shared:playerAnimation`, [10 §2](docs/10-counter-strike-gameplay.md#2-teams-and-characters)): the torso's sequence by what the player does and the weapon it holds (`SetAnimation`), the legs' gait sequence, their yaw and the aim's yaw and pitch blends (`StudioProcessGait`), the nine aim blends and the gait below the spine posed (`cs::posePlayerBones`); the server animates its players, each client turns the legs and the aim of those it draws
+- [x] The other players drawn (`cs.client:playerModels`): each as one of its team's characters (`data/cstrike/characters.toml`, drawn at random as the menu's auto-select draws one), between the last two ticks, the model of the weapon in its hands merged onto its bones (`cs::mergeBones`, `StudioMergeBones`)
+- [ ] The team and character menus (`chooseteam`, the appearance menu and its auto-select)
 - [ ] Viewmodel with its own FOV
 - [x] Weapons made as the game runs, the game's and a mod's in one catalog ([10 §7.5](docs/10-counter-strike-gameplay.md#75-weapons-made-as-the-game-runs)): standalone, from nothing or from another's values copied once, complete before they are given; their values set by the key paths of their data (`nx::data::assignField`); replaced wherever the game makes them; their view models read as they are made or changed; no limit of weapons nor of kinds of ammo; `create_weapon`, `set_weapon_var`, `get_weapon_var`, `list_weapons`, `replace_weapon`, `give`
 - [ ] A weapon's own behavior and hooks (overriding its attack, its reload) with Rook ([15](docs/15-mod-api.md)); kinds of ammo made as the game runs
