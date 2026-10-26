@@ -5,8 +5,9 @@
 /// 4), as ReGameDLL's CHostage makes and plays them (Spawn, SetActivity, IdleThink, RePosition; GPL,
 /// consulted: docs/20 section 3): each idling in a sequence of its model's idle ones, drawn by weight,
 /// its frame advanced by the server as it thinks, a thirtieth of a second apart, its head straight
-/// ahead, dropped to the floor; put back where it started as each round starts; a box that stops the
-/// players; and its hitboxes, posed as its last think left it, that stop the shots.
+/// ahead, dropped to the floor; put back where it started as each round starts; solid as a box to the
+/// players and to the server's traces, which a line meets by its hitboxes, posed as its last think left
+/// it; a passive human to the game's rules.
 ///
 /// Today: idling. Following, rescue, damage and death come with what they need (TODO.md).
 export module cs.shared:hostages;
@@ -72,8 +73,10 @@ struct ShownHostage {
 
 /// Makes in `world` a hostage of each of `spawns`, in their order, as CHostage::Spawn makes it: idling
 /// in a sequence of its model's idle ones, drawn by weight (lookupActivity), from its first frame; its
-/// head's controllers straight ahead; dropped to the floor of the world of `hulls` and of the solid
-/// brush entities of `world`; thinking first in 0.1 to 0.2 seconds, drawn at random; the draws of each
+/// head's controllers straight ahead; dropped to the floor through what is solid in `world`, whose
+/// map's hulls are `hulls`; solid as kHostageBox, a line meeting its hitboxes where its last think left
+/// them (SV_HullForStudioModel: all in solid and not stopped for a model without any), a box its box
+/// grown by the one traced; thinking first in 0.1 to 0.2 seconds, drawn at random; the draws of each
 /// from a stream of its own. A spawn of a model `world`'s hostages do not play is left out.
 void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                    std::span<const HostageSpawn> spawns);
@@ -85,20 +88,6 @@ void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls
 /// original's loop stops there).
 void repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                         const HostageBonus& bonus);
-
-/// The boxes of the hostages of `world` that stop a player (SOLID_SLIDEBOX): each kHostageBox about
-/// where it is.
-[[nodiscard]] auto hostageBoxes(nx::ecs::World& world) -> std::vector<SolidBox>;
-
-/// The server's way of `hull` from `start` to `end` through the hostages of `world`, where it takes
-/// the place of `sofar`, what the way met otherwise (keepFirstStop): each hostage whose box
-/// (kHostageBox, a unit more each way, as the engine links it) the way's box meets (SV_ClipToLinks) is
-/// met as SV_HullForStudioModel chooses, a line by its hitboxes, its bones posed where its last think
-/// left its frame (serverFrameOf) with its sequence's motion kept, and a hull by its box grown by the
-/// hull's. None when no hostage takes its place.
-[[nodiscard]] auto traceHostages(nx::ecs::World& world, nx::collision::Hull hull, nx::Vec3 start,
-                                 nx::Vec3 end, const nx::collision::Trace& sofar)
-    -> std::optional<nx::collision::Trace>;
 
 /// How each hostage of `world` shows at `time`, in the world's order: its frame where the client
 /// estimates it from its last think's (estimatedFrameOf).

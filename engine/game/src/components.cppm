@@ -24,8 +24,9 @@ enum class Solid : std::uint8_t {
 /// What kind of thing an entity is to the game's rules, as the original's Classify answers: what a
 /// knife's strike sounds on, for one (not none, nor a machine, which come with their entities).
 enum class Classification : std::uint8_t {
-    None,    ///< CLASS_NONE: the world, a door, a wall.
-    Vehicle, ///< CLASS_VEHICLE: a func_vehicle.
+    None,         ///< CLASS_NONE: the world, a door, a wall.
+    Vehicle,      ///< CLASS_VEHICLE: a func_vehicle.
+    HumanPassive, ///< CLASS_HUMAN_PASSIVE: a hostage.
     Count,
 };
 
@@ -43,6 +44,12 @@ struct BrushModel {
 struct Transform {
     Vec3 origin{};
     EulerAngles angles{};
+};
+
+/// An entity solid as a box about its origin, never turned, as the original's SOLID_SLIDEBOX and
+/// SOLID_BBOX entities are (a hostage): `box`, its mins and maxs.
+struct BoxSolidity {
+    Aabb box{};
 };
 
 /// How solid a brush entity is, and what a point inside it is in, as the original's pev->solid and

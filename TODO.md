@@ -324,7 +324,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)
 - [ ] Trace parity tests against traces recorded from the original
 - [ ] Dynamic spatial partition (AABB tree) and linking to leafs
-- [x] Traces against animated hitboxes (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): the hostages' stop the shots (`cs::traceHostages`)
+- [x] Traces against animated hitboxes (`nx::collision::traceHitboxes`, `cs::placedHitboxesOf`): the hostages' stop the shots
+- [x] One server trace for the game (`nx::game::traceSolidsHit`, the original's `SV_Move`, [07 §4.2](docs/07-simulation-and-physics.md#42-entities)): the world first, then the entities on the way to where it stopped, the brush entities and those solid as boxes (`nx::game::BoxSolidity`, a kind's `nx::game::ClipMethod`), none when the world stops it at once or once all in solid; the attacks', the pushers', the drops' to the floor
+- [ ] The pushers moving the hostages and the hostages' own movement (`MOVETYPE_STEP`), and a trace that leaves out an entity of no size for one of some ("points never interact"): with the hostages' movement
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
 - [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order)

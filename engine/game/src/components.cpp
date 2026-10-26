@@ -14,6 +14,8 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<BrushModel>("nx::game::BrushModel"),
                                 world.registerComponent<Transform>("nx::game::Transform"),
                                 world.registerComponent<BrushSolidity>("nx::game::BrushSolidity"),
+                                world.registerComponent<BoxSolidity>("nx::game::BoxSolidity"),
+                                world.registerComponent<ClipMethod>("nx::game::ClipMethod"),
                                 world.registerComponent<Pusher>("nx::game::Pusher"),
                                 world.registerComponent<Door>("nx::game::Door"),
                                 world.registerComponent<Waves>("nx::game::Waves"),

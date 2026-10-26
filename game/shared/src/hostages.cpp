@@ -15,9 +15,6 @@ namespace cs {
 
 namespace {
 
-/// How much an entity's box grows each way as the engine links it (SV_LinkEdict), and a line's as it
-/// bounds the way (SV_MoveBounds).
-constexpr float kLinkMargin = 1.0F;
 /// A hostage thinks again this long after it thought (IdleThink's giveUpTime).
 constexpr nx::Seconds kThinkInterval{1.0F / 30.0F};
 /// A hostage made or put back thinks first after this long at least, and at most.
@@ -120,19 +117,26 @@ void thinkHostage(nx::ecs::World& world, const nx::collision::BrushHulls& /*hull
                       .placement = nx::affine(nx::rotationMatrix(turn), transform.origin)});
 }
 
-/// The server's way of `hull` from `start` to `end` through `hostage` alone, before what it met is
-/// weighed; none for a model without hitboxes, which a line does not meet.
-[[nodiscard]] auto traceHostage(const Hostage& hostage, const Animation& animation, const PlayedModel& model,
-                                const nx::game::Transform& transform, nx::collision::Hull hull,
-                                nx::Vec3 start, nx::Vec3 end) -> std::optional<nx::collision::Trace> {
-    if (hull != nx::collision::Hull::Point) {
-        return nx::collision::traceBox(nx::collision::grownByHull(kHostageBox, hull), transform.origin, start,
-                                       end);
+/// A trace of a box `traced` from `start` to `end` through hostage `entity` of `world` (its
+/// ClipMethod), as SV_HullForStudioModel chooses: a line through its hitboxes, its bones posed where its
+/// last think left its frame with its sequence's motion kept, all in solid and not stopped for a model
+/// without any, as the original's loop over none leaves it; a box through its box grown by the one
+/// traced.
+[[nodiscard]] auto clipHostage(nx::ecs::World& world, nx::ecs::Entity entity, const nx::Aabb& traced,
+                               nx::Vec3 start, nx::Vec3 end) -> nx::collision::Trace {
+    const nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
+    const nx::Aabb box{.min = kHostageBox.min - traced.max, .max = kHostageBox.max - traced.min};
+    const std::span<const PlayedModel> models = modelsOf(world);
+    const Hostage& hostage = *world.get<Hostage>(entity);
+    if (traced.max != traced.min || hostage.model >= models.size()) {
+        return nx::collision::traceBox(box, transform.origin, start, end);
     }
+    const PlayedModel& model = models[hostage.model];
     if (model.view->hitboxes().empty()) {
-        return std::nullopt; // not met, where the original's would be all in the solid: the game's have them
+        return nx::collision::Trace{.fraction = 1.0F, .end = end, .isAllSolid = true};
     }
-    const std::vector<nx::Mat3x4> bones = serverBonesOf(hostage, animation, model, transform);
+    const std::vector<nx::Mat3x4> bones =
+        serverBonesOf(hostage, *world.get<Animation>(entity), model, transform);
     return nx::collision::traceHitboxes(placedHitboxesOf(model.view->hitboxes(), bones), start, end).trace;
 }
 
@@ -168,10 +172,12 @@ void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls
                         .controllers = controllersOf(*model.view)};
         Animation animation{};
         setActivity(hostage, animation, model, Activity::Idle, time.now, random);
-        hostage.start = nx::game::droppedToFloor(world, hulls, kHostageBox, spawn.origin);
-        const nx::ecs::Entity made =
-            world.spawn(nx::game::Transform{.origin = hostage.start, .angles = spawn.angles}, hostage,
-                        animation, nx::game::ThinkMethod{.think = &thinkHostage});
+        hostage.start = nx::game::droppedToFloor(world, hulls, kHostageBox, spawn.origin, std::nullopt);
+        const nx::ecs::Entity made = world.spawn(
+            nx::game::Transform{.origin = hostage.start, .angles = spawn.angles}, hostage, animation,
+            nx::game::BoxSolidity{.box = kHostageBox}, nx::game::ClipMethod{.clip = &clipHostage},
+            nx::game::Classified{.classification = nx::game::Classification::HumanPassive},
+            nx::game::ThinkMethod{.think = &thinkHostage});
         nx::game::setNextThink(world, made, firstThinkOf(time.now, time.rate, random));
     }
 }
@@ -190,7 +196,7 @@ void repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& 
         counted = nx::addSaturated(counted, bonus.perHostage);
         Hostage& hostage = *world.get<Hostage>(entity);
         nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
-        transform.origin = nx::game::droppedToFloor(world, hulls, kHostageBox, hostage.start);
+        transform.origin = nx::game::droppedToFloor(world, hulls, kHostageBox, hostage.start, entity);
         transform.angles = hostage.startAngles;
         if (hostage.model < models.size()) {
             setActivity(hostage, *world.get<Animation>(entity), models[hostage.model], Activity::Idle,
@@ -198,40 +204,6 @@ void repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& 
         }
         nx::game::setNextThink(world, entity, firstThinkOf(time.now, time.rate, random));
     }
-}
-
-auto hostageBoxes(nx::ecs::World& world) -> std::vector<SolidBox> {
-    std::vector<SolidBox> boxes;
-    for (const nx::ecs::Entity entity : hostagesOf(world)) {
-        boxes.push_back(
-            SolidBox{.origin = world.get<nx::game::Transform>(entity)->origin, .box = kHostageBox});
-    }
-    return boxes;
-}
-
-auto traceHostages(nx::ecs::World& world, nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end,
-                   const nx::collision::Trace& sofar) -> std::optional<nx::collision::Trace> {
-    const std::span<const PlayedModel> models = modelsOf(world);
-    const nx::Vec3 margin{.x = kLinkMargin, .y = kLinkMargin, .z = kLinkMargin};
-    const nx::Aabb traced = nx::collision::hullBoxOf(hull);
-    const nx::Aabb way{.min = nx::componentMin(start, end) + traced.min - margin,
-                       .max = nx::componentMax(start, end) + traced.max + margin};
-    nx::collision::Trace kept = sofar;
-    bool isMet = false;
-    for (const nx::ecs::Entity entity : hostagesOf(world)) {
-        const Hostage& hostage = *world.get<Hostage>(entity);
-        const nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
-        if (hostage.model >= models.size() ||
-            !way.intersects(kHostageBox.translated(transform.origin).expanded(margin))) {
-            continue;
-        }
-        const std::optional<nx::collision::Trace> hit = traceHostage(
-            hostage, *world.get<Animation>(entity), models[hostage.model], transform, hull, start, end);
-        if (hit && nx::collision::keepFirstStop(kept, *hit)) {
-            isMet = true;
-        }
-    }
-    return isMet ? std::optional{kept} : std::nullopt;
 }
 
 auto hostagesShownAt(nx::ecs::World& world, nx::GameTime time) -> std::vector<ShownHostage> {
