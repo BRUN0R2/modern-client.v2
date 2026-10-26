@@ -65,12 +65,42 @@ TEST(RoundsTest, ATimeRunOutIsWonByTheTeamThatHeldTheObjective) {
 }
 
 TEST(RoundsTest, TheCvarsLengthsAreCutToWholeSeconds) {
-    const RoundLengths defaults = cs::roundLengthsOf(6.0F, 5.0F);
-    EXPECT_EQ(defaults.freeze, nx::Seconds{6.0F});
-    EXPECT_EQ(defaults.round, nx::Seconds{300.0F});
-    const RoundLengths cut = cs::roundLengthsOf(6.9F, 2.501F);
-    EXPECT_EQ(cut.freeze, nx::Seconds{6.0F});
-    EXPECT_EQ(cut.round, nx::Seconds{150.0F});
+    const cs::RoundCvars defaults = cs::readRoundCvars(6.0F, 5.0F);
+    EXPECT_EQ(defaults.lengths.freeze, nx::Seconds{6.0F});
+    EXPECT_EQ(defaults.lengths.round, nx::Seconds{300.0F});
+    EXPECT_FALSE(defaults.freezeSeconds.has_value());
+    EXPECT_FALSE(defaults.roundMinutes.has_value());
+    const cs::RoundCvars cut = cs::readRoundCvars(6.9F, 2.501F);
+    EXPECT_EQ(cut.lengths.freeze, nx::Seconds{6.0F});
+    EXPECT_EQ(cut.lengths.round, nx::Seconds{150.0F});
+}
+
+TEST(RoundsTest, TheCvarsAreHeldWhereTheGameHoldsThemAndSetBack) {
+    // ReadMultiplayCvars: mp_roundtime 10 plays 9 minutes, 0.5 one, and the cvar is set to the bound;
+    // mp_freezetime 90 freezes 60 seconds, -3 none.
+    const cs::RoundCvars over = cs::readRoundCvars(90.0F, 10.0F);
+    EXPECT_EQ(over.lengths.round, nx::Seconds{540.0F});
+    EXPECT_EQ(over.roundMinutes, std::optional{9.0F});
+    EXPECT_EQ(over.lengths.freeze, nx::Seconds{60.0F});
+    EXPECT_EQ(over.freezeSeconds, std::optional{60.0F});
+    const cs::RoundCvars under = cs::readRoundCvars(-3.0F, 0.5F);
+    EXPECT_EQ(under.lengths.round, nx::Seconds{60.0F});
+    EXPECT_EQ(under.roundMinutes, std::optional{1.0F});
+    EXPECT_EQ(under.lengths.freeze, nx::Seconds{});
+    EXPECT_EQ(under.freezeSeconds, std::optional{0.0F});
+    // So far from the range that int() gives the integer indefinite: below it.
+    const cs::RoundCvars huge = cs::readRoundCvars(1.0e30F, 1.0e30F);
+    EXPECT_EQ(huge.lengths.round, nx::Seconds{60.0F});
+    EXPECT_EQ(huge.lengths.freeze, nx::Seconds{});
+}
+
+TEST(RoundsTest, TheRestartIsTheRoundsElseTheGamesCutAndHeldTo60) {
+    EXPECT_EQ(cs::restartDelayOf(0.0F, 0.0F), std::nullopt);
+    EXPECT_EQ(cs::restartDelayOf(3.0F, 7.0F), std::optional{nx::Seconds{3.0F}}) << "sv_restartround first";
+    EXPECT_EQ(cs::restartDelayOf(0.0F, 2.5F), std::optional{nx::Seconds{2.0F}}) << "cut to whole seconds";
+    EXPECT_EQ(cs::restartDelayOf(0.4F, 5.0F), std::optional{nx::Seconds{5.0F}}) << "0.4 is cut to 0";
+    EXPECT_EQ(cs::restartDelayOf(100.0F, 0.0F), std::optional{cs::kMostRestart});
+    EXPECT_EQ(cs::restartDelayOf(-5.0F, 0.0F), std::nullopt) << "below 0: nothing, and both left as they are";
 }
 
 TEST(RoundsTest, TheFirstFreezeOfAMapIsTwoSecondsLongerAndRunsOutIntoTheRoundsTime) {
@@ -117,9 +147,20 @@ TEST(RoundsTest, TheNextRoundIsAsLongAsTheLengthsSayAsItStarts) {
 TEST(RoundsTest, TheRoundsOfAMapPlayedForNothingRunOnPastTheirTime) {
     Rounds rounds = Rounds::start({}, kLengths, at(0.0));
     std::ignore = rounds.think(at(8.0), kRate, kLengths);
-    EXPECT_EQ(rounds.think(at(400.0), kRate, kLengths), RoundEvents{});
+    EXPECT_EQ(rounds.think(at(308.0), kRate, kLengths), RoundEvents{});
     EXPECT_EQ(rounds.end(), std::nullopt);
-    EXPECT_LT(rounds.remainingAt(at(400.0), kRate), nx::Seconds{});
+    // CheckRoundTimeExpired puts the round's start 60 seconds on: it runs out again 360 seconds later.
+    EXPECT_EQ(rounds.remainingAt(at(308.0), kRate), nx::Seconds{360.0F});
+    std::ignore = rounds.think(at(668.0), kRate, kLengths);
+    EXPECT_EQ(rounds.remainingAt(at(668.0), kRate), nx::Seconds{360.0F});
+}
+
+TEST(RoundsTest, ATimeOutPutsItsRoundsStart60SecondsOn) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = rounds.think(at(8.0), kRate, kLengths);
+    EXPECT_EQ(rounds.think(at(308.0), kRate, kLengths), events({RoundEvent::Ended}));
+    // What a player that spawns before the next round is told (SyncRoundTimer): 6:00 less the time since.
+    EXPECT_EQ(rounds.remainingAt(at(310.0), kRate), nx::Seconds{358.0F});
 }
 
 TEST(RoundsTest, ARestartedGameStartsItsNextRoundWhenAskedTheRoundPlayingOnUntilThen) {

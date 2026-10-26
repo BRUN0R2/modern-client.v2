@@ -146,4 +146,17 @@ TEST(EconomyTest, ARestartedGameStartsTheMoneyOver) {
     EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 0), paid(0, 0));
 }
 
+TEST(EconomyTest, TheStartingMoneyIsHeldAsTheGameReadsItAndSetBack) {
+    // CheckStartMoney: 20000 gives 16000 and sets the cvar so; 100 gives 800; 1000.7 gives 1000.
+    const cs::StartMoney over = cs::readStartMoney(20000.0F);
+    EXPECT_EQ(over.money, cs::kMostMoney);
+    EXPECT_EQ(over.setTo, std::optional{16000.0F});
+    const cs::StartMoney under = cs::readStartMoney(100.0F);
+    EXPECT_EQ(under.money, cs::kStartMoney);
+    EXPECT_EQ(under.setTo, std::optional{800.0F});
+    const cs::StartMoney cut = cs::readStartMoney(1000.7F);
+    EXPECT_EQ(cut.money, nx::Money{1000});
+    EXPECT_FALSE(cut.setTo.has_value());
+}
+
 } // namespace
