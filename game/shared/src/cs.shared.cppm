@@ -10,7 +10,7 @@
 /// has (given, drawn, idling, fired, reloaded, switched to their alternates and striking), the sounds
 /// the game makes, as data, the rounds of a map: their freeze, their time and its end, and the money
 /// they pay, its hostages, idling, hurt and killed, the damage the shots and the knife deal, and a
-/// player hurt by its falls and killed.
+/// player hurt by its falls, drowning, slime and lava, and killed.
 export module cs.shared;
 
 export import :movement;

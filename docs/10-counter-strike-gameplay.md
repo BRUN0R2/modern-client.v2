@@ -507,19 +507,28 @@ landings, as the original's `PostThink` weighs them after the weapon's frame, by
 falling as the command that put it on the ground started (`m_flFallVelocity`), out of water (slime and
 lava spare it none): beyond 500 units a second, 100 for each 600 more, in float, times the multiplayer
 rules' 1.25 (`cs::landingDamageOf`, `FlPlayerFallDamage`), so 20 at 600 units a second and 125 at
-1100. Such a harm, which its armor does not take, it takes as `CBasePlayer::TakeDamage` does
-(`cs::harmPlayer`): the pain of its flesh (`bhit_flesh-1` to `-3`, on its `Voice` channel), then the
-damage's whole points off its health (the original's `int()`), its health going below none as the
-original's does, which its HUD shows as none; a landing harder than its health first splats
-(`common/bodysplat`, on its `Item` channel), and the pitch of its kick is gone. With no health left it
+1100. Its breath, before each command moves it (`cs::Breath`, `WaterMove`): once its air ran out under
+water it drowns, a second apart (waited past: the next a second and a tick later), 3, then 4, then 5
+each time; with its head out of water again its drowning starts over from 3, and what drowning took is
+given back (`cs::TimedHarms`, `CheckTimeBasedDamage`), 10 at a time, each time the harms it keeps over
+time are looked at: two seconds apart at least, while it keeps one, drowning and slime's acid among
+them, so that the first giving back waits on the last look; in slime it is hurt 4 each command, and in
+lava 10, times how deep it is in (1 at its feet, 2 at its waist, 3 over its head), lava not within a
+second after slime hurt it without its leaving the water (the original's `dmgtime`). Each harm it takes
+as `CBasePlayer::TakeDamage` deals it to a player without armor, as no player has yet (`cs::harmPlayer`;
+a fall's and drowning's armor would never take): the pain of its flesh (`bhit_flesh-1` to `-3`, on its
+`Voice` channel), then the damage's whole points off its health (the original's `int()`), its health
+going below none as the original's does, which its HUD shows as none, drowning and acid kept over time;
+a landing harder than its health first splats (`common/bodysplat`, on its `Item` channel), and the
+pitch of its kick is gone. With no health left it
 is killed (`Killed`): its death is heard (`die1` to `die3`, `death6`, on its `Voice` channel, the
 pain's replaced), its weapons go with it (`PackDeadPlayerItems`; the box it drops comes with dropping),
 it does nothing more until it spawns again (killed by nothing, it observes its own body, which moves no
 more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), and its round ends in a draw
 (§3), the local game's other team having no player. What a dead player sees and its HUD (the
 original's client follows its body, `OBS_CHASE_FREE`, then spectates), its body's death played, the
-attacks of other players, their hit groups and the armor's share, drowning and the harm of slime and
-lava, and `trigger_hurt` come with what they need ([TODO](../TODO.md)).
+attacks of other players, their hit groups and the armor's share (of slime's and lava's harm too), and
+`trigger_hurt` come with what they need ([TODO](../TODO.md)).
 
 ### 7.5 Weapons made as the game runs
 

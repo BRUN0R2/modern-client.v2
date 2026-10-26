@@ -374,8 +374,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] The hostages' pain sounds (`headshot1`, `headshot2`, with spatial sound), their blood (with the temporary entities), `#Injured_Hostage` and `#Killed_Hostage` (with the center text), their fall as they die (`MOVETYPE_TOSS`) and `mp_hostagepenalty`
 - [x] What the shots hit (`cs::followRound`, `FireBullets3`, [10 §7.4](docs/10-counter-strike-gameplay.md#74-damage)): their damage by the distance they went (`rangeModifier`), on through what they meet by its material and their ammo's bullet type, a mark on each wall they meet
 - [x] A player hurt by its landings and killed (`cs.shared:playerHarm`, `data/cstrike/playerHarm.toml`, [10 §7.4](docs/10-counter-strike-gameplay.md#74-damage)): beyond 500 units a second, out of water, as `PostThink` and `FlPlayerFallDamage` weigh them; the whole points of the damage off its health (`cs::harmPlayer`), its pain, its splat and its death heard; dead, its weapons gone with it, doing nothing until it spawns again without armor and with its team's loadout
-- [ ] Hitgroups of the players, kevlar and helmet; the attacks of other players; `trigger_hurt`
-- [ ] What a dead player sees and its HUD (the original's client follows its body, `OBS_CHASE_FREE`, then spectates; to be measured on the original), its body's death played (with the players' models); the box of weapons it drops (with dropping)
+- [ ] Hitgroups of the players, kevlar and helmet, and the armor's share of a harm (slime's and lava's too); the hit group a player was last met in, which the original's world harms keep for their pain; the attacks of other players; `trigger_hurt`
+- [ ] What a dead player sees and its HUD (the original's client follows its body, `OBS_CHASE_FREE`, then spectates; to be measured on the original), its body's death played (with the players' models: the original's `WaterMove` breathes on for a player killed with exactly no health while its death plays); the box of weapons it drops (with dropping)
 - [x] Penetration by material (`materials.txt`): `FireBullets3`'s share of the power and of the damage kept by each material
 
 ### Audio
@@ -396,7 +396,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Sentences (`sentences.txt`)
 - [x] Footsteps by material (`cs.shared:footsteps`, `data/cstrike/footsteps.toml`, the installation's `sound/materials.txt` read as `cs::TextureMaterials`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): each foot's step on the ground by what its texture is made of, on a ladder and in water, slower and quieter ducked, the jump's and the landing's (with its roll of the view), the splash in and out of water, `mp_footsteps`
 - [x] The breath in water (`cs::Breath`, `data/cstrike/breath.toml`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): the gasp of a player coming up after a while under water and once its air ran out, and the bubbles under it, the likelier the less air is left (`CBasePlayer::WaterMove`)
-- [ ] Drowning, its health given back, and the harm of slime and lava (`CBasePlayer::WaterMove`), on the player's harm (`cs::harmPlayer`)
+- [x] Drowning, its health given back, and the harm of slime and lava (`cs::Breath`, `CBasePlayer::WaterMove`; `cs::TimedHarms`, `CheckTimeBasedDamage`; `data/cstrike/playerHarm.toml`, [10 §7.4](docs/10-counter-strike-gameplay.md#74-damage)): 3, 4 and 5 a second apart once the air ran out under water, 10 at a time given back with the head out of water as the harms kept over time are looked at, slime's 4 and lava's 10 each command times the water level
 - [ ] Music (`mp3`): `media/*.mp3` streamed as a voice of the mixer (no second player), `bgmvolume` as its gain; the MP3 decoder fuzzed
 - [ ] Voice pool with priority and documented stealing
 
