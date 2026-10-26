@@ -122,6 +122,9 @@ struct Trace {
     bool startsSolid = false; ///< It started in solid.
     bool isInOpen = false;    ///< It went through empty space.
     bool isInWater = false;   ///< It went through water, slime, lava or the other liquid contents.
+    /// The hit group of the hitbox that stopped it, which the game reads (head, chest...); 0 for what
+    /// has none (the original's trace_t::hitgroup).
+    std::uint32_t hitGroup = 0;
 };
 
 /// The hulls of a map's brush models, which traces read from any thread.

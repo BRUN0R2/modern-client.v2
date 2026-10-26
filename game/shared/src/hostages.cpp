@@ -15,17 +15,55 @@ namespace cs {
 
 namespace {
 
-/// A hostage thinks again this long after it thought (IdleThink's giveUpTime).
+/// A hostage thinks again this long after it thought (IdleThink's giveUpTime), and its tenth of a
+/// second's part this long after it last did.
 constexpr nx::Seconds kThinkInterval{1.0F / 30.0F};
+constexpr nx::Seconds kFullThinkInterval{0.1F};
 /// A hostage made or put back thinks first after this long at least, and at most.
 constexpr nx::Seconds kLeastFirstThink{0.1F};
 constexpr nx::Seconds kMostFirstThink{0.2F};
+/// A hostage hurt flinches this long (m_flFlinchTime).
+constexpr nx::Seconds kFlinchTime{0.75F};
 /// The controllers the game sets straight ahead for a hostage: its four channels; the mouth's is not
 /// an entity's controller.
 constexpr std::uint32_t kHostageControllers = 4;
 /// The streams a hostage's draws come from as it is made, and as the hostages are put back.
 constexpr std::string_view kSpawnStream = "hostage spawn";
 constexpr std::string_view kRepositionStream = "hostage reposition";
+/// The stream of the draws of a hostage's think and of an attack on it, of its tick and the hostage.
+constexpr std::string_view kTickStream = "hostage tick";
+
+/// The draws of `hostage` at `now`: of its tick and of which of the map's it is.
+[[nodiscard]] auto randomOf(const Hostage& hostage, nx::GameTime now) noexcept -> nx::Random {
+    constexpr unsigned kHostageBits = 32;
+    return nx::Random{(static_cast<std::uint64_t>(now.tick()) << kHostageBits) ^ hostage.spawn, kTickStream};
+}
+
+/// `damage` scaled by `share`, in double precision as the original's float times a double literal.
+[[nodiscard]] auto scaled(nx::Damage damage, double share) noexcept -> nx::Damage {
+    return nx::Damage{static_cast<float>(static_cast<double>(damage.value()) * share)};
+}
+
+/// The death a hostage met in hit group `group` plays, as Counter-Strike 1.6's SetDeathActivity
+/// chooses it; none for a group it does not name.
+[[nodiscard]] auto deathOf(std::uint32_t group) noexcept -> std::optional<Activity> {
+    switch (static_cast<HitGroup>(group)) {
+    case HitGroup::Generic:
+    case HitGroup::Head:
+        return Activity::DieHeadshot;
+    case HitGroup::Chest:
+    case HitGroup::RightArm:
+        return Activity::DieSimple;
+    case HitGroup::Stomach:
+    case HitGroup::RightLeg:
+        return Activity::DieForward;
+    case HitGroup::LeftArm:
+    case HitGroup::LeftLeg:
+        return Activity::DieBackward;
+    default:
+        return std::nullopt;
+    }
+}
 
 /// The hostages of `world` in the map's order, as the original's entities are.
 [[nodiscard]] auto hostagesOf(nx::ecs::World& world) -> std::vector<nx::ecs::Entity> {
@@ -38,11 +76,17 @@ constexpr std::string_view kRepositionStream = "hostage reposition";
     return found | std::views::values | std::ranges::to<std::vector>();
 }
 
+/// What the hostages of `world` play and take attacks by.
+[[nodiscard]] auto dataOf(const nx::ecs::World& world) noexcept -> const HostageData& {
+    static constexpr HostageData kNone{};
+    const HostageData* const data = world.resource<HostageData>();
+    nx::expects(data != nullptr, "cs: a world registerHostages made ready");
+    return data != nullptr ? *data : kNone;
+}
+
 /// The models the hostages of `world` play.
 [[nodiscard]] auto modelsOf(const nx::ecs::World& world) noexcept -> std::span<const PlayedModel> {
-    const HostageModels* const models = world.resource<HostageModels>();
-    nx::expects(models != nullptr, "cs: a world registerHostages made ready");
-    return models != nullptr ? models->models : std::span<const PlayedModel>{};
+    return dataOf(world).models;
 }
 
 /// When a hostage made or put back at `now` first thinks: 0.1 to 0.2 seconds on, drawn from `random`
@@ -91,14 +135,27 @@ void setActivity(Hostage& hostage, Animation& animation, const PlayedModel& mode
 }
 
 /// A hostage's think (CHostage::IdleThink), at `at`: again a thirtieth of a second on, its frame
-/// advanced to `at`. What it does every tenth of a second (following, rescue, the activity its speed
-/// gives it, the radar) comes with what moves it.
+/// advanced to `at`; then, a tenth of a second after its part of a tenth of a second last ran, that
+/// part: idling once it no longer flinches (the activity its speed gives it, still). Following, rescue
+/// and the radar come with what moves it.
 void thinkHostage(nx::ecs::World& world, const nx::collision::BrushHulls& /*hulls*/, nx::ecs::Entity entity,
                   nx::GameTime at) {
     const nx::TickRate rate = nx::game::tickTimeOf(world).rate;
     nx::game::setNextThink(world, entity, at.after(kThinkInterval, rate));
-    if (Animation* const animation = world.get<Animation>(entity)) {
-        advanceFrame(*animation, at, rate);
+    Hostage* const hostage = world.get<Hostage>(entity);
+    Animation* const animation = world.get<Animation>(entity);
+    if (hostage == nullptr || animation == nullptr) {
+        return;
+    }
+    advanceFrame(*animation, at, rate);
+    if (hostage->nextFullThink > at) {
+        return;
+    }
+    hostage->nextFullThink = at.after(kFullThinkInterval, rate);
+    const std::span<const PlayedModel> models = modelsOf(world);
+    if (at >= hostage->flinchUntil && hostage->model < models.size()) {
+        nx::Random random = randomOf(*hostage, at);
+        setActivity(*hostage, *animation, models[hostage->model], Activity::Idle, at, random);
     }
 }
 
@@ -137,13 +194,71 @@ void thinkHostage(nx::ecs::World& world, const nx::collision::BrushHulls& /*hull
     }
     const std::vector<nx::Mat3x4> bones =
         serverBonesOf(hostage, *world.get<Animation>(entity), model, transform);
-    return nx::collision::traceHitboxes(placedHitboxesOf(model.view->hitboxes(), bones), start, end).trace;
+    const nx::collision::HitboxTrace hit =
+        nx::collision::traceHitboxes(placedHitboxesOf(model.view->hitboxes(), bones), start, end);
+    nx::collision::Trace met = hit.trace;
+    met.hitGroup = model.view->hitboxes()[hit.hitbox].group;
+    return met;
+}
+
+/// `hostage`, of `entity`, solid as its box again and taking attacks (made whole, or put back).
+void makeSolid(nx::ecs::World& world, nx::ecs::Entity entity) {
+    if (!world.has<nx::game::BoxSolidity>(entity)) {
+        world.add(entity, nx::game::BoxSolidity{.box = kHostageBox});
+        world.add(entity, nx::game::ClipMethod{.clip = &clipHostage});
+    }
 }
 
 } // namespace
 
-auto registerHostages(nx::ecs::World& world, std::span<const PlayedModel> models)
-    -> nx::Result<void, nx::ecs::ComponentError> {
+auto harmHostage(nx::ecs::World& world, nx::ecs::Entity entity, const nx::game::Attack& attack)
+    -> nx::game::Harm {
+    Hostage& hostage = *world.get<Hostage>(entity);
+    if (hostage.isDead) {
+        return {};
+    }
+    // TraceAttack, then TakeDamage.
+    hostage.lastHitGroup = attack.trace.hitGroup;
+    const HitGroupRules* const shares = dataOf(world).hitGroups;
+    const nx::Damage dealt = shares != nullptr
+                                 ? scaled(scaled(attack.damage, shares->monster.of(hostage.lastHitGroup)),
+                                          shares->hostage.of(hostage.lastHitGroup))
+                                 : attack.damage;
+    const nx::Damage taken{std::min(dealt.value(), hostage.health.value())};
+    hostage.health = hostage.health - taken;
+    const nx::game::TickTime time = nx::game::tickTimeOf(world);
+    const std::span<const PlayedModel> models = modelsOf(world);
+    nx::Random random = randomOf(hostage, time.now);
+    Animation& animation = *world.get<Animation>(entity);
+    if (hostage.health > nx::HitPoints{}) {
+        hostage.flinchUntil = time.now.after(kFlinchTime, time.rate);
+        if (hostage.model < models.size()) {
+            setActivity(hostage, animation, models[hostage.model], Activity::SmallFlinch, time.now, random);
+        }
+        return nx::game::Harm{.damage = taken};
+    }
+    hostage.health = nx::HitPoints{};
+    hostage.isDead = true;
+    if (const std::optional<Activity> death = deathOf(hostage.lastHitGroup);
+        death && hostage.model < models.size()) {
+        setActivity(hostage, animation, models[hostage.model], *death, time.now, random);
+    }
+    // No longer solid (SOLID_NOT), nor thinking.
+    world.remove<nx::game::BoxSolidity>(entity);
+    world.remove<nx::game::ClipMethod>(entity);
+    world.remove<nx::game::NextThink>(entity);
+    return nx::game::Harm{.damage = taken, .isKilled = true};
+}
+
+auto hostageHarmCost(const nx::game::Harm& harm, const HostageHarmCosts& costs) noexcept -> nx::Money {
+    // The account loses its cost for each whole point of the damage (int()).
+    const auto points = static_cast<std::int32_t>(harm.damage.value());
+    const nx::Money damaged{nx::mulSaturated(costs.perDamage.value(), points)};
+    return harm.isKilled ? nx::addSaturated(damaged, costs.perKill) : damaged;
+}
+
+auto registerHostages(nx::ecs::World& world, std::span<const PlayedModel> models,
+                      const HitGroupRules& hitGroups) -> nx::Result<void, nx::ecs::ComponentError> {
     const std::array registered{world.registerComponent<Hostage>("cs::Hostage"),
                                 world.registerComponent<Animation>("cs::Animation")};
     for (const auto& component : registered) {
@@ -151,7 +266,7 @@ auto registerHostages(nx::ecs::World& world, std::span<const PlayedModel> models
             return std::unexpected{component.error()};
         }
     }
-    world.insertResource(HostageModels{.models = models});
+    world.insertResource(HostageData{.models = models, .hitGroups = &hitGroups});
     return {};
 }
 
@@ -173,28 +288,38 @@ void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls
         Animation animation{};
         setActivity(hostage, animation, model, Activity::Idle, time.now, random);
         hostage.start = nx::game::droppedToFloor(world, hulls, kHostageBox, spawn.origin, std::nullopt);
+        const nx::GameTime firstThink = firstThinkOf(time.now, time.rate, random);
+        hostage.nextFullThink = firstThinkOf(time.now, time.rate, random);
         const nx::ecs::Entity made = world.spawn(
             nx::game::Transform{.origin = hostage.start, .angles = spawn.angles}, hostage, animation,
             nx::game::BoxSolidity{.box = kHostageBox}, nx::game::ClipMethod{.clip = &clipHostage},
+            nx::game::DamageMethod{.takeAttack = &harmHostage},
             nx::game::Classified{.classification = nx::game::Classification::HumanPassive},
             nx::game::ThinkMethod{.think = &thinkHostage});
-        nx::game::setNextThink(world, made, firstThinkOf(time.now, time.rate, random));
+        nx::game::setNextThink(world, made, firstThink);
     }
 }
 
-void repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
-                        const HostageBonus& bonus) {
+auto repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
+                        const HostageBonus& bonus) -> std::uint32_t {
     const std::span<const PlayedModel> models = modelsOf(world);
     const nx::game::TickTime time = nx::game::tickTimeOf(world);
     nx::Random random{static_cast<std::uint64_t>(time.now.tick()), kRepositionStream};
     nx::Money counted{};
+    std::uint32_t held = 0;
     for (const nx::ecs::Entity entity : hostagesOf(world)) {
         if (counted >= bonus.upTo) {
             break;
         }
-        // Each is still held: none is rescued or dead yet.
-        counted = nx::addSaturated(counted, bonus.perHostage);
+        // A hostage still held counts: one alive, none being rescued yet.
+        if (!world.get<Hostage>(entity)->isDead) {
+            counted = nx::addSaturated(counted, bonus.perHostage);
+            ++held;
+        }
+        makeSolid(world, entity);
         Hostage& hostage = *world.get<Hostage>(entity);
+        hostage.health = kHostageHealth;
+        hostage.isDead = false;
         nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
         transform.origin = nx::game::droppedToFloor(world, hulls, kHostageBox, hostage.start, entity);
         transform.angles = hostage.startAngles;
@@ -202,8 +327,11 @@ void repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& 
             setActivity(hostage, *world.get<Animation>(entity), models[hostage.model], Activity::Idle,
                         time.now, random);
         }
-        nx::game::setNextThink(world, entity, firstThinkOf(time.now, time.rate, random));
+        const nx::GameTime firstThink = firstThinkOf(time.now, time.rate, random);
+        hostage.nextFullThink = firstThinkOf(time.now, time.rate, random);
+        nx::game::setNextThink(world, entity, firstThink);
     }
+    return held;
 }
 
 auto hostagesShownAt(nx::ecs::World& world, nx::GameTime time) -> std::vector<ShownHostage> {

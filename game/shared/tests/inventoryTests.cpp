@@ -15,6 +15,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.collision;
+import nx.ecs;
 import nx.game;
 import cs.shared;
 
@@ -95,6 +96,7 @@ constexpr float kTolerance = 1e-5F;
                            .drawSound = sound("weapons/knife_deploy1.wav", cs::SoundChannel::Item)});
     knife.melee =
         cs::WeaponMelee{.slash = {.reach = nx::HammerUnits{48.0F},
+                                  .damage = nx::Damage{15.0F},
                                   .missSequences = {6, 7},
                                   .hitSequences = {6, 7},
                                   .miss = {.primary = nx::Seconds{0.35F}, .secondary = nx::Seconds{0.5F}},
@@ -104,6 +106,7 @@ constexpr float kTolerance = 1e-5F;
                                   .hitSound = sound("weapons/knife_hitwall1.wav", cs::SoundChannel::Item),
                                   .bodySound = sound("weapons/knife_hit1.wav", cs::SoundChannel::Weapon)},
                         .stab = {.reach = nx::HammerUnits{32.0F},
+                                 .damage = nx::Damage{65.0F},
                                  .missSequences = {5},
                                  .hitSequences = {4},
                                  .miss = {.primary = nx::Seconds{1.0F}, .secondary = nx::Seconds{1.0F}},
@@ -252,7 +255,8 @@ auto frames(Inventory& inventory, Shooter& shooter, std::int64_t first, std::int
     std::vector<Shot> shots;
     for (std::int64_t tick = first; tick <= last; ++tick) {
         std::ranges::move(
-            inventory.frame(command(static_cast<std::uint32_t>(tick), held), shooter, missAll(), at(tick)),
+            inventory.frame(command(static_cast<std::uint32_t>(tick), held), shooter, missAll(), at(tick))
+                .shots,
             std::back_inserter(shots));
     }
     return shots;
@@ -541,7 +545,7 @@ TEST(FiringTest, AShotStraysWithinTwiceItsSpreadTheSameForTheSameCommand) {
         Shooter shooter{}; // in the air: a wide spread
         std::ignore = frames(inventory, shooter, 0, kReady - 1);
         const std::vector<Shot> shots =
-            inventory.frame(command(number, {Button::Attack}), shooter, missAll(), at(kReady));
+            inventory.frame(command(number, {Button::Attack}), shooter, missAll(), at(kReady)).shots;
         ASSERT_EQ(shots.size(), 1U);
         const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{});
         const Shot& shot = shots.front();
@@ -553,7 +557,7 @@ TEST(FiringTest, AShotStraysWithinTwiceItsSpreadTheSameForTheSameCommand) {
         Shooter same{};
         std::ignore = frames(again, same, 0, kReady - 1);
         const std::vector<Shot> repeated =
-            again.frame(command(number, {Button::Attack}), same, missAll(), at(kReady));
+            again.frame(command(number, {Button::Attack}), same, missAll(), at(kReady)).shots;
         ASSERT_EQ(repeated.size(), 1U);
         EXPECT_EQ(repeated.front().direction, shot.direction);
     }
@@ -821,6 +825,33 @@ TEST(MeleeTest, AHullThatMeetsABodyIsTakenAsItIs) {
     };
     EXPECT_EQ(slashSounds(weapons, tracer), Files{"weapons/knife_hit1.wav"});
     EXPECT_EQ(traces, 2U) << "only what is a brush model is looked for where it meets it";
+}
+
+TEST(MeleeTest, AStrikeThatMeetsAnEntityDealsItsBlow) {
+    const WeaponCatalog weapons = catalog();
+    nx::ecs::World world;
+    const nx::ecs::Entity met = world.spawn();
+    const cs::WeaponTracer meetsIt = [met](nx::collision::Hull, nx::Vec3, nx::Vec3) {
+        return cs::WeaponHit{.trace = {.fraction = 0.5F, .hitGroup = 2}, .entity = met, .isBody = true};
+    };
+    for (const auto& [button, damage] :
+         {std::pair{Button::Attack, 15.0F}, std::pair{Button::Attack2, 65.0F}}) {
+        Inventory inventory = given(weapons, {kKnife});
+        Shooter shooter{.view = nx::EulerAngles{.yaw = nx::Degrees{90.0F}}, .isOnGround = true};
+        std::ignore = frames(inventory, shooter, 0, kReady - 1);
+        const cs::WeaponAttacks attacks = inventory.frame(command(1, {button}), shooter, meetsIt, at(kReady));
+        ASSERT_EQ(attacks.blows.size(), 1U);
+        const cs::Blow& blow = attacks.blows.front();
+        EXPECT_EQ(blow.entity, met);
+        EXPECT_EQ(blow.damage.value(), damage) << "the slash's 15, the stab's 65";
+        EXPECT_EQ(blow.trace.hitGroup, 2U);
+        EXPECT_NEAR(blow.direction.y, 1.0F, kTolerance) << "along the view";
+    }
+    // The world, or nothing, takes no blow.
+    Inventory inventory = given(weapons, {kKnife});
+    Shooter shooter = standing();
+    std::ignore = frames(inventory, shooter, 0, kReady - 1);
+    EXPECT_TRUE(inventory.frame(command(1, {Button::Attack}), shooter, hitAll(), at(kReady)).blows.empty());
 }
 
 TEST(MeleeTest, DrawingTheKnifeAgainSlashesFromItsFirstSequence) {

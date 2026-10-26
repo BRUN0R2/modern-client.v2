@@ -88,7 +88,12 @@ inline constexpr float kFrameScale = 256.0F;
 
 /// What the game plays a model's sequences for, by the original's numbers (ACT_*): those it asks for.
 enum class Activity : std::int32_t {
-    Idle = 1, ///< ACT_IDLE.
+    Idle = 1,         ///< ACT_IDLE.
+    SmallFlinch = 26, ///< ACT_SMALL_FLINCH.
+    DieSimple = 36,   ///< ACT_DIESIMPLE.
+    DieBackward = 37, ///< ACT_DIEBACKWARD.
+    DieForward = 38,  ///< ACT_DIEFORWARD.
+    DieHeadshot = 66, ///< ACT_DIE_HEADSHOT.
 };
 
 /// The sequence of `sequences` the game plays for `activity`, as the original's LookupActivity picks

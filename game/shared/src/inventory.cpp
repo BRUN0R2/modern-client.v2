@@ -49,8 +49,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 
 /// Where a shot from `shooter` goes, strayed by `spread` at random from the stream of `seed`, along
 /// the view the punch turns: each way the sum of two even draws (FireBullets3).
-[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach, std::uint32_t seed)
-    -> Shot {
+[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach,
+                            const ShotRound& round, std::uint32_t seed) -> Shot {
     const nx::AngleVectors axes =
         nx::angleVectors(nx::EulerAngles{.pitch = shooter.view.pitch + shooter.punch.pitch,
                                          .yaw = shooter.view.yaw + shooter.punch.yaw,
@@ -64,7 +64,18 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
     return Shot{.origin = shooter.eye,
                 .direction = axes.forward + (axes.right * (right * spread)) + (axes.up * (up * spread)),
                 .spread = spread,
-                .reach = reach};
+                .reach = reach,
+                .round = round};
+}
+
+/// The round a shot of `firing`, of a weapon whose ammo is `ammo`, fires, at `rangeModifier`.
+[[nodiscard]] auto roundOf(const WeaponFiring& firing, const AmmoType* ammo, float rangeModifier) noexcept
+    -> ShotRound {
+    return ShotRound{.damage = firing.damage,
+                     .rangeModifier = rangeModifier,
+                     .penetration = firing.penetration,
+                     .penetrationPower = ammo != nullptr ? ammo->penetrationPower : 0,
+                     .penetrationDistance = ammo != nullptr ? ammo->penetrationDistance : nx::HammerUnits{}};
 }
 
 /// One of `sequences`, at random.
@@ -163,13 +174,14 @@ void Inventory::select(const UserCommand& command, const nx::game::TickTime& tim
 }
 
 auto Inventory::frame(const UserCommand& command, Shooter& shooter, const WeaponTracer& tracer,
-                      const nx::game::TickTime& time) -> std::vector<Shot> {
-    std::vector<Shot> shots;
+                      const nx::game::TickTime& time) -> WeaponAttacks {
+    WeaponAttacks attacks;
+    std::vector<Shot>& shots = attacks.shots;
     // As the original's PostThink, which counts the timers down once the frame is over.
     const nx::Seconds frameTime = frameTimeOf(command);
     const auto over = [&] {
         countDown(frameTime);
-        return shots;
+        return attacks;
     };
     if (!m_held || m_nextAttack > nx::Seconds{}) {
         return over();
@@ -192,24 +204,24 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
             shots.push_back(*shot);
         }
     }
-    const bool attacks = command.buttons.test(Button::Attack);
+    const bool isAttacking = command.buttons.test(Button::Attack);
     // `Attack2` counts for a weapon with an alternate or melee attacks alone (HasSecondaryAttack).
     const bool switches =
         (weapon.alternate.has_value() || weapon.melee.has_value()) && command.buttons.test(Button::Attack2);
     if (switches && owned.nextSecondary <= nx::Seconds{}) {
         if (weapon.melee) {
-            strike(owned, weapon.melee->stab, owned.stabs, shooter, tracer, time);
+            strike(owned, weapon.melee->stab, owned.stabs, shooter, tracer, time, attacks.blows);
         } else {
             switchAlternate(owned, weapon, time);
         }
         return over();
     }
-    if (attacks && owned.nextShot <= nx::Seconds{}) {
+    if (isAttacking && owned.nextShot <= nx::Seconds{}) {
         if (!shooter.canAttack) {
             return over(); // the frame is spent on the press all the same
         }
         if (weapon.melee) {
-            strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time);
+            strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time, attacks.blows);
         } else if (firingOf(weapon, owned)) {
             if (const std::optional<Shot> shot =
                     fire(owned, weapon, shooter, command.number.value, time, random)) {
@@ -224,7 +236,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         reload(owned, weapon, time, random);
         return over();
     }
-    if (attacks || switches) {
+    if (isAttacking || switches) {
         return over();
     }
     // No fire button down: the burst wanes, a pistol's at once.
@@ -383,7 +395,8 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
 
     // The shot goes along the view the kick turned so far; then the kick.
-    const Shot shot = shotFrom(shooter, spread, firing.reach, seed);
+    const Shot shot =
+        shotFrom(shooter, spread, firing.reach, roundOf(firing, ammoOf(weapon), firing.rangeModifier), seed);
     if (firing.recoil.kicks) {
         kickBack(kickOf(*firing.recoil.kicks, shooter), owned.shotsFired, owned.kicksLeft, shooter.punch,
                  random);
@@ -405,7 +418,12 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
     --owned.clip;
     --owned.followUpsLeft;
     makeSound(firing->sound, time);
-    return shotFrom(shooter, firing->followUps->spread, firing->reach, seed);
+    return shotFrom(shooter, firing->followUps->spread, firing->reach,
+                    roundOf(*firing, ammoOf(weapon), firing->followUps->rangeModifier), seed);
+}
+
+auto Inventory::ammoOf(const Weapon& weapon) const noexcept -> const AmmoType* {
+    return weapon.magazine ? m_catalog->findAmmo(weapon.magazine->ammo) : nullptr;
 }
 
 void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time) {
@@ -467,9 +485,11 @@ constexpr double kNoIntersection = 1.0e6;
 } // namespace
 
 void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint32_t& count,
-                       const Shooter& shooter, const WeaponTracer& tracer, const nx::game::TickTime& time) {
+                       const Shooter& shooter, const WeaponTracer& tracer, const nx::game::TickTime& time,
+                       std::vector<Blow>& blows) {
     // A line straight ahead along the view, without its kick, then a ducked player's hull.
-    const nx::Vec3 end = shooter.eye + (nx::angleVectors(shooter.view).forward * attack.reach.value());
+    const nx::Vec3 forward = nx::angleVectors(shooter.view).forward;
+    const nx::Vec3 end = shooter.eye + (forward * attack.reach.value());
     WeaponHit met = tracer(nx::collision::Hull::Point, shooter.eye, end);
     if (met.trace.fraction >= 1.0F) {
         met = tracer(nx::collision::Hull::Ducked, shooter.eye, end);
@@ -487,6 +507,11 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
     owned.nextSecondary = timing.secondary;
     if (attack.idleAfter) {
         m_nextIdle = *attack.idleAfter;
+    }
+    // What it met takes its blow once the next attack's time is set (TraceAttack, ApplyMultiDamage).
+    if (hits && met.entity) {
+        blows.push_back(
+            Blow{.entity = *met.entity, .trace = met.trace, .damage = attack.damage, .direction = forward});
     }
 }
 

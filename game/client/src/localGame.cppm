@@ -163,9 +163,17 @@ private:
     /// goes to their team's account, and the player, alive on the losing team, is not paid as the next
     /// round starts when the end does not pay its living losers.
     void roundEnded(RoundEndReason reason);
-    /// Pays the player what its team gets as a round starts (RestartRound), unless the last end left
-    /// it unpaid.
-    void payForRound();
+    /// Pays the player what its team gets as a round starts (RestartRound), `hostagesHeld` still held
+    /// (repositionHostages), unless the last end left it unpaid.
+    void payForRound(std::uint32_t hostagesHeld);
+    /// The player's `attack` on `entity`, as its weapon's TraceAttack and ApplyMultiDamage deal it
+    /// (nx::game::attackEntity); a hostage it hurts costs the player its money (hostageHarmCost).
+    void attackEntity(nx::ecs::Entity entity, const nx::game::Attack& attack);
+    /// What the texture a trace from `start` to `end` met, `hit`, is made of, as UTIL_TextureHit finds
+    /// it: flesh for a body; of the world's or a brush entity's model, as materials.txt tags it; none
+    /// for another entity.
+    [[nodiscard]] auto materialOfHit(const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) const
+        -> std::optional<TextureMaterial>;
     /// Spawns the player at the next spawn point of its team (nextSpawnPoint), as Spawn does: one
     /// unit above it, standing still and turned the way it faces (takeTurnedView), its health whole;
     /// it keeps its armor, its weapons and its money, and is paid as the next round starts. Its HUD is

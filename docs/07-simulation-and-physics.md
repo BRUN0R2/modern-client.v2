@@ -394,6 +394,17 @@ comes within 64 units of its origin (`FindEntityInSphere`), the one whose middle
 ahead from its eye, more than 0.7 of the way; as the original, through walls. In cs_office, the
 button by the garage door raises it.
 
+### 5.3 Damage
+
+**Today** (`nx.game:damage`): an attack on an entity a trace met (`nx::game::Attack`: who made it, its
+damage, its way and the trace, its hit group among it) is dealt as the entity's kind takes it, its
+`nx::game::DamageMethod` ([ADR-0022](adr/0022-plugin-api-primitives.md)'s `Entity.takeDamage`: the
+original's `TraceAttack`, then `ApplyMultiDamage` and `TakeDamage`), which says what it did
+(`nx::game::Harm`: the damage taken, and whether it killed); an entity of a kind that takes none
+takes nothing (`nx::game::attackEntity`). A trace through a hitbox carries its hit group
+(`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows and the shots' rounds are dealt
+so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
+
 ## 6. Determinism
 
 - `cs.shared` is compiled **once** into a static library linked by the client and the

@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# Where an attack meets a body, and the share of its damage the body takes (docs/10, section 7.4),
+# read into cs::HitGroupRules, with ReGameDLL_CS's shares (GPL, consulted: docs/20 section 3), by the
+# hit group of the hitbox the attack met (HITGROUP_*): `arm` and `leg` either, `other` a group the game
+# names none of. `monster` is the monsters' TraceAttack's, which a hostage takes an attack by first;
+# `hostage` the hostages' TakeDamage's (GetModifiedDamage), then.
+
+[monster]
+generic = 1.0
+head = 3.0
+chest = 1.5
+stomach = 1.5
+arm = 1.0
+leg = 0.75
+shield = 0.0
+other = 1.0
+
+[hostage]
+generic = 1.75
+head = 2.5
+chest = 1.5
+stomach = 1.75
+arm = 0.75
+leg = 0.6
+shield = 1.5 # the default's: a shield's damage is none by then
+other = 1.5
