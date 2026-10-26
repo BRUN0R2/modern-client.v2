@@ -650,12 +650,13 @@ void Client::handleInConsole(const nx::platform::WindowEvent& event) {
 auto Client::run() -> nx::Result<void, ClientError> {
     while (m_isRunning) {
         // fps_max: the limiter waits before the input is read, so that the frame shows the latest
-        // (docs/05-rendering.md, section 12).
-        if (const float fpsMax = m_cvars->video.fpsMax.value(); fpsMax > 0.0F) {
-            m_video->sleepTimer.sleepUntil(m_frameStart +
-                                           std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(
-                                               nx::Seconds{1.0F / fpsMax}));
-        }
+        // (docs/05-rendering.md, section 12). The local game is one of more than one player, as a
+        // Counter-Strike server's.
+        const nx::settings::GamePlayers players =
+            m_session ? nx::settings::GamePlayers::MoreThanOne : nx::settings::GamePlayers::One;
+        const nx::Seconds interval = nx::settings::frameIntervalOf(m_cvars->video, players);
+        m_video->sleepTimer.sleepUntil(
+            m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
         m_frameStart = nx::platform::MonotonicClock::now();
         if (auto read = readInput(); !read) {
             return read;

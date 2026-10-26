@@ -328,7 +328,7 @@ from reference shots; search comes later.
 | Group | Cvars |
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
-| Video | `fps_max`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals` |
+| Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals` |
 | HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `net_graph` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
@@ -355,8 +355,9 @@ file is written beside its place and then moved there, so a crash leaves the old
 the new ones, never a part. The original ends its `config.cfg` with `exec userconfig.cfg`;
 here the startup runs that file itself. `registerClientCvars` registers the client's cvars of
 §5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
-`sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, 0 for no limit), `gl_vsync`
-(1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `r_fidelity`
+`sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, held as the original holds it,
+[05 §12](05-rendering.md#12-latency-and-frame-pacing)), `fps_override` (0: `fps_max` at most 100),
+`gl_vsync` (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `r_fidelity`
 (`legacy`, or `enhanced`: the enhanced look, [ADR-0025](adr/0025-enhanced-rendering.md)), `r_decals`
 (4096, from 0, the most decals on faces) and `mp_decals` (300, from 0, what a game of more than one
 player holds `r_decals` to as it is entered, [05 §8](05-rendering.md#8-bsp-world)),
@@ -368,9 +369,10 @@ command line ran), `s_play_unfocused` (0: silent while the window is not focused
 is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
 effect as soon as what reads it reads it again: the mouse's as the mouse moves, `fps_max`,
-`hud_draw`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
+`fps_override`, `hud_draw`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
 given, the picture's (`gamma`, `brightness`,
-`texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again.
+`texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again
+(the pace it sets with `fps_max`, with the next frame).
 `config.cfg` keeps the binds too (§6), before the cvars, in the original's order. `cs::HudCvars` registers the
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 `cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the
