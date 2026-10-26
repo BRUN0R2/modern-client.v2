@@ -85,6 +85,11 @@ struct AmmoType {
     /// Beside its rounds on the HUD, for screens 640 wide and more: the `ammo` picture of the lists
     /// of the original's weapons that fire it (sprites/weapon_<name>.txt).
     SpritePicture picture{};
+    /// How far into what it meets a round of it goes on from (FireBullets3's iPenetrationPower, by the
+    /// bullet type of the weapons that fire it), less as what it meets is made of.
+    std::uint32_t penetrationPower{};
+    /// A round of it goes through nothing more once it went this far (flPenetrationDistance).
+    nx::HammerUnits penetrationDistance{};
 };
 
 /// data/cstrike/ammo.toml: the kinds of ammo.
@@ -230,14 +235,18 @@ struct WeaponRecoil {
 /// The rounds a shot fires after it on its own, one a weapon frame (the Glock's burst: FireRemaining).
 struct FollowUps {
     std::uint32_t rounds{};
-    float spread{}; ///< Each strays this much, whatever the accuracy and the movement.
+    float spread{};        ///< Each strays this much, whatever the accuracy and the movement.
+    float rangeModifier{}; ///< Each one's (FireRemaining's), instead of its firing's.
 };
 
 /// How a gun fires.
 struct WeaponFiring {
-    nx::Seconds cycle{};     ///< From a shot to the next.
-    bool isAutomatic{};      ///< Holding its button fires again; else each press fires once.
-    nx::HammerUnits reach{}; ///< How far its rounds go (FireBullets3's distance).
+    nx::Seconds cycle{};         ///< From a shot to the next.
+    bool isAutomatic{};          ///< Holding its button fires again; else each press fires once.
+    nx::HammerUnits reach{};     ///< How far its rounds go (FireBullets3's distance).
+    nx::Damage damage{};         ///< What a round deals as it leaves (iDamage), cut to a whole number.
+    float rangeModifier{};       ///< A round's damage is this many times as much for each 500 units it went.
+    std::uint32_t penetration{}; ///< How many things a round may meet (iPenetration).
     nx::Seconds idleAfterShot{};
     /// Its view model's sequences, by their numbers: one at random as it fires, and the one as it
     /// fires its clip's last round, when it has one. Its client chooses them, which is to be measured
@@ -462,6 +471,9 @@ struct nx::meta::Description<cs::AmmoType> {
         nx::meta::field<&cs::AmmoType::boxPrice>("boxPrice"),
         nx::meta::field<&cs::AmmoType::boxRounds>("boxRounds", nx::data::Range{.minimum = 1.0}),
         nx::meta::field<&cs::AmmoType::picture>("picture"),
+        nx::meta::field<&cs::AmmoType::penetrationPower>("penetrationPower"),
+        nx::meta::field<&cs::AmmoType::penetrationDistance>("penetrationDistance",
+                                                            nx::data::Range{.minimum = 0.0}),
     };
 };
 
@@ -646,6 +658,7 @@ struct nx::meta::Description<cs::FollowUps> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::FollowUps::rounds>("rounds", nx::data::Range{.minimum = 1.0}),
         nx::meta::field<&cs::FollowUps::spread>("spread", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::FollowUps::rangeModifier>("rangeModifier", nx::data::Range{.minimum = 0.0}),
     };
 };
 
@@ -656,6 +669,9 @@ struct nx::meta::Description<cs::WeaponFiring> {
         nx::meta::field<&cs::WeaponFiring::cycle>("cycle"),
         nx::meta::field<&cs::WeaponFiring::isAutomatic>("isAutomatic"),
         nx::meta::field<&cs::WeaponFiring::reach>("reach"),
+        nx::meta::field<&cs::WeaponFiring::damage>("damage", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponFiring::rangeModifier>("rangeModifier", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponFiring::penetration>("penetration", nx::data::Range{.minimum = 1.0}),
         nx::meta::field<&cs::WeaponFiring::idleAfterShot>("idleAfterShot", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponFiring::shootSequences>("shootSequences"),
         nx::meta::field<&cs::WeaponFiring::lastShotSequence>("lastShotSequence"),

@@ -19,6 +19,7 @@ export import :sounds;
 export import :weapons;
 export import :loadouts;
 export import :inventory;
+export import :bullets;
 export import :rounds;
 export import :economy;
 export import :materials;

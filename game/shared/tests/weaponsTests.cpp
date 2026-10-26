@@ -207,6 +207,15 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsAmmo) {
         EXPECT_EQ(ammo->boxPrice, nx::Money{expected.boxPrice}) << expected.id;
         EXPECT_EQ(ammo->boxRounds, expected.boxRounds) << expected.id;
     }
+    // FireBullets3's bullet types: how far a round goes into what it meets, and through nothing past.
+    for (const auto& [id, power, distance] :
+         {std::tuple{"9mm", 21U, 800.0F}, std::tuple{"45ACP", 15U, 500.0F},
+          std::tuple{"556Nato", 35U, 4000.0F}, std::tuple{"762Nato", 39U, 5000.0F}}) {
+        const AmmoType* const ammo = catalog->findAmmo(id);
+        ASSERT_NE(ammo, nullptr) << id;
+        EXPECT_EQ(ammo->penetrationPower, power) << id;
+        EXPECT_EQ(ammo->penetrationDistance, nx::HammerUnits{distance}) << id;
+    }
 }
 
 TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
@@ -347,6 +356,28 @@ TEST(WeaponsTest, TheRepositorysGunsFireAsTheOriginals) {
     EXPECT_FALSE(glock.recoil.kicks.has_value() || glock.recoil.punch.has_value())
         << "the Glock does not kick";
     EXPECT_EQ(catalog->findWeapon("glock18")->reload->sequences, (std::vector<std::uint32_t>{7, 12}));
+
+    // FireBullets3's iDamage, flRangeModifier and iPenetration; the silenced and the burst's own.
+    struct Round {
+        std::string_view id;
+        bool isAlternate;
+        float damage;
+        float rangeModifier;
+        std::uint32_t penetration;
+    };
+    for (const Round& expected :
+         {Round{"glock18", false, 25.0F, 0.75F, 1}, Round{"glock18", true, 25.0F, 0.75F, 1},
+          Round{"usp", false, 34.0F, 0.79F, 1}, Round{"usp", true, 30.0F, 0.79F, 1},
+          Round{"ak47", false, 36.0F, 0.98F, 2}, Round{"m4a1", false, 32.0F, 0.97F, 2},
+          Round{"m4a1", true, 33.0F, 0.95F, 2}}) {
+        const Weapon& weapon = *catalog->findWeapon(expected.id);
+        const cs::WeaponFiring& firing = expected.isAlternate ? *weapon.alternate->firing : *weapon.firing;
+        EXPECT_EQ(firing.damage, nx::Damage{expected.damage}) << expected.id;
+        EXPECT_EQ(firing.rangeModifier, expected.rangeModifier) << expected.id;
+        EXPECT_EQ(firing.penetration, expected.penetration) << expected.id;
+    }
+    EXPECT_EQ(catalog->findWeapon("glock18")->alternate->firing->followUps->rangeModifier, 0.9F)
+        << "FireRemaining's";
 }
 
 TEST(WeaponsTest, TheRepositorysAlternatesAreTheOriginals) {
@@ -471,6 +502,9 @@ TEST(WeaponsTest, FiringOrAReloadThatBreaksItsRulesIsInvalid) {
 cycle = 0.15
 isAutomatic = false
 reach = 4096.0
+damage = 34.0
+rangeModifier = 0.79
+penetration = 1
 idleAfterShot = 2.0
 shootSequences = [1]
 [firing.accuracy]
@@ -615,12 +649,14 @@ TEST(WeaponsTest, AViewThatDrawsOrIdlesWithNothingIsInvalid) {
 
 TEST(WeaponsTest, AmmoWithoutAnIdRoundsOrAPictureIsInvalid) {
     const std::string kPicture =
-        R"(picture = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 })";
+        R"(picture = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 })"
+        "\npenetrationPower = 39\npenetrationDistance = 5000.0\n";
     for (const std::string& text : {
              "[[ammo]]\nid = \"\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30\n" + kPicture,
              "[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 0\n" + kPicture,
              std::string{"[[ammo]]\nid = \"762Nato\"\nmaxCarried = 90\nboxPrice = 80\nboxRounds = 30\n"
-                         "picture = { sprite = \"640hud7\", x = 72, y = 72, width = 24, height = 24 }"},
+                         "picture = { sprite = \"640hud7\", x = 72, y = 72, width = 24, height = 24 }\n"
+                         "penetrationPower = 39\npenetrationDistance = 5000.0\n"},
          }) {
         const auto ammo = cs::readAmmoTypes(text, "ammo.toml");
         ASSERT_FALSE(ammo.has_value()) << text;

@@ -370,9 +370,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] The knife's damage (`cs::Blow`, `nx::game::attackEntity`, [07 §5.3](docs/07-simulation-and-physics.md#53-damage)): 15 for the slash, 65 for the stab, dealt to what it meets as its kind takes it
 - [x] Hostages hurt and killed (`cs::harmHostage`, [10 §4.2](docs/10-counter-strike-gameplay.md#42-hostages)): the hit groups' shares (`data/cstrike/hitGroups.toml`), the flinch, the death of where it was met, no longer solid nor thinking, put back whole, the attacker's money (`hostageHarm`)
 - [ ] The hostages' pain sounds (`headshot1`, `headshot2`, with spatial sound), their blood (with the temporary entities), `#Injured_Hostage` and `#Killed_Hostage` (with the center text), their fall as they die (`MOVETYPE_TOSS`) and `mp_hostagepenalty`
-- [ ] What the shots hit: damage by distance, penetration
+- [x] What the shots hit (`cs::followRound`, `FireBullets3`, [10 §7.4](docs/10-counter-strike-gameplay.md#74-damage)): their damage by the distance they went (`rangeModifier`), on through what they meet by its material and their ammo's bullet type, a mark on each wall they meet
 - [ ] Hitgroups of the players, kevlar and helmet
-- [ ] Penetration by material (`materials.txt`)
+- [x] Penetration by material (`materials.txt`): `FireBullets3`'s share of the power and of the damage kept by each material
 
 ### Audio
 - [x] The mixer (`nx.audio:mixer`): voices fed by a command queue, a windowed-sinc resampler from any rate and pitch, 32-bit float mixing with headroom and a limiter; sounds of any WAV layout (`nx.audio:sound`) ([11 §2](docs/11-audio.md#2-architecture))

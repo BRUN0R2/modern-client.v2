@@ -49,8 +49,8 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
 
 /// Where a shot from `shooter` goes, strayed by `spread` at random from the stream of `seed`, along
 /// the view the punch turns: each way the sum of two even draws (FireBullets3).
-[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach, std::uint32_t seed)
-    -> Shot {
+[[nodiscard]] auto shotFrom(const Shooter& shooter, float spread, nx::HammerUnits reach,
+                            const ShotRound& round, std::uint32_t seed) -> Shot {
     const nx::AngleVectors axes =
         nx::angleVectors(nx::EulerAngles{.pitch = shooter.view.pitch + shooter.punch.pitch,
                                          .yaw = shooter.view.yaw + shooter.punch.yaw,
@@ -64,7 +64,18 @@ constexpr nx::Seconds kBurstWaneStep{0.0225F};
     return Shot{.origin = shooter.eye,
                 .direction = axes.forward + (axes.right * (right * spread)) + (axes.up * (up * spread)),
                 .spread = spread,
-                .reach = reach};
+                .reach = reach,
+                .round = round};
+}
+
+/// The round a shot of `firing`, of a weapon whose ammo is `ammo`, fires, at `rangeModifier`.
+[[nodiscard]] auto roundOf(const WeaponFiring& firing, const AmmoType* ammo, float rangeModifier) noexcept
+    -> ShotRound {
+    return ShotRound{.damage = firing.damage,
+                     .rangeModifier = rangeModifier,
+                     .penetration = firing.penetration,
+                     .penetrationPower = ammo != nullptr ? ammo->penetrationPower : 0,
+                     .penetrationDistance = ammo != nullptr ? ammo->penetrationDistance : nx::HammerUnits{}};
 }
 
 /// One of `sequences`, at random.
@@ -384,7 +395,8 @@ auto Inventory::fire(OwnedWeapon& owned, const Weapon& weapon, Shooter& shooter,
     m_animation = ViewAnimation{.weapon = owned.weapon, .sequence = sequence, .start = time.now};
 
     // The shot goes along the view the kick turned so far; then the kick.
-    const Shot shot = shotFrom(shooter, spread, firing.reach, seed);
+    const Shot shot =
+        shotFrom(shooter, spread, firing.reach, roundOf(firing, ammoOf(weapon), firing.rangeModifier), seed);
     if (firing.recoil.kicks) {
         kickBack(kickOf(*firing.recoil.kicks, shooter), owned.shotsFired, owned.kicksLeft, shooter.punch,
                  random);
@@ -406,7 +418,12 @@ auto Inventory::fireFollowUp(OwnedWeapon& owned, const Weapon& weapon, const Sho
     --owned.clip;
     --owned.followUpsLeft;
     makeSound(firing->sound, time);
-    return shotFrom(shooter, firing->followUps->spread, firing->reach, seed);
+    return shotFrom(shooter, firing->followUps->spread, firing->reach,
+                    roundOf(*firing, ammoOf(weapon), firing->followUps->rangeModifier), seed);
+}
+
+auto Inventory::ammoOf(const Weapon& weapon) const noexcept -> const AmmoType* {
+    return weapon.magazine ? m_catalog->findAmmo(weapon.magazine->ammo) : nullptr;
 }
 
 void Inventory::switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time) {

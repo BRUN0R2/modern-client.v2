@@ -34,6 +34,9 @@ idlesWhenEmpty = true
 [firing] # without its silencer
 cycle = 0.0875
 reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 32.0 # FireBullets3's iDamage
+rangeModifier = 0.97 # its damage times this for each 500 units it went
+penetration = 2 # how many things a round may meet
 isAutomatic = true
 idleAfterShot = 1.5
 shootSequences = [8, 9, 10] # shoot1_unsil, shoot2_unsil, shoot3_unsil
@@ -81,6 +84,9 @@ idlesWhenEmpty = true
 [alternate.firing]
 cycle = 0.0875
 reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 33.0 # FireBullets3's iDamage with its silencer
+rangeModifier = 0.95 # its damage times this for each 500 units it went
+penetration = 2 # how many things a round may meet
 isAutomatic = true
 idleAfterShot = 1.5
 shootSequences = [1, 2, 3] # shoot1, shoot2, shoot3

@@ -34,6 +34,9 @@ idlesWhenEmpty = true
 [firing]
 cycle = 0.0955
 reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 36.0 # FireBullets3's iDamage
+rangeModifier = 0.98 # its damage times this for each 500 units it went
+penetration = 2 # how many things a round may meet
 isAutomatic = true
 idleAfterShot = 1.9
 shootSequences = [3, 4, 5] # shoot1, shoot2, shoot3

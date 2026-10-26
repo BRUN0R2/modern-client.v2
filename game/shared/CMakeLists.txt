@@ -15,6 +15,7 @@ nxAddModuleLibrary(csShared
         src/weapons.cppm
         src/loadouts.cppm
         src/inventory.cppm
+        src/bullets.cppm
         src/rounds.cppm
         src/economy.cppm
         src/materials.cppm
@@ -28,6 +29,7 @@ nxAddModuleLibrary(csShared
         src/weapons.cpp
         src/loadouts.cpp
         src/inventory.cpp
+        src/bullets.cpp
         src/rounds.cpp
         src/economy.cpp
         src/materials.cpp

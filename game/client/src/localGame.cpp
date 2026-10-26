@@ -188,17 +188,28 @@ void LocalGame::tick(const UserCommand& command) {
     };
     const WeaponAttacks attacks = m_inventory.frame(command, shooter, tracer, time);
     for (const Blow& blow : attacks.blows) {
-        strike(blow);
+        attackEntity(blow.entity, nx::game::Attack{.attacker = m_body,
+                                                   .damage = blow.damage,
+                                                   .direction = blow.direction,
+                                                   .trace = blow.trace});
     }
+    const HitMaterial materialOf = [this](const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) {
+        return materialOfHit(hit, start, end);
+    };
     for (const Shot& shot : attacks.shots) {
-        // As FireBullets3 traces it: its direction as it strays, not of length 1.
-        const nx::Vec3 end = shot.origin + (shot.direction * shot.reach.value());
-        const nx::game::SolidHit hit = nx::game::traceSolidsHit(
-            m_world, hulls, nx::game::hullTrace(nx::collision::Hull::Point, shot.origin, end));
-        // A mark where it meets the world or a brush entity; none on a hostage (DecalGunshot).
-        if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid &&
-            isBrushEntityOrWorld(m_world, hit.entity)) {
-            m_impacts.push_back(Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
+        // What its round meets, as FireBullets3 follows it: a mark on the world or a brush entity
+        // (DecalGunshot), none on a hostage; and its damage to what takes it.
+        for (const BulletHit& hit : followRound(shot, tracer, materialOf)) {
+            if (hit.isBrushModel) {
+                m_impacts.push_back(
+                    Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
+            }
+            if (hit.entity) {
+                attackEntity(*hit.entity, nx::game::Attack{.attacker = m_body,
+                                                           .damage = hit.damage,
+                                                           .direction = hit.direction,
+                                                           .trace = hit.trace});
+            }
         }
     }
     m_player.punch = shooter.punch;
@@ -262,12 +273,9 @@ void LocalGame::roundEnded(RoundEndReason reason) {
     }
 }
 
-void LocalGame::strike(const Blow& blow) {
-    const nx::game::Harm harm = nx::game::attackEntity(
-        m_world, blow.entity,
-        nx::game::Attack{
-            .attacker = m_body, .damage = blow.damage, .direction = blow.direction, .trace = blow.trace});
-    if (m_world.has<Hostage>(blow.entity)) {
+void LocalGame::attackEntity(nx::ecs::Entity entity, const nx::game::Attack& attack) {
+    const nx::game::Harm harm = nx::game::attackEntity(m_world, entity, attack);
+    if (m_world.has<Hostage>(entity)) {
         // The hostage's TakeDamage takes it from the player's account.
         m_status.money =
             addMoney(m_status.money, nx::Money{} - hostageHarmCost(harm, m_content->economy.hostageHarm));
@@ -381,6 +389,29 @@ auto LocalGame::groundMaterial(const StepGround& ground, std::span<const BrushEn
     };
     return m_level->materialAlong(m_content->materials, entity->model, inModelSpace(ground.origin),
                                   inModelSpace(below));
+}
+
+auto LocalGame::materialOfHit(const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) const
+    -> std::optional<TextureMaterial> {
+    if (hit.isBody) {
+        return TextureMaterial::Flesh;
+    }
+    if (!hit.entity) {
+        return m_level->materialAlong(m_content->materials, nx::assets::kWorldModel, start, end);
+    }
+    const nx::game::BrushModel* const model = m_world.get<nx::game::BrushModel>(*hit.entity);
+    const nx::game::Transform* const transform = m_world.get<nx::game::Transform>(*hit.entity);
+    if (model == nullptr || transform == nullptr) {
+        return std::nullopt; // no texture is named on what is not a brush model
+    }
+    // Into the space of the entity's model, as TraceTexture turns the segment.
+    const auto inModelSpace = [transform](nx::Vec3 point) {
+        const nx::Vec3 moved = point - transform->origin;
+        return transform->angles == nx::EulerAngles{}
+                   ? moved
+                   : nx::intoAxes(nx::angleVectors(transform->angles), moved);
+    };
+    return m_level->materialAlong(m_content->materials, model->index, inModelSpace(start), inModelSpace(end));
 }
 
 auto LocalGame::toggleNoclip() -> bool {

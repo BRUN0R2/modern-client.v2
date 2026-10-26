@@ -101,7 +101,18 @@ struct WeaponHit {
 /// (UTIL_TraceLine, UTIL_TraceHull), and what it met.
 using WeaponTracer = std::function<WeaponHit(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end)>;
 
-/// A shot fired: from where, the way it goes, how far its bullet may stray, and how far it goes.
+/// What a shot's round deals and how far it goes through what it meets (FireBullets3's iDamage,
+/// flRangeModifier, iPenetration, and its bullet type's power and distance).
+struct ShotRound {
+    nx::Damage damage{};
+    float rangeModifier{};
+    std::uint32_t penetration{};
+    std::uint32_t penetrationPower{};
+    nx::HammerUnits penetrationDistance{};
+};
+
+/// A shot fired: from where, the way it goes, how far its bullet may stray, how far it goes, and its
+/// round.
 struct Shot {
     nx::Vec3 origin{};
     /// Forward, strayed by at most twice `spread` to the right and up, at random: not of length 1,
@@ -111,6 +122,7 @@ struct Shot {
     /// Its weapon's (WeaponFiring::reach), along `direction`: its end is `origin` plus `direction` times
     /// it, as the original's is.
     nx::HammerUnits reach{};
+    ShotRound round{};
 };
 
 /// A melee attack that met an entity, which it attacks (TraceAttack): which, the trace that met it,
@@ -215,6 +227,8 @@ private:
                       const nx::game::TickTime& time) -> std::optional<Shot>;
     /// The held `owned`, of `weapon`, switches to its alternate or back at `time` (SecondaryAttack).
     void switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
+    /// The ammo `weapon` fires; none for one without a magazine, or whose ammo the catalog lacks.
+    [[nodiscard]] auto ammoOf(const Weapon& weapon) const noexcept -> const AmmoType*;
     /// The held `owned` makes `attack`, the `count`th of its kind, at `time`, meeting what `tracer`
     /// finds ahead of `shooter` (the knife's Swing, Stab); its blow on the entity it met, when it met
     /// one, goes to `blows`.

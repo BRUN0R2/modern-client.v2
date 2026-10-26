@@ -6,7 +6,9 @@
 # which a weapon's `magazine.ammo` names; a player carries `maxCarried` rounds of it at most besides
 # what its clips hold; buying sells it in boxes of `boxRounds` rounds for `boxPrice` each; the HUD
 # shows `picture` beside its rounds, the `ammo` picture of the lists of the original's weapons that
-# fire it (sprites/weapon_<name>.txt), read once, here.
+# fire it (sprites/weapon_<name>.txt), read once, here. A round of it goes `penetrationPower` units
+# into what it meets to go on, less as what it meets is made of, and through nothing once it went
+# `penetrationDistance` (FireBullets3, by the bullet type of the weapons that fire it).
 #
 # Today: the ammo of the Glock 18, the USP, the AK-47 and the M4A1.
 
@@ -16,6 +18,8 @@ maxCarried = 120
 boxPrice = 20
 boxRounds = 30
 picture = { sprite = "sprites/640hud7.spr", x = 48, y = 72, width = 24, height = 24 }
+penetrationPower = 21 # BULLET_PLAYER_9MM
+penetrationDistance = 800.0
 
 [[ammo]]
 id = "45ACP"
@@ -23,6 +27,8 @@ maxCarried = 100
 boxPrice = 25
 boxRounds = 12
 picture = { sprite = "sprites/640hud7.spr", x = 96, y = 72, width = 24, height = 24 }
+penetrationPower = 15 # BULLET_PLAYER_45ACP
+penetrationDistance = 500.0
 
 [[ammo]]
 id = "556Nato"
@@ -30,6 +36,8 @@ maxCarried = 90
 boxPrice = 60
 boxRounds = 30
 picture = { sprite = "sprites/640hud7.spr", x = 0, y = 96, width = 24, height = 24 }
+penetrationPower = 35 # BULLET_PLAYER_556MM
+penetrationDistance = 4000.0
 
 [[ammo]]
 id = "762Nato"
@@ -37,3 +45,5 @@ maxCarried = 90
 boxPrice = 80
 boxRounds = 30
 picture = { sprite = "sprites/640hud7.spr", x = 72, y = 72, width = 24, height = 24 }
+penetrationPower = 39 # BULLET_PLAYER_762MM
+penetrationDistance = 5000.0

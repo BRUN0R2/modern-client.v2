@@ -402,8 +402,8 @@ damage, its way and the trace, its hit group among it) is dealt as the entity's 
 original's `TraceAttack`, then `ApplyMultiDamage` and `TakeDamage`), which says what it did
 (`nx::game::Harm`: the damage taken, and whether it killed); an entity of a kind that takes none
 takes nothing (`nx::game::attackEntity`). A trace through a hitbox carries its hit group
-(`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows are dealt so today
-([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
+(`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows and the shots' rounds are dealt
+so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 
 ## 6. Determinism
 
