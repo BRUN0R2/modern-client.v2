@@ -31,8 +31,9 @@ enum class Fidelity : std::uint8_t {
 /// How frames are made and shown, the original's picture (nx::render::GammaSettings), how the picture
 /// is made, and how many decals stay.
 struct VideoCvars {
-    console::Cvar<float> fpsMax; ///< `fps_max`: the most frames a second; 0 for no limit.
-    console::Cvar<bool> vsync;   ///< `gl_vsync`: frames wait for the display's refresh.
+    console::Cvar<float> fpsMax;     ///< `fps_max`: the most frames a second, as frameIntervalOf holds it.
+    console::Cvar<bool> fpsOverride; ///< `fps_override`: lifts frameIntervalOf's ceiling of 100.
+    console::Cvar<bool> vsync;       ///< `gl_vsync`: frames wait for the display's refresh.
     console::Cvar<float> gamma;
     console::Cvar<float> brightness;
     console::Cvar<float> textureGamma; ///< `texgamma`.
@@ -55,6 +56,18 @@ inline constexpr std::int32_t kDefaultMultiplayerDecals = 300;
     -> std::int32_t {
     return std::min(decals, multiplayerDecals);
 }
+
+/// How many players the game played holds, as the original's client tells it (its maxclients).
+enum class GamePlayers : std::uint8_t {
+    One,
+    MoreThanOne,
+};
+
+/// The least time from a frame's start to the next's that `video` allows in a game of `players`, as
+/// the original's Host_FilterTime paces its client (ReHLDS, GPL, consulted: docs/20 section 3):
+/// `fps_max` frames a second, at least 0.5 (20 with more than one player) and at most 100 unless
+/// `fps_override` (100 whenever `gl_vsync` is on without it), and half a frame more.
+[[nodiscard]] auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds;
 
 /// The player's own settings, which the game reads.
 struct PlayerCvars {

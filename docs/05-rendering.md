@@ -657,8 +657,13 @@ Xash3D-FWGS project records from the original for its tests.
 ## 12. Latency and frame pacing
 
 - `fps_max` with a precise limiter (`nx::platform::SleepTimer`: a high-resolution timer on
-  Windows and an absolute sleep on the monotonic clock on Linux, without *spin*). No limit
-  when `0`.
+  Windows and an absolute sleep on the monotonic clock on Linux, without *spin*), paced as the
+  original's `Host_FilterTime` paces its client (`nx::settings::frameIntervalOf`): `fps_max` frames
+  a second, at least 0.5 (20 in a game of more than one player, which the local game is), at most 100
+  unless `fps_override` is 1, and exactly 100 while `gl_vsync` is 1 without it, the display's refresh
+  pacing the frames further; a frame starts no sooner than 1 / (that + 0.5) seconds after the one
+  before. So `fps_max 0` is half a frame a second, not "no limit". The 31 frames a second the original
+  keeps while it connects to a server wait for the connection (M4).
 - In low-latency mode, the limiter waits **before** sampling input, so that the frame is
   built with the most recent input.
 - No empty window while the client loads: `next` opens its window hidden and shows it with its first

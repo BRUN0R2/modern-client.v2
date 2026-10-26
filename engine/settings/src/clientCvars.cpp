@@ -26,6 +26,12 @@ constexpr float kBrightness = 1.0F;
 constexpr float kTextureGamma = 2.0F;
 constexpr float kLightGamma = 2.5F;
 constexpr float kVolume = 0.7F;
+// The frames a second the original's Host_FilterTime holds fps_max to: at least half a frame, 20 in a
+// game of more than one player, 100 at most without fps_override, and the half frame it adds to them.
+constexpr float kLeastFps = 0.5F;
+constexpr float kLeastMultiplayerFps = 20.0F;
+constexpr float kMostFpsWithoutOverride = 100.0F;
+constexpr float kFpsMargin = 0.5F;
 // The ranges the original holds the picture's cvars to (V_CheckGamma).
 constexpr float kLeastGamma = 1.8F;
 constexpr float kMostGamma = 3.0F;
@@ -53,9 +59,16 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
     auto fpsMax =
         console.registerCvar(CvarDesc<float>{.name = "fps_max",
                                              .defaultValue = kFpsMax,
-                                             .description = "The most frames a second; 0 for no limit.",
+                                             .description = "The most frames a second: 0.5 at least (20 with "
+                                                            "more than one player), 100 at most without "
+                                                            "fps_override.",
                                              .flags = kArchived,
                                              .minimum = 0.0F});
+    auto fpsOverride = console.registerCvar(
+        CvarDesc<bool>{.name = "fps_override",
+                       .defaultValue = false,
+                       .description = "Whether fps_max may pass 100 frames a second, gl_vsync on or not.",
+                       .flags = kArchived});
     auto vsync =
         console.registerCvar(CvarDesc<bool>{.name = "gl_vsync",
                                             .defaultValue = true,
@@ -131,7 +144,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                        .defaultValue = false,
                        .description = "Whether the game is heard while its window is not focused.",
                        .flags = kArchived});
-    for (auto* const registered : {&vsync, &hudDraw, &autoWeaponSwitch, &playUnfocused}) {
+    for (auto* const registered : {&fpsOverride, &vsync, &hudDraw, &autoWeaponSwitch, &playUnfocused}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -154,6 +167,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
     }
     return ClientCvars{.mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
                        .video = {.fpsMax = *fpsMax,
+                                 .fpsOverride = *fpsOverride,
                                  .vsync = *vsync,
                                  .gamma = *gamma,
                                  .brightness = *brightness,
@@ -165,6 +179,21 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .multiplayerDecals = *multiplayerDecals},
                        .player = {.autoWeaponSwitch = *autoWeaponSwitch},
                        .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
+}
+
+auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds {
+    const bool isOverridden = video.fpsOverride.value();
+    float fps = std::max(video.fpsMax.value(), kLeastFps);
+    if (!isOverridden) {
+        fps = std::min(fps, kMostFpsWithoutOverride);
+    }
+    if (players == GamePlayers::MoreThanOne) {
+        fps = std::max(fps, kLeastMultiplayerFps);
+    }
+    if (video.vsync.value() && !isOverridden) {
+        fps = kMostFpsWithoutOverride; // the display's refresh paces it
+    }
+    return Seconds{1.0F / (fps + kFpsMargin)};
 }
 
 auto enterMultiplayerGame(const VideoCvars& video) -> Result<void, console::CvarError> {

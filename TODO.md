@@ -203,6 +203,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Platform, math and console
 - [x] `nx.platform`: clocks (monotonic, wall, `Stopwatch`) and a precise deadline wait for tick and frame pacing (`SleepTimer`)
+- [x] `fps_max` and `fps_override` pace the client's frames as the original's `Host_FilterTime` does (`nx::settings::frameIntervalOf`, [05 §12](docs/05-rendering.md#12-latency-and-frame-pacing))
 - [ ] OS threads in `nx.platform` (name, priority, affinity), with the first consumer (audio thread, Tracy or affinity benchmark)
 - [x] `nx.math`: vectors, matrices (`Mat3`, `Mat3x4`, `Mat4`), quaternions, GoldSrc angles (`angleVectors`, `vectorAngles`), AABBs and planes, with deterministic floating point ([07 §6](docs/07-simulation-and-physics.md#6-determinism))
 - [ ] SIMD in `nx.math`, when a benchmark shows a gain
