@@ -89,8 +89,8 @@ private:
     console::Console* m_console;
     const KeyBindings* m_bindings;
     std::bitset<kKeyCount> m_down;
-    std::array<std::string, kKeyCount> m_releases; ///< The command each press must eventually release.
-    std::vector<PressedKey> m_pressedKeys;
+    std::array<std::string, kKeyCount> releaseCommands; ///< The command each press must eventually release.
+    std::vector<PressedKey> pressedKeys;
     float m_wheel = 0.0F; ///< Notches turned and not run yet: a part of one, on precise wheels.
 };
 

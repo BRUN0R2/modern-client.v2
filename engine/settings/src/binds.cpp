@@ -259,20 +259,20 @@ void BoundInput::handle(const platform::WindowEvent& event, KeyMapping mapping) 
 }
 
 void BoundInput::changeKey(const platform::KeyChanged& event, KeyMapping mapping) {
-    const auto held = std::ranges::find(m_pressedKeys, event.key, &PressedKey::position);
+    const auto held = std::ranges::find(pressedKeys, event.key, &PressedKey::position);
     if (event.isDown) {
-        if (event.isRepeat || held != m_pressedKeys.end()) {
+        if (event.isRepeat || held != pressedKeys.end()) {
             return;
         }
         const std::optional<KeyId> binding = keyOf(event, mapping);
-        m_pressedKeys.push_back({.position = event.key, .binding = binding});
+        pressedKeys.push_back({.position = event.key, .binding = binding});
         if (binding) {
             press(*binding);
         }
-    } else if (held != m_pressedKeys.end()) {
+    } else if (held != pressedKeys.end()) {
         const std::optional<KeyId> binding = held->binding;
-        m_pressedKeys.erase(held);
-        if (binding && std::ranges::none_of(m_pressedKeys, [binding](const PressedKey& key) {
+        pressedKeys.erase(held);
+        if (binding && std::ranges::none_of(pressedKeys, [binding](const PressedKey& key) {
                 return key.binding == binding;
             })) {
             release(*binding);
@@ -289,7 +289,7 @@ void BoundInput::press(KeyId key) {
     m_down.set(index);
     const std::string_view command = m_bindings->commandOf(key);
     if (command.starts_with('+')) {
-        m_releases[index] = std::format("-{} {}", command.substr(1), index);
+        releaseCommands[index] = std::format("-{} {}", command.substr(1), index);
         m_console->addText(std::format("{} {}", command, index));
     } else if (!command.empty()) {
         m_console->addText(command);
@@ -303,9 +303,9 @@ void BoundInput::release(KeyId key) {
         return; // it went down before the input was read here, or while another view had the keys
     }
     m_down.reset(index);
-    if (!m_releases[index].empty()) {
-        m_console->addText(m_releases[index]);
-        m_releases[index].clear();
+    if (!releaseCommands[index].empty()) {
+        m_console->addText(releaseCommands[index]);
+        releaseCommands[index].clear();
     }
 }
 
@@ -313,7 +313,7 @@ void BoundInput::releaseAll() {
     for (std::uint32_t number = 0; number < kKeyCount; ++number) {
         release(KeyId{number});
     }
-    m_pressedKeys.clear();
+    pressedKeys.clear();
 }
 
 } // namespace nx::settings
