@@ -70,6 +70,34 @@ TEST(TextureMaterialsTest, TheFirst1024TexturesAreRead) {
     EXPECT_EQ(materials.materialOf("wood1024"), TextureMaterial::Concrete);
 }
 
+TEST(TextureMaterialsTest, ALineIsReadIn510BytesAtMost) {
+    // The first 510 bytes are a line, the rest of it the next.
+    std::string text = "W wood1 ";
+    text.resize(cs::kMostLineBytes, ' ');
+    text += "M cut_metal \n";
+    // A name the 510th byte cuts is not followed by a space, and the line is left out.
+    std::string cut = "W ";
+    cut.resize(cs::kMostLineBytes, 'y');
+    text += cut + "G grate9 \n";
+    const TextureMaterials materials = TextureMaterials::read(text);
+    EXPECT_EQ(materials.size(), 3U);
+    EXPECT_EQ(materials.materialOf("wood1"), TextureMaterial::Wood);
+    EXPECT_EQ(materials.materialOf("cut_metal"), TextureMaterial::Metal);
+    EXPECT_EQ(materials.materialOf("grate9"), TextureMaterial::Grate);
+}
+
+TEST(TextureMaterialsTest, ALineEndsAtANul) {
+    using namespace std::string_view_literals;
+    const TextureMaterials materials = TextureMaterials::read("M na\0me \n"
+                                                              "\0V nul_first \n"
+                                                              "T tile\0 \n"
+                                                              "S slosh1 \0junk\n"sv);
+    EXPECT_EQ(materials.size(), 1U) << "a name a NUL ends is not followed by a space";
+    EXPECT_EQ(materials.materialOf("slosh1"), TextureMaterial::Slosh);
+    EXPECT_EQ(materials.materialOf("na"), TextureMaterial::Concrete);
+    EXPECT_EQ(materials.materialOf("tile"), TextureMaterial::Concrete);
+}
+
 TEST(TextureMaterialsTest, ATexturesNameIsLookedUpWithoutItsPrefixes) {
     EXPECT_EQ(cs::lookedUpTextureName("-0crate"), "crate");
     EXPECT_EQ(cs::lookedUpTextureName("+0~light"), "light");

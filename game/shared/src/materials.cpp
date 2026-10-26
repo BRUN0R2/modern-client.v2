@@ -66,11 +66,14 @@ auto TextureMaterials::read(std::string_view text) -> TextureMaterials {
     TextureMaterials materials;
     std::size_t start = 0;
     while (start < text.size() && materials.m_tagged.size() < kMostTaggedTextures) {
-        // A line as the original's memfgets reads it: with its end of line, when it has one.
+        // A line as the original's memfgets reads it: with its end of line, when it has one, and
+        // kMostLineBytes at most, then as a string, to a NUL.
         const std::size_t newline = text.find('\n', start);
-        const std::size_t end = newline == std::string_view::npos ? text.size() : newline + 1;
-        const std::string_view line = text.substr(start, end - start);
+        const std::size_t end =
+            std::min(newline == std::string_view::npos ? text.size() : newline + 1, start + kMostLineBytes);
+        std::string_view line = text.substr(start, end - start);
         start = end;
+        line = line.substr(0, line.find('\0'));
         std::size_t at = 0;
         while (at < line.size() && isSpace(line[at])) {
             ++at;
