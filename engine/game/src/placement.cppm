@@ -14,11 +14,11 @@ import nx.collision;
 
 export namespace nx::game {
 
-/// Where the origin of a box `box`, about it, at `origin` rests once dropped to the floor: traced 256
-/// units down by the server's rules, through the hull its size chooses (collision::boxHullOf), among the
-/// world of `hulls` and the solid brush entities of `world`. Where it starts when it starts all in solid
-/// or meets nothing.
+/// Where the origin of a box `box`, about it, at `origin` rests once dropped to the floor, as the
+/// engine drops entity `dropped` (DROP_TO_FLOOR): traced 256 units down through what is solid in
+/// `world`, whose map's hulls are `hulls`, but itself (traceSolidsHit). Where it starts when it starts
+/// all in solid or meets nothing.
 [[nodiscard]] auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Aabb& box,
-                                  Vec3 origin) -> Vec3;
+                                  Vec3 origin, std::optional<ecs::Entity> dropped) -> Vec3;
 
 } // namespace nx::game

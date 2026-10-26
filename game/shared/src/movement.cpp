@@ -1292,6 +1292,15 @@ private:
 
 } // namespace
 
+auto solidBoxesOf(nx::ecs::World& world) -> std::vector<SolidBox> {
+    std::vector<SolidBox> boxes;
+    nx::ecs::Query<const nx::game::Transform&, const nx::game::BoxSolidity&>{world}.forEach(
+        [&boxes](const nx::game::Transform& transform, const nx::game::BoxSolidity& solidity) {
+            boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box});
+        });
+    return boxes;
+}
+
 auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
     std::vector<BrushEntity> entities;
     nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&, const nx::game::BrushSolidity&>

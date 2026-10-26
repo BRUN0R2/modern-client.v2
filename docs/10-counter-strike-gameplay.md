@@ -133,7 +133,9 @@ shows on from as it estimates it (`cs::estimatedFrameOf`, `R_StudioEstimateFrame
 its hitboxes at. As each round starts, before its money is paid, each is put back where it started,
 turned as it was, thinking again in 0.1 to 0.2 seconds (`cs::repositionHostages`, `RePosition`), the
 rest left where they are once the bonus counted for them reaches its most, as `RestartRound`'s loop
-stops there. Its box stops the players (`cs::hostageBoxes`). Following, rescue, damage and death come
+stops there. It is solid as its box (`nx::game::BoxSolidity`): to the players (`cs::solidBoxesOf`) and
+to the server's traces, a line meeting its hitboxes ([07 §4.2](07-simulation-and-physics.md#42-entities));
+to the game's rules a passive human (`Classify`). Following, rescue, damage and death come
 with what they need.
 
 ## 5. Map entities
@@ -399,8 +401,8 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   (`FireBullets3`). Each goes as far as its weapon's `reach` (`cs::Shot::reach`: 8192 units for the
   Glock, the AK-47 and the M4A1, 4096 for the USP, as the original's fire them), its direction as it
   strayed (not of length 1), through
-  the world and the solid brush entities (`nx::game::traceSolidsHit`, which tells what stopped it)
-  and the hostages, by their hitboxes (`cs::traceHostages`, [07 §4.2](07-simulation-and-physics.md#42-entities)):
+  what is solid, the world, the solid brush entities and the hostages by their hitboxes
+  (`nx::game::traceSolidsHit`, which tells what stopped it, [07 §4.2](07-simulation-and-physics.md#42-entities)):
   a hostage it meets first stops it. Where it meets the world or a brush entity it leaves the mark the game names for it
   (`cs::bulletMarkOf`, `DamageDecal`): on the world and on an entity drawn normally a bullet hole,
   one of `{shot1` to `{shot5` of decals.wad at random; none on a solid one (`kRenderTransAlpha`);
@@ -433,10 +435,10 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   smoke with the original's duration and volume.
 - **Knife:** quick slash and heavy stab, with a multiplier from behind.
   **Today:** `+attack` slashes and `+attack2` stabs (Swing, Stab): a line 48 units ahead of the eye
-  (32 for the stab), along the view without its kick, then a ducked player's hull, through the world
-  and its solid brush entities (`nx::game::traceSolids`, the original's `SV_Move`) and the hostages,
-  the line by their hitboxes and the hull by their boxes (`cs::traceHostages`, as
-  `SV_HullForStudioModel` chooses); where the hull meets the world or a brush entity, it looks for
+  (32 for the stab), along the view without its kick, then a ducked player's hull, through what is
+  solid (`nx::game::traceSolidsHit`, the original's `SV_Move`): the world, its solid brush entities
+  and the hostages, the line by their hitboxes and the hull by their boxes, as
+  `SV_HullForStudioModel` chooses; where the hull meets the world or a brush entity, it looks for
   where it meets it as `FindHullIntersection` does: a line to twice as far as the hull stopped, else
   of the lines to the corners of a ducked player's box about that end the nearest that meets
   something, which may be a hostage; a miss and a hit play their sequences and hold the attacks as

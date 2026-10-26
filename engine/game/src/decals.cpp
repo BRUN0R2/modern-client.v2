@@ -33,8 +33,10 @@ auto staticDecalsOf(std::span<const assets::BspEntity> entities, ecs::World& wor
             continue;
         }
         const Vec3 origin = entity.findVector("origin").value_or(Vec3{});
-        const SolidHit hit =
-            traceSolidsHit(world, hulls, collision::Hull::Point, origin - reach, origin + reach);
+        // The original's line looks for what the decal lies on alone (ignore_monsters).
+        const SolidHit hit = traceSolidsHit(
+            world, hulls,
+            ServerTrace{.start = origin - reach, .end = origin + reach, .type = TraceType::NoMonsters});
         decals.push_back(StaticDecal{.texture = std::string{entity.find("texture").value_or("")},
                                      .origin = origin,
                                      .entity = hit.entity});
