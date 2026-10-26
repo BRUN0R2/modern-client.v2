@@ -103,6 +103,11 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                                        .defaultValue = true,
                                                        .description = "Whether the HUD is drawn.",
                                                        .flags = kArchived});
+    auto showFps = console.registerCvar(
+        CvarDesc<bool>{.name = "cl_showfps",
+                       .defaultValue = false,
+                       .description = "Whether the frames a second show in the top left corner.",
+                       .flags = kArchived});
     auto fidelity = console.registerCvar(CvarDesc<Fidelity>{
         .name = "r_fidelity",
         .defaultValue = Fidelity::Legacy,
@@ -144,7 +149,8 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                        .defaultValue = false,
                        .description = "Whether the game is heard while its window is not focused.",
                        .flags = kArchived});
-    for (auto* const registered : {&fpsOverride, &vsync, &hudDraw, &autoWeaponSwitch, &playUnfocused}) {
+    for (auto* const registered :
+         {&fpsOverride, &vsync, &hudDraw, &showFps, &autoWeaponSwitch, &playUnfocused}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -174,6 +180,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .textureGamma = *textureGamma,
                                  .lightGamma = *lightGamma,
                                  .hudDraw = *hudDraw,
+                                 .showFps = *showFps,
                                  .fidelity = *fidelity,
                                  .decals = *decals,
                                  .multiplayerDecals = *multiplayerDecals},

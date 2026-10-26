@@ -666,6 +666,10 @@ Xash3D-FWGS project records from the original for its tests.
   keeps while it connects to a server wait for the connection (M4).
 - In low-latency mode, the limiter waits **before** sampling input, so that the frame is
   built with the most recent input.
+- The frame rate shown is one measure (`nx::platform::FrameRateMeter`): the frames that started in
+  each whole second after its first, over the time from its first to its last, told again as each
+  second closes (a frame longer than a second closes it alone). `cl_showfps` shows it now and
+  `net_graph` is to show the same, where the original measures it twice and its two numbers disagree.
 - No empty window while the client loads: `next` opens its window hidden and shows it with its first
   image (`WindowDesc::isShown`, `Window::show`). A map's scene, its textures and models on the GPU, is
   made with the first image of it, and its game plays from the frame after: the player hears what

@@ -24,7 +24,9 @@ nxAddModuleLibrary(csClient
         src/gameCvars.cppm
         src/localGame.cppm
         src/hud.cppm
+        src/windowFonts.cppm
         src/console.cppm
+        src/fpsLabel.cppm
         src/audio.cppm
         src/weaponCommands.cppm
     SOURCES
@@ -45,7 +47,9 @@ nxAddModuleLibrary(csClient
         src/gameCvars.cpp
         src/localGame.cpp
         src/hud.cpp
+        src/windowFonts.cpp
         src/console.cpp
+        src/fpsLabel.cpp
         src/audio.cpp
         src/weaponCommands.cpp
     DEPENDS

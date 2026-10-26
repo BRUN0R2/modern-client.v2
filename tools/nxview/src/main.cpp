@@ -29,8 +29,8 @@ constexpr std::string_view kUsage =
     R"(usage: nxview --screenshot <file.bmp> [--map <name>] [--install <folder>]
               [--data <folder>] [--user-folder <folder>] [--look legacy|enhanced] [--weapon <id>]
               [--position "<x> <y> <z>"] [--angles "<pitch> <yaw> <roll>"]
-              [--time <seconds>] [--size <width>x<height>] [--hud] [--console <line>]...
-              [--typing <text>] [--validation]
+              [--time <seconds>] [--size <width>x<height>] [--hud] [--fps <frames a second>]
+              [--console <line>]... [--typing <text>] [--validation]
 
 Renders one frame of a map of the Counter-Strike 1.6 installation into a BMP file, without a window,
 as the client draws it with the original's default settings: the world as the game makes it when
@@ -56,6 +56,7 @@ of the first spawn's team draws as it spawns. To play a map, run next.
   --size <width>x<height> the frame's size in pixels (default: 1280x720)
   --hud                   the HUD over the frame: the player's as it spawns, the knife's crosshair
                           in Counter-Strike's default style
+  --fps <frames a second> cl_showfps's label over the frame, telling that many frames a second
   --console <line>        the console's window over the frame, <line> typed and sent in it; once
                           for each line, in their order (a console of the built-in commands)
   --typing <text>         the console's window over the frame, <text> typed in it and not sent,
@@ -81,6 +82,7 @@ struct Options {
     nx::rhi::Extent2d size{kDefaultExtent};
     bool isHudShown = false;
     bool isValidationEnabled = false;
+    std::optional<double> framesPerSecond; ///< Told by cl_showfps's label.
     std::vector<std::string> consoleLines; ///< Sent in the console's window.
     std::optional<std::string> typing;     ///< Left typed in it.
 
@@ -151,6 +153,14 @@ struct Options {
                 return std::nullopt;
             }
             options.time = nx::Seconds{seconds};
+        } else if (option == "--fps") {
+            double framesPerSecond = 0.0;
+            if (const auto [end, error] =
+                    std::from_chars(value.data(), value.data() + value.size(), framesPerSecond);
+                error != std::errc{} || end != value.data() + value.size() || framesPerSecond < 0.0) {
+                return std::nullopt;
+            }
+            options.framesPerSecond = framesPerSecond;
         } else if (option == "--size") {
             const std::optional<nx::rhi::Extent2d> size = sizeOfText(value);
             if (!size) {
@@ -333,14 +343,34 @@ constexpr std::size_t kBlue = 2;
     if (!gameCvars) {
         return unusable(gameCvars.error());
     }
+    // The fonts of the installation's windows: the console's, and cl_showfps's.
     nx::ui::FontCatalog fonts;
+    std::optional<cs::WindowFonts> windowFonts;
+    if (options.isConsoleShown() || options.framesPerSecond) {
+        auto opened = cs::WindowFonts::open(content.vfs, fonts);
+        if (!opened) {
+            return unusable(opened.error());
+        }
+        windowFonts.emplace(std::move(*opened));
+    }
+    std::optional<cs::FpsLabel> fpsLabel;
+    if (options.framesPerSecond) {
+        auto opened = cs::FpsLabel::open(*windowFonts, extent.height);
+        if (!opened) {
+            return unusable(opened.error());
+        }
+        fpsLabel.emplace(std::move(*opened));
+        if (auto loaded = fpsLabel->load(frames->screen(), uploadCommands); !loaded) {
+            return unusable(loaded.error());
+        }
+    }
     std::unique_ptr<cs::ConsoleWindow> consoleWindow;
     if (options.isConsoleShown()) {
-        consoleWindow = cs::ConsoleWindow::open(content.vfs, fonts, console, extent.height);
-        if (consoleWindow == nullptr) {
-            std::println(stderr, "nxview: the console has no window");
-            return kExitUnusable;
+        auto opened = cs::ConsoleWindow::open(*windowFonts, console, extent.height);
+        if (!opened) {
+            return unusable(opened.error());
         }
+        consoleWindow = std::move(*opened);
         if (auto loaded = consoleWindow->load(frames->screen(), uploadCommands, extent); !loaded) {
             return unusable(loaded.error());
         }
@@ -402,6 +432,9 @@ constexpr std::size_t kBlue = 2;
                      .crosshairDistance = cs::kKnifeCrosshairDistance,
                      .roundTime = (*game)->roundTimeShown()},
                     cs::CrosshairStyle{}, extent);
+    }
+    if (fpsLabel) {
+        fpsLabel->append(quads, *options.framesPerSecond);
     }
     if (consoleWindow != nullptr) {
         consoleWindow->paint(quads, extent);

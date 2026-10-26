@@ -48,6 +48,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_FLOAT_EQ(cvars->video.textureGamma.value(), 2.0F);
     EXPECT_FLOAT_EQ(cvars->video.lightGamma.value(), 2.5F);
     EXPECT_TRUE(cvars->video.hudDraw.value());
+    EXPECT_FALSE(cvars->video.showFps.value());
     EXPECT_EQ(cvars->video.decals.value(), 4096);
     EXPECT_EQ(cvars->video.multiplayerDecals.value(), 300);
     EXPECT_TRUE(cvars->player.autoWeaponSwitch.value());
@@ -61,7 +62,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     const std::string archived = console.archivedCvars();
     for (const std::string_view name :
          {"sensitivity", "m_yaw", "m_pitch", "fps_max", "fps_override", "gl_vsync", "gamma", "brightness",
-          "hud_draw", "r_decals", "mp_decals", "_cl_autowepswitch", "volume", "s_device",
+          "hud_draw", "cl_showfps", "r_decals", "mp_decals", "_cl_autowepswitch", "volume", "s_device",
           "s_play_unfocused"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }

@@ -39,6 +39,7 @@ struct VideoCvars {
     console::Cvar<float> textureGamma; ///< `texgamma`.
     console::Cvar<float> lightGamma;   ///< `lightgamma`.
     console::Cvar<bool> hudDraw;       ///< `hud_draw`: the HUD is drawn.
+    console::Cvar<bool> showFps;       ///< `cl_showfps`: the frames a second show in the top left corner.
     console::Cvar<Fidelity> fidelity;  ///< `r_fidelity`: read when a map is loaded.
     /// `r_decals`: the most decals on faces, read at each decal (nx::render::DecalPool::setLimit).
     console::Cvar<std::int32_t> decals;

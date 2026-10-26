@@ -35,15 +35,21 @@ public:
     /// The glyph of `character`, from fontFor. Errors: NoGlyph (no font draws it), and those of
     /// Font::glyph.
     [[nodiscard]] auto glyph(char32_t character) const -> Result<Glyph, FontError>;
+    /// Whether `character` casts VGUI2's drop shadow: the candidate that draws it says `dropshadow`.
+    [[nodiscard]] auto hasDropShadow(char32_t character) const noexcept -> bool;
 
 private:
-    /// A candidate that opened, and the characters it draws (all without a range).
+    /// A candidate that opened, the characters it draws (all without a range), and whether they cast a
+    /// drop shadow.
     struct Part {
         Font font;
         std::optional<assets::SchemeRange<char32_t>> characters;
+        bool hasDropShadow = false;
     };
 
     explicit SchemeFontSet(std::vector<Part> parts) noexcept;
+    /// The candidate that draws `character`: the first whose range holds it; null when none does.
+    [[nodiscard]] auto partFor(char32_t character) const noexcept -> const Part*;
 
     std::vector<Part> m_parts; ///< Never empty.
 };

@@ -102,4 +102,27 @@ TEST_F(SchemeFontTest, AnAtlasOfASchemesFont) {
     EXPECT_EQ(atlas->glyph(U'B')->advance, 4) << "Mark's";
 }
 
+TEST_F(SchemeFontTest, TheCharactersOfACandidateWithADropShadowCastIt) {
+    const SchemeFont font{.name = "EngineFont",
+                          .candidates = {FontCandidate{.face = "Square",
+                                                       .tall = 20,
+                                                       .flags = {FontFlag::DropShadow},
+                                                       .characters = SchemeRange<char32_t>{U'A', U'A'}},
+                                         FontCandidate{.face = "Mark", .tall = 9}}};
+    auto set = SchemeFontSet::open(font, 768, catalog);
+    ASSERT_TRUE(set.has_value()) << nx::describe(set.error());
+    EXPECT_TRUE(set->hasDropShadow(U'A'));
+    EXPECT_FALSE(set->hasDropShadow(U'B')) << "Mark's, which casts none";
+    EXPECT_FALSE(set->hasDropShadow(U'\x7F')) << "Mark's too: it has no range";
+
+    const auto atlas = nx::ui::GlyphAtlas::build(*set, U"AB");
+    ASSERT_TRUE(atlas.has_value()) << atlas.error().detail;
+    EXPECT_TRUE(atlas->glyph(U'A')->hasDropShadow);
+    EXPECT_FALSE(atlas->glyph(U'B')->hasDropShadow);
+    const std::vector<nx::ui::PlacedGlyph> placed = nx::ui::layoutText(*atlas, "AB", 0.0F, 0.0F);
+    ASSERT_EQ(placed.size(), 2U);
+    EXPECT_TRUE(placed[0].hasDropShadow);
+    EXPECT_FALSE(placed[1].hasDropShadow);
+}
+
 } // namespace

@@ -10,7 +10,7 @@
 /// its muzzle flashes, its decals and the marks bullets leave); the scene that draws it, and how a frame
 /// of it and the screen over it are drawn (FrameRenderer); the level's
 /// game, played by the client alone in the map's rounds, and the cvars of its rules; the HUD of its
-/// player; the console's window's font and place;
+/// player; the fonts of the installation's windows, the console's window's place and cl_showfps's label;
 /// the sound output with the sounds the client plays; and the console's weapon commands, which make
 /// weapons and set their values as the game runs.
 export module cs.client;
@@ -32,6 +32,8 @@ export import :frame;
 export import :gameCvars;
 export import :localGame;
 export import :hud;
+export import :windowFonts;
 export import :console;
+export import :fpsLabel;
 export import :audio;
 export import :weaponCommands;

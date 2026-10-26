@@ -10,6 +10,7 @@ import nx.platform;
 namespace {
 
 using namespace std::chrono_literals;
+using nx::platform::FrameRateMeter;
 using nx::platform::Instant;
 using nx::platform::MonotonicClock;
 using nx::platform::SleepTimer;
@@ -88,6 +89,34 @@ TEST(SleepTimerTest, MovesWithItsTimer) {
     const Instant deadline = MonotonicClock::now() + 1ms;
     moved.sleepUntil(deadline);
     EXPECT_GE(MonotonicClock::now(), deadline);
+}
+
+TEST(FrameRateMeterTest, TellsTheFramesASecondOfEachWholeSecond) {
+    FrameRateMeter meter;
+    const Instant start{};
+    meter.frameStarted(start);
+    for (int frame = 1; frame < 100; ++frame) {
+        meter.frameStarted(start + (frame * 10ms));
+    }
+    EXPECT_FALSE(meter.framesPerSecond().has_value()) << "99 frames after the first span 0.99 s";
+    meter.frameStarted(start + 1s);
+    ASSERT_TRUE(meter.framesPerSecond().has_value());
+    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 100.0) << "100 frames after the first, in a second";
+
+    // The next window starts with the frame that closed the last: its rate stays until it closes too.
+    for (int frame = 1; frame <= 3; ++frame) {
+        meter.frameStarted(start + 1s + (frame * 400ms));
+    }
+    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 2.5) << "3 frames in 1.2 s";
+}
+
+TEST(FrameRateMeterTest, AFrameLongerThanAWindowClosesItAlone) {
+    FrameRateMeter meter;
+    const Instant start{};
+    meter.frameStarted(start);
+    meter.frameStarted(start + 4s);
+    ASSERT_TRUE(meter.framesPerSecond().has_value());
+    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 0.25) << "a map that took 4 s to load in a frame";
 }
 
 TEST(WallClockTest, IsTheSystemClock) {

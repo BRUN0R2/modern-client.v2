@@ -14,6 +14,21 @@ import nx.core;
 
 namespace nx::platform {
 
+void FrameRateMeter::frameStarted(Instant at) noexcept {
+    if (!m_windowStart) {
+        m_windowStart = at;
+        return;
+    }
+    ++m_frames;
+    const MonotonicClock::duration elapsed = at - *m_windowStart;
+    if (elapsed < kFrameRateWindow) {
+        return;
+    }
+    m_framesPerSecond = static_cast<double>(m_frames) / std::chrono::duration<double>{elapsed}.count();
+    m_windowStart = at;
+    m_frames = 0;
+}
+
 #if defined(_WIN32)
 
 namespace {

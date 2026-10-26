@@ -152,6 +152,14 @@ face the catalog chooses for its name, weight and italics, at its `tall`, smooth
 Every font of the installation's `TrackerScheme.res` and `ClientScheme.res` opens so on this
 computer, but `GameConsole_Mono`, whose Courier is a bitmap font.
 
+**Drop shadow.** A candidate that says `dropshadow` casts VGUI2's shadow under its characters
+(`SchemeFontSet::hasDropShadow`, `AtlasGlyph::hasDropShadow`): `appendText` draws each such glyph's own
+shape in black, as opaque as the text, a pixel right and down (`kDropShadowOffset`), every shadow of
+the line before its glyphs, so that none falls over a glyph. Measured on Counter-Strike 1.6's
+`cl_showfps` (§3.2) at five resolutions: GDI's text with its copy so drawn under it matches the
+original's to the pixel, text and shadow alike, the shadow opaque black and the advances GDI's (the
+shadow widens no glyph).
+
 Still to come: Windows' bitmap fonts
 (`.fon`), such as the Courier that `GameConsole_Mono` asks for; italics simulated on a family
 without an italic face (Tahoma); and atlases that grow as new characters come.
@@ -233,6 +241,22 @@ for every weapon) and its opening as the player moves (`cl_dynamiccrosshair`), t
 the timer's color as the round runs out and the planted bomb's (to be measured on the original),
 the status icons and the radar come next.
 
+`cl_showfps 1` (observed in the same build, the frames a second at 514 to 520 and `net_graph 3` on, at
+640x480, 1024x768, 1280x720, 1280x960 and 1600x900) writes `N fps`, N a whole number without
+padding, in the `EngineFont` of the windows' scheme (`resource/TrackerScheme.res`: Verdana, weight 600,
+`dropshadow`, its `tall` by the screen's height: 12 up to 599 lines, 13 to 767, 14 to 1023 in that
+build; the Steam build of today has taller ones from 13 to 70), in opaque white, its line's top left at
+(2, 2) at every resolution. Its number was always a little below the one `net_graph` showed in the same
+frame (514 against 517.8, 518 against 520.0): the original measures the rate twice, two ways.
+
+**Today** (`cs.client:fpsLabel`): `next` draws that label while a map is played and `cl_showfps` is 1,
+over the HUD whether `hud_draw` draws it or not, as the original's engine writes it over its client's
+HUD, and `nxview --fps <frames a second>` over its frame; the five references match it to the pixel.
+Its number is the one measure of the client's frame rate, `nx::platform::FrameRateMeter`
+([05 §12](05-rendering.md#12-latency-and-frame-pacing)), rounded to the nearest whole number, which
+`net_graph` is to show too, so that the two never disagree as the original's do. Its font, like the
+console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
+
 ### 3.3 Visual parity of numbers
 
 Values within the original range (health up to 100, armor up to 100, money up to 16000)
@@ -313,8 +337,8 @@ its level: `ConsoleLogSink` keeps the lines logged on any thread until the main 
 closes it with the same keys or Escape: while it is open the keys and the typed text are its, the
 keys held for the game are let go and the cursor shows. Its font is the `Default` of the scheme of
 the installation's windows (`resource/TrackerScheme.res`, Tahoma 16 at 768 lines and up: 13 pixels
-per em, not smoothed), found among the system's fonts (`cs.client:console`); without the scheme or
-the face the console has no window, and the reason is logged. `cs::ConsoleWindow` is the window
+per em, not smoothed), found among the system's fonts (`cs.client:windowFonts`, which `cl_showfps`'s
+label shares); without the scheme or the face the console has no window, and the reason is logged. `cs::ConsoleWindow` is the window
 `next` and `nxview` both show: the font, the atlas of its characters put on the GPU with the screen's
 pictures, and the dialog, painted while it is open. What is logged and what the console
 replies show in it as well as where they always went. Failures read as the player reads them:
@@ -329,7 +353,7 @@ from reference shots; search comes later.
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
 | Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals` |
-| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `net_graph` |
+| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
 | Player | `name`, `_cl_autowepswitch`, `cl_autobuy`, `cl_rebuy`, `cl_minmodels` (respecting the server) |
@@ -357,7 +381,8 @@ here the startup runs that file itself. `registerClientCvars` registers the clie
 §5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, held as the original holds it,
 [05 §12](05-rendering.md#12-latency-and-frame-pacing)), `fps_override` (0: `fps_max` at most 100),
-`gl_vsync` (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `r_fidelity`
+`gl_vsync` (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `cl_showfps`
+(0: the frames a second in the top left corner, §3.2), `r_fidelity`
 (`legacy`, or `enhanced`: the enhanced look, [ADR-0025](adr/0025-enhanced-rendering.md)), `r_decals`
 (4096, from 0, the most decals on faces) and `mp_decals` (300, from 0, what a game of more than one
 player holds `r_decals` to as it is entered, [05 §8](05-rendering.md#8-bsp-world)),
@@ -369,7 +394,7 @@ command line ran), `s_play_unfocused` (0: silent while the window is not focused
 is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
 effect as soon as what reads it reads it again: the mouse's as the mouse moves, `fps_max`,
-`fps_override`, `hud_draw`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
+`fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
 given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again
 (the pace it sets with `fps_max`, with the next frame).
