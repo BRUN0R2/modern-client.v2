@@ -36,6 +36,9 @@ inline constexpr std::size_t kMostTaggedTextures = 1024;
 /// The characters of a texture's name the file and the lookup compare (MAX_TEXTURENAME_LENGHT, less
 /// its terminator).
 inline constexpr std::size_t kTaggedNameLength = 16;
+/// The most bytes of a line of the file the original reads at once (memfgets into its 512 bytes,
+/// told 511): the rest of a longer line is read as the next.
+inline constexpr std::size_t kMostLineBytes = 510;
 
 /// The textures materials.txt tags, as the original holds them: their first kTaggedNameLength
 /// characters, sorted without case by its own sort, each with what it is made of.
@@ -44,7 +47,8 @@ public:
     /// What `text`, a materials.txt, tags, as PM_InitTextureTypes reads it: on each line, after any
     /// spaces, a letter, spaces, then a texture's name, which must be followed by a space or the
     /// line's end of line; a line that starts otherwise (a comment) is left out; kMostTaggedTextures
-    /// at most.
+    /// at most. A line is kMostLineBytes at most, the rest of a longer one the next, and ends at a NUL,
+    /// as the original reads it as a string.
     [[nodiscard]] static auto read(std::string_view text) -> TextureMaterials;
 
     /// What the texture named `name` is made of, as PM_FindTextureType finds it: its first

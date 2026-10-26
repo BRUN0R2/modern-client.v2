@@ -132,9 +132,10 @@ it stood ([07 §3.1](07-simulation-and-physics.md#31-purity-requirements)); the 
 the texture 64 units under it, on the world or turned into the entity it stands on
 (`Level::materialAlong`, `nx::assets::surfaceAt`, the original's `SurfaceAtPoint`), what that texture
 is made of by the installation's `sound/materials.txt` (`cs::TextureMaterials`, read as the
-original reads it: 1024 textures, 16 characters, its own sort and search), and plays the step of
-that kind (`cs::StepVoice`, `data/cstrike/footsteps.toml`: each foot's sounds and volume, the rare
-`pl_tile5`, the silent first of each four wading steps; the splash), on the player's `Body` channel,
+original reads it: lines of 510 bytes at most, each ending at a NUL, 1024 textures, 16 characters,
+its own sort and search), and plays the step of that kind (`cs::StepVoice`,
+`data/cstrike/footsteps.toml`: each foot's sounds and volume, the rare `pl_tile5`, the silent first
+of each four wading steps; the splash), on the player's `Body` channel,
 while `mp_footsteps` is not 0. The weapons' and the bullets' sounds of the materials come with what they
 hit.
 
