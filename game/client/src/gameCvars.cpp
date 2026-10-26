@@ -12,68 +12,34 @@ namespace cs {
 
 namespace {
 
-// The original's values and ranges: a server's cvars, told to its players.
+// The original's values: a server's cvars, told to its players.
 constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
 constexpr float kDefaultFreezeSeconds = 6.0F;
-constexpr float kMostFreezeSeconds = 60.0F;
 constexpr float kDefaultRoundMinutes = 5.0F;
-constexpr float kLeastRoundMinutes = 1.0F;
-constexpr float kMostRoundMinutes = 9.0F;
-constexpr std::int32_t kMostRestartSeconds = 60;
 
 } // namespace
 
 auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvars, nx::console::CvarError> {
     using nx::console::CvarDesc;
-    auto freezeTime = console.registerCvar(
-        CvarDesc<float>{.name = "mp_freezetime",
-                        .defaultValue = kDefaultFreezeSeconds,
-                        .description = "The seconds each round starts frozen for, its players still.",
-                        .flags = kServerCvar,
-                        .minimum = 0.0F,
-                        .maximum = kMostFreezeSeconds});
-    auto roundTime =
-        console.registerCvar(CvarDesc<float>{.name = "mp_roundtime",
-                                             .defaultValue = kDefaultRoundMinutes,
-                                             .description = "The minutes a round runs for after its freeze.",
-                                             .flags = kServerCvar,
-                                             .minimum = kLeastRoundMinutes,
-                                             .maximum = kMostRoundMinutes});
-    auto startMoney = console.registerCvar(
-        CvarDesc<std::int32_t>{.name = "mp_startmoney",
-                               .defaultValue = kStartMoney.value(),
-                               .description = "The money each player starts the game with.",
-                               .flags = kServerCvar,
-                               .minimum = kStartMoney.value(), // the original's least is its default
-                               .maximum = kMostMoney.value()});
-    auto restartRound = console.registerCvar(CvarDesc<std::int32_t>{
-        .name = "sv_restartround",
-        .defaultValue = 0,
-        .description = "Restarts the game in this many seconds; read before sv_restart.",
-        .flags = kServerCvar,
-        .minimum = 0,
-        .maximum = kMostRestartSeconds});
-    auto restart =
-        console.registerCvar(CvarDesc<std::int32_t>{.name = "sv_restart",
-                                                    .defaultValue = 0,
-                                                    .description = "Restarts the game in this many seconds.",
-                                                    .flags = kServerCvar,
-                                                    .minimum = 0,
-                                                    .maximum = kMostRestartSeconds});
-    auto footsteps = console.registerCvar(CvarDesc<bool>{.name = "mp_footsteps",
-                                                         .defaultValue = true,
-                                                         .description = "Whether the players' steps sound.",
-                                                         .flags = kServerCvar});
-    if (!freezeTime || !roundTime) {
-        return std::unexpected{std::move(!freezeTime ? freezeTime.error() : roundTime.error())};
-    }
-    for (auto* const registered : {&startMoney, &restartRound, &restart}) {
+    const auto server = [&console](std::string_view name, float defaultValue, std::string_view description) {
+        return console.registerCvar(CvarDesc<float>{
+            .name = name, .defaultValue = defaultValue, .description = description, .flags = kServerCvar});
+    };
+    auto freezeTime = server("mp_freezetime", kDefaultFreezeSeconds,
+                             "The seconds each round starts frozen for, its players still: 0 to 60.");
+    auto roundTime = server("mp_roundtime", kDefaultRoundMinutes,
+                            "The minutes a round runs for after its freeze: 1 to 9.");
+    auto startMoney = server("mp_startmoney", static_cast<float>(kStartMoney.value()),
+                             "The money each player starts the game with: 800 to 16000.");
+    auto restartRound = server("sv_restartround", 0.0F,
+                               "Restarts the game in this many seconds, up to 60; read before sv_restart.");
+    auto restart = server("sv_restart", 0.0F, "Restarts the game in this many seconds, up to 60.");
+    auto footsteps = server("mp_footsteps", 1.0F, "Whether the players' steps sound: any value but 0.");
+    for (auto* const registered :
+         {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
-    }
-    if (!footsteps) {
-        return std::unexpected{std::move(footsteps.error())};
     }
     return GameCvars{.freezeTime = *freezeTime,
                      .roundTime = *roundTime,
@@ -83,24 +49,40 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .footsteps = *footsteps};
 }
 
+// The values set back are finite, and the cvars have no range and are neither read-only nor cheats:
+// the sets hold.
+
 auto GameCvars::roundLengths() const -> RoundLengths {
-    return roundLengthsOf(freezeTime.value(), roundTime.value());
+    const RoundCvars read = readRoundCvars(freezeTime.value(), roundTime.value());
+    if (read.freezeSeconds) {
+        std::ignore = freezeTime.set(*read.freezeSeconds);
+    }
+    if (read.roundMinutes) {
+        std::ignore = roundTime.set(*read.roundMinutes);
+    }
+    return read.lengths;
 }
 
 auto GameCvars::startingMoney() const -> nx::Money {
-    return nx::Money{startMoney.value()};
+    const StartMoney read = readStartMoney(startMoney.value());
+    if (read.setTo) {
+        std::ignore = startMoney.set(*read.setTo);
+    }
+    return read.money;
 }
 
 auto GameCvars::takeRestart() const -> std::optional<nx::Seconds> {
-    const std::int32_t seconds = restartRound.value() != 0 ? restartRound.value() : restart.value();
-    if (seconds == 0) {
-        return std::nullopt;
+    const std::optional<nx::Seconds> delay = restartDelayOf(restartRound.value(), restart.value());
+    if (delay) {
+        for (const nx::console::Cvar<float>& asked : {restartRound, restart}) {
+            std::ignore = asked.set(0.0F);
+        }
     }
-    for (const nx::console::Cvar<std::int32_t>& asked : {restartRound, restart}) {
-        // 0 is within their range, and they are neither read-only nor cheats: the set holds.
-        std::ignore = asked.set(0);
-    }
-    return nx::Seconds{static_cast<float>(seconds)};
+    return delay;
+}
+
+auto GameCvars::doStepsSound() const -> bool {
+    return footsteps.value() != 0.0F;
 }
 
 } // namespace cs

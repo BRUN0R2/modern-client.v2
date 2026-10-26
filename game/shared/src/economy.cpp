@@ -97,4 +97,15 @@ void TeamAccounts::restartGame() noexcept {
     *this = TeamAccounts{*m_rules};
 }
 
+auto readStartMoney(float value) noexcept -> StartMoney {
+    const std::int32_t money = nx::truncateAsX86(value);
+    if (money > kMostMoney.value()) {
+        return StartMoney{.money = kMostMoney, .setTo = static_cast<float>(kMostMoney.value())};
+    }
+    if (money < kStartMoney.value()) {
+        return StartMoney{.money = kStartMoney, .setTo = static_cast<float>(kStartMoney.value())};
+    }
+    return StartMoney{.money = nx::Money{money}};
+}
+
 } // namespace cs

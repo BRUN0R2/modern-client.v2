@@ -315,7 +315,7 @@ void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<co
             m_movementSounds.push_back(SoundMade{.sound = &splash, .at = now, .volume = splash.volume});
             continue;
         }
-        if (!m_cvars.footsteps.value()) {
+        if (!m_cvars.doStepsSound()) {
             continue;
         }
         const Footstep& step = std::get<Footstep>(sound);

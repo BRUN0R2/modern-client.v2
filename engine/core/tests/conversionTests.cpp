@@ -37,6 +37,18 @@ TEST(Conversion, TryNarrowReturnsATypedFailure) {
     EXPECT_EQ(overflows.error().detail, "1000 does not fit in [-128, 127]");
 }
 
+TEST(Conversion, TruncateAsX86CutsTowardZeroAndGivesTheIndefiniteOutOfRange) {
+    EXPECT_EQ(nx::truncateAsX86(2.9F), 2);
+    EXPECT_EQ(nx::truncateAsX86(-2.9F), -2);
+    EXPECT_EQ(nx::truncateAsX86(-2147483648.0F), std::numeric_limits<std::int32_t>::min());
+    EXPECT_EQ(nx::truncateAsX86(2147483520.0F), 2147483520) << "the greatest float below 2^31";
+    for (const float outside :
+         {2147483648.0F, -2147483904.0F, 1.0e30F, std::numeric_limits<float>::infinity(),
+          std::numeric_limits<float>::quiet_NaN()}) {
+        EXPECT_EQ(nx::truncateAsX86(outside), std::numeric_limits<std::int32_t>::min()) << outside;
+    }
+}
+
 TEST(Conversion, TruncateKeepsTheLowBits) {
     EXPECT_EQ(nx::truncate<std::uint8_t>(0x1'2C), 0x2CU);
     EXPECT_EQ(nx::truncate<std::uint16_t>(-1), 0xFFFFU);

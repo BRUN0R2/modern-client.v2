@@ -3,9 +3,10 @@
 
 /// The cvars of the game's rules (docs/12-ui-hud-and-console.md, section 5.2), by the original's
 /// names, which a server sets and tells its players of, as the local game plays them until its
-/// server comes (cs.server): their values, their ranges and when the game reads them are
-/// ReGameDLL_CS's (game.cpp, ReadMultiplayCvars, CheckStartMoney and CheckRestartRound, GPL,
-/// consulted: docs/20 section 3).
+/// server comes (cs.server): numbers, any of them, as the original's are; the game holds them as it
+/// reads them, where the original does, and sets them back as it does. Their values and when and how
+/// the game reads them are ReGameDLL_CS's (game.cpp, ReadMultiplayCvars, CheckStartMoney and
+/// CheckRestartRound, GPL, consulted: docs/20 section 3).
 export module cs.client:gameCvars;
 
 import std;
@@ -16,28 +17,32 @@ import cs.shared;
 export namespace cs {
 
 /// The cvars of the rounds, of the money a game starts with and of the players' steps: `mp_freezetime`
-/// (6 seconds, 0 to 60), `mp_roundtime` (5 minutes, 1 to 9), `mp_startmoney` (800, 800 to 16000),
-/// `sv_restartround` and `sv_restart` (0: the seconds to restart the game in, up to 60), and
-/// `mp_footsteps` (1: the players' steps sound).
+/// (6 seconds), `mp_roundtime` (5 minutes), `mp_startmoney` (800), `sv_restartround` and `sv_restart`
+/// (0: the seconds to restart the game in), and `mp_footsteps` (1: the players' steps sound, any value
+/// but 0).
 struct GameCvars {
     nx::console::Cvar<float> freezeTime;
     nx::console::Cvar<float> roundTime;
-    nx::console::Cvar<std::int32_t> startMoney;
-    nx::console::Cvar<std::int32_t> restartRound; ///< `sv_restartround`, read before sv_restart.
-    nx::console::Cvar<std::int32_t> restart;      ///< `sv_restart`.
-    nx::console::Cvar<bool> footsteps;            ///< `mp_footsteps`, read at each step.
+    nx::console::Cvar<float> startMoney;
+    nx::console::Cvar<float> restartRound; ///< `sv_restartround`, read before sv_restart.
+    nx::console::Cvar<float> restart;      ///< `sv_restart`.
+    nx::console::Cvar<float> footsteps;    ///< `mp_footsteps`, read at each step.
 
     /// Registers them in `console`. Errors: those of Console::registerCvar.
     [[nodiscard]] static auto registerIn(nx::console::Console& console)
         -> nx::Result<GameCvars, nx::console::CvarError>;
 
-    /// The lengths of a round that starts now (roundLengthsOf).
+    /// The lengths of a round that starts now, mp_freezetime and mp_roundtime set back where they
+    /// are held (readRoundCvars).
     [[nodiscard]] auto roundLengths() const -> RoundLengths;
-    /// The money a player starts the game with.
+    /// The money a player starts the game with, mp_startmoney set back where it is held
+    /// (readStartMoney).
     [[nodiscard]] auto startingMoney() const -> nx::Money;
-    /// The restart of the game they ask for, as the game reads them once a second: sv_restartround's
-    /// seconds, else sv_restart's, both set back to 0 once read; none while both are 0.
+    /// The restart of the game they ask for, as the game reads them once a second (restartDelayOf),
+    /// both set back to 0 when one is asked for.
     [[nodiscard]] auto takeRestart() const -> std::optional<nx::Seconds>;
+    /// Whether the players' steps sound: mp_footsteps is not 0.
+    [[nodiscard]] auto doStepsSound() const -> bool;
 };
 
 } // namespace cs
