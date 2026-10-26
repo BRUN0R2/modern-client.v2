@@ -2,7 +2,7 @@
 
 > This document records the **project's policy**. It is not legal advice. Before the first
 > public release, the content must be reviewed by someone with legal training (an item in
-> the [TODO](../TODO.md)).
+> the [TODO](TODO.md)).
 
 ## 1. Trademarks
 
@@ -28,7 +28,8 @@
 
 ## 3. Clean room
 
-The code is **written from scratch**. Rules for contributions:
+The code is **written from scratch**. This section owns the source permissions for every
+contribution ([ADR-0026](adr/0026-clean-room-source-policy.md)):
 
 | Source | Policy |
 |--------|--------|
@@ -40,6 +41,7 @@ The code is **written from scratch**. Rules for contributions:
 
 - Every commit has a *Signed-off-by* line (DCO), in which the contributor declares the right
   to submit the code.
+- Disassembling or decompiling Valve binaries is outside the clean room.
 - File formats (BSP, MDL, WAD, SPR) are implemented from public specifications and from
   analysis of the files themselves.
 

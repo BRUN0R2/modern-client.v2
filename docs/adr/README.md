@@ -21,7 +21,7 @@ says where.
 | [0010](0010-license.md) | License: GPL-3.0-or-later, MIT (Rook and SDK) and CC BY 4.0 (docs) | Accepted |
 | [0011](0011-player-limit-1024.md) | `maxplayers` from 1 to 1024 as a policy limit | Accepted |
 | [0012](0012-typed-get-set-vars-pattern.md) | `get*Var`/`set*Var` pattern with compile-time checked keys | Accepted, amended by 0021 |
-| [0013](0013-camelcase-convention.md) | camelCase convention across the project (C++ and Rook) | Accepted, amended by 0021 |
+| [0013](0013-camelcase-convention.md) | camelCase convention across the project (C++ and Rook) | Accepted, amended by 0021 and 0027 |
 | [0014](0014-std-module-built-by-the-project.md) | `std` module built by the project, without CMake's experimental `import std` | Accepted |
 | [0015](0015-free-content-and-optional-original-assets.md) | Free content by default; original assets optional and configured locally | Accepted |
 | [0016](0016-english-documentation.md) | English as the default language of the documentation | Accepted |
@@ -34,6 +34,8 @@ says where.
 | [0023](0023-navigation.md) | Navigation meshes for every kind of agent, in `nx.navigation` | Accepted |
 | [0024](0024-agents.md) | Agents: one system for bots, monsters, bosses and every character the game moves | Accepted |
 | [0025](0025-enhanced-rendering.md) | The enhanced look: physically based materials, the map's reflections, HDR and bloom, the same on every card | Proposed |
+| [0026](0026-clean-room-source-policy.md) | One clean room source policy, with consultation of public open-source references | Accepted |
+| [0027](0027-private-member-camelcase.md) | Private members use ordinary camelCase, without a prefix | Accepted |
 
 ## Template
 

@@ -56,7 +56,6 @@ CheckOptions:
   - { key: readability-identifier-naming.ParameterCase,          value: camelBack }
   - { key: readability-identifier-naming.PublicMemberCase,       value: camelBack }
   - { key: readability-identifier-naming.PrivateMemberCase,      value: camelBack }
-  - { key: readability-identifier-naming.PrivateMemberPrefix,    value: m_ }
   - { key: readability-identifier-naming.ConstexprVariableCase,  value: CamelCase }
   - { key: readability-identifier-naming.ConstexprVariablePrefix, value: k }
   - { key: readability-identifier-naming.MacroDefinitionCase,    value: UPPER_CASE }

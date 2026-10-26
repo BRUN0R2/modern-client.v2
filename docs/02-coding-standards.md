@@ -116,7 +116,7 @@ import nx.rhi;
 | Type, concept, enum | `PascalCase` | `CommandBuffer`, `ComponentType`, `BspError` |
 | Enum value | `PascalCase` | `BspError::LumpOutOfBounds` |
 | Function, method, variable | `camelCase` | `parseBsp`, `entityCount` |
-| Private member | `m_camelCase` | `m_chunks` |
+| Private member | `camelCase` | `chunks` |
 | Constant (`constexpr`/`constinit`) | `kPascalCase` | `kDefaultTickRate` |
 | Template parameter | `PascalCase` | `template <class Component>` |
 | Macro (avoid) | `NX_SCREAMING_CASE` | `NX_PLATFORM_WINDOWS` |
@@ -134,12 +134,16 @@ in new code ([ADR-0013](adr/0013-camelcase-convention.md)).
 |----------|-----|------|
 | Functions, methods, variables, parameters | `camelCase` (`parseBsp`) | `camelCase` (`setWeaponVar`) |
 | Fields and data keys | `camelCase` (`clipSize`) | `camelCase` (`maxClip`) |
-| Private members | `m_camelCase` (`m_chunks`) | `camelCase` |
+| Private members | `camelCase` (`chunks`) | `camelCase` |
 | Types, concepts, enums and enum values | `PascalCase` | `PascalCase` |
 | Constants | `kPascalCase` | `SCREAMING_SNAKE_CASE` |
 | Namespaces and modules | lowercase (`nx::ecs`, `nx.core`) | lowercase (`rezombie.api.classes`) |
 | Files and directories | `camelCase` (`contractsTests.cpp`, `enumArray.cppm`, `rhiVulkan/`) | `camelCase` (`infectionTests.rook`) |
 | Build targets, executables, CMake functions and scripts | `camelCase` (`nxCoreTests`, `rookLsp`, `nxAddTest`, `devShell.ps1`) | — |
+
+Private members have no prefix ([ADR-0027](adr/0027-private-member-camelcase.md)). Apply this
+to new or renamed identifiers; existing `m_` names are known inconsistencies, without
+unrelated renames.
 
 Exceptions, because the name comes from outside the code or is required by a tool:
 
@@ -544,7 +548,7 @@ if (m_budgetWarnings.allow()) {
 // removing this breaks bunny-hop feel. Covered by tests/parity/movement/bhopPenalty.
 ```
 
-- `TODO` only with a reference to the [TODO.md](../TODO.md) item or to an issue.
+- `TODO` only with a reference to the [TODO.md](TODO.md) item or to an issue.
 
 ## 12. Formatting and static analysis
 

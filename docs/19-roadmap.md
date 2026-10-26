@@ -2,7 +2,7 @@
 
 The project evolves through **milestones** (M0–M8). Each milestone delivers something
 runnable and tested and has verifiable exit criteria. The detailed task list of each
-milestone is in [`../TODO.md`](../TODO.md).
+milestone is in [`TODO.md`](TODO.md).
 
 ```mermaid
 gantt

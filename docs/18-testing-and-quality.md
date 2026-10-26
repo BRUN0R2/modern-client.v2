@@ -186,7 +186,7 @@ justification.
 
 ## Definition of done
 
-A [TODO](../TODO.md) task is only checked `[x]` when:
+A [TODO](TODO.md) task is only checked `[x]` when:
 
 - [ ] The code follows [02-coding-standards.md](02-coding-standards.md) and passed review.
 - [ ] There are tests (unit, integration or parity, as the case requires) and CI is green.

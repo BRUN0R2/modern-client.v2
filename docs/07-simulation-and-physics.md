@@ -162,7 +162,7 @@ code** on the server (authoritative) and on the client (prediction).
   pushers no longer push it, as the original's corpse once its death is played (`MOVETYPE_NONE`).
   Observers, the body of a player killed by another (tossed, `PM_Physics_Toss`), players and
   pushables as boxes (and a player stuck in another one pushed out by force), conveyors, pushes and
-  currents come next ([TODO](../TODO.md)).
+  currents come next ([TODO](TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 

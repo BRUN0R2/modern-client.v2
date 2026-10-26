@@ -46,7 +46,7 @@ and lava, and killed, and the server-owned light styles sent to each client), wi
 `next`, plays the maps alone, round after round.
 `nxcheck` reads every file of a Counter-Strike 1.6 installation with those readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
-[`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
+[`docs/RULES.md`](docs/RULES.md) and the backlog in [`docs/TODO.md`](docs/TODO.md).
 
 ## Building
 
