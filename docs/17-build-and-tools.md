@@ -93,7 +93,7 @@ with fallbacks behind facades.
 | Compiler | Platforms | Role | Status (2026-10-20) |
 |----------|-----------|------|---------------------|
 | MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, every test passing |
-| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module, every test passing, C++26 reflection (`-freflection`) checking the `nx.meta` descriptions. Windows (MinGW) to be validated |
+| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.1.0 (`gcc:16.1.0` container; 16.2.0 cannot read back some of its own module interfaces, see below), libstdc++'s `std` module, every test passing, C++26 reflection (`-freflection`) checking the `nx.meta` descriptions. Windows (MinGW) to be validated |
 | Clang (latest stable version) | Linux, Windows | Sanitizers (ASan, TSan, MSan, UBSan), `clang-tidy`, `clangd` | To be validated (presets ready) |
 
 C++26 features available in MSVC 14.51 (according to the *feature-test macros*): **none**
@@ -119,6 +119,7 @@ dialect is `/std:c++latest`.
 | MSVC 14.51 cannot materialize a `std::optional` returned by a `consteval` call inside a template (C2440, "too many initializers") | The `nx.meta` functions that return class types (`typeAnnotation`, `Field::annotation`) are `constexpr`: pure, still evaluated at compile time where a constant is required |
 | libstdc++ keeps `std::stacktrace` in a separate library, `libstdc++exp` | `nx.core` links `stdc++exp` on GCC (`nx::currentStackTrace`) |
 | GCC 16 also applies `-Wmissing-field-initializers` (from `-Wextra`) to designated initializers that omit a member without a default initializer; MSVC does not warn | Every aggregate member that can be omitted has a default initializer (`Entity entity{};`). The required ones, such as `JobDesc::label`, have types without a default constructor: omitting them does not even compile |
+| GCC 16.2.0 cannot read back some of the module interfaces it compiles: an importer fails with "failed to read compiled module cluster N: Bad file data", then "failed to load pendings for 'std::unique_ptr'" (or `std::span`, `std::vector`), the same clusters on every run of a source tree. It struck `cs.client` once the other players' models came; moving entities between its partitions only moved the clusters. GCC 16.1.0 reads them, as other projects found ([SpecLab #17](https://github.com/ambroise-leclerc/SpecLab/issues/17)) | The CI runs in the `gcc:16.1.0` container until a 16.2.x reads them ([TODO](../TODO.md)) |
 | GCC 16 spells a type imported from a named module with the module after it (`nx::ConversionError@nx.core`) in `__PRETTY_FUNCTION__`, where `nx.core:introspection` reads type names | `nx::typeName` drops every `@<module>`, so names read the same on every compiler (`Introspection.NamesTypesAttachedToAModuleWithoutTheModule`) |
 
 ## 3. Presets
@@ -265,7 +266,7 @@ and on demand. **Running today:**
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
 | `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
-| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run (the Windows runners have no Vulkan and skip them) | Yes |
+| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16.1.0` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run (the Windows runners have no Vulkan and skip them) | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the

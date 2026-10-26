@@ -99,7 +99,9 @@ jobs:
   linux-gcc:
     name: Linux · GCC 16 · ${{ matrix.preset }}
     runs-on: ubuntu-latest
-    container: gcc:16
+    # GCC 16.2.0 cannot read back some of the module interfaces it compiles (docs/17, section 2.2):
+    # 16.1.0 until a 16.2.x reads them.
+    container: gcc:16.1.0
     strategy:
       fail-fast: false
       matrix:

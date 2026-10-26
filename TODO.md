@@ -107,7 +107,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Toolchain
 - [x] Validate MSVC 14.51 (VS 2026) with CMake 4.3.1 and 4.4.4, Debug and Release
-- [x] Validate GCC 16 on Linux (GCC 16.2.0 in CI)
+- [x] Validate GCC 16 on Linux (GCC 16.1.0 in CI)
+- [ ] Back to the `gcc:16` container with the first GCC 16.2.x that reads back the module interfaces 16.2.0 cannot ([17 §2.2](docs/17-build-and-tools.md#22-known-quirks))
 - [ ] Validate Clang on Linux
 - [ ] Validate GCC (MinGW-w64) and Clang on Windows
 - [x] Document MSVC's native and fallback features ([17 §2.1](docs/17-build-and-tools.md#21-compiler-matrix))
