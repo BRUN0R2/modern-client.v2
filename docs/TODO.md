@@ -120,7 +120,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Windows MSVC jobs: Debug and Release with build and tests
 - [ ] Windows Clang job: `dev-windows-clang`, build and tests
 - [x] Required `linux-gcc` job (GCC 16)
-- [ ] Investigate PR #154's required Linux GCC build and TSan failures when importing `cs.client` (`Bad file data`); reproduce the module serialization failure on Linux before changing compiler versions or module structure
+- [ ] Complete required Linux GCC 16 and TSan validation of the `StudioIndex` construction fix for unreadable `cs.client` modules; reproduced locally with GCC 16.2 and the complete interface graph, pending CI
 - [ ] Linux job with Clang
 - [x] Formatting (`clang-format --dry-run --Werror`) in the `checks` job
 - [ ] `clang-tidy` in CI (requires a Clang build and modules)

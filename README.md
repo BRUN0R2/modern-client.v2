@@ -50,7 +50,8 @@ The architecture documentation is in [`docs/`](docs/README.md), the project rule
 ## Building
 
 Requirements on Windows: Visual Studio 2026 with the "Desktop development with C++" workload
-(it brings MSVC, Ninja, CMake and vcpkg). Details and the toolchain matrix are in
+(it brings MSVC, Ninja, CMake and vcpkg), and the Vulkan SDK for the GPU tests' validation layers.
+Details and the toolchain matrix are in
 [docs/17-build-and-tools.md](docs/17-build-and-tools.md).
 
 ```powershell

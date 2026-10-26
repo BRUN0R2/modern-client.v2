@@ -83,6 +83,7 @@ applications and tools of later milestones are not in the repository yet. Each m
 | Ninja | 1.12+ (the one shipped with Visual Studio works) | Mandatory (module scanning) |
 | vcpkg | Manifest mode with a pinned *baseline* (the one shipped with Visual Studio works) | Reproducible builds, custom triplets without exceptions |
 | Slang | The vcpkg `shader-slang` port, pinned by the *baseline* | Shader compilation: `slangc` comes from the port as a host tool (`nxAddShaders`, `shaders/`) |
+| Vulkan SDK | 1.4.363.0 on Windows; distribution validation layers on Linux | GPU tests request validation explicitly. Windows CI installs the SDK's registered layers; an installed loader alone is insufficient |
 | Python | 3.12+ | Installs tools with `pip`: `reuse` and `clang-format` (the [local checks](../CONTRIBUTING.md#local-checks) and CI), CMake and Ninja (CI). The repository has no Python script; nothing needs Python at run time |
 
 ### 2.1 Compiler matrix
@@ -118,6 +119,7 @@ dialect is `/std:c++latest`.
 | The Vulkan loader ignores the layer paths of the environment (`VK_LAYER_PATH`, `VK_ADD_LAYER_PATH`) in an elevated process | Validation in an elevated shell needs the layers registered by the Vulkan SDK; CI runs unelevated |
 | Windows gives a program its `char` command line, and runs the narrow-character functions, in the ANSI code page, which loses the characters of other languages (a folder named `Usuários`, `Пользователи`) | **Fixed at the cause:** every program (`nxAddProgram`) embeds `cmake/nxProgram.manifest`, which makes UTF-8 its code page (Windows 10 1903 and later) and allows paths longer than `MAX_PATH` |
 | GCC 16 hits an *internal compiler error* (`module_state::mangle`) when another unit uses a `friend` comparison operator with `= default` of a (non-template) class declared in a module | In those classes, *defaulted* comparisons are members: `auto operator<=>(const T&) const = default` |
+| GCC 16.2 writes an unreadable `cs.client` interface when an imported aggregate `StudioIndex<Tag>` is used in the player-frame containers (`Bad file data`, then pending `std::vector` declarations fail to load) | `StudioIndex` owns its construction: a `constexpr` default constructor and an explicit value constructor, like `Quantity`. It stays a trivially copyable 32-bit value with distinct tag types; it is no longer an aggregate. The complete interface graph and importer reproduce the failure before this change and pass with these constructors |
 | libstdc++'s `std` module (GCC 16) advertises `__cpp_lib_saturation_arithmetic` but does not export `std::add_sat` and friends | `nx.core` uses its own saturated arithmetic on every compiler |
 | MSVC 14.51 cannot materialize a `std::optional` returned by a `consteval` call inside a template (C2440, "too many initializers") | The `nx.meta` functions that return class types (`typeAnnotation`, `Field::annotation`) are `constexpr`: pure, still evaluated at compile time where a constant is required |
 | libstdc++ keeps `std::stacktrace` in a separate library, `libstdc++exp` | `nx.core` links `stdc++exp` on GCC (`nx::currentStackTrace`) |
@@ -272,8 +274,8 @@ and on demand. **Running today:**
 | Job | Contents | Blocking? |
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
-| `windows` | `dev-windows-msvc`, `release-windows-msvc` and `dev-windows-clang`: configure, build and tests, through the same `scripts/devShell.ps1` used for development; Clang is pinned to LLVM 23.1.4 | Yes |
-| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run (the Windows runners have no Vulkan and skip them) | Yes |
+| `windows` | `dev-windows-msvc`, `release-windows-msvc` and `dev-windows-clang`: configure, build and tests, through the same `scripts/devShell.ps1` used for development; Clang is pinned to LLVM 23.1.4. The Vulkan SDK supplies validation layers; GPU tests skip only without a suitable adapter or Vulkan backend | Yes |
+| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the

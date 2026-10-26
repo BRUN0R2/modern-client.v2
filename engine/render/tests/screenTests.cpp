@@ -17,6 +17,7 @@ import nx.rhi.vulkan;
 import nx.render;
 
 #include "offscreenTarget.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -62,6 +63,7 @@ public:
         auto device =
             nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
         if (!device) {
+            EXPECT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
             return;
         }
         m_device = std::move(*device);

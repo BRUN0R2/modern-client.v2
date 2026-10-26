@@ -56,13 +56,13 @@ void nx::test::fuzz(std::span<const std::byte> input) {
         if (model->sequences()[sequence].group.value != 0) {
             continue; // in another file
         }
-        const auto frames = model->decodeAnimation(nx::assets::SequenceIndex{.value = sequence}, input);
+        const auto frames = model->decodeAnimation(nx::assets::SequenceIndex{sequence}, input);
         if (!frames) {
             continue;
         }
         for (std::uint32_t bone = 0; bone < frames->boneCount; ++bone) {
             sum += static_cast<float>(frames->value(frames->blendCount - 1, frames->frameCount - 1,
-                                                    nx::assets::BoneIndex{.value = bone},
+                                                    nx::assets::BoneIndex{bone},
                                                     nx::assets::BoneAxis::RotationZ)) *
                    model->bones()[bone].scales.back();
         }

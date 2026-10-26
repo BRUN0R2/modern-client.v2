@@ -17,6 +17,7 @@ import nx.rhi.vulkan;
 import nx.render;
 
 #include "offscreenTarget.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -263,7 +264,8 @@ TEST(SpriteRendererTest, AnAddedSpriteAddsItsImageTimesItsColorAndAmount) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -288,7 +290,8 @@ TEST(SpriteRendererTest, AnImageOfBc3BlocksIsDrawnAsItsAuthorMadeItItsAlphaItsOw
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -309,7 +312,8 @@ TEST(SpriteRendererTest, ABrightnessMultipliesTheLightASpriteAdds) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device, nx::render::ColorEncoding::Linear};
     ASSERT_TRUE(scene.isReady());
@@ -336,7 +340,8 @@ TEST(SpriteRendererTest, AParallelSpriteFacesTheViewAndAnOrientedOneIsCulledFrom
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -363,7 +368,8 @@ TEST(SpriteRendererTest, AGlowShowsOverWhatIsInFrontUnlessTheGameHidesIt) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -405,7 +411,8 @@ TEST(SpriteRendererTest, ASpriteInTheViewModelsDepthsIsNotHiddenByAWallNearerTha
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -432,7 +439,8 @@ TEST(SpriteRendererTest, AnAlphaTestedSpriteIsCutAndLitByTheWorld) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -458,7 +466,8 @@ TEST(SpriteRendererTest, AGroupShowsItsImagesAsItsLoopGoes) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device};
     ASSERT_TRUE(scene.isReady());
@@ -485,7 +494,8 @@ TEST(SpriteRendererTest, DrawnAsLinearLightAnAddedSpriteAddsItsLightTimesItsAmou
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device, nx::render::ColorEncoding::Linear};
     ASSERT_TRUE(scene.isReady());
@@ -518,7 +528,8 @@ TEST(SpriteRendererTest, DrawnAsLinearLightABlendedSpriteMixesTheLightOfBoth) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device, nx::render::ColorEncoding::Linear};
     ASSERT_TRUE(scene.isReady());
@@ -551,7 +562,8 @@ TEST(SpriteRendererTest, DrawnAsLinearLightALitSpriteTakesTheWorldsLightAsLight)
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     Scene scene{**device, nx::render::ColorEncoding::Linear};
     ASSERT_TRUE(scene.isReady());

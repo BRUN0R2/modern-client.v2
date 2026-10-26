@@ -104,6 +104,10 @@ readers expected, and the readers now follow them
   missing-layer failure in a separate process with an empty `VK_LAYER_PATH`. It checks layer
   discovery and skips only when the operating system still exposes installed layers (notably
   elevated Windows), or when Vulkan is unavailable.
+  GPU tests skip only `BackendUnavailable` and `NoSuitableAdapter`; every other creation error,
+  including missing requested validation, fails the test. A fixture makes that assertion fatal
+  in `SetUp`, before any test body can access its device. Shared classification lives in
+  `engine/testSupport/vulkanAvailability.hpp`.
 - **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
   `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
 - **Files:** a test that reads the file system writes its input into a
@@ -187,6 +191,8 @@ not a measurement of the complete frame or a promise about player FPS:
   lines. Existing private `m_` declarations remain naming inconsistencies under [02 §3.1](02-coding-standards.md#31-project-rule-camelcase),
   recorded in `TODO.md`, without unrelated renames or disabled naming checks. An automated
   analysis gate remains planned; the Clang build and tests already run in CI.
+  A header is analyzed through a translation unit that includes it after the required module
+  imports; headers that depend on their consumer's imports are not standalone translation units.
 
   With LLVM on `PATH`, set `$reviewBase` to the commit before the changes being reviewed:
 

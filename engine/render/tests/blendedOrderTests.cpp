@@ -14,6 +14,7 @@ import nx.rhi.vulkan;
 import nx.render;
 
 #include "offscreenTarget.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -93,7 +94,8 @@ TEST(BlendedOrderTest, TheSolidThingsOfEachRendererAreDrawnFirstThenTheBlendedOn
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     std::vector<std::string> log;
     const LoggingRenderer world{

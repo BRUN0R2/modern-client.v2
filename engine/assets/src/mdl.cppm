@@ -52,6 +52,9 @@ enum class MdlError : std::uint8_t {
 /// An index into one list of an MdlView, named by `Tag`; parse() checks every one it reads.
 template <class Tag>
 struct StudioIndex {
+    constexpr StudioIndex() noexcept = default;
+    constexpr explicit StudioIndex(std::uint32_t index) noexcept : value{index} {}
+
     std::uint32_t value = 0;
 
     [[nodiscard]] inline auto operator==(const StudioIndex&) const noexcept -> bool = default;

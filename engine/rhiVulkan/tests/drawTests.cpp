@@ -56,10 +56,12 @@ constexpr Pixel kWhite{255, 255, 255, 255};
 class DrawTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        m_device = nx::test::openTestDevice();
-        if (!m_device) {
+        auto opened = nx::test::openTestDevice();
+        if (!opened) {
+            ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
             GTEST_SKIP() << nx::test::kNoVulkan;
         }
+        m_device = std::move(*opened);
     }
 
     void TearDown() override {

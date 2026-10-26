@@ -251,6 +251,9 @@ Readers today:
   meshes' skin references against its skins. A sequence group names its file as the original
   loads it, with `\` (`VfsPath::parseGoldsrc`). Every list is a vector: no count has a ceiling
   ([§3.4](#34-removed-content-limits)).
+  Its typed `StudioIndex<Tag>` values use explicit construction (`SequenceIndex{ordinal}`);
+  the reader checks each value against its list. The construction contract and compiler
+  boundary are documented in [17 §2.2](17-build-and-tools.md#22-known-quirks).
 - TGA (`nx.assets:tga`), the sky (`gfx/env/*.tga`) and the VGUI menus of the original, and a
   texture format of mods (§3.2): color-mapped (8-bit indices into 24- or 32-bit colors), true-color
   (24 or 32 bits) and grayscale (8 bits, or 16 with alpha) images, raw or run-length encoded,

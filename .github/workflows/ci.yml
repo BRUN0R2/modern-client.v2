@@ -61,6 +61,8 @@ jobs:
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
       LLVM_VERSION: "23.1.4"
+      VULKAN_SDK_VERSION: "1.4.363.0"
+      VULKAN_SDK_SHA256: "94A82D378F7A5E3E54C9DB7D2FB7016AF136E14AC0A18DBF0F2F67A36352D141"
     steps:
       - uses: actions/checkout@v7
 
@@ -70,6 +72,17 @@ jobs:
 
       - name: Install CMake and Ninja
         run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
+
+      - name: Install Vulkan validation layers
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "vulkansdk-$env:VULKAN_SDK_VERSION.exe"
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_SDK_VERSION.exe" -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $env:VULKAN_SDK_SHA256) {
+            throw 'The Vulkan SDK installer hash does not match the pinned release'
+          }
+          $installed = Start-Process $installer -ArgumentList @('install', '--accept-licenses', '--default-answer', '--confirm-command') -Wait -PassThru -WindowStyle Hidden
+          if ($installed.ExitCode -ne 0) { throw "Vulkan SDK installation failed: $($installed.ExitCode)" }
 
       - name: Install LLVM
         if: matrix.compiler == 'Clang'

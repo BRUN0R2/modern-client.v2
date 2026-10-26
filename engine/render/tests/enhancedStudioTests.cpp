@@ -16,6 +16,7 @@ import nx.render;
 
 #include "offscreenTarget.hpp"
 #include "triangleModel.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -274,7 +275,8 @@ void setSky(nx::rhi::Device& device, SurfaceScene& scene, int channel = kSkyChan
 TEST(EnhancedStudioTest, AMetalReflectsTheSkyWithoutDiffuseLight) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device, metalOf(0.35F));
     ASSERT_NE(scene, nullptr);
@@ -291,7 +293,8 @@ TEST(EnhancedStudioTest, AMetalReflectsTheSkyWithoutDiffuseLight) {
 TEST(EnhancedStudioTest, AMetalReflectsAProbeWithoutASkyOrDiffuseLight) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device, metalOf(0.35F));
     ASSERT_NE(scene, nullptr);
@@ -309,7 +312,8 @@ TEST(EnhancedStudioTest, AMetalReflectsAProbeWithoutASkyOrDiffuseLight) {
 TEST(EnhancedStudioTest, AMetalReflectsItsTwoProbesAsTheyAreShared) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device, metalOf(0.35F));
     ASSERT_NE(scene, nullptr);
@@ -337,7 +341,8 @@ TEST(EnhancedStudioTest, AMetalReflectsItsTwoProbesAsTheyAreShared) {
 TEST(EnhancedStudioTest, ATextureWithoutASurfaceDrawsAsTheOriginalUnderLightsAndASky) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     OffscreenTarget target{**device};
     for (const std::optional<StudioMaterial>& material :
@@ -359,7 +364,8 @@ TEST(EnhancedStudioTest, ATextureWithoutASurfaceDrawsAsTheOriginalUnderLightsAnd
 TEST(EnhancedStudioTest, ARoughDielectricIsShadedAsItsSurfaceSays) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto rough = sceneOn(
         **device, StudioMaterial{.surface = StudioMetallicRoughness{.metallic = 0.0F, .roughness = 1.0F},
@@ -380,7 +386,8 @@ TEST(EnhancedStudioTest, ARoughDielectricIsShadedAsItsSurfaceSays) {
 TEST(EnhancedStudioTest, RoughnessAndGrazingAnglesChangeTheReflection) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     constexpr int kDarkChannel = 32;
     const auto smooth = sceneOn(**device, metalOf(0.08F, kDarkChannel));
@@ -402,7 +409,8 @@ TEST(EnhancedStudioTest, RoughnessAndGrazingAnglesChangeTheReflection) {
 TEST(EnhancedStudioTest, AConstantSkyReflectsAsAnIntegralOfGgxOfItsOwn) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto gamma = nx::render::textureGammaTable({});
     const double f0 = std::pow(static_cast<double>(gamma[kHalfChannel]) / kChannelTop, kDisplayGamma);
@@ -425,7 +433,8 @@ TEST(EnhancedStudioTest, AConstantSkyReflectsAsAnIntegralOfGgxOfItsOwn) {
 TEST(EnhancedStudioTest, ASurfaceStaysWithItsTextureAcrossSkinFamilies) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene =
         sceneOn(**device, metalOf(0.35F), {.encoding = ColorEncoding::Linear, .hasSecondTexture = true});
@@ -450,7 +459,8 @@ TEST(EnhancedStudioTest, ASurfaceStaysWithItsTextureAcrossSkinFamilies) {
 TEST(EnhancedStudioTest, AnAddedModelsBlendScalesItsLinearLightOnce) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     OffscreenTarget target{**device};
     for (const auto blend : {nx::render::StudioBlend::Opaque, nx::render::StudioBlend::Additive}) {
@@ -471,7 +481,8 @@ TEST(EnhancedStudioTest, AnAddedModelsBlendScalesItsLinearLightOnce) {
 TEST(EnhancedStudioTest, AddedEmissionSumsAsLight) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     OffscreenTarget target{**device};
     const auto emittingOf = [](float emissive) {
@@ -497,7 +508,8 @@ TEST(EnhancedStudioTest, AddedEmissionSumsAsLight) {
 TEST(EnhancedStudioTest, ColorMipsAverageLightNotBytes) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     constexpr std::uint32_t kImageSize = 256;
     nx::assets::RgbaImage checker{.width = kImageSize, .height = kImageSize};
@@ -522,7 +534,8 @@ TEST(EnhancedStudioTest, ColorMipsAverageLightNotBytes) {
 TEST(EnhancedStudioTest, AFullbrightTextureTakesNeitherTheMapsLightNorItsColor) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     OffscreenTarget target{**device};
     for (const ColorEncoding encoding : {ColorEncoding::Display, ColorEncoding::Linear}) {
@@ -541,7 +554,8 @@ TEST(EnhancedStudioTest, AFullbrightTextureTakesNeitherTheMapsLightNorItsColor) 
 TEST(EnhancedStudioTest, APaintedSurfaceKeepsItsPaintingAndReflectsItsOwnColor) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     OffscreenTarget target{**device};
     StudioMaterial material = fullbrightOf(kHalfChannel);
@@ -566,7 +580,8 @@ TEST(EnhancedStudioTest, APaintedSurfaceKeepsItsPaintingAndReflectsItsOwnColor) 
 TEST(EnhancedStudioTest, APaintedLightIsSampledAsLightWithoutAReflection) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     constexpr std::array kLightChannels{64, 128, 192};
     constexpr float kGain = 0.5F;
@@ -596,7 +611,8 @@ TEST(EnhancedStudioTest, APaintedLightIsSampledAsLightWithoutAReflection) {
 TEST(EnhancedStudioTest, APaintedLightLightsItsTextureAloneAndNotWhatItEmits) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     StudioMaterial material = fullbrightOf(kHalfChannel);
     material.emissive = 1.0F;
@@ -622,7 +638,8 @@ TEST(EnhancedStudioTest, APaintedLightLightsItsTextureAloneAndNotWhatItEmits) {
 TEST(EnhancedStudioTest, ASpecularMapOfNoWeightLeavesThePaintingAtEveryAngle) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     OffscreenTarget target{**device};
     auto map = solidImage(kChannelTop);
@@ -646,7 +663,8 @@ TEST(EnhancedStudioTest, ASpecularMapOfNoWeightLeavesThePaintingAtEveryAngle) {
 TEST(EnhancedStudioTest, ASpecularMapGivesTheReflectionsColorAndWeightAsData) {
     auto device = deviceForTests();
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     constexpr float kRoughness = 0.55F;
     constexpr std::array kReflectanceChannels{255, 128, 20};
