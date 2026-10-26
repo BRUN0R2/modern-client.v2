@@ -377,12 +377,18 @@ crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 left: the view models mirrored by it, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning)),
 archived, which each frame reads. `cs::GameCvars` registers the
 cvars of the game's rules a server sets, which the local game plays by until the server comes, not
-archived and told to the players (`Notify`): `mp_freezetime` (6 seconds, from 0 to 60),
-`mp_roundtime` (5 minutes, from 1 to 9), read as each round starts, `mp_startmoney` (800, from 800
-to 16000), given as the player joins and as the game restarts, `sv_restartround` and
-`sv_restart` (0, up to 60 seconds), read once a second and set back to 0
-([10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), and `mp_footsteps` (1), read at
-each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)). `vid_vsync` as the name of
+archived and told to the players (`Notify`), each a number, any of them, as the original's are,
+held where the original's game holds it as it reads it and set back as it sets it:
+`mp_freezetime` (6 seconds) and `mp_roundtime` (5 minutes), read as each round starts, cut to whole
+seconds, the freeze held to 0 to 60 and the round to 1 to 9 minutes (`cs::readRoundCvars`,
+ReadMultiplayCvars), `mp_startmoney` (800), given as the player joins and as the game restarts,
+held to 800 to 16000 (`cs::readStartMoney`, CheckStartMoney), `sv_restartround` and `sv_restart`
+(0), read once a second, cut to whole seconds and held to 60, both set back to 0 when one asks for
+a restart (`cs::restartDelayOf`, CheckRestartRound,
+[10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), and `mp_footsteps` (1: any value but
+0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
+A number past what `int()` holds is cut as the original's processors cut it, to the least whole
+number (`nx::truncateAsX86`). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.
 
 ### 5.3 The `nx.console` module
@@ -419,7 +425,7 @@ views over an `nx::console::Console`, which writes replies and failures to a
   always reads the value back; a `TextRule` may narrow it further, as `cl_crosshair_size`
   takes `auto, small, medium or large` and writes the word) and `enum` with `Count` (accepts
   the number or the enumerator name and writes the number). Numbers may have a range. Rejected text
-  never becomes 0: `mp_freezetime: expected a whole number in [0, 60], got "abc"`.
+  never becomes 0: `mp_freezetime: expected a number, got "abc"`.
 - **The input line's help:** `completions(prefix, limit)` gives the commands, cvars and aliases
   whose names begin with what is typed, in any case and in the order of their names, each with its
   description (an alias's body), and a cvar's value and what it accepts; `completionPrefix(line)`
