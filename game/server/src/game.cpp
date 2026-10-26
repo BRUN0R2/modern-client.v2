@@ -77,7 +77,7 @@ constexpr nx::log::Category kLog{"game"};
 Game::Game(CreateToken /*token*/, const GameContent& content, const GameMap& map, GameCvars cvars,
            GameModels models)
     : m_content{&content}, m_map{&map}, m_cvars{std::move(cvars)},
-      m_lightStyles{mapLightStyles(map.map(), content.lightStyles)}, m_models{std::move(models)},
+      lightStyles{mapLightStyles(map.map(), content.lightStyles)}, m_models{std::move(models)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(map.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
       m_accounts{content.economy} {}
@@ -214,7 +214,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .impacts = m_impacts,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
-                          .lightStyles = m_lightStyles};
+                          .lightStyles = lightStyles};
 }
 
 void Game::tick(std::span<const PlayerCommand> commands) {

@@ -28,7 +28,7 @@ constexpr nx::Seconds kMaxCatchUp{0.25F};
 ClientGame::ClientGame(const MapModels& models, PlayerSnapshot first)
     : m_models{&models}, m_last{std::move(first)}, m_previousEye{eyeOf(m_last.player)},
       m_turnedView{m_last.turnedView} {
-    m_lightStyles.setPatterns(m_last.lightStyles.patterns);
+    lightStyles.setPatterns(m_last.lightStyles.patterns);
 }
 
 auto ClientGame::ticksDue(nx::Seconds elapsed, CatchUp catchUp) -> std::uint32_t {
@@ -66,13 +66,13 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
     std::ranges::move(snapshot.sounds, std::back_inserter(m_sounds));
     std::ranges::move(snapshot.impacts, std::back_inserter(m_impacts));
     if (snapshot.lightStyles != m_last.lightStyles) {
-        m_lightStyles.setPatterns(snapshot.lightStyles.patterns);
+        lightStyles.setPatterns(snapshot.lightStyles.patterns);
     }
     m_last = std::move(snapshot);
 }
 
 auto ClientGame::lightStylesAt(nx::Seconds time) const noexcept -> nx::render::LightStyleValues {
-    return m_lightStyles.valuesAt(time);
+    return lightStyles.valuesAt(time);
 }
 
 auto ClientGame::eye() const noexcept -> nx::Vec3 {

@@ -106,7 +106,7 @@ private:
     [[nodiscard]] auto numbered(UserCommand command) -> UserCommand;
 
     const MapModels* m_models;
-    nx::render::LightStyles m_lightStyles;         ///< The last snapshot's patterns, owned here.
+    nx::render::LightStyles lightStyles;           ///< The last snapshot's patterns, owned here.
     PlayerSnapshot m_last;                         ///< What the server told last.
     nx::Vec3 m_previousEye{};                      ///< Before the last tick.
     nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.
