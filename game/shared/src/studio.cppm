@@ -8,6 +8,9 @@
 /// GPL code that reconstructs it describes them, written anew (docs/20-legal-and-licensing.md,
 /// section 3): their order of steps and the precision of each sum.
 ///
+/// How an entity plays its model's sequences, as the original's server plays them (LookupActivity,
+/// ResetSequenceInfo, StudioFrameAdvance) and its client shows them (R_StudioEstimateFrame).
+///
 /// Today: one or two blends, the bone controllers and the mouth. The nine aim blends of the players'
 /// models and their legs' gait sequence come with player animation (TODO.md).
 export module cs.shared:studio;
@@ -67,6 +70,65 @@ struct Skeleton {
 /// short of its last; one of a single frame stays at it, and so does any before it started.
 [[nodiscard]] auto sequenceFrameAt(const nx::assets::StudioSequence& sequence, nx::Seconds elapsed,
                                    float framerate) noexcept -> SequenceFrame;
+
+/// What an entity's frame counts its sequence in (pev->frame): 0 is its first frame, this its last.
+inline constexpr float kFrameScale = 256.0F;
+
+/// Where `sequence` is `elapsed` after an entity showed it at `frame` (of kFrameScale), at `framerate`
+/// times its own speed, as the original's client estimates it from what the server last sent
+/// (R_StudioEstimateFrame): `frame` as a frame of the sequence, then on as sequenceFrameAt goes.
+[[nodiscard]] auto estimatedFrameOf(const nx::assets::StudioSequence& sequence, float frame,
+                                    nx::Seconds elapsed, float framerate) noexcept -> SequenceFrame;
+
+/// Where `sequence` is at `frame` of an entity (of kFrameScale), as the server poses its bones
+/// (SV_StudioSetupBones): `frame` as a frame of the sequence, in single precision; its first frame for a
+/// sequence of one.
+[[nodiscard]] auto serverFrameOf(const nx::assets::StudioSequence& sequence, float frame) noexcept
+    -> SequenceFrame;
+
+/// What the game plays a model's sequences for, by the original's numbers (ACT_*): those it asks for.
+enum class Activity : std::int32_t {
+    Idle = 1, ///< ACT_IDLE.
+};
+
+/// The sequence of `sequences` the game plays for `activity`, as the original's LookupActivity picks
+/// it: of those of the activity, a weight drawn from `random` below their weights' sum, the first whose
+/// weights up to it pass it, each as likely as its weight says; each as likely when they weigh nothing,
+/// and the first's weight drawn when they weigh less (as RANDOM_LONG draws a range it cannot). None
+/// when no sequence is of it, or none passes.
+[[nodiscard]] auto lookupActivity(std::span<const nx::assets::StudioSequence> sequences, Activity activity,
+                                  nx::Random& random) -> std::optional<nx::assets::SequenceIndex>;
+
+/// How an entity plays its sequence, as the original's server keeps it (pev->sequence, frame,
+/// framerate and animtime; CBaseAnimating's m_flFrameRate, m_fSequenceLoops and m_fSequenceFinished).
+struct Animation {
+    nx::assets::SequenceIndex sequence{};
+    float frame = 0.0F;        ///< Where it is, of kFrameScale.
+    float frameSpeed = 0.0F;   ///< How far its frame goes a second at its own speed (m_flFrameRate).
+    float framerate = 1.0F;    ///< Times its own speed it plays at (pev->framerate).
+    nx::GameTime advancedAt{}; ///< When its frame was last advanced (pev->animtime).
+    bool isLooping = false;
+    bool isFinished = false; ///< Its frame went past its sequence's end.
+};
+
+/// `animation` playing `sequence`, its own, from `now` (ResetSequenceInfo): its frame's speed the
+/// sequence's (GetSequenceInfo: kFrameScale a second for a sequence of one frame, else its frames a
+/// second over the frames after its first), looping as the sequence does, at its own speed, not
+/// finished; its frame left where it is.
+void resetSequence(Animation& animation, const nx::assets::StudioSequence& sequence,
+                   nx::GameTime now) noexcept;
+
+/// `animation`'s frame advanced to `now`, at `rate` (StudioFrameAdvance): by the time since it last was
+/// at its frame's speed and its framerate, unless that is a thousandth of a second or less; past its
+/// sequence's end it wraps if it loops, else it stays at 255 (0 before its start), and it is finished.
+void advanceFrame(Animation& animation, nx::GameTime now, nx::TickRate rate) noexcept;
+
+/// A studio model as the game plays it: its file, and the decoded frames of each of its sequences, by
+/// index. Its owner keeps both.
+struct PlayedModel {
+    const nx::assets::MdlView* view = nullptr;
+    std::span<const nx::assets::AnimationFrames> animations{};
+};
 
 /// The setting, from 0 to 255, that turns or moves `controller` by `value` (degrees for a rotation),
 /// as the game sets an entity's controller (SetController): a rotation's value reversed for a range

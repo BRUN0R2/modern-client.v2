@@ -9,6 +9,7 @@ nxAddTest(nxGameTests
         doorTests.cpp
         placementTests.cpp
         solidsTests.cpp
+        thinkingTests.cpp
         triggerTests.cpp
     DEPENDS
         nx::game

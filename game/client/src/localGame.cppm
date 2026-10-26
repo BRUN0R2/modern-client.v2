@@ -113,6 +113,9 @@ public:
     /// Where the game puts its brush entities now, how high their waves rise, and which textures they
     /// show: what the scene draws them by.
     [[nodiscard]] auto placements() -> std::vector<nx::render::ModelPlacement>;
+    /// How the game's hostages show at the moment a frame shows (cs::hostagesShownAt): what the scene
+    /// draws them by.
+    [[nodiscard]] auto hostages() -> std::vector<ShownHostage>;
 
     /// What the player has: what it spawned with, until the game's rules change it.
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_status; }
@@ -189,7 +192,6 @@ private:
     TeamAccounts m_accounts;
     StepVoice m_stepVoice;
     std::vector<SoundMade> m_movementSounds; ///< Since takeSounds.
-    std::vector<SolidBox> m_solidBoxes;      ///< What stops the player besides the brushes: hostages.
     bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
     RoundTimer m_roundTimer{};     ///< What the player's HUD was told last.
     std::optional<std::size_t> m_lastSpawnPoint{}; ///< Of its team's, the one it last spawned at.

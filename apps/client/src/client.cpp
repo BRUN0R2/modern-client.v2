@@ -330,6 +330,7 @@ private:
     std::optional<cs::Hud> m_hud;              ///< None when its pictures could not be read.
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
     std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
+    std::vector<cs::ShownHostage> m_hostages;             ///< How the frame shows the game's hostages.
     nx::ui::FontCatalog m_fonts;
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     std::vector<nx::platform::WindowEvent> m_events;
@@ -952,9 +953,11 @@ auto Client::sessionView() -> cs::SceneView {
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
     m_placements = m_session->game->placements();
+    m_hostages = m_session->game->hostages();
     return {.camera = kicked,
             .time = nx::Seconds{m_mapClock.elapsed()},
             .placements = m_placements,
+            .hostages = m_hostages,
             .viewModel = m_viewPose,
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};

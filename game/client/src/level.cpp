@@ -375,13 +375,11 @@ auto Level::load(const GameContent& content, std::string_view name)
         nx::log::warning(kLog, "models the map's entities show that cannot be read: {}",
                          listed(level.m_models->missing()));
     }
-    // The game drops its hostages to the floor as it makes them, among the brush entities at rest.
+    // The decals: the bullets', and those the map stamps as its game starts, on what is there then.
     nx::ecs::World resting;
     if (auto spawned = spawnGame(bsp, level.m_entityClasses, resting); !spawned) {
         return std::unexpected{std::move(spawned.error())};
     }
-    level.m_models->dropToFloor(resting, *level.m_hulls);
-    // The decals: the bullets', and those the map stamps as its game starts, on what is there then.
     const std::vector<nx::game::StaticDecal> stamped =
         nx::game::staticDecalsOf(bsp.entities(), resting, *level.m_hulls);
     std::vector<std::string_view> decalNames = bulletDecals();

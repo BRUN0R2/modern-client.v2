@@ -45,6 +45,7 @@ struct SceneView {
     float aspect = 1.0F;
     nx::Seconds time{}; ///< Since the map started.
     std::span<const nx::render::ModelPlacement> placements{};
+    std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (LocalGame::hostages).
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
