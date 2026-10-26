@@ -42,7 +42,10 @@ void runThinks(ecs::World& world, const collision::BrushHulls& hulls) {
             continue;
         }
         world.remove<NextThink>(acting.entity);
-        if (const DelayedUse* delayed = world.get<DelayedUse>(acting.entity)) {
+        if (const ThinkMethod* method = world.get<ThinkMethod>(acting.entity);
+            method != nullptr && method->think != nullptr) {
+            method->think(world, hulls, acting.entity, std::max(acting.time, tickTimeOf(world).now));
+        } else if (const DelayedUse* delayed = world.get<DelayedUse>(acting.entity)) {
             useTargets(world, hulls, acting.entity, delayed->activator);
             if (world.isAlive(acting.entity)) {
                 world.destroy(acting.entity);

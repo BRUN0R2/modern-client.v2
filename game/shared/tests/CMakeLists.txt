@@ -6,6 +6,7 @@ nxAddTest(csSharedTests
         breathTests.cpp
         economyTests.cpp
         footstepsTests.cpp
+        hostagesTests.cpp
         inventoryTests.cpp
         movementTests.cpp
         roundsTests.cpp

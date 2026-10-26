@@ -463,10 +463,10 @@ flowchart LR
    bounds (§7.1). A `StudioRenderer` is prepared once a frame: the client's scene (`cs::Scene`) draws the view's
    own model with one of its own, last. The client shows the maps' studio models as the game makes them: the
    `cycler_sprite` of a model (ReGameDLL's `CCyclerSprite`), its sequence at its `framerate` from
-   when the map starts, as the client estimates it; and the `hostage_entity` (`CHostage`), its model
-   the map's or `scientist.mdl`, its first idle sequence at its own speed (the game picks one of them
-   at random by weight), its head's controllers straight ahead (`SetController` of 0 degrees,
-   `cs::controllerSettingOf`), dropped to the floor ([07 §5](07-simulation-and-physics.md)); each turned by
+   when the map starts, as the client estimates it; and the `hostage_entity`, as the game plays it
+   ([10 §4.2](10-counter-strike-gameplay.md#42-hostages)): the sequence it idles in, where the client
+   estimates it from its last think (`cs::estimatedFrameOf`, `R_StudioEstimateFrame`), its head's
+   controllers straight ahead (`SetController` of 0 degrees, `cs::controllerSettingOf`); each turned by
    its entity's angles, the pitch negated as the engine's studio transform negates it, lit where it
    is. The render effects, the players' colors, the bob of the view's model and instancing come with
    their consumers.

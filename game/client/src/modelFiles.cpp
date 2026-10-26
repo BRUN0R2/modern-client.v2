@@ -25,6 +25,36 @@ using nx::assets::VfsPath;
     return std::move(*bytes);
 }
 
+/// The bytes of the file sequence group `group` of the model of `files` is in, `sequence` named in an
+/// error: none for its own file's. Errors: ReadFailed.
+[[nodiscard]] auto groupBytesOf(const Vfs& vfs, const ModelFiles& files, std::uint32_t group,
+                                nx::assets::SequenceIndex sequence)
+    -> nx::Result<std::vector<std::byte>, ModelFileError> {
+    if (group == 0) {
+        return std::vector<std::byte>{};
+    }
+    const MdlView& model = *files.view;
+    return readFile(vfs, VfsPath::parseGoldsrc(model.sequenceGroups()[group].fileName),
+                    std::format("the sequence group file of {:?}", model.sequences()[sequence.value].label));
+}
+
+/// The decoded frames of sequence `sequence` of the model of `files`, from `groupBytes`, its group's
+/// file, or from the model's own when it is empty. Errors: Invalid.
+[[nodiscard]] auto decodedIn(const ModelFiles& files, nx::assets::SequenceIndex sequence,
+                             std::span<const std::byte> groupBytes)
+    -> nx::Result<nx::assets::AnimationFrames, ModelFileError> {
+    const MdlView& model = *files.view;
+    auto frames = model.decodeAnimation(sequence, groupBytes.empty() ? std::span<const std::byte>{files.bytes}
+                                                                     : groupBytes);
+    if (!frames) {
+        return nx::fail(
+            ModelFileError::Invalid,
+            std::format("the animation of {:?} in {:?}", model.sequences()[sequence.value].label, files.path),
+            std::move(frames.error()));
+    }
+    return std::move(*frames);
+}
+
 } // namespace
 
 auto ModelFiles::texturesView() const -> const MdlView& {
@@ -67,27 +97,37 @@ auto readModelFiles(const Vfs& vfs, std::string_view path)
 
 auto animationOf(const Vfs& vfs, const ModelFiles& files, nx::assets::SequenceIndex sequence)
     -> nx::Result<nx::assets::AnimationFrames, ModelFileError> {
-    const MdlView& model = *files.view;
-    std::vector<std::byte> groupBytes;
-    if (const std::uint32_t group = model.sequences()[sequence.value].group.value; group != 0) {
-        auto read =
-            readFile(vfs, VfsPath::parseGoldsrc(model.sequenceGroups()[group].fileName),
-                     std::format("the sequence group file of {:?}", model.sequences()[sequence.value].label));
-        if (!read) {
-            return std::unexpected{std::move(read.error())};
+    auto groupBytes = groupBytesOf(vfs, files, files.view->sequences()[sequence.value].group.value, sequence);
+    if (!groupBytes) {
+        return std::unexpected{std::move(groupBytes.error())};
+    }
+    return decodedIn(files, sequence, *groupBytes);
+}
+
+auto animationsOf(const Vfs& vfs, const ModelFiles& files)
+    -> nx::Result<std::vector<nx::assets::AnimationFrames>, ModelFileError> {
+    const std::span<const nx::assets::StudioSequence> sequences = files.view->sequences();
+    std::map<std::uint32_t, std::vector<std::byte>> groups; // by group, each read once
+    std::vector<nx::assets::AnimationFrames> animations;
+    animations.reserve(sequences.size());
+    for (std::uint32_t index = 0; index < sequences.size(); ++index) {
+        const nx::assets::SequenceIndex sequence{index};
+        const std::uint32_t group = sequences[index].group.value;
+        auto found = groups.find(group);
+        if (found == groups.end()) {
+            auto read = groupBytesOf(vfs, files, group, sequence);
+            if (!read) {
+                return std::unexpected{std::move(read.error())};
+            }
+            found = groups.emplace(group, std::move(*read)).first;
         }
-        groupBytes = std::move(*read);
+        auto frames = decodedIn(files, sequence, found->second);
+        if (!frames) {
+            return std::unexpected{std::move(frames.error())};
+        }
+        animations.push_back(std::move(*frames));
     }
-    auto frames =
-        model.decodeAnimation(sequence, groupBytes.empty() ? std::span<const std::byte>{files.bytes}
-                                                           : std::span<const std::byte>{groupBytes});
-    if (!frames) {
-        return nx::fail(
-            ModelFileError::Invalid,
-            std::format("the animation of {:?} in {:?}", model.sequences()[sequence.value].label, files.path),
-            std::move(frames.error()));
-    }
-    return std::move(*frames);
+    return animations;
 }
 
 } // namespace cs

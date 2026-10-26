@@ -19,13 +19,22 @@ struct NextThink {
     GameTime time{};
 };
 
+/// What an entity of its kind does as it acts, its kind's think (ADR-0022's `Entity.think`), given by
+/// what makes it: called with `at`, when it was due, or the tick's start for one due before, as the
+/// original's engine sets the time of a think (SV_RunThink).
+struct ThinkMethod {
+    void (*think)(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+                  GameTime at) = nullptr;
+};
+
 /// `entity` acts next at `time`, instead of when it would have.
 void setNextThink(ecs::World& world, ecs::Entity entity, GameTime time);
 
 /// Runs what acts during this tick of `world`'s clock (TickTime): each entity whose NextThink comes
-/// before the next tick, from the earliest, then by the entity, its NextThink taken off first: a
-/// DelayedUse fires its targets and goes; a Trigger that waited may fire again, and a spent one goes.
-/// A target fired opens a door through the world of `hulls`.
+/// before the next tick, from the earliest, then by the entity, its NextThink taken off first: one of a
+/// kind with a ThinkMethod does what it says; a DelayedUse fires its targets and goes; a Trigger that
+/// waited may fire again, and a spent one goes. A target fired opens a door through the world of
+/// `hulls`.
 void runThinks(ecs::World& world, const collision::BrushHulls& hulls);
 
 } // namespace nx::game

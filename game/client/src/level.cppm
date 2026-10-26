@@ -29,7 +29,7 @@ enum class LevelError : std::uint8_t {
     ContentUnavailable,  ///< The project's data or the installation could not be read (cause).
     MapUnreadable,       ///< maps/<name>.bsp is missing or invalid (cause).
     HullsInvalid,        ///< The map's hulls could not be built (cause).
-    GameUnspawnable,     ///< The map's brush entities could not be made (cause).
+    GameUnspawnable,     ///< The map's entities could not be made (cause).
     ViewModelUnreadable, ///< A weapon's view model could not be read (cause).
 };
 
@@ -101,9 +101,8 @@ class Level {
 
 public:
     /// The map `name` of `content` (maps/<name>.bsp). A WAD, the sky, a sprite or a studio model the
-    /// installation lacks is left out and logged, as the original carries on without it; its
-    /// hostages are dropped to the floor, as the game drops them. Errors: MapUnreadable,
-    /// HullsInvalid, GameUnspawnable, ViewModelUnreadable.
+    /// installation lacks is left out and logged, as the original carries on without it. Errors:
+    /// MapUnreadable, HullsInvalid, GameUnspawnable, ViewModelUnreadable.
     [[nodiscard]] static auto load(const GameContent& content, std::string_view name)
         -> nx::Result<std::unique_ptr<Level>, LevelError>;
 

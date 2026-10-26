@@ -245,10 +245,9 @@ from the original, to test these rules against, are pending
   all in the solid, starts in it or stops sooner (SV_SingleClipMoveToEntity), the same rule that
   keeps the trace of what stops a move first among what it is clipped against
   (`nx::collision::keepFirstStop`, SV_ClipToLinks). The hostages' are met so by the shots
-  (`cs::MapModels::traceHostages`), each whose box, a unit more each way, the shot's meets, its
-  bones posed with its sequence's motion kept as the server poses them; posed when the shot is
-  fired, where the original's server poses a hostage as its last think left it, at most a thirtieth
-  of a second before.
+  (`cs::traceHostages`), each whose box, a unit more each way, the shot's meets, its bones posed
+  with its sequence's motion kept as the server poses them, at the frame its last think left it
+  (`cs::serverFrameOf`, SV_StudioSetupBones).
 
 ### 4.3 API
 
@@ -357,7 +356,10 @@ nothing. The client drops the hostages so as it loads a map (`cs::Level`).
 **Today** (`nx.game:thinking`, `nx.game:targets`, `nx.game:triggers`): an entity acts at its
 `NextThink`, a `GameTime` of its world's clock; `runThinks` runs, each tick, every entity due before
 the next tick starts (`SV_RunThink`), from the earliest, then by the entity, its `NextThink` taken off
-first. An entity's name is its `Named` (`targetname`); what it fires, its `Targets` (`target`,
+first. An entity of a kind that thinks has its `ThinkMethod`, its kind's think
+([ADR-0022](adr/0022-plugin-api-primitives.md)'s `Entity.think`), called with the time it was due, or
+the tick's start for one due before, as `SV_RunThink` sets the time of a think: a hostage's
+(`cs.shared:hostages`, [10 §4.2](10-counter-strike-gameplay.md#42-hostages)). An entity's name is its `Named` (`targetname`); what it fires, its `Targets` (`target`,
 `killtarget`, `delay`, `CBaseDelay`). `useTargets` fires them as `SUB_UseTargets`: with a delay, through
 a `DelayedUse` entity that fires them at its `NextThink` and goes; at once, removing the entities named
 by the kill target, then using every entity named by the target, in the world's order, found by name

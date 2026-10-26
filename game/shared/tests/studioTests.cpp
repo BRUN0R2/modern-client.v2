@@ -22,6 +22,7 @@ using nx::assets::BoneAxis;
 using nx::assets::BoneController;
 using nx::assets::BoneControllerIndex;
 using nx::assets::BoneIndex;
+using nx::assets::SequenceIndex;
 using nx::assets::StudioBone;
 using nx::assets::StudioSequence;
 
@@ -94,6 +95,103 @@ TEST(SequenceFrameTest, ASequenceThatDoesNotLoopStopsShortOfItsLastFrame) {
 TEST(SequenceFrameTest, TheEntitysFramerateScalesItsSpeed) {
     const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
     EXPECT_FLOAT_EQ(cs::sequenceFrameAt(idle, nx::Seconds{0.1F}, 2.0F).value(), 6.0F);
+}
+
+TEST(SequenceFrameTest, TheClientEstimatesAFrameFromTheOneTheServerSent) {
+    const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
+    // 128 of 256: half of its ten frames after its first, then 0.1 seconds on.
+    EXPECT_FLOAT_EQ(cs::estimatedFrameOf(idle, 128.0F, nx::Seconds{0.1F}, 1.0F).value(), 8.0F);
+    EXPECT_FLOAT_EQ(cs::estimatedFrameOf(idle, 128.0F, nx::Seconds{0.2F}, 1.0F).value(), 1.0F) << "wrapped";
+    EXPECT_FLOAT_EQ(cs::estimatedFrameOf(idle, 128.0F, nx::Seconds{-0.2F}, 1.0F).value(), 5.0F)
+        << "nothing passed before it was sent";
+    const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
+    EXPECT_NEAR(cs::estimatedFrameOf(draw, 255.0F, nx::Seconds{0.5F}, 1.0F).value(), 9.999F, kTolerance);
+}
+
+TEST(SequenceFrameTest, TheServerPosesAFrameAsItsShareOfTheSequence) {
+    const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
+    EXPECT_FLOAT_EQ(cs::serverFrameOf(idle, 128.0F).value(), 5.0F);
+    EXPECT_FLOAT_EQ(cs::serverFrameOf(idle, 255.0F).value(), 10.0F * 255.0F / 256.0F) << "short of its last";
+    const StudioSequence still{.label = "still", .fps = 30.0F, .frameCount = 1};
+    EXPECT_FLOAT_EQ(cs::serverFrameOf(still, 200.0F).value(), 0.0F);
+}
+
+TEST(ActivityTest, ASequenceOfTheActivityIsDrawnAsLikelyAsItsWeight) {
+    const std::array sequences{
+        StudioSequence{.label = "walk", .activity = 3, .activityWeight = 100},
+        StudioSequence{.label = "idle1", .activity = 1, .activityWeight = 50},
+        StudioSequence{.label = "idle3", .activity = 1, .activityWeight = 0},
+        StudioSequence{.label = "idle7", .activity = 1, .activityWeight = 10},
+    };
+    std::array<int, 4> drawn{};
+    for (std::uint64_t seed = 0; seed < 6000; ++seed) {
+        nx::Random random{seed, "activity"};
+        const std::optional<SequenceIndex> sequence =
+            cs::lookupActivity(sequences, cs::Activity::Idle, random);
+        ASSERT_TRUE(sequence.has_value());
+        ++drawn.at(sequence->value);
+    }
+    EXPECT_EQ(drawn[0], 0) << "of another activity";
+    EXPECT_EQ(drawn[2], 0) << "a weight of nothing is never drawn among weights";
+    EXPECT_NEAR(drawn[1], 5000, 150) << "50 of 60";
+    EXPECT_NEAR(drawn[3], 1000, 150) << "10 of 60";
+}
+
+TEST(ActivityTest, SequencesThatWeighNothingAreDrawnAlike) {
+    const std::array sequences{
+        StudioSequence{.label = "idle1", .activity = 1},
+        StudioSequence{.label = "idle2", .activity = 1},
+    };
+    std::array<int, 2> drawn{};
+    for (std::uint64_t seed = 0; seed < 2000; ++seed) {
+        nx::Random random{seed, "activity"};
+        ++drawn.at(cs::lookupActivity(sequences, cs::Activity::Idle, random).value_or(SequenceIndex{}).value);
+    }
+    EXPECT_NEAR(drawn[0], 1000, 120);
+    EXPECT_NEAR(drawn[1], 1000, 120);
+    nx::Random random{0, "activity"};
+    EXPECT_FALSE(
+        cs::lookupActivity(std::span<const StudioSequence>{}, cs::Activity::Idle, random).has_value())
+        << "none of the activity";
+}
+
+TEST(AnimationTest, ASequenceStartsAtItsOwnSpeed) {
+    cs::Animation animation{.frame = 40.0F, .framerate = 2.0F, .isFinished = true};
+    const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
+    const nx::GameTime now = nx::GameTime::atTick(7);
+    cs::resetSequence(animation, idle, now);
+    EXPECT_FLOAT_EQ(animation.frameSpeed, 30.0F * 256.0F / 10.0F);
+    EXPECT_FLOAT_EQ(animation.framerate, 1.0F);
+    EXPECT_TRUE(animation.isLooping);
+    EXPECT_FALSE(animation.isFinished);
+    EXPECT_EQ(animation.advancedAt, now);
+    EXPECT_FLOAT_EQ(animation.frame, 40.0F) << "where it is is left";
+    const StudioSequence still{.label = "still", .fps = 30.0F, .frameCount = 1};
+    cs::resetSequence(animation, still, now);
+    EXPECT_FLOAT_EQ(animation.frameSpeed, 256.0F) << "a sequence of one frame";
+}
+
+TEST(AnimationTest, AFrameAdvancesByTheTimeSinceAndWrapsOrStops) {
+    const nx::TickRate rate = nx::kDefaultTickRate;
+    const StudioSequence idle{.label = "idle", .fps = 30.0F, .isLooping = true, .frameCount = 11};
+    cs::Animation animation{};
+    cs::resetSequence(animation, idle, nx::GameTime{});
+    cs::advanceFrame(animation, nx::GameTime::atTick(10), rate);
+    EXPECT_NEAR(animation.frame, 76.8F, 0.001F) << "0.1 seconds at 768 a second";
+    EXPECT_EQ(animation.advancedAt, nx::GameTime::atTick(10));
+    cs::advanceFrame(animation, nx::GameTime::atTick(10, 0.05F), rate);
+    EXPECT_NEAR(animation.frame, 76.8F, 0.001F) << "a thousandth of a second or less does not advance it";
+    EXPECT_EQ(animation.advancedAt, nx::GameTime::atTick(10, 0.05F));
+    cs::advanceFrame(animation, nx::GameTime::atTick(40, 0.05F), rate);
+    EXPECT_NEAR(animation.frame, 76.8F + 230.4F - 256.0F, 0.01F) << "wrapped";
+    EXPECT_TRUE(animation.isFinished);
+
+    const StudioSequence draw{.label = "draw", .fps = 30.0F, .frameCount = 11};
+    cs::Animation drawn{};
+    cs::resetSequence(drawn, draw, nx::GameTime{});
+    cs::advanceFrame(drawn, nx::GameTime::atTick(100), rate);
+    EXPECT_FLOAT_EQ(drawn.frame, 255.0F) << "past its end, at 255";
+    EXPECT_TRUE(drawn.isFinished);
 }
 
 TEST(ControllerSettingTest, AValueIsMappedOntoItsControllersRangeAsTheGameSetsIt) {

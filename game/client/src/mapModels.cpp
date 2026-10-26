@@ -9,9 +9,6 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
-import nx.ecs;
-import nx.collision;
-import nx.game;
 import cs.shared;
 
 namespace cs {
@@ -19,16 +16,8 @@ namespace cs {
 namespace {
 
 constexpr std::string_view kSpriteExtension = ".spr";
-/// How much an entity's box grows each way as the engine links it (SV_LinkEdict), and a line's as it
-/// bounds the way (SV_MoveBounds).
-constexpr float kLinkMargin = 1.0F;
 /// The model of a hostage the map names none for (CHostage::Precache).
 constexpr std::string_view kDefaultHostageModel = "models/scientist.mdl";
-/// The activity a hostage idles in (ACT_IDLE).
-constexpr std::int32_t kIdleActivity = 1;
-/// The controllers the game sets straight ahead for a hostage: its four channels; the mouth's is not
-/// an entity's controller.
-constexpr std::uint32_t kHostageControllers = 4;
 
 /// Whether `model` names a sprite.
 [[nodiscard]] auto isSprite(std::string_view model) noexcept -> bool {
@@ -66,34 +55,25 @@ constexpr std::uint32_t kHostageControllers = 4;
     return std::nullopt;
 }
 
-/// The sequence `model` plays of `files`' model: a hostage's first idle one (the game picks one of
-/// them at random by weight, LookupActivity), a sequence the model lacks its first.
-[[nodiscard]] auto sequenceOf(const MapModel& model, const nx::assets::MdlView& view)
+/// The sequence a cycler of `view`'s model plays: its own, or the model's first when it lacks it.
+[[nodiscard]] auto cyclerSequenceOf(const MapModel& model, const nx::assets::MdlView& view)
     -> nx::assets::SequenceIndex {
-    const std::span<const nx::assets::StudioSequence> sequences = view.sequences();
-    if (model.kind == ModelClass::Hostage) {
-        const auto idle = std::ranges::find(sequences, kIdleActivity, &nx::assets::StudioSequence::activity);
-        return nx::assets::SequenceIndex{
-            idle == sequences.end() ? 0 : nx::narrow<std::uint32_t>(idle - sequences.begin())};
-    }
-    return nx::assets::SequenceIndex{model.sequence < sequences.size() ? model.sequence : 0};
+    return nx::assets::SequenceIndex{model.sequence < view.sequences().size() ? model.sequence : 0};
 }
 
-/// The controllers of `model` the game sets for `kind`: a hostage's straight ahead, 0 degrees
-/// (CHostage::Spawn, SetBoneController); a cycler's none.
-[[nodiscard]] auto controllersOf(ModelClass kind, const nx::assets::MdlView& view) -> cs::ControllerSettings {
-    cs::ControllerSettings settings;
-    if (kind != ModelClass::Hostage) {
-        return settings;
-    }
-    for (std::uint32_t channel = 0; channel < kHostageControllers; ++channel) {
-        const auto found =
-            std::ranges::find(view.boneControllers(), channel, &nx::assets::BoneController::channel);
-        if (found != view.boneControllers().end()) {
-            settings.channels.at(channel) = cs::controllerSettingOf(*found, 0.0F);
-        }
-    }
-    return settings;
+/// The bones of a model of `file`, playing `sequence` at `frame`, as the client draws them: its
+/// sequence's motion removed, set as `controllers` says, at `origin`, turned by `angles`, the pitch
+/// negated as the engine's studio transform negates it (R_StudioSetUpTransform's "stupid quake bug").
+[[nodiscard]] auto drawnBonesOf(const nx::assets::MdlView& view, const nx::assets::AnimationFrames& animation,
+                                nx::assets::SequenceIndex sequence, cs::SequenceFrame frame,
+                                const cs::ControllerSettings& controllers, nx::Vec3 origin,
+                                nx::EulerAngles angles) -> std::vector<nx::Mat3x4> {
+    const nx::EulerAngles turn{.pitch = -angles.pitch, .yaw = angles.yaw, .roll = angles.roll};
+    return cs::poseBones(cs::skeletonOf(view), view.sequences()[sequence.value], animation,
+                         {.frame = frame,
+                          .controllers = controllers,
+                          .motion = SequenceMotion::Removed,
+                          .placement = nx::affine(nx::rotationMatrix(turn), origin)});
 }
 
 } // namespace
@@ -121,100 +101,61 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
                     std::format("{} ({})", model.model, nx::describe(modelFiles.error())));
                 continue;
             }
+            auto animations = animationsOf(vfs, **modelFiles);
+            if (!animations) {
+                read.m_missing.push_back(
+                    std::format("{} ({})", model.model, nx::describe(animations.error())));
+                continue;
+            }
             found->second = read.m_files.size();
-            read.m_files.push_back(std::make_unique<File>(File{.files = std::move(*modelFiles)}));
+            read.m_files.push_back(std::make_unique<File>(
+                File{.files = std::move(*modelFiles), .animations = std::move(*animations)}));
         }
         if (!found->second) {
             continue;
         }
-        File& file = *read.m_files[*found->second];
-        const nx::assets::MdlView& view = *file.files->view;
-        const nx::assets::SequenceIndex sequence = sequenceOf(model, view);
-        if (!file.animations.contains(sequence.value)) {
-            auto frames = animationOf(vfs, *file.files, sequence);
-            if (!frames) {
-                read.m_missing.push_back(std::format("{} ({})", model.model, nx::describe(frames.error())));
-                continue;
-            }
-            file.animations.emplace(sequence.value, std::move(*frames));
+        const std::size_t file = *found->second;
+        if (model.kind == ModelClass::Cycler) {
+            model.sequence = cyclerSequenceOf(model, *read.m_files[file]->files->view).value;
+            read.m_cyclers.push_back(Entity{.model = std::move(model), .file = file});
+        } else {
+            read.m_hostages.push_back(Entity{.model = std::move(model), .file = file});
         }
-        model.sequence = sequence.value;
-        const cs::ControllerSettings controllers = controllersOf(model.kind, view);
-        read.m_entities.push_back(
-            Entity{.model = std::move(model), .file = *found->second, .controllers = controllers});
+    }
+    // The files no longer move: what the game plays points into them.
+    read.m_played.reserve(read.m_files.size());
+    for (const std::unique_ptr<File>& file : read.m_files) {
+        read.m_played.push_back(cs::PlayedModel{.view = &*file->files->view, .animations = file->animations});
     }
     return read;
 }
 
-auto MapModels::solidBoxes() const -> std::vector<SolidBox> {
-    std::vector<SolidBox> boxes;
-    for (const Entity& entity : m_entities) {
-        if (entity.model.kind == ModelClass::Hostage) {
-            boxes.push_back(SolidBox{.origin = entity.model.origin, .box = kHostageBox});
-        }
+auto MapModels::hostageSpawns() const -> std::vector<HostageSpawn> {
+    std::vector<HostageSpawn> spawns;
+    spawns.reserve(m_hostages.size());
+    for (const Entity& hostage : m_hostages) {
+        spawns.push_back(HostageSpawn{.model = nx::narrow<std::uint32_t>(hostage.file),
+                                      .origin = hostage.model.origin,
+                                      .angles = hostage.model.angles});
     }
-    return boxes;
+    return spawns;
 }
 
-auto MapModels::traceHostages(nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end, nx::Seconds sinceStart,
-                              const nx::collision::Trace& sofar) const
-    -> std::optional<nx::collision::Trace> {
-    const nx::Vec3 margin{.x = kLinkMargin, .y = kLinkMargin, .z = kLinkMargin};
-    const nx::Aabb traced = nx::collision::hullBoxOf(hull);
-    const nx::Aabb way{.min = nx::componentMin(start, end) + traced.min - margin,
-                       .max = nx::componentMax(start, end) + traced.max + margin};
-    nx::collision::Trace kept = sofar;
-    bool isMet = false;
-    for (const Entity& entity : m_entities) {
-        if (entity.model.kind != ModelClass::Hostage ||
-            !way.intersects(kHostageBox.translated(entity.model.origin).expanded(margin))) {
-            continue;
-        }
-        std::optional<nx::collision::Trace> hit = traceHostage(entity, hull, start, end, sinceStart);
-        if (hit && nx::collision::keepFirstStop(kept, *hit)) {
-            isMet = true;
-        }
-    }
-    return isMet ? std::optional{kept} : std::nullopt;
-}
-
-auto MapModels::traceHostage(const Entity& hostage, nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end,
-                             nx::Seconds sinceStart) const -> std::optional<nx::collision::Trace> {
-    const nx::Vec3 origin = hostage.model.origin;
-    if (hull != nx::collision::Hull::Point) {
-        return nx::collision::traceBox(nx::collision::grownByHull(kHostageBox, hull), origin, start, end);
-    }
-    const nx::assets::MdlView& view = *m_files[hostage.file]->files->view;
-    if (view.hitboxes().empty()) {
-        return std::nullopt; // not met, where the original's would be all in the solid: the game's have them
-    }
-    const std::vector<nx::Mat3x4> bones = poseOf(hostage, sinceStart, SequenceMotion::Kept);
-    return nx::collision::traceHitboxes(cs::placedHitboxesOf(view.hitboxes(), bones), start, end).trace;
-}
-
-auto MapModels::poseOf(const Entity& entity, nx::Seconds sinceStart, SequenceMotion motion) const
-    -> std::vector<nx::Mat3x4> {
-    const File& file = *m_files[entity.file];
+auto MapModels::cyclerPoseOf(const Entity& cycler, nx::Seconds sinceStart) const -> std::vector<nx::Mat3x4> {
+    const File& file = *m_files[cycler.file];
     const nx::assets::MdlView& view = *file.files->view;
-    const nx::assets::StudioSequence& sequence = view.sequences()[entity.model.sequence];
-    // The engine's studio transform turns a model by its entity's angles, the pitch negated
-    // (R_StudioSetUpTransform's "stupid quake bug"), and so does the server's (R_StudioHull).
-    const nx::EulerAngles turn{.pitch = -entity.model.angles.pitch,
-                               .yaw = entity.model.angles.yaw,
-                               .roll = entity.model.angles.roll};
-    return cs::poseBones(cs::skeletonOf(view), sequence, file.animations.at(entity.model.sequence),
-                         {.frame = cs::sequenceFrameAt(sequence, sinceStart, entity.model.framerate),
-                          .controllers = entity.controllers,
-                          .motion = motion,
-                          .placement = nx::affine(nx::rotationMatrix(turn), entity.model.origin)});
+    const nx::assets::SequenceIndex sequence{cycler.model.sequence};
+    return drawnBonesOf(
+        view, file.animations[sequence.value], sequence,
+        cs::sequenceFrameAt(view.sequences()[sequence.value], sinceStart, cycler.model.framerate), {},
+        cycler.model.origin, cycler.model.angles);
 }
 
-void MapModels::dropToFloor(nx::ecs::World& world, const nx::collision::BrushHulls& hulls) {
-    for (Entity& entity : m_entities) {
-        if (entity.model.kind == ModelClass::Hostage) {
-            entity.model.origin = nx::game::droppedToFloor(world, hulls, kHostageBox, entity.model.origin);
-        }
-    }
+auto MapModels::hostagePoseOf(const Entity& hostage, const ShownHostage& shown) const
+    -> std::vector<nx::Mat3x4> {
+    const File& file = *m_files[hostage.file];
+    return drawnBonesOf(*file.files->view, file.animations[shown.sequence.value], shown.sequence, shown.frame,
+                        shown.controllers, shown.origin, shown.angles);
 }
 
 auto MapModels::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
@@ -233,30 +174,54 @@ auto MapModels::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList&
 }
 
 auto MapModels::posed(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
-                      const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
-                      const nx::render::LightStyleValues& styles) const -> PosedModels {
+                      std::span<const ShownHostage> hostages, const nx::render::WorldLight& light,
+                      const nx::render::SkyLight& sky, const nx::render::LightStyleValues& styles) const
+    -> PosedModels {
     nx::expects(models.size() == m_files.size(), "MapModels::posed: a model for each file");
     PosedModels posed;
-    posed.bones.reserve(m_entities.size());
-    for (const Entity& entity : m_entities) {
-        posed.bones.push_back(poseOf(entity, sinceStart, SequenceMotion::Removed));
+    struct Drawn {
+        const Entity* entity = nullptr;
+        nx::Vec3 origin{};
+    };
+    std::vector<Drawn> drawn;
+    posed.bones.reserve(m_cyclers.size() + hostages.size());
+    for (const Entity& cycler : m_cyclers) {
+        posed.bones.push_back(cyclerPoseOf(cycler, sinceStart));
+        drawn.push_back(Drawn{.entity = &cycler, .origin = cycler.model.origin});
+    }
+    for (const ShownHostage& shown : hostages) {
+        if (shown.spawn >= m_hostages.size()) {
+            continue; // the contract's observe path: a hostage of another map
+        }
+        const Entity& hostage = m_hostages[shown.spawn];
+        posed.bones.push_back(hostagePoseOf(hostage, shown));
+        drawn.push_back(Drawn{.entity = &hostage, .origin = shown.origin});
     }
     // The instances point into the bones, which no longer move.
-    for (std::size_t index = 0; index < m_entities.size(); ++index) {
-        const Entity& entity = m_entities[index];
-        if (entity.file >= models.size()) {
-            continue; // the contract's observe path
+    for (std::size_t index = 0; index < drawn.size(); ++index) {
+        if (std::optional<nx::render::StudioInstance> instance = instanceOf(
+                *drawn[index].entity, drawn[index].origin, posed.bones[index], models, light, sky, styles)) {
+            posed.instances.push_back(*instance);
         }
-        posed.instances.push_back(nx::render::StudioInstance{
-            .model = models[entity.file],
-            .bones = posed.bones[index],
-            .light = light.modelLightAt({.origin = entity.model.origin, .sky = sky}, styles),
-            .skin = entity.model.skin,
-            .origin = entity.model.origin,
-            .mode = entity.model.mode,
-            .amount = entity.model.amount});
     }
     return posed;
+}
+
+auto MapModels::instanceOf(const Entity& entity, nx::Vec3 origin, std::span<const nx::Mat3x4> bones,
+                           std::span<const nx::render::StudioModel> models,
+                           const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
+                           const nx::render::LightStyleValues& styles) const
+    -> std::optional<nx::render::StudioInstance> {
+    if (entity.file >= models.size()) {
+        return std::nullopt; // the contract's observe path
+    }
+    return nx::render::StudioInstance{.model = models[entity.file],
+                                      .bones = bones,
+                                      .light = light.modelLightAt({.origin = origin, .sky = sky}, styles),
+                                      .skin = entity.model.skin,
+                                      .origin = origin,
+                                      .mode = entity.model.mode,
+                                      .amount = entity.model.amount};
 }
 
 } // namespace cs

@@ -368,6 +368,7 @@ constexpr std::size_t kBlue = 2;
     }
     std::ignore = (*game)->wait(camera.angles, options.time);
     const std::vector<nx::render::ModelPlacement> placements = (*game)->placements();
+    const std::vector<cs::ShownHostage> hostages = (*game)->hostages();
     // The client events of the play the view model is in, from its first frame: the muzzle flashes
     // a shot shows.
     const std::optional<cs::ViewModelPose> viewPose = (*game)->viewModel();
@@ -411,6 +412,7 @@ constexpr std::size_t kBlue = 2;
                                                              .view = {.camera = camera,
                                                                       .time = options.time,
                                                                       .placements = placements,
+                                                                      .hostages = hostages,
                                                                       .viewModel = viewPose,
                                                                       .clientEvents = clientEvents}}};
     if (auto recorded = frames->record(list, target->get(), extent, shown, quads); !recorded) {
