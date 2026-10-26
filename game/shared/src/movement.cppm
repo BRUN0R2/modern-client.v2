@@ -240,6 +240,10 @@ struct SolidBox {
 /// or a volume.
 [[nodiscard]] auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity>;
 
+/// The entities of `world` solid as boxes (nx::game::BoxSolidity) that stop a player, in the world's
+/// order, as the original's engine lists them for it (SOLID_SLIDEBOX, SOLID_BBOX): a hostage.
+[[nodiscard]] auto solidBoxesOf(nx::ecs::World& world) -> std::vector<SolidBox>;
+
 /// The body of a player in `state` that the game's pushers move: its box, standing or ducked, and the
 /// brush model it stands on.
 [[nodiscard]] auto bodyOf(const MovementState& state) -> nx::game::Body;

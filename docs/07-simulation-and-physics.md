@@ -244,10 +244,24 @@ from the original, to test these rules against, are pending
   the server's rules; of a model's hitboxes the first's trace is kept, then each later one's that is
   all in the solid, starts in it or stops sooner (SV_SingleClipMoveToEntity), the same rule that
   keeps the trace of what stops a move first among what it is clipped against
-  (`nx::collision::keepFirstStop`, SV_ClipToLinks). The hostages' are met so by the shots
-  (`cs::traceHostages`), each whose box, a unit more each way, the shot's meets, its bones posed
-  with its sequence's motion kept as the server poses them, at the frame its last think left it
-  (`cs::serverFrameOf`, SV_StudioSetupBones).
+  (`nx::collision::keepFirstStop`, SV_ClipToLinks). The hostages' are met so by a line, their bones
+  posed with their sequence's motion kept as the server poses them, at the frame their last think
+  left them (`cs::serverFrameOf`, SV_StudioSetupBones); a model without any is all in the solid, not
+  stopped, as the original's loop over none leaves it.
+
+**Today**, the server's trace (`nx::game::traceSolidsHit`, `nx.game:solids`, the original's
+`SV_Move`): of a box about its origin (a line's of none, `nx::game::ServerTrace`), of a type
+(`TraceType`: every solid entity, or the brush entities alone, `ignore_monsters`), leaving one entity
+out (its `passedict`). The world first, through the hull the box's size chooses
+(`collision::boxHullOf`); when it stops at once, that alone. Else each solid entity of the type but
+the one left out, whose linked box (a unit more each way) the way's box meets (`SV_MoveBounds`, the
+box at both ends a unit more each way), is clipped from the start to where the world stopped it: a
+brush entity through its model's hull, placed and turned as it is; an entity solid as a box
+(`nx::game::BoxSolidity`, `SOLID_SLIDEBOX`) through its box grown by the one traced, or as its kind's
+`nx::game::ClipMethod` says (a hostage's line, its hitboxes: `SV_HullForStudioModel`); kept as
+`keepFirstStop` keeps it, none looked at once all in solid; then its fraction of the whole way. Every
+trace of the game goes through it: the attacks', the pushers' and a drop to the floor; the one that
+finds what a decal lies on meets the brush entities alone.
 
 ### 4.3 API
 
@@ -331,13 +345,15 @@ entity's "frame" sets which it shows first. The moves of doors and buttons are t
 (`cs::LocalGame`): the player's use (`+use`, as it goes down), the player's command, the doors and buttons it touched, the triggers it is in,
 what is due, then the pushers, the player's body among the bodies, then the clock.
 
-**Today** (`nx.game:placement`): an entity the game drops to the floor as it makes it, as the
-engine's `DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's rules through the
-hull its size chooses (`collision::boxHullOf`, `SV_HullForBsp`: a point for one 8 units wide or less,
-the ducked hull for one 36 wide and tall at most, the standing one for one taller, the large one for
-one wider; the hull's middle offset from the box's origin by the hull's low corner from the box's),
-among the world and the solid brush entities; where it starts when it starts all in solid or meets
-nothing. The client drops the hostages so as it loads a map (`cs::Level`).
+**Today** (`nx.game:placement`): an entity the game drops to the floor, as the engine's
+`DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's trace (§4.2) through what is
+solid but itself, the world through the hull its size chooses (`collision::boxHullOf`,
+`SV_HullForBsp`: a point for one 8 units wide or less, the ducked hull for one 36 wide and tall at
+most, the standing one for one taller, the large one for one wider; the hull's middle offset from the
+box's origin by the hull's low corner from the box's), the brush entities and the other entities
+solid as boxes, another hostage's head too; where it starts when it starts all in solid or meets
+nothing. The game drops the hostages so as it makes them and puts them back
+([10 §4.2](10-counter-strike-gameplay.md#42-hostages)).
 
 ### 5.2 Think, touch and triggers
 

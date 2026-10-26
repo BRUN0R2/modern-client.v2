@@ -23,7 +23,6 @@ constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickR
 constexpr nx::Seconds kMaxCatchUp{0.25F};
 /// The stream of random numbers a spawn's weapons draw from.
 constexpr std::string_view kSpawnStream = "spawn";
-/// How far a bullet goes: FireBullets3's distance for every gun the game has.
 /// How far above its spawn point a player spawns (GetPlayerSpawnSpot).
 constexpr nx::HammerUnits kSpawnLift{1.0F};
 /// How often the rules look at the restart the cvars ask for (Think's periodic part).
@@ -36,6 +35,12 @@ constexpr nx::log::Category kLog{"game"};
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
+}
+
+/// Whether what a trace met in `world`, `entity`, is the world (none) or a brush entity (IsBSPModel).
+[[nodiscard]] auto isBrushEntityOrWorld(const nx::ecs::World& world, std::optional<nx::ecs::Entity> entity)
+    -> bool {
+    return !entity || world.get<nx::game::BrushModel>(*entity) != nullptr;
 }
 
 } // namespace
@@ -155,7 +160,7 @@ void LocalGame::tick(const UserCommand& command) {
     }
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
     const MovementResult moved =
-        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, hostageBoxes(m_world));
+        simulateMovement(m_player, command, MovementSettings{}, hulls, entities, solidBoxesOf(m_world));
     m_player = moved.state;
     hearMovement(moved.sounds, entities, command);
     nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
@@ -176,30 +181,26 @@ void LocalGame::tick(const UserCommand& command) {
         .isDucked = m_player.isDucked,
         .canAttack = !m_rounds.isFrozen()};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
-    // What the attacks meet: the world and its solid brush entities, then a hostage met first, a body.
+    // What the attacks meet: what is solid, the world, the brush entities and the hostages; a body is
+    // an entity the original's Classify makes other than none (a hostage, a vehicle).
     const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
-        const nx::game::SolidHit solid = nx::game::traceSolidsHit(m_world, hulls, hull, start, end);
-        if (std::optional<nx::collision::Trace> hostage =
-                traceHostages(m_world, hull, start, end, solid.trace)) {
-            return WeaponHit{.trace = *hostage, .isBody = true};
-        }
+        const nx::game::SolidHit solid =
+            nx::game::traceSolidsHit(m_world, hulls, nx::game::hullTrace(hull, start, end));
         const nx::game::Classified* const classified =
             solid.entity ? m_world.get<nx::game::Classified>(*solid.entity) : nullptr;
         return WeaponHit{.trace = solid.trace,
-                         .isBrushModel = true,
+                         .isBrushModel = isBrushEntityOrWorld(m_world, solid.entity),
                          .isBody = classified != nullptr &&
                                    classified->classification != nx::game::Classification::None};
     };
     for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
         const nx::Vec3 end = shot.origin + (shot.direction * shot.reach.value());
-        const nx::game::SolidHit hit =
-            nx::game::traceSolidsHit(m_world, hulls, nx::collision::Hull::Point, shot.origin, end);
-        // A hostage the shot meets first stops it, and leaves no mark behind it.
-        if (traceHostages(m_world, nx::collision::Hull::Point, shot.origin, end, hit.trace)) {
-            continue;
-        }
-        if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid) {
+        const nx::game::SolidHit hit = nx::game::traceSolidsHit(
+            m_world, hulls, nx::game::hullTrace(nx::collision::Hull::Point, shot.origin, end));
+        // A mark where it meets the world or a brush entity; none on a hostage (DecalGunshot).
+        if (hit.trace.fraction < 1.0F && !hit.trace.startsSolid &&
+            isBrushEntityOrWorld(m_world, hit.entity)) {
             m_impacts.push_back(Impact{.position = hit.trace.end, .on = decalTargetOf(m_world, hit.entity)});
         }
     }

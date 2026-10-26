@@ -43,11 +43,17 @@ constexpr float kTolerance = 1e-4F;
     return std::move(hulls).value();
 }
 
+/// Where the triangle model's header counts its hitboxes.
+constexpr std::size_t kHitboxCountAt = 156;
+
 /// The triangle model, as the game plays it: two idle sequences of a weight of 1 each, "idle" of two
-/// frames that loops and "wave" of one, a hitbox on its second bone.
+/// frames that loops and "wave" of one, a hitbox on its second bone, or none.
 class PlayedTriangle {
 public:
-    PlayedTriangle() {
+    explicit PlayedTriangle(bool hasHitboxes = true) {
+        if (!hasHitboxes) {
+            m_model.put(kHitboxCountAt, std::int32_t{0});
+        }
         auto view = nx::assets::MdlView::parse(m_model.bytes);
         EXPECT_TRUE(view.has_value());
         m_view.emplace(std::move(view).value());
@@ -88,6 +94,15 @@ void makeReady(nx::ecs::World& world, std::span<const cs::PlayedModel> models) {
     return found | std::views::values | std::ranges::to<std::vector>();
 }
 
+/// `count` hostages 40 units apart along x, from x = 0, 100 units up: none on another's head.
+[[nodiscard]] auto spawnsApart(std::size_t count) -> std::vector<cs::HostageSpawn> {
+    std::vector<cs::HostageSpawn> spawns;
+    for (std::size_t index = 0; index < count; ++index) {
+        spawns.push_back(cs::HostageSpawn{.origin = {.x = 40.0F * static_cast<float>(index), .z = 100.0F}});
+    }
+    return spawns;
+}
+
 /// Runs `world` for `ticks` ticks: what thinks, then the clock on.
 void runTicks(nx::ecs::World& world, const BrushHulls& hulls, std::int64_t ticks) {
     for (std::int64_t tick = 0; tick < ticks; ++tick) {
@@ -101,8 +116,7 @@ TEST(HostagesTest, AHostageIdlesInASequenceDrawnByWeightDroppedToTheFloor) {
     nx::ecs::World world;
     makeReady(world, triangle.models());
     const BrushHulls hulls = floorHulls();
-    const std::vector<cs::HostageSpawn> spawns(64, cs::HostageSpawn{.origin = {.x = 4.0F, .z = 100.0F}});
-    cs::spawnHostages(world, hulls, spawns);
+    cs::spawnHostages(world, hulls, spawnsApart(64));
 
     std::array<std::uint32_t, 2> drawn{};
     for (const nx::ecs::Entity entity : hostagesOf(world)) {
@@ -166,12 +180,11 @@ TEST(HostagesTest, ARoundPutsTheHostagesBackWhereTheyStartedWhileTheBonusLetsIt)
     nx::ecs::World world;
     makeReady(world, triangle.models());
     const BrushHulls hulls = floorHulls();
-    const std::vector<cs::HostageSpawn> spawns(3, cs::HostageSpawn{.origin = {.z = 100.0F}});
-    cs::spawnHostages(world, hulls, spawns);
+    cs::spawnHostages(world, hulls, spawnsApart(3));
     const std::vector<nx::ecs::Entity> hostages = hostagesOf(world);
     for (const nx::ecs::Entity entity : hostages) {
         nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
-        transform.origin = {.x = 50.0F, .z = 200.0F};
+        transform.origin = {.x = transform.origin.x + 1000.0F, .z = 200.0F};
         transform.angles = {.yaw = nx::Degrees{90.0F}};
     }
     runTicks(world, hulls, 30);
@@ -182,14 +195,30 @@ TEST(HostagesTest, ARoundPutsTheHostagesBackWhereTheyStartedWhileTheBonusLetsIt)
     const nx::game::TickTime time = nx::game::tickTimeOf(world);
     for (std::size_t index = 0; index < 2; ++index) {
         const nx::game::Transform& transform = *world.get<nx::game::Transform>(hostages[index]);
-        EXPECT_FLOAT_EQ(transform.origin.x, 0.0F) << index;
+        EXPECT_FLOAT_EQ(transform.origin.x, 40.0F * static_cast<float>(index)) << index;
         EXPECT_NEAR(transform.origin.z, kStopDistance, kTolerance) << index;
         EXPECT_FLOAT_EQ(transform.angles.yaw.value(), 0.0F) << index;
         const nx::GameTime think = world.get<nx::game::NextThink>(hostages[index])->time;
         EXPECT_GE(think, time.now.after(nx::Seconds{0.1F}, time.rate)) << index;
         EXPECT_LE(think, time.now.after(nx::Seconds{0.2F}, time.rate)) << index;
     }
-    EXPECT_FLOAT_EQ(world.get<nx::game::Transform>(hostages[2])->origin.x, 50.0F) << "past the bonus's most";
+    EXPECT_FLOAT_EQ(world.get<nx::game::Transform>(hostages[2])->origin.x, 1080.0F)
+        << "past the bonus's most";
+}
+
+TEST(HostagesTest, AHostageDroppedWhereAnotherIsLandsOnItsHead) {
+    const PlayedTriangle triangle;
+    nx::ecs::World world;
+    makeReady(world, triangle.models());
+    const BrushHulls hulls = floorHulls();
+    const std::vector<cs::HostageSpawn> spawns(2, cs::HostageSpawn{.origin = {.z = 100.0F}});
+    cs::spawnHostages(world, hulls, spawns);
+
+    const std::vector<nx::ecs::Entity> hostages = hostagesOf(world);
+    EXPECT_NEAR(world.get<nx::game::Transform>(hostages[0])->origin.z, kStopDistance, kTolerance);
+    EXPECT_NEAR(world.get<nx::game::Transform>(hostages[1])->origin.z,
+                kStopDistance + cs::kHostageBox.max.z + kStopDistance, kTolerance)
+        << "DROP_TO_FLOOR meets the other's box";
 }
 
 TEST(HostagesTest, AHostageStopsAPlayerAsABox) {
@@ -200,10 +229,13 @@ TEST(HostagesTest, AHostageStopsAPlayerAsABox) {
     const std::array spawns{cs::HostageSpawn{.origin = {.x = 30.0F, .z = 100.0F}}};
     cs::spawnHostages(world, hulls, spawns);
 
-    const std::vector<cs::SolidBox> boxes = cs::hostageBoxes(world);
+    const std::vector<cs::SolidBox> boxes = cs::solidBoxesOf(world);
     ASSERT_EQ(boxes.size(), 1U);
     EXPECT_FLOAT_EQ(boxes[0].origin.x, 30.0F);
     EXPECT_EQ(boxes[0].box.max.z, cs::kHostageBox.max.z);
+    const nx::game::Classified* const classified = world.get<nx::game::Classified>(hostagesOf(world).front());
+    ASSERT_NE(classified, nullptr);
+    EXPECT_EQ(classified->classification, nx::game::Classification::HumanPassive) << "Classify";
 }
 
 TEST(HostagesTest, ATraceMeetsAHostageAsSvHullForStudioModelChooses) {
@@ -213,22 +245,39 @@ TEST(HostagesTest, ATraceMeetsAHostageAsSvHullForStudioModelChooses) {
     const BrushHulls hulls = floorHulls();
     const std::array spawns{cs::HostageSpawn{.origin = {.z = 100.0F}}};
     cs::spawnHostages(world, hulls, spawns);
-    const nx::collision::Trace nothing{.fraction = 1.0F};
+    const nx::ecs::Entity hostage = hostagesOf(world).front();
 
     // A hull meets its box grown by the hull's.
-    const std::optional<nx::collision::Trace> boxed = cs::traceHostages(
-        world, nx::collision::Hull::Standing, {.x = -100.0F, .z = 40.0F}, {.x = 100.0F, .z = 40.0F}, nothing);
-    ASSERT_TRUE(boxed.has_value());
-    EXPECT_NEAR(boxed->end.x, -10.0F - 16.0F, 0.1F);
+    const nx::game::SolidHit boxed =
+        nx::game::traceSolidsHit(world, hulls,
+                                 nx::game::hullTrace(nx::collision::Hull::Standing,
+                                                     {.x = -100.0F, .z = 40.0F}, {.x = 100.0F, .z = 40.0F}));
+    EXPECT_EQ(boxed.entity, hostage);
+    EXPECT_NEAR(boxed.trace.end.x, -10.0F - 16.0F, 0.1F);
     // A line meets nothing where its box is far from the hostage's.
-    EXPECT_FALSE(cs::traceHostages(world, nx::collision::Hull::Point, {.x = -100.0F, .z = 500.0F},
-                                   {.x = 100.0F, .z = 500.0F}, nothing)
-                     .has_value());
-    // What met the way before it stays met.
-    const nx::collision::Trace nearer{.fraction = 0.1F};
-    EXPECT_FALSE(cs::traceHostages(world, nx::collision::Hull::Standing, {.x = -100.0F, .z = 40.0F},
-                                   {.x = 100.0F, .z = 40.0F}, nearer)
-                     .has_value());
+    EXPECT_FALSE(
+        nx::game::traceSolidsHit(world, hulls,
+                                 nx::game::hullTrace(nx::collision::Hull::Point, {.x = -100.0F, .z = 500.0F},
+                                                     {.x = 100.0F, .z = 500.0F}))
+            .entity.has_value());
+}
+
+TEST(HostagesTest, ALineThroughAHostageOfAModelWithoutHitboxesIsAllInSolid) {
+    const PlayedTriangle triangle{false};
+    nx::ecs::World world;
+    makeReady(world, triangle.models());
+    const BrushHulls hulls = floorHulls();
+    const std::array spawns{cs::HostageSpawn{.origin = {.z = 100.0F}}};
+    cs::spawnHostages(world, hulls, spawns);
+
+    // The original's loop over the hitboxes of none leaves the trace all in solid, not stopped.
+    const nx::game::SolidHit hit =
+        nx::game::traceSolidsHit(world, hulls,
+                                 nx::game::hullTrace(nx::collision::Hull::Point, {.x = -100.0F, .z = 30.0F},
+                                                     {.x = 100.0F, .z = 30.0F}));
+    EXPECT_EQ(hit.entity, hostagesOf(world).front());
+    EXPECT_TRUE(hit.trace.isAllSolid);
+    EXPECT_EQ(hit.trace.fraction, 1.0F);
 }
 
 TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {

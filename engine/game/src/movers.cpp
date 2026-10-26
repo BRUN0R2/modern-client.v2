@@ -16,10 +16,10 @@ namespace {
 /// The engine keeps a pusher's angles within ten turns.
 constexpr float kAngleWrap = 3600.0F;
 
-/// Whether the box of `body` at `origin` is in solid (SV_TestEntityPosition).
-[[nodiscard]] auto isStuck(const collision::BrushHulls& hulls, std::span<const SolidBrush> solids,
-                           const Body& body, Vec3 origin) -> bool {
-    return serverTrace(hulls, solids, std::nullopt, body.hull, origin, origin).startsSolid;
+/// Whether the box of `body` at `origin` is in solid in `world` (SV_TestEntityPosition).
+[[nodiscard]] auto isStuck(ecs::World& world, const collision::BrushHulls& hulls, const Body& body,
+                           Vec3 origin) -> bool {
+    return traceSolidsHit(world, hulls, hullTrace(body.hull, origin, origin)).trace.startsSolid;
 }
 
 /// Whether a body's linked box, at `origin`, overlaps `box`, more than touching it (SV_PushMove).
@@ -60,12 +60,13 @@ struct Moved {
                             ecs::Entity bodyEntity, Vec3 push) -> bool {
     const Body& body = *world.get<Body>(bodyEntity);
     Vec3& origin = world.get<Transform>(bodyEntity)->origin;
-    const collision::Trace pushed =
-        serverTrace(hulls, solidBrushesOf(world), pusher, body.hull, origin, origin + push);
+    ServerTrace way = hullTrace(body.hull, origin, origin + push);
+    way.ignored = pusher;
+    const collision::Trace pushed = traceSolidsHit(world, hulls, way).trace;
     if (pushed.fraction != 0.0F) {
         origin = pushed.end;
     }
-    return isStuck(hulls, solidBrushesOf(world), body, origin);
+    return isStuck(world, hulls, body, origin);
 }
 
 /// Puts back everything a blocked pusher moved, its clock too, and blocks it.
@@ -105,7 +106,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         const Body& body = *world.get<Body>(bodyEntity);
         const Vec3 origin = world.get<Transform>(bodyEntity)->origin;
         if (body.groundModel != model &&
-            (!overlaps(body, origin, swept) || !isStuck(hulls, solidBrushesOf(world), body, origin))) {
+            (!overlaps(body, origin, swept) || !isStuck(world, hulls, body, origin))) {
             continue; // not in its way
         }
         moved.push_back({.entity = bodyEntity, .from = origin});
@@ -144,7 +145,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         const Body& body = *world.get<Body>(bodyEntity);
         const Vec3 origin = world.get<Transform>(bodyEntity)->origin;
         if (body.groundModel != model &&
-            (!overlaps(body, origin, linked) || !isStuck(hulls, solidBrushesOf(world), body, origin))) {
+            (!overlaps(body, origin, linked) || !isStuck(world, hulls, body, origin))) {
             continue; // not in its way
         }
         moved.push_back({.entity = bodyEntity, .from = origin});

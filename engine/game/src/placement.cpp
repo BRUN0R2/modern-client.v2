@@ -18,16 +18,18 @@ constexpr float kDropReach = 256.0F;
 
 } // namespace
 
-auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Aabb& box, Vec3 origin)
-    -> Vec3 {
-    const collision::BoxHull boxHull = collision::boxHullOf(box);
-    const Vec3 start = origin - boxHull.offset;
-    const collision::Trace trace = serverTrace(hulls, solidBrushesOf(world), std::nullopt, boxHull.hull,
-                                               start, start - Vec3{.z = kDropReach});
+auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Aabb& box, Vec3 origin,
+                    std::optional<ecs::Entity> dropped) -> Vec3 {
+    const collision::Trace trace = traceSolidsHit(world, hulls,
+                                                  ServerTrace{.box = box,
+                                                              .start = origin,
+                                                              .end = origin - Vec3{.z = kDropReach},
+                                                              .ignored = dropped})
+                                       .trace;
     if (trace.isAllSolid || trace.fraction == 1.0F) {
         return origin;
     }
-    return trace.end + boxHull.offset;
+    return trace.end;
 }
 
 } // namespace nx::game
