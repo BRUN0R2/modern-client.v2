@@ -216,6 +216,7 @@ milestone that needs them.
 | KTX-Software | KTX2/Basis | Apache-2.0 |
 | libspng or stb_image | PNG/TGA | BSD-2 / public domain |
 | toml++ | Configuration and data (no-exceptions mode) | MIT |
+| Recast and Detour (`recastnavigation`) | Navigation meshes and their queries (`nx.navigation`, [ADR-0023](adr/0023-navigation.md)) | Zlib |
 | SQLite | `nx.storage` | Public domain |
 | Tracy | Profiler | BSD-3-Clause |
 | Dear ImGui | Development tools | MIT |

@@ -39,6 +39,8 @@ The API is the **stable facade** between Rook plugins and the engine/game. Princ
 | `nx.storage` | KV and SQLite (capability `storage`) |
 | `nx.http` | Outgoing requests (capability `http`) |
 | `nx.log` | Logging with plugin context |
+| `nx.navigation` | Paths, nearest and random points, reachability, hiding spots and places; links and marked areas ([ADR-0023](adr/0023-navigation.md)) |
+| `nx.agents` | Classes with an agent part, goals, memory (`remember`, `recall`, `forget`, `knownThreats`) and behaviors as classes; each kind a mod makes, such as its zombies or its bosses, a module of the mod over it ([ADR-0024](adr/0024-agents.md)) |
 | `cs.player` | Players, teams, items, typed filters |
 | `cs.weapons` | Weapon classes (original and custom), virtuals, ammo |
 | `cs.rules` | Round, scoreboard, round end, `getGameVar`/`setGameVar` |

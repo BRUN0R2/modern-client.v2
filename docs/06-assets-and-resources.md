@@ -378,7 +378,8 @@ Loading a map involves:
 4. Packing lightmaps into atlases.
 5. Reading the entity lump and instantiating prefabs ([03 §11](03-ecs.md#11-prefabs-and-map-entities)).
 6. Reading the map's `.res` and building the resource manifest.
-7. Loading the optional parts: detail textures, overview and navigation mesh (bots).
+7. Loading the optional parts: detail textures, overview, and the navigation meshes of the
+   agents' profiles, read from their cache or built in jobs ([ADR-0023](adr/0023-navigation.md)).
 
 Loading runs as a job graph. The goal is to load `de_dust2` in under 1 second from a warm
 cache.
