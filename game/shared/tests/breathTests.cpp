@@ -3,13 +3,15 @@
 
 // The repository's data/cstrike/breath.toml, and a player's breath in water as the original's
 // CBasePlayer::WaterMove has it: the gasps as it comes up for air, after a while under water and once
-// its air ran out, the air whole again with its head out, held while it noclips, and the bubbles with
-// its head under, the likelier the less air it has left.
+// its air ran out, the air whole again with its head out, held while it noclips, the bubbles with its
+// head under, the likelier the less air it has left, its drowning once its air ran out, what drowning
+// took given back as it breathes again, and the harm of slime and lava.
 
 #include <gtest/gtest.h>
 
 import std;
 import nx.core;
+import nx.collision;
 import nx.game;
 import nx.platform;
 import cs.shared;
@@ -17,10 +19,19 @@ import cs.shared;
 namespace {
 
 using cs::Breath;
+using cs::BreathEvent;
 using cs::BreathRules;
+using cs::HarmKind;
 using cs::MoveType;
+using cs::PlayerHarm;
+using cs::PlayerHarmRules;
 using cs::SoundMade;
+using cs::TimedHarms;
 using cs::WaterLevel;
+using nx::collision::Contents;
+
+/// The harm of drowning and harmful water, the original's.
+const PlayerHarmRules kHarm{};
 
 /// The repository's data/cstrike/breath.toml, read.
 [[nodiscard]] auto repositoryRules() -> BreathRules {
@@ -37,10 +48,43 @@ using cs::WaterLevel;
     return nx::game::TickTime{.now = nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate)};
 }
 
+/// The first sound among `events`, when there is one.
+[[nodiscard]] auto firstSound(const std::vector<BreathEvent>& events) -> std::optional<SoundMade> {
+    for (const BreathEvent& event : events) {
+        if (const auto* const sound = std::get_if<SoundMade>(&event)) {
+            return *sound;
+        }
+    }
+    return std::nullopt;
+}
+
+/// The harms among `events`, in their order.
+[[nodiscard]] auto harmsOf(const std::vector<BreathEvent>& events) -> std::vector<PlayerHarm> {
+    std::vector<PlayerHarm> harms;
+    for (const BreathEvent& event : events) {
+        if (const auto* const harm = std::get_if<PlayerHarm>(&event)) {
+            harms.push_back(*harm);
+        }
+    }
+    return harms;
+}
+
+/// What a breath at `seconds` did, in `contents` to `level`, walking, its kept harms in `timed`.
+[[nodiscard]] auto breathAt(Breath& breath, TimedHarms& timed, float seconds, WaterLevel level,
+                            Contents contents = Contents::Water) -> std::vector<BreathEvent> {
+    nx::Random random{0, "breath"};
+    return breath.breathe(level, contents, MoveType::Walk, timed, at(seconds), random);
+}
+
 /// The sound of a breath at `seconds`, in water to `level`, walking.
 [[nodiscard]] auto breatheAt(Breath& breath, float seconds, WaterLevel level) -> std::optional<SoundMade> {
-    nx::Random random{0, "breath"};
-    return breath.breathe(level, MoveType::Walk, at(seconds), random);
+    TimedHarms timed;
+    return firstSound(breathAt(breath, timed, seconds, level));
+}
+
+/// A harm of `damage` and `kind`.
+[[nodiscard]] auto harm(float damage, HarmKind kind) -> PlayerHarm {
+    return PlayerHarm{.damage = nx::Damage{damage}, .kind = kind};
 }
 
 /// The sound `made` played, when one was made.
@@ -54,11 +98,12 @@ using cs::WaterLevel;
     -> std::uint64_t {
     std::uint64_t bubbles = 0;
     for (std::uint64_t command = 0; command < breaths; ++command) {
-        Breath breath{rules};
+        Breath breath{rules, kHarm};
         breath.fill(at(0.0F));
+        TimedHarms timed;
         nx::Random random{command, "breath"};
-        const std::optional<SoundMade> made =
-            breath.breathe(WaterLevel::Eyes, MoveType::Walk, at(seconds), random);
+        const std::optional<SoundMade> made = firstSound(
+            breath.breathe(WaterLevel::Eyes, Contents::Water, MoveType::Walk, timed, at(seconds), random));
         if (made && made->sound == &rules.bubbles) {
             ++bubbles;
         }
@@ -92,7 +137,7 @@ bubbles = { files = [], channel = "body" }
 
 TEST(BreathTest, ComingUpAfterAWhileUnderWaterGasps) {
     const BreathRules rules = repositoryRules();
-    Breath breath{rules};
+    Breath breath{rules, kHarm};
     breath.fill(at(0.0F));
     EXPECT_EQ(soundOf(breatheAt(breath, 3.0F, WaterLevel::Waist)), nullptr)
         << "9 seconds of the air left are not less than 9";
@@ -107,7 +152,7 @@ TEST(BreathTest, ComingUpAfterAWhileUnderWaterGasps) {
 
 TEST(BreathTest, ComingUpOnceTheAirRanOutGaspsLong) {
     const BreathRules rules = repositoryRules();
-    Breath breath{rules};
+    Breath breath{rules, kHarm};
     breath.fill(at(0.0F));
     std::ignore = breatheAt(breath, 6.0F, WaterLevel::Eyes);
     EXPECT_EQ(soundOf(breatheAt(breath, 12.0F, WaterLevel::Feet)), &rules.shortGasp)
@@ -119,7 +164,7 @@ TEST(BreathTest, ComingUpOnceTheAirRanOutGaspsLong) {
 
 TEST(BreathTest, TheAirIsWholeWhileTheHeadIsOutOfWater) {
     const BreathRules rules = repositoryRules();
-    Breath breath{rules};
+    Breath breath{rules, kHarm};
     breath.fill(at(0.0F));
     for (int second = 1; second <= 30; ++second) {
         EXPECT_EQ(soundOf(breatheAt(breath, static_cast<float>(second), WaterLevel::Waist)), nullptr)
@@ -131,10 +176,12 @@ TEST(BreathTest, TheAirIsWholeWhileTheHeadIsOutOfWater) {
 
 TEST(BreathTest, ANoclippingPlayerHoldsItsBreathAsItWas) {
     const BreathRules rules = repositoryRules();
-    Breath breath{rules};
+    Breath breath{rules, kHarm};
     breath.fill(at(0.0F));
     nx::Random random{0, "breath"};
-    EXPECT_FALSE(breath.breathe(WaterLevel::Dry, MoveType::Noclip, at(20.0F), random).has_value());
+    TimedHarms timed;
+    EXPECT_TRUE(
+        breath.breathe(WaterLevel::Dry, Contents::Empty, MoveType::Noclip, timed, at(20.0F), random).empty());
     EXPECT_EQ(soundOf(breatheAt(breath, 20.0F, WaterLevel::Dry)), &rules.longGasp)
         << "the air ran out while it noclipped";
 }
@@ -151,12 +198,14 @@ TEST(BreathTest, UnderWaterItBubblesTheLikelierTheLessAirIsLeft) {
     const std::uint64_t withoutAir = bubblesAt(rules, 12.5F, kBreaths);
     EXPECT_GT(withoutAir, 1'050U);
     EXPECT_LT(withoutAir, 1'350U);
-    Breath breath{rules};
+    Breath breath{rules, kHarm};
     breath.fill(at(0.0F));
     std::optional<SoundMade> bubble;
+    TimedHarms timed;
     for (std::uint64_t command = 0; !bubble && command < kBreaths; ++command) {
         nx::Random random{command, "breath"};
-        bubble = breath.breathe(WaterLevel::Eyes, MoveType::Walk, at(12.5F), random);
+        bubble = firstSound(
+            breath.breathe(WaterLevel::Eyes, Contents::Water, MoveType::Walk, timed, at(12.5F), random));
     }
     ASSERT_TRUE(bubble.has_value());
     EXPECT_EQ(bubble->sound, &rules.bubbles);
@@ -166,14 +215,118 @@ TEST(BreathTest, UnderWaterItBubblesTheLikelierTheLessAirIsLeft) {
 
 TEST(BreathTest, WithItsHeadOutOfWaterItDoesNotBubble) {
     const BreathRules rules = repositoryRules();
-    Breath breath{rules};
+    Breath breath{rules, kHarm};
     breath.fill(at(0.0F));
     for (std::uint64_t command = 0; command < 4'000; ++command) {
         nx::Random random{command, "breath"};
         const float seconds = 1.0F + (static_cast<float>(command) * 0.01F);
-        EXPECT_FALSE(breath.breathe(WaterLevel::Waist, MoveType::Walk, at(seconds), random).has_value())
+        TimedHarms timed;
+        EXPECT_TRUE(
+            breath.breathe(WaterLevel::Waist, Contents::Water, MoveType::Walk, timed, at(seconds), random)
+                .empty())
             << seconds;
     }
+}
+
+TEST(BreathTest, OnceItsAirRanOutItDrownsASecondApartEachHarmAStepMoreUpToFive) {
+    const BreathRules rules = repositoryRules();
+    Breath breath{rules, kHarm};
+    breath.fill(at(0.0F));
+    TimedHarms timed;
+    EXPECT_TRUE(harmsOf(breathAt(breath, timed, 12.0F, WaterLevel::Eyes)).empty())
+        << "its air runs out after 12";
+    std::vector<PlayerHarm> harms;
+    for (int command = 1201; command <= 1503; ++command) {
+        std::ranges::copy(
+            harmsOf(breathAt(breath, timed, static_cast<float>(command) / 100.0F, WaterLevel::Eyes)),
+            std::back_inserter(harms));
+    }
+    // At 12.01, then a second and a hundredth apart, as pain_finished is waited past.
+    EXPECT_EQ(harms, (std::vector<PlayerHarm>{harm(3.0F, HarmKind::Drown), harm(4.0F, HarmKind::Drown),
+                                              harm(5.0F, HarmKind::Drown)}));
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 15.04F, WaterLevel::Eyes)),
+              (std::vector<PlayerHarm>{harm(5.0F, HarmKind::Drown)}))
+        << "five at most";
+}
+
+TEST(BreathTest, ComingUpGivesBackWhatDrowningTookAndStartsItsHarmOver) {
+    const BreathRules rules = repositoryRules();
+    Breath breath{rules, kHarm};
+    breath.fill(at(0.0F));
+    TimedHarms timed;
+    for (const float seconds : {12.01F, 13.02F, 14.03F, 15.04F}) {
+        for (const PlayerHarm& harm : harmsOf(breathAt(breath, timed, seconds, WaterLevel::Eyes))) {
+            timed.took(harm.kind);
+        }
+    }
+    // It took 3, 4, 5 and 5: given back 10 at a time, at least two seconds apart.
+    EXPECT_EQ(soundOf(firstSound(breathAt(breath, timed, 15.5F, WaterLevel::Waist))), &rules.longGasp);
+    EXPECT_EQ(timed.check(kHarm.drowning.givenBack, at(15.5F).now, nx::kDefaultTickRate),
+              nx::HitPoints{10.0F});
+    std::ignore = breathAt(breath, timed, 16.0F, WaterLevel::Waist);
+    EXPECT_EQ(timed.check(kHarm.drowning.givenBack, at(16.0F).now, nx::kDefaultTickRate), nx::HitPoints{})
+        << "half a second after";
+    std::ignore = breathAt(breath, timed, 17.5F, WaterLevel::Waist);
+    EXPECT_EQ(timed.check(kHarm.drowning.givenBack, at(17.5F).now, nx::kDefaultTickRate),
+              nx::HitPoints{7.0F});
+    // Its air whole as it came up, it drowns again at 3 once that runs out.
+    EXPECT_TRUE(harmsOf(breathAt(breath, timed, 29.5F, WaterLevel::Eyes)).empty());
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 29.51F, WaterLevel::Eyes)),
+              (std::vector<PlayerHarm>{harm(3.0F, HarmKind::Drown)}));
+}
+
+TEST(BreathTest, SlimeAndLavaHurtEachCommandByHowDeepThePlayerIs) {
+    const BreathRules rules = repositoryRules();
+    Breath breath{rules, kHarm};
+    breath.fill(at(0.0F));
+    TimedHarms timed;
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 1.0F, WaterLevel::Feet, Contents::Lava)),
+              (std::vector<PlayerHarm>{harm(10.0F, HarmKind::Burn)}));
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 1.01F, WaterLevel::Eyes, Contents::Lava)),
+              (std::vector<PlayerHarm>{harm(30.0F, HarmKind::Burn)}))
+        << "each command";
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 1.02F, WaterLevel::Waist, Contents::Slime)),
+              (std::vector<PlayerHarm>{harm(8.0F, HarmKind::Acid)}));
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 1.03F, WaterLevel::Feet, Contents::Slime)),
+              (std::vector<PlayerHarm>{harm(4.0F, HarmKind::Acid)}));
+    EXPECT_TRUE(harmsOf(breathAt(breath, timed, 1.04F, WaterLevel::Waist, Contents::Water)).empty());
+}
+
+TEST(BreathTest, LavaSparesThePlayerASecondAfterSlimeUntilItGoesIntoWaterAgain) {
+    // Slime sets the original's dmgtime a second on, which lava waits past; going into water puts it back.
+    const BreathRules rules = repositoryRules();
+    Breath breath{rules, kHarm};
+    breath.fill(at(0.0F));
+    TimedHarms timed;
+    std::ignore = breathAt(breath, timed, 0.9F, WaterLevel::Feet, Contents::Water);
+    std::ignore = breathAt(breath, timed, 1.0F, WaterLevel::Feet, Contents::Slime);
+    EXPECT_TRUE(harmsOf(breathAt(breath, timed, 1.5F, WaterLevel::Feet, Contents::Lava)).empty());
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 2.01F, WaterLevel::Feet, Contents::Lava)).size(), 1U);
+
+    std::ignore = breathAt(breath, timed, 3.0F, WaterLevel::Feet, Contents::Slime);
+    std::ignore = breathAt(breath, timed, 3.1F, WaterLevel::Dry, Contents::Empty);
+    EXPECT_TRUE(harmsOf(breathAt(breath, timed, 3.2F, WaterLevel::Feet, Contents::Lava)).empty())
+        << "going in, it is weighed before it is put back";
+    EXPECT_EQ(harmsOf(breathAt(breath, timed, 3.21F, WaterLevel::Feet, Contents::Lava)).size(), 1U);
+}
+
+TEST(BreathTest, ItDrownsBeforeItBubblesAndBeforeSlimeHurtsIt) {
+    const BreathRules rules = repositoryRules();
+    for (std::uint64_t command = 0; command < 4'000; ++command) {
+        TimedHarms timed;
+        Breath fresh{rules, kHarm};
+        fresh.fill(at(0.0F));
+        nx::Random random{command, "breath"};
+        const std::vector<BreathEvent> events =
+            fresh.breathe(WaterLevel::Eyes, Contents::Slime, MoveType::Walk, timed, at(12.5F), random);
+        if (events.size() == 3) {
+            EXPECT_EQ(std::get<PlayerHarm>(events[0]), harm(3.0F, HarmKind::Drown));
+            EXPECT_EQ(std::get<SoundMade>(events[1]).sound, &rules.bubbles);
+            EXPECT_EQ(std::get<PlayerHarm>(events[2]), harm(12.0F, HarmKind::Acid));
+            return;
+        }
+    }
+    ADD_FAILURE() << "no breath bubbled";
 }
 
 } // namespace

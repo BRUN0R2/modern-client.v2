@@ -50,8 +50,9 @@ LocalGame::LocalGame(CreateToken /*token*/, const GameContent& content, const Le
     : m_content{&content}, m_level{&level}, m_team{team}, m_autoSwitch{autoSwitch}, m_cvars{std::move(cvars)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(level.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy}, m_stepVoice{content.footsteps}, m_breath{content.breath},
-      m_status{.money = m_cvars.startingMoney()}, m_inventory{content.weapons} {}
+      m_accounts{content.economy}, m_stepVoice{content.footsteps},
+      m_breath{content.breath, content.playerHarm}, m_status{.money = m_cvars.startingMoney()},
+      m_inventory{content.weapons} {}
 
 auto LocalGame::start(const GameContent& content, const Level& level, Team team, AutoSwitch autoSwitch,
                       GameCvars cvars) -> nx::Result<std::unique_ptr<LocalGame>, LevelError> {
@@ -144,11 +145,10 @@ void LocalGame::tick(const UserCommand& command) {
     // the original's CmdStart selects it.
     m_inventory.select(command, nx::game::tickTimeOf(m_world));
     m_player.maxSpeed = maxSpeed();
-    const bool isAlive = m_status.isAlive();
-    if (isAlive) {
-        preThink(command);
-    }
+    preThink(command);
     m_lastButtons = command.buttons;
+    // After PreThink, which may kill it, as the original's returns then, and its PostThink skips the dead.
+    const bool isAlive = m_status.isAlive();
     const MovementState before = m_player;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
     const MovementResult moved =
@@ -173,16 +173,27 @@ void LocalGame::tick(const UserCommand& command) {
 }
 
 void LocalGame::preThink(const UserCommand& command) {
-    if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
-        std::ignore = nx::game::playerUse(
-            m_world, m_level->hulls(), m_body,
-            {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    if (m_status.isAlive()) {
+        if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
+            std::ignore = nx::game::playerUse(
+                m_world, m_level->hulls(), m_body,
+                {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
+        }
+        nx::Random breathRandom{command.number.value, kBreathStream};
+        for (const BreathEvent& event :
+             m_breath.breathe(m_player.waterLevel, m_player.waterType, m_player.moveType, m_timedHarms, time,
+                              breathRandom)) {
+            if (const auto* const sound = std::get_if<SoundMade>(&event)) {
+                m_playerSounds.push_back(*sound);
+            } else {
+                hurt(std::get<PlayerHarm>(event));
+            }
+        }
     }
-    nx::Random breathRandom{command.number.value, kBreathStream};
-    if (const std::optional<SoundMade> breath = m_breath.breathe(
-            m_player.waterLevel, m_player.moveType, nx::game::tickTimeOf(m_world), breathRandom)) {
-        m_playerSounds.push_back(*breath);
-    }
+    // Dead or not, as the original's PreThink looks at the kept harms before it weighs a death; the dead
+    // are given back none.
+    healPlayer(m_status, m_timedHarms.check(m_content->playerHarm.drowning.givenBack, time.now, time.rate));
 }
 
 void LocalGame::postThink(const UserCommand& command, const MovementState& before) {
@@ -246,15 +257,20 @@ void LocalGame::postThink(const UserCommand& command, const MovementState& befor
 }
 
 void LocalGame::land(nx::Damage damage) {
-    const PlayerHarmRules& rules = m_content->playerHarm;
     // Weighed before the damage is cut to its whole points.
     if (damage.value() > m_status.health.value()) {
-        makeSound(rules.splat);
+        makeSound(m_content->playerHarm.splat);
     }
-    makeSound(rules.pain);
-    const nx::game::Harm harm = harmPlayer(m_status, damage);
+    hurt(PlayerHarm{.damage = damage, .kind = HarmKind::Fall});
     m_player.punch.pitch = nx::Degrees{};
-    if (harm.isKilled) {
+}
+
+void LocalGame::hurt(const PlayerHarm& harm) {
+    if (!m_status.isAlive()) {
+        return;
+    }
+    makeSound(m_content->playerHarm.pain);
+    if (harmPlayer(m_status, m_timedHarms, harm).isKilled) {
         die();
     }
 }
@@ -363,6 +379,7 @@ void LocalGame::spawn() {
     m_turnedView = nx::EulerAngles{.yaw = point.yaw};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     m_breath.fill(time);
+    m_timedHarms.spawned();
     m_roundTimer = m_rounds.timerAt(time.now, time.rate);
 }
 

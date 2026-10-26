@@ -6,8 +6,8 @@
 /// movement one user command a tick (docs/07-simulation-and-physics.md, section 2.2), with the
 /// weapons a player of its team spawns with (cs::Inventory), in the rounds of the map (cs::Rounds),
 /// spawning again at its team's spawn points as each starts, paid by them (cs::TeamAccounts); its
-/// feet sound by what it walks on (cs::StepVoice); its hard landings hurt it, and kill it
-/// (cs.shared:playerHarm), which ends its round in a draw.
+/// feet sound by what it walks on (cs::StepVoice); its hard landings, drowning and harmful water hurt
+/// it, and kill it (cs.shared:playerHarm), which ends its round in a draw.
 export module cs.client:localGame;
 
 import std;
@@ -145,17 +145,21 @@ private:
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;
     /// One tick of the game, `command` the player's.
     void tick(const UserCommand& command);
-    /// What a living player does before `command` moves it (PreThink): it uses what is in front as the
-    /// use button goes down, and breathes in the water the last command left it in (Breath::breathe).
+    /// What the player does before `command` moves it (PreThink): alive, it uses what is in front as
+    /// the use button goes down, and breathes in the water the last command left it in
+    /// (Breath::breathe), hurt as it drowns and by harmful water; then the harms it keeps over time are
+    /// looked at, and what drowning took given back to it alive (TimedHarms::check).
     void preThink(const UserCommand& command);
     /// What a living player does once `command` moved it from `before` (PostThink): the weapon in hand
     /// fires, is reloaded or idles, its attacks dealt to what they meet; then its landing hurts it
     /// (landingDamageOf).
     void postThink(const UserCommand& command, const MovementState& before);
     /// The player lands, hurt by `damage` (PostThink): it splats when the damage is more than its
-    /// health, feels the pain of a harm its armor does not take, loses the damage's whole points
-    /// (harmPlayer) and the pitch of its kick; killed by it, it dies (die).
+    /// health, is hurt by its fall (hurt), and loses the pitch of its kick.
     void land(nx::Damage damage);
+    /// The player is dealt `harm` (CBasePlayer::TakeDamage): alive, it feels its pain and loses its
+    /// whole points, keeping a harm kept over time (harmPlayer); killed by it, it dies (die).
+    void hurt(const PlayerHarm& harm);
     /// The player dies (Killed): it is heard dying, moves no more (MovementState::isDead) and its weapons
     /// are gone with it; the local game's other team having no player, nobody is alive: its round ends
     /// in a draw (TeamExterminationCheck).
@@ -219,6 +223,7 @@ private:
     TeamAccounts m_accounts;
     StepVoice m_stepVoice;
     Breath m_breath;
+    TimedHarms m_timedHarms;               ///< What harms the player keeps over time.
     std::vector<SoundMade> m_playerSounds; ///< Since takeSounds, but its weapons', which they keep.
     bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
     RoundTimer m_roundTimer{};     ///< What the player's HUD was told last.
