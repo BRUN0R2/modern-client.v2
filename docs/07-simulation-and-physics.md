@@ -398,7 +398,12 @@ the player walks to them. A player's use (`playerUse`, `CBasePlayer::PlayerUse`)
 entities it reaches (a button that takes no damage, a door flagged "use only"), whose linked box
 comes within 64 units of its origin (`FindEntityInSphere`), the one whose middle is most straight
 ahead from its eye, more than 0.7 of the way; as the original, through walls. In cs_office, the
-button by the garage door raises it.
+button by the garage door raises it. The local game uses as the use key goes down after the command
+moved the player, from where the move left its eye, before the weapon's frame, as the original's
+`ItemPostFrame` runs `ImpulseCommands` in `PostThink`, and not while the player is held back, its
+weapon being drawn or reloaded (`m_flNextAttack`, `cs::Inventory::isHeldBack`): the press is lost then.
+It is heard (`data/cstrike/use.toml`, `cs::UseRules`): `common/wpn_select` with something to use in
+front, `common/wpn_denyselect` with nothing (`UseEmpty`), at 0.4 on the player's `Item` channel.
 
 ### 5.3 Damage
 
