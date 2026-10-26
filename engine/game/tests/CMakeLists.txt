@@ -8,6 +8,7 @@ nxAddTest(nxGameTests
         damageTests.cpp
         decalsTests.cpp
         doorTests.cpp
+        entityKeysTests.cpp
         navigationTests.cpp
         placementTests.cpp
         solidsTests.cpp
@@ -15,6 +16,7 @@ nxAddTest(nxGameTests
         triggerTests.cpp
     DEPENDS
         nx::game
+        nx::assets
         nx::navigation
         nx::platform)
 

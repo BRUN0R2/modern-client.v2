@@ -53,22 +53,6 @@ constexpr std::int32_t kNotByPlayers = 2;
 constexpr Seconds kDefaultTriggerWait{0.2F};
 constexpr Seconds kFiresOnce{-1.0F};
 
-/// The "angles" of an entity; else its "angle", which the original's engine turns into angles:
-/// a yaw, -1 for up, any other negative for down.
-[[nodiscard]] auto anglesOf(const assets::BspEntity& entity) -> Vec3 {
-    if (const std::optional<Vec3> angles = entity.findVector("angles")) {
-        return *angles;
-    }
-    constexpr float kUp = -1.0F;
-    constexpr float kQuarterTurn = 90.0F;
-    const float angle = entity.findNumber("angle").value_or(0.0F);
-    if (angle >= 0.0F) {
-        return Vec3{.y = angle};
-    }
-    // Parity: the original compares the angle cut to a whole number.
-    return Vec3{.x = std::trunc(angle) == kUp ? -kQuarterTurn : kQuarterTurn};
-}
-
 /// The way a mover goes for `angles` (the original's SetMovedir): (0 -1 0) up, (0 -2 0) down, else
 /// the way they face.
 [[nodiscard]] auto moveDirectionOf(Vec3 angles) -> Vec3 {

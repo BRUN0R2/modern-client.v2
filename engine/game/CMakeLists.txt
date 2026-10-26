@@ -7,6 +7,7 @@ nxAddModuleLibrary(nxGame
     MODULES
         src/nx.game.cppm
         src/clock.cppm
+        src/entityKeys.cppm
         src/components.cppm
         src/links.cppm
         src/thinking.cppm
@@ -25,6 +26,7 @@ nxAddModuleLibrary(nxGame
         src/navigation.cppm
     SOURCES
         src/clock.cpp
+        src/entityKeys.cpp
         src/components.cpp
         src/links.cpp
         src/thinking.cpp

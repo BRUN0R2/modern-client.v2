@@ -9,7 +9,6 @@ nxAddModuleLibrary(csClient
         src/cs.client.cppm
         src/input.cppm
         src/entityKeys.cppm
-        src/modelFiles.cppm
         src/mapLight.cppm
         src/mapSprites.cppm
         src/mapModels.cppm
@@ -21,8 +20,7 @@ nxAddModuleLibrary(csClient
         src/level.cppm
         src/scene.cppm
         src/frame.cppm
-        src/gameCvars.cppm
-        src/localGame.cppm
+        src/clientGame.cppm
         src/hud.cppm
         src/windowFonts.cppm
         src/console.cppm
@@ -33,7 +31,6 @@ nxAddModuleLibrary(csClient
     SOURCES
         src/input.cpp
         src/entityKeys.cpp
-        src/modelFiles.cpp
         src/mapLight.cpp
         src/mapSprites.cpp
         src/mapModels.cpp
@@ -45,8 +42,7 @@ nxAddModuleLibrary(csClient
         src/level.cpp
         src/scene.cpp
         src/frame.cpp
-        src/gameCvars.cpp
-        src/localGame.cpp
+        src/clientGame.cpp
         src/hud.cpp
         src/windowFonts.cpp
         src/console.cpp

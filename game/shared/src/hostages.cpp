@@ -270,18 +270,36 @@ auto registerHostages(nx::ecs::World& world, std::span<const PlayedModel> models
     return {};
 }
 
+auto mapHostagesOf(const nx::assets::BspView& map) -> std::vector<MapHostage> {
+    std::vector<MapHostage> hostages;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        if (entity.find("classname") != kHostageClass) {
+            continue;
+        }
+        const nx::Vec3 angles = nx::game::anglesOf(entity);
+        const std::string_view model = entity.find("model").value_or("");
+        hostages.push_back(MapHostage{
+            .model = std::string{model.empty() ? kDefaultHostageModel : model},
+            .origin = entity.findVector("origin").value_or(nx::Vec3{}),
+            .angles = {.pitch = nx::Degrees{angles.x},
+                       .yaw = nx::Degrees{angles.y},
+                       .roll = nx::Degrees{angles.z}},
+            .skin = static_cast<std::uint32_t>(std::max(entity.findInteger("skin").value_or(0), 0))});
+    }
+    return hostages;
+}
+
 void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                    std::span<const HostageSpawn> spawns) {
     const std::span<const PlayedModel> models = modelsOf(world);
     const nx::game::TickTime time = nx::game::tickTimeOf(world);
-    for (std::size_t index = 0; index < spawns.size(); ++index) {
-        const HostageSpawn& spawn = spawns[index];
+    for (const HostageSpawn& spawn : spawns) {
         if (spawn.model >= models.size()) {
             continue;
         }
         const PlayedModel& model = models[spawn.model];
-        nx::Random random{index, kSpawnStream};
-        Hostage hostage{.spawn = nx::narrow<std::uint32_t>(index),
+        nx::Random random{spawn.spawn, kSpawnStream};
+        Hostage hostage{.spawn = spawn.spawn,
                         .model = spawn.model,
                         .startAngles = spawn.angles,
                         .controllers = controllersOf(*model.view)};
@@ -334,29 +352,33 @@ auto repositionHostages(nx::ecs::World& world, const nx::collision::BrushHulls& 
     return held;
 }
 
-auto hostagesShownAt(nx::ecs::World& world, nx::GameTime time) -> std::vector<ShownHostage> {
-    const std::span<const PlayedModel> models = modelsOf(world);
-    const nx::TickRate rate = nx::game::tickTimeOf(world).rate;
-    std::vector<ShownHostage> shown;
+auto hostageStatesOf(nx::ecs::World& world) -> std::vector<HostageState> {
+    std::vector<HostageState> states;
     for (const nx::ecs::Entity entity : hostagesOf(world)) {
         const Hostage& hostage = *world.get<Hostage>(entity);
-        if (hostage.model >= models.size()) {
-            continue;
-        }
         const Animation& animation = *world.get<Animation>(entity);
         const nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
-        const nx::assets::StudioSequence& sequence =
-            models[hostage.model].view->sequences()[animation.sequence.value];
-        shown.push_back(ShownHostage{.spawn = hostage.spawn,
-                                     .origin = transform.origin,
-                                     .angles = transform.angles,
-                                     .sequence = animation.sequence,
-                                     .frame = estimatedFrameOf(sequence, animation.frame,
-                                                               time.since(animation.advancedAt, rate),
-                                                               animation.framerate),
-                                     .controllers = hostage.controllers});
+        states.push_back(HostageState{.spawn = hostage.spawn,
+                                      .origin = transform.origin,
+                                      .angles = transform.angles,
+                                      .sequence = animation.sequence,
+                                      .frame = animation.frame,
+                                      .advancedAt = animation.advancedAt,
+                                      .framerate = animation.framerate,
+                                      .controllers = hostage.controllers});
     }
-    return shown;
+    return states;
+}
+
+auto shownHostageOf(const HostageState& state, const nx::assets::StudioSequence& sequence, nx::GameTime time,
+                    nx::TickRate rate) -> ShownHostage {
+    return ShownHostage{
+        .spawn = state.spawn,
+        .origin = state.origin,
+        .angles = state.angles,
+        .sequence = state.sequence,
+        .frame = estimatedFrameOf(sequence, state.frame, time.since(state.advancedAt, rate), state.framerate),
+        .controllers = state.controllers};
 }
 
 } // namespace cs

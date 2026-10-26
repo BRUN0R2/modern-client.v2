@@ -9,11 +9,13 @@
 /// data/cstrike/entities.toml describes; doors, which a player's touch opens and the engine's pusher
 /// physics moves; buttons a player presses by use or touch; triggers a player walks into, firing the
 /// entities named by their targets, at once or after a delay, as the entities' think runs; what a
-/// player uses; an entity dropped to the floor; the decals a map stamps as its game starts; and what
-/// navigation is given: the agents' profiles of data/cstrike/navigation.toml, and a map's geometry.
+/// player uses; an entity dropped to the floor; the decals a map stamps as its game starts; the angles
+/// the engine reads of an entity's keys; and what navigation is given: the agents' profiles of
+/// data/cstrike/navigation.toml, and a map's geometry.
 export module nx.game;
 
 export import :clock;
+export import :entityKeys;
 export import :components;
 export import :links;
 export import :solids;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // What the client sets up as the game would: the light styles, the sky's light and the sprite entities of
-// a map, its spawn points and what it is played for, the BSP seed of the fuzz corpus given other
+// a map, the view of a player at its first spawn point, the BSP seed of the fuzz corpus given other
 // entities, and how those sprites animate.
 
 #include <gtest/gtest.h>
@@ -16,6 +16,8 @@ import nx.render;
 import cs.shared;
 import cs.client;
 
+#include "boxMap.hpp"
+
 namespace {
 
 using cs::MapSprite;
@@ -23,25 +25,11 @@ using cs::SpriteClass;
 using nx::render::RenderMode;
 
 constexpr float kTolerance = 1e-5F;
-/// Where the header of a BSP keeps the offset and the length of its entities.
-constexpr std::size_t kEntitiesLump = 4;
 
 /// A map of the BSP seed whose entities are `entities`, the text of its entities lump.
 class MapOf {
 public:
-    explicit MapOf(std::string_view entities) {
-        auto seed = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" /
-                                           "boxEmbedded.bsp");
-        EXPECT_TRUE(seed.has_value());
-        m_bytes = seed.value_or(std::vector<std::byte>{});
-        // The new lump at the end of the file, its terminating zero included.
-        const auto offset = static_cast<std::int32_t>(m_bytes.size());
-        const auto length = static_cast<std::int32_t>(entities.size() + 1);
-        std::ranges::copy(std::as_bytes(std::span{entities}), std::back_inserter(m_bytes));
-        m_bytes.push_back(std::byte{0});
-        const auto header =
-            std::bit_cast<std::array<std::byte, sizeof(std::int32_t) * 2>>(std::array{offset, length});
-        std::ranges::copy(header, m_bytes.begin() + static_cast<std::ptrdiff_t>(kEntitiesLump));
+    explicit MapOf(std::string_view entities) : m_bytes{nx::test::boxMapWith(entities)} {
         auto map = nx::assets::BspView::parse(m_bytes);
         EXPECT_TRUE(map.has_value()) << (map ? "" : nx::describe(map.error()));
         if (map) {
@@ -130,43 +118,18 @@ TEST(LightStyleTest, ASwitchableLightStartsAsItsEntitySays) {
     EXPECT_EQ(values[34], 256) << "a light without a name cannot be switched: no pattern of its own";
 }
 
-TEST(SpawnPointTest, EachTeamsAreItsClassesWithAnOriginInTheirOrder) {
+TEST(SpawnViewTest, ThePlayersEyeIsAtTheFirstCounterTerroristSpawnPoint) {
     const MapOf map{R"({ "classname" "worldspawn" }
 { "classname" "info_player_deathmatch" "origin" "1 2 3" "angles" "0 90 0" }
-{ "classname" "info_player_start" "origin" "4 5 6" }
-{ "classname" "info_player_deathmatch" "origin" "0 0 0" }
-{ "classname" "info_player_deathmatch" }
-{ "classname" "info_player_deathmatch" "origin" "7 8 9" "angles" "10 180 0" })"};
-    const std::vector<cs::SpawnPoint> terrorists{
-        {.origin = {.x = 1.0F, .y = 2.0F, .z = 3.0F}, .yaw = nx::Degrees{90.0F}},
-        {.origin = {.x = 7.0F, .y = 8.0F, .z = 9.0F}, .yaw = nx::Degrees{180.0F}}};
-    EXPECT_EQ(cs::spawnPointsOf(map.get(), cs::Team::Terrorists), terrorists);
-    const std::vector<cs::SpawnPoint> counterTerrorists{{.origin = {.x = 4.0F, .y = 5.0F, .z = 6.0F}}};
-    EXPECT_EQ(cs::spawnPointsOf(map.get(), cs::Team::CounterTerrorists), counterTerrorists);
-    // A player first stands at the first counter-terrorist spawn point, its eye at the view's height.
-    EXPECT_EQ(cs::spawnTeam(map.get()), cs::Team::CounterTerrorists);
+{ "classname" "info_player_start" "origin" "4 5 6" })"};
+    // Its eye at the view's height.
     EXPECT_EQ(cs::spawnView(map.get()).position, (nx::Vec3{.x = 4.0F, .y = 5.0F, .z = 6.0F + 17.0F}));
 }
 
-TEST(SpawnPointTest, WithoutCounterTerroristsAPlayerFirstStandsWithTheTerrorists) {
+TEST(SpawnViewTest, WithoutCounterTerroristsThePlayerLooksAsTheTerroristsFirstSpawnPointFaces) {
     const MapOf map{R"({ "classname" "worldspawn" }
 { "classname" "info_player_deathmatch" "origin" "1 2 3" "angles" "0 90 0" })"};
-    EXPECT_EQ(cs::spawnTeam(map.get()), cs::Team::Terrorists);
     EXPECT_EQ(cs::spawnView(map.get()).angles.yaw, nx::Degrees{90.0F});
-}
-
-TEST(MapObjectiveTest, AMapIsPlayedForWhatItsEntitiesAre) {
-    const MapOf bomb{R"({ "classname" "worldspawn" }
-{ "classname" "func_buyzone" }
-{ "classname" "info_bomb_target" "origin" "1 2 3" }
-{ "classname" "hostage_entity" })"};
-    EXPECT_EQ(cs::mapObjectivesOf(bomb.get()),
-              (cs::MapObjectives{cs::MapObjective::BombTarget, cs::MapObjective::Hostages}));
-    EXPECT_EQ(cs::hostagesOf(bomb.get()), 1U);
-    const MapOf none{R"({ "classname" "worldspawn" }
-{ "classname" "info_player_start" "origin" "1 2 3" })"};
-    EXPECT_EQ(cs::mapObjectivesOf(none.get()), cs::MapObjectives{});
-    EXPECT_EQ(cs::hostagesOf(none.get()), 0U);
 }
 
 TEST(SkyLightTest, LightEnvironmentsLightIsMadeTheEnginesAndAimsByItsPitch) {

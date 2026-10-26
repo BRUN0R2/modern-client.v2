@@ -23,7 +23,8 @@ TEST(NavigationProfileTest, ThePlayersProfileIsTheMovementsPlayer) {
     ASSERT_TRUE(text.has_value());
     const auto read = nx::game::readNavigationData(*text, "navigation.toml");
     ASSERT_TRUE(read.has_value()) << nx::describe(read.error());
-    const auto player = std::ranges::find(read->profiles, "player", &nx::navigation::AgentProfile::name);
+    const auto player =
+        std::ranges::find(read->profiles, std::string_view{"player"}, &nx::navigation::AgentProfile::name);
     ASSERT_NE(player, read->profiles.end());
 
     EXPECT_EQ(player->radius.value(), cs::kStandingBox.max.x);

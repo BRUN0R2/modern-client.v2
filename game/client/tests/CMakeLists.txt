@@ -5,6 +5,7 @@ nxAddTest(csClientTests
     SOURCES
         inputTests.cpp
         mapTests.cpp
+        clientGameTests.cpp
         hudTests.cpp
         muzzleFlashTests.cpp
         modelMaterialsTests.cpp
