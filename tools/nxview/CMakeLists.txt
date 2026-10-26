@@ -17,6 +17,7 @@ nxAddProgram(nxview
         nx::ui
         nx::settings
         cs::shared
+        cs::server
         cs::client)
 
 # The world, studio, sprite and screen shaders, in bin/shaders/.

@@ -66,9 +66,9 @@ the weapon it selects. The others arrive with what reads them.
 
 **Today** (`cs.client`): `cs::PlayerInput::nextCommand` makes a command from the player's `+`
 buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)),
-and the weapon `weapon_<id>` or `lastinv` selected since the last. `next` (`cs::LocalGame`) makes
-one each 10 ms, whatever its frame rate, numbered after the last; `cl_movement_rate` comes with the
-client.
+and the weapon `weapon_<id>` or `lastinv` selected since the last. `next` (`cs::ClientGame`) makes
+one each 10 ms, whatever its frame rate, numbered after the last, and the server's game (`cs::Game`)
+runs each in a tick; `cl_movement_rate` comes with the client.
 
 ### 2.3 Shared seed
 
@@ -131,7 +131,7 @@ code** on the server (authoritative) and on the client (prediction).
   (`PM_CheckFalling`); and a splash entering water, leaving it or swimming up
   (`PM_PlayWaterSounds`). A step says where the player stood, which the game looks up the texture
   under, and what it is made of ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
-  `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
+  `next` walks through the maps with it (`cs::Game`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
   list), which the game touches, a door opening; the player keeps what it stands on
@@ -347,9 +347,10 @@ stays in until used again (a toggle), or for good (a `wait` of -1); on its way b
 its usual textures again, and back out, a toggle fires its targets again (`ButtonBackHome`). A
 `func_wall` used shows its other textures (`CFuncWall::Use`, every use a toggle today); a brush
 entity's "frame" sets which it shows first. The moves of doors and buttons are those of the original's
-`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `next` ticks the game at 100 Hz
-(`cs::LocalGame`): the player's use (`+use`, as it goes down), the player's command, the doors and buttons it touched, the triggers it is in,
-what is due, then the pushers, the player's body among the bodies, then the clock.
+`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `next` ticks the server's game at
+100 Hz (`cs::Game`): each player's command, its use (`+use`, as it goes down), the doors and buttons it
+touched, the triggers it is in; then what is due, then the pushers, the players' bodies among the
+bodies, then the clock.
 
 **Today** (`nx.game:placement`): an entity the game drops to the floor, as the engine's
 `DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's trace (§4.2) through what is

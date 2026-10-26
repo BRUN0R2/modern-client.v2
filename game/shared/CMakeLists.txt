@@ -25,6 +25,10 @@ nxAddModuleLibrary(csShared
         src/hostages.cppm
         src/playerHarm.cppm
         src/use.cppm
+        src/modelFiles.cppm
+        src/gameContent.cppm
+        src/gameMap.cppm
+        src/snapshot.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -42,11 +46,15 @@ nxAddModuleLibrary(csShared
         src/hostages.cpp
         src/playerHarm.cpp
         src/use.cpp
+        src/modelFiles.cpp
+        src/gameContent.cpp
+        src/gameMap.cpp
     DEPENDS
         nx::core
         nx::math
         nx::meta
         nx::data
+        nx::platform
         nx::ecs
         nx::assets
         nx::collision

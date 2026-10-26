@@ -122,7 +122,8 @@ void makeReady(nx::ecs::World& world, std::span<const cs::PlayedModel> models) {
 [[nodiscard]] auto spawnsApart(std::size_t count) -> std::vector<cs::HostageSpawn> {
     std::vector<cs::HostageSpawn> spawns;
     for (std::size_t index = 0; index < count; ++index) {
-        spawns.push_back(cs::HostageSpawn{.origin = {.x = 40.0F * static_cast<float>(index), .z = 100.0F}});
+        spawns.push_back(cs::HostageSpawn{.spawn = nx::narrow<std::uint32_t>(index),
+                                          .origin = {.x = 40.0F * static_cast<float>(index), .z = 100.0F}});
     }
     return spawns;
 }
@@ -304,7 +305,7 @@ TEST(HostagesTest, ALineThroughAHostageOfAModelWithoutHitboxesIsAllInSolid) {
     EXPECT_EQ(hit.trace.fraction, 1.0F);
 }
 
-TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {
+TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromWhatTheServerTellsOfItsLastThink) {
     const PlayedTriangle triangle;
     nx::ecs::World world;
     makeReady(world, triangle.models());
@@ -317,14 +318,20 @@ TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {
     const nx::TickRate rate = nx::game::tickTimeOf(world).rate;
     const nx::GameTime later = animation.advancedAt.after(nx::Seconds{0.02F}, rate);
 
-    const std::vector<cs::ShownHostage> shown = cs::hostagesShownAt(world, later);
-    ASSERT_EQ(shown.size(), 1U);
-    EXPECT_EQ(shown[0].spawn, 0U);
-    EXPECT_FLOAT_EQ(shown[0].origin.x, 8.0F);
-    EXPECT_EQ(shown[0].sequence, animation.sequence);
+    const std::vector<cs::HostageState> states = cs::hostageStatesOf(world);
+    ASSERT_EQ(states.size(), 1U);
+    EXPECT_EQ(states[0].spawn, 0U);
+    EXPECT_FLOAT_EQ(states[0].origin.x, 8.0F);
+    EXPECT_EQ(states[0].sequence, animation.sequence);
+    EXPECT_EQ(states[0].frame, animation.frame);
+    EXPECT_EQ(states[0].advancedAt, animation.advancedAt);
     const nx::assets::StudioSequence& sequence = triangle.view().sequences()[animation.sequence.value];
+    const cs::ShownHostage shown = cs::shownHostageOf(states[0], sequence, later, rate);
+    EXPECT_EQ(shown.spawn, 0U);
+    EXPECT_FLOAT_EQ(shown.origin.x, 8.0F);
+    EXPECT_EQ(shown.sequence, animation.sequence);
     EXPECT_FLOAT_EQ(
-        shown[0].frame.value(),
+        shown.frame.value(),
         cs::estimatedFrameOf(sequence, animation.frame, nx::Seconds{0.02F}, animation.framerate).value());
 }
 

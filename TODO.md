@@ -319,7 +319,10 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 ## M3 — Local game
 
 ### Simulation
-- [x] The client, `next` (`app.client`): the original's command line (`-basedir`, `+map de_dust2`), the player's settings and binds, `map`, `noclip` and `quit`, and a map played alone in a window (`cs.client`: `Level`, `Scene`, `LocalGame`, out of `nxview`)
+- [x] The client, `next` (`app.client`): the original's command line (`-basedir`, `+map de_dust2`), the player's settings and binds, `map`, `noclip` and `quit`, and a map played alone in a window (`cs.client`: `Level`, `Scene`, out of `nxview`)
+- [x] The game played by its server, `cs.server` (`cs::Game`), in the client's process as a listen server plays it ([01 §3](docs/01-architecture.md#3-execution-modes)): each tick the client's command goes to it and the client takes its snapshot (`cs::PlayerSnapshot`, `cs::ClientGame`), its hostages as their entity state tells them (`cs::HostageState`); the game's content and its map read once and shared (`cs::GameContent`, `cs::GameMap`), the server's studio models read without their textures (`cs::GameModels`); an entity's angles read one way for every entity, in the order of its keys (`nx::game::anglesOf`)
+- [ ] The light styles the game sets, told by the server to its clients (the client sets them from `data/cstrike/lightStyles.toml` today, `cs::ClientContent`)
+- [ ] Several players in the server's game (`cs::Game::join`, one today): each team's spawn points in turn, the round's win conditions (`TeamExterminationCheck`, Game Commencing) and their money by whether the map has a bomb target (`RR_CTS_WIN` or `RR_BOMB_DEFUSED`), the players solid to each other
 - [x] Tick-based `GameTime`, with no degradation over uptime (`nx.core:gameTime`: ticks and a fraction; `nx.game:clock`: each world's `TickTime`, the pushers' clocks on it)
 - [ ] Usercmd generated at a fixed rate (`cl_movement_rate`)
 - [x] Traces on per-hull clipnodes (`nx.collision`: the server's rules and player movement's, as reconstructed by the GPL engines; every map's hulls built by `nxcheck`)

@@ -9,6 +9,7 @@ import nx.math;
 import nx.assets;
 import nx.rhi;
 import nx.render;
+import nx.game;
 import nx.collision;
 
 namespace cs {
@@ -51,7 +52,7 @@ auto mapSpritesOf(const nx::assets::BspView& map) -> std::vector<MapSprite> {
                          .origin = entity.findVector("origin").value_or(nx::Vec3{}),
                          .scale = entity.findNumber("scale").value_or(0.0F),
                          .framerate = entity.findNumber("framerate").value_or(0.0F)};
-        nx::Vec3 angles = anglesOf(entity);
+        nx::Vec3 angles = nx::game::anglesOf(entity);
         if (*kind == SpriteClass::Sprite) {
             // CSprite::Spawn: the editors set the yaw alone, which the game makes the roll.
             if (angles.y != 0.0F && angles.z == 0.0F) {

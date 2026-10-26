@@ -24,6 +24,7 @@ nxAddModuleLibrary(appClient
         nx::render
         nx::ui
         cs::shared
+        cs::server
         cs::client)
 
 nxAddProgram(next
