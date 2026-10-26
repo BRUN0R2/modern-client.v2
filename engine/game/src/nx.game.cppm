@@ -27,3 +27,4 @@ export import :brushEntities;
 export import :movers;
 export import :placement;
 export import :decals;
+export import :damage;

@@ -21,6 +21,7 @@ nxAddModuleLibrary(nxGame
         src/movers.cppm
         src/placement.cppm
         src/decals.cppm
+        src/damage.cppm
     SOURCES
         src/clock.cpp
         src/components.cpp
@@ -37,6 +38,7 @@ nxAddModuleLibrary(nxGame
         src/movers.cpp
         src/placement.cpp
         src/decals.cpp
+        src/damage.cpp
     DEPENDS
         nx::core
         nx::math

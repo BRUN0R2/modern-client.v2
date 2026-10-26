@@ -15,6 +15,7 @@ import nx.assets;
 import nx.ecs;
 import nx.collision;
 import nx.game;
+import nx.platform;
 import cs.shared;
 
 #include "triangleModel.hpp"
@@ -43,16 +44,25 @@ constexpr float kTolerance = 1e-4F;
     return std::move(hulls).value();
 }
 
-/// Where the triangle model's header counts its hitboxes.
+/// Where the triangle model's header counts its hitboxes; how long a sequence's record is, and where
+/// its activity is in it.
 constexpr std::size_t kHitboxCountAt = 156;
+constexpr std::size_t kSequenceRecordSize = 176;
+constexpr std::size_t kActivityAt = 40;
 
 /// The triangle model, as the game plays it: two idle sequences of a weight of 1 each, "idle" of two
-/// frames that loops and "wave" of one, a hitbox on its second bone, or none.
+/// frames that loops and "wave" of one, a hitbox on its second bone, or none; "wave" of `waveActivity`
+/// instead when given.
 class PlayedTriangle {
 public:
-    explicit PlayedTriangle(bool hasHitboxes = true) {
+    explicit PlayedTriangle(bool hasHitboxes = true,
+                            std::optional<cs::Activity> waveActivity = std::nullopt) {
         if (!hasHitboxes) {
             m_model.put(kHitboxCountAt, std::int32_t{0});
+        }
+        if (waveActivity) {
+            m_model.put(m_model.sequences + kSequenceRecordSize + kActivityAt,
+                        std::to_underlying(*waveActivity));
         }
         auto view = nx::assets::MdlView::parse(m_model.bytes);
         EXPECT_TRUE(view.has_value());
@@ -77,10 +87,24 @@ private:
     std::array<cs::PlayedModel, 1> m_played{};
 };
 
-/// `world` made ready for hostages that play `models`.
+/// The repository's data/cstrike/hitGroups.toml, read once.
+[[nodiscard]] auto repositoryHitGroups() -> const cs::HitGroupRules& {
+    static const cs::HitGroupRules rules = [] {
+        const std::filesystem::path file =
+            std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "hitGroups.toml";
+        auto text = nx::platform::readTextFile(file);
+        EXPECT_TRUE(text.has_value());
+        auto read = cs::readHitGroupRules(text.value_or(std::string{}), "hitGroups.toml");
+        EXPECT_TRUE(read.has_value()) << (read ? "" : nx::describe(read.error()));
+        return read.value_or(cs::HitGroupRules{});
+    }();
+    return rules;
+}
+
+/// `world` made ready for hostages that play `models`, taking attacks by the repository's hit groups.
 void makeReady(nx::ecs::World& world, std::span<const cs::PlayedModel> models) {
     EXPECT_TRUE(nx::game::registerComponents(world).has_value());
-    EXPECT_TRUE(cs::registerHostages(world, models).has_value());
+    EXPECT_TRUE(cs::registerHostages(world, models, repositoryHitGroups()).has_value());
 }
 
 /// The hostages of `world`, in the map's order.
@@ -302,6 +326,132 @@ TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {
     EXPECT_FLOAT_EQ(
         shown[0].frame.value(),
         cs::estimatedFrameOf(sequence, animation.frame, nx::Seconds{0.02F}, animation.framerate).value());
+}
+
+/// An attack of `damage` that met a hostage in hit group `group`.
+[[nodiscard]] auto attackOf(float damage, cs::HitGroup group) -> nx::game::Attack {
+    return nx::game::Attack{
+        .damage = nx::Damage{damage},
+        .trace = nx::collision::Trace{.fraction = 0.5F, .hitGroup = std::to_underlying(group)}};
+}
+
+TEST(HitGroupRulesTest, TheRepositorysSharesAreTheOriginals) {
+    const cs::HitGroupRules& rules = repositoryHitGroups();
+    // CBaseMonster::TraceAttack.
+    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Head)), 3.0);
+    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Stomach)), 1.5);
+    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::RightLeg)), 0.75);
+    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Shield)), 0.0);
+    EXPECT_EQ(rules.monster.of(42), 1.0) << "a group the game names none of";
+    // CHostage::GetModifiedDamage.
+    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::Generic)), 1.75);
+    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::Head)), 2.5);
+    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::LeftArm)), 0.75);
+    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::LeftLeg)), 0.6);
+    EXPECT_EQ(rules.hostage.of(42), 1.5);
+}
+
+TEST(HostageDamageTest, AnAttackIsScaledByWhereItMeetsTheHostage) {
+    const PlayedTriangle triangle;
+    nx::ecs::World world;
+    makeReady(world, triangle.models());
+    const BrushHulls hulls = floorHulls();
+    cs::spawnHostages(world, hulls, spawnsApart(5));
+    const std::vector<nx::ecs::Entity> hostages = hostagesOf(world);
+
+    // The monsters' share, then the hostages', each on a hostage of its own.
+    const std::array cases{std::tuple{cs::HitGroup::Generic, 15.0F * 1.75F},
+                           std::tuple{cs::HitGroup::Chest, 15.0F * 1.5F * 1.5F},
+                           std::tuple{cs::HitGroup::Stomach, 15.0F * 1.5F * 1.75F},
+                           std::tuple{cs::HitGroup::LeftArm, 15.0F * 0.75F},
+                           std::tuple{cs::HitGroup::RightLeg, 15.0F * 0.75F * 0.6F}};
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        const auto& [group, expected] = cases.at(index);
+        const nx::game::Harm harm = nx::game::attackEntity(world, hostages[index], attackOf(15.0F, group));
+        EXPECT_NEAR(harm.damage.value(), expected, 1e-4F) << std::to_underlying(group);
+        EXPECT_FALSE(harm.isKilled);
+        EXPECT_NEAR(world.get<cs::Hostage>(hostages[index])->health.value(),
+                    cs::kHostageHealth.value() - expected, 1e-3F);
+        EXPECT_EQ(world.get<cs::Hostage>(hostages[index])->lastHitGroup, std::to_underlying(group));
+    }
+    const nx::game::Harm shielded =
+        nx::game::attackEntity(world, hostages.front(), attackOf(15.0F, cs::HitGroup::Shield));
+    EXPECT_EQ(shielded.damage.value(), 0.0F) << "a shield takes it all";
+}
+
+TEST(HostageDamageTest, AHurtHostageFlinchesThenIdlesAgain) {
+    const PlayedTriangle triangle{true, cs::Activity::SmallFlinch};
+    nx::ecs::World world;
+    makeReady(world, triangle.models());
+    const BrushHulls hulls = floorHulls();
+    cs::spawnHostages(world, hulls, spawnsApart(1));
+    const nx::ecs::Entity hostage = hostagesOf(world).front();
+    runTicks(world, hulls, 30);
+
+    std::ignore = nx::game::attackEntity(world, hostage, attackOf(15.0F, cs::HitGroup::Chest));
+    const nx::game::TickTime time = nx::game::tickTimeOf(world);
+    EXPECT_EQ(world.get<cs::Hostage>(hostage)->activity, cs::Activity::SmallFlinch);
+    EXPECT_EQ(world.get<cs::Animation>(hostage)->sequence, nx::assets::SequenceIndex{1});
+    EXPECT_EQ(world.get<cs::Hostage>(hostage)->flinchUntil, time.now.after(nx::Seconds{0.75F}, time.rate));
+    runTicks(world, hulls, 70);
+    EXPECT_EQ(world.get<cs::Hostage>(hostage)->activity, cs::Activity::SmallFlinch) << "for 0.75 seconds";
+    runTicks(world, hulls, 20);
+    EXPECT_EQ(world.get<cs::Hostage>(hostage)->activity, cs::Activity::Idle)
+        << "its tenth of a second's part";
+    EXPECT_EQ(world.get<cs::Animation>(hostage)->sequence, nx::assets::SequenceIndex{0});
+}
+
+TEST(HostageDamageTest, AKilledHostagePlaysItsDeathAndIsNoLongerSolidNorThinks) {
+    const PlayedTriangle triangle{true, cs::Activity::DieHeadshot};
+    nx::ecs::World world;
+    makeReady(world, triangle.models());
+    const BrushHulls hulls = floorHulls();
+    cs::spawnHostages(world, hulls, spawnsApart(1));
+    const nx::ecs::Entity hostage = hostagesOf(world).front();
+
+    // 15 times 3 then 2.5 is more than its health, which is all it takes.
+    const nx::game::Harm harm = nx::game::attackEntity(world, hostage, attackOf(15.0F, cs::HitGroup::Head));
+    EXPECT_TRUE(harm.isKilled);
+    EXPECT_FLOAT_EQ(harm.damage.value(), cs::kHostageHealth.value());
+    const cs::Hostage& dead = *world.get<cs::Hostage>(hostage);
+    EXPECT_TRUE(dead.isDead);
+    EXPECT_EQ(dead.health, nx::HitPoints{});
+    EXPECT_EQ(dead.activity, cs::Activity::DieHeadshot);
+    EXPECT_FALSE(world.has<nx::game::BoxSolidity>(hostage)) << "SOLID_NOT";
+    EXPECT_FALSE(world.has<nx::game::NextThink>(hostage));
+    EXPECT_TRUE(cs::solidBoxesOf(world).empty());
+    const nx::game::Harm again = nx::game::attackEntity(world, hostage, attackOf(15.0F, cs::HitGroup::Head));
+    EXPECT_EQ(again.damage.value(), 0.0F) << "a dead hostage takes no damage";
+    EXPECT_FALSE(again.isKilled);
+}
+
+TEST(HostageDamageTest, ARoundPutsADeadHostageBackWholeButCountsItNot) {
+    const PlayedTriangle triangle{true, cs::Activity::DieHeadshot};
+    nx::ecs::World world;
+    makeReady(world, triangle.models());
+    const BrushHulls hulls = floorHulls();
+    cs::spawnHostages(world, hulls, spawnsApart(2));
+    const std::vector<nx::ecs::Entity> hostages = hostagesOf(world);
+    std::ignore = nx::game::attackEntity(world, hostages[0], attackOf(100.0F, cs::HitGroup::Head));
+
+    const std::uint32_t held = cs::repositionHostages(
+        world, hulls, cs::HostageBonus{.perHostage = nx::Money{150}, .upTo = nx::Money{2000}});
+    EXPECT_EQ(held, 1U) << "the dead one is not held";
+    const cs::Hostage& revived = *world.get<cs::Hostage>(hostages[0]);
+    EXPECT_FALSE(revived.isDead);
+    EXPECT_EQ(revived.health, cs::kHostageHealth);
+    EXPECT_EQ(revived.activity, cs::Activity::Idle);
+    EXPECT_TRUE(world.has<nx::game::BoxSolidity>(hostages[0]));
+    EXPECT_TRUE(world.has<nx::game::NextThink>(hostages[0]));
+    EXPECT_EQ(cs::solidBoxesOf(world).size(), 2U);
+}
+
+TEST(HostageDamageTest, HurtingAHostageCostsItsAttacker) {
+    const cs::HostageHarmCosts costs{.perDamage = nx::Money{20}, .perKill = nx::Money{500}};
+    EXPECT_EQ(cs::hostageHarmCost(nx::game::Harm{.damage = nx::Damage{26.25F}}, costs), nx::Money{520})
+        << "each whole point";
+    EXPECT_EQ(cs::hostageHarmCost(nx::game::Harm{.damage = nx::Damage{47.5F}, .isKilled = true}, costs),
+              nx::Money{940 + 500});
 }
 
 } // namespace

@@ -38,6 +38,9 @@ idlesWhenEmpty = false
 [firing]
 cycle = 0.15 # semi-automatic: the original's 0.2 less 0.05
 reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 25.0 # FireBullets3's iDamage
+rangeModifier = 0.75 # its damage times this for each 500 units it went
+penetration = 1 # how many things a round may meet
 isAutomatic = false
 idleAfterShot = 2.5
 shootSequences = [5] # shoot3: its model flashes once, a single shot
@@ -76,11 +79,15 @@ switchTime = 0.3
 [alternate.firing]
 cycle = 0.5
 reach = 8192.0 # how far its rounds go (FireBullets3)
+damage = 25.0 # FireBullets3's iDamage
+rangeModifier = 0.75 # its damage times this for each 500 units it went
+penetration = 1 # how many things a round may meet
 isAutomatic = true # in burst, holding the button fires again
 idleAfterShot = 2.5
 shootSequences = [3, 4] # shoot, shoot2: its model flashes three times, a burst
 lastShotSequence = 6
-followUps = { rounds = 2, spread = 0.05 } # they leave the burst's sequence playing
+# they leave the burst's sequence playing, each of a range modifier of its own (FireRemaining)
+followUps = { rounds = 2, spread = 0.05, rangeModifier = 0.9 }
 
 [alternate.firing.accuracy]
 initial = 0.9

@@ -15,11 +15,13 @@ nxAddModuleLibrary(csShared
         src/weapons.cppm
         src/loadouts.cppm
         src/inventory.cppm
+        src/bullets.cppm
         src/rounds.cppm
         src/economy.cppm
         src/materials.cppm
         src/footsteps.cppm
         src/breath.cppm
+        src/hitGroups.cppm
         src/hostages.cppm
     SOURCES
         src/movement.cpp
@@ -28,11 +30,13 @@ nxAddModuleLibrary(csShared
         src/weapons.cpp
         src/loadouts.cpp
         src/inventory.cpp
+        src/bullets.cpp
         src/rounds.cpp
         src/economy.cpp
         src/materials.cpp
         src/footsteps.cpp
         src/breath.cpp
+        src/hitGroups.cpp
         src/hostages.cpp
     DEPENDS
         nx::core

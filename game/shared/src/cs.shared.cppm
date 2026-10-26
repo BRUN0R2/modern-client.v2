@@ -9,7 +9,7 @@
 /// of its breath in water, what a player has as it spawns, what each weapon is, the weapons a player
 /// has (given, drawn, idling, fired, reloaded, switched to their alternates and striking), the sounds
 /// the game makes, as data, the rounds of a map: their freeze, their time and its end, and the money
-/// they pay, and its hostages, idling.
+/// they pay, its hostages, idling, hurt and killed, and the damage the shots and the knife deal.
 export module cs.shared;
 
 export import :movement;
@@ -19,9 +19,11 @@ export import :sounds;
 export import :weapons;
 export import :loadouts;
 export import :inventory;
+export import :bullets;
 export import :rounds;
 export import :economy;
 export import :materials;
 export import :footsteps;
 export import :breath;
+export import :hitGroups;
 export import :hostages;

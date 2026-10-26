@@ -135,8 +135,20 @@ turned as it was, thinking again in 0.1 to 0.2 seconds (`cs::repositionHostages`
 rest left where they are once the bonus counted for them reaches its most, as `RestartRound`'s loop
 stops there. It is solid as its box (`nx::game::BoxSolidity`): to the players (`cs::solidBoxesOf`) and
 to the server's traces, a line meeting its hitboxes ([07 §4.2](07-simulation-and-physics.md#42-entities));
-to the game's rules a passive human (`Classify`). Following, rescue, damage and death come
-with what they need.
+to the game's rules a passive human (`Classify`). It takes an attack as `CHostage` takes it
+(`cs::harmHostage`, its `nx::game::DamageMethod`): from 100 health, the damage scaled by the hit group it
+was met in, as the monsters' `TraceAttack` and then the hostages' `TakeDamage` scale it (§7.4), at most
+its health; alive, it flinches for 0.75 seconds (`ACT_SMALL_FLINCH`), then idles again, a new idle
+drawn, at its next tenth of a second's think; killed, it plays the death of where it was met
+(Counter-Strike 1.6's `SetDeathActivity`: the head's for none and the head, `ACT_DIESIMPLE` for the
+chest and the right arm, `ACT_DIEFORWARD` for the stomach and the right leg, `ACT_DIEBACKWARD` for
+the left arm and leg), and is no longer solid nor thinks. The player who hurts it loses 20 for each
+whole point of the damage, and 500 more for a kill (`data/cstrike/economy.toml`'s `hostageHarm`,
+`cs::hostageHarmCost`). As each round starts a dead hostage is put back too, whole, but not counted
+as held. Following, rescue, its pain's headshot sounds (with spatial sound), its blood (with the
+temporary entities), the center messages (`#Injured_Hostage`, `#Killed_Hostage`, with the center
+text), its fall as it dies (`MOVETYPE_TOSS`, with its movement) and `mp_hostagepenalty`'s kick
+(with the players) come with what they need.
 
 ## 5. Map entities
 
@@ -402,14 +414,15 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   Glock, the AK-47 and the M4A1, 4096 for the USP, as the original's fire them), its direction as it
   strayed (not of length 1), through
   what is solid, the world, the solid brush entities and the hostages by their hitboxes
-  (`nx::game::traceSolidsHit`, which tells what stopped it, [07 §4.2](07-simulation-and-physics.md#42-entities)):
-  a hostage it meets first stops it. Where it meets the world or a brush entity it leaves the mark the game names for it
+  (`nx::game::traceSolidsHit`, which tells what stopped it, [07 §4.2](07-simulation-and-physics.md#42-entities)),
+  on through what it meets as `FireBullets3` follows its round (`cs::followRound`, section 7.4). Each
+  time it meets the world or a brush entity it leaves the mark the game names for it, none on a hostage
   (`cs::bulletMarkOf`, `DamageDecal`): on the world and on an entity drawn normally a bullet hole,
   one of `{shot1` to `{shot5` of decals.wad at random; none on a solid one (`kRenderTransAlpha`);
   `{bproof1` on one drawn otherwise; on a `func_breakable`, by its `material` first, one of
   `{break1` to `{break3` on glass (its default) and `{bproof1` on unbreakable glass. The client
   stamps them on what was hit, where the game had it (docs/05 §8), `DecalGunshot` being empty on the
-  server. Their damage and how far they go through come with damage.
+  server.
 - **Spread:** a per-weapon function reproducing the original, depending on movement, being
   in the air, crouching, zoom and accumulated accuracy.
   **Today:** the data's terms (section 7.2), of the accuracy before the shot changes it: a burst's
@@ -448,7 +461,10 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
   `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
   sound of what its texture is made of, as the original's multiplayer rules play none
-  (`CHalfLifeMultiplay::PlayTextureSounds`). Its damage and the back stab come with the damage.
+  (`CHalfLifeMultiplay::PlayTextureSounds`). What it meets takes its blow (`cs::Blow`,
+  `nx::game::attackEntity`) once the next attack's time is set: 15 for the slash (its fast swing's 20
+  is never dealt, that time set before it is weighed) and 65 for the stab (`data/cstrike/weapons/knife.toml`'s
+  `damage`); the stab's three times as much in a player's back comes with the players.
 
 ### 7.4 Damage
 
@@ -458,6 +474,26 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - Damage falloff by distance (`rangeModifier`).
 - Friendly fire with `mp_friendlyfire` and the penalty rules (`mp_tkpunish`).
 - All damage goes through the hookable `TakeDamage` action ([15](15-mod-api.md#5-hookable-actions)).
+
+**Today** (`cs.shared:hitGroups`, `data/cstrike/hitGroups.toml`): the share of an attack's damage a
+body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`), for each kind:
+the monsters' `TraceAttack`'s (head 3, chest and stomach 1.5, arms 1, legs 0.75, a shield none), which
+a hostage takes an attack by first, and the hostages' `TakeDamage`'s (`GetModifiedDamage`: none 1.75,
+head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), each in double precision as the
+original's float times a double. The players' shares and armor come with them.
+
+**Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
+`damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's
+36, the M4A1's 32 and 33 silenced), its `rangeModifier`'s power of every 500 units it went, cut again,
+to what it meets (`nx::game::attackEntity`), and may meet its `penetration` things (the pistols one,
+the rifles two). The bullet type of its ammo (`data/cstrike/ammo.toml`: 9 mm 21 units and 800, .45 ACP
+15 and 500, 5.56 mm 35 and 4000, 7.62 mm 39 and 5000) says how far into what it meets it goes on from,
+and how far it may go before it goes through nothing more. What it meets's texture, as materials.txt
+tags it (flesh for a body), keeps of that power (metal 0.15, concrete 0.25, a grate and a vent 0.5,
+tile 0.65, a computer 0.4) and sets the share it deals after (metal 0.2, a grate 0.4, a vent and a
+computer 0.45, tile 0.3, wood 0.6, else 0.5); what is not a brush model, or the last it may meet,
+lets it go 42 units in, deals 0.75 after and leaves it 0.75 of the way left, a brush model half. The
+Glock's burst's two last rounds have a range modifier of 0.9 (`FireRemaining`).
 
 ### 7.5 Weapons made as the game runs
 

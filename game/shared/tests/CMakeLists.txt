@@ -4,6 +4,7 @@
 nxAddTest(csSharedTests
     SOURCES
         breathTests.cpp
+        bulletsTests.cpp
         economyTests.cpp
         footstepsTests.cpp
         hostagesTests.cpp
