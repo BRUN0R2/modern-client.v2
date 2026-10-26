@@ -147,9 +147,20 @@ TEST(RoundsTest, TheNextRoundIsAsLongAsTheLengthsSayAsItStarts) {
 TEST(RoundsTest, TheRoundsOfAMapPlayedForNothingRunOnPastTheirTime) {
     Rounds rounds = Rounds::start({}, kLengths, at(0.0));
     std::ignore = rounds.think(at(8.0), kRate, kLengths);
-    EXPECT_EQ(rounds.think(at(400.0), kRate, kLengths), RoundEvents{});
+    EXPECT_EQ(rounds.think(at(308.0), kRate, kLengths), RoundEvents{});
     EXPECT_EQ(rounds.end(), std::nullopt);
-    EXPECT_LT(rounds.remainingAt(at(400.0), kRate), nx::Seconds{});
+    // CheckRoundTimeExpired puts the round's start 60 seconds on: it runs out again 360 seconds later.
+    EXPECT_EQ(rounds.remainingAt(at(308.0), kRate), nx::Seconds{360.0F});
+    std::ignore = rounds.think(at(668.0), kRate, kLengths);
+    EXPECT_EQ(rounds.remainingAt(at(668.0), kRate), nx::Seconds{360.0F});
+}
+
+TEST(RoundsTest, ATimeOutPutsItsRoundsStart60SecondsOn) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = rounds.think(at(8.0), kRate, kLengths);
+    EXPECT_EQ(rounds.think(at(308.0), kRate, kLengths), events({RoundEvent::Ended}));
+    // What a player that spawns before the next round is told (SyncRoundTimer): 6:00 less the time since.
+    EXPECT_EQ(rounds.remainingAt(at(310.0), kRate), nx::Seconds{358.0F});
 }
 
 TEST(RoundsTest, ARestartedGameStartsItsNextRoundWhenAskedTheRoundPlayingOnUntilThen) {

@@ -70,8 +70,10 @@ public:
         const std::vector entities{nx::assets::BspEntity{.keyValues = std::move(keyValues)}};
         const std::vector models{nx::assets::BspModel{}, nx::assets::BspModel{.bounds = kDoorBounds}};
         const nx::game::EntityClasses classes{
-            .brushClasses = {nx::game::BrushClass{
-                .classname = classname, .solid = nx::game::Solid::Bsp, .behavior = behavior}}};
+            .brushClasses = {nx::game::BrushClass{.classname = classname,
+                                                  .solid = nx::game::Solid::Bsp,
+                                                  .behavior = behavior,
+                                                  .restartsEachRound = true}}};
         EXPECT_TRUE(nx::game::spawnBrushEntities(m_world, entities, models, classes).has_value());
         nx::ecs::Query<nx::ecs::Entity, const Door&>{m_world}.forEach(
             [this](nx::ecs::Entity entity, const Door&) { m_door = entity; });
@@ -88,6 +90,8 @@ public:
         const std::array models{nx::collision::ModelIndex{1}};
         nx::game::touchBrushEntities(m_world, hulls, models, m_toucher);
     }
+
+    void restart(const BrushHulls& hulls) { nx::game::restartBrushEntities(m_world, hulls); }
 
     void run(const BrushHulls& hulls, int ticks) {
         for (int tick = 0; tick < ticks; ++tick) {
@@ -146,6 +150,30 @@ TEST(DoorTest, ATouchOpensADoorThatClosesAfterItsWait) {
     game.run(hulls, 70);
     EXPECT_EQ(game.door().state, DoorState::Closed);
     EXPECT_EQ(game.doorAt().origin, Vec3{});
+}
+
+TEST(DoorTest, ARoundStartClosesADoorFromWhereItIsATouchOpeningItAgainMeanwhile) {
+    const BrushHulls hulls = doorHulls(false);
+    DoorWorld game{slidingDoor(), nx::game::BrushBehavior::SlidingDoor};
+    game.touch(hulls);
+    game.run(hulls, 72);
+    ASSERT_EQ(game.door().state, DoorState::Open);
+
+    game.restart(hulls);
+    EXPECT_EQ(game.door().state, DoorState::Closing) << "it closes again, not at once";
+    EXPECT_TRUE(game.door().isTouchable) << "a touch opens it again, as CBaseDoor::Restart sets it";
+    game.run(hulls, 32);
+    EXPECT_NEAR(game.doorAt().origin.x, 32.0F, kTolerance);
+    game.touch(hulls);
+    EXPECT_EQ(game.door().state, DoorState::Opening);
+
+    game.run(hulls, 40);
+    game.restart(hulls);
+    game.run(hulls, 70);
+    EXPECT_EQ(game.door().state, DoorState::Closed);
+    EXPECT_EQ(game.doorAt().origin, Vec3{});
+    game.restart(hulls);
+    EXPECT_EQ(game.door().state, DoorState::Closed) << "closed already, it arrives at once";
 }
 
 TEST(DoorTest, ADoorMovesAMonthIntoAMapAsAtItsStart) {

@@ -90,6 +90,12 @@ void closeDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entit
     turnTo(world, hulls, entity, turn.closed, turn.speed);
 }
 
+void restartDoor(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
+    closeDoor(world, hulls, entity);
+    Door& door = *world.get<Door>(entity);
+    door.isTouchable = !door.isUseOnly;
+}
+
 void doorArrived(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity) {
     Door& door = *world.get<Door>(entity);
     Pusher& pusher = *world.get<Pusher>(entity);

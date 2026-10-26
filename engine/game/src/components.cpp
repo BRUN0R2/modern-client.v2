@@ -19,6 +19,7 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<Waves>("nx::game::Waves"),
                                 world.registerComponent<AlternateTextures>("nx::game::AlternateTextures"),
                                 world.registerComponent<Wall>("nx::game::Wall"),
+                                world.registerComponent<RestartsEachRound>("nx::game::RestartsEachRound"),
                                 world.registerComponent<Body>("nx::game::Body"),
                                 world.registerComponent<NextThink>("nx::game::NextThink"),
                                 world.registerComponent<ThinkMethod>("nx::game::ThinkMethod"),
