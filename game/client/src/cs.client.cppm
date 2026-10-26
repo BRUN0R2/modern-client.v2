@@ -20,6 +20,7 @@ export import :input;
 export import :entityKeys;
 export import :mapLight;
 export import :mapSprites;
+export import :posedModels;
 export import :mapModels;
 export import :playerModels;
 export import :modelMaterials;

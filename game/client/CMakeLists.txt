@@ -11,6 +11,7 @@ nxAddModuleLibrary(csClient
         src/entityKeys.cppm
         src/mapLight.cppm
         src/mapSprites.cppm
+        src/posedModels.cppm
         src/mapModels.cppm
         src/playerModels.cppm
         src/modelMaterials.cppm

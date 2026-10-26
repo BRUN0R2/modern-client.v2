@@ -14,6 +14,7 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import cs.shared;
+import :posedModels;
 
 export namespace cs {
 
@@ -39,12 +40,6 @@ struct MapModel {
 
 /// The studio model entities of `map`: its cycler_sprites of a model (not ".spr") and its hostages.
 [[nodiscard]] auto mapModelsOf(const nx::assets::BspView& map) -> std::vector<MapModel>;
-
-/// The map's models posed for a frame: their bones, which their instances point into.
-struct PosedModels {
-    std::vector<std::vector<nx::Mat3x4>> bones{};
-    std::vector<nx::render::StudioInstance> instances{};
-};
 
 /// The map's studio model entities and their models' files and animations.
 class MapModels {

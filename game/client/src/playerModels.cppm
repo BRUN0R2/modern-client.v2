@@ -15,7 +15,7 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import cs.shared;
-import :mapModels;
+import :posedModels;
 
 export namespace cs {
 
