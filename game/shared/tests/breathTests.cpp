@@ -59,7 +59,9 @@ using cs::WaterLevel;
         nx::Random random{command, "breath"};
         const std::optional<SoundMade> made =
             breath.breathe(WaterLevel::Eyes, MoveType::Walk, at(seconds), random);
-        bubbles += made && made->sound == &rules.bubbles ? 1 : 0;
+        if (made && made->sound == &rules.bubbles) {
+            ++bubbles;
+        }
     }
     return bubbles;
 }
