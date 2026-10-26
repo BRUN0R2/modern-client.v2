@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The game of a map, as its server plays it (docs/07-simulation-and-physics.md, section 2.2): the map's
-/// brush entities and hostages as the game makes them, and its players among them, each moved by the
-/// game's own movement one user command a tick, with the weapons a player of its team spawns with
-/// (cs::Inventory), in the rounds of the map (cs::Rounds), spawning again at its team's spawn points as
-/// each starts, paid by them (cs::TeamAccounts); their feet sound by what they walk on (cs::StepVoice);
-/// their hard landings, drowning and harmful water hurt them, and kill them (cs.shared:playerHarm), as
-/// ReGameDLL_CS's CBasePlayer and CHalfLifeMultiplay play them (GPL, consulted: docs/20 section 3).
-/// After each tick it tells each player's client what it needs (PlayerSnapshot).
+/// brush entities and hostages as the game makes them, and its players among them, joining a team and
+/// solid to each other, each moved by the game's own movement one user command a tick, with the weapons
+/// a player of its team spawns with (cs::Inventory), in the rounds of the map (cs::Rounds), ended by a
+/// team eliminated and begun by Game Commencing as both teams have players, spawning again at their
+/// team's spawn points in turn as each starts, paid by them (cs::TeamAccounts); their feet sound by what
+/// they walk on (cs::StepVoice); their hard landings, drowning and harmful water hurt them, and kill them
+/// (cs.shared:playerHarm), as ReGameDLL_CS's CBasePlayer and CHalfLifeMultiplay play them (GPL,
+/// consulted: docs/20 section 3). After each tick it tells each player's client what it needs
+/// (PlayerSnapshot).
 ///
-/// Today: the game of one player, whose death ends its round in a draw; the teams of several players,
-/// their win conditions and Game Commencing come with the bots (TODO.md).
+/// Today: the players hurt by the world; their attacks on each other, their hit groups and armor come
+/// with the players' models (TODO.md).
 export module cs.server:game;
 
 import std;
@@ -50,8 +52,9 @@ namespace cs {
 /// A player of the game, as its server keeps it (CBasePlayer): its team and _cl_autowepswitch, where it
 /// is and how it moves, what it has, its weapons, its feet's and its breath's voices, the harms it keeps
 /// over time, its body among the world's entities, the buttons of its last command, whether the next
-/// round pays it, what its HUD was told last of the round's time, and what the tick did to it and made
-/// it make, which its client is told of.
+/// round pays it, how often it spawned in the round, what its HUD was told last of the round's time,
+/// and what the tick did to it and made it make, which its client is told of. It joins dead, and lives
+/// once it spawns.
 struct Player {
     Team team;
     AutoSwitch autoSwitch;
@@ -64,6 +67,7 @@ struct Player {
     nx::ecs::Entity body{};
     nx::Flags<Button> lastButtons{}; ///< m_afButtonLast: the use button acts as it goes down.
     bool isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
+    std::uint32_t spawnsThisRound = 0; ///< m_iNumSpawns.
     RoundTimer roundTimer{};
     std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
     bool wasPlaced = false;                      ///< In the tick.
@@ -97,9 +101,11 @@ public:
     auto operator=(Game&&) -> Game& = delete;
     ~Game() = default;
 
-    /// A player joins the game in `team`, its weapons drawn as `autoSwitch` says (its _cl_autowepswitch,
-    /// until setAutoSwitch): given what a player of `team` spawns with, spawned at its team's next spawn
-    /// point. A game has one player today (TODO.md).
+    /// A player joins the game in `team`, with mp_startmoney, its weapons drawn as `autoSwitch` says (its
+    /// _cl_autowepswitch, until setAutoSwitch), as the original's JoiningThink lets it play: spawned at
+    /// once when it may (canSpawn), given what a player of `team` spawns with; else watching from its
+    /// team's next spawn point, dead, until the next round. Then the round's end is weighed
+    /// (checkWinConditions): the first player of the second team commences the game.
     auto join(Team team, AutoSwitch autoSwitch) -> PlayerIndex;
 
     /// One tick of the game (docs/07, section 2.2): each player of `commands`, in their order, a command
@@ -157,10 +163,21 @@ private:
     /// `player` is dealt `harm` (CBasePlayer::TakeDamage): alive, it feels its pain and loses its whole
     /// points, keeping a harm kept over time (harmPlayer); killed by it, it dies (die).
     void hurt(Player& player, const PlayerHarm& harm);
-    /// `player` dies (Killed): it is heard dying, moves no more (MovementState::isDead) and its weapons
-    /// are gone with it; the game having no player of the other team, nobody is alive: its round ends in
-    /// a draw (TeamExterminationCheck).
+    /// `player` dies (Killed): it is heard dying, moves no more (MovementState::isDead), is no longer
+    /// solid, and its weapons are gone with it; then the round's end is weighed (checkWinConditions).
     void die(Player& player);
+    /// Weighs the round's end by the players alive and dead of each team (CheckWinConditions,
+    /// Rounds::checkWinConditions), what an end does to the money then played (roundEnded).
+    void checkWinConditions();
+    /// Whether `player`, joining, spawns now (FPlayerCanRespawn): not when it spawned in the round
+    /// already, nor, the game having players of both teams, once the round started kJoinSpawnWindow ago.
+    [[nodiscard]] auto canSpawn(const Player& player) const -> bool;
+    /// `player` watches until the next round, dead, from its team's next spawn point, turned the way it
+    /// faces (StartObserver at GetPlayerSpawnSpot).
+    void observe(Player& player);
+    /// What a move of `mover` meets as boxes: the world's (solidBoxesOf), and the other players alive, each
+    /// standing or ducked, as the engine lists them for movement (SV_AddLinksToPM's SOLID_SLIDEBOX).
+    [[nodiscard]] auto boxesMetBy(const Player& mover) -> std::vector<SolidBox>;
     /// `player` makes `sound` at the tick, at its own volume.
     void makeSound(Player& player, const GameSound& sound);
     /// The sounds `sounds`, made by `player`'s movement at the tick of `command` among `entities`, as it
@@ -195,8 +212,9 @@ private:
         -> std::optional<TextureMaterial>;
     /// Spawns `player` at the next spawn point of its team (nextSpawnPoint), as Spawn does: one unit
     /// above it, standing still and turned the way it faces, its health whole; alive, it keeps its armor,
-    /// its weapons and its money; killed, it keeps its money alone, given what a player of its team
-    /// spawns with. It is paid as the next round starts. Its HUD is told the round's time.
+    /// its weapons and its money; dead, it keeps its money alone, given what a player of its team spawns
+    /// with. It is paid as the next round starts, and has spawned once more in the round. Its HUD is told
+    /// the round's time.
     void spawn(Player& player);
     /// Gives `player` what a player of its team spawns with, drawn as its _cl_autowepswitch says.
     void equip(Player& player);

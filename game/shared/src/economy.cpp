@@ -28,6 +28,10 @@ namespace {
 
 } // namespace
 
+auto RoundEndMoney::moneyOn(MapObjectives objectives) const noexcept -> nx::Money {
+    return objectives.test(MapObjective::BombTarget) ? bombTargetMoney.value_or(money) : money;
+}
+
 auto EconomyRules::roundEnd(RoundEndReason reason) const noexcept -> RoundEndMoney {
     const auto found = std::ranges::find(roundEnds, reason, &RoundEndMoney::reason);
     return found != roundEnds.end() ? *found : RoundEndMoney{.reason = reason};
@@ -56,10 +60,11 @@ auto addMoney(nx::Money money, nx::Money amount) noexcept -> nx::Money {
 TeamAccounts::TeamAccounts(const EconomyRules& rules) noexcept
     : m_rules{&rules}, m_loserBonus{rules.loserBonus.first} {}
 
-void TeamAccounts::roundEnded(RoundEndReason reason) noexcept {
+void TeamAccounts::roundEnded(RoundEndReason reason, MapObjectives objectives) noexcept {
     m_winner = winnerOf(reason);
     if (m_winner) {
-        m_accounts[*m_winner] = nx::addSaturated(m_accounts[*m_winner], m_rules->roundEnd(reason).money);
+        m_accounts[*m_winner] =
+            nx::addSaturated(m_accounts[*m_winner], m_rules->roundEnd(reason).moneyOn(objectives));
     }
 }
 

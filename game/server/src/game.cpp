@@ -102,19 +102,71 @@ auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars
 }
 
 auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
-    nx::expects(m_players.empty(), "Game::join: one player, until the teams' rules come (TODO.md)");
     const PlayerIndex index{nx::narrow<std::uint32_t>(m_players.size())};
-    Player& player =
-        m_players.emplace_back(Player{.team = team,
-                                      .autoSwitch = autoSwitch,
-                                      .status = PlayerStatus{.money = m_cvars.startingMoney()},
-                                      .inventory = Inventory{m_content->weapons},
-                                      .stepVoice = StepVoice{m_content->footsteps},
-                                      .breath = Breath{m_content->breath, m_content->playerHarm}});
+    Player& player = m_players.emplace_back(
+        Player{.team = team,
+               .autoSwitch = autoSwitch,
+               .status = PlayerStatus{.health = nx::HitPoints{}, .money = m_cvars.startingMoney()},
+               .inventory = Inventory{m_content->weapons},
+               .stepVoice = StepVoice{m_content->footsteps},
+               .breath = Breath{m_content->breath, m_content->playerHarm}});
     player.body = m_world.spawn(nx::game::Transform{}, bodyOf(player.movement));
-    equip(player);
-    spawn(player);
+    nx::log::info(kLog, "a player joins the {}", nx::enumName(team));
+    if (canSpawn(player)) {
+        spawn(player);
+    } else {
+        observe(player);
+    }
+    checkWinConditions();
     return index;
+}
+
+auto Game::canSpawn(const Player& player) const -> bool {
+    if (player.spawnsThisRound > 0) {
+        return false;
+    }
+    const auto hasPlayers = [this](Team team) {
+        return std::ranges::contains(m_players, team, &Player::team);
+    };
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    return !hasPlayers(Team::Terrorists) || !hasPlayers(Team::CounterTerrorists) ||
+           m_rounds.sinceStartAt(time.now, time.rate) <= kJoinSpawnWindow;
+}
+
+void Game::observe(Player& player) {
+    const SpawnPoint point = nextSpawnPoint(player.team);
+    standAt(player, point.origin + nx::Vec3{.z = kSpawnLift.value()});
+    player.movement.isDead = true;
+    *m_world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
+    player.turnedView = nx::EulerAngles{.yaw = point.yaw};
+}
+
+void Game::checkWinConditions() {
+    TeamCounts counts{};
+    for (const Player& player : m_players) {
+        TeamCount& count = counts[player.team];
+        if (player.status.isAlive()) {
+            ++count.alive;
+        } else {
+            ++count.dead;
+        }
+    }
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    if (const std::optional<RoundEndReason> reason =
+            m_rounds.checkWinConditions(counts, time.now, time.rate)) {
+        roundEnded(*reason);
+    }
+}
+
+auto Game::boxesMetBy(const Player& mover) -> std::vector<SolidBox> {
+    std::vector<SolidBox> boxes = solidBoxesOf(m_world);
+    for (const Player& other : m_players) {
+        if (&other != &mover && other.status.isAlive()) {
+            boxes.push_back(SolidBox{.origin = other.movement.origin,
+                                     .box = other.movement.isDucked ? kDuckedBox : kStandingBox});
+        }
+    }
+    return boxes;
 }
 
 auto Game::playerAt(PlayerIndex index) -> Player& {
@@ -198,8 +250,8 @@ void Game::runCommand(Player& player, const UserCommand& command) {
     const bool isAlive = player.status.isAlive();
     const MovementState before = player.movement;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
-    const MovementResult moved = simulateMovement(player.movement, command, MovementSettings{}, hulls,
-                                                  entities, solidBoxesOf(m_world));
+    const MovementResult moved =
+        simulateMovement(player.movement, command, MovementSettings{}, hulls, entities, boxesMetBy(player));
     player.movement = moved.state;
     // A dead player's body is not solid (SOLID_NOT): it touches nothing.
     if (isAlive) {
@@ -338,12 +390,7 @@ void Game::die(Player& player) {
     *m_world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
     // Its weapons go with it (PackDeadPlayerItems; the box it drops comes with dropping, TODO.md).
     player.inventory.removeAll();
-    // As the original's CheckWinConditions weighs a death: nobody is alive, the other team having no
-    // player (TeamExterminationCheck).
-    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
-    if (m_rounds.endRound(RoundEndReason::RoundDraw, time.now, time.rate)) {
-        roundEnded(RoundEndReason::RoundDraw);
-    }
+    checkWinConditions();
 }
 
 void Game::makeSound(Player& player, const GameSound& sound) {
@@ -384,6 +431,10 @@ void Game::thinkRules() {
         }
     }
     if (events.test(RoundEvent::RoundStarted) || events.test(RoundEvent::GameRestarted)) {
+        // RestartRound counts the spawns of the round anew before the players spawn again.
+        for (Player& player : m_players) {
+            player.spawnsThisRound = 0;
+        }
         for (Player& player : m_players) {
             spawn(player);
         }
@@ -402,7 +453,7 @@ void Game::thinkRules() {
 
 void Game::roundEnded(RoundEndReason reason) {
     nx::log::info(kLog, "the round is over: {}", nx::enumName(reason));
-    m_accounts.roundEnded(reason);
+    m_accounts.roundEnded(reason, m_map->objectives());
     const std::optional<Team> winner = winnerOf(reason);
     const bool paysLivingLosers = m_content->economy.roundEnd(reason).paysLivingLosers;
     for (Player& player : m_players) {
@@ -441,6 +492,7 @@ void Game::spawn(Player& player) {
     standAt(player, point.origin + nx::Vec3{.z = kSpawnLift.value()});
     player.status.health = kSpawnHealth;
     player.isPaidNextRound = true;
+    ++player.spawnsThisRound;
     player.inventory.spawned();
     player.turnedView = nx::EulerAngles{.yaw = point.yaw};
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
