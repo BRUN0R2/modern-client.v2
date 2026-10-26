@@ -81,12 +81,6 @@ public:
                              const nx::render::LightStyleValues& styles) const -> PosedModels;
 
 private:
-    /// A model's files, and the decoded frames of each of its sequences, by index.
-    struct File {
-        std::unique_ptr<ModelFiles> files{};
-        std::vector<nx::assets::AnimationFrames> animations{};
-    };
-
     /// An entity and its file's index; a hostage, which of the map's it is (HostageSpawn::spawn).
     struct Entity {
         MapModel model{};
@@ -114,7 +108,7 @@ private:
                                   const nx::render::LightStyleValues& styles) const
         -> std::optional<nx::render::StudioInstance>;
 
-    std::vector<std::unique_ptr<File>> m_files;
+    std::vector<AnimatedModel> m_files;
     std::vector<Entity> m_cyclers;
     std::vector<Entity> m_hostages; ///< Of models it read, in the map's order.
     std::vector<std::string> m_missing;

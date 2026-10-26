@@ -18,19 +18,13 @@ auto GameModels::fileOf(const nx::assets::Vfs& vfs, std::string_view path,
     if (!isNew) {
         return found->second;
     }
-    auto modelFiles = readModelFiles(vfs, path, ModelTextures::Skipped);
-    if (!modelFiles) {
-        m_missing.push_back(std::format("{} ({})", path, nx::describe(modelFiles.error())));
-        return std::nullopt;
-    }
-    auto animations = animationsOf(vfs, **modelFiles);
-    if (!animations) {
-        m_missing.push_back(std::format("{} ({})", path, nx::describe(animations.error())));
+    auto model = readAnimatedModel(vfs, path, ModelTextures::Skipped);
+    if (!model) {
+        m_missing.push_back(std::format("{} ({})", path, nx::describe(model.error())));
         return std::nullopt;
     }
     found->second = nx::narrow<std::uint32_t>(m_files.size());
-    m_files.push_back(
-        std::make_unique<File>(File{.files = std::move(*modelFiles), .animations = std::move(*animations)}));
+    m_files.push_back(std::move(*model));
     return found->second;
 }
 
@@ -51,8 +45,8 @@ auto GameModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map
     }
     // The files no longer move: what the game plays points into them.
     read.m_played.reserve(read.m_files.size());
-    for (const std::unique_ptr<File>& file : read.m_files) {
-        read.m_played.push_back(PlayedModel{.view = &*file->files->view, .animations = file->animations});
+    for (const AnimatedModel& file : read.m_files) {
+        read.m_played.push_back(PlayedModel{.view = &*file.files->view, .animations = file.animations});
     }
     return read;
 }

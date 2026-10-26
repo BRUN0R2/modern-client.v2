@@ -96,28 +96,20 @@ auto MapModels::read(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
         auto [found, isNew] = files.try_emplace(model.model | std::views::transform(nx::toLowerAscii) |
                                                 std::ranges::to<std::string>()); // the VFS ignores case
         if (isNew) {
-            auto modelFiles = readModelFiles(vfs, model.model, ModelTextures::Read);
-            if (!modelFiles) {
-                read.m_missing.push_back(
-                    std::format("{} ({})", model.model, nx::describe(modelFiles.error())));
-                continue;
-            }
-            auto animations = animationsOf(vfs, **modelFiles);
-            if (!animations) {
-                read.m_missing.push_back(
-                    std::format("{} ({})", model.model, nx::describe(animations.error())));
+            auto animated = readAnimatedModel(vfs, model.model, ModelTextures::Read);
+            if (!animated) {
+                read.m_missing.push_back(std::format("{} ({})", model.model, nx::describe(animated.error())));
                 continue;
             }
             found->second = read.m_files.size();
-            read.m_files.push_back(std::make_unique<File>(
-                File{.files = std::move(*modelFiles), .animations = std::move(*animations)}));
+            read.m_files.push_back(std::move(*animated));
         }
         if (!found->second) {
             continue;
         }
         const std::size_t file = *found->second;
         if (model.kind == ModelClass::Cycler) {
-            model.sequence = cyclerSequenceOf(model, *read.m_files[file]->files->view).value;
+            model.sequence = cyclerSequenceOf(model, *read.m_files[file].files->view).value;
             read.m_cyclers.push_back(Entity{.model = std::move(model), .file = file});
         } else {
             read.m_hostages.push_back(Entity{.model = std::move(model), .file = file, .spawn = spawn});
@@ -133,11 +125,11 @@ auto MapModels::hostageOf(std::uint32_t spawn) const noexcept -> const Entity* {
 
 auto MapModels::hostageModel(std::uint32_t spawn) const noexcept -> const nx::assets::MdlView* {
     const Entity* const hostage = hostageOf(spawn);
-    return hostage != nullptr ? &*m_files[hostage->file]->files->view : nullptr;
+    return hostage != nullptr ? &*m_files[hostage->file].files->view : nullptr;
 }
 
 auto MapModels::cyclerPoseOf(const Entity& cycler, nx::Seconds sinceStart) const -> std::vector<nx::Mat3x4> {
-    const File& file = *m_files[cycler.file];
+    const AnimatedModel& file = m_files[cycler.file];
     const nx::assets::MdlView& view = *file.files->view;
     const nx::assets::SequenceIndex sequence{cycler.model.sequence};
     return drawnBonesOf(
@@ -148,7 +140,7 @@ auto MapModels::cyclerPoseOf(const Entity& cycler, nx::Seconds sinceStart) const
 
 auto MapModels::hostagePoseOf(const Entity& hostage, const ShownHostage& shown) const
     -> std::vector<nx::Mat3x4> {
-    const File& file = *m_files[hostage.file];
+    const AnimatedModel& file = m_files[hostage.file];
     return drawnBonesOf(*file.files->view, file.animations[shown.sequence.value], shown.sequence, shown.frame,
                         shown.controllers, shown.origin, shown.angles);
 }
@@ -157,9 +149,9 @@ auto MapModels::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList&
     -> nx::Result<std::vector<nx::render::StudioModel>, nx::render::StudioError> {
     std::vector<nx::render::StudioModel> models;
     models.reserve(m_files.size());
-    for (const std::unique_ptr<File>& file : m_files) {
+    for (const AnimatedModel& file : m_files) {
         auto model =
-            renderer.load(commands, {.model = *file->files->view, .textures = file->files->texturesView()});
+            renderer.load(commands, {.model = *file.files->view, .textures = file.files->texturesView()});
         if (!model) {
             return std::unexpected{std::move(model.error())};
         }

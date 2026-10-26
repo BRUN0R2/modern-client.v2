@@ -130,4 +130,17 @@ auto animationsOf(const Vfs& vfs, const ModelFiles& files)
     return animations;
 }
 
+auto readAnimatedModel(const nx::assets::Vfs& vfs, std::string_view path, ModelTextures textures)
+    -> nx::Result<AnimatedModel, ModelFileError> {
+    auto files = readModelFiles(vfs, path, textures);
+    if (!files) {
+        return std::unexpected{std::move(files.error())};
+    }
+    auto animations = animationsOf(vfs, **files);
+    if (!animations) {
+        return std::unexpected{std::move(animations.error())};
+    }
+    return AnimatedModel{.files = std::move(*files), .animations = std::move(*animations)};
+}
+
 } // namespace cs

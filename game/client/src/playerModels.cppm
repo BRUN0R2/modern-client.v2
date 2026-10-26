@@ -83,19 +83,14 @@ public:
                              const nx::render::LightStyleValues& styles) const -> PosedModels;
 
 private:
-    /// A model's files, and the decoded frames of each of its sequences, by index.
-    struct File {
-        std::unique_ptr<ModelFiles> files{};
-        std::vector<nx::assets::AnimationFrames> animations{};
-    };
-
     PlayerModels() = default;
 
     /// The model at `path` read from `vfs`; none, listed, for one that cannot be read.
-    [[nodiscard]] auto readFile(const nx::assets::Vfs& vfs, std::string_view path) -> std::unique_ptr<File>;
+    [[nodiscard]] auto readFile(const nx::assets::Vfs& vfs, std::string_view path)
+        -> std::optional<AnimatedModel>;
 
-    std::vector<std::unique_ptr<File>> m_characters; ///< By CharacterIndex; none for one left out.
-    std::vector<std::unique_ptr<File>> m_weapons;    ///< By WeaponIndex; none for one left out.
+    std::vector<std::optional<AnimatedModel>> m_characters; ///< By CharacterIndex; none for one left out.
+    std::vector<std::optional<AnimatedModel>> m_weapons;    ///< By WeaponIndex; none for one left out.
     std::vector<std::string> m_missing;
 };
 

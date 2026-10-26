@@ -42,12 +42,6 @@ public:
     [[nodiscard]] inline auto missing() const noexcept -> std::span<const std::string> { return m_missing; }
 
 private:
-    /// A model's files, and the decoded frames of each of its sequences, by index.
-    struct File {
-        std::unique_ptr<ModelFiles> files{};
-        std::vector<nx::assets::AnimationFrames> animations{};
-    };
-
     GameModels() = default;
 
     /// The file of the model at `path`, read once among `files`, the files by path; none for one that
@@ -56,7 +50,7 @@ private:
                               std::map<std::string, std::optional<std::uint32_t>, std::less<>>& files)
         -> std::optional<std::uint32_t>;
 
-    std::vector<std::unique_ptr<File>> m_files;
+    std::vector<AnimatedModel> m_files;
     std::vector<PlayedModel> m_played; ///< One for each file.
     std::vector<HostageSpawn> m_hostageSpawns;
     std::vector<std::optional<std::uint32_t>> m_characterFiles; ///< By CharacterIndex.

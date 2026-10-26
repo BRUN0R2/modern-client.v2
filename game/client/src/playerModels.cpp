@@ -24,19 +24,14 @@ namespace {
 
 } // namespace
 
-auto PlayerModels::readFile(const nx::assets::Vfs& vfs, std::string_view path) -> std::unique_ptr<File> {
-    auto modelFiles = readModelFiles(vfs, path, ModelTextures::Read);
-    if (!modelFiles) {
-        m_missing.push_back(std::format("{} ({})", path, nx::describe(modelFiles.error())));
-        return nullptr;
+auto PlayerModels::readFile(const nx::assets::Vfs& vfs, std::string_view path)
+    -> std::optional<AnimatedModel> {
+    auto model = readAnimatedModel(vfs, path, ModelTextures::Read);
+    if (!model) {
+        m_missing.push_back(std::format("{} ({})", path, nx::describe(model.error())));
+        return std::nullopt;
     }
-    auto animations = animationsOf(vfs, **modelFiles);
-    if (!animations) {
-        m_missing.push_back(std::format("{} ({})", path, nx::describe(animations.error())));
-        return nullptr;
-    }
-    return std::make_unique<File>(
-        File{.files = std::move(*modelFiles), .animations = std::move(*animations)});
+    return std::move(*model);
 }
 
 auto PlayerModels::read(const nx::assets::Vfs& vfs, const Characters& characters,
@@ -56,11 +51,11 @@ void PlayerModels::readWeapon(const nx::assets::Vfs& vfs, const WeaponCatalog& w
         m_weapons.resize(weapon.value + 1);
     }
     m_weapons[weapon.value] =
-        weapons.isComplete(weapon) ? readFile(vfs, weapons.weapon(weapon).models.player) : nullptr;
+        weapons.isComplete(weapon) ? readFile(vfs, weapons.weapon(weapon).models.player) : std::nullopt;
 }
 
 auto PlayerModels::characterModel(CharacterIndex character) const noexcept -> const nx::assets::MdlView* {
-    if (character.value >= m_characters.size() || m_characters[character.value] == nullptr) {
+    if (character.value >= m_characters.size() || !m_characters[character.value]) {
         return nullptr;
     }
     return &*m_characters[character.value]->files->view;
@@ -69,8 +64,8 @@ auto PlayerModels::characterModel(CharacterIndex character) const noexcept -> co
 auto PlayerModels::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
     -> nx::Result<PlayerGpuModels, nx::render::StudioError> {
     PlayerGpuModels models;
-    for (const std::unique_ptr<File>& file : m_characters) {
-        if (file == nullptr) {
+    for (const std::optional<AnimatedModel>& file : m_characters) {
+        if (!file) {
             models.characters.emplace_back();
             continue;
         }
@@ -91,10 +86,10 @@ auto PlayerModels::loadWeapon(nx::render::StudioRenderer& renderer, nx::rhi::Com
         models.weapons.resize(weapon.value + 1);
     }
     models.weapons[weapon.value].reset();
-    if (weapon.value >= m_weapons.size() || m_weapons[weapon.value] == nullptr) {
+    if (weapon.value >= m_weapons.size() || !m_weapons[weapon.value]) {
         return {};
     }
-    const File& file = *m_weapons[weapon.value];
+    const AnimatedModel& file = *m_weapons[weapon.value];
     auto model =
         renderer.load(commands, {.model = *file.files->view, .textures = file.files->texturesView()});
     if (!model) {
@@ -120,7 +115,7 @@ auto PlayerModels::posed(const PlayerGpuModels& models, std::span<const ShownPla
             !models.characters[player.character.value]) {
             continue; // one whose model could not be read, which was listed
         }
-        const File& character = *m_characters[player.character.value];
+        const AnimatedModel& character = *m_characters[player.character.value];
         const nx::Mat3x4 placement = placementOf(player.origin, player.angles);
         std::vector<nx::Mat3x4> bones = posePlayerBones(*view, character.animations, player.sequence,
                                                         PlayerPoseQuery{.frame = player.frame,
@@ -130,11 +125,10 @@ auto PlayerModels::posed(const PlayerGpuModels& models, std::span<const ShownPla
                                                                         .pitchBlend = player.pitchBlend,
                                                                         .placement = placement});
         const nx::render::ModelLight lit = light.modelLightAt({.origin = player.origin, .sky = sky}, styles);
-        if (player.weapon && player.weapon->value < m_weapons.size() &&
-            m_weapons[player.weapon->value] != nullptr &&
+        if (player.weapon && player.weapon->value < m_weapons.size() && m_weapons[player.weapon->value] &&
             !m_weapons[player.weapon->value]->animations.empty() &&
             player.weapon->value < models.weapons.size() && models.weapons[player.weapon->value]) {
-            const File& weapon = *m_weapons[player.weapon->value];
+            const AnimatedModel& weapon = *m_weapons[player.weapon->value];
             posed.bones.push_back(mergeBones(*weapon.files->view, weapon.animations.front(),
                                              skeletonOf(*view), bones, placement));
             drawn.push_back(Drawn{
