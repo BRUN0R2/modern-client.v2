@@ -304,6 +304,15 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!footsteps) {
         return nx::fail(LevelError::ContentUnavailable, std::move(footsteps.error()));
     }
+    const std::filesystem::path hitGroupsFile = data / "cstrike" / "hitGroups.toml";
+    auto hitGroupsText = nx::platform::readTextFile(hitGroupsFile);
+    if (!hitGroupsText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(hitGroupsText.error()));
+    }
+    auto hitGroups = readHitGroupRules(*hitGroupsText, nx::platform::toUtf8(hitGroupsFile));
+    if (!hitGroups) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(hitGroups.error()));
+    }
     TextureMaterials materials = readTextureMaterials(*vfs);
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
@@ -312,6 +321,7 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
                        .lightStyles = std::move(*lightStyles),
                        .economy = std::move(*economy),
                        .footsteps = std::move(*footsteps),
+                       .hitGroups = std::move(*hitGroups),
                        .materials = std::move(materials)};
 }
 

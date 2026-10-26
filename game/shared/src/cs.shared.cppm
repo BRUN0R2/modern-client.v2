@@ -23,4 +23,5 @@ export import :rounds;
 export import :economy;
 export import :materials;
 export import :footsteps;
+export import :hitGroups;
 export import :hostages;

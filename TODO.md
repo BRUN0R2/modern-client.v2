@@ -367,8 +367,11 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](docs/07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
 - [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
 - [x] The marks the shots leave on brush entities (`cs::bulletMarkOf`: `DamageDecal` by render mode, a breakable's by its material: `{bproof1`, `{break1` to `{break3`)
-- [ ] What the shots hit: damage by distance, penetration; the knife's damage
-- [ ] Hitgroups, kevlar and helmet
+- [x] The knife's damage (`cs::Blow`, `nx::game::attackEntity`, [07 §5.3](docs/07-simulation-and-physics.md#53-damage)): 15 for the slash, 65 for the stab, dealt to what it meets as its kind takes it
+- [x] Hostages hurt and killed (`cs::harmHostage`, [10 §4.2](docs/10-counter-strike-gameplay.md#42-hostages)): the hit groups' shares (`data/cstrike/hitGroups.toml`), the flinch, the death of where it was met, no longer solid nor thinking, put back whole, the attacker's money (`hostageHarm`)
+- [ ] The hostages' pain sounds (`headshot1`, `headshot2`, with spatial sound), their blood (with the temporary entities), `#Injured_Hostage` and `#Killed_Hostage` (with the center text), their fall as they die (`MOVETYPE_TOSS`) and `mp_hostagepenalty`
+- [ ] What the shots hit: damage by distance, penetration
+- [ ] Hitgroups of the players, kevlar and helmet
 - [ ] Penetration by material (`materials.txt`)
 
 ### Audio

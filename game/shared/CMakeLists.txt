@@ -19,6 +19,7 @@ nxAddModuleLibrary(csShared
         src/economy.cppm
         src/materials.cppm
         src/footsteps.cppm
+        src/hitGroups.cppm
         src/hostages.cppm
     SOURCES
         src/movement.cpp
@@ -31,6 +32,7 @@ nxAddModuleLibrary(csShared
         src/economy.cpp
         src/materials.cpp
         src/footsteps.cpp
+        src/hitGroups.cpp
         src/hostages.cpp
     DEPENDS
         nx::core

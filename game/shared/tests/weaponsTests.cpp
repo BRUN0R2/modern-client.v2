@@ -379,6 +379,8 @@ TEST(WeaponsTest, TheRepositorysKnifeAttacksAsTheOriginals) {
     ASSERT_TRUE(catalog.has_value());
     const cs::WeaponMelee& knife = *catalog->findWeapon("knife")->melee;
     EXPECT_EQ(knife.slash.reach, nx::HammerUnits{48.0F});
+    EXPECT_EQ(knife.slash.damage, nx::Damage{15.0F}) << "KNIFE_SWING_DAMAGE";
+    EXPECT_EQ(knife.stab.damage, nx::Damage{65.0F}) << "KNIFE_STAB_DAMAGE";
     EXPECT_EQ(knife.slash.missSequences, (std::vector<std::uint32_t>{6, 7}));
     EXPECT_EQ(knife.slash.miss.primary, nx::Seconds{0.35F});
     EXPECT_EQ(knife.slash.hit.primary, nx::Seconds{0.4F});

@@ -163,9 +163,12 @@ private:
     /// goes to their team's account, and the player, alive on the losing team, is not paid as the next
     /// round starts when the end does not pay its living losers.
     void roundEnded(RoundEndReason reason);
-    /// Pays the player what its team gets as a round starts (RestartRound), unless the last end left
-    /// it unpaid.
-    void payForRound();
+    /// Pays the player what its team gets as a round starts (RestartRound), `hostagesHeld` still held
+    /// (repositionHostages), unless the last end left it unpaid.
+    void payForRound(std::uint32_t hostagesHeld);
+    /// The player's `blow` on the entity it met, as the knife's TraceAttack and ApplyMultiDamage deal it
+    /// (nx::game::attackEntity); a hostage it hurts costs the player its money (hostageHarmCost).
+    void strike(const Blow& blow);
     /// Spawns the player at the next spawn point of its team (nextSpawnPoint), as Spawn does: one
     /// unit above it, standing still and turned the way it faces (takeTurnedView), its health whole;
     /// it keeps its armor, its weapons and its money, and is paid as the next round starts. Its HUD is

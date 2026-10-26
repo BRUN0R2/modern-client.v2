@@ -272,6 +272,7 @@ struct MeleeTiming {
 /// hit says; it idles `idleAfter` after it, or when it would have otherwise.
 struct MeleeAttack {
     nx::HammerUnits reach{};
+    nx::Damage damage{}; ///< What it deals what it meets (its TraceAttack's), before what that makes of it.
     std::vector<std::uint32_t> missSequences{};
     std::vector<std::uint32_t> hitSequences{};
     MeleeTiming miss{};
@@ -690,6 +691,7 @@ struct nx::meta::Description<cs::MeleeAttack> {
     static constexpr std::string_view kName = "cs::MeleeAttack";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::MeleeAttack::reach>("reach", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MeleeAttack::damage>("damage", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::MeleeAttack::missSequences>("missSequences"),
         nx::meta::field<&cs::MeleeAttack::hitSequences>("hitSequences"),
         nx::meta::field<&cs::MeleeAttack::miss>("miss"),

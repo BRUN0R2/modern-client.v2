@@ -59,7 +59,8 @@ auto LocalGame::start(const GameContent& content, const Level& level, Team team,
     if (auto spawned = spawnGame(level.map(), level.entityClasses(), game->m_world); !spawned) {
         return std::unexpected{std::move(spawned.error())};
     }
-    if (auto registered = registerHostages(game->m_world, level.models().playedModels()); !registered) {
+    if (auto registered = registerHostages(game->m_world, level.models().playedModels(), content.hitGroups);
+        !registered) {
         return nx::fail(LevelError::GameUnspawnable, std::move(registered.error()));
     }
     spawnHostages(game->m_world, level.hulls(), level.models().hostageSpawns());
@@ -180,11 +181,16 @@ void LocalGame::tick(const UserCommand& command) {
         const nx::game::Classified* const classified =
             solid.entity ? m_world.get<nx::game::Classified>(*solid.entity) : nullptr;
         return WeaponHit{.trace = solid.trace,
+                         .entity = solid.entity,
                          .isBrushModel = isBrushEntityOrWorld(m_world, solid.entity),
                          .isBody = classified != nullptr &&
                                    classified->classification != nx::game::Classification::None};
     };
-    for (const Shot& shot : m_inventory.frame(command, shooter, tracer, time)) {
+    const WeaponAttacks attacks = m_inventory.frame(command, shooter, tracer, time);
+    for (const Blow& blow : attacks.blows) {
+        strike(blow);
+    }
+    for (const Shot& shot : attacks.shots) {
         // As FireBullets3 traces it: its direction as it strays, not of length 1.
         const nx::Vec3 end = shot.origin + (shot.direction * shot.reach.value());
         const nx::game::SolidHit hit = nx::game::traceSolidsHit(
@@ -216,13 +222,14 @@ void LocalGame::thinkRules() {
         nx::log::info(kLog, "the round is over: {}", nx::enumName(*reason));
         roundEnded(*reason);
     }
+    std::uint32_t hostagesHeld = 0;
     if (events.test(RoundEvent::RoundStarted) || events.test(RoundEvent::GameRestarted)) {
         // RestartRound puts the hostages back as it counts what they bring, before it pays.
-        repositionHostages(m_world, m_level->hulls(), m_content->economy.hostageBonus);
+        hostagesHeld = repositionHostages(m_world, m_level->hulls(), m_content->economy.hostageBonus);
     }
     if (events.test(RoundEvent::RoundStarted)) {
         nx::log::info(kLog, "a round starts");
-        payForRound();
+        payForRound(hostagesHeld);
     }
     if (events.test(RoundEvent::GameRestarted)) {
         nx::log::info(kLog, "the game restarts");
@@ -255,9 +262,20 @@ void LocalGame::roundEnded(RoundEndReason reason) {
     }
 }
 
-void LocalGame::payForRound() {
-    const nx::EnumArray<Team, nx::Money> paid =
-        m_accounts.roundStarts(m_level->objectives(), m_level->hostages());
+void LocalGame::strike(const Blow& blow) {
+    const nx::game::Harm harm = nx::game::attackEntity(
+        m_world, blow.entity,
+        nx::game::Attack{
+            .attacker = m_body, .damage = blow.damage, .direction = blow.direction, .trace = blow.trace});
+    if (m_world.has<Hostage>(blow.entity)) {
+        // The hostage's TakeDamage takes it from the player's account.
+        m_status.money =
+            addMoney(m_status.money, nx::Money{} - hostageHarmCost(harm, m_content->economy.hostageHarm));
+    }
+}
+
+void LocalGame::payForRound(std::uint32_t hostagesHeld) {
+    const nx::EnumArray<Team, nx::Money> paid = m_accounts.roundStarts(m_level->objectives(), hostagesHeld);
     if (m_isPaidNextRound) {
         m_status.money = addMoney(m_status.money, paid[m_team]);
     }

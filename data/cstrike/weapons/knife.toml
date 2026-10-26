@@ -26,6 +26,8 @@ drawSound = { files = ["weapons/knife_deploy1.wav"], channel = "item", volume = 
 
 [melee.slash] # +attack (Swing): a miss and a hit play the same sequences, in turn
 reach = 48.0
+# KNIFE_SWING_DAMAGE: its fast swing's 20 is never dealt, the next attack's time set before it is weighed
+damage = 15.0
 missSequences = [6, 7] # midslash1, midslash2
 hitSequences = [6, 7]
 miss = { primary = 0.35, secondary = 0.5 }
@@ -39,6 +41,7 @@ bodySound = { files = ["weapons/knife_hit1.wav", "weapons/knife_hit2.wav", "weap
 
 [melee.stab] # +attack2 (Stab): it leaves the idle as it was
 reach = 32.0
+damage = 65.0 # KNIFE_STAB_DAMAGE; three times as much in a player's back, which comes with the players
 missSequences = [5] # stab_miss
 hitSequences = [4] # stab
 miss = { primary = 1.0, secondary = 1.0 }

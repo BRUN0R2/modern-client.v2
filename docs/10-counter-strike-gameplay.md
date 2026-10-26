@@ -135,8 +135,20 @@ turned as it was, thinking again in 0.1 to 0.2 seconds (`cs::repositionHostages`
 rest left where they are once the bonus counted for them reaches its most, as `RestartRound`'s loop
 stops there. It is solid as its box (`nx::game::BoxSolidity`): to the players (`cs::solidBoxesOf`) and
 to the server's traces, a line meeting its hitboxes ([07 §4.2](07-simulation-and-physics.md#42-entities));
-to the game's rules a passive human (`Classify`). Following, rescue, damage and death come
-with what they need.
+to the game's rules a passive human (`Classify`). It takes an attack as `CHostage` takes it
+(`cs::harmHostage`, its `nx::game::DamageMethod`): from 100 health, the damage scaled by the hit group it
+was met in, as the monsters' `TraceAttack` and then the hostages' `TakeDamage` scale it (§7.4), at most
+its health; alive, it flinches for 0.75 seconds (`ACT_SMALL_FLINCH`), then idles again, a new idle
+drawn, at its next tenth of a second's think; killed, it plays the death of where it was met
+(Counter-Strike 1.6's `SetDeathActivity`: the head's for none and the head, `ACT_DIESIMPLE` for the
+chest and the right arm, `ACT_DIEFORWARD` for the stomach and the right leg, `ACT_DIEBACKWARD` for
+the left arm and leg), and is no longer solid nor thinks. The player who hurts it loses 20 for each
+whole point of the damage, and 500 more for a kill (`data/cstrike/economy.toml`'s `hostageHarm`,
+`cs::hostageHarmCost`). As each round starts a dead hostage is put back too, whole, but not counted
+as held. Following, rescue, its pain's headshot sounds (with spatial sound), its blood (with the
+temporary entities), the center messages (`#Injured_Hostage`, `#Killed_Hostage`, with the center
+text), its fall as it dies (`MOVETYPE_TOSS`, with its movement) and `mp_hostagepenalty`'s kick
+(with the players) come with what they need.
 
 ## 5. Map entities
 
@@ -448,7 +460,10 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
   `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
   sound of what its texture is made of, as the original's multiplayer rules play none
-  (`CHalfLifeMultiplay::PlayTextureSounds`). Its damage and the back stab come with the damage.
+  (`CHalfLifeMultiplay::PlayTextureSounds`). What it meets takes its blow (`cs::Blow`,
+  `nx::game::attackEntity`) once the next attack's time is set: 15 for the slash (its fast swing's 20
+  is never dealt, that time set before it is weighed) and 65 for the stab (`data/cstrike/weapons/knife.toml`'s
+  `damage`); the stab's three times as much in a player's back comes with the players.
 
 ### 7.4 Damage
 
@@ -458,6 +473,13 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - Damage falloff by distance (`rangeModifier`).
 - Friendly fire with `mp_friendlyfire` and the penalty rules (`mp_tkpunish`).
 - All damage goes through the hookable `TakeDamage` action ([15](15-mod-api.md#5-hookable-actions)).
+
+**Today** (`cs.shared:hitGroups`, `data/cstrike/hitGroups.toml`): the share of an attack's damage a
+body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`), for each kind:
+the monsters' `TraceAttack`'s (head 3, chest and stomach 1.5, arms 1, legs 0.75, a shield none), which
+a hostage takes an attack by first, and the hostages' `TakeDamage`'s (`GetModifiedDamage`: none 1.75,
+head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), each in double precision as the
+original's float times a double. The players' shares, armor and the shots' damage come with them.
 
 ### 7.5 Weapons made as the game runs
 

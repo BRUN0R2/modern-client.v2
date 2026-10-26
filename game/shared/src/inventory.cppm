@@ -19,6 +19,7 @@ export module cs.shared:inventory;
 import std;
 import nx.core;
 import nx.math;
+import nx.ecs;
 import nx.collision;
 import nx.game;
 import :movement;
@@ -85,11 +86,13 @@ struct Shooter {
     bool canAttack = true;
 };
 
-/// What a weapon's attack met: its trace; whether what stopped it is the world or a brush entity
-/// (IsBSPModel); and whether it is a body, which sounds as flesh: an entity of a class other than
-/// none and the machines' (Classify), a hostage or a func_vehicle today.
+/// What a weapon's attack met: its trace; the entity that stopped it, none for the world or nothing
+/// (pHit); whether that is the world or a brush entity (IsBSPModel); and whether it is a body, which
+/// sounds as flesh: an entity of a class other than none and the machines' (Classify), a hostage or a
+/// func_vehicle today.
 struct WeaponHit {
     nx::collision::Trace trace{};
+    std::optional<nx::ecs::Entity> entity{};
     bool isBrushModel = false;
     bool isBody = false;
 };
@@ -108,6 +111,21 @@ struct Shot {
     /// Its weapon's (WeaponFiring::reach), along `direction`: its end is `origin` plus `direction` times
     /// it, as the original's is.
     nx::HammerUnits reach{};
+};
+
+/// A melee attack that met an entity, which it attacks (TraceAttack): which, the trace that met it,
+/// the damage it deals, and the way it goes, along the view without its kick.
+struct Blow {
+    nx::ecs::Entity entity{};
+    nx::collision::Trace trace{};
+    nx::Damage damage{};
+    nx::Vec3 direction{};
+};
+
+/// What a weapon did in a frame: the shots it fired and the blows it struck.
+struct WeaponAttacks {
+    std::vector<Shot> shots{};
+    std::vector<Blow> blows{};
 };
 
 /// The weapons a player has, the rounds it carries besides their clips, and the one it holds.
@@ -150,10 +168,10 @@ public:
     /// with `Reload` down it is reloaded; with no fire button down its burst wanes (a pistol's at
     /// once), an empty clip is reloaded, or it idles; then the weapons' timers count down by the
     /// command's duration. With `Attack` down and its cycle allowing, a weapon whose shooter may not
-    /// attack does nothing more. Returns the shots it fired. The random numbers this draws are the
-    /// command number's.
+    /// attack does nothing more. Returns the shots it fired and the blows it struck. The random numbers this
+    /// draws are the command number's.
     auto frame(const UserCommand& command, Shooter& shooter, const WeaponTracer& tracer,
-               const nx::game::TickTime& time) -> std::vector<Shot>;
+               const nx::game::TickTime& time) -> WeaponAttacks;
 
     /// The weapon `lastinv` selects (SelectLastItem): the one the player held before, or else the
     /// newest of the first of its primary, secondary and knife slots whose newest it does not hold;
@@ -198,9 +216,10 @@ private:
     /// The held `owned`, of `weapon`, switches to its alternate or back at `time` (SecondaryAttack).
     void switchAlternate(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time);
     /// The held `owned` makes `attack`, the `count`th of its kind, at `time`, meeting what `tracer`
-    /// finds ahead of `shooter` (the knife's Swing, Stab).
+    /// finds ahead of `shooter` (the knife's Swing, Stab); its blow on the entity it met, when it met
+    /// one, goes to `blows`.
     void strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint32_t& count, const Shooter& shooter,
-                const WeaponTracer& tracer, const nx::game::TickTime& time);
+                const WeaponTracer& tracer, const nx::game::TickTime& time, std::vector<Blow>& blows);
     /// The held `owned`, of `weapon`, is reloaded at `time` when a round can go into its clip
     /// (DefaultReload, and the guns' Reload).
     void reload(OwnedWeapon& owned, const Weapon& weapon, const nx::game::TickTime& time, nx::Random& random);

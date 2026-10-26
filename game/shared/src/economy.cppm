@@ -51,10 +51,18 @@ struct HostageBonus {
     nx::Money upTo{};
 };
 
+/// What a player who hurts a hostage loses (CHostage::TakeDamage): `perDamage` for each whole point of
+/// the damage it took, and `perKill` more when it killed it.
+struct HostageHarmCosts {
+    nx::Money perDamage{};
+    nx::Money perKill{};
+};
+
 /// data/cstrike/economy.toml.
 struct EconomyRules {
     LoserBonus loserBonus{};
     HostageBonus hostageBonus{};
+    HostageHarmCosts hostageHarm{};
     std::vector<RoundEndMoney> roundEnds{}; ///< One for each reason at most.
 
     /// What the file says of a round ended by `reason`: nothing for its winners, its losers paid,
@@ -142,6 +150,15 @@ struct nx::meta::Description<cs::LoserBonus> {
 };
 
 template <>
+struct nx::meta::Description<cs::HostageHarmCosts> {
+    static constexpr std::string_view kName = "cs::HostageHarmCosts";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::HostageHarmCosts::perDamage>("perDamage", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::HostageHarmCosts::perKill>("perKill", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::HostageBonus> {
     static constexpr std::string_view kName = "cs::HostageBonus";
     static constexpr std::tuple kFields{
@@ -156,6 +173,7 @@ struct nx::meta::Description<cs::EconomyRules> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::EconomyRules::loserBonus>("loserBonus"),
         nx::meta::field<&cs::EconomyRules::hostageBonus>("hostageBonus"),
+        nx::meta::field<&cs::EconomyRules::hostageHarm>("hostageHarm"),
         nx::meta::field<&cs::EconomyRules::roundEnds>("roundEnds"),
     };
 };

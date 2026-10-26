@@ -48,6 +48,7 @@ struct GameContent {
     WorldLightStyles lightStyles;
     EconomyRules economy;
     FootstepRules footsteps;
+    HitGroupRules hitGroups;
     TextureMaterials materials;
 };
 
