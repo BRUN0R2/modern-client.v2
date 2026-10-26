@@ -39,8 +39,9 @@ enum class LevelError : std::uint8_t {
 /// (data/cstrike/loadouts.toml), the light styles it sets as a map starts
 /// (data/cstrike/lightStyles.toml), the money of its rounds (data/cstrike/economy.toml), the sounds of
 /// a player's feet (data/cstrike/footsteps.toml) and of its breath in water (data/cstrike/breath.toml),
-/// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), and what the textures
-/// are made of (the installation's sound/materials.txt; none tagged without it).
+/// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), how a player is hurt
+/// and killed (data/cstrike/playerHarm.toml), and what the textures are made of (the installation's
+/// sound/materials.txt; none tagged without it).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
@@ -51,6 +52,7 @@ struct GameContent {
     FootstepRules footsteps;
     BreathRules breath;
     HitGroupRules hitGroups;
+    PlayerHarmRules playerHarm;
     TextureMaterials materials;
 };
 
@@ -80,7 +82,8 @@ struct SpawnPoint {
 
 /// Opens the game's content: from `data`, the project's data/ folder, the description of the
 /// installation's files, the entity classes, the weapons, each in the file named after its id, the
-/// loadouts, the light styles, the money of the rounds, the footsteps, the breath and the hit groups;
+/// loadouts, the light styles, the money of the rounds, the footsteps, the breath, the hit groups and
+/// the player's harm;
 /// what the textures are made of, from the installation; and the installation at `install`, or the one
 /// Steam installed, below `addons`, the user's own content (addonsFolderOf), when it is given and is a
 /// folder: a file there is read instead of the installation's. Errors: ContentUnavailable.

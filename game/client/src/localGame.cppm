@@ -6,7 +6,8 @@
 /// movement one user command a tick (docs/07-simulation-and-physics.md, section 2.2), with the
 /// weapons a player of its team spawns with (cs::Inventory), in the rounds of the map (cs::Rounds),
 /// spawning again at its team's spawn points as each starts, paid by them (cs::TeamAccounts); its
-/// feet sound by what it walks on (cs::StepVoice).
+/// feet sound by what it walks on (cs::StepVoice); its hard landings hurt it, and kill it
+/// (cs.shared:playerHarm), which ends its round in a draw.
 export module cs.client:localGame;
 
 import std;
@@ -72,11 +73,11 @@ public:
     /// next command of `input`, looking along `view`, numbered after the last, draws the weapon it
     /// selects, moves the player among the brush entities at the speed of the weapon it holds, the use
     /// button using what is in front as it goes down, and the doors it meets and the triggers it is in
-    /// are touched; the weapon in hand fires, is reloaded or idles (cs::Inventory::frame); then the
-    /// rules of the round play (thinkRules), what is due acts, and the pushers move, pushing the
-    /// player's body. While the round is frozen the player moves at kFreezeSpeed at most, and its
-    /// attack is held back. Returns the player's eye, between where the last two ticks left it by the
-    /// time left.
+    /// are touched; the weapon in hand fires, is reloaded or idles (cs::Inventory::frame), and a hard
+    /// landing hurts the player; then the rules of the round play (thinkRules), what is due acts, and
+    /// the pushers move, pushing the player's body. While the round is frozen the player moves at
+    /// kFreezeSpeed at most, and its attack is held back; dead, it does nothing until it spawns again.
+    /// Returns the player's eye, between where the last two ticks left it by the time left.
     auto play(PlayerInput& input, nx::EulerAngles view, nx::Seconds elapsed) -> nx::Vec3;
 
     /// As play(), all of `elapsed`, each command looking along `view` and asking nothing else: the
@@ -132,7 +133,7 @@ public:
     /// order: where a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
     /// The sounds the player made since the last call, each with the moment of its tick: its weapons'
-    /// (Inventory::takeSounds), then its breath's and its feet's.
+    /// (Inventory::takeSounds), then its breath's, its feet's, its pain's and its death's.
     [[nodiscard]] auto takeSounds() -> std::vector<SoundMade>;
 
 private:
@@ -144,6 +145,23 @@ private:
     auto run(const std::function<UserCommand()>& nextCommand) -> nx::Vec3;
     /// One tick of the game, `command` the player's.
     void tick(const UserCommand& command);
+    /// What a living player does before `command` moves it (PreThink): it uses what is in front as the
+    /// use button goes down, and breathes in the water the last command left it in (Breath::breathe).
+    void preThink(const UserCommand& command);
+    /// What a living player does once `command` moved it from `before` (PostThink): the weapon in hand
+    /// fires, is reloaded or idles, its attacks dealt to what they meet; then its landing hurts it
+    /// (landingDamageOf).
+    void postThink(const UserCommand& command, const MovementState& before);
+    /// The player lands, hurt by `damage` (PostThink): it splats when the damage is more than its
+    /// health, feels the pain of a harm its armor does not take, loses the damage's whole points
+    /// (harmPlayer) and the pitch of its kick; killed by it, it dies (die).
+    void land(nx::Damage damage);
+    /// The player dies (Killed): it is heard dying, moves no more (MovementState::isDead) and its weapons
+    /// are gone with it; the local game's other team having no player, nobody is alive: its round ends
+    /// in a draw (TeamExterminationCheck).
+    void die();
+    /// The player makes `sound` at the tick, at its own volume.
+    void makeSound(const GameSound& sound);
     /// The sounds `sounds`, made by the player's movement at the tick of `command` among `entities`,
     /// as the player hears them: each step by what it steps on (Level::materialAlong, in the space of
     /// the entity it stands on), while mp_footsteps lets them sound; each splash.
@@ -159,9 +177,9 @@ private:
     /// again; as a round starts the player spawns again (spawn); as the game restarts it spawns as it
     /// joined: with mp_startmoney, without armor, and with its team's loadout alone.
     void thinkRules();
-    /// What the end of a round by `reason` does to the money (TerminateRound): what its winners get
-    /// goes to their team's account, and the player, alive on the losing team, is not paid as the next
-    /// round starts when the end does not pay its living losers.
+    /// What the end of a round by `reason` does to the money (TerminateRound), logged: what its winners
+    /// get goes to their team's account, and the player, alive on the losing team, is not paid as the
+    /// next round starts when the end does not pay its living losers.
     void roundEnded(RoundEndReason reason);
     /// Pays the player what its team gets as a round starts (RestartRound), `hostagesHeld` still held
     /// (repositionHostages), unless the last end left it unpaid.
@@ -176,8 +194,9 @@ private:
         -> std::optional<TextureMaterial>;
     /// Spawns the player at the next spawn point of its team (nextSpawnPoint), as Spawn does: one
     /// unit above it, standing still and turned the way it faces (takeTurnedView), its health whole;
-    /// it keeps its armor, its weapons and its money, and is paid as the next round starts. Its HUD is
-    /// told the round's time.
+    /// alive, it keeps its armor, its weapons and its money; killed, it keeps its money alone, given
+    /// what a player of its team spawns with. It is paid as the next round starts. Its HUD is told the
+    /// round's time.
     void spawn();
     /// Gives the player what a player of its team spawns with, drawn as its _cl_autowepswitch says.
     void equip();
@@ -200,7 +219,7 @@ private:
     TeamAccounts m_accounts;
     StepVoice m_stepVoice;
     Breath m_breath;
-    std::vector<SoundMade> m_movementSounds; ///< Since takeSounds.
+    std::vector<SoundMade> m_playerSounds; ///< Since takeSounds, but its weapons', which they keep.
     bool m_isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
     RoundTimer m_roundTimer{};     ///< What the player's HUD was told last.
     std::optional<std::size_t> m_lastSpawnPoint{}; ///< Of its team's, the one it last spawned at.

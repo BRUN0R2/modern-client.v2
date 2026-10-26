@@ -331,7 +331,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
 - [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order)
-- [ ] pmove: observers
+- [ ] pmove: observers; the body of a player killed by another, tossed (`PM_Physics_Toss`, `pmove->dead`'s branches), pushed by pushers without blocking them until its death is played (`SV_PushMove`'s corpses)
+- [x] pmove: a dead player killed by nothing (`MovementState::isDead`): it observes its own body, which no command moves (`PM_SpectatorMove` of `OBS_CHASE_FREE` on itself), its eyes 8 units under its origin (`PM_DEAD_VIEWHEIGHT`), pushers passing through it
 - [x] pmove among entities: hostages as boxes (`cs::SolidBox`, grown by the player's box and traced by `nx::collision::traceBoxMovement`)
 - [ ] pmove among entities: players and pushables as boxes (a player stuck in another one pushed out by force), base velocity (conveyors, `trigger_push`, water currents)
 - [x] Brush entities made by the game when the map starts (`nx.game`, by the classes of `data/cstrike/entities.toml`), listed for movement by `cs::brushEntitiesOf`
@@ -343,7 +344,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Parity: steps and ramps (surf)
 - [ ] Parity: ladders
 - [ ] Parity: water
-- [ ] Parity: fall damage
+- [ ] Parity: fall damage (the rule is done, `cs::landingDamageOf`; the parity test against falls recorded on the original remains)
 - [x] Sliding doors (`func_door`, `func_water`): opened by a player's touch, moved by the pusher physics of the original (`SV_PushMove`), pushing bodies and blocked by them (`nx.game:movers`); `nxview` opens them
 - [x] Rotating doors (`func_door_rotating`): opened away from the player, turned by the pusher physics (`SV_PushRotate`), met turned by movement and the server's traces
 - [x] Doors opened by others: used by the targets that name them (`CBaseDoor::Use`), firing their own targets when they arrive
@@ -372,7 +373,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [x] Hostages hurt and killed (`cs::harmHostage`, [10 §4.2](docs/10-counter-strike-gameplay.md#42-hostages)): the hit groups' shares (`data/cstrike/hitGroups.toml`), the flinch, the death of where it was met, no longer solid nor thinking, put back whole, the attacker's money (`hostageHarm`)
 - [ ] The hostages' pain sounds (`headshot1`, `headshot2`, with spatial sound), their blood (with the temporary entities), `#Injured_Hostage` and `#Killed_Hostage` (with the center text), their fall as they die (`MOVETYPE_TOSS`) and `mp_hostagepenalty`
 - [x] What the shots hit (`cs::followRound`, `FireBullets3`, [10 §7.4](docs/10-counter-strike-gameplay.md#74-damage)): their damage by the distance they went (`rangeModifier`), on through what they meet by its material and their ammo's bullet type, a mark on each wall they meet
-- [ ] Hitgroups of the players, kevlar and helmet
+- [x] A player hurt by its landings and killed (`cs.shared:playerHarm`, `data/cstrike/playerHarm.toml`, [10 §7.4](docs/10-counter-strike-gameplay.md#74-damage)): beyond 500 units a second, out of water, as `PostThink` and `FlPlayerFallDamage` weigh them; the whole points of the damage off its health (`cs::harmPlayer`), its pain, its splat and its death heard; dead, its weapons gone with it, doing nothing until it spawns again without armor and with its team's loadout
+- [ ] Hitgroups of the players, kevlar and helmet; the attacks of other players; `trigger_hurt`
+- [ ] What a dead player sees and its HUD (the original's client follows its body, `OBS_CHASE_FREE`, then spectates; to be measured on the original), its body's death played (with the players' models); the box of weapons it drops (with dropping)
 - [x] Penetration by material (`materials.txt`): `FireBullets3`'s share of the power and of the damage kept by each material
 
 ### Audio
@@ -393,7 +396,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 - [ ] Sentences (`sentences.txt`)
 - [x] Footsteps by material (`cs.shared:footsteps`, `data/cstrike/footsteps.toml`, the installation's `sound/materials.txt` read as `cs::TextureMaterials`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): each foot's step on the ground by what its texture is made of, on a ladder and in water, slower and quieter ducked, the jump's and the landing's (with its roll of the view), the splash in and out of water, `mp_footsteps`
 - [x] The breath in water (`cs::Breath`, `data/cstrike/breath.toml`, [11 §3](docs/11-audio.md#3-original-semantics-to-preserve)): the gasp of a player coming up after a while under water and once its air ran out, and the bubbles under it, the likelier the less air is left (`CBasePlayer::WaterMove`)
-- [ ] Drowning, its health given back, and the harm of slime and lava (`CBasePlayer::WaterMove`): with a player's damage
+- [ ] Drowning, its health given back, and the harm of slime and lava (`CBasePlayer::WaterMove`), on the player's harm (`cs::harmPlayer`)
 - [ ] Music (`mp3`): `media/*.mp3` streamed as a voice of the mixer (no second player), `bgmvolume` as its gain; the MP3 decoder fuzzed
 - [ ] Voice pool with priority and documented stealing
 
@@ -473,7 +476,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](docs/19-roadmap.md)).
 
 ### Rules
 - [x] Rounds (`cs.shared:rounds`, [10 §3](docs/10-counter-strike-gameplay.md#3-match-and-round-flow)): each frozen for `mp_freezetime` (the first two seconds longer), the players barely moving and their attack held back, then running for `mp_roundtime`, ended as its time runs out by what the map is played for, the next five seconds later; `sv_restart` and `sv_restartround`; the local game's player spawning again at its team's spawn points in turn, the game restarted as it joined (`mp_startmoney`, `cs::GameCvars`)
-- [ ] Game Commencing, and the rounds' ends by elimination (with damage and death)
+- [x] A round ended by what the players do, once at most (`cs::Rounds::endRound`, `TerminateRound`): the draw of a game with players on one team alone once none is alive (`RoundDraw`, `TeamExterminationCheck`), the local game's player killed
+- [ ] Game Commencing, and the rounds' ends by a team eliminated by the other (with more than one player)
 - [ ] All round-end reasons per map type (the time run out's are done: `cs::timeOutReasonOf`)
 - [ ] `mp_timelimit`, `mp_maxrounds`, `mp_winlimit`, intermission and next map
 - [ ] Teams, characters, `mp_limitteams`, `mp_autoteambalance`

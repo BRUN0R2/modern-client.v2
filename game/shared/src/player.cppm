@@ -6,8 +6,8 @@
 /// (docs/12-ui-hud-and-console.md, section 3.4), as the game gives them to a player that spawns
 /// (ReGameDLL_CS's CBasePlayer::Spawn and mp_startmoney, GPL, consulted: docs/20 section 3).
 ///
-/// Today: what a player has as it first spawns; damage, buying and rewards come with the game's rules
-/// (TODO.md).
+/// Today: what a player has as it spawns, and its health as harm takes it (cs.shared:playerHarm);
+/// buying and rewards come with the game's rules (TODO.md).
 export module cs.shared:player;
 
 import std;
@@ -31,9 +31,13 @@ enum class Team : std::uint8_t {
 
 /// What a player has: what its HUD shows of it.
 struct PlayerStatus {
+    /// Below none once harm killed it, as the original's pev->health goes; its HUD shows none.
     nx::HitPoints health{kSpawnHealth};
     nx::ArmorPoints armor{};
     nx::Money money{kStartMoney};
+
+    /// Whether it lives: some health left (IsAlive).
+    [[nodiscard]] constexpr auto isAlive() const noexcept -> bool { return health > nx::HitPoints{}; }
 };
 
 } // namespace cs

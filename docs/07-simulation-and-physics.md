@@ -154,9 +154,15 @@ code** on the server (authoritative) and on the client (prediction).
   what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
   frees it frees the player, and moves it from the 28th on, the server leaving the smaller ones, for
   the network's precision, to the client's prediction. The time is the commands' own, which the
-  original's clock keeps as they come in real time. Observers, players and pushables as boxes (and a
-  player stuck in another one pushed out by force), conveyors, pushes and currents come next
-  ([TODO](../TODO.md)).
+  original's clock keeps as they come in real time. A dead player (`MovementState::isDead`, which the
+  game sets as it kills it) killed by nothing, as a fall kills, observes its own body, as the
+  original's pmove does once `Killed` sets `OBS_CHASE_FREE` on the player itself (`PM_SpectatorMove`,
+  which finds no other body to follow): no command moves it, nor gravity, its eyes 8 units under its
+  origin (`PM_DEAD_VIEWHEIGHT`), its kick still dropping back and where it lies categorized as ever;
+  pushers no longer push it, as the original's corpse once its death is played (`MOVETYPE_NONE`).
+  Observers, the body of a player killed by another (tossed, `PM_Physics_Toss`), players and
+  pushables as boxes (and a player stuck in another one pushed out by force), conveyors, pushes and
+  currents come next ([TODO](../TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -403,7 +409,9 @@ original's `TraceAttack`, then `ApplyMultiDamage` and `TakeDamage`), which says 
 (`nx::game::Harm`: the damage taken, and whether it killed); an entity of a kind that takes none
 takes nothing (`nx::game::attackEntity`). A trace through a hitbox carries its hit group
 (`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows and the shots' rounds are dealt
-so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
+so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). A player takes a harm its armor does not
+take, a hard landing's, as `CBasePlayer::TakeDamage` deals it (`cs::harmPlayer`): the whole points of it
+off its health, killed with none left, as the same section says.
 
 ## 6. Determinism
 

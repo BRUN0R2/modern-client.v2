@@ -129,6 +129,24 @@ TEST(EconomyTest, TheWinnersGetABonusForTheHostagesStillHeld) {
     EXPECT_EQ(accounts.roundStarts({MapObjective::Hostages}, 20)[Team::Terrorists], nx::Money{3250 + 2100});
 }
 
+TEST(EconomyTest, ADrawPaysNobodyButAStreakStillRaisesTheBonus) {
+    const EconomyRules rules = repositoryRules();
+    TeamAccounts accounts{rules};
+    accounts.roundEnded(RoundEndReason::RoundDraw);
+    EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 4), paid(0, 0));
+    EXPECT_EQ(accounts.loserBonus(), nx::Money{1400});
+    // The terrorists lost twice: the draw that follows raises their bonus, which no one gets yet.
+    for (int round = 0; round < 2; ++round) {
+        accounts.roundEnded(RoundEndReason::TargetSaved);
+        std::ignore = accounts.roundStarts({MapObjective::BombTarget}, 0);
+    }
+    EXPECT_EQ(accounts.loserBonus(), nx::Money{1900});
+    accounts.roundEnded(RoundEndReason::RoundDraw);
+    EXPECT_EQ(accounts.roundStarts({MapObjective::BombTarget}, 0), paid(0, 0));
+    EXPECT_EQ(accounts.loserBonus(), nx::Money{2400});
+    EXPECT_EQ(accounts.lossesInARow(Team::Terrorists), 2U);
+}
+
 TEST(EconomyTest, TheTerroristsOfAnEscapeMapGetNoBonus) {
     const EconomyRules rules = repositoryRules();
     TeamAccounts accounts{rules};

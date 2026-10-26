@@ -39,8 +39,8 @@ constexpr std::array kTimeOuts{
 };
 
 constexpr nx::EnumArray<RoundEndReason, std::optional<Team>> kWinners{
-    nx::EnumArray<RoundEndReason, std::optional<Team>>::Storage{Team::CounterTerrorists, Team::Terrorists,
-                                                                Team::CounterTerrorists, Team::Terrorists}};
+    nx::EnumArray<RoundEndReason, std::optional<Team>>::Storage{
+        Team::CounterTerrorists, Team::Terrorists, Team::CounterTerrorists, Team::Terrorists, std::nullopt}};
 
 constexpr float kSecondsPerMinute = 60.0F;
 
@@ -146,6 +146,15 @@ void Rounds::restartGameIn(nx::Seconds delay, nx::GameTime now, nx::TickRate rat
     m_restartsGame = true;
 }
 
+auto Rounds::endRound(RoundEndReason reason, nx::GameTime now, nx::TickRate rate) noexcept -> bool {
+    if (m_end) {
+        return false;
+    }
+    m_end = reason;
+    m_restartAt = now.after(kRestartDelay, rate);
+    return true;
+}
+
 auto Rounds::think(nx::GameTime now, nx::TickRate rate, const RoundLengths& lengths) noexcept -> RoundEvents {
     nx::expects(areLengths(lengths), "Rounds::think: lengths finite and not negative");
     RoundEvents events;
@@ -157,9 +166,8 @@ auto Rounds::think(nx::GameTime now, nx::TickRate rate, const RoundLengths& leng
             events.set(RoundEvent::FreezeEnded);
         }
     } else if (!m_end && remainingAt(now, rate) <= nx::Seconds{}) {
-        if (const std::optional<RoundEndReason> reason = timeOutReasonOf(m_objectives)) {
-            m_end = reason;
-            m_restartAt = now.after(kRestartDelay, rate);
+        if (const std::optional<RoundEndReason> reason = timeOutReasonOf(m_objectives);
+            reason && endRound(*reason, now, rate)) {
             events.set(RoundEvent::Ended);
         }
         // A map played for nothing too: its round runs out again after its length and the grace.

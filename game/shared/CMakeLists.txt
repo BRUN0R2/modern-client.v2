@@ -23,6 +23,7 @@ nxAddModuleLibrary(csShared
         src/breath.cppm
         src/hitGroups.cppm
         src/hostages.cppm
+        src/playerHarm.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -38,6 +39,7 @@ nxAddModuleLibrary(csShared
         src/breath.cpp
         src/hitGroups.cpp
         src/hostages.cpp
+        src/playerHarm.cpp
     DEPENDS
         nx::core
         nx::math

@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# How a player is hurt and killed (docs/10, section 7.4), read into cs::PlayerHarmRules, with
+# ReGameDLL_CS's values and sounds (CBasePlayer::TakeDamage, Pain, DeathSound and PostThink,
+# CHalfLifeMultiplay::FlPlayerFallDamage; GPL, consulted: docs/20 section 3). A player landing out of
+# water faster than `fall.safeSpeed` units a second takes `fall.damageAtFatalSpeed` for a fall as much
+# faster as `fall.fatalSpeed` is, in proportion, times `fall.scale`, and loses its whole points: 20 of
+# its health at 600 units a second, 125 at 1100. `pain` is heard as a harm its armor does not take hurts
+# it, `splat` as it lands harder than its health can take, and `death` as it dies, one of their files at
+# random.
+
+pain = { files = ["player/bhit_flesh-1.wav", "player/bhit_flesh-2.wav", "player/bhit_flesh-3.wav"], channel = "voice", volume = 1.0 }
+splat = { files = ["common/bodysplat.wav"], channel = "item", volume = 1.0 }
+death = { files = ["player/die1.wav", "player/die2.wav", "player/die3.wav", "player/death6.wav"], channel = "voice", volume = 1.0 }
+
+[fall]
+safeSpeed = 500.0
+fatalSpeed = 1100.0
+damageAtFatalSpeed = 100.0
+scale = 1.25

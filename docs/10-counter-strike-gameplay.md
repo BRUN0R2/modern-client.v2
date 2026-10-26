@@ -58,28 +58,35 @@ entities), the first of a bomb target (`TargetSaved`), hostages (`HostagesNotRes
 zone (`TerroristsNotEscaped`) and a VIP safety zone (`VipNotEscaped`); the rounds of a map played
 for none run on; a time-out puts its round's start 60 seconds on, as CheckRoundTimeExpired does, so
 that a player spawning before the next round is told the round's length and those 60 seconds less
-the time since (and a map played for nothing runs out again that much later). The next round starts
-five seconds after the end. `sv_restartround`, else
+the time since (and a map played for nothing runs out again that much later). A round ends, too, by
+what the players do (`cs::Rounds::endRound`, TerminateRound), once at most: a round that ended ends
+no more, as CheckWinConditions looks no further once a started game's round is decided, nor does
+its time run out after; today, in a draw (`RoundDraw`, won by nobody), as TeamExterminationCheck ends
+the round of a game with players on one team alone once none of them is alive: the local game's
+player killed ([§7.4](#74-damage)), frozen or not. The next round starts five seconds after the end.
+`sv_restartround`, else
 `sv_restart`, read once a second, restarts the game that many seconds later, the round playing on
 until then (or until five seconds after it ends): the players spawn as they joined, with
 `mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). As a round
 starts, the local game's player spawns again at its team's next spawn point (`cs::spawnPointsOf`,
 as `EntSelectSpawnPoint` takes them in turn), one unit above it, turned the way it faces, its
 health whole, keeping its armor, weapons and money, and what it may do next with its weapon it may
-do now (`cs::Inventory::spawned`, `m_flNextAttack = 0`: a reload under way completes); then the map
+do now (`cs::Inventory::spawned`, `m_flNextAttack = 0`: a reload under way completes); killed, it
+keeps its money alone, without armor, given its team's loadout (`Spawn`, `GiveDefaultItems`); then the map
 is cleaned up as `CleanUpMap` does after the players spawn: the brush entities whose class restarts
 each round restart (`nx::game::restartBrushEntities`), a door closing again from where it is, a
 touch opening it again meanwhile (`CBaseDoor::Restart`); the original's client clears the decals then
 (its `decal_reset` event), which is to be measured on the original. `sv_restart` is read after the
 round's checks, as the original's Think reads it last. The HUD counts down the whole seconds the game
 told it as the player spawned and as the freeze ended ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
-Each end pays the teams as [§6](#6-economy) says. Game Commencing, the ends by elimination and by
-the objectives, the teams' scores, buying and the end of the match come next.
+Each end pays the teams as [§6](#6-economy) says (a draw pays nobody, a team's losses in a row still
+raising the loser bonus). Game Commencing, the ends of a team eliminated by the other and by the
+objectives, the teams' scores, buying and the end of the match come next.
 
 ### 3.1 Round end reasons
 
 `enum class RoundEndReason` with parity with the original's reasons (today the four ends of a time
-run out, with the team each is won by: `cs::winnerOf`):
+run out and the draw, with the team each is won by: `cs::winnerOf`):
 
 | Reason | Maps |
 |--------|------|
@@ -495,6 +502,25 @@ computer 0.45, tile 0.3, wood 0.6, else 0.5); what is not a brush model, or the 
 lets it go 42 units in, deals 0.75 after and leaves it 0.75 of the way left, a brush model half. The
 Glock's burst's two last rounds have a range modifier of 0.9 (`FireRemaining`).
 
+**Today**, a player hurt and killed (`cs.shared:playerHarm`, `data/cstrike/playerHarm.toml`): its
+landings, as the original's `PostThink` weighs them after the weapon's frame, by how fast it was
+falling as the command that put it on the ground started (`m_flFallVelocity`), out of water (slime and
+lava spare it none): beyond 500 units a second, 100 for each 600 more, in float, times the multiplayer
+rules' 1.25 (`cs::landingDamageOf`, `FlPlayerFallDamage`), so 20 at 600 units a second and 125 at
+1100. Such a harm, which its armor does not take, it takes as `CBasePlayer::TakeDamage` does
+(`cs::harmPlayer`): the pain of its flesh (`bhit_flesh-1` to `-3`, on its `Voice` channel), then the
+damage's whole points off its health (the original's `int()`), its health going below none as the
+original's does, which its HUD shows as none; a landing harder than its health first splats
+(`common/bodysplat`, on its `Item` channel), and the pitch of its kick is gone. With no health left it
+is killed (`Killed`): its death is heard (`die1` to `die3`, `death6`, on its `Voice` channel, the
+pain's replaced), its weapons go with it (`PackDeadPlayerItems`; the box it drops comes with dropping),
+it does nothing more until it spawns again (killed by nothing, it observes its own body, which moves no
+more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), and its round ends in a draw
+(§3), the local game's other team having no player. What a dead player sees and its HUD (the
+original's client follows its body, `OBS_CHASE_FREE`, then spectates), its body's death played, the
+attacks of other players, their hit groups and the armor's share, drowning and the harm of slime and
+lava, and `trigger_hurt` come with what they need ([TODO](../TODO.md)).
+
 ### 7.5 Weapons made as the game runs
 
 A weapon is a type, standalone: the game's are read from its data (§7.2), and others are made as
@@ -586,8 +612,9 @@ kinds of ammo made as the game runs, with the HUD's picture of each, come with t
 
 The planned layout; today `entities.toml`
 ([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml`, `weapons/` (section 7.2), `loadouts.toml`,
-`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), and `footsteps.toml` and
-`breath.toml` ([11 §3](11-audio.md#3-original-semantics-to-preserve)) exist. The hull sizes are not data:
+`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml` and
+`playerHarm.toml` (section 7.4), and `footsteps.toml` and `breath.toml`
+([11 §3](11-audio.md#3-original-semantics-to-preserve)) exist. The hull sizes are not data:
 `cs.shared` holds them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
 ```
@@ -595,6 +622,7 @@ data/cstrike/
 ├── cvars.toml          # all game cvars: name, type, default, range, flags
 ├── economy.toml
 ├── hitGroups.toml
+├── playerHarm.toml     # how a player is hurt and killed: its falls, its pain and death
 ├── movement.toml       # derived constants not exposed as cvars
 ├── entities.toml       # classname -> prefab + keyvalue schema
 ├── teams.toml          # teams, characters, models

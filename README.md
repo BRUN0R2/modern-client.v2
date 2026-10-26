@@ -40,9 +40,9 @@ skinning, sprites, the HUD's screen, and the enhanced look), `nx.ui` (fonts as W
 them, panels and the console's window), `nx.audio` (the mixer), `nx.settings` (the player's
 `.cfg` files, cvars and binds), `nx.collision` (traces through the hulls of a map), `nx.game`
 (the map's brush entities, doors, buttons and triggers) and `cs.shared` (player movement, the
-knife, Glock 18, USP, AK-47 and M4A1 as the original fires them, and the rounds of a map: their
-freeze, their time, its end and the money they pay), with which the client, `next`, plays the maps
-alone, round after round. `nxcheck` reads every file of a Counter-Strike 1.6 installation with those
+knife, Glock 18, USP, AK-47 and M4A1 as the original fires them, the rounds of a map: their
+freeze, their time, its end and the money they pay, and a player hurt by its falls and killed), with
+which the client, `next`, plays the maps alone, round after round. `nxcheck` reads every file of a Counter-Strike 1.6 installation with those
 readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
