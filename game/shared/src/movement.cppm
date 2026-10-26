@@ -8,9 +8,10 @@
 /// precision of each sum, which change where a player ends up.
 ///
 /// Today: walking, the air, jumping and its penalties, ducking, stairs, sliding along walls and
-/// floors, water, and ladders, among the world and the brush entities where the game puts and turns
-/// them; noclip; and the weapon's kick to the view, dropped back each move. Observers, unsticking, boxes
-/// (players, hostages), conveyors and currents come next (TODO.md).
+/// floors, water, and ladders, among the world, the brush entities where the game puts and turns them
+/// and the hostages' boxes; unsticking; noclip; the weapon's kick to the view, dropped back each move;
+/// and a dead player, killed by nothing. Observers, the body of a player killed by another, the
+/// players' boxes, conveyors and currents come next (TODO.md).
 export module cs.shared:movement;
 
 import std;
@@ -157,6 +158,8 @@ inline constexpr nx::Aabb kDuckedBox{.min = {.x = -16.0F, .y = -16.0F, .z = -18.
 /// The height of a standing player's eyes above its origin, and of a ducked player's.
 inline constexpr nx::HammerUnits kStandingViewHeight{17.0F};
 inline constexpr nx::HammerUnits kDuckedViewHeight{12.0F};
+/// The height of a dead player's eyes above its origin: under it (PM_DEAD_VIEWHEIGHT).
+inline constexpr nx::HammerUnits kDeadViewHeight{-8.0F};
 
 /// How a player moves, the original's movetype that the game sets.
 enum class MoveType : std::uint8_t {
@@ -209,6 +212,11 @@ struct MovementState {
     /// Since a stuck player was last tried at a nudge, while that is too recent to try the next one
     /// (rgStuckCheckTime): none once it is not.
     std::optional<nx::Milliseconds> sinceStuckCheck{};
+    /// Its health is gone (pmove->dead), which the game sets as it kills it: killed by nothing, as a
+    /// fall kills, it observes its own body (the original's OBS_CHASE_FREE on itself), which no command
+    /// moves any more (PM_SpectatorMove), its eyes kDeadViewHeight above its origin, its kick dropping
+    /// back; pushers no longer push it, as the original's corpse once its death is played.
+    bool isDead = false;
 };
 
 /// What a brush entity is to a player's movement, as the game made it.
@@ -245,7 +253,7 @@ struct SolidBox {
 [[nodiscard]] auto solidBoxesOf(nx::ecs::World& world) -> std::vector<SolidBox>;
 
 /// The body of a player in `state` that the game's pushers move: its box, standing or ducked, and the
-/// brush model it stands on.
+/// brush model it stands on; not pushed while it noclips or is dead.
 [[nodiscard]] auto bodyOf(const MovementState& state) -> nx::game::Body;
 
 /// What a command did: the player after it, the brush entities it ran into or stood on, by their

@@ -286,6 +286,12 @@ public:
 
     [[nodiscard]] auto run() -> MovementResult {
         prepare();
+        if (m_player.isDead) {
+            // Killed by nothing, it observes its own body, which moves no more (PM_SpectatorMove).
+            m_player.viewHeight = kDeadViewHeight;
+            categorizePosition();
+            return result();
+        }
         // Parity: never stuck in noclip; stuck, the player does nothing else
         if (m_player.moveType != MoveType::Noclip && isStuck()) {
             return result();
@@ -1331,7 +1337,7 @@ auto bodyOf(const MovementState& state) -> nx::game::Body {
     return nx::game::Body{.hull = state.isDucked ? Hull::Ducked : Hull::Standing,
                           .box = state.isDucked ? kDuckedBox : kStandingBox,
                           .groundModel = state.isOnGround ? modelOf(state.ground) : std::nullopt,
-                          .isPushed = state.moveType == MoveType::Walk};
+                          .isPushed = state.moveType == MoveType::Walk && !state.isDead};
 }
 
 auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds {

@@ -144,33 +144,51 @@ void LocalGame::tick(const UserCommand& command) {
     // the original's CmdStart selects it.
     m_inventory.select(command, nx::game::tickTimeOf(m_world));
     m_player.maxSpeed = maxSpeed();
-    if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
-        // Before the command moves the player, as the original's PreThink uses.
-        std::ignore = nx::game::playerUse(
-            m_world, hulls, m_body,
-            {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
+    const bool isAlive = m_status.isAlive();
+    if (isAlive) {
+        preThink(command);
     }
     m_lastButtons = command.buttons;
-    // The player breathes in the water the last command left it in, before this one moves it, as the
-    // original's PreThink has it breathe (WaterMove).
-    nx::Random breathRandom{command.number.value, kBreathStream};
-    if (const std::optional<SoundMade> breath = m_breath.breathe(
-            m_player.waterLevel, m_player.moveType, nx::game::tickTimeOf(m_world), breathRandom)) {
-        m_movementSounds.push_back(*breath);
-    }
+    const MovementState before = m_player;
     const std::vector<BrushEntity> entities = brushEntitiesOf(m_world);
     const MovementResult moved =
         simulateMovement(m_player, command, MovementSettings{}, hulls, entities, solidBoxesOf(m_world));
     m_player = moved.state;
-    hearMovement(moved.sounds, entities, command);
-    nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
+    // A dead player's body is not solid (SOLID_NOT): it touches nothing.
+    if (isAlive) {
+        hearMovement(moved.sounds, entities, command);
+        nx::game::touchBrushEntities(m_world, hulls, moved.touchedModels, m_body);
+    }
     m_world.get<nx::game::Transform>(m_body)->origin = m_player.origin;
     *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
-    nx::game::touchTriggers(m_world, hulls, m_body);
-    // The weapon in hand fires, is reloaded or idles once the command moved the player, as the
-    // original's PostThink runs it; each shot goes as far as a bullet does, and where it meets the
-    // world or a brush entity it leaves its mark (its damage and how far it goes through come with
-    // damage).
+    if (isAlive) {
+        nx::game::touchTriggers(m_world, hulls, m_body);
+        postThink(command, before);
+    }
+    thinkRules();
+    nx::game::runThinks(m_world, hulls);
+    nx::game::runPushers(m_world, hulls);
+    m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;
+    nx::game::advanceTick(m_world);
+}
+
+void LocalGame::preThink(const UserCommand& command) {
+    if (command.buttons.test(Button::Use) && !m_lastButtons.test(Button::Use)) {
+        std::ignore = nx::game::playerUse(
+            m_world, m_level->hulls(), m_body,
+            {.eye = m_previousEye, .forward = nx::angleVectors(command.viewAngles).forward});
+    }
+    nx::Random breathRandom{command.number.value, kBreathStream};
+    if (const std::optional<SoundMade> breath = m_breath.breathe(
+            m_player.waterLevel, m_player.moveType, nx::game::tickTimeOf(m_world), breathRandom)) {
+        m_playerSounds.push_back(*breath);
+    }
+}
+
+void LocalGame::postThink(const UserCommand& command, const MovementState& before) {
+    const nx::collision::BrushHulls& hulls = m_level->hulls();
+    // Each shot goes as far as a bullet does, and where it meets the world or a brush entity it leaves
+    // its mark.
     Shooter shooter{
         .eye = eyeOf(m_player),
         .view = command.viewAngles,
@@ -221,11 +239,44 @@ void LocalGame::tick(const UserCommand& command) {
         }
     }
     m_player.punch = shooter.punch;
-    thinkRules();
-    nx::game::runThinks(m_world, hulls);
-    nx::game::runPushers(m_world, hulls);
-    m_player.origin = m_world.get<nx::game::Transform>(m_body)->origin;
-    nx::game::advanceTick(m_world);
+    if (const std::optional<nx::Damage> damage =
+            landingDamageOf(m_content->playerHarm.fall, before, m_player)) {
+        land(*damage);
+    }
+}
+
+void LocalGame::land(nx::Damage damage) {
+    const PlayerHarmRules& rules = m_content->playerHarm;
+    // Weighed before the damage is cut to its whole points.
+    if (damage.value() > m_status.health.value()) {
+        makeSound(rules.splat);
+    }
+    makeSound(rules.pain);
+    const nx::game::Harm harm = harmPlayer(m_status, damage);
+    m_player.punch.pitch = nx::Degrees{};
+    if (harm.isKilled) {
+        die();
+    }
+}
+
+void LocalGame::die() {
+    nx::log::info(kLog, "the player dies");
+    makeSound(m_content->playerHarm.death);
+    m_player.isDead = true;
+    *m_world.get<nx::game::Body>(m_body) = bodyOf(m_player);
+    // Its weapons go with it (PackDeadPlayerItems; the box it drops comes with dropping, TODO.md).
+    m_inventory.removeAll();
+    // As the original's CheckWinConditions weighs a death: nobody is alive, the other team having no
+    // player (TeamExterminationCheck).
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    if (m_rounds.endRound(RoundEndReason::RoundDraw, time.now, time.rate)) {
+        roundEnded(RoundEndReason::RoundDraw);
+    }
+}
+
+void LocalGame::makeSound(const GameSound& sound) {
+    m_playerSounds.push_back(
+        SoundMade{.sound = &sound, .at = nx::game::tickTimeOf(m_world).now, .volume = sound.volume});
 }
 
 void LocalGame::thinkRules() {
@@ -238,7 +289,6 @@ void LocalGame::thinkRules() {
     }
     if (const std::optional<RoundEndReason> reason = m_rounds.end();
         events.test(RoundEvent::Ended) && reason) {
-        nx::log::info(kLog, "the round is over: {}", nx::enumName(*reason));
         roundEnded(*reason);
     }
     std::uint32_t hostagesHeld = 0;
@@ -273,10 +323,11 @@ void LocalGame::thinkRules() {
 }
 
 void LocalGame::roundEnded(RoundEndReason reason) {
+    nx::log::info(kLog, "the round is over: {}", nx::enumName(reason));
     m_accounts.roundEnded(reason);
     const std::optional<Team> winner = winnerOf(reason);
-    const bool isAlive = m_status.health > nx::HitPoints{};
-    if (winner && *winner != m_team && isAlive && !m_content->economy.roundEnd(reason).paysLivingLosers) {
+    if (winner && *winner != m_team && m_status.isAlive() &&
+        !m_content->economy.roundEnd(reason).paysLivingLosers) {
         m_isPaidNextRound = false;
     }
 }
@@ -298,6 +349,12 @@ void LocalGame::payForRound(std::uint32_t hostagesHeld) {
 }
 
 void LocalGame::spawn() {
+    if (!m_status.isAlive()) {
+        // Killed, it spawns without armor (Spawn), given what a player of its team spawns with
+        // (GiveDefaultItems), as its weapons went with it.
+        m_status.armor = nx::ArmorPoints{};
+        equip();
+    }
     const SpawnPoint point = nextSpawnPoint();
     standAt(point.origin + nx::Vec3{.z = kSpawnLift.value()});
     m_status.health = kSpawnHealth;
@@ -349,8 +406,8 @@ void LocalGame::standAt(nx::Vec3 origin) {
 
 auto LocalGame::takeSounds() -> std::vector<SoundMade> {
     std::vector<SoundMade> sounds = m_inventory.takeSounds();
-    std::ranges::move(m_movementSounds, std::back_inserter(sounds));
-    m_movementSounds.clear();
+    std::ranges::move(m_playerSounds, std::back_inserter(sounds));
+    m_playerSounds.clear();
     return sounds;
 }
 
@@ -360,8 +417,7 @@ void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<co
     nx::Random random{command.number.value, kFootstepStream};
     for (const MovementSound& sound : sounds) {
         if (std::holds_alternative<Splash>(sound)) {
-            const GameSound& splash = m_content->footsteps.splash;
-            m_movementSounds.push_back(SoundMade{.sound = &splash, .at = now, .volume = splash.volume});
+            makeSound(m_content->footsteps.splash);
             continue;
         }
         if (!m_cvars.doStepsSound()) {
@@ -371,7 +427,7 @@ void LocalGame::hearMovement(std::span<const MovementSound> sounds, std::span<co
         const TextureMaterial ground =
             step.ground ? groundMaterial(*step.ground, entities) : TextureMaterial::Concrete;
         if (const std::optional<SoundMade> made = m_stepVoice.soundOf(step, ground, now, random)) {
-            m_movementSounds.push_back(*made);
+            m_playerSounds.push_back(*made);
         }
     }
 }

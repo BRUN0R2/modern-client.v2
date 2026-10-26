@@ -322,6 +322,15 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
     if (!hitGroups) {
         return nx::fail(LevelError::ContentUnavailable, std::move(hitGroups.error()));
     }
+    const std::filesystem::path playerHarmFile = data / "cstrike" / "playerHarm.toml";
+    auto playerHarmText = nx::platform::readTextFile(playerHarmFile);
+    if (!playerHarmText) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(playerHarmText.error()));
+    }
+    auto playerHarm = readPlayerHarmRules(*playerHarmText, nx::platform::toUtf8(playerHarmFile));
+    if (!playerHarm) {
+        return nx::fail(LevelError::ContentUnavailable, std::move(playerHarm.error()));
+    }
     TextureMaterials materials = readTextureMaterials(*vfs);
     return GameContent{.vfs = std::move(*vfs),
                        .entityClasses = std::move(*classes),
@@ -332,6 +341,7 @@ auto openGameContent(const std::filesystem::path& data, const std::optional<std:
                        .footsteps = std::move(*footsteps),
                        .breath = std::move(*breath),
                        .hitGroups = std::move(*hitGroups),
+                       .playerHarm = std::move(*playerHarm),
                        .materials = std::move(materials)};
 }
 

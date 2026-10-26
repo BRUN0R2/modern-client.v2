@@ -7,9 +7,10 @@
 /// what its map is played for ends it, or its time runs out; the next starts kRestartDelay after it
 /// ends. sv_restart restarts the game when it asks, the round playing on until then.
 ///
-/// Today: rounds ended by their time running out; the ends that what the players do brings (their
-/// deaths, the bomb, the hostages, the VIP, the escape), Game Commencing, the teams' scores and money,
-/// and the end of the map come with them (TODO.md).
+/// Today: rounds ended by their time running out, and by what the game ends them for (the draw of a
+/// game whose only team has no player alive); the other ends that what the players do brings (a team
+/// eliminated by the other, the bomb, the hostages, the VIP, the escape), Game Commencing, the teams'
+/// scores and the end of the map come with them (TODO.md).
 export module cs.shared:rounds;
 
 import std;
@@ -52,6 +53,8 @@ enum class RoundEndReason : std::uint8_t {
     HostagesNotRescued,   ///< Its time ran out on a map with hostages.
     TerroristsNotEscaped, ///< Its time ran out on a map with an escape zone.
     VipNotEscaped,        ///< Its time ran out on a map with a VIP safety zone.
+    /// Nobody was alive, a team having no player (TeamExterminationCheck's draw).
+    RoundDraw,
     Count,
 };
 
@@ -145,6 +148,12 @@ public:
     /// round starts then, or kRestartDelay after the round ends when it ends before, and its players
     /// spawn as they joined.
     void restartGameIn(nx::Seconds delay, nx::GameTime now, nx::TickRate rate) noexcept;
+
+    /// Ends the round by `reason` at `now`, the game running at `rate`, as what the players did ends it
+    /// (TerminateRound): the next round starts kRestartDelay after, the game restarting then when a
+    /// restart is asked for. Returns whether it ended it: a round that ended ends no more, as the
+    /// original's CheckWinConditions looks no further once the round of a started game is decided.
+    [[nodiscard]] auto endRound(RoundEndReason reason, nx::GameTime now, nx::TickRate rate) noexcept -> bool;
 
     /// Plays the rules at `now`, the game running at `rate`, in the original's order (Think): a
     /// freeze that ran out lets the round's time run; a time that ran out ends the round as its map's

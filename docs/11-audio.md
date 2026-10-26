@@ -145,7 +145,9 @@ command moves the player (`cs::Breath`, `data/cstrike/breath.toml`): with its he
 on its `Voice` channel, `pl_wade1` once they ran out; with its head under, it bubbles one breath in
 32, then as likely as a whole second from 0 to 11 drawn at random is the whole seconds of its air
 left or more (`pl_swim1` to `pl_swim4`, at 0.8, on its `Body` channel). A noclipping player holds
-its breath as it was. Drowning, and the harm of slime and lava, come with a player's damage. The
+its breath as it was, and a dead one breathes no more. Drowning, and the harm of slime and lava, come
+with the rest of a player's harm, whose pain, splat and death the player is heard by today
+([10 §7.4](10-counter-strike-gameplay.md#74-damage)). The
 original's float time sometimes makes the air a little less than whole, so that one wading within 12
 seconds before a power of two of seconds bubbles now and then; the game's time does not
 ([07 §1](07-simulation-and-physics.md#1-time-and-tick)).

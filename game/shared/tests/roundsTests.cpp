@@ -144,6 +144,39 @@ TEST(RoundsTest, TheNextRoundIsAsLongAsTheLengthsSayAsItStarts) {
     EXPECT_EQ(rounds.remainingAt(at(316.0), kRate), nx::Seconds{60.0F});
 }
 
+TEST(RoundsTest, ARoundTheGameEndsStartsTheNextFiveSecondsLaterAndEndsNoMore) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = rounds.think(at(8.0), kRate, kLengths);
+    EXPECT_TRUE(rounds.endRound(RoundEndReason::RoundDraw, at(20.0), kRate));
+    EXPECT_EQ(rounds.end(), RoundEndReason::RoundDraw);
+    EXPECT_EQ(rounds.restartAt(), at(25.0));
+    EXPECT_FALSE(rounds.endRound(RoundEndReason::RoundDraw, at(22.0), kRate)) << "it ended already";
+    EXPECT_EQ(rounds.restartAt(), at(25.0));
+    EXPECT_EQ(rounds.think(at(24.99), kRate, kLengths), RoundEvents{});
+    EXPECT_EQ(rounds.think(at(25.0), kRate, kLengths), events({RoundEvent::RoundStarted}));
+    EXPECT_EQ(rounds.end(), std::nullopt);
+}
+
+TEST(RoundsTest, ARoundTheGameEndsDoesNotRunOutAfterNorARoundThatRanOutEndAgain) {
+    Rounds drawn = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = drawn.think(at(8.0), kRate, kLengths);
+    EXPECT_TRUE(drawn.endRound(RoundEndReason::RoundDraw, at(305.0), kRate));
+    EXPECT_EQ(drawn.think(at(308.0), kRate, kLengths), RoundEvents{});
+    EXPECT_EQ(drawn.end(), RoundEndReason::RoundDraw);
+    EXPECT_EQ(drawn.restartAt(), at(310.0));
+
+    Rounds ranOut = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = ranOut.think(at(8.0), kRate, kLengths);
+    std::ignore = ranOut.think(at(308.0), kRate, kLengths);
+    EXPECT_FALSE(ranOut.endRound(RoundEndReason::RoundDraw, at(309.0), kRate));
+    EXPECT_EQ(ranOut.end(), RoundEndReason::TargetSaved);
+    EXPECT_EQ(ranOut.restartAt(), at(313.0));
+}
+
+TEST(RoundsTest, ADrawIsWonByNobody) {
+    EXPECT_EQ(cs::winnerOf(RoundEndReason::RoundDraw), std::nullopt);
+}
+
 TEST(RoundsTest, TheRoundsOfAMapPlayedForNothingRunOnPastTheirTime) {
     Rounds rounds = Rounds::start({}, kLengths, at(0.0));
     std::ignore = rounds.think(at(8.0), kRate, kLengths);

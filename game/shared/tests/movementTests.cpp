@@ -324,6 +324,29 @@ TEST(MovementTest, NoclipRisesOffTheFloorOnlyFasterThanItSticks) {
     EXPECT_NEAR(repeat(onTheFloor, rise(250.0F), 10, floorWorld()).origin.z, kOnTheFloor + 25.0F, kTolerance);
 }
 
+TEST(MovementTest, ADeadPlayerMovesNoMoreItsEyesUnderItsOrigin) {
+    // Killed by nothing, it observes its own body (PM_SpectatorMove): no key moves it, nor gravity.
+    MovementState dead = standingOnTheFloor();
+    dead.isDead = true;
+    dead.punch = nx::EulerAngles{.roll = nx::Degrees{5.0F}};
+    const MovementState after =
+        simulate(dead, command(forward(250.0F), {Button::Jump, Button::Duck}), {}, floorWorld());
+    EXPECT_EQ(after.origin, dead.origin);
+    EXPECT_EQ(after.velocity, Vec3{});
+    EXPECT_TRUE(after.isOnGround);
+    EXPECT_FALSE(after.isDucking);
+    EXPECT_FALSE(after.isDucked);
+    EXPECT_EQ(after.viewHeight, cs::kDeadViewHeight);
+    EXPECT_LT(after.punch.roll, dead.punch.roll) << "its kick drops back still";
+    EXPECT_FALSE(cs::bodyOf(after).isPushed) << "pushers pass through it";
+
+    const MovementState falling{.origin = {.z = 100.0F}, .velocity = {.z = -300.0F}, .isDead = true};
+    const MovementState fell = simulate(falling, command(), {}, emptyWorld());
+    EXPECT_EQ(fell.origin, falling.origin);
+    EXPECT_EQ(fell.velocity, falling.velocity);
+    EXPECT_FALSE(fell.isOnGround);
+}
+
 TEST(MovementTest, AMoveIntoAWallSlidesAlongIt) {
     // A wall from x = 10 on, over the floor.
     const BrushHulls walled = world({facingX(10.0F), facingUp(0.0F)},
