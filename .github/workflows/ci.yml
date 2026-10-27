@@ -176,7 +176,7 @@ jobs:
         run: |
           g++ --version | head -n 1
           cmake --version | head -n 1
-          cmake --preset ${{ matrix.preset }}
+          cmake --preset ${{ matrix.preset }} -DNX_REFLECTION_BACKEND=native
 
       - name: Build
         # -k 0: keep going after the first error so one run reports every problem.

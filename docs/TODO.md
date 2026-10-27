@@ -121,6 +121,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Windows Clang job: `dev-windows-clang`, build and tests
 - [x] Required `linux-gcc` job (GCC 16)
 - [x] Required Linux GCC 16 and TSan validation of `StudioIndex` construction and player-frame module imports; the complete interface graph and all tests pass
+- [ ] Native P2996 reflection in Linux GCC and TSan CI: evaluate the capability probe at compile time and require `NX_REFLECTION_BACKEND=native`; pending full native-path validation
 - [ ] Linux job with Clang
 - [x] Formatting (`clang-format --dry-run --Werror`) in the `checks` job
 - [ ] `clang-tidy` in CI with a baseline for existing naming inconsistencies; local changed-line analysis is validated
