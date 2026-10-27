@@ -75,11 +75,16 @@ struct EntityType {
 };
 
 /// Models stay owned here; indices are append-only and definitions cannot change under live bodies.
+/// References returned by type/model are borrowed until the next add; retain indices across additions.
 class EntityCatalog {
 public:
+    /// Validates stats, files, hitboxes and sequences before appending. Errors: InvalidDefinition,
+    /// ModelUnreadable, UnknownSequence. A failed addition leaves existing entries unchanged.
     [[nodiscard]] auto add(const nx::assets::Vfs& vfs, EntityDefinition definition, ModelTextures textures)
         -> nx::Result<EntityTypeIndex, EntityError>;
+    /// Requires a type index issued by this catalog.
     [[nodiscard]] auto type(EntityTypeIndex index) const -> const EntityType&;
+    /// Requires a model index issued by this catalog.
     [[nodiscard]] auto model(EntityModelIndex index) const -> const AnimatedModel&;
     [[nodiscard]] inline auto modelCount() const noexcept -> std::size_t { return models.size(); }
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return types.size(); }

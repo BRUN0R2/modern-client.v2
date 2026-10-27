@@ -34,6 +34,8 @@ struct Settings {
     nx::HammerUnits spawnSpacing{};
 };
 
+/// Parses the mod settings and validates perception/spawn budgets. Errors: InvalidData. The body's
+/// stats and model are validated separately by EntityCatalog::add before creating a horde.
 [[nodiscard]] auto readSettings(std::string_view text, std::string_view source)
     -> nx::Result<Settings, ZombieError>;
 
@@ -45,6 +47,8 @@ class Horde {
 public:
     /// Builds the standing-body mesh in jobs. The game and its content must outlive the horde;
     /// destroying the horde removes its bodies before releasing their mesh.
+    /// Requires validated settings and a matching type issued by the game's catalog.
+    /// Errors: NavigationUnavailable, SpawnFailed (component registration).
     [[nodiscard]] static auto create(nx::jobs::JobSystem& jobs, cs::Game& game,
                                      const nx::game::NavigationData& navigation, cs::EntityTypeIndex type,
                                      Settings settings) -> nx::Result<std::unique_ptr<Horde>, ZombieError>;
@@ -56,10 +60,13 @@ public:
     Horde(Horde&&) = delete;
     auto operator=(Horde&&) -> Horde& = delete;
 
-    /// All placements succeed or the bodies created by this call are rolled back.
+    /// All placements succeed or the bodies created by this call are rolled back. Errors: SpawnFailed
+    /// for an invalid count or a failed navigation/body placement.
     [[nodiscard]] auto spawn(nx::Vec3 origin, nx::Degrees yaw, std::uint32_t count)
         -> nx::Result<void, ZombieError>;
+    /// Samples sight and advances brains once, immediately before the owner's next tick.
     [[nodiscard]] auto commands() -> std::vector<cs::EntityCommand>;
+    /// Removes tracked bodies and their corridors. Errors: SpawnFailed, retaining a removal's cause.
     [[nodiscard]] auto clear() -> nx::Result<void, ZombieError>;
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return agents.size(); }
 

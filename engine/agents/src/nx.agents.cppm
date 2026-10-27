@@ -46,14 +46,17 @@ struct Decision {
     std::optional<navigation::NavigationError> navigationError{};
 };
 
-/// Bounded perception memory and a corridor, never a body's position or health.
+/// Bounded perception memory and a corridor, never a body's position or health. The mesh used by
+/// decide must outlive the brain's cached corridor.
 class Brain {
 public:
+    /// Requires positive distances, a positive memory lifetime and a nonzero memory budget.
     explicit Brain(Rules rules);
     /// Each tick replaces visibility and forgets expired records; fresh observations update memory.
     void perceive(std::span<const Observation> seen, GameTime now, TickRate rate);
     /// A deterministic choice: closest visible target, else freshest remembered target. Ties retain
     /// memory order. A failed path is attempted again only when its goal or source moves sufficiently.
+    /// Query/path failures become Blocked decisions carrying their NavigationError.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     [[nodiscard]] inline auto memories() const noexcept -> std::span<const Memory> { return memory; }
 

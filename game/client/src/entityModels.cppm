@@ -16,10 +16,12 @@ export namespace cs {
 enum class EntityModelError : std::uint8_t { MaterialsInvalid, UploadFailed };
 class EntityModels {
 public:
-    /// Appends GPU models once, without replacing models in-flight frames can still use.
+    /// Appends GPU models once, without replacing models in-flight frames can still use. Record outside
+    /// a render pass; catalog models must include textures. Errors: MaterialsInvalid, UploadFailed.
     [[nodiscard]] auto load(const EntityCatalog& catalog, nx::render::StudioRenderer& renderer,
                             const nx::assets::Vfs& vfs, nx::rhi::CommandList& commands)
         -> nx::Result<void, EntityModelError>;
+    /// Requires uploaded models and entity indices/sequences issued by this catalog.
     [[nodiscard]] auto posed(const EntityCatalog& catalog, std::span<const ShownEntity> entities,
                              const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
                              const nx::render::LightStyleValues& styles) const -> PosedModels;

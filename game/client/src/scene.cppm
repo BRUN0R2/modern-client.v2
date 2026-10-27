@@ -92,6 +92,8 @@ public:
     /// be done with the frames that drew a model this replaces. Errors: CreateFailed.
     [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
                                    std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
+    /// Appends the catalog's textured models outside a render pass; existing GPU models stay valid
+    /// for in-flight frames. Errors: CreateFailed, retaining the material/upload failure as its cause.
     [[nodiscard]] auto loadEntities(nx::rhi::CommandList& commands, const EntityCatalog& catalog,
                                     const nx::assets::Vfs& vfs) -> nx::Result<void, SceneError>;
 
