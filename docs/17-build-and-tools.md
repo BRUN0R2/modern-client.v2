@@ -94,8 +94,8 @@ with fallbacks behind facades.
 | Compiler | Platforms | Role | Status (2026-10-26) |
 |----------|-----------|------|---------------------|
 | MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, every test passing |
-| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module, every test passing, C++26 reflection (`-freflection`) checking the `nx.meta` descriptions. Windows (MinGW) to be validated |
-| Clang 23.1.4 | Linux, Windows | Windows build, `clang-tidy`, `clangd`; sanitizers on Linux | **Validated locally on Windows** with Microsoft STL, Debug and every test passing; `dev-windows-clang` runs in CI. Linux remains to be validated |
+| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module and every test passing. Native C++26 reflection (`-freflection`) checks the `nx.meta` descriptions in both Debug and TSan jobs. Windows (MinGW) to be validated |
+| Clang 23.1.4 | Linux, Windows | Windows build, `clang-tidy`, `clangd`; sanitizers on Linux | **Validated on Windows locally and in CI** with Microsoft STL, Debug and every test passing (`dev-windows-clang`). Linux remains to be validated |
 
 C++26 features available in MSVC 14.51 (according to the *feature-test macros*): **none**
 of those listed in [02 §1.1](02-coding-standards.md#11-adopted-features). All of them use
@@ -110,6 +110,7 @@ dialect is `/std:c++latest`.
 | CMake's `import std` support is still experimental (a *gate* with a UUID that changes with every version) and, on MSVC, generates `@cmake_cxx_std.lib`, which `link.exe` reads as a response file | **Fixed at the cause:** the project does not use that support. `cmake/nxStdModule.cmake` reads the standard library's `modules.json` manifest and compiles the `std` module as the regular target `nx::std` ([ADR-0014](adr/0014-std-module-built-by-the-project.md)) |
 | Out-of-tree sources get object directories with a long *hash* and could exceed 260 characters | **Fixed at the cause:** the `std` module source is copied to `build/<preset>/nxStd/` and compiled from there, with short paths |
 | Flags that change the ABI (exceptions, RTTI) must be the same in every unit, including the `std` module | They live in the global `CMAKE_CXX_FLAGS`. Warnings are per target and do not apply to `nx::std` |
+| A runtime comparison of reflection values made the P2996 capability probe reject GCC 16 | The probe compares reflections in `static_assert` and includes `<meta>`. Linux GCC and TSan CI require `NX_REFLECTION_BACKEND=native`, so a broken probe fails configuration instead of silently validating the fallback |
 | Clang's GNU frontend on Windows still uses the Microsoft ABI and STL | `nxStdModule.cmake` selects the manifest by `CMAKE_CXX_SIMULATE_ID`, not by the frontend's command-line syntax. `dev-windows-clang` builds its own Clang module interfaces |
 | GoogleTest 1.18.0 declares its `std::any` printer even when the STL does not provide `std::any` without RTTI | The pinned `cmake/ports/gtest` overlay guards that specialization with `__cpp_lib_any`. Its version, upstream patches and license notices are retained; no test or compiler check is disabled |
 | Clang 23.1.4 crashes when an importer instantiates the implicit lifetime operations of `DecalPool`'s private slot type | `DecalPool` defines its copy, move and destruction operations in its owning implementation unit; its value semantics stay explicit and unchanged |
@@ -131,7 +132,7 @@ dialect is `/std:c++latest`.
 | Preset | Use | Status |
 |--------|-----|--------|
 | `dev-windows-msvc` / `release-windows-msvc` | Development and release on Windows (Ninja + MSVC) | Validated |
-| `dev-windows-clang` | Development and static analysis on Windows (Ninja + Clang, Microsoft STL) | Build and tests in CI |
+| `dev-windows-clang` | Development and static analysis on Windows (Ninja + Clang, Microsoft STL) | Validated locally and in CI |
 | `dev-linux-gcc` / `release-linux-gcc` | Development and release on Linux with GCC | `dev-linux-gcc` validated in CI. `release-linux-gcc` to be validated |
 | `dev-linux-clang` | Development with `clangd`/`clang-tidy` | To be validated |
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
@@ -275,7 +276,7 @@ and on demand. **Running today:**
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
 | `windows` | `dev-windows-msvc`, `release-windows-msvc` and `dev-windows-clang`: configure, build and tests, through the same `scripts/devShell.ps1` used for development; Clang is pinned to LLVM 23.1.4. The Vulkan SDK supplies validation layers; GPU tests skip only without a suitable adapter or Vulkan backend | Yes |
-| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run | Yes |
+| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure with `NX_REFLECTION_BACKEND=native`, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the
@@ -310,11 +311,11 @@ image.
 ## 8. Workflow
 
 - **Trunk-based:** a protected `main`. Every change comes in through a pull request from a
-  short-lived branch; it merges only when the five CI jobs of [§7](#7-continuous-integration)
+  short-lived branch; it merges only when all CI jobs of [§7](#7-continuous-integration)
   pass on the branch brought up to date with `main`, and only as a **squash merge**, which
   GitHub signs: every commit on `main` is a green, *Verified* commit, one per logical change.
 - **Branch protection of `main`** (repository settings, also binding administrators): pull
-  request required, the five CI jobs required and up to date, signed commits, linear
+  request required, required CI checks up to date, signed commits, linear
   history, no force push and no deletion; merge commits and rebase merges are disabled, and
   merged branches are deleted. GitHub applies the signature rule to the commits of the pull
   request's branch too, so contributors sign every commit they make

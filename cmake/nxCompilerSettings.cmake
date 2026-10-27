@@ -63,11 +63,16 @@ endif()
 set(NX_NATIVE_REFLECTION OFF)
 if(NOT NX_REFLECTION_BACKEND STREQUAL "fallback" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state(RESET)
     set(CMAKE_REQUIRED_FLAGS "-freflection")
-    check_cxx_source_compiles("int main() { constexpr auto type = ^^int; return type == ^^int ? 0 : 1; }"
-        NX_COMPILER_HAS_REFLECTION)
-    unset(CMAKE_REQUIRED_FLAGS)
-    set(NX_NATIVE_REFLECTION ${NX_COMPILER_HAS_REFLECTION})
+    # Reflection values can only be compared during constant evaluation.
+    check_cxx_source_compiles("#include <meta>
+static_assert(^^int == ^^int);
+int main() {}"
+        nxCompilerHasNativeReflection)
+    cmake_pop_check_state()
+    set(NX_NATIVE_REFLECTION ${nxCompilerHasNativeReflection})
 endif()
 
 if(NX_NATIVE_REFLECTION)

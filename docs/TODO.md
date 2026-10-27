@@ -94,14 +94,14 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] `CMakePresets.json`: dev/release MSVC, dev/release GCC, dev Clang, ASan + UBSan, TSan
 - [x] `tools` presets (`tools-windows-msvc`, `tools-linux-gcc`): `nxcheck` and `nxview` alone, in Release
 - [ ] `server-headless` preset (once `nextds` exists)
-- [ ] Windows preset with GCC (MinGW-w64); Clang uses `dev-windows-clang`
+- [ ] Windows preset with GCC (MinGW-w64)
 - [x] `vcpkg.json` with a pinned baseline and a `tests` feature
 - [x] `x64-windows-nx` and `x64-linux-nx` triplets (dependencies without exceptions and without RTTI)
 - [x] `.clang-format` and `.clang-tidy` with `readability-magic-numbers` and naming as errors
 - [x] Warnings as errors, deterministic floating point, no exceptions and no RTTI
 - [x] Functions defined in module interfaces are `inline`, so importers can inline them ([02 §2](02-coding-standards.md#2-file-and-module-organization))
 - [x] `scripts/devShell.ps1` for command-line builds on Windows
-- [ ] Complete changed-line `clang-tidy` validation with Clang 23.1.4 and `dev-windows-clang`'s module interfaces
+- [x] Changed-line `clang-tidy` validation with Clang 23.1.4 and `dev-windows-clang`'s module interfaces, with headers analyzed through their consumers
 - [ ] Migrate existing private `m_` declarations when their owning APIs change, under [ADR-0027](adr/0027-private-member-camelcase.md); known in engine modules, `ClientGame`, `MapModels`, server state and test fixtures. Keep unrelated renames out of other changes
 - [x] Recommended editor settings in `.vscode/`
 - [x] Remove the dependency on the experimental `import std` and the `@cmake_cxx_std.lib` workaround
@@ -112,18 +112,19 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Validate GCC 16 on Linux (GCC 16.2.0 in CI)
 - [ ] Validate Clang on Linux
 - [ ] Validate GCC (MinGW-w64) on Windows
-- [ ] Validate Clang 23.1.4 on Windows, including the full test suite and CI
+- [x] Validate Clang 23.1.4 on Windows, including the full test suite and CI
 - [x] Document MSVC's native and fallback features ([17 §2.1](17-build-and-tools.md#21-compiler-matrix))
 
 ### CI
 - [x] `.github/workflows/ci.yml` workflow (push to `main`, pull requests, on demand)
 - [x] Windows MSVC jobs: Debug and Release with build and tests
-- [ ] Windows Clang job: `dev-windows-clang`, build and tests
+- [x] Windows Clang job: `dev-windows-clang`, build and tests
 - [x] Required `linux-gcc` job (GCC 16)
-- [ ] Complete required Linux GCC 16 and TSan validation of the `StudioIndex` construction fix for unreadable `cs.client` modules; reproduced locally with GCC 16.2 and the complete interface graph, pending CI
+- [x] Required Linux GCC 16 and TSan validation of `StudioIndex` construction and player-frame module imports; the complete interface graph and all tests pass
+- [x] Native P2996 reflection in Linux GCC and TSan CI: compile-time capability detection, required `NX_REFLECTION_BACKEND=native` and all native-path tests passing
 - [ ] Linux job with Clang
 - [x] Formatting (`clang-format --dry-run --Werror`) in the `checks` job
-- [ ] `clang-tidy` in CI (requires a Clang build and modules)
+- [ ] `clang-tidy` in CI with a baseline for existing naming inconsistencies; local changed-line analysis is validated
 - [x] Dependency graph check: every module declares its layer and CMake refuses a dependency on the same or a higher layer once every module exists, in every build ([01 §1.1](01-architecture.md#11-module-catalog)), with `LayerCheck.*` regression tests
 - [x] ThreadSanitizer on all tests (`tsan-linux-gcc` preset in the `linux-gcc` job)
 - [ ] ASan + UBSan jobs (with Clang)
@@ -324,7 +325,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ## M3 — Local game
 
 ### Simulation
-- [ ] Client hot-path optimization: reusable frame-extraction storage, player origins indexed per snapshot, hostage models indexed by spawn, no discarded aim pose, one read per view-model sequence group and bounded enhanced-light selection; `nxBenchClient` and regression tests ([18](18-testing-and-quality.md#performance)); implemented locally, pending required CI
+- [x] Client hot-path optimization: reusable frame-extraction storage, player origins indexed per snapshot, hostage models indexed by spawn, no discarded aim pose, one read per view-model sequence group and bounded enhanced-light selection; `nxBenchClient` and regression tests ([18](18-testing-and-quality.md#performance))
 - [x] The client, `next` (`app.client`): the original's command line (`-basedir`, `+map de_dust2`), the player's settings and binds, `map`, `noclip` and `quit`, and a map played alone in a window (`cs.client`: `Level`, `Scene`, out of `nxview`)
 - [x] The game played by its server, `cs.server` (`cs::Game`), in the client's process as a listen server plays it ([01 §3](01-architecture.md#3-execution-modes)): each tick the client's command goes to it and the client takes its snapshot (`cs::PlayerSnapshot`, `cs::ClientGame`), its hostages as their entity state tells them (`cs::HostageState`); the game's content and its map read once and shared (`cs::GameContent`, `cs::GameMap`), the server's studio models read without their textures (`cs::GameModels`); an entity's angles read one way for every entity, in the order of its keys (`nx::game::anglesOf`)
 - [x] The light styles the game sets, told by the server to its clients (`cs::MapLightStyles` in `PlayerSnapshot`, evaluated by `ClientGame`; one shared catalog and no client-local reconstruction)
