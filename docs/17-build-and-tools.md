@@ -310,11 +310,11 @@ image.
 ## 8. Workflow
 
 - **Trunk-based:** a protected `main`. Every change comes in through a pull request from a
-  short-lived branch; it merges only when the five CI jobs of [§7](#7-continuous-integration)
+  short-lived branch; it merges only when all CI jobs of [§7](#7-continuous-integration)
   pass on the branch brought up to date with `main`, and only as a **squash merge**, which
   GitHub signs: every commit on `main` is a green, *Verified* commit, one per logical change.
 - **Branch protection of `main`** (repository settings, also binding administrators): pull
-  request required, the five CI jobs required and up to date, signed commits, linear
+  request required, required CI checks up to date, signed commits, linear
   history, no force push and no deletion; merge commits and rebase merges are disabled, and
   merged branches are deleted. GitHub applies the signature rule to the commits of the pull
   request's branch too, so contributors sign every commit they make
