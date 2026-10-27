@@ -56,7 +56,9 @@ public:
     void perceive(std::span<const Observation> seen, GameTime now, TickRate rate);
     /// A deterministic choice: closest visible target, else freshest remembered target. Ties retain
     /// memory order. A failed path is attempted again only when its goal or source moves sufficiently.
+    /// Smaller observation changes update the corridor's destination without another full search.
     /// Query/path failures become Blocked decisions carrying their NavigationError.
+    /// Investigations finish at the corridor's projected destination, including an airborne observation.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     [[nodiscard]] inline auto memories() const noexcept -> std::span<const Memory> { return memory; }
 

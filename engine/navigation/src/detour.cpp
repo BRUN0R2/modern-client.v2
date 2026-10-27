@@ -489,9 +489,29 @@ auto Corridor::moveTarget(NavigationQuery& query, Vec3 target) -> Vec3 {
     expects(&query.mesh() == navigationMesh, "Corridor::moveTarget: a query of the corridor's mesh");
     if (&query.mesh() == navigationMesh) {
         const std::array<float, 3> wanted = detail::detourOf(target);
-        // False only when its last polygon left the mesh, which nothing changes yet.
-        std::ignore = detourState->corridor.moveTargetPosition(wanted.data(), query.detourState->query.get(),
-                                                               &query.detourState->filter);
+        const bool moved = detourState->corridor.moveTargetPosition(
+            wanted.data(), query.detourState->query.get(), &query.detourState->filter);
+        invariant(moved, "Corridor::moveTarget: its last polygon belongs to the immutable mesh");
+        float height = 0.0F;
+        const dtStatus sampled = query.detourState->query->getPolyHeight(
+            detourState->corridor.getLastPoly(), detourState->corridor.getTarget(), &height);
+        invariant(dtStatusSucceed(sampled), "Corridor::moveTarget: its clamped target is on its polygon");
+        // Detour retains the requested height. Its setter also takes the path, so reuse the query's
+        // scratch buffer rather than aliasing the setter's memcpy source with its destination.
+        if (height != detourState->corridor.getTarget()[1]) {
+            std::array<float, kCoordinates> grounded{};
+            std::ranges::copy(
+                std::span<const float, kCoordinates>{detourState->corridor.getTarget(), kCoordinates},
+                grounded.begin());
+            grounded[1] = height;
+            const std::span path{detourState->corridor.getPath(),
+                                 narrow<std::size_t>(detourState->corridor.getPathCount())};
+            invariant(path.size() <= query.detourState->polygons.size(),
+                      "Corridor::moveTarget: query scratch holds the corridor's path");
+            std::ranges::copy(path, query.detourState->polygons.begin());
+            detourState->corridor.setCorridor(grounded.data(), query.detourState->polygons.data(),
+                                              narrow<int>(path.size()));
+        }
     }
     return this->target();
 }

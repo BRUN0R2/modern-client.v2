@@ -228,6 +228,28 @@ TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
     EXPECT_TRUE(game().sees(*observer, eye, targets.front()));
 }
 
+TEST_F(GameTest, PerceivedFeetUseThePlayersActiveStanceIndependentlyOfTheAimPoint) {
+    constexpr float standingEyeAboveFeet = 53.0F;
+    constexpr float crouchedEyeAboveFeet = 30.0F;
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = play(player, kPastTheFirstFreeze);
+    const auto standing = game().perceptionTargets();
+    ASSERT_EQ(standing.size(), 1U);
+    EXPECT_FLOAT_EQ(standing.front().eye.z - standing.front().feet.z, standingEyeAboveFeet);
+    cs::UserCommand duck{.duration = nx::tickLengthOf(game().time().rate)};
+    duck.buttons.set(cs::Button::Duck);
+    const std::array commands{cs::PlayerCommand{.player = player, .command = duck}};
+    // Simulate a full second, beyond the 400 ms ground duck transition.
+    for (std::uint32_t tick = 0; tick < game().time().rate.value(); ++tick) {
+        game().tick(commands);
+    }
+    ASSERT_TRUE(game().snapshotFor(player).player.isDucked);
+    const auto crouched = game().perceptionTargets();
+    ASSERT_EQ(crouched.size(), 1U);
+    EXPECT_EQ(crouched.front().entity, standing.front().entity);
+    EXPECT_FLOAT_EQ(crouched.front().eye.z - crouched.front().feet.z, crouchedEyeAboveFeet);
+}
+
 TEST_F(GameTest, LocalWeaponsHitAnimatedGenericEntityHitboxesAndKillThem) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
     const auto type = entityType();

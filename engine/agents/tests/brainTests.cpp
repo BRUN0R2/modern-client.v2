@@ -86,6 +86,46 @@ TEST(AgentBrain, ReportsAnUnreachableGoalWithoutDirectMovement) {
     EXPECT_FALSE(decision.intent.attacks);
 }
 
+TEST(AgentBrain, FollowsAnObservationThatMovesLessThanTheReplanDistance) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 originalGoal{.x = 200};
+    brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = originalGoal}}, {},
+                   nx::kDefaultTickRate);
+    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Chase);
+    const nx::Vec3 shiftedGoal{.x = originalGoal.x + rules().replanDistance.value() / 2.0F};
+    brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = shiftedGoal}}, {},
+                   nx::kDefaultTickRate);
+    brain.perceive({}, {}, nx::kDefaultTickRate);
+    const auto investigation = brain.decide(originalGoal, query);
+    EXPECT_EQ(investigation.behavior, nx::agents::Behavior::Investigate);
+    EXPECT_GT(investigation.intent.direction.x, 0.0F);
+    EXPECT_FALSE(brain.memories().empty());
+    EXPECT_EQ(brain.decide(shiftedGoal, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_TRUE(brain.memories().empty());
+}
+
+TEST(AgentBrain, FinishesInvestigationAtTheWalkablePointBelowItsLastObservation) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    nx::agents::Brain brain{rules()};
+    constexpr float observedJumpHeight = 16.0F;
+    const nx::Vec3 feet{.x = 100};
+    const nx::Vec3 observedFeet{.x = feet.x, .z = observedJumpHeight};
+    brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = observedFeet}}, {},
+                   nx::kDefaultTickRate);
+    brain.perceive({}, {}, nx::kDefaultTickRate);
+    const auto decision = brain.decide(feet, query);
+    EXPECT_EQ(decision.behavior, nx::agents::Behavior::Idle);
+    EXPECT_EQ(decision.intent.direction, nx::Vec3{});
+    EXPECT_TRUE(brain.memories().empty());
+}
+
 TEST(AgentBrain, PreservesTheObservedAimPointSeparatelyFromTheGroundGoal) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

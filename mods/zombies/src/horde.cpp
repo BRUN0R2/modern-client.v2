@@ -163,8 +163,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
                 !game.sees(entity, eye, candidate)) {
                 continue;
             }
-            seen.push_back(
-                {.entity = candidate.entity, .position = feetOf(candidate.origin), .aimAt = candidate.eye});
+            seen.push_back({.entity = candidate.entity, .position = candidate.feet, .aimAt = candidate.eye});
         }
         agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
         agent.brain.perceive(seen, time.now, time.rate);
