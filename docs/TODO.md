@@ -325,6 +325,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ## M3 — Local game
 
 ### Simulation
+- [x] Generic humanoid entity bodies and an isolated native zombie test mod: validated data/models, animated hitboxes, local weapon damage/death, server-timed melee, bounded sight/memory, navigation corridors and generational cleanup ([Offline entity and agent tests](offlineAgents.md), [ADR-0028](adr/0028-native-agent-test-mod.md)); no player slots or Counter-Strike-specific zombie rules
 - [x] Client hot-path optimization: reusable frame-extraction storage, player origins indexed per snapshot, hostage models indexed by spawn, no discarded aim pose, one read per view-model sequence group and bounded enhanced-light selection; `nxBenchClient` and regression tests ([18](18-testing-and-quality.md#performance))
 - [x] The client, `next` (`app.client`): the original's command line (`-basedir`, `+map de_dust2`), the player's settings and binds, `map`, `noclip` and `quit`, and a map played alone in a window (`cs.client`: `Level`, `Scene`, out of `nxview`)
 - [x] The game played by its server, `cs.server` (`cs::Game`), in the client's process as a listen server plays it ([01 §3](01-architecture.md#3-execution-modes)): each tick the client's command goes to it and the client takes its snapshot (`cs::PlayerSnapshot`, `cs::ClientGame`), its hostages as their entity state tells them (`cs::HostageState`); the game's content and its map read once and shared (`cs::GameContent`, `cs::GameMap`), the server's studio models read without their textures (`cs::GameModels`); an entity's angles read one way for every entity, in the order of its keys (`nx::game::anglesOf`)
@@ -626,9 +627,11 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 
 ## M7 — Fine parity and ecosystem
 
-- [ ] `nx.navigation` ([ADR-0023](adr/0023-navigation.md)): meshes of convex polygons by Recast and Detour for each profile of `data/cstrike/navigation.toml`, built from a map's walkable geometry and cached by its content hash; `findPath`, `nearestPoint`, `raycast`, `randomPoint`, `isReachable` and the corridor that follows an agent; `nav_generate`, `nav_draw` and `nav_check`
+- [x] `nx.navigation` core ([ADR-0023](adr/0023-navigation.md)): Recast/Detour profiles, deterministic meshes and queries (`findPath`, `nearestPoint`, `raycast`, `randomPoint`, `isReachable`, corridors), map geometry, finite/range validation and regression tests
+- [ ] Navigation mesh cache by content hash, clip-brush geometry, dynamic links/doors, the tactical queries, `nxbake`, `nav_generate`, `nav_draw`, `nav_check`, and per-map spawn-to-objective tests
 - [ ] Navigation in a match: ladders, jumps, drops and teleporters as links; doors and breakables turning their areas and links on and off; the tactical layer (hiding, sniper and encounter spots, places); a `.nav` file's places and hiding spots; `nav_edit`
-- [ ] `nx.agents` ([ADR-0024](adr/0024-agents.md)): perception (sight within a budget, the game's sounds heard, damage), memory (perceived records whose confidence falls, a typed working board, a team's board fed by the radio, the danger learned on a map), behaviors (a state machine chosen by utility), steering along the corridor with local avoidance, intents alone; benchmarks at 64, 256 and 1024 agents
+- [x] First `nx.agents` consumer: an ECS brain with bounded last-seen memory, chase/attack/investigate/blocked intent, and pure-decision benchmarks at 64, 256 and 1024 agents ([offline tests](offlineAgents.md))
+- [ ] Complete `nx.agents` ([ADR-0024](adr/0024-agents.md)): perception (sight within a budget, the game's sounds heard, damage), memory (perceived records whose confidence falls, a typed working board, a team's board fed by the radio, the danger learned on a map), behaviors (a state machine chosen by utility), steering along the corridor with local avoidance, intents alone; benchmarks at 64, 256 and 1024 agents
 - [ ] `cs.bots` ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): Counter-Strike's bot, a player of the server's game driven by its commands: moving, fighting, buying, the objectives and the radio, by `bot_difficulty`; `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick`, `bot_quota`, `bot_difficulty`, `bot_chatter`
 - [ ] Demos (`record`, `playdemo`, `timedemo`)
 - [ ] Spectator relay (HLTV equivalent)

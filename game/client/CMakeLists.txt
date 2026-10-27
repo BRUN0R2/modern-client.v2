@@ -14,6 +14,7 @@ nxAddModuleLibrary(csClient
         src/posedModels.cppm
         src/mapModels.cppm
         src/playerModels.cppm
+        src/entityModels.cppm
         src/modelMaterials.cppm
         src/viewModel.cppm
         src/muzzleFlash.cppm
@@ -36,6 +37,7 @@ nxAddModuleLibrary(csClient
         src/mapSprites.cpp
         src/mapModels.cpp
         src/playerModels.cpp
+        src/entityModels.cpp
         src/modelMaterials.cpp
         src/viewModel.cpp
         src/muzzleFlash.cpp

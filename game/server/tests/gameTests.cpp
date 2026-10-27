@@ -23,6 +23,7 @@ import cs.server;
 
 #include "boxMap.hpp"
 #include "consoleFixtures.hpp"
+#include "entityFixtures.hpp"
 #include "playerModel.hpp"
 #include "temporaryDirectory.hpp"
 
@@ -126,6 +127,15 @@ protected:
     [[nodiscard]] auto content() const -> const cs::GameContent& { return *m_content; }
     [[nodiscard]] auto cvars() const -> const cs::GameCvars& { return *m_cvars; }
 
+    [[nodiscard]] auto entityType() -> nx::Result<cs::EntityTypeIndex, cs::EntityError> {
+        nx::test::writeEntityModel(m_installation);
+        auto vfs = nx::assets::Vfs::create(std::array{m_installation.path()});
+        if (!vfs) {
+            return nx::fail(cs::EntityError::ModelUnreadable, std::move(vfs.error()));
+        }
+        return m_content->entities.add(*vfs, nx::test::entityDefinition(), cs::ModelTextures::Skipped);
+    }
+
 private:
     nx::test::TemporaryDirectory m_installation;
     nx::test::RecordingOutput m_output;
@@ -155,6 +165,88 @@ TEST_F(GameTest, APlayerJoinsAtItsTeamsSpawnPointWithItsLoadoutAndTheStartingMon
     EXPECT_EQ(content().weapons.weapon(held->weapon).id, "usp");
     // The first round is frozen: its HUD counts the freeze down.
     EXPECT_TRUE(game().rounds().isFrozen());
+}
+
+TEST_F(GameTest, GenericEntitiesConsumeNoPlayerSlotAndCanBeRemovedOnlyByTheirCurrentHandle) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    const auto snapshot = game().snapshotFor(player);
+    EXPECT_TRUE(snapshot.players.empty());
+    ASSERT_EQ(snapshot.entities.size(), 1U);
+    EXPECT_EQ(snapshot.entities.front().entity, *created);
+    ASSERT_TRUE(game().removeEntity(*created).has_value());
+    EXPECT_FALSE(game().removeEntity(*created).has_value());
+    EXPECT_TRUE(game().snapshotFor(player).entities.empty());
+}
+
+TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredInterval) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    game().placeEye(player, {.x = 0, .y = 0, .z = 53});
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 50, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    cs::UserCommand attack{.duration = nx::Milliseconds{1000}, .viewAngles = {.yaw = nx::Degrees{180}}};
+    attack.buttons.set(cs::Button::Attack);
+    const std::array commands{cs::EntityCommand{.entity = *created, .command = attack}};
+    game().tick({}, commands);
+    EXPECT_EQ(game().snapshotFor(player).status.health, nx::HitPoints{80});
+    for (std::uint32_t tick = 0; tick < 99; ++tick) {
+        game().tick({}, commands);
+    }
+    EXPECT_EQ(game().snapshotFor(player).status.health, nx::HitPoints{80});
+    for (std::uint32_t tick = 0; tick < 301; ++tick) {
+        game().tick({}, commands);
+    }
+    const auto dead = game().snapshotFor(player);
+    EXPECT_FALSE(dead.status.isAlive());
+    EXPECT_TRUE(dead.player.isDead);
+    EXPECT_TRUE(dead.inventory.weapons().empty());
+}
+
+TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    // The synthetic map's clip hulls put the body's origin at z = 0 on the floor.
+    game().placeEye(player, {.x = 0, .y = 0, .z = cs::kStandingViewHeight.value()});
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value());
+    const auto observer = game().createEntity(*type, {.origin = {.x = 150, .z = 40}});
+    ASSERT_TRUE(observer.has_value());
+    const auto blocker = game().createEntity(*type, {.origin = {.x = 75, .z = 40}});
+    ASSERT_TRUE(blocker.has_value());
+    const auto targets = game().perceptionTargets();
+    ASSERT_EQ(targets.size(), 1U);
+    const auto states = game().entities();
+    const auto found = std::ranges::find(states, *observer, &cs::EntityState::entity);
+    ASSERT_NE(found, states.end());
+    const nx::Vec3 eye = found->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()};
+    EXPECT_FALSE(game().sees(*observer, eye, targets.front()));
+    ASSERT_TRUE(game().removeEntity(*blocker).has_value());
+    EXPECT_TRUE(game().sees(*observer, eye, targets.front()));
+}
+
+TEST_F(GameTest, LocalWeaponsHitAnimatedGenericEntityHitboxesAndKillThem) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    game().give(player, *content().weapons.indexOf("ak47"));
+    std::ignore = play(player, kPastTheFirstFreeze);
+    cs::UserCommand attack{.number = cs::CommandNumber{1}, .duration = nx::Milliseconds{10}};
+    attack.buttons.set(cs::Button::Attack);
+    const std::array commands{cs::PlayerCommand{.player = player, .command = attack}};
+    for (std::uint32_t tick = 0; tick < 120; ++tick) {
+        game().tick(commands);
+    }
+    const auto snapshot = game().snapshotFor(player);
+    ASSERT_EQ(snapshot.entities.size(), 1U);
+    EXPECT_EQ(snapshot.entities.front().health, nx::HitPoints{});
+    EXPECT_EQ(snapshot.entities.front().animation.sequence,
+              content().entities.type(snapshot.entities.front().type).sequences.death);
 }
 
 TEST_F(GameTest, EachTickTellsTheClientWhatItMadeAndPlacedNothingAgain) {

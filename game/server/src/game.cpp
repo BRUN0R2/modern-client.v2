@@ -10,11 +10,16 @@ import nx.assets;
 import nx.ecs;
 import nx.collision;
 import nx.game;
+import nx.navigation;
 import cs.shared;
 
 namespace cs {
 
 namespace {
+
+struct PlayerBodyLink {
+    PlayerIndex player{};
+};
 
 /// The stream of random numbers a spawn's weapons draw from.
 constexpr std::string_view kSpawnStream = "spawn";
@@ -103,6 +108,13 @@ auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars
         return nx::fail(GameError::Unspawnable, std::move(registered.error()));
     }
     spawnHostages(game->m_world, map.hulls(), game->m_models.hostageSpawns());
+    if (auto registered = registerEntityBodies(game->m_world, content.entities); !registered) {
+        return nx::fail(GameError::Unspawnable, std::move(registered.error()));
+    }
+    if (auto registered = game->m_world.registerComponent<PlayerBodyLink>("cs::PlayerBodyLink");
+        !registered) {
+        return nx::fail(GameError::Unspawnable, std::move(registered.error()));
+    }
     return game;
 }
 
@@ -119,7 +131,7 @@ auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
                .inventory = Inventory{m_content->weapons},
                .stepVoice = StepVoice{m_content->footsteps},
                .breath = Breath{m_content->breath, m_content->playerHarm}});
-    player.body = m_world.spawn(nx::game::Transform{}, bodyOf(player.movement));
+    player.body = m_world.spawn(nx::game::Transform{}, bodyOf(player.movement), PlayerBodyLink{index});
     nx::log::info(kLog, "a player joins the {}", nx::enumName(team));
     if (canSpawn(player)) {
         spawn(player);
@@ -169,14 +181,7 @@ void Game::checkWinConditions() {
 }
 
 auto Game::boxesMetBy(const Player& mover) -> std::vector<SolidBox> {
-    std::vector<SolidBox> boxes = solidBoxesOf(m_world);
-    for (const Player& other : m_players) {
-        if (&other != &mover && other.status.isAlive()) {
-            boxes.push_back(SolidBox{.origin = other.movement.origin,
-                                     .box = other.movement.isDucked ? kDuckedBox : kStandingBox});
-        }
-    }
-    return boxes;
+    return solidBoxesOf(m_world, mover.body);
 }
 
 auto Game::playerAt(PlayerIndex index) -> Player& {
@@ -244,10 +249,11 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
+                          .entities = entityStatesOf(m_world),
                           .lightStyles = lightStyles};
 }
 
-void Game::tick(std::span<const PlayerCommand> commands) {
+void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
     m_impacts.clear();
     for (Player& player : m_players) {
         player.turnedView.reset();
@@ -256,6 +262,14 @@ void Game::tick(std::span<const PlayerCommand> commands) {
     }
     for (const PlayerCommand& command : commands) {
         runCommand(playerAt(command.player), command.command);
+    }
+    for (const EntityAttack& strike : runEntityBodies(m_world, m_map->hulls(), entities)) {
+        const PlayerBodyLink* const link = m_world.get<PlayerBodyLink>(strike.target);
+        if (link != nullptr) {
+            hurt(playerAt(link->player), {.damage = strike.attack.damage, .kind = HarmKind::Melee});
+        } else {
+            std::ignore = nx::game::attackEntity(m_world, strike.target, strike.attack);
+        }
     }
     thinkRules();
     const nx::collision::BrushHulls& hulls = m_map->hulls();
@@ -295,6 +309,10 @@ void Game::runCommand(Player& player, const UserCommand& command) {
     }
     m_world.get<nx::game::Transform>(player.body)->origin = player.movement.origin;
     *m_world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
+    if (isAlive) {
+        m_world.get<nx::game::BoxSolidity>(player.body)->box =
+            player.movement.isDucked ? kDuckedBox : kStandingBox;
+    }
     if (isAlive) {
         nx::game::touchTriggers(m_world, hulls, player.body);
         postThink(player, command, before);
@@ -357,9 +375,11 @@ void Game::postThink(Player& player, const UserCommand& command, const MovementS
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     // What the attacks meet: what is solid, the world, the brush entities and the hostages; a body is
     // an entity the original's Classify makes other than none (a hostage, a vehicle).
-    const WeaponTracer tracer = [this, &hulls](nx::collision::Hull hull, nx::Vec3 start, nx::Vec3 end) {
-        const nx::game::SolidHit solid =
-            nx::game::traceSolidsHit(m_world, hulls, nx::game::hullTrace(hull, start, end));
+    const WeaponTracer tracer = [this, &hulls, &player](nx::collision::Hull hull, nx::Vec3 start,
+                                                        nx::Vec3 end) {
+        nx::game::ServerTrace trace = nx::game::hullTrace(hull, start, end);
+        trace.ignored = player.body;
+        const nx::game::SolidHit solid = nx::game::traceSolidsHit(m_world, hulls, trace);
         const nx::game::Classified* const classified =
             solid.entity ? m_world.get<nx::game::Classified>(*solid.entity) : nullptr;
         return WeaponHit{.trace = solid.trace,
@@ -446,6 +466,7 @@ void Game::die(Player& player) {
     nx::log::info(kLog, "a player dies");
     makeSound(player, m_content->playerHarm.death);
     player.movement.isDead = true;
+    m_world.remove<nx::game::BoxSolidity>(player.body);
     *m_world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
     animate(player, PlayerAction::Die);
     // Its weapons go with it (PackDeadPlayerItems; the box it drops comes with dropping, TODO.md).
@@ -608,6 +629,9 @@ void Game::spawn(Player& player) {
     player.breath.fill(time);
     player.timedHarms.spawned();
     player.roundTimer = m_rounds.timerAt(time.now, time.rate);
+    if (!m_world.has<nx::game::BoxSolidity>(player.body)) {
+        m_world.add(player.body, nx::game::BoxSolidity{.box = kStandingBox});
+    }
 }
 
 void Game::equip(Player& player) {
@@ -716,6 +740,49 @@ auto Game::materialOfHit(const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) con
                    : nx::intoAxes(nx::angleVectors(transform->angles), moved);
     };
     return m_map->materialAlong(m_content->materials, model->index, inModelSpace(start), inModelSpace(end));
+}
+
+auto Game::createEntity(EntityTypeIndex type, nx::game::Transform placement)
+    -> nx::Result<nx::ecs::Entity, EntityError> {
+    return spawnEntityBody(m_world, m_map->hulls(), type, placement);
+}
+
+auto Game::removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError> {
+    if (!m_world.isAlive(entity) || !m_world.has<EntityBody>(entity)) {
+        return nx::fail(EntityError::UnknownEntity, "a live entity-body handle is required");
+    }
+    m_world.destroy(entity);
+    return {};
+}
+
+auto Game::entities() -> std::vector<EntityState> {
+    return entityStatesOf(m_world);
+}
+
+auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
+    std::vector<PerceptionTarget> targets;
+    for (const Player& player : m_players) {
+        if (player.status.isAlive()) {
+            targets.push_back(
+                {.entity = player.body, .origin = player.movement.origin, .eye = eyeOf(player.movement)});
+        }
+    }
+    return targets;
+}
+
+auto Game::sees(nx::ecs::Entity observer, nx::Vec3 eye, const PerceptionTarget& target) -> bool {
+    const nx::game::SolidHit hit = nx::game::traceSolidsHit(
+        m_world, m_map->hulls(), {.start = eye, .end = target.eye, .ignored = observer});
+    return hit.entity == target.entity ||
+           (hit.trace.fraction >= 1.0F && !hit.trace.startsSolid && !hit.trace.isAllSolid);
+}
+
+auto Game::navigationGeometry() -> nx::navigation::Geometry {
+    return nx::game::navigationGeometryOf(m_map->map(), m_world);
+}
+
+auto Game::time() const -> nx::game::TickTime {
+    return nx::game::tickTimeOf(m_world);
 }
 
 } // namespace cs

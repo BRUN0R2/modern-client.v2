@@ -129,7 +129,11 @@ jobs:
   linux-gcc:
     name: Linux · GCC 16 · ${{ matrix.preset }}
     runs-on: ubuntu-latest
-    container: gcc:16
+    container:
+      image: gcc:16
+      # TSan must control its process layout via personality(ADDR_NO_RANDOMIZE).
+      # Docker's default seccomp policy denies it; only this ephemeral sanitizer job opts out.
+      options: ${{ matrix.preset == 'tsan-linux-gcc' && '--security-opt seccomp=unconfined' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -148,7 +152,7 @@ jobs:
         # fail on any validation error.
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip \
+          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip util-linux \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxft-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev libegl-dev libdecor-0-dev \
             libvulkan1 mesa-vulkan-drivers vulkan-validationlayers
@@ -172,6 +176,10 @@ jobs:
           key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
           restore-keys: vcpkg-linux-gcc-
 
+      - name: Check TSan process layout control
+        if: matrix.preset == 'tsan-linux-gcc'
+        run: setarch "$(uname -m)" -R true
+
       - name: Configure
         run: |
           g++ --version | head -n 1
@@ -183,4 +191,9 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }} -- -k 0
 
       - name: Test
-        run: ctest --preset ${{ matrix.preset }}
+        run: |
+          if [ '${{ matrix.preset }}' = 'tsan-linux-gcc' ]; then
+            setarch "$(uname -m)" -R ctest --preset ${{ matrix.preset }}
+          else
+            ctest --preset ${{ matrix.preset }}
+          fi

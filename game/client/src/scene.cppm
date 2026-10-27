@@ -15,6 +15,7 @@ import nx.rhi;
 import nx.render;
 import :level;
 import :playerModels;
+import :entityModels;
 import :viewModel;
 import :muzzleFlash;
 
@@ -49,6 +50,7 @@ struct SceneView {
     std::span<const nx::render::ModelPlacement> placements{};
     std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (ClientGame::writeHostages).
     std::span<const ShownPlayer> players{};   ///< How the other players show (ClientGame::updatePlayers).
+    std::span<const ShownEntity> entities{};
     std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
@@ -90,6 +92,10 @@ public:
     /// be done with the frames that drew a model this replaces. Errors: CreateFailed.
     [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
                                    std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
+    /// Appends the catalog's textured models outside a render pass; existing GPU models stay valid
+    /// for in-flight frames. Errors: CreateFailed, retaining the material/upload failure as its cause.
+    [[nodiscard]] auto loadEntities(nx::rhi::CommandList& commands, const EntityCatalog& catalog,
+                                    const nx::assets::Vfs& vfs) -> nx::Result<void, SceneError>;
 
     /// Records the baking of the next of the level's reflection probes in the enhanced look, outside a
     /// render pass and before the frame's draw: the world as `view` shows it, including the server's
@@ -142,6 +148,7 @@ private:
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.
+    EntityModels entityModels;
     /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
     /// MuzzleFlashSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;

@@ -1,6 +1,6 @@
 # ADR-0023 — Navigation meshes for every kind of agent, in `nx.navigation`
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0028](0028-native-agent-test-mod.md) for type metadata ownership
 - **Date:** 2026-10-23
 
 ## Context

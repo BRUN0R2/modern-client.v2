@@ -40,3 +40,4 @@ export import :gameMap;
 export import :characters;
 export import :playerAnimation;
 export import :snapshot;
+export import :entityCatalog;

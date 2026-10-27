@@ -9,7 +9,7 @@
 | Unit | GoogleTest | Isolated functions and types (`nx.core`, parsers, ECS, math) | Every PR |
 | Integration | GoogleTest (`nxIntegrationTests`) | Modules together: a world moved by parallel ECS systems, the same with any number of workers ([below](#determinism)) | Every PR |
 | Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
-| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`) | ECS, Job System, light-style snapshots and client hot paths | Built on every PR, run by hand ([below](#performance)) |
+| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`, `nxBenchNavigation`) | ECS, Job System, light-style snapshots and client hot paths | Built on every PR, run by hand ([below](#performance)) |
 | Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
 | Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 
@@ -238,3 +238,6 @@ A [TODO](TODO.md) task is only checked `[x]` when:
 - Every fixed bug gets a **regression test** that failed before the fix.
 - Parity bugs get the `parity` label and need a fixture.
 - Production crashes (crash reports) are triaged weekly.
+
+The native offline entity/agent regression scenarios and navigation/agent benchmark workloads
+are described in [Offline entity and agent tests](offlineAgents.md#review-and-verification).

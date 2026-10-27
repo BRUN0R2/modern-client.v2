@@ -11,6 +11,7 @@ export module cs.client:clientGame;
 import std;
 import nx.core;
 import nx.math;
+import nx.ecs;
 import nx.render;
 import cs.shared;
 import :input;
@@ -84,6 +85,7 @@ public:
     /// How the game's hostages show at the moment a frame shows (cs::shownHostageOf), those whose model
     /// the client read, replacing `hostages` and keeping its storage for the next frame.
     void writeHostages(std::vector<ShownHostage>& hostages) const;
+    void writeEntities(const EntityCatalog& catalog, std::vector<ShownEntity>& entities) const;
 
     /// The brightness of the server's light styles at `time` since the map started, including every
     /// unset style. No pattern is inferred from local content.
@@ -121,6 +123,7 @@ private:
     PlayerSnapshot m_last;               ///< What the server told last.
     /// Previous snapshot's origins by PlayerIndex; none where that snapshot had no player.
     std::vector<std::optional<nx::Vec3>> previousPlayerOrigins;
+    std::map<nx::ecs::Entity, nx::Vec3> previousEntityOrigins;
     std::vector<std::optional<Gait>> m_gaits;      ///< By PlayerIndex: none for one not seen yet.
     nx::Vec3 m_previousEye{};                      ///< Before the last tick.
     nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.

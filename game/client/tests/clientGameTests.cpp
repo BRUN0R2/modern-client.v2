@@ -14,11 +14,13 @@ import nx.core;
 import nx.math;
 import nx.platform;
 import nx.assets;
+import nx.ecs;
 import nx.render;
 import cs.shared;
 import cs.client;
 
 #include "boxMap.hpp"
+#include "entityFixtures.hpp"
 #include "playerModel.hpp"
 #include "temporaryDirectory.hpp"
 #include "triangleModel.hpp"
@@ -308,6 +310,39 @@ TEST_F(ClientGameTest, PlayerInterpolationFollowsSparseIdentitiesAcrossReorderin
     client.updatePlayers(kTick, seenAgain);
     ASSERT_EQ(seenAgain.size(), 1U);
     EXPECT_FLOAT_EQ(seenAgain[0].origin.x, 900.0F) << "no interpolation from a snapshot where it was absent";
+}
+
+TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlotAlone) {
+    nx::test::TemporaryDirectory directory;
+    nx::test::writeEntityModel(directory);
+    auto vfs = nx::assets::Vfs::create(std::array{directory.path()});
+    ASSERT_TRUE(vfs.has_value());
+    cs::EntityCatalog catalog;
+    auto type = catalog.add(*vfs, nx::test::entityDefinition(), cs::ModelTextures::Read);
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    nx::ecs::World world;
+    const auto firstEntity = world.spawn();
+    auto first = snapshotAt(0, {});
+    first.entities.push_back({.entity = firstEntity, .type = *type});
+    cs::ClientGame game{models(), playerModels(), std::move(first)};
+    auto next = snapshotAt(1, {});
+    next.entities.push_back({.entity = firstEntity, .type = *type, .origin = {.x = 100}});
+    game.receive(std::move(next));
+    EXPECT_EQ(game.ticksDue(kTick / 2.0F, cs::CatchUp::Whole), 0U);
+    std::vector<cs::ShownEntity> shown;
+    game.writeEntities(catalog, shown);
+    ASSERT_EQ(shown.size(), 1U);
+    EXPECT_NEAR(shown.front().origin.x, 50, kTolerance);
+    world.destroy(firstEntity);
+    const auto replacement = world.spawn();
+    EXPECT_EQ(replacement.index(), firstEntity.index());
+    EXPECT_NE(replacement, firstEntity);
+    auto replaced = snapshotAt(2, {});
+    replaced.entities.push_back({.entity = replacement, .type = *type, .origin = {.x = 1000}});
+    game.receive(std::move(replaced));
+    game.writeEntities(catalog, shown);
+    ASSERT_EQ(shown.size(), 1U);
+    EXPECT_EQ(shown.front().origin.x, 1000);
 }
 
 } // namespace

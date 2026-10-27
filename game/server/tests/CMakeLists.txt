@@ -4,11 +4,15 @@
 nxAddTest(csServerTests
     SOURCES
         gameTests.cpp
+        entityBodiesTests.cpp
     DEPENDS
         cs::server
         cs::shared
         nx::console
         nx::assets
+        nx::ecs
+        nx::game
+        nx::collision
         nx::platform)
 
 # The maps of the tests are the BSP seed of the fuzz corpus, given other entities; the game's data is the

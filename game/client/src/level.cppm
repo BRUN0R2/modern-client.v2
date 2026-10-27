@@ -88,6 +88,7 @@ public:
     [[nodiscard]] inline auto models() const noexcept -> const MapModels& { return *m_models; }
     /// The models the players are drawn with: the characters', and the weapons' player models.
     [[nodiscard]] inline auto players() const noexcept -> const PlayerModels& { return *m_players; }
+    [[nodiscard]] inline auto entityCatalog() const noexcept -> const EntityCatalog& { return *entities; }
     /// The sprites of the weapons' muzzle flashes: those their view models' events show, as their
     /// weapons' data styles them.
     [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
@@ -116,6 +117,7 @@ public:
 
 private:
     const GameMap* m_gameMap = nullptr;
+    const EntityCatalog* entities = nullptr;
     std::vector<std::vector<std::byte>> m_wadBytes;
     std::vector<nx::assets::WadView> m_wads;
     std::optional<LevelDecals> m_decals;
