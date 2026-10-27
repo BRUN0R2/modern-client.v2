@@ -181,7 +181,7 @@ template <class Tag>
         return fail(MdlError::BadIndex,
                     std::format("{}: {} {} is not in [0, {})", where(table, record), field, value, count));
     }
-    return StudioIndex<Tag>{.value = static_cast<std::uint32_t>(value)};
+    return StudioIndex<Tag>{static_cast<std::uint32_t>(value)};
 }
 
 /// Decodes every record of `table` with `decode(record, index)`. Errors: those of `decode`.

@@ -116,7 +116,7 @@ import nx.rhi;
 | Type, concept, enum | `PascalCase` | `CommandBuffer`, `ComponentType`, `BspError` |
 | Enum value | `PascalCase` | `BspError::LumpOutOfBounds` |
 | Function, method, variable | `camelCase` | `parseBsp`, `entityCount` |
-| Private member | `m_camelCase` | `m_chunks` |
+| Private member | `camelCase` | `chunks` |
 | Constant (`constexpr`/`constinit`) | `kPascalCase` | `kDefaultTickRate` |
 | Template parameter | `PascalCase` | `template <class Component>` |
 | Macro (avoid) | `NX_SCREAMING_CASE` | `NX_PLATFORM_WINDOWS` |
@@ -134,12 +134,16 @@ in new code ([ADR-0013](adr/0013-camelcase-convention.md)).
 |----------|-----|------|
 | Functions, methods, variables, parameters | `camelCase` (`parseBsp`) | `camelCase` (`setWeaponVar`) |
 | Fields and data keys | `camelCase` (`clipSize`) | `camelCase` (`maxClip`) |
-| Private members | `m_camelCase` (`m_chunks`) | `camelCase` |
+| Private members | `camelCase` (`chunks`) | `camelCase` |
 | Types, concepts, enums and enum values | `PascalCase` | `PascalCase` |
 | Constants | `kPascalCase` | `SCREAMING_SNAKE_CASE` |
 | Namespaces and modules | lowercase (`nx::ecs`, `nx.core`) | lowercase (`rezombie.api.classes`) |
 | Files and directories | `camelCase` (`contractsTests.cpp`, `enumArray.cppm`, `rhiVulkan/`) | `camelCase` (`infectionTests.rook`) |
 | Build targets, executables, CMake functions and scripts | `camelCase` (`nxCoreTests`, `rookLsp`, `nxAddTest`, `devShell.ps1`) | — |
+
+Private members have no prefix ([ADR-0027](adr/0027-private-member-camelcase.md)). Apply this
+to new or renamed identifiers; existing `m_` names are known inconsistencies, without
+unrelated renames.
 
 Exceptions, because the name comes from outside the code or is required by a tool:
 
@@ -169,8 +173,9 @@ Exceptions, because the name comes from outside the code or is required by a too
   plugins that use them ([ADR-0021](adr/0021-rook-amxx-names.md)). The project's own Rook code (built-in mods, examples,
   documentation, the API's tests) uses the canonical names.
 
-`.clang-tidy` encodes the rule for C++ (`readability-identifier-naming`, as an error); it runs
-in CI once a Clang build with modules exists (planned, [17 §7](17-build-and-tools.md#7-continuous-integration)).
+`.clang-tidy` encodes the rule for C++ (`readability-identifier-naming`, as an error). Local
+analysis uses a complete Clang build and its module interfaces ([18](18-testing-and-quality.md#sanitizers-and-analysis));
+an automated analysis gate is planned ([17 §7](17-build-and-tools.md#7-continuous-integration)).
 In Rook, the `naming` lint of `rookc` will check it, and the `compatibilityName` lint will point
 each AMX Mod X name at its canonical form ([14 §22](14-rook-language.md#22-lints-and-magic-numbers)).
 
@@ -544,15 +549,15 @@ if (m_budgetWarnings.allow()) {
 // removing this breaks bunny-hop feel. Covered by tests/parity/movement/bhopPenalty.
 ```
 
-- `TODO` only with a reference to the [TODO.md](../TODO.md) item or to an issue.
+- `TODO` only with a reference to the [TODO.md](TODO.md) item or to an issue.
 
 ## 12. Formatting and static analysis
 
 - `clang-format` with the repository's `.clang-format` (LLVM base, 4 spaces, column 110).
 - `clang-tidy` with the repository profile. Enabled groups: `bugprone-*`, `concurrency-*`,
   `cppcoreguidelines-*`, `misc-*`, `modernize-*`, `performance-*`, `readability-*`. Exceptions
-  are listed in `.clang-tidy` with a justification. It runs in CI once a Clang build with
-  modules exists (planned).
+  are listed in `.clang-tidy` with a justification. Local analysis uses a Clang build with
+  modules; its automated CI gate remains planned ([18](18-testing-and-quality.md#sanitizers-and-analysis)).
 - Warnings as errors (`-Werror` / `/WX`) in all of the project's own targets.
 - Sanitizers in CI: TSan on the tests of every pull request and of every push to `main` (GCC,
   `tsan-linux-gcc`); ASan + UBSan and MSan arrive with Clang in CI (planned,

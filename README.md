@@ -32,7 +32,7 @@ core: `nx.core` (typed errors, contracts, strong types and units), `nx.meta` (re
 `nx.data` (TOML files with schemas), `nx.jobs` (*work-stealing* Job System), `nx.ecs` (archetype
 ECS), `nx.math` (vectors, matrices, quaternions, GoldSrc angles) and `nx.console` (typed cvars,
 commands and `.cfg`). Above them: `nx.platform` (clocks, the native file system, the window, its
-input and the sound output), `nx.rhi` (the GPU interface, with its Vulkan backend), `nx.assets`
+input by position and layout, and the sound output), `nx.rhi` (the GPU interface, with its Vulkan backend), `nx.assets`
 (the VFS, the Counter-Strike 1.6 installation and its detection in Steam, and fuzzed readers of
 every binary GoldSrc format: BSP, WAD3, MDL, SPR, WAV, TGA, and of VGUI2's schemes and fonts),
 `nx.render` (the BSP world with its lightmaps, sky, water and decals, studio models with GPU
@@ -45,12 +45,13 @@ freeze, their time, its end and the money they pay, and a player hurt by its fal
 and lava, and killed), with which the client, `next`, plays the maps alone, round after round.
 `nxcheck` reads every file of a Counter-Strike 1.6 installation with those readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
-[`docs/RULES.md`](docs/RULES.md) and the backlog in [`TODO.md`](TODO.md).
+[`docs/RULES.md`](docs/RULES.md) and the backlog in [`docs/TODO.md`](docs/TODO.md).
 
 ## Building
 
 Requirements on Windows: Visual Studio 2026 with the "Desktop development with C++" workload
-(it brings MSVC, Ninja, CMake and vcpkg). Details and the toolchain matrix are in
+(it brings MSVC, Ninja, CMake and vcpkg), and the Vulkan SDK for the GPU tests' validation layers.
+Details and the toolchain matrix are in
 [docs/17-build-and-tools.md](docs/17-build-and-tools.md).
 
 ```powershell
@@ -63,6 +64,10 @@ ctest --preset dev-windows-msvc
 On Linux, use the `dev-linux-gcc` preset; the other presets and their status are in
 [docs/17 §3](docs/17-build-and-tools.md#3-presets).
 
+Release builds include the component benchmarks, including `nxBenchClient` for the client's hot
+paths. Their synthetic workloads and comparison procedure are in
+[docs/18](docs/18-testing-and-quality.md#performance).
+
 With Counter-Strike 1.6 installed through Steam, `nxcheck` reads every file of the installation
 with the engine's readers and reports any it cannot read
 ([docs/18](docs/18-testing-and-quality.md#real-content)), and `next` plays one of its maps as a
@@ -71,7 +76,9 @@ looks, and the keys do what Counter-Strike binds them to (W A S D move, Space ju
 Shift walks, E uses, the arrows turn, the left button fires, the right one switches a silencer or
 a burst, R reloads, Q draws the last weapon, the tilde opens the console); V flies through
 everything (`noclip`), and Escape ends it. Its settings and binds are kept in `config.cfg`, in
-`%APPDATA%\Modern-Client.v2`. `nxview` renders one frame of a map into a BMP file:
+`%APPDATA%\Modern-Client.v2`. Keyboard binds follow the layout by default (`in_keymap keycode`);
+`in_keymap scancode` selects physical US positions instead. The mode can also be set on the command
+line with `+in_keymap scancode`. `nxview` renders one frame of a map into a BMP file:
 
 ```powershell
 .\build\dev-windows-msvc\bin\nxcheck.exe
@@ -92,7 +99,7 @@ drawn ([material file](docs/05-rendering.md#92-mdl-format-features-to-support)).
 |------|---------|
 | Engine, game, server, tools and data | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) with the [Rook Plugin Exception](LICENSES/LicenseRef-Rook-Plugin-Exception.txt) |
 | Rook toolchain and plugin SDK (`rook/`) | [MIT](LICENSES/MIT.txt) |
-| Documentation (`docs/`, `README.md`, `TODO.md`, `CONTRIBUTING.md`, `SECURITY.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
+| Documentation (`docs/`, `README.md`, `docs/TODO.md`, `CONTRIBUTING.md`, `SECURITY.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
 
 **Plugins and mods** that use only the plugin interface may adopt **any license**,
 including proprietary ones. This is guaranteed by the exception, not just by intent.

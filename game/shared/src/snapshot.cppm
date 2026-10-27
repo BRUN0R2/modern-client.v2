@@ -17,6 +17,9 @@ import :inventory;
 import :rounds;
 import :sounds;
 import :hostages;
+import :weapons;
+import :characters;
+import :lightStyles;
 
 export namespace cs {
 
@@ -51,10 +54,30 @@ struct Impact {
     [[nodiscard]] inline auto operator==(const Impact&) const noexcept -> bool = default;
 };
 
+/// What the server tells a client of another player for it to draw, as the original's entity state
+/// carries it: which player it is, the character it plays as, the weapon in its hands (its player model:
+/// models/p_<weapon>.mdl), where it is, how its body is turned (its pitch a third of its view's,
+/// negated), the sequence its torso plays, where in it, when and at what framerate, and the gait sequence
+/// its legs play; the client turns its legs and its aim itself (processGait).
+struct PlayerEntityState {
+    PlayerIndex player{};
+    CharacterIndex character{};
+    std::optional<WeaponIndex> weapon{};
+    nx::Vec3 origin{};
+    nx::EulerAngles angles{};
+    nx::assets::SequenceIndex sequence{};
+    float frame = 0.0F; ///< Of kFrameScale.
+    nx::GameTime advancedAt{};
+    float framerate = 1.0F;
+    nx::assets::SequenceIndex gaitSequence{};
+
+    [[nodiscard]] inline auto operator==(const PlayerEntityState&) const noexcept -> bool = default;
+};
+
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
 /// what the tick did to it and made it make; where the tick's shots met what is solid; and the world
-/// it sees: the brush entities and the hostages.
+/// it sees: the brush entities, the hostages, the other players and the light-style patterns.
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
     nx::TickRate rate{nx::kDefaultTickRate};
@@ -74,6 +97,8 @@ struct PlayerSnapshot {
     std::vector<Impact> impacts{}; ///< Of the tick's shots, in their order.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
+    std::vector<PlayerEntityState> players{};
+    MapLightStyles lightStyles{}; ///< The server's current patterns, evaluated by the client.
 };
 
 } // namespace cs

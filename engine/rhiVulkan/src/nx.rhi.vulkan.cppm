@@ -25,6 +25,7 @@ struct DeviceDesc {
     std::optional<platform::NativeWindow> window{};
     /// The Khronos validation layer, with synchronization validation, when it is installed: its
     /// warnings and errors are logged, and its errors counted (Device::validationErrors).
+    /// Requires the Khronos validation layer and its debug messenger; creation fails if unavailable.
     bool isValidationEnabled = false;
     std::uint32_t framesInFlight = kMinFramesInFlight; ///< From kMinFramesInFlight to kMaxFramesInFlight.
     /// What a device of the same GPU and driver learned building its pipelines (Device::pipelineCache);

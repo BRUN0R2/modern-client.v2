@@ -29,6 +29,13 @@ enum class Team : std::uint8_t {
     Count,
 };
 
+/// A player of the game, by the order it joined in.
+struct PlayerIndex {
+    std::uint32_t value = 0;
+
+    [[nodiscard]] inline auto operator==(const PlayerIndex&) const noexcept -> bool = default;
+};
+
 /// What a player has: what its HUD shows of it.
 struct PlayerStatus {
     /// Below none once harm killed it, as the original's pev->health goes; its HUD shows none.

@@ -269,6 +269,29 @@ auto keyOf(platform::Key key) noexcept -> std::optional<console::KeyId> {
     }
 }
 
+auto keyOf(const platform::KeyChanged& event, KeyMapping mapping) noexcept -> std::optional<console::KeyId> {
+    expects(mapping == KeyMapping::Scancode || mapping == KeyMapping::Keycode,
+            "keyOf: scancode or keycode mapping");
+    if (mapping == KeyMapping::Scancode) {
+        return keyOf(event.key);
+    }
+    if (mapping != KeyMapping::Keycode) {
+        return std::nullopt;
+    }
+    const std::optional<console::KeyId> physical = keyOf(event.key);
+    using platform::Key;
+    if (event.key == Key::Space || (event.key >= Key::KeypadDivide && event.key <= Key::KeypadPeriod) ||
+        (physical && (std::to_underlying(*physical) < U' ' || std::to_underlying(*physical) > U'~'))) {
+        return physical;
+    }
+    if (!event.character || *event.character < U' ' || *event.character > U'~') {
+        return std::nullopt;
+    }
+    const auto character = toLowerAscii(static_cast<char>(*event.character));
+    const console::KeyId key = typing(character);
+    return nameOf(key) ? std::optional{key} : std::nullopt;
+}
+
 auto keyOf(platform::MouseButton button) noexcept -> std::optional<console::KeyId> {
     using platform::MouseButton;
     switch (button) {

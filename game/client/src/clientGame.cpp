@@ -25,9 +25,11 @@ constexpr nx::Seconds kMaxCatchUp{0.25F};
 
 } // namespace
 
-ClientGame::ClientGame(const MapModels& models, PlayerSnapshot first)
-    : m_models{&models}, m_last{std::move(first)}, m_previousEye{eyeOf(m_last.player)},
-      m_turnedView{m_last.turnedView} {}
+ClientGame::ClientGame(const MapModels& models, const PlayerModels& players, PlayerSnapshot first)
+    : m_models{&models}, m_players{&players}, m_last{std::move(first)}, m_previousEye{eyeOf(m_last.player)},
+      m_turnedView{m_last.turnedView} {
+    lightStyles.setPatterns(m_last.lightStyles.patterns);
+}
 
 auto ClientGame::ticksDue(nx::Seconds elapsed, CatchUp catchUp) -> std::uint32_t {
     m_pending += elapsed;
@@ -63,6 +65,16 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
     }
     std::ranges::move(snapshot.sounds, std::back_inserter(m_sounds));
     std::ranges::move(snapshot.impacts, std::back_inserter(m_impacts));
+    if (snapshot.lightStyles != m_last.lightStyles) {
+        lightStyles.setPatterns(snapshot.lightStyles.patterns);
+    }
+    previousPlayerOrigins.clear();
+    for (const PlayerEntityState& player : m_last.players) {
+        if (player.player.value >= previousPlayerOrigins.size()) {
+            previousPlayerOrigins.resize(std::size_t{player.player.value} + 1);
+        }
+        previousPlayerOrigins[player.player.value] = player.origin;
+    }
     m_last = std::move(snapshot);
 }
 
@@ -93,20 +105,65 @@ auto ClientGame::roundTimeShown() const -> std::uint32_t {
     return m_last.roundTimer.shownAt(shownTime(), m_last.rate);
 }
 
-auto ClientGame::placements() const -> std::vector<nx::render::ModelPlacement> {
-    return m_last.brushEntities | std::views::transform([](const BrushEntityState& entity) {
-               return nx::render::ModelPlacement{.model = entity.model,
-                                                 .origin = entity.origin,
-                                                 .angles = entity.angles,
-                                                 .waveHeight = entity.waveHeight,
-                                                 .showsAlternateTextures = entity.showsAlternateTextures};
-           }) |
-           std::ranges::to<std::vector>();
+void ClientGame::writePlacements(std::vector<nx::render::ModelPlacement>& placements) const {
+    placements.resize(m_last.brushEntities.size());
+    std::ranges::transform(m_last.brushEntities, placements.begin(), [](const BrushEntityState& entity) {
+        return nx::render::ModelPlacement{.model = entity.model,
+                                          .origin = entity.origin,
+                                          .angles = entity.angles,
+                                          .waveHeight = entity.waveHeight,
+                                          .showsAlternateTextures = entity.showsAlternateTextures};
+    });
 }
 
-auto ClientGame::hostages() const -> std::vector<ShownHostage> {
+auto ClientGame::lightStylesAt(nx::Seconds time) const noexcept -> nx::render::LightStyleValues {
+    return lightStyles.valuesAt(time);
+}
+
+void ClientGame::updatePlayers(nx::Seconds frameTime, std::vector<ShownPlayer>& players) {
     const nx::GameTime shown = shownTime();
-    std::vector<ShownHostage> hostages;
+    const float between = m_pending / kCommandInterval;
+    players.clear();
+    players.reserve(m_last.players.size());
+    for (const PlayerEntityState& state : m_last.players) {
+        const nx::assets::MdlView* const model = m_players->characterModel(state.character);
+        if (model == nullptr) {
+            continue; // one whose model the client could not read, which it listed
+        }
+        const std::optional<nx::Vec3> before = state.player.value < previousPlayerOrigins.size()
+                                                   ? previousPlayerOrigins[state.player.value]
+                                                   : std::nullopt;
+        const nx::Vec3 origin = before ? nx::lerp(*before, state.origin, between) : state.origin;
+        if (state.player.value >= m_gaits.size()) {
+            m_gaits.resize(state.player.value + 1);
+        }
+        std::optional<Gait>& gait = m_gaits[state.player.value];
+        if (!gait) {
+            gait = Gait{.yaw = state.angles.yaw.value(), .previousOrigin = origin};
+        }
+        processGait(*gait, *model, state.gaitSequence, origin, state.angles, frameTime, state.framerate);
+        const std::span<const nx::assets::StudioSequence> sequences = model->sequences();
+        const nx::assets::SequenceIndex sequence =
+            state.sequence.value < sequences.size() ? state.sequence : nx::assets::SequenceIndex{};
+        players.push_back(ShownPlayer{
+            .character = state.character,
+            .weapon = state.weapon,
+            .origin = origin,
+            .angles = nx::EulerAngles{.yaw = nx::Degrees{gait->yaw}, .roll = state.angles.roll},
+            .sequence = sequence,
+            .frame = estimatedFrameOf(sequences[sequence.value], state.frame,
+                                      shown.since(state.advancedAt, m_last.rate), state.framerate),
+            .gaitSequence = state.gaitSequence,
+            .gaitFrame = SequenceFrame{gait->frame},
+            .yawBlend = gait->yawBlend,
+            .pitchBlend = static_cast<float>(gait->pitchBlend)});
+    }
+}
+
+void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {
+    const nx::GameTime shown = shownTime();
+    hostages.clear();
+    hostages.reserve(m_last.hostages.size());
     for (const HostageState& state : m_last.hostages) {
         const nx::assets::MdlView* const model = m_models->hostageModel(state.spawn);
         if (model == nullptr || state.sequence.value >= model->sequences().size()) {
@@ -115,7 +172,6 @@ auto ClientGame::hostages() const -> std::vector<ShownHostage> {
         hostages.push_back(
             shownHostageOf(state, model->sequences()[state.sequence.value], shown, m_last.rate));
     }
-    return hostages;
 }
 
 } // namespace cs

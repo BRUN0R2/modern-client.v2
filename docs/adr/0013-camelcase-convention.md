@@ -1,6 +1,6 @@
 # ADR-0013 — camelCase convention across the project (C++ and Rook)
 
-- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md)
+- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md) and [ADR-0027](0027-private-member-camelcase.md)
 - **Date:** 2026-10-20
 
 ## Context

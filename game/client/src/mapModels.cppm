@@ -14,6 +14,7 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import cs.shared;
+import :posedModels;
 
 export namespace cs {
 
@@ -40,12 +41,6 @@ struct MapModel {
 /// The studio model entities of `map`: its cycler_sprites of a model (not ".spr") and its hostages.
 [[nodiscard]] auto mapModelsOf(const nx::assets::BspView& map) -> std::vector<MapModel>;
 
-/// The map's models posed for a frame: their bones, which their instances point into.
-struct PosedModels {
-    std::vector<std::vector<nx::Mat3x4>> bones{};
-    std::vector<nx::render::StudioInstance> instances{};
-};
-
 /// The map's studio model entities and their models' files and animations.
 class MapModels {
 public:
@@ -64,7 +59,7 @@ public:
     [[nodiscard]] inline auto missing() const noexcept -> std::span<const std::string> { return m_missing; }
 
     /// The model the map's hostage `spawn` plays (HostageSpawn::spawn); none for one whose model it could
-    /// not read, or that the map lacks.
+    /// not read, or that the map lacks. Lookup is constant time, including missing models.
     [[nodiscard]] auto hostageModel(std::uint32_t spawn) const noexcept -> const nx::assets::MdlView*;
 
     /// Every model on the GPU of `renderer`, a model for each file, its uploads recorded in `commands`.
@@ -81,17 +76,10 @@ public:
                              const nx::render::LightStyleValues& styles) const -> PosedModels;
 
 private:
-    /// A model's files, and the decoded frames of each of its sequences, by index.
-    struct File {
-        std::unique_ptr<ModelFiles> files{};
-        std::vector<nx::assets::AnimationFrames> animations{};
-    };
-
-    /// An entity and its file's index; a hostage, which of the map's it is (HostageSpawn::spawn).
+    /// An entity and its file's index.
     struct Entity {
         MapModel model{};
         std::size_t file = 0;
-        std::uint32_t spawn = 0;
     };
 
     MapModels() = default;
@@ -114,9 +102,10 @@ private:
                                   const nx::render::LightStyleValues& styles) const
         -> std::optional<nx::render::StudioInstance>;
 
-    std::vector<std::unique_ptr<File>> m_files;
+    std::vector<AnimatedModel> m_files;
     std::vector<Entity> m_cyclers;
-    std::vector<Entity> m_hostages; ///< Of models it read, in the map's order.
+    /// By HostageSpawn::spawn; none where the model could not be read.
+    std::vector<std::optional<Entity>> hostagesBySpawn;
     std::vector<std::string> m_missing;
 };
 

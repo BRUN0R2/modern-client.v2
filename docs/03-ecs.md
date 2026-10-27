@@ -399,7 +399,7 @@ the `infodecal`s give the decals the map stamps as its game starts (`nx::game::s
 
 - `ent_list [filter]`, `ent_dump <netid>` and `ecs_stats` (archetypes, chunks, occupancy,
   memory per component). The numbers already come from `World::stats()`; the commands are
-  planned in `nx.console` ([TODO](../TODO.md)).
+  planned in `nx.console` ([TODO](TODO.md)).
 - ImGui inspector in development builds: archetype tree, component editing and a view of
   the schedule DAG with per-system timings.
 - Tracy zones per system and per batch of chunks.

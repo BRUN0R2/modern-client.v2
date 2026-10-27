@@ -11,8 +11,9 @@
 /// How an entity plays its model's sequences, as the original's server plays them (LookupActivity,
 /// ResetSequenceInfo, StudioFrameAdvance) and its client shows them (R_StudioEstimateFrame).
 ///
-/// Today: one or two blends, the bone controllers and the mouth. The nine aim blends of the players'
-/// models and their legs' gait sequence come with player animation (TODO.md).
+/// The players' models, posed as the original's server poses them (its SV_StudioSetupBones for players):
+/// the nine aim blends of their sequences, by the yaw and the pitch of the aim, and their legs below the
+/// spine playing their gait sequence.
 export module cs.shared:studio;
 
 import std;
@@ -35,6 +36,8 @@ inline constexpr std::size_t kControllerChannels = 4;
 struct ControllerSettings {
     std::array<std::uint8_t, kControllerChannels> channels{};
     std::uint8_t mouth = 0; ///< How far the mouth opens: fully from 64 on.
+
+    [[nodiscard]] inline auto operator==(const ControllerSettings&) const noexcept -> bool = default;
 };
 
 /// What becomes of the motion of a sequence's motion bone along the axes the sequence moves the
@@ -88,13 +91,34 @@ inline constexpr float kFrameScale = 256.0F;
 
 /// What the game plays a model's sequences for, by the original's numbers (ACT_*): those it asks for.
 enum class Activity : std::int32_t {
-    Idle = 1,         ///< ACT_IDLE.
-    SmallFlinch = 26, ///< ACT_SMALL_FLINCH.
-    DieSimple = 36,   ///< ACT_DIESIMPLE.
-    DieBackward = 37, ///< ACT_DIEBACKWARD.
-    DieForward = 38,  ///< ACT_DIEFORWARD.
-    DieHeadshot = 66, ///< ACT_DIE_HEADSHOT.
+    Idle = 1,          ///< ACT_IDLE.
+    Walk = 3,          ///< ACT_WALK.
+    Run = 4,           ///< ACT_RUN.
+    Swim = 6,          ///< ACT_SWIM.
+    Hop = 7,           ///< ACT_HOP: a jump up.
+    Leap = 8,          ///< ACT_LEAP: a long jump forward.
+    Crouch = 17,       ///< ACT_CROUCH.
+    CrouchIdle = 18,   ///< ACT_CROUCHIDLE.
+    SmallFlinch = 26,  ///< ACT_SMALL_FLINCH.
+    RangeAttack1 = 28, ///< ACT_RANGE_ATTACK1.
+    RangeAttack2 = 29, ///< ACT_RANGE_ATTACK2.
+    Reload = 32,       ///< ACT_RELOAD.
+    DieSimple = 36,    ///< ACT_DIESIMPLE.
+    DieBackward = 37,  ///< ACT_DIEBACKWARD.
+    DieForward = 38,   ///< ACT_DIEFORWARD.
+    Hover = 50,        ///< ACT_HOVER: still in water.
+    DieHeadshot = 66,  ///< ACT_DIE_HEADSHOT.
+    DieChestshot = 67, ///< ACT_DIE_CHESTSHOT.
+    DieGutshot = 68,   ///< ACT_DIE_GUTSHOT.
+    DieBackshot = 69,  ///< ACT_DIE_BACKSHOT.
+    Flinch = 77,       ///< ACT_FLINCH.
+    LargeFlinch = 78,  ///< ACT_LARGE_FLINCH.
 };
+
+/// The sequence of `sequences` labelled `label`, its case ignored, as the original's LookupSequence
+/// finds it: the first; none.
+[[nodiscard]] auto lookupSequence(std::span<const nx::assets::StudioSequence> sequences,
+                                  std::string_view label) -> std::optional<nx::assets::SequenceIndex>;
 
 /// The sequence of `sequences` the game plays for `activity`, as the original's LookupActivity picks
 /// it: of those of the activity, a weight drawn from `random` below their weights' sum, the first whose
@@ -149,6 +173,50 @@ struct PlayedModel {
 /// transform of each bone, by its index, from its space to the space of `query.placement`'s parent.
 [[nodiscard]] auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
                              const nx::assets::AnimationFrames& animation, const PoseQuery& query)
+    -> std::vector<nx::Mat3x4>;
+
+/// The blends of a sequence of a player's model that aims (NUM_BLENDING): three of yaw by three of
+/// pitch.
+inline constexpr std::uint32_t kAimBlends = 9;
+/// The first death sequence of a player's model, and its swimming ones: the legs of none of them play
+/// the gait sequence (ANIM_FIRST_DEATH_SEQUENCE, ANIM_SWIM_1, ANIM_SWIM_2).
+inline constexpr nx::assets::SequenceIndex kFirstDeathSequence{101};
+inline constexpr std::array kSwimSequences{nx::assets::SequenceIndex{8}, nx::assets::SequenceIndex{9}};
+
+/// A pose of a player's model: its sequence at a frame, its legs' gait sequence at a frame of its own,
+/// the aim's yaw and pitch blends, each 0 to 255 (m_flYaw and m_flPitch, the yaw's with a fraction on the
+/// server), and where it is: turned by the gait's yaw, not the view's.
+struct PlayerPoseQuery {
+    SequenceFrame frame{};
+    nx::assets::SequenceIndex gaitSequence{};
+    /// From 0 to the gait sequence's frame count, not reaching it (Gait::frame): the server's is the first
+    /// (SV_StudioSetupBones). Its last frame, played towards none after it.
+    SequenceFrame gaitFrame{};
+    float yawBlend = 0.0F;
+    float pitchBlend = 0.0F;
+    nx::Mat3x4 placement{};
+};
+
+/// The bones of the player's `model`, whose decoded frames are `animations` by sequence, posed as
+/// `query` asks in `sequence` (SV_StudioSetupBones for a player), its motion bone kept: a sequence of
+/// nine blends (kAimBlends) by the four of them around the yaw's and the pitch's blends, the yaw's
+/// shares first (0 to 127 between the left and the middle, 128 to 255 between the middle and the right,
+/// as the pitch's between up, the middle and down); another by poseBones's blending, the first by the
+/// yaw's. A sequence of nine blends below kFirstDeathSequence, but the swimming ones, has the bones from
+/// the root to the spine and from each child of the pelvis on (its legs) play the gait sequence
+/// instead.
+[[nodiscard]] auto posePlayerBones(const nx::assets::MdlView& model,
+                                   std::span<const nx::assets::AnimationFrames> animations,
+                                   nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query)
+    -> std::vector<nx::Mat3x4>;
+
+/// The bones of `model` drawn on another model's posed bones, `onto`, of `ontoSkeleton`, as the original's
+/// engine merges the model of a player's weapon onto the player's (StudioMergeBones): a bone named as one
+/// of the other's takes its transform; another is posed at the first frame of `model`'s first sequence,
+/// whose decoded frames are `firstSequence`, in its parent, or in `placement` for a root.
+[[nodiscard]] auto mergeBones(const nx::assets::MdlView& model,
+                              const nx::assets::AnimationFrames& firstSequence, const Skeleton& ontoSkeleton,
+                              std::span<const nx::Mat3x4> onto, const nx::Mat3x4& placement)
     -> std::vector<nx::Mat3x4>;
 
 /// The `hitboxes` of a model on its bones posed as `bones` (poseBones's, by index), as the server places

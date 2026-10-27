@@ -66,8 +66,8 @@ modern-client.v2/
 │   └── bench/
 ├── scripts/
 │   └── devShell.ps1           # loads the Visual Studio x64 environment for CLI builds
-├── docs/
-└── TODO.md
+└── docs/
+    └── TODO.md                # actionable backlog
 ```
 
 This is the target layout: a directory arrives with its first code, so the modules, games,
@@ -83,6 +83,7 @@ applications and tools of later milestones are not in the repository yet. Each m
 | Ninja | 1.12+ (the one shipped with Visual Studio works) | Mandatory (module scanning) |
 | vcpkg | Manifest mode with a pinned *baseline* (the one shipped with Visual Studio works) | Reproducible builds, custom triplets without exceptions |
 | Slang | The vcpkg `shader-slang` port, pinned by the *baseline* | Shader compilation: `slangc` comes from the port as a host tool (`nxAddShaders`, `shaders/`) |
+| Vulkan SDK | 1.4.363.0 on Windows; distribution validation layers on Linux | GPU tests request validation explicitly. Windows CI installs the SDK's registered layers; an installed loader alone is insufficient |
 | Python | 3.12+ | Installs tools with `pip`: `reuse` and `clang-format` (the [local checks](../CONTRIBUTING.md#local-checks) and CI), CMake and Ninja (CI). The repository has no Python script; nothing needs Python at run time |
 
 ### 2.1 Compiler matrix
@@ -90,11 +91,11 @@ applications and tools of later milestones are not in the repository yet. Each m
 The project requires the C++26 subset of [02 §1.1](02-coding-standards.md#11-adopted-features),
 with fallbacks behind facades.
 
-| Compiler | Platforms | Role | Status (2026-10-20) |
+| Compiler | Platforms | Role | Status (2026-10-26) |
 |----------|-----------|------|---------------------|
 | MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, every test passing |
 | GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module, every test passing, C++26 reflection (`-freflection`) checking the `nx.meta` descriptions. Windows (MinGW) to be validated |
-| Clang (latest stable version) | Linux, Windows | Sanitizers (ASan, TSan, MSan, UBSan), `clang-tidy`, `clangd` | To be validated (presets ready) |
+| Clang 23.1.4 | Linux, Windows | Windows build, `clang-tidy`, `clangd`; sanitizers on Linux | **Validated locally on Windows** with Microsoft STL, Debug and every test passing; `dev-windows-clang` runs in CI. Linux remains to be validated |
 
 C++26 features available in MSVC 14.51 (according to the *feature-test macros*): **none**
 of those listed in [02 §1.1](02-coding-standards.md#11-adopted-features). All of them use
@@ -104,17 +105,21 @@ dialect is `/std:c++latest`.
 
 ### 2.2 Known quirks
 
-| Problem | Workaround in the project |
+| Problem | Resolution in the project |
 |---------|---------------------------|
 | CMake's `import std` support is still experimental (a *gate* with a UUID that changes with every version) and, on MSVC, generates `@cmake_cxx_std.lib`, which `link.exe` reads as a response file | **Fixed at the cause:** the project does not use that support. `cmake/nxStdModule.cmake` reads the standard library's `modules.json` manifest and compiles the `std` module as the regular target `nx::std` ([ADR-0014](adr/0014-std-module-built-by-the-project.md)) |
 | Out-of-tree sources get object directories with a long *hash* and could exceed 260 characters | **Fixed at the cause:** the `std` module source is copied to `build/<preset>/nxStd/` and compiled from there, with short paths |
 | Flags that change the ABI (exceptions, RTTI) must be the same in every unit, including the `std` module | They live in the global `CMAKE_CXX_FLAGS`. Warnings are per target and do not apply to `nx::std` |
+| Clang's GNU frontend on Windows still uses the Microsoft ABI and STL | `nxStdModule.cmake` selects the manifest by `CMAKE_CXX_SIMULATE_ID`, not by the frontend's command-line syntax. `dev-windows-clang` builds its own Clang module interfaces |
+| GoogleTest 1.18.0 declares its `std::any` printer even when the STL does not provide `std::any` without RTTI | The pinned `cmake/ports/gtest` overlay guards that specialization with `__cpp_lib_any`. Its version, upstream patches and license notices are retained; no test or compiler check is disabled |
+| Clang 23.1.4 crashes when an importer instantiates the implicit lifetime operations of `DecalPool`'s private slot type | `DecalPool` defines its copy, move and destruction operations in its owning implementation unit; its value semantics stay explicit and unchanged |
 | MSVC disables `std::println(std::ostream&, ...)` without exceptions (documented STL behavior) | Output through `std::println(stderr, ...)` or `std::fputs` (`FILE*`) |
 | The vcpkg toolchain puts the host triplet's tools (such as `slangc`) on `CMAKE_PROGRAM_PATH` only when `VCPKG_HOST_TRIPLET` is set; otherwise it searches the target triplet's, where host tools are not | The presets set `VCPKG_HOST_TRIPLET` (`x64-windows`, `x64-linux`: the defaults vcpkg uses anyway) |
 | After linking each program, the vcpkg toolchain runs `vcpkg z-applocal` on it to copy the DLLs it needs beside it; the project's triplets build static libraries, so there are none, and on Windows runners the step sometimes finds the program still held open and fails the build ("The process cannot access the file because it is being used by another process") | **Fixed at the cause:** the Windows presets set `VCPKG_APPLOCAL_DEPS` off, so no step runs that has nothing to copy |
 | The Vulkan loader ignores the layer paths of the environment (`VK_LAYER_PATH`, `VK_ADD_LAYER_PATH`) in an elevated process | Validation in an elevated shell needs the layers registered by the Vulkan SDK; CI runs unelevated |
 | Windows gives a program its `char` command line, and runs the narrow-character functions, in the ANSI code page, which loses the characters of other languages (a folder named `Usuários`, `Пользователи`) | **Fixed at the cause:** every program (`nxAddProgram`) embeds `cmake/nxProgram.manifest`, which makes UTF-8 its code page (Windows 10 1903 and later) and allows paths longer than `MAX_PATH` |
 | GCC 16 hits an *internal compiler error* (`module_state::mangle`) when another unit uses a `friend` comparison operator with `= default` of a (non-template) class declared in a module | In those classes, *defaulted* comparisons are members: `auto operator<=>(const T&) const = default` |
+| GCC 16.2 writes an unreadable `cs.client` interface when an imported aggregate `StudioIndex<Tag>` is used in the player-frame containers (`Bad file data`, then pending `std::vector` declarations fail to load) | `StudioIndex` owns its construction: a `constexpr` default constructor and an explicit value constructor, like `Quantity`. It stays a trivially copyable 32-bit value with distinct tag types; it is no longer an aggregate. The complete interface graph and importer reproduce the failure before this change and pass with these constructors |
 | libstdc++'s `std` module (GCC 16) advertises `__cpp_lib_saturation_arithmetic` but does not export `std::add_sat` and friends | `nx.core` uses its own saturated arithmetic on every compiler |
 | MSVC 14.51 cannot materialize a `std::optional` returned by a `consteval` call inside a template (C2440, "too many initializers") | The `nx.meta` functions that return class types (`typeAnnotation`, `Field::annotation`) are `constexpr`: pure, still evaluated at compile time where a constant is required |
 | libstdc++ keeps `std::stacktrace` in a separate library, `libstdc++exp` | `nx.core` links `stdc++exp` on GCC (`nx::currentStackTrace`) |
@@ -126,6 +131,7 @@ dialect is `/std:c++latest`.
 | Preset | Use | Status |
 |--------|-----|--------|
 | `dev-windows-msvc` / `release-windows-msvc` | Development and release on Windows (Ninja + MSVC) | Validated |
+| `dev-windows-clang` | Development and static analysis on Windows (Ninja + Clang, Microsoft STL) | Build and tests in CI |
 | `dev-linux-gcc` / `release-linux-gcc` | Development and release on Linux with GCC | `dev-linux-gcc` validated in CI. `release-linux-gcc` to be validated |
 | `dev-linux-clang` | Development with `clangd`/`clang-tidy` | To be validated |
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
@@ -148,6 +154,10 @@ cmake --preset dev-windows-msvc
 cmake --build --preset dev-windows-msvc
 ctest --preset dev-windows-msvc
 ```
+
+For Clang on Windows, install LLVM 23.1.4 and use the same developer shell. Put LLVM's `bin`
+directory first on `PATH`, then configure, build and test `dev-windows-clang`. The Microsoft STL
+module is compiled by Clang in that preset; MSVC's compiled module files are not reused.
 
 **Linux:** besides GCC 16, CMake, Ninja and vcpkg (with `VCPKG_ROOT` set), the build needs the
 system packages vcpkg and the `sdl3` port build with: the X11, Wayland, xkbcommon, EGL and
@@ -253,7 +263,7 @@ Rules:
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
-| `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`) |
+| `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`, `nxBenchLightStyles`, `nxBenchClient`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`); workloads and comparison procedure in [18](18-testing-and-quality.md#performance) |
 | `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzKeyValues`, `fuzzTga`, `fuzzFont`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
@@ -264,8 +274,8 @@ and on demand. **Running today:**
 | Job | Contents | Blocking? |
 |-----|----------|-----------|
 | `checks` | `reuse lint` (license and copyright in every file), `clang-format --dry-run --Werror` and line endings (nothing but LF in the repository) | Yes |
-| `windows-msvc` | `dev-windows-msvc` and `release-windows-msvc`: configure, build and tests, through the same `scripts/devShell.ps1` used for development | Yes |
-| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run (the Windows runners have no Vulkan and skip them) | Yes |
+| `windows` | `dev-windows-msvc`, `release-windows-msvc` and `dev-windows-clang`: configure, build and tests, through the same `scripts/devShell.ps1` used for development; Clang is pinned to LLVM 23.1.4. The Vulkan SDK supplies validation layers; GPU tests skip only without a suitable adapter or Vulkan backend | Yes |
+| `linux-gcc` | `dev-linux-gcc` and `tsan-linux-gcc` (every test under ThreadSanitizer) in the `gcc:16` container: configure, build and tests. The container gets the X11 and Wayland headers that the `sdl3` port builds against, and lavapipe with the Vulkan validation layers, on which the Vulkan tests run | Yes |
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the
@@ -321,7 +331,7 @@ image.
 ## 9. Development environment
 
 - **VS Code** with `clangd` and CMake Tools, and the Rook extension (syntax, LSP, debugger) once
-  it exists ([TODO](../TODO.md)). The
+  it exists ([TODO](TODO.md)). The
   repository ships `.vscode/` with the recommended extensions and settings: CMake Tools uses
   the presets and copies the active preset's `compile_commands.json` to `build/`, where
   `clangd` reads it (with its module support on); formatting follows `.clang-format` on save.

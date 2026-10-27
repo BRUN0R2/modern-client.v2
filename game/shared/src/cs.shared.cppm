@@ -12,7 +12,8 @@
 /// they pay, its hostages, idling, hurt and killed, the damage the shots and the knife deal, and a
 /// player hurt by its falls, drowning, slime and lava, and killed; what the player hears as it uses;
 /// the files of studio models; the game's content and a map as the game plays it, which the server and
-/// the client of one process share; and what the server tells a player's client after each tick.
+/// the client of one process share; the characters the players play as and how their models play; and
+/// what the server tells a player's client after each tick.
 export module cs.shared;
 
 export import :movement;
@@ -33,6 +34,9 @@ export import :hostages;
 export import :playerHarm;
 export import :use;
 export import :modelFiles;
+export import :lightStyles;
 export import :gameContent;
 export import :gameMap;
+export import :characters;
+export import :playerAnimation;
 export import :snapshot;

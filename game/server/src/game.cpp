@@ -27,6 +27,11 @@ constexpr std::string_view kFootstepStream = "footsteps";
 constexpr std::string_view kBreathStream = "breath";
 /// What the game's rules log, as the original's server logs the rounds.
 constexpr nx::log::Category kLog{"game"};
+/// The stream of random numbers a joining player's character is drawn from, and its models' animations'.
+constexpr std::string_view kAppearanceStream = "appearance";
+constexpr std::string_view kAnimationStream = "player animation";
+/// The number PostThink compares a player's gait sequence with, ACT_FLY's.
+constexpr std::uint32_t kFlyActivityNumber = 5;
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -79,11 +84,11 @@ Game::Game(CreateToken /*token*/, const GameContent& content, const GameMap& map
     : m_content{&content}, m_map{&map}, m_cvars{std::move(cvars)}, m_models{std::move(models)},
       // The first round starts with the map, the first moment of the game's clock.
       m_rounds{Rounds::start(map.objectives(), m_cvars.roundLengths(), nx::GameTime{})},
-      m_accounts{content.economy} {}
+      m_accounts{content.economy}, lightStyles{mapLightStyles(map.map(), content.lightStyles)} {}
 
 auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars)
     -> nx::Result<std::unique_ptr<Game>, GameError> {
-    GameModels models = GameModels::read(content.vfs, map.map());
+    GameModels models = GameModels::read(content.vfs, map.map(), content.characters);
     if (!models.missing().empty()) {
         nx::log::warning(kLog, "models the map's hostages play that cannot be read: {}",
                          models.missing() | std::views::join_with(std::string_view{", "}) |
@@ -103,9 +108,13 @@ auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars
 
 auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
     const PlayerIndex index{nx::narrow<std::uint32_t>(m_players.size())};
+    // HandleMenu_ChooseAppearance's auto-select: one of the team's characters, each as likely.
+    const std::vector<CharacterIndex> characters = m_content->characters.ofTeam(team);
+    nx::Random appearance{index.value, kAppearanceStream};
     Player& player = m_players.emplace_back(
         Player{.team = team,
                .autoSwitch = autoSwitch,
+               .character = characters.at(appearance.below(characters.size())),
                .status = PlayerStatus{.health = nx::HitPoints{}, .money = m_cvars.startingMoney()},
                .inventory = Inventory{m_content->weapons},
                .stepVoice = StepVoice{m_content->footsteps},
@@ -139,6 +148,7 @@ void Game::observe(Player& player) {
     player.movement.isDead = true;
     *m_world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
     player.turnedView = nx::EulerAngles{.yaw = point.yaw};
+    player.view = *player.turnedView;
 }
 
 void Game::checkWinConditions() {
@@ -200,6 +210,26 @@ void Game::placeEye(PlayerIndex index, nx::Vec3 eye) {
 
 auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
     const Player& player = playerAt(index);
+    std::vector<PlayerEntityState> others;
+    for (std::uint32_t other = 0; other < m_players.size(); ++other) {
+        if (other == index.value) {
+            continue;
+        }
+        const Player& shown = m_players[other];
+        const OwnedWeapon* const held = shown.inventory.held();
+        const Animation& torso = shown.animation.torso;
+        others.push_back(
+            PlayerEntityState{.player = PlayerIndex{other},
+                              .character = shown.character,
+                              .weapon = held != nullptr ? std::optional{held->weapon} : std::nullopt,
+                              .origin = shown.movement.origin,
+                              .angles = bodyAnglesOf(shown.view),
+                              .sequence = torso.sequence,
+                              .frame = torso.frame,
+                              .advancedAt = torso.advancedAt,
+                              .framerate = torso.framerate,
+                              .gaitSequence = shown.animation.gaitSequence});
+    }
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     return PlayerSnapshot{.time = time.now,
                           .rate = time.rate,
@@ -212,7 +242,9 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .sounds = player.sounds,
                           .impacts = m_impacts,
                           .brushEntities = brushEntityStatesOf(m_world),
-                          .hostages = hostageStatesOf(m_world)};
+                          .hostages = hostageStatesOf(m_world),
+                          .players = std::move(others),
+                          .lightStyles = lightStyles};
 }
 
 void Game::tick(std::span<const PlayerCommand> commands) {
@@ -241,6 +273,9 @@ void Game::tick(std::span<const PlayerCommand> commands) {
 
 void Game::runCommand(Player& player, const UserCommand& command) {
     const nx::collision::BrushHulls& hulls = m_map->hulls();
+    // SV_RunCmd: where the player looks, and the seed of what it does.
+    player.view = command.viewAngles;
+    player.randomSeed = command.number;
     // The weapon the command selects is drawn before it moves the player, at the speed it allows, as
     // the original's CmdStart selects it.
     player.inventory.select(command, nx::game::tickTimeOf(m_world));
@@ -264,8 +299,9 @@ void Game::runCommand(Player& player, const UserCommand& command) {
         nx::game::touchTriggers(m_world, hulls, player.body);
         postThink(player, command, before);
     }
-    // As the original's PostThink ends, dead or alive (m_afButtonLast).
+    // As the original's PostThink ends, dead or alive (m_afButtonLast, StudioProcessGait).
     player.lastButtons = command.buttons;
+    animateAfterCommand(player, frameTimeOf(command));
 }
 
 void Game::preThink(Player& player, const UserCommand& command) {
@@ -281,6 +317,22 @@ void Game::preThink(Player& player, const UserCommand& command) {
                 hurt(player, std::get<PlayerHarm>(event));
             }
         }
+    }
+    if (player.status.isAlive()) {
+        // Jump: the button going down on the ground, out of deep water and of a jump out of water.
+        const MovementState& movement = player.movement;
+        if (command.buttons.test(Button::Jump) && !player.lastButtons.test(Button::Jump) &&
+            movement.isOnGround && movement.waterLevel < WaterLevel::Waist &&
+            movement.waterJumpTime <= nx::Milliseconds{}) {
+            animate(player, PlayerAction::Jump);
+        }
+        // Duck.
+        if (command.buttons.test(Button::Duck)) {
+            animate(player, PlayerAction::Walk);
+        }
+    } else if (!player.animation.torso.isFinished) {
+        // PlayerDeathThink: its death plays on.
+        advanceFrame(player.animation.torso, time.now, time.rate);
     }
     // Dead or not, as the original's PreThink looks at the kept harms before it weighs a death; the dead
     // are given back none.
@@ -323,6 +375,13 @@ void Game::postThink(Player& player, const UserCommand& command, const MovementS
         use(player, command);
     }
     const WeaponAttacks attacks = player.inventory.frame(command, shooter, tracer, time);
+    // As its weapon's code asks the player's model to play it.
+    if (attacks.motions.test(HolderMotion::Attacked)) {
+        animate(player, PlayerAction::Attack1);
+    }
+    if (attacks.motions.test(HolderMotion::Reloaded)) {
+        animate(player, PlayerAction::Reload);
+    }
     for (const Blow& blow : attacks.blows) {
         attackEntity(player, blow.entity,
                      nx::game::Attack{.attacker = player.body,
@@ -388,9 +447,57 @@ void Game::die(Player& player) {
     makeSound(player, m_content->playerHarm.death);
     player.movement.isDead = true;
     *m_world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
+    animate(player, PlayerAction::Die);
     // Its weapons go with it (PackDeadPlayerItems; the box it drops comes with dropping, TODO.md).
     player.inventory.removeAll();
     checkWinConditions();
+}
+
+void Game::animate(Player& player, PlayerAction action) {
+    const PlayedModel* const model = m_models.characterModel(player.character);
+    if (model == nullptr) {
+        return;
+    }
+    const OwnedWeapon* const held = player.inventory.held();
+    const MovementState& movement = player.movement;
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    nx::Random random{player.randomSeed.value, kAnimationStream};
+    setPlayerAnimation(
+        player.animation, action,
+        PlayerAnimationContext{
+            .model = model->view,
+            .weaponAnimation =
+                held != nullptr
+                    ? std::string_view{m_content->weapons.weapon(held->weapon).models.playerAnimation}
+                    : std::string_view{},
+            .isDucked = movement.isDucked,
+            .isOnGround = movement.isOnGround,
+            .waterLevel = movement.waterLevel,
+            .speed = nx::UnitsPerSecond{std::hypot(movement.velocity.x, movement.velocity.y)},
+            .now = time.now,
+            .rate = time.rate},
+        random);
+}
+
+void Game::animateAfterCommand(Player& player, nx::Seconds frameTime) {
+    const PlayedModel* const model = m_models.characterModel(player.character);
+    if (model == nullptr) {
+        return;
+    }
+    if (player.status.isAlive()) {
+        const MovementState& movement = player.movement;
+        if (movement.velocity.x != 0.0F || movement.velocity.y != 0.0F) {
+            if (movement.isOnGround || movement.waterLevel > WaterLevel::Feet) {
+                animate(player, PlayerAction::Walk);
+            }
+        } else if (player.animation.gaitSequence.value != kFlyActivityNumber) {
+            animate(player, PlayerAction::Idle);
+        }
+        const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+        advanceFrame(player.animation.torso, time.now, time.rate);
+    }
+    processGait(player.animation.gait, *model->view, player.animation.gaitSequence, player.movement.origin,
+                bodyAnglesOf(player.view), frameTime, player.animation.torso.framerate);
 }
 
 void Game::makeSound(Player& player, const GameSound& sound) {
@@ -495,6 +602,8 @@ void Game::spawn(Player& player) {
     ++player.spawnsThisRound;
     player.inventory.spawned();
     player.turnedView = nx::EulerAngles{.yaw = point.yaw};
+    player.view = *player.turnedView;
+    spawnAnimation(player.animation);
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     player.breath.fill(time);
     player.timedHarms.spawned();

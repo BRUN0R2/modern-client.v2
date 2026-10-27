@@ -43,15 +43,21 @@ struct ModelFiles {
 [[nodiscard]] auto readModelFiles(const nx::assets::Vfs& vfs, std::string_view path, ModelTextures textures)
     -> nx::Result<std::unique_ptr<ModelFiles>, ModelFileError>;
 
-/// The decoded frames of sequence `sequence` of the model of `files`, from its file or its sequence
-/// group's. Errors: ReadFailed, Invalid.
-[[nodiscard]] auto animationOf(const nx::assets::Vfs& vfs, const ModelFiles& files,
-                               nx::assets::SequenceIndex sequence)
-    -> nx::Result<nx::assets::AnimationFrames, ModelFileError>;
-
 /// The decoded frames of every sequence of the model of `files`, by index, each sequence group's file
 /// read once. Errors: ReadFailed, Invalid.
 [[nodiscard]] auto animationsOf(const nx::assets::Vfs& vfs, const ModelFiles& files)
     -> nx::Result<std::vector<nx::assets::AnimationFrames>, ModelFileError>;
+
+/// A studio model read to be played: its files, and the decoded frames of each of its sequences, by
+/// index. What plays it points into them, which stay where they are as it moves.
+struct AnimatedModel {
+    std::unique_ptr<ModelFiles> files{};
+    std::vector<nx::assets::AnimationFrames> animations{};
+};
+
+/// Reads the model at `path` and, as `textures` says, its `*T.mdl` (readModelFiles), and the decoded
+/// frames of its sequences (animationsOf). Errors: ReadFailed, Invalid.
+[[nodiscard]] auto readAnimatedModel(const nx::assets::Vfs& vfs, std::string_view path,
+                                     ModelTextures textures) -> nx::Result<AnimatedModel, ModelFileError>;
 
 } // namespace cs

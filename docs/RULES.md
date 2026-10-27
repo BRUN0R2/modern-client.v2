@@ -48,14 +48,14 @@ inconsistency. The code stays understandable months later without historical con
 - Every commit is signed, on `main` and on the pull request branches: contributors sign their
   own commits (SSH or GPG), and GitHub signs the squash commit.
 - One pull request per finished logical change, with its tests, documentation and
-  [`TODO.md`](../TODO.md) updated **in the same change**: its squash commit is the change's
+  [`TODO.md`](TODO.md) updated **in the same change**: its squash commit is the change's
   only commit on `main`, so a fix found by the CI never lands as a separate commit.
 - Messages in English, as Conventional Commits, with a short imperative summary of the real
   change: `feat(console): add cvarlist, cmdlist and find`. The pull request title is the
   subject of the squash commit.
 - Every commit carries a Signed-off-by line (DCO), because of the clean room
   ([§12](#12-legal-and-clean-room)).
-- The root [`TODO.md`](../TODO.md) is the backlog: minimal, current and actionable. An item is
+- The [`docs/TODO.md`](TODO.md) is the backlog: minimal, current and actionable. An item is
   checked `[x]` only by the [definition of done](18-testing-and-quality.md#definition-of-done).
 - Every file has a license and a copyright notice in the REUSE format (SPDX header or
   `REUSE.toml`) and is stored with LF line endings.
@@ -136,7 +136,9 @@ inconsistency. The code stays understandable months later without historical con
 
 - camelCase across the project, including files and directories
   ([ADR-0013](adr/0013-camelcase-convention.md)); `PascalCase` for types and enumerators,
-  `kPascalCase` for constants and `m_camelCase` for private members.
+  `kPascalCase` for constants, and ordinary camelCase without a prefix for private members
+  ([ADR-0027](adr/0027-private-member-camelcase.md)). Apply it to new or renamed identifiers;
+  existing `m_` names are known inconsistencies, without unrelated renames.
 - Clear, descriptive names, without obscure abbreviations or artificial prefixes and
   suffixes. `snake_case` only where imposed from outside (cvars, commands, map classnames).
 
@@ -211,12 +213,10 @@ Performance is intentional, never accidental.
 
 - No Valve asset in the repository or in the binaries; tests use synthetic content
   (`devContent`).
-- Forbidden: reading or copying leaked GoldSrc code, and copying code from the Half-Life SDK,
-  ReHLDS, ReGameDLL_CS or any other incompatible source.
-- Behavior is reimplemented from public documentation and specifications, from observing the
-  game and from analyzing the data files themselves, and validated by parity tests.
-  Disassembling or decompiling Valve binaries is not observation and is outside the clean
-  room.
+- Follow the source policy of [20 §3](20-legal-and-licensing.md#3-clean-room), the single
+  authority for reference material and source permissions
+  ([ADR-0026](adr/0026-clean-room-source-policy.md)). Record behavioral references in code and
+  validate parity against the original.
 
 ## 13. Forbidden patterns
 

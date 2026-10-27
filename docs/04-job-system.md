@@ -246,7 +246,7 @@ from `nx.core`, with a named capacity and a typed error if they fill up
   once Tracy comes in as a dependency.
 - `JobSystem::stats()`: jobs executed, steals and times slept, per worker, and jobs
   executed by threads inside `wait`. A `jobs_stats` command that shows these numbers is
-  planned in `nx.console` ([TODO](../TODO.md)); the average time per priority comes with Tracy.
+  planned in `nx.console` ([TODO](TODO.md)); the average time per priority comes with Tracy.
 - `jobs_serial 1` mode (development, planned with `jobs_stats`) is equivalent to
   `jobs_workers 0`: without workers, each job runs inside `wait` on the waiting thread, in
   priority and submission order. Useful to isolate concurrency bugs. Today the same mode is

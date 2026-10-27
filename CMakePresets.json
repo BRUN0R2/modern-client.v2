@@ -10,6 +10,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports",
         "NX_BUILD_TESTS": "ON",
         "NX_WARNINGS_AS_ERRORS": "ON"
       }
@@ -33,6 +34,15 @@
       "displayName": "Windows · MSVC · Debug",
       "inherits": "windows-msvc",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "dev-windows-clang",
+      "displayName": "Windows · Clang · Debug",
+      "inherits": "windows-msvc",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     },
     {
       "name": "release-windows-msvc",
@@ -134,6 +144,7 @@
     }
   ],
   "buildPresets": [
+    { "name": "dev-windows-clang", "configurePreset": "dev-windows-clang" },
     { "name": "dev-windows-msvc", "configurePreset": "dev-windows-msvc" },
     { "name": "release-windows-msvc", "configurePreset": "release-windows-msvc" },
     { "name": "fuzz-windows-msvc", "configurePreset": "fuzz-windows-msvc" },
@@ -147,6 +158,7 @@
     { "name": "tsan-linux-clang", "configurePreset": "tsan-linux-clang" }
   ],
   "testPresets": [
+    { "name": "dev-windows-clang", "inherits": "test-base", "configurePreset": "dev-windows-clang" },
     {
       "name": "test-base",
       "hidden": true,

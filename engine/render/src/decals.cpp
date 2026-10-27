@@ -184,6 +184,12 @@ auto takesDecals(std::string_view name) noexcept -> bool {
     return kind == SurfaceKind::Opaque && !isConveyor;
 }
 
+DecalPool::DecalPool(const DecalPool&) = default;
+auto DecalPool::operator=(const DecalPool&) -> DecalPool& = default;
+DecalPool::DecalPool(DecalPool&&) noexcept = default;
+auto DecalPool::operator=(DecalPool&&) noexcept -> DecalPool& = default;
+DecalPool::~DecalPool() = default;
+
 DecalPool::DecalPool(const assets::BspView& map, std::vector<DecalFace> faces, std::size_t limit)
     : m_map{&map}, m_faces{std::move(faces)}, m_decalsOfFace(m_faces.size()) {
     expects(m_faces.size() == map.faces().size(), "DecalPool: a DecalFace for each face of the map");

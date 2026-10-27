@@ -26,8 +26,11 @@ nxAddModuleLibrary(csShared
         src/playerHarm.cppm
         src/use.cppm
         src/modelFiles.cppm
+        src/lightStyles.cppm
         src/gameContent.cppm
         src/gameMap.cppm
+        src/characters.cppm
+        src/playerAnimation.cppm
         src/snapshot.cppm
     SOURCES
         src/movement.cpp
@@ -47,8 +50,11 @@ nxAddModuleLibrary(csShared
         src/playerHarm.cpp
         src/use.cpp
         src/modelFiles.cpp
+        src/lightStyles.cpp
         src/gameContent.cpp
         src/gameMap.cpp
+        src/characters.cpp
+        src/playerAnimation.cpp
     DEPENDS
         nx::core
         nx::math

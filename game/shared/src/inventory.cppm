@@ -134,10 +134,22 @@ struct Blow {
     nx::Vec3 direction{};
 };
 
-/// What a weapon did in a frame: the shots it fired and the blows it struck.
+/// What a weapon did in a frame that its holder's model plays (the weapons' SetAnimation): it fired or
+/// struck (PLAYER_ATTACK1), or a reload began (PLAYER_RELOAD).
+enum class HolderMotion : std::uint8_t {
+    Attacked,
+    Reloaded,
+    Count,
+};
+
+using HolderMotions = nx::Flags<HolderMotion>;
+
+/// What a weapon did in a frame: the shots it fired, the blows it struck, and what its holder's model
+/// plays of it.
 struct WeaponAttacks {
     std::vector<Shot> shots{};
     std::vector<Blow> blows{};
+    HolderMotions motions{};
 };
 
 /// The weapons a player has, the rounds it carries besides their clips, and the one it holds.

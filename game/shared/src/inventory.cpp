@@ -202,6 +202,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         if (const std::optional<Shot> shot =
                 fireFollowUp(owned, weapon, shooter, command.number.value, time)) {
             shots.push_back(*shot);
+            attacks.motions.set(HolderMotion::Attacked);
         }
     }
     const bool isAttacking = command.buttons.test(Button::Attack);
@@ -211,6 +212,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     if (switches && owned.nextSecondary <= nx::Seconds{}) {
         if (weapon.melee) {
             strike(owned, weapon.melee->stab, owned.stabs, shooter, tracer, time, attacks.blows);
+            attacks.motions.set(HolderMotion::Attacked);
         } else {
             switchAlternate(owned, weapon, time);
         }
@@ -222,10 +224,12 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         }
         if (weapon.melee) {
             strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time, attacks.blows);
+            attacks.motions.set(HolderMotion::Attacked);
         } else if (firingOf(weapon, owned)) {
             if (const std::optional<Shot> shot =
                     fire(owned, weapon, shooter, command.number.value, time, random)) {
                 shots.push_back(*shot);
+                attacks.motions.set(HolderMotion::Attacked);
             }
         }
         return over();
@@ -234,6 +238,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     if (command.buttons.test(Button::Reload) && canReload && !m_isReloading &&
         owned.nextShot < nx::Seconds{}) {
         reload(owned, weapon, time, random);
+        attacks.motions.set(HolderMotion::Reloaded);
         return over();
     }
     if (isAttacking || switches) {
@@ -255,6 +260,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     const bool isUsable = !weapon.magazine || owned.clip > 0 || reserve(weapon.magazine->ammo) > 0;
     if (isUsable && canReload && owned.clip == 0 && owned.nextShot < nx::Seconds{}) {
         reload(owned, weapon, time, random);
+        attacks.motions.set(HolderMotion::Reloaded);
         return over();
     }
     idle(time, random);

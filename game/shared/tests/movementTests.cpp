@@ -80,10 +80,11 @@ struct ModelTrees {
         const HullChild duckedRoot = append(desc.clipNodes, std::move(model.ducked));
         const HullChild pointRoot = append(desc.pointNodes, std::move(model.point));
         desc.models.push_back(nx::collision::BrushModel{
-            .hulls = HullRoots{{pointRoot, standingRoot, Contents::Empty, duckedRoot}},
+            .hulls = HullRoots{{pointRoot, standingRoot, HullChild{Contents::Empty}, duckedRoot}},
             .bounds = model.bounds});
     }
-    const HullNode spare{.plane = 0, .children = {Contents::Empty, Contents::Empty}};
+    const HullNode spare{.plane = nx::collision::PlaneIndex{0},
+                         .children = {Contents::Empty, Contents::Empty}};
     desc.clipNodes.push_back(spare);
     desc.pointNodes.push_back(spare);
     auto hulls = BrushHulls::create(std::move(desc));

@@ -18,6 +18,9 @@ import nx.game;
 import nx.platform;
 import cs.shared;
 
+static_assert(std::equality_comparable<cs::ControllerSettings>);
+static_assert(std::equality_comparable<cs::HostageState>);
+
 #include "triangleModel.hpp"
 
 namespace {

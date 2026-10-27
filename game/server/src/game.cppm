@@ -32,13 +32,6 @@ enum class GameError : std::uint8_t {
     Unspawnable, ///< The map's entities or its hostages could not be made (cause).
 };
 
-/// A player of the game, by the order it joined in.
-struct PlayerIndex {
-    std::uint32_t value = 0;
-
-    [[nodiscard]] inline auto operator==(const PlayerIndex&) const noexcept -> bool = default;
-};
-
 /// A player's command for a tick.
 struct PlayerCommand {
     PlayerIndex player{};
@@ -53,11 +46,13 @@ namespace cs {
 /// is and how it moves, what it has, its weapons, its feet's and its breath's voices, the harms it keeps
 /// over time, its body among the world's entities, the buttons of its last command, whether the next
 /// round pays it, how often it spawned in the round, what its HUD was told last of the round's time,
-/// and what the tick did to it and made it make, which its client is told of. It joins dead, and lives
-/// once it spawns.
+/// and what the tick did to it and made it make, which its client is told of; the character it plays
+/// as, where it looks (pev->v_angle), how its model plays, and the seed of the command it runs, which what
+/// it does draws from (random_seed). It joins dead, and lives once it spawns.
 struct Player {
     Team team;
     AutoSwitch autoSwitch;
+    CharacterIndex character;
     MovementState movement{};
     PlayerStatus status;
     Inventory inventory;
@@ -72,6 +67,9 @@ struct Player {
     std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
     bool wasPlaced = false;                      ///< In the tick.
     std::vector<SoundMade> sounds{};             ///< In the tick, but its weapons', which they keep.
+    nx::EulerAngles view{};
+    PlayerAnimation animation{};
+    CommandNumber randomSeed{};
 };
 
 } // namespace cs
@@ -102,7 +100,8 @@ public:
     ~Game() = default;
 
     /// A player joins the game in `team`, with mp_startmoney, its weapons drawn as `autoSwitch` says (its
-    /// _cl_autowepswitch, until setAutoSwitch), as the original's JoiningThink lets it play: spawned at
+    /// _cl_autowepswitch, until setAutoSwitch), as one of its team's characters drawn at random, as the
+    /// original's appearance menu draws one to auto-select; as its JoiningThink lets it play: spawned at
     /// once when it may (canSpawn), given what a player of `team` spawns with; else watching from its
     /// team's next spawn point, dead, until the next round. Then the round's end is weighed
     /// (checkWinConditions): the first player of the second team commences the game.
@@ -180,6 +179,15 @@ private:
     [[nodiscard]] auto boxesMetBy(const Player& mover) -> std::vector<SolidBox>;
     /// `player` makes `sound` at the tick, at its own volume.
     void makeSound(Player& player, const GameSound& sound);
+    /// `player`'s model plays `action` (setPlayerAnimation, CBasePlayer::SetAnimation), as the player
+    /// stands and moves, by the weapon it holds, drawing from its command's seed; nothing for a character
+    /// whose model could not be read.
+    void animate(Player& player, PlayerAction action);
+    /// What `player`'s model plays as it ends a command of `frameTime` (PostThink): alive, walking while it
+    /// moves on the ground or in water, else standing (but, as the original compares the gait sequence
+    /// with ACT_FLY's number, while its legs play the sixth), its torso's frame advanced; dead or alive,
+    /// its gait (processGait, StudioProcessGait) turned by its view.
+    void animateAfterCommand(Player& player, nx::Seconds frameTime);
     /// The sounds `sounds`, made by `player`'s movement at the tick of `command` among `entities`, as it
     /// hears them: each step by what it steps on (GameMap::materialAlong, in the space of the entity it
     /// stands on), while mp_footsteps lets them sound; each splash.
@@ -241,6 +249,7 @@ private:
     nx::ecs::World m_world;
     std::vector<Player> m_players;
     std::vector<Impact> m_impacts; ///< Of the tick.
+    MapLightStyles lightStyles;    ///< Owned by this game; copied into each client's snapshot.
 };
 
 } // namespace cs

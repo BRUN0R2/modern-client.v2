@@ -95,15 +95,6 @@ auto readModelFiles(const Vfs& vfs, std::string_view path, ModelTextures texture
     return files;
 }
 
-auto animationOf(const Vfs& vfs, const ModelFiles& files, nx::assets::SequenceIndex sequence)
-    -> nx::Result<nx::assets::AnimationFrames, ModelFileError> {
-    auto groupBytes = groupBytesOf(vfs, files, files.view->sequences()[sequence.value].group.value, sequence);
-    if (!groupBytes) {
-        return std::unexpected{std::move(groupBytes.error())};
-    }
-    return decodedIn(files, sequence, *groupBytes);
-}
-
 auto animationsOf(const Vfs& vfs, const ModelFiles& files)
     -> nx::Result<std::vector<nx::assets::AnimationFrames>, ModelFileError> {
     const std::span<const nx::assets::StudioSequence> sequences = files.view->sequences();
@@ -128,6 +119,19 @@ auto animationsOf(const Vfs& vfs, const ModelFiles& files)
         animations.push_back(std::move(*frames));
     }
     return animations;
+}
+
+auto readAnimatedModel(const nx::assets::Vfs& vfs, std::string_view path, ModelTextures textures)
+    -> nx::Result<AnimatedModel, ModelFileError> {
+    auto files = readModelFiles(vfs, path, textures);
+    if (!files) {
+        return std::unexpected{std::move(files.error())};
+    }
+    auto animations = animationsOf(vfs, **files);
+    if (!animations) {
+        return std::unexpected{std::move(animations.error())};
+    }
+    return AnimatedModel{.files = std::move(*files), .animations = std::move(*animations)};
 }
 
 } // namespace cs

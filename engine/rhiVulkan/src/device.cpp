@@ -1088,8 +1088,8 @@ struct Validation {
     bool hasFeatures = false;
 };
 
-/// The validation of the Khronos layer, when it is installed and `available` has its messenger;
-/// none, with a warning, when it is not. Errors: those of the loader's enumerations.
+/// The requested validation of the Khronos layer and its messenger. Errors: ValidationUnavailable
+/// when either is absent; those of the loader's enumerations.
 [[nodiscard]] auto validationOf(std::span<const VkExtensionProperties> available)
     -> Result<Validation, RhiError> {
     auto installed = enumerate<VkLayerProperties>([](std::uint32_t* count, VkLayerProperties* values) {
@@ -1101,9 +1101,13 @@ struct Validation {
     const bool hasLayer = std::ranges::any_of(*installed, [](const VkLayerProperties& layer) {
         return textOf(layer.layerName, VK_MAX_EXTENSION_NAME_SIZE) == kValidationLayer;
     });
-    if (!hasLayer || !hasName(available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
-        log::warning(kLog, "Vulkan validation was asked for, but {} is not installed", kValidationLayer);
-        return Validation{};
+    if (!hasLayer) {
+        return fail(RhiError::ValidationUnavailable,
+                    std::format("requested Vulkan validation requires {}", kValidationLayer));
+    }
+    if (!hasName(available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+        return fail(RhiError::ValidationUnavailable,
+                    "requested Vulkan validation requires VK_EXT_debug_utils");
     }
     auto layerExtensions =
         enumerate<VkExtensionProperties>([](std::uint32_t* count, VkExtensionProperties* values) {

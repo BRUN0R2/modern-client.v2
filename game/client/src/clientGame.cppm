@@ -4,7 +4,8 @@
 /// The game as its player's client knows it (docs/07-simulation-and-physics.md, section 2.2;
 /// docs/08-networking.md): the user commands it makes, one a tick, and what its server tells it after
 /// each (PlayerSnapshot), which a frame shows between the last two ticks, by the time left over; the
-/// sounds, the marks and the turns of the view the ticks brought, kept until the frame takes them.
+/// sounds, the marks and the turns of the view the ticks brought, kept until the frame takes them; and
+/// the other players, whose legs and aim it turns itself each frame, as the original's client does.
 export module cs.client:clientGame;
 
 import std;
@@ -14,6 +15,7 @@ import nx.render;
 import cs.shared;
 import :input;
 import :mapModels;
+import :playerModels;
 import :viewModel;
 
 export namespace cs {
@@ -42,9 +44,9 @@ enum class CatchUp : std::uint8_t {
 /// The game as its player's client knows it.
 class ClientGame {
 public:
-    /// The game whose map's studio models are `models`, which must outlive it, as its server told of it
-    /// first, `first`.
-    ClientGame(const MapModels& models, PlayerSnapshot first);
+    /// The game whose map's studio models are `models` and whose players' are `players`, which must both
+    /// outlive it, as its server told of it first, `first`.
+    ClientGame(const MapModels& models, const PlayerModels& players, PlayerSnapshot first);
 
     /// Gives `elapsed` to the game, as `catchUp` says: how many ticks are due now, a command each
     /// (docs/07, section 2.2), the classic 100 a second.
@@ -76,12 +78,23 @@ public:
     /// The whole seconds the player's HUD shows of the round's time (RoundTimer::shownAt), at the
     /// moment of the game a frame shows.
     [[nodiscard]] auto roundTimeShown() const -> std::uint32_t;
-    /// Where the game puts its brush entities now, how high their waves rise, and which textures they
-    /// show: what the scene draws them by.
-    [[nodiscard]] auto placements() const -> std::vector<nx::render::ModelPlacement>;
+    /// Replaces `placements` with where the game puts its brush entities now, how high their waves rise,
+    /// and which textures they show. Keeps the destination's storage for the next frame.
+    void writePlacements(std::vector<nx::render::ModelPlacement>& placements) const;
     /// How the game's hostages show at the moment a frame shows (cs::shownHostageOf), those whose model
-    /// the client read: what the scene draws them by.
-    [[nodiscard]] auto hostages() const -> std::vector<ShownHostage>;
+    /// the client read, replacing `hostages` and keeping its storage for the next frame.
+    void writeHostages(std::vector<ShownHostage>& hostages) const;
+
+    /// The brightness of the server's light styles at `time` since the map started, including every
+    /// unset style. No pattern is inferred from local content.
+    [[nodiscard]] auto lightStylesAt(nx::Seconds time) const noexcept -> nx::render::LightStyleValues;
+
+    /// How the other players show in a frame of `frameTime`, at the moment it shows: each between where
+    /// the last two ticks left it; its legs and its aim turned by the frame (processGait), from its legs
+    /// facing its body as it stands when it is first seen; its torso's frame where the client estimates it
+    /// from what the server told; those whose model the client read. Replaces `players`, keeping its
+    /// storage for the next frame. Previous origins are indexed once per received snapshot.
+    void updatePlayers(nx::Seconds frameTime, std::vector<ShownPlayer>& players);
 
     /// The way the game last turned the player's view since the last call, as the original's fixangle
     /// turns it: the way the spawn point it last spawned at faces; none.
@@ -103,7 +116,12 @@ private:
     [[nodiscard]] auto numbered(UserCommand command) -> UserCommand;
 
     const MapModels* m_models;
-    PlayerSnapshot m_last;                         ///< What the server told last.
+    const PlayerModels* m_players;
+    nx::render::LightStyles lightStyles; ///< The last snapshot's patterns, owned here.
+    PlayerSnapshot m_last;               ///< What the server told last.
+    /// Previous snapshot's origins by PlayerIndex; none where that snapshot had no player.
+    std::vector<std::optional<nx::Vec3>> previousPlayerOrigins;
+    std::vector<std::optional<Gait>> m_gaits;      ///< By PlayerIndex: none for one not seen yet.
     nx::Vec3 m_previousEye{};                      ///< Before the last tick.
     nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.
     CommandNumber m_lastCommand{};                 ///< The number of the last command the player made.
