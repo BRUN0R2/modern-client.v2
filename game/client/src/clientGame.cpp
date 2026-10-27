@@ -69,6 +69,10 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
         lightStyles.setPatterns(snapshot.lightStyles.patterns);
     }
     previousPlayerOrigins.clear();
+    previousEntityOrigins.clear();
+    for (const EntityState& entity : m_last.entities) {
+        previousEntityOrigins.emplace(entity.entity, entity.origin);
+    }
     for (const PlayerEntityState& player : m_last.players) {
         if (player.player.value >= previousPlayerOrigins.size()) {
             previousPlayerOrigins.resize(std::size_t{player.player.value} + 1);
@@ -171,6 +175,28 @@ void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {
         }
         hostages.push_back(
             shownHostageOf(state, model->sequences()[state.sequence.value], shown, m_last.rate));
+    }
+}
+
+void ClientGame::writeEntities(const EntityCatalog& catalog, std::vector<ShownEntity>& entities) const {
+    const nx::GameTime shown = shownTime();
+    entities.clear();
+    entities.reserve(m_last.entities.size());
+    for (const EntityState& state : m_last.entities) {
+        const auto before = previousEntityOrigins.find(state.entity);
+        const nx::Vec3 origin = before == previousEntityOrigins.end()
+                                    ? state.origin
+                                    : nx::lerp(before->second, state.origin, m_pending / kCommandInterval);
+        const EntityType& type = catalog.type(state.type);
+        const auto& sequence =
+            catalog.model(type.model).files->view->sequences()[state.animation.sequence.value];
+        entities.push_back({.type = state.type,
+                            .origin = origin,
+                            .angles = state.angles,
+                            .sequence = state.animation.sequence,
+                            .frame = estimatedFrameOf(sequence, state.animation.frame,
+                                                      shown.since(state.animation.advancedAt, m_last.rate),
+                                                      state.animation.framerate)});
     }
 }
 

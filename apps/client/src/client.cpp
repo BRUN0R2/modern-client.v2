@@ -11,6 +11,8 @@ module app.client;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
+import nx.game;
 import nx.platform;
 import nx.console;
 import nx.assets;
@@ -22,6 +24,7 @@ import nx.ui;
 import cs.shared;
 import cs.server;
 import cs.client;
+import mod.zombies;
 
 namespace app {
 
@@ -195,6 +198,7 @@ struct Session {
     std::unique_ptr<cs::Game> game;
     cs::PlayerIndex player;
     cs::ClientGame client;
+    std::unique_ptr<zombies::Horde> horde{};
 };
 
 /// The map `name` of `content`, its client's level read, its game started by the
@@ -202,7 +206,7 @@ struct Session {
 /// drawn as `autoSwitch` says. Errors: CommandFailed, with the cause.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
                                 cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
-    -> nx::Result<Session, ConsoleError> {
+    -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
     const std::string failed = std::format("map {}", name);
     auto map = cs::GameMap::load(content.vfs, name);
     if (!map) {
@@ -218,11 +222,11 @@ struct Session {
     }
     const cs::PlayerIndex player = (*game)->join(cs::spawnTeam((*map)->map()), autoSwitch);
     cs::ClientGame known{(*level)->models(), (*level)->players(), (*game)->snapshotFor(player)};
-    return Session{.map = std::move(*map),
-                   .level = std::move(*level),
-                   .game = std::move(*game),
-                   .player = player,
-                   .client = std::move(known)};
+    return std::make_unique<Session>(Session{.map = std::move(*map),
+                                             .level = std::move(*level),
+                                             .game = std::move(*game),
+                                             .player = player,
+                                             .client = std::move(known)});
 }
 
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
@@ -263,6 +267,8 @@ private:
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    [[nodiscard]] auto zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    [[nodiscard]] auto removeZombies() -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
     [[nodiscard]] auto listSoundOutputs() -> nx::Result<void, ConsoleError>;
@@ -339,11 +345,16 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::GameContent> m_content;
+    std::filesystem::path dataFolder;
+    std::unique_ptr<nx::jobs::JobSystem> agentJobs;
+    std::optional<cs::EntityTypeIndex> zombieType{};
+    std::optional<zombies::Settings> zombieSettings{};
+    std::vector<cs::ShownEntity> shownEntities;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
-    std::optional<Session> m_session;               ///< The map played.
-    std::optional<Session> m_nextSession;           ///< The map `map` loaded, played from the next frame.
+    std::unique_ptr<Session> m_session;             ///< The map played.
+    std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
     cs::ViewModelEvents m_viewModelEvents;
@@ -422,6 +433,7 @@ auto Client::start() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::ContentUnavailable, std::move(install.error()));
     }
     const std::filesystem::path data = m_options->data.value_or(executable->parent_path() / "data");
+    dataFolder = data;
     auto content = cs::openGameContent(data, *install, cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
@@ -504,6 +516,17 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     for (auto&& registered :
          {add({.name = "map", .description = "Plays a map: map <name>."},
               [this](Console&, const CommandLine& line) { return mapCommand(line); }),
+          add({.name = "zombie_add", .description = "Spawns pursuing entity agents: zombie_add [count]."},
+              [this](Console&, const CommandLine& line) { return zombieCommand(line); }),
+          add({.name = "zombie_kick",
+               .description = "Removes this session's test zombies and their corpses."},
+              [this](Console&, const CommandLine& line) {
+                  if (!line.arguments().empty()) {
+                      return nx::Result<void, ConsoleError>{
+                          nx::fail(ConsoleError::InvalidArguments, "usage: zombie_kick")};
+                  }
+                  return removeZombies();
+              }),
           add({.name = "play", .description = "Plays a sound heard everywhere: play <sound>."},
               [this](Console&, const CommandLine& line) { return playCommand(line); }),
           add({.name = "playvol",
@@ -572,6 +595,90 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
+    return {};
+}
+
+auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
+    std::uint32_t count = 1;
+    if (line.arguments().size() > 1) {
+        return nx::fail(ConsoleError::InvalidArguments, "usage: zombie_add [count]");
+    }
+    if (!line.arguments().empty()) {
+        const std::string& text = line.arguments().front();
+        const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), count);
+        if (error != std::errc{} || end != text.data() + text.size() || count == 0) {
+            return nx::fail(ConsoleError::InvalidArguments, "usage: zombie_add [positive count]");
+        }
+    }
+    Session* session = m_nextSession ? &*m_nextSession : (m_session ? &*m_session : nullptr);
+    if (session == nullptr) {
+        return nx::fail(ConsoleError::CommandFailed, "zombie_add: load a map first");
+    }
+    if (!zombieSettings) {
+        constexpr std::string_view settingsFile = "entities/zombies.toml";
+        auto path = nx::assets::VfsPath::parse(settingsFile);
+        nx::invariant(path.has_value(), "Client: the zombie settings file is a valid VFS path");
+        auto bytes = m_content->vfs.readAll(*path);
+        if (!bytes) {
+            return nx::fail(ConsoleError::CommandFailed, std::string{settingsFile}, std::move(bytes.error()));
+        }
+        const std::string text = *bytes | std::views::transform([](std::byte value) {
+            return static_cast<char>(value);
+        }) | std::ranges::to<std::string>();
+        auto settings = zombies::readSettings(text, settingsFile);
+        if (!settings) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(settings.error()));
+        }
+        auto type = m_content->entities.add(m_content->vfs, settings->body, cs::ModelTextures::Read);
+        if (!type) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(type.error()));
+        }
+        zombieType = *type;
+        zombieSettings.emplace(std::move(*settings));
+    }
+    if (!session->horde) {
+        if (!agentJobs) {
+            auto jobs = nx::jobs::JobSystem::create({});
+            if (!jobs) {
+                return nx::fail(ConsoleError::CommandFailed, std::move(jobs.error()));
+            }
+            agentJobs = std::move(*jobs);
+        }
+        const auto file = dataFolder / "cstrike" / "navigation.toml";
+        auto text = nx::platform::readTextFile(file);
+        if (!text) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(text.error()));
+        }
+        auto navigation = nx::game::readNavigationData(*text, nx::platform::toUtf8(file));
+        if (!navigation) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(navigation.error()));
+        }
+        auto horde =
+            zombies::Horde::create(*agentJobs, *session->game, *navigation, *zombieType, *zombieSettings);
+        if (!horde) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
+        }
+        session->horde = std::move(*horde);
+    }
+    const cs::PlayerSnapshot player = session->game->snapshotFor(session->player);
+    const nx::Degrees yaw =
+        m_nextSession ? player.turnedView.value_or(nx::EulerAngles{}).yaw : m_camera.angles.yaw;
+    if (auto spawned = session->horde->spawn(player.player.origin, yaw, count); !spawned) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(spawned.error()));
+    }
+    m_console.print(std::format("{} zombie entities added", count));
+    return {};
+}
+
+auto Client::removeZombies() -> nx::Result<void, ConsoleError> {
+    Session* session = m_nextSession ? &*m_nextSession : (m_session ? &*m_session : nullptr);
+    if (session == nullptr || !session->horde) {
+        return nx::fail(ConsoleError::CommandFailed, "zombie_kick: no horde in this map");
+    }
+    if (auto cleared = session->horde->clear(); !cleared) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(cleared.error()));
+    }
+    m_console.print("zombie entities removed");
     return {};
 }
 
@@ -789,7 +896,7 @@ void Client::startNextSession() {
     }
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
-    m_session = std::exchange(m_nextSession, std::nullopt);
+    m_session = std::exchange(m_nextSession, nullptr);
     // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
     // to mp_decals as the original's client holds it when it enters one.
     if (auto held = nx::settings::enterMultiplayerGame(m_cvars->video); !held) {
@@ -811,7 +918,9 @@ void Client::playSession(nx::Seconds elapsed) {
     for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited); due > 0; --due) {
         const std::array commands{cs::PlayerCommand{
             .player = session.player, .command = session.client.nextCommand(*m_input, m_camera.angles)}};
-        session.game->tick(commands);
+        const std::vector<cs::EntityCommand> entityCommands =
+            session.horde ? session.horde->commands() : std::vector<cs::EntityCommand>{};
+        session.game->tick(commands, entityCommands);
         session.client.receive(session.game->snapshotFor(session.player));
     }
 }
@@ -1015,6 +1124,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
         m_changedWeapons.clear();
     }
+    if (m_scene) {
+        if (auto loaded = m_scene->loadEntities(list, m_content->entities, m_content->vfs); !loaded) {
+            return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+        }
+    }
     return {};
 }
 
@@ -1028,6 +1142,7 @@ auto Client::sessionView() -> cs::SceneView {
                                     .roll = m_camera.angles.roll + punch.roll};
     m_session->client.writePlacements(m_placements);
     m_session->client.writeHostages(m_hostages);
+    m_session->client.writeEntities(m_content->entities, shownEntities);
     const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
             .time = time,
@@ -1035,6 +1150,7 @@ auto Client::sessionView() -> cs::SceneView {
             .placements = m_placements,
             .hostages = m_hostages,
             .players = m_players,
+            .entities = shownEntities,
             .viewModel = m_viewPose,
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};

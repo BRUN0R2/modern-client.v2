@@ -38,3 +38,7 @@ nxAddBenchmark(nxBenchClient
         cs::client)
 
 target_compile_definitions(nxBenchClient PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")
+
+nxAddBenchmark(nxBenchNavigation
+    SOURCES navigationBench.cpp
+    DEPENDS nx::navigation nx::agents nx::ecs)

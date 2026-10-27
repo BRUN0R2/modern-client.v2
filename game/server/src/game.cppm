@@ -21,9 +21,11 @@ import nx.core;
 import nx.math;
 import nx.ecs;
 import nx.game;
+import nx.navigation;
 import cs.shared;
 import :gameCvars;
 import :gameModels;
+import :entityBodies;
 
 export namespace cs {
 
@@ -36,6 +38,12 @@ enum class GameError : std::uint8_t {
 struct PlayerCommand {
     PlayerIndex player{};
     UserCommand command{};
+};
+
+struct PerceptionTarget {
+    nx::ecs::Entity entity{};
+    nx::Vec3 origin{};
+    nx::Vec3 eye{};
 };
 
 } // namespace cs
@@ -111,11 +119,54 @@ public:
     /// at most for each, draws the weapon it selects and moves among the brush entities at the speed of
     /// the weapon it holds, and the doors it meets and the triggers it is in are touched; the use button
     /// going down uses what is in front, the weapon in hand fires, is reloaded or idles
-    /// (cs::Inventory::frame), and a hard landing hurts it; then the rules of the round play
+    /// (cs::Inventory::frame), and a hard landing hurts it; then command-driven entity bodies move
+    /// once and make their attacks, and the rules of the round play
     /// (thinkRules), what is due acts, and the pushers move, pushing the players' bodies. While the
     /// round is frozen a player moves at kFreezeSpeed at most, and its attack is held back; dead, it
     /// does nothing until it spawns again.
-    void tick(std::span<const PlayerCommand> commands);
+    void tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities = {});
+
+    /// A body of a type issued by this game's content catalog. Its origin/yaw must be finite and
+    /// its pitch/roll zero. Errors: InvalidPlacement. No player slot is allocated.
+    [[nodiscard]] auto createEntity(EntityTypeIndex type, nx::game::Transform placement)
+        -> nx::Result<nx::ecs::Entity, EntityError>;
+    /// Removes only a body issued by createEntity. Errors: UnknownEntity for a stale/non-body handle.
+    [[nodiscard]] auto removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError>;
+    /// Body states, including corpses, ordered by their complete generational handles.
+    [[nodiscard]] auto entities() -> std::vector<EntityState>;
+    /// Living player bodies a mod may consider; these are candidates, not already perceived facts.
+    [[nodiscard]] auto perceptionTargets() const -> std::vector<PerceptionTarget>;
+    /// Whether the solid trace from eye reaches this candidate's eye, leaving out the observer.
+    [[nodiscard]] auto sees(nx::ecs::Entity observer, nx::Vec3 eye, const PerceptionTarget& target) -> bool;
+    /// World and solid brush surfaces where they are now, without moving bodies.
+    [[nodiscard]] auto navigationGeometry() -> nx::navigation::Geometry;
+    /// The authoritative clock, independent of a command's requested duration.
+    [[nodiscard]] auto time() const -> nx::game::TickTime;
+
+    /// Native extension components are registered once per game, before attachment. A component
+    /// pointer is borrowed only until the next structural change of the world's entities.
+    template <nx::ecs::Component Component>
+    [[nodiscard]] auto registerEntityComponent(std::string_view name)
+        -> nx::Result<void, nx::ecs::ComponentError> {
+        auto registered = m_world.registerComponent<Component>(name);
+        if (!registered) {
+            return std::unexpected{std::move(registered.error())};
+        }
+        return {};
+    }
+    template <nx::ecs::Component Component>
+    [[nodiscard]] auto attachEntityComponent(nx::ecs::Entity entity, Component component)
+        -> nx::Result<void, EntityError> {
+        if (!m_world.isAlive(entity) || !m_world.has<EntityBody>(entity)) {
+            return nx::fail(EntityError::UnknownEntity, "an entity-body handle is required");
+        }
+        m_world.add(entity, std::move(component));
+        return {};
+    }
+    template <nx::ecs::Component Component>
+    [[nodiscard]] auto entityComponent(nx::ecs::Entity entity) -> Component* {
+        return m_world.has<EntityBody>(entity) ? m_world.get<Component>(entity) : nullptr;
+    }
 
     /// What `player`'s client is told after the last tick (PlayerSnapshot).
     [[nodiscard]] auto snapshotFor(PlayerIndex player) -> PlayerSnapshot;

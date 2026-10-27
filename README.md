@@ -47,6 +47,11 @@ and lava, and killed), with which the client, `next`, plays the maps alone, roun
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`docs/TODO.md`](docs/TODO.md).
 
+The native offline test mod can spawn pursuing, attacking zombies as generic world entities,
+using models from the user's own addon folder: `+map de_dust2 +zombie_add 3`;
+`zombie_kick` removes them. Setup, the entity/agent boundaries and the remaining work are in
+[Offline entity and agent tests](docs/offlineAgents.md).
+
 ## Building
 
 Requirements on Windows: Visual Studio 2026 with the "Desktop development with C++" workload

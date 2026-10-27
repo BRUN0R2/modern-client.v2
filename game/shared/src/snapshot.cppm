@@ -20,6 +20,7 @@ import :hostages;
 import :weapons;
 import :characters;
 import :lightStyles;
+import :entityCatalog;
 
 export namespace cs {
 
@@ -98,6 +99,7 @@ struct PlayerSnapshot {
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
+    std::vector<EntityState> entities{};
     MapLightStyles lightStyles{}; ///< The server's current patterns, evaluated by the client.
 };
 

@@ -13,3 +13,4 @@ export module cs.server;
 export import :gameCvars;
 export import :gameModels;
 export import :game;
+export import :entityBodies;

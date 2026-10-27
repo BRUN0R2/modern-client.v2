@@ -31,11 +31,12 @@ says where.
 | [0020](0020-in-house-ui-toolkit.md) | In-house retained UI toolkit for the menus, the screens and the console | Accepted |
 | [0021](0021-rook-amxx-names.md) | Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer | Accepted |
 | [0022](0022-plugin-api-primitives.md) | The plugin API as a few generic primitives in place of the old modules | Proposed |
-| [0023](0023-navigation.md) | Navigation meshes for every kind of agent, in `nx.navigation` | Accepted |
-| [0024](0024-agents.md) | Agents: one system for bots, monsters, bosses and every character the game moves | Accepted |
+| [0023](0023-navigation.md) | Navigation meshes for every kind of agent, in `nx.navigation` | Accepted, amended by 0028 |
+| [0024](0024-agents.md) | Agents: one system for bots, monsters, bosses and every character the game moves | Accepted, amended by 0028 |
 | [0025](0025-enhanced-rendering.md) | The enhanced look: physically based materials, the map's reflections, HDR and bloom, the same on every card | Proposed |
 | [0026](0026-clean-room-source-policy.md) | One clean room source policy, with consultation of public open-source references | Accepted |
 | [0027](0027-private-member-camelcase.md) | Private members use ordinary camelCase, without a prefix | Accepted |
+| [0028](0028-native-agent-test-mod.md) | Exercise generic entities and agents with an isolated native zombie test mod before Rook | Accepted |
 
 ## Template
 

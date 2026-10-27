@@ -110,6 +110,7 @@ auto Level::load(const GameContent& content, const GameMap& map)
     auto made = std::make_unique<Level>(CreateToken{});
     Level& level = *made;
     level.m_gameMap = &map;
+    level.entities = &content.entities;
     const nx::assets::BspView& bsp = map.map();
     level.m_skyLight = skyLightOf(bsp);
     level.m_lights = highlightLightsOf(bsp);

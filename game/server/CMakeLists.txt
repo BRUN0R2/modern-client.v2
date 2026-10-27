@@ -10,10 +10,12 @@ nxAddModuleLibrary(csServer
         src/gameCvars.cppm
         src/gameModels.cppm
         src/game.cppm
+        src/entityBodies.cppm
     SOURCES
         src/gameCvars.cpp
         src/gameModels.cpp
         src/game.cpp
+        src/entityBodies.cpp
     DEPENDS
         nx::core
         nx::math
@@ -21,6 +23,7 @@ nxAddModuleLibrary(csServer
         nx::assets
         nx::ecs
         nx::collision
+        nx::navigation
         nx::game
         cs::shared
     LATERAL

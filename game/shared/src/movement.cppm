@@ -24,6 +24,9 @@ import :weapons;
 
 export namespace cs {
 
+/// The least upward normal of a floor movement stands on; navigation must use the same slope.
+inline constexpr float kMinGroundNormalZ = 0.7F;
+
 /// The buttons of a user command, those movement reads and those the game does.
 enum class Button : std::uint8_t {
     Jump,
@@ -250,7 +253,8 @@ struct SolidBox {
 
 /// The entities of `world` solid as boxes (nx::game::BoxSolidity) that stop a player, in the world's
 /// order, as the original's engine lists them for it (SOLID_SLIDEBOX, SOLID_BBOX): a hostage.
-[[nodiscard]] auto solidBoxesOf(nx::ecs::World& world) -> std::vector<SolidBox>;
+[[nodiscard]] auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored = std::nullopt)
+    -> std::vector<SolidBox>;
 
 /// The body of a player in `state` that the game's pushers move: its box, standing or ducked, and the
 /// brush model it stands on; not pushed while it noclips or is dead.

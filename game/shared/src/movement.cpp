@@ -28,8 +28,6 @@ constexpr double kDuckDrop = double{kStandingHalfHeight - kDuckedHalfHeight};
 
 // The thresholds of the original's movement, each a behavior a player feels.
 
-/// Ground faces up at least this much; on a steeper plane a player slides.
-constexpr float kMinGroundNormalZ = 0.7F;
 /// Faster upwards, a player has left the ground.
 constexpr float kLiftOffSpeed = 180.0F;
 /// How far below a player the ground is looked for.
@@ -1298,10 +1296,14 @@ private:
 
 } // namespace
 
-auto solidBoxesOf(nx::ecs::World& world) -> std::vector<SolidBox> {
+auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored) -> std::vector<SolidBox> {
     std::vector<SolidBox> boxes;
-    nx::ecs::Query<const nx::game::Transform&, const nx::game::BoxSolidity&>{world}.forEach(
-        [&boxes](const nx::game::Transform& transform, const nx::game::BoxSolidity& solidity) {
+    nx::ecs::Query<nx::ecs::Entity, const nx::game::Transform&, const nx::game::BoxSolidity&>{world}.forEach(
+        [&boxes, ignored](nx::ecs::Entity entity, const nx::game::Transform& transform,
+                          const nx::game::BoxSolidity& solidity) {
+            if (ignored == entity) {
+                return;
+            }
             boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box});
         });
     return boxes;

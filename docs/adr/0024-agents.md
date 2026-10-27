@@ -1,6 +1,6 @@
 # ADR-0024 — Agents: one system for bots, monsters, bosses and every character the game moves
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0028](0028-native-agent-test-mod.md) for the first native test mod
 - **Date:** 2026-10-23
 
 ## Context

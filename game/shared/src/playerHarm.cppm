@@ -32,6 +32,7 @@ enum class PlayerHarmError : std::uint8_t {
 
 /// The kinds of harm a player takes, as the original's damage types tell them apart.
 enum class HarmKind : std::uint8_t {
+    Melee, ///< An entity body's melee strike, without a timed harm.
     Fall,  ///< A hard landing (DMG_FALL).
     Drown, ///< Out of air under water (DMG_DROWN), which the player keeps over time.
     Burn,  ///< In lava (DMG_BURN).

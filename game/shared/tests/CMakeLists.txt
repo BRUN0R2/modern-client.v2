@@ -6,12 +6,14 @@ nxAddTest(csSharedTests
         breathTests.cpp
         bulletsTests.cpp
         economyTests.cpp
+        entityCatalogTests.cpp
         footstepsTests.cpp
         gameMapTests.cpp
         hostagesTests.cpp
         inventoryTests.cpp
         lightStylesTests.cpp
         movementTests.cpp
+        navigationProfileTests.cpp
         playerAnimationTests.cpp
         playerHarmTests.cpp
         roundsTests.cpp
@@ -23,6 +25,7 @@ nxAddTest(csSharedTests
         cs::shared
         nx::data
         nx::game
+        nx::navigation
         nx::platform)
 
 # Tests read the repository's data/cstrike/ammo.toml, breath.toml, economy.toml, footsteps.toml,

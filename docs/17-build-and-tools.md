@@ -114,6 +114,7 @@ dialect is `/std:c++latest`.
 | Clang's GNU frontend on Windows still uses the Microsoft ABI and STL | `nxStdModule.cmake` selects the manifest by `CMAKE_CXX_SIMULATE_ID`, not by the frontend's command-line syntax. `dev-windows-clang` builds its own Clang module interfaces |
 | GoogleTest 1.18.0 declares its `std::any` printer even when the STL does not provide `std::any` without RTTI | The pinned `cmake/ports/gtest` overlay guards that specialization with `__cpp_lib_any`. Its version, upstream patches and license notices are retained; no test or compiler check is disabled |
 | Clang 23.1.4 crashes when an importer instantiates the implicit lifetime operations of `DecalPool`'s private slot type | `DecalPool` defines its copy, move and destruction operations in its owning implementation unit; its value semantics stay explicit and unchanged |
+| Clang 23.1.4 crashes mangling navigation metadata attached to the importing `nx.game` module | Navigation types own their `nx.meta::Description` specializations in `nx.navigation`; only the map adapter's metadata belongs to `nx.game` ([ADR-0028](adr/0028-native-agent-test-mod.md)) |
 | MSVC disables `std::println(std::ostream&, ...)` without exceptions (documented STL behavior) | Output through `std::println(stderr, ...)` or `std::fputs` (`FILE*`) |
 | The vcpkg toolchain puts the host triplet's tools (such as `slangc`) on `CMAKE_PROGRAM_PATH` only when `VCPKG_HOST_TRIPLET` is set; otherwise it searches the target triplet's, where host tools are not | The presets set `VCPKG_HOST_TRIPLET` (`x64-windows`, `x64-linux`: the defaults vcpkg uses anyway) |
 | After linking each program, the vcpkg toolchain runs `vcpkg z-applocal` on it to copy the DLLs it needs beside it; the project's triplets build static libraries, so there are none, and on Windows runners the step sometimes finds the program still held open and fails the build ("The process cannot access the file because it is being used by another process") | **Fixed at the cause:** the Windows presets set `VCPKG_APPLOCAL_DEPS` off, so no step runs that has nothing to copy |
@@ -202,7 +203,7 @@ modules. Today `NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS`,
 
 ## 5. Dependencies
 
-In use today: toml++, SDL3 (on Linux with its X11 and Wayland backends only: its default IBus
+In use today: Recast/Detour (`recastnavigation`, behind `nx.navigation`), toml++, SDL3 (on Linux with its X11 and Wayland backends only: its default IBus
 support would build D-Bus and its dependencies from source, for an input method nothing uses yet),
 Vulkan Headers, volk, Vulkan Memory Allocator, Slang (its compiler, as a host tool), FreeType
 (without its optional features: no zlib, bzip2, PNG or Brotli, which only compressed or colour

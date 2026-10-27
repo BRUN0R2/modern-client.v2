@@ -72,3 +72,5 @@ The project's actionable backlog lives in [`TODO.md`](TODO.md).
 | `next` / `nextds` | Client and dedicated server executables |
 | `rookc` / `rook` | The Rook language's own compiler and CLI |
 | `nxbake` | Asset import and baking tool |
+
+The native development scenario is documented in [Offline entity and agent tests](offlineAgents.md).

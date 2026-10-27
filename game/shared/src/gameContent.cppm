@@ -21,6 +21,7 @@ import :playerHarm;
 import :use;
 import :characters;
 import :lightStyles;
+import :entityCatalog;
 
 export namespace cs {
 
@@ -53,6 +54,7 @@ struct GameContent {
     Characters characters;
     TextureMaterials materials;
     WorldLightStyles lightStyles;
+    EntityCatalog entities{}; ///< Append-only definitions loaded explicitly by the host or a mod.
 };
 
 /// The user's own content of the game in `userFolder` (nx::platform::userDirectory): its

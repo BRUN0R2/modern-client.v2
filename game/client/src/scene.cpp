@@ -176,8 +176,11 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         level.models().posed(m_models, view.time, view.hostages, m_light, level.skyLight(), styles);
     const PosedModels players =
         level.players().posed(m_playerModels, view.players, m_light, level.skyLight(), styles);
+    const PosedModels entities =
+        entityModels.posed(level.entityCatalog(), view.entities, m_light, level.skyLight(), styles);
     std::vector<nx::render::StudioInstance> instances = models.instances;
     std::ranges::copy(players.instances, std::back_inserter(instances));
+    std::ranges::copy(entities.instances, std::back_inserter(instances));
     if (auto prepared =
             m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = instances});
         !prepared) {
@@ -321,6 +324,14 @@ auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(flashModels.error()));
     }
     std::ranges::move(*flashModels, std::back_inserter(m_flashModels));
+    return {};
+}
+
+auto Scene::loadEntities(nx::rhi::CommandList& commands, const EntityCatalog& catalog,
+                         const nx::assets::Vfs& vfs) -> nx::Result<void, SceneError> {
+    if (auto loaded = entityModels.load(catalog, m_studio, vfs, commands); !loaded) {
+        return nx::fail(SceneError::CreateFailed, "an entity model", std::move(loaded.error()));
+    }
     return {};
 }
 
