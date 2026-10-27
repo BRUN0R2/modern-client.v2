@@ -95,7 +95,7 @@ with fallbacks behind facades.
 |----------|-----------|------|---------------------|
 | MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, every test passing |
 | GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module, every test passing, C++26 reflection (`-freflection`) checking the `nx.meta` descriptions. Windows (MinGW) to be validated |
-| Clang 23.1.4 | Linux, Windows | Windows build, `clang-tidy`, `clangd`; sanitizers on Linux | **Validated locally on Windows** with Microsoft STL, Debug and every test passing; `dev-windows-clang` runs in CI. Linux remains to be validated |
+| Clang 23.1.4 | Linux, Windows | Windows build, `clang-tidy`, `clangd`; sanitizers on Linux | **Validated on Windows locally and in CI** with Microsoft STL, Debug and every test passing (`dev-windows-clang`). Linux remains to be validated |
 
 C++26 features available in MSVC 14.51 (according to the *feature-test macros*): **none**
 of those listed in [02 §1.1](02-coding-standards.md#11-adopted-features). All of them use
@@ -131,7 +131,7 @@ dialect is `/std:c++latest`.
 | Preset | Use | Status |
 |--------|-----|--------|
 | `dev-windows-msvc` / `release-windows-msvc` | Development and release on Windows (Ninja + MSVC) | Validated |
-| `dev-windows-clang` | Development and static analysis on Windows (Ninja + Clang, Microsoft STL) | Build and tests in CI |
+| `dev-windows-clang` | Development and static analysis on Windows (Ninja + Clang, Microsoft STL) | Validated locally and in CI |
 | `dev-linux-gcc` / `release-linux-gcc` | Development and release on Linux with GCC | `dev-linux-gcc` validated in CI. `release-linux-gcc` to be validated |
 | `dev-linux-clang` | Development with `clangd`/`clang-tidy` | To be validated |
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
