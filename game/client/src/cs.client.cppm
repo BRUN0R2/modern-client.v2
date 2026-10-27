@@ -23,6 +23,7 @@ export import :mapSprites;
 export import :posedModels;
 export import :mapModels;
 export import :playerModels;
+export import :entityModels;
 export import :modelMaterials;
 export import :viewModel;
 export import :muzzleFlash;
