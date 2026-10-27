@@ -94,8 +94,9 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         return decision;
     }
     invariant(corridor.has_value(), "Brain: a planned corridor or a reported path error");
-    std::ignore = corridor->moveAgent(query, feet);
-    if (length(feet - goal) <= rules.arrivalDistance.value()) {
+    std::ignore = corridor->moveTarget(query, goal);
+    const Vec3 walkablePosition = corridor->moveAgent(query, feet);
+    if (length(walkablePosition - corridor->target()) <= rules.arrivalDistance.value()) {
         if (!selected->isVisible) {
             const ecs::Entity investigated = selected->observation.entity;
             std::erase_if(memory, [investigated](const Memory& record) {

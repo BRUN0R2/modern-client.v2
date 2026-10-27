@@ -87,6 +87,22 @@ TEST(CorridorTest, TheTargetMovesAlongTheMesh) {
     EXPECT_LT(nx::test::distanceAcross(corridor->target(), target), 0.01F);
 }
 
+TEST(CorridorTest, AChangedTargetAndItsLastCornerStayOnTheFloor) {
+    constexpr float airborneHeight = 32.0F;
+    const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
+    NavigationQuery query{mesh};
+    auto corridor =
+        Corridor::plan(query, {.from = {.x = 100.0F, .y = 100.0F}, .to = {.x = 924.0F, .y = 100.0F}});
+    ASSERT_TRUE(corridor.has_value());
+    const float floorHeight = corridor->target().z;
+    const Vec3 moved =
+        corridor->moveTarget(query, {.x = 924.0F, .y = 300.0F, .z = floorHeight + airborneHeight});
+    EXPECT_FLOAT_EQ(moved.z, floorHeight);
+    const auto corners = corridor->corners(query, 2);
+    ASSERT_FALSE(corners.empty());
+    EXPECT_FLOAT_EQ(corners.back().z, floorHeight);
+}
+
 TEST(CorridorTest, NoCorridorJoinsAPointOffTheMesh) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

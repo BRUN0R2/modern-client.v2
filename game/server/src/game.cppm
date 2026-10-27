@@ -44,6 +44,7 @@ struct PerceptionTarget {
     nx::ecs::Entity entity{};
     nx::Vec3 origin{};
     nx::Vec3 eye{};
+    nx::Vec3 feet{}; ///< The active body's lower center, independent of its stance.
 };
 
 } // namespace cs
@@ -135,6 +136,7 @@ public:
     /// Body states, including corpses, ordered by their complete generational handles.
     [[nodiscard]] auto entities() -> std::vector<EntityState>;
     /// Living player bodies a mod may consider; these are candidates, not already perceived facts.
+    /// Feet come from each active collision hull, independently of its current eye height.
     [[nodiscard]] auto perceptionTargets() const -> std::vector<PerceptionTarget>;
     /// Whether the solid trace from eye reaches this candidate's eye, leaving out the observer.
     [[nodiscard]] auto sees(nx::ecs::Entity observer, nx::Vec3 eye, const PerceptionTarget& target) -> bool;

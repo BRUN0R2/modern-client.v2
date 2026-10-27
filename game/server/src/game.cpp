@@ -763,8 +763,11 @@ auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
     std::vector<PerceptionTarget> targets;
     for (const Player& player : m_players) {
         if (player.status.isAlive()) {
-            targets.push_back(
-                {.entity = player.body, .origin = player.movement.origin, .eye = eyeOf(player.movement)});
+            const nx::Aabb& hull = player.movement.isDucked ? kDuckedBox : kStandingBox;
+            targets.push_back({.entity = player.body,
+                               .origin = player.movement.origin,
+                               .eye = eyeOf(player.movement),
+                               .feet = player.movement.origin + nx::Vec3{.z = hull.min.z}});
         }
     }
     return targets;

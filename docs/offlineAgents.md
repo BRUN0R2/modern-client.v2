@@ -58,7 +58,11 @@ Player-versus-player hit groups, armor and combat rules remain the gameplay back
 
 Sight uses the configured range, field of view, per-agent candidate budget and the server's
 solid traces. A brain pursues a visible target or its last observed position, never an unseen
-current position. Memory expires or is forgotten after investigating that place. A failed
+current position. The server supplies the target's feet from its active standing/crouched hull,
+separately from its eye position; the mod does not infer the target's stance. Memory expires
+or is forgotten after reaching the corridor's walkable destination, including when the target
+was last seen airborne. Small observation changes update the corridor's destination without a full
+search; retargeting keeps both the destination and its last corner on the walkable floor. A failed
 path yields `Blocked` with its navigation error; it does not enable direct movement. Navigation
 is built once per horde/map, in jobs. Agent commands and body updates have deterministic order.
 The horde removes its owned bodies, including their borrowed corridors, before destroying its

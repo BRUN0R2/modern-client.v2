@@ -39,7 +39,7 @@ public:
     /// Moves the agent towards `position` as far as the mesh lets it go straight from where it was: the
     /// corridor drops the polygons it left and takes those it entered. Returns where it is.
     auto moveAgent(NavigationQuery& query, Vec3 position) -> Vec3;
-    /// Moves the target likewise. Returns where it is.
+    /// Moves the target likewise, sampling its floor height after clamping. Returns where it is.
     auto moveTarget(NavigationQuery& query, Vec3 target) -> Vec3;
 
     /// The next corners, at most `count`, the agent steers to along the corridor, the target last when it
