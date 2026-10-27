@@ -103,6 +103,25 @@ TEST(CorridorTest, AChangedTargetAndItsLastCornerStayOnTheFloor) {
     EXPECT_FLOAT_EQ(corners.back().z, floorHeight);
 }
 
+TEST(CorridorTest, ATargetPushedAgainstAWallStaysOnItsBoundaryAndFloor) {
+    constexpr Vec3 kFrom{.x = 100.0F, .y = 100.0F};
+    constexpr Vec3 kInitialTarget{.x = 400.0F, .y = 100.0F};
+    constexpr Vec3 kBlockedTarget{.x = 520.0F, .y = 100.0F};
+    constexpr float kAirborneHeight = 32.0F;
+    constexpr float kBoundaryX = 464.0F;
+    const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
+    NavigationQuery query{mesh};
+    auto corridor = Corridor::plan(query, {.from = kFrom, .to = kInitialTarget});
+    ASSERT_TRUE(corridor.has_value());
+    const float floorHeight = corridor->target().z;
+    const Vec3 moved = corridor->moveTarget(query, kBlockedTarget + Vec3{.z = floorHeight + kAirborneHeight});
+    EXPECT_NEAR(moved.x, kBoundaryX, kTolerance);
+    EXPECT_FLOAT_EQ(moved.z, floorHeight);
+    const auto corners = corridor->corners(query, 2);
+    ASSERT_FALSE(corners.empty());
+    EXPECT_EQ(corners.back(), moved);
+}
+
 TEST(CorridorTest, NoCorridorJoinsAPointOffTheMesh) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

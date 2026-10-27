@@ -492,18 +492,15 @@ auto Corridor::moveTarget(NavigationQuery& query, Vec3 target) -> Vec3 {
         const bool moved = detourState->corridor.moveTargetPosition(
             wanted.data(), query.detourState->query.get(), &query.detourState->filter);
         invariant(moved, "Corridor::moveTarget: its last polygon belongs to the immutable mesh");
-        float height = 0.0F;
-        const dtStatus sampled = query.detourState->query->getPolyHeight(
-            detourState->corridor.getLastPoly(), detourState->corridor.getTarget(), &height);
-        invariant(dtStatusSucceed(sampled), "Corridor::moveTarget: its clamped target is on its polygon");
-        // Detour retains the requested height. Its setter also takes the path, so reuse the query's
-        // scratch buffer rather than aliasing the setter's memcpy source with its destination.
-        if (height != detourState->corridor.getTarget()[1]) {
-            std::array<float, kCoordinates> grounded{};
-            std::ranges::copy(
-                std::span<const float, kCoordinates>{detourState->corridor.getTarget(), kCoordinates},
-                grounded.begin());
-            grounded[1] = height;
+        const std::span<const float, kCoordinates> clamped{detourState->corridor.getTarget(), kCoordinates};
+        std::array<float, kCoordinates> grounded{};
+        // Surface movement can end exactly on an edge, where getPolyHeight requires a strictly
+        // interior point. Projection covers the boundary too and supplies its detailed floor height.
+        const dtStatus projected = query.detourState->query->closestPointOnPoly(
+            detourState->corridor.getLastPoly(), clamped.data(), grounded.data(), nullptr);
+        invariant(dtStatusSucceed(projected), "Corridor::moveTarget: its final polygon belongs to the mesh");
+        // Its setter also takes the path: reuse query scratch rather than aliasing memcpy's buffers.
+        if (!std::ranges::equal(grounded, clamped)) {
             const std::span path{detourState->corridor.getPath(),
                                  narrow<std::size_t>(detourState->corridor.getPathCount())};
             invariant(path.size() <= query.detourState->polygons.size(),

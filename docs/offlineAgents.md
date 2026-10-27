@@ -16,14 +16,25 @@ It does not implement Counter-Strike's player bots or claim CSO gameplay parity.
 3. Build `next` as [17](17-build-and-tools.md) describes, then run:
 
    ```powershell
-   .\build\dev-windows-msvc\bin\next.exe +mp_freezetime 0 +map de_dust2 +zombie_add 3
+   .\build\dev-windows-msvc\bin\next.exe +mp_freezetime 0 +map de_dust2 +zombie_add 64
    ```
 
-In the console, `zombie_add [count]` places a row on walkable ground ahead of the player.
-An occupied or unreachable placement rejects the batch and removes everything that batch
-created. `spawnBatchLimit` limits one command, not the number of entities in the world.
+In the console, `zombie_add [count]` uses the map's terrorist spawn points as the base,
+independently of the player's position. It selects clear, reachable base points and polygon
+corners/centers, nearest the base first and within `spawnRadius` of a projected base point.
+`spawnSpacing` separates them from live entity bodies horizontally. Bodies face the nearest
+base point's map yaw. A map without terrorist spawn points reports an error.
+Occupied or disconnected candidates are excluded. If there are too few valid positions,
+the whole batch is rolled back. `spawnBatchLimit` limits one command, not the world population;
+the example allows 64 per command within a radius of 512 units. Existing local configurations
+must replace `spawnDistance` with `spawnRadius` and raise `spawnBatchLimit` to use 64.
 `zombie_kick` removes the mod's bodies and corpses. Changing maps destroys them too.
 `give ak47`, `give m4a1`, or the id of a local weapon gives a weapon to test against them.
+For an isolated offline weapon test, `next --data <folder> --user-folder <folder>` selects
+its data catalog and a separate settings/addons folder. Its loadouts may give the test weapons
+on every spawn, with `weapon_<id>` binds in that folder's configuration. Proprietary models,
+sounds and private study profiles stay outside the repository; unsupported special-mode data
+is rejected, not silently ignored.
 
 The example names the CSO model `models/player/zombi/zombi.mdl` and its `idle1`, `walk`,
 `ref_shoot_knife` and `death1` sequences. It distributes none of its files. The configuration
@@ -61,8 +72,10 @@ solid traces. A brain pursues a visible target or its last observed position, ne
 current position. The server supplies the target's feet from its active standing/crouched hull,
 separately from its eye position; the mod does not infer the target's stance. Memory expires
 or is forgotten after reaching the corridor's walkable destination, including when the target
-was last seen airborne. Small observation changes update the corridor's destination without a full
-search; retargeting keeps both the destination and its last corner on the walkable floor. A failed
+was last seen airborne. Targets are projected onto the final polygon, including its boundary,
+so wall-clamped and airborne targets retain a valid floor height. Small observation changes
+update the corridor's destination without a full search; retargeting keeps both the destination
+and its last corner on the walkable floor. A failed
 path yields `Blocked` with its navigation error; it does not enable direct movement. Navigation
 is built once per horde/map, in jobs. Agent commands and body updates have deterministic order.
 The horde removes its owned bodies, including their borrowed corridors, before destroying its
@@ -78,7 +91,12 @@ certification of every subsystem or of gameplay parity against the original.
 
 Regression tests cover nonfinite and oversized navigation dimensions before integer
 conversions, memory expiry, bounded memory, blocked paths, hit-group damage, death,
-retired handles, player melee damage/cooldowns, local weapon hits and cleanup.
+retired handles, player melee damage/cooldowns, local weapon hits and cleanup. Spawn tests
+place 64 bodies in a base too narrow for a straight row, enforce their horizontal spacing
+and roll back a partially placed batch when the reachable area cannot hold it. A corridor test
+pushes an airborne target against a wall and checks its boundary position and floor height.
+Base tests also reject missing points and prevent a full small base from spilling into the
+rest of the map or removing previously created bodies.
 Navigation determinism compares the same mesh with 0, 1, 3 and 15 workers.
 `nxBenchNavigation` measures navigation and pure agent memory/decisions for 64, 256 and
 1024 agents; it does not represent the cost of the full render/physics frame.

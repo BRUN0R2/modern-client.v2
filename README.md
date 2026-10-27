@@ -48,7 +48,8 @@ The architecture documentation is in [`docs/`](docs/README.md), the project rule
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`docs/TODO.md`](docs/TODO.md).
 
 The native offline test mod can spawn pursuing, attacking zombies as generic world entities,
-using models from the user's own addon folder: `+map de_dust2 +zombie_add 3`;
+using models from the user's own addon folder: `+map de_dust2 +zombie_add 64` places them
+around the map's terrorist base; `--data <folder> --user-folder <folder>` isolates a private test;
 `zombie_kick` removes them. Setup, the entity/agent boundaries and the remaining work are in
 [Offline entity and agent tests](docs/offlineAgents.md).
 
