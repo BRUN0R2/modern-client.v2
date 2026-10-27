@@ -80,6 +80,8 @@ TEST_F(EntityBodyTest, ALoopingAttackReturnsToRestWhenItsIntervalEnds) {
     auto definition = nx::test::entityDefinition();
     definition.id = "loopingAttack";
     definition.attackSequence = "idle";
+    // The animation outlasts the cooldown: finishing its cycle cannot release the body yet.
+    definition.meleeInterval = nx::tickLengthOf(nx::game::tickTimeOf(world).rate);
     auto looping = catalog.add(*files, definition, cs::ModelTextures::Skipped);
     ASSERT_TRUE(looping.has_value());
     auto made = cs::spawnEntityBody(world, *hulls, *looping, {});
