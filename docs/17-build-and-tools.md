@@ -94,7 +94,7 @@ with fallbacks behind facades.
 | Compiler | Platforms | Role | Status (2026-10-26) |
 |----------|-----------|------|---------------------|
 | MSVC 14.51 (Visual Studio 2026 18.x) | Windows | Development toolchain on Windows | **Validated**: CMake 4.3.1 and 4.4.4, Ninja, Debug and Release, every test passing |
-| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module and every test passing. Native C++26 reflection (`-freflection`), previously missed by the capability probe, awaits CI validation. Windows (MinGW) to be validated |
+| GCC 16+ | Linux, Windows (MinGW-w64 UCRT) | Reference for static reflection and contracts | **Validated on Linux by CI**: GCC 16.2.0 (`gcc:16` container), libstdc++'s `std` module and every test passing. Native C++26 reflection (`-freflection`) checks the `nx.meta` descriptions in both Debug and TSan jobs. Windows (MinGW) to be validated |
 | Clang 23.1.4 | Linux, Windows | Windows build, `clang-tidy`, `clangd`; sanitizers on Linux | **Validated on Windows locally and in CI** with Microsoft STL, Debug and every test passing (`dev-windows-clang`). Linux remains to be validated |
 
 C++26 features available in MSVC 14.51 (according to the *feature-test macros*): **none**
