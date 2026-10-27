@@ -325,6 +325,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ## M3 — Local game
 
 ### Simulation
+- [x] Bounded offline test sessions: 64-body zombie batches around map-defined terrorist spawn points, deterministic clear/reachable candidates, horizontal separation, atomic rollback, boundary-safe corridor targets, and an explicit `next --user-folder` for private weapon data/settings
 - [x] Generic humanoid entity bodies and an isolated native zombie test mod: validated data/models, animated hitboxes, local weapon damage/death, server-timed melee, bounded sight/memory with stance-aware feet/eyes, navigation corridors and generational cleanup ([Offline entity and agent tests](offlineAgents.md), [ADR-0028](adr/0028-native-agent-test-mod.md)); no player slots or Counter-Strike-specific zombie rules
 - [x] Client hot-path optimization: reusable frame-extraction storage, player origins indexed per snapshot, hostage models indexed by spawn, no discarded aim pose, one read per view-model sequence group and bounded enhanced-light selection; `nxBenchClient` and regression tests ([18](18-testing-and-quality.md#performance))
 - [x] The client, `next` (`app.client`): the original's command line (`-basedir`, `+map de_dust2`), the player's settings and binds, `map`, `noclip` and `quit`, and a map played alone in a window (`cs.client`: `Level`, `Scene`, out of `nxview`)

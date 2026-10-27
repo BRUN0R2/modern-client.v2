@@ -23,6 +23,57 @@ constexpr std::string_view walkingProfile = "player";
 [[nodiscard]] auto feetOf(nx::Vec3 origin) -> nx::Vec3 {
     return origin + nx::Vec3{.z = cs::kStandingBox.min.z};
 }
+[[nodiscard]] auto distanceSquaredAcross(nx::Vec3 first, nx::Vec3 second) -> double {
+    const double x = double{first.x} - double{second.x};
+    const double y = double{first.y} - double{second.y};
+    return (x * x) + (y * y);
+}
+struct SpawnAnchor {
+    nx::Vec3 feet{};
+    nx::Degrees yaw{};
+};
+[[nodiscard]] auto distanceSquared(nx::Vec3 first, nx::Vec3 second) -> double {
+    const double z = double{first.z} - double{second.z};
+    return distanceSquaredAcross(first, second) + (z * z);
+}
+[[nodiscard]] auto nearestAnchor(std::span<const SpawnAnchor> base, nx::Vec3 point) -> const SpawnAnchor& {
+    return *std::ranges::min_element(base, {}, [point](const SpawnAnchor& anchor) -> double {
+        return distanceSquared(anchor.feet, point);
+    });
+}
+[[nodiscard]] auto spawnCandidates(const nx::navigation::NavigationMesh& mesh,
+                                   std::span<const SpawnAnchor> base) -> std::vector<nx::Vec3> {
+    auto outline = mesh.outline();
+    std::vector<nx::Vec3> candidates = std::move(outline.corners);
+    candidates.reserve(candidates.size() + outline.polygons.size() + base.size());
+    for (const auto& polygon : outline.polygons) {
+        const auto corners = std::span{candidates}.subspan(polygon.firstCorner, polygon.cornerCount);
+        double x = 0;
+        double y = 0;
+        double z = 0;
+        for (const nx::Vec3 corner : corners) {
+            x += double{corner.x};
+            y += double{corner.y};
+            z += double{corner.z};
+        }
+        const auto count = static_cast<double>(corners.size());
+        candidates.push_back({.x = static_cast<float>(x / count),
+                              .y = static_cast<float>(y / count),
+                              .z = static_cast<float>(z / count)});
+    }
+    for (const SpawnAnchor& anchor : base) {
+        candidates.push_back(anchor.feet);
+    }
+    std::ranges::sort(candidates, [](nx::Vec3 first, nx::Vec3 second) -> bool {
+        return std::tie(first.x, first.y, first.z) < std::tie(second.x, second.y, second.z);
+    });
+    const auto duplicates = std::ranges::unique(candidates);
+    candidates.erase(duplicates.begin(), duplicates.end());
+    std::ranges::stable_sort(candidates, {}, [base](nx::Vec3 point) -> double {
+        return distanceSquared(point, nearestAnchor(base, point).feet);
+    });
+    return candidates;
+}
 [[nodiscard]] auto rulesOf(const Settings& settings) -> nx::agents::Rules {
     return {.memoryLifetime = settings.memoryLifetime,
             .attackDistance = settings.body.meleeReach,
@@ -43,7 +94,7 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
     if (!positive(read->sightRange.value()) || !positive(read->fieldOfView.value()) ||
         read->fieldOfView.value() > fullTurnDegrees || !positive(read->memoryLifetime.count()) ||
         !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
-        !positive(read->spawnDistance.value()) || !positive(read->spawnSpacing.value()) ||
+        !positive(read->spawnRadius.value()) || !positive(read->spawnSpacing.value()) ||
         read->memoryLimit == 0 || read->perceptionBudget == 0 || read->spawnBatchLimit == 0) {
         return nx::fail(
             ZombieError::InvalidData,
@@ -95,35 +146,87 @@ auto Horde::create(nx::jobs::JobSystem& jobs, cs::Game& game, const nx::game::Na
     return std::make_unique<Horde>(CreateToken{}, type, std::move(settings), std::move(*mesh), game);
 }
 
-auto Horde::spawn(nx::Vec3 origin, nx::Degrees yaw, std::uint32_t count) -> nx::Result<void, ZombieError> {
+auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
+    -> nx::Result<void, ZombieError> {
     cs::Game& game = *owner;
     if (count == 0 || count > settings.spawnBatchLimit) {
         return nx::fail(ZombieError::SpawnFailed,
                         std::format("count must be from 1 to {}", settings.spawnBatchLimit));
     }
+    if (base.empty()) {
+        return nx::fail(ZombieError::SpawnFailed, "the selected base has no map spawn points");
+    }
+    std::vector<SpawnAnchor> anchors;
+    anchors.reserve(base.size());
+    for (const cs::SpawnPoint& spawn : base) {
+        if (!std::isfinite(spawn.origin.x) || !std::isfinite(spawn.origin.y) ||
+            !std::isfinite(spawn.origin.z) || !std::isfinite(spawn.yaw.value())) {
+            return nx::fail(ZombieError::SpawnFailed, "finite base origins and yaws are required");
+        }
+        auto feet = query.nearestPoint(feetOf(spawn.origin));
+        if (!feet) {
+            return nx::fail(ZombieError::SpawnFailed, "a base spawn point is not near walkable ground",
+                            std::move(feet.error()));
+        }
+        anchors.push_back({.feet = *feet, .yaw = spawn.yaw});
+    }
     std::vector<nx::ecs::Entity> born;
-    const nx::AngleVectors axes = nx::angleVectors({.yaw = yaw});
-    for (std::uint32_t index = 0; index < count; ++index) {
-        const float sideways = (static_cast<float>(index) - static_cast<float>(count - 1) / 2.0F) *
-                               settings.spawnSpacing.value();
-        const nx::Vec3 requested =
-            origin + axes.forward * settings.spawnDistance.value() + axes.right * sideways;
-        auto point = query.nearestPoint(feetOf(requested));
-        nx::Result<nx::ecs::Entity, cs::EntityError> made =
-            point ? game.createEntity(type, {.origin = *point - nx::Vec3{.z = cs::kStandingBox.min.z},
-                                             .angles = {.yaw = nx::Degrees{yaw.value() + halfTurnDegrees}}})
-                  : nx::Result<nx::ecs::Entity, cs::EntityError>{
-                        nx::fail(cs::EntityError::InvalidPlacement, std::move(point.error()))};
+    std::vector<nx::Vec3> occupied;
+    for (const auto& body : game.entities()) {
+        if (body.health > nx::HitPoints{}) {
+            occupied.push_back(body.origin);
+        }
+    }
+    const auto rollback = [&game, &born] -> void {
+        for (const nx::ecs::Entity entity : born) {
+            const auto removed = game.removeEntity(entity);
+            nx::invariant(removed.has_value(), "Horde: rollback owns every newly created body");
+        }
+    };
+    const double radius = double{settings.spawnRadius.value()};
+    const double spacing = double{settings.spawnSpacing.value()};
+    for (const nx::Vec3 candidate : spawnCandidates(mesh, anchors)) {
+        auto point = query.nearestPoint(candidate);
+        if (!point) {
+            rollback();
+            return nx::fail(ZombieError::SpawnFailed, std::move(point.error()));
+        }
+        const SpawnAnchor& anchor = nearestAnchor(anchors, *point);
+        if (distanceSquared(*point, anchor.feet) > radius * radius ||
+            std::ranges::any_of(occupied, [&](nx::Vec3 other) -> bool {
+                return distanceSquaredAcross(*point, other) < spacing * spacing;
+            })) {
+            continue;
+        }
+        auto reachable = query.isReachable(anchor.feet, *point);
+        if (!reachable) {
+            rollback();
+            return nx::fail(ZombieError::SpawnFailed, std::move(reachable.error()));
+        }
+        if (!*reachable) {
+            continue;
+        }
+        auto made = game.createEntity(
+            type, {.origin = *point - nx::Vec3{.z = cs::kStandingBox.min.z}, .angles = {.yaw = anchor.yaw}});
         if (!made) {
-            for (const nx::ecs::Entity entity : born) {
-                const auto removed = game.removeEntity(entity);
-                nx::invariant(removed.has_value(), "Horde: rollback owns every newly created body");
+            if (made.error().code == cs::EntityError::InvalidPlacement) {
+                continue;
             }
-            return nx::fail(ZombieError::SpawnFailed,
-                            "the batch was rolled back; aim at open walkable ground",
-                            std::move(made.error()));
+            rollback();
+            return nx::fail(ZombieError::SpawnFailed, std::move(made.error()));
         }
         born.push_back(*made);
+        occupied.push_back(*point);
+        if (born.size() == count) {
+            break;
+        }
+    }
+    if (born.size() != count) {
+        rollback();
+        return nx::fail(
+            ZombieError::SpawnFailed,
+            std::format("only {} of {} clear reachable positions were found; the batch was rolled back",
+                        born.size(), count));
     }
     for (const nx::ecs::Entity entity : born) {
         auto attached = game.attachEntityComponent(

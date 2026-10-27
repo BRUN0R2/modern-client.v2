@@ -30,7 +30,7 @@ struct Settings {
     std::uint32_t memoryLimit = 0;
     std::uint32_t perceptionBudget = 0;
     std::uint32_t spawnBatchLimit = 0;
-    nx::HammerUnits spawnDistance{};
+    nx::HammerUnits spawnRadius{};
     nx::HammerUnits spawnSpacing{};
 };
 
@@ -60,9 +60,12 @@ public:
     Horde(Horde&&) = delete;
     auto operator=(Horde&&) -> Horde& = delete;
 
-    /// All placements succeed or the bodies created by this call are rolled back. Errors: SpawnFailed
-    /// for an invalid count or a failed navigation/body placement.
-    [[nodiscard]] auto spawn(nx::Vec3 origin, nx::Degrees yaw, std::uint32_t count)
+    /// Searches the base's spawn points and unique polygon corners/centers, nearest the base first.
+    /// Bodies stay within spawnRadius of a projected base point, reachable from its nearest point,
+    /// and keep spawnSpacing from live entity bodies horizontally. They face the nearest point's yaw.
+    /// All placements succeed or this call is rolled back. Errors: SpawnFailed for an invalid count,
+    /// an invalid query or insufficient clear reachable positions. Occupied candidates are excluded.
+    [[nodiscard]] auto spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
         -> nx::Result<void, ZombieError>;
     /// Samples sight and advances brains once, immediately before the owner's next tick.
     [[nodiscard]] auto commands() -> std::vector<cs::EntityCommand>;
@@ -95,7 +98,7 @@ struct nx::meta::Description<zombies::Settings> {
         nx::meta::field<&zombies::Settings::memoryLimit>("memoryLimit"),
         nx::meta::field<&zombies::Settings::perceptionBudget>("perceptionBudget"),
         nx::meta::field<&zombies::Settings::spawnBatchLimit>("spawnBatchLimit"),
-        nx::meta::field<&zombies::Settings::spawnDistance>("spawnDistance"),
+        nx::meta::field<&zombies::Settings::spawnRadius>("spawnRadius"),
         nx::meta::field<&zombies::Settings::spawnSpacing>("spawnSpacing"),
     };
 };

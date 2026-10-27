@@ -46,4 +46,14 @@ TEST(ClientCommandLineTest, WhatIsNotAnOptionIsRefused) {
     EXPECT_FALSE(parse({"+sensitivity", "-1"}).has_value()) << "`-1` ends the command, as in the original";
 }
 
+TEST(ClientCommandLineTest, ALocalUserFolderIsExplicitAndDoesNotBecomeABootCommand) {
+    const auto options = parse({"--user-folder", "offline test/user", "+map", "de_dust2"});
+    ASSERT_TRUE(options.has_value());
+    EXPECT_EQ(options->userFolder, std::filesystem::path{"offline test/user"});
+    EXPECT_EQ(options->bootCommands, "map de_dust2\n");
+    EXPECT_FALSE(parse({})->userFolder.has_value());
+    EXPECT_FALSE(parse({"--user-folder"}).has_value());
+    EXPECT_FALSE(parse({"--user-folder", "one", "--user-folder", "two"}).has_value());
+}
+
 } // namespace

@@ -22,6 +22,9 @@ namespace {
     if (word == "--data") {
         return &options.data;
     }
+    if (word == "--user-folder") {
+        return &options.userFolder;
+    }
     return nullptr;
 }
 

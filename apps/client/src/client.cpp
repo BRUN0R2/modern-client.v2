@@ -516,7 +516,8 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     for (auto&& registered :
          {add({.name = "map", .description = "Plays a map: map <name>."},
               [this](Console&, const CommandLine& line) { return mapCommand(line); }),
-          add({.name = "zombie_add", .description = "Spawns pursuing entity agents: zombie_add [count]."},
+          add({.name = "zombie_add",
+               .description = "Spawns entity agents at the terrorist base: zombie_add [count]."},
               [this](Console&, const CommandLine& line) { return zombieCommand(line); }),
           add({.name = "zombie_kick",
                .description = "Removes this session's test zombies and their corpses."},
@@ -660,10 +661,8 @@ auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<v
         }
         session->horde = std::move(*horde);
     }
-    const cs::PlayerSnapshot player = session->game->snapshotFor(session->player);
-    const nx::Degrees yaw =
-        m_nextSession ? player.turnedView.value_or(nx::EulerAngles{}).yaw : m_camera.angles.yaw;
-    if (auto spawned = session->horde->spawn(player.player.origin, yaw, count); !spawned) {
+    if (auto spawned = session->horde->spawn(session->map->spawnPoints(cs::Team::Terrorists), count);
+        !spawned) {
         return nx::fail(ConsoleError::CommandFailed, std::move(spawned.error()));
     }
     m_console.print(std::format("{} zombie entities added", count));
@@ -1197,11 +1196,17 @@ auto Client::finish() -> nx::Result<void, ClientError> {
 } // namespace
 
 auto runClient(const ClientOptions& options) -> nx::Result<void, ClientError> {
-    auto userFolder = nx::platform::userDirectory();
-    if (!userFolder) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(userFolder.error()));
+    std::filesystem::path userFolder;
+    if (options.userFolder) {
+        userFolder = *options.userFolder;
+    } else {
+        auto directory = nx::platform::userDirectory();
+        if (!directory) {
+            return nx::fail(ClientError::SettingsUnavailable, std::move(directory.error()));
+        }
+        userFolder = std::move(*directory);
     }
-    Client client{options, *userFolder};
+    Client client{options, userFolder};
     if (auto started = client.start(); !started) {
         return started;
     }

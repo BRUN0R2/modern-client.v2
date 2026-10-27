@@ -256,7 +256,7 @@ Rules:
 | Target | Description |
 |--------|-------------|
 | `nextLauncher` | Launcher: updates itself and the client, then starts `next` ([21](21-launcher-and-updates.md)). Planned (M4) |
-| `next` | Client (the listen server comes with `cs.server`). Today (`app.client`): the original's command line (`-basedir <folder>`, and the `+` commands it runs after the player's config files: `next +map de_dust2`), the player's settings and binds, and a map the `map` command loads, played alone in a window, the player walking with what its team spawns with, firing and reloading as the binds ask; the console's window (`toggleconsole`), the weapons' commands and sounds; `noclip` flies, `quit` or Escape ends it; `--data` names the project's `data/` folder, `--validation` |
+| `next` | Client (the listen server comes with `cs.server`). Today (`app.client`): the original's command line (`-basedir <folder>`, and the `+` commands it runs after the player's config files: `next +map de_dust2`), the player's settings and binds, and a map the `map` command loads, played alone in a window, the player walking with what its team spawns with, firing and reloading as the binds ask; the console's window (`toggleconsole`), the weapons' commands and sounds; `noclip` flies, `quit` or Escape ends it; `--data` names the project's `data/` folder, `--user-folder` selects a separate player settings/addons folder for local tests, `--validation` |
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |

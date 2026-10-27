@@ -11,8 +11,8 @@ arrivalDistance = 8.0
 replanDistance = 24.0
 memoryLimit = 32
 perceptionBudget = 8
-spawnBatchLimit = 32
-spawnDistance = 192.0
+spawnBatchLimit = 64
+spawnRadius = 512.0
 spawnSpacing = 64.0
 
 [body]
