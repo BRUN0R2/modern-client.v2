@@ -192,10 +192,13 @@ private:
 [[nodiscard]] auto boxContentsAt(const Aabb& box, Vec3 point) noexcept -> Contents;
 
 /// A box turned and placed as a bone places its hitbox: `bounds` along the axes of `placement`, the
-/// columns of its rotation, about its translation.
+/// columns of its rotation, about its translation; each face moved out by `grownBy`'s share along it, the
+/// sum of each of its parts times its axis's along the face's normal, none negative (R_StudioHull's
+/// size: a player's half a unit each way, for sv_clienttrace).
 struct PlacedBox {
     Mat3x4 placement{};
     Aabb bounds{};
+    Vec3 grownBy{};
 };
 
 /// What a trace through hitboxes met: the trace, and the hitbox that gave it, by its index.

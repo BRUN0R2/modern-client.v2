@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The console's weapon commands (docs/10, section 7.5): a weapon named in any case, made, set,
-// replaced and given through the console.
+// replaced and given through the console, and armor given by its item.
 
 #include <gtest/gtest.h>
 
@@ -88,6 +88,10 @@ public:
             .give = [this](WeaponIndex weapon) -> nx::Result<void, cs::WeaponActionError> {
                 given.push_back(weapon);
                 return {};
+            },
+            .giveArmor = [this](cs::ArmorKind kind) -> nx::Result<void, cs::WeaponActionError> {
+                armor.push_back(kind);
+                return {};
             }};
         nx::invariant(cs::registerWeaponCommands(console, weapons, actions).has_value(),
                       "the weapon commands");
@@ -105,6 +109,7 @@ public:
     cs::WeaponCatalog weapons;
     std::vector<WeaponIndex> selected;
     std::vector<WeaponIndex> given;
+    std::vector<cs::ArmorKind> armor;
 };
 
 TEST(WeaponCommandsTest, AWeaponIsNamedByItsIdOrClassnameInAnyCase) {
@@ -141,6 +146,16 @@ TEST(WeaponCommandsTest, AWeaponIsMadeSetReplacedAndGivenThroughTheConsole) {
         << "the replacement is the inventory's to make";
     EXPECT_EQ(game.selected, (std::vector<WeaponIndex>{*drakar}));
     EXPECT_EQ(game.weapons.madeFor(kAk), *drakar);
+    EXPECT_TRUE(game.output.failures.empty());
+}
+
+TEST(WeaponCommandsTest, GiveGivesArmorByTheClassnameOfItsItem) {
+    WeaponConsole game;
+    game.run("give item_kevlar");
+    game.run("give item_assaultsuit");
+    EXPECT_EQ(game.armor,
+              (std::vector<cs::ArmorKind>{cs::ArmorKind::Kevlar, cs::ArmorKind::KevlarAndHelmet}));
+    EXPECT_TRUE(game.given.empty());
     EXPECT_TRUE(game.output.failures.empty());
 }
 

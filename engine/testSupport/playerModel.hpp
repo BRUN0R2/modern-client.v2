@@ -5,9 +5,10 @@
 
 // Test helper: an MDL v10 file shaped as a player's model, built byte by byte: the bones a player's
 // model has its gait split at (Bip01, Bip01 Pelvis, Bip01 Spine, and a leg, Bip01 L Thigh, a child of
-// the pelvis), and the sequences a test gives, each with its label, activity, frames, blends and how far
-// it moves the model; each blend of a sequence holds each bone at a position along X of its own, the
-// whole sequence long. Include after `import std;` and `import nx.math;`.
+// the pelvis), its hitboxes, all on the pelvis, the shield's last, and the sequences a test gives, each
+// with its label, activity, frames, blends and how far it moves the model; each blend of a sequence holds
+// each bone at a position along X of its own, the whole sequence long. Include after `import std;` and
+// `import nx.math;`.
 
 #include "triangleModel.hpp" // the writing of an MDL's records
 
@@ -24,6 +25,40 @@ enum class PlayerBone : std::uint8_t {
 inline constexpr std::array<std::string_view, 4> kPlayerBoneNames{"Bip01", "Bip01 Pelvis", "Bip01 Spine",
                                                                   "Bip01 L Thigh"};
 inline constexpr std::array<std::int32_t, 4> kPlayerBoneParents{-1, 0, 1, 1};
+
+/// A hitbox of a player's model: the bone it is on, its hit group (HITGROUP_*) and its bounds in the
+/// bone's space.
+struct PlayerHitbox {
+    PlayerBone bone{};
+    std::int32_t group = 0;
+    Aabb bounds{};
+};
+
+/// Where the pelvis of a player's model stands along X from its origin in the gait sequences of
+/// playerSequences (its root's place, kGaitRoot), and its hitboxes, all on it, as a player's of
+/// Counter-Strike stand about its origin, the eye of one standing at 17 units up: the head about the eye,
+/// the chest, the stomach, the left leg below, the left arm at its left (+Y), and last a shield's that
+/// takes in all of them, which a player without one has none of (SV_HullForStudioModel).
+inline constexpr std::array<PlayerHitbox, 6> kPlayerHitboxes{{
+    {.bone = PlayerBone::Pelvis,
+     .group = 1,
+     .bounds = {.min = {.x = -6.0F, .y = -6.0F, .z = 14.0F}, .max = {.x = 6.0F, .y = 6.0F, .z = 24.0F}}},
+    {.bone = PlayerBone::Pelvis,
+     .group = 2,
+     .bounds = {.min = {.x = -6.0F, .y = -6.0F, .z = 0.0F}, .max = {.x = 6.0F, .y = 6.0F, .z = 14.0F}}},
+    {.bone = PlayerBone::Pelvis,
+     .group = 3,
+     .bounds = {.min = {.x = -6.0F, .y = -6.0F, .z = -10.0F}, .max = {.x = 6.0F, .y = 6.0F, .z = 0.0F}}},
+    {.bone = PlayerBone::Pelvis,
+     .group = 6,
+     .bounds = {.min = {.x = -6.0F, .y = -6.0F, .z = -36.0F}, .max = {.x = 6.0F, .y = 6.0F, .z = -10.0F}}},
+    {.bone = PlayerBone::Pelvis,
+     .group = 4,
+     .bounds = {.min = {.x = -3.0F, .y = 6.0F, .z = 0.0F}, .max = {.x = 3.0F, .y = 12.0F, .z = 14.0F}}},
+    {.bone = PlayerBone::Pelvis,
+     .group = 8,
+     .bounds = {.min = {.x = -30.0F, .y = -30.0F, .z = -36.0F}, .max = {.x = 30.0F, .y = 30.0F, .z = 36.0F}}},
+}};
 
 /// A sequence of a PlayerModel: its label, its activity (ACT_*), its frames, its looping, how far it
 /// moves the model along X, and each blend's positions of the bones along X, by PlayerBone.
@@ -73,6 +108,15 @@ struct PlayerSequence {
         }
     }
     table(140, kBoneCount, boneRecords);
+
+    Bytes hitboxRecords;
+    for (const PlayerHitbox& hitbox : kPlayerHitboxes) {
+        append(hitboxRecords, static_cast<std::int32_t>(hitbox.bone));
+        append(hitboxRecords, hitbox.group);
+        appendVec3(hitboxRecords, hitbox.bounds.min);
+        appendVec3(hitboxRecords, hitbox.bounds.max);
+    }
+    table(156, kPlayerHitboxes.size(), hitboxRecords);
 
     Bytes groups;
     appendName(groups, "default", 32);
@@ -151,8 +195,9 @@ inline constexpr std::int16_t kGaitRoot = 5;
 inline constexpr std::int16_t kGaitThigh = 7;
 
 /// Sequences of the shape of a Counter-Strike player's model, by their index in it: its first ones, the
-/// legs' gait sequences by their activities (ACT_*), the swimming ones at 8 and 9, then the deaths, and
-/// the torso's aiming, shooting and reloading ones of the knife and of a pistol held one-handed.
+/// legs' gait sequences by their activities (ACT_*), the swimming ones at 8 and 9, then the deaths, the
+/// torso's aiming, shooting and reloading ones of the knife and of a pistol held one-handed, and the
+/// flinches.
 [[nodiscard]] inline auto playerSequences() -> std::vector<PlayerSequence> {
     const std::vector<std::array<std::int16_t, 4>> gait{{kGaitRoot, 0, 0, kGaitThigh}};
     return {
@@ -173,6 +218,8 @@ inline constexpr std::int16_t kGaitThigh = 7;
         {.label = "death2", .activity = 37, .frames = 5, .loops = false},
         {.label = "death3", .activity = 38, .frames = 5, .loops = false},
         {.label = "chestshot", .activity = 67, .frames = 5, .loops = false},
+        {.label = "left", .activity = 36, .frames = 5, .loops = false},
+        {.label = "right", .activity = 36, .frames = 5, .loops = false},
         {.label = "crouch_die", .frames = 5, .loops = false},
         {.label = "ref_aim_knife", .blends = aimBlends()},
         {.label = "crouch_aim_knife", .blends = aimBlends()},
@@ -182,6 +229,8 @@ inline constexpr std::int16_t kGaitThigh = 7;
         {.label = "crouch_aim_onehanded", .blends = aimBlends()},
         {.label = "ref_shoot_onehanded", .frames = 5, .loops = false, .blends = aimBlends()},
         {.label = "ref_reload_onehanded", .frames = 5, .loops = false, .blends = aimBlends()},
+        {.label = "gut_flinch", .frames = 5, .loops = false, .blends = aimBlends()},
+        {.label = "head_flinch", .frames = 5, .loops = false, .blends = aimBlends()},
     };
 }
 

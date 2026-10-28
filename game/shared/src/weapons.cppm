@@ -282,6 +282,9 @@ struct MeleeTiming {
 struct MeleeAttack {
     nx::HammerUnits reach{};
     nx::Damage damage{}; ///< What it deals what it meets (its TraceAttack's), before what that makes of it.
+    /// Its damage times this in a player's back: one it meets facing the way it strikes, more than 0.8
+    /// of its body's forward along the ground (the stab's KnifeBackStabMultiplier); none: no more there.
+    std::optional<float> backMultiplier{};
     std::vector<std::uint32_t> missSequences{};
     std::vector<std::uint32_t> hitSequences{};
     MeleeTiming miss{};
@@ -311,6 +314,15 @@ struct WeaponAlternate {
     std::optional<WeaponView> view{};
     std::optional<WeaponFiring> firing{};
     std::optional<WeaponReload> reload{};
+};
+
+/// What a weapon's attacks do to a player they hurt, as CBasePlayer::TakeDamage weighs its attacker's
+/// weapon in hand (m_pActiveItem): the armor's ratio, the share of a damage the player's health takes
+/// where its armor covers it, times `armorRatio` (flRatio); and whether a hit but in the legs makes a
+/// player that does not duck flinch large, knocked back (ShouldDoLargeFlinch).
+struct WeaponHarm {
+    double armorRatio = 1.0;
+    bool largeFlinch = false;
 };
 
 /// The models a weapon is seen by.
@@ -344,6 +356,7 @@ struct Weapon {
     std::optional<WeaponReload> reload{};       ///< None: it is not reloaded.
     std::optional<WeaponAlternate> alternate{}; ///< None: `+attack2` switches nothing.
     std::optional<WeaponMelee> melee{};         ///< None: it has no melee attacks.
+    WeaponHarm harm{};
 };
 
 /// A weapon of a catalog, by its place in it, which it keeps.
@@ -708,6 +721,7 @@ struct nx::meta::Description<cs::MeleeAttack> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::MeleeAttack::reach>("reach", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::MeleeAttack::damage>("damage", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::MeleeAttack::backMultiplier>("backMultiplier", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::MeleeAttack::missSequences>("missSequences"),
         nx::meta::field<&cs::MeleeAttack::hitSequences>("hitSequences"),
         nx::meta::field<&cs::MeleeAttack::miss>("miss"),
@@ -742,6 +756,15 @@ struct nx::meta::Description<cs::WeaponAlternate> {
 };
 
 template <>
+struct nx::meta::Description<cs::WeaponHarm> {
+    static constexpr std::string_view kName = "cs::WeaponHarm";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponHarm::armorRatio>("armorRatio", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponHarm::largeFlinch>("largeFlinch"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponModels> {
     static constexpr std::string_view kName = "cs::WeaponModels";
     static constexpr std::tuple kFields{
@@ -771,5 +794,6 @@ struct nx::meta::Description<cs::Weapon> {
         nx::meta::field<&cs::Weapon::reload>("reload"),
         nx::meta::field<&cs::Weapon::alternate>("alternate"),
         nx::meta::field<&cs::Weapon::melee>("melee"),
+        nx::meta::field<&cs::Weapon::harm>("harm"),
     };
 };

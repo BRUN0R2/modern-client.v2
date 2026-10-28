@@ -8,12 +8,13 @@
 /// team eliminated and begun by Game Commencing as both teams have players, spawning again at their
 /// team's spawn points in turn as each starts, paid by them (cs::TeamAccounts); their feet sound by what
 /// they walk on (cs::StepVoice); their hard landings, drowning and harmful water hurt them, and kill them
-/// (cs.shared:playerHarm), as ReGameDLL_CS's CBasePlayer and CHalfLifeMultiplay play them (GPL,
-/// consulted: docs/20 section 3). After each tick it tells each player's client what it needs
-/// (PlayerSnapshot).
+/// (cs.shared:playerHarm); their shots and knives meet each other's hitboxes (cs.server:playerBodies),
+/// hurt them by where they meet them and through their armor, and pay for a kill; as ReGameDLL_CS's
+/// CBasePlayer and CHalfLifeMultiplay play them (GPL, consulted: docs/20 section 3). After each tick it
+/// tells each player's client what it needs (PlayerSnapshot).
 ///
-/// Today: the players hurt by the world; their attacks on each other, their hit groups and armor come
-/// with the players' models (TODO.md).
+/// Today: the players hurt by the world and by each other's shots and knives; the grenades, the bomb, the
+/// blood and the scores come with them (TODO.md).
 export module cs.server:game;
 
 import std;
@@ -26,6 +27,7 @@ import cs.shared;
 import :gameCvars;
 import :gameModels;
 import :entityBodies;
+import :playerBodies;
 
 export namespace cs {
 
@@ -57,7 +59,9 @@ namespace cs {
 /// round pays it, how often it spawned in the round, what its HUD was told last of the round's time,
 /// and what the tick did to it and made it make, which its client is told of; the character it plays
 /// as, where it looks (pev->v_angle), how its model plays, and the seed of the command it runs, which what
-/// it does draws from (random_seed). It joins dead, and lives once it spawns.
+/// it does draws from (random_seed); the hit group an attack last met it in (m_LastHitGroup), and the
+/// share of its speed a hit slowed it down to (m_flVelocityModifier). It joins dead, and lives once it
+/// spawns.
 struct Player {
     Team team;
     AutoSwitch autoSwitch;
@@ -79,6 +83,8 @@ struct Player {
     nx::EulerAngles view{};
     PlayerAnimation animation{};
     CommandNumber randomSeed{};
+    std::uint32_t lastHitGroup = 0;
+    float speedShare = 1.0F;
 };
 
 } // namespace cs
@@ -183,6 +189,9 @@ public:
     /// Sets `player`'s _cl_autowepswitch, as its client tells the server of it: whether a weapon it is
     /// given heavier than the one it holds is drawn.
     void setAutoSwitch(PlayerIndex player, AutoSwitch autoSwitch);
+    /// Gives `player` armor of `kind`, as an item of it does (wearArmor): item_kevlar's and
+    /// item_assaultsuit's, which the original's `give` names.
+    void giveArmor(PlayerIndex player, ArmorKind kind);
     /// Turns noclip on or off for `player`, as the original's `noclip` cheat does; returns whether it is
     /// on now.
     auto toggleNoclip(PlayerIndex player) -> bool;
@@ -197,9 +206,10 @@ private:
     /// moves and touches what it meets, then thinks after (postThink), alive.
     void runCommand(Player& player, const UserCommand& command);
     /// What `player` does before `command` moves it (PreThink): alive, it breathes in the water the last
-    /// command left it in (Breath::breathe), hurt as it drowns and by harmful water; then the harms it
-    /// keeps over time are looked at, and what drowning took given back to it alive
-    /// (TimedHarms::check).
+    /// command left it in (Breath::breathe), hurt as it drowns and by harmful water; on the ground, slowed
+    /// down by a hit, it is a hundredth of its speed less slow each command, its velocity that share of it
+    /// (m_flVelocityModifier); then the harms it keeps over time are looked at, and what drowning took
+    /// given back to it alive (TimedHarms::check).
     void preThink(Player& player, const UserCommand& command);
     /// What a living `player` does once `command` moved it from `before` (PostThink): unless it is held
     /// back (Inventory::isHeldBack), the use key going down uses what is in front (use), then the weapon
@@ -212,12 +222,26 @@ private:
     /// `player` lands, hurt by `damage` (PostThink): it splats when the damage is more than its health,
     /// is hurt by its fall (hurt), and loses the pitch of its kick.
     void land(Player& player, nx::Damage damage);
-    /// `player` is dealt `harm` (CBasePlayer::TakeDamage): alive, it feels its pain and loses its whole
-    /// points, keeping a harm kept over time (harmPlayer); killed by it, it dies (die).
+    /// `player` is dealt `harm` of the world (CBasePlayer::TakeDamage): alive, its armor takes its share
+    /// and it loses its whole points, keeping a harm kept over time (harmPlayer), and is heard in its pain
+    /// by where it was last met (painOf); a fall met it in no group; killed by it, it dies (die).
     void hurt(Player& player, const PlayerHarm& harm);
-    /// `player` dies (Killed): it is heard dying, moves no more (MovementState::isDead), is no longer
-    /// solid, and its weapons are gone with it; then the round's end is weighed (checkWinConditions).
-    void die(Player& player);
+    /// `attacker`'s `attack` on `victim`, alive, as the victim's TraceAttack and TakeDamage take it: it is
+    /// met in the attack's hit group, its damage that group's share of the players'; its view punched
+    /// (punchByHit) but by a teammate while mp_friendlyfire is 0, whose attack then hurts it none
+    /// (FPlayerCanTakeDamage); a teammate's attack deals its share of it (PlayerAttackRules); then it
+    /// flinches, large as its attacker's weapon makes it but in the legs and ducked, knocked back while it
+    /// moves slow enough, else small, slowed down; its armor takes its share, its attacker's weapon's
+    /// times the armor's ratio (WeaponHarm::armorRatio), and it loses its whole points (harmPlayer), heard
+    /// in its pain (painOf); killed by it, it dies, killed by `attacker` (die). The punch's draws come
+    /// from a stream of the attacker's command and the victim.
+    void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
+    /// `player` dies (Killed), killed by `killer`, none for the world: it is heard dying, moves no more
+    /// (MovementState::isDead), plays its death by where it was last met, is no longer solid, and its
+    /// weapons are gone with it; its killer, another player, gets the money of an enemy's kill, or loses a
+    /// teammate's (CHalfLifeMultiplay::PlayerKilled, KillMoney); then the round's end is weighed
+    /// (checkWinConditions).
+    void die(Player& player, Player* killer);
     /// Weighs the round's end by the players alive and dead of each team (CheckWinConditions,
     /// Rounds::checkWinConditions), what an end does to the money then played (roundEnded).
     void checkWinConditions();
@@ -227,9 +251,16 @@ private:
     /// `player` watches until the next round, dead, from its team's next spawn point, turned the way it
     /// faces (StartObserver at GetPlayerSpawnSpot).
     void observe(Player& player);
-    /// What a move of `mover` meets as boxes: the world's (solidBoxesOf), and the other players alive, each
-    /// standing or ducked, as the engine lists them for movement (SV_AddLinksToPM's SOLID_SLIDEBOX).
+    /// What a move of `mover` meets as boxes: the world's (solidBoxesOf), the other players alive among
+    /// them, each standing or ducked, as the engine lists them for movement (SV_AddLinksToPM's
+    /// SOLID_SLIDEBOX).
     [[nodiscard]] auto boxesMetBy(const Player& mover) -> std::vector<SolidBox>;
+    /// `player`'s body where it is: at its origin, its box among the bodies the pushers move, and, alive,
+    /// solid to the server's traces as its box, standing or ducked (setBodySolidity); dead, not solid.
+    void placeBody(Player& player);
+    /// `player`'s body posed for the server's traces as its model plays (PlayerPose): its torso's sequence
+    /// and frame, its legs' gait sequence and yaw, the aim's blends and its view's body angles.
+    void poseBody(Player& player);
     /// `player` makes `sound` at the tick, at its own volume.
     void makeSound(Player& player, const GameSound& sound);
     /// `player`'s model plays `action` (setPlayerAnimation, CBasePlayer::SetAnimation), as the player
@@ -263,8 +294,9 @@ private:
     /// Pays each player what its team gets as a round starts (RestartRound), `hostagesHeld` still held
     /// (repositionHostages), unless the last end left it unpaid.
     void payForRound(std::uint32_t hostagesHeld);
-    /// `player`'s `attack` on `entity`, as its weapon's TraceAttack and ApplyMultiDamage deal it
-    /// (nx::game::attackEntity); a hostage it hurts costs it its money (hostageHarmCost).
+    /// `player`'s `attack` on `entity`, as its weapon's TraceAttack and ApplyMultiDamage deal it: to
+    /// another player's body as attackPlayer deals it; to another entity as its kind takes it
+    /// (nx::game::attackEntity), a hostage it hurts costing it its money (hostageHarmCost).
     void attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::Attack& attack);
     /// What the texture a trace from `start` to `end` met, `hit`, is made of, as UTIL_TextureHit finds
     /// it: flesh for a body; of the world's or a brush entity's model, as materials.txt tags it; none for
@@ -272,10 +304,10 @@ private:
     [[nodiscard]] auto materialOfHit(const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) const
         -> std::optional<TextureMaterial>;
     /// Spawns `player` at the next spawn point of its team (nextSpawnPoint), as Spawn does: one unit
-    /// above it, standing still and turned the way it faces, its health whole; alive, it keeps its armor,
-    /// its weapons and its money; dead, it keeps its money alone, given what a player of its team spawns
-    /// with. It is paid as the next round starts, and has spawned once more in the round. Its HUD is told
-    /// the round's time.
+    /// above it, standing still and turned the way it faces, its health whole, its speed no longer
+    /// slowed; alive, it keeps its armor, its weapons and its money; dead, it keeps its money alone,
+    /// given what a player of its team spawns with. It is paid as the next round starts, and has spawned
+    /// once more in the round. Its HUD is told the round's time.
     void spawn(Player& player);
     /// Gives `player` what a player of its team spawns with, drawn as its _cl_autowepswitch says.
     void equip(Player& player);

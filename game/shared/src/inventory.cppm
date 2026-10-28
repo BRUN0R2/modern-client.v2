@@ -87,14 +87,16 @@ struct Shooter {
 };
 
 /// What a weapon's attack met: its trace; the entity that stopped it, none for the world or nothing
-/// (pHit); whether that is the world or a brush entity (IsBSPModel); and whether it is a body, which
-/// sounds as flesh: an entity of a class other than none and the machines' (Classify), a hostage or a
-/// func_vehicle today.
+/// (pHit); whether that is the world or a brush entity (IsBSPModel); whether it is a body, which
+/// sounds as flesh: an entity of a class other than none and the machines' (Classify), a player, a
+/// hostage or a func_vehicle; and, a player's body, how the player's body is turned (pev->angles), which
+/// a stab weighs its back by.
 struct WeaponHit {
     nx::collision::Trace trace{};
     std::optional<nx::ecs::Entity> entity{};
     bool isBrushModel = false;
     bool isBody = false;
+    std::optional<nx::EulerAngles> playerAngles{};
 };
 
 /// How a weapon's attacks meet what is solid: the server's way for a hull from a start to an end

@@ -2,20 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// How a player is hurt and killed (docs/10-counter-strike-gameplay.md, section 7.4):
-/// data/cstrike/playerHarm.toml, with ReGameDLL_CS's values and sounds (CBasePlayer::TakeDamage,
-/// TakeHealth, Pain, DeathSound, PostThink's landing, WaterMove and CheckTimeBasedDamage,
+/// data/cstrike/playerHarm.toml, with ReGameDLL_CS's values and sounds (CBasePlayer::TraceAttack,
+/// TakeDamage, TakeHealth, Pain, DeathSound, PostThink's landing, WaterMove and CheckTimeBasedDamage,
 /// CHalfLifeMultiplay::FlPlayerFallDamage; GPL, consulted: docs/20 section 3): the damage a hard
-/// landing, drowning and harmful water deal, the whole points of a damage a player's health loses, the
-/// harms it keeps over time and the drowned health they give back, and the sounds of its pain, of a
-/// landing that kills it and of its death.
+/// landing, drowning and harmful water deal, what the other players' attacks do (the share of a
+/// teammate's, the knockback, the slowing down and the view's punch of a hit), the share of a harm its
+/// armor takes, the whole points of a damage a player's health loses, the harms it keeps over time and
+/// the drowned health they give back, and the sounds of its pain, by where it was met and its armor, of
+/// a landing that kills it and of its death.
 ///
-/// Today: the harm of a player's falls, of drowning, and of slime and lava; no player has armor yet,
-/// so none takes a share of a harm. The attacks of other players, their hit groups and the armor's
-/// share come with them (TODO.md).
+/// Today: the harm of a player's falls, of drowning, of slime and lava, and of the other players' shots
+/// and knives; the grenades' and the bomb's come with them (TODO.md).
 export module cs.shared:playerHarm;
 
 import std;
 import nx.core;
+import nx.math;
 import nx.meta;
 import nx.data;
 import nx.game;
@@ -32,11 +34,12 @@ enum class PlayerHarmError : std::uint8_t {
 
 /// The kinds of harm a player takes, as the original's damage types tell them apart.
 enum class HarmKind : std::uint8_t {
-    Melee, ///< An entity body's melee strike, without a timed harm.
-    Fall,  ///< A hard landing (DMG_FALL).
-    Drown, ///< Out of air under water (DMG_DROWN), which the player keeps over time.
-    Burn,  ///< In lava (DMG_BURN).
-    Acid,  ///< In slime (DMG_ACID), which the player keeps over time.
+    Melee,  ///< An entity body's melee strike, without a timed harm.
+    Fall,   ///< A hard landing (DMG_FALL).
+    Drown,  ///< Out of air under water (DMG_DROWN), which the player keeps over time.
+    Burn,   ///< In lava (DMG_BURN).
+    Acid,   ///< In slime (DMG_ACID), which the player keeps over time.
+    Bullet, ///< Another player's weapon: a shot's round or a knife's strike (DMG_BULLET).
     Count,
 };
 
@@ -46,6 +49,28 @@ struct PlayerHarm {
     HarmKind kind{};
 
     [[nodiscard]] constexpr auto operator==(const PlayerHarm&) const noexcept -> bool = default;
+};
+
+/// What a player's armor makes of a harm where it covers the hit group the player was last met in
+/// (TakeDamage): the player's health takes `ratio` of it (flRatio: ARMOR_RATIO, times its attacker's
+/// weapon's), and the armor loses `bonus` (flBonus, ARMOR_BONUS) for each point of the rest, while it
+/// lasts.
+struct ArmorShares {
+    float ratio = 0.5F;
+    float bonus = 0.5F;
+};
+
+/// What the other players' attacks do to a player (CBasePlayer::TakeDamage, TakeDamageImpulse): a
+/// teammate's deals `teammateShare` of its damage; a hit that makes it flinch small slows it down to
+/// `flinchSpeedShare` of its speed (m_flVelocityModifier); one that makes it flinch large, moving
+/// slower than `knockbackBelowSpeed`, knocks it back `knockback` units a second away from its
+/// attacker and slows it down to `largeFlinchSpeedShare`.
+struct PlayerAttackRules {
+    double teammateShare = 0.35;
+    nx::UnitsPerSecond knockback{170.0F};
+    nx::UnitsPerSecond knockbackBelowSpeed{300.0F};
+    float flinchSpeedShare = 0.5F;
+    float largeFlinchSpeedShare = 0.65F;
 };
 
 /// How a hard landing hurts a player (FlPlayerFallDamage): falling faster than `safeSpeed`, by
@@ -81,9 +106,14 @@ struct PlayerHarmRules {
     FallDamage fall{};
     DrowningDamage drowning{};
     HarmfulWater harmfulWater{};
-    GameSound pain{};  ///< As a harm hurts it (Pain, without armor, of no hit group).
-    GameSound splat{}; ///< As it lands harder than its health can take.
-    GameSound death{}; ///< As it dies (DeathSound).
+    ArmorShares armor{}; ///< The base of an attack's ratio, its weapon's times it.
+    PlayerAttackRules attacks{};
+    GameSound pain{};       ///< As a harm hurts it but in the head, its armor taking none (Pain).
+    GameSound headPain{};   ///< In the head, without a helmet.
+    GameSound helmetPain{}; ///< In the head, with a helmet.
+    GameSound kevlarPain{}; ///< But in the head and the legs, its armor taking a share.
+    GameSound splat{};      ///< As it lands harder than its health can take.
+    GameSound death{};      ///< As it dies (DeathSound).
 
     /// Every file its sounds play, each once, in the order the file names them.
     [[nodiscard]] auto soundFiles() const -> std::vector<std::string_view>;
@@ -153,13 +183,44 @@ private:
     std::int32_t m_givenBack = 0;                    ///< Whole points of them given back (m_idrownrestored).
 };
 
-/// Deals `harm`, its damage finite and not negative, to a player of `status` as CBasePlayer::TakeDamage
-/// deals it to one without armor, as no player has yet (a fall's and drowning's armor never takes): the
-/// whole points of it off its health, as the original's processors cut it (int()), so that its health
-/// stays whole, and a harm kept over time kept (`timed`); with no health left, it is killed. A dead
-/// player takes none, and keeps none. What it did.
-[[nodiscard]] auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm) noexcept
-    -> nx::game::Harm;
+/// Whether armor of `kind` covers hit group `group` (IsArmored): a helmet the head; the vest the chest, the
+/// stomach, the arms and a hit of no group; none the legs.
+[[nodiscard]] auto isArmored(ArmorKind kind, std::uint32_t group) noexcept -> bool;
+
+/// What a harm did to a player: the damage its health took, whether its armor took a share of it, and
+/// whether it killed it.
+struct PlayerHarmed {
+    nx::Damage damage{};
+    bool isArmored = false;
+    bool isKilled = false;
+
+    [[nodiscard]] constexpr auto operator==(const PlayerHarmed&) const noexcept -> bool = default;
+};
+
+/// Deals `harm`, its damage finite and not negative, to a player of `status` last met in hit group
+/// `group` (m_LastHitGroup), as CBasePlayer::TakeDamage deals it: with armor that covers that group
+/// (isArmored), but to a fall and drowning, its health takes `armor`'s ratio of it, the armor losing
+/// its bonus of each point of the rest, in float; and when that is more armor than it has, it loses it
+/// all, and the health takes what the armor's points, over its bonus, leave; its kind none once its
+/// armor is none. Then the whole points of what is left off its health, as the original's processors
+/// cut it (int()), so that its health stays whole, and a harm kept over time kept (`timed`); with no
+/// health left, it is killed. A dead player takes none, and keeps none. What it did.
+[[nodiscard]] auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm,
+                              std::uint32_t group, const ArmorShares& armor) noexcept -> PlayerHarmed;
+
+/// What a player of `status` is heard saying as a harm that met it last in hit group `group` hurts it
+/// (Pain), `harmed` its armor taking a share or none: in the head, its helmet's, or a headshot's
+/// without one; elsewhere, its armor's but in the legs, or its flesh's.
+[[nodiscard]] auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, std::uint32_t group,
+                          bool isArmored) noexcept -> const GameSound&;
+
+/// How an attack's `damage`, its hit group's share taken, punches the view of a player of armor `kind`
+/// met in hit group `group` (TraceAttack), its blood shed: in the head, without a helmet, its pitch half
+/// the damage up, 12 degrees at most, and its roll as much as the damage, drawn from `random` either
+/// way, 9 degrees at most; in the chest or the stomach, without armor, its pitch a tenth of the damage
+/// up, 4 at most; elsewhere none, and the punch as it was.
+void punchByHit(nx::EulerAngles& punch, std::uint32_t group, nx::Damage damage, ArmorKind kind,
+                nx::Random& random) noexcept;
 
 /// Gives a player of `status` back `health`, not negative, as CBasePlayer::TakeHealth does: alive and
 /// below the health it spawns with, up to it.
@@ -201,13 +262,43 @@ struct nx::meta::Description<cs::HarmfulWater> {
 };
 
 template <>
+struct nx::meta::Description<cs::ArmorShares> {
+    static constexpr std::string_view kName = "cs::ArmorShares";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::ArmorShares::ratio>("ratio", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::ArmorShares::bonus>("bonus", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::PlayerAttackRules> {
+    static constexpr std::string_view kName = "cs::PlayerAttackRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::PlayerAttackRules::teammateShare>("teammateShare",
+                                                               nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::PlayerAttackRules::knockback>("knockback", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::PlayerAttackRules::knockbackBelowSpeed>("knockbackBelowSpeed",
+                                                                     nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::PlayerAttackRules::flinchSpeedShare>(
+            "flinchSpeedShare", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::PlayerAttackRules::largeFlinchSpeedShare>(
+            "largeFlinchSpeedShare", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::PlayerHarmRules> {
     static constexpr std::string_view kName = "cs::PlayerHarmRules";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::PlayerHarmRules::fall>("fall"),
         nx::meta::field<&cs::PlayerHarmRules::drowning>("drowning"),
         nx::meta::field<&cs::PlayerHarmRules::harmfulWater>("harmfulWater"),
+        nx::meta::field<&cs::PlayerHarmRules::armor>("armor"),
+        nx::meta::field<&cs::PlayerHarmRules::attacks>("attacks"),
         nx::meta::field<&cs::PlayerHarmRules::pain>("pain"),
+        nx::meta::field<&cs::PlayerHarmRules::headPain>("headPain"),
+        nx::meta::field<&cs::PlayerHarmRules::helmetPain>("helmetPain"),
+        nx::meta::field<&cs::PlayerHarmRules::kevlarPain>("kevlarPain"),
         nx::meta::field<&cs::PlayerHarmRules::splat>("splat"),
         nx::meta::field<&cs::PlayerHarmRules::death>("death"),
     };

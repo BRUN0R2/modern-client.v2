@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // How a player's model plays, as the original's CBasePlayer animates it: its torso's sequence by what it
-// does and the weapon it holds, its legs' gait sequence by how fast it moves and whether it ducks, the way
-// its legs face, the aim's yaw and pitch blends; and its bones posed by the nine blends around the aim, its
-// legs below the spine playing the gait. On a model of the shape of Counter-Strike's players'.
+// does and the weapon it holds, its flinches and its deaths by where it was met, its legs' gait sequence
+// by how fast it moves and whether it ducks, the way its legs face, the aim's yaw and pitch blends; and
+// its bones posed by the nine blends around the aim, its legs below the spine playing the gait. On a model
+// of the shape of Counter-Strike's players'.
 
 #include <gtest/gtest.h>
 
@@ -19,6 +20,7 @@ import cs.shared;
 namespace {
 
 using cs::Activity;
+using cs::HitGroup;
 using cs::PlayerAction;
 using nx::test::playerSequenceIndex;
 
@@ -133,7 +135,7 @@ TEST_F(PlayerModelTest, ADeathPlaysADeathItsLegsNoGait) {
     play(animation, PlayerAction::Die, standing());
     const std::uint32_t played = animation.torso.sequence.value;
     EXPECT_GE(played, playerSequenceIndex("death1"));
-    EXPECT_LE(played, playerSequenceIndex("chestshot"));
+    EXPECT_LE(played, playerSequenceIndex("right")) << "of a hit of no group";
     EXPECT_EQ(animation.gaitSequence, nx::assets::SequenceIndex{});
     EXPECT_FALSE(animation.torso.isLooping);
 
@@ -142,6 +144,66 @@ TEST_F(PlayerModelTest, ADeathPlaysADeathItsLegsNoGait) {
     ducked.isDucked = true;
     play(crouched, PlayerAction::Die, ducked);
     EXPECT_EQ(crouched.torso.sequence, sequence("crouch_die"));
+}
+
+TEST_F(PlayerModelTest, APlayerDiesByWhereTheAttackMetIt) {
+    for (const auto& [group, death] :
+         {std::pair{HitGroup::Head, "head"}, std::pair{HitGroup::Chest, "chestshot"},
+          std::pair{HitGroup::Stomach, "gutshot"}, std::pair{HitGroup::LeftArm, "left"},
+          std::pair{HitGroup::RightArm, "right"}}) {
+        cs::PlayerAnimation animation;
+        cs::PlayerAnimationContext met = standing();
+        met.lastHitGroup = std::to_underlying(group);
+        play(animation, PlayerAction::Die, met);
+        EXPECT_EQ(animation.torso.sequence, sequence(death)) << death;
+        met.isDucked = true;
+        cs::PlayerAnimation ducked;
+        play(ducked, PlayerAction::Die, met);
+        EXPECT_EQ(ducked.torso.sequence, sequence("crouch_die")) << "ducked, wherever it was met";
+    }
+    // In the legs: the simplest death, one of those of ACT_DIESIMPLE.
+    cs::PlayerAnimation legs;
+    cs::PlayerAnimationContext met = standing();
+    met.lastHitGroup = std::to_underlying(HitGroup::LeftLeg);
+    play(legs, PlayerAction::Die, met);
+    EXPECT_EQ(model().sequences()[legs.torso.sequence.value].activity,
+              std::to_underlying(Activity::DieSimple));
+}
+
+TEST_F(PlayerModelTest, AFlinchPlaysByWhereTheAttackMetItAndHoldsTheTorsoToItsEnd) {
+    for (const auto& [group, flinch] :
+         {std::pair{HitGroup::Head, "head_flinch"}, std::pair{HitGroup::Chest, "head_flinch"},
+          std::pair{HitGroup::Stomach, "gut_flinch"}, std::pair{HitGroup::RightLeg, "gut_flinch"}}) {
+        cs::PlayerAnimation animation;
+        play(animation, PlayerAction::Idle, standing());
+        cs::PlayerAnimationContext met = standing();
+        met.lastHitGroup = std::to_underlying(group);
+        for (const PlayerAction action : {PlayerAction::Flinch, PlayerAction::LargeFlinch}) {
+            play(animation, action, met);
+            EXPECT_EQ(animation.torso.sequence, sequence(flinch)) << flinch;
+            EXPECT_EQ(animation.gaitSequence, sequence("idle1")) << "its legs play on";
+        }
+        EXPECT_EQ(animation.activity, Activity::LargeFlinch);
+    }
+    cs::PlayerAnimation generic;
+    cs::PlayerAnimationContext met = standing();
+    play(generic, PlayerAction::Flinch, met);
+    EXPECT_TRUE(generic.torso.sequence == sequence("head_flinch") ||
+                generic.torso.sequence == sequence("gut_flinch"))
+        << "either for a hit of no group";
+
+    // Running, the flinch plays to its end before the torso aims again; the legs run meanwhile.
+    cs::PlayerAnimation running;
+    play(running, PlayerAction::Walk, standing(250.0F));
+    met.lastHitGroup = std::to_underlying(HitGroup::Head);
+    play(running, PlayerAction::Flinch, met);
+    play(running, PlayerAction::Walk, standing(250.0F));
+    EXPECT_EQ(running.torso.sequence, sequence("head_flinch"));
+    EXPECT_EQ(running.gaitSequence, sequence("run"));
+    running.torso.isFinished = true;
+    play(running, PlayerAction::Walk, standing(250.0F));
+    EXPECT_EQ(running.torso.sequence, sequence("ref_aim_knife"));
+    EXPECT_EQ(running.activity, Activity::Run);
 }
 
 TEST_F(PlayerModelTest, InDeepWaterAStillPlayerHoversAndAMovingOneSwims) {

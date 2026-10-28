@@ -16,10 +16,13 @@ namespace {
 /// The engine keeps a pusher's angles within ten turns.
 constexpr float kAngleWrap = 3600.0F;
 
-/// Whether the box of `body` at `origin` is in solid in `world` (SV_TestEntityPosition).
-[[nodiscard]] auto isStuck(ecs::World& world, const collision::BrushHulls& hulls, const Body& body,
-                           Vec3 origin) -> bool {
-    return traceSolidsHit(world, hulls, hullTrace(body.hull, origin, origin)).trace.startsSolid;
+/// Whether the box of `body`, of `entity`, at `origin` is in solid in `world` but itself
+/// (SV_TestEntityPosition).
+[[nodiscard]] auto isStuck(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+                           const Body& body, Vec3 origin) -> bool {
+    ServerTrace stay = hullTrace(body.hull, origin, origin);
+    stay.ignored = entity;
+    return traceSolidsHit(world, hulls, stay).trace.startsSolid;
 }
 
 /// Whether a body's linked box, at `origin`, overlaps `box`, more than touching it (SV_PushMove).
@@ -54,19 +57,23 @@ struct Moved {
     return bodies;
 }
 
-/// Pushes `body` by `push` through all else (SV_PushEntity, the pusher not solid meanwhile); returns
-/// whether it is still in solid after, the pusher solid again.
+/// Pushes `body` by `push` through all else but itself (SV_PushEntity), the pusher not solid meanwhile
+/// (SOLID_NOT, as SV_PushMove makes it); returns whether it is still in solid after, the pusher solid
+/// again.
 [[nodiscard]] auto pushBody(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity pusher,
                             ecs::Entity bodyEntity, Vec3 push) -> bool {
     const Body& body = *world.get<Body>(bodyEntity);
     Vec3& origin = world.get<Transform>(bodyEntity)->origin;
     ServerTrace way = hullTrace(body.hull, origin, origin + push);
-    way.ignored = pusher;
+    way.ignored = bodyEntity;
+    Solid& pusherSolid = world.get<BrushSolidity>(pusher)->solid;
+    const Solid solid = std::exchange(pusherSolid, Solid::Not);
     const collision::Trace pushed = traceSolidsHit(world, hulls, way).trace;
+    pusherSolid = solid;
     if (pushed.fraction != 0.0F) {
         origin = pushed.end;
     }
-    return isStuck(world, hulls, body, origin);
+    return isStuck(world, hulls, bodyEntity, body, origin);
 }
 
 /// Puts back everything a blocked pusher moved, its clock too, and blocks it.
@@ -106,7 +113,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         const Body& body = *world.get<Body>(bodyEntity);
         const Vec3 origin = world.get<Transform>(bodyEntity)->origin;
         if (body.groundModel != model &&
-            (!overlaps(body, origin, swept) || !isStuck(world, hulls, body, origin))) {
+            (!overlaps(body, origin, swept) || !isStuck(world, hulls, bodyEntity, body, origin))) {
             continue; // not in its way
         }
         moved.push_back({.entity = bodyEntity, .from = origin});
@@ -145,7 +152,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         const Body& body = *world.get<Body>(bodyEntity);
         const Vec3 origin = world.get<Transform>(bodyEntity)->origin;
         if (body.groundModel != model &&
-            (!overlaps(body, origin, linked) || !isStuck(world, hulls, body, origin))) {
+            (!overlaps(body, origin, linked) || !isStuck(world, hulls, bodyEntity, body, origin))) {
             continue; // not in its way
         }
         moved.push_back({.entity = bodyEntity, .from = origin});

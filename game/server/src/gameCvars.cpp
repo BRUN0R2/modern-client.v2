@@ -35,8 +35,10 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                                "Restarts the game in this many seconds, up to 60; read before sv_restart.");
     auto restart = server("sv_restart", 0.0F, "Restarts the game in this many seconds, up to 60.");
     auto footsteps = server("mp_footsteps", 1.0F, "Whether the players' steps sound: any value but 0.");
+    auto friendlyFire =
+        server("mp_friendlyfire", 0.0F, "Whether a player's attacks hurt its teammates: any value but 0.");
     for (auto* const registered :
-         {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps}) {
+         {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps, &friendlyFire}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -46,7 +48,8 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .startMoney = *startMoney,
                      .restartRound = *restartRound,
                      .restart = *restart,
-                     .footsteps = *footsteps};
+                     .footsteps = *footsteps,
+                     .friendlyFire = *friendlyFire};
 }
 
 // The values set back are finite, and the cvars have no range and are neither read-only nor cheats:
@@ -83,6 +86,10 @@ auto GameCvars::takeRestart() const -> std::optional<nx::Seconds> {
 
 auto GameCvars::doStepsSound() const -> bool {
     return footsteps.value() != 0.0F;
+}
+
+auto GameCvars::isFriendlyFireOn() const -> bool {
+    return friendlyFire.value() != 0.0F;
 }
 
 } // namespace cs
