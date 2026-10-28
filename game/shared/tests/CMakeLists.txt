@@ -3,23 +3,34 @@
 
 nxAddTest(csSharedTests
     SOURCES
+        bloodTests.cpp
         breathTests.cpp
         bulletsTests.cpp
         economyTests.cpp
+        entityCatalogTests.cpp
         footstepsTests.cpp
+        gameMapTests.cpp
         hostagesTests.cpp
         inventoryTests.cpp
+        lightStylesTests.cpp
         movementTests.cpp
+        navigationProfileTests.cpp
+        playerAnimationTests.cpp
+        playerHarmTests.cpp
         roundsTests.cpp
         studioTests.cpp
+        useTests.cpp
         weaponsTests.cpp
         weaponTypesTests.cpp
     DEPENDS
         cs::shared
         nx::data
         nx::game
+        nx::navigation
         nx::platform)
 
 # Tests read the repository's data/cstrike/ammo.toml, breath.toml, economy.toml, footsteps.toml,
-# loadouts.toml and weapons/.
-target_compile_definitions(csSharedTests PRIVATE NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")
+# lightStyles.toml, loadouts.toml, playerHarm.toml, use.toml and weapons/; their maps are the BSP seed of the fuzz corpus,
+# given other entities.
+target_compile_definitions(csSharedTests PRIVATE NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data"
+                                                 NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")

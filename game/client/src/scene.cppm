@@ -14,8 +14,11 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import :level;
+import :playerModels;
+import :entityModels;
 import :viewModel;
 import :muzzleFlash;
+import :tempEntities;
 
 export namespace cs {
 
@@ -43,10 +46,14 @@ struct SceneShaders {
 struct SceneView {
     nx::render::Camera camera{};
     float aspect = 1.0F;
-    nx::Seconds time{}; ///< Since the map started.
+    nx::Seconds time{};                         ///< Since the map started.
+    nx::render::LightStyleValues lightStyles{}; ///< The server's styles at time (ClientGame::lightStylesAt).
     std::span<const nx::render::ModelPlacement> placements{};
-    std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (LocalGame::hostages).
-    std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
+    std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (ClientGame::writeHostages).
+    std::span<const ShownPlayer> players{};   ///< How the other players show (ClientGame::updatePlayers).
+    std::span<const ShownEntity> entities{};
+    std::optional<ViewModelPose> viewModel{};   ///< None without a weapon in hand.
+    std::span<const TempEntity> tempEntities{}; ///< The client's (TempEntities::shown).
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
     Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
@@ -66,12 +73,12 @@ public:
         -> nx::Result<Scene, SceneError>;
 
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
-    /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
-    /// sight does not reach hidden, the blended ones of them all in one order
-    /// (nx.render:blendedOrder); then the weapon in the player's hand, lit where the player's eye is, as
-    /// the original lights the view's own model, and in the enhanced look by the light of its flashes
-    /// too. It prepares the muzzle flashes, those of the view's client events and those still showing,
-    /// for drawEffects to record. Errors: DrawFailed.
+    /// entities, each lit where it is, the sprites of its entities, a glow the player's line of sight
+    /// does not reach hidden, and its temporary entities, each as translucent as it is, the blended ones of
+    /// them all in one order (nx.render:blendedOrder); then the weapon in the player's hand, lit where the
+    /// player's eye is, as the original lights the view's own model, and in the enhanced look by the light of
+    /// its flashes too. It prepares the muzzle flashes, those of the view's client events and those still
+    /// showing, for drawEffects to record. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
     /// Records the effects the last draw prepared, the weapon's muzzle flashes, as the original adds
@@ -87,13 +94,16 @@ public:
     /// be done with the frames that drew a model this replaces. Errors: CreateFailed.
     [[nodiscard]] auto loadWeapons(nx::rhi::CommandList& commands, const Level& level,
                                    std::span<const WeaponIndex> weapons) -> nx::Result<void, SceneError>;
+    /// Appends the catalog's textured models outside a render pass; existing GPU models stay valid
+    /// for in-flight frames. Errors: CreateFailed, retaining the material/upload failure as its cause.
+    [[nodiscard]] auto loadEntities(nx::rhi::CommandList& commands, const EntityCatalog& catalog,
+                                    const nx::assets::Vfs& vfs) -> nx::Result<void, SceneError>;
 
     /// Records the baking of the next of the level's reflection probes in the enhanced look, outside a
-    /// render pass and before the frame's draw: the world as the frame shows it at `time`, its brush
-    /// entities where `placements` puts them (nx::render::ReflectionProbes::bakeNext); nothing once they
+    /// render pass and before the frame's draw: the world as `view` shows it, including the server's
+    /// light styles and brush placements (nx::render::ReflectionProbes::bakeNext); nothing once they
     /// are baked, or in the legacy look.
-    void bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
-                         std::span<const nx::render::ModelPlacement> placements);
+    void bakeReflections(nx::rhi::CommandList& list, const SceneView& view);
 
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the
@@ -139,10 +149,16 @@ private:
     nx::render::SpriteRenderer m_viewSprites;
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
+    PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.
+    EntityModels entityModels;
     /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
-    /// MuzzleFlashSprites.
+    /// muzzle flashes' EffectSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;
-    MuzzleFlashes m_flashes;        ///< Those showing, or their light.
+    MuzzleFlashes m_flashes; ///< Those showing, or their light.
+    /// The blood's sprites, on m_sprites, by their place in the level's bloodSprites; and each temporary
+    /// entity's sprite's place among them, none for one the level could not read.
+    std::vector<std::optional<nx::render::SpriteModel>> bloodModels;
+    nx::EnumArray<TempSprite, std::optional<std::uint32_t>> tempSpriteIndices{};
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
     nx::render::StudioLook m_look = nx::render::StudioLook::Legacy;

@@ -17,6 +17,7 @@ import nx.rhi.vulkan;
 import nx.render;
 
 #include "offscreenTarget.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -92,7 +93,8 @@ TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> file = readSeed();
     const auto map = nx::assets::BspView::parse(file);
@@ -140,7 +142,8 @@ TEST(BspWorldTest, AFacesLightIsAsBrightAsItsStyle) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> file = readSeed();
     const auto map = nx::assets::BspView::parse(file);
@@ -168,7 +171,8 @@ TEST(BspWorldTest, DrawsOnlyWhatTheCameraSees) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> file = readSeed();
     const auto map = nx::assets::BspView::parse(file);
@@ -202,7 +206,8 @@ TEST(BspWorldTest, AnAnimatedTextureShowsItsFramesTenASecond) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     // Frame 0 the crate, frame 1 a texture no WAD has: the checkerboard, magenta and black.
     std::vector<std::byte> file = readSeed();
@@ -234,7 +239,8 @@ TEST(BspWorldTest, AWaterFaceWarpsAndIsNotLit) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     std::vector<std::byte> file = readSeed();
     renameTexture(file, "CRATE01", "!crate");
@@ -272,7 +278,8 @@ TEST(BspWorldTest, ABrushEntityIsDrawnAsItsRenderModeSays) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
@@ -337,7 +344,8 @@ TEST(BspWorldTest, ABrushEntityIsDrawnWhereTheGamePutsAndTurnsIt) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
@@ -374,7 +382,8 @@ TEST(BspWorldTest, ABrushEntityWhoseFrameIsNotZeroShowsItsAlternateTextures) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
@@ -413,7 +422,8 @@ TEST(BspWorldTest, TheWaterOfABrushEntityRisesAndFallsInWaves) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
@@ -454,7 +464,8 @@ TEST(BspWorldTest, EachSideOfTheSkyIsSeenUprightTowardItsAxis) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     // Every wall of the box a face of the sky.
     std::vector<std::byte> file = readSeed();
@@ -541,7 +552,8 @@ TEST(BspWorldTest, ADecalDarkensTheFaceItLiesOnLitAsItIs) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> file = readSeed();
     const auto map = nx::assets::BspView::parse(file);
@@ -601,7 +613,8 @@ TEST(BspWorldTest, ADecalOnABrushEntityGoesWhereTheGameMovesIt) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
@@ -638,7 +651,8 @@ TEST(BspWorldTest, ADecalOnABrushEntityIsDrawnAsItsRenderModeDrawsIt) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const std::vector<std::byte> shader = worldShader();
     OffscreenTarget target{**device};
@@ -704,7 +718,8 @@ TEST(BspWorldTest, DrawnAsLinearLightAFaceIsItsTextureTimesItsLightAsLight) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     std::vector<std::byte> file = readSeed();
     paintTextures(file, {70, 40, 20});
@@ -746,7 +761,8 @@ TEST(BspWorldTest, DrawnAsLinearLightTheSkyIsFilteredAsLight) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     std::vector<std::byte> file = readSeed();
     renameTexture(file, "CRATE01", "sky");
@@ -784,7 +800,8 @@ TEST(BspWorldTest, DrawnAsLinearLightABrushsAmountScalesItsLight) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     constexpr std::array kColor{70, 40, 20};
     const auto shader = worldShader();

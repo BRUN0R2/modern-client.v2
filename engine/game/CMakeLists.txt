@@ -7,6 +7,7 @@ nxAddModuleLibrary(nxGame
     MODULES
         src/nx.game.cppm
         src/clock.cppm
+        src/entityKeys.cppm
         src/components.cppm
         src/links.cppm
         src/thinking.cppm
@@ -22,8 +23,10 @@ nxAddModuleLibrary(nxGame
         src/placement.cppm
         src/decals.cppm
         src/damage.cppm
+        src/navigation.cppm
     SOURCES
         src/clock.cpp
+        src/entityKeys.cpp
         src/components.cpp
         src/links.cpp
         src/thinking.cpp
@@ -39,6 +42,7 @@ nxAddModuleLibrary(nxGame
         src/placement.cpp
         src/decals.cpp
         src/damage.cpp
+        src/navigation.cpp
     DEPENDS
         nx::core
         nx::math
@@ -46,7 +50,8 @@ nxAddModuleLibrary(nxGame
         nx::data
         nx::ecs
         nx::assets
-        nx::collision)
+        nx::collision
+        nx::navigation)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

@@ -27,6 +27,38 @@
 - Rules: `mp_limitteams`, `mp_autoteambalance`, full team, team changes limited per round,
   `allow_spectators`.
 
+**Today** (`cs.shared:characters`, `data/cstrike/characters.toml`): each team's four characters, in the
+order its menu offers them, each playing the model `models/player/<name>/<name>.mdl`; a player that
+joins a team is given one of its characters at random, as the menu's auto-select gives one (the menus
+come with the menus). Its model plays as ReGameDLL_CS's `CBasePlayer` animates it
+(`cs.shared:playerAnimation`, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)): its
+torso's sequence by what it does and the weapon it holds (`SetAnimation`, `GetAnimDesired`:
+`ref_aim_<weapon>`, `crouch_shoot_<weapon>`, `ref_reload_<weapon>`, the weapon's `playerAnimation`),
+a shot started from its first frame and kept while the player runs within 4 seconds of it; its legs'
+gait sequence by whether it ducks and how fast it moves (idling, walking, running beyond 135 units a
+second, crouching, jumping, swimming and hovering in water); a death of a hit of no group, or
+`crouch_die` ducked, its legs then playing none; and each frame its gait (`StudioProcessGait`): its legs
+turned along the way it moves, or after its body while it stands (slowly when it nearly faces ahead,
+fast when it faces away), turned around and moving backwards when it faces more than 120 degrees from
+the way it moves; the aim's yaw blend from the angle between its body and its legs, its pitch blend
+from its view's pitch, from 45 degrees up to 45 down. The server animates its players so, and each
+client the others it draws ([05 §9.1](05-rendering.md#91-pipeline)): it is told their sequences, and
+turns their legs and their aim itself. A player hurt by an attack flinches: `head_flinch` for the head
+and the chest, `gut_flinch` elsewhere, either at random for a hit of no group, played to its end; killed,
+it plays the death of where it was met: the head's, the chest's or the stomach's, `left` and `right` for
+the arms, a death at random for a hit of no group, the simplest for the legs (§7.4).
+
+**Today**, the players' names (`cs.server:playerNames`, `cs::Game::join`): a player asks for a name
+(the client's `name`, "Player" at first, the engine's, which Steam replaces with its persona's) and
+the server gives it one as the original engine does (`SV_CheckUserInfo`, `SV_ExtractFromUserinfo`,
+`SV_CheckForDuplicateNames`, ReHLDS, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)):
+its `%` and `&` blanked, the `#`s it starts with too, so that it resembles no player's number, and the
+blanks about it gone; `unnamed` for none left, `console` in any case, or one holding `..`, `"` or
+`\`; then, while another player has it in any case, the first of `(1)name`, `(2)name`... no one has.
+The original's two ways disagree on a name that starts with `#` (its connection leaves it, a change
+of name blanks it): here both blank it. A name changed while playing, and its 31 characters at most,
+come with the network ([08](08-networking.md)).
+
 ## 3. Match and round flow
 
 ```mermaid
@@ -58,28 +90,48 @@ entities), the first of a bomb target (`TargetSaved`), hostages (`HostagesNotRes
 zone (`TerroristsNotEscaped`) and a VIP safety zone (`VipNotEscaped`); the rounds of a map played
 for none run on; a time-out puts its round's start 60 seconds on, as CheckRoundTimeExpired does, so
 that a player spawning before the next round is told the round's length and those 60 seconds less
-the time since (and a map played for nothing runs out again that much later). The next round starts
-five seconds after the end. `sv_restartround`, else
+the time since (and a map played for nothing runs out again that much later). A round ends, too, by
+what the players do (`cs::Rounds::endRound`, TerminateRound), once at most: a round that ended ends
+no more, as CheckWinConditions looks no further once a started game's round is decided, nor does
+its time run out after. The server's game weighs the round's end as the original's
+CheckWinConditions does (`cs::Rounds::checkWinConditions`), whenever a player joins or dies
+([§7.4](#74-damage)), frozen or not, by the players alive and dead of each team (`cs::TeamCounts`;
+one that joined and has not spawned counts as dead): the first time both teams have players, and
+again after a team had none, the game commences (`GameCommencing`, NeededPlayersCheck): the round
+ends unfrozen and the game restarts three seconds later (`cs::kCommenceDelay`); then
+TeamExterminationCheck: with players on both teams, every terrorist dead and a counter-terrorist
+alive is the counter-terrorists' win (`CounterTerroristsWin`), else every counter-terrorist dead the
+terrorists' (`TerroristsWin`, both dead at once included); with players on one team alone, none of
+them alive is a draw (`RoundDraw`, won by nobody). The next round starts five seconds after the end.
+`sv_restartround`, else
 `sv_restart`, read once a second, restarts the game that many seconds later, the round playing on
 until then (or until five seconds after it ends): the players spawn as they joined, with
-`mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). As a round
-starts, the local game's player spawns again at its team's next spawn point (`cs::spawnPointsOf`,
-as `EntSelectSpawnPoint` takes them in turn), one unit above it, turned the way it faces, its
+`mp_startmoney`, no armor and their team's loadout alone (`cs::Inventory::removeAll`). A player joins
+a team (`cs::Game::join`, JoiningThink) with `mp_startmoney` and spawns at once, unless it spawned in
+the round already or, the game having players on both teams, the round started more than 20 seconds
+before (`cs::kJoinSpawnWindow`, FPlayerCanRespawn, from the start of its freeze, then of its time):
+it then watches, dead, from its team's next spawn point until the next round. As a round starts,
+every player spawns again at its team's next spawn point (`cs::spawnPointsOf`, as
+`EntSelectSpawnPoint` takes each team's in turn, for all its players), one unit above it, turned
+the way it faces, its
 health whole, keeping its armor, weapons and money, and what it may do next with its weapon it may
-do now (`cs::Inventory::spawned`, `m_flNextAttack = 0`: a reload under way completes); then the map
+do now (`cs::Inventory::spawned`, `m_flNextAttack = 0`: a reload under way completes); killed, it
+keeps its money alone, without armor, given its team's loadout (`Spawn`, `GiveDefaultItems`); then the map
 is cleaned up as `CleanUpMap` does after the players spawn: the brush entities whose class restarts
 each round restart (`nx::game::restartBrushEntities`), a door closing again from where it is, a
 touch opening it again meanwhile (`CBaseDoor::Restart`); the original's client clears the decals then
 (its `decal_reset` event), which is to be measured on the original. `sv_restart` is read after the
 round's checks, as the original's Think reads it last. The HUD counts down the whole seconds the game
 told it as the player spawned and as the freeze ended ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
-Each end pays the teams as [§6](#6-economy) says. Game Commencing, the ends by elimination and by
-the objectives, the teams' scores, buying and the end of the match come next.
+Each end pays the teams as [§6](#6-economy) says (a draw and Game Commencing pay nobody, a team's
+losses in a row still raising the loser bonus). The ends by the objectives, the teams' scores, buying
+and the end of the match come next.
 
 ### 3.1 Round end reasons
 
 `enum class RoundEndReason` with parity with the original's reasons (today the four ends of a time
-run out, with the team each is won by: `cs::winnerOf`):
+run out, the draw, the two ends of a team eliminated and Game Commencing, with the team each is won
+by: `cs::winnerOf`):
 
 | Reason | Maps |
 |--------|------|
@@ -90,7 +142,7 @@ run out, with the team each is won by: `cs::winnerOf`):
 | `HostagesNotRescued` (time ran out) | `cs_` |
 | `VipEscaped` / `VipAssassinated` / `VipNotEscaped` | `as_` |
 | `TerroristsEscaped` / `CTsPreventEscape` / `EscapingTerroristsNeutralized` / `TerroristsNotEscaped` | `es_` |
-| `CTsWin` / `TerroristsWin` (elimination) | All |
+| `CounterTerroristsWin` / `TerroristsWin` (elimination) | All |
 | `RoundDraw` | All |
 | `GameCommencing` | All |
 
@@ -185,16 +237,19 @@ key (planned, [18](18-testing-and-quality.md#parity-tests)). What the file holds
 
 **Today** (`cs.shared:economy`, `data/cstrike/economy.toml`, ReGameDLL_CS's values and rules):
 the winners of a round get its end's money (`roundEnds`: 3250 for a target saved, hostages not
-rescued or the VIP not escaped, nothing for terrorists not escaped) and, as the next round starts,
+rescued or the VIP not escaped, nothing for terrorists not escaped; 3000 for a team eliminated, 3250
+on a map with a bomb target, where the original pays the bomb's rewards for it, `bombTargetMoney`)
+and, as the next round starts,
 150 for each hostage still held while the sum is below 2000; the losers get the loser bonus, 1400
 as a game starts, 500 more each round while a team has lost more than once in a row up to 3400,
 1500 once a team wins after such a streak, never to the terrorists of a map with an escape zone
 (`cs::TeamAccounts`). As a round starts each player gets its team's account but those alive on the
 losing side of an end that does not pay them (a target saved, hostages not rescued); a player's
 money is held from none to 16000 (`cs::addMoney`, `kMostMoney`); a restarted game starts the
-accounts, the losses and the bonus over. The local game's player is paid so. The single auditable
+accounts, the losses and the bonus over, Game Commencing too. The server's players are paid so. The single auditable
 function and its event come with their first consumers (the HUD's flash of a changed number,
-plugins); the kills', the bomb's and the hostages' rescue money come with them.
+plugins); the bomb's and the hostages' rescue money come with them. A kill's money is paid as
+[§7.4](#74-damage) tells.
 
 ## 7. Weapons and equipment
 
@@ -457,14 +512,16 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   something, which may be a hostage; a miss and a hit play their sequences and hold the attacks as
   the data says (a slash 0.35 or 0.4 seconds, the next stab 0.5; a stab 1.0 or 1.1), the slashes
   from their first sequence again each time the knife is drawn. A hit on a body
-  (`cs::WeaponHit::isBody`: a hostage, or an entity of a class the original's `Classify` makes other
-  than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
+  (`cs::WeaponHit::isBody`: a player, a hostage, or an entity of a class the original's `Classify`
+  makes other than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
   `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
   sound of what its texture is made of, as the original's multiplayer rules play none
   (`CHalfLifeMultiplay::PlayTextureSounds`). What it meets takes its blow (`cs::Blow`,
   `nx::game::attackEntity`) once the next attack's time is set: 15 for the slash (its fast swing's 20
   is never dealt, that time set before it is weighed) and 65 for the stab (`data/cstrike/weapons/knife.toml`'s
-  `damage`); the stab's three times as much in a player's back comes with the players.
+  `damage`), three times as much in a player's back (`backMultiplier`, `KnifeBackStabMultiplier`): a
+  player it meets turned the way it strikes, its body's forward along the ground more than 0.8 along
+  the strike's (`Stab`'s dot).
 
 ### 7.4 Damage
 
@@ -476,11 +533,64 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - All damage goes through the hookable `TakeDamage` action ([15](15-mod-api.md#5-hookable-actions)).
 
 **Today** (`cs.shared:hitGroups`, `data/cstrike/hitGroups.toml`): the share of an attack's damage a
-body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`), for each kind:
+body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`, read from a
+trace's model group by `cs::hitGroupOf`, a group the game names none of keeping its number), for each kind:
 the monsters' `TraceAttack`'s (head 3, chest and stomach 1.5, arms 1, legs 0.75, a shield none), which
 a hostage takes an attack by first, and the hostages' `TakeDamage`'s (`GetModifiedDamage`: none 1.75,
-head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), each in double precision as the
-original's float times a double. The players' shares and armor come with them.
+head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), and the players' `TraceAttack`'s
+(head 4, chest 1, stomach 1.25, arms 1, legs 0.75), each in double precision as the original's float
+times a double (`cs::DamageShare`, `cs::scaled`).
+
+**Today**, the players' attacks on each other (`cs.server:playerBodies`, `cs::Game`, GPL, consulted:
+[20 §3](20-legal-and-licensing.md#3-clean-room)): a player's body is solid as its box to a hull's trace,
+standing or ducked, and meets a line by its model's hitboxes but the last, a shield's, which a player
+without one has none of, each grown half a unit each way (`SV_HullForStudioModel` with
+`sv_clienttrace` 1), posed as the server's game poses a client's (`R_StudioPlayerBlend`,
+`R_StudioHull`, `SV_StudioSetupBones`): its sequence at the frame it estimates, its motion kept, the
+aim's blends, its legs at the first frame of their gait sequence, turned by their yaw and, for a
+sequence of fewer blends, by the pitch beyond its first blend's reach. The shooter's own body is left
+out of its shots and strikes. A player met (`TraceAttack`) takes the hit group of the hitbox met (none
+for a box), the damage its share; its view is punched, unless its helmet or its vest stops the blood
+(the head half the damage up, 12 at most, and its roll as much either way, 9 at most; the chest and the
+stomach a tenth up, 4 at most); then `TakeDamage`: a teammate's attack hurts none while
+`mp_friendlyfire` is 0 (`FPlayerCanTakeDamage`), else 0.35 of it; a hit but in the legs of a weapon of
+`harm.largeFlinch` (the AK-47's, the M4A1's) on a player that does not duck flinches it large, knocks it
+back 170 units a second away from its attacker while it moves slower than 300 and slows it down to
+0.65 of its speed, any other flinches it small and slows it down to 0.5 (`TakeDamageImpulse`), a
+hundredth less slow each command it starts on the ground (`m_flVelocityModifier`); its armor where it
+covers the group (kevlar the chest, the stomach, the arms and a hit of no group, a helmet the head)
+takes its share: the health takes 0.5 times the attacker's weapon's `harm.armorRatio` of the damage
+(`ARMOR_RATIO`: the AK-47's 1.55, the Glock's 1.05, the knife's 1.7, the M4A1's 1.4, the USP's 1), the
+armor loses half the rest (`ARMOR_BONUS`), and once it is gone the health takes what its points did
+not, the armor none then; its whole points off its health; heard in its pain by where it was met
+(`headshot1` to `3`, `bhit_helmet-1` with a helmet, `bhit_kevlar-1` its armor taking a share but in the
+legs, else its flesh's). Killed by it, it plays its death by where it was met (§2), and its killer gets
+300 for an enemy and loses 3300 for a teammate (`data/cstrike/economy.toml`'s `kills`,
+`CHalfLifeMultiplay::PlayerKilled`). A player wears armor as an item of it gives it (`cs::wearArmor`:
+100, `item_kevlar` a vest, `item_assaultsuit` a vest and a helmet), until it is killed. A hit sheds
+its blood (`cs::shedsBlood`, `TraceAttack`'s `bShouldBleed`) but on a teammate while
+`mp_friendlyfire` is 0, in the head with a helmet, and in the chest, the stomach and the arms with
+armor; then it is traced behind the player (`cs.shared:blood`, `data/cstrike/blood.toml`,
+`CBaseEntity::TraceBleed`): along the hit's way and a little off it, by its damage once its hit group
+took its share (one way a tenth off below 10, two a fifth off below 25, else four three tenths off),
+172 units on from where it met the body through the world and the brush entities, the bodies left
+be; one in three of the ways that meet one leaves a red blood decal there, `{blood1` to `{blood6` each
+as likely (`UTIL_BloodDecalTrace`), which the server chooses and tells its clients
+(`cs::BloodMark`). Before that, it sprays where it met the body (`SpawnBlood`, `UTIL_BloodDrips`,
+`TE_BLOODSPRITE`): the server tells its clients of the spray (`cs::BloodSpray`), its color the
+palette's entry 247 (`BLOOD_COLOR_RED`) and its size the hit's whole points doubled (the multiplayer
+rules'), 255 at most, over 10, from 3 to 16; a hit of no whole point sprays none. A client shows it as
+Xash3D-FWGS's `R_BloodSprite` does (GPL, consulted; `cs.client:tempEntities`, `data/cstrike/blood.toml`'s
+`look`): `sprites/bloodspray.spr`, 2 to 4 units above where the hit met the body, its scale its size
+over 35 to over 25, its color the engine palette's entry 1 to 3 after the server's
+(`gfx/palette.lmp`), plays its frames once in a quarter of a second; and its drops of
+`sprites/blood.spr`, as many as its size and two dice of eight, their scales its size over 25 to over
+15, the entry before the spray's, fly off at -96 to 95 units a second across the ground and -32 to 95
+up, spin, fall at half the world's gravity, stop where they meet the world and go after 1 to 3
+seconds, each on one of its frames from the second, the last for one beyond the eighth; both 250 of
+255 opaque. A head's stream (`BloodSplat`, `TE_BLOODSTREAM`) and a helmet's sparks
+(`TE_STREAK_SPLASH`) come with particles; the scores and the kill feed with what they need
+([TODO](TODO.md)).
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's
@@ -494,6 +604,34 @@ tile 0.65, a computer 0.4) and sets the share it deals after (metal 0.2, a grate
 computer 0.45, tile 0.3, wood 0.6, else 0.5); what is not a brush model, or the last it may meet,
 lets it go 42 units in, deals 0.75 after and leaves it 0.75 of the way left, a brush model half. The
 Glock's burst's two last rounds have a range modifier of 0.9 (`FireRemaining`).
+
+**Today**, a player hurt and killed (`cs.shared:playerHarm`, `data/cstrike/playerHarm.toml`): its
+landings, as the original's `PostThink` weighs them after the weapon's frame, by how fast it was
+falling as the command that put it on the ground started (`m_flFallVelocity`), out of water (slime and
+lava spare it none): beyond 500 units a second, 100 for each 600 more, in float, times the multiplayer
+rules' 1.25 (`cs::landingDamageOf`, `FlPlayerFallDamage`), so 20 at 600 units a second and 125 at
+1100. Its breath, before each command moves it (`cs::Breath`, `WaterMove`): once its air ran out under
+water it drowns, a second apart (waited past: the next a second and a tick later), 3, then 4, then 5
+each time; with its head out of water again its drowning starts over from 3, and what drowning took is
+given back (`cs::TimedHarms`, `CheckTimeBasedDamage`), 10 at a time, each time the harms it keeps over
+time are looked at: two seconds apart at least, while it keeps one, drowning and slime's acid among
+them, so that the first giving back waits on the last look; in slime it is hurt 4 each command, and in
+lava 10, times how deep it is in (1 at its feet, 2 at its waist, 3 over its head), lava not within a
+second after slime hurt it without its leaving the water (the original's `dmgtime`). Each harm it takes
+as `CBasePlayer::TakeDamage` deals it (`cs::harmPlayer`): its armor's share where it covers the hit group
+it was last met in (a fall meets it in none), but of a fall and of drowning; the pain of where it was
+met (`cs::painOf`, on its `Voice` channel: its flesh's, `bhit_flesh-1` to `-3`, for a fall), then the
+damage's whole points off its health (the original's `int()`), its health
+going below none as the original's does, which its HUD shows as none, drowning and acid kept over time;
+a landing harder than its health first splats (`common/bodysplat`, on its `Item` channel), and the
+pitch of its kick is gone. With no health left it
+is killed (`Killed`): its death is heard (`die1` to `die3`, `death6`, on its `Voice` channel, the
+pain's replaced), its weapons go with it (`PackDeadPlayerItems`; the box it drops comes with dropping),
+it does nothing more until it spawns again (killed by nothing, it observes its own body, which moves no
+more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), no longer solid, and the round's
+end is weighed (§3): its team eliminated loses it. What a dead player sees and its HUD (the
+original's client follows its body, `OBS_CHASE_FREE`, then spectates) and `trigger_hurt` come with what
+they need ([TODO](TODO.md)).
 
 ### 7.5 Weapons made as the game runs
 
@@ -538,7 +676,7 @@ The console's weapon commands (`cs.client:weaponCommands`) are named as a plugin
 | `get_weapon_var <weapon> [key path]` | Prints a value, or all of them and what the weapon lacks |
 | `list_weapons` | Prints the weapons: id, classname, name, slot, position, and whether incomplete or replaced |
 | `replace_weapon <weapon> [replacement]` | The game makes the replacement for the weapon, or the weapon again |
-| `give <weapon>` | Gives the player a weapon, by its id or classname: its replacement, when it is replaced |
+| `give <weapon>` | Gives the player a weapon, by its id or classname: its replacement, when it is replaced; or armor, as the original's names its items: `item_kevlar`, `item_assaultsuit` |
 
 **Today:** weapons made, set, replaced and given through the catalog and the console; their
 behavior is the weapons' own, driven by their values. A weapon's own behavior (overriding its
@@ -576,18 +714,98 @@ kinds of ammo made as the game runs, with the HUD's picture of each, come with t
 
 ## 11. Bots (milestone M7)
 
-- Bots with behavior equivalent to the official CS 1.6 bots, on a navigation mesh (with
-  import of existing `.nav` files).
+Counter-Strike 1.6 has no bots of its own; its players know Condition Zero's, which ReGameDLL_CS
+reconstructs (GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)). The project's bot
+plays by those rules, on the agents every kind shares ([ADR-0024](adr/0024-agents.md)) and on
+navigation meshes ([ADR-0023](adr/0023-navigation.md)):
+
+- One module, `cs.bots`: a bot is a player of the server's game, which it joins as a client does
+  and drives by user commands alone, with no gameplay shortcut; offline, it plays in the local
+  server.
+- Smarter than Condition Zero's by its memory, never by cheating: where each enemy was last seen or
+  heard and where it may have gone since along the mesh, what its team reported over the radio,
+  and where players died on the map before. It knows only what it perceived or was told.
+- Quick to decide: perception and decisions within a budget per tick, path queries in batches in
+  jobs. How soon it reacts and how well it aims are `bot_difficulty`'s values, in data.
 - Familiar commands and cvars: `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick`,
   `bot_quota`, `bot_difficulty`, `bot_chatter`.
-- Bots use the same intent API as players (usercmds), with no gameplay shortcuts.
+- A map's `.nav` file of Condition Zero's format may give its places and hiding spots; the mesh
+  itself is always built.
+
+Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_util.cpp`):
+
+- `bot_add` joins the team the game's auto-select joins (`cs::Game::defaultTeam`,
+  `SelectDefaultTeam`: the one of fewer players, else one at random; the teams' wins, which it
+  weighs then, come with the scores), `bot_add_t` and `bot_add_ct` their team; each adds one to
+  `bot_quota`. Each takes a profile's name, in any case (`bot_add_t Abner`, `GetProfile`), refused
+  when no profile has it or when a bot plays as it or a player has its name (`UTIL_IsNameTaken`).
+  `bot_kick` (or `bot_kick all`) makes every bot leave and sets `bot_quota` to 0; `bot_kick <name>`
+  the bot of that name, exactly, one less in `bot_quota`, and fails when no bot has it, where the
+  original says nothing. A bot leaves as a client disconnects (`cs::Game::leave`,
+  `ClientDisconnected`): its weapons and body go, and its slot is the next player's.
+- `bot_quota` is looked at every 0.3 seconds (`MonitorBotCVars`): one bot is added when there are
+  fewer, one leaves when there are more, of the team of more players or of one drawn at random,
+  a dead one first, of the other team when that one has none (`MaintainBotQuota`,
+  `UTIL_KickBotFromTeam`). `bot_join_after_player`, `bot_auto_vacate` and the player limit come with
+  the dedicated server's `maxplayers`.
+- A bot sees an enemy (`cs.bots:botSight`) when one of its spots, tried in order, is in the cone of
+  120 degrees about its view's yaw across the ground (`FInViewCone`, `m_flFieldOfView` 0.5) and a
+  line from its eye reaches it through the world and the brush entities, the bodies leaving it be
+  (`IsVisible`, `UTIL_TraceLine` with `ignore_monsters`, `cs::Game::seesSpot`): the chest, the head
+  25 above, the feet 34 below standing or 14 ducked, and the sides 13 across. It looks at a share of
+  the players each tick (`perceptionBudget`) and remembers what it saw for a while
+  (`data/cstrike/bots.toml`). Lines through glass and smoke are weighed with them.
+- Each bot plays as a profile drawn as it joins among those of `bot_difficulty`'s difficulty that
+  no bot plays as and no player has the name of (`GetDifficultyLevel`: easy below 0.9, normal below
+  1.9, hard below 2.9, else expert; `GetRandomProfile`, `UTIL_IsNameTaken`): a name and its level of
+  skill, the templates of the zBot's `BotProfile.db` that ReGameDLL_CS ships, each a skill, a
+  reaction time and an attack delay (`skillLevels` in `data/cstrike/bots.toml`, each with its
+  `profiles`; easy and fair for easy, fair, normal and tough for normal, tough, hard and very hard
+  for hard, expert and elite for expert). The profiles' names are the project's own. Its player is
+  named after `bot_prefix`, a blank between (`UTIL_ConstructBotNetName`). With every profile of its
+  difficulty in the game, the original adds no bot; here one is drawn among them all, and the
+  server numbers its name (section 2).
+- An enemy it sees is known to it its reaction time after it first saw it, out of sight since or not
+  (`ReactionTime`, `nx::agents::Rules::reactionTime`): before then it neither attacks nor chases it.
+- Its view turns towards where it looks by a spring, stiffer as it attacks, its yaw set once a degree
+  off, its pitch pulled twice as hard (`UpdateLookAngles`, `cs.bots:botAim`). It aims at the first
+  spot of its enemy it saw, ahead of it by their velocities apart over a tenth of a second above half
+  a skill (`Upkeep`), and off by its aim's error: a tenth of the range at most on each axis, times
+  the share of skill it lacks, less as it focuses with its view held steady (up to 0.75 of skill over
+  5 seconds times the share it lacks, 2 at least), a new one drawn each 0.25 to 1 second, which its
+  aim moves to a tenth of the way each thirtieth of a second (`SetAimOffset`, `UpdateAimOffset`).
+  The original moves its view and its aim at each of its 30 commands a second; here over each
+  command's duration, the same on any tick rate.
+- It weighs pressing its attack at each full think, a tenth of a second apart, its buttons held until
+  the next (`BotThink`, `FireWeaponAtEnemy`, `cs.bots:botTrigger`): once its attack delay went by
+  since it took its enemy on, with its view's yaw within the angle 32 units span at the range of
+  where it aims, and its pause went by; with a pistol it fires as fast as it may above 0.75 of skill,
+  its attack up and down each command (`StartRapidFire`), else 0.15 to 0.4 seconds apart; with a gun
+  at once below half a skill or nearer than 400 units, 0.3 to 0.7 seconds apart beyond 800, else
+  0.15 to 0.5, each pause a think less.
+- It chases what it no longer sees to where it saw it, and, with nothing to pursue, hunts a place of
+  the mesh drawn within `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its
+  corridor, standing (the mesh leaves out what only a ducked player passes), its view level ahead
+  along its way. Spawning again, it starts with a new brain, its view still, its aim and its trigger
+  anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
+  (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
+  with it as it leaves.
+- The spot of its enemy it aims at by its skill and the parts it sees, the knife's,
+  the sniper rifles', the shotguns' and the machine gun's own ways of firing, the weapons it chooses
+  and buys, the objectives, the radio and `bot_chatter` come next.
+
+The kinds a mod makes, such as zombies and bosses, are modules of the mod over the same agents,
+in Rook ([15 §2](15-mod-api.md#2-module-organization)).
 
 ## 12. Data organization
 
 The planned layout; today `entities.toml`
 ([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml`, `weapons/` (section 7.2), `loadouts.toml`,
-`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), and `footsteps.toml` and
-`breath.toml` ([11 §3](11-audio.md#3-original-semantics-to-preserve)) exist. The hull sizes are not data:
+`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml`,
+`blood.toml` and `playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
+([11 §3](11-audio.md#3-original-semantics-to-preserve)), `use.toml`
+([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) and `characters.toml` (section 2)
+exist. The hull sizes are not data:
 `cs.shared` holds them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
 ```
@@ -595,14 +813,18 @@ data/cstrike/
 ├── cvars.toml          # all game cvars: name, type, default, range, flags
 ├── economy.toml
 ├── hitGroups.toml
+├── blood.toml          # the blood a hit sheds on what is behind it
+├── playerHarm.toml     # how a player is hurt and killed: its falls, its pain and death
 ├── movement.toml       # derived constants not exposed as cvars
+├── navigation.toml     # the agents' profiles: the size and moves of each (ADR-0023)
 ├── entities.toml       # classname -> prefab + keyvalue schema
-├── teams.toml          # teams, characters, models
+├── characters.toml     # each team's characters, in its menu's order: their models
 ├── ammo.toml           # kinds of ammo: carried, box price and rounds
 ├── loadouts.toml       # what each team spawns with
 ├── lightStyles.toml    # the light styles the game sets as a map starts
 ├── footsteps.toml      # the sounds of a player's feet
 ├── breath.toml         # the sounds of a player's breath in water
+├── use.toml            # the sounds of a player's use key
 ├── weapons/
 │   ├── ak47.toml
 │   └── ...

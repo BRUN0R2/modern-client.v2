@@ -73,7 +73,7 @@ auto ReflectionProbes::create(rhi::Device& device, rhi::CommandList& commands,
     probes.m_positions.assign(desc.positions.begin(),
                               desc.positions.begin() +
                                   narrow<std::ptrdiff_t>(std::min(desc.positions.size(), kMostProbes)));
-    probes.m_mipLevels = std::bit_width(kProbeSideSize);
+    probes.m_mipLevels = narrow<std::uint32_t>(std::bit_width(kProbeSideSize));
     const rhi::Extent2d side{.width = kProbeSideSize, .height = kProbeSideSize};
     const auto probeCount = narrow<std::uint32_t>(std::max<std::size_t>(probes.m_positions.size(), 1));
     auto capture =

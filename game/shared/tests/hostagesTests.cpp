@@ -18,6 +18,9 @@ import nx.game;
 import nx.platform;
 import cs.shared;
 
+static_assert(std::equality_comparable<cs::ControllerSettings>);
+static_assert(std::equality_comparable<cs::HostageState>);
+
 #include "triangleModel.hpp"
 
 namespace {
@@ -122,7 +125,8 @@ void makeReady(nx::ecs::World& world, std::span<const cs::PlayedModel> models) {
 [[nodiscard]] auto spawnsApart(std::size_t count) -> std::vector<cs::HostageSpawn> {
     std::vector<cs::HostageSpawn> spawns;
     for (std::size_t index = 0; index < count; ++index) {
-        spawns.push_back(cs::HostageSpawn{.origin = {.x = 40.0F * static_cast<float>(index), .z = 100.0F}});
+        spawns.push_back(cs::HostageSpawn{.spawn = nx::narrow<std::uint32_t>(index),
+                                          .origin = {.x = 40.0F * static_cast<float>(index), .z = 100.0F}});
     }
     return spawns;
 }
@@ -253,7 +257,7 @@ TEST(HostagesTest, AHostageStopsAPlayerAsABox) {
     const std::array spawns{cs::HostageSpawn{.origin = {.x = 30.0F, .z = 100.0F}}};
     cs::spawnHostages(world, hulls, spawns);
 
-    const std::vector<cs::SolidBox> boxes = cs::solidBoxesOf(world);
+    const std::vector<cs::SolidBox> boxes = cs::solidBoxesOf(world, std::nullopt);
     ASSERT_EQ(boxes.size(), 1U);
     EXPECT_FLOAT_EQ(boxes[0].origin.x, 30.0F);
     EXPECT_EQ(boxes[0].box.max.z, cs::kHostageBox.max.z);
@@ -304,7 +308,7 @@ TEST(HostagesTest, ALineThroughAHostageOfAModelWithoutHitboxesIsAllInSolid) {
     EXPECT_EQ(hit.trace.fraction, 1.0F);
 }
 
-TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {
+TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromWhatTheServerTellsOfItsLastThink) {
     const PlayedTriangle triangle;
     nx::ecs::World world;
     makeReady(world, triangle.models());
@@ -317,14 +321,20 @@ TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {
     const nx::TickRate rate = nx::game::tickTimeOf(world).rate;
     const nx::GameTime later = animation.advancedAt.after(nx::Seconds{0.02F}, rate);
 
-    const std::vector<cs::ShownHostage> shown = cs::hostagesShownAt(world, later);
-    ASSERT_EQ(shown.size(), 1U);
-    EXPECT_EQ(shown[0].spawn, 0U);
-    EXPECT_FLOAT_EQ(shown[0].origin.x, 8.0F);
-    EXPECT_EQ(shown[0].sequence, animation.sequence);
+    const std::vector<cs::HostageState> states = cs::hostageStatesOf(world);
+    ASSERT_EQ(states.size(), 1U);
+    EXPECT_EQ(states[0].spawn, 0U);
+    EXPECT_FLOAT_EQ(states[0].origin.x, 8.0F);
+    EXPECT_EQ(states[0].sequence, animation.sequence);
+    EXPECT_EQ(states[0].frame, animation.frame);
+    EXPECT_EQ(states[0].advancedAt, animation.advancedAt);
     const nx::assets::StudioSequence& sequence = triangle.view().sequences()[animation.sequence.value];
+    const cs::ShownHostage shown = cs::shownHostageOf(states[0], sequence, later, rate);
+    EXPECT_EQ(shown.spawn, 0U);
+    EXPECT_FLOAT_EQ(shown.origin.x, 8.0F);
+    EXPECT_EQ(shown.sequence, animation.sequence);
     EXPECT_FLOAT_EQ(
-        shown[0].frame.value(),
+        shown.frame.value(),
         cs::estimatedFrameOf(sequence, animation.frame, nx::Seconds{0.02F}, animation.framerate).value());
 }
 
@@ -335,20 +345,30 @@ TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromItsLastThink) {
         .trace = nx::collision::Trace{.fraction = 0.5F, .hitGroup = std::to_underlying(group)}};
 }
 
+TEST(HitGroupRulesTest, ATracesModelGroupIsTheGamesHitGroupItsNumberKept) {
+    EXPECT_EQ(cs::hitGroupOf(nx::collision::Trace{.hitGroup = 1}), cs::HitGroup::Head);
+    EXPECT_EQ(cs::hitGroupOf(nx::collision::Trace{}), cs::HitGroup::Generic) << "a trace that met no hitbox";
+    EXPECT_EQ(std::to_underlying(cs::hitGroupOf(nx::collision::Trace{.hitGroup = 42})), 42U)
+        << "a group the game names none of";
+    EXPECT_TRUE(cs::isLeg(cs::HitGroup::LeftLeg));
+    EXPECT_TRUE(cs::isLeg(cs::HitGroup::RightLeg));
+    EXPECT_FALSE(cs::isLeg(cs::HitGroup::Stomach));
+}
+
 TEST(HitGroupRulesTest, TheRepositorysSharesAreTheOriginals) {
     const cs::HitGroupRules& rules = repositoryHitGroups();
     // CBaseMonster::TraceAttack.
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Head)), 3.0);
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Stomach)), 1.5);
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::RightLeg)), 0.75);
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Shield)), 0.0);
-    EXPECT_EQ(rules.monster.of(42), 1.0) << "a group the game names none of";
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::Head), cs::DamageShare{3.0});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::Stomach), cs::DamageShare{1.5});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::RightLeg), cs::DamageShare{0.75});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::Shield), cs::DamageShare{0.0});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup{42}), cs::DamageShare{1.0}) << "a group the game names none of";
     // CHostage::GetModifiedDamage.
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::Generic)), 1.75);
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::Head)), 2.5);
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::LeftArm)), 0.75);
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::LeftLeg)), 0.6);
-    EXPECT_EQ(rules.hostage.of(42), 1.5);
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::Generic), cs::DamageShare{1.75});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::Head), cs::DamageShare{2.5});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::LeftArm), cs::DamageShare{0.75});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::LeftLeg), cs::DamageShare{0.6});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup{42}), cs::DamageShare{1.5});
 }
 
 TEST(HostageDamageTest, AnAttackIsScaledByWhereItMeetsTheHostage) {
@@ -368,11 +388,11 @@ TEST(HostageDamageTest, AnAttackIsScaledByWhereItMeetsTheHostage) {
     for (std::size_t index = 0; index < cases.size(); ++index) {
         const auto& [group, expected] = cases.at(index);
         const nx::game::Harm harm = nx::game::attackEntity(world, hostages[index], attackOf(15.0F, group));
-        EXPECT_NEAR(harm.damage.value(), expected, 1e-4F) << std::to_underlying(group);
+        EXPECT_NEAR(harm.damage.value(), expected, 1e-4F) << nx::enumName(group);
         EXPECT_FALSE(harm.isKilled);
         EXPECT_NEAR(world.get<cs::Hostage>(hostages[index])->health.value(),
                     cs::kHostageHealth.value() - expected, 1e-3F);
-        EXPECT_EQ(world.get<cs::Hostage>(hostages[index])->lastHitGroup, std::to_underlying(group));
+        EXPECT_EQ(world.get<cs::Hostage>(hostages[index])->lastHitGroup, group);
     }
     const nx::game::Harm shielded =
         nx::game::attackEntity(world, hostages.front(), attackOf(15.0F, cs::HitGroup::Shield));
@@ -419,7 +439,7 @@ TEST(HostageDamageTest, AKilledHostagePlaysItsDeathAndIsNoLongerSolidNorThinks) 
     EXPECT_EQ(dead.activity, cs::Activity::DieHeadshot);
     EXPECT_FALSE(world.has<nx::game::BoxSolidity>(hostage)) << "SOLID_NOT";
     EXPECT_FALSE(world.has<nx::game::NextThink>(hostage));
-    EXPECT_TRUE(cs::solidBoxesOf(world).empty());
+    EXPECT_TRUE(cs::solidBoxesOf(world, std::nullopt).empty());
     const nx::game::Harm again = nx::game::attackEntity(world, hostage, attackOf(15.0F, cs::HitGroup::Head));
     EXPECT_EQ(again.damage.value(), 0.0F) << "a dead hostage takes no damage";
     EXPECT_FALSE(again.isKilled);
@@ -443,7 +463,7 @@ TEST(HostageDamageTest, ARoundPutsADeadHostageBackWholeButCountsItNot) {
     EXPECT_EQ(revived.activity, cs::Activity::Idle);
     EXPECT_TRUE(world.has<nx::game::BoxSolidity>(hostages[0]));
     EXPECT_TRUE(world.has<nx::game::NextThink>(hostages[0]));
-    EXPECT_EQ(cs::solidBoxesOf(world).size(), 2U);
+    EXPECT_EQ(cs::solidBoxesOf(world, std::nullopt).size(), 2U);
 }
 
 TEST(HostageDamageTest, HurtingAHostageCostsItsAttacker) {

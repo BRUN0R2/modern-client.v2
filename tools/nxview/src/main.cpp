@@ -20,6 +20,7 @@ import nx.render;
 import nx.ui;
 import nx.settings;
 import cs.shared;
+import cs.server;
 import cs.client;
 
 namespace {
@@ -386,22 +387,34 @@ constexpr std::size_t kBlue = 2;
     }
     const nx::render::Camera camera = startCamera(options, level.map());
     // The brush entities where the game puts them, and the weapon the player drew as the map started,
-    // the player standing still until the frame, its eye where the options put the camera.
-    // The original's default setting: _cl_autowepswitch 1.
-    auto game = cs::LocalGame::start(content, level, cs::spawnTeam(level.map()), cs::AutoSwitch::ToHeavier,
-                                     *gameCvars);
+    // the player standing still until the frame, its eye where the options put the camera, as the
+    // client of a listen server knows its game. The original's default settings: _cl_autowepswitch 1,
+    // and the engine's name for a player.
+    auto game = cs::Game::start(content, level.gameMap(), *gameCvars);
     if (!game) {
         return unusable(game.error());
     }
+    const cs::PlayerIndex player = (*game)->join(cs::spawnTeam(level.map()), cs::AutoSwitch::ToHeavier,
+                                                 nx::settings::kDefaultPlayerName);
     if (options.position) {
-        (*game)->placeEye(camera.position);
+        (*game)->placeEye(player, camera.position);
     }
-    std::ignore = (*game)->wait(camera.angles, options.time);
-    const std::vector<nx::render::ModelPlacement> placements = (*game)->placements();
-    const std::vector<cs::ShownHostage> hostages = (*game)->hostages();
+    cs::ClientGame client{level.models(), level.players(), (*game)->snapshotFor(player)};
+    for (std::uint32_t due = client.ticksDue(options.time, cs::CatchUp::Whole); due > 0; --due) {
+        const std::array playerCommands{
+            cs::PlayerCommand{.player = player, .command = client.standingCommand(camera.angles)}};
+        (*game)->tick(playerCommands);
+        client.receive((*game)->snapshotFor(player));
+    }
+    std::vector<nx::render::ModelPlacement> placements;
+    std::vector<cs::ShownHostage> hostages;
+    std::vector<cs::ShownPlayer> players;
+    client.writePlacements(placements);
+    client.writeHostages(hostages);
+    client.updatePlayers(options.time, players);
     // The client events of the play the view model is in, from its first frame: the muzzle flashes
     // a shot shows.
-    const std::optional<cs::ViewModelPose> viewPose = (*game)->viewModel();
+    const std::optional<cs::ViewModelPose> viewPose = client.viewModel();
     cs::ViewModelEvents viewEvents;
     const std::vector<cs::PassedEvent> clientEvents =
         viewEvents.passed(viewPose ? level.viewModel(viewPose->weapon) : nullptr, viewPose);
@@ -410,7 +423,9 @@ constexpr std::size_t kBlue = 2;
         // before drawing it, so the result does not depend on how quickly the GPU runs.
         const std::size_t probeCount = std::min(level.probePositions().size(), nx::render::kMostProbes);
         for (std::size_t probe = 0; probe < probeCount; ++probe) {
-            scene->bakeReflections(commands->get(), level, options.time, placements);
+            scene->bakeReflections(commands->get(), {.time = options.time,
+                                                     .lightStyles = client.lightStylesAt(options.time),
+                                                     .placements = placements});
             if (auto submitted = (*device)->submitFrame(); !submitted) {
                 return unusable(submitted.error());
             }
@@ -423,14 +438,14 @@ constexpr std::size_t kBlue = 2;
     }
     std::vector<nx::render::ScreenQuad> quads;
     if (hud) {
-        const cs::PlayerStatus& status = (*game)->status();
+        const cs::PlayerStatus& status = client.status();
         hud->append(quads,
                     {.health = status.health,
                      .armor = status.armor,
                      .money = status.money,
-                     .ammo = cs::hudAmmoOf((*game)->inventory(), content.weapons),
+                     .ammo = cs::hudAmmoOf(client.inventory(), content.weapons),
                      .crosshairDistance = cs::kKnifeCrosshairDistance,
-                     .roundTime = (*game)->roundTimeShown()},
+                     .roundTime = client.roundTimeShown()},
                     cs::CrosshairStyle{}, extent);
     }
     if (fpsLabel) {
@@ -440,14 +455,17 @@ constexpr std::size_t kBlue = 2;
         consoleWindow->paint(quads, extent);
     }
     nx::rhi::CommandList& list = commands->get();
-    const std::optional<cs::FrameScene> shown{cs::FrameScene{.scene = *scene,
-                                                             .level = level,
-                                                             .view = {.camera = camera,
-                                                                      .time = options.time,
-                                                                      .placements = placements,
-                                                                      .hostages = hostages,
-                                                                      .viewModel = viewPose,
-                                                                      .clientEvents = clientEvents}}};
+    const std::optional<cs::FrameScene> shown{
+        cs::FrameScene{.scene = *scene,
+                       .level = level,
+                       .view = {.camera = camera,
+                                .time = options.time,
+                                .lightStyles = client.lightStylesAt(options.time),
+                                .placements = placements,
+                                .hostages = hostages,
+                                .players = players,
+                                .viewModel = viewPose,
+                                .clientEvents = clientEvents}}};
     if (auto recorded = frames->record(list, target->get(), extent, shown, quads); !recorded) {
         return unusable(recorded.error());
     }
@@ -498,8 +516,8 @@ auto main(int argumentCount, char** argumentValues) -> int {
         std::println(stderr, "nxview: no local custom content folder {}", nx::platform::toUtf8(*addons));
         return kExitUnusable;
     }
-    auto content =
-        cs::openGameContent(options->data.value_or(programFolder / "data"), options->install, addons);
+    const std::filesystem::path data = options->data.value_or(programFolder / "data");
+    auto content = cs::openGameContent(data, options->install, addons);
     if (!content) {
         return unusable(content.error());
     }
@@ -518,7 +536,11 @@ auto main(int argumentCount, char** argumentValues) -> int {
         content->loadouts.loadouts = {{.team = cs::Team::Terrorists, .weapons = {id}},
                                       {.team = cs::Team::CounterTerrorists, .weapons = {id}}};
     }
-    auto level = cs::Level::load(*content, options->map);
+    auto map = cs::GameMap::load(content->vfs, options->map);
+    if (!map) {
+        return unusable(map.error());
+    }
+    auto level = cs::Level::load(*content, **map);
     if (!level) {
         return unusable(level.error());
     }

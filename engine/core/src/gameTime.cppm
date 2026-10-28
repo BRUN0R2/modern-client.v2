@@ -54,7 +54,8 @@ public:
     }
 
     /// `elapsed` later (earlier when negative), at `rate`: the whole ticks of the fraction carried
-    /// into the count.
+    /// into the count. A duration that is the float nearest to a whole number of ticks lasts that
+    /// number exactly: 0.1 s is ten ticks at 100, not ten and a hair, which would land on the eleventh.
     [[nodiscard]] auto after(Seconds elapsed, TickRate rate) const noexcept -> GameTime;
 
     /// How long after `earlier` it is, at `rate`: negative when before it.

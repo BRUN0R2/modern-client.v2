@@ -20,6 +20,7 @@
       ]
     },
     "tomlplusplus",
+    "recastnavigation",
     {
       "name": "freetype",
       "default-features": false

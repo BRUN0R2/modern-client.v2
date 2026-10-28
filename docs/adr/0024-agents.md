@@ -1,6 +1,6 @@
 # ADR-0024 — Agents: one system for bots, monsters, bosses and every character the game moves
 
-- **Status:** Proposed
+- **Status:** Accepted, amended by [0028](0028-native-agent-test-mod.md) for the first native test mod
 - **Date:** 2026-10-23
 
 ## Context
@@ -17,9 +17,13 @@ is replicated as a player. A monster or a boss is an **entity** of the world: no
 its own way of moving and its own `vars`. A flag would put `if (kind == bot)` in every rule that
 cares.
 
+The maintainer also wants each kind (the bots, a mod's zombies, its bosses) to be its own module,
+independent of the others, over that one system, and the bots smarter than Condition Zero's, with a
+memory of where the players were.
+
 ## Decision
 
-Proposed: a module **`nx.agents`** (layer 4, beside `nx.game`) makes agents of entities of the
+A module **`nx.agents`** (layer 4, beside `nx.game`) makes agents of entities of the
 ECS. An agent is an entity with an `Agent` component and the parts it uses: `Perception`,
 `Memory`, `Behavior` and `NavigationAgent` (a profile of [ADR-0023](0023-navigation.md), its path
 and its steering).
@@ -29,6 +33,14 @@ and its steering).
   a health. A bot drives a player's body, and the game's rules treat it as a player; a monster,
   a boss or a hostage drives an entity's body, moved as its class moves (as a player does, by
   steps, flying). The agent's systems never ask which.
+- **One module for each kind.** `nx.agents` is the brain every kind shares, and it knows no kind:
+  perception, memory, behaviors, steering. Each kind of agent is its own module above it, which
+  brings the kind's body, behaviors and rules and depends on no other kind's: removing one changes
+  nothing in the others. Counter-Strike's bot is `cs.bots`; the kinds a mod makes, such as zombies
+  and bosses, are modules of the mod, in Rook (M6, with the port of ReZombie,
+  [16](../16-amxx-migration.md)), on the same API, since the repository plays Counter-Strike 1.6
+  alone ([ADR-0017](0017-counter-strike-only.md)). Until then, the hostages, Counter-Strike's own
+  characters, are the first kind with an entity's body, following the original's rules.
 - **Roles are classes and tags, not a flag.** Boss, zombie, hostage, ally, escort are classes
   ([ADR-0022](0022-plugin-api-primitives.md)) and typed tags (`tag Boss;`) a mod declares; a boss's
   health bar or a round rule looks for the tag.
@@ -63,11 +75,14 @@ and its steering).
   local server ([08](../08-networking.md)); clients never run them. Ticks are fixed, each agent
   draws from its own random stream ([07 §2.3](../07-simulation-and-physics.md#23-shared-seed)),
   and pure decisions run in jobs: the same inputs give the same match, for replays and tests.
-- **Counter-Strike's bot** lives with the game's rules (`cs.server`; in the local game until the
-  server exists): buying, objectives, the radio and its difficulty, after ReGameDLL_CS's
-  reconstruction of Condition Zero's bot (GPL, consulted), with the commands of
-  [10 §11](../10-counter-strike-gameplay.md#11-bots-milestone-m7): `bot_add`, `bot_add_t`,
-  `bot_add_ct`, `bot_kick`, `bot_quota`, `bot_difficulty`, `bot_chatter`.
+- **Counter-Strike's bot** is the module `cs.bots` (layer 5, beside `cs.server`, declared lateral):
+  its bots join the server's game as players and hand it, each tick, the commands their agents
+  make, as a client's arrive; offline, the game is the local server's. Buying, objectives, the radio
+  and its difficulty follow ReGameDLL_CS's reconstruction of Condition Zero's bot (GPL, consulted),
+  with the commands of [10 §11](../10-counter-strike-gameplay.md#11-bots-milestone-m7): `bot_add`,
+  `bot_add_t`, `bot_add_ct`, `bot_kick`, `bot_quota`, `bot_difficulty`, `bot_chatter`. It is
+  smarter by its memory, never by cheating: where each enemy was last seen or heard and where it
+  may have gone since along the mesh, what its team reported, where players died on the map.
 - **Rook API** (M6, in full words): a class with an agent part; `setGoal(agent, Goal.MoveTo(position))`,
   `chase(agent, target)`, `remember`, `recall`, `forget`, `knownThreats(agent)`,
   `getAgentMemory`/`setAgentMemory` (and `get_agent_memory`/`set_agent_memory`,
@@ -79,6 +94,7 @@ and its steering).
 | Alternative | Why not |
 |-------------|---------|
 | One kind of character with a flag (bot, boss, npc) | Players and world entities differ in every rule that counts players: the flag would spread through the rules |
+| One module holding every kind | Each kind's body and rules would sit together: a mod's boss would change the module the bots live in, and no kind could be removed alone |
 | A system for bots and another for monsters | Navigation, perception, memory and behaviors written twice, and mods choosing between them |
 | Behavior trees | Fine for authored characters, but transitions by score fit a bot's shifting priorities better, and Condition Zero's bot already decides this way |
 | Goal-oriented planning (GOAP) | A planner's choices are hard to predict and to debug, and cost more per decision |
@@ -90,6 +106,8 @@ and its steering).
 - ✅ A mod's boss, horde or companion is a class with an agent part: navigation, perception,
   memory and behaviors come with it.
 - ✅ Bots play by the players' rules: every intent goes through the same movement and weapons.
+- ✅ Each kind is a module of its own: the bots, a mod's zombies and its bosses come and go
+  independently, on one API.
 - ✅ The same match on a server and offline, replayable.
 - ⚠️ Perception and decisions for many agents cost time. Mitigation: budgets per tick, jobs, and
   benchmarks at 64, 256 and 1024 agents.
@@ -97,6 +115,6 @@ and its steering).
   record forgotten first, and the size reported by the agents' statistics.
 - ⚠️ The game's bot depends on rounds, damage, buying and objectives, which come first.
 
-If accepted, the same change amends [01 §1.1](../01-architecture.md#11-module-catalog),
-[10 §11](../10-counter-strike-gameplay.md#11-bots-milestone-m7), [15](../15-mod-api.md) and the
-M7 items of `TODO.md`.
+The change that accepted it amended [01 §1.1](../01-architecture.md#11-module-catalog),
+[10 §11](../10-counter-strike-gameplay.md#11-bots-milestone-m7), [15](../15-mod-api.md),
+[19](../19-roadmap.md) and the M6 and M7 items of `TODO.md`.

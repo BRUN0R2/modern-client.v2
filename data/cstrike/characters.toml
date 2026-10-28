@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The characters a player of each team plays as (docs/10, section 5), read into cs::Characters, as
+# Counter-Strike 1.6's appearance menu offers them, in its order; each plays the model
+# models/player/<name>/<name>.mdl.
+
+[[characters]]
+name = "terror"   # Phoenix Connexion
+team = "terrorists"
+
+[[characters]]
+name = "leet"     # Elite Crew
+team = "terrorists"
+
+[[characters]]
+name = "arctic"   # Arctic Avengers
+team = "terrorists"
+
+[[characters]]
+name = "guerilla" # Guerilla Warfare
+team = "terrorists"
+
+[[characters]]
+name = "urban"    # Seal Team 6
+team = "counterTerrorists"
+
+[[characters]]
+name = "gsg9"     # GSG-9
+team = "counterTerrorists"
+
+[[characters]]
+name = "sas"      # SAS
+team = "counterTerrorists"
+
+[[characters]]
+name = "gign"     # GIGN
+team = "counterTerrorists"

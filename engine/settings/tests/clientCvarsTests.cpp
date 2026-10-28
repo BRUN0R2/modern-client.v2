@@ -38,6 +38,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     ASSERT_TRUE(cvars.has_value()) << nx::describe(cvars.error());
 
     EXPECT_FLOAT_EQ(cvars->mouse.sensitivity.value(), 3.0F);
+    EXPECT_EQ(cvars->keyboard.keymap.value(), nx::settings::KeyMapping::Keycode);
     EXPECT_FLOAT_EQ(cvars->mouse.yaw.value(), 0.022F);
     EXPECT_FLOAT_EQ(cvars->mouse.pitch.value(), 0.022F);
     EXPECT_FLOAT_EQ(cvars->video.fpsMax.value(), 100.0F);
@@ -52,6 +53,7 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     EXPECT_EQ(cvars->video.decals.value(), 4096);
     EXPECT_EQ(cvars->video.multiplayerDecals.value(), 300);
     EXPECT_TRUE(cvars->player.autoWeaponSwitch.value());
+    EXPECT_EQ(cvars->player.name.value(), "Player") << "the engine's, which Steam replaces";
     EXPECT_FLOAT_EQ(cvars->audio.volume.value(), 0.7F);
     EXPECT_EQ(cvars->audio.device.value(), "") << "the system's default output";
     EXPECT_FALSE(cvars->audio.playUnfocused.value()) << "silent unfocused, as the original";
@@ -62,12 +64,33 @@ TEST(ClientCvarsTest, StartAsCounterStrikeStarts) {
     const std::string archived = console.archivedCvars();
     for (const std::string_view name :
          {"sensitivity", "m_yaw", "m_pitch", "fps_max", "fps_override", "gl_vsync", "gamma", "brightness",
-          "hud_draw", "cl_showfps", "r_decals", "mp_decals", "_cl_autowepswitch", "volume", "s_device",
-          "s_play_unfocused"}) {
+          "hud_draw", "cl_showfps", "r_decals", "mp_decals", "_cl_autowepswitch", "name", "volume",
+          "s_device", "s_play_unfocused", "in_keymap"}) {
         EXPECT_NE(archived.find(std::format("{} \"", name)), std::string::npos) << name;
     }
     EXPECT_EQ(archived.find("texgamma"), std::string::npos);
     EXPECT_EQ(archived.find("lightgamma"), std::string::npos);
+}
+
+TEST(ClientCvarsTest, KeyboardMappingIsTypedArchivedAndChangesExplicitly) {
+    SilentOutput output;
+    NoFiles files;
+    nx::console::Console console{output, files};
+    const auto cvars = nx::settings::registerClientCvars(console);
+    ASSERT_TRUE(cvars.has_value());
+    ASSERT_TRUE(console.setCvar("in_keymap", "scancode").has_value());
+    EXPECT_EQ(cvars->keyboard.keymap.value(), nx::settings::KeyMapping::Scancode);
+    EXPECT_NE(console.archivedCvars().find("in_keymap \"0\""), std::string::npos);
+    nx::console::Console restored{output, files};
+    const auto restoredCvars = nx::settings::registerClientCvars(restored);
+    ASSERT_TRUE(restoredCvars.has_value());
+    restored.addText(console.archivedCvars());
+    ASSERT_EQ(restored.execute(), nx::console::BufferState::Empty);
+    EXPECT_EQ(restoredCvars->keyboard.keymap.value(), nx::settings::KeyMapping::Scancode);
+    EXPECT_FALSE(console.setCvar("in_keymap", "unknown").has_value());
+    EXPECT_EQ(cvars->keyboard.keymap.value(), nx::settings::KeyMapping::Scancode);
+    ASSERT_TRUE(console.setCvar("in_keymap", "keycode").has_value());
+    EXPECT_EQ(cvars->keyboard.keymap.value(), nx::settings::KeyMapping::Keycode);
 }
 
 TEST(ClientCvarsTest, ThePictureStaysInTheOriginalsRanges) {

@@ -16,15 +16,18 @@ flowchart TB
     end
     subgraph L5[Game]
         CS_SV[cs.server]
+        CS_BOTS[cs.bots · Counter-Strike's bot]
         CS_CL[cs.client]
         CS_SH[cs.shared · pmove, weapons, shared rules]
     end
     subgraph L4[Game framework]
         GAME[nx.game · world, map entities, triggers]
         SCRIPT[nx.script · Rook VM host and bindings]
+        AGENTS[nx.agents · perception, memory, behaviors]
     end
     subgraph L3[Subsystems]
         RENDER[nx.render]
+        NAVIGATION[nx.navigation]
         AUDIO[nx.audio]
         NET[nx.net]
         COLL[nx.collision]
@@ -59,11 +62,11 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
 | `nx.jobs` | 1 | Job System, counters, dependency graphs, and the lock-free queues between long-lived threads (today: SPSC). Planned: a `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks, the sound output (SDL3's default output, on its real-time thread). Planned: OS threads | core |
+| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface; physical keys and their layout characters), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks, the sound output (SDL3's default output, on its real-time thread), and the named threads outside the job system's pool ([04 §5](04-job-system.md#5-dedicated-threads-outside-the-pool)). Planned: their affinity and priority | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math (today: core) |
-| `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
+| `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend, its frames submitted and shown on a thread of its own ([ADR-0029](adr/0029-submission-thread.md)) | jobs, rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform (today: core, math, meta, data, platform) |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces, and the hull a box is traced through | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
@@ -71,14 +74,18 @@ flowchart TB
 | `nx.audio` | 3 | Mixer, spatialization, DSP, streaming, voice. Today: sounds of WAV files, the library that reads the game's, and the mixer, an `AudioSource` of the sound output ([11 §2](11-audio.md#2-architecture)) | assets, jobs, platform (today: core, jobs, platform, assets) |
 | `nx.net` | 3 | UDP transport, encryption, channels, snapshots, replication | core, meta, jobs, ecs |
 | `nx.ui` | 3 | Sprite-based HUD, menu toolkit, console (a view over `nx.console`), fonts. Today: panels, placed by VGUI2's layouts and following their parent as it changes size; fonts, found, sized and drawn as Windows did; text on the screen; controls (labels, text entries, rich text) and the console's window ([ADR-0020](adr/0020-in-house-ui-toolkit.md)) | render, assets, platform, console (today: core, console, platform, rhi, assets, render; FreeType) |
+| `nx.navigation` | 3 | Navigation meshes and corridors by Recast/Detour, built from supplied geometry for an agent profile, with typed numeric validation and deterministic queries ([ADR-0023](adr/0023-navigation.md)). Tactical data and caches remain planned | core, meta, math, jobs |
 | `nx.settings` | 3 | The player's settings: the `.cfg` files of the user's folder run at startup and `config.cfg` written at exit, the client's cvars by the original's names ([12 §5.2](12-ui-hud-and-console.md#52-client-configuration-files)), the binds by the original's key names and the keys that run them ([12 §6](12-ui-hud-and-console.md#6-input)). Planned: `video.toml`, `audio.toml` | core, console, platform |
-| `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the game's clock; the map's brush entities, as the game makes them when a map starts; its doors, sliding and rotating, its buttons, its triggers and the targets they fire, what a player uses, an entity dropped to the floor, and the decals the map stamps as its game starts | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision) |
+| `nx.game` | 4 | Map entities, triggers, movers, spawn, generic rules. Today: the game's clock; the angles the engine reads of an entity's keys; the map's brush entities, as the game makes them when a map starts; its doors, sliding and rotating, its buttons, its triggers and the targets they fire, what a player uses, an entity dropped to the floor, and the decals the map stamps as its game starts | ecs, collision, assets, net (today: core, math, meta, data, ecs, assets, collision, navigation) |
+| `nx.agents` | 4 | The ECS agent brain, bounded last-seen memory and deterministic chase/attack/investigate decisions along navigation corridors, or a move to a goal it is given, driving a body by intent alone. Richer perception, memory and behavior remain planned ([ADR-0024](adr/0024-agents.md), amended by [0028](adr/0028-native-agent-test-mod.md)) | core, math, ecs, navigation |
 | `nx.script` | 4 | Rook VM host, generated bindings, isolates, permissions | ecs, meta, jobs, game |
-| `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement among the world and the brush entities, the bones of studio models posed, what a player has, the weapons' data and catalog, the loadouts, a player's weapons fired and reloaded, the sounds they make, the rounds of a map (`Rounds`) and their money (`TeamAccounts`) | game, collision (today: core, math, meta, data, ecs, assets, collision, game) |
-| `cs.server` | 5 | Server rules: rounds, economy, objectives, admin | cs.shared, script, net |
-| `cs.client` | 5 | HUD, menus, effects, prediction, interpolation. Today: the player's input, the `+` buttons the binds hold and the user commands they make ([12 §6](12-ui-hud-and-console.md#6-input)); the game's content and a map of it (`Level`), what its entities show as the game sets them up until the server comes, the scene that draws it (`Scene`), its game, played by the client alone in the map's rounds (`LocalGame`) by the cvars of its rules (`GameCvars`), the weapon in the player's hand and its muzzle flashes, the HUD (`Hud`), the console's window and the weapons' console commands, and the sound output with the sounds the client plays (`ClientAudio`) | cs.shared, render, audio, ui (today: core, math, meta, platform, console, data, assets, rhi, render, ui, audio, ecs, collision, game, cs.shared) |
+| `cs.shared` | 5 | Movement, weapons and rules shared for prediction. Today: player movement among the world and the brush entities, the bones of studio models posed and their files, what a player has, the weapons' data and catalog, the loadouts, a player's weapons fired and reloaded, the sounds they make, the rounds of a map (`Rounds`) and their money (`TeamAccounts`), the game's content (`GameContent`) and a map as the game plays it (`GameMap`), which the server and the client of one process share, the characters and how a player's model plays (`PlayerAnimation`, `processGait`, `posePlayerBones`), how an attack and the world hurt a player through its armor (`harmPlayer`), the light-style data and patterns the server owns (`MapLightStyles`), and what the server tells a player's client after each tick (`PlayerSnapshot`) | game, collision (today: core, math, meta, data, platform, ecs, assets, collision, game) |
+| `cs.server` | 5 | Server rules: rounds, economy, objectives, admin. Today: the game of a map (`Game`), its players moved by their commands tick by tick in its rounds and their money, by the cvars of its rules (`GameCvars`), the studio models it plays (`GameModels`), its players' bodies as its traces meet them (`PlayerBody`), and the snapshot it tells each player's client after each tick; players joining teams as one of their characters, their models animated, solid to each other, hurting each other by hit group and through their armor, paid for their kills, leaving their slots to the next to join, the team a player auto-selects, what a player knows of itself and which spots a line reaches for the bots, the round's win conditions and Game Commencing | cs.shared, script, net (today: core, math, console, assets, ecs, collision, navigation, game, cs.shared) |
+| `cs.bots` | 5 | Counter-Strike's bot: agents playing players of the server's game by their commands, buying, the objectives, the radio, `bot_difficulty`, and the `bot_*` commands ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)). Today: bots that join, leave and keep their number (`Bots`, `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick`, by a profile's name or not, `bot_quota`), see the enemies in their cone and in line, hunt, chase and fire, each as a profile of `bot_difficulty`, its name after `bot_prefix` and its level of skill: its reaction time, its view's spring, its aim's error and its trigger (`data/cstrike/bots.toml`) | core, math, meta, data, console, jobs, ecs, game, navigation, agents, cs.shared and cs.server (lateral) |
+| `cs.client` | 5 | HUD, menus, effects, prediction, interpolation. Today: the player's input, the `+` buttons the binds hold and the user commands they make ([12 §6](12-ui-hud-and-console.md#6-input)); the game's content and a map of it (`Level`), what its entities show, the scene that draws it (`Scene`), the game as its player's client knows it from the snapshot of each tick (`ClientGame`), the other players drawn with their weapons (`PlayerModels`), the weapon in the player's hand and its muzzle flashes, the temporary entities of its effects (`TempEntities`: the blood a hit sprays), the HUD (`Hud`), the console's window and the weapons' console commands, and the sound output with the sounds the client plays (`ClientAudio`) | cs.shared, render, audio, ui (today: core, math, meta, platform, console, data, assets, rhi, render, ui, audio, ecs, collision, game, cs.shared) |
+| `mod.zombies` | 5 | Native development mod: zombie settings, bounded sight, ECS brains and entity commands, owned horde cleanup ([ADR-0028](adr/0028-native-agent-test-mod.md)) | core, math, meta, data, jobs, ecs, assets, game, navigation, agents, cs.shared and cs.server (lateral) |
 | `nx.update` | 3 | Updates of the client and the server products: signed release metadata, content-addressed chunks, atomic installs and rollback ([21](21-launcher-and-updates.md)). Planned (M4) | core, jobs, platform, net |
-| `app.client` / `app.server` | 6 | Bootstrap, command line, main loop. Today: `app.client`, the client `next`: the original's command line, the player's settings, and a map played alone in a window | everything above |
+| `app.client` / `app.server` | 6 | Bootstrap, command line, main loop. Today: `app.client`, the client `next`: the original's command line, the player's settings, and a map played in a window, the server's game and the client's in one process, as a listen server plays it | everything above |
 | `app.launcher` | 6 | The program players open: updates itself and the client, then starts `next`. Planned (M4) | update, platform |
 | `tool.nxcheck` | 6 | `nxcheck`: reads every file of the Counter-Strike 1.6 installation through the VFS with the readers of `nx.assets`, joins included, and reports each failure ([18](18-testing-and-quality.md#real-content)) | core, math, jobs, assets, collision, cs.shared (platform in the program) |
 
@@ -92,6 +99,11 @@ dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi` and `nx.platform`,
 `nx.collision` on `nx.assets`, …) are declared `LATERAL` where the module is built (`nxAddModuleLibrary`): the check
 accepts a same-layer dependency only when it is declared, and a `LATERAL` module only when it is of
 the same layer.
+
+The native agent consumers are `cs.bots` and `mod.zombies` (layer 5, each depending laterally on
+`cs.shared` and `cs.server`, and on the lower-layer agents/navigation modules), neither on the
+other. `app.client` composes both; no game module depends on them. The generic entity catalog, bodies and presentation are described
+in [Offline entity and agent tests](offlineAgents.md).
 
 ## 2. Structural principles
 
@@ -170,6 +182,11 @@ decides what runs, the lower one only when ([ADR-0018](adr/0018-work-handed-down
 The server of the listen server is **the same code** as the dedicated one. The loopback only
 avoids serializing and encrypting packets, so the network behavior (delay, order,
 snapshots) stays the same.
+
+Today `next` plays the server's game (`cs::Game`) on its main thread, a tick at a time: the client's
+command of each tick goes to it, and the client takes the snapshot of each tick (`cs::PlayerSnapshot`,
+`cs::ClientGame`), data from the server to the client with nothing that points back. The server's
+thread and the loopback come with the network (M4).
 
 ## 4. Thread model
 

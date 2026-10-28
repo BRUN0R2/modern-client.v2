@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# How a player is hurt and killed (docs/10, section 7.4), read into cs::PlayerHarmRules, with
+# ReGameDLL_CS's values and sounds (CBasePlayer::TakeDamage, TakeDamageImpulse, Pain, DeathSound,
+# PostThink, WaterMove and CheckTimeBasedDamage, CHalfLifeMultiplay::FlPlayerFallDamage; GPL, consulted:
+# docs/20 section 3). A
+# player landing out of water faster than `fall.safeSpeed` units a second takes `fall.damageAtFatalSpeed`
+# for a fall as much faster as `fall.fatalSpeed` is, in proportion, times `fall.scale`, and loses its
+# whole points: 20 of its health at 600 units a second, 125 at 1100. Its air run out under water, it
+# drowns every `drowning.interval` seconds, each harm `drowning.step` more than the last, from
+# `drowning.start` as its air is whole, `drowning.most` at most: 3, 4, 5, 5...; with its head out of
+# water again, what drowning took is given back, `drowning.givenBack` at most each time its kept harms
+# are looked at (2 seconds apart at least). In slime or lava it takes `harmfulWater.slime` or
+# `harmfulWater.lava` each command, times how deep it is in (1 at its feet, 2 at its waist, 3 over its
+# head). Its armor, but to a fall and drowning, takes a share of a harm where it covers it: its health
+# takes `armor.ratio` of it (ARMOR_RATIO, times the weapon's of another player's attack), and the armor
+# loses `armor.bonus` of each point of the rest (ARMOR_BONUS). Another player's attack deals a teammate
+# `attacks.teammateShare` of its damage; one that makes it flinch slows it down to
+# `attacks.flinchSpeedShare` of its speed, or, a large flinch, to `attacks.largeFlinchSpeedShare`, and
+# knocks it back `attacks.knockback` units a second away from its attacker while it moves slower than
+# `attacks.knockbackBelowSpeed`. `pain` is heard as a harm hurts it but in the head, its armor taking
+# none (or in the legs); `kevlarPain` its armor taking a share; `headPain` in the head, `helmetPain`
+# with a helmet; `splat` as it lands harder than its health can take, and `death` as it dies, one of
+# their files at random.
+
+pain = { files = ["player/bhit_flesh-1.wav", "player/bhit_flesh-2.wav", "player/bhit_flesh-3.wav"], channel = "voice", volume = 1.0 }
+headPain = { files = ["player/headshot1.wav", "player/headshot2.wav", "player/headshot3.wav"], channel = "voice", volume = 1.0 }
+helmetPain = { files = ["player/bhit_helmet-1.wav"], channel = "voice", volume = 1.0 }
+kevlarPain = { files = ["player/bhit_kevlar-1.wav"], channel = "voice", volume = 1.0 }
+splat = { files = ["common/bodysplat.wav"], channel = "item", volume = 1.0 }
+death = { files = ["player/die1.wav", "player/die2.wav", "player/die3.wav", "player/death6.wav"], channel = "voice", volume = 1.0 }
+
+[fall]
+safeSpeed = 500.0
+fatalSpeed = 1100.0
+damageAtFatalSpeed = 100.0
+scale = 1.25
+
+[drowning]
+interval = 1.0
+start = 2.0
+step = 1.0
+most = 5.0
+givenBack = 10.0
+
+[harmfulWater]
+slime = 4.0
+lava = 10.0
+
+[armor]
+ratio = 0.5
+bonus = 0.5
+
+[attacks]
+teammateShare = 0.35
+knockback = 170.0
+knockbackBelowSpeed = 300.0
+flinchSpeedShare = 0.5
+largeFlinchSpeedShare = 0.65

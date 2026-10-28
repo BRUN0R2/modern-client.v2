@@ -87,14 +87,16 @@ struct Shooter {
 };
 
 /// What a weapon's attack met: its trace; the entity that stopped it, none for the world or nothing
-/// (pHit); whether that is the world or a brush entity (IsBSPModel); and whether it is a body, which
-/// sounds as flesh: an entity of a class other than none and the machines' (Classify), a hostage or a
-/// func_vehicle today.
+/// (pHit); whether that is the world or a brush entity (IsBSPModel); whether it is a body, which
+/// sounds as flesh: an entity of a class other than none and the machines' (Classify), a player, a
+/// hostage or a func_vehicle; and, a player's body, how the player's body is turned (pev->angles), which
+/// a stab weighs its back by.
 struct WeaponHit {
     nx::collision::Trace trace{};
     std::optional<nx::ecs::Entity> entity{};
     bool isBrushModel = false;
     bool isBody = false;
+    std::optional<nx::EulerAngles> playerAngles{};
 };
 
 /// How a weapon's attacks meet what is solid: the server's way for a hull from a start to an end
@@ -134,10 +136,22 @@ struct Blow {
     nx::Vec3 direction{};
 };
 
-/// What a weapon did in a frame: the shots it fired and the blows it struck.
+/// What a weapon did in a frame that its holder's model plays (the weapons' SetAnimation): it fired or
+/// struck (PLAYER_ATTACK1), or a reload began (PLAYER_RELOAD).
+enum class HolderMotion : std::uint8_t {
+    Attacked,
+    Reloaded,
+    Count,
+};
+
+using HolderMotions = nx::Flags<HolderMotion>;
+
+/// What a weapon did in a frame: the shots it fired, the blows it struck, and what its holder's model
+/// plays of it.
 struct WeaponAttacks {
     std::vector<Shot> shots{};
     std::vector<Blow> blows{};
+    HolderMotions motions{};
 };
 
 /// The weapons a player has, the rounds it carries besides their clips, and the one it holds.
@@ -201,6 +215,9 @@ public:
     }
     /// Whether the weapon held is being reloaded.
     [[nodiscard]] inline auto isReloading() const noexcept -> bool { return m_isReloading; }
+    /// Whether the player is held back from acting, the weapon it holds being drawn or reloaded (the
+    /// player's m_flNextAttack): its ItemPostFrame neither uses what is in front nor runs the weapon.
+    [[nodiscard]] inline auto isHeldBack() const noexcept -> bool { return m_nextAttack > nx::Seconds{}; }
     /// How fast the weapon the player holds lets it run, kUnarmedSpeed with none (ResetMaxSpeed).
     [[nodiscard]] auto maxSpeed() const noexcept -> nx::UnitsPerSecond;
 

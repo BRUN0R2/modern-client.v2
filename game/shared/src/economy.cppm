@@ -8,8 +8,8 @@
 /// losers get, which grows while a team loses round after round, and what each team's players are
 /// paid as the next round starts.
 ///
-/// Today: the money of the rounds whose time ran out; the kills', the bomb's and the hostages', and
-/// buying, come with them (TODO.md).
+/// Today: the money of the rounds whose time ran out and of those a team won by eliminating the other;
+/// the kills', the bomb's and the hostages', and buying, come with them (TODO.md).
 export module cs.shared:economy;
 
 import std;
@@ -26,12 +26,17 @@ enum class EconomyError : std::uint8_t {
     DataInvalid, ///< The file breaks its schema or its rules (cause: the DataError, when there is one).
 };
 
-/// What the winners of a round ended by `reason` get, and whether its losers alive as it ended are
-/// paid as the next round starts.
+/// What the winners of a round ended by `reason` get, on a map with a bomb target what they get there
+/// instead when it says so (Round_Cts and Round_Ts pay the bomb's rewards there), and whether its losers
+/// alive as it ended are paid as the next round starts.
 struct RoundEndMoney {
     RoundEndReason reason{};
     nx::Money money{};
+    std::optional<nx::Money> bombTargetMoney{};
     bool paysLivingLosers = true;
+
+    /// What its winners get on a map played for `objectives`.
+    [[nodiscard]] auto moneyOn(MapObjectives objectives) const noexcept -> nx::Money;
 };
 
 /// The bonus the losers of a round get (m_iLoserBonus): `first` as a game starts; `afterStreak` once
@@ -58,11 +63,19 @@ struct HostageHarmCosts {
     nx::Money perKill{};
 };
 
+/// What a player gets for killing a player of the other team (REWARD_KILLED_ENEMY), and loses for
+/// killing one of its own (PAYBACK_FOR_KILLED_TEAMMATES) (CHalfLifeMultiplay::PlayerKilled).
+struct KillMoney {
+    nx::Money enemy{};
+    nx::Money teammate{};
+};
+
 /// data/cstrike/economy.toml.
 struct EconomyRules {
     LoserBonus loserBonus{};
     HostageBonus hostageBonus{};
     HostageHarmCosts hostageHarm{};
+    KillMoney kills{};
     std::vector<RoundEndMoney> roundEnds{}; ///< One for each reason at most.
 
     /// What the file says of a round ended by `reason`: nothing for its winners, its losers paid,
@@ -96,9 +109,9 @@ public:
     /// losses, the loser bonus `first`.
     explicit TeamAccounts(const EconomyRules& rules) noexcept;
 
-    /// A round ended by `reason` (TerminateRound): what its winners get added to their team's
-    /// account, and it is the round the next start pays for.
-    void roundEnded(RoundEndReason reason) noexcept;
+    /// A round ended by `reason` on a map played for `objectives` (TerminateRound): what its winners get
+    /// there added to their team's account, and it is the round the next start pays for.
+    void roundEnded(RoundEndReason reason, MapObjectives objectives) noexcept;
 
     /// As the next round starts on a map played for `objectives`, `hostagesHeld` of its hostages not
     /// rescued (RestartRound): after a round won, the hostage bonus for them added to the winners'
@@ -134,6 +147,8 @@ struct nx::meta::Description<cs::RoundEndMoney> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::RoundEndMoney::reason>("reason"),
         nx::meta::field<&cs::RoundEndMoney::money>("money", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::RoundEndMoney::bombTargetMoney>("bombTargetMoney",
+                                                             nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::RoundEndMoney::paysLivingLosers>("paysLivingLosers"),
     };
 };
@@ -146,6 +161,15 @@ struct nx::meta::Description<cs::LoserBonus> {
         nx::meta::field<&cs::LoserBonus::afterStreak>("afterStreak", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::LoserBonus::step>("step", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::LoserBonus::most>("most", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::KillMoney> {
+    static constexpr std::string_view kName = "cs::KillMoney";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::KillMoney::enemy>("enemy", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::KillMoney::teammate>("teammate", nx::data::Range{.minimum = 0.0}),
     };
 };
 
@@ -174,6 +198,7 @@ struct nx::meta::Description<cs::EconomyRules> {
         nx::meta::field<&cs::EconomyRules::loserBonus>("loserBonus"),
         nx::meta::field<&cs::EconomyRules::hostageBonus>("hostageBonus"),
         nx::meta::field<&cs::EconomyRules::hostageHarm>("hostageHarm"),
+        nx::meta::field<&cs::EconomyRules::kills>("kills"),
         nx::meta::field<&cs::EconomyRules::roundEnds>("roundEnds"),
     };
 };

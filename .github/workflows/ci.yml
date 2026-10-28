@@ -48,15 +48,21 @@ jobs:
             exit 1
           fi
 
-  windows-msvc:
-    name: Windows · MSVC · ${{ matrix.preset }}
+  windows:
+    name: Windows · ${{ matrix.compiler }} · ${{ matrix.preset }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        preset: [dev-windows-msvc, release-windows-msvc]
+        include:
+          - { preset: dev-windows-msvc, compiler: MSVC }
+          - { preset: release-windows-msvc, compiler: MSVC }
+          - { preset: dev-windows-clang, compiler: Clang }
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+      LLVM_VERSION: "23.1.4"
+      VULKAN_SDK_VERSION: "1.4.363.0"
+      VULKAN_SDK_SHA256: "94A82D378F7A5E3E54C9DB7D2FB7016AF136E14AC0A18DBF0F2F67A36352D141"
     steps:
       - uses: actions/checkout@v7
 
@@ -66,6 +72,26 @@ jobs:
 
       - name: Install CMake and Ninja
         run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
+
+      - name: Install Vulkan validation layers
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "vulkansdk-$env:VULKAN_SDK_VERSION.exe"
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_SDK_VERSION.exe" -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $env:VULKAN_SDK_SHA256) {
+            throw 'The Vulkan SDK installer hash does not match the pinned release'
+          }
+          $installed = Start-Process $installer -ArgumentList @('install', '--accept-licenses', '--default-answer', '--confirm-command') -Wait -PassThru -WindowStyle Hidden
+          if ($installed.ExitCode -ne 0) { throw "Vulkan SDK installation failed: $($installed.ExitCode)" }
+
+      - name: Install LLVM
+        if: matrix.compiler == 'Clang'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "LLVM-$env:LLVM_VERSION-win64.msi"
+          Invoke-WebRequest "https://github.com/llvm/llvm-project/releases/download/llvmorg-$env:LLVM_VERSION/LLVM-$env:LLVM_VERSION-win64.msi" -OutFile $installer
+          $installed = Start-Process msiexec.exe -ArgumentList @('/i', "`"$installer`"", '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
+          if ($installed.ExitCode -ne 0) { throw "LLVM installation failed: $($installed.ExitCode)" }
 
       - name: Bootstrap vcpkg
         shell: pwsh
@@ -80,7 +106,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}\..\vcpkg-cache
-          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
           restore-keys: vcpkg-windows-
 
       - name: Configure, build and test
@@ -91,6 +117,10 @@ jobs:
           $cmakeDirectory = Split-Path (Get-Command cmake).Source
           . ./scripts/devShell.ps1
           $env:PATH = "$cmakeDirectory;$env:PATH"
+          if ('${{ matrix.compiler }}' -eq 'Clang') {
+            $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+            clang++ --version
+          }
           cmake --version
           cmake --preset ${{ matrix.preset }}
           cmake --build --preset ${{ matrix.preset }}
@@ -99,7 +129,11 @@ jobs:
   linux-gcc:
     name: Linux · GCC 16 · ${{ matrix.preset }}
     runs-on: ubuntu-latest
-    container: gcc:16
+    container:
+      image: gcc:16
+      # TSan must control its process layout via personality(ADDR_NO_RANDOMIZE).
+      # Docker's default seccomp policy denies it; only this ephemeral sanitizer job opts out.
+      options: ${{ matrix.preset == 'tsan-linux-gcc' && '--security-opt seccomp=unconfined' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -118,7 +152,7 @@ jobs:
         # fail on any validation error.
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip \
+          apt-get install -y --no-install-recommends ca-certificates curl git pkg-config python3 python3-venv tar unzip zip util-linux \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxft-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev libegl-dev libdecor-0-dev \
             libvulkan1 mesa-vulkan-drivers vulkan-validationlayers
@@ -139,18 +173,27 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /tmp/vcpkg-cache
-          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
           restore-keys: vcpkg-linux-gcc-
+
+      - name: Check TSan process layout control
+        if: matrix.preset == 'tsan-linux-gcc'
+        run: setarch "$(uname -m)" -R true
 
       - name: Configure
         run: |
           g++ --version | head -n 1
           cmake --version | head -n 1
-          cmake --preset ${{ matrix.preset }}
+          cmake --preset ${{ matrix.preset }} -DNX_REFLECTION_BACKEND=native
 
       - name: Build
         # -k 0: keep going after the first error so one run reports every problem.
         run: cmake --build --preset ${{ matrix.preset }} -- -k 0
 
       - name: Test
-        run: ctest --preset ${{ matrix.preset }}
+        run: |
+          if [ '${{ matrix.preset }}' = 'tsan-linux-gcc' ]; then
+            setarch "$(uname -m)" -R ctest --preset ${{ matrix.preset }}
+          else
+            ctest --preset ${{ matrix.preset }}
+          fi

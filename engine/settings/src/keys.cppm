@@ -14,6 +14,13 @@ import nx.console;
 
 export namespace nx::settings {
 
+/// What a keyboard bind names: its physical position on a US keyboard, or the layout's base keycode.
+enum class KeyMapping : std::uint8_t {
+    Scancode = 0,
+    Keycode = 1,
+    Count,
+};
+
 /// The original's key numbers run from 0 to this, excluded.
 inline constexpr std::uint32_t kKeyCount = 256;
 
@@ -26,6 +33,12 @@ inline constexpr console::KeyId kWheelUp{240};
 /// says. None for the keys it has no number for: Print Screen, Scroll Lock, Num Lock, the system
 /// and menu keys, and the keys without an enumerator.
 [[nodiscard]] auto keyOf(platform::Key key) noexcept -> std::optional<console::KeyId>;
+
+/// The key `event` names in `mapping`: its US position for Scancode; its layout's printable ASCII
+/// character, case-insensitive, for Keycode. Named controls, Space and the keypad retain their
+/// original numbers in either mode. None for an unsupported or missing layout character.
+[[nodiscard]] auto keyOf(const platform::KeyChanged& event, KeyMapping mapping) noexcept
+    -> std::optional<console::KeyId>;
 
 /// MOUSE1 to MOUSE5; none past the fifth button, which the original does not have.
 [[nodiscard]] auto keyOf(platform::MouseButton button) noexcept -> std::optional<console::KeyId>;

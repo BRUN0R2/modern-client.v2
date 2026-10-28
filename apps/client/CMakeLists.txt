@@ -15,6 +15,8 @@ nxAddModuleLibrary(appClient
     DEPENDS
         nx::core
         nx::math
+        nx::jobs
+        nx::game
         nx::platform
         nx::console
         nx::settings
@@ -24,7 +26,10 @@ nxAddModuleLibrary(appClient
         nx::render
         nx::ui
         cs::shared
-        cs::client)
+        cs::server
+        cs::client
+        cs::bots
+        mod::zombies)
 
 nxAddProgram(next
     SOURCES

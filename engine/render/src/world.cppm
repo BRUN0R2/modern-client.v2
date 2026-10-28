@@ -263,10 +263,10 @@ private:
         rhi::BindGroupHandle textures{};
     };
 
-    /// A face of a brush entity drawn this frame: one that faces the camera, its triangles in
-    /// m_entityIndices; or one of a kRenderTransTexture entity seen from behind with decals, which
-    /// shows its decals alone, as the original keeps such a face for them and culls its polygon
-    /// (R_SortBrushModelSurfaces).
+    /// A face of a brush entity drawn this frame: one that faces the camera, its triangles in the slot's
+    /// indices from m_firstEntityIndex, which prepare writes; or one of a kRenderTransTexture entity seen
+    /// from behind with decals, which shows its decals alone, as the original keeps such a face for them
+    /// and culls its polygon (R_SortBrushModelSurfaces).
     struct EntityFace {
         std::uint32_t face = 0;
         IndexRange triangles{};
@@ -287,16 +287,15 @@ private:
     /// Where each brush model is drawn this frame, in m_placements: where `placements` puts it, else
     /// where its entity puts it, unturned.
     void place(std::span<const ModelPlacement> placements);
-    /// Puts the triangles of what `camera` sees in m_bucketIndices and m_skyIndices, the brush entities
-    /// it sees, where m_placements puts them, in m_entityDraws, and the blended ones in m_blendedDraws.
+    /// Puts the faces of the world `camera` sees in m_bucketFaces and m_skyFaces, the brush entities it
+    /// sees, where m_placements puts them, in m_entityDraws, and the blended ones in m_blendedDraws.
     void gather(const Camera& camera, float aspect);
     /// Whether face `face`, drawn, faces `eye` (in its model's space): a face of the world from the
     /// side of its plane the eye is on, the plane itself in front, as the original's
     /// R_RecursiveWorldNode; a brush entity's from at least BACKFACE_EPSILON past it, as its
     /// R_DrawBrushModel.
     [[nodiscard]] auto isSeen(std::uint32_t face, Vec3 eye, bool isOfAnEntity) const noexcept -> bool;
-    /// Adds the triangles of face `face` of the world, once a frame, to its bucket when it is seen
-    /// from `eye`.
+    /// Adds face `face` of the world, once a frame, to its bucket's faces when it is seen from `eye`.
     void addFace(std::uint32_t face, Vec3 eye);
     /// Puts a brush entity, its model placed by `placement`, in m_entityDraws, with its faces seen from
     /// `camera`, in the order the original draws them.
@@ -377,8 +376,10 @@ private:
     std::vector<ModelPlacement> m_placements;  ///< Of each of m_models, this frame.
     std::optional<assets::LeafIndex> m_visibleFrom;
     std::vector<assets::LeafIndex> m_visibleLeaves; ///< Those of m_visibleFrom.
-    std::vector<std::vector<std::uint32_t>> m_bucketIndices;
-    std::vector<std::uint32_t> m_skyIndices;
+    /// The faces of the world seen this frame, of each bucket and of the sky: prepare copies their
+    /// triangles once, from m_faceIndices to the slot's indices.
+    std::vector<std::vector<std::uint32_t>> m_bucketFaces;
+    std::vector<std::uint32_t> m_skyFaces;
     std::vector<Batch> m_batches;
     IndexRange m_sky{};                   ///< The sky's triangles, in the slot's indices.
     std::uint32_t m_firstEntityIndex = 0; ///< Where m_entityIndices start in the slot's indices.
@@ -386,7 +387,6 @@ private:
     std::vector<EntityDraw> m_entityDraws;
     std::vector<BlendedDraw> m_blendedDraws; ///< Of m_entityDraws, by their index.
     std::vector<EntityFace> m_entityFaces;
-    std::vector<std::uint32_t> m_entityIndices;
     FrameStats m_lastFrame;
 };
 

@@ -11,6 +11,8 @@ module app.client;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
+import nx.game;
 import nx.platform;
 import nx.console;
 import nx.assets;
@@ -20,7 +22,10 @@ import nx.rhi.vulkan;
 import nx.render;
 import nx.ui;
 import cs.shared;
+import cs.server;
 import cs.client;
+import cs.bots;
+import mod.zombies;
 
 namespace app {
 
@@ -41,6 +46,8 @@ constexpr std::chrono::seconds kSoundFailureInterval{5};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
 /// the original's game chooses it among them.
 constexpr std::string_view kBulletHoleStream = "bulletHoles";
+/// The seed of the stream the temporary entities of each map's client draw their chances from.
+constexpr std::uint64_t kTempEntitySeed = 0;
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -185,27 +192,49 @@ void savePipelineCache(const nx::rhi::Device& device) {
                  .sleepTimer = std::move(*sleepTimer)};
 }
 
-/// A map being played: its level, and the game of it, which goes before the level it plays.
+/// A map being played, as a listen server plays it (docs/01-architecture.md, section 3): the map as the
+/// game plays it; the level the client draws of it; the game its server plays of it, and the player the
+/// client plays in it; the game as the client knows it, and its temporary entities; and the test
+/// zombies and the bots in the game, once asked for. Each goes before what it points into.
 struct Session {
+    std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Level> level;
-    std::unique_ptr<cs::LocalGame> game;
+    std::unique_ptr<cs::Game> game;
+    cs::PlayerIndex player;
+    cs::ClientGame client;
+    cs::TempEntities effects;
+    std::unique_ptr<zombies::Horde> horde{};
+    std::unique_ptr<cs::Bots> bots{};
 };
 
-/// The map `name` of `content`, its game started by the rules `cvars` set, its player of the team of
-/// its first spawn point, its weapons drawn as `autoSwitch` says. Errors: those of Level::load and
-/// LocalGame::start.
+/// The map `name` of `content`, its client's level read, its game started by the
+/// rules `cvars` set, the client's player joined in the team of its first spawn point, asking for the
+/// name `player` holds and drawing its weapons as `player` says. Errors: CommandFailed, with the cause.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
-                                cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
-    -> nx::Result<Session, cs::LevelError> {
-    auto level = cs::Level::load(content, name);
+                                const nx::settings::PlayerCvars& player, const cs::GameCvars& cvars)
+    -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
+    const std::string failed = std::format("map {}", name);
+    auto map = cs::GameMap::load(content.vfs, name);
+    if (!map) {
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(map.error()));
+    }
+    auto level = cs::Level::load(content, **map);
     if (!level) {
-        return std::unexpected{std::move(level.error())};
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));
     }
-    auto game = cs::LocalGame::start(content, **level, cs::spawnTeam((*level)->map()), autoSwitch, cvars);
+    auto game = cs::Game::start(content, **map, cvars);
     if (!game) {
-        return std::unexpected{std::move(game.error())};
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(game.error()));
     }
-    return Session{.level = std::move(*level), .game = std::move(*game)};
+    const cs::PlayerIndex joined =
+        (*game)->join(cs::spawnTeam((*map)->map()), autoSwitchOf(player), player.name.value());
+    cs::ClientGame known{(*level)->models(), (*level)->players(), (*game)->snapshotFor(joined)};
+    return std::make_unique<Session>(Session{.map = std::move(*map),
+                                             .level = std::move(*level),
+                                             .game = std::move(*game),
+                                             .player = joined,
+                                             .client = std::move(known),
+                                             .effects = cs::TempEntities{kTempEntitySeed}});
 }
 
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
@@ -246,6 +275,22 @@ private:
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    [[nodiscard]] auto zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    [[nodiscard]] auto removeZombies() -> nx::Result<void, ConsoleError>;
+    /// Registers the bot commands (cs::registerBotCommands), acting on the map loaded last.
+    [[nodiscard]] auto registerBotCommands() -> nx::Result<void, ClientError>;
+    /// The job system the agents' navigation meshes are built in, made the first time one is. Errors:
+    /// CommandFailed.
+    [[nodiscard]] auto agentJobSystem() -> nx::Result<nx::jobs::JobSystem*, ConsoleError>;
+    /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
+    [[nodiscard]] auto readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError>;
+    /// The bots of `session`, made the first time they are asked for: data/cstrike/bots.toml's rules
+    /// on the mesh of its map. Errors: Unavailable, with the cause.
+    [[nodiscard]] auto botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError>;
+    /// Keeps the session's bots as bot_quota asks, those it adds of bot_difficulty's difficulty
+    /// (cs::Bots::keepQuota), making them first when it asks for any; when they cannot be made, it is
+    /// logged and bot_quota set back to 0.
+    void keepBotQuota(Session& session);
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
     [[nodiscard]] auto listSoundOutputs() -> nx::Result<void, ConsoleError>;
@@ -270,6 +315,9 @@ private:
     /// Plays the sound on the output s_device names, when it names one: the system's default stays
     /// when none has that name, logged.
     void openNamedSoundOutput();
+    /// Plays `elapsed` of the session's game, as a listen server plays it: each tick due, the command the
+    /// player's input makes is the server's game's tick, whose snapshot the client's game takes.
+    void playSession(nx::Seconds elapsed);
     /// Turns the view the way the session's game turned its player, if it did (the original's
     /// fixangle): as the player spawns.
     void turnAsTheGameDid();
@@ -280,9 +328,10 @@ private:
     /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
     /// as it is made or changed. One that cannot be read is logged, and the game plays on.
     void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
-    /// Reads the sounds of the player's feet and breath (cs::FootstepRules::soundFiles,
-    /// cs::BreathRules::soundFiles) as a session starts, so that no step or breath waits on its file.
-    /// One that cannot be read is logged, and the game plays on.
+    /// Reads the sounds of the player's feet, breath, pain, death and use (cs::FootstepRules::soundFiles,
+    /// cs::BreathRules::soundFiles, cs::PlayerHarmRules::soundFiles, cs::UseRules::soundFiles) as a
+    /// session starts, so that none waits on its file. One that cannot be read is logged, and the game
+    /// plays on.
     void readPlayerSounds();
     /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
     /// weapons made and its view model's sound events, each as long after the frame as it came after
@@ -290,10 +339,16 @@ private:
     void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Leaves a bullet's mark where each of the session's shots met the world or a brush entity in the
-    /// frame, once the scene is drawn: the decal the mark of what it met leaves (cs::bulletDecalOf).
-    void stampBulletHoles();
-    [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
+    /// Moves the session's temporary entities over `elapsed`, then shows the blood the hits sprayed since
+    /// the last frame (cs::TempEntities::sprayBlood), but without the engine's palette, as the level
+    /// logged.
+    void showEffects(nx::Seconds elapsed);
+    /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
+    /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
+    /// (cs::bulletDecalOf); then blood's where the blood a hit shed met it, the decal the server chose.
+    void stampMarks();
+    /// Records the frame begun in `list`, and hands it to the GPU to show.
+    [[nodiscard]] auto drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
@@ -317,12 +372,19 @@ private:
     std::optional<cs::PlayerInput> m_input;
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
+    std::optional<cs::BotCvars> botCvars;
+    std::optional<cs::BotRules> botRules{}; ///< Read the first time the bots are made.
     std::optional<cs::GameContent> m_content;
+    std::filesystem::path dataFolder;
+    std::unique_ptr<nx::jobs::JobSystem> agentJobs;
+    std::optional<cs::EntityTypeIndex> zombieType{};
+    std::optional<zombies::Settings> zombieSettings{};
+    std::vector<cs::ShownEntity> shownEntities;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
     std::optional<cs::FrameShaders> m_frameShaders; ///< Until the frame renderer is made of them.
-    std::optional<Session> m_session;               ///< The map played.
-    std::optional<Session> m_nextSession;           ///< The map `map` loaded, played from the next frame.
+    std::unique_ptr<Session> m_session;             ///< The map played.
+    std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
     cs::ViewModelEvents m_viewModelEvents;
@@ -337,6 +399,7 @@ private:
     std::vector<nx::render::ScreenQuad> m_screenQuads;    ///< What the screen draws in a frame.
     std::vector<nx::render::ModelPlacement> m_placements; ///< Where the frame draws the brush entities.
     std::vector<cs::ShownHostage> m_hostages;             ///< How the frame shows the game's hostages.
+    std::vector<cs::ShownPlayer> m_players;               ///< How the frame shows the other players.
     nx::ui::FontCatalog m_fonts;
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
@@ -391,6 +454,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerCommands(); !registered) {
         return registered;
     }
+    if (auto registered = registerBotCommands(); !registered) {
+        return registered;
+    }
     auto executable = nx::platform::executablePath();
     if (!executable) {
         return nx::fail(ClientError::ContentUnavailable, std::move(executable.error()));
@@ -399,8 +465,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (!install) {
         return nx::fail(ClientError::ContentUnavailable, std::move(install.error()));
     }
-    auto content = cs::openGameContent(m_options->data.value_or(executable->parent_path() / "data"), *install,
-                                       cs::addonsFolderOf(m_files.directory()));
+    const std::filesystem::path data = m_options->data.value_or(executable->parent_path() / "data");
+    dataFolder = data;
+    auto content = cs::openGameContent(data, *install, cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
     }
@@ -463,6 +530,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
     }
     m_gameCvars = std::move(*gameCvars);
+    auto registeredBotCvars = cs::BotCvars::registerIn(m_console);
+    if (!registeredBotCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registeredBotCvars.error()));
+    }
+    botCvars = std::move(*registeredBotCvars);
     // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
     const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
     nx::invariant(noclipKey.has_value(), "Client: the noclip key has a name");
@@ -482,6 +554,18 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     for (auto&& registered :
          {add({.name = "map", .description = "Plays a map: map <name>."},
               [this](Console&, const CommandLine& line) { return mapCommand(line); }),
+          add({.name = "zombie_add",
+               .description = "Spawns entity agents at the terrorist base: zombie_add [count]."},
+              [this](Console&, const CommandLine& line) { return zombieCommand(line); }),
+          add({.name = "zombie_kick",
+               .description = "Removes this session's test zombies and their corpses."},
+              [this](Console&, const CommandLine& line) {
+                  if (!line.arguments().empty()) {
+                      return nx::Result<void, ConsoleError>{
+                          nx::fail(ConsoleError::InvalidArguments, "usage: zombie_kick")};
+                  }
+                  return removeZombies();
+              }),
           add({.name = "play", .description = "Plays a sound heard everywhere: play <sound>."},
               [this](Console&, const CommandLine& line) { return playCommand(line); }),
           add({.name = "playvol",
@@ -530,7 +614,14 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
             if (!m_session) {
                 return nx::fail(cs::WeaponActionError::NoMap);
             }
-            m_session->game->give(weapon);
+            m_session->game->give(m_session->player, weapon);
+            return {};
+        },
+        .giveArmor = [this](cs::ArmorKind kind) -> nx::Result<void, cs::WeaponActionError> {
+            if (!m_session) {
+                return nx::fail(cs::WeaponActionError::NoMap);
+            }
+            m_session->game->giveArmor(m_session->player, kind);
             return {};
         }};
     if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
@@ -540,16 +631,211 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
     return {};
 }
 
+auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
+    // The map loaded last, as the commands that follow `map` on a line act on it.
+    const auto played = [this]() -> Session* {
+        return m_nextSession ? m_nextSession.get() : m_session.get();
+    };
+    cs::BotActions actions{
+        .add = [this, played](const cs::BotRequest& request) -> nx::Result<void, cs::BotActionError> {
+            Session* const session = played();
+            if (session == nullptr) {
+                return nx::fail(cs::BotActionError::NoMap);
+            }
+            auto bots = botsOf(*session);
+            if (!bots) {
+                return std::unexpected{std::move(bots.error())};
+            }
+            if (!request.profile) {
+                std::ignore = (*bots)->add(request.team, request.difficulty, request.prefix);
+                return {};
+            }
+            if (auto added = (*bots)->addProfile(*request.profile, request.team, request.prefix); !added) {
+                return nx::fail(cs::BotActionError::Refused, std::move(added.error()));
+            }
+            return {};
+        },
+        .kick = [played](std::string_view name) -> nx::Result<void, cs::BotActionError> {
+            Session* const session = played();
+            if (session == nullptr) {
+                return nx::fail(cs::BotActionError::NoMap);
+            }
+            if (!session->bots || !session->bots->kickNamed(name)) {
+                return nx::fail(cs::BotActionError::NoSuchBot, std::format("no bot is named {}", name));
+            }
+            return {};
+        },
+        .kickAll = [played]() -> nx::Result<void, cs::BotActionError> {
+            Session* const session = played();
+            if (session == nullptr) {
+                return nx::fail(cs::BotActionError::NoMap);
+            }
+            if (session->bots) {
+                session->bots->kickAll();
+            }
+            return {};
+        }};
+    if (auto registered = cs::registerBotCommands(m_console, *botCvars, std::move(actions)); !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
+    }
+    return {};
+}
+
+auto Client::agentJobSystem() -> nx::Result<nx::jobs::JobSystem*, ConsoleError> {
+    if (!agentJobs) {
+        auto jobs = nx::jobs::JobSystem::create({});
+        if (!jobs) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(jobs.error()));
+        }
+        agentJobs = std::move(*jobs);
+    }
+    return agentJobs.get();
+}
+
+auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError> {
+    const auto file = dataFolder / "cstrike" / "navigation.toml";
+    auto text = nx::platform::readTextFile(file);
+    if (!text) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(text.error()));
+    }
+    auto navigation = nx::game::readNavigationData(*text, nx::platform::toUtf8(file));
+    if (!navigation) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(navigation.error()));
+    }
+    return std::move(*navigation);
+}
+
+auto Client::botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError> {
+    if (session.bots) {
+        return session.bots.get();
+    }
+    if (!botRules) {
+        const auto file = dataFolder / "cstrike" / "bots.toml";
+        auto text = nx::platform::readTextFile(file);
+        if (!text) {
+            return nx::fail(cs::BotActionError::Unavailable, std::move(text.error()));
+        }
+        auto rules = cs::readBotRules(*text, nx::platform::toUtf8(file));
+        if (!rules) {
+            return nx::fail(cs::BotActionError::Unavailable, std::move(rules.error()));
+        }
+        botRules = std::move(*rules);
+    }
+    auto jobs = agentJobSystem();
+    if (!jobs) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(jobs.error()));
+    }
+    auto navigation = readNavigation();
+    if (!navigation) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(navigation.error()));
+    }
+    auto bots = cs::Bots::create(**jobs, *session.game, *navigation, *botRules);
+    if (!bots) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(bots.error()));
+    }
+    session.bots = std::move(*bots);
+    return session.bots.get();
+}
+
+void Client::keepBotQuota(Session& session) {
+    const std::uint32_t quota = botCvars->quotaCount();
+    if (quota > 0 && !session.bots) {
+        if (auto bots = botsOf(session); !bots) {
+            nx::log::warning(kLog, "bot_quota set back to 0: {}", nx::describe(bots.error()));
+            botCvars->setQuota(0);
+            return;
+        }
+    }
+    if (session.bots) {
+        session.bots->keepQuota(quota, botCvars->difficultyLevel(), botCvars->prefix.value());
+    }
+}
+
 auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
     if (line.arguments().size() != 1) {
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
+    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars);
     if (!session) {
-        return nx::fail(ConsoleError::CommandFailed, std::format("map {}", name), std::move(session.error()));
+        return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
+    return {};
+}
+
+auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
+    std::uint32_t count = 1;
+    if (line.arguments().size() > 1) {
+        return nx::fail(ConsoleError::InvalidArguments, "usage: zombie_add [count]");
+    }
+    if (!line.arguments().empty()) {
+        const std::string& text = line.arguments().front();
+        const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), count);
+        if (error != std::errc{} || end != text.data() + text.size() || count == 0) {
+            return nx::fail(ConsoleError::InvalidArguments, "usage: zombie_add [positive count]");
+        }
+    }
+    Session* session = m_nextSession ? &*m_nextSession : (m_session ? &*m_session : nullptr);
+    if (session == nullptr) {
+        return nx::fail(ConsoleError::CommandFailed, "zombie_add: load a map first");
+    }
+    if (!zombieSettings) {
+        constexpr std::string_view kSettingsFile = "entities/zombies.toml";
+        auto path = nx::assets::VfsPath::parse(kSettingsFile);
+        nx::invariant(path.has_value(), "Client: the zombie settings file is a valid VFS path");
+        auto bytes = m_content->vfs.readAll(*path);
+        if (!bytes) {
+            return nx::fail(ConsoleError::CommandFailed, std::string{kSettingsFile},
+                            std::move(bytes.error()));
+        }
+        const std::string text = *bytes | std::views::transform([](std::byte value) {
+            return static_cast<char>(value);
+        }) | std::ranges::to<std::string>();
+        auto settings = zombies::readSettings(text, kSettingsFile);
+        if (!settings) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(settings.error()));
+        }
+        auto type = m_content->entities.add(m_content->vfs, settings->body, cs::ModelTextures::Read);
+        if (!type) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(type.error()));
+        }
+        zombieType = *type;
+        zombieSettings.emplace(std::move(*settings));
+    }
+    if (!session->horde) {
+        auto jobs = agentJobSystem();
+        if (!jobs) {
+            return std::unexpected{std::move(jobs.error())};
+        }
+        auto navigation = readNavigation();
+        if (!navigation) {
+            return std::unexpected{std::move(navigation.error())};
+        }
+        auto horde =
+            zombies::Horde::create(**jobs, *session->game, *navigation, *zombieType, *zombieSettings);
+        if (!horde) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
+        }
+        session->horde = std::move(*horde);
+    }
+    if (auto spawned = session->horde->spawn(session->map->spawnPoints(cs::Team::Terrorists), count);
+        !spawned) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(spawned.error()));
+    }
+    m_console.print(std::format("{} zombie entities added", count));
+    return {};
+}
+
+auto Client::removeZombies() -> nx::Result<void, ConsoleError> {
+    Session* session = m_nextSession ? &*m_nextSession : (m_session ? &*m_session : nullptr);
+    if (session == nullptr || !session->horde) {
+        return nx::fail(ConsoleError::CommandFailed, "zombie_kick: no horde in this map");
+    }
+    if (auto cleared = session->horde->clear(); !cleared) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(cleared.error()));
+    }
+    m_console.print("zombie entities removed");
     return {};
 }
 
@@ -602,7 +888,7 @@ void Client::noclipCommand() {
         m_console.print("Can't \"noclip\", not playing a map");
         return;
     }
-    m_console.print(m_session->game->toggleNoclip() ? "noclip ON" : "noclip OFF");
+    m_console.print(m_session->game->toggleNoclip(m_session->player) ? "noclip ON" : "noclip OFF");
 }
 
 void Client::lastWeaponCommand() {
@@ -610,7 +896,7 @@ void Client::lastWeaponCommand() {
         m_console.print("Can't \"lastinv\", not playing a map");
         return;
     }
-    if (const std::optional<cs::WeaponIndex> last = m_session->game->inventory().lastWeapon()) {
+    if (const std::optional<cs::WeaponIndex> last = m_session->client.inventory().lastWeapon()) {
         m_input->selectWeapon(*last);
     }
 }
@@ -685,6 +971,12 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
         m_frameStart = nx::platform::MonotonicClock::now();
         m_frameRate.frameStarted(m_frameStart);
+        // The frame's waits, for the GPU and for the frame before to be taken to the GPU, before the
+        // input is read too (docs/adr/0029-submission-thread.md).
+        auto commands = m_video->device->beginFrame();
+        if (!commands) {
+            return nx::fail(ClientError::GpuFailed, std::move(commands.error()));
+        }
         if (auto read = readInput(); !read) {
             return read;
         }
@@ -703,15 +995,18 @@ auto Client::run() -> nx::Result<void, ClientError> {
         // A session plays once its scene is made, from the frame after the first image of it: what the
         // player hears of it, they see.
         if (m_session && m_scene) {
-            const cs::Hearing hearing = m_session->game->hearing(); // from what the last frame showed
+            const cs::Hearing hearing = m_session->client.hearing(); // from what the last frame showed
             // The player's own setting, as its client tells the server of it.
-            m_session->game->setAutoSwitch(autoSwitchOf(m_cvars->player));
-            m_camera.position = m_session->game->play(*m_input, m_camera.angles, elapsed);
+            m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(m_cvars->player));
+            playSession(elapsed);
+            m_camera.position = m_session->client.eye();
+            m_session->client.updatePlayers(elapsed, m_players);
             turnAsTheGameDid();
             hearSession(hearing);
-            stampBulletHoles();
+            stampMarks();
+            showEffects(elapsed);
         }
-        if (auto drawn = drawFrame(); !drawn) {
+        if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
         }
     }
@@ -740,7 +1035,7 @@ auto Client::readInput() -> nx::Result<void, ClientError> {
                 return nx::fail(ClientError::GpuFailed, std::move(recreated.error()));
             }
         } else {
-            m_keys.handle(event);
+            m_keys.handle(event, m_cvars->keyboard.keymap.value());
         }
     }
     return {};
@@ -765,7 +1060,7 @@ void Client::startNextSession() {
     }
     m_video->device->waitIdle(); // the old scene may still be drawing
     m_scene.reset();
-    m_session = std::exchange(m_nextSession, std::nullopt);
+    m_session = std::exchange(m_nextSession, nullptr);
     // The local game is one of more than one player, as a Counter-Strike server's: r_decals is held
     // to mp_decals as the original's client holds it when it enters one.
     if (auto held = nx::settings::enterMultiplayerGame(m_cvars->video); !held) {
@@ -777,13 +1072,29 @@ void Client::startNextSession() {
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
     readPlayerSounds();
-    m_camera.position = m_session->game->eye();
+    m_camera.position = m_session->client.eye();
     turnAsTheGameDid();
     std::ignore = m_frameClock.restart(); // the loading is no time of the game's
 }
 
+void Client::playSession(nx::Seconds elapsed) {
+    Session& session = *m_session;
+    for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited); due > 0; --due) {
+        keepBotQuota(session);
+        std::vector<cs::PlayerCommand> commands{cs::PlayerCommand{
+            .player = session.player, .command = session.client.nextCommand(*m_input, m_camera.angles)}};
+        if (session.bots) {
+            std::ranges::move(session.bots->commands(), std::back_inserter(commands));
+        }
+        const std::vector<cs::EntityCommand> entityCommands =
+            session.horde ? session.horde->commands() : std::vector<cs::EntityCommand>{};
+        session.game->tick(commands, entityCommands);
+        session.client.receive(session.game->snapshotFor(session.player));
+    }
+}
+
 void Client::turnAsTheGameDid() {
-    if (const std::optional<nx::EulerAngles> turned = m_session->game->takeTurnedView()) {
+    if (const std::optional<nx::EulerAngles> turned = m_session->client.takeTurnedView()) {
         m_camera.angles = *turned;
     }
 }
@@ -821,7 +1132,9 @@ void Client::readPlayerSounds() {
         return;
     }
     for (const auto& [what, files] : {std::pair{"footsteps", m_content->footsteps.soundFiles()},
-                                      std::pair{"breath", m_content->breath.soundFiles()}}) {
+                                      std::pair{"breath", m_content->breath.soundFiles()},
+                                      std::pair{"harm", m_content->playerHarm.soundFiles()},
+                                      std::pair{"use", m_content->use.soundFiles()}}) {
         for (const std::string_view file : files) {
             if (auto read = m_audio->preload(file); !read) {
                 nx::log::warning(kLog, "a sound of the {} cannot be read: {}", what,
@@ -832,10 +1145,10 @@ void Client::readPlayerSounds() {
 }
 
 void Client::hearSession(const cs::Hearing& hearing) {
-    m_viewPose = m_session->game->viewModel();
+    m_viewPose = m_session->client.viewModel();
     m_clientEvents = m_viewModelEvents.passed(
         m_viewPose ? m_session->level->viewModel(m_viewPose->weapon) : nullptr, m_viewPose);
-    const std::vector<cs::SoundMade> sounds = m_session->game->takeSounds();
+    const std::vector<cs::SoundMade> sounds = m_session->client.takeSounds();
     if (m_audio == nullptr) {
         return;
     }
@@ -850,22 +1163,47 @@ void Client::hearSession(const cs::Hearing& hearing) {
     }
 }
 
-void Client::stampBulletHoles() {
-    const std::vector<cs::Impact> impacts = m_session->game->takeImpacts();
+void Client::showEffects(nx::Seconds elapsed) {
+    const std::vector<cs::BloodSpray> sprays = m_session->client.takeBloodSprays();
+    const nx::Seconds now{m_mapClock.elapsed()};
+    const cs::Level& level = *m_session->level;
+    m_session->effects.update(now, elapsed, level.hulls(), cs::MovementSettings{}.gravity);
+    const std::optional<nx::assets::Palette>& palette = level.palette();
+    if (!palette) {
+        return;
+    }
+    const cs::BloodSprayLook& look = m_content->blood.look;
+    const cs::BloodSpriteFrames frames = cs::bloodSpriteFramesOf(level.bloodSprites(), look);
+    for (const cs::BloodSpray& spray : sprays) {
+        m_session->effects.sprayBlood(spray, look, *palette, frames, now);
+    }
+}
+
+void Client::stampMarks() {
+    const std::vector<cs::Impact> impacts = m_session->client.takeImpacts();
+    const std::vector<cs::BloodMark> bloodMarks = m_session->client.takeBloodMarks();
     if (!m_scene) {
         return;
     }
     // r_decals as it is now, as the original reads it at each decal.
     m_scene->setDecalLimit(decalLimitOf(m_cvars->video));
     const cs::Level& level = *m_session->level;
-    for (const cs::Impact& impact : impacts) {
-        const std::optional<std::string_view> name =
-            cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles);
+    const auto stamp = [this, &level](std::string_view name, nx::Vec3 position, const cs::StampTarget& on) {
         // One the installation lacks was reported as the level was read.
-        if (const std::optional<nx::render::DecalImageIndex> decal =
-                name ? level.decals().indexOf(*name) : std::nullopt) {
-            std::ignore = m_scene->shootDecal(*decal, impact.position, impact.on);
+        if (const std::optional<nx::render::DecalImageIndex> decal = level.decals().indexOf(name)) {
+            std::ignore = m_scene->shootDecal(*decal, position, cs::decalTargetOf(on));
         }
+    };
+    for (const cs::Impact& impact : impacts) {
+        if (const std::optional<std::string_view> name =
+                cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles)) {
+            stamp(*name, impact.position, impact.on);
+        }
+    }
+    const std::vector<std::string>& bloodDecals = m_content->blood.decals;
+    for (const cs::BloodMark& mark : bloodMarks) {
+        nx::expects(mark.decal < bloodDecals.size(), "Client: a blood decal of the game's content");
+        stamp(bloodDecals[mark.decal], mark.position, mark.on);
     }
 }
 
@@ -876,13 +1214,8 @@ void Client::reportSound(const nx::Result<void, cs::PlayError>& played) {
     }
 }
 
-auto Client::drawFrame() -> nx::Result<void, ClientError> {
+auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
     nx::rhi::Device& device = *m_video->device;
-    auto commands = device.beginFrame();
-    if (!commands) {
-        return nx::fail(ClientError::GpuFailed, std::move(commands.error()));
-    }
-    nx::rhi::CommandList& list = commands->get();
     auto image = m_video->swapchain->acquire();
     if (!image) {
         return nx::fail(ClientError::GpuFailed, std::move(image.error()));
@@ -979,6 +1312,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
         }
         m_changedWeapons.clear();
     }
+    if (m_scene) {
+        if (auto loaded = m_scene->loadEntities(list, m_content->entities, m_content->vfs); !loaded) {
+            return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+        }
+    }
     return {};
 }
 
@@ -986,17 +1324,23 @@ auto Client::sessionView() -> cs::SceneView {
     // The view is drawn turned by the kick the player's weapon gave it, as the original's client adds
     // the punch to it.
     nx::render::Camera kicked = m_camera;
-    const nx::EulerAngles punch = m_session->game->punch();
+    const nx::EulerAngles punch = m_session->client.punch();
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
-    m_placements = m_session->game->placements();
-    m_hostages = m_session->game->hostages();
+    m_session->client.writePlacements(m_placements);
+    m_session->client.writeHostages(m_hostages);
+    m_session->client.writeEntities(m_content->entities, shownEntities);
+    const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
-            .time = nx::Seconds{m_mapClock.elapsed()},
+            .time = time,
+            .lightStyles = m_session->client.lightStylesAt(time),
             .placements = m_placements,
             .hostages = m_hostages,
+            .players = m_players,
+            .entities = shownEntities,
             .viewModel = m_viewPose,
+            .tempEntities = m_session->effects.shown(),
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};
 }
@@ -1005,14 +1349,14 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
     if (m_session && m_hud && m_cvars->video.hudDraw.value()) {
         // The HUD, over the scene, the knife's crosshair in the middle.
-        const cs::PlayerStatus& status = m_session->game->status();
+        const cs::PlayerStatus& status = m_session->client.status();
         m_hud->append(m_screenQuads,
                       {.health = status.health,
                        .armor = status.armor,
                        .money = status.money,
-                       .ammo = cs::hudAmmoOf(m_session->game->inventory(), m_content->weapons),
+                       .ammo = cs::hudAmmoOf(m_session->client.inventory(), m_content->weapons),
                        .crosshairDistance = cs::kKnifeCrosshairDistance,
-                       .roundTime = m_session->game->roundTimeShown()},
+                       .roundTime = m_session->client.roundTimeShown()},
                       m_hudCvars->crosshair(), size);
     }
     // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
@@ -1042,11 +1386,17 @@ auto Client::finish() -> nx::Result<void, ClientError> {
 } // namespace
 
 auto runClient(const ClientOptions& options) -> nx::Result<void, ClientError> {
-    auto userFolder = nx::platform::userDirectory();
-    if (!userFolder) {
-        return nx::fail(ClientError::SettingsUnavailable, std::move(userFolder.error()));
+    std::filesystem::path userFolder;
+    if (options.userFolder) {
+        userFolder = *options.userFolder;
+    } else {
+        auto directory = nx::platform::userDirectory();
+        if (!directory) {
+            return nx::fail(ClientError::SettingsUnavailable, std::move(directory.error()));
+        }
+        userFolder = std::move(*directory);
     }
-    Client client{options, *userFolder};
+    Client client{options, userFolder};
     if (auto started = client.start(); !started) {
         return started;
     }

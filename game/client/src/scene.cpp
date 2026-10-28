@@ -135,11 +135,24 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!models) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(models.error()));
     }
+    auto playerModels = level.players().load(*studio, commands);
+    if (!playerModels) {
+        return nx::fail(SceneError::CreateFailed, "the players' models", std::move(playerModels.error()));
+    }
     Scene scene{std::move(*world),      nx::render::WorldLight{level.map()},
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(*viewSprites)};
     scene.m_look = look;
+    scene.m_playerModels = std::move(*playerModels);
+    auto bloodModels = level.bloodSprites().load(scene.m_sprites, commands, 0);
+    if (!bloodModels) {
+        return nx::fail(SceneError::CreateFailed, "the blood's sprites", std::move(bloodModels.error()));
+    }
+    scene.bloodModels = std::move(*bloodModels);
+    for (const TempSprite sprite : nx::EnumArray<TempSprite, bool>::keys()) {
+        scene.tempSpriteIndices[sprite] = level.bloodSprites().indexOf(pathOf(sprite, level.bloodLook()));
+    }
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
@@ -161,7 +174,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
 
 auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
     -> nx::Result<void, SceneError> {
-    const nx::render::LightStyleValues styles = level.lightStyles().valuesAt(view.time);
+    const nx::render::LightStyleValues& styles = view.lightStyles;
     m_world.prepare({.camera = view.camera,
                      .aspect = view.aspect,
                      .time = view.time,
@@ -169,8 +182,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                      .placements = view.placements});
     const PosedModels models =
         level.models().posed(m_models, view.time, view.hostages, m_light, level.skyLight(), styles);
+    const PosedModels players =
+        level.players().posed(m_playerModels, view.players, m_light, level.skyLight(), styles);
+    const PosedModels entities =
+        entityModels.posed(level.entityCatalog(), view.entities, m_light, level.skyLight(), styles);
+    std::vector<nx::render::StudioInstance> instances = models.instances;
+    std::ranges::copy(players.instances, std::back_inserter(instances));
+    std::ranges::copy(entities.instances, std::back_inserter(instances));
     if (auto prepared =
-            m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = models.instances});
+            m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = instances});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }
@@ -199,6 +219,21 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
             sprite.isHidden = level.glowBlockers().hides(level.hulls(), view.placements, view.camera.position,
                                                          sprite.origin);
         }
+    }
+    // The temporary entities: their textures, as translucent as they are (kRenderTransTexture).
+    for (const TempEntity& entity : view.tempEntities) {
+        const std::optional<std::uint32_t> index = tempSpriteIndices[entity.sprite];
+        if (!index || !bloodModels[*index]) {
+            continue; // the level could not read its sprite, as it logged
+        }
+        sprites.push_back(nx::render::SpriteInstance{.model = *bloodModels[*index],
+                                                     .origin = entity.origin,
+                                                     .angles = {.roll = entity.roll},
+                                                     .frame = entity.frame,
+                                                     .scale = entity.scale,
+                                                     .mode = nx::render::RenderMode::TransTexture,
+                                                     .amount = entity.amount,
+                                                     .color = entity.color});
     }
     if (auto prepared = m_sprites.prepare({.camera = view.camera,
                                            .aspect = view.aspect,
@@ -244,11 +279,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     // The weapon in hand is lit as modern shooters light theirs, readable whatever the map: a key light
     // above it and behind the eye, carried with the view, first; then the light of its flashes, one a
     // muzzle, the nearest; then the map's lights nearest it, in the room left.
-    std::vector<nx::render::StudioLight> lights{viewModelLightOf(view.camera)};
-    std::ranges::copy(m_flashes.lightsAt(view.time, whereIs), std::back_inserter(lights));
-    const std::size_t room =
-        nx::render::kMostStudioLights - std::min(lights.size(), nx::render::kMostStudioLights);
-    std::ranges::copy(nearestLights(level.lights(), view.camera.position, room), std::back_inserter(lights));
+    std::vector<nx::render::StudioLight> lights;
+    if (m_look == nx::render::StudioLook::Enhanced) {
+        lights.push_back(viewModelLightOf(view.camera));
+        std::ranges::copy(m_flashes.lightsAt(view.time, whereIs), std::back_inserter(lights));
+        const std::size_t room =
+            nx::render::kMostStudioLights - std::min(lights.size(), nx::render::kMostStudioLights);
+        std::ranges::copy(nearestLights(level.lights(), view.camera.position, room),
+                          std::back_inserter(lights));
+    }
     const std::array held{nx::render::StudioInstance{
         .model = *weaponModel,
         .bones = bones,
@@ -271,14 +310,12 @@ void Scene::drawEffects(nx::rhi::CommandList& list) const {
     nx::render::drawInOrder(list, m_viewSprites);
 }
 
-void Scene::bakeReflections(nx::rhi::CommandList& list, const Level& level, nx::Seconds time,
-                            std::span<const nx::render::ModelPlacement> placements) {
+void Scene::bakeReflections(nx::rhi::CommandList& list, const SceneView& view) {
     if (!m_probes || m_probes->isBaked()) {
         return;
     }
-    m_probes->bakeNext(
-        list, m_world,
-        {.time = time, .lightStyles = level.lightStyles().valuesAt(time), .placements = placements});
+    m_probes->bakeNext(list, m_world,
+                       {.time = view.time, .lightStyles = view.lightStyles, .placements = view.placements});
 }
 
 auto Scene::shootDecal(nx::render::DecalImageIndex decal, nx::Vec3 position,
@@ -301,12 +338,23 @@ auto Scene::loadWeapons(nx::rhi::CommandList& commands, const Level& level,
             }
             model.emplace(std::move(*loaded));
         }
+        if (auto loaded = level.players().loadWeapon(m_studio, commands, weapon, m_playerModels); !loaded) {
+            return nx::fail(SceneError::CreateFailed, "a weapon's player model", std::move(loaded.error()));
+        }
     }
     auto flashModels = level.muzzleFlashes().load(m_viewSprites, commands, m_flashModels.size());
     if (!flashModels) {
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(flashModels.error()));
     }
     std::ranges::move(*flashModels, std::back_inserter(m_flashModels));
+    return {};
+}
+
+auto Scene::loadEntities(nx::rhi::CommandList& commands, const EntityCatalog& catalog,
+                         const nx::assets::Vfs& vfs) -> nx::Result<void, SceneError> {
+    if (auto loaded = entityModels.load(catalog, m_studio, vfs, commands); !loaded) {
+        return nx::fail(SceneError::CreateFailed, "an entity model", std::move(loaded.error()));
+    }
     return {};
 }
 

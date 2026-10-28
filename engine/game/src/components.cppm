@@ -25,8 +25,10 @@ enum class Solid : std::uint8_t {
 /// knife's strike sounds on, for one (not none, nor a machine, which come with their entities).
 enum class Classification : std::uint8_t {
     None,         ///< CLASS_NONE: the world, a door, a wall.
+    Player,       ///< CLASS_PLAYER: a player's body.
     Vehicle,      ///< CLASS_VEHICLE: a func_vehicle.
     HumanPassive, ///< CLASS_HUMAN_PASSIVE: a hostage.
+    Organic,      ///< A mod's organic entity, met as flesh by weapons.
     Count,
 };
 

@@ -40,6 +40,15 @@ constexpr float kMostBrightness = 3.0F;
 } // namespace
 
 auto registerClientCvars(console::Console& console) -> Result<ClientCvars, console::CvarError> {
+    auto keymap = console.registerCvar(CvarDesc<KeyMapping>{
+        .name = "in_keymap",
+        .defaultValue = KeyMapping::Keycode,
+        .description = "How keyboard binds are selected: keycode follows the layout's characters; "
+                       "scancode follows their physical positions on a US keyboard.",
+        .flags = kArchived});
+    if (!keymap) {
+        return std::unexpected{std::move(keymap.error())};
+    }
     auto sensitivity = console.registerCvar(
         CvarDesc<float>{.name = "sensitivity",
                         .defaultValue = kSensitivity,
@@ -161,8 +170,15 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
         .defaultValue = "",
         .description = "The sound output to play on, by its name; empty for the system's default.",
         .flags = kArchived});
-    if (!device) {
-        return std::unexpected{std::move(device.error())};
+    auto playerName = console.registerCvar(
+        CvarDesc<std::string>{.name = "name",
+                              .defaultValue = std::string{kDefaultPlayerName},
+                              .description = "The name you ask the server for as you join.",
+                              .flags = kArchived});
+    for (auto* const registered : {&device, &playerName}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
     }
     for (auto* const registered : {&decals, &multiplayerDecals}) {
         if (!*registered) {
@@ -172,7 +188,8 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
     if (!fidelity) {
         return std::unexpected{std::move(fidelity.error())};
     }
-    return ClientCvars{.mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
+    return ClientCvars{.keyboard = {.keymap = *keymap},
+                       .mouse = {.sensitivity = *sensitivity, .yaw = *yaw, .pitch = *pitch},
                        .video = {.fpsMax = *fpsMax,
                                  .fpsOverride = *fpsOverride,
                                  .vsync = *vsync,
@@ -185,7 +202,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .fidelity = *fidelity,
                                  .decals = *decals,
                                  .multiplayerDecals = *multiplayerDecals},
-                       .player = {.autoWeaponSwitch = *autoWeaponSwitch},
+                       .player = {.name = *playerName, .autoWeaponSwitch = *autoWeaponSwitch},
                        .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
 }
 

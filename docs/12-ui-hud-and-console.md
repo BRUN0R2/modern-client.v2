@@ -251,10 +251,13 @@ frame (514 against 517.8, 518 against 520.0): the original measures the rate twi
 
 **Today** (`cs.client:fpsLabel`): `next` draws that label while a map is played and `cl_showfps` is 1,
 over the HUD whether `hud_draw` draws it or not, as the original's engine writes it over its client's
-HUD, and `nxview --fps <frames a second>` over its frame; the five references match it to the pixel.
-Its number is the one measure of the client's frame rate, `nx::platform::FrameRateMeter`
-([05 §12](05-rendering.md#12-latency-and-frame-pacing)), rounded to the nearest whole number, which
-`net_graph` is to show too, so that the two never disagree as the original's do. Its font, like the
+HUD, and `nxview --fps <frames a second>` over its frame; its font, place, colour and shadow match the
+five references to the pixel. Its number is the one measure of the client's frame rate,
+`nx::platform::FrameRateMeter` ([05 §12](05-rendering.md#12-latency-and-frame-pacing)), the one the
+original's `net_graph` writes, which changes with every frame, and it is written as `net_graph` writes
+it, to the nearest tenth (`520.8 fps`): a departure the user chose (2026-10-28) from the original's
+whole number, which is counted over each second and lags the rate. `net_graph` is to show the same
+number, so that the two never disagree as the original's do. Its font, like the
 console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 
 ### 3.3 Visual parity of numbers
@@ -378,7 +381,8 @@ unreadable one is printed. `exec` reads `.cfg` files of that folder by relative 
 file is written beside its place and then moved there, so a crash leaves the old settings or
 the new ones, never a part. The original ends its `config.cfg` with `exec userconfig.cfg`;
 here the startup runs that file itself. `registerClientCvars` registers the client's cvars of
-§5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values:
+§5.1 that have a consumer today, with Counter-Strike 1.6's names and starting values, and the
+project's keyboard mapping choice (`in_keymap`, §6):
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, held as the original holds it,
 [05 §12](05-rendering.md#12-latency-and-frame-pacing)), `fps_override` (0: `fps_max` at most 100),
 `gl_vsync` (0, where the original starts it at 1: `fps_max` alone paces the frames, the project's
@@ -394,7 +398,8 @@ system's default sound output; else one `s_devices` lists, opened once the start
 command line ran), `s_play_unfocused` (0: silent while the window is not focused, as the original
 is), all archived, and `texgamma` (2) and `lightgamma` (2.5), from 1.8 to 3, which the original does not archive.
 `next` reads them as it starts and writes `config.cfg` as it ends. A change from the console takes
-effect as soon as what reads it reads it again: the mouse's as the mouse moves, `fps_max`,
+effect as soon as what reads it reads it again: `in_keymap` with the next key press, the mouse's
+as the mouse moves, `fps_max`,
 `fps_override`, `hud_draw`, `cl_showfps`, `r_decals`, `volume` and `s_play_unfocused` with the next frame, `_cl_autowepswitch` with the next weapon
 given, the picture's (`gamma`, `brightness`,
 `texgamma`, `lightgamma`, `r_fidelity`) with the next map, and `gl_vsync` when `next` starts again
@@ -413,8 +418,10 @@ ReadMultiplayCvars), `mp_startmoney` (800), given as the player joins and as the
 held to 800 to 16000 (`cs::readStartMoney`, CheckStartMoney), `sv_restartround` and `sv_restart`
 (0), read once a second, cut to whole seconds and held to 60, both set back to 0 when one asks for
 a restart (`cs::restartDelayOf`, CheckRestartRound,
-[10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), and `mp_footsteps` (1: any value but
-0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
+[10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), `mp_footsteps` (1: any value but
+0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)), and
+`mp_friendlyfire` (0: any value but 0 lets a player's attacks hurt its teammates), read at each attack
+([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 A number past what `int()` holds is cut as the original's processors cut it, to the least whole
 number (`nx::truncateAsX86`). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.
@@ -489,7 +496,8 @@ category the application passes in (`log_level_net debug`, or the level's number
 ## 6. Input
 
 - **SDL3** for keyboard, mouse and gamepad, behind `nx::platform::Window`: keys arrive by
-  physical position (`Key`, the USB HID usage code), the mouse as relative motion in its own
+  physical position (`Key`, the USB HID usage code) and their layout's base character
+  (`KeyChanged::character`, from SDL's keycode), the mouse as relative motion in its own
   counts (`MouseMoved`), and the window gives a GPU backend its native handles. Typed text arrives
   apart from the keys, as the keyboard's layout and the system's input method make it
   (`TextEntered`, UTF-8), while text input is on (`Window::setTextInput`): the console and the
@@ -510,9 +518,14 @@ the original's own (`UPARROW` 128, `MWHEELUP` 240, `MOUSE1` 241). `keyOf` gives 
 position of a US keyboard: both Ctrl keys are `CTRL`, both Shift `SHIFT`, both Alt `ALT`, and
 the keypad's keys are its `KP_` keys whatever Num Lock says; the keys the original has no number
 for (Print Screen, Scroll Lock, Num Lock, the system keys) run nothing. The platform reports
-positions only, so binds follow them until `in_keymap` brings the layout's characters. `bind
-<key> [command]`, `unbind`, `unbindall` and `bindlist` set and list them: a key is one ASCII
-character (a letter in either case) or one of the original's names in any case (`keyNamed`), and
+each position with its layout's base character, separately from typed text. `in_keymap keycode`
+(the default, also 1) selects the layout's printable ASCII character; `in_keymap scancode`
+(also 0) selects the US position. Both keep the named controls and the keypad's `KP_` keys,
+regardless of Num Lock or SDL's keypad hints. A character outside the original's bind names,
+or an unknown character, runs nothing in keycode mode; scancode mode remains an explicit choice.
+Like the other enum cvars, the mode is archived by number. `bind <key> [command]`, `unbind`,
+`unbindall` and `bindlist` set and list them: a key is one ASCII character (a letter in either
+case) or one of the original's names in any case (`keyNamed`), and
 a command holds no `"`, so that `config.cfg` reads it back. `defaultBindings` are Counter-Strike
 1.6's, those its options restore, and `config.cfg` keeps the binds: `unbindall`, then a `bind
 "<key>" "<command>"` line per bound key. `BoundInput` runs them as the original does: a key
@@ -521,7 +534,12 @@ going down queues its command, followed by the key's number when it starts with 
 commands. The number follows the whole command, as in the original: a key bound to `+jump;
 wait; -jump` queues `+jump; wait; -jump 32`. A key the system repeats queues nothing more, a key
 that comes up without having gone down here queues nothing, and every key down comes up when the
-window loses the keyboard. Each notch of the wheel presses its key and releases it at once.
+window loses the keyboard. Each physical key keeps the logical key it selected on its press,
+even if the layout or `in_keymap` changes before release. Several physical keys selecting one
+logical key (both Ctrl keys, for example) hold its action until the last comes up. A press keeps
+its own release command, so rebinding or unbinding a held key cannot leave its action stuck.
+A repeated down event received without its initial press does nothing, including after focus
+loss. Each notch of the wheel presses its key and releases it at once.
 
 `cs::PlayerInput` (`cs.client`) registers the player's buttons, `+forward`, `+back`,
 `+moveleft`, `+moveright`, `+moveup`, `+movedown`, `+left`, `+right`, `+lookup`, `+lookdown`,

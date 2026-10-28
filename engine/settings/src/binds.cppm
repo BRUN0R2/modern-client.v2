@@ -62,22 +62,35 @@ public:
         : m_console{&console}, m_bindings{&bindings} {}
 
     /// What `event` does to the keys: a key or a mouse button goes down or up, the wheel turns, or
-    /// the window loses the keyboard and every key down comes up. Other events do nothing.
-    void handle(const platform::WindowEvent& event);
+    /// the window loses the keyboard and every key down comes up. Keyboard presses select their bind
+    /// by `mapping`; releases keep the selection made on the press, across layout and mode changes.
+    /// Other events do nothing.
+    void handle(const platform::WindowEvent& event, KeyMapping mapping);
 
     /// `key` went down: queues its command, unless it is down already (the system's key repeat).
     void press(console::KeyId key);
 
-    /// `key` came up: queues its `-` command, when it went down here.
+    /// `key` came up: queues the `-` command of its press, even if its bind has since changed.
     void release(console::KeyId key);
 
     /// Every key down comes up.
     void releaseAll();
 
 private:
+    /// The bind selected by one physical key still held; none for an unmapped press.
+    /// Several physical keys may select the same logical bind.
+    struct PressedKey {
+        platform::Key position{};
+        std::optional<console::KeyId> binding{};
+    };
+
+    void changeKey(const platform::KeyChanged& event, KeyMapping mapping);
+
     console::Console* m_console;
     const KeyBindings* m_bindings;
     std::bitset<kKeyCount> m_down;
+    std::array<std::string, kKeyCount> releaseCommands; ///< The command each press must eventually release.
+    std::vector<PressedKey> pressedKeys;
     float m_wheel = 0.0F; ///< Notches turned and not run yet: a part of one, on precise wheels.
 };
 

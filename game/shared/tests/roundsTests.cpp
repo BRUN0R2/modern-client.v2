@@ -22,6 +22,8 @@ using cs::RoundEvents;
 using cs::RoundLengths;
 using cs::Rounds;
 using cs::Team;
+using cs::TeamCount;
+using cs::TeamCounts;
 
 constexpr nx::TickRate kRate = nx::kDefaultTickRate;
 constexpr RoundLengths kLengths{.freeze = nx::Seconds{6.0F}, .round = nx::Seconds{300.0F}};
@@ -34,6 +36,20 @@ constexpr MapObjectives kBombMap{MapObjective::BombTarget};
 
 [[nodiscard]] auto events(std::initializer_list<RoundEvent> list) -> RoundEvents {
     return RoundEvents{list};
+}
+
+/// The players of each team, terrorists then counter-terrorists.
+[[nodiscard]] auto teams(TeamCount terrorists, TeamCount counterTerrorists) -> TeamCounts {
+    return TeamCounts{TeamCounts::Storage{terrorists, counterTerrorists}};
+}
+
+/// Rounds of a game started: its players of both teams commenced it, and its next round started.
+[[nodiscard]] auto startedGame() -> Rounds {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = rounds.checkWinConditions(teams({.alive = 1}, {.alive = 1}), at(1.0), kRate);
+    std::ignore = rounds.think(at(4.0), kRate, kLengths);
+    std::ignore = rounds.think(at(10.0), kRate, kLengths);
+    return rounds;
 }
 
 TEST(RoundsTest, AMapIsPlayedForWhatTheClassesOfItsEntitiesSay) {
@@ -142,6 +158,101 @@ TEST(RoundsTest, TheNextRoundIsAsLongAsTheLengthsSayAsItStarts) {
     // Lengths changed later wait for the round after.
     EXPECT_EQ(rounds.think(at(316.0), kRate, kLengths), events({RoundEvent::FreezeEnded}));
     EXPECT_EQ(rounds.remainingAt(at(316.0), kRate), nx::Seconds{60.0F});
+}
+
+TEST(RoundsTest, ARoundTheGameEndsStartsTheNextFiveSecondsLaterAndEndsNoMore) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = rounds.think(at(8.0), kRate, kLengths);
+    EXPECT_TRUE(rounds.endRound(RoundEndReason::RoundDraw, at(20.0), kRate));
+    EXPECT_EQ(rounds.end(), RoundEndReason::RoundDraw);
+    EXPECT_EQ(rounds.restartAt(), at(25.0));
+    EXPECT_FALSE(rounds.endRound(RoundEndReason::RoundDraw, at(22.0), kRate)) << "it ended already";
+    EXPECT_EQ(rounds.restartAt(), at(25.0));
+    EXPECT_EQ(rounds.think(at(24.99), kRate, kLengths), RoundEvents{});
+    EXPECT_EQ(rounds.think(at(25.0), kRate, kLengths), events({RoundEvent::RoundStarted}));
+    EXPECT_EQ(rounds.end(), std::nullopt);
+}
+
+TEST(RoundsTest, ARoundTheGameEndsDoesNotRunOutAfterNorARoundThatRanOutEndAgain) {
+    Rounds drawn = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = drawn.think(at(8.0), kRate, kLengths);
+    EXPECT_TRUE(drawn.endRound(RoundEndReason::RoundDraw, at(305.0), kRate));
+    EXPECT_EQ(drawn.think(at(308.0), kRate, kLengths), RoundEvents{});
+    EXPECT_EQ(drawn.end(), RoundEndReason::RoundDraw);
+    EXPECT_EQ(drawn.restartAt(), at(310.0));
+
+    Rounds ranOut = Rounds::start(kBombMap, kLengths, at(0.0));
+    std::ignore = ranOut.think(at(8.0), kRate, kLengths);
+    std::ignore = ranOut.think(at(308.0), kRate, kLengths);
+    EXPECT_FALSE(ranOut.endRound(RoundEndReason::RoundDraw, at(309.0), kRate));
+    EXPECT_EQ(ranOut.end(), RoundEndReason::TargetSaved);
+    EXPECT_EQ(ranOut.restartAt(), at(313.0));
+}
+
+TEST(RoundsTest, ADrawIsWonByNobody) {
+    EXPECT_EQ(cs::winnerOf(RoundEndReason::RoundDraw), std::nullopt);
+    EXPECT_EQ(cs::winnerOf(RoundEndReason::GameCommencing), std::nullopt);
+    EXPECT_EQ(cs::winnerOf(RoundEndReason::CounterTerroristsWin), Team::CounterTerrorists);
+    EXPECT_EQ(cs::winnerOf(RoundEndReason::TerroristsWin), Team::Terrorists);
+}
+
+TEST(RoundsTest, TheGameCommencesAsBothTeamsHavePlayersUnfrozenAndRestartsThreeSecondsLater) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    EXPECT_FALSE(rounds.isGameStarted());
+    EXPECT_EQ(rounds.checkWinConditions(teams({}, {.alive = 1}), at(1.0), kRate), std::nullopt);
+    EXPECT_FALSE(rounds.isGameStarted()) << "a team without players";
+    EXPECT_EQ(rounds.checkWinConditions(teams({.alive = 1}, {.alive = 1}), at(2.0), kRate),
+              RoundEndReason::GameCommencing);
+    EXPECT_TRUE(rounds.isGameStarted());
+    EXPECT_FALSE(rounds.isFrozen());
+    EXPECT_EQ(rounds.restartAt(), at(5.0));
+    EXPECT_EQ(rounds.think(at(5.0), kRate, kLengths), events({RoundEvent::GameRestarted}));
+    EXPECT_TRUE(rounds.isGameStarted()) << "kept from round to round";
+    EXPECT_TRUE(rounds.isFrozen());
+}
+
+TEST(RoundsTest, TheGameCommencesThoughItsRoundEnded) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    EXPECT_EQ(rounds.checkWinConditions(teams({}, {.dead = 1}), at(1.0), kRate), RoundEndReason::RoundDraw);
+    EXPECT_EQ(rounds.restartAt(), at(6.0));
+    EXPECT_EQ(rounds.checkWinConditions(teams({.alive = 1}, {.dead = 1}), at(2.0), kRate),
+              RoundEndReason::GameCommencing);
+    EXPECT_EQ(rounds.restartAt(), at(5.0));
+}
+
+TEST(RoundsTest, ATeamEliminatedLosesTheRound) {
+    Rounds terroristsDead = startedGame();
+    EXPECT_EQ(
+        terroristsDead.checkWinConditions(teams({.alive = 1, .dead = 1}, {.alive = 1}), at(20.0), kRate),
+        std::nullopt);
+    EXPECT_EQ(terroristsDead.checkWinConditions(teams({.dead = 2}, {.alive = 1}), at(21.0), kRate),
+              RoundEndReason::CounterTerroristsWin);
+    EXPECT_EQ(terroristsDead.restartAt(), at(26.0));
+    EXPECT_EQ(terroristsDead.checkWinConditions(teams({.dead = 2}, {.dead = 1}), at(22.0), kRate),
+              std::nullopt)
+        << "a started game's round that ended ends no more";
+
+    Rounds counterTerroristsDead = startedGame();
+    EXPECT_EQ(counterTerroristsDead.checkWinConditions(teams({.alive = 1}, {.dead = 3}), at(20.0), kRate),
+              RoundEndReason::TerroristsWin);
+    Rounds everybodyDead = startedGame();
+    EXPECT_EQ(everybodyDead.checkWinConditions(teams({.dead = 1}, {.dead = 1}), at(20.0), kRate),
+              RoundEndReason::TerroristsWin)
+        << "TeamExterminationCheck looks at the counter-terrorists last";
+}
+
+TEST(RoundsTest, WithoutBothTeamsNobodyAliveIsADrawAndTheGameStops) {
+    Rounds rounds = startedGame();
+    EXPECT_EQ(rounds.checkWinConditions(teams({}, {.alive = 1, .dead = 1}), at(20.0), kRate), std::nullopt);
+    EXPECT_FALSE(rounds.isGameStarted()) << "the terrorists left";
+    EXPECT_EQ(rounds.checkWinConditions(teams({}, {.dead = 2}), at(21.0), kRate), RoundEndReason::RoundDraw);
+}
+
+TEST(RoundsTest, TheRoundsStartIsItsFreezesThenItsTimes) {
+    Rounds rounds = Rounds::start(kBombMap, kLengths, at(0.0));
+    EXPECT_EQ(rounds.sinceStartAt(at(5.0), kRate), nx::Seconds{5.0F});
+    std::ignore = rounds.think(at(8.0), kRate, kLengths);
+    EXPECT_EQ(rounds.sinceStartAt(at(30.0), kRate), nx::Seconds{22.0F});
 }
 
 TEST(RoundsTest, TheRoundsOfAMapPlayedForNothingRunOnPastTheirTime) {

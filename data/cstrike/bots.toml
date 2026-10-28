@@ -1,0 +1,174 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# How the bots see, remember, move, keep their number and play by their skill (docs/10, section 11),
+# read into cs::BotRules. ReGameDLL_CS's reconstruction of Condition Zero's bot gives what it has
+# (GPL, consulted: docs/20 section 3); the rest is the project's own.
+
+# FInViewCone of a player: m_flFieldOfView 0.5, the cosine of half of a 120 degree cone about its view.
+fieldOfView = 120.0
+# How many players a bot looks at in a tick, in turn: every player of a game of 32 (the project's).
+perceptionBudget = 32
+# How long a bot remembers an enemy it no longer sees, and how many it remembers (the project's).
+memoryLifetime = 10.0
+memoryLimit = 32
+# A bot fires at an enemy it sees as far as a shot goes (FireBullets3's 8192 units).
+attackDistance = 8192.0
+# How near the end of its way a bot arrives, and how far a goal moves before it finds another way
+# (the project's, as the zombies' of data/mods/zombies.toml).
+arrivalDistance = 8.0
+replanDistance = 24.0
+# How far from a bot the next place its hunt goes to is drawn on the mesh (the project's: a map's).
+huntRadius = 4096.0
+# How often bot_quota is looked at (MonitorBotCVars: 0.3 seconds).
+quotaInterval = 0.3
+
+# The spots of a player a bot looks for from its origin (CCSBot::IsVisible): its head 25 above, its
+# feet 34 below standing and 14 ducked, and its sides 13 across.
+[spots]
+head = 25.0
+standingFeet = 34.0
+duckedFeet = 14.0
+side = 13.0
+
+# The levels of skill a bot plays with, each with the profiles of the bots that play with it: a bot
+# joining takes a profile of bot_difficulty's difficulty no one in the game plays as, its name the
+# profile's (after bot_prefix). The templates of the BotProfile.db that ReGameDLL_CS's zBot ships (its
+# Skill a hundredth here; the Default template's reaction time 0.3 and attack delay 0 where one sets
+# none); the profiles' names are the project's own.
+[[skillLevels]]
+name = "easy"
+difficulties = ["easy"]
+profiles = [
+    "Abner", "Basil", "Cyril", "Dudley", "Edgar", "Floyd", "Gilbert", "Horace", "Jasper", "Lionel",
+    "Mortimer", "Percival"
+]
+skill = 0.0
+reactionTime = 0.5
+attackDelay = 1.5
+
+[[skillLevels]]
+name = "fair"
+difficulties = ["easy", "normal"]
+profiles = [
+    "Ambrose", "Barnaby", "Clement", "Desmond", "Elias", "Felix", "Gideon", "Isidore", "Jules",
+    "Leopold", "Rupert", "Silas"
+]
+skill = 0.25
+reactionTime = 0.4
+attackDelay = 1.0
+
+[[skillLevels]]
+name = "normal"
+difficulties = ["normal"]
+profiles = [
+    "Anton", "Breno", "Caio", "Dario", "Emil", "Fabio", "Gustav", "Hector", "Joaquim", "Lucas",
+    "Marco", "Nuno"
+]
+skill = 0.5
+reactionTime = 0.4
+attackDelay = 0.7
+
+[[skillLevels]]
+name = "tough"
+difficulties = ["normal", "hard"]
+profiles = ["Aldo", "Bento", "Ciro", "Diego", "Enzo", "Franco", "Gael", "Heitor", "Igor", "Joel"]
+skill = 0.6
+reactionTime = 0.3
+attackDelay = 0.35
+
+[[skillLevels]]
+name = "hard"
+difficulties = ["hard"]
+profiles = [
+    "Arthur", "Bernardo", "Cassio", "Davi", "Elton", "Fausto", "Gaspar", "Ismael", "Jonas", "Kleber"
+]
+skill = 0.75
+reactionTime = 0.25
+attackDelay = 0.0
+
+[[skillLevels]]
+name = "veryHard"
+difficulties = ["hard"]
+profiles = ["Leandro", "Matheus", "Nelson", "Otavio", "Pietro", "Rafael", "Saulo", "Tiago"]
+skill = 0.8
+reactionTime = 0.25
+attackDelay = 0.0
+
+[[skillLevels]]
+name = "expert"
+difficulties = ["expert"]
+profiles = [
+    "Renato", "Silvio", "Tadeu", "Teodoro", "Valter", "Vicente", "Wagner", "Xande", "Yago", "Zeca"
+]
+skill = 0.9
+reactionTime = 0.2
+attackDelay = 0.0
+
+[[skillLevels]]
+name = "elite"
+difficulties = ["expert"]
+profiles = ["Aurelio", "Bastian", "Cosimo", "Dante", "Ezio", "Fiore", "Galeno", "Lauro"]
+skill = 1.0
+reactionTime = 0.2
+attackDelay = 0.0
+
+# How a bot's view turns towards where it looks (UpdateLookAngles): a spring, stiffer as it attacks;
+# its yaw set once a degree off at most, its pitch pulled twice as hard and held within 89 degrees.
+[look]
+snapTolerance = 1.0
+pitchStiffness = 2.0
+pitchLimit = 89.0
+
+[look.attacking]
+stiffness = 300.0
+damping = 30.0
+maxAcceleration = 3000.0
+
+[look.roaming]
+stiffness = 200.0
+damping = 25.0
+maxAcceleration = 3000.0
+
+# How a bot's aim errs (SetAimOffset, UpdateAimOffset): a tenth of the range at most on each axis,
+# times the share of skill it lacks; focusing, held steadier than 100 degrees a second, it gains up
+# to 0.75 of skill over 5 seconds times the share it lacks, 2 at least; a new error each 0.25 to 1
+# second, which its aim moves a tenth of the way to each of its 30 commands a second. Above half a
+# skill it aims ahead of a moving enemy by 3 of those commands (Upkeep).
+[aim]
+errorPerRange = 0.1
+slowestFocus = 5.0
+quickestFocus = 2.0
+bestFocus = 0.75
+steadyTurn = 100.0
+soonestNewError = 0.25
+latestNewError = 1.0
+settleShare = 0.1
+settleRate = 30.0
+leadingSkill = 0.5
+leadTime = 0.1
+
+# How a bot fires (FireWeaponAtEnemy): a press weighed at each full think, a tenth of a second apart
+# (g_flBotFullThinkInterval), held until the next; aimed within twice HalfHumanWidth beside where it
+# aims; with a pistol as fast as it may above 0.75 of skill, else 0.15 to 0.4 seconds apart; with a
+# gun at once below half a skill or nearer than 400, 0.3 to 0.7 seconds apart beyond 800, else 0.15 to
+# 0.5.
+[fire]
+aimHalfWidth = 32.0
+thinkInterval = 0.1
+rapidPistolSkill = 0.75
+spraySkill = 0.5
+sprayRange = 400.0
+distantRange = 800.0
+
+[fire.pistolPause]
+shortest = 0.15
+longest = 0.4
+
+[fire.distantPause]
+shortest = 0.3
+longest = 0.7
+
+[fire.burstPause]
+shortest = 0.15
+longest = 0.5

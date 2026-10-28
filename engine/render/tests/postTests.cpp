@@ -18,6 +18,7 @@ import nx.rhi.vulkan;
 import nx.render;
 
 #include "offscreenTarget.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -58,10 +59,8 @@ protected:
             nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
         if (!device) {
             const auto code = device.error().code;
-            EXPECT_TRUE(code == nx::rhi::RhiError::BackendUnavailable ||
-                        code == nx::rhi::RhiError::NoSuitableAdapter)
-                << nx::describe(device.error());
-            GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+            ASSERT_TRUE(nx::test::isVulkanUnavailable(code)) << nx::describe(device.error());
+            GTEST_SKIP() << nx::test::kNoVulkan;
         }
         devicePtr = std::move(*device);
         const auto executable = nx::platform::executablePath();

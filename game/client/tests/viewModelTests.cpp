@@ -94,6 +94,26 @@ TEST_F(ViewModelAppearanceTest, KeepsOriginalDefaults) {
     EXPECT_TRUE(viewModel->bodyChoices().empty());
 }
 
+TEST_F(ViewModelAppearanceTest, DecodesEverySequenceWhenSeveralShareOneExternalGroup) {
+    constexpr std::size_t kSequenceBytes = 176;
+    constexpr std::size_t kSequenceCountOffset = 164;
+    constexpr std::size_t kOriginalSequenceCount = 2;
+    constexpr std::int32_t kExtendedSequenceCount = 3;
+    const auto original =
+        std::span{model.bytes}.subspan(model.sequences, kOriginalSequenceCount * kSequenceBytes);
+    nx::test::Bytes sequences{original.begin(), original.end()};
+    const auto wave = original.subspan(kSequenceBytes);
+    sequences.insert(sequences.end(), wave.begin(), wave.end());
+    std::ignore = model.table(kSequenceCountOffset, kExtendedSequenceCount, sequences);
+    const auto viewModel = read(weapon());
+    ASSERT_TRUE(viewModel.has_value()) << nx::describe(viewModel.error());
+    const std::vector<nx::Mat3x4> first = viewModel->pose({}, 1, {}, cs::Hand::Left);
+    const std::vector<nx::Mat3x4> second = viewModel->pose({}, 2, {}, cs::Hand::Left);
+    EXPECT_EQ(first, second);
+    EXPECT_EQ(viewModel->sequence(0).label, "idle");
+    EXPECT_EQ(viewModel->sequence(2).label, "wave");
+}
+
 TEST_F(ViewModelAppearanceTest, IsMirroredInTheHandItIsNotModeledIn) {
     // Modeled in the left hand, as Counter-Strike's guns are: mirrored for a right-handed player
     // (cl_righthand 1), as the original draws them, and drawn as it is for a left-handed one.

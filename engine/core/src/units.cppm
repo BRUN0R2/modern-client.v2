@@ -29,9 +29,17 @@ struct UnitsPerSecondSquaredTag {
 struct PerSecondTag {
     static constexpr std::string_view kSuffix = "/s";
 };
+/// The unit of PerSecondSquared.
+struct PerSecondSquaredTag {
+    static constexpr std::string_view kSuffix = "/s/s";
+};
 /// The unit of DegreesPerSecond.
 struct DegreesPerSecondTag {
     static constexpr std::string_view kSuffix = "deg/s";
+};
+/// The unit of DegreesPerSecondSquared.
+struct DegreesPerSecondSquaredTag {
+    static constexpr std::string_view kSuffix = "deg/s/s";
 };
 /// The unit of HitPoints.
 struct HitPointsTag {
@@ -79,8 +87,14 @@ using UnitsPerSecondSquared = Quantity<float, UnitsPerSecondSquaredTag>;
 /// factors of player movement).
 using PerSecond = Quantity<float, PerSecondTag>;
 
+/// A rate of a rate: how hard a spring pulls back by how far it is stretched (its stiffness).
+using PerSecondSquared = Quantity<float, PerSecondSquaredTag>;
+
 /// How fast something turns (a rotating door), in degrees a second.
 using DegreesPerSecond = Quantity<float, DegreesPerSecondTag>;
+
+/// How fast a turn speeds up (a bot's view), in degrees a second, per second.
+using DegreesPerSecondSquared = Quantity<float, DegreesPerSecondSquaredTag>;
 
 /// Health. Floating point like the original game: fractional damage accumulates, and the HUD
 /// shows the integer value derived by the original rule, without any upper limit.

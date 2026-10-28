@@ -189,13 +189,14 @@ inline constexpr auto kTypeName = [] {
 
 template <auto Value>
 [[nodiscard]] consteval auto enumeratorName() noexcept -> std::string_view {
-    const auto argument = templateArgument(valueSignature<Value>(), kValueArgumentPrefix);
-    // A value without an enumerator is printed as a cast: "(enum E)0x7" (MSVC), "(E)7" (GCC, Clang).
-    if (argument.empty() || argument.front() == '(' || argument.front() == '-' ||
-        isDecimalDigit(argument.front())) {
+    const auto name = unqualified(templateArgument(valueSignature<Value>(), kValueArgumentPrefix));
+    // Clang's anonymous namespace also starts with '('. Inspect the final component, where a cast
+    // such as "(ns::E)7" still has its closing ')' and a named enumerator has neither parenthesis.
+    if (name.empty() || name.contains('(') || name.contains(')') || name.front() == '-' ||
+        isDecimalDigit(name.front())) {
         return {};
     }
-    return unqualified(argument);
+    return name;
 }
 
 template <ScopedEnum Enum>

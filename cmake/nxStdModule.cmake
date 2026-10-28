@@ -17,7 +17,7 @@ include_guard(GLOBAL)
 
 # Sets <outManifest> to the absolute path of the standard library module manifest.
 function(nxFindStdModulesManifest outManifest)
-    if(MSVC)
+    if(CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC" OR MSVC)
         # cl.exe lives in <toolset>/bin/Host<arch>/<arch>/; the manifest in <toolset>/modules/.
         cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH toolset)
         cmake_path(GET toolset PARENT_PATH toolset)

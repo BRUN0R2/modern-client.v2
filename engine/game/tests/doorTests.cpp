@@ -113,6 +113,11 @@ public:
     /// The body flies in noclip: pushers pass through it.
     void noclip() { m_world.get<nx::game::Body>(m_toucher)->isPushed = false; }
 
+    /// The body is solid as its box, as a player's is to the server's traces.
+    void makeSolid() {
+        m_world.add(m_toucher, nx::game::BoxSolidity{.box = m_world.get<nx::game::Body>(m_toucher)->box});
+    }
+
 private:
     nx::ecs::World m_world;
     nx::ecs::Entity m_door{};
@@ -213,6 +218,17 @@ TEST(DoorTest, AnOpeningDoorPushesABodyOutOfItsWay) {
     game.run(hulls, 80);
     EXPECT_EQ(game.door().state, DoorState::Open);
     EXPECT_NEAR(game.toucherOrigin().x, 128.0F, 0.01F) << "pushed ahead of its face";
+}
+
+TEST(DoorTest, AnOpeningDoorPushesABodySolidAsABoxThroughAllButItself) {
+    const BrushHulls hulls = doorHulls(false);
+    DoorWorld game{slidingDoor(), nx::game::BrushBehavior::SlidingDoor, Vec3{.x = 70.0F}};
+    game.makeSolid();
+
+    game.touch(hulls);
+    game.run(hulls, 80);
+    EXPECT_EQ(game.door().state, DoorState::Open) << "its own box does not hold it";
+    EXPECT_NEAR(game.toucherOrigin().x, 128.0F, 0.01F);
 }
 
 TEST(DoorTest, AnOpeningDoorPassesThroughABodyInNoclip) {

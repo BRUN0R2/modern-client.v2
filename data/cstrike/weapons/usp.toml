@@ -118,3 +118,7 @@ volume = 0.8
 [alternate.reload]
 time = 2.7
 sequences = [5] # reload
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.0
+largeFlinch = false

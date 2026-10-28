@@ -19,6 +19,8 @@ inline constexpr std::int32_t kBspVersion = 30;
 /// The light styles a face blends; kNoLightStyle marks an unused one.
 inline constexpr std::size_t kFaceLightStyles = 4;
 inline constexpr std::uint8_t kNoLightStyle = 255;
+/// The animated styles a GoldSrc map can address; higher face styles have no pattern.
+inline constexpr std::size_t kLightStyleCount = 64;
 
 /// The ambient sounds a leaf sets levels for: water, sky, slime and lava.
 inline constexpr std::size_t kAmbientSounds = 4;

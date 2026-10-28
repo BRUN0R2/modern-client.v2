@@ -59,7 +59,14 @@ idles = [{ sequence = 0, wait = 20.0, share = 1.0 }]
 idlesWhenEmpty = true
 )";
 
-/// A weapon file with `extra` after its keys, its models and `view`.
+/// What a weapon's attacks do to the players they hurt, as a weapon file holds it.
+constexpr std::string_view kGunHarm = R"(
+[harm]
+armorRatio = 1.0
+largeFlinch = false
+)";
+
+/// A weapon file with `extra` after its keys, its models, `view` and its harm.
 [[nodiscard]] auto weaponText(std::string_view keys, std::string_view extra = "",
                               std::string_view view = kGunView) -> std::string {
     return std::format(R"(
@@ -70,8 +77,9 @@ player = "models/p_gun.mdl"
 playerAnimation = "gun"
 viewHand = "left"
 {}
+{}
 {})",
-                       keys, view, extra);
+                       keys, view, kGunHarm, extra);
 }
 
 constexpr std::string_view kGunKeys = R"(
@@ -422,6 +430,25 @@ TEST(WeaponsTest, TheRepositorysKnifeAttacksAsTheOriginals) {
     EXPECT_EQ(knife.stab.hitSequences, (std::vector<std::uint32_t>{4}));
     EXPECT_EQ(knife.stab.hit.primary, nx::Seconds{1.1F});
     EXPECT_FALSE(knife.stab.idleAfter.has_value()) << "the original's stab leaves the idle as it was";
+    EXPECT_FALSE(knife.slash.backMultiplier.has_value());
+    EXPECT_EQ(knife.stab.backMultiplier, 3.0F) << "KnifeBackStabMultiplier";
+}
+
+TEST(WeaponsTest, TheRepositorysWeaponsHurtPlayersAsTheOriginals) {
+    const std::optional<WeaponCatalog> catalog = repositoryCatalog();
+    ASSERT_TRUE(catalog.has_value());
+    // CBasePlayer::TakeDamage's flRatio by the attacker's weapon, and ShouldDoLargeFlinch's.
+    const std::array<std::tuple<std::string_view, double, bool>, 5> expected{{{"ak47", 1.55, true},
+                                                                              {"glock18", 1.05, false},
+                                                                              {"knife", 1.7, false},
+                                                                              {"m4a1", 1.4, true},
+                                                                              {"usp", 1.0, false}}};
+    for (const auto& [id, armorRatio, largeFlinch] : expected) {
+        const Weapon* const weapon = catalog->findWeapon(id);
+        ASSERT_NE(weapon, nullptr) << id;
+        EXPECT_EQ(weapon->harm.armorRatio, armorRatio) << id;
+        EXPECT_EQ(weapon->harm.largeFlinch, largeFlinch) << id;
+    }
 }
 
 TEST(WeaponsTest, TheRepositorysWeaponsSoundAsTheOriginals) {
@@ -610,14 +637,14 @@ view = "models/../v_gun.mdl"
 player = "models/p_gun.mdl"
 playerAnimation = "gun"
 viewHand = "left"
-)" + std::string{kGunView};
+)" + std::string{kGunView} + std::string{kGunHarm};
     const std::string noAnimation = std::string{kGunKeys} + R"(
 [models]
 view = "models/v_gun.mdl"
 player = "models/p_gun.mdl"
 playerAnimation = ""
 viewHand = "left"
-)" + std::string{kGunView};
+)" + std::string{kGunView} + std::string{kGunHarm};
     for (const std::string& text :
          {weaponText(kNoId), weaponText(kGunKeys, "[magazine]\nammo = \"\"\nclipSize = 30"), badModels,
           noAnimation}) {

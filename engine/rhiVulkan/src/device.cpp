@@ -9,6 +9,7 @@ module nx.rhi.vulkan;
 
 import std;
 import nx.core;
+import nx.jobs;
 import nx.platform;
 import nx.rhi;
 
@@ -712,12 +713,17 @@ struct VulkanTexture {
     /// A render target of more than one mip level or layer: the view of each mip level of each layer,
     /// which a pass draws to, at mipLevel * arrayLayers + arrayLayer. None otherwise.
     std::vector<VkImageView> attachmentViews{};
-    VmaAllocation allocation = VK_NULL_HANDLE; ///< None for a swapchain's image, which the swapchain owns.
+    VmaAllocation allocation = VK_NULL_HANDLE; ///< None for the window's image.
     Format format = Format::Undefined;
     Extent2d extent;
     std::uint32_t mipLevels = 1;
     std::uint32_t arrayLayers = 1;
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    /// What its last transition recorded left it in: what a transition from Undefined waits for.
+    TextureState lastState = TextureState::Undefined;
+    /// The window's next image (Swapchain::acquire), which no image or view backs: the submission
+    /// thread draws the frame's pass of it on the image it acquires (docs/adr/0029-submission-thread.md).
+    bool isWindowImage = false;
 };
 
 struct VulkanSampler {
@@ -752,14 +758,77 @@ struct RetiredResource {
     Resource resource;
 };
 
+/// The bind groups and the vertex buffer slots whose bindings a command list remembers: as many bind
+/// groups as every Vulkan device can bind (maxBoundDescriptorSets is at least 4), and as many slots.
+/// A binding beyond them is recorded every time.
+constexpr std::size_t kRememberedBindGroups = 4;
+constexpr std::size_t kRememberedVertexSlots = 4;
+
+/// A vertex or index buffer bound, and where its data starts.
+struct BoundBuffer {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    std::uint64_t offset = 0;
+
+    [[nodiscard]] auto operator==(const BoundBuffer&) const noexcept -> bool = default;
+};
+
+/// What a command buffer has bound as its commands left it, to record no command that would bind the
+/// same again: the driver does a binding's work whether or not it changes anything (docs/05-rendering.md,
+/// section 12). Vulkan keeps all of it from one render pass to the next of a command buffer.
+struct BoundState {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE; ///< The bound pipeline's.
+    /// The layout `groups` were bound with. A group bound with another layout may disturb those bound
+    /// with this one, so that none of them is known any more.
+    VkPipelineLayout groupsLayout = VK_NULL_HANDLE;
+    std::array<VkDescriptorSet, kRememberedBindGroups> groups{};
+    std::array<BoundBuffer, kRememberedVertexSlots> vertices{};
+    BoundBuffer indices;
+    VkIndexType indexType = VK_INDEX_TYPE_UINT32;
+    std::optional<Rect> viewport;
+    std::optional<Rect> scissor;
+};
+
+/// The render pass a frame draws to the window's image in, as the submission thread begins it on the
+/// image it acquires: its commands are recorded, its image is not (docs/adr/0029-submission-thread.md).
+struct WindowPass {
+    VkCommandBuffer commands = VK_NULL_HANDLE; ///< Secondary: what the pass draws.
+    VkRenderingAttachmentInfo color{};         ///< All but the view of the window's image.
+    VkRenderingAttachmentInfo depth{};
+    bool hasDepth = false;
+    VkExtent2D area{};
+};
+
+/// Where a frame's commands go, around its pass that draws to the window's image.
+enum class WindowPassState : std::uint8_t {
+    Before,  ///< Before that pass, or with none: to the frame's primary command buffer.
+    Drawing, ///< In it: to its secondary command buffer.
+    Lost,    ///< In it, its command buffer refused to begin: nowhere, and the frame fails.
+    Done,    ///< After it: nothing more, the window's transition to Present aside.
+};
+
 class VulkanCommandList final : public CommandList {
 public:
     explicit VulkanCommandList(VulkanDevice& device) noexcept : m_device{&device} {}
 
-    void startRecording(VkCommandBuffer commands) noexcept {
-        m_commands = commands;
-        m_pipelineLayout = VK_NULL_HANDLE;
+    /// Records into `frameCommands`, which a new recording leaves with nothing bound; the frame's pass
+    /// that draws to the window's image, if it has one, into the secondary command buffer
+    /// `windowCommands`.
+    void startRecording(VkCommandBuffer frameCommands, VkCommandBuffer windowCommands) noexcept {
+        m_commands = frameCommands;
+        m_windowCommands = windowCommands;
+        m_windowPassState = WindowPassState::Before;
+        m_windowPass = {};
+        m_failure.reset();
+        m_bound = {};
+        m_imageBarriers.clear();
+        m_bufferBarriers.clear();
     }
+
+    /// Records what is left queued and ends the window pass's command buffer, before the frame's own
+    /// ends. Returns the window's pass the frame drew, none without one. Errors: OutOfHostMemory,
+    /// OutOfDeviceMemory (beginning or ending the window pass's command buffer).
+    [[nodiscard]] auto finishRecording() -> Result<std::optional<WindowPass>, RhiError>;
 
     void transition(TextureHandle texture, TextureState before, TextureState after) override;
     void transition(BufferHandle buffer, BufferState before, BufferState after) override;
@@ -783,22 +852,62 @@ public:
 private:
     /// The region of a copy between `copy`'s buffer and texture.
     [[nodiscard]] auto copyRegionOf(const TextureCopy& copy) -> VkBufferImageCopy;
+    /// Records the barriers queued by the transitions since the last command, all in one dependency.
+    void recordBarriers();
+    /// The window's pass is the frame's last: nothing is recorded after it.
+    void expectsWindowPassNotDone() const;
+    /// The command buffer the frame's commands go to now; none in a lost window's pass.
+    [[nodiscard]] auto commands() const -> VkCommandBuffer;
+    /// Starts recording `desc`, whose only color attachment is the window's image, into the window
+    /// pass's command buffer.
+    void beginWindowPass(const RenderingDesc& desc);
 
     VulkanDevice* m_device;
     VkCommandBuffer m_commands = VK_NULL_HANDLE;
-    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE; ///< The layout of the pipeline set last.
+    VkCommandBuffer m_windowCommands = VK_NULL_HANDLE;
+    WindowPassState m_windowPassState = WindowPassState::Before;
+    WindowPass m_windowPass;
+    std::optional<Failure<RhiError>> m_failure; ///< Why the window's pass was lost.
+    BoundState m_bound;
+    /// The transitions' barriers, queued until a command needs them: one call records those in a row.
+    /// The barriers of a dependency are unordered among themselves, so a second one of the same image
+    /// or buffer records those queued first.
+    std::vector<VkImageMemoryBarrier2> m_imageBarriers;
+    std::vector<VkBufferMemoryBarrier2> m_bufferBarriers;
 };
 
 /// What one frame in flight owns.
 struct Frame {
     VkCommandPool pool = VK_NULL_HANDLE;
+    VkCommandBuffer commands = VK_NULL_HANDLE;       ///< Primary: all but the window's pass.
+    VkCommandBuffer windowCommands = VK_NULL_HANDLE; ///< Secondary: the window's pass.
+    std::uint64_t submitted = 0;                     ///< The timeline value of its last submission.
+    bool hasAcquiredImage = false;                   ///< Swapchain::acquire gave it the window's image.
+};
+
+/// The command buffer the submission thread draws a frame's window pass in, one per frame in flight:
+/// that thread's alone.
+struct PresentCommands {
+    VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandBuffer commands = VK_NULL_HANDLE;
-    VkSemaphore imageAcquired = VK_NULL_HANDLE; ///< Signaled when its swapchain image is ready to draw.
-    std::uint64_t submitted = 0;                ///< The timeline value of its last submission.
-    bool hasAcquiredImage = false;
 };
 
 class VulkanSwapchain;
+
+/// A frame handed to the submission thread (Device::submitFrame), in the order frames are handed.
+struct HandedFrame {
+    VkCommandBuffer commands = VK_NULL_HANDLE;
+    std::uint64_t timelineValue = 0; ///< What the frame signals once the GPU has run it.
+    std::size_t slot = 0;            ///< Its frame in flight.
+    /// The swapchain whose next image the window's pass draws on, then shows; none for a frame that
+    /// draws nothing to a window.
+    VulkanSwapchain* presentTo = nullptr;
+    WindowPass windowPass{};
+};
+
+/// The frames handed to the submission thread and not taken yet: at most one, since a frame begins
+/// only once the one before is taken (Device::beginFrame).
+constexpr std::size_t kHandOffCapacity = 2;
 
 class VulkanDevice final : public Device {
 public:
@@ -842,6 +951,15 @@ public:
     [[nodiscard]] auto isRecording() const noexcept -> bool { return m_isRecording; }
     [[nodiscard]] auto currentFrame() noexcept -> Frame& { return m_frames[m_frameIndex]; }
 
+    /// Waits until the submission thread has finished every frame handed to it: then, until another
+    /// frame is handed, the render thread alone uses the queue and the swapchain.
+    void drain() noexcept;
+    /// The first failure of the submission thread, which every frame after it shares.
+    [[nodiscard]] auto submissionFailure() const -> Result<void, RhiError>;
+    /// Waits on `semaphore`, signaled or about to be, with nothing else: it is then free. From a drained
+    /// render thread only. Errors: those of vkQueueSubmit2.
+    [[nodiscard]] auto consume(VkSemaphore semaphore) -> Result<void, RhiError>;
+
     void swapchainOpened() noexcept { ++m_openSwapchains; }
     void swapchainClosed() noexcept { --m_openSwapchains; }
 
@@ -881,7 +999,17 @@ private:
     /// Whether `learned` is a pipeline cache this GPU and driver wrote: its header's version, vendor,
     /// device and cache UUID theirs.
     [[nodiscard]] auto fitsThisDevice(std::span<const std::byte> learned) const noexcept -> bool;
+    /// Hands the frame to the submission thread, to show on `presentTo` when it has one.
     [[nodiscard]] auto submit(VulkanSwapchain* presentTo) -> Result<void, RhiError>;
+
+    // The submission thread (docs/adr/0029-submission-thread.md): it takes the frames handed to it in
+    // order, submits them, and draws each one's window pass on the image it acquires, then shows it.
+    void runSubmissions(const std::stop_token& stop);
+    /// Submits `frame`, and shows it when it draws to a window. Errors: those of vkQueueSubmit2,
+    /// vkAcquireNextImageKHR and vkQueuePresentKHR, and of recording the window's pass.
+    [[nodiscard]] auto submitHanded(const HandedFrame& frame) -> Result<void, RhiError>;
+    /// Waits until the submission thread has taken every frame handed to it.
+    void waitUntilTaken() noexcept;
 
     /// The layout of the bind groups of `desc`.
     [[nodiscard]] auto createPipelineLayout(const RenderPipelineDesc& desc)
@@ -927,6 +1055,19 @@ private:
     AdapterInfo m_adapter;
     int m_openSwapchains = 0;
     std::atomic<std::uint64_t> m_validationErrors{0};
+
+    // Between the render thread and the submission thread: the frames handed over, counts that only
+    // grow, and the first failure. A count changes after what it counts, so that a thread that reads
+    // it sees that too.
+    jobs::SpscQueue<HandedFrame, kHandOffCapacity> m_handOff;
+    std::uint64_t m_handedFrames = 0;        ///< The render thread's own.
+    std::atomic<std::uint64_t> m_wakeups{0}; ///< A frame handed, or the thread asked to stop.
+    std::atomic<std::uint64_t> m_takenFrames{0};
+    std::atomic<std::uint64_t> m_finishedFrames{0};
+    std::atomic<bool> m_hasFailed{false};
+    std::optional<Failure<RhiError>> m_submissionFailure; ///< Written once, before m_hasFailed.
+    std::vector<PresentCommands> m_presentCommands;       ///< One per frame in flight.
+    platform::Thread m_submission;                        ///< Last: started once the rest is made.
 };
 
 // --- Swapchains -----------------------------------------------------------------------------------
@@ -952,6 +1093,17 @@ private:
     const std::uint32_t count = capabilities.minImageCount + kExtraImages;
     return capabilities.maxImageCount != 0 ? std::min(count, capabilities.maxImageCount) : count;
 }
+
+/// The semaphores a swapchain's acquires signal in turn: one more than the most frames in flight, so
+/// that the one an acquire takes was last waited on by a frame the render thread has seen finish
+/// before it began the frame being drawn.
+constexpr std::size_t kAcquireSemaphores = kMaxFramesInFlight + 1;
+
+/// An image of the swapchain acquired and not shown yet, and the semaphore its acquire signals.
+struct HeldImage {
+    std::uint32_t index = 0;
+    VkSemaphore acquired = VK_NULL_HANDLE;
+};
 
 /// The format a swapchain draws in, and how it presents.
 struct SurfaceUse {
@@ -1007,31 +1159,54 @@ public:
     [[nodiscard]] auto device() const noexcept -> const VulkanDevice* { return m_device; }
     [[nodiscard]] auto build(const SwapchainDesc& desc) -> Result<void, RhiError>;
 
-    /// The image acquired this frame, which the frame's submission presents; forgets it.
-    [[nodiscard]] auto takeAcquired() noexcept -> std::optional<std::uint32_t> {
-        return std::exchange(m_acquired, std::nullopt);
+    // The submission thread's (docs/adr/0029-submission-thread.md); the render thread changes what
+    // they use only once that thread is drained.
+
+    /// The image to draw a frame's window pass on: the one acquired ahead, or one acquired now; none
+    /// while the swapchain is out of date or minimized. Errors: those of vkAcquireNextImageKHR.
+    [[nodiscard]] auto takeImage() -> Result<std::optional<HeldImage>, RhiError>;
+    /// Holds again `image`, taken and never drawn on: for the next frame, or to be let go of.
+    void giveBack(HeldImage image) noexcept;
+    /// Acquires the next image, for the frame after the one just shown; none while out of date.
+    /// Errors: those of vkAcquireNextImageKHR.
+    [[nodiscard]] auto acquireAhead() -> Result<void, RhiError>;
+    [[nodiscard]] auto image(std::uint32_t index) const noexcept -> VkImage { return m_images[index]; }
+    [[nodiscard]] auto view(std::uint32_t index) const noexcept -> VkImageView { return m_views[index]; }
+    [[nodiscard]] auto renderFinished(std::uint32_t index) const noexcept -> VkSemaphore {
+        return m_renderFinished[index];
     }
-    [[nodiscard]] auto renderFinished(std::uint32_t image) const noexcept -> VkSemaphore {
-        return m_renderFinished[image];
-    }
-    [[nodiscard]] auto present(std::uint32_t image) -> Result<void, RhiError>;
+    /// Shows image `index` once its semaphore is signaled; an out-of-date swapchain is marked.
+    /// Errors: those of vkQueuePresentKHR.
+    [[nodiscard]] auto present(std::uint32_t index) -> Result<void, RhiError>;
 
 private:
     [[nodiscard]] auto rebuild() -> Result<void, RhiError>;
-    /// The images of the swapchain just made, in `format`: a texture and a semaphore for each.
+    /// The images of the swapchain just made, in `format`: a view and a semaphore for each.
     [[nodiscard]] auto createImages(VkFormat format) -> Result<void, RhiError>;
     void destroyImages() noexcept;
+    /// Lets go of the image acquired ahead, if any, which will never be shown: its semaphore is waited
+    /// on, so that none is destroyed or reused with a signal pending. Once the submission thread is
+    /// drained.
+    void releaseHeldImage() noexcept;
+    /// The next image, acquired now; none while out of date or minimized. On the submission thread.
+    [[nodiscard]] auto acquireNow() -> Result<std::optional<HeldImage>, RhiError>;
 
     VulkanDevice* m_device;
     VkSwapchainKHR m_swapchain = VK_NULL_HANDLE;
-    std::vector<TextureHandle> m_textures;
+    std::vector<VkImage> m_images;             ///< The swapchain's own.
+    std::vector<VkImageView> m_views;          ///< One per image, which the window's pass draws to.
     std::vector<VkSemaphore> m_renderFinished; ///< One per image: what its presentation waits for.
+    /// What each acquire signals once its image is ready, taken in turn: one is used again only once
+    /// the frame that waited on it has finished.
+    std::array<VkSemaphore, kAcquireSemaphores> m_acquired{};
+    std::size_t m_nextAcquired = 0;
+    std::optional<HeldImage> m_held; ///< Acquired ahead, for the next frame that draws to the window.
+    TextureHandle m_window;          ///< What a frame draws to the window's image through.
     Format m_format = Format::Undefined;
     Extent2d m_extent;
     Extent2d m_requestedSize;
     PresentMode m_presentMode = PresentMode::Fifo;
-    bool m_isOutOfDate = false;
-    std::optional<std::uint32_t> m_acquired;
+    std::atomic<bool> m_isOutOfDate{false}; ///< Rebuilt at the render thread's next acquire.
 };
 
 VKAPI_ATTR auto VKAPI_CALL onValidationMessage(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -1088,8 +1263,8 @@ struct Validation {
     bool hasFeatures = false;
 };
 
-/// The validation of the Khronos layer, when it is installed and `available` has its messenger;
-/// none, with a warning, when it is not. Errors: those of the loader's enumerations.
+/// The requested validation of the Khronos layer and its messenger. Errors: ValidationUnavailable
+/// when either is absent; those of the loader's enumerations.
 [[nodiscard]] auto validationOf(std::span<const VkExtensionProperties> available)
     -> Result<Validation, RhiError> {
     auto installed = enumerate<VkLayerProperties>([](std::uint32_t* count, VkLayerProperties* values) {
@@ -1101,9 +1276,13 @@ struct Validation {
     const bool hasLayer = std::ranges::any_of(*installed, [](const VkLayerProperties& layer) {
         return textOf(layer.layerName, VK_MAX_EXTENSION_NAME_SIZE) == kValidationLayer;
     });
-    if (!hasLayer || !hasName(available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
-        log::warning(kLog, "Vulkan validation was asked for, but {} is not installed", kValidationLayer);
-        return Validation{};
+    if (!hasLayer) {
+        return fail(RhiError::ValidationUnavailable,
+                    std::format("requested Vulkan validation requires {}", kValidationLayer));
+    }
+    if (!hasName(available, VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+        return fail(RhiError::ValidationUnavailable,
+                    "requested Vulkan validation requires VK_EXT_debug_utils");
     }
     auto layerExtensions =
         enumerate<VkExtensionProperties>([](std::uint32_t* count, VkExtensionProperties* values) {
@@ -1151,11 +1330,37 @@ constexpr VkValidationFeaturesEXT kSynchronizationValidation{
 
 // --- VulkanCommandList ---------------------------------------------------------------------------
 
+void VulkanCommandList::expectsWindowPassNotDone() const {
+    expects(m_windowPassState != WindowPassState::Done,
+            "CommandList: the pass that draws to the window's image is the frame's last");
+}
+
+auto VulkanCommandList::commands() const -> VkCommandBuffer {
+    expectsWindowPassNotDone();
+    return m_commands;
+}
+
 void VulkanCommandList::transition(TextureHandle texture, TextureState before, TextureState after) {
     expects(after != TextureState::Undefined, "CommandList::transition: a texture cannot become Undefined");
-    const VulkanTexture& target = m_device->textures().get(texture);
-    const StateAccess from = accessOf(before);
+    VulkanTexture& target = m_device->textures().get(texture);
+    if (target.isWindowImage) {
+        // The submission thread readies the image it acquires for the window's pass, then to be shown.
+        const bool isBeforePass = before == TextureState::Undefined && after == TextureState::RenderTarget &&
+                                  m_windowPassState == WindowPassState::Before;
+        const bool isAfterPass = before == TextureState::RenderTarget && after == TextureState::Present &&
+                                 m_windowPassState == WindowPassState::Done;
+        expects(isBeforePass || isAfterPass,
+                "CommandList::transition: the window's image goes from Undefined "
+                "to RenderTarget before its pass, and to Present after it");
+        return;
+    }
+    expectsWindowPassNotDone();
+    // From Undefined the old content is gone, but its last use, by a frame before maybe, still comes
+    // first: no frame waits for the one before as a whole.
+    const StateAccess last = accessOf(before == TextureState::Undefined ? target.lastState : before);
+    const StateAccess from{.stages = last.stages, .access = last.access, .layout = accessOf(before).layout};
     const StateAccess to = accessOf(after);
+    target.lastState = after;
     const VkImageMemoryBarrier2 barrier{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .pNext = nullptr,
@@ -1174,18 +1379,32 @@ void VulkanCommandList::transition(TextureHandle texture, TextureState before, T
                              .baseArrayLayer = 0,
                              .layerCount = VK_REMAINING_ARRAY_LAYERS},
     };
+    if (std::ranges::contains(m_imageBarriers, target.image, &VkImageMemoryBarrier2::image)) {
+        recordBarriers();
+    }
+    m_imageBarriers.push_back(barrier);
+}
+
+void VulkanCommandList::recordBarriers() {
+    if (m_imageBarriers.empty() && m_bufferBarriers.empty()) {
+        return;
+    }
     const VkDependencyInfo dependency{
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .pNext = nullptr,
         .dependencyFlags = 0,
         .memoryBarrierCount = 0,
         .pMemoryBarriers = nullptr,
-        .bufferMemoryBarrierCount = 0,
-        .pBufferMemoryBarriers = nullptr,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers = &barrier,
+        .bufferMemoryBarrierCount = narrow<std::uint32_t>(m_bufferBarriers.size()),
+        .pBufferMemoryBarriers = m_bufferBarriers.data(),
+        .imageMemoryBarrierCount = narrow<std::uint32_t>(m_imageBarriers.size()),
+        .pImageMemoryBarriers = m_imageBarriers.data(),
     };
-    vkCmdPipelineBarrier2(m_commands, &dependency);
+    if (const VkCommandBuffer recording = commands(); recording != VK_NULL_HANDLE) { // none: a lost pass
+        vkCmdPipelineBarrier2(recording, &dependency);
+    }
+    m_imageBarriers.clear();
+    m_bufferBarriers.clear();
 }
 
 /// The view a pass draws `color` to, of `texture`: its own, or that of the mip level of the layer.
@@ -1199,33 +1418,56 @@ void VulkanCommandList::transition(TextureHandle texture, TextureState before, T
     return texture.attachmentViews[(std::size_t{color.mipLevel} * texture.arrayLayers) + color.arrayLayer];
 }
 
+/// What a pass does with `color`, drawn through `view`.
+[[nodiscard]] auto renderingAttachmentOf(const ColorAttachment& color, VkImageView view) noexcept
+    -> VkRenderingAttachmentInfo {
+    VkRenderingAttachmentInfo attachment{};
+    attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    attachment.imageView = view;
+    attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    attachment.loadOp = loadOpOf(color.load);
+    attachment.storeOp = storeOpOf(color.store);
+    attachment.clearValue.color.float32[0] = color.clear.red;
+    attachment.clearValue.color.float32[1] = color.clear.green;
+    attachment.clearValue.color.float32[2] = color.clear.blue;
+    attachment.clearValue.color.float32[3] = color.clear.alpha;
+    return attachment;
+}
+
+/// What a pass does with `depth`, drawn through `view`.
+[[nodiscard]] auto renderingAttachmentOf(const DepthAttachment& depth, VkImageView view) noexcept
+    -> VkRenderingAttachmentInfo {
+    VkRenderingAttachmentInfo attachment{};
+    attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    attachment.imageView = view;
+    attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+    attachment.loadOp = loadOpOf(depth.load);
+    attachment.storeOp = storeOpOf(depth.store);
+    attachment.clearValue.depthStencil.depth = depth.clear;
+    return attachment;
+}
+
 void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
     expects(desc.colors.size() <= kMaxColorAttachments,
             "CommandList::beginRendering: at most 8 color attachments");
+    if (std::ranges::any_of(desc.colors, [this](const ColorAttachment& color) {
+            return m_device->textures().get(color.texture).isWindowImage;
+        })) {
+        beginWindowPass(desc);
+        return;
+    }
+    recordBarriers();
     std::array<VkRenderingAttachmentInfo, kMaxColorAttachments> attachments{};
     for (std::size_t index = 0; index < desc.colors.size(); ++index) {
         const ColorAttachment& color = desc.colors[index];
-        VkRenderingAttachmentInfo& attachment = attachments.at(index);
-        attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        attachment.imageView = attachmentViewOf(m_device->textures().get(color.texture), color);
-        attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        attachment.resolveMode = VK_RESOLVE_MODE_NONE;
-        attachment.loadOp = loadOpOf(color.load);
-        attachment.storeOp = storeOpOf(color.store);
-        attachment.clearValue.color.float32[0] = color.clear.red;
-        attachment.clearValue.color.float32[1] = color.clear.green;
-        attachment.clearValue.color.float32[2] = color.clear.blue;
-        attachment.clearValue.color.float32[3] = color.clear.alpha;
+        attachments.at(index) =
+            renderingAttachmentOf(color, attachmentViewOf(m_device->textures().get(color.texture), color));
     }
     VkRenderingAttachmentInfo depth{};
     if (desc.depth) {
-        depth.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        depth.imageView = m_device->textures().get(desc.depth->texture).view;
-        depth.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-        depth.resolveMode = VK_RESOLVE_MODE_NONE;
-        depth.loadOp = loadOpOf(desc.depth->load);
-        depth.storeOp = storeOpOf(desc.depth->store);
-        depth.clearValue.depthStencil.depth = desc.depth->clear;
+        depth = renderingAttachmentOf(*desc.depth, m_device->textures().get(desc.depth->texture).view);
     }
     const VkRenderingInfo rendering{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -1240,14 +1482,102 @@ void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
         .pDepthAttachment = desc.depth ? &depth : nullptr,
         .pStencilAttachment = nullptr,
     };
-    vkCmdBeginRendering(m_commands, &rendering);
+    vkCmdBeginRendering(commands(), &rendering);
+    const Rect whole{.x = 0, .y = 0, .size = desc.area};
+    setViewport(whole);
+    setScissor(whole);
+}
+
+void VulkanCommandList::beginWindowPass(const RenderingDesc& desc) {
+    expects(desc.colors.size() == 1,
+            "CommandList::beginRendering: the window's image is its pass's only color attachment");
+    expects(m_windowPassState == WindowPassState::Before,
+            "CommandList::beginRendering: the window's image is drawn in one pass a frame");
+    expects(m_device->currentFrame().hasAcquiredImage,
+            "CommandList::beginRendering: the window's image of the frame that acquired it");
+    const ColorAttachment& color = desc.colors.front();
+    const VulkanTexture& window = m_device->textures().get(color.texture);
+    expects(color.mipLevel == 0 && color.arrayLayer == 0 && desc.area.width <= window.extent.width &&
+                desc.area.height <= window.extent.height,
+            "CommandList::beginRendering: a pass within the window's image");
+    recordBarriers(); // the commands before the pass, in the frame's own command buffer
+    m_windowPass = WindowPass{.commands = m_windowCommands,
+                              .color = renderingAttachmentOf(color, VK_NULL_HANDLE),
+                              .area = {.width = desc.area.width, .height = desc.area.height}};
+    const VkFormat colorFormat = vulkanFormatOf(window.format);
+    VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+    if (desc.depth) {
+        const VulkanTexture& depth = m_device->textures().get(desc.depth->texture);
+        depthFormat = vulkanFormatOf(depth.format);
+        m_windowPass.depth = renderingAttachmentOf(*desc.depth, depth.view);
+        m_windowPass.hasDepth = true;
+    }
+    // What the pass the submission thread begins will have: its attachments' formats.
+    const VkCommandBufferInheritanceRenderingInfo rendering{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &colorFormat,
+        .depthAttachmentFormat = depthFormat,
+        .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+    const VkCommandBufferInheritanceInfo inheritance{.sType =
+                                                         VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+                                                     .pNext = &rendering,
+                                                     .renderPass = VK_NULL_HANDLE,
+                                                     .subpass = 0,
+                                                     .framebuffer = VK_NULL_HANDLE,
+                                                     .occlusionQueryEnable = VK_FALSE,
+                                                     .queryFlags = 0,
+                                                     .pipelineStatistics = 0};
+    const VkCommandBufferBeginInfo beginInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                                             .pNext = nullptr,
+                                             .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT |
+                                                      VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+                                             .pInheritanceInfo = &inheritance};
+    m_bound = {}; // a secondary command buffer inherits nothing bound
+    if (const VkResult result = vkBeginCommandBuffer(m_windowCommands, &beginInfo); result != VK_SUCCESS) {
+        // Recording has no way to fail: the pass's commands go nowhere, and the frame's submission fails.
+        m_failure = vulkanFailure(result, "vkBeginCommandBuffer").error();
+        m_windowPassState = WindowPassState::Lost;
+        m_commands = VK_NULL_HANDLE;
+        return;
+    }
+    m_windowPassState = WindowPassState::Drawing;
+    m_commands = m_windowCommands;
     const Rect whole{.x = 0, .y = 0, .size = desc.area};
     setViewport(whole);
     setScissor(whole);
 }
 
 void VulkanCommandList::endRendering() {
-    vkCmdEndRendering(m_commands);
+    recordBarriers();
+    if (m_windowPassState == WindowPassState::Drawing || m_windowPassState == WindowPassState::Lost) {
+        // The submission thread ends the pass, on the window's image.
+        m_windowPassState = WindowPassState::Done;
+        m_commands = VK_NULL_HANDLE;
+        return;
+    }
+    vkCmdEndRendering(commands());
+}
+
+auto VulkanCommandList::finishRecording() -> Result<std::optional<WindowPass>, RhiError> {
+    recordBarriers();
+    expects(m_windowPassState == WindowPassState::Before || m_windowPassState == WindowPassState::Done,
+            "rhi::Device::submitFrame: the window's pass has ended");
+    if (m_failure) {
+        return std::unexpected{std::move(*m_failure)};
+    }
+    if (m_windowPassState == WindowPassState::Before) {
+        return std::nullopt;
+    }
+    if (const VkResult result = vkEndCommandBuffer(m_windowCommands); result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkEndCommandBuffer");
+    }
+    return m_windowPass;
 }
 
 void VulkanCommandList::transition(BufferHandle buffer, BufferState before, BufferState after) {
@@ -1267,29 +1597,23 @@ void VulkanCommandList::transition(BufferHandle buffer, BufferState before, Buff
         .offset = 0,
         .size = VK_WHOLE_SIZE,
     };
-    const VkDependencyInfo dependency{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pNext = nullptr,
-        .dependencyFlags = 0,
-        .memoryBarrierCount = 0,
-        .pMemoryBarriers = nullptr,
-        .bufferMemoryBarrierCount = 1,
-        .pBufferMemoryBarriers = &barrier,
-        .imageMemoryBarrierCount = 0,
-        .pImageMemoryBarriers = nullptr,
-    };
-    vkCmdPipelineBarrier2(m_commands, &dependency);
+    if (std::ranges::contains(m_bufferBarriers, barrier.buffer, &VkBufferMemoryBarrier2::buffer)) {
+        recordBarriers();
+    }
+    m_bufferBarriers.push_back(barrier);
 }
 
 void VulkanCommandList::copyBuffer(BufferHandle source, std::uint64_t sourceOffset, BufferHandle destination,
                                    std::uint64_t destinationOffset, std::uint64_t size) {
+    recordBarriers();
     const VkBufferCopy region{.srcOffset = sourceOffset, .dstOffset = destinationOffset, .size = size};
-    vkCmdCopyBuffer(m_commands, m_device->buffers().get(source).buffer,
+    vkCmdCopyBuffer(commands(), m_device->buffers().get(source).buffer,
                     m_device->buffers().get(destination).buffer, 1, &region);
 }
 
 auto VulkanCommandList::copyRegionOf(const TextureCopy& copy) -> VkBufferImageCopy {
     const VulkanTexture& texture = m_device->textures().get(copy.texture);
+    expects(!texture.isWindowImage, "CommandList: the window's image is drawn to, never copied");
     const std::uint32_t texelBytes = bytesPerTexel(texture.format);
     expects(copy.bytesPerRow % texelBytes == 0, "CommandList: a row of a texture copy is whole texels");
     expects(copy.mipLevel < texture.mipLevels && copy.arrayLayer < texture.arrayLayers,
@@ -1308,43 +1632,95 @@ auto VulkanCommandList::copyRegionOf(const TextureCopy& copy) -> VkBufferImageCo
 }
 
 void VulkanCommandList::copyBufferToTexture(const TextureCopy& copy) {
+    recordBarriers();
     const VkBufferImageCopy region = copyRegionOf(copy);
-    vkCmdCopyBufferToImage(m_commands, m_device->buffers().get(copy.buffer).buffer,
+    vkCmdCopyBufferToImage(commands(), m_device->buffers().get(copy.buffer).buffer,
                            m_device->textures().get(copy.texture).image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &region);
 }
 
 void VulkanCommandList::copyTextureToBuffer(const TextureCopy& copy) {
+    recordBarriers();
     const VkBufferImageCopy region = copyRegionOf(copy);
-    vkCmdCopyImageToBuffer(m_commands, m_device->textures().get(copy.texture).image,
+    vkCmdCopyImageToBuffer(commands(), m_device->textures().get(copy.texture).image,
                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_device->buffers().get(copy.buffer).buffer,
                            1, &region);
 }
 
 void VulkanCommandList::setPipeline(RenderPipelineHandle pipeline) {
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
     const VulkanPipeline& bound = m_device->pipelines().get(pipeline);
-    vkCmdBindPipeline(m_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, bound.pipeline);
-    m_pipelineLayout = bound.layout;
+    if (bound.pipeline == m_bound.pipeline) {
+        return;
+    }
+    vkCmdBindPipeline(recording, VK_PIPELINE_BIND_POINT_GRAPHICS, bound.pipeline);
+    m_bound.pipeline = bound.pipeline;
+    m_bound.layout = bound.layout;
 }
 
 void VulkanCommandList::setBindGroup(std::uint32_t index, BindGroupHandle group) {
-    expects(m_pipelineLayout != VK_NULL_HANDLE, "CommandList::setBindGroup: after setPipeline");
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    expects(m_bound.layout != VK_NULL_HANDLE, "CommandList::setBindGroup: after setPipeline");
     const VkDescriptorSet set = m_device->bindGroups().get(group).set;
-    vkCmdBindDescriptorSets(m_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, index, 1, &set, 0,
+    if (m_bound.groupsLayout != m_bound.layout) {
+        m_bound.groups = {};
+        m_bound.groupsLayout = m_bound.layout;
+    }
+    if (index < m_bound.groups.size()) {
+        if (m_bound.groups.at(index) == set) {
+            return;
+        }
+        m_bound.groups.at(index) = set;
+    }
+    vkCmdBindDescriptorSets(recording, VK_PIPELINE_BIND_POINT_GRAPHICS, m_bound.layout, index, 1, &set, 0,
                             nullptr);
 }
 
 void VulkanCommandList::setVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) {
-    const VkBuffer bound = m_device->buffers().get(buffer).buffer;
-    vkCmdBindVertexBuffers(m_commands, slot, 1, &bound, &offset);
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    const BoundBuffer bound{.buffer = m_device->buffers().get(buffer).buffer, .offset = offset};
+    if (slot < m_bound.vertices.size()) {
+        if (m_bound.vertices.at(slot) == bound) {
+            return;
+        }
+        m_bound.vertices.at(slot) = bound;
+    }
+    vkCmdBindVertexBuffers(recording, slot, 1, &bound.buffer, &bound.offset);
 }
 
 void VulkanCommandList::setIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) {
-    vkCmdBindIndexBuffer(m_commands, m_device->buffers().get(buffer).buffer, offset,
-                         format == IndexFormat::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    const BoundBuffer bound{.buffer = m_device->buffers().get(buffer).buffer, .offset = offset};
+    const VkIndexType type = format == IndexFormat::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    if (m_bound.indices == bound && m_bound.indexType == type) {
+        return;
+    }
+    vkCmdBindIndexBuffer(recording, bound.buffer, bound.offset, type);
+    m_bound.indices = bound;
+    m_bound.indexType = type;
 }
 
 void VulkanCommandList::setViewport(const Rect& area) {
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    if (m_bound.viewport == area) {
+        return;
+    }
+    m_bound.viewport = area;
     // A negative height turns Vulkan's clip space, y down, into the RHI's, y up (Vulkan 1.1).
     const VkViewport viewport{.x = static_cast<float>(area.x),
                               .y = static_cast<float>(area.y) + static_cast<float>(area.size.height),
@@ -1352,24 +1728,42 @@ void VulkanCommandList::setViewport(const Rect& area) {
                               .height = -static_cast<float>(area.size.height),
                               .minDepth = 0.0F,
                               .maxDepth = 1.0F};
-    vkCmdSetViewport(m_commands, 0, 1, &viewport);
+    vkCmdSetViewport(recording, 0, 1, &viewport);
 }
 
 void VulkanCommandList::setScissor(const Rect& area) {
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    if (m_bound.scissor == area) {
+        return;
+    }
+    m_bound.scissor = area;
     const VkRect2D scissor{.offset = {.x = area.x, .y = area.y},
                            .extent = {.width = area.size.width, .height = area.size.height}};
-    vkCmdSetScissor(m_commands, 0, 1, &scissor);
+    vkCmdSetScissor(recording, 0, 1, &scissor);
 }
 
 void VulkanCommandList::draw(std::uint32_t vertexCount, std::uint32_t instanceCount,
                              std::uint32_t firstVertex, std::uint32_t firstInstance) {
-    vkCmdDraw(m_commands, vertexCount, instanceCount, firstVertex, firstInstance);
+    recordBarriers();
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    vkCmdDraw(recording, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void VulkanCommandList::drawIndexed(std::uint32_t indexCount, std::uint32_t instanceCount,
                                     std::uint32_t firstIndex, std::int32_t vertexOffset,
                                     std::uint32_t firstInstance) {
-    vkCmdDrawIndexed(m_commands, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    recordBarriers();
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    vkCmdDrawIndexed(recording, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 // --- VulkanDevice --------------------------------------------------------------------------------
@@ -1402,6 +1796,10 @@ auto VulkanDevice::create(const DeviceDesc& desc) -> Result<std::unique_ptr<Vulk
     if (auto frames = device->createFrames(desc.framesInFlight); !frames) {
         return std::unexpected{std::move(frames.error())};
     }
+    device->m_submission =
+        platform::Thread{"rhiSubmission", [submitting = device.get()](std::stop_token stop) {
+                             submitting->runSubmissions(stop);
+                         }};
     log::info(kLog, "Vulkan device: {} ({}), {}; {} frames in flight; validation {}", device->m_adapter.name,
               enumName(device->m_adapter.kind), device->m_adapter.driver, desc.framesInFlight,
               device->m_messenger != VK_NULL_HANDLE ? "on" : "off");
@@ -1726,34 +2124,65 @@ auto VulkanDevice::createLogicalDevice() -> Result<void, RhiError> {
     return {};
 }
 
+/// A command pool of `device` for queue family `family`, whose command buffers are recorded once each
+/// time it is reset. Errors: those of vkCreateCommandPool.
+[[nodiscard]] auto createCommandPool(VkDevice device, std::uint32_t family)
+    -> Result<VkCommandPool, RhiError> {
+    const VkCommandPoolCreateInfo poolInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                                           .pNext = nullptr,
+                                           .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+                                           .queueFamilyIndex = family};
+    VkCommandPool pool = VK_NULL_HANDLE;
+    if (const VkResult result = vkCreateCommandPool(device, &poolInfo, nullptr, &pool);
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkCreateCommandPool");
+    }
+    return pool;
+}
+
+/// A command buffer of `level` from `pool`. Errors: those of vkAllocateCommandBuffers.
+[[nodiscard]] auto allocateCommandBuffer(VkDevice device, VkCommandPool pool, VkCommandBufferLevel level)
+    -> Result<VkCommandBuffer, RhiError> {
+    const VkCommandBufferAllocateInfo allocateInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                                                   .pNext = nullptr,
+                                                   .commandPool = pool,
+                                                   .level = level,
+                                                   .commandBufferCount = 1};
+    VkCommandBuffer commands = VK_NULL_HANDLE;
+    if (const VkResult result = vkAllocateCommandBuffers(device, &allocateInfo, &commands);
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkAllocateCommandBuffers");
+    }
+    return commands;
+}
+
 auto VulkanDevice::createFrames(std::uint32_t count) -> Result<void, RhiError> {
     m_frames.resize(count);
-    for (Frame& frame : m_frames) {
-        const VkCommandPoolCreateInfo poolInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                                               .pNext = nullptr,
-                                               .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-                                               .queueFamilyIndex = m_queueFamily};
-        if (const VkResult result = vkCreateCommandPool(m_device, &poolInfo, nullptr, &frame.pool);
-            result != VK_SUCCESS) {
-            return vulkanFailure(result, "vkCreateCommandPool");
+    m_presentCommands.resize(count);
+    for (std::size_t slot = 0; slot < count; ++slot) {
+        Frame& frame = m_frames[slot];
+        PresentCommands& present = m_presentCommands[slot];
+        auto framePool = createCommandPool(m_device, m_queueFamily);
+        if (!framePool) {
+            return std::unexpected{std::move(framePool.error())};
         }
-        const VkCommandBufferAllocateInfo allocateInfo{.sType =
-                                                           VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                                                       .pNext = nullptr,
-                                                       .commandPool = frame.pool,
-                                                       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                                                       .commandBufferCount = 1};
-        if (const VkResult result = vkAllocateCommandBuffers(m_device, &allocateInfo, &frame.commands);
-            result != VK_SUCCESS) {
-            return vulkanFailure(result, "vkAllocateCommandBuffers");
+        frame.pool = *framePool;
+        auto presentPool = createCommandPool(m_device, m_queueFamily);
+        if (!presentPool) {
+            return std::unexpected{std::move(presentPool.error())};
         }
-        const VkSemaphoreCreateInfo semaphoreInfo{
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = nullptr, .flags = 0};
-        if (const VkResult result =
-                vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &frame.imageAcquired);
-            result != VK_SUCCESS) {
-            return vulkanFailure(result, "vkCreateSemaphore");
+        present.pool = *presentPool;
+        auto commands = allocateCommandBuffer(m_device, frame.pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+        auto windowCommands = allocateCommandBuffer(m_device, frame.pool, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
+        auto presentCommands = allocateCommandBuffer(m_device, present.pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+        for (const auto* allocated : {&commands, &windowCommands, &presentCommands}) {
+            if (!*allocated) {
+                return std::unexpected{allocated->error()};
+            }
         }
+        frame.commands = *commands;
+        frame.windowCommands = *windowCommands;
+        present.commands = *presentCommands;
     }
     m_frameIndex = m_frames.size() - 1; // the first frame is frame 0
     return {};
@@ -1761,6 +2190,11 @@ auto VulkanDevice::createFrames(std::uint32_t count) -> Result<void, RhiError> {
 
 VulkanDevice::~VulkanDevice() {
     expects(m_openSwapchains == 0, "rhi::Device: a swapchain outlives its device");
+    drain();
+    m_submission.requestStop();
+    m_wakeups.fetch_add(1, std::memory_order_release);
+    m_wakeups.notify_one();
+    m_submission = {}; // ends it
     if (m_device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(m_device);
         for (RetiredResource& retired : m_retired) {
@@ -1787,8 +2221,10 @@ VulkanDevice::~VulkanDevice() {
             vmaDestroyAllocator(m_allocator);
         }
         for (const Frame& frame : m_frames) {
-            vkDestroySemaphore(m_device, frame.imageAcquired, nullptr);
             vkDestroyCommandPool(m_device, frame.pool, nullptr);
+        }
+        for (const PresentCommands& present : m_presentCommands) {
+            vkDestroyCommandPool(m_device, present.pool, nullptr);
         }
         vkDestroySemaphore(m_device, m_timeline, nullptr);
         vkDestroyPipelineCache(m_device, m_pipelineCache, nullptr);
@@ -1819,6 +2255,11 @@ auto VulkanDevice::createSwapchain(const SwapchainDesc& desc)
 
 auto VulkanDevice::beginFrame() -> Result<std::reference_wrapper<CommandList>, RhiError> {
     expects(!m_isRecording, "rhi::Device::beginFrame: the previous frame was not submitted");
+    // No frame waits behind another to be submitted: a frame of latency (docs/adr/0029).
+    waitUntilTaken();
+    if (auto failed = submissionFailure(); !failed) {
+        return std::unexpected{std::move(failed.error())}; // its frames will not finish: no waiting for them
+    }
     m_frameIndex = (m_frameIndex + 1) % m_frames.size();
     Frame& frame = m_frames[m_frameIndex];
     if (frame.submitted != 0) {
@@ -1843,7 +2284,7 @@ auto VulkanDevice::beginFrame() -> Result<std::reference_wrapper<CommandList>, R
     if (const VkResult result = vkBeginCommandBuffer(frame.commands, &beginInfo); result != VK_SUCCESS) {
         return vulkanFailure(result, "vkBeginCommandBuffer");
     }
-    m_commandList.startRecording(frame.commands);
+    m_commandList.startRecording(frame.commands, frame.windowCommands);
     m_isRecording = true;
     return std::ref<CommandList>(m_commandList);
 }
@@ -1864,61 +2305,275 @@ auto VulkanDevice::submit(VulkanSwapchain* presentTo) -> Result<void, RhiError> 
     expects(m_isRecording, "rhi::Device::submitFrame: no frame was begun");
     Frame& frame = currentFrame();
     m_isRecording = false;
+    frame.hasAcquiredImage = false;
+    auto windowPass = m_commandList.finishRecording();
+    if (!windowPass) {
+        return std::unexpected{std::move(windowPass.error())};
+    }
     if (const VkResult result = vkEndCommandBuffer(frame.commands); result != VK_SUCCESS) {
         return vulkanFailure(result, "vkEndCommandBuffer");
     }
-    const std::optional<std::uint32_t> image =
-        presentTo != nullptr ? presentTo->takeAcquired() : std::nullopt;
-    frame.hasAcquiredImage = false;
     frame.submitted = ++m_timelineValue;
+    const bool isShown = windowPass->has_value();
+    const auto handed = m_handOff.push(HandedFrame{.commands = frame.commands,
+                                                   .timelineValue = frame.submitted,
+                                                   .slot = m_frameIndex,
+                                                   .presentTo = isShown ? presentTo : nullptr,
+                                                   .windowPass = windowPass->value_or(WindowPass{})});
+    expects(handed.has_value(), "rhi::Device::submitFrame: a frame is begun once the one before is taken");
+    ++m_handedFrames;
+    m_wakeups.fetch_add(1, std::memory_order_release);
+    m_wakeups.notify_one();
+    return submissionFailure(); // an earlier frame's
+}
 
-    const VkSemaphoreSubmitInfo acquired{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .pNext = nullptr,
-        .semaphore = frame.imageAcquired,
-        .value = 0,
-        // Every command waits: a transition from Undefined runs no stage of its own.
-        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-        .deviceIndex = 0};
-    std::array signals{
-        VkSemaphoreSubmitInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                              .pNext = nullptr,
-                              .semaphore = m_timeline,
-                              .value = frame.submitted,
-                              .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                              .deviceIndex = 0},
-        VkSemaphoreSubmitInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                              .pNext = nullptr,
-                              .semaphore = image ? presentTo->renderFinished(*image) : VK_NULL_HANDLE,
-                              .value = 0,
-                              .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                              .deviceIndex = 0},
-    };
-    const VkCommandBufferSubmitInfo commands{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-                                             .pNext = nullptr,
-                                             .commandBuffer = frame.commands,
-                                             .deviceMask = 0};
-    const VkSubmitInfo2 submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-                                   .pNext = nullptr,
-                                   .flags = 0,
-                                   .waitSemaphoreInfoCount = image ? 1U : 0U,
-                                   .pWaitSemaphoreInfos = &acquired,
-                                   .commandBufferInfoCount = 1,
-                                   .pCommandBufferInfos = &commands,
-                                   .signalSemaphoreInfoCount = image ? 2U : 1U,
-                                   .pSignalSemaphoreInfos = signals.data()};
-    if (const VkResult result = vkQueueSubmit2(m_queue, 1, &submitInfo, VK_NULL_HANDLE);
-        result != VK_SUCCESS) {
-        return vulkanFailure(result, "vkQueueSubmit2");
+void VulkanDevice::waitIdle() noexcept {
+    drain();
+    vkDeviceWaitIdle(m_device);
+}
+
+void VulkanDevice::waitUntilTaken() noexcept {
+    for (std::uint64_t taken = m_takenFrames.load(std::memory_order_acquire); taken != m_handedFrames;
+         taken = m_takenFrames.load(std::memory_order_acquire)) {
+        m_takenFrames.wait(taken, std::memory_order_acquire);
     }
-    if (image) {
-        return presentTo->present(*image);
+}
+
+void VulkanDevice::drain() noexcept {
+    for (std::uint64_t finished = m_finishedFrames.load(std::memory_order_acquire);
+         finished != m_handedFrames; finished = m_finishedFrames.load(std::memory_order_acquire)) {
+        m_finishedFrames.wait(finished, std::memory_order_acquire);
+    }
+}
+
+auto VulkanDevice::submissionFailure() const -> Result<void, RhiError> {
+    if (m_hasFailed.load(std::memory_order_acquire)) {
+        return std::unexpected{*m_submissionFailure};
     }
     return {};
 }
 
-void VulkanDevice::waitIdle() noexcept {
-    vkDeviceWaitIdle(m_device);
+auto VulkanDevice::consume(VkSemaphore semaphore) -> Result<void, RhiError> {
+    const VkSemaphoreSubmitInfo wait{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                     .pNext = nullptr,
+                                     .semaphore = semaphore,
+                                     .value = 0,
+                                     .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                     .deviceIndex = 0};
+    const VkSubmitInfo2 submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                                   .pNext = nullptr,
+                                   .flags = 0,
+                                   .waitSemaphoreInfoCount = 1,
+                                   .pWaitSemaphoreInfos = &wait,
+                                   .commandBufferInfoCount = 0,
+                                   .pCommandBufferInfos = nullptr,
+                                   .signalSemaphoreInfoCount = 0,
+                                   .pSignalSemaphoreInfos = nullptr};
+    if (const VkResult result = vkQueueSubmit2(m_queue, 1, &submitInfo, VK_NULL_HANDLE);
+        result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkQueueSubmit2");
+    }
+    return {};
+}
+
+// --- VulkanDevice: the submission thread ---------------------------------------------------------
+
+void VulkanDevice::runSubmissions(const std::stop_token& stop) {
+    for (;;) {
+        // Read before looking for a frame, so that a frame handed after the look changes it.
+        const std::uint64_t wakeups = m_wakeups.load(std::memory_order_acquire);
+        if (std::optional<HandedFrame> frame = m_handOff.pop()) {
+            m_takenFrames.fetch_add(1, std::memory_order_release);
+            m_takenFrames.notify_all();
+            // After a failure the frames are dropped: the render thread learns of it and stops.
+            if (!m_hasFailed.load(std::memory_order_relaxed)) { // this thread's own to write
+                if (auto submitted = submitHanded(*frame); !submitted) {
+                    m_submissionFailure = std::move(submitted.error());
+                    m_hasFailed.store(true, std::memory_order_release);
+                }
+            }
+            m_finishedFrames.fetch_add(1, std::memory_order_release);
+            m_finishedFrames.notify_all();
+            continue;
+        }
+        if (stop.stop_requested()) {
+            return;
+        }
+        m_wakeups.wait(wakeups, std::memory_order_acquire);
+    }
+}
+
+/// Records in `commands` the window's pass `pass` drawn on `image`, seen through `view`: the image made
+/// ready to draw once acquired, the pass's own commands run inside a render pass on it, then the image
+/// made ready to be shown. Errors: those of vkBeginCommandBuffer and vkEndCommandBuffer.
+[[nodiscard]] auto recordWindowPass(VkCommandBuffer commands, const WindowPass& pass, VkImage image,
+                                    VkImageView view) -> Result<void, RhiError> {
+    const VkCommandBufferBeginInfo beginInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                                             .pNext = nullptr,
+                                             .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                                             .pInheritanceInfo = nullptr};
+    if (const VkResult result = vkBeginCommandBuffer(commands, &beginInfo); result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkBeginCommandBuffer");
+    }
+    const VkImageSubresourceRange whole{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                        .baseMipLevel = 0,
+                                        .levelCount = 1,
+                                        .baseArrayLayer = 0,
+                                        .layerCount = 1};
+    const auto barrierOf = [image, &whole](VkPipelineStageFlags2 sourceStages, VkAccessFlags2 sourceAccess,
+                                           VkPipelineStageFlags2 targetStages, VkAccessFlags2 targetAccess,
+                                           VkImageLayout from, VkImageLayout to) {
+        return VkImageMemoryBarrier2{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                     .pNext = nullptr,
+                                     .srcStageMask = sourceStages,
+                                     .srcAccessMask = sourceAccess,
+                                     .dstStageMask = targetStages,
+                                     .dstAccessMask = targetAccess,
+                                     .oldLayout = from,
+                                     .newLayout = to,
+                                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                     .image = image,
+                                     .subresourceRange = whole};
+    };
+    const auto recordBarrier = [commands](const VkImageMemoryBarrier2& barrier) {
+        const VkDependencyInfo dependency{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                          .pNext = nullptr,
+                                          .dependencyFlags = 0,
+                                          .memoryBarrierCount = 0,
+                                          .pMemoryBarriers = nullptr,
+                                          .bufferMemoryBarrierCount = 0,
+                                          .pBufferMemoryBarriers = nullptr,
+                                          .imageMemoryBarrierCount = 1,
+                                          .pImageMemoryBarriers = &barrier};
+        vkCmdPipelineBarrier2(commands, &dependency);
+    };
+    // After the acquire's semaphore, which the batch waits on at the color attachments' stage.
+    recordBarrier(barrierOf(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_NONE,
+                            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                            VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+    VkRenderingAttachmentInfo color = pass.color;
+    color.imageView = view;
+    const VkRenderingInfo rendering{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
+        .flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
+        .renderArea = {.offset = {.x = 0, .y = 0}, .extent = pass.area},
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color,
+        .pDepthAttachment = pass.hasDepth ? &pass.depth : nullptr,
+        .pStencilAttachment = nullptr,
+    };
+    vkCmdBeginRendering(commands, &rendering);
+    vkCmdExecuteCommands(commands, 1, &pass.commands);
+    vkCmdEndRendering(commands);
+    // The presentation waits on the image's semaphore, which covers every stage.
+    recordBarrier(barrierOf(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_NONE,
+                            VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR));
+    if (const VkResult result = vkEndCommandBuffer(commands); result != VK_SUCCESS) {
+        return vulkanFailure(result, "vkEndCommandBuffer");
+    }
+    return {};
+}
+
+auto VulkanDevice::submitHanded(const HandedFrame& frame) -> Result<void, RhiError> {
+    std::optional<HeldImage> image;
+    if (frame.presentTo != nullptr) {
+        auto taken = frame.presentTo->takeImage();
+        if (!taken) {
+            return std::unexpected{std::move(taken.error())};
+        }
+        image = *taken; // none: out of date or minimized, the frame not shown
+    }
+    const PresentCommands& present = m_presentCommands[frame.slot];
+    if (image) {
+        // The frame in flight's last use of them has finished: the render thread saw it before it
+        // began this frame.
+        if (const VkResult result = vkResetCommandPool(m_device, present.pool, 0); result != VK_SUCCESS) {
+            return vulkanFailure(result, "vkResetCommandPool");
+        }
+        if (auto recorded =
+                recordWindowPass(present.commands, frame.windowPass, frame.presentTo->image(image->index),
+                                 frame.presentTo->view(image->index));
+            !recorded) {
+            frame.presentTo->giveBack(*image);
+            return recorded;
+        }
+    }
+    // The frame's own commands wait for nothing; the window's pass waits for its image, then signals
+    // what the presentation waits for; the last batch signals the frame's end.
+    const std::array frameCommands{
+        VkCommandBufferSubmitInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                                  .pNext = nullptr,
+                                  .commandBuffer = frame.commands,
+                                  .deviceMask = 0},
+        VkCommandBufferSubmitInfo{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                                  .pNext = nullptr,
+                                  .commandBuffer = present.commands,
+                                  .deviceMask = 0}};
+    const VkSemaphoreSubmitInfo acquired{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                         .pNext = nullptr,
+                                         .semaphore = image ? image->acquired : VK_NULL_HANDLE,
+                                         .value = 0,
+                                         .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                         .deviceIndex = 0};
+    const std::array signals{
+        VkSemaphoreSubmitInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                              .pNext = nullptr,
+                              .semaphore = m_timeline,
+                              .value = frame.timelineValue,
+                              .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                              .deviceIndex = 0},
+        VkSemaphoreSubmitInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                              .pNext = nullptr,
+                              .semaphore =
+                                  image ? frame.presentTo->renderFinished(image->index) : VK_NULL_HANDLE,
+                              .value = 0,
+                              .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                              .deviceIndex = 0},
+    };
+    const std::array batches{
+        VkSubmitInfo2{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                      .pNext = nullptr,
+                      .flags = 0,
+                      .waitSemaphoreInfoCount = 0,
+                      .pWaitSemaphoreInfos = nullptr,
+                      .commandBufferInfoCount = 1,
+                      .pCommandBufferInfos = &frameCommands[0],
+                      .signalSemaphoreInfoCount = image ? 0U : 1U,
+                      .pSignalSemaphoreInfos = signals.data()},
+        VkSubmitInfo2{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                      .pNext = nullptr,
+                      .flags = 0,
+                      .waitSemaphoreInfoCount = 1,
+                      .pWaitSemaphoreInfos = &acquired,
+                      .commandBufferInfoCount = 1,
+                      .pCommandBufferInfos = &frameCommands[1],
+                      .signalSemaphoreInfoCount = narrow<std::uint32_t>(signals.size()),
+                      .pSignalSemaphoreInfos = signals.data()},
+    };
+    if (const VkResult result = vkQueueSubmit2(m_queue, image ? narrow<std::uint32_t>(batches.size()) : 1U,
+                                               batches.data(), VK_NULL_HANDLE);
+        result != VK_SUCCESS) {
+        if (image) {
+            frame.presentTo->giveBack(*image); // nothing waited on its semaphore
+        }
+        return vulkanFailure(result, "vkQueueSubmit2");
+    }
+    if (!image) {
+        return {};
+    }
+    if (auto shown = frame.presentTo->present(image->index); !shown) {
+        return shown;
+    }
+    // Waiting here for the display, before the next frame is taken, so that the render thread reads that
+    // frame's input once the display is ready for it.
+    return frame.presentTo->acquireAhead();
 }
 
 // --- VulkanDevice: resources ---------------------------------------------------------------------
@@ -2320,6 +2975,8 @@ auto VulkanDevice::makeBindGroup(const BindGroupDesc& desc) -> Result<BindGroupH
         } else if (const auto* texture = std::get_if<TextureHandle>(&binding.resource)) {
             expects(declared->type == BindingType::SampledTexture,
                     "rhi::Device::createBindGroup: a texture for a texture binding");
+            expects(!m_textures.get(*texture).isWindowImage,
+                    "rhi::Device::createBindGroup: the window's image is drawn to, never sampled");
             images.push_back(VkDescriptorImageInfo{.sampler = VK_NULL_HANDLE,
                                                    .imageView = m_textures.get(*texture).view,
                                                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
@@ -2487,6 +3144,15 @@ auto VulkanDevice::mappedBytes(BufferHandle buffer) -> std::span<std::byte> {
 // --- VulkanSwapchain -----------------------------------------------------------------------------
 
 auto VulkanSwapchain::build(const SwapchainDesc& desc) -> Result<void, RhiError> {
+    const VkSemaphoreCreateInfo semaphoreInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = nullptr, .flags = 0};
+    for (VkSemaphore& semaphore : m_acquired) {
+        if (const VkResult result =
+                vkCreateSemaphore(m_device->handle(), &semaphoreInfo, nullptr, &semaphore);
+            result != VK_SUCCESS) {
+            return vulkanFailure(result, "vkCreateSemaphore");
+        }
+    }
     m_requestedSize = desc.size;
     m_presentMode = desc.presentMode;
     return rebuild();
@@ -2496,9 +3162,11 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
     const VkPhysicalDevice physical = m_device->physicalDevice();
     const VkSurfaceKHR surface = m_device->surface();
     const VkDevice device = m_device->handle();
+    m_device->drain(); // the submission thread uses the swapchain no more
+    releaseHeldImage();
     m_device->waitIdle(); // the old images may still be drawn or shown
     destroyImages();
-    m_isOutOfDate = false;
+    m_isOutOfDate.store(false, std::memory_order_relaxed);
 
     VkSurfaceCapabilitiesKHR capabilities{};
     if (const VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, surface, &capabilities);
@@ -2553,7 +3221,9 @@ auto VulkanSwapchain::rebuild() -> Result<void, RhiError> {
     if (auto images = createImages(choice->format.format); !images) {
         return images;
     }
-    log::debug(kLog, "swapchain: {} images of {}x{}, {}", m_textures.size(), m_extent.width, m_extent.height,
+    m_window = m_device->textures().insert(
+        VulkanTexture{.format = m_format, .extent = m_extent, .isWindowImage = true});
+    log::debug(kLog, "swapchain: {} images of {}x{}, {}", m_images.size(), m_extent.width, m_extent.height,
                enumName(m_format));
     return {};
 }
@@ -2567,6 +3237,7 @@ auto VulkanSwapchain::createImages(VkFormat format) -> Result<void, RhiError> {
         return std::unexpected{std::move(images.error())};
     }
     for (VkImage image : *images) {
+        m_images.push_back(image);
         const VkImageViewCreateInfo viewInfo{
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .pNext = nullptr,
@@ -2586,8 +3257,7 @@ auto VulkanSwapchain::createImages(VkFormat format) -> Result<void, RhiError> {
             result != VK_SUCCESS) {
             return vulkanFailure(result, "vkCreateImageView");
         }
-        m_textures.push_back(m_device->textures().insert(
-            VulkanTexture{.image = image, .view = view, .format = m_format, .extent = m_extent}));
+        m_views.push_back(view);
         const VkSemaphoreCreateInfo semaphoreInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = nullptr, .flags = 0};
         VkSemaphore semaphore = VK_NULL_HANDLE;
@@ -2602,31 +3272,48 @@ auto VulkanSwapchain::createImages(VkFormat format) -> Result<void, RhiError> {
 
 void VulkanSwapchain::destroyImages() noexcept {
     const VkDevice device = m_device->handle();
-    for (const TextureHandle texture : m_textures) {
-        if (auto removed = m_device->textures().remove(texture)) {
-            vkDestroyImageView(device, removed->view, nullptr); // the image is the swapchain's
-        }
+    std::ignore = m_device->textures().remove(std::exchange(m_window, TextureHandle{}));
+    for (VkImageView view : m_views) {
+        vkDestroyImageView(device, view, nullptr); // the image is the swapchain's
     }
     for (VkSemaphore semaphore : m_renderFinished) {
         vkDestroySemaphore(device, semaphore, nullptr);
     }
-    m_textures.clear();
+    m_images.clear();
+    m_views.clear();
     m_renderFinished.clear();
 }
 
+void VulkanSwapchain::releaseHeldImage() noexcept {
+    if (const std::optional<HeldImage> held = std::exchange(m_held, std::nullopt)) {
+        if (auto consumed = m_device->consume(held->acquired); !consumed) {
+            log::warning(kLog, "an image acquired ahead and never shown: {}", describe(consumed.error()));
+        }
+    }
+}
+
 VulkanSwapchain::~VulkanSwapchain() {
+    m_device->drain();
+    releaseHeldImage();
     m_device->waitIdle();
     destroyImages();
     if (m_swapchain != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(m_device->handle(), m_swapchain, nullptr);
+    }
+    for (VkSemaphore semaphore : m_acquired) {
+        vkDestroySemaphore(m_device->handle(), semaphore, nullptr);
     }
     m_device->swapchainClosed();
 }
 
 auto VulkanSwapchain::acquire() -> Result<std::optional<SwapchainImage>, RhiError> {
     expects(m_device->isRecording(), "rhi::Swapchain::acquire: between Device::beginFrame and submitFrame");
-    expects(!m_acquired, "rhi::Swapchain::acquire: one image per frame");
-    if (m_isOutOfDate) {
+    Frame& frame = m_device->currentFrame();
+    expects(!frame.hasAcquiredImage, "rhi::Swapchain::acquire: one image per frame");
+    if (auto failed = m_device->submissionFailure(); !failed) {
+        return std::unexpected{std::move(failed.error())};
+    }
+    if (m_isOutOfDate.load(std::memory_order_acquire)) {
         if (auto rebuilt = rebuild(); !rebuilt) {
             return std::unexpected{std::move(rebuilt.error())};
         }
@@ -2634,48 +3321,81 @@ auto VulkanSwapchain::acquire() -> Result<std::optional<SwapchainImage>, RhiErro
     if (m_swapchain == VK_NULL_HANDLE) {
         return std::nullopt; // minimized
     }
-    Frame& frame = m_device->currentFrame();
+    frame.hasAcquiredImage = true;
+    return SwapchainImage{.texture = m_window, .size = m_extent, .format = m_format};
+}
+
+auto VulkanSwapchain::resize(Extent2d size) -> Result<void, RhiError> {
+    expects(!m_device->isRecording() || !m_device->currentFrame().hasAcquiredImage,
+            "rhi::Swapchain::resize: not while a frame holds its image");
+    m_requestedSize = size;
+    return rebuild();
+}
+
+auto VulkanSwapchain::takeImage() -> Result<std::optional<HeldImage>, RhiError> {
+    if (m_held) {
+        return std::exchange(m_held, std::nullopt);
+    }
+    return acquireNow();
+}
+
+void VulkanSwapchain::giveBack(HeldImage image) noexcept {
+    m_held = image;
+}
+
+auto VulkanSwapchain::acquireAhead() -> Result<void, RhiError> {
+    if (m_held) {
+        return {};
+    }
+    auto acquired = acquireNow();
+    if (!acquired) {
+        return std::unexpected{std::move(acquired.error())};
+    }
+    m_held = *acquired;
+    return {};
+}
+
+auto VulkanSwapchain::acquireNow() -> Result<std::optional<HeldImage>, RhiError> {
+    if (m_swapchain == VK_NULL_HANDLE || m_isOutOfDate.load(std::memory_order_relaxed)) {
+        return std::nullopt; // until the render thread rebuilds it
+    }
+    const VkSemaphore semaphore = m_acquired.at(m_nextAcquired);
     std::uint32_t index = 0;
-    const VkResult result = vkAcquireNextImageKHR(m_device->handle(), m_swapchain, kNoTimeout,
-                                                  frame.imageAcquired, VK_NULL_HANDLE, &index);
+    const VkResult result =
+        vkAcquireNextImageKHR(m_device->handle(), m_swapchain, kNoTimeout, semaphore, VK_NULL_HANDLE, &index);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        m_isOutOfDate = true; // rebuilt at the next acquire
+        m_isOutOfDate.store(true, std::memory_order_release);
         return std::nullopt;
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         return vulkanFailure(result, "vkAcquireNextImageKHR");
     }
-    m_isOutOfDate = result == VK_SUBOPTIMAL_KHR; // still usable this frame
-    m_acquired = index;
-    frame.hasAcquiredImage = true;
-    return SwapchainImage{.texture = m_textures[index], .size = m_extent, .format = m_format};
+    if (result == VK_SUBOPTIMAL_KHR) {
+        m_isOutOfDate.store(true, std::memory_order_release); // still shows it; rebuilt after
+    }
+    m_nextAcquired = (m_nextAcquired + 1) % m_acquired.size();
+    return HeldImage{.index = index, .acquired = semaphore};
 }
 
-auto VulkanSwapchain::present(std::uint32_t image) -> Result<void, RhiError> {
-    const VkSemaphore waitFor = m_renderFinished[image];
+auto VulkanSwapchain::present(std::uint32_t index) -> Result<void, RhiError> {
+    const VkSemaphore waitFor = m_renderFinished[index];
     const VkPresentInfoKHR presentInfo{.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
                                        .pNext = nullptr,
                                        .waitSemaphoreCount = 1,
                                        .pWaitSemaphores = &waitFor,
                                        .swapchainCount = 1,
                                        .pSwapchains = &m_swapchain,
-                                       .pImageIndices = &image,
+                                       .pImageIndices = &index,
                                        .pResults = nullptr};
     const VkResult result = vkQueuePresentKHR(m_device->queue(), &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        m_isOutOfDate = true;
+        m_isOutOfDate.store(true, std::memory_order_release);
         return {};
     }
     if (result != VK_SUCCESS) {
         return vulkanFailure(result, "vkQueuePresentKHR");
     }
     return {};
-}
-
-auto VulkanSwapchain::resize(Extent2d size) -> Result<void, RhiError> {
-    expects(!m_acquired, "rhi::Swapchain::resize: not while a frame holds its image");
-    m_requestedSize = size;
-    return rebuild();
 }
 
 } // namespace

@@ -29,6 +29,20 @@ using nx::test::TriangleModel;
     return view ? MdlError{} : view.error().code;
 }
 
+TEST(MdlTest, StudioIndicesPreserveTagIdentityAndIntegerRepresentation) {
+    constexpr std::uint32_t kLargest = std::numeric_limits<std::uint32_t>::max();
+    static_assert(SequenceIndex{}.value == 0);
+    static_assert(SequenceIndex{kLargest}.value == kLargest);
+    static_assert(sizeof(SequenceIndex) == sizeof(std::uint32_t));
+    static_assert(alignof(SequenceIndex) == alignof(std::uint32_t));
+    static_assert(std::is_trivially_copyable_v<SequenceIndex>);
+    static_assert(std::is_nothrow_default_constructible_v<SequenceIndex>);
+    static_assert(std::is_nothrow_constructible_v<SequenceIndex, std::uint32_t>);
+    static_assert(!std::convertible_to<std::uint32_t, SequenceIndex>);
+    static_assert(!std::constructible_from<SequenceIndex, BoneIndex>);
+    SUCCEED();
+}
+
 TEST(MdlTest, ReadsTheSkeletonAndWhatHangsOnIt) {
     const TriangleModel model;
     const auto view = MdlView::parse(model.bytes);
@@ -39,7 +53,7 @@ TEST(MdlTest, ReadsTheSkeletonAndWhatHangsOnIt) {
 
     ASSERT_EQ(view->bones().size(), 2U);
     EXPECT_FALSE(view->bones()[0].parent.has_value());
-    EXPECT_EQ(view->bones()[1].parent, std::optional{BoneIndex{.value = 0}});
+    EXPECT_EQ(view->bones()[1].parent, std::optional{BoneIndex{0}});
     EXPECT_EQ(view->bones()[1].name, "head");
     EXPECT_EQ(view->bones()[1].values[2], 10.0F);
     EXPECT_TRUE(view->bones()[1].controllers[4].has_value());
@@ -157,18 +171,18 @@ TEST(MdlTest, DecodesAnimationsHereAndInSequenceGroups) {
     const auto view = MdlView::parse(model.bytes);
     ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
 
-    const auto idle = view->decodeAnimation(SequenceIndex{.value = 0}, model.bytes);
+    const auto idle = view->decodeAnimation(SequenceIndex{0}, model.bytes);
     ASSERT_TRUE(idle.has_value()) << nx::describe(idle.error());
     EXPECT_EQ(idle->values.size(), 2U * 2U * 6U);
-    const BoneIndex root{.value = 0};
-    const BoneIndex head{.value = 1};
+    const BoneIndex root{0};
+    const BoneIndex head{1};
     EXPECT_EQ(idle->value(0, 0, root, BoneAxis::Z), 5);
     EXPECT_EQ(idle->value(0, 1, root, BoneAxis::Z), 7);
     EXPECT_EQ(idle->value(0, 0, head, BoneAxis::RotationY), 100);
     EXPECT_EQ(idle->value(0, 1, head, BoneAxis::RotationY), 100) << "past its values, a run repeats the last";
     EXPECT_EQ(idle->value(0, 1, head, BoneAxis::X), 0) << "an axis without a stream stays at 0";
 
-    const auto wave = view->decodeAnimation(SequenceIndex{.value = 1}, model.groupFile);
+    const auto wave = view->decodeAnimation(SequenceIndex{1}, model.groupFile);
     ASSERT_TRUE(wave.has_value()) << nx::describe(wave.error());
     EXPECT_EQ(wave->value(0, 0, head, BoneAxis::RotationY), -3);
 }
@@ -182,8 +196,8 @@ TEST(MdlTest, RejectsABrokenAnimation) {
         if (!view) {
             return MdlError{};
         }
-        const auto frames = view->decodeAnimation(SequenceIndex{.value = sequence},
-                                                  sequence == 0 ? model.bytes : model.groupFile);
+        const auto frames =
+            view->decodeAnimation(SequenceIndex{sequence}, sequence == 0 ? model.bytes : model.groupFile);
         EXPECT_FALSE(frames.has_value());
         return frames ? MdlError{} : frames.error().code;
     };

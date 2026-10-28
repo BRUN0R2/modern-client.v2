@@ -106,7 +106,7 @@ struct FrameUniform {
     if (chosen.intervals.empty()) {
         return chosen.firstImage;
     }
-    const double loop = chosen.intervals.back();
+    const double loop = static_cast<double>(chosen.intervals.back());
     const double now = std::max(static_cast<double>(time.count()), 0.0);
     const double into = now - (std::trunc(now / loop) * loop);
     std::uint32_t image = 0;

@@ -56,6 +56,10 @@ express**. The vocabulary is close to WebGPU's.
   device's create functions give and which destroys it when it lets it go or ends; destruction is
   deferred until the GPU finishes the frame that used the resource.
 - Every creation error returns `nx::Result<T, RhiError>`
+- A Vulkan device requested with validation requires the Khronos layer and debug messenger
+  extension. Missing validation returns `RhiError::ValidationUnavailable`; device creation never
+  silently drops the request. Tests cover both validation errors and unavailable validation
+  ([18](18-testing-and-quality.md#c-test-conventions)).
   (`OutOfDeviceMemory`, `UnsupportedFormat`, `DeviceLost`, `SurfaceLost`…).
 - Debug names are mandatory (`.label`), propagated to RenderDoc and the validation layers.
 - A device is created for the window it presents to (or for none): the swapchain then needs only
@@ -68,8 +72,10 @@ express**. The vocabulary is close to WebGPU's.
   viewport of negative height.
 
 **Today** (`engine/rhi`, `engine/rhiVulkan`): the device and its frames in flight
-(`beginFrame` waits for the frame's slot and gives its `CommandList`, `submitFrame` submits and
-presents), the swapchain with its recreation on resize and while minimized, and generational
+(`beginFrame` waits until the frame before is taken to the GPU and for the frame's slot, and gives
+its `CommandList`; `submitFrame` hands the frame to the device's submission thread, which submits it
+and presents it, [ADR-0029](adr/0029-submission-thread.md)), the swapchain with its recreation on
+resize and while minimized, and generational
 handles (`HandlePool`: a stale handle is a contract violation) to buffers (device memory, or mapped
 memory to upload and read back, through VMA), textures (with mip levels, and arrays of layers that
 shaders sample as `Texture2DArray`), samplers, shaders, bind group layouts and
@@ -103,6 +109,7 @@ if (!lightmapAtlas) {
 | Memory | Vulkan Memory Allocator (VMA) |
 | Frames in flight | 2 (default) or 3, configurable (`r_frames_in_flight`) |
 | Present | `vid_vsync 0/1`, `r_present_mode immediate/mailbox/fifo` |
+| Submission | A thread of the device's own (`nx::platform::Thread`) submits the frames in the order they were handed and shows them: the only user of the queue and the swapchain while it has frames ([ADR-0029](adr/0029-submission-thread.md)). The frame's pass that draws to the window's image is recorded into a secondary command buffer, which that thread runs inside its own render pass on the image it acquired; it acquires the next image once it has shown a frame, before it takes the next one |
 | Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID. Today: `next` gives the device what its GPU learned last time (`vulkan::DeviceDesc::pipelineCache`, from `pipelineCache.bin` in the cache folder, `nx::platform::cacheDirectory`: `%LOCALAPPDATA%\Modern-Client.v2`, or `$XDG_CACHE_HOME`/`~/.cache` `modern-client.v2`), kept only when its header names the same vendor, device and cache UUID, and writes what it learned there as it ends (`Device::pipelineCache`, written whole or not at all) |
 | Parallel recording | One `VkCommandPool` per worker per frame in flight |
 | Validation | Validation layers + sync validation in development builds (`--validation` in `next` and `nxview`; always in the tests) |
@@ -144,7 +151,8 @@ if (!lightmapAtlas) {
   - elimination of passes whose result is not consumed;
   - execution order and parallel recording points.
 - Passes record command lists in **parallel jobs**. The render thread submits them in
-  order.
+  order; the device's submission thread takes them to the GPU and shows the frame
+  ([ADR-0029](adr/0029-submission-thread.md)).
 
 ### 7.1 Frame passes (legacy mode)
 
@@ -161,7 +169,7 @@ if (!lightmapAtlas) {
 | 9 | `ScreenEffects` | Flashbang, fade, *screen shake* (applied to the camera), NVG tint |
 | 10 | `Gamma` | Output curve of `r_fidelity enhanced` (HDR); the GoldSrc curves are applied where the original applies them (§11) |
 | 11 | `Hud` | Sprite HUD, crosshair, text, menus ([12](12-ui-hud-and-console.md)) |
-| 12 | `Present` | Copy to the swapchain |
+| 12 | `Present` | The `Hud` pass drawn on the window's image once the device's submission thread has acquired it, then shown ([ADR-0029](adr/0029-submission-thread.md)): no copy |
 
 **Today** (`nx.render:blendedOrder`): until the render graph comes, a frame is one render pass drawn
 in the original's order (`R_DrawEntitiesOnList`, as Xash3D-FWGS reconstructs it). Each renderer
@@ -252,11 +260,16 @@ luxels around each point, as the original's bilinear filter blends its light tex
 without lightmaps is fully bright, as the original draws a face without samples. The styles'
 brightness comes with each draw (`nx.render:lightStyle`): 22 for each letter of a style's pattern
 after `a` (264 at `m`, the normal one), ten letters a second, 256 for a style the game left unset,
-and 264 for the styles above the 64 the game sets. The client (`cs.client`) sets the world's patterns (flicker,
+and 264 for the styles above the 64 the game sets. The server (`cs::Game`) sets the world's patterns (flicker,
 candles, strobes, pulses...) from `data/cstrike/lightStyles.toml` (`cs::WorldLightStyles`, each style
 once, in letters from `a` to `z`), as Quake's world.qc sets them, under the names the Half-Life FGDs
 give the styles (style 12, which has no public pattern, stays unset), and the switchable lights' from
-their entities, `a` for those that start off, else `m` or their `pattern`.
+their entities, `a` for those that start off, else `m` or their `pattern`. The data is read once
+with `cs::GameContent` (`cs.shared:lightStyles`), and the server owns a `cs::MapLightStyles` for
+its map and sends a copy in each `cs::PlayerSnapshot`. The client evaluates these patterns at
+the frame's map time (`ClientGame::lightStylesAt`), replacing removed patterns as well as changed
+ones. `SceneView::lightStyles` supplies the same values to the world, models, sprites and
+reflection baking; neither `Level` nor the scene reconstructs game state from local data.
 
 The camera (`nx.render:camera`) writes reversed depth, 1 at the near plane and 0 at
 infinity, compared with `Greater`: nearly uniform precision across a whole map; `fov` is the
@@ -377,8 +390,19 @@ flowchart LR
    the mouth's from 0 to 64); the first two blends mixed by the first blending; the motion bone's
    motion kept (the server's hitboxes) or removed (the client's drawing); each bone placed in its
    parent, the roots in the entity's transform. `nxcheck` poses every sequence of every model of the
-   installation ([18](18-testing-and-quality.md#real-content)). The nine aim blends and the gait of
-   the players' models, the transitions between sequences and the jobs come with player animation.
+   installation ([18](18-testing-and-quality.md#real-content)). A player's model (`cs::posePlayerBones`,
+   as ReGameDLL_CS's `SV_StudioSetupBones` poses one): a sequence of nine blends by the four around the
+   aim's yaw and pitch blends, the yaw's shares first; another by its first blending; the bones from the
+   root to the spine and from each child of the pelvis on (its legs) playing the gait sequence, but in
+   the deaths and the swimming sequences; turned by its legs' yaw, its pitch the aim's blend
+   ([10 §2](10-counter-strike-gameplay.md#2-teams-and-characters)). The model of the weapon in its hands
+   (`models/p_<weapon>.mdl`) takes the bones of the player's of the same names (`cs::mergeBones`, the
+   engine's `StudioMergeBones`), its others posed at its first sequence's first frame. The transitions
+   between sequences and the jobs come later.
+   Only the four aim blends needed by the query are evaluated; there is no discarded first pose.
+   View models decode their sequences through `cs::animationsOf`, the same reader as the map's and
+   players' models: each external sequence group is read once per model load, however many sequences
+   use it, with the same typed failures for a missing or invalid animation.
 2. **Bone palette:** `Mat3x4` (48 bytes) per bone, written straight into the persistent
    mapped upload ring. Each instance keeps a `paletteOffset`.
 3. **Vertex shader:** fetches `bones[paletteOffset + vertex.boneIndex]`. The MDL v10 format
@@ -449,12 +473,18 @@ flowchart LR
    texture's orange where the original's turns yellow. In the enhanced look its `light` lights the
    weapon in hand from the flash (a `StudioLight`, after the key light), dimming to nothing over its
    own time, the lights of a muzzle's flashes added into one. The sprites a view model's flashes show are read
-   with it, by their paths (`cs::MuzzleFlashSprites`, `Level::updateViewModels`), and put on the GPU
+   with it, by their paths (`cs::EffectSprites`, `Level::updateViewModels`), and put on the GPU
    with it (`Scene::loadWeapons`), so that no file is read as a frame plays: one missing is logged
    and its flashes are not shown. A sound's (5004) plays the sound its options name
    ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a frame to the
    next, for the scene and the sound alike. The original's light of a shot on the world and its
-   models (`EF_MUZZLEFLASH`) comes with the dynamic lights, the shells with the temporary entities. A
+   models (`EF_MUZZLEFLASH`) comes with the dynamic lights, the shells with more temporary entities.
+   The client's temporary entities (`cs.client:tempEntities`) are sprites shown a while where the game
+   tells of an effect, moving on their own, drawn among the map's sprites as translucent as they are
+   (`kRenderTransTexture`), their sprites read with the level (`cs::EffectSprites`): today the blood a
+   hit sprays ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). The original's client moves them in its
+   closed `HUD_TempEntUpdate`: here each falls at its share of the world's gravity, spins, and rests
+   where a line from where it was meets the world. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
@@ -469,7 +499,10 @@ flowchart LR
    controllers straight ahead (`SetController` of 0 degrees, `cs::controllerSettingOf`); each turned by
    its entity's angles, the pitch negated as the engine's studio transform negates it, lit where it
    is. The render effects, the players' colors, the bob of the view's model and instancing come with
-   their consumers.
+   their consumers. Hostage models are indexed by their map spawn, including absent models, so each
+   frame looks them up in constant time. Highlight lights are selected only for the enhanced look,
+   with working storage bounded by the remaining light budget; a zero budget does not scan the map's
+   lights.
 4. **Modern formats (glTF)** use up to 4 influences (`joints: u8x4/u16x4`,
    `weights: unorm8x4`), in the same pipeline with another permutation.
 5. **Compute skinning** (`r_skinning compute`): pre-transforms vertices once per frame
@@ -656,20 +689,33 @@ Xash3D-FWGS project records from the original for its tests.
 
 ## 12. Latency and frame pacing
 
-- `fps_max` with a precise limiter (`nx::platform::SleepTimer`: a high-resolution timer on
-  Windows and an absolute sleep on the monotonic clock on Linux, without *spin*), paced as the
+- `fps_max` with a precise limiter (`nx::platform::SleepTimer`), paced as the
   original's `Host_FilterTime` paces its client (`nx::settings::frameIntervalOf`): `fps_max` frames
   a second, at least 0.5 (20 in a game of more than one player, which the local game is), at most 100
   unless `fps_override` is 1, and exactly 100 while `gl_vsync` is 1 without it, the display's refresh
   pacing the frames further; a frame starts no sooner than 1 / (that + 0.5) seconds after the one
   before. So `fps_max 0` is half a frame a second, not "no limit". The 31 frames a second the original
   keeps while it connects to a server wait for the connection (M4).
+- The limiter starts each frame within microseconds of its time, as the original's busy loop does,
+  without keeping a core busy for the whole wait. No OS timer wakes a thread that precisely: Windows'
+  high-resolution waitable timer was measured waking it 0.4 to 0.8 ms late whatever the wait (Windows
+  11, 2026), which held `fps_max 1000` to about 710 frames a second with half of each frame spent
+  working; Linux's absolute sleep is some tens of microseconds late. So the OS's timer (Windows'
+  high-resolution waitable timer, an absolute sleep on the monotonic clock on Linux) waits until as
+  much before the deadline as it was seen to be late, a running estimate of the 99th percentile of its
+  lateness (`nx::platform::WakeLateness`), and the clock is read for the rest, the thread yielding its
+  core between reads.
 - In low-latency mode, the limiter waits **before** sampling input, so that the frame is
-  built with the most recent input.
-- The frame rate shown is one measure (`nx::platform::FrameRateMeter`): the frames that started in
-  each whole second after its first, over the time from its first to its last, told again as each
-  second closes (a frame longer than a second closes it alone). `cl_showfps` shows it now and
-  `net_graph` is to show the same, where the original measures it twice and its two numbers disagree.
+  built with the most recent input. So do the frame's own waits: `next` begins its frame
+  (`Device::beginFrame`: the frame before taken to the GPU, then the frame's slot free) right after
+  the limiter, before it reads the input, so that no frame waits behind another to be submitted
+  ([ADR-0029](adr/0029-submission-thread.md)).
+- The frame rate shown is one measure (`nx::platform::FrameRateMeter`), the original's `net_graph`'s,
+  which changes with every frame: an average of the frames' times, each frame's moving it half way to
+  its own (`FRAMERATE_AVG_FRAC`), from none, a frame counting for 0.25 s at most as `Host_FilterTime`
+  holds it; the rate is one over that average. `cl_showfps` shows it now, to a tenth, and `net_graph`
+  is to show the same, where the original measures it twice and its two numbers disagree (its
+  `cl_showfps` counts the frames of each second).
 - No empty window while the client loads: `next` opens its window hidden and shows it with its first
   image (`WindowDesc::isShown`, `Window::show`). A map's scene, its textures and models on the GPU, is
   made with the first image of it, and its game plays from the frame after: the player hears what

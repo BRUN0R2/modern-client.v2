@@ -22,7 +22,18 @@ nxAddModuleLibrary(csShared
         src/footsteps.cppm
         src/breath.cppm
         src/hitGroups.cppm
+        src/blood.cppm
         src/hostages.cppm
+        src/playerHarm.cppm
+        src/use.cppm
+        src/modelFiles.cppm
+        src/lightStyles.cppm
+        src/gameContent.cppm
+        src/gameMap.cppm
+        src/characters.cppm
+        src/playerAnimation.cppm
+        src/snapshot.cppm
+        src/entityCatalog.cppm
     SOURCES
         src/movement.cpp
         src/studio.cpp
@@ -37,12 +48,24 @@ nxAddModuleLibrary(csShared
         src/footsteps.cpp
         src/breath.cpp
         src/hitGroups.cpp
+        src/blood.cpp
         src/hostages.cpp
+        src/player.cpp
+        src/playerHarm.cpp
+        src/use.cpp
+        src/modelFiles.cpp
+        src/lightStyles.cpp
+        src/gameContent.cpp
+        src/gameMap.cpp
+        src/characters.cpp
+        src/playerAnimation.cpp
+        src/entityCatalog.cpp
     DEPENDS
         nx::core
         nx::math
         nx::meta
         nx::data
+        nx::platform
         nx::ecs
         nx::assets
         nx::collision

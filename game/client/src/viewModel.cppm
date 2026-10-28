@@ -16,7 +16,6 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import cs.shared;
-import :modelFiles;
 import :modelMaterials;
 import :muzzleFlash;
 

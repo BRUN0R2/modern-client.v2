@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# Example for the native offline test mod (ADR-0028). Copy to the user's
+# addons/cstrike/entities/zombies.toml. The model comes from the user's own files;
+# no CSO content is distributed. Sequence names must exist in the selected model.
+sightRange = 2048.0
+fieldOfView = 180.0
+memoryLifetime = 6.0
+arrivalDistance = 8.0
+replanDistance = 24.0
+memoryLimit = 32
+perceptionBudget = 8
+spawnBatchLimit = 64
+spawnRadius = 512.0
+spawnSpacing = 64.0
+
+[body]
+id = "testZombie"
+model = "models/player/zombi/zombi.mdl"
+modelOffset = { x = 0.0, y = 0.0, z = 0.0 }
+health = 500.0
+speed = 160.0
+meleeDamage = 20.0
+meleeReach = 64.0
+meleeInterval = 1.0
+idleSequence = "idle1"
+walkSequence = "walk"
+attackSequence = "ref_shoot_knife"
+deathSequence = "death1"
+hitGroups = { generic = 1.0, head = 4.0, chest = 1.0, stomach = 1.25, arm = 1.0, leg = 0.75, shield = 0.0, other = 1.0 }

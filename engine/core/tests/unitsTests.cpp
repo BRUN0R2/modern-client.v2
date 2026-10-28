@@ -69,6 +69,8 @@ TEST(Units, AccelerationAndRatesPrintTheirUnits) {
     EXPECT_EQ(std::format("{}", nx::UnitsPerSecondSquared{800.0F}), "800ups/s");
     EXPECT_EQ(std::format("{}", nx::PerSecond{4.0F}), "4/s");
     EXPECT_EQ(std::format("{}", nx::DegreesPerSecond{100.0F}), "100deg/s");
+    EXPECT_EQ(std::format("{}", nx::PerSecondSquared{300.0F}), "300/s/s");
+    EXPECT_EQ(std::format("{}", nx::DegreesPerSecondSquared{3000.0F}), "3000deg/s/s");
 }
 
 TEST(Units, DegreesAndRadiansConvertExplicitly) {

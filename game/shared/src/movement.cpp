@@ -28,8 +28,6 @@ constexpr double kDuckDrop = double{kStandingHalfHeight - kDuckedHalfHeight};
 
 // The thresholds of the original's movement, each a behavior a player feels.
 
-/// Ground faces up at least this much; on a steeper plane a player slides.
-constexpr float kMinGroundNormalZ = 0.7F;
 /// Faster upwards, a player has left the ground.
 constexpr float kLiftOffSpeed = 180.0F;
 /// How far below a player the ground is looked for.
@@ -286,6 +284,12 @@ public:
 
     [[nodiscard]] auto run() -> MovementResult {
         prepare();
+        if (m_player.isDead) {
+            // Killed by nothing, it observes its own body, which moves no more (PM_SpectatorMove).
+            m_player.viewHeight = kDeadViewHeight;
+            categorizePosition();
+            return result();
+        }
         // Parity: never stuck in noclip; stuck, the player does nothing else
         if (m_player.moveType != MoveType::Noclip && isStuck()) {
             return result();
@@ -1292,10 +1296,14 @@ private:
 
 } // namespace
 
-auto solidBoxesOf(nx::ecs::World& world) -> std::vector<SolidBox> {
+auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored) -> std::vector<SolidBox> {
     std::vector<SolidBox> boxes;
-    nx::ecs::Query<const nx::game::Transform&, const nx::game::BoxSolidity&>{world}.forEach(
-        [&boxes](const nx::game::Transform& transform, const nx::game::BoxSolidity& solidity) {
+    nx::ecs::Query<nx::ecs::Entity, const nx::game::Transform&, const nx::game::BoxSolidity&>{world}.forEach(
+        [&boxes, ignored](nx::ecs::Entity entity, const nx::game::Transform& transform,
+                          const nx::game::BoxSolidity& solidity) {
+            if (ignored == entity) {
+                return;
+            }
             boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box});
         });
     return boxes;
@@ -1331,7 +1339,7 @@ auto bodyOf(const MovementState& state) -> nx::game::Body {
     return nx::game::Body{.hull = state.isDucked ? Hull::Ducked : Hull::Standing,
                           .box = state.isDucked ? kDuckedBox : kStandingBox,
                           .groundModel = state.isOnGround ? modelOf(state.ground) : std::nullopt,
-                          .isPushed = state.moveType == MoveType::Walk};
+                          .isPushed = state.moveType == MoveType::Walk && !state.isDead};
 }
 
 auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds {

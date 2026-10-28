@@ -17,6 +17,7 @@ import nx.rhi.vulkan;
 import nx.render;
 
 #include "offscreenTarget.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -62,6 +63,7 @@ public:
         auto device =
             nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
         if (!device) {
+            EXPECT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
             return;
         }
         m_device = std::move(*device);
@@ -116,6 +118,31 @@ void expectRgb(const Pixel& actual, std::array<int, 3> expected, std::string_vie
     for (std::size_t channel = 0; channel < expected.size(); ++channel) {
         EXPECT_NEAR(actual.at(channel), expected.at(channel), 1) << what << ", channel " << channel;
     }
+}
+
+TEST(RetainedQuadsTest, MakesTheQuadsAgainOnlyWhenWhatTheyShowChanges) {
+    nx::render::RetainedQuads<int> retained;
+    int made = 0;
+    // A quad as wide as what it shows.
+    const auto append = [&retained, &made](std::vector<ScreenQuad>& quads, int shown) {
+        retained.append(quads, shown, [&made, shown](std::vector<ScreenQuad>& into) {
+            ++made;
+            into.push_back(ScreenQuad{.target = {.width = static_cast<float>(shown)}});
+        });
+    };
+    std::vector<ScreenQuad> quads{ScreenQuad{}}; // what was appended before
+    append(quads, 1);
+    append(quads, 1);
+    EXPECT_EQ(made, 1) << "what it shows is the same: its quads again";
+    append(quads, 2);
+    append(quads, 1);
+    EXPECT_EQ(made, 3) << "made again each time what it shows changes";
+    ASSERT_EQ(quads.size(), 5U);
+    EXPECT_EQ(quads[0].target.width, 0.0F) << "appended after what was there";
+    EXPECT_EQ(quads[1].target.width, 1.0F);
+    EXPECT_EQ(quads[2].target.width, 1.0F);
+    EXPECT_EQ(quads[3].target.width, 2.0F);
+    EXPECT_EQ(quads[4].target.width, 1.0F);
 }
 
 TEST(ScreenRendererTest, EachTexelLandsOnThePixelItCovers) {

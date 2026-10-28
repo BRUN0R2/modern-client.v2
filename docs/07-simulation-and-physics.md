@@ -17,7 +17,9 @@ preserves the original movement behavior.
 `nx::GameTime`, a signed 64-bit count of ticks since the map started and a `float` fraction of the
 next, from 0 up to 1, ordered by tick then fraction. `after(seconds, rate)` moves it by a duration,
 carrying the fraction's whole ticks into the count (a fraction that rounds up to 1 is the next tick's
-start), and `since(earlier, rate)` measures from another moment, both in double precision: a moment
+start); a duration that is the float nearest to a whole number of ticks lasts that number exactly,
+as one written in seconds is (0.1 is 0.100000001, ten ticks and a hair more at 100, which would land
+on the eleventh). `since(earlier, rate)` measures from another moment, the two in double precision: a moment
 a month into a map is as precise as one at its start, where float seconds a month in are a quarter
 of a second apart. Each game world holds a `TickTime` resource, its rate and its `now`, which
 `registerComponents` gives it at the map's start and `advanceTick` moves on; the pushers' own clocks
@@ -66,9 +68,15 @@ the weapon it selects. The others arrive with what reads them.
 
 **Today** (`cs.client`): `cs::PlayerInput::nextCommand` makes a command from the player's `+`
 buttons, as the original's `CL_CreateMove` makes it ([12 §6](12-ui-hud-and-console.md#6-input)),
-and the weapon `weapon_<id>` or `lastinv` selected since the last. `next` (`cs::LocalGame`) makes
-one each 10 ms, whatever its frame rate, numbered after the last; `cl_movement_rate` comes with the
-client.
+and the weapon `weapon_<id>` or `lastinv` selected since the last. `next` (`cs::ClientGame`) makes
+one each 10 ms, whatever its frame rate, numbered after the last, and the server's game (`cs::Game`)
+runs each in a tick; `cl_movement_rate` comes with the client.
+
+Frame extraction writes into caller-owned vectors (`ClientGame::writePlacements`, `writeHostages`
+and `updatePlayers`), replacing the previous frame's contents while retaining their capacity. Each
+received snapshot indexes the preceding snapshot's player origins by `PlayerIndex`; interpolation
+then looks up each origin in constant time, independent of the order or gaps in the snapshot. An
+origin absent from the preceding snapshot is not interpolated from older visibility.
 
 ### 2.3 Shared seed
 
@@ -131,7 +139,7 @@ code** on the server (authoritative) and on the client (prediction).
   (`PM_CheckFalling`); and a splash entering water, leaving it or swimming up
   (`PM_PlayWaterSounds`). A step says where the player stood, which the game looks up the texture
   under, and what it is made of ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
-  `next` walks through the maps with it (`cs::LocalGame`), among the brush entities `nx.game` makes as the game
+  `next` walks through the maps with it (`cs::Game`), among the brush entities `nx.game` makes as the game
   does when the map starts, listed for movement by `cs::brushEntitiesOf`. The result is the
   player and what it ran into or stood on (`MovementResult::touchedModels`, the original's touch
   list), which the game touches, a door opening; the player keeps what it stands on
@@ -154,9 +162,15 @@ code** on the server (authoritative) and on the client (prediction).
   what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
   frees it frees the player, and moves it from the 28th on, the server leaving the smaller ones, for
   the network's precision, to the client's prediction. The time is the commands' own, which the
-  original's clock keeps as they come in real time. Observers, players and pushables as boxes (and a
-  player stuck in another one pushed out by force), conveyors, pushes and currents come next
-  ([TODO](../TODO.md)).
+  original's clock keeps as they come in real time. A dead player (`MovementState::isDead`, which the
+  game sets as it kills it) killed by nothing, as a fall kills, observes its own body, as the
+  original's pmove does once `Killed` sets `OBS_CHASE_FREE` on the player itself (`PM_SpectatorMove`,
+  which finds no other body to follow): no command moves it, nor gravity, its eyes 8 units under its
+  origin (`PM_DEAD_VIEWHEIGHT`), its kick still dropping back and where it lies categorized as ever;
+  pushers no longer push it, as the original's corpse once its death is played (`MOVETYPE_NONE`).
+  Observers, the body of a player killed by another (tossed, `PM_Physics_Toss`), players and
+  pushables as boxes (and a player stuck in another one pushed out by force), conveyors, pushes and
+  currents come next ([TODO](TODO.md)).
 
 ### 3.2 Behaviors that MUST be preserved
 
@@ -341,9 +355,10 @@ stays in until used again (a toggle), or for good (a `wait` of -1); on its way b
 its usual textures again, and back out, a toggle fires its targets again (`ButtonBackHome`). A
 `func_wall` used shows its other textures (`CFuncWall::Use`, every use a toggle today); a brush
 entity's "frame" sets which it shows first. The moves of doors and buttons are those of the original's
-`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `next` ticks the game at 100 Hz
-(`cs::LocalGame`): the player's use (`+use`, as it goes down), the player's command, the doors and buttons it touched, the triggers it is in,
-what is due, then the pushers, the player's body among the bodies, then the clock.
+`CBaseToggle` (`nx.game:toggles`), each arriving as its kind does. `next` ticks the server's game at
+100 Hz (`cs::Game`): each player's command, its use (`+use`, as it goes down), the doors and buttons it
+touched, the triggers it is in; then what is due, then the pushers, the players' bodies among the
+bodies, then the clock.
 
 **Today** (`nx.game:placement`): an entity the game drops to the floor, as the engine's
 `DROP_TO_FLOOR` drops it: its box traced 256 units down by the server's trace (§4.2) through what is
@@ -392,7 +407,12 @@ the player walks to them. A player's use (`playerUse`, `CBasePlayer::PlayerUse`)
 entities it reaches (a button that takes no damage, a door flagged "use only"), whose linked box
 comes within 64 units of its origin (`FindEntityInSphere`), the one whose middle is most straight
 ahead from its eye, more than 0.7 of the way; as the original, through walls. In cs_office, the
-button by the garage door raises it.
+button by the garage door raises it. The local game uses as the use key goes down after the command
+moved the player, from where the move left its eye, before the weapon's frame, as the original's
+`ItemPostFrame` runs `ImpulseCommands` in `PostThink`, and not while the player is held back, its
+weapon being drawn or reloaded (`m_flNextAttack`, `cs::Inventory::isHeldBack`): the press is lost then.
+It is heard (`data/cstrike/use.toml`, `cs::UseRules`): `common/wpn_select` with something to use in
+front, `common/wpn_denyselect` with nothing (`UseEmpty`), at 0.4 on the player's `Item` channel.
 
 ### 5.3 Damage
 
@@ -402,8 +422,15 @@ damage, its way and the trace, its hit group among it) is dealt as the entity's 
 original's `TraceAttack`, then `ApplyMultiDamage` and `TakeDamage`), which says what it did
 (`nx::game::Harm`: the damage taken, and whether it killed); an entity of a kind that takes none
 takes nothing (`nx::game::attackEntity`). A trace through a hitbox carries its hit group
-(`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows and the shots' rounds are dealt
-so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
+(`collision::Trace::hitGroup`, `trace_t::hitgroup`): the model's number, which the game reads once as
+its own `cs::HitGroup` (`cs::hitGroupOf`). The knife's blows and the shots' rounds are dealt
+so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). A player's body (`cs::PlayerBody`) is
+solid as its box, standing or ducked, and a line meets it by its model's hitboxes, posed as the server's
+game poses a client's (`cs.server:playerBodies`); an attack on it is dealt by the server's game, as
+`CBasePlayer::TraceAttack` and `TakeDamage` deal it, and a harm of the world as the latter deals it
+(`cs::harmPlayer`): its armor's share, then the whole points of it off its health, killed with none
+left, as the same section says. The pushers leave the body they push out of its own way, not solid
+themselves meanwhile (`SV_PushMove`, `SV_PushEntity`, `SV_TestEntityPosition`).
 
 ## 6. Determinism
 

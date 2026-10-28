@@ -11,7 +11,8 @@ export namespace app {
 
 /// What `--help` prints, and what a command line that is not valid shows.
 inline constexpr std::string_view kClientUsage =
-    R"(usage: next [-basedir <folder>] [--content-config <file>] [--data <folder>] [--validation]
+    R"(usage: next [-basedir <folder>] [--content-config <file>] [--data <folder>]
+            [--user-folder <folder>] [--validation]
             [+<command> [<argument>...]]...
 
 Plays Counter-Strike 1.6. Each word that starts with + runs a console command as the client starts,
@@ -25,6 +26,7 @@ next one that starts with + or - as its arguments, as the original reads its com
   --content-config <file>  the content configuration (default: content.toml in the working
                            folder, else in the player's folder, when there is one)
   --data <folder>          the data/ folder of the project (default: the one next to next)
+  --user-folder <folder>   the player's settings and addons folder (default: the platform's)
   --validation             the Khronos validation layer, when it is installed: its messages are
                            logged and next exits with 1 when it reported an error
 )";
@@ -34,6 +36,7 @@ struct ClientOptions {
     std::optional<std::filesystem::path> install;       ///< `-basedir`.
     std::optional<std::filesystem::path> contentConfig; ///< `--content-config`.
     std::optional<std::filesystem::path> data;          ///< `--data`.
+    std::optional<std::filesystem::path> userFolder;    ///< `--user-folder`.
     /// The `+` commands, one a line, without their `+`: `map de_dust2\n`.
     std::string bootCommands;
     bool isValidationEnabled = false; ///< `--validation`.

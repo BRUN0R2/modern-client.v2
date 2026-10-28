@@ -189,7 +189,13 @@ public:
     [[nodiscard]] auto give(const CommandLine& line) const -> nx::Result<void, ConsoleError> {
         const std::span<const std::string> words = line.arguments();
         if (words.size() != 1) {
-            return nx::fail(ConsoleError::InvalidArguments, "usage: give <weapon>");
+            return nx::fail(ConsoleError::InvalidArguments, "usage: give <weapon or item>");
+        }
+        if (const std::optional<ArmorKind> armor = armorItemNamed(words[0])) {
+            if (auto given = m_actions.giveArmor(*armor); !given) {
+                m_console->print(noMap("give"));
+            }
+            return {};
         }
         auto weapon = weaponNamed(*m_weapons, words[0]);
         if (!weapon) {
@@ -277,7 +283,9 @@ auto registerWeaponCommands(Console& console, WeaponCatalog& weapons, WeaponActi
                   .description = "Makes a weapon wherever the game makes another, or stops: replace_weapon "
                                  "<weapon> [replacement]."},
                  [commands](Console&, const CommandLine& line) { return commands.replace(line); }),
-             add({.name = "give", .description = "Gives the player a weapon: give <weapon>."},
+             add({.name = "give",
+                  .description = "Gives the player a weapon, or armor: give <weapon>, item_kevlar or "
+                                 "item_assaultsuit."},
                  [commands](Console&, const CommandLine& line) { return commands.give(line); }),
          }) {
         if (!registered) {

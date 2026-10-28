@@ -1,6 +1,6 @@
 # ADR-0023 — Navigation meshes for every kind of agent, in `nx.navigation`
 
-- **Status:** Proposed
+- **Status:** Accepted, amended by [0028](0028-native-agent-test-mod.md) for type metadata ownership
 - **Date:** 2026-10-23
 
 ## Context
@@ -18,7 +18,7 @@ player's: a step of 18 units, a jump of 41.8, half a width of 16, a height of 72
 
 ## Decision
 
-Proposed: a module **`nx.navigation`** (layer 3) builds, keeps and answers navigation meshes of
+A module **`nx.navigation`** (layer 3) builds, keeps and answers navigation meshes of
 convex polygons, through Recast and Detour.
 
 - **Decoupled.** It depends on `nx.core`, `nx.math` and `nx.jobs`, and builds from the geometry it
@@ -82,6 +82,6 @@ convex polygons, through Recast and Detour.
 - ⚠️ A profile must match the movement it stands for. Mitigation: a test on every official map
   that each spawn reaches each objective with the player's profile.
 
-If accepted, the same change amends [01 §1.1](../01-architecture.md#11-module-catalog),
+The change that accepted it amended [01 §1.1](../01-architecture.md#11-module-catalog),
 [06](../06-assets-and-resources.md), [10 §11](../10-counter-strike-gameplay.md#11-bots-milestone-m7),
 [17 §5](../17-build-and-tools.md#5-dependencies) and the M7 items of `TODO.md`.

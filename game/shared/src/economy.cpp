@@ -11,11 +11,6 @@ namespace cs {
 
 namespace {
 
-/// The team `team` plays against.
-[[nodiscard]] auto opponentOf(Team team) noexcept -> Team {
-    return team == Team::Terrorists ? Team::CounterTerrorists : Team::Terrorists;
-}
-
 /// `bonus` for `hostagesHeld` hostages, each counted while the sum is below its `upTo`.
 [[nodiscard]] auto hostageBonusOf(const HostageBonus& bonus, std::uint32_t hostagesHeld) noexcept
     -> nx::Money {
@@ -27,6 +22,10 @@ namespace {
 }
 
 } // namespace
+
+auto RoundEndMoney::moneyOn(MapObjectives objectives) const noexcept -> nx::Money {
+    return objectives.test(MapObjective::BombTarget) ? bombTargetMoney.value_or(money) : money;
+}
 
 auto EconomyRules::roundEnd(RoundEndReason reason) const noexcept -> RoundEndMoney {
     const auto found = std::ranges::find(roundEnds, reason, &RoundEndMoney::reason);
@@ -56,10 +55,11 @@ auto addMoney(nx::Money money, nx::Money amount) noexcept -> nx::Money {
 TeamAccounts::TeamAccounts(const EconomyRules& rules) noexcept
     : m_rules{&rules}, m_loserBonus{rules.loserBonus.first} {}
 
-void TeamAccounts::roundEnded(RoundEndReason reason) noexcept {
+void TeamAccounts::roundEnded(RoundEndReason reason, MapObjectives objectives) noexcept {
     m_winner = winnerOf(reason);
     if (m_winner) {
-        m_accounts[*m_winner] = nx::addSaturated(m_accounts[*m_winner], m_rules->roundEnd(reason).money);
+        m_accounts[*m_winner] =
+            nx::addSaturated(m_accounts[*m_winner], m_rules->roundEnd(reason).moneyOn(objectives));
     }
 }
 

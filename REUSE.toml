@@ -18,6 +18,13 @@ SPDX-License-Identifier = "MIT"
 
 # Documentation.
 [[annotations]]
-path = ["docs/**", "README.md", "TODO.md", "CONTRIBUTING.md", "SECURITY.md"]
+path = ["docs/**", "README.md", "CONTRIBUTING.md", "SECURITY.md"]
 SPDX-FileCopyrightText = "2026 Modern-Client.v2 contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+# The pinned vcpkg GoogleTest recipe and its dependency fixes.
+[[annotations]]
+path = "cmake/ports/gtest/**"
+precedence = "override"
+SPDX-FileCopyrightText = ["Microsoft Corporation", "2007-2008 Google Inc.", "2026 Modern-Client.v2 contributors"]
+SPDX-License-Identifier = "MIT AND BSD-3-Clause"

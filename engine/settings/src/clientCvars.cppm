@@ -1,15 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The client's cvars (docs/12-ui-hud-and-console.md, section 5.1), by the original's names, with the
-/// values Counter-Strike 1.6 starts with (but gl_vsync, off) and archived as it archives them.
+/// The client's cvars (docs/12-ui-hud-and-console.md, section 5.1): the original's names and values
+/// (but gl_vsync, off), archived as it archives them, and the project's keyboard mapping choice.
 export module nx.settings:clientCvars;
 
 import std;
 import nx.core;
 import nx.console;
+import :keys;
 
 export namespace nx::settings {
+
+/// How keyboard events select binds (in_keymap).
+struct KeyboardCvars {
+    console::Cvar<KeyMapping> keymap;
+};
 
 /// How the mouse turns the view (docs/12-ui-hud-and-console.md, section 6): a count of the mouse
 /// across turns it `sensitivity` times `m_yaw` degrees, and down `sensitivity` times `m_pitch`, as
@@ -70,8 +76,13 @@ enum class GamePlayers : std::uint8_t {
 /// `fps_override` (100 whenever `gl_vsync` is on without it), and half a frame more.
 [[nodiscard]] auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds;
 
+/// `name`'s default: the engine's name for a player, which Steam replaces with its persona's.
+inline constexpr std::string_view kDefaultPlayerName = "Player";
+
 /// The player's own settings, which the game reads.
 struct PlayerCvars {
+    /// `name`: the name the player asks the server for, which gives it one no other player has.
+    console::Cvar<std::string> name;
     /// `_cl_autowepswitch`: a weapon given heavier than the one held is drawn.
     console::Cvar<bool> autoWeaponSwitch;
 };
@@ -89,6 +100,7 @@ struct AudioCvars {
 
 /// The client's cvars, by what they set.
 struct ClientCvars {
+    KeyboardCvars keyboard;
     MouseCvars mouse;
     VideoCvars video;
     PlayerCvars player;

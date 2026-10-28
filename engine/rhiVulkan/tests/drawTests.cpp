@@ -3,7 +3,8 @@
 
 // Draws into offscreen targets and reads their pixels back: buffers, textures and their uploads,
 // samplers, bind groups, pipelines, depth, and the RHI's clip space (y up, the viewport from the
-// top-left corner). The shaders are the build's own (shaders/test, in bin/shaders/test).
+// top-left corner). Then draws to a hidden window, where one can be made, through the device's
+// submission thread. The shaders are the build's own (shaders/test, in bin/shaders/test).
 
 #include <gtest/gtest.h>
 
@@ -56,10 +57,12 @@ constexpr Pixel kWhite{255, 255, 255, 255};
 class DrawTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        m_device = nx::test::openTestDevice();
-        if (!m_device) {
+        auto opened = nx::test::openTestDevice();
+        if (!opened) {
+            ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
             GTEST_SKIP() << nx::test::kNoVulkan;
         }
+        m_device = std::move(*opened);
     }
 
     void TearDown() override {
@@ -216,8 +219,8 @@ struct FillPipeline {
     nx::rhi::OwnedRenderPipeline pipeline;
 };
 
-[[nodiscard]] auto createFillPipeline(Device& device, std::optional<nx::rhi::DepthState> depth)
-    -> std::optional<FillPipeline> {
+[[nodiscard]] auto createFillPipeline(Device& device, std::optional<nx::rhi::DepthState> depth,
+                                      Format format = Format::Rgba8Unorm) -> std::optional<FillPipeline> {
     const std::vector<std::byte> code = shaderCode("fill.spv");
     auto shader = device.createShader({.label = "test.fill", .code = code});
     const std::array bindings{nx::rhi::BindingLayout{.binding = 0,
@@ -232,7 +235,7 @@ struct FillPipeline {
         nx::rhi::VertexAttribute{.location = 0, .format = nx::rhi::VertexFormat::Float2, .offset = 0}};
     const std::array vertexBuffers{
         nx::rhi::VertexBufferLayout{.stride = 2 * sizeof(float), .attributes = attributes}};
-    const std::array targets{nx::rhi::ColorTarget{.format = Format::Rgba8Unorm}};
+    const std::array targets{nx::rhi::ColorTarget{.format = format}};
     const std::array layouts{layout->get()};
     auto pipeline =
         device.createRenderPipeline({.label = "test.fill",
@@ -462,11 +465,227 @@ TEST_F(DrawTest, ACubeIsSquareItsLayersSixBySixAndAnHdrTargetIsBlendable) {
     EXPECT_TRUE(cubes.has_value()) << "a cube array: " << nx::describe(cubes.error());
 }
 
+TEST_F(DrawTest, WhatIsSetAgainDrawsAsSetEvenAfterAnotherPipelinesBindGroup) {
+    // Two pipelines, each of its own layout. A bind group set again is bound again once the other
+    // pipeline's group was bound in between, and a pipeline set again is kept with its group when
+    // nothing else was bound: each of the three pixels shows the color it was drawn in.
+    const auto red = createFillPipeline(device(), std::nullopt);
+    const auto green = createFillPipeline(device(), std::nullopt);
+    ASSERT_TRUE(red.has_value());
+    ASSERT_TRUE(green.has_value());
+    const auto redGroup = fillGroup(device(), *red, {1.0F, 0.0F, 0.0F, 1.0F});
+    const auto greenGroup = fillGroup(device(), *green, {0.0F, 1.0F, 0.0F, 1.0F});
+    auto vertices =
+        upload("test.vertices", {BufferUsage::Vertex}, std::as_bytes(std::span{kCoveringTriangle}));
+    ASSERT_TRUE(redGroup.has_value());
+    ASSERT_TRUE(greenGroup.has_value());
+    ASSERT_TRUE(vertices.has_value());
+
+    const auto drawRed = [&](CommandList& commands, std::int32_t pixel) {
+        commands.setPipeline(red->pipeline.get());
+        commands.setBindGroup(0, redGroup->group.get());
+        commands.setVertexBuffer(0, vertices->get(), 0);
+        commands.setScissor({.x = pixel, .y = 0, .size = {.width = 1, .height = 1}});
+        commands.draw(3, 1, 0, 0);
+    };
+    const auto pixels = drawAndRead({.width = 3, .height = 1}, [&](CommandList& commands) {
+        drawRed(commands, 0);
+        commands.setPipeline(green->pipeline.get());
+        commands.setBindGroup(0, greenGroup->group.get());
+        commands.setScissor({.x = 1, .y = 0, .size = {.width = 1, .height = 1}});
+        commands.draw(3, 1, 0, 0);
+        drawRed(commands, 2);
+    });
+    EXPECT_EQ(pixels, (std::vector<Pixel>{kRed, kGreen, kRed}));
+}
+
+TEST_F(DrawTest, TransitionsInARowOfOneTextureAreMadeInTheirOrder) {
+    // Uploaded, then made ready to sample and at once to copy from: the two transitions of the texture
+    // in a row must not be made together, unordered.
+    constexpr Extent2d kExtent{.width = 2, .height = 1};
+    const std::array texels{kBlue, kWhite};
+    auto texture = device().createTexture(
+        {.label = "test.texture",
+         .format = Format::Rgba8Unorm,
+         .extent = kExtent,
+         .usage = {TextureUsage::Sampled, TextureUsage::CopyDestination, TextureUsage::CopySource}});
+    auto staging = upload("test.staging", {BufferUsage::CopySource}, bytesOf(texels));
+    auto readback = device().createBuffer({.label = "test.readback",
+                                           .size = sizeof(texels),
+                                           .usage = {BufferUsage::CopyDestination},
+                                           .location = MemoryLocation::Readback});
+    ASSERT_TRUE(texture.has_value());
+    ASSERT_TRUE(staging.has_value());
+    ASSERT_TRUE(readback.has_value());
+
+    runFrame([&](CommandList& commands) {
+        commands.transition(texture->get(), TextureState::Undefined, TextureState::CopyDestination);
+        commands.copyBufferToTexture(
+            {.buffer = staging->get(), .texture = texture->get(), .extent = kExtent});
+        commands.transition(texture->get(), TextureState::CopyDestination, TextureState::ShaderRead);
+        commands.transition(texture->get(), TextureState::ShaderRead, TextureState::CopySource);
+        commands.transition(readback->get(), BufferState::Undefined, BufferState::CopyDestination);
+        commands.copyTextureToBuffer(
+            {.buffer = readback->get(), .texture = texture->get(), .extent = kExtent});
+        commands.transition(readback->get(), BufferState::CopyDestination, BufferState::HostRead);
+    });
+    std::array<Pixel, 2> read{};
+    std::ranges::copy(device().mappedBytes(readback->get()), std::as_writable_bytes(std::span{read}).begin());
+    EXPECT_EQ(read, texels);
+}
+
 TEST_F(DrawTest, ShaderCodeThatIsNotSpirvIsRefused) {
     const std::array code{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
     const auto shader = device().createShader({.label = "test.garbage", .code = code});
     ASSERT_FALSE(shader.has_value());
     EXPECT_EQ(shader.error().code, nx::rhi::RhiError::InvalidShader);
+}
+
+// --- The window's image ---------------------------------------------------------------------------
+
+/// A hidden window, a device that shows its frames there, with validation, and its swapchain; each
+/// goes before what it was made for.
+struct WindowDevice {
+    nx::platform::Window window;
+    std::unique_ptr<Device> device;
+    std::unique_ptr<nx::rhi::Swapchain> swapchain;
+};
+
+/// The window device of a window of `size`; none where no window can be made (no display, as in CI)
+/// or no Vulkan device can present to it.
+[[nodiscard]] auto openWindowDevice(Extent2d size) -> std::optional<WindowDevice> {
+    auto window = nx::platform::Window::create({.title = "nxRhiVulkanTests",
+                                                .size = {.width = size.width, .height = size.height},
+                                                .isResizable = false,
+                                                .isShown = false});
+    if (!window) {
+        return std::nullopt;
+    }
+    auto native = window->nativeWindow();
+    if (!native) {
+        return std::nullopt;
+    }
+    auto device = nx::rhi::vulkan::createDevice(
+        {.applicationName = "nxRhiVulkanTests", .window = *native, .isValidationEnabled = true});
+    if (!device) {
+        EXPECT_TRUE(nx::test::isVulkanUnavailable(device.error().code) ||
+                    device.error().code == nx::rhi::RhiError::SurfaceUnavailable)
+            << nx::describe(device.error());
+        return std::nullopt;
+    }
+    auto swapchain =
+        (*device)->createSwapchain({.size = size, .presentMode = nx::rhi::PresentMode::Immediate});
+    if (!swapchain) {
+        ADD_FAILURE() << nx::describe(swapchain.error());
+        return std::nullopt;
+    }
+    return WindowDevice{
+        .window = std::move(*window), .device = std::move(*device), .swapchain = std::move(*swapchain)};
+}
+
+constexpr std::string_view kNoWindow = "no window to present to, or no Vulkan device for it";
+
+TEST(WindowDrawTest, DrawsFramesWithDepthToTheWindowAndRebuildsItsSwapchain) {
+    constexpr Extent2d kExtent{.width = 64, .height = 48};
+    constexpr int kFrames = 24; // more than the frames in flight and the images, before and after
+    auto opened = openWindowDevice(kExtent);
+    if (!opened) {
+        GTEST_SKIP() << kNoWindow;
+    }
+    Device& device = *opened->device;
+    auto vertices = device.createBuffer({.label = "test.window.vertices",
+                                         .size = sizeof(kCoveringTriangle),
+                                         .usage = {BufferUsage::Vertex},
+                                         .location = MemoryLocation::Upload});
+    auto depth = device.createTexture({.label = "test.window.depth",
+                                       .format = Format::Depth32Float,
+                                       .extent = kExtent,
+                                       .usage = {nx::rhi::TextureUsage::DepthTarget}});
+    ASSERT_TRUE(vertices && depth);
+    std::ranges::copy(std::as_bytes(std::span{kCoveringTriangle}),
+                      device.mappedBytes(vertices->get()).begin());
+    std::optional<FillPipeline> fill;
+    std::optional<FillGroup> green;
+    int shown = 0;
+    for (int frame = 0; frame < kFrames; ++frame) {
+        if (frame == kFrames / 2) {
+            // Rebuilt between frames, as a resize does: the image acquired ahead is let go of.
+            const auto rebuilt = opened->swapchain->resize(kExtent);
+            ASSERT_TRUE(rebuilt.has_value()) << nx::describe(rebuilt.error());
+        }
+        auto commands = device.beginFrame();
+        ASSERT_TRUE(commands.has_value()) << nx::describe(commands.error());
+        CommandList& list = commands->get();
+        const auto image = opened->swapchain->acquire();
+        ASSERT_TRUE(image.has_value()) << nx::describe(image.error());
+        if (!*image) {
+            ASSERT_TRUE(device.submitFrame().has_value()); // nothing to draw to
+            continue;
+        }
+        ASSERT_EQ((*image)->size, kExtent);
+        if (!fill) {
+            fill = createFillPipeline(device, nx::rhi::DepthState{.isWriteEnabled = true}, (*image)->format);
+            ASSERT_TRUE(fill.has_value());
+            green = fillGroup(device, *fill, {0.0F, 1.0F, 0.0F, 1.0F});
+            ASSERT_TRUE(green.has_value());
+        }
+        list.transition(depth->get(), TextureState::Undefined, TextureState::DepthTarget);
+        list.transition((*image)->texture, TextureState::Undefined, TextureState::RenderTarget);
+        const std::array colors{nx::rhi::ColorAttachment{.texture = (*image)->texture}};
+        list.beginRendering(
+            {.colors = colors, .depth = nx::rhi::DepthAttachment{.texture = depth->get()}, .area = kExtent});
+        list.setPipeline(fill->pipeline.get());
+        list.setBindGroup(0, green->group.get());
+        list.setVertexBuffer(0, vertices->get(), 0);
+        list.draw(3, 1, 0, 0);
+        list.endRendering();
+        list.transition((*image)->texture, TextureState::RenderTarget, TextureState::Present);
+        const auto submitted = device.submitFrame(*opened->swapchain);
+        ASSERT_TRUE(submitted.has_value()) << nx::describe(submitted.error());
+        ++shown;
+    }
+    device.waitIdle();
+    EXPECT_GT(shown, 0);
+    EXPECT_EQ(device.validationErrors(), 0U);
+}
+
+TEST(WindowDrawTest, FramesThatShowNothingLeaveTheNextImageForOneThatDoes) {
+    constexpr Extent2d kExtent{.width = 32, .height = 32};
+    constexpr int kFrames = 18;
+    auto opened = openWindowDevice(kExtent);
+    if (!opened) {
+        GTEST_SKIP() << kNoWindow;
+    }
+    Device& device = *opened->device;
+    for (int frame = 0; frame < kFrames; ++frame) {
+        auto commands = device.beginFrame();
+        ASSERT_TRUE(commands.has_value()) << nx::describe(commands.error());
+        nx::Result<void, nx::rhi::RhiError> submitted;
+        switch (frame % 3) {
+        case 0: { // a pass that only clears, without depth
+            const auto image = opened->swapchain->acquire();
+            ASSERT_TRUE(image.has_value() && image->has_value());
+            CommandList& list = commands->get();
+            list.transition((*image)->texture, TextureState::Undefined, TextureState::RenderTarget);
+            const std::array colors{
+                nx::rhi::ColorAttachment{.texture = (*image)->texture, .clear = {.blue = 1.0F}}};
+            list.beginRendering({.colors = colors, .area = (*image)->size});
+            list.endRendering();
+            list.transition((*image)->texture, TextureState::RenderTarget, TextureState::Present);
+            submitted = device.submitFrame(*opened->swapchain);
+            break;
+        }
+        case 1:
+            submitted = device.submitFrame(*opened->swapchain); // acquired nothing: shows nothing
+            break;
+        default:
+            submitted = device.submitFrame();
+            break;
+        }
+        ASSERT_TRUE(submitted.has_value()) << nx::describe(submitted.error());
+    }
+    device.waitIdle();
+    EXPECT_EQ(device.validationErrors(), 0U);
 }
 
 } // namespace

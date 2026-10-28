@@ -202,6 +202,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         if (const std::optional<Shot> shot =
                 fireFollowUp(owned, weapon, shooter, command.number.value, time)) {
             shots.push_back(*shot);
+            attacks.motions.set(HolderMotion::Attacked);
         }
     }
     const bool isAttacking = command.buttons.test(Button::Attack);
@@ -211,6 +212,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     if (switches && owned.nextSecondary <= nx::Seconds{}) {
         if (weapon.melee) {
             strike(owned, weapon.melee->stab, owned.stabs, shooter, tracer, time, attacks.blows);
+            attacks.motions.set(HolderMotion::Attacked);
         } else {
             switchAlternate(owned, weapon, time);
         }
@@ -222,10 +224,12 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
         }
         if (weapon.melee) {
             strike(owned, weapon.melee->slash, owned.slashes, shooter, tracer, time, attacks.blows);
+            attacks.motions.set(HolderMotion::Attacked);
         } else if (firingOf(weapon, owned)) {
             if (const std::optional<Shot> shot =
                     fire(owned, weapon, shooter, command.number.value, time, random)) {
                 shots.push_back(*shot);
+                attacks.motions.set(HolderMotion::Attacked);
             }
         }
         return over();
@@ -234,6 +238,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     if (command.buttons.test(Button::Reload) && canReload && !m_isReloading &&
         owned.nextShot < nx::Seconds{}) {
         reload(owned, weapon, time, random);
+        attacks.motions.set(HolderMotion::Reloaded);
         return over();
     }
     if (isAttacking || switches) {
@@ -255,6 +260,7 @@ auto Inventory::frame(const UserCommand& command, Shooter& shooter, const Weapon
     const bool isUsable = !weapon.magazine || owned.clip > 0 || reserve(weapon.magazine->ammo) > 0;
     if (isUsable && canReload && owned.clip == 0 && owned.nextShot < nx::Seconds{}) {
         reload(owned, weapon, time, random);
+        attacks.motions.set(HolderMotion::Reloaded);
         return over();
     }
     idle(time, random);
@@ -445,6 +451,21 @@ namespace {
 
 /// Nearer than this, a corner's line is the nearest (FindHullIntersection's first distance).
 constexpr double kNoIntersection = 1.0e6;
+/// A stab is in a player's back when the way it strikes, along the ground, is more than this along the
+/// player's body's forward (Stab's flDot).
+constexpr float kInTheBack = 0.8F;
+
+/// Whether a strike along `forward` meets a player whose body is turned by `angles` in its back (Stab):
+/// `forward` along the ground, made of length 1, more than kInTheBack along the body's forward along the
+/// ground, as it is.
+[[nodiscard]] auto isInTheBack(nx::Vec3 forward, nx::EulerAngles angles) noexcept -> bool {
+    const nx::Vec3 body = nx::angleVectors(angles).forward;
+    const float length = std::sqrt((forward.x * forward.x) + (forward.y * forward.y));
+    if (length == 0.0F) {
+        return false; // the original's Normalize of none is none
+    }
+    return ((forward.x / length) * body.x) + ((forward.y / length) * body.y) > kInTheBack;
+}
 
 /// Where a hull's way that met the world or a brush entity at `hull` meets what it met, as the knife's
 /// FindHullIntersection approximates it: a line from `eye` to twice as far as the hull stopped, else
@@ -508,10 +529,15 @@ void Inventory::strike(OwnedWeapon& owned, const MeleeAttack& attack, std::uint3
     if (attack.idleAfter) {
         m_nextIdle = *attack.idleAfter;
     }
-    // What it met takes its blow once the next attack's time is set (TraceAttack, ApplyMultiDamage).
+    // What it met takes its blow once the next attack's time is set (TraceAttack, ApplyMultiDamage), more
+    // in a player's back.
     if (hits && met.entity) {
+        nx::Damage damage = attack.damage;
+        if (attack.backMultiplier && met.playerAngles && isInTheBack(forward, *met.playerAngles)) {
+            damage = nx::Damage{damage.value() * *attack.backMultiplier};
+        }
         blows.push_back(
-            Blow{.entity = *met.entity, .trace = met.trace, .damage = attack.damage, .direction = forward});
+            Blow{.entity = *met.entity, .trace = met.trace, .damage = damage, .direction = forward});
     }
 }
 

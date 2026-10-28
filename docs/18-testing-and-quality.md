@@ -9,7 +9,7 @@
 | Unit | GoogleTest | Isolated functions and types (`nx.core`, parsers, ECS, math) | Every PR |
 | Integration | GoogleTest (`nxIntegrationTests`) | Modules together: a world moved by parallel ECS systems, the same with any number of workers ([below](#determinism)) | Every PR |
 | Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
-| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`) | ECS and Job System hot paths | Built on every PR, run by hand ([below](#performance)) |
+| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`, `nxBenchNavigation`) | ECS, Job System, light-style snapshots and client hot paths | Built on every PR, run by hand ([below](#performance)) |
 | Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
 | Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 
@@ -99,6 +99,15 @@ readers expected, and the readers now follow them
 - **GPU:** the Vulkan tests run on whatever device the machine has, with the validation layers,
   and require that validation reports no error. In CI they run on lavapipe, Mesa's software
   Vulkan, in the Linux jobs; a machine without Vulkan skips them.
+  A device requested with validation must have the Khronos layer and debug messenger extension;
+  otherwise it returns `RhiError::ValidationUnavailable`. `nxVulkanValidationTests` verifies the
+  missing-layer failure in a separate process with an empty `VK_LAYER_PATH`. It checks layer
+  discovery and skips only when the operating system still exposes installed layers (notably
+  elevated Windows), or when Vulkan is unavailable.
+  GPU tests skip only `BackendUnavailable` and `NoSuitableAdapter`; every other creation error,
+  including missing requested validation, fails the test. A fixture makes that assertion fatal
+  in `SetUp`, before any test body can access its device. Shared classification lives in
+  `engine/testSupport/vulkanAvailability.hpp`.
 - **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
   `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
 - **Files:** a test that reads the file system writes its input into a
@@ -144,17 +153,31 @@ readers expected, and the readers now follow them
 | Metric | Where | Regression threshold |
 |--------|-------|----------------------|
 | Server tick time (p50/p99) with 32, 128 and 1024 players | `nxBenchServer` (planned) | 5% |
-| Client frame time in `timedemo` | `nxBenchClient` (planned) | 5% |
+| Client frame time in `timedemo` | Planned with demo playback | 5% |
+| Client frame extraction, hostage lookup, aim posing, light selection and grouped view-model reads | `nxBenchClient` | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
 | Job System throughput | `nxBenchJobs` | 5% |
+| Light-style payload copy, unchanged snapshot comparison and frame evaluation (12 and 64 animated styles) | `nxBenchLightStyles` | 5% |
 | Map loading (warm cache) | `nxBenchAssets` (planned) | 10% |
 | Rook compile time per 1000 lines | `rookBench` (planned) | 10% |
 
 Planned: the benchmarks run every night on a dedicated, stable machine, which fails a regression
 above the threshold and publishes the results as a historical series
-([17 §7](17-build-and-tools.md#7-continuous-integration)). Today every preset but
-`fuzz-windows-msvc` builds them (`NX_BUILD_BENCHMARKS`), so the CI keeps them compiling, and they
+([17 §7](17-build-and-tools.md#7-continuous-integration)). Today the development and release
+presets build them (`NX_BUILD_BENCHMARKS`), so the CI keeps them compiling, and they
 are run by hand from a release build: `build/release-windows-msvc/bin/nxBenchEcs`.
+
+`nxBenchClient` uses only synthetic content. It measures frame extraction with 32, 128 and 1024
+players, brush placements and hostage-model lookups with 32 and 1024 entities, a four-bone player's
+nine-blend aim, selecting zero or four of 4096 reaching lights, and loading a view model whose one
+or 64 sequences share a 1 MiB external group. Fixture creation and initial decoding are outside
+frame measurements; file reads use the operating system's normal cache. Compare the same Release
+build, inputs and machine, using repeated runs and their medians; these are component measurements,
+not a measurement of the complete frame or a promise about player FPS:
+
+```powershell
+.\build\release-windows-msvc\bin\nxBenchClient.exe --benchmark_min_time=0.25s --benchmark_repetitions=5
+```
 
 ## Sanitizers and analysis
 
@@ -162,8 +185,24 @@ are run by hand from a release build: `build/release-windows-msvc/bin/nxBenchEcs
   preset). Its suppressions (`tests/tsan.supp`) name only code that is not the project's, each
   with why: today Mesa's lavapipe, whose uninstrumented threads TSan sees through their pthread
   calls only. Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
-- Planned: `clang-tidy` as an error ([02 §12](02-coding-standards.md#12-formatting-and-static-analysis)),
-  with a Clang build with modules.
+- `clang-tidy` runs locally against `build/dev-windows-clang/compile_commands.json` and the Clang
+  modules produced by a complete build. Use LLVM 23.1.4's `clang-tidy-diff.py` with a zero-context
+  Git diff and `-p1 -path build/dev-windows-clang`; the full repository profile applies to changed
+  lines. Existing private `m_` declarations remain naming inconsistencies under [02 §3.1](02-coding-standards.md#31-project-rule-camelcase),
+  recorded in `TODO.md`, without unrelated renames or disabled naming checks. An automated
+  analysis gate remains planned; the Clang build and tests already run in CI.
+  A header is analyzed through a translation unit that includes it after the required module
+  imports; headers that depend on their consumer's imports are not standalone translation units.
+
+  With LLVM on `PATH`, set `$reviewBase` to the commit before the changes being reviewed:
+
+  ```powershell
+  $tidyDiff = Join-Path $env:TEMP 'clang-tidy-diff.py'
+  Invoke-WebRequest 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.4/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py' -OutFile $tidyDiff
+  git diff --ignore-all-space --unified=0 $reviewBase -- '*.cpp' '*.cppm' '*.hpp' |
+      python $tidyDiff -p1 -path build/dev-windows-clang -clang-tidy-binary clang-tidy -j 4
+  ```
+
 - Fuzzing of the parsers of external data (`tests/fuzz`, libFuzzer with AddressSanitizer): every
   night, and locally with the `fuzz-windows-msvc` preset. Each target has a versioned corpus of
   synthetic seeds that every build replays as a test (`fuzzWad.corpus`); every crash found joins
@@ -185,7 +224,7 @@ justification.
 
 ## Definition of done
 
-A [TODO](../TODO.md) task is only checked `[x]` when:
+A [TODO](TODO.md) task is only checked `[x]` when:
 
 - [ ] The code follows [02-coding-standards.md](02-coding-standards.md) and passed review.
 - [ ] There are tests (unit, integration or parity, as the case requires) and CI is green.
@@ -199,3 +238,6 @@ A [TODO](../TODO.md) task is only checked `[x]` when:
 - Every fixed bug gets a **regression test** that failed before the fix.
 - Parity bugs get the `parity` label and need a fixture.
 - Production crashes (crash reports) are triaged weekly.
+
+The native offline entity/agent regression scenarios and navigation/agent benchmark workloads
+are described in [Offline entity and agent tests](offlineAgents.md#review-and-verification).

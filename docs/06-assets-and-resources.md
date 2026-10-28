@@ -35,7 +35,7 @@ Today the VFS (`nx::assets::Vfs`) mounts directories, in the order it is given: 
 so that a model, a sound or a sprite put there is read instead of the installation's, or as a file
 it lacks; `nxview` mounts none, its screenshots the installation's alone. The content sources and
 profiles that decide which mounts exist, `.nxpak` packages ([§8](#8-packages)) and the embedded
-`engine/` mount are planned (M2, [TODO](../TODO.md)).
+`engine/` mount are planned (M2, [TODO](TODO.md)).
 
 ### 2.2 Path rules
 
@@ -164,6 +164,8 @@ the profiles they switch between.
 
 Readers today:
 
+- The engine's palette (`nx.assets:palette`, `gfx/palette.lmp`): 256 colors of red, green and blue,
+  which the game names by their entry (the blood's colors).
 - WAD3 (`nx.assets:wad`): the directory, looked up by name ignoring ASCII case with the first
   entry of a name winning, as in GoldSrc, and the mip textures, with their four levels and
   palette, as views of the file's bytes. Its pictures (`readPicture`: a size, palette indices and
@@ -251,6 +253,9 @@ Readers today:
   meshes' skin references against its skins. A sequence group names its file as the original
   loads it, with `\` (`VfsPath::parseGoldsrc`). Every list is a vector: no count has a ceiling
   ([§3.4](#34-removed-content-limits)).
+  Its typed `StudioIndex<Tag>` values use explicit construction (`SequenceIndex{ordinal}`);
+  the reader checks each value against its list. The construction contract and compiler
+  boundary are documented in [17 §2.2](17-build-and-tools.md#22-known-quirks).
 - TGA (`nx.assets:tga`), the sky (`gfx/env/*.tga`) and the VGUI menus of the original, and a
   texture format of mods (§3.2): color-mapped (8-bit indices into 24- or 32-bit colors), true-color
   (24 or 32 bits) and grayscale (8 bits, or 16 with alpha) images, raw or run-length encoded,
@@ -279,7 +284,7 @@ Every reader refuses malformed input with a typed error and is fuzzed
 
 BSP v30 has format limits (16-bit indices in clipnodes and marksurfaces, among others).
 Support for large maps comes from an in-house extended format (`.nxmap`), imported from the
-existing compile tools. See [TODO](../TODO.md).
+existing compile tools. See [TODO](TODO.md).
 
 ### 3.4 Removed content limits
 
@@ -378,7 +383,8 @@ Loading a map involves:
 4. Packing lightmaps into atlases.
 5. Reading the entity lump and instantiating prefabs ([03 §11](03-ecs.md#11-prefabs-and-map-entities)).
 6. Reading the map's `.res` and building the resource manifest.
-7. Loading the optional parts: detail textures, overview and navigation mesh (bots).
+7. Loading the optional parts: detail textures, overview, and the navigation meshes of the
+   agents' profiles, read from their cache or built in jobs ([ADR-0023](adr/0023-navigation.md)).
 
 Loading runs as a job graph. The goal is to load `de_dust2` in under 1 second from a warm
 cache.

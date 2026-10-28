@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The agents' profiles and how their navigation meshes are built (docs/adr/0023-navigation.md), read
+# into nx::game::NavigationData.
+#
+# Each profile is an agent's size and moves, which it has a mesh of its own for: `radius`, half its
+# width, how far its middle stays from walls and ledges; `standingHeight`, and `crouchedHeight`, under
+# which it crouches; `stepHeight`, the highest step it walks up; `jumpHeight`, the highest ledge it
+# jumps onto, which its jump links will span; `minGroundNormalZ`, the least upward share of a floor's
+# unit normal it stands on; and `areaCosts`, the kinds of area ("floor", "crouch", "water") that cost
+# it more than their length, each 1 or more.
+#
+# The player's is Counter-Strike's movement (cs::kStandingBox, cs::kDuckedBox, sv_stepsize and the
+# ground's normal, cs::kMinGroundNormalZ), with the jump of Condition Zero's bots (ReGameDLL_CS's
+# nav.h; GPL, consulted: docs/20 section 3); a kind of area costs it as many times its length as it
+# is slower there: crouched a third of its speed (0.333), in water four fifths (0.8).
+
+[[profiles]]
+name = "player"
+radius = 16.0
+standingHeight = 72.0
+crouchedHeight = 36.0
+stepHeight = 18.0
+jumpHeight = 41.8
+minGroundNormalZ = 0.7
+areaCosts = [{ area = "crouch", cost = 3.0 }, { area = "water", cost = 1.25 }]
+
+# The voxels Recast fills with a map: `cellSize` across, a quarter of the player's radius, so that a
+# way a little wider than the player stays open, and `cellHeight` tall, whose 8191 voxels a span
+# counts reach past a map's 8192 units; tiles of `tileCells` cells, 256 units, each built in a job of
+# its own. Floor that a square of `smallestIsland` would not cover, cut off from the rest, is left
+# out; regions smaller than a square of `smallestRegion` are merged into their neighbors. Edges along
+# walls are no longer than `longestEdge` and stray from the floor's outline by `edgeError` at most;
+# the polygons' details sample the floor every `detailSampleDistance` and stray from it by
+# `detailHeightError`. All in units.
+[build]
+cellSize = 4.0
+cellHeight = 2.0
+tileCells = 64
+smallestIsland = 32.0
+smallestRegion = 80.0
+longestEdge = 96.0
+edgeError = 5.0
+detailSampleDistance = 24.0
+detailHeightError = 2.0

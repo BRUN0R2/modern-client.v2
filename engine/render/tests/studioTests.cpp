@@ -19,6 +19,7 @@ import nx.render;
 
 #include "offscreenTarget.hpp"
 #include "triangleModel.hpp"
+#include "vulkanAvailability.hpp"
 
 namespace {
 
@@ -166,7 +167,8 @@ TEST(StudioRendererTest, DrawsAModelLitAsTheOriginalLightsIt) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device);
     ASSERT_NE(scene, nullptr);
@@ -190,7 +192,8 @@ TEST(StudioRendererTest, TheTrianglesWoundCounterclockwiseAreCulledAsTheOriginal
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device);
     ASSERT_NE(scene, nullptr);
@@ -210,7 +213,8 @@ TEST(StudioRendererTest, TheViewsOwnModelIsDrawnInFrontOfNearerOnes) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device);
     ASSERT_NE(scene, nullptr);
@@ -242,7 +246,8 @@ TEST(StudioRendererTest, AnAddedModelIsUnlitAndAddedToWhatIsBehind) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device);
     ASSERT_NE(scene, nullptr);
@@ -268,7 +273,8 @@ TEST(StudioRendererTest, BlendedModelsAreDrawnFromTheFarthest) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto scene = sceneOn(**device);
     ASSERT_NE(scene, nullptr);
@@ -294,7 +300,8 @@ TEST(StudioRendererTest, TheBlendedModelsOfTwoRenderersAreDrawnInOneOrder) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
-        GTEST_SKIP() << "no Vulkan 1.3 device on this machine";
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
     }
     const auto first = sceneOn(**device);
     const auto second = sceneOn(**device);

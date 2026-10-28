@@ -118,7 +118,7 @@ ViewModel::ViewModel(std::unique_ptr<ModelFiles> files, std::vector<nx::assets::
       m_hand{hand}, m_appearance{std::move(appearance)} {}
 
 auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewModel, ViewModelError> {
-    auto files = readModelFiles(vfs, weapon.models.view);
+    auto files = readModelFiles(vfs, weapon.models.view, ModelTextures::Read);
     if (!files) {
         return nx::fail(ViewModelError::FilesFailed, std::move(files.error()));
     }
@@ -129,13 +129,9 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
     if (auto checked = checkSequences(model, weapon); !checked) {
         return std::unexpected{std::move(checked.error())};
     }
-    std::vector<nx::assets::AnimationFrames> animations;
-    for (std::uint32_t sequence = 0; sequence < model.sequences().size(); ++sequence) {
-        auto frames = animationOf(vfs, **files, nx::assets::SequenceIndex{sequence});
-        if (!frames) {
-            return nx::fail(ViewModelError::FilesFailed, std::move(frames.error()));
-        }
-        animations.push_back(std::move(*frames));
+    auto animations = animationsOf(vfs, **files);
+    if (!animations) {
+        return nx::fail(ViewModelError::FilesFailed, std::move(animations.error()));
     }
     // Its materials for the enhanced look: without them, as the original shades it.
     auto materials = readModelMaterials(vfs, weapon.models.view, (*files)->texturesView());
@@ -143,7 +139,7 @@ auto ViewModel::read(const Vfs& vfs, const Weapon& weapon) -> nx::Result<ViewMod
         nx::log::warning(kViewModelLog, "{}: shaded as the original shades it: {}", weapon.models.view,
                          nx::describe(materials.error()));
     }
-    return ViewModel{std::move(*files), std::move(animations),
+    return ViewModel{std::move(*files), std::move(*animations),
                      std::move(materials).value_or(std::vector<std::optional<nx::render::StudioMaterial>>{}),
                      weapon.models.viewHand,
                      Appearance{.skin = weapon.view.skin.value_or(0),

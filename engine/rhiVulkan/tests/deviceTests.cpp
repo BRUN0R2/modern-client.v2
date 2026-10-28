@@ -21,10 +21,12 @@ using nx::test::kNoVulkan;
 using nx::test::openTestDevice;
 
 TEST(VulkanDeviceTest, OpensTheBestAdapter) {
-    const auto device = openTestDevice();
-    if (!device) {
+    auto opened = openTestDevice();
+    if (!opened) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
         GTEST_SKIP() << kNoVulkan;
     }
+    const auto device = std::move(*opened);
     EXPECT_FALSE(device->adapter().name.empty());
     EXPECT_FALSE(device->adapter().driver.empty());
     EXPECT_EQ(device->shaderFormat(), nx::rhi::ShaderFormat::Spirv);
@@ -32,10 +34,12 @@ TEST(VulkanDeviceTest, OpensTheBestAdapter) {
 }
 
 TEST(VulkanDeviceTest, ADeviceWithoutAWindowHasNoSwapchain) {
-    const auto device = openTestDevice();
-    if (!device) {
+    auto opened = openTestDevice();
+    if (!opened) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
         GTEST_SKIP() << kNoVulkan;
     }
+    const auto device = std::move(*opened);
     const auto swapchain = device->createSwapchain({.size = {.width = 64, .height = 64}});
     ASSERT_FALSE(swapchain.has_value());
     EXPECT_EQ(swapchain.error().code, RhiError::SurfaceUnavailable);
@@ -43,10 +47,12 @@ TEST(VulkanDeviceTest, ADeviceWithoutAWindowHasNoSwapchain) {
 
 TEST(VulkanDeviceTest, RunsMoreFramesThanItHasInFlight) {
     for (const std::uint32_t framesInFlight : {2U, nx::rhi::vulkan::kMaxFramesInFlight}) {
-        const auto device = openTestDevice(framesInFlight);
-        if (!device) {
+        auto opened = openTestDevice(framesInFlight);
+        if (!opened) {
+            ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
             GTEST_SKIP() << kNoVulkan;
         }
+        const auto device = std::move(*opened);
         for (int frame = 0; frame < 10; ++frame) {
             const auto commands = device->beginFrame();
             ASSERT_TRUE(commands.has_value()) << nx::describe(commands.error());
@@ -59,12 +65,16 @@ TEST(VulkanDeviceTest, RunsMoreFramesThanItHasInFlight) {
 }
 
 TEST(VulkanDeviceTest, TwoDevicesWorkAtOnce) {
-    const auto first = openTestDevice();
-    if (!first) {
+    auto firstOpened = openTestDevice();
+    if (!firstOpened) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(firstOpened.error().code))
+            << nx::describe(firstOpened.error());
         GTEST_SKIP() << kNoVulkan;
     }
-    const auto second = openTestDevice();
-    ASSERT_NE(second, nullptr);
+    const auto first = std::move(*firstOpened);
+    auto secondOpened = openTestDevice();
+    ASSERT_TRUE(secondOpened.has_value()) << nx::describe(secondOpened.error());
+    const auto second = std::move(*secondOpened);
     for (nx::rhi::Device* const device : {first.get(), second.get()}) {
         const auto buffer = device->createBuffer({.label = "test.twoDevices",
                                                   .size = 256,
@@ -81,10 +91,12 @@ TEST(VulkanDeviceTest, TwoDevicesWorkAtOnce) {
 }
 
 TEST(VulkanDeviceTest, APipelineCacheIsKeptForTheSameGpuAndAnotherOneLeftOut) {
-    const auto device = openTestDevice();
-    if (!device) {
+    auto opened = openTestDevice();
+    if (!opened) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
         GTEST_SKIP() << kNoVulkan;
     }
+    const auto device = std::move(*opened);
     const auto learned = device->pipelineCache();
     ASSERT_TRUE(learned.has_value()) << nx::describe(learned.error());
     constexpr std::size_t kHeaderBytes = 32; // VkPipelineCacheHeaderVersionOne
@@ -108,10 +120,12 @@ TEST(VulkanDeviceTest, APipelineCacheIsKeptForTheSameGpuAndAnotherOneLeftOut) {
 }
 
 TEST(VulkanDeviceTest, ADestroyedResourceLivesUntilItsFramesAreDone) {
-    const auto device = openTestDevice();
-    if (!device) {
+    auto opened = openTestDevice();
+    if (!opened) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(opened.error().code)) << nx::describe(opened.error());
         GTEST_SKIP() << kNoVulkan;
     }
+    const auto device = std::move(*opened);
     auto buffer = device->createBuffer({.label = "test.retired",
                                         .size = 256,
                                         .usage = {nx::rhi::BufferUsage::CopyDestination},

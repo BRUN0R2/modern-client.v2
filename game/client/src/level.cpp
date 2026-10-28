@@ -19,9 +19,8 @@ namespace cs {
 namespace {
 
 constexpr nx::log::Category kLog{"client"};
-
-/// The extension of the project's data files.
-constexpr std::string_view kDataExtension = ".toml";
+/// The engine's palette, in the base game's folder.
+constexpr std::string_view kPalettePath = "gfx/palette.lmp";
 
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names at
 /// the root of the VFS, as the original looks them up: their bytes, and the names of those the
@@ -100,85 +99,26 @@ struct WadFiles {
     return {};
 }
 
-/// The game's weapons, from `data`, the project's data/ folder: cstrike/ammo.toml and each
-/// cstrike/weapons/<id>.toml, which must hold the weapon `id`. Errors: ContentUnavailable.
-[[nodiscard]] auto readWeaponCatalog(const std::filesystem::path& data)
-    -> nx::Result<WeaponCatalog, LevelError> {
-    const std::filesystem::path ammoFile = data / "cstrike" / "ammo.toml";
-    auto ammoText = nx::platform::readTextFile(ammoFile);
-    if (!ammoText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(ammoText.error()));
-    }
-    auto ammo = readAmmoTypes(*ammoText, nx::platform::toUtf8(ammoFile));
-    if (!ammo) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(ammo.error()));
-    }
-    const std::filesystem::path folder = data / "cstrike" / "weapons";
-    auto files = nx::platform::listFiles(folder);
-    if (!files) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(files.error()));
-    }
-    std::vector<Weapon> weapons;
-    for (const std::filesystem::path& file : *files) {
-        if (file.has_parent_path() || file.extension() != kDataExtension) {
-            continue;
-        }
-        const std::filesystem::path path = folder / file;
-        auto text = nx::platform::readTextFile(path);
-        if (!text) {
-            return nx::fail(LevelError::ContentUnavailable, std::move(text.error()));
-        }
-        auto weapon = readWeapon(*text, nx::platform::toUtf8(path));
-        if (!weapon) {
-            return nx::fail(LevelError::ContentUnavailable, std::move(weapon.error()));
-        }
-        if (weapon->id != nx::platform::toUtf8(file.stem())) {
-            return nx::fail(LevelError::ContentUnavailable,
-                            std::format("{}: the weapon {:?}, in a file not named after it",
-                                        nx::platform::toUtf8(path), weapon->id));
-        }
-        weapons.push_back(std::move(*weapon));
-    }
-    auto catalog = WeaponCatalog::make(std::move(*ammo), std::move(weapons));
-    if (!catalog) {
-        return nx::fail(LevelError::ContentUnavailable, nx::platform::toUtf8(folder),
-                        std::move(catalog.error()));
-    }
-    return std::move(*catalog);
-}
-
-/// What the installation says its textures are made of.
-constexpr std::string_view kMaterialsFile = "sound/materials.txt";
-
-/// The class of the spawn points of each team.
-constexpr nx::EnumArray<Team, std::string_view> kSpawnClasses{
-    nx::EnumArray<Team, std::string_view>::Storage{"info_player_deathmatch", "info_player_start"}};
-
-/// The first spawn point of `map` and its team: a counter-terrorist one, else a terrorist one; none.
-[[nodiscard]] auto firstSpawnOf(const nx::assets::BspView& map)
-    -> std::optional<std::pair<SpawnPoint, Team>> {
-    for (const Team team : {Team::CounterTerrorists, Team::Terrorists}) {
-        if (const std::vector<SpawnPoint> points = spawnPointsOf(map, team); !points.empty()) {
-            return std::pair{points.front(), team};
-        }
-    }
-    return std::nullopt;
-}
-
-/// What the textures of `vfs`'s installation are made of: its sound/materials.txt; none tagged, and
-/// logged, without it, as the original carries on.
-[[nodiscard]] auto readTextureMaterials(const nx::assets::Vfs& vfs) -> TextureMaterials {
-    auto bytes = nx::assets::VfsPath::parse(kMaterialsFile).and_then([&vfs](const nx::assets::VfsPath& path) {
-        return vfs.readAll(path);
-    });
+/// The engine's palette in `vfs`; none, logged, when it is missing or unreadable.
+[[nodiscard]] auto readPalette(const nx::assets::Vfs& vfs) -> std::optional<nx::assets::Palette> {
+    const auto unread = [](std::string_view why) {
+        nx::log::warning(kLog, "the engine's palette {} cannot be read: {}; no blood is sprayed",
+                         kPalettePath, why);
+    };
+    const auto bytes =
+        nx::assets::VfsPath::parse(kPalettePath).and_then([&vfs](const nx::assets::VfsPath& path) {
+            return vfs.readAll(path);
+        });
     if (!bytes) {
-        nx::log::warning(kLog, "{} is missing or unreadable: every texture sounds as concrete",
-                         kMaterialsFile);
-        return TextureMaterials{};
+        unread(nx::describe(bytes.error()));
+        return std::nullopt;
     }
-    return TextureMaterials::read(*bytes | std::views::transform([](std::byte value) {
-        return static_cast<char>(value);
-    }) | std::ranges::to<std::string>());
+    auto palette = nx::assets::Palette::read(*bytes);
+    if (!palette) {
+        unread(nx::describe(palette.error()));
+        return std::nullopt;
+    }
+    return std::move(*palette);
 }
 
 /// `names`, separated by commas.
@@ -189,181 +129,16 @@ template <class Names>
 
 } // namespace
 
-auto spawnPointsOf(const nx::assets::BspView& map, Team team) -> std::vector<SpawnPoint> {
-    std::vector<SpawnPoint> points;
-    for (const nx::assets::BspEntity& entity : map.entities()) {
-        if (entity.find("classname") != kSpawnClasses[team]) {
-            continue;
-        }
-        const nx::Vec3 origin = entity.findVector("origin").value_or(nx::Vec3{});
-        if (origin == nx::Vec3{}) {
-            continue;
-        }
-        const std::optional<nx::Vec3> angles = entity.findVector("angles");
-        points.push_back({.origin = origin, .yaw = nx::Degrees{angles ? angles->y : 0.0F}});
-    }
-    return points;
-}
-
-auto mapObjectivesOf(const nx::assets::BspView& map) -> MapObjectives {
-    MapObjectives objectives;
-    for (const nx::assets::BspEntity& entity : map.entities()) {
-        if (const std::optional<MapObjective> objective =
-                objectiveOfClass(entity.find("classname").value_or(""))) {
-            objectives.set(*objective);
-        }
-    }
-    return objectives;
-}
-
-auto hostagesOf(const nx::assets::BspView& map) -> std::uint32_t {
-    return nx::narrow<std::uint32_t>(
-        std::ranges::count_if(map.entities(), [](const nx::assets::BspEntity& entity) {
-            return entity.find("classname") == kHostageClass;
-        }));
-}
-
-auto addonsFolderOf(const std::filesystem::path& userFolder) -> std::filesystem::path {
-    return userFolder / "addons" / "cstrike";
-}
-
-auto openGameContent(const std::filesystem::path& data, const std::optional<std::filesystem::path>& install,
-                     const std::optional<std::filesystem::path>& addons)
-    -> nx::Result<GameContent, LevelError> {
-    const std::filesystem::path descriptionFile = data / "content" / "goldsrcCstrike.toml";
-    auto text = nx::platform::readTextFile(descriptionFile);
-    if (!text) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(text.error()));
-    }
-    auto description = nx::assets::readGoldsrcInstallDesc(*text, nx::platform::toUtf8(descriptionFile));
-    if (!description) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(description.error()));
-    }
-    auto installation = install
-                            ? nx::assets::GoldsrcInstall::open(*description, *install)
-                            : nx::assets::detectGoldsrcInstall(*description, nx::platform::steamFolders());
-    if (!installation) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(installation.error()));
-    }
-    std::vector<std::filesystem::path> mounts;
-    if (std::error_code error; addons && std::filesystem::is_directory(*addons, error)) {
-        nx::log::info(kLog, "the user's own content: {}", nx::platform::toUtf8(*addons));
-        mounts.push_back(*addons);
-    }
-    std::ranges::copy(installation->mounts(), std::back_inserter(mounts));
-    auto vfs = nx::assets::Vfs::create(mounts);
-    if (!vfs) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(vfs.error()));
-    }
-    const std::filesystem::path classesFile = data / "cstrike" / "entities.toml";
-    auto classesText = nx::platform::readTextFile(classesFile);
-    if (!classesText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(classesText.error()));
-    }
-    auto classes = nx::game::readEntityClasses(*classesText, nx::platform::toUtf8(classesFile));
-    if (!classes) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(classes.error()));
-    }
-    auto weapons = readWeaponCatalog(data);
-    if (!weapons) {
-        return std::unexpected{std::move(weapons.error())};
-    }
-    const std::filesystem::path loadoutsFile = data / "cstrike" / "loadouts.toml";
-    auto loadoutsText = nx::platform::readTextFile(loadoutsFile);
-    if (!loadoutsText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(loadoutsText.error()));
-    }
-    auto loadouts = readLoadouts(*loadoutsText, nx::platform::toUtf8(loadoutsFile), *weapons);
-    if (!loadouts) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(loadouts.error()));
-    }
-    const std::filesystem::path lightStylesFile = data / "cstrike" / "lightStyles.toml";
-    auto lightStylesText = nx::platform::readTextFile(lightStylesFile);
-    if (!lightStylesText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(lightStylesText.error()));
-    }
-    auto lightStyles = readWorldLightStyles(*lightStylesText, nx::platform::toUtf8(lightStylesFile));
-    if (!lightStyles) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(lightStyles.error()));
-    }
-    const std::filesystem::path economyFile = data / "cstrike" / "economy.toml";
-    auto economyText = nx::platform::readTextFile(economyFile);
-    if (!economyText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(economyText.error()));
-    }
-    auto economy = readEconomyRules(*economyText, nx::platform::toUtf8(economyFile));
-    if (!economy) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(economy.error()));
-    }
-    const std::filesystem::path footstepsFile = data / "cstrike" / "footsteps.toml";
-    auto footstepsText = nx::platform::readTextFile(footstepsFile);
-    if (!footstepsText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(footstepsText.error()));
-    }
-    auto footsteps = readFootstepRules(*footstepsText, nx::platform::toUtf8(footstepsFile));
-    if (!footsteps) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(footsteps.error()));
-    }
-    const std::filesystem::path breathFile = data / "cstrike" / "breath.toml";
-    auto breathText = nx::platform::readTextFile(breathFile);
-    if (!breathText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(breathText.error()));
-    }
-    auto breath = readBreathRules(*breathText, nx::platform::toUtf8(breathFile));
-    if (!breath) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(breath.error()));
-    }
-    const std::filesystem::path hitGroupsFile = data / "cstrike" / "hitGroups.toml";
-    auto hitGroupsText = nx::platform::readTextFile(hitGroupsFile);
-    if (!hitGroupsText) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(hitGroupsText.error()));
-    }
-    auto hitGroups = readHitGroupRules(*hitGroupsText, nx::platform::toUtf8(hitGroupsFile));
-    if (!hitGroups) {
-        return nx::fail(LevelError::ContentUnavailable, std::move(hitGroups.error()));
-    }
-    TextureMaterials materials = readTextureMaterials(*vfs);
-    return GameContent{.vfs = std::move(*vfs),
-                       .entityClasses = std::move(*classes),
-                       .weapons = std::move(*weapons),
-                       .loadouts = std::move(*loadouts),
-                       .lightStyles = std::move(*lightStyles),
-                       .economy = std::move(*economy),
-                       .footsteps = std::move(*footsteps),
-                       .breath = std::move(*breath),
-                       .hitGroups = std::move(*hitGroups),
-                       .materials = std::move(materials)};
-}
-
-auto Level::load(const GameContent& content, std::string_view name)
+auto Level::load(const GameContent& content, const GameMap& map)
     -> nx::Result<std::unique_ptr<Level>, LevelError> {
-    const auto mapPath = nx::assets::VfsPath::parse(std::format("maps/{}.bsp", name));
-    if (!mapPath) {
-        return nx::fail(LevelError::MapUnreadable, std::string{name}, mapPath.error());
-    }
     auto made = std::make_unique<Level>(CreateToken{});
     Level& level = *made;
-    auto mapBytes = content.vfs.readAll(*mapPath);
-    if (!mapBytes) {
-        return nx::fail(LevelError::MapUnreadable, std::string{name}, std::move(mapBytes.error()));
-    }
-    level.m_mapBytes = std::move(*mapBytes);
-    auto map = nx::assets::BspView::parse(level.m_mapBytes);
-    if (!map) {
-        return nx::fail(LevelError::MapUnreadable, std::string{name}, std::move(map.error()));
-    }
-    level.m_map = std::move(*map);
-    const nx::assets::BspView& bsp = *level.m_map;
-    level.m_entityClasses = content.entityClasses;
-    level.m_lightStyles = mapLightStyles(bsp, content.lightStyles);
+    level.m_gameMap = &map;
+    level.entities = &content.entities;
+    const nx::assets::BspView& bsp = map.map();
     level.m_skyLight = skyLightOf(bsp);
     level.m_lights = highlightLightsOf(bsp);
     level.m_probePositions = probePositionsOf(bsp);
-    auto hulls = nx::collision::BrushHulls::create(bsp);
-    if (!hulls) {
-        return nx::fail(LevelError::HullsInvalid, std::string{name}, std::move(hulls.error()));
-    }
-    level.m_hulls = std::move(*hulls);
     level.m_glowBlockers.emplace(bsp);
 
     WadFiles wads = readWads(content.vfs, bsp);
@@ -378,12 +153,6 @@ auto Level::load(const GameContent& content, std::string_view name)
         }
     }
     level.m_bulletMarks = bulletMarksOf(bsp);
-    for (const Team team : nx::EnumArray<Team, std::vector<SpawnPoint>>::keys()) {
-        level.m_spawnPoints[team] = spawnPointsOf(bsp, team);
-    }
-    level.m_objectives = mapObjectivesOf(bsp);
-    level.m_hostages = hostagesOf(bsp);
-    level.m_surfaceExtents = nx::assets::surfaceExtentsOf(bsp);
     level.m_sky = readSky(content.vfs, bsp);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
     if (!level.m_sprites->missing().empty()) {
@@ -395,20 +164,35 @@ auto Level::load(const GameContent& content, std::string_view name)
         nx::log::warning(kLog, "models the map's entities show that cannot be read: {}",
                          listed(level.m_models->missing()));
     }
+    level.enginePalette = readPalette(content.vfs);
+    level.sprayLook = &content.blood.look;
+    const std::vector<std::string> bloodSprites{content.blood.look.spraySprite,
+                                                content.blood.look.dropSprite};
+    if (const std::vector<std::string> missing = level.bloodSpriteFiles.read(content.vfs, bloodSprites);
+        !missing.empty()) {
+        nx::log::warning(kLog, "the blood's sprites that cannot be read: {}", listed(missing));
+    }
+    level.m_players = PlayerModels::read(content.vfs, content.characters, content.weapons);
+    if (!level.m_players->missing().empty()) {
+        nx::log::warning(kLog, "models the players are drawn with that cannot be read: {}",
+                         listed(level.m_players->missing()));
+    }
     // The decals: the bullets', and those the map stamps as its game starts, on what is there then.
     nx::ecs::World resting;
-    if (auto spawned = spawnGame(bsp, level.m_entityClasses, resting); !spawned) {
-        return std::unexpected{std::move(spawned.error())};
+    if (auto spawned = spawnGame(bsp, content.entityClasses, resting); !spawned) {
+        return nx::fail(LevelError::GameUnspawnable, std::move(spawned.error()));
     }
     const std::vector<nx::game::StaticDecal> stamped =
-        nx::game::staticDecalsOf(bsp.entities(), resting, *level.m_hulls);
+        nx::game::staticDecalsOf(bsp.entities(), resting, map.hulls());
     std::vector<std::string_view> decalNames = bulletDecals();
+    std::ranges::copy(content.blood.decals, std::back_inserter(decalNames));
     std::ranges::transform(
         stamped, std::back_inserter(decalNames),
         [](const nx::game::StaticDecal& decal) -> std::string_view { return decal.texture; });
     level.m_decals = LevelDecals::read(content.vfs, decalNames);
     if (!level.m_decals->missing().empty()) {
-        nx::log::warning(kLog, "decals the bullets leave or the map stamps that cannot be read: {}",
+        nx::log::warning(kLog,
+                         "decals the bullets and the blood leave or the map stamps that cannot be read: {}",
                          listed(level.m_decals->missing()));
     }
     for (const nx::game::StaticDecal& decal : stamped) {
@@ -464,6 +248,7 @@ auto Level::updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& we
         WeaponViewModel& viewModel = m_viewModels[index];
         viewModel = WeaponViewModel{.revision = revision};
         updated.push_back(weapon);
+        m_players->readWeapon(vfs, weapons, weapon);
         if (!weapons.isComplete(weapon)) {
             continue;
         }
@@ -491,42 +276,13 @@ auto Level::bulletMarkOn(nx::assets::ModelIndex model) const noexcept -> BulletM
     return model.value < m_bulletMarks.size() ? m_bulletMarks[model.value] : BulletMark::None;
 }
 
-auto spawnGame(const nx::assets::BspView& map, const nx::game::EntityClasses& classes, nx::ecs::World& world)
-    -> nx::Result<void, LevelError> {
-    if (auto registered = nx::game::registerComponents(world); !registered) {
-        return nx::fail(LevelError::GameUnspawnable, std::move(registered.error()));
-    }
-    if (auto spawned = nx::game::spawnBrushEntities(world, map.entities(), map.models(), classes); !spawned) {
-        return nx::fail(LevelError::GameUnspawnable, std::move(spawned.error()));
-    }
-    return {};
-}
-
-auto Level::materialAlong(const TextureMaterials& materials, nx::assets::ModelIndex model, nx::Vec3 start,
-                          nx::Vec3 end) const -> TextureMaterial {
-    const nx::assets::BspView& map = *m_map;
-    const std::optional<nx::assets::FaceIndex> face =
-        nx::assets::surfaceAt(map, m_surfaceExtents, model, start, end);
-    if (!face) {
-        return TextureMaterial::Concrete;
-    }
-    const nx::assets::TextureInfo& info = map.textureInfos()[map.faces()[face->value].textureInfo.value];
-    const std::optional<nx::assets::MipTexture>& texture = map.textures()[info.texture.value];
-    return texture ? materials.materialOf(lookedUpTextureName(texture->name)) : TextureMaterial::Concrete;
-}
-
 auto spawnView(const nx::assets::BspView& map) -> nx::render::Camera {
-    const auto spawn = firstSpawnOf(map);
+    const std::optional<TeamSpawn> spawn = firstSpawnOf(map);
     if (!spawn) {
         return nx::render::Camera{};
     }
-    return nx::render::Camera{.position = spawn->first.origin + nx::Vec3{.z = kStandingViewHeight.value()},
-                              .angles = {.yaw = spawn->first.yaw}};
-}
-
-auto spawnTeam(const nx::assets::BspView& map) -> Team {
-    const auto spawn = firstSpawnOf(map);
-    return spawn ? spawn->second : Team::CounterTerrorists;
+    return nx::render::Camera{.position = spawn->point.origin + nx::Vec3{.z = kStandingViewHeight.value()},
+                              .angles = {.yaw = spawn->point.yaw}};
 }
 
 } // namespace cs

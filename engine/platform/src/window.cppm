@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The program's window and its input, over SDL3 (docs/12-ui-hud-and-console.md, section 6): keys
-/// by their physical position, the mouse as raw relative motion, and the native handles a GPU
+/// by their physical position and the layout's base character, the mouse as raw relative motion,
+/// and the native handles a GPU
 /// backend draws to. SDL stays in the implementation: nothing of it crosses this interface.
 export module nx.platform:window;
 
@@ -185,6 +186,9 @@ struct KeyChanged {
     Key key{};
     bool isDown = false;   ///< False when the key was released.
     bool isRepeat = false; ///< Sent again while held, by the system's key repeat.
+    /// The layout's base character (SDL's keycode), independent of Shift and Caps Lock; none for a
+    /// noncharacter key. Text entry uses TextEntered, including modifiers and input methods.
+    std::optional<char32_t> character{};
 };
 
 /// Relative motion in the mouse's own counts, without the system's acceleration while the mouse is

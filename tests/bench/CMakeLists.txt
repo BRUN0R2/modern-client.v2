@@ -14,3 +14,31 @@ nxAddBenchmark(nxBenchEcs
         ecsBench.cpp
     DEPENDS
         nx::ecs)
+
+nxAddBenchmark(nxBenchLightStyles
+    SOURCES
+        lightStylesBench.cpp
+    DEPENDS
+        nx::core
+        nx::assets
+        nx::render
+        cs::shared)
+
+nxAddBenchmark(nxBenchClient
+    SOURCES
+        clientBench.cpp
+    DEPENDS
+        nx::core
+        nx::math
+        nx::platform
+        nx::assets
+        nx::render
+        nx::testSupport
+        cs::shared
+        cs::client)
+
+target_compile_definitions(nxBenchClient PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")
+
+nxAddBenchmark(nxBenchNavigation
+    SOURCES navigationBench.cpp
+    DEPENDS nx::navigation nx::agents nx::ecs)
