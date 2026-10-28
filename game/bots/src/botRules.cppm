@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// How the bots see, remember, move and keep their number (docs/10-counter-strike-gameplay.md,
-/// section 11): data/cstrike/bots.toml, with the values of ReGameDLL_CS's reconstruction of Condition
-/// Zero's bot where it has them (CCSBot::IsVisible, CBaseMonster::FInViewCone,
-/// CCSBotManager::MonitorBotCVars; GPL, consulted: docs/20 section 3) and the project's own where it
-/// has none.
+/// How the bots see, remember, move, keep their number and play by their skill
+/// (docs/10-counter-strike-gameplay.md, section 11): data/cstrike/bots.toml, with the values of
+/// ReGameDLL_CS's reconstruction of Condition Zero's bot where it has them (CCSBot::IsVisible,
+/// CBaseMonster::FInViewCone, CCSBotManager::MonitorBotCVars, CCSBot::UpdateLookAngles,
+/// CCSBot::SetAimOffset, CCSBot::FireWeaponAtEnemy, the zBot's BotProfile.db; GPL, consulted: docs/20
+/// section 3) and the project's own where it has none.
 export module cs.bots:botRules;
 
 import std;
@@ -24,6 +25,32 @@ enum class BotError : std::uint8_t {
     Unregistered,          ///< A component of the bots' bodies could not be registered in the game (cause).
 };
 
+/// The difficulty the bots that join play at (BotDifficultyType), which bot_difficulty names.
+enum class BotDifficulty : std::uint8_t {
+    Easy,
+    Normal,
+    Hard,
+    Expert,
+    Count,
+};
+
+/// The unit of BotSkill: none.
+struct BotSkillTag {};
+
+/// How good a bot is, from none (0) to the best (1): a profile's Skill, a hundredth of it.
+using BotSkill = nx::Quantity<float, BotSkillTag>;
+
+/// A level of skill a bot plays with, as a template of BotProfile.db makes one: its name, the
+/// difficulties a bot of it joins at, its skill, how long after it first sees an enemy it knows of it
+/// (ReactionTime), and how long after it took an enemy on it fires at it (AttackDelay).
+struct BotSkillLevel {
+    std::string name;
+    std::vector<BotDifficulty> difficulties;
+    BotSkill skill{};
+    nx::Seconds reactionTime{};
+    nx::Seconds attackDelay{};
+};
+
 /// Where a bot looks for a player it may see, from the player's origin, in the order IsVisible tries
 /// them: its chest (the origin itself), its head above, its feet below as it stands or ducks, and its
 /// sides, either way across the bot's line to it.
@@ -34,10 +61,75 @@ struct BotSightSpots {
     nx::HammerUnits side{};
 };
 
+/// The spring a bot's view turns by towards where it looks (UpdateLookAngles): it speeds up by how far
+/// off it is, times its stiffness, less how fast it turns, times its damping, by maxAcceleration at most.
+struct BotSpring {
+    nx::PerSecondSquared stiffness{};
+    nx::PerSecond damping{};
+    nx::DegreesPerSecondSquared maxAcceleration{};
+};
+
+/// How a bot's view turns (UpdateLookAngles): by a stiffer spring as it attacks, so that it follows its
+/// enemy, than as it roams; its yaw set where it looks once that is nearer than snapTolerance; its pitch
+/// pulled pitchStiffness times as hard, as its range is half the yaw's, never snapped, and held within
+/// pitchLimit up or down.
+struct BotLookRules {
+    BotSpring attacking{};
+    BotSpring roaming{};
+    nx::Degrees snapTolerance{};
+    nx::Scale pitchStiffness{};
+    nx::Degrees pitchLimit{};
+};
+
+/// How a bot's aim errs about where it means to aim (SetAimOffset, UpdateAimOffset): on each axis by
+/// errorPerRange of its range at most, times the share of skill it lacks; a skill it gains by focusing,
+/// as its view holds steadier than steadyTurn, of all it gains in slowestFocus times the share of skill
+/// it lacks, quickestFocus at least, up to bestFocus; a new error drawn soonestNewError to
+/// latestNewError after the last, which its aim moves settleShare of the way to, settleRate times a
+/// second. Above leadingSkill it aims ahead of a moving enemy by their velocities apart over leadTime.
+struct BotAimRules {
+    nx::Scale errorPerRange{};
+    nx::Seconds slowestFocus{};
+    nx::Seconds quickestFocus{};
+    BotSkill bestFocus{};
+    nx::DegreesPerSecond steadyTurn{};
+    nx::Seconds soonestNewError{};
+    nx::Seconds latestNewError{};
+    nx::Scale settleShare{};
+    nx::PerSecond settleRate{};
+    BotSkill leadingSkill{};
+    nx::Seconds leadTime{};
+};
+
+/// A pause drawn between two lengths.
+struct BotPause {
+    nx::Seconds shortest{};
+    nx::Seconds longest{};
+};
+
+/// How a bot fires (FireWeaponAtEnemy): it weighs a press at each full think, thinkInterval apart
+/// (g_flBotFullThinkInterval), its press held until the next; only with its view's yaw within the angle
+/// aimHalfWidth spans at the range of where it aims; the next press a pause later, less thinkInterval:
+/// with a pistol, as fast as it may above rapidPistolSkill (StartRapidFire), else after pistolPause;
+/// with a gun, at once below spraySkill or nearer than sprayRange, after distantPause beyond
+/// distantRange, else after burstPause.
+struct BotFireRules {
+    nx::HammerUnits aimHalfWidth{};
+    nx::Seconds thinkInterval{};
+    BotSkill rapidPistolSkill{};
+    BotPause pistolPause{};
+    BotSkill spraySkill{};
+    nx::HammerUnits sprayRange{};
+    nx::HammerUnits distantRange{};
+    BotPause distantPause{};
+    BotPause burstPause{};
+};
+
 /// data/cstrike/bots.toml: what a bot sees (the cone about its view's yaw, the players it looks at each
 /// tick in turn, and the spots of each), how long and how many it remembers, how near it attacks, how
 /// near it arrives and how far a goal moves before it finds another way, how far its hunt's next place
-/// is drawn, and how often bot_quota is looked at.
+/// is drawn, how often bot_quota is looked at, the levels of skill it plays with, and how it turns its
+/// view, aims and fires.
 struct BotRules {
     nx::Degrees fieldOfView{};
     std::uint32_t perceptionBudget = 0;
@@ -49,17 +141,37 @@ struct BotRules {
     nx::HammerUnits replanDistance{};
     nx::HammerUnits huntRadius{};
     nx::Seconds quotaInterval{};
+    std::vector<BotSkillLevel> skillLevels;
+    BotLookRules look{};
+    BotAimRules aim{};
+    BotFireRules fire{};
 };
 
 /// Reads `text`, the file `sourceName`: every distance, time and budget more than none, the cone a
-/// whole turn at most. Errors: InvalidData.
+/// whole turn at most; a level of skill for each difficulty, each of none or more time, each pause's
+/// shortest none or more and its longest no shorter, the springs and the pitch's limit more than none
+/// (a quarter turn at most). Errors: InvalidData.
 [[nodiscard]] auto readBotRules(std::string_view text, std::string_view sourceName)
     -> nx::Result<BotRules, BotError>;
 
-/// The rules of the brain a bot of `rules` thinks with.
-[[nodiscard]] auto brainRulesOf(const BotRules& rules) noexcept -> nx::agents::Rules;
+/// The rules of the brain a bot of `rules` thinks with, reacting `reactionTime` after it first sees an
+/// enemy.
+[[nodiscard]] auto brainRulesOf(const BotRules& rules, nx::Seconds reactionTime) noexcept
+    -> nx::agents::Rules;
 
 } // namespace cs
+
+template <>
+struct nx::meta::Description<cs::BotSkillLevel> {
+    static constexpr std::string_view kName = "cs::BotSkillLevel";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotSkillLevel::name>("name"),
+        nx::meta::field<&cs::BotSkillLevel::difficulties>("difficulties"),
+        nx::meta::field<&cs::BotSkillLevel::skill>("skill", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotSkillLevel::reactionTime>("reactionTime"),
+        nx::meta::field<&cs::BotSkillLevel::attackDelay>("attackDelay"),
+    };
+};
 
 template <>
 struct nx::meta::Description<cs::BotSightSpots> {
@@ -69,6 +181,76 @@ struct nx::meta::Description<cs::BotSightSpots> {
         nx::meta::field<&cs::BotSightSpots::standingFeet>("standingFeet", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotSightSpots::duckedFeet>("duckedFeet", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotSightSpots::side>("side", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BotSpring> {
+    static constexpr std::string_view kName = "cs::BotSpring";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotSpring::stiffness>("stiffness"),
+        nx::meta::field<&cs::BotSpring::damping>("damping"),
+        nx::meta::field<&cs::BotSpring::maxAcceleration>("maxAcceleration"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BotLookRules> {
+    static constexpr std::string_view kName = "cs::BotLookRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotLookRules::attacking>("attacking"),
+        nx::meta::field<&cs::BotLookRules::roaming>("roaming"),
+        nx::meta::field<&cs::BotLookRules::snapTolerance>("snapTolerance", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotLookRules::pitchStiffness>("pitchStiffness"),
+        nx::meta::field<&cs::BotLookRules::pitchLimit>("pitchLimit"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BotAimRules> {
+    static constexpr std::string_view kName = "cs::BotAimRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotAimRules::errorPerRange>("errorPerRange", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotAimRules::slowestFocus>("slowestFocus"),
+        nx::meta::field<&cs::BotAimRules::quickestFocus>("quickestFocus"),
+        nx::meta::field<&cs::BotAimRules::bestFocus>("bestFocus",
+                                                     nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotAimRules::steadyTurn>("steadyTurn"),
+        nx::meta::field<&cs::BotAimRules::soonestNewError>("soonestNewError"),
+        nx::meta::field<&cs::BotAimRules::latestNewError>("latestNewError"),
+        nx::meta::field<&cs::BotAimRules::settleShare>("settleShare",
+                                                       nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotAimRules::settleRate>("settleRate"),
+        nx::meta::field<&cs::BotAimRules::leadingSkill>("leadingSkill",
+                                                        nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotAimRules::leadTime>("leadTime"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BotPause> {
+    static constexpr std::string_view kName = "cs::BotPause";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotPause::shortest>("shortest"),
+        nx::meta::field<&cs::BotPause::longest>("longest"),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BotFireRules> {
+    static constexpr std::string_view kName = "cs::BotFireRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotFireRules::aimHalfWidth>("aimHalfWidth"),
+        nx::meta::field<&cs::BotFireRules::thinkInterval>("thinkInterval"),
+        nx::meta::field<&cs::BotFireRules::rapidPistolSkill>("rapidPistolSkill",
+                                                             nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotFireRules::pistolPause>("pistolPause"),
+        nx::meta::field<&cs::BotFireRules::spraySkill>("spraySkill",
+                                                       nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotFireRules::sprayRange>("sprayRange", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotFireRules::distantRange>("distantRange", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotFireRules::distantPause>("distantPause"),
+        nx::meta::field<&cs::BotFireRules::burstPause>("burstPause"),
     };
 };
 
@@ -86,5 +268,9 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::replanDistance>("replanDistance"),
         nx::meta::field<&cs::BotRules::huntRadius>("huntRadius"),
         nx::meta::field<&cs::BotRules::quotaInterval>("quotaInterval"),
+        nx::meta::field<&cs::BotRules::skillLevels>("skillLevels"),
+        nx::meta::field<&cs::BotRules::look>("look"),
+        nx::meta::field<&cs::BotRules::aim>("aim"),
+        nx::meta::field<&cs::BotRules::fire>("fire"),
     };
 };

@@ -43,8 +43,8 @@ struct PlayerCommand {
 };
 
 /// A living player's body that an agent's perception may consider: its entity, the player and its team,
-/// its origin and eye, its feet, and whether it is ducked. A candidate, not a fact perceived: Game::sees
-/// and Game::seesSpot tell whether an eye sees it.
+/// its origin and eye, its feet, how it moves, and whether it is ducked. A candidate, not a fact
+/// perceived: Game::sees and Game::seesSpot tell whether an eye sees it.
 struct PerceptionTarget {
     nx::ecs::Entity entity{};
     PlayerIndex player{};
@@ -52,19 +52,22 @@ struct PerceptionTarget {
     nx::Vec3 origin{};
     nx::Vec3 eye{};
     nx::Vec3 feet{}; ///< The active body's lower center, independent of its stance.
+    nx::Vec3 velocity{};
     bool isDucked = false;
 };
 
 /// What a player knows of itself, as its own client is told it: its team, whether it is alive, its eye
-/// and its feet, where it looks (pev->v_angle, which the game turns as it spawns), and how fast it may
-/// run (pev->maxspeed).
+/// and its feet, how it moves, where it looks (pev->v_angle, which the game turns as it spawns), how
+/// fast it may run (pev->maxspeed), and the slot of the weapon it holds, none while it holds none.
 struct PlayerOwnState {
     Team team{};
     bool isAlive = false;
     nx::Vec3 eye{};
     nx::Vec3 feet{};
+    nx::Vec3 velocity{};
     nx::EulerAngles view{};
     nx::UnitsPerSecond maxSpeed{};
+    std::optional<WeaponSlot> heldSlot{};
 };
 
 } // namespace cs

@@ -719,16 +719,40 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   25 above, the feet 34 below standing or 14 ducked, and the sides 13 across. It looks at a share of
   the players each tick (`perceptionBudget`) and remembers what it saw for a while
   (`data/cstrike/bots.toml`). Lines through glass and smoke are weighed with them.
-- It fires at an enemy it sees, aiming at the first spot of it it saw, pressing its attack every
-  other command so that a pistol fires each round (`TogglePrimaryAttack`); it chases what it no
-  longer sees to where it saw it, and, with nothing to pursue, hunts a place of the mesh drawn within
-  `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its corridor, standing (the
-  mesh leaves out what only a ducked player passes). Spawning again, it starts with a new brain.
-  Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
+- Each bot plays with a level of skill drawn as it joins among those of `bot_difficulty`'s
+  difficulty (`GetDifficultyLevel`: easy below 0.9, normal below 1.9, hard below 2.9, else
+  expert): the templates of the zBot's `BotProfile.db` that ReGameDLL_CS ships, each a skill, a
+  reaction time and an attack delay (`skillLevels` in `data/cstrike/bots.toml`; easy and fair for
+  easy, fair, normal and tough for normal, tough, hard and very hard for hard, expert and elite for
+  expert). The draw is among the levels until the bots' names bring the named profiles.
+- An enemy it sees is known to it its reaction time after it first saw it, out of sight since or not
+  (`ReactionTime`, `nx::agents::Rules::reactionTime`): before then it neither attacks nor chases it.
+- Its view turns towards where it looks by a spring, stiffer as it attacks, its yaw set once a degree
+  off, its pitch pulled twice as hard (`UpdateLookAngles`, `cs.bots:botAim`). It aims at the first
+  spot of its enemy it saw, ahead of it by their velocities apart over a tenth of a second above half
+  a skill (`Upkeep`), and off by its aim's error: a tenth of the range at most on each axis, times
+  the share of skill it lacks, less as it focuses with its view held steady (up to 0.75 of skill over
+  5 seconds times the share it lacks, 2 at least), a new one drawn each 0.25 to 1 second, which its
+  aim moves to a tenth of the way each thirtieth of a second (`SetAimOffset`, `UpdateAimOffset`).
+  The original moves its view and its aim at each of its 30 commands a second; here over each
+  command's duration, the same on any tick rate.
+- It weighs pressing its attack at each full think, a tenth of a second apart, its buttons held until
+  the next (`BotThink`, `FireWeaponAtEnemy`, `cs.bots:botTrigger`): once its attack delay went by
+  since it took its enemy on, with its view's yaw within the angle 32 units span at the range of
+  where it aims, and its pause went by; with a pistol it fires as fast as it may above 0.75 of skill,
+  its attack up and down each command (`StartRapidFire`), else 0.15 to 0.4 seconds apart; with a gun
+  at once below half a skill or nearer than 400 units, 0.3 to 0.7 seconds apart beyond 800, else
+  0.15 to 0.5, each pause a think less.
+- It chases what it no longer sees to where it saw it, and, with nothing to pursue, hunts a place of
+  the mesh drawn within `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its
+  corridor, standing (the mesh leaves out what only a ducked player passes), its view level ahead
+  along its way. Spawning again, it starts with a new brain, its view still, its aim and its trigger
+  anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.
-- Its difficulty (its reactions, its aim's errors and speed, its leading of a moving enemy), its
-  names, the weapons it chooses and buys, the objectives, the radio and `bot_chatter` come next.
+- Its names, the spot of its enemy it aims at by its skill and the parts it sees, the knife's,
+  the sniper rifles', the shotguns' and the machine gun's own ways of firing, the weapons it chooses
+  and buys, the objectives, the radio and `bot_chatter` come next.
 
 The kinds a mod makes, such as zombies and bosses, are modules of the mod over the same agents,
 in Rook ([15 §2](15-mod-api.md#2-module-organization)).

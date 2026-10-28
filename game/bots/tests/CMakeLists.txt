@@ -5,6 +5,8 @@ nxAddTest(csBotsTests
     SOURCES
         botRulesTests.cpp
         botSightTests.cpp
+        botAimTests.cpp
+        botTriggerTests.cpp
         botsTests.cpp
         botCommandsTests.cpp
     DEPENDS
@@ -17,6 +19,7 @@ nxAddTest(csBotsTests
         nx::assets
         nx::jobs
         nx::agents
+        nx::ecs
         nx::game
         nx::platform)
 

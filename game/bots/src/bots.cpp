@@ -24,6 +24,13 @@ constexpr std::string_view kPlayerProfile = "player";
 constexpr std::string_view kHuntStream = "bot hunt";
 /// The stream of random numbers the team a bot leaves to keep bot_quota is drawn from, of the tick.
 constexpr std::string_view kQuotaStream = "bot quota";
+/// The stream of random numbers a bot's level of skill is drawn from, of the tick it joins and its slot.
+constexpr std::string_view kSkillStream = "bot skill";
+/// The stream of random numbers a bot's aim's errors and its pauses between presses draw from, of the
+/// player it plays.
+constexpr std::string_view kAimStream = "bot aim";
+/// How far the tick a bot joins at is shifted from its slot in the seed of its level's draw.
+constexpr int kSlotBits = 32;
 /// The teams a bot may play in, which MaintainBotQuota draws one of.
 constexpr std::uint32_t kPlayingTeams = 2;
 
@@ -34,21 +41,50 @@ constexpr std::uint32_t kPlayingTeams = 2;
     return nx::length(way) == 0.0F ? view : nx::vectorAngles(way);
 }
 
-/// Turns `command` of a player that knows itself as `self` the way `intent` looks, or along the way it
-/// moves, and moves it that way at its full speed (GetMoveSpeed of a running bot: pev->maxspeed).
-void steer(UserCommand& command, const nx::agents::Intent& intent, const PlayerOwnState& self) noexcept {
+/// Where a player that knows itself as `self` wants to look: at `aimSpot`, else where `intent` looks,
+/// else ahead along the way it moves, level (SetLookAngles of m_lookAheadAngle), else where it looks.
+[[nodiscard]] auto viewWanted(const nx::agents::Intent& intent, std::optional<nx::Vec3> aimSpot,
+                              const PlayerOwnState& self) noexcept -> nx::EulerAngles {
+    if (const std::optional<nx::Vec3> looked = aimSpot ? aimSpot : intent.lookAt) {
+        return viewFacing(self.eye, *looked, self.view);
+    }
+    if (nx::length(intent.direction) > 0.0F) {
+        return nx::EulerAngles{.yaw = nx::vectorAngles(intent.direction).yaw};
+    }
+    return self.view;
+}
+
+/// Moves `command`, its view turned, the way `intent` moves at `maxSpeed`, its full speed (GetMoveSpeed
+/// of a running bot: pev->maxspeed).
+void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::UnitsPerSecond maxSpeed) noexcept {
     const nx::Vec3 way = intent.direction;
-    const bool moves = nx::length(way) > 0.0F;
-    if (intent.lookAt) {
-        command.viewAngles = viewFacing(self.eye, *intent.lookAt, self.view);
-    } else if (moves) {
-        command.viewAngles = nx::EulerAngles{.yaw = nx::vectorAngles(way).yaw};
+    if (nx::length(way) == 0.0F) {
+        return;
     }
-    if (moves) {
-        const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{.yaw = command.viewAngles.yaw});
-        command.move.forward = self.maxSpeed * nx::dot(way, axes.forward);
-        command.move.side = self.maxSpeed * nx::dot(way, axes.right);
+    const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{.yaw = command.viewAngles.yaw});
+    command.move.forward = maxSpeed * nx::dot(way, axes.forward);
+    command.move.side = maxSpeed * nx::dot(way, axes.right);
+}
+
+/// The index in `levels` of one of `difficulty`'s, drawn from `random` as GetRandomProfile draws a
+/// profile of it; readBotRules leaves a level for each difficulty.
+[[nodiscard]] auto drawSkillLevel(std::span<const BotSkillLevel> levels, BotDifficulty difficulty,
+                                  nx::Random& random) -> std::size_t {
+    const auto isOf = [difficulty](const BotSkillLevel& level) {
+        return std::ranges::contains(level.difficulties, difficulty);
+    };
+    const auto count = static_cast<std::uint64_t>(std::ranges::count_if(levels, isOf));
+    nx::invariant(count > 0, "Bots: a level of skill for each difficulty");
+    std::uint64_t left = random.below(count);
+    for (const auto& [index, level] : std::views::enumerate(levels)) {
+        if (isOf(level)) {
+            if (left == 0) {
+                return static_cast<std::size_t>(index);
+            }
+            --left;
+        }
     }
+    std::unreachable();
 }
 
 } // namespace
@@ -92,14 +128,27 @@ Bots::~Bots() {
     kickAll();
 }
 
-auto Bots::add(std::optional<Team> team) -> PlayerIndex {
+auto Bots::add(std::optional<Team> team, BotDifficulty difficulty) -> PlayerIndex {
     const Team joined = team.value_or(game->defaultTeam());
     const PlayerIndex player = game->join(joined, AutoSwitch::ToHeavier);
-    game->attachPlayerComponent(player, nx::agents::Agent{.brain = nx::agents::Brain{brainRulesOf(rules)}});
-    game->attachPlayerComponent(player, BotDriver{.hunt = nx::Random{player.value, kHuntStream}});
+    nx::Random skills{(std::bit_cast<std::uint64_t>(game->time().now.tick()) << kSlotBits) ^ player.value,
+                      kSkillStream};
+    const std::size_t level = drawSkillLevel(rules.skillLevels, difficulty, skills);
+    const BotSkillLevel& skill = rules.skillLevels[level];
+    game->attachPlayerComponent(
+        player, nx::agents::Agent{.brain = nx::agents::Brain{brainRulesOf(rules, skill.reactionTime)}});
+    game->attachPlayerComponent(player, BotDriver{.skillLevel = level,
+                                                  .hunt = nx::Random{player.value, kHuntStream},
+                                                  .aim = nx::Random{player.value, kAimStream}});
     bots.push_back(player);
-    nx::log::info(kLog, "a bot joins the {}", nx::enumName(joined));
+    nx::log::info(kLog, "a bot joins the {}, {}", nx::enumName(joined), skill.name);
     return player;
+}
+
+auto Bots::skillLevelOf(PlayerIndex player) -> const BotSkillLevel& {
+    const BotDriver* const driver = game->playerComponent<BotDriver>(player);
+    nx::expects(driver != nullptr, "Bots::skillLevelOf: a bot's player");
+    return rules.skillLevels[driver->skillLevel];
 }
 
 void Bots::kickAll() {
@@ -130,14 +179,14 @@ auto Bots::kickFrom(Team team) -> bool {
     return true;
 }
 
-void Bots::keepQuota(std::uint32_t quota) {
+void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty) {
     const nx::game::TickTime time = game->time();
     if (time.now < nextQuotaCheck) {
         return;
     }
     nextQuotaCheck = time.now.after(rules.quotaInterval, time.rate);
     if (quota > bots.size()) {
-        std::ignore = add(std::nullopt);
+        std::ignore = add(std::nullopt, difficulty);
         return;
     }
     if (quota == bots.size()) {
@@ -204,6 +253,27 @@ void Bots::hunt(nx::agents::Agent& agent, BotDriver& driver, const nx::agents::D
     }
 }
 
+auto Bots::aimSpotOf(BotDriver& driver, const PlayerOwnState& self, const nx::agents::Decision& decision,
+                     std::span<const PerceptionTarget> targets, nx::Seconds duration) -> nx::Vec3 {
+    const nx::game::TickTime time = game->time();
+    const BotSkill skill = rules.skillLevels[driver.skillLevel].skill;
+    nx::invariant(decision.intent.lookAt.has_value() && decision.target.has_value(),
+                  "Bots: an attack looks at the target it pursues");
+    // The enemy it attacks it sees: it is among the targets of the tick.
+    const auto enemy = std::ranges::find(targets, *decision.target, &PerceptionTarget::entity);
+    nx::invariant(enemy != targets.end(), "Bots: the enemy a bot attacks is alive");
+    const nx::Vec3 spot = leadSpot(*decision.intent.lookAt, enemy->velocity, self.velocity, skill, rules.aim);
+    settleAimError(driver.aimError,
+                   {.skill = skill,
+                    .range = nx::HammerUnits{nx::length(spot - self.eye)},
+                    .isTurning = isTurningFaster(driver.turn, rules.aim.steadyTurn),
+                    .now = time.now,
+                    .rate = time.rate,
+                    .duration = duration},
+                   rules.aim, driver.aim);
+    return spot + driver.aimError.offset;
+}
+
 auto Bots::commandOf(PlayerIndex player, std::span<const PerceptionTarget> targets) -> UserCommand {
     const nx::game::TickTime time = game->time();
     const PlayerOwnState self = game->ownStateOf(player);
@@ -217,20 +287,38 @@ auto Bots::commandOf(PlayerIndex player, std::span<const PerceptionTarget> targe
         driver->wasAlive = false;
         return command;
     }
+    const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
     if (!driver->wasAlive) {
-        // Spawned again: what it knew and where it went are of its last life.
-        agent->brain = nx::agents::Brain{brainRulesOf(rules)};
-        driver->hasFired = false;
+        // Spawned again: what it knew, where it went, how it turned, aimed and fired are of its last life.
+        agent->brain = nx::agents::Brain{brainRulesOf(rules, level.reactionTime)};
+        driver->turn = {};
+        driver->aimError = {};
+        driver->trigger = {};
         driver->wasAlive = true;
     }
     agent->brain.perceive(perceive(player, *agent, self, targets), time.now, time.rate);
     const nx::agents::Decision decision = agent->brain.decide(self.feet, query);
     agent->behavior = decision.behavior;
     hunt(*agent, *driver, decision, self.feet);
-    steer(command, decision.intent, self);
-    // TogglePrimaryAttack: pressed every other command, so that a pistol fires each round.
-    driver->hasFired = decision.intent.attacks && !driver->hasFired;
-    if (driver->hasFired) {
+    const bool attacks = decision.behavior == nx::agents::Behavior::Attack;
+    const std::optional<nx::Vec3> aimSpot =
+        attacks ? std::optional{aimSpotOf(*driver, self, decision, targets, command.duration)} : std::nullopt;
+    command.viewAngles =
+        turnView(self.view, viewWanted(decision.intent, aimSpot, self), driver->turn,
+                 attacks ? rules.look.attacking : rules.look.roaming, rules.look, command.duration);
+    moveAlong(command, decision.intent, self.maxSpeed);
+    const bool presses = pullTrigger(driver->trigger,
+                                     {.pursued = decision.target,
+                                      .eye = self.eye,
+                                      .viewYaw = command.viewAngles.yaw,
+                                      .aimSpot = aimSpot,
+                                      .heldSlot = self.heldSlot,
+                                      .skill = level.skill,
+                                      .attackDelay = level.attackDelay,
+                                      .now = time.now,
+                                      .rate = time.rate},
+                                     rules.fire, driver->aim);
+    if (presses) {
         command.buttons.set(Button::Attack);
     }
     return command;

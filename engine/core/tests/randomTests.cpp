@@ -57,6 +57,19 @@ TEST(Random, UnitsAreFromZeroUpToOne) {
     EXPECT_NEAR(sum / kDraws, 0.5, 0.02);
 }
 
+TEST(Random, NumbersBetweenTwoAreAsUnitsAre) {
+    nx::Random random{7, "between"};
+    nx::Random units{7, "between"};
+    constexpr int kDraws = 1'000;
+    for (int draw = 0; draw < kDraws; ++draw) {
+        const float drawn = random.between(-2.0F, 6.0F);
+        ASSERT_EQ(drawn, -2.0F + (static_cast<float>(units.nextUnit()) * 8.0F));
+        ASSERT_GE(drawn, -2.0F);
+        ASSERT_LE(drawn, 6.0F);
+    }
+    EXPECT_EQ(random.between(3.0F, 3.0F), 3.0F);
+}
+
 TEST(Random, WholeNumbersBelowACountAreEachAsLikely) {
     nx::Random random{7, "whole"};
     EXPECT_EQ(random.below(0), 0U);

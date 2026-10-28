@@ -33,6 +33,9 @@ struct Rules {
     HammerUnits replanDistance{};
     /// How many targets are remembered at once, the one seen longest ago forgotten first.
     std::size_t memoryLimit = 0;
+    /// How long after it first sees a target it knows of it: none before then pursues it (a CS bot's
+    /// reaction time). None, at once.
+    Seconds reactionTime{};
 };
 
 /// A sensed fact, never a target's position obtained through a wall.
@@ -42,11 +45,14 @@ struct Observation {
     std::optional<Vec3> aimAt{}; ///< The observed aim point, distinct from the navigation destination.
 };
 
-/// What a brain remembers of a target: its last observation, when, and whether it sees it now.
+/// What a brain remembers of a target: its last observation, when, when it first saw it since it
+/// remembers it, whether it sees it now, and whether its reaction time since it first saw it went by.
 struct Memory {
     Observation observation{};
     GameTime seenAt{};
+    GameTime noticedAt{};
     bool isVisible = false;
+    bool isRecognized = false;
 };
 
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
@@ -57,10 +63,12 @@ struct Intent {
     bool attacks = false;
 };
 
-/// A brain's decision of a tick: its intent, its behavior and, Blocked, why no path was found.
+/// A brain's decision of a tick: its intent, its behavior, the target it pursues (none for its goal or
+/// for nothing) and, Blocked, why no path was found.
 struct Decision {
     Intent intent{};
     Behavior behavior = Behavior::Idle;
+    std::optional<ecs::Entity> target{};
     std::optional<navigation::NavigationError> navigationError{};
 };
 
@@ -68,14 +76,16 @@ struct Decision {
 /// decide must outlive the brain's cached corridor.
 class Brain {
 public:
-    /// Requires positive distances, a positive memory lifetime and a nonzero memory budget.
+    /// Requires positive distances, a positive memory lifetime, a nonzero memory budget and a reaction
+    /// time of none or more.
     explicit Brain(Rules rules);
-    /// Each tick replaces visibility and forgets expired records; fresh observations update memory.
+    /// Each tick replaces visibility and forgets expired records; fresh observations update memory, a
+    /// target seen anew noticed now; the targets noticed at least the reaction time ago are recognized.
     void perceive(std::span<const Observation> seen, GameTime now, TickRate rate);
-    /// A deterministic choice: closest visible target, else freshest remembered target. Ties retain
-    /// memory order. A failed path is attempted again only when its goal or source moves sufficiently.
-    /// Smaller observation changes update the corridor's destination without another full search.
-    /// Query/path failures become Blocked decisions carrying their NavigationError.
+    /// A deterministic choice among the targets recognized: closest visible target, else freshest
+    /// remembered target. Ties retain memory order. A failed path is attempted again only when its goal or
+    /// source moves sufficiently. Smaller observation changes update the corridor's destination without
+    /// another full search. Query/path failures become Blocked decisions carrying their NavigationError.
     /// Investigations finish at the corridor's projected destination, including an airborne observation.
     /// With no target remembered, it moves to its goal (MoveTo), which it forgets as it arrives
     /// (Idle).

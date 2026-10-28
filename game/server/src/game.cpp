@@ -230,12 +230,17 @@ auto Game::playerCount() const -> std::size_t {
 
 auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
     const Player& player = playerAt(index);
+    const OwnedWeapon* const held = player.inventory.held();
     return PlayerOwnState{.team = player.team,
                           .isAlive = player.status.isAlive(),
                           .eye = eyeOf(player.movement),
                           .feet = feetOf(player.movement),
+                          .velocity = player.movement.velocity,
                           .view = player.view,
-                          .maxSpeed = player.movement.maxSpeed};
+                          .maxSpeed = player.movement.maxSpeed,
+                          .heldSlot = held != nullptr
+                                          ? std::optional{m_content->weapons.weapon(held->weapon).slot}
+                                          : std::nullopt};
 }
 
 auto Game::canSpawn(const Player& player) const -> bool {
@@ -963,6 +968,7 @@ auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
                                .origin = player->movement.origin,
                                .eye = eyeOf(player->movement),
                                .feet = feetOf(player->movement),
+                               .velocity = player->movement.velocity,
                                .isDucked = player->movement.isDucked});
         }
     }

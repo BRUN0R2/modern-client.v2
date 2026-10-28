@@ -9,11 +9,15 @@ nxAddModuleLibrary(csBots
         src/cs.bots.cppm
         src/botRules.cppm
         src/botSight.cppm
+        src/botAim.cppm
+        src/botTrigger.cppm
         src/bots.cppm
         src/botCommands.cppm
     SOURCES
         src/botRules.cpp
         src/botSight.cpp
+        src/botAim.cpp
+        src/botTrigger.cpp
         src/bots.cpp
         src/botCommands.cpp
     DEPENDS
@@ -23,6 +27,7 @@ nxAddModuleLibrary(csBots
         nx::data
         nx::console
         nx::jobs
+        nx::ecs
         nx::game
         nx::navigation
         nx::agents

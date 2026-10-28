@@ -33,6 +33,11 @@ public:
         return static_cast<double>(nextBits() >> kUnitDroppedBits) * kUnitStep;
     }
 
+    /// A number from `least` to `most`: nextUnit's share of the way between them.
+    [[nodiscard]] constexpr auto between(float least, float most) noexcept -> float {
+        return least + (static_cast<float>(nextUnit()) * (most - least));
+    }
+
     /// A whole number from 0 up to `count`, `count` left out, each as likely; 0 when `count` is 0.
     [[nodiscard]] constexpr auto below(std::uint64_t count) noexcept -> std::uint64_t {
         if (count == 0) {
