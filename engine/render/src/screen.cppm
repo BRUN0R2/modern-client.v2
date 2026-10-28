@@ -178,6 +178,30 @@ struct ScreenQuad {
 auto appendText(std::vector<ScreenQuad>& quads, const ScreenFont& font, std::string_view text, float x,
                 float y, ScreenColor color, ScreenBlend blend = ScreenBlend::Normal) -> float;
 
+/// The quads made of what something on the screen shows, its `Shown`, such as the numbers of a HUD,
+/// kept from a frame to the next: made again only when what it shows changes, appended again as they
+/// were while it does not. A HUD laid out and its text written each frame would do again work whose
+/// result changes about once a second.
+template <std::equality_comparable Shown>
+class RetainedQuads {
+public:
+    /// Appends to `quads` those `make` appends to the vector it is given for `shown`, called only when
+    /// `shown` differs from what the last call showed, or on the first call.
+    template <std::invocable<std::vector<ScreenQuad>&> Make>
+    inline void append(std::vector<ScreenQuad>& quads, const Shown& shown, Make&& make) {
+        if (m_shown != shown) {
+            m_quads.clear(); // its memory kept
+            std::forward<Make>(make)(m_quads);
+            m_shown = shown;
+        }
+        quads.insert(quads.end(), m_quads.begin(), m_quads.end());
+    }
+
+private:
+    std::optional<Shown> m_shown; ///< None before the first append.
+    std::vector<ScreenQuad> m_quads;
+};
+
 /// What a draw shows: `quads`, in their order, over a target of `size`.
 struct ScreenDraw {
     rhi::Extent2d size{};
