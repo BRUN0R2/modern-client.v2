@@ -78,9 +78,10 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                        .defaultValue = false,
                        .description = "Whether fps_max may pass 100 frames a second, gl_vsync on or not.",
                        .flags = kArchived});
+    // Off, where Counter-Strike 1.6 starts it on (the project's choice): fps_max alone paces the frames.
     auto vsync =
         console.registerCvar(CvarDesc<bool>{.name = "gl_vsync",
-                                            .defaultValue = true,
+                                            .defaultValue = false,
                                             .description = "Whether frames wait for the display's refresh.",
                                             .flags = kArchived});
     auto gamma =

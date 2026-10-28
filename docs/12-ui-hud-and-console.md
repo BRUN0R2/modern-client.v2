@@ -385,7 +385,8 @@ here the startup runs that file itself. `registerClientCvars` registers the clie
 project's keyboard mapping choice (`in_keymap`, §6):
 `sensitivity` (3), `m_yaw` and `m_pitch` (0.022), `fps_max` (100, held as the original holds it,
 [05 §12](05-rendering.md#12-latency-and-frame-pacing)), `fps_override` (0: `fps_max` at most 100),
-`gl_vsync` (1), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `cl_showfps`
+`gl_vsync` (0, where the original starts it at 1: `fps_max` alone paces the frames, the project's
+choice), `gamma` (2.5, from 1.8 to 3), `brightness` (1, from 0 to 3), `hud_draw` (1), `cl_showfps`
 (0: the frames a second in the top left corner, §3.2), `r_fidelity`
 (`legacy`, or `enhanced`: the enhanced look, [ADR-0025](adr/0025-enhanced-rendering.md)), `r_decals`
 (4096, from 0, the most decals on faces) and `mp_decals` (300, from 0, what a game of more than one
