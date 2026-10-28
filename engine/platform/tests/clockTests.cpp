@@ -168,32 +168,45 @@ TEST(WakeLatenessTest, FallsSlowlyOnceTheWakesAreOnTime) {
     EXPECT_GT(lateness.margin(), 800us - kWakeLatenessStep) << "a wake on time moves it less than a step";
 }
 
-TEST(FrameRateMeterTest, TellsTheFramesASecondOfEachWholeSecond) {
+TEST(FrameRateMeterTest, EachFrameMovesTheAverageHalfWayToItsTime) {
     FrameRateMeter meter;
-    const Instant start{};
-    meter.frameStarted(start);
-    for (int frame = 1; frame < 100; ++frame) {
-        meter.frameStarted(start + (frame * 10ms));
-    }
-    EXPECT_FALSE(meter.framesPerSecond().has_value()) << "99 frames after the first span 0.99 s";
-    meter.frameStarted(start + 1s);
+    Instant at{};
+    meter.frameStarted(at);
+    EXPECT_FALSE(meter.framesPerSecond().has_value()) << "no frame's time yet";
+    at += 2ms;
+    meter.frameStarted(at);
     ASSERT_TRUE(meter.framesPerSecond().has_value());
-    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 100.0) << "100 frames after the first, in a second";
-
-    // The next window starts with the frame that closed the last: its rate stays until it closes too.
-    for (int frame = 1; frame <= 3; ++frame) {
-        meter.frameStarted(start + 1s + (frame * 400ms));
+    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 1000.0) << "half of 2 ms from none, as the original starts";
+    at += 2ms;
+    meter.frameStarted(at);
+    EXPECT_NEAR(*meter.framesPerSecond(), 1000.0 / 1.5, 1e-9) << "1.5 ms: half way from 1 ms to 2 ms";
+    for (int frame = 0; frame < 60; ++frame) {
+        at += 2ms;
+        meter.frameStarted(at);
     }
-    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 2.5) << "3 frames in 1.2 s";
+    EXPECT_NEAR(*meter.framesPerSecond(), 500.0, 1e-6) << "frames of 2 ms";
 }
 
-TEST(FrameRateMeterTest, AFrameLongerThanAWindowClosesItAlone) {
+TEST(FrameRateMeterTest, ChangesWithTheVeryNextFrame) {
     FrameRateMeter meter;
-    const Instant start{};
-    meter.frameStarted(start);
-    meter.frameStarted(start + 4s);
-    ASSERT_TRUE(meter.framesPerSecond().has_value());
-    EXPECT_DOUBLE_EQ(*meter.framesPerSecond(), 0.25) << "a map that took 4 s to load in a frame";
+    Instant at{};
+    for (int frame = 0; frame < 60; ++frame) {
+        meter.frameStarted(at);
+        at += 1ms;
+    }
+    EXPECT_NEAR(*meter.framesPerSecond(), 1000.0, 1e-6);
+    meter.frameStarted(at + 1ms); // a frame of 2 ms
+    EXPECT_NEAR(*meter.framesPerSecond(), 1000.0 / 1.5, 1e-6);
+}
+
+TEST(FrameRateMeterTest, AFrameCountsForAQuarterOfASecondAtMost) {
+    FrameRateMeter meter;
+    Instant at{};
+    for (int frame = 0; frame < 60; ++frame) {
+        meter.frameStarted(at);
+        at += 4s; // a map that took 4 s to load, each frame
+    }
+    EXPECT_NEAR(*meter.framesPerSecond(), 4.0, 1e-9) << "as the original's Host_FilterTime holds a frame";
 }
 
 TEST(WallClockTest, IsTheSystemClock) {

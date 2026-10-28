@@ -3,7 +3,7 @@
 
 /// cl_showfps's label (docs/12-ui-hud-and-console.md, section 3.2): the frames a second the client
 /// shows (nx::platform::FrameRateMeter), in the top left corner, in the font, the colour and the place
-/// Counter-Strike 1.6 writes them.
+/// Counter-Strike 1.6 writes them, to a tenth as its net_graph writes them.
 export module cs.client:fpsLabel;
 
 import std;
@@ -24,7 +24,9 @@ inline constexpr float kFpsLabelY = 2.0F;
 /// The label's colour.
 inline constexpr nx::render::ScreenColor kFpsLabelColor{.red = 255, .green = 255, .blue = 255, .alpha = 255};
 
-/// What the label says of `framesPerSecond`: the nearest whole number, then " fps" ("520 fps").
+/// What the label says of `framesPerSecond`: the number to the nearest tenth, as the original's net_graph
+/// writes it, then " fps" ("520.8 fps"). The original's cl_showfps writes a whole number; the user chose
+/// the tenth, which shows the rate as it moves.
 [[nodiscard]] auto fpsText(double framesPerSecond) -> std::string;
 
 /// The label: the glyphs it writes, in kFpsFont made for a screen's height, put on the GPU with the
@@ -42,16 +44,16 @@ public:
         -> nx::Result<void, nx::render::ScreenError>;
 
     /// Appends to `quads` the label of `framesPerSecond` (fpsText), once loaded; nothing before. The
-    /// label is written again only when the number it shows changes, once a second at most
-    /// (nx::platform::FrameRateMeter): the quads of the last call are appended again until then.
+    /// label is laid out again only when its text changes: the quads of the last call are appended again
+    /// until then.
     void append(std::vector<nx::render::ScreenQuad>& quads, double framesPerSecond);
 
 private:
     explicit FpsLabel(nx::ui::GlyphAtlas atlas) noexcept;
 
     nx::ui::GlyphAtlas m_atlas;
-    std::optional<nx::render::ScreenImage> m_image;  ///< The atlas on the GPU, once loaded.
-    nx::render::RetainedQuads<std::int64_t> m_shown; ///< Of the number the label shows.
+    std::optional<nx::render::ScreenImage> m_image; ///< The atlas on the GPU, once loaded.
+    nx::render::RetainedQuads<std::string> m_shown; ///< Of the text the label shows.
 };
 
 } // namespace cs

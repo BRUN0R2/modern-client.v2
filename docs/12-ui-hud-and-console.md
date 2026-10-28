@@ -251,10 +251,13 @@ frame (514 against 517.8, 518 against 520.0): the original measures the rate twi
 
 **Today** (`cs.client:fpsLabel`): `next` draws that label while a map is played and `cl_showfps` is 1,
 over the HUD whether `hud_draw` draws it or not, as the original's engine writes it over its client's
-HUD, and `nxview --fps <frames a second>` over its frame; the five references match it to the pixel.
-Its number is the one measure of the client's frame rate, `nx::platform::FrameRateMeter`
-([05 §12](05-rendering.md#12-latency-and-frame-pacing)), rounded to the nearest whole number, which
-`net_graph` is to show too, so that the two never disagree as the original's do. Its font, like the
+HUD, and `nxview --fps <frames a second>` over its frame; its font, place, colour and shadow match the
+five references to the pixel. Its number is the one measure of the client's frame rate,
+`nx::platform::FrameRateMeter` ([05 §12](05-rendering.md#12-latency-and-frame-pacing)), the one the
+original's `net_graph` writes, which changes with every frame, and it is written as `net_graph` writes
+it, to the nearest tenth (`520.8 fps`): a departure the user chose (2026-10-28) from the original's
+whole number, which is counted over each second and lags the rate. `net_graph` is to show the same
+number, so that the two never disagree as the original's do. Its font, like the
 console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 
 ### 3.3 Visual parity of numbers

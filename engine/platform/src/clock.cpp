@@ -15,18 +15,19 @@ import nx.core;
 namespace nx::platform {
 
 void FrameRateMeter::frameStarted(Instant at) noexcept {
-    if (!m_windowStart) {
-        m_windowStart = at;
-        return;
+    if (m_lastStart) {
+        const std::chrono::duration<double> frameTime =
+            std::min<std::chrono::duration<double>>(at - *m_lastStart, kLongestFrameTime);
+        m_averageFrameTime = (frameTime * kFrameTimeShare) + (m_averageFrameTime * (1.0 - kFrameTimeShare));
     }
-    ++m_frames;
-    const MonotonicClock::duration elapsed = at - *m_windowStart;
-    if (elapsed < kFrameRateWindow) {
-        return;
+    m_lastStart = at;
+}
+
+auto FrameRateMeter::framesPerSecond() const noexcept -> std::optional<double> {
+    if (m_averageFrameTime <= std::chrono::duration<double>::zero()) {
+        return std::nullopt;
     }
-    m_framesPerSecond = static_cast<double>(m_frames) / std::chrono::duration<double>{elapsed}.count();
-    m_windowStart = at;
-    m_frames = 0;
+    return 1.0 / m_averageFrameTime.count();
 }
 
 namespace {

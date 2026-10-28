@@ -14,17 +14,12 @@ namespace cs {
 namespace {
 
 /// The characters the label writes.
-constexpr std::u32string_view kFpsCharacters = U"0123456789 fps";
-
-/// The number fpsText writes of `framesPerSecond`: the nearest whole one.
-[[nodiscard]] auto shownRateOf(double framesPerSecond) -> std::int64_t {
-    return std::llround(framesPerSecond);
-}
+constexpr std::u32string_view kFpsCharacters = U"0123456789. fps";
 
 } // namespace
 
 auto fpsText(double framesPerSecond) -> std::string {
-    return std::format("{} fps", shownRateOf(framesPerSecond));
+    return std::format("{:.1f} fps", framesPerSecond);
 }
 
 auto FpsLabel::open(const WindowFonts& fonts, std::uint32_t screenHeight)
@@ -56,9 +51,9 @@ void FpsLabel::append(std::vector<nx::render::ScreenQuad>& quads, double framesP
     if (!m_image) {
         return;
     }
-    m_shown.append(quads, shownRateOf(framesPerSecond), [&](std::vector<nx::render::ScreenQuad>& label) {
-        nx::ui::appendText(label, m_atlas, *m_image, fpsText(framesPerSecond), kFpsLabelX, kFpsLabelY,
-                           kFpsLabelColor);
+    const std::string text = fpsText(framesPerSecond);
+    m_shown.append(quads, text, [&](std::vector<nx::render::ScreenQuad>& label) {
+        nx::ui::appendText(label, m_atlas, *m_image, text, kFpsLabelX, kFpsLabelY, kFpsLabelColor);
     });
 }
 
