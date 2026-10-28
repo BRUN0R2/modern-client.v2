@@ -107,6 +107,7 @@ constexpr float kTolerance = 1e-5F;
                                   .bodySound = sound("weapons/knife_hit1.wav", cs::SoundChannel::Weapon)},
                         .stab = {.reach = nx::HammerUnits{32.0F},
                                  .damage = nx::Damage{65.0F},
+                                 .backMultiplier = 3.0F,
                                  .missSequences = {5},
                                  .hitSequences = {4},
                                  .miss = {.primary = nx::Seconds{1.0F}, .secondary = nx::Seconds{1.0F}},
@@ -871,6 +872,37 @@ TEST(MeleeTest, AStrikeThatMeetsAnEntityDealsItsBlow) {
     Shooter shooter = standing();
     std::ignore = frames(inventory, shooter, 0, kReady - 1);
     EXPECT_TRUE(inventory.frame(command(1, {Button::Attack}), shooter, hitAll(), at(kReady)).blows.empty());
+}
+
+TEST(MeleeTest, AStabInAPlayersBackDealsThreeTimesItsDamage) {
+    const WeaponCatalog weapons = catalog();
+    nx::ecs::World world;
+    const nx::ecs::Entity met = world.spawn();
+    // Struck along +y: a player turned the same way, or within about 37 degrees of it, is struck in its
+    // back; one turned further, or another entity, is not.
+    for (const auto& [angles, slash, stab] :
+         {std::tuple{std::optional{nx::EulerAngles{.yaw = nx::Degrees{90.0F}}}, 15.0F, 195.0F},
+          std::tuple{std::optional{nx::EulerAngles{.pitch = nx::Degrees{-10.0F}, .yaw = nx::Degrees{60.0F}}},
+                     15.0F, 195.0F},
+          std::tuple{std::optional{nx::EulerAngles{.yaw = nx::Degrees{45.0F}}}, 15.0F, 65.0F},
+          std::tuple{std::optional{nx::EulerAngles{.yaw = nx::Degrees{270.0F}}}, 15.0F, 65.0F},
+          std::tuple{std::optional<nx::EulerAngles>{}, 15.0F, 65.0F}}) {
+        const cs::WeaponTracer meetsIt = [met, angles](nx::collision::Hull, nx::Vec3, nx::Vec3) {
+            return cs::WeaponHit{
+                .trace = {.fraction = 0.5F}, .entity = met, .isBody = true, .playerAngles = angles};
+        };
+        for (const auto& [button, damage] :
+             {std::pair{Button::Attack, slash}, std::pair{Button::Attack2, stab}}) {
+            Inventory inventory = given(weapons, {kKnife});
+            Shooter shooter{.view = nx::EulerAngles{.yaw = nx::Degrees{90.0F}}, .isOnGround = true};
+            std::ignore = frames(inventory, shooter, 0, kReady - 1);
+            const cs::WeaponAttacks attacks =
+                inventory.frame(command(1, {button}), shooter, meetsIt, at(kReady));
+            ASSERT_EQ(attacks.blows.size(), 1U);
+            EXPECT_EQ(attacks.blows.front().damage.value(), damage)
+                << (angles ? angles->yaw.value() : -1.0F) << (button == Button::Attack ? " slash" : " stab");
+        }
+    }
 }
 
 TEST(MeleeTest, DrawingTheKnifeAgainSlashesFromItsFirstSequence) {

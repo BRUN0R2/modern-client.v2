@@ -42,7 +42,10 @@ them, panels and the console's window), `nx.audio` (the mixer), `nx.settings` (t
 (the map's brush entities, doors, buttons and triggers) and `cs.shared` (player movement, the
 knife, Glock 18, USP, AK-47 and M4A1 as the original fires them, the rounds of a map: their
 freeze, their time, its end and the money they pay, and a player hurt by its falls, drowning, slime
-and lava, and killed), with which the client, `next`, plays the maps alone, round after round.
+and lava, and killed) and `cs.server` (the game of a map played by its players' commands: joining
+teams, solid to each other, their shots and knives meeting each other's hitboxes and hurting by hit
+group, through kevlar and helmet), with which the client, `next`, plays the maps as a listen server,
+round after round.
 `nxcheck` reads every file of a Counter-Strike 1.6 installation with those readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in
 [`docs/RULES.md`](docs/RULES.md) and the backlog in [`docs/TODO.md`](docs/TODO.md).

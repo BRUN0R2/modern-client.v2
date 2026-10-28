@@ -111,3 +111,7 @@ volume = 1.0
 files = ["weapons/dryfire_pistol.wav"]
 channel = "weapon"
 volume = 0.8
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.05
+largeFlinch = false

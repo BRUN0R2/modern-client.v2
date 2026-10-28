@@ -578,6 +578,13 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
             }
             m_session->game->give(m_session->player, weapon);
             return {};
+        },
+        .giveArmor = [this](cs::ArmorKind kind) -> nx::Result<void, cs::WeaponActionError> {
+            if (!m_session) {
+                return nx::fail(cs::WeaponActionError::NoMap);
+            }
+            m_session->game->giveArmor(m_session->player, kind);
+            return {};
         }};
     if (auto registered = cs::registerWeaponCommands(m_console, m_content->weapons, std::move(actions));
         !registered) {

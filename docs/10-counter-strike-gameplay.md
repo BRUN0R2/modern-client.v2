@@ -43,8 +43,10 @@ fast when it faces away), turned around and moving backwards when it faces more 
 the way it moves; the aim's yaw blend from the angle between its body and its legs, its pitch blend
 from its view's pitch, from 45 degrees up to 45 down. The server animates its players so, and each
 client the others it draws ([05 §9.1](05-rendering.md#91-pipeline)): it is told their sequences, and
-turns their legs and their aim itself. The flinches and the deaths by where a shot met a player come
-with the attacks of players.
+turns their legs and their aim itself. A player hurt by an attack flinches: `head_flinch` for the head
+and the chest, `gut_flinch` elsewhere, either at random for a hit of no group, played to its end; killed,
+it plays the death of where it was met: the head's, the chest's or the stomach's, `left` and `right` for
+the arms, a death at random for a hit of no group, the simplest for the legs (§7.4).
 
 ## 3. Match and round flow
 
@@ -235,7 +237,8 @@ losing side of an end that does not pay them (a target saved, hostages not rescu
 money is held from none to 16000 (`cs::addMoney`, `kMostMoney`); a restarted game starts the
 accounts, the losses and the bonus over, Game Commencing too. The server's players are paid so. The single auditable
 function and its event come with their first consumers (the HUD's flash of a changed number,
-plugins); the kills', the bomb's and the hostages' rescue money come with them.
+plugins); the bomb's and the hostages' rescue money come with them. A kill's money is paid as
+[§7.4](#74-damage) tells.
 
 ## 7. Weapons and equipment
 
@@ -498,14 +501,16 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
   something, which may be a hostage; a miss and a hit play their sequences and hold the attacks as
   the data says (a slash 0.35 or 0.4 seconds, the next stab 0.5; a stab 1.0 or 1.1), the slashes
   from their first sequence again each time the knife is drawn. A hit on a body
-  (`cs::WeaponHit::isBody`: a hostage, or an entity of a class the original's `Classify` makes other
-  than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
+  (`cs::WeaponHit::isBody`: a player, a hostage, or an entity of a class the original's `Classify`
+  makes other than none, a `func_vehicle`) sounds as flesh, `knife_hit1` to `knife_hit4` for the slash and
   `knife_stab` for the stab; one on the world or a brush entity `knife_hitwall1` alone, with no
   sound of what its texture is made of, as the original's multiplayer rules play none
   (`CHalfLifeMultiplay::PlayTextureSounds`). What it meets takes its blow (`cs::Blow`,
   `nx::game::attackEntity`) once the next attack's time is set: 15 for the slash (its fast swing's 20
   is never dealt, that time set before it is weighed) and 65 for the stab (`data/cstrike/weapons/knife.toml`'s
-  `damage`); the stab's three times as much in a player's back comes with the players.
+  `damage`), three times as much in a player's back (`backMultiplier`, `KnifeBackStabMultiplier`): a
+  player it meets turned the way it strikes, its body's forward along the ground more than 0.8 along
+  the strike's (`Stab`'s dot).
 
 ### 7.4 Damage
 
@@ -520,8 +525,38 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`), for each kind:
 the monsters' `TraceAttack`'s (head 3, chest and stomach 1.5, arms 1, legs 0.75, a shield none), which
 a hostage takes an attack by first, and the hostages' `TakeDamage`'s (`GetModifiedDamage`: none 1.75,
-head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), each in double precision as the
-original's float times a double. The players' shares and armor come with them.
+head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), and the players' `TraceAttack`'s
+(head 4, chest 1, stomach 1.25, arms 1, legs 0.75), each in double precision as the original's float
+times a double.
+
+**Today**, the players' attacks on each other (`cs.server:playerBodies`, `cs::Game`, GPL, consulted:
+[20 §3](20-legal-and-licensing.md#3-clean-room)): a player's body is solid as its box to a hull's trace,
+standing or ducked, and meets a line by its model's hitboxes but the last, a shield's, which a player
+without one has none of, each grown half a unit each way (`SV_HullForStudioModel` with
+`sv_clienttrace` 1), posed as the server's game poses a client's (`R_StudioPlayerBlend`,
+`R_StudioHull`, `SV_StudioSetupBones`): its sequence at the frame it estimates, its motion kept, the
+aim's blends, its legs at the first frame of their gait sequence, turned by their yaw and, for a
+sequence of fewer blends, by the pitch beyond its first blend's reach. The shooter's own body is left
+out of its shots and strikes. A player met (`TraceAttack`) takes the hit group of the hitbox met (none
+for a box), the damage its share; its view is punched, unless its helmet or its vest stops the blood
+(the head half the damage up, 12 at most, and its roll as much either way, 9 at most; the chest and the
+stomach a tenth up, 4 at most); then `TakeDamage`: a teammate's attack hurts none while
+`mp_friendlyfire` is 0 (`FPlayerCanTakeDamage`), else 0.35 of it; a hit but in the legs of a weapon of
+`harm.largeFlinch` (the AK-47's, the M4A1's) on a player that does not duck flinches it large, knocks it
+back 170 units a second away from its attacker while it moves slower than 300 and slows it down to
+0.65 of its speed, any other flinches it small and slows it down to 0.5 (`TakeDamageImpulse`), a
+hundredth less slow each command it starts on the ground (`m_flVelocityModifier`); its armor where it
+covers the group (kevlar the chest, the stomach, the arms and a hit of no group, a helmet the head)
+takes its share: the health takes 0.5 times the attacker's weapon's `harm.armorRatio` of the damage
+(`ARMOR_RATIO`: the AK-47's 1.55, the Glock's 1.05, the knife's 1.7, the M4A1's 1.4, the USP's 1), the
+armor loses half the rest (`ARMOR_BONUS`), and once it is gone the health takes what its points did
+not, the armor none then; its whole points off its health; heard in its pain by where it was met
+(`headshot1` to `3`, `bhit_helmet-1` with a helmet, `bhit_kevlar-1` its armor taking a share but in the
+legs, else its flesh's). Killed by it, it plays its death by where it was met (§2), and its killer gets
+300 for an enemy and loses 3300 for a teammate (`data/cstrike/economy.toml`'s `kills`,
+`CHalfLifeMultiplay::PlayerKilled`). A player wears armor as an item of it gives it (`cs::wearArmor`:
+100, `item_kevlar` a vest, `item_assaultsuit` a vest and a helmet), until it is killed. The blood, the
+scores and the kill feed come with what they need ([TODO](TODO.md)).
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's
@@ -549,9 +584,10 @@ time are looked at: two seconds apart at least, while it keeps one, drowning and
 them, so that the first giving back waits on the last look; in slime it is hurt 4 each command, and in
 lava 10, times how deep it is in (1 at its feet, 2 at its waist, 3 over its head), lava not within a
 second after slime hurt it without its leaving the water (the original's `dmgtime`). Each harm it takes
-as `CBasePlayer::TakeDamage` deals it to a player without armor, as no player has yet (`cs::harmPlayer`;
-a fall's and drowning's armor would never take): the pain of its flesh (`bhit_flesh-1` to `-3`, on its
-`Voice` channel), then the damage's whole points off its health (the original's `int()`), its health
+as `CBasePlayer::TakeDamage` deals it (`cs::harmPlayer`): its armor's share where it covers the hit group
+it was last met in (a fall meets it in none), but of a fall and of drowning; the pain of where it was
+met (`cs::painOf`, on its `Voice` channel: its flesh's, `bhit_flesh-1` to `-3`, for a fall), then the
+damage's whole points off its health (the original's `int()`), its health
 going below none as the original's does, which its HUD shows as none, drowning and acid kept over time;
 a landing harder than its health first splats (`common/bodysplat`, on its `Item` channel), and the
 pitch of its kick is gone. With no health left it
@@ -560,9 +596,8 @@ pain's replaced), its weapons go with it (`PackDeadPlayerItems`; the box it drop
 it does nothing more until it spawns again (killed by nothing, it observes its own body, which moves no
 more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), no longer solid, and the round's
 end is weighed (§3): its team eliminated loses it. What a dead player sees and its HUD (the
-original's client follows its body, `OBS_CHASE_FREE`, then spectates), its body's death played, the
-attacks of other players, their hit groups and the armor's share (of slime's and lava's harm too), and
-`trigger_hurt` come with what they need ([TODO](TODO.md)).
+original's client follows its body, `OBS_CHASE_FREE`, then spectates) and `trigger_hurt` come with what
+they need ([TODO](TODO.md)).
 
 ### 7.5 Weapons made as the game runs
 
@@ -607,7 +642,7 @@ The console's weapon commands (`cs.client:weaponCommands`) are named as a plugin
 | `get_weapon_var <weapon> [key path]` | Prints a value, or all of them and what the weapon lacks |
 | `list_weapons` | Prints the weapons: id, classname, name, slot, position, and whether incomplete or replaced |
 | `replace_weapon <weapon> [replacement]` | The game makes the replacement for the weapon, or the weapon again |
-| `give <weapon>` | Gives the player a weapon, by its id or classname: its replacement, when it is replaced |
+| `give <weapon>` | Gives the player a weapon, by its id or classname: its replacement, when it is replaced; or armor, as the original's names its items: `item_kevlar`, `item_assaultsuit` |
 
 **Today:** weapons made, set, replaced and given through the catalog and the console; their
 behavior is the weapons' own, driven by their values. A weapon's own behavior (overriding its

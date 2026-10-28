@@ -185,7 +185,9 @@ inline constexpr std::array kSwimSequences{nx::assets::SequenceIndex{8}, nx::ass
 
 /// A pose of a player's model: its sequence at a frame, its legs' gait sequence at a frame of its own,
 /// the aim's yaw and pitch blends, each 0 to 255 (m_flYaw and m_flPitch, the yaw's with a fraction on the
-/// server), and where it is: turned by the gait's yaw, not the view's.
+/// server), the first blending of a sequence of two to eight blends, 0 to 255 (pev->blending[0]: the
+/// yaw's blend cut to a whole one as the clients draw it, R_StudioPlayerBlend's of its pitch for the
+/// server's traces), and where it is: turned by the gait's yaw, not the view's.
 struct PlayerPoseQuery {
     SequenceFrame frame{};
     nx::assets::SequenceIndex gaitSequence{};
@@ -194,6 +196,7 @@ struct PlayerPoseQuery {
     SequenceFrame gaitFrame{};
     float yawBlend = 0.0F;
     float pitchBlend = 0.0F;
+    std::uint8_t blending = 0;
     nx::Mat3x4 placement{};
 };
 
@@ -201,8 +204,8 @@ struct PlayerPoseQuery {
 /// `query` asks in `sequence` (SV_StudioSetupBones for a player), its motion bone kept: a sequence of
 /// nine blends (kAimBlends) by the four of them around the yaw's and the pitch's blends, the yaw's
 /// shares first (0 to 127 between the left and the middle, 128 to 255 between the middle and the right,
-/// as the pitch's between up, the middle and down); another by poseBones's blending, the first by the
-/// yaw's. A sequence of nine blends below kFirstDeathSequence, but the swimming ones, has the bones from
+/// as the pitch's between up, the middle and down); another by poseBones's blending, the first the
+/// query's. A sequence of nine blends below kFirstDeathSequence, but the swimming ones, has the bones from
 /// the root to the spine and from each child of the pelvis on (its legs) play the gait sequence
 /// instead.
 [[nodiscard]] auto posePlayerBones(const nx::assets::MdlView& model,
@@ -220,9 +223,10 @@ struct PlayerPoseQuery {
     -> std::vector<nx::Mat3x4>;
 
 /// The `hitboxes` of a model on its bones posed as `bones` (poseBones's, by index), as the server places
-/// them for its traces (R_StudioHull): each its bounds along its bone's axes.
+/// them for its traces (R_StudioHull): each its bounds along its bone's axes, grown by `grownBy`
+/// (nx::collision::PlacedBox).
 [[nodiscard]] auto placedHitboxesOf(std::span<const nx::assets::Hitbox> hitboxes,
-                                    std::span<const nx::Mat3x4> bones)
+                                    std::span<const nx::Mat3x4> bones, nx::Vec3 grownBy = {})
     -> std::vector<nx::collision::PlacedBox>;
 
 } // namespace cs

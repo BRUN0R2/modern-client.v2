@@ -414,8 +414,10 @@ ReadMultiplayCvars), `mp_startmoney` (800), given as the player joins and as the
 held to 800 to 16000 (`cs::readStartMoney`, CheckStartMoney), `sv_restartround` and `sv_restart`
 (0), read once a second, cut to whole seconds and held to 60, both set back to 0 when one asks for
 a restart (`cs::restartDelayOf`, CheckRestartRound,
-[10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), and `mp_footsteps` (1: any value but
-0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)).
+[10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), `mp_footsteps` (1: any value but
+0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)), and
+`mp_friendlyfire` (0: any value but 0 lets a player's attacks hurt its teammates), read at each attack
+([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 A number past what `int()` holds is cut as the original's processors cut it, to the least whole
 number (`nx::truncateAsX86`). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.

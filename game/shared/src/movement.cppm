@@ -252,7 +252,8 @@ struct SolidBox {
 [[nodiscard]] auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity>;
 
 /// The entities of `world` solid as boxes (nx::game::BoxSolidity) that stop a player, in the world's
-/// order, as the original's engine lists them for it (SOLID_SLIDEBOX, SOLID_BBOX): a hostage.
+/// order, as the original's engine lists them for it (SOLID_SLIDEBOX, SOLID_BBOX): a hostage, another
+/// player alive, an entity's body; all but `ignored`, the body of the one that moves, when there is one.
 [[nodiscard]] auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored = std::nullopt)
     -> std::vector<SolidBox>;
 

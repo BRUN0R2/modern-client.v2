@@ -4,7 +4,8 @@
 /// The console's weapon commands (docs/10-counter-strike-gameplay.md, section 7.5): `weapon_<id>` for
 /// each weapon, as the original's game takes them, and the commands that make weapons as the game
 /// runs, set and read their values by the key paths of their data, replace one by another and give
-/// one, named as a plugin's functions are (docs/15): what a plugin will do, typed at the console.
+/// one, or an item of armor, named as a plugin's functions are (docs/15): what a plugin will do, typed at
+/// the console.
 export module cs.client:weaponCommands;
 
 import std;
@@ -25,6 +26,8 @@ struct WeaponActions {
     std::function<nx::Result<void, WeaponActionError>(WeaponIndex weapon)> select;
     /// The player is given `weapon`, which is complete. Errors: NoMap.
     std::function<nx::Result<void, WeaponActionError>(WeaponIndex weapon)> give;
+    /// The player is given armor of `kind`, as an item of it gives it. Errors: NoMap.
+    std::function<nx::Result<void, WeaponActionError>(ArmorKind kind)> giveArmor;
 };
 
 /// The weapon `name` names in `weapons`: by its id, or by its classname, in any case, as the console
@@ -39,8 +42,10 @@ struct WeaponActions {
 
 /// Registers in `console` `weapon_<id>` (its classname) for each weapon of `weapons`, and
 /// `create_weapon`, `set_weapon_var`, `get_weapon_var`, `list_weapons`, `replace_weapon` and `give`,
-/// which act through `actions`; `weapons` and `console` must outlive the commands. A weapon made
-/// registers its own `weapon_<id>`. Errors: those of nx::console::Console::registerCommand.
+/// which act through `actions`; `give` takes a weapon, or an item of armor by its classname
+/// (armorItemNamed: item_kevlar, item_assaultsuit), as the original's does. `weapons` and `console` must
+/// outlive the commands. A weapon made registers its own `weapon_<id>`. Errors: those of
+/// nx::console::Console::registerCommand.
 [[nodiscard]] auto registerWeaponCommands(nx::console::Console& console, WeaponCatalog& weapons,
                                           WeaponActions actions)
     -> nx::Result<void, nx::console::ConsoleError>;

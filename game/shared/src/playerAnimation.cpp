@@ -52,6 +52,13 @@ constexpr std::array kGenericDeaths{Activity::DieHeadshot,  Activity::DieGutshot
                                     Activity::DieSimple,    Activity::DieBackward, Activity::DieForward,
                                     Activity::DieChestshot, Activity::DieGutshot,  Activity::DieHeadshot};
 constexpr std::string_view kCrouchDeath = "crouch_die";
+/// The deaths of a hit in either arm, and the flinches of one in the head and in the gut.
+constexpr std::string_view kLeftArmDeath = "left";
+constexpr std::string_view kRightArmDeath = "right";
+constexpr std::string_view kHeadFlinch = "head_flinch";
+constexpr std::string_view kGutFlinch = "gut_flinch";
+/// A hit of no group flinches the head or the gut, each as likely (RANDOM_LONG(0, 1)).
+constexpr std::uint64_t kGenericFlinches = 2;
 
 /// Whether the sequence label of an animation begins with "crouch_" when the player ducks
 /// (GetAnimDesired's ANIM_CROUCH), or "ref_" whatever it does (ANIM_NORMAL).
@@ -117,6 +124,10 @@ void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
         return unlessUninterrupted(Activity::RangeAttack1);
     case PlayerAction::Reload:
         return unlessUninterrupted(Activity::Reload);
+    case PlayerAction::Flinch:
+        return Activity::Flinch;
+    case PlayerAction::LargeFlinch:
+        return Activity::LargeFlinch;
     case PlayerAction::Idle:
     case PlayerAction::Walk:
         if (context.isOnGround ||
@@ -136,14 +147,79 @@ void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
     return animation.activity != activity || animation.torso.isFinished;
 }
 
-/// The death the player plays (SetAnimation's ACT_DIESIMPLE): one of a hit of no group, drawn from
-/// `random`, but "crouch_die" ducked; the first sequence for one the model lacks.
+/// Whether the torso's shots, flinches and reloads are over, or it does something else (ACT_WALK's).
+[[nodiscard]] auto areOneOffsOver(const PlayerAnimation& animation) noexcept -> bool {
+    return isOverOrNot(animation, Activity::RangeAttack1) && isOverOrNot(animation, Activity::Flinch) &&
+           isOverOrNot(animation, Activity::LargeFlinch) && isOverOrNot(animation, Activity::Reload);
+}
+
+/// Whether the player flinches.
+[[nodiscard]] auto isFlinching(std::optional<Activity> activity) noexcept -> bool {
+    return activity == Activity::Flinch || activity == Activity::LargeFlinch;
+}
+
+/// The flinch the player plays (SetAnimation's ACT_FLINCH and ACT_LARGE_FLINCH), by where it was met:
+/// "head_flinch" for the head and the chest, "gut_flinch" elsewhere, either drawn from `random` for a hit
+/// of no group; the first sequence for the shield, and for one the model lacks.
+[[nodiscard]] auto flinchSequenceOf(const PlayerAnimationContext& context, nx::Random& random)
+    -> nx::assets::SequenceIndex {
+    std::optional<std::string_view> flinch = kGutFlinch;
+    switch (static_cast<HitGroup>(context.lastHitGroup)) {
+    case HitGroup::Generic:
+        flinch = random.below(kGenericFlinches) != 0 ? kHeadFlinch : kGutFlinch;
+        break;
+    case HitGroup::Head:
+    case HitGroup::Chest:
+        flinch = kHeadFlinch;
+        break;
+    case HitGroup::Shield:
+        flinch.reset();
+        break;
+    default:
+        break;
+    }
+    return flinch
+        .and_then(
+            [&context](std::string_view label) { return lookupSequence(context.model->sequences(), label); })
+        .value_or(nx::assets::SequenceIndex{});
+}
+
+/// The death the player plays (SetAnimation's ACT_DIESIMPLE), by where it was met: one of a hit of no
+/// group, drawn from `random`; the head's, the chest's or the stomach's; "left" and "right" for the
+/// arms; the simplest elsewhere; but "crouch_die" ducked; the first sequence for one the model lacks.
 [[nodiscard]] auto deathSequenceOf(const PlayerAnimationContext& context, nx::Random& random)
     -> nx::assets::SequenceIndex {
-    const Activity death = kGenericDeaths.at(random.below(kGenericDeaths.size()));
-    const std::optional<nx::assets::SequenceIndex> sequence =
-        context.isDucked ? lookupSequence(context.model->sequences(), kCrouchDeath)
-                         : lookupActivity(context.model->sequences(), death, random);
+    const std::span<const nx::assets::StudioSequence> sequences = context.model->sequences();
+    const auto ofActivity = [&sequences, &random](Activity activity) {
+        return lookupActivity(sequences, activity, random);
+    };
+    std::optional<nx::assets::SequenceIndex> sequence;
+    switch (static_cast<HitGroup>(context.lastHitGroup)) {
+    case HitGroup::Generic:
+        sequence = ofActivity(kGenericDeaths.at(random.below(kGenericDeaths.size())));
+        break;
+    case HitGroup::Head:
+        sequence = ofActivity(Activity::DieHeadshot);
+        break;
+    case HitGroup::Chest:
+        sequence = ofActivity(Activity::DieChestshot);
+        break;
+    case HitGroup::Stomach:
+        sequence = ofActivity(Activity::DieGutshot);
+        break;
+    case HitGroup::LeftArm:
+        sequence = lookupSequence(sequences, kLeftArmDeath);
+        break;
+    case HitGroup::RightArm:
+        sequence = lookupSequence(sequences, kRightArmDeath);
+        break;
+    default:
+        sequence = ofActivity(Activity::DieSimple);
+        break;
+    }
+    if (context.isDucked) {
+        sequence = lookupSequence(sequences, kCrouchDeath);
+    }
     return sequence.value_or(nx::assets::SequenceIndex{});
 }
 
@@ -198,7 +274,7 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
         }
         animation.activity = ideal;
     } else if (ideal == Activity::Walk) {
-        if (isOverOrNot(animation, Activity::RangeAttack1) && isOverOrNot(animation, Activity::Reload)) {
+        if (areOneOffsOver(animation)) {
             if (context.speed <= kRunSpeed || hasFiredLately()) {
                 desired =
                     desiredSequence("aim", Posture::AsItIs, context).value_or(nx::assets::SequenceIndex{});
@@ -219,6 +295,9 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
         }
         animation.gaitSequence =
             sequenceOf(context.speed > kRunSpeed ? Activity::Run : Activity::Walk, context, random);
+    } else if (isFlinching(ideal)) {
+        animation.activity = ideal;
+        desired = flinchSequenceOf(context, random);
     } else if (ideal == Activity::DieSimple) {
         if (animation.activity == ideal) {
             return;
@@ -249,7 +328,7 @@ void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
                 sequenceOf(context.speed != nx::UnitsPerSecond{} ? Activity::Crouch : Activity::CrouchIdle,
                            context, random);
         } else if (context.speed > kRunSpeed) {
-            if (!hasFiredLately()) {
+            if (!hasFiredLately() && !isFlinching(animation.activity)) {
                 if (const std::optional<nx::assets::SequenceIndex> run =
                         desiredSequence("run", Posture::Standing, context)) {
                     desired = *run;

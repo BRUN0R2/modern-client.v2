@@ -1,15 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// How a player is hurt and killed, as the original's CBasePlayer::TakeDamage, TakeHealth, PostThink and
-// CheckTimeBasedDamage do it: the repository's data/cstrike/playerHarm.toml and what its reader
-// refuses, the damage of a fall by its speed, the landings that deal it, the whole points a player's
-// health loses until it dies, the harms it keeps over time, and the drowned health given back.
+// How a player is hurt and killed, as the original's CBasePlayer::TraceAttack, TakeDamage, Pain,
+// TakeHealth, PostThink and CheckTimeBasedDamage do it: the repository's data/cstrike/playerHarm.toml and
+// what its reader refuses, the damage of a fall by its speed, the landings that deal it, the share of a
+// harm armor takes where it covers the player, the whole points a player's health loses until it dies,
+// the pain it is heard in and the punch of its view by where it was met, the harms it keeps over time,
+// and the drowned health given back.
 
 #include <gtest/gtest.h>
 
 import std;
 import nx.core;
+import nx.math;
 import nx.collision;
 import nx.game;
 import nx.platform;
@@ -17,8 +20,11 @@ import cs.shared;
 
 namespace {
 
+using cs::ArmorKind;
+using cs::ArmorShares;
 using cs::FallDamage;
 using cs::HarmKind;
+using cs::HitGroup;
 using cs::MovementState;
 using cs::PlayerHarm;
 using cs::PlayerHarmRules;
@@ -28,6 +34,9 @@ using nx::collision::Contents;
 
 constexpr nx::TickRate kRate = nx::kDefaultTickRate;
 constexpr nx::HitPoints kGivenBack{10.0F};
+/// The armor's shares of a harm of the world's: ARMOR_RATIO and ARMOR_BONUS.
+constexpr ArmorShares kArmor{};
+constexpr auto kGeneric = std::to_underlying(HitGroup::Generic);
 
 /// The repository's data/cstrike/playerHarm.toml, read.
 [[nodiscard]] auto repositoryRules() -> PlayerHarmRules {
@@ -93,17 +102,35 @@ TEST(PlayerHarmTest, TheRepositorysHarmIsTheOriginals) {
               (std::vector<std::string>{"player/bhit_flesh-1.wav", "player/bhit_flesh-2.wav",
                                         "player/bhit_flesh-3.wav"}));
     EXPECT_EQ(rules.pain.channel, cs::SoundChannel::Voice);
+    EXPECT_EQ(rules.headPain.files, (std::vector<std::string>{"player/headshot1.wav", "player/headshot2.wav",
+                                                              "player/headshot3.wav"}));
+    EXPECT_EQ(rules.helmetPain.files, (std::vector<std::string>{"player/bhit_helmet-1.wav"}));
+    EXPECT_EQ(rules.kevlarPain.files, (std::vector<std::string>{"player/bhit_kevlar-1.wav"}));
+    for (const cs::GameSound* const pain : {&rules.headPain, &rules.helmetPain, &rules.kevlarPain}) {
+        EXPECT_EQ(pain->channel, cs::SoundChannel::Voice);
+    }
+    // ARMOR_RATIO, ARMOR_BONUS; TakeDamage's 0.35 of a teammate's attack, TakeDamageImpulse's.
+    EXPECT_EQ(rules.armor.ratio, 0.5F);
+    EXPECT_EQ(rules.armor.bonus, 0.5F);
+    EXPECT_EQ(rules.attacks.teammateShare, 0.35);
+    EXPECT_EQ(rules.attacks.knockback, nx::UnitsPerSecond{170.0F});
+    EXPECT_EQ(rules.attacks.knockbackBelowSpeed, nx::UnitsPerSecond{300.0F});
+    EXPECT_EQ(rules.attacks.flinchSpeedShare, 0.5F);
+    EXPECT_EQ(rules.attacks.largeFlinchSpeedShare, 0.65F);
     EXPECT_EQ(rules.splat.files, (std::vector<std::string>{"common/bodysplat.wav"}));
     EXPECT_EQ(rules.splat.channel, cs::SoundChannel::Item);
     EXPECT_EQ(rules.death.files, (std::vector<std::string>{"player/die1.wav", "player/die2.wav",
                                                            "player/die3.wav", "player/death6.wav"}));
     EXPECT_EQ(rules.death.channel, cs::SoundChannel::Voice);
-    EXPECT_EQ(rules.soundFiles().size(), 8U);
+    EXPECT_EQ(rules.soundFiles().size(), 13U);
 }
 
 /// A file of the harm: `painFiles` for its pain, and a fall from `safeSpeed` to `fatalSpeed`.
 [[nodiscard]] auto harmFile(std::string_view painFiles, float safeSpeed, float fatalSpeed) -> std::string {
     return std::format(R"(pain = {{ files = [{}], channel = "voice", volume = 1.0 }}
+headPain = {{ files = ["d.wav"], channel = "voice", volume = 1.0 }}
+helmetPain = {{ files = ["e.wav"], channel = "voice", volume = 1.0 }}
+kevlarPain = {{ files = ["f.wav"], channel = "voice", volume = 1.0 }}
 splat = {{ files = ["b.wav"], channel = "item", volume = 1.0 }}
 death = {{ files = ["c.wav"], channel = "voice", volume = 1.0 }}
 
@@ -123,6 +150,17 @@ givenBack = 10.0
 [harmfulWater]
 slime = 4.0
 lava = 10.0
+
+[armor]
+ratio = 0.5
+bonus = 0.5
+
+[attacks]
+teammateShare = 0.35
+knockback = 170.0
+knockbackBelowSpeed = 300.0
+flinchSpeedShare = 0.5
+largeFlinchSpeedShare = 0.65
 )",
                        painFiles, safeSpeed, fatalSpeed);
 }
@@ -161,22 +199,23 @@ TEST(PlayerHarmTest, OnlyALandingFasterThanTheSafeSpeedOutOfWaterHurts) {
 TEST(PlayerHarmTest, APlayerLosesTheWholePointsOfADamageAndDiesWithNoneLeft) {
     PlayerStatus status{};
     TimedHarms timed;
-    const nx::game::Harm hurt = cs::harmPlayer(status, timed, harm(20.8F));
+    const cs::PlayerHarmed hurt = cs::harmPlayer(status, timed, harm(20.8F), kGeneric, kArmor);
     EXPECT_EQ(hurt.damage, nx::Damage{20.0F});
     EXPECT_FALSE(hurt.isKilled);
     EXPECT_EQ(status.health, nx::HitPoints{80.0F});
     EXPECT_TRUE(status.isAlive());
 
-    EXPECT_EQ(cs::harmPlayer(status, timed, harm(0.9F)).damage, nx::Damage{}) << "less than a point: none";
+    EXPECT_EQ(cs::harmPlayer(status, timed, harm(0.9F), kGeneric, kArmor).damage, nx::Damage{})
+        << "less than a point: none";
     EXPECT_EQ(status.health, nx::HitPoints{80.0F});
 
-    const nx::game::Harm killed = cs::harmPlayer(status, timed, harm(125.0F));
+    const cs::PlayerHarmed killed = cs::harmPlayer(status, timed, harm(125.0F), kGeneric, kArmor);
     EXPECT_EQ(killed.damage, nx::Damage{125.0F});
     EXPECT_TRUE(killed.isKilled);
     EXPECT_EQ(status.health, nx::HitPoints{-45.0F}) << "below none, as the original's health goes";
     EXPECT_FALSE(status.isAlive());
 
-    const nx::game::Harm again = cs::harmPlayer(status, timed, harm(10.0F));
+    const cs::PlayerHarmed again = cs::harmPlayer(status, timed, harm(10.0F), kGeneric, kArmor);
     EXPECT_EQ(again.damage, nx::Damage{}) << "a dead player takes none";
     EXPECT_FALSE(again.isKilled);
     EXPECT_EQ(status.health, nx::HitPoints{-45.0F});
@@ -185,8 +224,100 @@ TEST(PlayerHarmTest, APlayerLosesTheWholePointsOfADamageAndDiesWithNoneLeft) {
 TEST(PlayerHarmTest, APlayerLeftWithExactlyNoneIsKilled) {
     PlayerStatus status{.health = nx::HitPoints{20.0F}};
     TimedHarms timed;
-    EXPECT_TRUE(cs::harmPlayer(status, timed, harm(20.9F)).isKilled);
+    EXPECT_TRUE(cs::harmPlayer(status, timed, harm(20.9F), kGeneric, kArmor).isKilled);
     EXPECT_EQ(status.health, nx::HitPoints{});
+}
+
+TEST(PlayerHarmTest, ArmorTakesItsShareWhereItCoversThePlayer) {
+    const auto chest = std::to_underlying(HitGroup::Chest);
+    const auto head = std::to_underlying(HitGroup::Head);
+    const auto leg = std::to_underlying(HitGroup::LeftLeg);
+    // An AK-47's 36 in the chest of kevlar: the health takes 0.5 times 1.55 of it, the armor half the rest.
+    PlayerStatus kevlar{.armor = nx::ArmorPoints{100.0F}, .armorKind = ArmorKind::Kevlar};
+    TimedHarms timed;
+    const ArmorShares akRatio{.ratio = static_cast<float>(0.5 * 1.55)};
+    const cs::PlayerHarmed shot =
+        cs::harmPlayer(kevlar, timed, harm(36.0F, HarmKind::Bullet), chest, akRatio);
+    EXPECT_TRUE(shot.isArmored);
+    EXPECT_EQ(shot.damage, nx::Damage{27.0F}) << "27.9, its whole points";
+    EXPECT_EQ(kevlar.health, nx::HitPoints{73.0F});
+    EXPECT_FLOAT_EQ(kevlar.armor.value(), 100.0F - ((36.0F - (akRatio.ratio * 36.0F)) * 0.5F));
+
+    // In the head, only a helmet takes a share; in the legs, nothing does.
+    PlayerStatus vest{.armor = nx::ArmorPoints{100.0F}, .armorKind = ArmorKind::Kevlar};
+    EXPECT_FALSE(cs::harmPlayer(vest, timed, harm(60.0F, HarmKind::Bullet), head, kArmor).isArmored);
+    EXPECT_EQ(vest.health, nx::HitPoints{40.0F});
+    PlayerStatus helmet{.armor = nx::ArmorPoints{100.0F}, .armorKind = ArmorKind::KevlarAndHelmet};
+    EXPECT_TRUE(cs::harmPlayer(helmet, timed, harm(60.0F, HarmKind::Bullet), head, kArmor).isArmored);
+    EXPECT_EQ(helmet.health, nx::HitPoints{70.0F});
+    EXPECT_EQ(helmet.armor, nx::ArmorPoints{85.0F});
+    EXPECT_FALSE(cs::harmPlayer(helmet, timed, harm(20.0F, HarmKind::Bullet), leg, kArmor).isArmored);
+    EXPECT_EQ(helmet.health, nx::HitPoints{50.0F});
+
+    // Nor a fall nor drowning, wherever the player was last met; lava and slime it does.
+    PlayerStatus world{.armor = nx::ArmorPoints{100.0F}, .armorKind = ArmorKind::Kevlar};
+    EXPECT_FALSE(cs::harmPlayer(world, timed, harm(10.0F, HarmKind::Fall), chest, kArmor).isArmored);
+    EXPECT_FALSE(cs::harmPlayer(world, timed, harm(10.0F, HarmKind::Drown), chest, kArmor).isArmored);
+    EXPECT_TRUE(cs::harmPlayer(world, timed, harm(10.0F, HarmKind::Burn), chest, kArmor).isArmored);
+    EXPECT_EQ(world.health, nx::HitPoints{75.0F});
+}
+
+TEST(PlayerHarmTest, ArmorWornOutGivesWhatItsPointsTookAndIsNoneThen) {
+    // 40 would wear 10 of its 2 points: they take 4 of it, the health the other 36.
+    PlayerStatus worn{.armor = nx::ArmorPoints{2.0F}, .armorKind = ArmorKind::KevlarAndHelmet};
+    TimedHarms timed;
+    const cs::PlayerHarmed shot = cs::harmPlayer(worn, timed, harm(40.0F, HarmKind::Bullet),
+                                                 std::to_underlying(HitGroup::Stomach), kArmor);
+    EXPECT_TRUE(shot.isArmored);
+    EXPECT_EQ(shot.damage, nx::Damage{36.0F});
+    EXPECT_EQ(worn.armor, nx::ArmorPoints{});
+    EXPECT_EQ(worn.armorKind, ArmorKind::None);
+}
+
+TEST(PlayerHarmTest, APlayerIsHeardInPainByWhereItWasMetAndItsArmor) {
+    const PlayerHarmRules rules = repositoryRules();
+    const auto group = [](HitGroup hit) {
+        return std::to_underlying(hit);
+    };
+    const PlayerStatus bare{};
+    const PlayerStatus helmet{.armor = nx::ArmorPoints{50.0F}, .armorKind = ArmorKind::KevlarAndHelmet};
+    EXPECT_EQ(&cs::painOf(rules, bare, group(HitGroup::Head), false), &rules.headPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::Head), true), &rules.helmetPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::Chest), true), &rules.kevlarPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::Generic), true), &rules.kevlarPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::RightLeg), true), &rules.pain);
+    EXPECT_EQ(&cs::painOf(rules, bare, group(HitGroup::Chest), false), &rules.pain);
+}
+
+TEST(PlayerHarmTest, AHitPunchesTheViewOfAPlayerItBleeds) {
+    nx::Random random{1, "punch"};
+    const auto group = [](HitGroup hit) {
+        return std::to_underlying(hit);
+    };
+    nx::EulerAngles head{};
+    cs::punchByHit(head, group(HitGroup::Head), nx::Damage{4.0F}, ArmorKind::Kevlar, random);
+    EXPECT_FLOAT_EQ(head.pitch.value(), -2.0F) << "half of it up";
+    EXPECT_LE(std::abs(head.roll.value()), 4.0F) << "as much as it either way";
+    cs::punchByHit(head, group(HitGroup::Head), nx::Damage{400.0F}, ArmorKind::None, random);
+    EXPECT_FLOAT_EQ(head.pitch.value(), -12.0F);
+    EXPECT_FLOAT_EQ(std::abs(head.roll.value()), 9.0F) << "at most";
+
+    nx::EulerAngles chest{.yaw = nx::Degrees{1.0F}};
+    cs::punchByHit(chest, group(HitGroup::Chest), nx::Damage{30.0F}, ArmorKind::None, random);
+    EXPECT_FLOAT_EQ(chest.pitch.value(), -3.0F);
+    cs::punchByHit(chest, group(HitGroup::Stomach), nx::Damage{125.0F}, ArmorKind::None, random);
+    EXPECT_FLOAT_EQ(chest.pitch.value(), -4.0F);
+    EXPECT_FLOAT_EQ(chest.yaw.value(), 1.0F) << "the rest as it was";
+
+    // Armor that stops the blood, and the arms and legs, leave it as it was.
+    for (const auto& [hit, kind] :
+         {std::pair{HitGroup::Head, ArmorKind::KevlarAndHelmet},
+          std::pair{HitGroup::Chest, ArmorKind::Kevlar}, std::pair{HitGroup::LeftArm, ArmorKind::None},
+          std::pair{HitGroup::RightLeg, ArmorKind::None}}) {
+        nx::EulerAngles punch{.pitch = nx::Degrees{-1.0F}};
+        cs::punchByHit(punch, group(hit), nx::Damage{50.0F}, kind, random);
+        EXPECT_EQ(punch, (nx::EulerAngles{.pitch = nx::Degrees{-1.0F}})) << std::to_underlying(hit);
+    }
 }
 
 TEST(PlayerHarmTest, WhatDrowningTookIsGivenBackTenAtATimeTwoSecondsApart) {
@@ -242,14 +373,14 @@ TEST(PlayerHarmTest, AHarmThatKillsIsKeptButNoneIsKeptByTheDead) {
     // Acid kept by a harm that kills holds the looks two seconds apart; the dead keep nothing.
     PlayerStatus dying{.health = nx::HitPoints{4.0F}};
     TimedHarms kept;
-    EXPECT_TRUE(cs::harmPlayer(dying, kept, harm(4.0F, HarmKind::Acid)).isKilled);
+    EXPECT_TRUE(cs::harmPlayer(dying, kept, harm(4.0F, HarmKind::Acid), kGeneric, kArmor).isKilled);
     std::ignore = kept.check(kGivenBack, at(2.0), kRate);
     kept.drowned(nx::Damage{3.0F});
     kept.headOutOfWater();
     EXPECT_EQ(kept.check(kGivenBack, at(2.5), kRate), nx::HitPoints{}) << "looked at at 2 seconds";
 
     TimedHarms none;
-    EXPECT_EQ(cs::harmPlayer(dying, none, harm(4.0F, HarmKind::Acid)).damage, nx::Damage{});
+    EXPECT_EQ(cs::harmPlayer(dying, none, harm(4.0F, HarmKind::Acid), kGeneric, kArmor).damage, nx::Damage{});
     EXPECT_EQ(none.check(kGivenBack, at(2.0), kRate), nx::HitPoints{}) << "nothing kept, nothing looked at";
     none.drowned(nx::Damage{3.0F});
     none.headOutOfWater();
