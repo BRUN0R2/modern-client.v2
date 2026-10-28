@@ -268,6 +268,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Vulkan 1.3 backend with volk: instance and adapter choice, device, frames in flight on a timeline semaphore, validation counted
 - [x] VMA in the Vulkan backend (with buffers and textures)
 - [x] Swapchain, present modes and recreation (resize, minimized, out of date)
+- [x] Frames submitted and shown on the device's own thread, the window's pass drawn there on the image it acquires ([ADR-0029](adr/0029-submission-thread.md))
 - [ ] *Device lost*: recreate the device and its resources once, then a crash report
 - [ ] Parallel recording (one command pool per worker per frame)
 - [ ] Persistent staging ring
@@ -432,7 +433,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Each weapon's crosshair (measured: the knife 7, the Glock and the Desert Eagle 8), opening as the player moves (`cl_dynamiccrosshair`); the weapon menu (`slot1`–`slot5`, `invnext`, `invprev`, `hud_fastswitch`), its layout measured on the original; the first row of each HUD picture, which the original leaves out
 - [x] Numbers without truncation: health above 255, armor, money and ammo ([12 §3.4](12-ui-hud-and-console.md#34-no-value-truncation))
 - [x] HUD regression test with health 5000, 100000 and the type's maximum
-- [x] `cl_showfps`: the frames a second where, and as, the original writes them, measured on it to the pixel (`cs.client:fpsLabel`, VGUI2's drop shadow in `nx.ui`), one measure of the frame rate for it and `net_graph` (`nx::platform::FrameRateMeter`, [12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution))
+- [x] `cl_showfps`: the frames a second where, and in the font, the original writes them, measured on it to the pixel (`cs.client:fpsLabel`, VGUI2's drop shadow in `nx.ui`), to a tenth and with every frame as its `net_graph` measures them, one measure of the frame rate for it and `net_graph` (`nx::platform::FrameRateMeter`, [12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution))
 
 ---
 
@@ -637,6 +638,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ## M7 — Fine parity and ecosystem
 
 - [x] `nx.navigation` core ([ADR-0023](adr/0023-navigation.md)): Recast/Detour profiles, deterministic meshes and queries (`findPath`, `nearestPoint`, `raycast`, `randomPoint`, `isReachable`, corridors), map geometry, finite/range validation and regression tests
+- [x] The agents' mesh built in jobs as the map loads, overlapping the client's level, and shared by the bots and the horde, so that `bot_add` builds nothing and reads no file during a frame, and `zombie_add` builds no mesh (`nx::navigation::MeshBuild`, `cs::standingPlayerProfile`)
 - [ ] Navigation mesh cache by content hash, clip-brush geometry, dynamic links/doors, the tactical queries, `nxbake`, `nav_generate`, `nav_draw`, `nav_check`, and per-map spawn-to-objective tests
 - [ ] Navigation in a match: ladders, jumps, drops and teleporters as links; doors and breakables turning their areas and links on and off; the tactical layer (hiding, sniper and encounter spots, places); a `.nav` file's places and hiding spots; `nav_edit`
 - [x] First `nx.agents` consumer: an ECS brain with bounded last-seen memory, chase/attack/investigate/blocked intent, and pure-decision benchmarks at 64, 256 and 1024 agents ([offline tests](offlineAgents.md))
@@ -644,7 +646,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] `cs.bots`, its first part ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): bots that join the server's game as players and drive it by their commands alone; `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick` (all), `bot_quota` (`MaintainBotQuota`); a player leaving its slot (`cs::Game::leave`) and the team auto-select joins (`cs::Game::defaultTeam`); sight by the cone and the spots of `CCSBot::IsVisible` (`cs::Game::seesSpot`); hunting places of the mesh, chasing and firing at the enemies it sees, a brain's goal (`nx::agents::Brain::setGoal`)
 - [x] `cs.bots`, its second part, `bot_difficulty` ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): each bot with a level of skill of its difficulty (the zBot's `BotProfile.db` templates, `skillLevels`); its reaction time (`nx::agents::Rules::reactionTime`), its view turned by a spring (`UpdateLookAngles`), its aim's error and focus (`SetAimOffset`, `UpdateAimOffset`), its lead of a moving enemy (`Upkeep`), and its trigger weighed at each full think by its attack delay, its aim, its weapon, its skill and the range (`FireWeaponAtEnemy`, `StartRapidFire`)
 - [x] `cs.bots`, its third part, names ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): the players' names in the server's game as the original engine gives them (`cs.server:playerNames`, the client's `name`); each bot as a profile, a name of its level of skill, that no one in the game has (`GetRandomProfile`, `UTIL_IsNameTaken`), named after `bot_prefix`; `bot_add <profile>`, `bot_kick <name>`
-- [ ] `cs.bots`, what follows: the spot it aims at by its skill and the parts of its enemy it sees (`Upkeep`'s sharpshooter), the knife's, the sniper rifles', the shotguns' and the machine gun's ways of firing, its view drifting as it roams, the teams' wins in the auto-select and in the quota, weapon choice and buying, ducking and jumping, the objectives, the radio and `bot_chatter`; sight through glass and smoke; `bot_join_after_player`, `bot_auto_vacate` and the player limit (with `maxplayers`); perception and decisions in jobs; the mesh built without holding a frame (today `next` builds it in the frame of the first bot: 0.8 to 2.2 seconds on de_dust2, release)
+- [ ] `cs.bots`, what follows: the spot it aims at by its skill and the parts of its enemy it sees (`Upkeep`'s sharpshooter), the knife's, the sniper rifles', the shotguns' and the machine gun's ways of firing, its view drifting as it roams, the teams' wins in the auto-select and in the quota, weapon choice and buying, ducking and jumping, the objectives, the radio and `bot_chatter`; sight through glass and smoke; `bot_join_after_player`, `bot_auto_vacate` and the player limit (with `maxplayers`); perception and decisions in jobs
 - [ ] Demos (`record`, `playdemo`, `timedemo`)
 - [ ] Spectator relay (HLTV equivalent)
 - [ ] Sandboxed client plugins and `cl_plugins`

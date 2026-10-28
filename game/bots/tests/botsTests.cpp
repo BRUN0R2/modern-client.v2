@@ -11,6 +11,7 @@ import nx.console;
 import nx.assets;
 import nx.jobs;
 import nx.game;
+import nx.navigation;
 import nx.agents;
 import cs.shared;
 import cs.server;
@@ -101,7 +102,13 @@ protected:
         auto rules = cs::readBotRules(
             nx::platform::readTextFile(data / "cstrike" / "bots.toml").value_or(std::string{}), "bots.toml");
         EXPECT_TRUE(rules.has_value());
-        auto made = cs::Bots::create(*jobs, *game, navigation.value(), std::move(rules).value());
+        auto profile = cs::standingPlayerProfile(navigation.value());
+        EXPECT_TRUE(profile.has_value()) << (profile ? "" : nx::describe(profile.error()));
+        auto built = nx::navigation::NavigationMesh::build(*jobs, game->navigationGeometry(), profile.value(),
+                                                           navigation.value().build);
+        EXPECT_TRUE(built.has_value()) << (built ? "" : nx::describe(built.error()));
+        mesh.emplace(std::move(built).value());
+        auto made = cs::Bots::create(*game, *mesh, std::move(rules).value());
         EXPECT_TRUE(made.has_value()) << (made ? "" : nx::describe(made.error()));
         bots = std::move(made).value_or(nullptr);
     }
@@ -135,7 +142,8 @@ protected:
     std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Game> game;
     std::unique_ptr<nx::jobs::JobSystem> jobs;
-    std::unique_ptr<cs::Bots> bots; ///< Before the game it plays in goes.
+    std::optional<nx::navigation::NavigationMesh> mesh; ///< The map's, which the bots walk.
+    std::unique_ptr<cs::Bots> bots;                     ///< Before the game it plays in and its mesh go.
 };
 
 TEST_F(BotsTest, ABotJoinsTheTeamOfFewerPlayersAndLeavesItsSlotWhenKicked) {

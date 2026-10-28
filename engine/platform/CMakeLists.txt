@@ -10,12 +10,14 @@ nxAddModuleLibrary(nxPlatform
         src/clock.cppm
         src/fileSystem.cppm
         src/steam.cppm
+        src/thread.cppm
         src/window.cppm
     SOURCES
         src/audio.cpp
         src/clock.cpp
         src/fileSystem.cpp
         src/steam.cpp
+        src/thread.cpp
         src/window.cpp
     DEPENDS
         nx::core)

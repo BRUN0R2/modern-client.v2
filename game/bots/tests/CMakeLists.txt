@@ -21,6 +21,7 @@ nxAddTest(csBotsTests
         nx::agents
         nx::ecs
         nx::game
+        nx::navigation
         nx::platform)
 
 # The maps of the tests are the BSP seed of the fuzz corpus, given other entities; the game's data is the

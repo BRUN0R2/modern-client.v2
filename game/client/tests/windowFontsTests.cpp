@@ -112,12 +112,12 @@ TEST_F(WindowFontsTest, TheFpsLabelWritesInTheEngineFont) {
     EXPECT_TRUE(label.has_value()) << nx::describe(label.error());
 }
 
-TEST(FpsLabelTest, TellsTheNearestWholeNumberOfFramesASecond) {
-    EXPECT_EQ(cs::fpsText(520.0), "520 fps");
-    EXPECT_EQ(cs::fpsText(519.6), "520 fps");
-    EXPECT_EQ(cs::fpsText(100.4), "100 fps");
-    EXPECT_EQ(cs::fpsText(99.5), "100 fps");
-    EXPECT_EQ(cs::fpsText(0.25), "0 fps") << "a frame that took four seconds";
+TEST(FpsLabelTest, TellsTheFramesASecondToTheNearestTenth) {
+    EXPECT_EQ(cs::fpsText(520.8), "520.8 fps");
+    EXPECT_EQ(cs::fpsText(520.0), "520.0 fps");
+    EXPECT_EQ(cs::fpsText(519.96), "520.0 fps");
+    EXPECT_EQ(cs::fpsText(999.44), "999.4 fps");
+    EXPECT_EQ(cs::fpsText(4.0), "4.0 fps") << "frames of 0.25 s, the longest one counts for";
 }
 
 } // namespace

@@ -13,6 +13,7 @@ nxAddModuleLibrary(csServer
         src/playerNames.cppm
         src/game.cppm
         src/entityBodies.cppm
+        src/agentNavigation.cppm
     SOURCES
         src/gameCvars.cpp
         src/gameModels.cpp
@@ -20,6 +21,7 @@ nxAddModuleLibrary(csServer
         src/playerNames.cpp
         src/game.cpp
         src/entityBodies.cpp
+        src/agentNavigation.cpp
     DEPENDS
         nx::core
         nx::math

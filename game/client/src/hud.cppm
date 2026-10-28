@@ -68,6 +68,8 @@ struct HudAmmo {
     std::string_view ammo{}; ///< Its kind, whose picture is drawn.
     std::uint32_t clip{};
     std::uint32_t reserve{}; ///< The rounds of its kind the player carries besides the clips.
+
+    [[nodiscard]] inline auto operator==(const HudAmmo&) const noexcept -> bool = default;
 };
 
 /// The ammo the HUD shows of `inventory`, whose weapons are of `catalog`: of the weapon it holds, when
@@ -86,6 +88,8 @@ struct HudView {
     std::optional<std::uint32_t> crosshairDistance{};
     /// The whole seconds the round's timer shows (cs::RoundTimer); none without a round.
     std::optional<std::uint32_t> roundTime{};
+
+    [[nodiscard]] inline auto operator==(const HudView&) const noexcept -> bool = default;
 };
 
 /// The size of the crosshair, as `cl_crosshair_size` names it.
@@ -108,6 +112,8 @@ struct CrosshairStyle {
     nx::render::ScreenColor color{.red = 50, .green = 250, .blue = 50};
     CrosshairSize size = CrosshairSize::Auto;
     bool isTranslucent = true; ///< Added to what is behind it; else drawn over it as it is.
+
+    [[nodiscard]] inline auto operator==(const CrosshairStyle&) const noexcept -> bool = default;
 };
 
 /// The HUD's cvars, by the original's names, archived, with Counter-Strike 1.6's values:
@@ -218,11 +224,25 @@ public:
     /// layoutTimer), each picture drawn as the original draws a HUD sprite, added in the HUD's color,
     /// the ammo's bar added in it, the picture of its kind when the HUD has one, and the timer's colon;
     /// then the crosshair in `crosshair`'s style (crosshairRects), added or drawn as it is. The quads
-    /// point into the HUD.
+    /// point into the HUD. The HUD is laid out again only when what it shows changes, about once a
+    /// second as the round's timer counts: the quads of the last call are appended again until then.
     void append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
-                const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const;
+                const CrosshairStyle& crosshair, nx::rhi::Extent2d size);
 
 private:
+    /// What append shows: what it lays out.
+    struct Shown {
+        HudView view;
+        CrosshairStyle crosshair;
+        nx::rhi::Extent2d size;
+
+        [[nodiscard]] inline auto operator==(const Shown&) const noexcept -> bool = default;
+    };
+
+    /// Appends to `quads` the HUD of `view`, laid out, as append describes.
+    void layOut(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
+                const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const;
+
     /// A picture of a sprite: its rectangle, and which of the images its sprite is.
     struct Picture {
         nx::assets::SpriteRect rect{};
@@ -237,6 +257,7 @@ private:
     std::vector<nx::render::ScreenImage> m_images;    ///< The first frame of each sprite of the pictures.
     nx::EnumArray<HudPicture, std::size_t> m_imageOf; ///< Which of the images each picture is in.
     AmmoPictures m_ammoPictures;                      ///< Of each kind of ammo, by its id.
+    nx::render::RetainedQuads<Shown> m_shown;
 };
 
 } // namespace cs

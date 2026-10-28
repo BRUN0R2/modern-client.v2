@@ -6,7 +6,6 @@ module cs.bots;
 import std;
 import nx.core;
 import nx.math;
-import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -18,8 +17,6 @@ namespace cs {
 namespace {
 
 constexpr nx::log::Category kLog{"bots"};
-/// The navigation profile a bot walks by, a standing player's.
-constexpr std::string_view kPlayerProfile = "player";
 /// The stream of random numbers a bot's hunt draws its places from, of the player it plays.
 constexpr std::string_view kHuntStream = "bot hunt";
 /// The stream of random numbers the team a bot leaves to keep bot_quota is drawn from, of the tick.
@@ -95,40 +92,20 @@ struct ProfileOf {
 
 } // namespace
 
-auto Bots::create(nx::jobs::JobSystem& jobs, Game& game, const nx::game::NavigationData& navigation,
-                  BotRules rules) -> nx::Result<std::unique_ptr<Bots>, BotError> {
-    const auto profile =
-        std::ranges::find(navigation.profiles, kPlayerProfile, &nx::navigation::AgentProfile::name);
-    if (profile == navigation.profiles.end()) {
-        return nx::fail(BotError::NavigationUnavailable, "a bot walks by the player navigation profile");
-    }
-    if (profile->radius.value() != kStandingBox.max.x ||
-        profile->standingHeight.value() != kStandingBox.max.z - kStandingBox.min.z ||
-        profile->stepHeight != MovementSettings{}.stepSize ||
-        profile->minGroundNormalZ != kMinGroundNormalZ) {
-        return nx::fail(BotError::NavigationUnavailable,
-                        "the player navigation profile must match a standing player");
-    }
-    // A bot does not duck yet: its mesh leaves out what only a ducked player passes.
-    nx::navigation::AgentProfile standing = *profile;
-    standing.crouchedHeight = standing.standingHeight;
-    auto mesh =
-        nx::navigation::NavigationMesh::build(jobs, game.navigationGeometry(), standing, navigation.build);
-    if (!mesh) {
-        return nx::fail(BotError::NavigationUnavailable, std::move(mesh.error()));
-    }
+auto Bots::create(Game& game, const nx::navigation::NavigationMesh& mesh, BotRules rules)
+    -> nx::Result<std::unique_ptr<Bots>, BotError> {
     if (auto registered = game.registerEntityComponent<nx::agents::Agent>("nx::agents::Agent"); !registered) {
         return nx::fail(BotError::Unregistered, std::move(registered.error()));
     }
     if (auto registered = game.registerEntityComponent<BotDriver>("cs::BotDriver"); !registered) {
         return nx::fail(BotError::Unregistered, std::move(registered.error()));
     }
-    nx::log::info(kLog, "navigation ready: {} polygons", mesh->polygonCount());
-    return std::make_unique<Bots>(CreateToken{}, game, std::move(rules), std::move(*mesh));
+    nx::log::info(kLog, "bots walk {} polygons", mesh.polygonCount());
+    return std::make_unique<Bots>(CreateToken{}, game, std::move(rules), mesh);
 }
 
-Bots::Bots(CreateToken /*token*/, Game& owner, BotRules botRules, nx::navigation::NavigationMesh navigation)
-    : game{&owner}, rules{std::move(botRules)}, mesh{std::move(navigation)}, query{mesh} {}
+Bots::Bots(CreateToken /*token*/, Game& owner, BotRules botRules, const nx::navigation::NavigationMesh& mesh)
+    : game{&owner}, rules{std::move(botRules)}, query{mesh} {}
 
 Bots::~Bots() {
     kickAll();

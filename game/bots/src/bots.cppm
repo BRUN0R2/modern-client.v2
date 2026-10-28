@@ -16,7 +16,6 @@ export module cs.bots:bots;
 import std;
 import nx.core;
 import nx.math;
-import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -51,27 +50,24 @@ struct BotDriver {
 };
 
 /// The bots of one game, which must outlive them: each a player of it whose body is an agent
-/// (nx::agents::Agent, ADR-0024) with its driver (BotDriver), on a mesh of a standing player's profile,
-/// built once.
+/// (nx::agents::Agent, ADR-0024) with its driver (BotDriver), on the map's mesh of a standing player's
+/// profile, which the bots borrow.
 class Bots {
     struct CreateToken {
         explicit CreateToken() = default;
     };
 
 public:
-    /// The bots of `game`, none yet, on the mesh of `navigation`'s player profile built in `jobs` of the
-    /// game's map, a standing player's: it does not duck through what is only passed ducked; the
-    /// bodies' components registered in the game. Errors: NavigationUnavailable (no player profile, or
-    /// one that does not match a standing player, or the mesh's build failed: its cause), Unregistered
-    /// (a component: its cause).
-    [[nodiscard]] static auto create(nx::jobs::JobSystem& jobs, Game& game,
-                                     const nx::game::NavigationData& navigation, BotRules rules)
+    /// The bots of `game`, none yet, on `mesh`, the mesh of the game's map for standingPlayerProfile: a
+    /// bot does not duck through what is only passed ducked. Both must outlive them. The bodies'
+    /// components are registered in the game. Errors: Unregistered (a component: its cause).
+    [[nodiscard]] static auto create(Game& game, const nx::navigation::NavigationMesh& mesh, BotRules rules)
         -> nx::Result<std::unique_ptr<Bots>, BotError>;
 
     /// Use create(). Public only so that create() can use std::make_unique.
-    Bots(CreateToken token, Game& game, BotRules rules, nx::navigation::NavigationMesh mesh);
-    /// Each bot leaves the game, its body and its brain's corridor with it, before the mesh the corridor
-    /// borrows goes.
+    Bots(CreateToken token, Game& game, BotRules rules, const nx::navigation::NavigationMesh& mesh);
+    /// Each bot leaves the game, its body and its brain's corridor with it, while the mesh the corridor
+    /// borrows is there.
     ~Bots();
     Bots(const Bots&) = delete;
     auto operator=(const Bots&) -> Bots& = delete;
@@ -150,9 +146,8 @@ private:
 
     Game* game;
     BotRules rules;
-    nx::navigation::NavigationMesh mesh;
-    nx::navigation::NavigationQuery query; ///< Of mesh.
-    std::vector<PlayerIndex> bots;         ///< Their bodies' corridors borrow mesh: they leave first.
+    nx::navigation::NavigationQuery query; ///< Of the mesh the bots borrow.
+    std::vector<PlayerIndex> bots;         ///< Their bodies' corridors borrow the mesh: they leave first.
     nx::GameTime nextQuotaCheck{};
 };
 
