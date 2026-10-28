@@ -36,7 +36,7 @@ constexpr nx::TickRate kRate = nx::kDefaultTickRate;
 constexpr nx::HitPoints kGivenBack{10.0F};
 /// The armor's shares of a harm of the world's: ARMOR_RATIO and ARMOR_BONUS.
 constexpr ArmorShares kArmor{};
-constexpr auto kGeneric = std::to_underlying(HitGroup::Generic);
+constexpr HitGroup kGeneric = HitGroup::Generic;
 
 /// The repository's data/cstrike/playerHarm.toml, read.
 [[nodiscard]] auto repositoryRules() -> PlayerHarmRules {
@@ -112,7 +112,7 @@ TEST(PlayerHarmTest, TheRepositorysHarmIsTheOriginals) {
     // ARMOR_RATIO, ARMOR_BONUS; TakeDamage's 0.35 of a teammate's attack, TakeDamageImpulse's.
     EXPECT_EQ(rules.armor.ratio, 0.5F);
     EXPECT_EQ(rules.armor.bonus, 0.5F);
-    EXPECT_EQ(rules.attacks.teammateShare, 0.35);
+    EXPECT_EQ(rules.attacks.teammateShare, cs::DamageShare{0.35});
     EXPECT_EQ(rules.attacks.knockback, nx::UnitsPerSecond{170.0F});
     EXPECT_EQ(rules.attacks.knockbackBelowSpeed, nx::UnitsPerSecond{300.0F});
     EXPECT_EQ(rules.attacks.flinchSpeedShare, 0.5F);
@@ -229,9 +229,9 @@ TEST(PlayerHarmTest, APlayerLeftWithExactlyNoneIsKilled) {
 }
 
 TEST(PlayerHarmTest, ArmorTakesItsShareWhereItCoversThePlayer) {
-    const auto chest = std::to_underlying(HitGroup::Chest);
-    const auto head = std::to_underlying(HitGroup::Head);
-    const auto leg = std::to_underlying(HitGroup::LeftLeg);
+    const HitGroup chest = HitGroup::Chest;
+    const HitGroup head = HitGroup::Head;
+    const HitGroup leg = HitGroup::LeftLeg;
     // An AK-47's 36 in the chest of kevlar: the health takes 0.5 times 1.55 of it, the armor half the rest.
     PlayerStatus kevlar{.armor = nx::ArmorPoints{100.0F}, .armorKind = ArmorKind::Kevlar};
     TimedHarms timed;
@@ -266,8 +266,8 @@ TEST(PlayerHarmTest, ArmorWornOutGivesWhatItsPointsTookAndIsNoneThen) {
     // 40 would wear 10 of its 2 points: they take 4 of it, the health the other 36.
     PlayerStatus worn{.armor = nx::ArmorPoints{2.0F}, .armorKind = ArmorKind::KevlarAndHelmet};
     TimedHarms timed;
-    const cs::PlayerHarmed shot = cs::harmPlayer(worn, timed, harm(40.0F, HarmKind::Bullet),
-                                                 std::to_underlying(HitGroup::Stomach), kArmor);
+    const cs::PlayerHarmed shot =
+        cs::harmPlayer(worn, timed, harm(40.0F, HarmKind::Bullet), HitGroup::Stomach, kArmor);
     EXPECT_TRUE(shot.isArmored);
     EXPECT_EQ(shot.damage, nx::Damage{36.0F});
     EXPECT_EQ(worn.armor, nx::ArmorPoints{});
@@ -276,36 +276,30 @@ TEST(PlayerHarmTest, ArmorWornOutGivesWhatItsPointsTookAndIsNoneThen) {
 
 TEST(PlayerHarmTest, APlayerIsHeardInPainByWhereItWasMetAndItsArmor) {
     const PlayerHarmRules rules = repositoryRules();
-    const auto group = [](HitGroup hit) {
-        return std::to_underlying(hit);
-    };
     const PlayerStatus bare{};
     const PlayerStatus helmet{.armor = nx::ArmorPoints{50.0F}, .armorKind = ArmorKind::KevlarAndHelmet};
-    EXPECT_EQ(&cs::painOf(rules, bare, group(HitGroup::Head), false), &rules.headPain);
-    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::Head), true), &rules.helmetPain);
-    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::Chest), true), &rules.kevlarPain);
-    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::Generic), true), &rules.kevlarPain);
-    EXPECT_EQ(&cs::painOf(rules, helmet, group(HitGroup::RightLeg), true), &rules.pain);
-    EXPECT_EQ(&cs::painOf(rules, bare, group(HitGroup::Chest), false), &rules.pain);
+    EXPECT_EQ(&cs::painOf(rules, bare, HitGroup::Head, false), &rules.headPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, HitGroup::Head, true), &rules.helmetPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, HitGroup::Chest, true), &rules.kevlarPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, HitGroup::Generic, true), &rules.kevlarPain);
+    EXPECT_EQ(&cs::painOf(rules, helmet, HitGroup::RightLeg, true), &rules.pain);
+    EXPECT_EQ(&cs::painOf(rules, bare, HitGroup::Chest, false), &rules.pain);
 }
 
 TEST(PlayerHarmTest, AHitPunchesTheViewOfAPlayerItBleeds) {
     nx::Random random{1, "punch"};
-    const auto group = [](HitGroup hit) {
-        return std::to_underlying(hit);
-    };
     nx::EulerAngles head{};
-    cs::punchByHit(head, group(HitGroup::Head), nx::Damage{4.0F}, ArmorKind::Kevlar, random);
+    cs::punchByHit(head, HitGroup::Head, nx::Damage{4.0F}, ArmorKind::Kevlar, random);
     EXPECT_FLOAT_EQ(head.pitch.value(), -2.0F) << "half of it up";
     EXPECT_LE(std::abs(head.roll.value()), 4.0F) << "as much as it either way";
-    cs::punchByHit(head, group(HitGroup::Head), nx::Damage{400.0F}, ArmorKind::None, random);
+    cs::punchByHit(head, HitGroup::Head, nx::Damage{400.0F}, ArmorKind::None, random);
     EXPECT_FLOAT_EQ(head.pitch.value(), -12.0F);
     EXPECT_FLOAT_EQ(std::abs(head.roll.value()), 9.0F) << "at most";
 
     nx::EulerAngles chest{.yaw = nx::Degrees{1.0F}};
-    cs::punchByHit(chest, group(HitGroup::Chest), nx::Damage{30.0F}, ArmorKind::None, random);
+    cs::punchByHit(chest, HitGroup::Chest, nx::Damage{30.0F}, ArmorKind::None, random);
     EXPECT_FLOAT_EQ(chest.pitch.value(), -3.0F);
-    cs::punchByHit(chest, group(HitGroup::Stomach), nx::Damage{125.0F}, ArmorKind::None, random);
+    cs::punchByHit(chest, HitGroup::Stomach, nx::Damage{125.0F}, ArmorKind::None, random);
     EXPECT_FLOAT_EQ(chest.pitch.value(), -4.0F);
     EXPECT_FLOAT_EQ(chest.yaw.value(), 1.0F) << "the rest as it was";
 
@@ -315,8 +309,8 @@ TEST(PlayerHarmTest, AHitPunchesTheViewOfAPlayerItBleeds) {
           std::pair{HitGroup::Chest, ArmorKind::Kevlar}, std::pair{HitGroup::LeftArm, ArmorKind::None},
           std::pair{HitGroup::RightLeg, ArmorKind::None}}) {
         nx::EulerAngles punch{.pitch = nx::Degrees{-1.0F}};
-        cs::punchByHit(punch, group(hit), nx::Damage{50.0F}, kind, random);
-        EXPECT_EQ(punch, (nx::EulerAngles{.pitch = nx::Degrees{-1.0F}})) << std::to_underlying(hit);
+        cs::punchByHit(punch, hit, nx::Damage{50.0F}, kind, random);
+        EXPECT_EQ(punch, (nx::EulerAngles{.pitch = nx::Degrees{-1.0F}})) << nx::enumName(hit);
     }
 }
 

@@ -96,8 +96,8 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
                 "entities: finite nonnegative damage");
     const EntityCatalog& catalog = catalogOf(world);
     const EntityType& type = catalog.type(body.type);
-    const double scaled =
-        static_cast<double>(attack.damage.value()) * type.definition.hitGroups.of(attack.trace.hitGroup);
+    const double scaled = static_cast<double>(attack.damage.value()) *
+                          type.definition.hitGroups.of(hitGroupOf(attack.trace)).value();
     const nx::Damage taken{static_cast<float>(std::min(scaled, static_cast<double>(body.health.value())))};
     body.health = body.health - taken;
     const bool isKilled = body.health <= nx::HitPoints{};

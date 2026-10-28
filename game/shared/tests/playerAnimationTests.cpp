@@ -153,7 +153,7 @@ TEST_F(PlayerModelTest, APlayerDiesByWhereTheAttackMetIt) {
           std::pair{HitGroup::RightArm, "right"}}) {
         cs::PlayerAnimation animation;
         cs::PlayerAnimationContext met = standing();
-        met.lastHitGroup = std::to_underlying(group);
+        met.lastHitGroup = group;
         play(animation, PlayerAction::Die, met);
         EXPECT_EQ(animation.torso.sequence, sequence(death)) << death;
         met.isDucked = true;
@@ -164,7 +164,7 @@ TEST_F(PlayerModelTest, APlayerDiesByWhereTheAttackMetIt) {
     // In the legs: the simplest death, one of those of ACT_DIESIMPLE.
     cs::PlayerAnimation legs;
     cs::PlayerAnimationContext met = standing();
-    met.lastHitGroup = std::to_underlying(HitGroup::LeftLeg);
+    met.lastHitGroup = HitGroup::LeftLeg;
     play(legs, PlayerAction::Die, met);
     EXPECT_EQ(model().sequences()[legs.torso.sequence.value].activity,
               std::to_underlying(Activity::DieSimple));
@@ -177,7 +177,7 @@ TEST_F(PlayerModelTest, AFlinchPlaysByWhereTheAttackMetItAndHoldsTheTorsoToItsEn
         cs::PlayerAnimation animation;
         play(animation, PlayerAction::Idle, standing());
         cs::PlayerAnimationContext met = standing();
-        met.lastHitGroup = std::to_underlying(group);
+        met.lastHitGroup = group;
         for (const PlayerAction action : {PlayerAction::Flinch, PlayerAction::LargeFlinch}) {
             play(animation, action, met);
             EXPECT_EQ(animation.torso.sequence, sequence(flinch)) << flinch;
@@ -195,7 +195,7 @@ TEST_F(PlayerModelTest, AFlinchPlaysByWhereTheAttackMetItAndHoldsTheTorsoToItsEn
     // Running, the flinch plays to its end before the torso aims again; the legs run meanwhile.
     cs::PlayerAnimation running;
     play(running, PlayerAction::Walk, standing(250.0F));
-    met.lastHitGroup = std::to_underlying(HitGroup::Head);
+    met.lastHitGroup = HitGroup::Head;
     play(running, PlayerAction::Flinch, met);
     play(running, PlayerAction::Walk, standing(250.0F));
     EXPECT_EQ(running.torso.sequence, sequence("head_flinch"));

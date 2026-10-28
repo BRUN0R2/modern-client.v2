@@ -20,7 +20,7 @@ namespace nx::test {
             .walkSequence = "idle",
             .attackSequence = "wave",
             .deathSequence = "wave",
-            .hitGroups = {.head = 2.0}};
+            .hitGroups = {.head = cs::DamageShare{2.0}}};
 }
 
 inline void writeEntityModel(const TemporaryDirectory& directory) {

@@ -420,7 +420,8 @@ damage, its way and the trace, its hit group among it) is dealt as the entity's 
 original's `TraceAttack`, then `ApplyMultiDamage` and `TakeDamage`), which says what it did
 (`nx::game::Harm`: the damage taken, and whether it killed); an entity of a kind that takes none
 takes nothing (`nx::game::attackEntity`). A trace through a hitbox carries its hit group
-(`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows and the shots' rounds are dealt
+(`collision::Trace::hitGroup`, `trace_t::hitgroup`): the model's number, which the game reads once as
+its own `cs::HitGroup` (`cs::hitGroupOf`). The knife's blows and the shots' rounds are dealt
 so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). A player's body (`cs::PlayerBody`) is
 solid as its box, standing or ducked, and a line meets it by its model's hitboxes, posed as the server's
 game poses a client's (`cs.server:playerBodies`); an attack on it is dealt by the server's game, as

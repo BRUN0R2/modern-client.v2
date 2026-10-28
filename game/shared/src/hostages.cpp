@@ -39,15 +39,10 @@ constexpr std::string_view kTickStream = "hostage tick";
     return nx::Random{(static_cast<std::uint64_t>(now.tick()) << kHostageBits) ^ hostage.spawn, kTickStream};
 }
 
-/// `damage` scaled by `share`, in double precision as the original's float times a double literal.
-[[nodiscard]] auto scaled(nx::Damage damage, double share) noexcept -> nx::Damage {
-    return nx::Damage{static_cast<float>(static_cast<double>(damage.value()) * share)};
-}
-
 /// The death a hostage met in hit group `group` plays, as Counter-Strike 1.6's SetDeathActivity
 /// chooses it; none for a group it does not name.
-[[nodiscard]] auto deathOf(std::uint32_t group) noexcept -> std::optional<Activity> {
-    switch (static_cast<HitGroup>(group)) {
+[[nodiscard]] auto deathOf(HitGroup group) noexcept -> std::optional<Activity> {
+    switch (group) {
     case HitGroup::Generic:
     case HitGroup::Head:
         return Activity::DieHeadshot;
@@ -218,7 +213,7 @@ auto harmHostage(nx::ecs::World& world, nx::ecs::Entity entity, const nx::game::
         return {};
     }
     // TraceAttack, then TakeDamage.
-    hostage.lastHitGroup = attack.trace.hitGroup;
+    hostage.lastHitGroup = hitGroupOf(attack.trace);
     const HitGroupRules* const shares = dataOf(world).hitGroups;
     const nx::Damage dealt = shares != nullptr
                                  ? scaled(scaled(attack.damage, shares->monster.of(hostage.lastHitGroup)),
