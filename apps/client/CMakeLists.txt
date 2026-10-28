@@ -28,6 +28,7 @@ nxAddModuleLibrary(appClient
         cs::shared
         cs::server
         cs::client
+        cs::bots
         mod::zombies)
 
 nxAddProgram(next

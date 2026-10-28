@@ -11,11 +11,6 @@ namespace cs {
 
 namespace {
 
-/// The team `team` plays against.
-[[nodiscard]] auto opponentOf(Team team) noexcept -> Team {
-    return team == Team::Terrorists ? Team::CounterTerrorists : Team::Terrorists;
-}
-
 /// `bonus` for `hostagesHeld` hostages, each counted while the sum is below its `upTo`.
 [[nodiscard]] auto hostageBonusOf(const HostageBonus& bonus, std::uint32_t hostagesHeld) noexcept
     -> nx::Money {

@@ -86,6 +86,37 @@ TEST(AgentBrain, ReportsAnUnreachableGoalWithoutDirectMovement) {
     EXPECT_FALSE(decision.intent.attacks);
 }
 
+TEST(AgentBrain, MovesToItsGoalWithNoTargetAndForgetsItAsItArrives) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
+    const nx::Vec3 goal{.y = 200};
+    brain.setGoal(goal);
+    const auto moving = brain.decide({}, query);
+    EXPECT_EQ(moving.behavior, nx::agents::Behavior::MoveTo);
+    EXPECT_GT(moving.intent.direction.y, 0.0F);
+    EXPECT_FALSE(moving.intent.lookAt.has_value());
+    EXPECT_FALSE(moving.intent.attacks);
+    EXPECT_EQ(brain.decide(goal, query).behavior, nx::agents::Behavior::Idle);
+    EXPECT_FALSE(brain.goal().has_value());
+}
+
+TEST(AgentBrain, ATargetItSeesComesBeforeItsGoal) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.y = 200});
+    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::MoveTo);
+    brain.perceive(std::array{nx::agents::Observation{target, {.x = -200}}}, {}, nx::kDefaultTickRate);
+    const auto chase = brain.decide({}, query);
+    EXPECT_EQ(chase.behavior, nx::agents::Behavior::Chase);
+    EXPECT_LT(chase.intent.direction.x, 0.0F);
+    EXPECT_TRUE(brain.goal().has_value()) << "kept for when it has no target";
+}
+
 TEST(AgentBrain, FollowsAnObservationThatMovesLessThanTheReplanDistance) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

@@ -698,6 +698,38 @@ navigation meshes ([ADR-0023](adr/0023-navigation.md)):
 - A map's `.nav` file of Condition Zero's format may give its places and hiding spots; the mesh
   itself is always built.
 
+Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_util.cpp`):
+
+- `bot_add` joins the team the game's auto-select joins (`cs::Game::defaultTeam`,
+  `SelectDefaultTeam`: the one of fewer players, else one at random; the teams' wins, which it
+  weighs then, come with the scores), `bot_add_t` and `bot_add_ct` their team; each adds one to
+  `bot_quota`. `bot_kick` (or `bot_kick all`) makes every bot leave and sets `bot_quota` to 0; a bot
+  kicked by its name comes with the bots' names. A bot leaves as a client disconnects
+  (`cs::Game::leave`, `ClientDisconnected`): its weapons and body go, and its slot is the next
+  player's.
+- `bot_quota` is looked at every 0.3 seconds (`MonitorBotCVars`): one bot is added when there are
+  fewer, one leaves when there are more, of the team of more players or of one drawn at random,
+  a dead one first, of the other team when that one has none (`MaintainBotQuota`,
+  `UTIL_KickBotFromTeam`). `bot_join_after_player`, `bot_auto_vacate` and the player limit come with
+  the dedicated server's `maxplayers`.
+- A bot sees an enemy (`cs.bots:botSight`) when one of its spots, tried in order, is in the cone of
+  120 degrees about its view's yaw across the ground (`FInViewCone`, `m_flFieldOfView` 0.5) and a
+  line from its eye reaches it through the world and the brush entities, the bodies leaving it be
+  (`IsVisible`, `UTIL_TraceLine` with `ignore_monsters`, `cs::Game::seesSpot`): the chest, the head
+  25 above, the feet 34 below standing or 14 ducked, and the sides 13 across. It looks at a share of
+  the players each tick (`perceptionBudget`) and remembers what it saw for a while
+  (`data/cstrike/bots.toml`). Lines through glass and smoke are weighed with them.
+- It fires at an enemy it sees, aiming at the first spot of it it saw, pressing its attack every
+  other command so that a pistol fires each round (`TogglePrimaryAttack`); it chases what it no
+  longer sees to where it saw it, and, with nothing to pursue, hunts a place of the mesh drawn within
+  `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its corridor, standing (the
+  mesh leaves out what only a ducked player passes). Spawning again, it starts with a new brain.
+  Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
+  (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
+  with it as it leaves.
+- Its difficulty (its reactions, its aim's errors and speed, its leading of a moving enemy), its
+  names, the weapons it chooses and buys, the objectives, the radio and `bot_chatter` come next.
+
 The kinds a mod makes, such as zombies and bosses, are modules of the mod over the same agents,
 in Rook ([15 §2](15-mod-api.md#2-module-organization)).
 
