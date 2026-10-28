@@ -5,6 +5,7 @@ nxAddTest(csServerTests
     SOURCES
         gameTests.cpp
         entityBodiesTests.cpp
+        playerNamesTests.cpp
     DEPENDS
         cs::server
         cs::shared

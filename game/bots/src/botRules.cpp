@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.data;
 import nx.agents;
+import cs.server;
 
 namespace cs {
 
@@ -36,8 +37,24 @@ constexpr float kQuarterTurnDegrees = 90.0F;
 }
 
 [[nodiscard]] auto isValid(const BotSkillLevel& level) noexcept -> bool {
-    return !level.difficulties.empty() && isNoneOrMore(level.reactionTime.count()) &&
-           isNoneOrMore(level.attackDelay.count());
+    return !level.difficulties.empty() && !level.profiles.empty() &&
+           isNoneOrMore(level.reactionTime.count()) && isNoneOrMore(level.attackDelay.count());
+}
+
+/// Whether each profile of `levels` is named as the server names a player, taken by none, and as no
+/// other profile is, in any case, so that no two bots of them share a name.
+[[nodiscard]] auto areProfilesNamedApart(std::span<const BotSkillLevel> levels) -> bool {
+    std::vector<std::string_view> seen;
+    for (const std::string& profile :
+         levels | std::views::transform(&BotSkillLevel::profiles) | std::views::join) {
+        const bool isSeen = std::ranges::any_of(
+            seen, [&profile](std::string_view other) { return nx::equalsIgnoringCase(profile, other); });
+        if (isSeen || playerNameOf(profile, {}) != profile) {
+            return false;
+        }
+        seen.push_back(profile);
+    }
+    return true;
 }
 
 /// Whether every difficulty has a level of skill a bot joining at it plays with.
@@ -90,10 +107,11 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
         return isValid(level);
     };
     if (!std::ranges::all_of(rules->skillLevels, isValidLevel) ||
-        !coversEveryDifficulty(rules->skillLevels)) {
+        !coversEveryDifficulty(rules->skillLevels) || !areProfilesNamedApart(rules->skillLevels)) {
         return nx::fail(BotError::InvalidData,
                         std::format("{}: each difficulty needs a level of skill, and each level its "
-                                    "difficulties and times of none or more",
+                                    "difficulties, times of none or more and profiles, each named as the "
+                                    "server names a player and as no other profile is, in any case",
                                     sourceName));
     }
     if (!isValid(rules->look) || !isValid(rules->aim) || !isValid(rules->fire)) {

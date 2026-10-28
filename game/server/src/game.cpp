@@ -147,7 +147,10 @@ auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars
     return game;
 }
 
-auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
+auto Game::join(Team team, AutoSwitch autoSwitch, std::string_view name) -> PlayerIndex {
+    const std::vector<std::string_view> taken = playersIn(m_players) | std::views::transform(&Player::name) |
+                                                std::ranges::to<std::vector<std::string_view>>();
+    std::string given = playerNameOf(name, taken);
     // The first free slot, as the engine gives a client the first free one.
     const auto free =
         std::ranges::find_if(m_players, [](const std::optional<Player>& slot) { return !slot; });
@@ -160,6 +163,7 @@ auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
     nx::Random appearance{index.value, kAppearanceStream};
     Player& player = m_players[index.value].emplace(
         Player{.team = team,
+               .name = std::move(given),
                .autoSwitch = autoSwitch,
                .character = characters.at(appearance.below(characters.size())),
                .status = PlayerStatus{.health = nx::HitPoints{}, .money = m_cvars.startingMoney()},
@@ -168,7 +172,7 @@ auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
                .breath = Breath{m_content->breath, m_content->playerHarm}});
     player.body = m_world.spawn(nx::game::Transform{}, bodyOf(player.movement), PlayerBody{.player = index},
                                 nx::game::Classified{.classification = nx::game::Classification::Player});
-    nx::log::info(kLog, "a player joins the {}", nx::enumName(team));
+    nx::log::info(kLog, "{} joins the {}", player.name, nx::enumName(team));
     if (canSpawn(player)) {
         spawn(player);
     } else {
@@ -180,7 +184,7 @@ auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
 
 void Game::leave(PlayerIndex index) {
     const Player& player = playerAt(index);
-    nx::log::info(kLog, "a player of the {} leaves", nx::enumName(player.team));
+    nx::log::info(kLog, "{} of the {} leaves", player.name, nx::enumName(player.team));
     // ClientDisconnected: its weapons destroyed with it, its body gone, no longer counted.
     m_world.destroy(player.body);
     m_players[index.value].reset();
@@ -215,6 +219,19 @@ auto Game::teamCounts() const -> TeamCounts {
 
 auto Game::playerCount() const -> std::size_t {
     return static_cast<std::size_t>(std::ranges::distance(playersIn(m_players)));
+}
+
+auto Game::nameOf(PlayerIndex player) const -> std::string_view {
+    return playerAt(player).name;
+}
+
+auto Game::playerNamed(std::string_view name) const -> std::optional<PlayerIndex> {
+    for (const auto& [slot, player] : std::views::enumerate(m_players)) {
+        if (player && player->name == name) {
+            return PlayerIndex{nx::narrow<std::uint32_t>(slot)};
+        }
+    }
+    return std::nullopt;
 }
 
 auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
@@ -642,7 +659,7 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
 }
 
 void Game::die(Player& player, Player* killer) {
-    nx::log::info(kLog, "a player dies");
+    nx::log::info(kLog, "{} dies", player.name);
     makeSound(player, m_content->playerHarm.death);
     // PlayerKilled pays its killer, or makes it pay for a teammate.
     if (killer != nullptr && killer != &player) {

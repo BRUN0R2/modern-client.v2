@@ -6,7 +6,8 @@
 ///
 /// Today: the game of a map (Game), played tick by tick by its players' commands in the map's rounds and
 /// their money, by the cvars of its rules (GameCvars), the studio models it plays (GameModels), its
-/// players' bodies as its traces meet them (PlayerBody), and the snapshot it tells each player's client
+/// players' bodies as its traces meet them (PlayerBody), the names it gives them (playerNameOf), and
+/// the snapshot it tells each player's client
 /// after each tick; played in the client's process until the dedicated server and the network come
 /// (docs/09, docs/08).
 export module cs.server;
@@ -14,5 +15,6 @@ export module cs.server;
 export import :gameCvars;
 export import :gameModels;
 export import :playerBodies;
+export import :playerNames;
 export import :game;
 export import :entityBodies;

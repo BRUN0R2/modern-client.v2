@@ -48,6 +48,17 @@ and the chest, `gut_flinch` elsewhere, either at random for a hit of no group, p
 it plays the death of where it was met: the head's, the chest's or the stomach's, `left` and `right` for
 the arms, a death at random for a hit of no group, the simplest for the legs (§7.4).
 
+**Today**, the players' names (`cs.server:playerNames`, `cs::Game::join`): a player asks for a name
+(the client's `name`, "Player" at first, the engine's, which Steam replaces with its persona's) and
+the server gives it one as the original engine does (`SV_CheckUserInfo`, `SV_ExtractFromUserinfo`,
+`SV_CheckForDuplicateNames`, ReHLDS, GPL, consulted: [20 §3](20-legal-and-licensing.md#3-clean-room)):
+its `%` and `&` blanked, the `#`s it starts with too, so that it resembles no player's number, and the
+blanks about it gone; `unnamed` for none left, `console` in any case, or one holding `..`, `"` or
+`\`; then, while another player has it in any case, the first of `(1)name`, `(2)name`... no one has.
+The original's two ways disagree on a name that starts with `#` (its connection leaves it, a change
+of name blanks it): here both blank it. A name changed while playing, and its 31 characters at most,
+come with the network ([08](08-networking.md)).
+
 ## 3. Match and round flow
 
 ```mermaid
@@ -704,10 +715,12 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
 - `bot_add` joins the team the game's auto-select joins (`cs::Game::defaultTeam`,
   `SelectDefaultTeam`: the one of fewer players, else one at random; the teams' wins, which it
   weighs then, come with the scores), `bot_add_t` and `bot_add_ct` their team; each adds one to
-  `bot_quota`. `bot_kick` (or `bot_kick all`) makes every bot leave and sets `bot_quota` to 0; a bot
-  kicked by its name comes with the bots' names. A bot leaves as a client disconnects
-  (`cs::Game::leave`, `ClientDisconnected`): its weapons and body go, and its slot is the next
-  player's.
+  `bot_quota`. Each takes a profile's name, in any case (`bot_add_t Abner`, `GetProfile`), refused
+  when no profile has it or when a bot plays as it or a player has its name (`UTIL_IsNameTaken`).
+  `bot_kick` (or `bot_kick all`) makes every bot leave and sets `bot_quota` to 0; `bot_kick <name>`
+  the bot of that name, exactly, one less in `bot_quota`, and fails when no bot has it, where the
+  original says nothing. A bot leaves as a client disconnects (`cs::Game::leave`,
+  `ClientDisconnected`): its weapons and body go, and its slot is the next player's.
 - `bot_quota` is looked at every 0.3 seconds (`MonitorBotCVars`): one bot is added when there are
   fewer, one leaves when there are more, of the team of more players or of one drawn at random,
   a dead one first, of the other team when that one has none (`MaintainBotQuota`,
@@ -720,12 +733,16 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   25 above, the feet 34 below standing or 14 ducked, and the sides 13 across. It looks at a share of
   the players each tick (`perceptionBudget`) and remembers what it saw for a while
   (`data/cstrike/bots.toml`). Lines through glass and smoke are weighed with them.
-- Each bot plays with a level of skill drawn as it joins among those of `bot_difficulty`'s
-  difficulty (`GetDifficultyLevel`: easy below 0.9, normal below 1.9, hard below 2.9, else
-  expert): the templates of the zBot's `BotProfile.db` that ReGameDLL_CS ships, each a skill, a
-  reaction time and an attack delay (`skillLevels` in `data/cstrike/bots.toml`; easy and fair for
-  easy, fair, normal and tough for normal, tough, hard and very hard for hard, expert and elite for
-  expert). The draw is among the levels until the bots' names bring the named profiles.
+- Each bot plays as a profile drawn as it joins among those of `bot_difficulty`'s difficulty that
+  no bot plays as and no player has the name of (`GetDifficultyLevel`: easy below 0.9, normal below
+  1.9, hard below 2.9, else expert; `GetRandomProfile`, `UTIL_IsNameTaken`): a name and its level of
+  skill, the templates of the zBot's `BotProfile.db` that ReGameDLL_CS ships, each a skill, a
+  reaction time and an attack delay (`skillLevels` in `data/cstrike/bots.toml`, each with its
+  `profiles`; easy and fair for easy, fair, normal and tough for normal, tough, hard and very hard
+  for hard, expert and elite for expert). The profiles' names are the project's own. Its player is
+  named after `bot_prefix`, a blank between (`UTIL_ConstructBotNetName`). With every profile of its
+  difficulty in the game, the original adds no bot; here one is drawn among them all, and the
+  server numbers its name (section 2).
 - An enemy it sees is known to it its reaction time after it first saw it, out of sight since or not
   (`ReactionTime`, `nx::agents::Rules::reactionTime`): before then it neither attacks nor chases it.
 - Its view turns towards where it looks by a spring, stiffer as it attacks, its yaw set once a degree
@@ -751,7 +768,7 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.
-- Its names, the spot of its enemy it aims at by its skill and the parts it sees, the knife's,
+- The spot of its enemy it aims at by its skill and the parts it sees, the knife's,
   the sniper rifles', the shotguns' and the machine gun's own ways of firing, the weapons it chooses
   and buys, the objectives, the radio and `bot_chatter` come next.
 

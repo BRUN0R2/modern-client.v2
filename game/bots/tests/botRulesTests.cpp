@@ -44,6 +44,7 @@ TEST(BotRulesTest, TheLevelsOfSkillAreTheZBotsTemplatesEachOfItsDifficulties) {
     EXPECT_EQ(easy.skill, cs::BotSkill{0.0F});
     EXPECT_EQ(easy.reactionTime, nx::Seconds{0.5F});
     EXPECT_EQ(easy.attackDelay, nx::Seconds{1.5F});
+    EXPECT_EQ(easy.profiles.front(), "Abner");
     const cs::BotSkillLevel& elite = rules->skillLevels.back();
     EXPECT_EQ(elite.name, "elite");
     EXPECT_EQ(elite.difficulties, std::vector{cs::BotDifficulty::Expert});
@@ -58,10 +59,10 @@ TEST(BotRulesTest, RulesBeyondTheirBoundsAreRefused) {
          {std::pair{"fieldOfView = 120.0", "fieldOfView = 361.0"},
           std::pair{"perceptionBudget = 32", "perceptionBudget = 0"},
           std::pair{"quotaInterval = 0.3", "quotaInterval = 0.0"},
-          std::pair{R"(difficulties = ["expert"]
-skill = 1.0)",
-                    R"(difficulties = []
-skill = 1.0)"},
+          std::pair{R"(name = "elite"
+difficulties = ["expert"])",
+                    R"(name = "elite"
+difficulties = [])"},
           std::pair{"reactionTime = 0.5", "reactionTime = -0.5"}, std::pair{"skill = 0.25", "skill = 1.25"},
           std::pair{"pitchLimit = 89.0", "pitchLimit = 91.0"}, std::pair{"damping = 25.0", "damping = 0.0"},
           std::pair{"latestNewError = 1.0", "latestNewError = 0.1"},
@@ -74,6 +75,24 @@ longest = 0.7)"}}) {
         const std::size_t at = broken.find(line);
         ASSERT_NE(at, std::string::npos) << line;
         broken.replace(at, std::string_view{line}.size(), changed);
+        const auto rules = cs::readBotRules(broken, "bots.toml");
+        ASSERT_FALSE(rules.has_value()) << changed;
+        EXPECT_EQ(rules.error().code, cs::BotError::InvalidData);
+    }
+}
+
+TEST(BotRulesTest, ProfilesNamedApartAsTheServerNamesAPlayerAreRequired) {
+    const std::string text = repositoryRules();
+    for (const auto& [name, changed] :
+         {std::pair{R"("Basil")", R"("abner")"}, std::pair{R"("Cyril")", R"("console")"},
+          std::pair{R"("Dudley")", R"("#Dudley")"}, std::pair{R"("Edgar")", R"(" Edgar")"},
+          std::pair{
+              R"(profiles = ["Aurelio", "Bastian", "Cosimo", "Dante", "Ezio", "Fiore", "Galeno", "Lauro"])",
+              "profiles = []"}}) {
+        std::string broken = text;
+        const std::size_t at = broken.find(name);
+        ASSERT_NE(at, std::string::npos) << name;
+        broken.replace(at, std::string_view{name}.size(), changed);
         const auto rules = cs::readBotRules(broken, "bots.toml");
         ASSERT_FALSE(rules.has_value()) << changed;
         EXPECT_EQ(rules.error().code, cs::BotError::InvalidData);

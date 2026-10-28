@@ -205,10 +205,10 @@ struct Session {
 };
 
 /// The map `name` of `content`, its client's level read, its game started by the
-/// rules `cvars` set, the client's player joined in the team of its first spawn point, its weapons
-/// drawn as `autoSwitch` says. Errors: CommandFailed, with the cause.
+/// rules `cvars` set, the client's player joined in the team of its first spawn point, asking for the
+/// name `player` holds and drawing its weapons as `player` says. Errors: CommandFailed, with the cause.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
-                                cs::AutoSwitch autoSwitch, const cs::GameCvars& cvars)
+                                const nx::settings::PlayerCvars& player, const cs::GameCvars& cvars)
     -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
     const std::string failed = std::format("map {}", name);
     auto map = cs::GameMap::load(content.vfs, name);
@@ -223,12 +223,13 @@ struct Session {
     if (!game) {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(game.error()));
     }
-    const cs::PlayerIndex player = (*game)->join(cs::spawnTeam((*map)->map()), autoSwitch);
-    cs::ClientGame known{(*level)->models(), (*level)->players(), (*game)->snapshotFor(player)};
+    const cs::PlayerIndex joined =
+        (*game)->join(cs::spawnTeam((*map)->map()), autoSwitchOf(player), player.name.value());
+    cs::ClientGame known{(*level)->models(), (*level)->players(), (*game)->snapshotFor(joined)};
     return std::make_unique<Session>(Session{.map = std::move(*map),
                                              .level = std::move(*level),
                                              .game = std::move(*game),
-                                             .player = player,
+                                             .player = joined,
                                              .client = std::move(known)});
 }
 
@@ -626,8 +627,7 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
         return m_nextSession ? m_nextSession.get() : m_session.get();
     };
     cs::BotActions actions{
-        .add = [this, played](std::optional<cs::Team> team,
-                              cs::BotDifficulty difficulty) -> nx::Result<void, cs::BotActionError> {
+        .add = [this, played](const cs::BotRequest& request) -> nx::Result<void, cs::BotActionError> {
             Session* const session = played();
             if (session == nullptr) {
                 return nx::fail(cs::BotActionError::NoMap);
@@ -636,7 +636,23 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
             if (!bots) {
                 return std::unexpected{std::move(bots.error())};
             }
-            std::ignore = (*bots)->add(team, difficulty);
+            if (!request.profile) {
+                std::ignore = (*bots)->add(request.team, request.difficulty, request.prefix);
+                return {};
+            }
+            if (auto added = (*bots)->addProfile(*request.profile, request.team, request.prefix); !added) {
+                return nx::fail(cs::BotActionError::Refused, std::move(added.error()));
+            }
+            return {};
+        },
+        .kick = [played](std::string_view name) -> nx::Result<void, cs::BotActionError> {
+            Session* const session = played();
+            if (session == nullptr) {
+                return nx::fail(cs::BotActionError::NoMap);
+            }
+            if (!session->bots || !session->bots->kickNamed(name)) {
+                return nx::fail(cs::BotActionError::NoSuchBot, std::format("no bot is named {}", name));
+            }
             return {};
         },
         .kickAll = [played]() -> nx::Result<void, cs::BotActionError> {
@@ -721,7 +737,7 @@ void Client::keepBotQuota(Session& session) {
         }
     }
     if (session.bots) {
-        session.bots->keepQuota(quota, botCvars->difficultyLevel());
+        session.bots->keepQuota(quota, botCvars->difficultyLevel(), botCvars->prefix.value());
     }
 }
 
@@ -730,7 +746,7 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, autoSwitchOf(m_cvars->player), *m_gameCvars);
+    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars);
     if (!session) {
         return std::unexpected{std::move(session.error())};
     }

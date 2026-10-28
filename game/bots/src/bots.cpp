@@ -24,13 +24,14 @@ constexpr std::string_view kPlayerProfile = "player";
 constexpr std::string_view kHuntStream = "bot hunt";
 /// The stream of random numbers the team a bot leaves to keep bot_quota is drawn from, of the tick.
 constexpr std::string_view kQuotaStream = "bot quota";
-/// The stream of random numbers a bot's level of skill is drawn from, of the tick it joins and its slot.
-constexpr std::string_view kSkillStream = "bot skill";
+/// The stream of random numbers a bot's profile is drawn from, of the tick it joins and the bots in the
+/// game.
+constexpr std::string_view kProfileStream = "bot profile";
 /// The stream of random numbers a bot's aim's errors and its pauses between presses draw from, of the
 /// player it plays.
 constexpr std::string_view kAimStream = "bot aim";
-/// How far the tick a bot joins at is shifted from its slot in the seed of its level's draw.
-constexpr int kSlotBits = 32;
+/// How far the tick a bot joins at is shifted from the count of bots in the seed of its profile's draw.
+constexpr int kCountBits = 32;
 /// The teams a bot may play in, which MaintainBotQuota draws one of.
 constexpr std::uint32_t kPlayingTeams = 2;
 
@@ -66,25 +67,30 @@ void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::Units
     command.move.side = maxSpeed * nx::dot(way, axes.right);
 }
 
-/// The index in `levels` of one of `difficulty`'s, drawn from `random` as GetRandomProfile draws a
-/// profile of it; readBotRules leaves a level for each difficulty.
-[[nodiscard]] auto drawSkillLevel(std::span<const BotSkillLevel> levels, BotDifficulty difficulty,
-                                  nx::Random& random) -> std::size_t {
-    const auto isOf = [difficulty](const BotSkillLevel& level) {
-        return std::ranges::contains(level.difficulties, difficulty);
-    };
-    const auto count = static_cast<std::uint64_t>(std::ranges::count_if(levels, isOf));
-    nx::invariant(count > 0, "Bots: a level of skill for each difficulty");
-    std::uint64_t left = random.below(count);
+/// A profile of the bots' rules: the index of its level of skill and its name.
+struct ProfileOf {
+    std::size_t level = 0;
+    std::string_view name;
+};
+
+/// The profiles of the levels of `levels`, those of `difficulty` alone when it is given, in their order.
+[[nodiscard]] auto profilesOf(std::span<const BotSkillLevel> levels, std::optional<BotDifficulty> difficulty)
+    -> std::vector<ProfileOf> {
+    std::vector<ProfileOf> profiles;
     for (const auto& [index, level] : std::views::enumerate(levels)) {
-        if (isOf(level)) {
-            if (left == 0) {
-                return static_cast<std::size_t>(index);
+        if (!difficulty || std::ranges::contains(level.difficulties, *difficulty)) {
+            for (const std::string& name : level.profiles) {
+                profiles.push_back({.level = static_cast<std::size_t>(index), .name = name});
             }
-            --left;
         }
     }
-    std::unreachable();
+    return profiles;
+}
+
+/// The name of a bot of the profile `profile` after `prefix`, the prefix and a blank before it
+/// (UTIL_ConstructBotNetName).
+[[nodiscard]] auto botNameOf(std::string_view profile, std::string_view prefix) -> std::string {
+    return prefix.empty() ? std::string{profile} : std::format("{} {}", prefix, profile);
 }
 
 } // namespace
@@ -128,21 +134,56 @@ Bots::~Bots() {
     kickAll();
 }
 
-auto Bots::add(std::optional<Team> team, BotDifficulty difficulty) -> PlayerIndex {
-    const Team joined = team.value_or(game->defaultTeam());
-    const PlayerIndex player = game->join(joined, AutoSwitch::ToHeavier);
-    nx::Random skills{(std::bit_cast<std::uint64_t>(game->time().now.tick()) << kSlotBits) ^ player.value,
-                      kSkillStream};
-    const std::size_t level = drawSkillLevel(rules.skillLevels, difficulty, skills);
-    const BotSkillLevel& skill = rules.skillLevels[level];
+auto Bots::add(std::optional<Team> team, BotDifficulty difficulty, std::string_view prefix) -> PlayerIndex {
+    const std::vector<ProfileOf> ofDifficulty = profilesOf(rules.skillLevels, difficulty);
+    nx::invariant(!ofDifficulty.empty(), "Bots: profiles for each difficulty");
+    std::vector<ProfileOf> free =
+        ofDifficulty |
+        std::views::filter([this](const ProfileOf& profile) { return !isInGame(profile.name); }) |
+        std::ranges::to<std::vector>();
+    const std::span<const ProfileOf> drawn = free.empty() ? std::span{ofDifficulty} : std::span{free};
+    nx::Random random{(std::bit_cast<std::uint64_t>(game->time().now.tick()) << kCountBits) ^ bots.size(),
+                      kProfileStream};
+    const ProfileOf profile = drawn[random.below(drawn.size())];
+    return join(profile.level, profile.name, team, prefix);
+}
+
+auto Bots::addProfile(std::string_view profile, std::optional<Team> team, std::string_view prefix)
+    -> nx::Result<PlayerIndex, BotJoinError> {
+    const std::vector<ProfileOf> every = profilesOf(rules.skillLevels, std::nullopt);
+    const auto named = std::ranges::find_if(
+        every, [profile](const ProfileOf& each) { return nx::equalsIgnoringCase(each.name, profile); });
+    if (named == every.end()) {
+        return nx::fail(BotJoinError::UnknownProfile, std::format("no profile is named {}", profile));
+    }
+    if (isInGame(named->name)) {
+        return nx::fail(BotJoinError::ProfileInGame, std::format("{} is in the game already", named->name));
+    }
+    return join(named->level, named->name, team, prefix);
+}
+
+auto Bots::join(std::size_t level, std::string_view profile, std::optional<Team> team,
+                std::string_view prefix) -> PlayerIndex {
+    const BotSkillLevel& skill = rules.skillLevels.at(level);
+    const PlayerIndex player =
+        game->join(team.value_or(game->defaultTeam()), AutoSwitch::ToHeavier, botNameOf(profile, prefix));
     game->attachPlayerComponent(
         player, nx::agents::Agent{.brain = nx::agents::Brain{brainRulesOf(rules, skill.reactionTime)}});
-    game->attachPlayerComponent(player, BotDriver{.skillLevel = level,
+    game->attachPlayerComponent(player, BotDriver{.profile = std::string{profile},
+                                                  .skillLevel = level,
                                                   .hunt = nx::Random{player.value, kHuntStream},
                                                   .aim = nx::Random{player.value, kAimStream}});
     bots.push_back(player);
-    nx::log::info(kLog, "a bot joins the {}, {}", nx::enumName(joined), skill.name);
+    nx::log::info(kLog, "{} plays at the {} level", game->nameOf(player), skill.name);
     return player;
+}
+
+auto Bots::isInGame(std::string_view profile) -> bool {
+    const bool isPlayed = std::ranges::any_of(bots, [this, profile](PlayerIndex bot) {
+        return game->playerComponent<BotDriver>(bot)->profile == profile;
+    });
+    const std::optional<PlayerIndex> named = game->playerNamed(profile);
+    return isPlayed || (named && game->playerComponent<BotDriver>(*named) == nullptr);
 }
 
 auto Bots::skillLevelOf(PlayerIndex player) -> const BotSkillLevel& {
@@ -155,6 +196,16 @@ void Bots::kickAll() {
     while (!bots.empty()) {
         kick(std::prev(bots.end()));
     }
+}
+
+auto Bots::kickNamed(std::string_view name) -> bool {
+    const auto named =
+        std::ranges::find_if(bots, [this, name](PlayerIndex bot) { return game->nameOf(bot) == name; });
+    if (named == bots.end()) {
+        return false;
+    }
+    kick(named);
+    return true;
 }
 
 void Bots::kick(std::vector<PlayerIndex>::const_iterator bot) {
@@ -179,14 +230,14 @@ auto Bots::kickFrom(Team team) -> bool {
     return true;
 }
 
-void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty) {
+void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_view prefix) {
     const nx::game::TickTime time = game->time();
     if (time.now < nextQuotaCheck) {
         return;
     }
     nextQuotaCheck = time.now.after(rules.quotaInterval, time.rate);
     if (quota > bots.size()) {
-        std::ignore = add(std::nullopt, difficulty);
+        std::ignore = add(std::nullopt, difficulty, prefix);
         return;
     }
     if (quota == bots.size()) {
