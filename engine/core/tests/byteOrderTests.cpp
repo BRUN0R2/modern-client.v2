@@ -34,6 +34,17 @@ TEST(ByteOrderTest, ReadsIeeeFloats) {
     static_assert(nx::loadLittleEndian<float>(oneAndAHalf) == 1.5F);
 }
 
+TEST(ByteOrderTest, AppendsWhatLoadLittleEndianReads) {
+    std::vector<std::byte> bytes;
+    nx::appendLittleEndian(bytes, std::uint32_t{0x0403'0201});
+    nx::appendLittleEndian(bytes, std::int16_t{-2});
+    nx::appendLittleEndian(bytes, 1.5F);
+    ASSERT_EQ(bytes.size(), 10U);
+    EXPECT_TRUE(std::ranges::equal(std::span{bytes}.first(4), std::span{kBytes}.first(4)));
+    EXPECT_EQ(nx::loadLittleEndian<std::int16_t>(std::span{bytes}.subspan(4)), -2);
+    EXPECT_EQ(nx::loadLittleEndian<float>(std::span{bytes}.subspan(6)), 1.5F);
+}
+
 TEST(ByteOrderTest, TooFewBytesBreakTheContract) {
     const nx::test::ContractRecorder recorder;
     EXPECT_EQ(nx::loadLittleEndian<std::uint32_t>(std::span{kBytes}.first(3)), 0U);

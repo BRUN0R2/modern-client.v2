@@ -9,10 +9,11 @@
 /// thread that asked for them goes on, from triangles each of a kind of area; the paths Detour finds on
 /// them (A* over the polygons, then the funnel that straightens it), the nearest point, a straight walk,
 /// a random point within a radius, whether one point reaches another, and a corridor that follows an
-/// agent as it moves. It knows nothing of maps or entities: the game gives it their geometry. Links
-/// (ladders, jumps, teleporters), areas a door turns on and off, the tactical layer and the meshes'
-/// cache come next (TODO.md). Recast and Detour stay in its implementation units: no type of theirs
-/// crosses this interface.
+/// agent as it moves; and a mesh kept as bytes under the key of what it was built from (meshKeyOf,
+/// NavigationMesh::save), read back without building it again. It knows nothing of maps, entities or
+/// files: the game gives it their geometry, and keeps the bytes where it will. Links (ladders, jumps,
+/// teleporters), areas a door turns on and off and the tactical layer come next (TODO.md). Recast and
+/// Detour stay in its implementation units: no type of theirs crosses this interface.
 export module nx.navigation;
 
 export import :profile;

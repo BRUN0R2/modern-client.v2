@@ -211,11 +211,77 @@ struct Session {
     std::unique_ptr<cs::Bots> bots{};
 };
 
-/// Starts building, in `jobs`, the mesh of `game`'s map the agents walk: cs::standingPlayerProfile of
-/// `navigation`, by its settings. Errors: CommandFailed, with the cause (also `navigation`'s).
-[[nodiscard]] auto startAgentMesh(nx::jobs::JobSystem& jobs, cs::Game& game,
+/// The folder of the cache (nx::platform::cacheDirectory) that keeps the maps' navigation meshes: a file
+/// for each map and profile, which holds its mesh's key, so that a map whose content, profile or settings
+/// changed has its mesh built again and kept in place of the old one.
+constexpr std::string_view kMeshCacheFolder = "navigation";
+constexpr std::string_view kMeshFileExtension = ".nxnav";
+
+/// Whether a file's name keeps `letter` as it is.
+[[nodiscard]] auto isFileNameLetter(char letter) noexcept -> bool {
+    return std::isalnum(static_cast<unsigned char>(letter)) != 0 || letter == '_' || letter == '-' ||
+           letter == '.';
+}
+
+/// The file of the cache that keeps the mesh of `profile` of the map `map`, the characters a file's name
+/// may not hold (a map in a folder of maps/, say) turned into '_'; none when the system names no cache
+/// folder.
+[[nodiscard]] auto meshFileOf(std::string_view map, std::string_view profile)
+    -> std::optional<std::filesystem::path> {
+    const auto folder = nx::platform::cacheDirectory();
+    if (!folder) {
+        return std::nullopt;
+    }
+    std::string name = std::format("{}.{}{}", map, profile, kMeshFileExtension);
+    std::ranges::replace_if(name, std::not_fn(isFileNameLetter), '_');
+    return *folder / kMeshCacheFolder / nx::platform::fromUtf8(name);
+}
+
+/// The mesh `file` keeps for `key`, for `profile`; none when it keeps none, or another (logged).
+[[nodiscard]] auto readKeptMesh(const std::filesystem::path& file, nx::navigation::MeshKey key,
+                                const nx::navigation::AgentProfile& profile)
+    -> std::optional<nx::navigation::NavigationMesh> {
+    auto bytes = nx::platform::readFile(file);
+    if (!bytes) {
+        if (bytes.error().code != nx::platform::FileError::NotFound) {
+            nx::log::warning(kLog, "the kept navigation mesh cannot be read: {}",
+                             nx::describe(bytes.error()));
+        }
+        return std::nullopt;
+    }
+    auto mesh = nx::navigation::NavigationMesh::load(*bytes, key, profile);
+    if (!mesh) {
+        nx::log::info(kLog, "the kept navigation mesh {} is built again: {}", nx::platform::toUtf8(file),
+                      nx::describe(mesh.error()));
+        return std::nullopt;
+    }
+    return std::move(*mesh);
+}
+
+/// Keeps `mesh`, of `key`, in `file`, for the next time its map loads; logs what fails.
+void keepMesh(const std::filesystem::path& file, const nx::navigation::NavigationMesh& mesh,
+              nx::navigation::MeshKey key) {
+    auto written = nx::platform::createDirectories(file.parent_path()).and_then([&] {
+        return nx::platform::writeFile(file, mesh.save(key));
+    });
+    if (!written) {
+        nx::log::warning(kLog, "the navigation mesh is not kept: {}", nx::describe(written.error()));
+    }
+}
+
+/// The agents' mesh of a map as it loads: read from the cache, or being built in jobs, then kept there.
+struct AgentMeshLoad {
+    std::variant<nx::navigation::NavigationMesh, nx::navigation::MeshBuild> mesh;
+    nx::navigation::MeshKey key{};
+    std::optional<std::filesystem::path> file{}; ///< Where it is kept, when the system names a cache folder.
+};
+
+/// The mesh of `game`'s map, the map `map`, that the agents walk: cs::standingPlayerProfile of `navigation`,
+/// by its settings; read from the cache when it keeps it, else started in `jobs`. Errors: CommandFailed,
+/// with the cause (also `navigation`'s).
+[[nodiscard]] auto startAgentMesh(nx::jobs::JobSystem& jobs, cs::Game& game, std::string_view map,
                                   const nx::Result<nx::game::NavigationData, ConsoleError>& navigation)
-    -> nx::Result<nx::navigation::MeshBuild, ConsoleError> {
+    -> nx::Result<AgentMeshLoad, ConsoleError> {
     if (!navigation) {
         return std::unexpected{navigation.error()};
     }
@@ -223,23 +289,37 @@ struct Session {
     if (!profile) {
         return nx::fail(ConsoleError::CommandFailed, std::move(profile.error()));
     }
-    auto started = nx::navigation::NavigationMesh::startBuild(jobs, game.navigationGeometry(), *profile,
-                                                              navigation->build);
+    const nx::navigation::Geometry geometry = game.navigationGeometry();
+    const nx::navigation::MeshKey key = nx::navigation::meshKeyOf(geometry, *profile, navigation->build);
+    std::optional<std::filesystem::path> file = meshFileOf(map, profile->name);
+    if (file) {
+        if (auto kept = readKeptMesh(*file, key, *profile)) {
+            return AgentMeshLoad{.mesh = std::move(*kept), .key = key, .file = std::move(file)};
+        }
+    }
+    auto started = nx::navigation::NavigationMesh::startBuild(jobs, geometry, *profile, navigation->build);
     if (!started) {
         return nx::fail(ConsoleError::CommandFailed, std::move(started.error()));
     }
-    return std::move(*started);
+    return AgentMeshLoad{.mesh = std::move(*started), .key = key, .file = std::move(file)};
 }
 
-/// The mesh `started` builds, once built. Errors: CommandFailed, with the cause.
-[[nodiscard]] auto finishAgentMesh(nx::Result<nx::navigation::MeshBuild, ConsoleError> started)
+/// The mesh `load` has, once built, then kept for the next time when it was built. Errors:
+/// CommandFailed, with the cause.
+[[nodiscard]] auto finishAgentMesh(nx::Result<AgentMeshLoad, ConsoleError> load)
     -> nx::Result<nx::navigation::NavigationMesh, ConsoleError> {
-    if (!started) {
-        return std::unexpected{std::move(started.error())};
+    if (!load) {
+        return std::unexpected{std::move(load.error())};
     }
-    auto mesh = std::move(*started).finish();
+    if (auto* const kept = std::get_if<nx::navigation::NavigationMesh>(&load->mesh)) {
+        return std::move(*kept);
+    }
+    auto mesh = std::get<nx::navigation::MeshBuild>(std::move(load->mesh)).finish();
     if (!mesh) {
         return nx::fail(ConsoleError::CommandFailed, std::move(mesh.error()));
+    }
+    if (load->file) {
+        keepMesh(*load->file, *mesh, load->key);
     }
     return std::move(*mesh);
 }
@@ -247,8 +327,8 @@ struct Session {
 /// The map `name` of `content`, its game started by the rules `cvars` set, the client's player joined
 /// in the team of its first spawn point, asking for the name `player` holds and drawing its weapons as
 /// `player` says, and its client's level read; meanwhile the workers of `jobs` build the map's mesh of
-/// `navigation` the agents walk, which a map plays without when it cannot be built. Errors:
-/// CommandFailed, with the cause.
+/// `navigation` the agents walk, unless the cache keeps it, which a map plays without when it cannot be
+/// built. Errors: CommandFailed, with the cause.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
                                 const nx::settings::PlayerCvars& player, const cs::GameCvars& cvars,
                                 nx::jobs::JobSystem& jobs,
@@ -265,7 +345,7 @@ struct Session {
     }
     const cs::PlayerIndex joined =
         (*game)->join(cs::spawnTeam((*map)->map()), autoSwitchOf(player), player.name.value());
-    auto agentMesh = startAgentMesh(jobs, **game, navigation);
+    auto agentMesh = startAgentMesh(jobs, **game, (*map)->name(), navigation);
     auto level = cs::Level::load(content, **map); // while the workers build the mesh
     if (!level) {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));

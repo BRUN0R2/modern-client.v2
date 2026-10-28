@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Numbers stored in bytes: the little-endian fields of the file formats (WAD3, BSP, MDL, SPR,
-/// WAV) and the big-endian ones of TrueType's tables, read the same on any host.
+/// WAV, and the project's own navigation meshes, which it writes too) and the big-endian ones of
+/// TrueType's tables, read the same on any host.
 export module nx.core:byteOrder;
 
 import std;
@@ -35,6 +36,17 @@ template <class Value>
         std::ranges::reverse(raw);
     }
     return std::bit_cast<Value>(raw);
+}
+
+/// Appends `value` to `bytes` little-endian, as loadLittleEndian reads it back. Floats are IEEE 754.
+template <class Value>
+    requires Integer<Value> || (std::floating_point<Value> && std::numeric_limits<Value>::is_iec559)
+constexpr void appendLittleEndian(std::vector<std::byte>& bytes, Value value) {
+    auto raw = std::bit_cast<std::array<std::byte, sizeof(Value)>>(value);
+    if constexpr (std::endian::native == std::endian::big) {
+        std::ranges::reverse(raw);
+    }
+    bytes.insert(bytes.end(), raw.begin(), raw.end());
 }
 
 /// The `Value` stored big-endian in the first sizeof(Value) bytes of `bytes`, which must hold them,

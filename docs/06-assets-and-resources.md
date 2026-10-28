@@ -385,6 +385,10 @@ Loading a map involves:
 6. Reading the map's `.res` and building the resource manifest.
 7. Loading the optional parts: detail textures, overview, and the navigation meshes of the
    agents' profiles, read from their cache or built in jobs ([ADR-0023](adr/0023-navigation.md)).
+   Today `next` reads the mesh its agents walk from `navigation/<map>.<profile>.nxnav` in the
+   cache folder (`nx::platform::cacheDirectory`) when the file holds the key of the map's
+   geometry, the profile and the settings; else it builds it in jobs while the level loads and
+   keeps it there, replacing what the file held.
 
 Loading runs as a job graph. The goal is to load `de_dust2` in under 1 second from a warm
 cache.

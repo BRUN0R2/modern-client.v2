@@ -442,3 +442,56 @@ auto takeTiles(TileWork& work) -> Result<BuiltTiles, MeshBuildError> {
 }
 
 } // namespace nx::navigation::detail
+
+namespace nx::navigation {
+
+namespace {
+
+/// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
+/// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
+/// that no mesh kept before is taken for one built now.
+constexpr std::uint32_t kTilesVersion = 1;
+
+/// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
+/// and its kind), to reserve them.
+constexpr std::size_t kVertexKeyBytes = 3 * sizeof(float);
+constexpr std::size_t kTriangleKeyBytes = (3 * sizeof(std::uint32_t)) + sizeof(AreaKind);
+
+} // namespace
+
+auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const BuildSettings& settings)
+    -> MeshKey {
+    std::vector<std::byte> bytes;
+    bytes.reserve((geometry.vertices.size() * kVertexKeyBytes) +
+                  (geometry.triangles.size() * kTriangleKeyBytes));
+    appendLittleEndian(bytes, kTilesVersion);
+    appendLittleEndian(bytes, std::int32_t{DT_NAVMESH_VERSION});
+    for (const float value :
+         {profile.radius.value(), profile.standingHeight.value(), profile.crouchedHeight.value(),
+          profile.stepHeight.value(), profile.minGroundNormalZ}) {
+        appendLittleEndian(bytes, value);
+    }
+    for (const float value :
+         {settings.cellSize.value(), settings.cellHeight.value(), settings.smallestIsland.value(),
+          settings.smallestRegion.value(), settings.longestEdge.value(), settings.edgeError.value(),
+          settings.detailSampleDistance.value(), settings.detailHeightError.value()}) {
+        appendLittleEndian(bytes, value);
+    }
+    appendLittleEndian(bytes, settings.tileCells);
+    appendLittleEndian(bytes, std::uint64_t{geometry.vertices.size()});
+    for (const Vec3 vertex : geometry.vertices) {
+        appendLittleEndian(bytes, vertex.x);
+        appendLittleEndian(bytes, vertex.y);
+        appendLittleEndian(bytes, vertex.z);
+    }
+    appendLittleEndian(bytes, std::uint64_t{geometry.triangles.size()});
+    for (const GeometryTriangle& triangle : geometry.triangles) {
+        for (const std::uint32_t corner : triangle.corners) {
+            appendLittleEndian(bytes, corner);
+        }
+        appendLittleEndian(bytes, std::to_underlying(triangle.kind));
+    }
+    return MeshKey{hash64(bytes)};
+}
+
+} // namespace nx::navigation
