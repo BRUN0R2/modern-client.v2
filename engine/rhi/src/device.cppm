@@ -97,7 +97,10 @@ struct TextureCopy {
     Extent2d extent{};
 };
 
-/// The commands of a frame (Device::beginFrame), which the GPU runs in order once submitted.
+/// The commands of a frame (Device::beginFrame), which the GPU runs in order once submitted. Setting a
+/// pipeline, a bind group, a buffer, the viewport or the scissor to what is set already records nothing,
+/// and transitions in a row are recorded together, so that a renderer sets what it draws with without
+/// knowing what the one before it left set, at no cost to the driver.
 class CommandList {
 public:
     CommandList() = default;
