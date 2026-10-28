@@ -164,7 +164,7 @@ void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
 [[nodiscard]] auto flinchSequenceOf(const PlayerAnimationContext& context, nx::Random& random)
     -> nx::assets::SequenceIndex {
     std::optional<std::string_view> flinch = kGutFlinch;
-    switch (static_cast<HitGroup>(context.lastHitGroup)) {
+    switch (context.lastHitGroup) {
     case HitGroup::Generic:
         flinch = random.below(kGenericFlinches) != 0 ? kHeadFlinch : kGutFlinch;
         break;
@@ -194,7 +194,7 @@ void playTorso(PlayerAnimation& animation, nx::assets::SequenceIndex sequence,
         return lookupActivity(sequences, activity, random);
     };
     std::optional<nx::assets::SequenceIndex> sequence;
-    switch (static_cast<HitGroup>(context.lastHitGroup)) {
+    switch (context.lastHitGroup) {
     case HitGroup::Generic:
         sequence = ofActivity(kGenericDeaths.at(random.below(kGenericDeaths.size())));
         break;

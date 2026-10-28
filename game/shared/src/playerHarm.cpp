@@ -154,11 +154,11 @@ auto TimedHarms::check(nx::HitPoints mostGivenBack, nx::GameTime now, nx::TickRa
     return given;
 }
 
-auto isArmored(ArmorKind kind, std::uint32_t group) noexcept -> bool {
+auto isArmored(ArmorKind kind, HitGroup group) noexcept -> bool {
     if (kind == ArmorKind::None) {
         return false;
     }
-    switch (static_cast<HitGroup>(group)) {
+    switch (group) {
     case HitGroup::Head:
         return kind == ArmorKind::KevlarAndHelmet;
     case HitGroup::Generic:
@@ -172,7 +172,7 @@ auto isArmored(ArmorKind kind, std::uint32_t group) noexcept -> bool {
     }
 }
 
-auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm, std::uint32_t group,
+auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm, HitGroup group,
                 const ArmorShares& armor) noexcept -> PlayerHarmed {
     nx::expects(std::isfinite(harm.damage.value()) && harm.damage >= nx::Damage{},
                 "harmPlayer: a damage finite and not negative");
@@ -206,21 +206,20 @@ auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm,
     return PlayerHarmed{.damage = taken, .isArmored = isArmoredHarm, .isKilled = !status.isAlive()};
 }
 
-auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, std::uint32_t group,
-            bool isArmored) noexcept -> const GameSound& {
-    const auto hit = static_cast<HitGroup>(group);
-    if (hit == HitGroup::Head) {
+auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, HitGroup group, bool isArmored) noexcept
+    -> const GameSound& {
+    if (group == HitGroup::Head) {
         return status.armorKind == ArmorKind::KevlarAndHelmet ? rules.helmetPain : rules.headPain;
     }
-    if (isArmored && hit != HitGroup::LeftLeg && hit != HitGroup::RightLeg) {
+    if (isArmored && !isLeg(group)) {
         return rules.kevlarPain;
     }
     return rules.pain;
 }
 
-void punchByHit(nx::EulerAngles& punch, std::uint32_t group, nx::Damage damage, ArmorKind kind,
+void punchByHit(nx::EulerAngles& punch, HitGroup group, nx::Damage damage, ArmorKind kind,
                 nx::Random& random) noexcept {
-    switch (static_cast<HitGroup>(group)) {
+    switch (group) {
     case HitGroup::Head:
         if (kind != ArmorKind::KevlarAndHelmet) {
             punch.pitch = nx::Degrees{std::max(damage.value() * kHeadPitchShare, kMostHeadPitch)};

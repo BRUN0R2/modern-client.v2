@@ -345,20 +345,30 @@ TEST(HostagesTest, TheClientShowsAHostageWhereItEstimatesItFromWhatTheServerTell
         .trace = nx::collision::Trace{.fraction = 0.5F, .hitGroup = std::to_underlying(group)}};
 }
 
+TEST(HitGroupRulesTest, ATracesModelGroupIsTheGamesHitGroupItsNumberKept) {
+    EXPECT_EQ(cs::hitGroupOf(nx::collision::Trace{.hitGroup = 1}), cs::HitGroup::Head);
+    EXPECT_EQ(cs::hitGroupOf(nx::collision::Trace{}), cs::HitGroup::Generic) << "a trace that met no hitbox";
+    EXPECT_EQ(std::to_underlying(cs::hitGroupOf(nx::collision::Trace{.hitGroup = 42})), 42U)
+        << "a group the game names none of";
+    EXPECT_TRUE(cs::isLeg(cs::HitGroup::LeftLeg));
+    EXPECT_TRUE(cs::isLeg(cs::HitGroup::RightLeg));
+    EXPECT_FALSE(cs::isLeg(cs::HitGroup::Stomach));
+}
+
 TEST(HitGroupRulesTest, TheRepositorysSharesAreTheOriginals) {
     const cs::HitGroupRules& rules = repositoryHitGroups();
     // CBaseMonster::TraceAttack.
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Head)), 3.0);
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Stomach)), 1.5);
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::RightLeg)), 0.75);
-    EXPECT_EQ(rules.monster.of(std::to_underlying(cs::HitGroup::Shield)), 0.0);
-    EXPECT_EQ(rules.monster.of(42), 1.0) << "a group the game names none of";
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::Head), cs::DamageShare{3.0});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::Stomach), cs::DamageShare{1.5});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::RightLeg), cs::DamageShare{0.75});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup::Shield), cs::DamageShare{0.0});
+    EXPECT_EQ(rules.monster.of(cs::HitGroup{42}), cs::DamageShare{1.0}) << "a group the game names none of";
     // CHostage::GetModifiedDamage.
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::Generic)), 1.75);
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::Head)), 2.5);
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::LeftArm)), 0.75);
-    EXPECT_EQ(rules.hostage.of(std::to_underlying(cs::HitGroup::LeftLeg)), 0.6);
-    EXPECT_EQ(rules.hostage.of(42), 1.5);
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::Generic), cs::DamageShare{1.75});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::Head), cs::DamageShare{2.5});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::LeftArm), cs::DamageShare{0.75});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup::LeftLeg), cs::DamageShare{0.6});
+    EXPECT_EQ(rules.hostage.of(cs::HitGroup{42}), cs::DamageShare{1.5});
 }
 
 TEST(HostageDamageTest, AnAttackIsScaledByWhereItMeetsTheHostage) {
@@ -378,11 +388,11 @@ TEST(HostageDamageTest, AnAttackIsScaledByWhereItMeetsTheHostage) {
     for (std::size_t index = 0; index < cases.size(); ++index) {
         const auto& [group, expected] = cases.at(index);
         const nx::game::Harm harm = nx::game::attackEntity(world, hostages[index], attackOf(15.0F, group));
-        EXPECT_NEAR(harm.damage.value(), expected, 1e-4F) << std::to_underlying(group);
+        EXPECT_NEAR(harm.damage.value(), expected, 1e-4F) << nx::enumName(group);
         EXPECT_FALSE(harm.isKilled);
         EXPECT_NEAR(world.get<cs::Hostage>(hostages[index])->health.value(),
                     cs::kHostageHealth.value() - expected, 1e-3F);
-        EXPECT_EQ(world.get<cs::Hostage>(hostages[index])->lastHitGroup, std::to_underlying(group));
+        EXPECT_EQ(world.get<cs::Hostage>(hostages[index])->lastHitGroup, group);
     }
     const nx::game::Harm shielded =
         nx::game::attackEntity(world, hostages.front(), attackOf(15.0F, cs::HitGroup::Shield));

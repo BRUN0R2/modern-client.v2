@@ -533,12 +533,13 @@ its `shoot` and `shoot2` three times, a burst, which its follow-up rounds leave 
 - All damage goes through the hookable `TakeDamage` action ([15](15-mod-api.md#5-hookable-actions)).
 
 **Today** (`cs.shared:hitGroups`, `data/cstrike/hitGroups.toml`): the share of an attack's damage a
-body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`), for each kind:
+body takes by the hit group of the hitbox it was met in (`cs::HitGroup`, `HITGROUP_*`, read from a
+trace's model group by `cs::hitGroupOf`, a group the game names none of keeping its number), for each kind:
 the monsters' `TraceAttack`'s (head 3, chest and stomach 1.5, arms 1, legs 0.75, a shield none), which
 a hostage takes an attack by first, and the hostages' `TakeDamage`'s (`GetModifiedDamage`: none 1.75,
 head 2.5, chest 1.5, stomach 1.75, arms 0.75, legs 0.6, another 1.5), and the players' `TraceAttack`'s
 (head 4, chest 1, stomach 1.25, arms 1, legs 0.75), each in double precision as the original's float
-times a double.
+times a double (`cs::DamageShare`, `cs::scaled`).
 
 **Today**, the players' attacks on each other (`cs.server:playerBodies`, `cs::Game`, GPL, consulted:
 [20 §3](20-legal-and-licensing.md#3-clean-room)): a player's body is solid as its box to a hull's trace,

@@ -72,7 +72,7 @@ struct Hostage {
     std::optional<Activity> activity{};
     ControllerSettings controllers{};
     nx::HitPoints health{kHostageHealth};
-    std::uint32_t lastHitGroup = 0;
+    HitGroup lastHitGroup = HitGroup::Generic;
     nx::GameTime flinchUntil{};
     nx::GameTime nextFullThink{};
     bool isDead = false;

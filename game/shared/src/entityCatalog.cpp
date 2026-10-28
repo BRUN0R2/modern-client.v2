@@ -26,11 +26,11 @@ namespace {
         return nx::fail(EntityError::InvalidDefinition,
                         "health, speed, melee damage, reach and interval must be finite and positive");
     }
-    for (const double share :
+    for (const DamageShare share :
          {definition.hitGroups.generic, definition.hitGroups.head, definition.hitGroups.chest,
           definition.hitGroups.stomach, definition.hitGroups.arm, definition.hitGroups.leg,
           definition.hitGroups.shield, definition.hitGroups.other}) {
-        if (!std::isfinite(share) || share < 0.0) {
+        if (!std::isfinite(share.value()) || share < DamageShare{}) {
             return nx::fail(EntityError::InvalidDefinition,
                             "hit-group shares must be finite and nonnegative");
         }
