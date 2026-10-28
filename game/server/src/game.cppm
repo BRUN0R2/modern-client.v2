@@ -40,6 +40,8 @@ struct PlayerCommand {
     UserCommand command{};
 };
 
+/// A living player's body that an agent's perception may consider: its entity, its origin and eye,
+/// and its feet. A candidate, not a fact perceived: Game::sees tells whether an eye sees it.
 struct PerceptionTarget {
     nx::ecs::Entity entity{};
     nx::Vec3 origin{};

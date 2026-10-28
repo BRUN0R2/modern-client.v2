@@ -13,8 +13,16 @@ import cs.shared;
 
 export namespace cs {
 
-enum class EntityMotion : std::uint8_t { Idle, Walking, Attacking, Dead };
+/// What an entity's body is doing, which its model plays.
+enum class EntityMotion : std::uint8_t {
+    Idle,      ///< Standing, not commanded to move.
+    Walking,   ///< Moving by its command.
+    Attacking, ///< Striking, until its melee interval ends.
+    Dead,      ///< Killed: no longer solid nor moved, its death played.
+};
 
+/// An entity's body of a type of the catalog: how it moves, its health, how its model plays, what it
+/// is doing and when it may strike again.
 struct EntityBody {
     EntityTypeIndex type{};
     MovementState movement{};
@@ -24,11 +32,13 @@ struct EntityBody {
     nx::GameTime attacksAgainAt{};
 };
 
+/// The command an entity's body is driven by in a tick, as a player's client sends its own.
 struct EntityCommand {
     nx::ecs::Entity entity{};
     UserCommand command{};
 };
 
+/// A strike of an entity's body on `target`, which the game deals as its kind takes it.
 struct EntityAttack {
     nx::ecs::Entity target{};
     nx::game::Attack attack{};

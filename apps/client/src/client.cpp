@@ -616,17 +616,18 @@ auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<v
         return nx::fail(ConsoleError::CommandFailed, "zombie_add: load a map first");
     }
     if (!zombieSettings) {
-        constexpr std::string_view settingsFile = "entities/zombies.toml";
-        auto path = nx::assets::VfsPath::parse(settingsFile);
+        constexpr std::string_view kSettingsFile = "entities/zombies.toml";
+        auto path = nx::assets::VfsPath::parse(kSettingsFile);
         nx::invariant(path.has_value(), "Client: the zombie settings file is a valid VFS path");
         auto bytes = m_content->vfs.readAll(*path);
         if (!bytes) {
-            return nx::fail(ConsoleError::CommandFailed, std::string{settingsFile}, std::move(bytes.error()));
+            return nx::fail(ConsoleError::CommandFailed, std::string{kSettingsFile},
+                            std::move(bytes.error()));
         }
         const std::string text = *bytes | std::views::transform([](std::byte value) {
             return static_cast<char>(value);
         }) | std::ranges::to<std::string>();
-        auto settings = zombies::readSettings(text, settingsFile);
+        auto settings = zombies::readSettings(text, kSettingsFile);
         if (!settings) {
             return nx::fail(ConsoleError::CommandFailed, std::move(settings.error()));
         }

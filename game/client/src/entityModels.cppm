@@ -13,7 +13,13 @@ import cs.shared;
 import :posedModels;
 
 export namespace cs {
-enum class EntityModelError : std::uint8_t { MaterialsInvalid, UploadFailed };
+/// Why the entities' models could not be loaded.
+enum class EntityModelError : std::uint8_t {
+    MaterialsInvalid, ///< A model's materials could not be read.
+    UploadFailed,     ///< A model could not be uploaded to the GPU.
+};
+
+/// The GPU models of an EntityCatalog's types, in the catalog's order.
 class EntityModels {
 public:
     /// Appends GPU models once, without replacing models in-flight frames can still use. Record outside

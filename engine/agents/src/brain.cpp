@@ -10,7 +10,7 @@ import nx.navigation;
 
 namespace nx::agents {
 namespace {
-constexpr std::size_t steeringCorners = 4;
+constexpr std::size_t kSteeringCorners = 4;
 [[nodiscard]] auto groundDistance(Vec3 first, Vec3 second) noexcept -> float {
     return std::hypot(first.x - second.x, first.y - second.y);
 }
@@ -106,7 +106,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         decision.behavior = Behavior::Idle;
         return decision;
     }
-    const std::vector<Vec3> corners = corridor->corners(query, steeringCorners);
+    const std::vector<Vec3> corners = corridor->corners(query, kSteeringCorners);
     for (const Vec3 corner : corners) {
         if (groundDistance(feet, corner) > rules.arrivalDistance.value()) {
             const Vec3 direction{.x = corner.x - feet.x, .y = corner.y - feet.y};
