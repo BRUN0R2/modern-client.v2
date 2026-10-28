@@ -29,6 +29,42 @@ void FrameRateMeter::frameStarted(Instant at) noexcept {
     m_frames = 0;
 }
 
+namespace {
+
+/// The steps WakeLateness's margin moves by: kWakeLatenessStep shared so that, steady, the wakes later
+/// than the margin are 1 - kWakeLatenessQuantile of them.
+constexpr std::chrono::duration<double, std::micro> kLatenessStep{kWakeLatenessStep};
+constexpr auto kLatenessRise =
+    std::chrono::duration_cast<MonotonicClock::duration>(kLatenessStep * kWakeLatenessQuantile);
+constexpr auto kLatenessFall =
+    std::chrono::duration_cast<MonotonicClock::duration>(kLatenessStep * (1.0 - kWakeLatenessQuantile));
+
+} // namespace
+
+void WakeLateness::observe(MonotonicClock::duration late) noexcept {
+    late = std::max(late, MonotonicClock::duration::zero());
+    if (!m_isSeeded) {
+        m_margin = late;
+        m_isSeeded = true;
+    } else if (late > m_margin) {
+        m_margin += kLatenessRise;
+    } else {
+        m_margin = std::max(m_margin - kLatenessFall, MonotonicClock::duration::zero());
+    }
+}
+
+void SleepTimer::sleepUntil(Instant deadline) noexcept {
+    for (Instant now = MonotonicClock::now(); deadline - now > m_lateness.margin();
+         now = MonotonicClock::now()) {
+        const Instant wake = deadline - m_lateness.margin();
+        sleepCoarselyUntil(wake);
+        m_lateness.observe(MonotonicClock::now() - wake);
+    }
+    while (MonotonicClock::now() < deadline) {
+        std::this_thread::yield(); // the core's other threads run meanwhile
+    }
+}
+
 #if defined(_WIN32)
 
 namespace {
@@ -56,20 +92,19 @@ void SleepTimer::close() noexcept {
     }
 }
 
-void SleepTimer::sleepUntil(Instant deadline) const noexcept {
+void SleepTimer::sleepCoarselyUntil(Instant wake) const noexcept {
     expects(m_timer != nullptr, "SleepTimer::sleepUntil: the timer was moved from");
-    // The timer and the monotonic clock may disagree by a fraction of a tick: wait again until the
-    // clock agrees that the deadline has passed.
-    for (Instant now = MonotonicClock::now(); now < deadline; now = MonotonicClock::now()) {
-        LARGE_INTEGER dueTime{};
-        dueTime.QuadPart = -std::chrono::ceil<DueTimeTicks>(deadline - now).count(); // negative: relative
-        const BOOL armed = SetWaitableTimerEx(m_timer, &dueTime, 0, nullptr, nullptr, nullptr, 0);
-        invariant(armed != FALSE, "SleepTimer::sleepUntil: SetWaitableTimerEx failed on a valid timer");
-        if (armed == FALSE) {
-            return; // the handler let execution continue ("observe")
-        }
-        WaitForSingleObject(m_timer, INFINITE);
+    // Negative: relative to now. Never positive, which would be a date.
+    const MonotonicClock::duration wait =
+        std::max(wake - MonotonicClock::now(), MonotonicClock::duration::zero());
+    LARGE_INTEGER dueTime{};
+    dueTime.QuadPart = -std::chrono::ceil<DueTimeTicks>(wait).count();
+    const BOOL armed = SetWaitableTimerEx(m_timer, &dueTime, 0, nullptr, nullptr, nullptr, 0);
+    invariant(armed != FALSE, "SleepTimer::sleepUntil: SetWaitableTimerEx failed on a valid timer");
+    if (armed == FALSE) {
+        return; // the handler let execution continue ("observe"): the clock waits the rest
     }
+    WaitForSingleObject(m_timer, INFINITE);
 }
 
 #else
@@ -80,12 +115,10 @@ auto SleepTimer::create() -> Result<SleepTimer, ClockError> {
 
 void SleepTimer::close() noexcept {}
 
-void SleepTimer::sleepUntil(Instant deadline) const noexcept {
-    // An absolute sleep on the monotonic clock (clock_nanosleep in libstdc++), resumed if a signal
-    // interrupts it.
-    while (MonotonicClock::now() < deadline) {
-        std::this_thread::sleep_until(deadline);
-    }
+void SleepTimer::sleepCoarselyUntil(Instant wake) const noexcept {
+    // An absolute sleep on the monotonic clock (clock_nanosleep in libstdc++); a signal that
+    // interrupts it leaves the rest to sleepUntil.
+    std::this_thread::sleep_until(wake);
 }
 
 #endif
