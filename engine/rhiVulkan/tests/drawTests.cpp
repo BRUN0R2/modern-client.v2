@@ -464,6 +464,75 @@ TEST_F(DrawTest, ACubeIsSquareItsLayersSixBySixAndAnHdrTargetIsBlendable) {
     EXPECT_TRUE(cubes.has_value()) << "a cube array: " << nx::describe(cubes.error());
 }
 
+TEST_F(DrawTest, WhatIsSetAgainDrawsAsSetEvenAfterAnotherPipelinesBindGroup) {
+    // Two pipelines, each of its own layout. A bind group set again is bound again once the other
+    // pipeline's group was bound in between, and a pipeline set again is kept with its group when
+    // nothing else was bound: each of the three pixels shows the color it was drawn in.
+    const auto red = createFillPipeline(device(), std::nullopt);
+    const auto green = createFillPipeline(device(), std::nullopt);
+    ASSERT_TRUE(red.has_value());
+    ASSERT_TRUE(green.has_value());
+    const auto redGroup = fillGroup(device(), *red, {1.0F, 0.0F, 0.0F, 1.0F});
+    const auto greenGroup = fillGroup(device(), *green, {0.0F, 1.0F, 0.0F, 1.0F});
+    auto vertices =
+        upload("test.vertices", {BufferUsage::Vertex}, std::as_bytes(std::span{kCoveringTriangle}));
+    ASSERT_TRUE(redGroup.has_value());
+    ASSERT_TRUE(greenGroup.has_value());
+    ASSERT_TRUE(vertices.has_value());
+
+    const auto drawRed = [&](CommandList& commands, std::int32_t pixel) {
+        commands.setPipeline(red->pipeline.get());
+        commands.setBindGroup(0, redGroup->group.get());
+        commands.setVertexBuffer(0, vertices->get(), 0);
+        commands.setScissor({.x = pixel, .y = 0, .size = {.width = 1, .height = 1}});
+        commands.draw(3, 1, 0, 0);
+    };
+    const auto pixels = drawAndRead({.width = 3, .height = 1}, [&](CommandList& commands) {
+        drawRed(commands, 0);
+        commands.setPipeline(green->pipeline.get());
+        commands.setBindGroup(0, greenGroup->group.get());
+        commands.setScissor({.x = 1, .y = 0, .size = {.width = 1, .height = 1}});
+        commands.draw(3, 1, 0, 0);
+        drawRed(commands, 2);
+    });
+    EXPECT_EQ(pixels, (std::vector<Pixel>{kRed, kGreen, kRed}));
+}
+
+TEST_F(DrawTest, TransitionsInARowOfOneTextureAreMadeInTheirOrder) {
+    // Uploaded, then made ready to sample and at once to copy from: the two transitions of the texture
+    // in a row must not be made together, unordered.
+    constexpr Extent2d kExtent{.width = 2, .height = 1};
+    const std::array texels{kBlue, kWhite};
+    auto texture = device().createTexture(
+        {.label = "test.texture",
+         .format = Format::Rgba8Unorm,
+         .extent = kExtent,
+         .usage = {TextureUsage::Sampled, TextureUsage::CopyDestination, TextureUsage::CopySource}});
+    auto staging = upload("test.staging", {BufferUsage::CopySource}, bytesOf(texels));
+    auto readback = device().createBuffer({.label = "test.readback",
+                                           .size = sizeof(texels),
+                                           .usage = {BufferUsage::CopyDestination},
+                                           .location = MemoryLocation::Readback});
+    ASSERT_TRUE(texture.has_value());
+    ASSERT_TRUE(staging.has_value());
+    ASSERT_TRUE(readback.has_value());
+
+    runFrame([&](CommandList& commands) {
+        commands.transition(texture->get(), TextureState::Undefined, TextureState::CopyDestination);
+        commands.copyBufferToTexture(
+            {.buffer = staging->get(), .texture = texture->get(), .extent = kExtent});
+        commands.transition(texture->get(), TextureState::CopyDestination, TextureState::ShaderRead);
+        commands.transition(texture->get(), TextureState::ShaderRead, TextureState::CopySource);
+        commands.transition(readback->get(), BufferState::Undefined, BufferState::CopyDestination);
+        commands.copyTextureToBuffer(
+            {.buffer = readback->get(), .texture = texture->get(), .extent = kExtent});
+        commands.transition(readback->get(), BufferState::CopyDestination, BufferState::HostRead);
+    });
+    std::array<Pixel, 2> read{};
+    std::ranges::copy(device().mappedBytes(readback->get()), std::as_writable_bytes(std::span{read}).begin());
+    EXPECT_EQ(read, texels);
+}
+
 TEST_F(DrawTest, ShaderCodeThatIsNotSpirvIsRefused) {
     const std::array code{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
     const auto shader = device().createShader({.label = "test.garbage", .code = code});

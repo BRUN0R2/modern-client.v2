@@ -752,14 +752,51 @@ struct RetiredResource {
     Resource resource;
 };
 
+/// The bind groups and the vertex buffer slots whose bindings a command list remembers: as many bind
+/// groups as every Vulkan device can bind (maxBoundDescriptorSets is at least 4), and as many slots.
+/// A binding beyond them is recorded every time.
+constexpr std::size_t kRememberedBindGroups = 4;
+constexpr std::size_t kRememberedVertexSlots = 4;
+
+/// A vertex or index buffer bound, and where its data starts.
+struct BoundBuffer {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    std::uint64_t offset = 0;
+
+    [[nodiscard]] auto operator==(const BoundBuffer&) const noexcept -> bool = default;
+};
+
+/// What a command buffer has bound as its commands left it, to record no command that would bind the
+/// same again: the driver does a binding's work whether or not it changes anything (docs/05-rendering.md,
+/// section 12). Vulkan keeps all of it from one render pass to the next of a command buffer.
+struct BoundState {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE; ///< The bound pipeline's.
+    /// The layout `groups` were bound with. A group bound with another layout may disturb those bound
+    /// with this one, so that none of them is known any more.
+    VkPipelineLayout groupsLayout = VK_NULL_HANDLE;
+    std::array<VkDescriptorSet, kRememberedBindGroups> groups{};
+    std::array<BoundBuffer, kRememberedVertexSlots> vertices{};
+    BoundBuffer indices;
+    VkIndexType indexType = VK_INDEX_TYPE_UINT32;
+    std::optional<Rect> viewport;
+    std::optional<Rect> scissor;
+};
+
 class VulkanCommandList final : public CommandList {
 public:
     explicit VulkanCommandList(VulkanDevice& device) noexcept : m_device{&device} {}
 
+    /// Records into `commands`, which a new recording leaves with nothing bound.
     void startRecording(VkCommandBuffer commands) noexcept {
         m_commands = commands;
-        m_pipelineLayout = VK_NULL_HANDLE;
+        m_bound = {};
+        m_imageBarriers.clear();
+        m_bufferBarriers.clear();
     }
+
+    /// Records what is left queued, before the command buffer ends.
+    void finishRecording() { recordBarriers(); }
 
     void transition(TextureHandle texture, TextureState before, TextureState after) override;
     void transition(BufferHandle buffer, BufferState before, BufferState after) override;
@@ -783,10 +820,17 @@ public:
 private:
     /// The region of a copy between `copy`'s buffer and texture.
     [[nodiscard]] auto copyRegionOf(const TextureCopy& copy) -> VkBufferImageCopy;
+    /// Records the barriers queued by the transitions since the last command, all in one dependency.
+    void recordBarriers();
 
     VulkanDevice* m_device;
     VkCommandBuffer m_commands = VK_NULL_HANDLE;
-    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE; ///< The layout of the pipeline set last.
+    BoundState m_bound;
+    /// The transitions' barriers, queued until a command needs them: one call records those in a row.
+    /// The barriers of a dependency are unordered among themselves, so a second one of the same image
+    /// or buffer records those queued first.
+    std::vector<VkImageMemoryBarrier2> m_imageBarriers;
+    std::vector<VkBufferMemoryBarrier2> m_bufferBarriers;
 };
 
 /// What one frame in flight owns.
@@ -1178,18 +1222,30 @@ void VulkanCommandList::transition(TextureHandle texture, TextureState before, T
                              .baseArrayLayer = 0,
                              .layerCount = VK_REMAINING_ARRAY_LAYERS},
     };
+    if (std::ranges::contains(m_imageBarriers, target.image, &VkImageMemoryBarrier2::image)) {
+        recordBarriers();
+    }
+    m_imageBarriers.push_back(barrier);
+}
+
+void VulkanCommandList::recordBarriers() {
+    if (m_imageBarriers.empty() && m_bufferBarriers.empty()) {
+        return;
+    }
     const VkDependencyInfo dependency{
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .pNext = nullptr,
         .dependencyFlags = 0,
         .memoryBarrierCount = 0,
         .pMemoryBarriers = nullptr,
-        .bufferMemoryBarrierCount = 0,
-        .pBufferMemoryBarriers = nullptr,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers = &barrier,
+        .bufferMemoryBarrierCount = narrow<std::uint32_t>(m_bufferBarriers.size()),
+        .pBufferMemoryBarriers = m_bufferBarriers.data(),
+        .imageMemoryBarrierCount = narrow<std::uint32_t>(m_imageBarriers.size()),
+        .pImageMemoryBarriers = m_imageBarriers.data(),
     };
     vkCmdPipelineBarrier2(m_commands, &dependency);
+    m_imageBarriers.clear();
+    m_bufferBarriers.clear();
 }
 
 /// The view a pass draws `color` to, of `texture`: its own, or that of the mip level of the layer.
@@ -1206,6 +1262,7 @@ void VulkanCommandList::transition(TextureHandle texture, TextureState before, T
 void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
     expects(desc.colors.size() <= kMaxColorAttachments,
             "CommandList::beginRendering: at most 8 color attachments");
+    recordBarriers();
     std::array<VkRenderingAttachmentInfo, kMaxColorAttachments> attachments{};
     for (std::size_t index = 0; index < desc.colors.size(); ++index) {
         const ColorAttachment& color = desc.colors[index];
@@ -1251,6 +1308,7 @@ void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
 }
 
 void VulkanCommandList::endRendering() {
+    recordBarriers();
     vkCmdEndRendering(m_commands);
 }
 
@@ -1271,22 +1329,15 @@ void VulkanCommandList::transition(BufferHandle buffer, BufferState before, Buff
         .offset = 0,
         .size = VK_WHOLE_SIZE,
     };
-    const VkDependencyInfo dependency{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pNext = nullptr,
-        .dependencyFlags = 0,
-        .memoryBarrierCount = 0,
-        .pMemoryBarriers = nullptr,
-        .bufferMemoryBarrierCount = 1,
-        .pBufferMemoryBarriers = &barrier,
-        .imageMemoryBarrierCount = 0,
-        .pImageMemoryBarriers = nullptr,
-    };
-    vkCmdPipelineBarrier2(m_commands, &dependency);
+    if (std::ranges::contains(m_bufferBarriers, barrier.buffer, &VkBufferMemoryBarrier2::buffer)) {
+        recordBarriers();
+    }
+    m_bufferBarriers.push_back(barrier);
 }
 
 void VulkanCommandList::copyBuffer(BufferHandle source, std::uint64_t sourceOffset, BufferHandle destination,
                                    std::uint64_t destinationOffset, std::uint64_t size) {
+    recordBarriers();
     const VkBufferCopy region{.srcOffset = sourceOffset, .dstOffset = destinationOffset, .size = size};
     vkCmdCopyBuffer(m_commands, m_device->buffers().get(source).buffer,
                     m_device->buffers().get(destination).buffer, 1, &region);
@@ -1312,6 +1363,7 @@ auto VulkanCommandList::copyRegionOf(const TextureCopy& copy) -> VkBufferImageCo
 }
 
 void VulkanCommandList::copyBufferToTexture(const TextureCopy& copy) {
+    recordBarriers();
     const VkBufferImageCopy region = copyRegionOf(copy);
     vkCmdCopyBufferToImage(m_commands, m_device->buffers().get(copy.buffer).buffer,
                            m_device->textures().get(copy.texture).image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -1319,6 +1371,7 @@ void VulkanCommandList::copyBufferToTexture(const TextureCopy& copy) {
 }
 
 void VulkanCommandList::copyTextureToBuffer(const TextureCopy& copy) {
+    recordBarriers();
     const VkBufferImageCopy region = copyRegionOf(copy);
     vkCmdCopyImageToBuffer(m_commands, m_device->textures().get(copy.texture).image,
                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_device->buffers().get(copy.buffer).buffer,
@@ -1327,28 +1380,58 @@ void VulkanCommandList::copyTextureToBuffer(const TextureCopy& copy) {
 
 void VulkanCommandList::setPipeline(RenderPipelineHandle pipeline) {
     const VulkanPipeline& bound = m_device->pipelines().get(pipeline);
+    if (bound.pipeline == m_bound.pipeline) {
+        return;
+    }
     vkCmdBindPipeline(m_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, bound.pipeline);
-    m_pipelineLayout = bound.layout;
+    m_bound.pipeline = bound.pipeline;
+    m_bound.layout = bound.layout;
 }
 
 void VulkanCommandList::setBindGroup(std::uint32_t index, BindGroupHandle group) {
-    expects(m_pipelineLayout != VK_NULL_HANDLE, "CommandList::setBindGroup: after setPipeline");
+    expects(m_bound.layout != VK_NULL_HANDLE, "CommandList::setBindGroup: after setPipeline");
     const VkDescriptorSet set = m_device->bindGroups().get(group).set;
-    vkCmdBindDescriptorSets(m_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, index, 1, &set, 0,
+    if (m_bound.groupsLayout != m_bound.layout) {
+        m_bound.groups = {};
+        m_bound.groupsLayout = m_bound.layout;
+    }
+    if (index < m_bound.groups.size()) {
+        if (m_bound.groups.at(index) == set) {
+            return;
+        }
+        m_bound.groups.at(index) = set;
+    }
+    vkCmdBindDescriptorSets(m_commands, VK_PIPELINE_BIND_POINT_GRAPHICS, m_bound.layout, index, 1, &set, 0,
                             nullptr);
 }
 
 void VulkanCommandList::setVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) {
-    const VkBuffer bound = m_device->buffers().get(buffer).buffer;
-    vkCmdBindVertexBuffers(m_commands, slot, 1, &bound, &offset);
+    const BoundBuffer bound{.buffer = m_device->buffers().get(buffer).buffer, .offset = offset};
+    if (slot < m_bound.vertices.size()) {
+        if (m_bound.vertices.at(slot) == bound) {
+            return;
+        }
+        m_bound.vertices.at(slot) = bound;
+    }
+    vkCmdBindVertexBuffers(m_commands, slot, 1, &bound.buffer, &bound.offset);
 }
 
 void VulkanCommandList::setIndexBuffer(BufferHandle buffer, std::uint64_t offset, IndexFormat format) {
-    vkCmdBindIndexBuffer(m_commands, m_device->buffers().get(buffer).buffer, offset,
-                         format == IndexFormat::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+    const BoundBuffer bound{.buffer = m_device->buffers().get(buffer).buffer, .offset = offset};
+    const VkIndexType type = format == IndexFormat::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    if (m_bound.indices == bound && m_bound.indexType == type) {
+        return;
+    }
+    vkCmdBindIndexBuffer(m_commands, bound.buffer, bound.offset, type);
+    m_bound.indices = bound;
+    m_bound.indexType = type;
 }
 
 void VulkanCommandList::setViewport(const Rect& area) {
+    if (m_bound.viewport == area) {
+        return;
+    }
+    m_bound.viewport = area;
     // A negative height turns Vulkan's clip space, y down, into the RHI's, y up (Vulkan 1.1).
     const VkViewport viewport{.x = static_cast<float>(area.x),
                               .y = static_cast<float>(area.y) + static_cast<float>(area.size.height),
@@ -1360,6 +1443,10 @@ void VulkanCommandList::setViewport(const Rect& area) {
 }
 
 void VulkanCommandList::setScissor(const Rect& area) {
+    if (m_bound.scissor == area) {
+        return;
+    }
+    m_bound.scissor = area;
     const VkRect2D scissor{.offset = {.x = area.x, .y = area.y},
                            .extent = {.width = area.size.width, .height = area.size.height}};
     vkCmdSetScissor(m_commands, 0, 1, &scissor);
@@ -1367,12 +1454,14 @@ void VulkanCommandList::setScissor(const Rect& area) {
 
 void VulkanCommandList::draw(std::uint32_t vertexCount, std::uint32_t instanceCount,
                              std::uint32_t firstVertex, std::uint32_t firstInstance) {
+    recordBarriers();
     vkCmdDraw(m_commands, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void VulkanCommandList::drawIndexed(std::uint32_t indexCount, std::uint32_t instanceCount,
                                     std::uint32_t firstIndex, std::int32_t vertexOffset,
                                     std::uint32_t firstInstance) {
+    recordBarriers();
     vkCmdDrawIndexed(m_commands, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
@@ -1868,6 +1957,7 @@ auto VulkanDevice::submit(VulkanSwapchain* presentTo) -> Result<void, RhiError> 
     expects(m_isRecording, "rhi::Device::submitFrame: no frame was begun");
     Frame& frame = currentFrame();
     m_isRecording = false;
+    m_commandList.finishRecording();
     if (const VkResult result = vkEndCommandBuffer(frame.commands); result != VK_SUCCESS) {
         return vulkanFailure(result, "vkEndCommandBuffer");
     }
