@@ -655,6 +655,45 @@ TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {
               (nx::Vec3{.x = 10.0F, .y = 20.0F, .z = 100.0F}));
 }
 
+TEST_F(GameTest, APlayerLeavingFreesItsSlotAndIsNoLongerCountedNorShown) {
+    const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex third = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    game().leave(second);
+    EXPECT_EQ(game().playerCount(), 2U);
+    EXPECT_EQ(game().teamCounts()[cs::Team::Terrorists].players(), 1U);
+    EXPECT_EQ(game().snapshotFor(first).players.size(), 1U);
+    EXPECT_EQ(game().snapshotFor(first).players[0].player, third);
+    EXPECT_EQ(game().perceptionTargets().size(), 2U);
+    idle(1);
+    EXPECT_EQ(game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier), second) << "its slot";
+    EXPECT_EQ(game().ownStateOf(second).team, cs::Team::CounterTerrorists);
+}
+
+TEST_F(GameTest, TheDefaultTeamIsTheOneOfFewerPlayers) {
+    std::ignore = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    EXPECT_EQ(game().defaultTeam(), cs::Team::Terrorists);
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    EXPECT_EQ(game().defaultTeam(), cs::Team::CounterTerrorists);
+}
+
+TEST_F(GameTest, ASpotIsSeenThroughTheBodiesButNotThroughTheWorld) {
+    const cs::PlayerIndex watcher = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex between = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    standOff(watcher, between, "knife");
+    const nx::Vec3 eye = game().ownStateOf(watcher).eye;
+    const nx::Vec3 beyond = eye + nx::Vec3{.x = 2.0F * kVictimAhead};
+    const cs::PerceptionTarget body = game().perceptionTargets()[1];
+    ASSERT_EQ(body.player, between);
+    EXPECT_TRUE(game().seesSpot(eye, beyond)) << "the body in between leaves the line be";
+    EXPECT_FALSE(game().seesSpot(eye, beyond - nx::Vec3{.z = 2.0F * kStandingEye})) << "under the floor";
+    EXPECT_TRUE(body.feet.z < body.origin.z && !body.isDucked);
+    EXPECT_EQ(game().ownStateOf(watcher).feet,
+              game().ownStateOf(watcher).eye -
+                  nx::Vec3{.z = cs::kStandingViewHeight.value() - cs::kStandingBox.min.z});
+}
+
 TEST_F(GameTest, EveryClientReceivesTheGamesWorldAndSwitchableLightPatterns) {
     constexpr std::size_t kSwitchableStyle = 32;
     const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);

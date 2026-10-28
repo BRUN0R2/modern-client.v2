@@ -29,7 +29,12 @@ enum class Team : std::uint8_t {
     Count,
 };
 
-/// A player of the game, by the order it joined in.
+/// The team `team` plays against.
+[[nodiscard]] constexpr auto opponentOf(Team team) noexcept -> Team {
+    return team == Team::Terrorists ? Team::CounterTerrorists : Team::Terrorists;
+}
+
+/// A player of the game, by the slot it joined in.
 struct PlayerIndex {
     std::uint32_t value = 0;
 

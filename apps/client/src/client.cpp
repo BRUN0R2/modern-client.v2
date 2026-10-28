@@ -24,6 +24,7 @@ import nx.ui;
 import cs.shared;
 import cs.server;
 import cs.client;
+import cs.bots;
 import mod.zombies;
 
 namespace app {
@@ -191,7 +192,8 @@ void savePipelineCache(const nx::rhi::Device& device) {
 
 /// A map being played, as a listen server plays it (docs/01-architecture.md, section 3): the map as the
 /// game plays it; the level the client draws of it; the game its server plays of it, and the player the
-/// client plays in it; and the game as the client knows it. Each goes before what it points into.
+/// client plays in it; the game as the client knows it; and the test zombies and the bots in the game,
+/// once asked for. Each goes before what it points into.
 struct Session {
     std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Level> level;
@@ -199,6 +201,7 @@ struct Session {
     cs::PlayerIndex player;
     cs::ClientGame client;
     std::unique_ptr<zombies::Horde> horde{};
+    std::unique_ptr<cs::Bots> bots{};
 };
 
 /// The map `name` of `content`, its client's level read, its game started by the
@@ -269,6 +272,19 @@ private:
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto removeZombies() -> nx::Result<void, ConsoleError>;
+    /// Registers the bot commands (cs::registerBotCommands), acting on the map loaded last.
+    [[nodiscard]] auto registerBotCommands() -> nx::Result<void, ClientError>;
+    /// The job system the agents' navigation meshes are built in, made the first time one is. Errors:
+    /// CommandFailed.
+    [[nodiscard]] auto agentJobSystem() -> nx::Result<nx::jobs::JobSystem*, ConsoleError>;
+    /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
+    [[nodiscard]] auto readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError>;
+    /// The bots of `session`, made the first time they are asked for: data/cstrike/bots.toml's rules
+    /// on the mesh of its map. Errors: Unavailable, with the cause.
+    [[nodiscard]] auto botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError>;
+    /// Keeps the session's bots as bot_quota asks (cs::Bots::keepQuota), making them first when it asks
+    /// for any; when they cannot be made, it is logged and bot_quota set back to 0.
+    void keepBotQuota(Session& session);
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
     [[nodiscard]] auto listSoundOutputs() -> nx::Result<void, ConsoleError>;
@@ -344,6 +360,8 @@ private:
     std::optional<cs::PlayerInput> m_input;
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
+    std::optional<cs::BotCvars> botCvars;
+    std::optional<cs::BotRules> botRules{}; ///< Read the first time the bots are made.
     std::optional<cs::GameContent> m_content;
     std::filesystem::path dataFolder;
     std::unique_ptr<nx::jobs::JobSystem> agentJobs;
@@ -424,6 +442,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerCommands(); !registered) {
         return registered;
     }
+    if (auto registered = registerBotCommands(); !registered) {
+        return registered;
+    }
     auto executable = nx::platform::executablePath();
     if (!executable) {
         return nx::fail(ClientError::ContentUnavailable, std::move(executable.error()));
@@ -497,6 +518,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
     }
     m_gameCvars = std::move(*gameCvars);
+    auto registeredBotCvars = cs::BotCvars::registerIn(m_console);
+    if (!registeredBotCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registeredBotCvars.error()));
+    }
+    botCvars = std::move(*registeredBotCvars);
     // Counter-Strike's binds, and noclip on a key it leaves free, until config.cfg says otherwise.
     const std::optional<nx::console::KeyId> noclipKey = nx::settings::keyNamed(kNoclipKey);
     nx::invariant(noclipKey.has_value(), "Client: the noclip key has a name");
@@ -593,6 +619,110 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
     return {};
 }
 
+auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
+    // The map loaded last, as the commands that follow `map` on a line act on it.
+    const auto played = [this]() -> Session* {
+        return m_nextSession ? m_nextSession.get() : m_session.get();
+    };
+    cs::BotActions actions{
+        .add = [this, played](std::optional<cs::Team> team) -> nx::Result<void, cs::BotActionError> {
+            Session* const session = played();
+            if (session == nullptr) {
+                return nx::fail(cs::BotActionError::NoMap);
+            }
+            auto bots = botsOf(*session);
+            if (!bots) {
+                return std::unexpected{std::move(bots.error())};
+            }
+            std::ignore = (*bots)->add(team);
+            return {};
+        },
+        .kickAll = [played]() -> nx::Result<void, cs::BotActionError> {
+            Session* const session = played();
+            if (session == nullptr) {
+                return nx::fail(cs::BotActionError::NoMap);
+            }
+            if (session->bots) {
+                session->bots->kickAll();
+            }
+            return {};
+        }};
+    if (auto registered = cs::registerBotCommands(m_console, *botCvars, std::move(actions)); !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
+    }
+    return {};
+}
+
+auto Client::agentJobSystem() -> nx::Result<nx::jobs::JobSystem*, ConsoleError> {
+    if (!agentJobs) {
+        auto jobs = nx::jobs::JobSystem::create({});
+        if (!jobs) {
+            return nx::fail(ConsoleError::CommandFailed, std::move(jobs.error()));
+        }
+        agentJobs = std::move(*jobs);
+    }
+    return agentJobs.get();
+}
+
+auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError> {
+    const auto file = dataFolder / "cstrike" / "navigation.toml";
+    auto text = nx::platform::readTextFile(file);
+    if (!text) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(text.error()));
+    }
+    auto navigation = nx::game::readNavigationData(*text, nx::platform::toUtf8(file));
+    if (!navigation) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(navigation.error()));
+    }
+    return std::move(*navigation);
+}
+
+auto Client::botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError> {
+    if (session.bots) {
+        return session.bots.get();
+    }
+    if (!botRules) {
+        const auto file = dataFolder / "cstrike" / "bots.toml";
+        auto text = nx::platform::readTextFile(file);
+        if (!text) {
+            return nx::fail(cs::BotActionError::Unavailable, std::move(text.error()));
+        }
+        auto rules = cs::readBotRules(*text, nx::platform::toUtf8(file));
+        if (!rules) {
+            return nx::fail(cs::BotActionError::Unavailable, std::move(rules.error()));
+        }
+        botRules = std::move(*rules);
+    }
+    auto jobs = agentJobSystem();
+    if (!jobs) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(jobs.error()));
+    }
+    auto navigation = readNavigation();
+    if (!navigation) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(navigation.error()));
+    }
+    auto bots = cs::Bots::create(**jobs, *session.game, *navigation, *botRules);
+    if (!bots) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(bots.error()));
+    }
+    session.bots = std::move(*bots);
+    return session.bots.get();
+}
+
+void Client::keepBotQuota(Session& session) {
+    const std::uint32_t quota = botCvars->quotaCount();
+    if (quota > 0 && !session.bots) {
+        if (auto bots = botsOf(session); !bots) {
+            nx::log::warning(kLog, "bot_quota set back to 0: {}", nx::describe(bots.error()));
+            botCvars->setQuota(0);
+            return;
+        }
+    }
+    if (session.bots) {
+        session.bots->keepQuota(quota);
+    }
+}
+
 auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
     if (line.arguments().size() != 1) {
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
@@ -645,24 +775,16 @@ auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<v
         zombieSettings.emplace(std::move(*settings));
     }
     if (!session->horde) {
-        if (!agentJobs) {
-            auto jobs = nx::jobs::JobSystem::create({});
-            if (!jobs) {
-                return nx::fail(ConsoleError::CommandFailed, std::move(jobs.error()));
-            }
-            agentJobs = std::move(*jobs);
+        auto jobs = agentJobSystem();
+        if (!jobs) {
+            return std::unexpected{std::move(jobs.error())};
         }
-        const auto file = dataFolder / "cstrike" / "navigation.toml";
-        auto text = nx::platform::readTextFile(file);
-        if (!text) {
-            return nx::fail(ConsoleError::CommandFailed, std::move(text.error()));
-        }
-        auto navigation = nx::game::readNavigationData(*text, nx::platform::toUtf8(file));
+        auto navigation = readNavigation();
         if (!navigation) {
-            return nx::fail(ConsoleError::CommandFailed, std::move(navigation.error()));
+            return std::unexpected{std::move(navigation.error())};
         }
         auto horde =
-            zombies::Horde::create(*agentJobs, *session->game, *navigation, *zombieType, *zombieSettings);
+            zombies::Horde::create(**jobs, *session->game, *navigation, *zombieType, *zombieSettings);
         if (!horde) {
             return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
         }
@@ -922,8 +1044,12 @@ void Client::startNextSession() {
 void Client::playSession(nx::Seconds elapsed) {
     Session& session = *m_session;
     for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited); due > 0; --due) {
-        const std::array commands{cs::PlayerCommand{
+        keepBotQuota(session);
+        std::vector<cs::PlayerCommand> commands{cs::PlayerCommand{
             .player = session.player, .command = session.client.nextCommand(*m_input, m_camera.angles)}};
+        if (session.bots) {
+            std::ranges::move(session.bots->commands(), std::back_inserter(commands));
+        }
         const std::vector<cs::EntityCommand> entityCommands =
             session.horde ? session.horde->commands() : std::vector<cs::EntityCommand>{};
         session.game->tick(commands, entityCommands);

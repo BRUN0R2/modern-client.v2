@@ -37,9 +37,29 @@ constexpr std::uint32_t kFlyActivityNumber = 5;
 constexpr std::string_view kAttackStream = "player attack";
 /// How much less slow a player slowed down by a hit is each command it starts on the ground (PreThink).
 constexpr double kSpeedShareRecovery = 0.01;
+/// The stream of random numbers the team of a player joining by auto-select is drawn from.
+constexpr std::string_view kDefaultTeamStream = "default team";
+/// The teams a player may join, which SelectDefaultTeam draws one of.
+constexpr std::uint32_t kPlayingTeams = 2;
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
+}
+
+/// The lower center of `player`'s active box, standing or ducked.
+[[nodiscard]] auto feetOf(const MovementState& player) -> nx::Vec3 {
+    const nx::Aabb& hull = player.isDucked ? kDuckedBox : kStandingBox;
+    return player.origin + nx::Vec3{.z = hull.min.z};
+}
+
+/// The players of `slots`, in their slots' order, a slot a player left holding none.
+[[nodiscard]] auto playersIn(std::vector<std::optional<Player>>& slots) {
+    return slots | std::views::filter([](const std::optional<Player>& slot) { return slot.has_value(); }) |
+           std::views::transform([](std::optional<Player>& slot) -> Player& { return *slot; });
+}
+[[nodiscard]] auto playersIn(const std::vector<std::optional<Player>>& slots) {
+    return slots | std::views::filter([](const std::optional<Player>& slot) { return slot.has_value(); }) |
+           std::views::transform([](const std::optional<Player>& slot) -> const Player& { return *slot; });
 }
 
 /// Whether what a trace met in `world`, `entity`, is the world (none) or a brush entity (IsBSPModel).
@@ -139,11 +159,17 @@ auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars
 }
 
 auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
-    const PlayerIndex index{nx::narrow<std::uint32_t>(m_players.size())};
+    // The first free slot, as the engine gives a client the first free one.
+    const auto free =
+        std::ranges::find_if(m_players, [](const std::optional<Player>& slot) { return !slot; });
+    const PlayerIndex index{nx::narrow<std::uint32_t>(std::distance(m_players.begin(), free))};
+    if (free == m_players.end()) {
+        m_players.emplace_back();
+    }
     // HandleMenu_ChooseAppearance's auto-select: one of the team's characters, each as likely.
     const std::vector<CharacterIndex> characters = m_content->characters.ofTeam(team);
     nx::Random appearance{index.value, kAppearanceStream};
-    Player& player = m_players.emplace_back(
+    Player& player = m_players[index.value].emplace(
         Player{.team = team,
                .autoSwitch = autoSwitch,
                .character = characters.at(appearance.below(characters.size())),
@@ -163,12 +189,61 @@ auto Game::join(Team team, AutoSwitch autoSwitch) -> PlayerIndex {
     return index;
 }
 
+void Game::leave(PlayerIndex index) {
+    const Player& player = playerAt(index);
+    nx::log::info(kLog, "a player of the {} leaves", nx::enumName(player.team));
+    // ClientDisconnected: its weapons destroyed with it, its body gone, no longer counted.
+    m_world.destroy(player.body);
+    m_players[index.value].reset();
+    checkWinConditions();
+}
+
+auto Game::defaultTeam() const -> Team {
+    const TeamCounts counts = teamCounts();
+    const std::uint32_t terrorists = counts[Team::Terrorists].players();
+    const std::uint32_t counterTerrorists = counts[Team::CounterTerrorists].players();
+    if (terrorists != counterTerrorists) {
+        return terrorists < counterTerrorists ? Team::Terrorists : Team::CounterTerrorists;
+    }
+    // Teams equal: one at random, RANDOM_LONG(0, 1) == 0 picking the counter-terrorists.
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kDefaultTeamStream};
+    return random.below(kPlayingTeams) == 0 ? Team::CounterTerrorists : Team::Terrorists;
+}
+
+auto Game::teamCounts() const -> TeamCounts {
+    TeamCounts counts{};
+    for (const Player& player : playersIn(m_players)) {
+        TeamCount& count = counts[player.team];
+        if (player.status.isAlive()) {
+            ++count.alive;
+        } else {
+            ++count.dead;
+        }
+    }
+    return counts;
+}
+
+auto Game::playerCount() const -> std::size_t {
+    return static_cast<std::size_t>(std::ranges::distance(playersIn(m_players)));
+}
+
+auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
+    const Player& player = playerAt(index);
+    return PlayerOwnState{.team = player.team,
+                          .isAlive = player.status.isAlive(),
+                          .eye = eyeOf(player.movement),
+                          .feet = feetOf(player.movement),
+                          .view = player.view,
+                          .maxSpeed = player.movement.maxSpeed};
+}
+
 auto Game::canSpawn(const Player& player) const -> bool {
     if (player.spawnsThisRound > 0) {
         return false;
     }
     const auto hasPlayers = [this](Team team) {
-        return std::ranges::contains(m_players, team, &Player::team);
+        return std::ranges::contains(playersIn(m_players), team, &Player::team);
     };
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     return !hasPlayers(Team::Terrorists) || !hasPlayers(Team::CounterTerrorists) ||
@@ -185,15 +260,7 @@ void Game::observe(Player& player) {
 }
 
 void Game::checkWinConditions() {
-    TeamCounts counts{};
-    for (const Player& player : m_players) {
-        TeamCount& count = counts[player.team];
-        if (player.status.isAlive()) {
-            ++count.alive;
-        } else {
-            ++count.dead;
-        }
-    }
+    const TeamCounts counts = teamCounts();
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     if (const std::optional<RoundEndReason> reason =
             m_rounds.checkWinConditions(counts, time.now, time.rate)) {
@@ -228,8 +295,13 @@ void Game::poseBody(Player& player) {
 }
 
 auto Game::playerAt(PlayerIndex index) -> Player& {
-    nx::expects(index.value < m_players.size(), "Game: a player of the game");
-    return m_players[index.value];
+    nx::expects(index.value < m_players.size() && m_players[index.value], "Game: a player of the game");
+    return *m_players[index.value];
+}
+
+auto Game::playerAt(PlayerIndex index) const -> const Player& {
+    nx::expects(index.value < m_players.size() && m_players[index.value], "Game: a player of the game");
+    return *m_players[index.value];
 }
 
 void Game::give(PlayerIndex index, WeaponIndex weapon) {
@@ -264,10 +336,10 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
     const Player& player = playerAt(index);
     std::vector<PlayerEntityState> others;
     for (std::uint32_t other = 0; other < m_players.size(); ++other) {
-        if (other == index.value) {
+        if (other == index.value || !m_players[other]) {
             continue;
         }
-        const Player& shown = m_players[other];
+        const Player& shown = *m_players[other];
         const OwnedWeapon* const held = shown.inventory.held();
         const Animation& torso = shown.animation.torso;
         others.push_back(
@@ -302,7 +374,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
 
 void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
     m_impacts.clear();
-    for (Player& player : m_players) {
+    for (Player& player : playersIn(m_players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
         player.sounds.clear();
@@ -324,7 +396,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     const nx::collision::BrushHulls& hulls = m_map->hulls();
     nx::game::runThinks(m_world, hulls);
     nx::game::runPushers(m_world, hulls);
-    for (Player& player : m_players) {
+    for (Player& player : playersIn(m_players)) {
         player.movement.origin = m_world.get<nx::game::Transform>(player.body)->origin;
         // Its weapons' sounds of the tick first, as they come before what the player makes of them.
         std::vector<SoundMade> sounds = player.inventory.takeSounds();
@@ -650,7 +722,7 @@ void Game::thinkRules() {
     const RoundEvents events = m_rounds.think(time.now, time.rate, m_cvars.roundLengths());
     if (events.test(RoundEvent::FreezeEnded)) {
         nx::log::info(kLog, "the round's freeze is over");
-        for (Player& player : m_players) {
+        for (Player& player : playersIn(m_players)) {
             player.roundTimer = m_rounds.timerAt(time.now, time.rate);
             player.movement.maxSpeed = maxSpeed(player);
         }
@@ -671,7 +743,7 @@ void Game::thinkRules() {
     if (events.test(RoundEvent::GameRestarted)) {
         nx::log::info(kLog, "the game restarts");
         m_accounts.restartGame();
-        for (Player& player : m_players) {
+        for (Player& player : playersIn(m_players)) {
             player.status = PlayerStatus{.money = m_cvars.startingMoney()};
             player.inventory.removeAll();
             equip(player);
@@ -679,10 +751,10 @@ void Game::thinkRules() {
     }
     if (events.test(RoundEvent::RoundStarted) || events.test(RoundEvent::GameRestarted)) {
         // RestartRound counts the spawns of the round anew before the players spawn again.
-        for (Player& player : m_players) {
+        for (Player& player : playersIn(m_players)) {
             player.spawnsThisRound = 0;
         }
-        for (Player& player : m_players) {
+        for (Player& player : playersIn(m_players)) {
             spawn(player);
         }
         // After the players spawn, as the original's RestartRound cleans the map up (CleanUpMap).
@@ -703,7 +775,7 @@ void Game::roundEnded(RoundEndReason reason) {
     m_accounts.roundEnded(reason, m_map->objectives());
     const std::optional<Team> winner = winnerOf(reason);
     const bool paysLivingLosers = m_content->economy.roundEnd(reason).paysLivingLosers;
-    for (Player& player : m_players) {
+    for (Player& player : playersIn(m_players)) {
         if (winner && *winner != player.team && player.status.isAlive() && !paysLivingLosers) {
             player.isPaidNextRound = false;
         }
@@ -725,7 +797,7 @@ void Game::attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::
 
 void Game::payForRound(std::uint32_t hostagesHeld) {
     const nx::EnumArray<Team, nx::Money> paid = m_accounts.roundStarts(m_map->objectives(), hostagesHeld);
-    for (Player& player : m_players) {
+    for (Player& player : playersIn(m_players)) {
         if (player.isPaidNextRound) {
             player.status.money = addMoney(player.status.money, paid[player.team]);
         }
@@ -883,13 +955,15 @@ auto Game::entities() -> std::vector<EntityState> {
 
 auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
     std::vector<PerceptionTarget> targets;
-    for (const Player& player : m_players) {
-        if (player.status.isAlive()) {
-            const nx::Aabb& hull = player.movement.isDucked ? kDuckedBox : kStandingBox;
-            targets.push_back({.entity = player.body,
-                               .origin = player.movement.origin,
-                               .eye = eyeOf(player.movement),
-                               .feet = player.movement.origin + nx::Vec3{.z = hull.min.z}});
+    for (const auto& [slot, player] : std::views::enumerate(m_players)) {
+        if (player && player->status.isAlive()) {
+            targets.push_back({.entity = player->body,
+                               .player = PlayerIndex{nx::narrow<std::uint32_t>(slot)},
+                               .team = player->team,
+                               .origin = player->movement.origin,
+                               .eye = eyeOf(player->movement),
+                               .feet = feetOf(player->movement),
+                               .isDucked = player->movement.isDucked});
         }
     }
     return targets;
@@ -900,6 +974,12 @@ auto Game::sees(nx::ecs::Entity observer, nx::Vec3 eye, const PerceptionTarget& 
         m_world, m_map->hulls(), {.start = eye, .end = target.eye, .ignored = observer});
     return hit.entity == target.entity ||
            (hit.trace.fraction >= 1.0F && !hit.trace.startsSolid && !hit.trace.isAllSolid);
+}
+
+auto Game::seesSpot(nx::Vec3 eye, nx::Vec3 spot) -> bool {
+    const nx::game::SolidHit hit = nx::game::traceSolidsHit(
+        m_world, m_map->hulls(), {.start = eye, .end = spot, .type = nx::game::TraceType::NoMonsters});
+    return hit.trace.fraction >= 1.0F;
 }
 
 auto Game::navigationGeometry() -> nx::navigation::Geometry {

@@ -19,33 +19,10 @@ import mod.zombies;
 #include "playerModel.hpp"
 
 namespace {
-constexpr float kSeedSide = 64.0F;
 constexpr float kHalf = 0.5F;
-constexpr std::size_t kLumpRangeFields = 2;
-constexpr std::size_t kVertexCoordinates = 3;
 
 auto floorMap(nx::HammerUnits width, nx::HammerUnits depth) -> std::vector<std::byte> {
-    auto bytes = nx::test::boxMapWith(R"({ "classname" "worldspawn" })");
-    // BSP's vertex lump is its fourth offset/length pair, after the version word.
-    constexpr std::size_t kVertexLumpIndex = 3;
-    constexpr std::size_t kLumpHeader =
-        sizeof(std::int32_t) + kVertexLumpIndex * kLumpRangeFields * sizeof(std::int32_t);
-    std::array<std::int32_t, kLumpRangeFields> header{};
-    nx::invariant(bytes.size() >= kLumpHeader + sizeof(header), "a complete BSP fixture header");
-    std::memcpy(header.data(), bytes.data() + kLumpHeader, sizeof(header));
-    const auto offset = nx::narrow<std::size_t>(header[0]);
-    const auto length = nx::narrow<std::size_t>(header[1]);
-    using Vertex = std::array<float, kVertexCoordinates>;
-    nx::invariant(offset <= bytes.size() && length <= bytes.size() - offset && length % sizeof(Vertex) == 0,
-                  "a complete BSP vertex lump");
-    for (std::size_t at = offset; at < offset + length; at += sizeof(Vertex)) {
-        Vertex point{};
-        std::memcpy(point.data(), bytes.data() + at, sizeof(point));
-        point[0] *= width.value() / kSeedSide;
-        point[1] *= depth.value() / kSeedSide;
-        std::memcpy(bytes.data() + at, point.data(), sizeof(point));
-    }
-    return bytes;
+    return nx::test::stretchedBoxMapWith(R"({ "classname" "worldspawn" })", width.value(), depth.value());
 }
 
 class HordeSpawnTest : public ::testing::Test {
@@ -104,8 +81,9 @@ protected:
         auto created = zombies::Horde::create(*jobs, *game, *navigation, type, settings);
         ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
         horde = std::move(*created);
-        anchor = {
-            .x = width.value() * kHalf, .y = depth.value() * kHalf, .z = kSeedSide + cs::kStandingBox.max.z};
+        anchor = {.x = width.value() * kHalf,
+                  .y = depth.value() * kHalf,
+                  .z = nx::test::kBoxSide + cs::kStandingBox.max.z};
     }
 
     nx::test::TemporaryDirectory installation;

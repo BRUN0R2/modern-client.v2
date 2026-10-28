@@ -57,7 +57,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
             selected = &candidate;
         }
     }
-    if (selected == nullptr) {
+    if (selected == nullptr && !givenGoal) {
         target.reset();
         plannedGoal.reset();
         plannedFrom.reset();
@@ -65,18 +65,24 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         pathError.reset();
         return {};
     }
-    const Vec3 goal = selected->observation.position;
-    Decision decision{.intent = {.lookAt = selected->observation.aimAt.value_or(goal)},
-                      .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate};
-    if (selected->isVisible && length(goal - feet) <= rules.attackDistance.value()) {
-        decision.behavior = Behavior::Attack;
-        decision.intent.attacks = true;
-        return decision;
+    // A target remembered first, else the goal given, which no entity is pursued for.
+    const Vec3 goal = selected != nullptr ? selected->observation.position : *givenGoal;
+    const std::optional<ecs::Entity> pursued =
+        selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
+    Decision decision{.behavior = Behavior::MoveTo};
+    if (selected != nullptr) {
+        decision = {.intent = {.lookAt = selected->observation.aimAt.value_or(goal)},
+                    .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate};
+        if (selected->isVisible && length(goal - feet) <= rules.attackDistance.value()) {
+            decision.behavior = Behavior::Attack;
+            decision.intent.attacks = true;
+            return decision;
+        }
     }
-    if (target != selected->observation.entity || !plannedGoal ||
+    if (target != pursued || !plannedGoal ||
         groundDistance(*plannedGoal, goal) >= rules.replanDistance.value() ||
         (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value())) {
-        target = selected->observation.entity;
+        target = pursued;
         plannedGoal = goal;
         plannedFrom = feet;
         corridor.reset();
@@ -97,7 +103,9 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     std::ignore = corridor->moveTarget(query, goal);
     const Vec3 walkablePosition = corridor->moveAgent(query, feet);
     if (length(walkablePosition - corridor->target()) <= rules.arrivalDistance.value()) {
-        if (!selected->isVisible) {
+        if (selected == nullptr) {
+            givenGoal.reset();
+        } else if (!selected->isVisible) {
             const ecs::Entity investigated = selected->observation.entity;
             std::erase_if(memory, [investigated](const Memory& record) {
                 return record.observation.entity == investigated;

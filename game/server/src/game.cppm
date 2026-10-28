@@ -42,11 +42,29 @@ struct PlayerCommand {
     UserCommand command{};
 };
 
+/// A living player's body that an agent's perception may consider: its entity, the player and its team,
+/// its origin and eye, its feet, and whether it is ducked. A candidate, not a fact perceived: Game::sees
+/// and Game::seesSpot tell whether an eye sees it.
 struct PerceptionTarget {
     nx::ecs::Entity entity{};
+    PlayerIndex player{};
+    Team team{};
     nx::Vec3 origin{};
     nx::Vec3 eye{};
     nx::Vec3 feet{}; ///< The active body's lower center, independent of its stance.
+    bool isDucked = false;
+};
+
+/// What a player knows of itself, as its own client is told it: its team, whether it is alive, its eye
+/// and its feet, where it looks (pev->v_angle, which the game turns as it spawns), and how fast it may
+/// run (pev->maxspeed).
+struct PlayerOwnState {
+    Team team{};
+    bool isAlive = false;
+    nx::Vec3 eye{};
+    nx::Vec3 feet{};
+    nx::EulerAngles view{};
+    nx::UnitsPerSecond maxSpeed{};
 };
 
 } // namespace cs
@@ -121,6 +139,20 @@ public:
     /// team's next spawn point, dead, until the next round. Then the round's end is weighed
     /// (checkWinConditions): the first player of the second team commences the game.
     auto join(Team team, AutoSwitch autoSwitch) -> PlayerIndex;
+    /// `player` leaves the game, as a client disconnects (CHalfLifeMultiplay::ClientDisconnected): its
+    /// weapons and its body are gone, and its slot is free for the next player to join; then the round's
+    /// end is weighed (checkWinConditions). `player` is in the game.
+    void leave(PlayerIndex player);
+    /// The team a player joining by auto-select joins (SelectDefaultTeam): the one of fewer players, else
+    /// one of the two drawn at random, from a stream of the tick. The original then weighs the teams'
+    /// wins, which come with the scores (TODO.md).
+    [[nodiscard]] auto defaultTeam() const -> Team;
+    /// How many players of each team are in the game, alive and dead.
+    [[nodiscard]] auto teamCounts() const -> TeamCounts;
+    /// How many players are in the game.
+    [[nodiscard]] auto playerCount() const -> std::size_t;
+    /// What `player`, in the game, knows of itself (PlayerOwnState).
+    [[nodiscard]] auto ownStateOf(PlayerIndex player) const -> PlayerOwnState;
 
     /// One tick of the game (docs/07, section 2.2): each player of `commands`, in their order, a command
     /// at most for each, draws the weapon it selects and moves among the brush entities at the speed of
@@ -146,16 +178,24 @@ public:
     [[nodiscard]] auto perceptionTargets() const -> std::vector<PerceptionTarget>;
     /// Whether the solid trace from eye reaches this candidate's eye, leaving out the observer.
     [[nodiscard]] auto sees(nx::ecs::Entity observer, nx::Vec3 eye, const PerceptionTarget& target) -> bool;
+    /// Whether a line from `eye` reaches `spot` through the world and the solid brush entities alone, the
+    /// bodies leaving it be, as a bot's IsVisible traces one (UTIL_TraceLine with ignore_monsters).
+    [[nodiscard]] auto seesSpot(nx::Vec3 eye, nx::Vec3 spot) -> bool;
     /// World and solid brush surfaces where they are now, without moving bodies.
     [[nodiscard]] auto navigationGeometry() -> nx::navigation::Geometry;
     /// The authoritative clock, independent of a command's requested duration.
     [[nodiscard]] auto time() const -> nx::game::TickTime;
 
-    /// Native extension components are registered once per game, before attachment. A component
-    /// pointer is borrowed only until the next structural change of the world's entities.
+    /// Native extension components are registered before attachment, once a game: by `name`, or by the
+    /// name the first extension registering the type gave it, which every one may register, as the bots
+    /// and the test zombies both register nx::agents::Agent. A component pointer is borrowed only until
+    /// the next structural change of the world's entities.
     template <nx::ecs::Component Component>
     [[nodiscard]] auto registerEntityComponent(std::string_view name)
         -> nx::Result<void, nx::ecs::ComponentError> {
+        if (m_world.components().find<Component>()) {
+            return {};
+        }
         auto registered = m_world.registerComponent<Component>(name);
         if (!registered) {
             return std::unexpected{std::move(registered.error())};
@@ -174,6 +214,17 @@ public:
     template <nx::ecs::Component Component>
     [[nodiscard]] auto entityComponent(nx::ecs::Entity entity) -> Component* {
         return m_world.has<EntityBody>(entity) ? m_world.get<Component>(entity) : nullptr;
+    }
+    /// Attaches `component`, registered, to the body of `player`, in the game, which the body keeps until
+    /// the player leaves.
+    template <nx::ecs::Component Component>
+    void attachPlayerComponent(PlayerIndex player, Component component) {
+        m_world.add(playerAt(player).body, std::move(component));
+    }
+    /// The component of `player`'s body, in the game, none when it has none.
+    template <nx::ecs::Component Component>
+    [[nodiscard]] auto playerComponent(PlayerIndex player) -> Component* {
+        return m_world.get<Component>(playerAt(player).body);
     }
 
     /// What `player`'s client is told after the last tick (PlayerSnapshot).
@@ -200,8 +251,9 @@ public:
     void placeEye(PlayerIndex player, nx::Vec3 eye);
 
 private:
-    /// The player `index` names.
+    /// The player `index` names, in the game.
     [[nodiscard]] auto playerAt(PlayerIndex index) -> Player&;
+    [[nodiscard]] auto playerAt(PlayerIndex index) const -> const Player&;
     /// What `player` does with `command` in the tick: it selects, thinks before it moves (preThink),
     /// moves and touches what it meets, then thinks after (postThink), alive.
     void runCommand(Player& player, const UserCommand& command);
@@ -332,9 +384,9 @@ private:
     /// g_pLastCTSpawn).
     nx::EnumArray<Team, std::optional<std::size_t>> m_lastSpawnPoints{};
     nx::ecs::World m_world;
-    std::vector<Player> m_players;
-    std::vector<Impact> m_impacts; ///< Of the tick.
-    MapLightStyles lightStyles;    ///< Owned by this game; copied into each client's snapshot.
+    std::vector<std::optional<Player>> m_players; ///< By slot: none for a slot a player left.
+    std::vector<Impact> m_impacts;                ///< Of the tick.
+    MapLightStyles lightStyles;                   ///< Owned by this game; copied into each client's snapshot.
 };
 
 } // namespace cs
