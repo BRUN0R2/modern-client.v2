@@ -34,6 +34,10 @@ constexpr float kRowY = 1000.0F;
 constexpr float kStandingEye = cs::kStandingViewHeight.value() + 1.0F;
 /// How far from a bot the players of the tests stand, ahead of it or behind.
 constexpr float kApart = 300.0F;
+/// bot_prefix's default: the bots named after nothing.
+constexpr std::string_view kNoPrefix;
+/// The profiles bot_difficulty 3 draws from in the repository's data: the expert and the elite levels'.
+constexpr std::size_t kExpertProfiles = 18;
 /// Ticks of bot_quota's interval, 0.3 seconds.
 constexpr std::uint32_t kPastAQuotaCheck = 30;
 /// Ticks past the first freeze of a map: mp_freezetime's default and its extra two seconds, 800 ticks.
@@ -135,8 +139,8 @@ protected:
 };
 
 TEST_F(BotsTest, ABotJoinsTheTeamOfFewerPlayersAndLeavesItsSlotWhenKicked) {
-    const cs::PlayerIndex human = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex bot = bots->add(std::nullopt, cs::BotDifficulty::Easy);
+    const cs::PlayerIndex human = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex bot = bots->add(std::nullopt, cs::BotDifficulty::Easy, kNoPrefix);
     EXPECT_EQ(game->ownStateOf(bot).team, cs::Team::CounterTerrorists) << "SelectDefaultTeam";
     EXPECT_TRUE(game->ownStateOf(bot).isAlive);
     EXPECT_EQ(game->playerCount(), 2U);
@@ -145,12 +149,12 @@ TEST_F(BotsTest, ABotJoinsTheTeamOfFewerPlayersAndLeavesItsSlotWhenKicked) {
     EXPECT_EQ(game->playerCount(), 1U);
     EXPECT_EQ(game->teamCounts()[cs::Team::CounterTerrorists].players(), 0U);
     // The slot it left is the next player's.
-    EXPECT_EQ(game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier), bot);
+    EXPECT_EQ(game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player"), bot);
     EXPECT_NE(bot, human);
 }
 
 TEST_F(BotsTest, ABotsBodyIsAnAgentWhoseTypeAnotherKindMayRegisterToo) {
-    const cs::PlayerIndex bot = bots->add(cs::Team::Terrorists, cs::BotDifficulty::Easy);
+    const cs::PlayerIndex bot = bots->add(cs::Team::Terrorists, cs::BotDifficulty::Easy, kNoPrefix);
     const nx::agents::Agent* const agent = game->playerComponent<nx::agents::Agent>(bot);
     ASSERT_NE(agent, nullptr);
     EXPECT_TRUE(agent->brain.memories().empty());
@@ -163,15 +167,15 @@ TEST_F(BotsTest, TheQuotaAddsOneBotEachIntervalAndKicksADeadOneFirst) {
     // Three counter-terrorists: each bot joins the terrorists, the team of fewer players.
     constexpr std::uint32_t kHumans = 3;
     for (std::uint32_t human = 0; human < kHumans; ++human) {
-        std::ignore = game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+        std::ignore = game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     }
-    bots->keepQuota(2, cs::BotDifficulty::Easy);
+    bots->keepQuota(2, cs::BotDifficulty::Easy, kNoPrefix);
     EXPECT_EQ(bots->size(), 1U);
-    bots->keepQuota(2, cs::BotDifficulty::Easy);
+    bots->keepQuota(2, cs::BotDifficulty::Easy, kNoPrefix);
     EXPECT_EQ(bots->size(), 1U) << "once in its interval";
     // Its joining commenced the game: past the restart, the second joins the round played.
     play(kPastTheCommence);
-    bots->keepQuota(2, cs::BotDifficulty::Easy);
+    bots->keepQuota(2, cs::BotDifficulty::Easy, kNoPrefix);
     ASSERT_EQ(bots->size(), 2U);
     const std::vector<cs::PlayerIndex> joined = bots->players() | std::ranges::to<std::vector>();
     // Kill the second by a fall; then the counter-terrorists are the larger team, which has no bot.
@@ -183,13 +187,13 @@ TEST_F(BotsTest, TheQuotaAddsOneBotEachIntervalAndKicksADeadOneFirst) {
     }
     ASSERT_FALSE(game->ownStateOf(joined[1]).isAlive) << "killed by its landing";
     play(kPastAQuotaCheck);
-    bots->keepQuota(1, cs::BotDifficulty::Easy);
+    bots->keepQuota(1, cs::BotDifficulty::Easy, kNoPrefix);
     EXPECT_TRUE(std::ranges::equal(bots->players(), std::array{joined[0]})) << "the dead one first";
 }
 
 TEST_F(BotsTest, EachBotPlaysWithALevelOfSkillOfTheDifficultyItJoinsAt) {
     const auto levelOf = [this](cs::BotDifficulty difficulty) {
-        return bots->skillLevelOf(bots->add(cs::Team::CounterTerrorists, difficulty)).name;
+        return bots->skillLevelOf(bots->add(cs::Team::CounterTerrorists, difficulty, kNoPrefix)).name;
     };
     for (const auto& [difficulty, names] :
          {std::pair{cs::BotDifficulty::Easy, std::vector<std::string>{"easy", "fair"}},
@@ -200,9 +204,57 @@ TEST_F(BotsTest, EachBotPlaysWithALevelOfSkillOfTheDifficultyItJoinsAt) {
     }
 }
 
+TEST_F(BotsTest, EachBotPlaysAsAProfileOfItsDifficultyNoOneElsePlaysAsNamedAfterBotPrefix) {
+    std::vector<std::string> names;
+    for (std::uint32_t added = 0; added < 3; ++added) {
+        const cs::PlayerIndex bot =
+            bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+        names.emplace_back(game->nameOf(bot));
+        const cs::BotSkillLevel& level = bots->skillLevelOf(bot);
+        EXPECT_TRUE(std::ranges::contains(level.profiles, names.back())) << "its level's profile";
+    }
+    std::ranges::sort(names);
+    EXPECT_EQ(std::ranges::unique(names).begin(), names.end()) << "each a profile no one else plays as";
+    const cs::PlayerIndex prefixed = bots->add(cs::Team::Terrorists, cs::BotDifficulty::Expert, "[NX]");
+    EXPECT_TRUE(game->nameOf(prefixed).starts_with("[NX] ")) << game->nameOf(prefixed);
+}
+
+TEST_F(BotsTest, ABotJoinsAsAProfileByItsNameInAnyCaseWhileNoOneHasIt) {
+    const auto added = bots->addProfile("abner", cs::Team::Terrorists, kNoPrefix);
+    ASSERT_TRUE(added.has_value());
+    EXPECT_EQ(game->nameOf(*added), "Abner") << "the profile's own name";
+    EXPECT_EQ(bots->skillLevelOf(*added).name, "easy");
+    EXPECT_EQ(bots->addProfile("Abner", std::nullopt, "[NX]").error().code, cs::BotJoinError::ProfileInGame)
+        << "a bot plays as it, whatever its prefix";
+    EXPECT_EQ(bots->addProfile("Nobody", std::nullopt, kNoPrefix).error().code,
+              cs::BotJoinError::UnknownProfile);
+    std::ignore = game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Basil");
+    EXPECT_EQ(bots->addProfile("Basil", std::nullopt, kNoPrefix).error().code,
+              cs::BotJoinError::ProfileInGame)
+        << "a player has its name";
+}
+
+TEST_F(BotsTest, ABotLeavesByItsNameExactly) {
+    ASSERT_TRUE(bots->addProfile("Abner", cs::Team::Terrorists, "[NX]").has_value());
+    EXPECT_FALSE(bots->kickNamed("Abner")) << "its name is after bot_prefix";
+    EXPECT_FALSE(bots->kickNamed("[nx] abner"));
+    EXPECT_TRUE(bots->kickNamed("[NX] Abner"));
+    EXPECT_EQ(bots->size(), 0U);
+    EXPECT_EQ(game->playerCount(), 0U);
+}
+
+TEST_F(BotsTest, WithEveryProfileOfItsDifficultyInTheGameABotStillJoinsItsNameNumbered) {
+    for (std::size_t added = 0; added < kExpertProfiles; ++added) {
+        std::ignore = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    }
+    const cs::PlayerIndex numbered = bots->add(cs::Team::Terrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    EXPECT_TRUE(game->nameOf(numbered).starts_with("(1)")) << game->nameOf(numbered);
+    EXPECT_EQ(bots->size(), kExpertProfiles + 1);
+}
+
 TEST_F(BotsTest, ABotFiresOnlyItsReactionTimeAfterItSeesAnEnemyAndOnceItsViewTurnedToIt) {
-    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert);
-    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     // The bot faces +x as its spawn point does; the enemy stands in its cone, half a right angle off.
     standAt(bot, 0.0F);
     standAt(enemy, kApart, kApart);
@@ -224,9 +276,10 @@ TEST_F(BotsTest, ABotFiresOnlyItsReactionTimeAfterItSeesAnEnemyAndOnceItsViewTur
 }
 
 TEST_F(BotsTest, ABotFiresAtNoTeammateAndSeesNoEnemyBehindIt) {
-    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy);
-    const cs::PlayerIndex teammate = game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy, kNoPrefix);
+    const cs::PlayerIndex teammate =
+        game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     standAt(bot, kMapSide * 0.5F);
     standAt(teammate, (kMapSide * 0.5F) + kApart);
     standAt(enemy, (kMapSide * 0.5F) - kApart);
@@ -238,8 +291,8 @@ TEST_F(BotsTest, ABotFiresAtNoTeammateAndSeesNoEnemyBehindIt) {
 }
 
 TEST_F(BotsTest, AnExpertBotKillsAnEnemyItSeesOnceTheFreezeIsOver) {
-    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert);
-    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     // Both teams have players: Game Commencing restarts the game, spawning them again.
     play(kPastTheCommence);
     standAt(bot, 0.0F);

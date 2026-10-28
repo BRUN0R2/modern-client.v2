@@ -41,11 +41,13 @@ struct BotSkillTag {};
 using BotSkill = nx::Quantity<float, BotSkillTag>;
 
 /// A level of skill a bot plays with, as a template of BotProfile.db makes one: its name, the
-/// difficulties a bot of it joins at, its skill, how long after it first sees an enemy it knows of it
-/// (ReactionTime), and how long after it took an enemy on it fires at it (AttackDelay).
+/// difficulties a bot of it joins at, the names of its profiles, the bots that play with it, its skill,
+/// how long after it first sees an enemy it knows of it (ReactionTime), and how long after it took an
+/// enemy on it fires at it (AttackDelay).
 struct BotSkillLevel {
     std::string name;
     std::vector<BotDifficulty> difficulties;
+    std::vector<std::string> profiles;
     BotSkill skill{};
     nx::Seconds reactionTime{};
     nx::Seconds attackDelay{};
@@ -148,7 +150,8 @@ struct BotRules {
 };
 
 /// Reads `text`, the file `sourceName`: every distance, time and budget more than none, the cone a
-/// whole turn at most; a level of skill for each difficulty, each of none or more time, each pause's
+/// whole turn at most; a level of skill for each difficulty, each of none or more time and of profiles
+/// named as the server names a player and as no other profile is, in any case; each pause's
 /// shortest none or more and its longest no shorter, the springs and the pitch's limit more than none
 /// (a quarter turn at most). Errors: InvalidData.
 [[nodiscard]] auto readBotRules(std::string_view text, std::string_view sourceName)
@@ -167,6 +170,7 @@ struct nx::meta::Description<cs::BotSkillLevel> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::BotSkillLevel::name>("name"),
         nx::meta::field<&cs::BotSkillLevel::difficulties>("difficulties"),
+        nx::meta::field<&cs::BotSkillLevel::profiles>("profiles"),
         nx::meta::field<&cs::BotSkillLevel::skill>("skill", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BotSkillLevel::reactionTime>("reactionTime"),
         nx::meta::field<&cs::BotSkillLevel::attackDelay>("attackDelay"),

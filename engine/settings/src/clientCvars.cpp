@@ -169,8 +169,15 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
         .defaultValue = "",
         .description = "The sound output to play on, by its name; empty for the system's default.",
         .flags = kArchived});
-    if (!device) {
-        return std::unexpected{std::move(device.error())};
+    auto playerName = console.registerCvar(
+        CvarDesc<std::string>{.name = "name",
+                              .defaultValue = std::string{kDefaultPlayerName},
+                              .description = "The name you ask the server for as you join.",
+                              .flags = kArchived});
+    for (auto* const registered : {&device, &playerName}) {
+        if (!*registered) {
+            return std::unexpected{std::move(registered->error())};
+        }
     }
     for (auto* const registered : {&decals, &multiplayerDecals}) {
         if (!*registered) {
@@ -194,7 +201,7 @@ auto registerClientCvars(console::Console& console) -> Result<ClientCvars, conso
                                  .fidelity = *fidelity,
                                  .decals = *decals,
                                  .multiplayerDecals = *multiplayerDecals},
-                       .player = {.autoWeaponSwitch = *autoWeaponSwitch},
+                       .player = {.name = *playerName, .autoWeaponSwitch = *autoWeaponSwitch},
                        .audio = {.volume = *volume, .device = *device, .playUnfocused = *playUnfocused}};
 }
 

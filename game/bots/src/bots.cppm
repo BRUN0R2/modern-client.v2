@@ -8,9 +8,9 @@
 /// UTIL_KickBotFromTeam, CCSBot::IsVisible, TogglePrimaryAttack; GPL, consulted: docs/20 section 3).
 ///
 /// Today: they hunt places of the mesh drawn at random, chase and fire at the enemies they see, aiming
-/// at the first spot of them they see, and look for where they lost them; each plays with a level of
-/// skill of bot_difficulty, which tells how soon it reacts, how well it aims and how it fires; their
-/// names, their buying, the objectives and the radio come next (TODO.md).
+/// at the first spot of them they see, and look for where they lost them; each plays as a profile, its
+/// name and its level of skill, of bot_difficulty, which tells how soon it reacts, how well it aims and
+/// how it fires; their buying, the objectives and the radio come next (TODO.md).
 export module cs.bots:bots;
 
 import std;
@@ -28,11 +28,19 @@ import :botTrigger;
 
 export namespace cs {
 
+/// Why a bot asked for by its profile could not join.
+enum class BotJoinError : std::uint8_t {
+    UnknownProfile, ///< No profile has the name asked for, in any case (GetProfile).
+    ProfileInGame,  ///< A bot plays as it, or a player has its name (UTIL_IsNameTaken).
+};
+
 /// What drives a bot's player besides its brain, a component of its body: the number of its last
-/// command, its level of skill (of BotRules::skillLevels), whether it was alive at its last command, how
-/// its view turns, how its aim errs, its trigger, and the streams its hunt and its aim draw from.
+/// command, the profile it plays as, its name and its level of skill (of BotRules::skillLevels), whether
+/// it was alive at its last command, how its view turns, how its aim errs, its trigger, and the streams
+/// its hunt and its aim draw from.
 struct BotDriver {
     CommandNumber lastCommand{};
+    std::string profile{};
     std::size_t skillLevel = 0;
     bool wasAlive = false;
     BotViewTurn turn{};
@@ -71,18 +79,27 @@ public:
     auto operator=(Bots&&) -> Bots& = delete;
 
     /// A bot joins the game in `team`, or in the game's default team for none (BotAddCommand with
-    /// bot_join_team "any": SelectDefaultTeam), drawing the heavier weapon it is given, with a level of
-    /// skill of `difficulty` drawn at random (GetRandomProfile, among the levels as the named profiles
-    /// come with the bots' names). Returns its player.
-    auto add(std::optional<Team> team, BotDifficulty difficulty) -> PlayerIndex;
+    /// bot_join_team "any": SelectDefaultTeam), drawing the heavier weapon it is given, as a profile of
+    /// `difficulty` drawn at random among those not in the game (GetRandomProfile, UTIL_IsNameTaken),
+    /// named after `prefix` (bot_prefix, UTIL_ConstructBotNetName). With every one of them in the game,
+    /// it is drawn among them all and the server numbers its name, where the original adds none.
+    /// Returns its player.
+    auto add(std::optional<Team> team, BotDifficulty difficulty, std::string_view prefix) -> PlayerIndex;
+    /// A bot joins the game as the profile named `profile`, in any case, in `team` or the game's default,
+    /// named after `prefix`, as add does (bot_add with a name). Errors: UnknownProfile, ProfileInGame.
+    [[nodiscard]] auto addProfile(std::string_view profile, std::optional<Team> team, std::string_view prefix)
+        -> nx::Result<PlayerIndex, BotJoinError>;
     /// Every bot leaves the game (bot_kick).
     void kickAll();
-    /// Adds a bot of `difficulty` when there are fewer than `quota`, or makes one leave when there are
-    /// more, once each BotRules::quotaInterval of the game (MaintainBotQuota): of the team of more
-    /// players, else of one drawn at random, a dead one first (UTIL_KickBotFromTeam); of the other team
-    /// when that one has none. The original then weighs the teams' wins, which come with the scores
-    /// (TODO.md).
-    void keepQuota(std::uint32_t quota, BotDifficulty difficulty);
+    /// The bot whose player is named `name`, exactly, leaves the game (bot_kick with a name); returns
+    /// whether one did.
+    auto kickNamed(std::string_view name) -> bool;
+    /// Adds a bot of `difficulty`, named after `prefix`, when there are fewer than `quota`, or makes one
+    /// leave when there are more, once each BotRules::quotaInterval of the game (MaintainBotQuota): of the
+    /// team of more players, else of one drawn at random, a dead one first (UTIL_KickBotFromTeam); of the
+    /// other team when that one has none. The original then weighs the teams' wins, which come with the
+    /// scores (TODO.md).
+    void keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_view prefix);
     /// The commands of the bots for the game's next tick, one for each, in the order they joined: each
     /// alive looks at the enemies its budget lets it look at, in turn, and remembers those it sees, each
     /// known to it its level's reaction time after it first saw it; thinks (nx::agents::Brain::decide);
@@ -119,6 +136,13 @@ private:
     [[nodiscard]] auto aimSpotOf(BotDriver& driver, const PlayerOwnState& self,
                                  const nx::agents::Decision& decision,
                                  std::span<const PerceptionTarget> targets, nx::Seconds duration) -> nx::Vec3;
+    /// A bot joins `team`, or the game's default, as the profile `profile` of the level `level`, named
+    /// after `prefix`.
+    auto join(std::size_t level, std::string_view profile, std::optional<Team> team, std::string_view prefix)
+        -> PlayerIndex;
+    /// Whether a bot plays as the profile `profile`, or a player that is no bot has its name, exactly
+    /// (UTIL_IsNameTaken).
+    [[nodiscard]] auto isInGame(std::string_view profile) -> bool;
     /// Makes a bot of `team` leave, a dead one first; returns whether one did.
     auto kickFrom(Team team) -> bool;
     /// Makes the bot `bot` leave the game.

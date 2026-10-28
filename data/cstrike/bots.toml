@@ -31,13 +31,18 @@ standingFeet = 34.0
 duckedFeet = 14.0
 side = 13.0
 
-# The levels of skill a bot plays with: those of bot_difficulty's difficulty, one drawn as it joins.
-# The templates of the BotProfile.db that ReGameDLL_CS's zBot ships (its Skill a hundredth here; the
-# Default template's reaction time 0.3 and attack delay 0 where one sets none). Its named profiles
-# come with the bots' names.
+# The levels of skill a bot plays with, each with the profiles of the bots that play with it: a bot
+# joining takes a profile of bot_difficulty's difficulty no one in the game plays as, its name the
+# profile's (after bot_prefix). The templates of the BotProfile.db that ReGameDLL_CS's zBot ships (its
+# Skill a hundredth here; the Default template's reaction time 0.3 and attack delay 0 where one sets
+# none); the profiles' names are the project's own.
 [[skillLevels]]
 name = "easy"
 difficulties = ["easy"]
+profiles = [
+    "Abner", "Basil", "Cyril", "Dudley", "Edgar", "Floyd", "Gilbert", "Horace", "Jasper", "Lionel",
+    "Mortimer", "Percival"
+]
 skill = 0.0
 reactionTime = 0.5
 attackDelay = 1.5
@@ -45,6 +50,10 @@ attackDelay = 1.5
 [[skillLevels]]
 name = "fair"
 difficulties = ["easy", "normal"]
+profiles = [
+    "Ambrose", "Barnaby", "Clement", "Desmond", "Elias", "Felix", "Gideon", "Isidore", "Jules",
+    "Leopold", "Rupert", "Silas"
+]
 skill = 0.25
 reactionTime = 0.4
 attackDelay = 1.0
@@ -52,6 +61,10 @@ attackDelay = 1.0
 [[skillLevels]]
 name = "normal"
 difficulties = ["normal"]
+profiles = [
+    "Anton", "Breno", "Caio", "Dario", "Emil", "Fabio", "Gustav", "Hector", "Joaquim", "Lucas",
+    "Marco", "Nuno"
+]
 skill = 0.5
 reactionTime = 0.4
 attackDelay = 0.7
@@ -59,6 +72,7 @@ attackDelay = 0.7
 [[skillLevels]]
 name = "tough"
 difficulties = ["normal", "hard"]
+profiles = ["Aldo", "Bento", "Ciro", "Diego", "Enzo", "Franco", "Gael", "Heitor", "Igor", "Joel"]
 skill = 0.6
 reactionTime = 0.3
 attackDelay = 0.35
@@ -66,6 +80,9 @@ attackDelay = 0.35
 [[skillLevels]]
 name = "hard"
 difficulties = ["hard"]
+profiles = [
+    "Arthur", "Bernardo", "Cassio", "Davi", "Elton", "Fausto", "Gaspar", "Ismael", "Jonas", "Kleber"
+]
 skill = 0.75
 reactionTime = 0.25
 attackDelay = 0.0
@@ -73,6 +90,7 @@ attackDelay = 0.0
 [[skillLevels]]
 name = "veryHard"
 difficulties = ["hard"]
+profiles = ["Leandro", "Matheus", "Nelson", "Otavio", "Pietro", "Rafael", "Saulo", "Tiago"]
 skill = 0.8
 reactionTime = 0.25
 attackDelay = 0.0
@@ -80,6 +98,9 @@ attackDelay = 0.0
 [[skillLevels]]
 name = "expert"
 difficulties = ["expert"]
+profiles = [
+    "Renato", "Silvio", "Tadeu", "Teodoro", "Valter", "Vicente", "Wagner", "Xande", "Yago", "Zeca"
+]
 skill = 0.9
 reactionTime = 0.2
 attackDelay = 0.0
@@ -87,6 +108,7 @@ attackDelay = 0.0
 [[skillLevels]]
 name = "elite"
 difficulties = ["expert"]
+profiles = ["Aurelio", "Bastian", "Cosimo", "Dante", "Ezio", "Fiore", "Galeno", "Lauro"]
 skill = 1.0
 reactionTime = 0.2
 attackDelay = 0.0
