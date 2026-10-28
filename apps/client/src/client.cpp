@@ -347,7 +347,8 @@ private:
     /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
     /// (cs::bulletDecalOf); then blood's where the blood a hit shed met it, the decal the server chose.
     void stampMarks();
-    [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
+    /// Records the frame begun in `list`, and hands it to the GPU to show.
+    [[nodiscard]] auto drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
@@ -970,6 +971,12 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_frameStart + std::chrono::duration_cast<nx::platform::MonotonicClock::duration>(interval));
         m_frameStart = nx::platform::MonotonicClock::now();
         m_frameRate.frameStarted(m_frameStart);
+        // The frame's waits, for the GPU and for the frame before to be taken to the GPU, before the
+        // input is read too (docs/adr/0029-submission-thread.md).
+        auto commands = m_video->device->beginFrame();
+        if (!commands) {
+            return nx::fail(ClientError::GpuFailed, std::move(commands.error()));
+        }
         if (auto read = readInput(); !read) {
             return read;
         }
@@ -999,7 +1006,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             stampMarks();
             showEffects(elapsed);
         }
-        if (auto drawn = drawFrame(); !drawn) {
+        if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
         }
     }
@@ -1207,13 +1214,8 @@ void Client::reportSound(const nx::Result<void, cs::PlayError>& played) {
     }
 }
 
-auto Client::drawFrame() -> nx::Result<void, ClientError> {
+auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
     nx::rhi::Device& device = *m_video->device;
-    auto commands = device.beginFrame();
-    if (!commands) {
-        return nx::fail(ClientError::GpuFailed, std::move(commands.error()));
-    }
-    nx::rhi::CommandList& list = commands->get();
     auto image = m_video->swapchain->acquire();
     if (!image) {
         return nx::fail(ClientError::GpuFailed, std::move(image.error()));

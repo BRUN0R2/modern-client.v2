@@ -268,6 +268,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Vulkan 1.3 backend with volk: instance and adapter choice, device, frames in flight on a timeline semaphore, validation counted
 - [x] VMA in the Vulkan backend (with buffers and textures)
 - [x] Swapchain, present modes and recreation (resize, minimized, out of date)
+- [x] Frames submitted and shown on the device's own thread, the window's pass drawn there on the image it acquires ([ADR-0029](adr/0029-submission-thread.md))
 - [ ] *Device lost*: recreate the device and its resources once, then a crash report
 - [ ] Parallel recording (one command pool per worker per frame)
 - [ ] Persistent staging ring

@@ -17,6 +17,7 @@ nxAddModuleLibrary(nxRhiVulkan
         src/device.cpp
     DEPENDS
         nx::core
+        nx::jobs
         nx::platform
         nx::rhi
     LATERAL

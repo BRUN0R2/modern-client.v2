@@ -6,6 +6,7 @@ nxAddTest(nxPlatformTests
         audioTests.cpp
         clockTests.cpp
         fileSystemTests.cpp
+        threadTests.cpp
         windowTests.cpp
     DEPENDS
         nx::platform

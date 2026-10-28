@@ -62,11 +62,11 @@ flowchart TB
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
 | `nx.jobs` | 1 | Job System, counters, dependency graphs, and the lock-free queues between long-lived threads (today: SPSC). Planned: a `std::execution` scheduler | core |
-| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface; physical keys and their layout characters), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks, the sound output (SDL3's default output, on its real-time thread). Planned: OS threads | core |
+| `nx.platform` | 2 | Window and input (SDL3, kept out of its interface; physical keys and their layout characters), native file system (files replaced whole, never left half written), the path of the running program, the user's folder of Modern-Client.v2, their Steam folders and the system's font folders, clocks, the sound output (SDL3's default output, on its real-time thread), and the named threads outside the job system's pool ([04 §5](04-job-system.md#5-dedicated-threads-outside-the-pool)). Planned: their affinity and priority | core |
 | `nx.ecs` | 2 | World, archetypes, queries, systems, scheduler, command buffers, events | core, jobs (meta with reflected component registration) |
 | `nx.data` | 2 | Data and configuration files: TOML read into described structs, with typed failures that name the file, line, column and key ([§8](#8-configuration-and-data)) | core, meta |
 | `nx.rhi` | 2 | Graphics hardware interface (abstract) | core, math (today: core) |
-| `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend | rhi, platform |
+| `nx.rhi.vulkan` | 2 | Vulkan 1.3 backend, its frames submitted and shown on a thread of its own ([ADR-0029](adr/0029-submission-thread.md)) | jobs, rhi, platform |
 | `nx.rhi.d3d11` | 2 | DirectX 11 backend (future) | rhi, platform |
 | `nx.assets` | 3 | VFS, content sources, GoldSrc and modern importers, cache, handles, streaming | core, math, jobs, meta, data, platform (today: core, math, meta, data, platform) |
 | `nx.collision` | 3 | Traces against BSP hulls, entity collision, hitboxes. Today: the hulls of a map's brush models and their traces, and the hull a box is traced through | core, math, jobs, assets (today: core, math, assets; the hulls come from the map as its compiler wrote them) |
