@@ -100,7 +100,8 @@ struct VoxelProfile {
 }
 
 /// What every tile is built from: the geometry in Detour's space, each triangle's area (none where it
-/// is no floor for the profile) and footprint, the grid of tiles over it, and the profile in voxels.
+/// is no floor for the profile) and footprint, the grid of tiles over it, and the profile and settings,
+/// as given and in voxels. Its own copies: the jobs that read it may run after its geometry is gone.
 struct TileInput {
     std::vector<float> vertices{};
     std::vector<int> corners{};
@@ -108,8 +109,8 @@ struct TileInput {
     std::vector<Footprint> footprints{};
     std::array<float, 3> low{};
     std::array<float, 3> high{};
-    const AgentProfile* profile = nullptr;
-    const BuildSettings* settings = nullptr;
+    AgentProfile profile{};
+    BuildSettings settings{};
     VoxelProfile voxels{};
 };
 
@@ -128,7 +129,7 @@ struct TileInput {
 /// What the tiles of `geometry` are built from. Errors: InvalidGeometry, TooLarge.
 [[nodiscard]] auto tileInputOf(const Geometry& geometry, const AgentProfile& profile,
                                const BuildSettings& settings) -> Result<TileInput, MeshBuildError> {
-    TileInput input{.profile = &profile, .settings = &settings, .voxels = voxelProfileOf(profile, settings)};
+    TileInput input{.profile = profile, .settings = settings, .voxels = voxelProfileOf(profile, settings)};
     input.vertices.reserve(geometry.vertices.size() * 3);
     for (const Vec3 vertex : geometry.vertices) {
         if (!std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z)) {
@@ -212,8 +213,8 @@ struct TileBounds {
 };
 
 [[nodiscard]] auto boundsOf(const TileInput& input, std::int32_t tileX, std::int32_t tileY) -> TileBounds {
-    const float cell = input.settings->cellSize.value();
-    const auto tileCells = static_cast<float>(input.settings->tileCells);
+    const float cell = input.settings.cellSize.value();
+    const auto tileCells = static_cast<float>(input.settings.tileCells);
     const auto border = static_cast<float>(input.voxels.borderCells);
     const float tileSide = tileCells * cell;
     TileBounds bounds{.low = input.low, .high = input.high};
@@ -245,11 +246,11 @@ struct TileBounds {
     if (areas.empty()) {
         return std::optional<Heightfield>{};
     }
-    const int side = narrow<int>(input.settings->tileCells) + (2 * input.voxels.borderCells);
+    const int side = narrow<int>(input.settings.tileCells) + (2 * input.voxels.borderCells);
     Heightfield heightfield{rcAllocHeightfield()};
     if (!heightfield ||
         !rcCreateHeightfield(&log, *heightfield, side, side, bounds.low.data(), bounds.high.data(),
-                             input.settings->cellSize.value(), input.settings->cellHeight.value())) {
+                             input.settings.cellSize.value(), input.settings.cellHeight.value())) {
         return refused(log, tileX, tileY, "its heightfield");
     }
     const int climb = input.voxels.climbVoxels;
@@ -281,9 +282,9 @@ struct TileBounds {
     params.detailVertsCount = detail.nverts;
     params.detailTris = detail.tris;
     params.detailTriCount = detail.ntris;
-    params.walkableHeight = input.profile->crouchedHeight.value();
-    params.walkableRadius = input.profile->radius.value();
-    params.walkableClimb = input.profile->stepHeight.value();
+    params.walkableHeight = input.profile.crouchedHeight.value();
+    params.walkableRadius = input.profile.radius.value();
+    params.walkableClimb = input.profile.stepHeight.value();
     params.tileX = tileX;
     params.tileY = tileY;
     std::ranges::copy(polygons.bmin, std::begin(params.bmin));
@@ -348,8 +349,8 @@ struct TileBounds {
     }
     DetailMesh detail{rcAllocPolyMeshDetail()};
     if (!detail ||
-        !rcBuildPolyMeshDetail(&log, *polygons, *compact, input.settings->detailSampleDistance.value(),
-                               input.settings->detailHeightError.value(), *detail)) {
+        !rcBuildPolyMeshDetail(&log, *polygons, *compact, input.settings.detailSampleDistance.value(),
+                               input.settings.detailHeightError.value(), *detail)) {
         return refused(log, tileX, tileY, "its polygons' details");
     }
     if (polygons->npolys == 0) {
@@ -360,52 +361,75 @@ struct TileBounds {
     });
 }
 
-} // namespace
-
-auto buildTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
-                const BuildSettings& settings) -> Result<BuiltTiles, MeshBuildError> {
-    auto input = tileInputOf(geometry, profile, settings);
-    if (!input) {
-        return std::unexpected{std::move(input.error())};
-    }
+/// The grid of tiles over `input`, with none built yet: none for no triangle. Errors: TooLarge.
+[[nodiscard]] auto gridOf(const TileInput& input, bool isEmpty) -> Result<BuiltTiles, MeshBuildError> {
+    const BuildSettings& settings = input.settings;
     const float tileSide = static_cast<float>(settings.tileCells) * settings.cellSize.value();
-    BuiltTiles built{.origin = input->low, .tileSide = tileSide};
-    if (geometry.triangles.empty()) {
-        built.origin = {};
-        return built;
+    if (isEmpty) {
+        return BuiltTiles{.tileSide = tileSide};
     }
+    BuiltTiles grid{.origin = input.low, .tileSide = tileSide};
     // tileInputOf checked the integer grid range. Keep the subtraction and rounding in double
     // so that a representable cell count cannot round up past INT_MAX in float.
     constexpr double halfCell = 0.5;
     const auto gridCells = [&input, &settings](std::size_t axis) {
         return static_cast<int>(
-            std::floor((static_cast<double>(input->high[axis]) - static_cast<double>(input->low[axis])) /
+            std::floor((static_cast<double>(input.high[axis]) - static_cast<double>(input.low[axis])) /
                            static_cast<double>(settings.cellSize.value()) +
                        halfCell));
     };
     const int cellsAcross = gridCells(0);
     const int cellsDown = gridCells(2);
     const int tileCells = narrow<int>(settings.tileCells);
-    built.tilesAcross = (cellsAcross + tileCells - 1) / tileCells;
-    built.tilesDown = (cellsDown + tileCells - 1) / tileCells;
-    const auto tileCount = narrow<std::size_t>(built.tilesAcross) * narrow<std::size_t>(built.tilesDown);
+    grid.tilesAcross = (cellsAcross + tileCells - 1) / tileCells;
+    grid.tilesDown = (cellsDown + tileCells - 1) / tileCells;
+    const auto tileCount = narrow<std::size_t>(grid.tilesAcross) * narrow<std::size_t>(grid.tilesDown);
     if (tileCount > (std::size_t{1} << kMostTileBits)) {
         return fail(MeshBuildError::TooLarge,
-                    std::format("{} by {} tiles, more than Detour's {}", built.tilesAcross, built.tilesDown,
+                    std::format("{} by {} tiles, more than Detour's {}", grid.tilesAcross, grid.tilesDown,
                                 std::size_t{1} << kMostTileBits));
     }
-    // Each tile in its own job, its result at its own index: the same mesh with any number of workers.
-    std::vector<Result<std::optional<BuiltTile>, MeshBuildError>> results(tileCount);
-    const std::span<Result<std::optional<BuiltTile>, MeshBuildError>> resultView = results;
-    const TileInput& tileInput = *input;
-    const std::int32_t tilesAcross = built.tilesAcross;
-    jobs.wait(
-        jobs.parallelFor({.label = "navigation.tile"}, std::views::iota(std::size_t{0}, tileCount),
-                         jobs::Grain::automatic(), [&tileInput, resultView, tilesAcross](std::size_t index) {
-                             const auto tile = narrow<std::int32_t>(index);
-                             resultView[index] = buildTile(tileInput, tile % tilesAcross, tile / tilesAcross);
-                         }));
-    for (auto& result : results) {
+    return grid;
+}
+
+} // namespace
+
+struct TileWork {
+    TileInput input{};
+    BuiltTiles grid{}; ///< Its tiles left out: they are in results.
+    std::vector<Result<std::optional<BuiltTile>, MeshBuildError>> results{}; ///< Row by row.
+};
+
+auto startTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
+                const BuildSettings& settings, jobs::Priority priority) -> Result<TileJobs, MeshBuildError> {
+    auto input = tileInputOf(geometry, profile, settings);
+    if (!input) {
+        return std::unexpected{std::move(input.error())};
+    }
+    auto grid = gridOf(*input, geometry.triangles.empty());
+    if (!grid) {
+        return std::unexpected{std::move(grid.error())};
+    }
+    const auto tileCount = narrow<std::size_t>(grid->tilesAcross) * narrow<std::size_t>(grid->tilesDown);
+    auto work = std::make_shared<TileWork>(
+        TileWork{.input = std::move(*input), .grid = std::move(*grid), .results = {}});
+    work->results.resize(tileCount);
+    // Each tile in its own job, its result at its own index: the same mesh with any number of workers. The
+    // work outlives the jobs: its holder waits for them before it lets it go (MeshBuild).
+    TileWork* const shared = work.get();
+    const jobs::JobHandle done = jobs.parallelFor(
+        {.label = "navigation.tile", .priority = priority}, std::views::iota(std::size_t{0}, tileCount),
+        jobs::Grain::automatic(), [shared](std::size_t index) {
+            const auto tile = narrow<std::int32_t>(index);
+            const std::int32_t tilesAcross = shared->grid.tilesAcross;
+            shared->results[index] = buildTile(shared->input, tile % tilesAcross, tile / tilesAcross);
+        });
+    return TileJobs{.work = std::move(work), .done = done};
+}
+
+auto takeTiles(TileWork& work) -> Result<BuiltTiles, MeshBuildError> {
+    BuiltTiles built = std::move(work.grid);
+    for (auto& result : work.results) {
         if (!result) {
             return std::unexpected{std::move(result.error())};
         }
@@ -413,6 +437,7 @@ auto buildTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProf
             built.tiles.push_back(std::move(**result));
         }
     }
+    work = TileWork{};
     return built;
 }
 

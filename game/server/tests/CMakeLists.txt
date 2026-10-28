@@ -6,6 +6,7 @@ nxAddTest(csServerTests
         gameTests.cpp
         entityBodiesTests.cpp
         playerNamesTests.cpp
+        agentNavigationTests.cpp
     DEPENDS
         cs::server
         cs::shared
@@ -13,6 +14,7 @@ nxAddTest(csServerTests
         nx::assets
         nx::ecs
         nx::game
+        nx::navigation
         nx::collision
         nx::platform)
 
