@@ -24,6 +24,28 @@ export namespace nx::navigation {
 
 class NavigationMesh;
 
+/// What a mesh is built from, as one number (meshKeyOf): two builds of one key make the same tiles, so a
+/// mesh kept under its key (NavigationMesh::save) stands for building it again.
+struct MeshKey {
+    std::uint64_t value = 0;
+
+    [[nodiscard]] inline auto operator==(const MeshKey&) const noexcept -> bool = default;
+};
+
+/// The key of the mesh of `geometry` for `profile` by `settings`: of the geometry's vertices and triangles,
+/// of what of the profile shapes the tiles (its size, step and steepest floor, not its name or its costs,
+/// which only queries weigh) and of every setting, and of the version of the build and of Detour's tiles,
+/// which change with what they make.
+[[nodiscard]] auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile,
+                             const BuildSettings& settings) -> MeshKey;
+
+/// Why bytes could not be read back as a mesh (NavigationMesh::load).
+enum class MeshFileError : std::uint8_t {
+    NotAMesh,  ///< Not what NavigationMesh::save writes, or what another version of it wrote.
+    OtherMesh, ///< A mesh of another key: of other geometry, profile or settings, or of another build.
+    Damaged,   ///< Cut short, or changed since it was written; the detail says where.
+};
+
 /// A mesh being built in jobs (NavigationMesh::startBuild): its tiles, each in a job of its own, then
 /// Detour's mesh of them in one more, all of the priority Background. Its jobs read and write only what
 /// it holds, so going before they have run waits for them.
@@ -107,6 +129,16 @@ public:
     [[nodiscard]] auto polygonCount() const noexcept -> std::size_t;
     /// Its polygons, tile by tile, in the order Detour numbers them.
     [[nodiscard]] auto outline() const -> MeshOutline;
+
+    /// The bytes that keep it as the mesh of `key`, which load reads back without building anything:
+    /// Detour's tiles as it holds them, row by row, after a header of the key and of a hash of the rest.
+    /// Detour rebuilds the links it wrote into them as it takes them again.
+    [[nodiscard]] auto save(MeshKey key) const -> std::vector<std::byte>;
+
+    /// The mesh `bytes` keep, which save wrote for `key`, for `profile`, the one it was built for.
+    /// Errors: NotAMesh, OtherMesh, Damaged.
+    [[nodiscard]] static auto load(std::span<const std::byte> bytes, MeshKey key, const AgentProfile& profile)
+        -> Result<NavigationMesh, MeshFileError>;
 
 private:
     friend class NavigationQuery;
