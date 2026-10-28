@@ -127,43 +127,94 @@ NavigationMesh::NavigationMesh(NavigationMesh&& other) noexcept = default;
 auto NavigationMesh::operator=(NavigationMesh&& other) noexcept -> NavigationMesh& = default;
 NavigationMesh::~NavigationMesh() = default;
 
-auto NavigationMesh::build(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
-                           const BuildSettings& settings) -> Result<NavigationMesh, MeshBuildError> {
+struct MeshBuild::State {
+    jobs::JobSystem* jobs = nullptr;
+    std::shared_ptr<detail::TileWork> tiles{}; ///< Until the mesh is made of them.
+    AgentProfile profile{};
+    std::optional<Result<NavigationMesh, MeshBuildError>> mesh{}; ///< Once its job has run.
+    jobs::JobHandle meshMade{};                                   ///< Of the last job.
+};
+
+MeshBuild::MeshBuild(std::unique_ptr<State> state) noexcept : buildState{std::move(state)} {}
+
+MeshBuild::MeshBuild(MeshBuild&& other) noexcept = default;
+
+MeshBuild::~MeshBuild() {
+    if (buildState) {
+        buildState->jobs->wait(buildState->meshMade);
+    }
+}
+
+auto MeshBuild::finish() && -> Result<NavigationMesh, MeshBuildError> {
+    expects(buildState != nullptr, "MeshBuild::finish: a build not finished yet");
+    const std::unique_ptr<State> state = std::move(buildState);
+    state->jobs->wait(state->meshMade);
+    invariant(state->mesh.has_value(), "MeshBuild::finish: the mesh's job has run");
+    return std::move(*state->mesh);
+}
+
+auto NavigationMesh::startBuild(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
+                                const BuildSettings& settings) -> Result<MeshBuild, MeshBuildError> {
     if (auto checked = checkSettings(settings).and_then([&] { return checkProfile(profile, settings); });
         !checked) {
         return std::unexpected{std::move(checked.error())};
     }
-    auto built = detail::buildTiles(jobs, geometry, profile, settings);
-    if (!built) {
-        return std::unexpected{std::move(built.error())};
+    auto tiles = detail::startTiles(jobs, geometry, profile, settings, jobs::Priority::Background);
+    if (!tiles) {
+        return std::unexpected{std::move(tiles.error())};
     }
-    const std::uint32_t tileBits = bitsToNumber(built->tiles.size());
+    auto state = std::make_unique<MeshBuild::State>(
+        MeshBuild::State{.jobs = &jobs, .tiles = std::move(tiles->work), .profile = profile});
+    // The state outlives the job: MeshBuild waits for it before it lets the state go.
+    MeshBuild::State* const shared = state.get();
+    const std::array tilesBuilt{tiles->done};
+    state->meshMade = jobs.submit(
+        {.label = "navigation.mesh", .priority = jobs::Priority::Background, .dependsOn = tilesBuilt},
+        [shared] {
+            shared->mesh = detail::takeTiles(*shared->tiles).and_then([shared](detail::BuiltTiles built) {
+                return assemble(std::move(built), shared->profile);
+            });
+            shared->tiles.reset();
+        });
+    return MeshBuild{std::move(state)};
+}
+
+auto NavigationMesh::build(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
+                           const BuildSettings& settings) -> Result<NavigationMesh, MeshBuildError> {
+    return startBuild(jobs, geometry, profile, settings).and_then([](MeshBuild started) {
+        return std::move(started).finish();
+    });
+}
+
+auto NavigationMesh::assemble(detail::BuiltTiles built, const AgentProfile& profile)
+    -> Result<NavigationMesh, MeshBuildError> {
+    const std::uint32_t tileBits = bitsToNumber(built.tiles.size());
     const std::uint32_t polygonBits = detail::kTileAndPolygonBits - tileBits;
-    for (const detail::BuiltTile& tile : built->tiles) {
+    for (const detail::BuiltTile& tile : built.tiles) {
         if (tile.polygonCount > (std::uint32_t{1} << polygonBits)) {
             return fail(MeshBuildError::TooLarge,
                         std::format("tile {}, {} has {} polygons, more than the {} of each of {} tiles",
                                     tile.x, tile.y, tile.polygonCount, std::uint32_t{1} << polygonBits,
-                                    built->tiles.size()));
+                                    built.tiles.size()));
         }
     }
     auto detour = std::make_unique<Detour>();
     detour->mesh.reset(dtAllocNavMesh());
     dtNavMeshParams params{};
-    std::ranges::copy(built->origin, std::begin(params.orig));
-    params.tileWidth = built->tileSide;
-    params.tileHeight = built->tileSide;
+    std::ranges::copy(built.origin, std::begin(params.orig));
+    params.tileWidth = built.tileSide;
+    params.tileHeight = built.tileSide;
     params.maxTiles = 1 << tileBits;
     params.maxPolys = 1 << polygonBits;
     endUnlessAllocated(detour->mesh != nullptr && dtStatusSucceed(detour->mesh->init(&params)), "a mesh");
-    detour->tiles.reserve(built->tiles.size());
-    for (detail::BuiltTile& tile : built->tiles) {
+    detour->tiles.reserve(built.tiles.size());
+    for (detail::BuiltTile& tile : built.tiles) {
         std::vector<std::byte>& data = detour->tiles.emplace_back(std::move(tile.data));
         // The tile stays theirs (no DT_TILE_FREE_DATA): Detour writes its links into it.
         const dtStatus added = detour->mesh->addTile(reinterpret_cast<unsigned char*>(data.data()),
                                                      narrow<int>(data.size()), 0, 0, nullptr);
         invariant(dtStatusSucceed(added),
-                  "NavigationMesh::build: Detour takes each tile Recast built for it");
+                  "NavigationMesh::assemble: Detour takes each tile Recast built for it");
         if (dtStatusSucceed(added)) {
             detour->polygonCount += tile.polygonCount;
         }

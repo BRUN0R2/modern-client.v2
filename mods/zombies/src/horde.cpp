@@ -7,7 +7,6 @@ import nx.core;
 import nx.math;
 import nx.data;
 import nx.ecs;
-import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -19,7 +18,6 @@ namespace {
 constexpr nx::log::Category kLog{"zombies"};
 constexpr float kHalfTurnDegrees = 180.0F;
 constexpr float kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
-constexpr std::string_view kWalkingProfile = "player";
 [[nodiscard]] auto feetOf(nx::Vec3 origin) -> nx::Vec3 {
     return origin + nx::Vec3{.z = cs::kStandingBox.min.z};
 }
@@ -106,44 +104,22 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
 }
 
 Horde::Horde(CreateToken /*token*/, cs::EntityTypeIndex entityType, Settings rules,
-             nx::navigation::NavigationMesh navigation, cs::Game& game)
-    : type{entityType}, settings{std::move(rules)}, mesh{std::move(navigation)}, query{mesh}, owner{&game} {}
+             const nx::navigation::NavigationMesh& mesh, cs::Game& game)
+    : type{entityType}, settings{std::move(rules)}, query{mesh}, owner{&game} {}
 
 Horde::~Horde() {
     const auto cleared = clear();
     nx::invariant(cleared.has_value(),
-                  "Horde: owned bodies and their borrowed corridors are destroyed before the mesh");
+                  "Horde: owned bodies and their borrowed corridors are destroyed while the mesh is there");
 }
 
-auto Horde::create(nx::jobs::JobSystem& jobs, cs::Game& game, const nx::game::NavigationData& navigation,
-                   cs::EntityTypeIndex type, Settings settings)
-    -> nx::Result<std::unique_ptr<Horde>, ZombieError> {
-    const auto profile =
-        std::ranges::find(navigation.profiles, kWalkingProfile, &nx::navigation::AgentProfile::name);
-    if (profile == navigation.profiles.end()) {
-        return nx::fail(ZombieError::NavigationUnavailable,
-                        "the humanoid body requires the player navigation profile");
-    }
-    if (profile->radius.value() != cs::kStandingBox.max.x ||
-        profile->standingHeight.value() != cs::kStandingBox.max.z - cs::kStandingBox.min.z ||
-        profile->stepHeight != cs::MovementSettings{}.stepSize ||
-        profile->minGroundNormalZ != cs::kMinGroundNormalZ) {
-        return nx::fail(ZombieError::NavigationUnavailable,
-                        "the navigation profile must match the standing body");
-    }
-    // This adapter cannot crouch. A mesh with equal heights excludes crouch-only passages.
-    nx::navigation::AgentProfile standing = *profile;
-    standing.crouchedHeight = standing.standingHeight;
-    auto mesh =
-        nx::navigation::NavigationMesh::build(jobs, game.navigationGeometry(), standing, navigation.build);
-    if (!mesh) {
-        return nx::fail(ZombieError::NavigationUnavailable, std::move(mesh.error()));
-    }
+auto Horde::create(cs::Game& game, const nx::navigation::NavigationMesh& mesh, cs::EntityTypeIndex type,
+                   Settings settings) -> nx::Result<std::unique_ptr<Horde>, ZombieError> {
     if (auto registered = game.registerEntityComponent<nx::agents::Agent>("nx::agents::Agent"); !registered) {
         return nx::fail(ZombieError::SpawnFailed, std::move(registered.error()));
     }
-    nx::log::info(kLog, "navigation ready: {} polygons", mesh->polygonCount());
-    return std::make_unique<Horde>(CreateToken{}, type, std::move(settings), std::move(*mesh), game);
+    nx::log::info(kLog, "zombies walk {} polygons", mesh.polygonCount());
+    return std::make_unique<Horde>(CreateToken{}, type, std::move(settings), mesh, game);
 }
 
 auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
@@ -185,7 +161,7 @@ auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
     };
     const double radius = double{settings.spawnRadius.value()};
     const double spacing = double{settings.spawnSpacing.value()};
-    for (const nx::Vec3 candidate : spawnCandidates(mesh, anchors)) {
+    for (const nx::Vec3 candidate : spawnCandidates(query.mesh(), anchors)) {
         auto point = query.nearestPoint(candidate);
         if (!point) {
             rollback();

@@ -13,6 +13,7 @@ import nx.core;
 import nx.math;
 import nx.jobs;
 import nx.game;
+import nx.navigation;
 import nx.platform;
 import nx.console;
 import nx.assets;
@@ -203,24 +204,60 @@ struct Session {
     cs::PlayerIndex player;
     cs::ClientGame client;
     cs::TempEntities effects;
+    /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
+    /// they go before it. Else why it could not be built.
+    nx::Result<nx::navigation::NavigationMesh, ConsoleError> agentMesh;
     std::unique_ptr<zombies::Horde> horde{};
     std::unique_ptr<cs::Bots> bots{};
 };
 
-/// The map `name` of `content`, its client's level read, its game started by the
-/// rules `cvars` set, the client's player joined in the team of its first spawn point, asking for the
-/// name `player` holds and drawing its weapons as `player` says. Errors: CommandFailed, with the cause.
+/// Starts building, in `jobs`, the mesh of `game`'s map the agents walk: cs::standingPlayerProfile of
+/// `navigation`, by its settings. Errors: CommandFailed, with the cause (also `navigation`'s).
+[[nodiscard]] auto startAgentMesh(nx::jobs::JobSystem& jobs, cs::Game& game,
+                                  const nx::Result<nx::game::NavigationData, ConsoleError>& navigation)
+    -> nx::Result<nx::navigation::MeshBuild, ConsoleError> {
+    if (!navigation) {
+        return std::unexpected{navigation.error()};
+    }
+    auto profile = cs::standingPlayerProfile(*navigation);
+    if (!profile) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(profile.error()));
+    }
+    auto started = nx::navigation::NavigationMesh::startBuild(jobs, game.navigationGeometry(), *profile,
+                                                              navigation->build);
+    if (!started) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(started.error()));
+    }
+    return std::move(*started);
+}
+
+/// The mesh `started` builds, once built. Errors: CommandFailed, with the cause.
+[[nodiscard]] auto finishAgentMesh(nx::Result<nx::navigation::MeshBuild, ConsoleError> started)
+    -> nx::Result<nx::navigation::NavigationMesh, ConsoleError> {
+    if (!started) {
+        return std::unexpected{std::move(started.error())};
+    }
+    auto mesh = std::move(*started).finish();
+    if (!mesh) {
+        return nx::fail(ConsoleError::CommandFailed, std::move(mesh.error()));
+    }
+    return std::move(*mesh);
+}
+
+/// The map `name` of `content`, its game started by the rules `cvars` set, the client's player joined
+/// in the team of its first spawn point, asking for the name `player` holds and drawing its weapons as
+/// `player` says, and its client's level read; meanwhile the workers of `jobs` build the map's mesh of
+/// `navigation` the agents walk, which a map plays without when it cannot be built. Errors:
+/// CommandFailed, with the cause.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
-                                const nx::settings::PlayerCvars& player, const cs::GameCvars& cvars)
+                                const nx::settings::PlayerCvars& player, const cs::GameCvars& cvars,
+                                nx::jobs::JobSystem& jobs,
+                                const nx::Result<nx::game::NavigationData, ConsoleError>& navigation)
     -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
     const std::string failed = std::format("map {}", name);
     auto map = cs::GameMap::load(content.vfs, name);
     if (!map) {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(map.error()));
-    }
-    auto level = cs::Level::load(content, **map);
-    if (!level) {
-        return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));
     }
     auto game = cs::Game::start(content, **map, cvars);
     if (!game) {
@@ -228,13 +265,23 @@ struct Session {
     }
     const cs::PlayerIndex joined =
         (*game)->join(cs::spawnTeam((*map)->map()), autoSwitchOf(player), player.name.value());
+    auto agentMesh = startAgentMesh(jobs, **game, navigation);
+    auto level = cs::Level::load(content, **map); // while the workers build the mesh
+    if (!level) {
+        return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));
+    }
+    auto mesh = finishAgentMesh(std::move(agentMesh));
+    if (!mesh) {
+        nx::log::warning(kLog, "{} plays without bots and zombies: {}", failed, nx::describe(mesh.error()));
+    }
     cs::ClientGame known{(*level)->models(), (*level)->players(), (*game)->snapshotFor(joined)};
     return std::make_unique<Session>(Session{.map = std::move(*map),
                                              .level = std::move(*level),
                                              .game = std::move(*game),
                                              .player = joined,
                                              .client = std::move(known),
-                                             .effects = cs::TempEntities{kTempEntitySeed}});
+                                             .effects = cs::TempEntities{kTempEntitySeed},
+                                             .agentMesh = std::move(mesh)});
 }
 
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
@@ -279,13 +326,12 @@ private:
     [[nodiscard]] auto removeZombies() -> nx::Result<void, ConsoleError>;
     /// Registers the bot commands (cs::registerBotCommands), acting on the map loaded last.
     [[nodiscard]] auto registerBotCommands() -> nx::Result<void, ClientError>;
-    /// The job system the agents' navigation meshes are built in, made the first time one is. Errors:
-    /// CommandFailed.
-    [[nodiscard]] auto agentJobSystem() -> nx::Result<nx::jobs::JobSystem*, ConsoleError>;
     /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
     [[nodiscard]] auto readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError>;
-    /// The bots of `session`, made the first time they are asked for: data/cstrike/bots.toml's rules
-    /// on the mesh of its map. Errors: Unavailable, with the cause.
+    /// The bots' rules of data/cstrike/bots.toml. Errors: Unavailable, with the cause.
+    [[nodiscard]] auto readBotRules() const -> nx::Result<cs::BotRules, cs::BotActionError>;
+    /// The bots of `session`, made the first time they are asked for: botRules on the mesh its map built
+    /// as it loaded. Errors: Unavailable, with the cause.
     [[nodiscard]] auto botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError>;
     /// Keeps the session's bots as bot_quota asks, those it adds of bot_difficulty's difficulty
     /// (cs::Bots::keepQuota), making them first when it asks for any; when they cannot be made, it is
@@ -373,10 +419,13 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
-    std::optional<cs::BotRules> botRules{}; ///< Read the first time the bots are made.
+    /// Read as the client starts, so that making the bots reads nothing during a frame.
+    nx::Result<cs::BotRules, cs::BotActionError> botRules{};
+    /// Read as the client starts: each map's agents' mesh is built by it as the map loads.
+    nx::Result<nx::game::NavigationData, ConsoleError> navigationData{};
     std::optional<cs::GameContent> m_content;
     std::filesystem::path dataFolder;
-    std::unique_ptr<nx::jobs::JobSystem> agentJobs;
+    std::unique_ptr<nx::jobs::JobSystem> m_jobs; ///< The maps' meshes are built in it as they load.
     std::optional<cs::EntityTypeIndex> zombieType{};
     std::optional<zombies::Settings> zombieSettings{};
     std::vector<cs::ShownEntity> shownEntities;
@@ -467,6 +516,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
     }
     const std::filesystem::path data = m_options->data.value_or(executable->parent_path() / "data");
     dataFolder = data;
+    auto jobs = nx::jobs::JobSystem::create();
+    nx::invariant(jobs.has_value(), "Client: the default worker count is within the Job System's limit");
+    m_jobs = std::move(jobs).value_or(nullptr);
+    navigationData = readNavigation();
+    botRules = readBotRules();
     auto content = cs::openGameContent(data, *install, cs::addonsFolderOf(m_files.directory()));
     if (!content) {
         return nx::fail(ClientError::ContentUnavailable, std::move(content.error()));
@@ -681,17 +735,6 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
     return {};
 }
 
-auto Client::agentJobSystem() -> nx::Result<nx::jobs::JobSystem*, ConsoleError> {
-    if (!agentJobs) {
-        auto jobs = nx::jobs::JobSystem::create({});
-        if (!jobs) {
-            return nx::fail(ConsoleError::CommandFailed, std::move(jobs.error()));
-        }
-        agentJobs = std::move(*jobs);
-    }
-    return agentJobs.get();
-}
-
 auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, ConsoleError> {
     const auto file = dataFolder / "cstrike" / "navigation.toml";
     auto text = nx::platform::readTextFile(file);
@@ -705,31 +748,30 @@ auto Client::readNavigation() const -> nx::Result<nx::game::NavigationData, Cons
     return std::move(*navigation);
 }
 
+auto Client::readBotRules() const -> nx::Result<cs::BotRules, cs::BotActionError> {
+    const auto file = dataFolder / "cstrike" / "bots.toml";
+    auto text = nx::platform::readTextFile(file);
+    if (!text) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(text.error()));
+    }
+    auto rules = cs::readBotRules(*text, nx::platform::toUtf8(file));
+    if (!rules) {
+        return nx::fail(cs::BotActionError::Unavailable, std::move(rules.error()));
+    }
+    return std::move(*rules);
+}
+
 auto Client::botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError> {
     if (session.bots) {
         return session.bots.get();
     }
     if (!botRules) {
-        const auto file = dataFolder / "cstrike" / "bots.toml";
-        auto text = nx::platform::readTextFile(file);
-        if (!text) {
-            return nx::fail(cs::BotActionError::Unavailable, std::move(text.error()));
-        }
-        auto rules = cs::readBotRules(*text, nx::platform::toUtf8(file));
-        if (!rules) {
-            return nx::fail(cs::BotActionError::Unavailable, std::move(rules.error()));
-        }
-        botRules = std::move(*rules);
+        return std::unexpected{botRules.error()};
     }
-    auto jobs = agentJobSystem();
-    if (!jobs) {
-        return nx::fail(cs::BotActionError::Unavailable, std::move(jobs.error()));
+    if (!session.agentMesh) {
+        return nx::fail(cs::BotActionError::Unavailable, session.agentMesh.error());
     }
-    auto navigation = readNavigation();
-    if (!navigation) {
-        return nx::fail(cs::BotActionError::Unavailable, std::move(navigation.error()));
-    }
-    auto bots = cs::Bots::create(**jobs, *session.game, *navigation, *botRules);
+    auto bots = cs::Bots::create(*session.game, *session.agentMesh, *botRules);
     if (!bots) {
         return nx::fail(cs::BotActionError::Unavailable, std::move(bots.error()));
     }
@@ -756,7 +798,7 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars);
+    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars, *m_jobs, navigationData);
     if (!session) {
         return std::unexpected{std::move(session.error())};
     }
@@ -804,16 +846,11 @@ auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<v
         zombieSettings.emplace(std::move(*settings));
     }
     if (!session->horde) {
-        auto jobs = agentJobSystem();
-        if (!jobs) {
-            return std::unexpected{std::move(jobs.error())};
-        }
-        auto navigation = readNavigation();
-        if (!navigation) {
-            return std::unexpected{std::move(navigation.error())};
+        if (!session->agentMesh) {
+            return std::unexpected{session->agentMesh.error()};
         }
         auto horde =
-            zombies::Horde::create(**jobs, *session->game, *navigation, *zombieType, *zombieSettings);
+            zombies::Horde::create(*session->game, *session->agentMesh, *zombieType, *zombieSettings);
         if (!horde) {
             return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
         }

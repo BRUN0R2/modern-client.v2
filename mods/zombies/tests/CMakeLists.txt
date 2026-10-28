@@ -4,6 +4,6 @@
 nxAddTest(modZombiesTests
     SOURCES settingsTests.cpp spawnTests.cpp
     DEPENDS mod::zombies cs::server cs::shared nx::core nx::math nx::platform nx::console
-            nx::assets nx::jobs nx::game)
+            nx::assets nx::jobs nx::game nx::navigation)
 target_compile_definitions(modZombiesTests PRIVATE NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")
 target_compile_definitions(modZombiesTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")

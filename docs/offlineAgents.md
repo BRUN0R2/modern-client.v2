@@ -77,10 +77,11 @@ was last seen airborne. Targets are projected onto the final polygon, including 
 so wall-clamped and airborne targets retain a valid floor height. Small observation changes
 update the corridor's destination without a full search; retargeting keeps both the destination
 and its last corner on the walkable floor. A failed
-path yields `Blocked` with its navigation error; it does not enable direct movement. Navigation
-is built once per horde/map, in jobs. Agent commands and body updates have deterministic order.
-The horde removes its owned bodies, including their borrowed corridors, before destroying its
-mesh. Native extensions attach typed components through `Game` without exposing its world.
+path yields `Blocked` with its navigation error; it does not enable direct movement. The mesh
+is built once per map as it loads, in jobs, overlapping the client's level
+(`nx::navigation::MeshBuild`), and the horde and the bots borrow it: `zombie_add` and `bot_add`
+build nothing. Agent commands and body updates have deterministic order. The session removes the
+horde's owned bodies, including their borrowed corridors, before destroying the mesh. Native extensions attach typed components through `Game` without exposing its world.
 The application owns each session as one unit: replacing a map destroys its horde before
 its game, level and map, including when another map command replaces a pending session.
 
