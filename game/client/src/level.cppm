@@ -105,7 +105,8 @@ public:
     /// the game plays on; a sprite likewise its flashes.
     auto updateViewModels(const nx::assets::Vfs& vfs, const WeaponCatalog& weapons)
         -> std::vector<WeaponIndex>;
-    /// The decals of decals.wad the level shows: those bullets leave (bulletDecals), and those its map
+    /// The decals of decals.wad the level shows: those bullets leave (bulletDecals), those blood leaves
+    /// (BloodRules::decals), and those its map
     /// stamps as its game starts.
     [[nodiscard]] inline auto decals() const noexcept -> const LevelDecals& { return *m_decals; }
     /// The decals its map stamps for good as its game starts (nx::game::staticDecalsOf), in their

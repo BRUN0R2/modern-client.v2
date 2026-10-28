@@ -30,6 +30,7 @@ export import :materials;
 export import :footsteps;
 export import :breath;
 export import :hitGroups;
+export import :blood;
 export import :hostages;
 export import :playerHarm;
 export import :use;

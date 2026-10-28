@@ -65,6 +65,7 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
     }
     std::ranges::move(snapshot.sounds, std::back_inserter(m_sounds));
     std::ranges::move(snapshot.impacts, std::back_inserter(m_impacts));
+    std::ranges::move(snapshot.bloodMarks, std::back_inserter(bloodMarks));
     if (snapshot.lightStyles != m_last.lightStyles) {
         lightStyles.setPatterns(snapshot.lightStyles.patterns);
     }

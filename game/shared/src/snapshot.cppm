@@ -55,6 +55,16 @@ struct Impact {
     [[nodiscard]] inline auto operator==(const Impact&) const noexcept -> bool = default;
 };
 
+/// Where the blood a hit shed met what is solid behind it: the point, what it is on, and the decal it
+/// leaves there, of BloodRules::decals.
+struct BloodMark {
+    nx::Vec3 position{};
+    StampTarget on{};
+    std::uint32_t decal = 0;
+
+    [[nodiscard]] inline auto operator==(const BloodMark&) const noexcept -> bool = default;
+};
+
 /// What the server tells a client of another player for it to draw, as the original's entity state
 /// carries it: which player it is, the character it plays as, the weapon in its hands (its player model:
 /// models/p_<weapon>.mdl), where it is, how its body is turned (its pitch a third of its view's,
@@ -77,7 +87,8 @@ struct PlayerEntityState {
 
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
-/// what the tick did to it and made it make; where the tick's shots met what is solid; and the world
+/// what the tick did to it and made it make; where the tick's shots and the blood they shed met what is
+/// solid; and the world
 /// it sees: the brush entities, the hostages, the other players and the light-style patterns.
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
@@ -95,7 +106,8 @@ struct PlayerSnapshot {
     /// The sounds it made in the tick, which it hears, each with the moment it was made: its weapons',
     /// then its breath's, its feet's, its use's, its pain's and its death's.
     std::vector<SoundMade> sounds{};
-    std::vector<Impact> impacts{}; ///< Of the tick's shots, in their order.
+    std::vector<Impact> impacts{};       ///< Of the tick's shots, in their order.
+    std::vector<BloodMark> bloodMarks{}; ///< Of the tick's hits, in their order.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};

@@ -335,9 +335,10 @@ private:
     void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Leaves a bullet's mark where each of the session's shots met the world or a brush entity in the
-    /// frame, once the scene is drawn: the decal the mark of what it met leaves (cs::bulletDecalOf).
-    void stampBulletHoles();
+    /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
+    /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
+    /// (cs::bulletDecalOf); then blood's where the blood a hit shed met it, the decal the server chose.
+    void stampMarks();
     [[nodiscard]] auto drawFrame() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
@@ -987,7 +988,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_session->client.updatePlayers(elapsed, m_players);
             turnAsTheGameDid();
             hearSession(hearing);
-            stampBulletHoles();
+            stampMarks();
         }
         if (auto drawn = drawFrame(); !drawn) {
             return drawn;
@@ -1146,22 +1147,31 @@ void Client::hearSession(const cs::Hearing& hearing) {
     }
 }
 
-void Client::stampBulletHoles() {
+void Client::stampMarks() {
     const std::vector<cs::Impact> impacts = m_session->client.takeImpacts();
+    const std::vector<cs::BloodMark> bloodMarks = m_session->client.takeBloodMarks();
     if (!m_scene) {
         return;
     }
     // r_decals as it is now, as the original reads it at each decal.
     m_scene->setDecalLimit(decalLimitOf(m_cvars->video));
     const cs::Level& level = *m_session->level;
-    for (const cs::Impact& impact : impacts) {
-        const std::optional<std::string_view> name =
-            cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles);
+    const auto stamp = [this, &level](std::string_view name, nx::Vec3 position, const cs::StampTarget& on) {
         // One the installation lacks was reported as the level was read.
-        if (const std::optional<nx::render::DecalImageIndex> decal =
-                name ? level.decals().indexOf(*name) : std::nullopt) {
-            std::ignore = m_scene->shootDecal(*decal, impact.position, cs::decalTargetOf(impact.on));
+        if (const std::optional<nx::render::DecalImageIndex> decal = level.decals().indexOf(name)) {
+            std::ignore = m_scene->shootDecal(*decal, position, cs::decalTargetOf(on));
         }
+    };
+    for (const cs::Impact& impact : impacts) {
+        if (const std::optional<std::string_view> name =
+                cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles)) {
+            stamp(*name, impact.position, impact.on);
+        }
+    }
+    const std::vector<std::string>& bloodDecals = m_content->blood.decals;
+    for (const cs::BloodMark& mark : bloodMarks) {
+        nx::expects(mark.decal < bloodDecals.size(), "Client: a blood decal of the game's content");
+        stamp(bloodDecals[mark.decal], mark.position, mark.on);
     }
 }
 

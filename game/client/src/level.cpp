@@ -153,12 +153,14 @@ auto Level::load(const GameContent& content, const GameMap& map)
     const std::vector<nx::game::StaticDecal> stamped =
         nx::game::staticDecalsOf(bsp.entities(), resting, map.hulls());
     std::vector<std::string_view> decalNames = bulletDecals();
+    std::ranges::copy(content.blood.decals, std::back_inserter(decalNames));
     std::ranges::transform(
         stamped, std::back_inserter(decalNames),
         [](const nx::game::StaticDecal& decal) -> std::string_view { return decal.texture; });
     level.m_decals = LevelDecals::read(content.vfs, decalNames);
     if (!level.m_decals->missing().empty()) {
-        nx::log::warning(kLog, "decals the bullets leave or the map stamps that cannot be read: {}",
+        nx::log::warning(kLog,
+                         "decals the bullets and the blood leave or the map stamps that cannot be read: {}",
                          listed(level.m_decals->missing()));
     }
     for (const nx::game::StaticDecal& decal : stamped) {

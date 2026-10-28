@@ -217,22 +217,38 @@ auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, HitGroup g
     return rules.pain;
 }
 
-void punchByHit(nx::EulerAngles& punch, HitGroup group, nx::Damage damage, ArmorKind kind,
-                nx::Random& random) noexcept {
+auto shedsBlood(HitGroup group, ArmorKind kind) noexcept -> bool {
     switch (group) {
     case HitGroup::Head:
-        if (kind != ArmorKind::KevlarAndHelmet) {
-            punch.pitch = nx::Degrees{std::max(damage.value() * kHeadPitchShare, kMostHeadPitch)};
-            // RANDOM_FLOAT(-1, 1).
-            const auto drawn = static_cast<float>((random.nextUnit() * 2.0) - 1.0);
-            punch.roll = nx::Degrees{std::clamp(damage.value() * drawn, -kMostHeadRoll, kMostHeadRoll)};
-        }
-        return;
+        return kind != ArmorKind::KevlarAndHelmet;
     case HitGroup::Chest:
     case HitGroup::Stomach:
-        if (kind == ArmorKind::None) {
-            punch.pitch = nx::Degrees{std::max(damage.value() * kBodyPitchShare, kMostBodyPitch)};
-        }
+    case HitGroup::LeftArm:
+    case HitGroup::RightArm:
+        return kind == ArmorKind::None;
+    case HitGroup::Shield:
+        return false;
+    default:
+        return true;
+    }
+}
+
+void punchByHit(nx::EulerAngles& punch, HitGroup group, nx::Damage damage, ArmorKind kind,
+                nx::Random& random) noexcept {
+    if (!shedsBlood(group, kind)) {
+        return;
+    }
+    switch (group) {
+    case HitGroup::Head: {
+        punch.pitch = nx::Degrees{std::max(damage.value() * kHeadPitchShare, kMostHeadPitch)};
+        // RANDOM_FLOAT(-1, 1).
+        const auto drawn = static_cast<float>((random.nextUnit() * 2.0) - 1.0);
+        punch.roll = nx::Degrees{std::clamp(damage.value() * drawn, -kMostHeadRoll, kMostHeadRoll)};
+        return;
+    }
+    case HitGroup::Chest:
+    case HitGroup::Stomach:
+        punch.pitch = nx::Degrees{std::max(damage.value() * kBodyPitchShare, kMostBodyPitch)};
         return;
     default:
         return;

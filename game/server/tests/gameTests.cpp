@@ -41,6 +41,8 @@ constexpr std::string_view kEntities = R"({ "classname" "worldspawn" }
 { "classname" "info_player_deathmatch" "origin" "600 300 8" "angles" "0 0 0" })";
 
 constexpr float kTolerance = 1e-3F;
+/// How far off what it met a trace stops: the original's DIST_EPSILON, back along its way.
+constexpr float kTraceEpsilon = 0.03125F;
 /// Ticks past the first freeze of a map: mp_freezetime's default and its extra two seconds, 800 ticks.
 constexpr std::uint32_t kPastTheFirstFreeze = 810;
 /// Ticks past the next round's start after one ends (kRestartDelay, 500 ticks).
@@ -576,6 +578,7 @@ TEST_F(GameTest, AHelmetTakesItsShareOfAHitInTheHeadAndSpillsNoBlood) {
     EXPECT_EQ(hurt.status.armorKind, cs::ArmorKind::KevlarAndHelmet);
     EXPECT_EQ(hurt.player.punch, nx::EulerAngles{});
     EXPECT_TRUE(made(victim, content().playerHarm.helmetPain));
+    EXPECT_TRUE(hurt.bloodMarks.empty());
 }
 
 TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {
@@ -623,6 +626,38 @@ TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
     std::ignore = press(attacker, {cs::Button::Attack});
     EXPECT_EQ(game().snapshotFor(attacker).status.money, paid) << "no other kill";
     EXPECT_FALSE(made(victim, content().playerHarm.headPain));
+}
+
+TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    idle(kPastTheCommence + kPastAFreeze);
+    game().give(attacker, *content().weapons.indexOf("ak47"));
+    standOff(attacker, victim, "ak47");
+    // Down into its chest: its blood goes on down behind it, onto the box's floor, level with the
+    // players' origins.
+    const nx::EulerAngles down{.pitch = nx::Degrees{14.0F}};
+    const float floor = game().snapshotFor(victim).player.origin.z;
+    std::vector<cs::BloodMark> marks;
+    for (std::uint32_t shot = 0; shot < 2; ++shot) {
+        const cs::PlayerSnapshot shooting = press(attacker, {cs::Button::Attack}, down);
+        std::ranges::copy(shooting.bloodMarks, std::back_inserter(marks));
+        std::ignore = play(attacker, kReadyTicks);
+    }
+    ASSERT_TRUE(game().snapshotFor(victim).status.isAlive()) << "35 twice";
+    ASSERT_FALSE(marks.empty()) << "one in three of the ways that meet the floor";
+    for (const cs::BloodMark& mark : marks) {
+        EXPECT_NEAR(mark.position.z, floor, kTraceEpsilon) << "on the floor";
+        EXPECT_GT(mark.position.x, kVictimAhead) << "behind it";
+        EXPECT_EQ(mark.on.model, nx::assets::kWorldModel);
+        EXPECT_LT(mark.decal, content().blood.decals.size());
+    }
+
+    // A vest keeps the chest's blood in.
+    game().giveArmor(victim, cs::ArmorKind::Kevlar);
+    EXPECT_TRUE(press(attacker, {cs::Button::Attack}, down).bloodMarks.empty());
+    EXPECT_LT(game().snapshotFor(victim).status.armor.value(), 100.0F) << "it met the vest";
 }
 
 TEST_F(GameTest, AHeavyWeaponsHitButInTheLegsFlinchesAPlayerLargeKnockingItBack) {

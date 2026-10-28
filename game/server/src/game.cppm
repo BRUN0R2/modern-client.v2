@@ -291,14 +291,21 @@ private:
     void hurt(Player& player, const PlayerHarm& harm);
     /// `attacker`'s `attack` on `victim`, alive, as the victim's TraceAttack and TakeDamage take it: it is
     /// met in the attack's hit group, its damage that group's share of the players'; its view punched
-    /// (punchByHit) but by a teammate while mp_friendlyfire is 0, whose attack then hurts it none
-    /// (FPlayerCanTakeDamage); a teammate's attack deals its share of it (PlayerAttackRules); then it
+    /// (punchByHit) and its blood shed (bleed) but by a teammate while mp_friendlyfire is 0, whose attack
+    /// then hurts it none (FPlayerCanTakeDamage); a teammate's attack deals its share of it
+    /// (PlayerAttackRules); then it
     /// flinches, large as its attacker's weapon makes it but in the legs and ducked, knocked back while it
     /// moves slow enough, else small, slowed down; its armor takes its share, its attacker's weapon's
     /// times the armor's ratio (WeaponHarm::armorRatio), and it loses its whole points (harmPlayer), heard
-    /// in its pain (painOf); killed by it, it dies, killed by `attacker` (die). The punch's draws come
-    /// from a stream of the attacker's command and the victim.
+    /// in its pain (painOf); killed by it, it dies, killed by `attacker` (die). The punch's and the
+    /// blood's draws come from streams of the attacker's command and the victim.
     void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
+    /// The blood `victim` sheds as `attack` meets it, of `damage` once its hit group took its share, where
+    /// its armor lets it (shedsBlood): on what is solid behind it, through the world and the brush
+    /// entities, the bodies left be, along the ways it traces (bleedingWaysOf), as far as BloodRules::reach,
+    /// a mark of the tick where one of them leaves its decal (bloodDecalOf) on the world or a brush entity
+    /// (TraceBleed, UTIL_BloodDecalTrace); drawn from `random`.
+    void bleed(const Player& victim, const nx::game::Attack& attack, nx::Damage damage, nx::Random& random);
     /// `player` dies (Killed), killed by `killer`, none for the world: it is heard dying, moves no more
     /// (MovementState::isDead), plays its death by where it was last met, is no longer solid, and its
     /// weapons are gone with it; its killer, another player, gets the money of an enemy's kill, or loses a
@@ -397,6 +404,7 @@ private:
     nx::ecs::World m_world;
     std::vector<std::optional<Player>> m_players; ///< By slot: none for a slot a player left.
     std::vector<Impact> m_impacts;                ///< Of the tick.
+    std::vector<BloodMark> bloodMarks;            ///< Of the tick.
     MapLightStyles lightStyles;                   ///< Owned by this game; copied into each client's snapshot.
 };
 

@@ -286,6 +286,21 @@ TEST(PlayerHarmTest, APlayerIsHeardInPainByWhereItWasMetAndItsArmor) {
     EXPECT_EQ(&cs::painOf(rules, bare, HitGroup::Chest, false), &rules.pain);
 }
 
+TEST(PlayerHarmTest, AHitShedsBloodWhereNoArmorCoversThePlayer) {
+    for (const auto& [group, kind, sheds] : {std::tuple{HitGroup::Head, ArmorKind::Kevlar, true},
+                                             std::tuple{HitGroup::Head, ArmorKind::KevlarAndHelmet, false},
+                                             std::tuple{HitGroup::Chest, ArmorKind::None, true},
+                                             std::tuple{HitGroup::Chest, ArmorKind::Kevlar, false},
+                                             std::tuple{HitGroup::Stomach, ArmorKind::Kevlar, false},
+                                             std::tuple{HitGroup::LeftArm, ArmorKind::KevlarAndHelmet, false},
+                                             std::tuple{HitGroup::RightArm, ArmorKind::None, true},
+                                             std::tuple{HitGroup::LeftLeg, ArmorKind::KevlarAndHelmet, true},
+                                             std::tuple{HitGroup::Generic, ArmorKind::KevlarAndHelmet, true},
+                                             std::tuple{HitGroup::Shield, ArmorKind::None, false}}) {
+        EXPECT_EQ(cs::shedsBlood(group, kind), sheds) << nx::enumName(group) << " " << nx::enumName(kind);
+    }
+}
+
 TEST(PlayerHarmTest, AHitPunchesTheViewOfAPlayerItBleeds) {
     nx::Random random{1, "punch"};
     nx::EulerAngles head{};
