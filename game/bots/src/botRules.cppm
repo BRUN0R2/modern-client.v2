@@ -19,10 +19,8 @@ export namespace cs {
 
 /// Why the bots could not be made.
 enum class BotError : std::uint8_t {
-    InvalidData, ///< bots.toml breaks its schema or its rules (cause: the DataError, when there is one).
-    NavigationUnavailable, ///< No navigation profile matches a standing player, or its mesh was not built
-                           ///< (cause).
-    Unregistered,          ///< A component of the bots' bodies could not be registered in the game (cause).
+    InvalidData,  ///< bots.toml breaks its schema or its rules (cause: the DataError, when there is one).
+    Unregistered, ///< A component of the bots' bodies could not be registered in the game (cause).
 };
 
 /// The difficulty the bots that join play at (BotDifficultyType), which bot_difficulty names.

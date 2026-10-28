@@ -10,6 +10,7 @@ import nx.console;
 import nx.assets;
 import nx.jobs;
 import nx.game;
+import nx.navigation;
 import cs.shared;
 import cs.server;
 import mod.zombies;
@@ -78,7 +79,13 @@ protected:
         ASSERT_TRUE(text.has_value());
         auto navigation = nx::game::readNavigationData(*text, "navigation.toml");
         ASSERT_TRUE(navigation.has_value());
-        auto created = zombies::Horde::create(*jobs, *game, *navigation, type, settings);
+        auto profile = cs::standingPlayerProfile(*navigation);
+        ASSERT_TRUE(profile.has_value()) << (profile ? "" : nx::describe(profile.error()));
+        auto built = nx::navigation::NavigationMesh::build(*jobs, game->navigationGeometry(), *profile,
+                                                           navigation->build);
+        ASSERT_TRUE(built.has_value()) << (built ? "" : nx::describe(built.error()));
+        mesh.emplace(std::move(*built));
+        auto created = zombies::Horde::create(*game, *mesh, type, settings);
         ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
         horde = std::move(*created);
         anchor = {.x = width.value() * kHalf,
@@ -98,7 +105,8 @@ protected:
     zombies::Settings settings{};
     cs::EntityTypeIndex type{};
     nx::Vec3 anchor{};
-    std::unique_ptr<zombies::Horde> horde;
+    std::optional<nx::navigation::NavigationMesh> mesh; ///< The map's, which the horde walks.
+    std::unique_ptr<zombies::Horde> horde;              ///< Before its mesh goes.
 };
 
 TEST_F(HordeSpawnTest, SixtyFourBodiesFitAReachableBaseThatCannotHoldAStraightRow) {
