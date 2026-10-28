@@ -629,8 +629,9 @@ TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
 }
 
 TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     game().give(attacker, *content().weapons.indexOf("ak47"));
     standOff(attacker, victim, "ak47");
