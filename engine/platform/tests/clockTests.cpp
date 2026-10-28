@@ -12,9 +12,11 @@ namespace {
 using namespace std::chrono_literals;
 using nx::platform::FrameRateMeter;
 using nx::platform::Instant;
+using nx::platform::kWakeLatenessStep;
 using nx::platform::MonotonicClock;
 using nx::platform::SleepTimer;
 using nx::platform::Stopwatch;
+using nx::platform::WakeLateness;
 
 [[nodiscard]] auto makeTimer() -> std::optional<SleepTimer> {
     auto created = SleepTimer::create();
@@ -43,7 +45,7 @@ TEST(StopwatchTest, MeasuresAndRestarts) {
 }
 
 TEST(SleepTimerTest, NeverWakesBeforeTheDeadline) {
-    const auto timer = makeTimer();
+    auto timer = makeTimer();
     ASSERT_TRUE(timer.has_value());
     for (const auto wait : {0us, 50us, 500us, 1000us, 2500us}) {
         const Instant deadline = MonotonicClock::now() + wait;
@@ -53,7 +55,7 @@ TEST(SleepTimerTest, NeverWakesBeforeTheDeadline) {
 }
 
 TEST(SleepTimerTest, APassedDeadlineReturnsAtOnce) {
-    const auto timer = makeTimer();
+    auto timer = makeTimer();
     ASSERT_TRUE(timer.has_value());
     const Stopwatch stopwatch;
     timer->sleepUntil(MonotonicClock::now() - 1s);
@@ -67,7 +69,7 @@ TEST(SleepTimerTest, PacesAFixedRateLoop) {
     constexpr int kTicks = 11;
     constexpr auto kMedianLatenessLimit = 2ms;
 
-    const auto timer = makeTimer();
+    auto timer = makeTimer();
     ASSERT_TRUE(timer.has_value());
     std::vector<MonotonicClock::duration> lateness;
     Instant deadline = MonotonicClock::now();
@@ -82,6 +84,32 @@ TEST(SleepTimerTest, PacesAFixedRateLoop) {
         << std::chrono::duration_cast<std::chrono::microseconds>(median).count() << " us";
 }
 
+TEST(SleepTimerTest, StartsFramesOfAMillisecondOnTime) {
+    // fps_max 1000: a frame every millisecond, half of it working. The OS's timer alone wakes 0.4 to
+    // 0.8 ms late on some systems; the frames must start within a few tens of microseconds instead.
+    constexpr auto kFrame = 1ms;
+    constexpr auto kWork = 500us;
+    constexpr int kFrames = 200;
+    constexpr auto kMedianLatenessLimit = 100us;
+
+    auto timer = makeTimer();
+    ASSERT_TRUE(timer.has_value());
+    std::vector<MonotonicClock::duration> lateness;
+    Instant deadline = MonotonicClock::now();
+    for (int frame = 0; frame < kFrames; ++frame) {
+        deadline += kFrame;
+        timer->sleepUntil(deadline);
+        const Instant started = MonotonicClock::now();
+        lateness.push_back(started - deadline);
+        while (MonotonicClock::now() - started < kWork) {
+        }
+    }
+    std::ranges::sort(lateness);
+    const auto median = lateness[lateness.size() / 2];
+    EXPECT_LT(median, kMedianLatenessLimit)
+        << std::chrono::duration_cast<std::chrono::microseconds>(median).count() << " us";
+}
+
 TEST(SleepTimerTest, MovesWithItsTimer) {
     auto timer = makeTimer();
     ASSERT_TRUE(timer.has_value());
@@ -89,6 +117,55 @@ TEST(SleepTimerTest, MovesWithItsTimer) {
     const Instant deadline = MonotonicClock::now() + 1ms;
     moved.sleepUntil(deadline);
     EXPECT_GE(MonotonicClock::now(), deadline);
+}
+
+TEST(WakeLatenessTest, TheFirstWakeSetsTheMargin) {
+    WakeLateness lateness;
+    EXPECT_EQ(lateness.margin(), MonotonicClock::duration::zero()) << "nothing to wake early by yet";
+    lateness.observe(640us);
+    EXPECT_EQ(lateness.margin(), 640us);
+}
+
+TEST(WakeLatenessTest, AnEarlyWakeCountsAsOnTime) {
+    WakeLateness lateness;
+    lateness.observe(-30us);
+    EXPECT_EQ(lateness.margin(), MonotonicClock::duration::zero());
+}
+
+TEST(WakeLatenessTest, AWakeFarLaterThanTheOthersMovesTheMarginOneStep) {
+    WakeLateness lateness;
+    lateness.observe(600us);
+    lateness.observe(15ms); // a thread the OS put aside
+    EXPECT_GT(lateness.margin(), 600us);
+    EXPECT_LE(lateness.margin(), 600us + kWakeLatenessStep);
+}
+
+TEST(WakeLatenessTest, SettlesWhereOneWakeInAHundredIsLater) {
+    // Wakes late by 0 to 999 us, evenly, many times over: the margin settles near 990 us, within a
+    // few steps.
+    constexpr int kRounds = 300;
+    constexpr int kLatenesses = 1000;
+    constexpr int kScatter = 383;
+    constexpr auto kSettled = 990us;
+    constexpr auto kTolerance = 3 * kWakeLatenessStep;
+    WakeLateness lateness;
+    for (int round = 0; round < kRounds; ++round) {
+        for (int late = 0; late < kLatenesses; ++late) {
+            // 0, 383, 766, 149, ... visits each lateness once a round, scattered (383 and 1000 share no
+            // factor).
+            lateness.observe(std::chrono::microseconds{(late * kScatter) % kLatenesses});
+        }
+    }
+    EXPECT_GT(lateness.margin(), kSettled - kTolerance);
+    EXPECT_LT(lateness.margin(), kSettled + kTolerance);
+}
+
+TEST(WakeLatenessTest, FallsSlowlyOnceTheWakesAreOnTime) {
+    WakeLateness lateness;
+    lateness.observe(800us);
+    lateness.observe(0us);
+    EXPECT_LT(lateness.margin(), 800us);
+    EXPECT_GT(lateness.margin(), 800us - kWakeLatenessStep) << "a wake on time moves it less than a step";
 }
 
 TEST(FrameRateMeterTest, TellsTheFramesASecondOfEachWholeSecond) {
