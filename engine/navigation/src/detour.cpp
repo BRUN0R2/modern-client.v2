@@ -371,26 +371,30 @@ auto NavigationMesh::load(std::span<const std::byte> bytes, MeshKey key, const A
     if (hash64(body) != loadLittleEndian<std::uint64_t>(bytes.subspan(kMeshFileHashAt))) {
         return damaged("its body is not the one it was written with");
     }
+    if (body.size() < kGridBytes) {
+        return damaged(std::format("{} bytes of body, fewer than its grid", body.size()));
+    }
     BodyReader reader{body};
     detail::BuiltTiles built;
+    // The body holds the grid: none of its fields is missing.
     for (float& coordinate : built.origin) {
         coordinate = reader.next<float>().value_or(0.0F);
     }
     built.tileSide = reader.next<float>().value_or(0.0F);
-    const std::optional<std::uint32_t> tileCount = reader.next<std::uint32_t>();
-    if (!tileCount || *tileCount > reader.left() / kTileRecordBytes) {
-        return damaged(std::format("its grid in {} bytes", body.size()));
+    const std::uint32_t tileCount = reader.next<std::uint32_t>().value_or(0);
+    if (tileCount > reader.left() / kTileRecordBytes) {
+        return damaged(std::format("{} tiles in {} bytes", tileCount, reader.left()));
     }
-    built.tiles.reserve(*tileCount);
+    built.tiles.reserve(tileCount);
     std::set<std::pair<std::int32_t, std::int32_t>> places;
-    for (std::uint32_t index = 0; index < *tileCount; ++index) {
+    for (std::uint32_t index = 0; index < tileCount; ++index) {
         const auto x = reader.next<std::int32_t>();
         const auto y = reader.next<std::int32_t>();
         const auto polygonCount = reader.next<std::uint32_t>();
         const auto byteCount = reader.next<std::uint32_t>();
         const auto data = byteCount ? reader.bytes(*byteCount) : std::nullopt;
         if (!data || !isTileOf(*data, *x, *y, *polygonCount) || !places.emplace(*x, *y).second) {
-            return damaged(std::format("its tile {} of {}", index + 1, *tileCount));
+            return damaged(std::format("its tile {} of {}", index + 1, tileCount));
         }
         built.tiles.push_back(detail::BuiltTile{
             .x = *x, .y = *y, .polygonCount = *polygonCount, .data = {data->begin(), data->end()}});

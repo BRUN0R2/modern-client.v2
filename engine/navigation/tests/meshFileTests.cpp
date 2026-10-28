@@ -107,6 +107,33 @@ TEST(MeshFileTest, BytesCutShortOrChangedAreDamaged) {
     }
 }
 
+/// `bytes` with their body cut to its first `bodyBytes`, its hash written again for it: what passes the
+/// hash and must still be refused for what it holds.
+[[nodiscard]] auto withBodyCut(std::vector<std::byte> bytes, std::size_t bodyBytes)
+    -> std::vector<std::byte> {
+    // The header: the magic's eight bytes, the version, four bytes of nothing, the key, then the hash.
+    constexpr std::size_t kHashAt = 24;
+    constexpr std::size_t kBodyAt = 32;
+    bytes.resize(kBodyAt + bodyBytes);
+    std::vector<std::byte> hash;
+    nx::appendLittleEndian(hash, nx::hash64(std::span{bytes}.subspan(kBodyAt)));
+    std::ranges::copy(hash, bytes.begin() + kHashAt);
+    return bytes;
+}
+
+TEST(MeshFileTest, ABodyOfAGoodHashThatLacksItsGridOrItsTilesIsDamaged) {
+    const Geometry geometry = floorAndBox();
+    const MeshKey key = keyOf(geometry);
+    const std::vector<std::byte> bytes = nx::test::playerMesh(geometry).save(key);
+    // Eight bytes of the grid's twenty; the grid whole and a tile's record cut short.
+    for (const std::size_t bodyBytes : {std::size_t{8}, std::size_t{30}}) {
+        const auto refused =
+            NavigationMesh::load(withBodyCut(bytes, bodyBytes), key, nx::test::playerProfile());
+        ASSERT_FALSE(refused.has_value()) << bodyBytes;
+        EXPECT_EQ(refused.error().code, MeshFileError::Damaged) << bodyBytes;
+    }
+}
+
 TEST(MeshFileTest, AKeyChangesWithWhatShapesTheTilesAlone) {
     const Geometry geometry = floorAndBox();
     const MeshKey key = keyOf(geometry);
