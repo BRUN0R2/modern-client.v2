@@ -45,8 +45,8 @@ freeze, their time, its end and the money they pay, and a player hurt by its fal
 and lava, and killed) and `cs.server` (the game of a map played by its players' commands: joining
 teams, solid to each other, their shots and knives meeting each other's hitboxes and hurting by hit
 group, through kevlar and helmet) and `cs.bots` (bots that join as players, see what is in their
-cone and in line, hunt, chase and fire, reacting, turning and aiming by their skill: `bot_add`,
-`bot_kick`, `bot_quota`, `bot_difficulty`), with which the client,
+cone and in line, hunt, chase and fire, reacting, turning and aiming by their skill, each by its
+name: `bot_add`, `bot_kick`, `bot_quota`, `bot_difficulty`, `bot_prefix`), with which the client,
 `next`, plays the maps as a listen server, round after round: `+map de_dust2 +bot_quota 9`.
 `nxcheck` reads every file of a Counter-Strike 1.6 installation with those readers.
 The architecture documentation is in [`docs/`](docs/README.md), the project rules in

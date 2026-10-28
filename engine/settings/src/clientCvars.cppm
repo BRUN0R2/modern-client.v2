@@ -76,8 +76,13 @@ enum class GamePlayers : std::uint8_t {
 /// `fps_override` (100 whenever `gl_vsync` is on without it), and half a frame more.
 [[nodiscard]] auto frameIntervalOf(const VideoCvars& video, GamePlayers players) -> Seconds;
 
+/// `name`'s default: the engine's name for a player, which Steam replaces with its persona's.
+inline constexpr std::string_view kDefaultPlayerName = "Player";
+
 /// The player's own settings, which the game reads.
 struct PlayerCvars {
+    /// `name`: the name the player asks the server for, which gives it one no other player has.
+    console::Cvar<std::string> name;
     /// `_cl_autowepswitch`: a weapon given heavier than the one held is drawn.
     console::Cvar<bool> autoWeaponSwitch;
 };

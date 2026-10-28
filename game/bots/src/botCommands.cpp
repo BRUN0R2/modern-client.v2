@@ -25,18 +25,46 @@ constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
 /// (GetDifficultyLevel's 0.9, 1.9 and 2.9).
 constexpr float kDifficultyTolerance = 0.1F;
 
-/// `command`'s bot joining `team` through `actions`, bot_quota counting it.
+/// `command`'s bot joining `team` through `actions`, of the profile `line` names or one drawn, bot_quota
+/// counting it.
 [[nodiscard]] auto addBot(const BotActions& actions, const BotCvars& cvars, std::string_view command,
                           const CommandLine& line, std::optional<Team> team)
     -> nx::Result<void, ConsoleError> {
-    if (!line.arguments().empty()) {
-        return nx::fail(ConsoleError::InvalidArguments,
-                        std::format("usage: {}: a bot by its name comes with the bots' names", command));
+    const std::span<const std::string> words = line.arguments();
+    if (words.size() > 1) {
+        return nx::fail(ConsoleError::InvalidArguments, std::format("usage: {} [profile]", command));
     }
-    if (auto added = actions.add(team, cvars.difficultyLevel()); !added) {
+    const BotRequest request{.profile = words.empty() ? std::nullopt : std::optional{words.front()},
+                             .team = team,
+                             .difficulty = cvars.difficultyLevel(),
+                             .prefix = cvars.prefix.value()};
+    if (auto added = actions.add(request); !added) {
         return nx::fail(ConsoleError::CommandFailed, std::string{command}, std::move(added.error()));
     }
     cvars.setQuota(cvars.quotaCount() + 1);
+    return {};
+}
+
+/// `bot_kick`: every bot, bot_quota set to 0, for no argument or kEveryBot; else the bot of the name
+/// `line` gives, one less in bot_quota.
+[[nodiscard]] auto kickBots(const BotActions& actions, const BotCvars& cvars, const CommandLine& line)
+    -> nx::Result<void, ConsoleError> {
+    const std::span<const std::string> words = line.arguments();
+    if (words.size() > 1) {
+        return nx::fail(ConsoleError::InvalidArguments, "usage: bot_kick [all | name]");
+    }
+    if (words.empty() || words.front() == kEveryBot) {
+        if (auto kicked = actions.kickAll(); !kicked) {
+            return nx::fail(ConsoleError::CommandFailed, "bot_kick", std::move(kicked.error()));
+        }
+        cvars.setQuota(0);
+        return {};
+    }
+    if (auto kicked = actions.kick(words.front()); !kicked) {
+        return nx::fail(ConsoleError::CommandFailed, "bot_kick", std::move(kicked.error()));
+    }
+    const std::uint32_t quota = cvars.quotaCount();
+    cvars.setQuota(quota > 0 ? quota - 1 : 0);
     return {};
 }
 
@@ -59,7 +87,15 @@ auto BotCvars::registerIn(Console& console) -> nx::Result<BotCvars, nx::console:
     if (!difficulty) {
         return std::unexpected{std::move(difficulty.error())};
     }
-    return BotCvars{.quota = *quota, .difficulty = *difficulty};
+    auto prefix = console.registerCvar(nx::console::CvarDesc<std::string>{
+        .name = "bot_prefix",
+        .defaultValue = "",
+        .description = "What the bots that join are named after, a blank between: [CLAN] Name.",
+        .flags = kServerCvar});
+    if (!prefix) {
+        return std::unexpected{std::move(prefix.error())};
+    }
+    return BotCvars{.quota = *quota, .difficulty = *difficulty, .prefix = *prefix};
 }
 
 auto BotCvars::quotaCount() const noexcept -> std::uint32_t {
@@ -94,31 +130,26 @@ auto registerBotCommands(Console& console, BotCvars cvars, BotActions actions)
         return console.registerCommand(desc, std::move(handler));
     };
     for (auto&& registered : {
-             add({.name = "bot_add", .description = "Adds a bot to the team the game's auto-select joins."},
+             add({.name = "bot_add",
+                  .description = "Adds a bot, of a profile or one drawn, to the team the auto-select joins."},
                  [actions, cvars](Console&, const CommandLine& line) {
                      return addBot(actions, cvars, "bot_add", line, std::nullopt);
                  }),
-             add({.name = "bot_add_t", .description = "Adds a bot to the terrorists."},
+             add({.name = "bot_add_t",
+                  .description = "Adds a bot, of a profile or one drawn, to the terrorists."},
                  [actions, cvars](Console&, const CommandLine& line) {
                      return addBot(actions, cvars, "bot_add_t", line, Team::Terrorists);
                  }),
-             add({.name = "bot_add_ct", .description = "Adds a bot to the counter-terrorists."},
+             add({.name = "bot_add_ct",
+                  .description = "Adds a bot, of a profile or one drawn, to the counter-terrorists."},
                  [actions, cvars](Console&, const CommandLine& line) {
                      return addBot(actions, cvars, "bot_add_ct", line, Team::CounterTerrorists);
                  }),
-             add({.name = "bot_kick", .description = "Kicks every bot: bot_kick [all]; bot_quota goes to 0."},
-                 [actions, cvars](Console&, const CommandLine& line) -> nx::Result<void, ConsoleError> {
-                     const std::span<const std::string> words = line.arguments();
-                     if (words.size() > 1 || (words.size() == 1 && words[0] != kEveryBot)) {
-                         return nx::fail(
-                             ConsoleError::InvalidArguments,
-                             "usage: bot_kick [all]: a bot by its name comes with the bots' names");
-                     }
-                     if (auto kicked = actions.kickAll(); !kicked) {
-                         return nx::fail(ConsoleError::CommandFailed, "bot_kick", std::move(kicked.error()));
-                     }
-                     cvars.setQuota(0);
-                     return {};
+             add({.name = "bot_kick",
+                  .description =
+                      "Kicks every bot, bot_quota going to 0, or the one named: bot_kick [all | name]."},
+                 [actions, cvars](Console&, const CommandLine& line) {
+                     return kickBots(actions, cvars, line);
                  }),
          }) {
         if (!registered) {

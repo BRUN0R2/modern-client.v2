@@ -10,12 +10,14 @@ nxAddModuleLibrary(csServer
         src/gameCvars.cppm
         src/gameModels.cppm
         src/playerBodies.cppm
+        src/playerNames.cppm
         src/game.cppm
         src/entityBodies.cppm
     SOURCES
         src/gameCvars.cpp
         src/gameModels.cpp
         src/playerBodies.cpp
+        src/playerNames.cpp
         src/game.cpp
         src/entityBodies.cpp
     DEPENDS

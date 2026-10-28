@@ -388,12 +388,14 @@ constexpr std::size_t kBlue = 2;
     const nx::render::Camera camera = startCamera(options, level.map());
     // The brush entities where the game puts them, and the weapon the player drew as the map started,
     // the player standing still until the frame, its eye where the options put the camera, as the
-    // client of a listen server knows its game. The original's default setting: _cl_autowepswitch 1.
+    // client of a listen server knows its game. The original's default settings: _cl_autowepswitch 1,
+    // and the engine's name for a player.
     auto game = cs::Game::start(content, level.gameMap(), *gameCvars);
     if (!game) {
         return unusable(game.error());
     }
-    const cs::PlayerIndex player = (*game)->join(cs::spawnTeam(level.map()), cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player = (*game)->join(cs::spawnTeam(level.map()), cs::AutoSwitch::ToHeavier,
+                                                 nx::settings::kDefaultPlayerName);
     if (options.position) {
         (*game)->placeEye(player, camera.position);
     }

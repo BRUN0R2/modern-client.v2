@@ -214,7 +214,8 @@ private:
 };
 
 TEST_F(GameTest, APlayerJoinsAtItsTeamsSpawnPointWithItsLoadoutAndTheStartingMoney) {
-    const cs::PlayerIndex player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const cs::PlayerSnapshot joined = game().snapshotFor(player);
     // One unit above the first counter-terrorist spawn point, turned the way it faces, placed there.
     EXPECT_EQ(joined.player.origin, (nx::Vec3{.x = 32.0F, .y = 32.0F, .z = 9.0F}));
@@ -232,8 +233,23 @@ TEST_F(GameTest, APlayerJoinsAtItsTeamsSpawnPointWithItsLoadoutAndTheStartingMon
     EXPECT_TRUE(game().rounds().isFrozen());
 }
 
+TEST_F(GameTest, APlayerPlaysByTheNameTheServerGivesItAmongTheOthers) {
+    const cs::PlayerIndex first =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, " Bruno ");
+    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "bruno");
+    EXPECT_EQ(game().nameOf(first), "Bruno");
+    EXPECT_EQ(game().nameOf(second), "(1)bruno") << "another has it, in any case";
+    EXPECT_EQ(game().playerNamed("(1)bruno"), second);
+    EXPECT_FALSE(game().playerNamed("BRUNO").has_value()) << "found by its name exactly";
+    game().leave(first);
+    EXPECT_FALSE(game().playerNamed("Bruno").has_value());
+    EXPECT_EQ(game().nameOf(game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Bruno")),
+              "Bruno")
+        << "free again once its player left";
+}
+
 TEST_F(GameTest, GenericEntitiesConsumeNoPlayerSlotAndCanBeRemovedOnlyByTheirCurrentHandle) {
-    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const auto type = entityType();
     ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
     const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
@@ -248,7 +264,7 @@ TEST_F(GameTest, GenericEntitiesConsumeNoPlayerSlotAndCanBeRemovedOnlyByTheirCur
 }
 
 TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredInterval) {
-    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     game().placeEye(player, {.x = 0, .y = 0, .z = 53});
     const auto type = entityType();
     ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
@@ -273,7 +289,7 @@ TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredI
 }
 
 TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
-    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     // The synthetic map's clip hulls put the body's origin at z = 0 on the floor.
     game().placeEye(player, {.x = 0, .y = 0, .z = cs::kStandingViewHeight.value()});
     const auto type = entityType();
@@ -296,7 +312,7 @@ TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
 TEST_F(GameTest, PerceivedFeetUseThePlayersActiveStanceIndependentlyOfTheAimPoint) {
     constexpr float kStandingEyeAboveFeet = 53.0F;
     constexpr float kCrouchedEyeAboveFeet = 30.0F;
-    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     std::ignore = play(player, kPastTheFirstFreeze);
     const auto standing = game().perceptionTargets();
     ASSERT_EQ(standing.size(), 1U);
@@ -316,7 +332,7 @@ TEST_F(GameTest, PerceivedFeetUseThePlayersActiveStanceIndependentlyOfTheAimPoin
 }
 
 TEST_F(GameTest, LocalWeaponsHitAnimatedGenericEntityHitboxesAndKillThem) {
-    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const auto type = entityType();
     ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
     const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
@@ -337,7 +353,8 @@ TEST_F(GameTest, LocalWeaponsHitAnimatedGenericEntityHitboxesAndKillThem) {
 }
 
 TEST_F(GameTest, EachTickTellsTheClientWhatItMadeAndPlacedNothingAgain) {
-    const cs::PlayerIndex player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const cs::PlayerSnapshot joined = game().snapshotFor(player);
     const cs::PlayerSnapshot first = play(player, 1);
     EXPECT_EQ(first.time.since(joined.time, first.rate), nx::tickLengthOf(first.rate));
@@ -353,7 +370,8 @@ TEST_F(GameTest, EachTickTellsTheClientWhatItMadeAndPlacedNothingAgain) {
 }
 
 TEST_F(GameTest, APlayerMovesByItsCommandsOnceTheFirstFreezeIsOver) {
-    const cs::PlayerIndex player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const cs::PlayerSnapshot landed = play(player, kPastTheFirstFreeze);
     ASSERT_FALSE(game().rounds().isFrozen());
     EXPECT_TRUE(landed.player.isOnGround);
@@ -366,7 +384,8 @@ TEST_F(GameTest, APlayerMovesByItsCommandsOnceTheFirstFreezeIsOver) {
 }
 
 TEST_F(GameTest, ThePlayersDeathEndsTheRoundInADrawAndItSpawnsAgainAsTheNextStarts) {
-    const cs::PlayerIndex player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     // Up where its second spawn point is: 2000 units above the floor.
     game().placeEye(player, {.x = 16.0F, .y = 16.0F, .z = 2000.0F});
     cs::PlayerSnapshot fallen = play(player, 1);
@@ -393,7 +412,7 @@ TEST_F(GameTest, ThePlayersDeathEndsTheRoundInADrawAndItSpawnsAgainAsTheNextStar
 }
 
 TEST_F(GameTest, SvRestartRestartsTheGameWithTheStartingMoney) {
-    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     const std::optional<cs::WeaponIndex> ak47 = content().weapons.indexOf("ak47");
     ASSERT_TRUE(ak47.has_value());
     game().give(player, *ak47);
@@ -416,9 +435,12 @@ TEST_F(GameTest, SvRestartRestartsTheGameWithTheStartingMoney) {
 }
 
 TEST_F(GameTest, EachPlayerOfATeamSpawnsAtItsTeamsNextSpawnPoint) {
-    const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex second = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex third = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex first =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex second =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex third =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     EXPECT_EQ(game().snapshotFor(first).player.origin, (nx::Vec3{.x = 32.0F, .y = 32.0F, .z = 9.0F}));
     EXPECT_EQ(game().snapshotFor(second).player.origin, (nx::Vec3{.x = 16.0F, .y = 16.0F, .z = 2001.0F}));
     EXPECT_EQ(game().snapshotFor(third).player.origin, (nx::Vec3{.x = 32.0F, .y = 32.0F, .z = 9.0F}))
@@ -428,8 +450,8 @@ TEST_F(GameTest, EachPlayerOfATeamSpawnsAtItsTeamsNextSpawnPoint) {
 
 TEST_F(GameTest, TheSecondTeamsFirstPlayerCommencesTheGame) {
     const cs::PlayerIndex counterTerrorist =
-        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     EXPECT_EQ(game().rounds().end(), cs::RoundEndReason::GameCommencing);
     EXPECT_TRUE(game().rounds().isGameStarted());
     EXPECT_FALSE(game().rounds().isFrozen()) << "unfrozen until the restart";
@@ -445,8 +467,8 @@ TEST_F(GameTest, TheSecondTeamsFirstPlayerCommencesTheGame) {
 
 TEST_F(GameTest, ATeamEliminatedLosesTheRoundAndItsWinnersArePaid) {
     const cs::PlayerIndex counterTerrorist =
-        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence);
     std::ignore = killByFall(terrorist);
     EXPECT_EQ(game().rounds().end(), cs::RoundEndReason::CounterTerroristsWin);
@@ -461,13 +483,13 @@ TEST_F(GameTest, ATeamEliminatedLosesTheRoundAndItsWinnersArePaid) {
 }
 
 TEST_F(GameTest, APlayerJoiningLateWatchesUntilTheNextRound) {
-    std::ignore = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
-    const cs::PlayerIndex early = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex early = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     EXPECT_TRUE(game().snapshotFor(early).status.isAlive()) << "within 20 seconds of the round's start";
     idle(kPastTheJoinWindow);
-    const cs::PlayerIndex late = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex late = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     const cs::PlayerSnapshot watching = game().snapshotFor(late);
     EXPECT_FALSE(watching.status.isAlive());
     EXPECT_TRUE(watching.player.isDead);
@@ -477,8 +499,9 @@ TEST_F(GameTest, APlayerJoiningLateWatchesUntilTheNextRound) {
 }
 
 TEST_F(GameTest, PlayersAreSolidToEachOther) {
-    const cs::PlayerIndex walker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex standing = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex walker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex standing = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     // On the floor, a box's width and a half apart along x.
     game().placeEye(walker, {.y = 1000.0F, .z = cs::kStandingViewHeight.value() + 1.0F});
@@ -490,8 +513,8 @@ TEST_F(GameTest, PlayersAreSolidToEachOther) {
 
 TEST_F(GameTest, AClientIsToldOfTheOtherPlayersAsTheirModelsPlay) {
     const cs::PlayerIndex counterTerrorist =
-        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence);
     std::ignore = play(terrorist, 1, {}, {.pitch = nx::Degrees{30.0F}, .yaw = nx::Degrees{45.0F}});
     const cs::PlayerSnapshot seen = game().snapshotFor(counterTerrorist);
@@ -511,8 +534,8 @@ TEST_F(GameTest, AClientIsToldOfTheOtherPlayersAsTheirModelsPlay) {
 
 TEST_F(GameTest, AKilledPlayersModelPlaysADeathItsLegsNoGait) {
     const cs::PlayerIndex counterTerrorist =
-        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence);
     std::ignore = killByFall(terrorist);
     const cs::PlayerSnapshot seen = game().snapshotFor(counterTerrorist);
@@ -525,8 +548,9 @@ TEST_F(GameTest, AKilledPlayersModelPlaysADeathItsLegsNoGait) {
 }
 
 TEST_F(GameTest, AKnifeMeetsAPlayersHeadByItsHitboxesAndHurtsItFourTimesAsMuch) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     standOff(attacker, victim, "knife");
     // A slash at the eye's height meets its head: 15 times 4.
@@ -540,8 +564,9 @@ TEST_F(GameTest, AKnifeMeetsAPlayersHeadByItsHitboxesAndHurtsItFourTimesAsMuch) 
 }
 
 TEST_F(GameTest, AHelmetTakesItsShareOfAHitInTheHeadAndSpillsNoBlood) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     standOff(attacker, victim, "knife");
     game().giveArmor(victim, cs::ArmorKind::KevlarAndHelmet);
@@ -557,8 +582,9 @@ TEST_F(GameTest, AHelmetTakesItsShareOfAHitInTheHeadAndSpillsNoBlood) {
 }
 
 TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     standOff(attacker, victim, "knife");
     const nx::Money before = game().snapshotFor(attacker).status.money;
@@ -575,8 +601,9 @@ TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {
 }
 
 TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     // 12 units to its right: within its box and its shield's hitbox, beside the others.
     standOff(attacker, victim, "usp", kDuelY - 12.0F);
@@ -633,8 +660,9 @@ TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt
 }
 
 TEST_F(GameTest, AHeavyWeaponsHitButInTheLegsFlinchesAPlayerLargeKnockingItBack) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     game().give(attacker, *content().weapons.indexOf("ak47"));
     standOff(attacker, victim, "ak47");
@@ -649,9 +677,11 @@ TEST_F(GameTest, AHeavyWeaponsHitButInTheLegsFlinchesAPlayerLargeKnockingItBack)
 }
 
 TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillCosts) {
-    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex teammate = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex teammate =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     idle(kPastTheCommence + kPastAFreeze);
     standOff(attacker, teammate, "knife");
     std::ignore = press(attacker, {cs::Button::Attack});
@@ -672,7 +702,7 @@ TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillC
 }
 
 TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {
-    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     const std::optional<cs::WeaponIndex> ak47 = content().weapons.indexOf("ak47");
     ASSERT_TRUE(ak47.has_value());
     game().give(player, *ak47);
@@ -690,9 +720,10 @@ TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {
 }
 
 TEST_F(GameTest, APlayerLeavingFreesItsSlotAndIsNoLongerCountedNorShown) {
-    const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex third = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex first =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex third = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     game().leave(second);
     EXPECT_EQ(game().playerCount(), 2U);
     EXPECT_EQ(game().teamCounts()[cs::Team::Terrorists].players(), 1U);
@@ -700,21 +731,23 @@ TEST_F(GameTest, APlayerLeavingFreesItsSlotAndIsNoLongerCountedNorShown) {
     EXPECT_EQ(game().snapshotFor(first).players[0].player, third);
     EXPECT_EQ(game().perceptionTargets().size(), 2U);
     idle(1);
-    EXPECT_EQ(game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier), second) << "its slot";
+    EXPECT_EQ(game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player"), second)
+        << "its slot";
     EXPECT_EQ(game().ownStateOf(second).team, cs::Team::CounterTerrorists);
 }
 
 TEST_F(GameTest, TheDefaultTeamIsTheOneOfFewerPlayers) {
-    std::ignore = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     EXPECT_EQ(game().defaultTeam(), cs::Team::Terrorists);
-    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
-    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     EXPECT_EQ(game().defaultTeam(), cs::Team::CounterTerrorists);
 }
 
 TEST_F(GameTest, ASpotIsSeenThroughTheBodiesButNotThroughTheWorld) {
-    const cs::PlayerIndex watcher = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex between = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex watcher =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex between = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     standOff(watcher, between, "knife");
     const nx::Vec3 eye = game().ownStateOf(watcher).eye;
     const nx::Vec3 beyond = eye + nx::Vec3{.x = 2.0F * kVictimAhead};
@@ -730,8 +763,9 @@ TEST_F(GameTest, ASpotIsSeenThroughTheBodiesButNotThroughTheWorld) {
 
 TEST_F(GameTest, EveryClientReceivesTheGamesWorldAndSwitchableLightPatterns) {
     constexpr std::size_t kSwitchableStyle = 32;
-    const cs::PlayerIndex first = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
-    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex first =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex second = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
     cs::PlayerSnapshot snapshot = game().snapshotFor(first);
     EXPECT_EQ(snapshot.lightStyles.patterns[0], "m");
     EXPECT_EQ(snapshot.lightStyles.patterns[4], "mamamamamama");

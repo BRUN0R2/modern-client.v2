@@ -28,6 +28,7 @@ import :gameCvars;
 import :gameModels;
 import :entityBodies;
 import :playerBodies;
+import :playerNames;
 
 export namespace cs {
 
@@ -74,7 +75,8 @@ struct PlayerOwnState {
 
 namespace cs {
 
-/// A player of the game, as its server keeps it (CBasePlayer): its team and _cl_autowepswitch, where it
+/// A player of the game, as its server keeps it (CBasePlayer): its team, its name (pev->netname) and
+/// _cl_autowepswitch, where it
 /// is and how it moves, what it has, its weapons, its feet's and its breath's voices, the harms it keeps
 /// over time, its body among the world's entities, the buttons of its last command, whether the next
 /// round pays it, how often it spawned in the round, what its HUD was told last of the round's time,
@@ -85,6 +87,7 @@ namespace cs {
 /// spawns.
 struct Player {
     Team team;
+    std::string name;
     AutoSwitch autoSwitch;
     CharacterIndex character;
     MovementState movement{};
@@ -135,13 +138,14 @@ public:
     auto operator=(Game&&) -> Game& = delete;
     ~Game() = default;
 
-    /// A player joins the game in `team`, with mp_startmoney, its weapons drawn as `autoSwitch` says (its
+    /// A player asking for `name` joins the game in `team`, by the name the server gives it among the
+    /// others' (playerNameOf), with mp_startmoney, its weapons drawn as `autoSwitch` says (its
     /// _cl_autowepswitch, until setAutoSwitch), as one of its team's characters drawn at random, as the
     /// original's appearance menu draws one to auto-select; as its JoiningThink lets it play: spawned at
     /// once when it may (canSpawn), given what a player of `team` spawns with; else watching from its
     /// team's next spawn point, dead, until the next round. Then the round's end is weighed
     /// (checkWinConditions): the first player of the second team commences the game.
-    auto join(Team team, AutoSwitch autoSwitch) -> PlayerIndex;
+    auto join(Team team, AutoSwitch autoSwitch, std::string_view name) -> PlayerIndex;
     /// `player` leaves the game, as a client disconnects (CHalfLifeMultiplay::ClientDisconnected): its
     /// weapons and its body are gone, and its slot is free for the next player to join; then the round's
     /// end is weighed (checkWinConditions). `player` is in the game.
@@ -156,6 +160,10 @@ public:
     [[nodiscard]] auto playerCount() const -> std::size_t;
     /// What `player`, in the game, knows of itself (PlayerOwnState).
     [[nodiscard]] auto ownStateOf(PlayerIndex player) const -> PlayerOwnState;
+    /// The name of `player`, in the game.
+    [[nodiscard]] auto nameOf(PlayerIndex player) const -> std::string_view;
+    /// The player of the game named `name`, exactly; none when no player is.
+    [[nodiscard]] auto playerNamed(std::string_view name) const -> std::optional<PlayerIndex>;
 
     /// One tick of the game (docs/07, section 2.2): each player of `commands`, in their order, a command
     /// at most for each, draws the weapon it selects and moves among the brush entities at the speed of
