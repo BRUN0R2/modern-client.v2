@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Intent and perception memory, independent of the body's kind (ADRs 0024 and 0028).
+/// Intent and perception memory, independent of the body's kind (ADRs 0024 and 0028), and the decisions
+/// of many brains at once, in batches in jobs.
 export module nx.agents;
 import std;
 import nx.core;
 import nx.math;
 import nx.ecs;
+import nx.jobs;
 import nx.navigation;
 
 export namespace nx::agents {
@@ -105,6 +107,38 @@ private:
     std::optional<Vec3> plannedFrom{};
     std::optional<navigation::Corridor> corridor{};
     std::optional<navigation::NavigationError> pathError{};
+};
+
+/// A brain to decide with, and where its body's feet are this tick (Deciders::decide).
+struct DecisionRequest {
+    Brain* brain = nullptr;
+    Vec3 feet{};
+};
+
+/// The fewest brains a batch of Deciders decides: a decision costs some microseconds on a large map
+/// (nxBenchNavigation's agentDecisions), so that a batch outweighs handing it to a worker; fewer brains
+/// decide on the calling thread alone.
+inline constexpr std::size_t kSmallestBatch = 8;
+
+/// Decides for many brains on one mesh at once (ADR-0023's queries in batches in jobs): in batches of at
+/// least kSmallestBatch, at most one for each thread that runs jobs, each batch with a query of its own,
+/// so that batches run side by side. Each decision is written at its request's index, the same with any
+/// number of workers (docs/04, section 8): a brain reads and writes only its own state and the mesh.
+class Deciders {
+public:
+    /// Deciders on `mesh`, which must outlive them and the corridors of the brains they decide for.
+    explicit Deciders(const navigation::NavigationMesh& mesh) noexcept;
+
+    /// Each request's brain decides at its feet (Brain::decide), its decision written at its index of
+    /// `decisions`, which must be as long, in jobs of `jobs` of the priority Critical, which the calling
+    /// thread runs too while it waits for them. The brains must be distinct, and none of them used by
+    /// another thread meanwhile.
+    void decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> requests,
+                std::span<Decision> decisions);
+
+private:
+    const navigation::NavigationMesh* decidedOn;
+    std::vector<navigation::NavigationQuery> queries; ///< One for each batch, made as batches need them.
 };
 
 /// The brain component attached to the same generational entity as its body. Mod-specific rules

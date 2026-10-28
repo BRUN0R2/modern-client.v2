@@ -108,7 +108,7 @@ protected:
                                                            navigation.value().build);
         EXPECT_TRUE(built.has_value()) << (built ? "" : nx::describe(built.error()));
         mesh.emplace(std::move(built).value());
-        auto made = cs::Bots::create(*game, *mesh, std::move(rules).value());
+        auto made = cs::Bots::create(*game, *mesh, *jobs, std::move(rules).value());
         EXPECT_TRUE(made.has_value()) << (made ? "" : nx::describe(made.error()));
         bots = std::move(made).value_or(nullptr);
     }

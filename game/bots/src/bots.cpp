@@ -6,6 +6,7 @@ module cs.bots;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -92,8 +93,8 @@ struct ProfileOf {
 
 } // namespace
 
-auto Bots::create(Game& game, const nx::navigation::NavigationMesh& mesh, BotRules rules)
-    -> nx::Result<std::unique_ptr<Bots>, BotError> {
+auto Bots::create(Game& game, const nx::navigation::NavigationMesh& mesh, nx::jobs::JobSystem& jobs,
+                  BotRules rules) -> nx::Result<std::unique_ptr<Bots>, BotError> {
     if (auto registered = game.registerEntityComponent<nx::agents::Agent>("nx::agents::Agent"); !registered) {
         return nx::fail(BotError::Unregistered, std::move(registered.error()));
     }
@@ -101,11 +102,20 @@ auto Bots::create(Game& game, const nx::navigation::NavigationMesh& mesh, BotRul
         return nx::fail(BotError::Unregistered, std::move(registered.error()));
     }
     nx::log::info(kLog, "bots walk {} polygons", mesh.polygonCount());
-    return std::make_unique<Bots>(CreateToken{}, game, std::move(rules), mesh);
+    return std::make_unique<Bots>(CreateToken{}, game, std::move(rules), mesh, jobs);
 }
 
-Bots::Bots(CreateToken /*token*/, Game& owner, BotRules botRules, const nx::navigation::NavigationMesh& mesh)
-    : game{&owner}, rules{std::move(botRules)}, query{mesh} {}
+struct Bots::Turn {
+    PlayerIndex player{};
+    nx::agents::Agent* agent = nullptr;
+    BotDriver* driver = nullptr;
+    PlayerOwnState self{};
+    UserCommand command{};
+};
+
+Bots::Bots(CreateToken /*token*/, Game& owner, BotRules botRules, const nx::navigation::NavigationMesh& mesh,
+           nx::jobs::JobSystem& jobSystem)
+    : game{&owner}, rules{std::move(botRules)}, jobs{&jobSystem}, query{mesh}, deciders{mesh} {}
 
 Bots::~Bots() {
     kickAll();
@@ -236,10 +246,25 @@ void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_
 
 auto Bots::commands() -> std::vector<PlayerCommand> {
     const std::vector<PerceptionTarget> targets = game->perceptionTargets();
-    std::vector<PlayerCommand> made;
-    made.reserve(bots.size());
+    std::vector<Turn> turns;
+    turns.reserve(bots.size());
+    std::vector<nx::agents::DecisionRequest> requests;
     for (const PlayerIndex bot : bots) {
-        made.push_back(PlayerCommand{.player = bot, .command = commandOf(bot, targets)});
+        Turn& turn = turns.emplace_back(beginTurn(bot, targets));
+        if (turn.self.isAlive) {
+            requests.push_back({.brain = &turn.agent->brain, .feet = turn.self.feet});
+        }
+    }
+    // What a bot perceives does not depend on what another decides, nor a decision on another's.
+    std::vector<nx::agents::Decision> decisions(requests.size());
+    deciders.decide(*jobs, requests, decisions);
+    std::vector<PlayerCommand> made;
+    made.reserve(turns.size());
+    auto decision = decisions.begin();
+    for (Turn& turn : turns) {
+        made.push_back(PlayerCommand{.player = turn.player,
+                                     .command = turn.self.isAlive ? finishTurn(turn, *decision++, targets)
+                                                                  : turn.command});
     }
     return made;
 }
@@ -302,30 +327,44 @@ auto Bots::aimSpotOf(BotDriver& driver, const PlayerOwnState& self, const nx::ag
     return spot + driver.aimError.offset;
 }
 
-auto Bots::commandOf(PlayerIndex player, std::span<const PerceptionTarget> targets) -> UserCommand {
+auto Bots::beginTurn(PlayerIndex player, std::span<const PerceptionTarget> targets) -> Turn {
     const nx::game::TickTime time = game->time();
-    const PlayerOwnState self = game->ownStateOf(player);
-    nx::agents::Agent* const agent = game->playerComponent<nx::agents::Agent>(player);
-    BotDriver* const driver = game->playerComponent<BotDriver>(player);
-    nx::invariant(agent != nullptr && driver != nullptr, "Bots: a bot's body is an agent with its driver");
+    Turn turn{.player = player,
+              .agent = game->playerComponent<nx::agents::Agent>(player),
+              .driver = game->playerComponent<BotDriver>(player),
+              .self = game->ownStateOf(player)};
+    nx::invariant(turn.agent != nullptr && turn.driver != nullptr,
+                  "Bots: a bot's body is an agent with its driver");
+    nx::agents::Agent* const agent = turn.agent;
+    BotDriver* const driver = turn.driver;
     driver->lastCommand = CommandNumber{driver->lastCommand.value + 1};
-    UserCommand command{
-        .number = driver->lastCommand, .duration = nx::tickLengthOf(time.rate), .viewAngles = self.view};
-    if (!self.isAlive) {
+    turn.command = UserCommand{
+        .number = driver->lastCommand, .duration = nx::tickLengthOf(time.rate), .viewAngles = turn.self.view};
+    if (!turn.self.isAlive) {
         driver->wasAlive = false;
-        return command;
+        return turn;
     }
-    const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
     if (!driver->wasAlive) {
         // Spawned again: what it knew, where it went, how it turned, aimed and fired are of its last life.
+        const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
         agent->brain = nx::agents::Brain{brainRulesOf(rules, level.reactionTime)};
         driver->turn = {};
         driver->aimError = {};
         driver->trigger = {};
         driver->wasAlive = true;
     }
-    agent->brain.perceive(perceive(player, *agent, self, targets), time.now, time.rate);
-    const nx::agents::Decision decision = agent->brain.decide(self.feet, query);
+    agent->brain.perceive(perceive(player, *agent, turn.self, targets), time.now, time.rate);
+    return turn;
+}
+
+auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision,
+                      std::span<const PerceptionTarget> targets) -> UserCommand {
+    const nx::game::TickTime time = game->time();
+    const PlayerOwnState& self = turn.self;
+    nx::agents::Agent* const agent = turn.agent;
+    BotDriver* const driver = turn.driver;
+    UserCommand& command = turn.command;
+    const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
     agent->behavior = decision.behavior;
     hunt(*agent, *driver, decision, self.feet);
     const bool attacks = decision.behavior == nx::agents::Behavior::Attack;

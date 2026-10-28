@@ -726,7 +726,9 @@ navigation meshes ([ADR-0023](adr/0023-navigation.md)):
   heard and where it may have gone since along the mesh, what its team reported over the radio,
   and where players died on the map before. It knows only what it perceived or was told.
 - Quick to decide: perception and decisions within a budget per tick, path queries in batches in
-  jobs. How soon it reacts and how well it aims are `bot_difficulty`'s values, in data.
+  jobs (today the decisions run in batches in jobs, `nx::agents::Deciders`; perception has its
+  budget of enemies looked at per tick, and path searches have none yet). How soon it reacts and
+  how well it aims are `bot_difficulty`'s values, in data.
 - Familiar commands and cvars: `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick`,
   `bot_quota`, `bot_difficulty`, `bot_chatter`.
 - A map's `.nav` file of Condition Zero's format may give its places and hiding spots; the mesh
