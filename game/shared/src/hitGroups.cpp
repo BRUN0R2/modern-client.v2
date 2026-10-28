@@ -9,8 +9,8 @@ import nx.data;
 
 namespace cs {
 
-auto HitGroupShares::of(std::uint32_t group) const noexcept -> double {
-    switch (static_cast<HitGroup>(group)) {
+auto HitGroupShares::of(HitGroup group) const noexcept -> DamageShare {
+    switch (group) {
     case HitGroup::Generic:
         return generic;
     case HitGroup::Head:

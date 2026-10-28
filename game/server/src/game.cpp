@@ -85,11 +85,6 @@ constexpr std::uint32_t kPlayingTeams = 2;
     return StampTarget{.model = model->index, .origin = transform->origin, .angles = transform->angles};
 }
 
-/// `damage` scaled by `share`, in double precision as the original's float times a double literal.
-[[nodiscard]] auto scaled(nx::Damage damage, double share) noexcept -> nx::Damage {
-    return nx::Damage{static_cast<float>(static_cast<double>(damage.value()) * share)};
-}
-
 /// The way of `vector`, of length 1, as the original's Vector::Normalize makes it: its parts times the
 /// inverse of its length; straight up for none.
 [[nodiscard]] auto wayOf(nx::Vec3 vector) noexcept -> nx::Vec3 {
@@ -98,12 +93,6 @@ constexpr std::uint32_t kPlayingTeams = 2;
         return nx::Vec3{.z = 1.0F};
     }
     return vector * (1.0F / length);
-}
-
-/// Whether hit group `group` is a leg's.
-[[nodiscard]] auto isLeg(std::uint32_t group) noexcept -> bool {
-    const auto hit = static_cast<HitGroup>(group);
-    return hit == HitGroup::LeftLeg || hit == HitGroup::RightLeg;
 }
 
 /// Where the game has the brush entities of `world`, and which of their looks they show.
@@ -391,7 +380,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
         if (const PlayerBody* const body = m_world.get<PlayerBody>(strike.target)) {
             // A strike met the player where its trace did, as a TraceAttack sets m_LastHitGroup.
             Player& struck = playerAt(body->player);
-            struck.lastHitGroup = strike.attack.trace.hitGroup;
+            struck.lastHitGroup = hitGroupOf(strike.attack.trace);
             hurt(struck, {.damage = strike.attack.damage, .kind = HarmKind::Melee});
         } else {
             std::ignore = nx::game::attackEntity(m_world, strike.target, strike.attack);
@@ -591,7 +580,7 @@ void Game::hurt(Player& player, const PlayerHarm& harm) {
         return;
     }
     if (harm.kind == HarmKind::Fall) {
-        player.lastHitGroup = std::to_underlying(HitGroup::Generic);
+        player.lastHitGroup = HitGroup::Generic;
     }
     const PlayerHarmRules& rules = m_content->playerHarm;
     const PlayerHarmed harmed =
@@ -610,7 +599,7 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
     // TraceAttack: a teammate's attack sheds no blood, nor hurts, while friendly fire is off.
     const bool isTeammate = attacker.team == victim.team;
     const bool isSpared = isTeammate && !m_cvars.isFriendlyFireOn();
-    victim.lastHitGroup = attack.trace.hitGroup;
+    victim.lastHitGroup = hitGroupOf(attack.trace);
     nx::Damage damage = scaled(attack.damage, m_content->hitGroups.player.of(victim.lastHitGroup));
     if (isSpared) {
         return;

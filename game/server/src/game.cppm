@@ -104,7 +104,7 @@ struct Player {
     nx::EulerAngles view{};
     PlayerAnimation animation{};
     CommandNumber randomSeed{};
-    std::uint32_t lastHitGroup = 0;
+    HitGroup lastHitGroup = HitGroup::Generic;
     float speedShare = 1.0F;
 };
 

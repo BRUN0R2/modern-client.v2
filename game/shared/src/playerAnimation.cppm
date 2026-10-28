@@ -19,6 +19,7 @@ import nx.math;
 import nx.assets;
 import :studio;
 import :movement;
+import :hitGroups;
 
 export namespace cs {
 
@@ -64,7 +65,7 @@ struct PlayerAnimation {
 /// What a player's model plays by: the model, the end of the labels of the sequences of the weapon it
 /// holds (its m_szAnimExtention: "ak47"), whether it ducks (FL_DUCKING), stands on the ground
 /// (FL_ONGROUND) and how deep it is in water, how fast it moves along the ground, the hit group an attack
-/// last met it in (m_LastHitGroup, HitGroup's number), and the moment, the game running at `rate`.
+/// last met it in (m_LastHitGroup), and the moment, the game running at `rate`.
 struct PlayerAnimationContext {
     const nx::assets::MdlView* model = nullptr;
     std::string_view weaponAnimation{};
@@ -72,7 +73,7 @@ struct PlayerAnimationContext {
     bool isOnGround = false;
     WaterLevel waterLevel = WaterLevel::Dry;
     nx::UnitsPerSecond speed{};
-    std::uint32_t lastHitGroup = 0;
+    HitGroup lastHitGroup = HitGroup::Generic;
     nx::GameTime now{};
     nx::TickRate rate{nx::kDefaultTickRate};
 };

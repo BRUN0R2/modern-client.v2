@@ -24,6 +24,7 @@ import nx.game;
 import :sounds;
 import :player;
 import :movement;
+import :hitGroups;
 
 export namespace cs {
 
@@ -66,7 +67,7 @@ struct ArmorShares {
 /// slower than `knockbackBelowSpeed`, knocks it back `knockback` units a second away from its
 /// attacker and slows it down to `largeFlinchSpeedShare`.
 struct PlayerAttackRules {
-    double teammateShare = 0.35;
+    DamageShare teammateShare{0.35};
     nx::UnitsPerSecond knockback{170.0F};
     nx::UnitsPerSecond knockbackBelowSpeed{300.0F};
     float flinchSpeedShare = 0.5F;
@@ -185,7 +186,7 @@ private:
 
 /// Whether armor of `kind` covers hit group `group` (IsArmored): a helmet the head; the vest the chest, the
 /// stomach, the arms and a hit of no group; none the legs.
-[[nodiscard]] auto isArmored(ArmorKind kind, std::uint32_t group) noexcept -> bool;
+[[nodiscard]] auto isArmored(ArmorKind kind, HitGroup group) noexcept -> bool;
 
 /// What a harm did to a player: the damage its health took, whether its armor took a share of it, and
 /// whether it killed it.
@@ -205,13 +206,13 @@ struct PlayerHarmed {
 /// armor is none. Then the whole points of what is left off its health, as the original's processors
 /// cut it (int()), so that its health stays whole, and a harm kept over time kept (`timed`); with no
 /// health left, it is killed. A dead player takes none, and keeps none. What it did.
-[[nodiscard]] auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm,
-                              std::uint32_t group, const ArmorShares& armor) noexcept -> PlayerHarmed;
+[[nodiscard]] auto harmPlayer(PlayerStatus& status, TimedHarms& timed, const PlayerHarm& harm, HitGroup group,
+                              const ArmorShares& armor) noexcept -> PlayerHarmed;
 
 /// What a player of `status` is heard saying as a harm that met it last in hit group `group` hurts it
 /// (Pain), `harmed` its armor taking a share or none: in the head, its helmet's, or a headshot's
 /// without one; elsewhere, its armor's but in the legs, or its flesh's.
-[[nodiscard]] auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, std::uint32_t group,
+[[nodiscard]] auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, HitGroup group,
                           bool isArmored) noexcept -> const GameSound&;
 
 /// How an attack's `damage`, its hit group's share taken, punches the view of a player of armor `kind`
@@ -219,7 +220,7 @@ struct PlayerHarmed {
 /// the damage up, 12 degrees at most, and its roll as much as the damage, drawn from `random` either
 /// way, 9 degrees at most; in the chest or the stomach, without armor, its pitch a tenth of the damage
 /// up, 4 at most; elsewhere none, and the punch as it was.
-void punchByHit(nx::EulerAngles& punch, std::uint32_t group, nx::Damage damage, ArmorKind kind,
+void punchByHit(nx::EulerAngles& punch, HitGroup group, nx::Damage damage, ArmorKind kind,
                 nx::Random& random) noexcept;
 
 /// Gives a player of `status` back `health`, not negative, as CBasePlayer::TakeHealth does: alive and
