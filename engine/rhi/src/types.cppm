@@ -350,6 +350,8 @@ struct Rect {
     std::int32_t x = 0;
     std::int32_t y = 0;
     Extent2d size{};
+
+    [[nodiscard]] inline auto operator==(const Rect&) const noexcept -> bool = default;
 };
 
 /// The kind of GPU an adapter is.
