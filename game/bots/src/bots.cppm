@@ -8,8 +8,9 @@
 /// UTIL_KickBotFromTeam, CCSBot::IsVisible, TogglePrimaryAttack; GPL, consulted: docs/20 section 3).
 ///
 /// Today: they hunt places of the mesh drawn at random, chase and fire at the enemies they see, aiming
-/// at the first spot of them they see, and look for where they lost them; their difficulty, their
-/// reactions and their aim's errors, their buying, the objectives and the radio come next (TODO.md).
+/// at the first spot of them they see, and look for where they lost them; each plays with a level of
+/// skill of bot_difficulty, which tells how soon it reacts, how well it aims and how it fires; their
+/// names, their buying, the objectives and the radio come next (TODO.md).
 export module cs.bots:bots;
 
 import std;
@@ -22,17 +23,23 @@ import nx.agents;
 import cs.shared;
 import cs.server;
 import :botRules;
+import :botAim;
+import :botTrigger;
 
 export namespace cs {
 
 /// What drives a bot's player besides its brain, a component of its body: the number of its last
-/// command, whether that command fired, whether the bot was alive at it, and the stream its hunt draws
-/// from.
+/// command, its level of skill (of BotRules::skillLevels), whether it was alive at its last command, how
+/// its view turns, how its aim errs, its trigger, and the streams its hunt and its aim draw from.
 struct BotDriver {
     CommandNumber lastCommand{};
-    bool hasFired = false;
+    std::size_t skillLevel = 0;
     bool wasAlive = false;
+    BotViewTurn turn{};
+    BotAimError aimError{};
+    BotTrigger trigger{};
     nx::Random hunt;
+    nx::Random aim;
 };
 
 /// The bots of one game, which must outlive them: each a player of it whose body is an agent
@@ -64,27 +71,35 @@ public:
     auto operator=(Bots&&) -> Bots& = delete;
 
     /// A bot joins the game in `team`, or in the game's default team for none (BotAddCommand with
-    /// bot_join_team "any": SelectDefaultTeam), drawing the heavier weapon it is given. Returns its player.
-    auto add(std::optional<Team> team) -> PlayerIndex;
+    /// bot_join_team "any": SelectDefaultTeam), drawing the heavier weapon it is given, with a level of
+    /// skill of `difficulty` drawn at random (GetRandomProfile, among the levels as the named profiles
+    /// come with the bots' names). Returns its player.
+    auto add(std::optional<Team> team, BotDifficulty difficulty) -> PlayerIndex;
     /// Every bot leaves the game (bot_kick).
     void kickAll();
-    /// Adds a bot when there are fewer than `quota`, or makes one leave when there are more, once each
-    /// BotRules::quotaInterval of the game (MaintainBotQuota): of the team of more players, else of one
-    /// drawn at random, a dead one first (UTIL_KickBotFromTeam); of the other team when that one has none.
-    /// The original then weighs the teams' wins, which come with the scores (TODO.md).
-    void keepQuota(std::uint32_t quota);
+    /// Adds a bot of `difficulty` when there are fewer than `quota`, or makes one leave when there are
+    /// more, once each BotRules::quotaInterval of the game (MaintainBotQuota): of the team of more
+    /// players, else of one drawn at random, a dead one first (UTIL_KickBotFromTeam); of the other team
+    /// when that one has none. The original then weighs the teams' wins, which come with the scores
+    /// (TODO.md).
+    void keepQuota(std::uint32_t quota, BotDifficulty difficulty);
     /// The commands of the bots for the game's next tick, one for each, in the order they joined: each
-    /// alive looks at the enemies its budget lets it look at, in turn, and remembers those it sees;
-    /// thinks (nx::agents::Brain::decide); looks at what it aims at or along its way, moves along its
-    /// corridor at its full speed, and fires every other command at what it attacks, as a press for
-    /// each round (TogglePrimaryAttack); with nothing to pursue, it hunts a place drawn on the mesh
-    /// within BotRules::huntRadius. Spawning again, it starts with a new brain.
+    /// alive looks at the enemies its budget lets it look at, in turn, and remembers those it sees, each
+    /// known to it its level's reaction time after it first saw it; thinks (nx::agents::Brain::decide);
+    /// turns its view by its spring (turnView) towards where it aims at what it attacks, ahead of it
+    /// above BotAimRules::leadingSkill (leadSpot) and off by its aim's error (settleAimError), or at what
+    /// it looks at, or along its way; moves along its corridor at its full speed; and presses its attack
+    /// as its trigger lets it (pullTrigger), its level's attack delay after it took its enemy on. With
+    /// nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius. Spawning again,
+    /// it starts with a new brain, its view still, its aim and its trigger anew.
     [[nodiscard]] auto commands() -> std::vector<PlayerCommand>;
 
     /// How many bots are in the game.
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return bots.size(); }
     /// The players the bots play, in the order they joined.
     [[nodiscard]] inline auto players() const noexcept -> std::span<const PlayerIndex> { return bots; }
+    /// The level of skill the bot `player` plays with.
+    [[nodiscard]] auto skillLevelOf(PlayerIndex player) -> const BotSkillLevel&;
 
 private:
     /// The command of the bot `player` for the next tick, knowing `targets`.
@@ -99,6 +114,11 @@ private:
     /// `decision` leaves it nothing to do, another when its way to the last is blocked.
     void hunt(nx::agents::Agent& agent, BotDriver& driver, const nx::agents::Decision& decision,
               nx::Vec3 feet);
+    /// Where a bot with `driver`, alive as `self`, aims at the enemy `decision` attacks, among `targets`,
+    /// as its command of `duration` moves its aim's error.
+    [[nodiscard]] auto aimSpotOf(BotDriver& driver, const PlayerOwnState& self,
+                                 const nx::agents::Decision& decision,
+                                 std::span<const PerceptionTarget> targets, nx::Seconds duration) -> nx::Vec3;
     /// Makes a bot of `team` leave, a dead one first; returns whether one did.
     auto kickFrom(Team team) -> bool;
     /// Makes the bot `bot` leave the game.

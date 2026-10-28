@@ -282,8 +282,9 @@ private:
     /// The bots of `session`, made the first time they are asked for: data/cstrike/bots.toml's rules
     /// on the mesh of its map. Errors: Unavailable, with the cause.
     [[nodiscard]] auto botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionError>;
-    /// Keeps the session's bots as bot_quota asks (cs::Bots::keepQuota), making them first when it asks
-    /// for any; when they cannot be made, it is logged and bot_quota set back to 0.
+    /// Keeps the session's bots as bot_quota asks, those it adds of bot_difficulty's difficulty
+    /// (cs::Bots::keepQuota), making them first when it asks for any; when they cannot be made, it is
+    /// logged and bot_quota set back to 0.
     void keepBotQuota(Session& session);
     [[nodiscard]] auto playCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     /// Prints the names of the sound outputs, which s_device takes. Errors: CommandFailed.
@@ -625,7 +626,8 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
         return m_nextSession ? m_nextSession.get() : m_session.get();
     };
     cs::BotActions actions{
-        .add = [this, played](std::optional<cs::Team> team) -> nx::Result<void, cs::BotActionError> {
+        .add = [this, played](std::optional<cs::Team> team,
+                              cs::BotDifficulty difficulty) -> nx::Result<void, cs::BotActionError> {
             Session* const session = played();
             if (session == nullptr) {
                 return nx::fail(cs::BotActionError::NoMap);
@@ -634,7 +636,7 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
             if (!bots) {
                 return std::unexpected{std::move(bots.error())};
             }
-            std::ignore = (*bots)->add(team);
+            std::ignore = (*bots)->add(team, difficulty);
             return {};
         },
         .kickAll = [played]() -> nx::Result<void, cs::BotActionError> {
@@ -719,7 +721,7 @@ void Client::keepBotQuota(Session& session) {
         }
     }
     if (session.bots) {
-        session.bots->keepQuota(quota);
+        session.bots->keepQuota(quota, botCvars->difficultyLevel());
     }
 }
 

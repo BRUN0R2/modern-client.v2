@@ -19,8 +19,8 @@ constexpr std::size_t kSteeringCorners = 4;
 Brain::Brain(Rules settings) : rules{settings} {
     expects(rules.memoryLimit > 0 && rules.memoryLifetime > Seconds{} &&
                 rules.attackDistance > HammerUnits{} && rules.arrivalDistance > HammerUnits{} &&
-                rules.replanDistance > HammerUnits{},
-            "Brain: positive rules and a memory budget");
+                rules.replanDistance > HammerUnits{} && rules.reactionTime >= Seconds{},
+            "Brain: positive rules, a memory budget and a reaction time of none or more");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
@@ -34,21 +34,27 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
         auto found = std::ranges::find(memory, observation.entity,
                                        [](const Memory& record) { return record.observation.entity; });
         if (found != memory.end()) {
-            *found = {.observation = observation, .seenAt = now, .isVisible = true};
+            found->observation = observation;
+            found->seenAt = now;
+            found->isVisible = true;
         } else {
             if (memory.size() == rules.memoryLimit) {
                 // The oldest unobserved fact has the weakest confidence.
                 const auto weakest = std::ranges::min_element(memory, {}, &Memory::seenAt);
                 memory.erase(weakest);
             }
-            memory.push_back({.observation = observation, .seenAt = now, .isVisible = true});
+            memory.push_back(
+                {.observation = observation, .seenAt = now, .noticedAt = now, .isVisible = true});
         }
+    }
+    for (Memory& record : memory) {
+        record.isRecognized = now.since(record.noticedAt, rate) >= rules.reactionTime;
     }
 }
 
 auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     const Memory* selected = nullptr;
-    for (const Memory& candidate : memory) {
+    for (const Memory& candidate : memory | std::views::filter(&Memory::isRecognized)) {
         if (selected == nullptr || (candidate.isVisible && !selected->isVisible) ||
             (candidate.isVisible && selected->isVisible &&
              groundDistance(feet, candidate.observation.position) <
@@ -72,7 +78,8 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     Decision decision{.behavior = Behavior::MoveTo};
     if (selected != nullptr) {
         decision = {.intent = {.lookAt = selected->observation.aimAt.value_or(goal)},
-                    .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate};
+                    .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate,
+                    .target = pursued};
         if (selected->isVisible && length(goal - feet) <= rules.attackDistance.value()) {
             decision.behavior = Behavior::Attack;
             decision.intent.attacks = true;

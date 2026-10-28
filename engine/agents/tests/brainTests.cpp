@@ -72,6 +72,38 @@ TEST(AgentBrain, ChasesOnTheMeshAndAttacksOnlyWhileItSeesTheTarget) {
     EXPECT_FALSE(brain.decide({.x = 180}, query).intent.attacks);
 }
 
+TEST(AgentBrain, PursuesATargetOnlyItsReactionTimeAfterItFirstSawIt) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    nx::agents::Rules reacting = rules();
+    reacting.reactionTime = nx::Seconds{0.5F};
+    nx::agents::Brain brain{reacting};
+    const std::array seen{nx::agents::Observation{.entity = target, .position = {.x = 20}}};
+    const auto at = [](float seconds) {
+        return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
+    };
+    brain.perceive(seen, at(0.0F), nx::kDefaultTickRate);
+    EXPECT_FALSE(brain.memories().front().isRecognized);
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle) << "seen, not reacted to";
+    brain.perceive(seen, at(0.49F), nx::kDefaultTickRate);
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
+    brain.perceive({}, at(0.5F), nx::kDefaultTickRate);
+    const auto investigated = brain.decide({}, query);
+    EXPECT_EQ(investigated.behavior, nx::agents::Behavior::Investigate) << "recognized out of sight too";
+    EXPECT_EQ(investigated.target, target);
+    brain.perceive(seen, at(0.6F), nx::kDefaultTickRate);
+    const auto attack = brain.decide({}, query);
+    EXPECT_EQ(attack.behavior, nx::agents::Behavior::Attack);
+    EXPECT_EQ(attack.target, target);
+    // Forgotten, it is noticed anew when it is seen again.
+    brain.perceive({}, at(2.7F), nx::kDefaultTickRate);
+    ASSERT_TRUE(brain.memories().empty());
+    brain.perceive(seen, at(2.8F), nx::kDefaultTickRate);
+    EXPECT_FALSE(brain.memories().front().isRecognized);
+}
+
 TEST(AgentBrain, ReportsAnUnreachableGoalWithoutDirectMovement) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// The console's bot commands (docs/10, section 11): a bot added to a team counts in bot_quota, every bot
-// kicked sets it to 0, and what cannot act on a game leaves it as it was.
+// The console's bot commands (docs/10, section 11): a bot added to a team, of bot_difficulty's
+// difficulty, counts in bot_quota, every bot kicked sets it to 0, and what cannot act on a game leaves
+// it as it was.
 
 #include <gtest/gtest.h>
 
@@ -25,11 +26,13 @@ protected:
         EXPECT_TRUE(registered.has_value());
         cvars.emplace(std::move(registered).value());
         const cs::BotActions actions{
-            .add = [this](std::optional<cs::Team> team) -> nx::Result<void, cs::BotActionError> {
+            .add = [this](std::optional<cs::Team> team,
+                          cs::BotDifficulty difficulty) -> nx::Result<void, cs::BotActionError> {
                 if (!isPlayed) {
                     return nx::fail(cs::BotActionError::NoMap);
                 }
                 added.push_back(team);
+                difficulties.push_back(difficulty);
                 return {};
             },
             .kickAll = [this]() -> nx::Result<void, cs::BotActionError> {
@@ -51,6 +54,7 @@ protected:
     std::optional<cs::BotCvars> cvars;
     bool isPlayed = true;
     std::vector<std::optional<cs::Team>> added;
+    std::vector<cs::BotDifficulty> difficulties;
     std::uint32_t kicks = 0;
 };
 
@@ -80,6 +84,23 @@ TEST_F(BotCommandsTest, ABotAddedWithNoMapFailsAndLeavesTheQuota) {
     run("bot_add_t");
     EXPECT_EQ(output.failureCodes(), std::vector{ConsoleError::CommandFailed});
     EXPECT_EQ(cvars->quotaCount(), 0U);
+}
+
+TEST_F(BotCommandsTest, EachBotAddedPlaysAtTheDifficultyBotDifficultyNames) {
+    run("bot_add; bot_difficulty 3; bot_add_t");
+    EXPECT_EQ(difficulties, (std::vector{cs::BotDifficulty::Easy, cs::BotDifficulty::Expert}))
+        << "0 at first";
+}
+
+TEST_F(BotCommandsTest, BotDifficultyNamesEachDifficultyFromATenthBelowItsNumber) {
+    for (const auto& [value, difficulty] :
+         {std::pair{"-1", cs::BotDifficulty::Easy}, std::pair{"0.89", cs::BotDifficulty::Easy},
+          std::pair{"0.9", cs::BotDifficulty::Normal}, std::pair{"1.89", cs::BotDifficulty::Normal},
+          std::pair{"1.9", cs::BotDifficulty::Hard}, std::pair{"2.9", cs::BotDifficulty::Expert},
+          std::pair{"7", cs::BotDifficulty::Expert}}) {
+        run(std::format("bot_difficulty {}", value));
+        EXPECT_EQ(cvars->difficultyLevel(), difficulty) << value;
+    }
 }
 
 TEST_F(BotCommandsTest, TheQuotaCountsWholeBotsAndNoneBelowOne) {

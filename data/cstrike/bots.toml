@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 # SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-# How the bots see, remember, move and keep their number (docs/10, section 11), read into
-# cs::BotRules. ReGameDLL_CS's reconstruction of Condition Zero's bot gives what it has (GPL,
-# consulted: docs/20 section 3); the rest is the project's own.
+# How the bots see, remember, move, keep their number and play by their skill (docs/10, section 11),
+# read into cs::BotRules. ReGameDLL_CS's reconstruction of Condition Zero's bot gives what it has
+# (GPL, consulted: docs/20 section 3); the rest is the project's own.
 
 # FInViewCone of a player: m_flFieldOfView 0.5, the cosine of half of a 120 degree cone about its view.
 fieldOfView = 120.0
@@ -30,3 +30,123 @@ head = 25.0
 standingFeet = 34.0
 duckedFeet = 14.0
 side = 13.0
+
+# The levels of skill a bot plays with: those of bot_difficulty's difficulty, one drawn as it joins.
+# The templates of the BotProfile.db that ReGameDLL_CS's zBot ships (its Skill a hundredth here; the
+# Default template's reaction time 0.3 and attack delay 0 where one sets none). Its named profiles
+# come with the bots' names.
+[[skillLevels]]
+name = "easy"
+difficulties = ["easy"]
+skill = 0.0
+reactionTime = 0.5
+attackDelay = 1.5
+
+[[skillLevels]]
+name = "fair"
+difficulties = ["easy", "normal"]
+skill = 0.25
+reactionTime = 0.4
+attackDelay = 1.0
+
+[[skillLevels]]
+name = "normal"
+difficulties = ["normal"]
+skill = 0.5
+reactionTime = 0.4
+attackDelay = 0.7
+
+[[skillLevels]]
+name = "tough"
+difficulties = ["normal", "hard"]
+skill = 0.6
+reactionTime = 0.3
+attackDelay = 0.35
+
+[[skillLevels]]
+name = "hard"
+difficulties = ["hard"]
+skill = 0.75
+reactionTime = 0.25
+attackDelay = 0.0
+
+[[skillLevels]]
+name = "veryHard"
+difficulties = ["hard"]
+skill = 0.8
+reactionTime = 0.25
+attackDelay = 0.0
+
+[[skillLevels]]
+name = "expert"
+difficulties = ["expert"]
+skill = 0.9
+reactionTime = 0.2
+attackDelay = 0.0
+
+[[skillLevels]]
+name = "elite"
+difficulties = ["expert"]
+skill = 1.0
+reactionTime = 0.2
+attackDelay = 0.0
+
+# How a bot's view turns towards where it looks (UpdateLookAngles): a spring, stiffer as it attacks;
+# its yaw set once a degree off at most, its pitch pulled twice as hard and held within 89 degrees.
+[look]
+snapTolerance = 1.0
+pitchStiffness = 2.0
+pitchLimit = 89.0
+
+[look.attacking]
+stiffness = 300.0
+damping = 30.0
+maxAcceleration = 3000.0
+
+[look.roaming]
+stiffness = 200.0
+damping = 25.0
+maxAcceleration = 3000.0
+
+# How a bot's aim errs (SetAimOffset, UpdateAimOffset): a tenth of the range at most on each axis,
+# times the share of skill it lacks; focusing, held steadier than 100 degrees a second, it gains up
+# to 0.75 of skill over 5 seconds times the share it lacks, 2 at least; a new error each 0.25 to 1
+# second, which its aim moves a tenth of the way to each of its 30 commands a second. Above half a
+# skill it aims ahead of a moving enemy by 3 of those commands (Upkeep).
+[aim]
+errorPerRange = 0.1
+slowestFocus = 5.0
+quickestFocus = 2.0
+bestFocus = 0.75
+steadyTurn = 100.0
+soonestNewError = 0.25
+latestNewError = 1.0
+settleShare = 0.1
+settleRate = 30.0
+leadingSkill = 0.5
+leadTime = 0.1
+
+# How a bot fires (FireWeaponAtEnemy): a press weighed at each full think, a tenth of a second apart
+# (g_flBotFullThinkInterval), held until the next; aimed within twice HalfHumanWidth beside where it
+# aims; with a pistol as fast as it may above 0.75 of skill, else 0.15 to 0.4 seconds apart; with a
+# gun at once below half a skill or nearer than 400, 0.3 to 0.7 seconds apart beyond 800, else 0.15 to
+# 0.5.
+[fire]
+aimHalfWidth = 32.0
+thinkInterval = 0.1
+rapidPistolSkill = 0.75
+spraySkill = 0.5
+sprayRange = 400.0
+distantRange = 800.0
+
+[fire.pistolPause]
+shortest = 0.15
+longest = 0.4
+
+[fire.distantPause]
+shortest = 0.3
+longest = 0.7
+
+[fire.burstPause]
+shortest = 0.15
+longest = 0.5

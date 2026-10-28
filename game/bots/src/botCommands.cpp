@@ -21,6 +21,9 @@ constexpr std::string_view kEveryBot = "all";
 
 // A server's cvar, told to its players, as the original's FCVAR_SERVER.
 constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
+/// How far below the number of the next difficulty bot_difficulty still names the one before
+/// (GetDifficultyLevel's 0.9, 1.9 and 2.9).
+constexpr float kDifficultyTolerance = 0.1F;
 
 /// `command`'s bot joining `team` through `actions`, bot_quota counting it.
 [[nodiscard]] auto addBot(const BotActions& actions, const BotCvars& cvars, std::string_view command,
@@ -30,7 +33,7 @@ constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
         return nx::fail(ConsoleError::InvalidArguments,
                         std::format("usage: {}: a bot by its name comes with the bots' names", command));
     }
-    if (auto added = actions.add(team); !added) {
+    if (auto added = actions.add(team, cvars.difficultyLevel()); !added) {
         return nx::fail(ConsoleError::CommandFailed, std::string{command}, std::move(added.error()));
     }
     cvars.setQuota(cvars.quotaCount() + 1);
@@ -48,7 +51,15 @@ auto BotCvars::registerIn(Console& console) -> nx::Result<BotCvars, nx::console:
     if (!quota) {
         return std::unexpected{std::move(quota.error())};
     }
-    return BotCvars{.quota = *quota};
+    auto difficulty = console.registerCvar(nx::console::CvarDesc<float>{
+        .name = "bot_difficulty",
+        .defaultValue = 0.0F,
+        .description = "The difficulty the bots that join play at: 0 easy, 1 normal, 2 hard, 3 expert.",
+        .flags = kServerCvar});
+    if (!difficulty) {
+        return std::unexpected{std::move(difficulty.error())};
+    }
+    return BotCvars{.quota = *quota, .difficulty = *difficulty};
 }
 
 auto BotCvars::quotaCount() const noexcept -> std::uint32_t {
@@ -59,6 +70,17 @@ auto BotCvars::quotaCount() const noexcept -> std::uint32_t {
     return value >= static_cast<float>(std::numeric_limits<std::uint32_t>::max())
                ? std::numeric_limits<std::uint32_t>::max()
                : static_cast<std::uint32_t>(value);
+}
+
+auto BotCvars::difficultyLevel() const noexcept -> BotDifficulty {
+    const float value = difficulty.value();
+    for (const BotDifficulty level : nx::EnumArray<BotDifficulty, bool>::keys()) {
+        const float next = static_cast<float>(std::to_underlying(level) + 1);
+        if (value < next - kDifficultyTolerance) {
+            return level;
+        }
+    }
+    return BotDifficulty::Expert;
 }
 
 void BotCvars::setQuota(std::uint32_t count) const {
