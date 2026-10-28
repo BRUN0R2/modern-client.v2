@@ -48,6 +48,7 @@ nxAddModuleLibrary(csShared
         src/breath.cpp
         src/hitGroups.cpp
         src/hostages.cpp
+        src/player.cpp
         src/playerHarm.cpp
         src/use.cpp
         src/modelFiles.cpp

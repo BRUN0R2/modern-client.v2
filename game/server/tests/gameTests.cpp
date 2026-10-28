@@ -7,8 +7,10 @@
 // tick's snapshot tells its client; players of both teams: each team's spawn points in turn, Game
 // Commencing, a team eliminated and its winners paid, a player joining late watching until the next
 // round, and players solid to each other; what a client is told of the other players, and how their models
-// play; on the BSP seed of the fuzz corpus (a floor at z = 0 in its hulls) given other entities, by the
-// repository's data, each character's model of the shape of Counter-Strike's.
+// play; the players' shots and knives meeting each other's hitboxes, hurting them by where they meet them
+// and through their armor, flinching them, sparing their teammates or not, and paying for a kill; on the
+// BSP seed of the fuzz corpus (a floor at z = 0 in its hulls) given other entities, by the repository's
+// data, each character's model of the shape of Counter-Strike's.
 
 #include <gtest/gtest.h>
 
@@ -53,6 +55,14 @@ constexpr std::uint32_t kPastAFreeze = 610;
 constexpr std::uint32_t kPastTheJoinWindow = 2010;
 /// Above a floor: a fall from there kills.
 constexpr float kDeadlyHeight = 2000.0F;
+/// Ticks a weapon drawn takes to be ready to attack, and more.
+constexpr std::uint32_t kReadyTicks = 120;
+/// How far ahead along +x of its attacker a victim of the attacks' tests stands, along y kDuelY; the
+/// eye of either placed a unit above where it stands on the floor, and the ticks it takes to land.
+constexpr float kVictimAhead = 40.0F;
+constexpr float kDuelY = 1000.0F;
+constexpr float kStandingEye = cs::kStandingViewHeight.value() + 1.0F;
+constexpr std::uint32_t kLandingTicks = 20;
 
 /// A game of the box, with the repository's data and an installation of the characters' models alone.
 class GameTest : public ::testing::Test {
@@ -103,6 +113,56 @@ protected:
         return m_game->snapshotFor(player);
     }
 
+    /// Plays a tick of `player`'s command looking along `view` with `buttons` down, asking to draw `weapon`;
+    /// returns its snapshot.
+    auto press(cs::PlayerIndex player, nx::Flags<cs::Button> buttons, nx::EulerAngles view = {},
+               std::optional<cs::WeaponIndex> weapon = std::nullopt) -> cs::PlayerSnapshot {
+        m_lastCommand = cs::CommandNumber{m_lastCommand.value + 1};
+        const std::array commands{
+            cs::PlayerCommand{.player = player,
+                              .command = cs::UserCommand{.number = m_lastCommand,
+                                                         .duration = nx::Milliseconds{10.0F},
+                                                         .viewAngles = view,
+                                                         .buttons = buttons,
+                                                         .weaponSelect = weapon}}};
+        m_game->tick(commands);
+        return m_game->snapshotFor(player);
+    }
+
+    /// `attacker` standing on the floor at x 0 and y `attackerY`, looking along +x, `weapon` drawn and
+    /// ready; `victim` standing kVictimAhead further along +x at y kDuelY, its back to it, aiming, its
+    /// legs along +x: placed a unit short of there first, its legs then turned the way it moved
+    /// (StudioEstimateGait).
+    void standOff(cs::PlayerIndex attacker, cs::PlayerIndex victim, std::string_view weapon,
+                  float attackerY = kDuelY) {
+        m_game->placeEye(victim, {.x = kVictimAhead - 1.0F, .y = kDuelY, .z = kStandingEye});
+        std::ignore = play(victim, 1);
+        m_game->placeEye(victim, {.x = kVictimAhead, .y = kDuelY, .z = kStandingEye});
+        std::ignore = play(victim, kLandingTicks);
+        placeAttacker(attacker, attackerY);
+        std::ignore = press(attacker, {}, {}, m_content->weapons.indexOf(weapon));
+        std::ignore = play(attacker, kReadyTicks);
+    }
+
+    /// `attacker` standing on the floor at x 0 and y `y`.
+    void placeAttacker(cs::PlayerIndex attacker, float y = kDuelY) {
+        m_game->placeEye(attacker, {.y = y, .z = kStandingEye});
+        std::ignore = play(attacker, kLandingTicks);
+    }
+
+    /// How `seen` is shown to `viewer`'s client.
+    [[nodiscard]] auto shown(cs::PlayerIndex viewer, cs::PlayerIndex seen) -> cs::PlayerEntityState {
+        const cs::PlayerSnapshot snapshot = m_game->snapshotFor(viewer);
+        const auto found = std::ranges::find(snapshot.players, seen, &cs::PlayerEntityState::player);
+        EXPECT_NE(found, snapshot.players.end());
+        return found != snapshot.players.end() ? *found : cs::PlayerEntityState{};
+    }
+
+    /// Whether `player` was heard making `sound` in the last tick.
+    [[nodiscard]] auto made(cs::PlayerIndex player, const cs::GameSound& sound) -> bool {
+        return std::ranges::contains(m_game->snapshotFor(player).sounds, &sound, &cs::SoundMade::sound);
+    }
+
     /// Plays `ticks` ticks of no player's command.
     void idle(std::uint32_t ticks) {
         for (std::uint32_t tick = 0; tick < ticks; ++tick) {
@@ -126,6 +186,9 @@ protected:
     [[nodiscard]] auto game() -> cs::Game& { return *m_game; }
     [[nodiscard]] auto content() const -> const cs::GameContent& { return *m_content; }
     [[nodiscard]] auto cvars() const -> const cs::GameCvars& { return *m_cvars; }
+    [[nodiscard]] auto sequence(std::string_view label) const -> nx::assets::SequenceIndex {
+        return nx::assets::SequenceIndex{nx::test::playerSequenceIndex(label)};
+    }
 
     [[nodiscard]] auto entityType() -> nx::Result<cs::EntityTypeIndex, cs::EntityError> {
         nx::test::writeEntityModel(m_installation);
@@ -457,6 +520,121 @@ TEST_F(GameTest, AKilledPlayersModelPlaysADeathItsLegsNoGait) {
     EXPECT_LE(dead.sequence.value, nx::test::playerSequenceIndex("crouch_die"));
     EXPECT_EQ(dead.gaitSequence.value, 0U);
     EXPECT_FALSE(dead.weapon.has_value()) << "its weapons gone with it";
+}
+
+TEST_F(GameTest, AKnifeMeetsAPlayersHeadByItsHitboxesAndHurtsItFourTimesAsMuch) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "knife");
+    // A slash at the eye's height meets its head: 15 times 4.
+    std::ignore = press(attacker, {cs::Button::Attack});
+    const cs::PlayerSnapshot hurt = game().snapshotFor(victim);
+    EXPECT_EQ(hurt.status.health, nx::HitPoints{40.0F});
+    EXPECT_FLOAT_EQ(hurt.player.punch.pitch.value(), -12.0F) << "half of 60 up, 12 at most";
+    EXPECT_TRUE(made(victim, content().playerHarm.headPain));
+    EXPECT_TRUE(made(attacker, *content().weapons.findWeapon("knife")->melee->slash.bodySound));
+    EXPECT_EQ(shown(attacker, victim).sequence, sequence("head_flinch")) << "the knife's is a small flinch";
+}
+
+TEST_F(GameTest, AHelmetTakesItsShareOfAHitInTheHeadAndSpillsNoBlood) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "knife");
+    game().giveArmor(victim, cs::ArmorKind::KevlarAndHelmet);
+    std::ignore = press(attacker, {cs::Button::Attack});
+    // The knife's ratio, 0.5 times 1.7: 51 of the 60 to the health, half the rest off the armor.
+    const cs::PlayerSnapshot hurt = game().snapshotFor(victim);
+    EXPECT_EQ(hurt.status.health, nx::HitPoints{49.0F});
+    EXPECT_FLOAT_EQ(hurt.status.armor.value(), 95.5F);
+    EXPECT_EQ(hurt.status.armorKind, cs::ArmorKind::KevlarAndHelmet);
+    EXPECT_EQ(hurt.player.punch, nx::EulerAngles{});
+    EXPECT_TRUE(made(victim, content().playerHarm.helmetPain));
+}
+
+TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "knife");
+    const nx::Money before = game().snapshotFor(attacker).status.money;
+    // Too short for a line to meet its hitboxes, the stab's ducked hull meets its box: no group, its 65
+    // three times as much in its back.
+    std::ignore = press(attacker, {cs::Button::Attack2});
+    const cs::PlayerSnapshot killed = game().snapshotFor(victim);
+    EXPECT_FALSE(killed.status.isAlive());
+    EXPECT_EQ(killed.status.health, nx::HitPoints{100.0F - 195.0F});
+    EXPECT_EQ(game().snapshotFor(attacker).status.money, nx::Money{before.value() + 300})
+        << "an enemy's kill";
+    EXPECT_EQ(game().rounds().end(), cs::RoundEndReason::CounterTerroristsWin);
+    EXPECT_TRUE(made(victim, content().playerHarm.death));
+}
+
+TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    // 12 units to its right: within its box and its shield's hitbox, beside the others.
+    standOff(attacker, victim, "usp", kDuelY - 12.0F);
+    std::ignore = press(attacker, {cs::Button::Attack});
+    const cs::PlayerSnapshot missed = game().snapshotFor(victim);
+    EXPECT_EQ(missed.status.health, cs::kSpawnHealth);
+    EXPECT_FALSE(made(victim, content().playerHarm.pain));
+    EXPECT_FALSE(made(victim, content().playerHarm.headPain));
+
+    // Straight at it, the round meets its head; the USP's 34, less by the way, four times as much, kills.
+    placeAttacker(attacker);
+    std::ignore = play(attacker, kReadyTicks);
+    std::ignore = press(attacker, {cs::Button::Attack});
+    EXPECT_FALSE(game().snapshotFor(victim).status.isAlive());
+    EXPECT_EQ(shown(attacker, victim).sequence, sequence("head"));
+
+    // Dead, its body is not solid: a round goes through where it lies.
+    std::ignore = play(attacker, kReadyTicks);
+    const nx::Money paid = game().snapshotFor(attacker).status.money;
+    std::ignore = press(attacker, {cs::Button::Attack});
+    EXPECT_EQ(game().snapshotFor(attacker).status.money, paid) << "no other kill";
+    EXPECT_FALSE(made(victim, content().playerHarm.headPain));
+}
+
+TEST_F(GameTest, AHeavyWeaponsHitButInTheLegsFlinchesAPlayerLargeKnockingItBack) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    game().give(attacker, *content().weapons.indexOf("ak47"));
+    standOff(attacker, victim, "ak47");
+    // Down into its chest (the box's floor is level with the players' origins): the AK-47's 36, cut to 35
+    // by the way it went.
+    const nx::EulerAngles down{.pitch = nx::Degrees{14.0F}};
+    std::ignore = press(attacker, {cs::Button::Attack}, down);
+    const cs::PlayerSnapshot hurt = game().snapshotFor(victim);
+    EXPECT_EQ(hurt.status.health, nx::HitPoints{65.0F});
+    EXPECT_NEAR(hurt.player.velocity.x, 170.0F, kTolerance) << "knocked back away from its attacker";
+    EXPECT_EQ(shown(attacker, victim).sequence, sequence("head_flinch")) << "the chest's";
+}
+
+TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillCosts) {
+    const cs::PlayerIndex attacker = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    const cs::PlayerIndex teammate = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier);
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier);
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, teammate, "knife");
+    std::ignore = press(attacker, {cs::Button::Attack});
+    EXPECT_EQ(game().snapshotFor(teammate).status.health, cs::kSpawnHealth) << "mp_friendlyfire 0";
+    EXPECT_EQ(game().snapshotFor(teammate).player.punch, nx::EulerAngles{}) << "nor bleeds";
+
+    std::ignore = cvars().friendlyFire.set(1.0F);
+    std::ignore = play(attacker, kReadyTicks);
+    std::ignore = press(attacker, {cs::Button::Attack});
+    EXPECT_EQ(game().snapshotFor(teammate).status.health, nx::HitPoints{79.0F}) << "60 times 0.35, 21";
+    // Two stabs in its back, 68 each, kill it: the killer pays 3300, of its 800.
+    for (int stab = 0; stab < 2; ++stab) {
+        std::ignore = play(attacker, kReadyTicks);
+        std::ignore = press(attacker, {cs::Button::Attack2});
+    }
+    EXPECT_FALSE(game().snapshotFor(teammate).status.isAlive());
+    EXPECT_EQ(game().snapshotFor(attacker).status.money, nx::Money{}) << "none below none";
 }
 
 TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {

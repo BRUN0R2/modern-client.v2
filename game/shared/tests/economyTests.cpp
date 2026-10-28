@@ -62,13 +62,17 @@ TEST(EconomyTest, TheRepositorysMoneyIsTheOriginals) {
     // CHostage::TakeDamage: 20 for each point of damage, and 20 times 25 more for a kill.
     EXPECT_EQ(rules.hostageHarm.perDamage, nx::Money{20});
     EXPECT_EQ(rules.hostageHarm.perKill, nx::Money{500});
+    // PlayerKilled: REWARD_KILLED_ENEMY, and PAYBACK_FOR_KILLED_TEAMMATES lost.
+    EXPECT_EQ(rules.kills.enemy, nx::Money{300});
+    EXPECT_EQ(rules.kills.teammate, nx::Money{3300});
 }
 
 TEST(EconomyTest, TheReaderRefusesAnEndTwiceAndNegativeMoney) {
     constexpr std::string_view kBonuses =
         "[loserBonus]\nfirst = 1400\nafterStreak = 1500\nstep = 500\nmost = 3000\n"
         "[hostageBonus]\nperHostage = 150\nupTo = 2000\n"
-        "[hostageHarm]\nperDamage = 20\nperKill = 500\n";
+        "[hostageHarm]\nperDamage = 20\nperKill = 500\n"
+        "[kills]\nenemy = 300\nteammate = 3300\n";
     const auto twice = cs::readEconomyRules(
         std::format("{}{}", kBonuses,
                     "[[roundEnds]]\nreason = \"targetSaved\"\nmoney = 1\npaysLivingLosers = true\n"

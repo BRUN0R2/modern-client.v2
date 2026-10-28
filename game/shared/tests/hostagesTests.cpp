@@ -257,7 +257,7 @@ TEST(HostagesTest, AHostageStopsAPlayerAsABox) {
     const std::array spawns{cs::HostageSpawn{.origin = {.x = 30.0F, .z = 100.0F}}};
     cs::spawnHostages(world, hulls, spawns);
 
-    const std::vector<cs::SolidBox> boxes = cs::solidBoxesOf(world);
+    const std::vector<cs::SolidBox> boxes = cs::solidBoxesOf(world, std::nullopt);
     ASSERT_EQ(boxes.size(), 1U);
     EXPECT_FLOAT_EQ(boxes[0].origin.x, 30.0F);
     EXPECT_EQ(boxes[0].box.max.z, cs::kHostageBox.max.z);
@@ -429,7 +429,7 @@ TEST(HostageDamageTest, AKilledHostagePlaysItsDeathAndIsNoLongerSolidNorThinks) 
     EXPECT_EQ(dead.activity, cs::Activity::DieHeadshot);
     EXPECT_FALSE(world.has<nx::game::BoxSolidity>(hostage)) << "SOLID_NOT";
     EXPECT_FALSE(world.has<nx::game::NextThink>(hostage));
-    EXPECT_TRUE(cs::solidBoxesOf(world).empty());
+    EXPECT_TRUE(cs::solidBoxesOf(world, std::nullopt).empty());
     const nx::game::Harm again = nx::game::attackEntity(world, hostage, attackOf(15.0F, cs::HitGroup::Head));
     EXPECT_EQ(again.damage.value(), 0.0F) << "a dead hostage takes no damage";
     EXPECT_FALSE(again.isKilled);
@@ -453,7 +453,7 @@ TEST(HostageDamageTest, ARoundPutsADeadHostageBackWholeButCountsItNot) {
     EXPECT_EQ(revived.activity, cs::Activity::Idle);
     EXPECT_TRUE(world.has<nx::game::BoxSolidity>(hostages[0]));
     EXPECT_TRUE(world.has<nx::game::NextThink>(hostages[0]));
-    EXPECT_EQ(cs::solidBoxesOf(world).size(), 2U);
+    EXPECT_EQ(cs::solidBoxesOf(world, std::nullopt).size(), 2U);
 }
 
 TEST(HostageDamageTest, HurtingAHostageCostsItsAttacker) {

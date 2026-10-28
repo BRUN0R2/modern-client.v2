@@ -9,9 +9,8 @@
 /// by how fast it moves and whether it ducks, the way its legs face, and the aim's yaw and pitch blends
 /// that turn its torso and its arms towards where it looks.
 ///
-/// Today: standing, walking, running, ducking, jumping, swimming, firing, reloading and dying of what the
-/// world does to it; the flinches and the deaths by where a shot met it come with the attacks of players
-/// (TODO.md).
+/// Today: standing, walking, running, ducking, jumping, swimming, firing, reloading, flinching and dying
+/// by where an attack met it; the bomb's and the grenades' deaths come with them (TODO.md).
 export module cs.shared:playerAnimation;
 
 import std;
@@ -25,12 +24,14 @@ export namespace cs {
 
 /// What the game asks a player's model to play, as the original's SetAnimation is asked (PLAYER_ANIM).
 enum class PlayerAction : std::uint8_t {
-    Idle,    ///< PLAYER_IDLE: it stands still.
-    Walk,    ///< PLAYER_WALK: it moves, on the ground or in water, or it ducks.
-    Jump,    ///< PLAYER_JUMP.
-    Die,     ///< PLAYER_DIE.
-    Attack1, ///< PLAYER_ATTACK1: its weapon fired or struck.
-    Reload,  ///< PLAYER_RELOAD: its weapon is being reloaded.
+    Idle,        ///< PLAYER_IDLE: it stands still.
+    Walk,        ///< PLAYER_WALK: it moves, on the ground or in water, or it ducks.
+    Jump,        ///< PLAYER_JUMP.
+    Die,         ///< PLAYER_DIE.
+    Attack1,     ///< PLAYER_ATTACK1: its weapon fired or struck.
+    Reload,      ///< PLAYER_RELOAD: its weapon is being reloaded.
+    Flinch,      ///< PLAYER_FLINCH: an attack hurt it.
+    LargeFlinch, ///< PLAYER_LARGE_FLINCH: a heavy weapon's attack hurt it but in the legs, standing.
 };
 
 /// How a player's legs play its gait sequence, and the aim's blends that turn its torso, as the
@@ -62,8 +63,8 @@ struct PlayerAnimation {
 
 /// What a player's model plays by: the model, the end of the labels of the sequences of the weapon it
 /// holds (its m_szAnimExtention: "ak47"), whether it ducks (FL_DUCKING), stands on the ground
-/// (FL_ONGROUND) and how deep it is in water, how fast it moves along the ground, and the moment, the
-/// game running at `rate`.
+/// (FL_ONGROUND) and how deep it is in water, how fast it moves along the ground, the hit group an attack
+/// last met it in (m_LastHitGroup, HitGroup's number), and the moment, the game running at `rate`.
 struct PlayerAnimationContext {
     const nx::assets::MdlView* model = nullptr;
     std::string_view weaponAnimation{};
@@ -71,6 +72,7 @@ struct PlayerAnimationContext {
     bool isOnGround = false;
     WaterLevel waterLevel = WaterLevel::Dry;
     nx::UnitsPerSecond speed{};
+    std::uint32_t lastHitGroup = 0;
     nx::GameTime now{};
     nx::TickRate rate{nx::kDefaultTickRate};
 };
@@ -83,11 +85,15 @@ void spawnAnimation(PlayerAnimation& animation) noexcept;
 /// what it is to do (its ideal activity), a jump, a shot, a reload or a death but while it swims, hovers
 /// or dies; then its torso's sequence by what it does, the weapon it holds and whether it ducks (its
 /// "ref_" or "crouch_" "aim", "shoot", "reload" or "run" of the weapon's end; its first sequence for one
-/// the model lacks), started again for a shot and for a sequence that changes; and its gait sequence by
-/// whether it ducks and how fast it moves (running beyond 135 units a second, running in the torso too
-/// once 4 seconds passed since it fired), a jump's kept. A death plays one of the model's deaths, chosen
-/// at random as the original chooses one for a hit of no group, "crouch_die" ducked, its legs playing
-/// none. Sequences of an activity are drawn from `random` (LookupActivity).
+/// the model lacks), started again for a shot and for a sequence that changes, a shot's, a reload's and
+/// a flinch's played to their end; and its gait sequence by whether it ducks and how fast it moves
+/// (running beyond 135 units a second, running in the torso too once 4 seconds passed since it fired
+/// and while it does not flinch), a jump's kept. A flinch plays "head_flinch" for the head and the
+/// chest, "gut_flinch" elsewhere, either at random for a hit of no group, none for the shield. A death
+/// plays one of the model's deaths by where the attack met it: the head's, the chest's, the stomach's,
+/// "left" and "right" for the arms, a death at random for a hit of no group, the simplest elsewhere;
+/// "crouch_die" ducked; its legs playing none. Sequences of an activity are drawn from `random`
+/// (LookupActivity).
 void setPlayerAnimation(PlayerAnimation& animation, PlayerAction action,
                         const PlayerAnimationContext& context, nx::Random& random);
 

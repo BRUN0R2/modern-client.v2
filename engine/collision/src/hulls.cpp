@@ -440,12 +440,16 @@ public:
                                            Vec3{.x = r0.z, .y = r1.z, .z = r2.z}};
         const std::array<float, kAxes> most{box.bounds.max.x, box.bounds.max.y, box.bounds.max.z};
         const std::array<float, kAxes> least{box.bounds.min.x, box.bounds.min.y, box.bounds.min.z};
+        const Vec3& grownBy = box.grownBy;
         for (std::size_t axis = 0; axis < kAxes; ++axis) {
             const Vec3& normal = axes[axis];
-            // Parity: summed from z, as the engine sums it
+            // Parity: summed from z, as the engine sums it, then moved out by the box's growth along it
             const float along = (normal.z * origin.z) + (normal.y * origin.y) + (normal.x * origin.x);
-            m_planes[axis * kSides] = Plane{.normal = normal, .distance = along + most[axis]};
-            m_planes[(axis * kSides) + 1] = Plane{.normal = normal, .distance = along + least[axis]};
+            const float grown = std::abs(normal.x * grownBy.x) + std::abs(normal.y * grownBy.y) +
+                                std::abs(normal.z * grownBy.z);
+            m_planes[axis * kSides] = Plane{.normal = normal, .distance = (along + most[axis]) + grown};
+            m_planes[(axis * kSides) + 1] =
+                Plane{.normal = normal, .distance = (along + least[axis]) - grown};
         }
         for (std::uint32_t face = 0; face < kFaces; ++face) {
             // The empty is in front of a most's plane and behind a least's.

@@ -15,10 +15,11 @@ import cs.shared;
 
 export namespace cs {
 
-/// The cvars of the rounds, of the money a game starts with and of the players' steps: `mp_freezetime`
-/// (6 seconds), `mp_roundtime` (5 minutes), `mp_startmoney` (800), `sv_restartround` and `sv_restart`
-/// (0: the seconds to restart the game in), and `mp_footsteps` (1: the players' steps sound, any value
-/// but 0).
+/// The cvars of the rounds, of the money a game starts with, of the players' steps and of their attacks
+/// on their teammates: `mp_freezetime` (6 seconds), `mp_roundtime` (5 minutes), `mp_startmoney` (800),
+/// `sv_restartround` and `sv_restart` (0: the seconds to restart the game in), `mp_footsteps` (1: the
+/// players' steps sound, any value but 0), and `mp_friendlyfire` (0: a player's attacks hurt no
+/// teammate, any value but 0 that they do).
 struct GameCvars {
     nx::console::Cvar<float> freezeTime;
     nx::console::Cvar<float> roundTime;
@@ -26,6 +27,7 @@ struct GameCvars {
     nx::console::Cvar<float> restartRound; ///< `sv_restartround`, read before sv_restart.
     nx::console::Cvar<float> restart;      ///< `sv_restart`.
     nx::console::Cvar<float> footsteps;    ///< `mp_footsteps`, read at each step.
+    nx::console::Cvar<float> friendlyFire; ///< `mp_friendlyfire`, read at each attack.
 
     /// Registers them in `console`. Errors: those of Console::registerCvar.
     [[nodiscard]] static auto registerIn(nx::console::Console& console)
@@ -42,6 +44,8 @@ struct GameCvars {
     [[nodiscard]] auto takeRestart() const -> std::optional<nx::Seconds>;
     /// Whether the players' steps sound: mp_footsteps is not 0.
     [[nodiscard]] auto doStepsSound() const -> bool;
+    /// Whether a player's attacks hurt its teammates: mp_friendlyfire is not 0.
+    [[nodiscard]] auto isFriendlyFireOn() const -> bool;
 };
 
 } // namespace cs

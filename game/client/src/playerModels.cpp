@@ -22,6 +22,12 @@ namespace {
     return nx::affine(nx::rotationMatrix(turn), origin);
 }
 
+/// The first blending of a player's sequence of two to eight blends the client draws: the yaw's blend
+/// cut to a whole one, as the server tells it (CalculateYawBlend's pev->blending[0]).
+[[nodiscard]] auto blendingOf(float yawBlend) noexcept -> std::uint8_t {
+    return static_cast<std::uint8_t>(std::trunc(yawBlend));
+}
+
 } // namespace
 
 auto PlayerModels::readFile(const nx::assets::Vfs& vfs, std::string_view path)
@@ -117,13 +123,15 @@ auto PlayerModels::posed(const PlayerGpuModels& models, std::span<const ShownPla
         }
         const AnimatedModel& character = *m_characters[player.character.value];
         const nx::Mat3x4 placement = placementOf(player.origin, player.angles);
-        std::vector<nx::Mat3x4> bones = posePlayerBones(*view, character.animations, player.sequence,
-                                                        PlayerPoseQuery{.frame = player.frame,
-                                                                        .gaitSequence = player.gaitSequence,
-                                                                        .gaitFrame = player.gaitFrame,
-                                                                        .yawBlend = player.yawBlend,
-                                                                        .pitchBlend = player.pitchBlend,
-                                                                        .placement = placement});
+        std::vector<nx::Mat3x4> bones =
+            posePlayerBones(*view, character.animations, player.sequence,
+                            PlayerPoseQuery{.frame = player.frame,
+                                            .gaitSequence = player.gaitSequence,
+                                            .gaitFrame = player.gaitFrame,
+                                            .yawBlend = player.yawBlend,
+                                            .pitchBlend = player.pitchBlend,
+                                            .blending = blendingOf(player.yawBlend),
+                                            .placement = placement});
         const nx::render::ModelLight lit = light.modelLightAt({.origin = player.origin, .sky = sky}, styles);
         if (player.weapon && player.weapon->value < m_weapons.size() && m_weapons[player.weapon->value] &&
             !m_weapons[player.weapon->value]->animations.empty() &&

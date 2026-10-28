@@ -63,11 +63,19 @@ struct HostageHarmCosts {
     nx::Money perKill{};
 };
 
+/// What a player gets for killing a player of the other team (REWARD_KILLED_ENEMY), and loses for
+/// killing one of its own (PAYBACK_FOR_KILLED_TEAMMATES) (CHalfLifeMultiplay::PlayerKilled).
+struct KillMoney {
+    nx::Money enemy{};
+    nx::Money teammate{};
+};
+
 /// data/cstrike/economy.toml.
 struct EconomyRules {
     LoserBonus loserBonus{};
     HostageBonus hostageBonus{};
     HostageHarmCosts hostageHarm{};
+    KillMoney kills{};
     std::vector<RoundEndMoney> roundEnds{}; ///< One for each reason at most.
 
     /// What the file says of a round ended by `reason`: nothing for its winners, its losers paid,
@@ -157,6 +165,15 @@ struct nx::meta::Description<cs::LoserBonus> {
 };
 
 template <>
+struct nx::meta::Description<cs::KillMoney> {
+    static constexpr std::string_view kName = "cs::KillMoney";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::KillMoney::enemy>("enemy", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::KillMoney::teammate>("teammate", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::HostageHarmCosts> {
     static constexpr std::string_view kName = "cs::HostageHarmCosts";
     static constexpr std::tuple kFields{
@@ -181,6 +198,7 @@ struct nx::meta::Description<cs::EconomyRules> {
         nx::meta::field<&cs::EconomyRules::loserBonus>("loserBonus"),
         nx::meta::field<&cs::EconomyRules::hostageBonus>("hostageBonus"),
         nx::meta::field<&cs::EconomyRules::hostageHarm>("hostageHarm"),
+        nx::meta::field<&cs::EconomyRules::kills>("kills"),
         nx::meta::field<&cs::EconomyRules::roundEnds>("roundEnds"),
     };
 };

@@ -418,8 +418,7 @@ auto posePlayerBones(const nx::assets::MdlView& model,
     if (animation.blendCount != kAimBlends) {
         pose = poseOf(0);
         if (animation.blendCount > 1) {
-            // pev->blending[0]: the yaw's blend cut to a whole one.
-            blendPoses(pose, poseOf(1), std::trunc(query.yawBlend) / kBlendingTop);
+            blendPoses(pose, poseOf(1), static_cast<float>(query.blending) / kBlendingTop);
         }
     } else {
         // The four blends around the aim, three by three, and each blend's share of its half, in double.
@@ -526,15 +525,15 @@ auto controllerSettingOf(const BoneController& controller, float value) noexcept
     return static_cast<std::uint8_t>(std::min(std::trunc(setting), static_cast<float>(kControllerTop)));
 }
 
-auto placedHitboxesOf(std::span<const nx::assets::Hitbox> hitboxes, std::span<const nx::Mat3x4> bones)
-    -> std::vector<nx::collision::PlacedBox> {
+auto placedHitboxesOf(std::span<const nx::assets::Hitbox> hitboxes, std::span<const nx::Mat3x4> bones,
+                      nx::Vec3 grownBy) -> std::vector<nx::collision::PlacedBox> {
     nx::expects(std::ranges::all_of(
                     hitboxes,
                     [&bones](const nx::assets::Hitbox& hitbox) { return hitbox.bone.value < bones.size(); }),
                 "placedHitboxesOf: each hitbox on one of the bones");
-    return hitboxes | std::views::transform([&bones](const nx::assets::Hitbox& hitbox) {
-               return nx::collision::PlacedBox{.placement = bones[hitbox.bone.value],
-                                               .bounds = hitbox.bounds};
+    return hitboxes | std::views::transform([&bones, grownBy](const nx::assets::Hitbox& hitbox) {
+               return nx::collision::PlacedBox{
+                   .placement = bones[hitbox.bone.value], .bounds = hitbox.bounds, .grownBy = grownBy};
            }) |
            std::ranges::to<std::vector>();
 }

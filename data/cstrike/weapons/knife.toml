@@ -36,12 +36,13 @@ idleAfter = 2.0
 missSound = { files = ["weapons/knife_slash1.wav", "weapons/knife_slash2.wav"], channel = "weapon", volume = 1.0, pitch = { least = 94, most = 94 } }
 # on the world and the brush entities: the multiplayer rules play no sound of their texture
 hitSound = { files = ["weapons/knife_hitwall1.wav"], channel = "item", volume = 1.0, pitch = { least = 98, most = 101 } }
-# on a body, a hostage today
+# on a body: a player or a hostage
 bodySound = { files = ["weapons/knife_hit1.wav", "weapons/knife_hit2.wav", "weapons/knife_hit3.wav", "weapons/knife_hit4.wav"], channel = "weapon", volume = 1.0 }
 
 [melee.stab] # +attack2 (Stab): it leaves the idle as it was
 reach = 32.0
-damage = 65.0 # KNIFE_STAB_DAMAGE; three times as much in a player's back, which comes with the players
+damage = 65.0 # KNIFE_STAB_DAMAGE
+backMultiplier = 3.0 # three times as much in a player's back (KnifeBackStabMultiplier)
 missSequences = [5] # stab_miss
 hitSequences = [4] # stab
 miss = { primary = 1.0, secondary = 1.0 }
@@ -49,5 +50,9 @@ hit = { primary = 1.1, secondary = 1.1 }
 missSound = { files = ["weapons/knife_slash1.wav", "weapons/knife_slash2.wav"], channel = "weapon", volume = 1.0, pitch = { least = 94, most = 94 } }
 # on the world and the brush entities: the multiplayer rules play no sound of their texture
 hitSound = { files = ["weapons/knife_hitwall1.wav"], channel = "item", volume = 1.0, pitch = { least = 98, most = 101 } }
-# on a body, a hostage today
+# on a body: a player or a hostage
 bodySound = { files = ["weapons/knife_stab.wav"], channel = "weapon", volume = 1.0 }
+
+[harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
+armorRatio = 1.7
+largeFlinch = false

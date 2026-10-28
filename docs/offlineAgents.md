@@ -65,7 +65,8 @@ definition's hit-group multipliers. Death removes solidity once, stops movement 
 the death sequence; subsequent attacks take no more health. Melee uses a solid trace and
 a server-clock cooldown, which also bounds looping attack animations. An NPC strike on a
 player enters the existing harm/death pipeline.
-Player-versus-player hit groups, armor and combat rules remain the gameplay backlog's work.
+Players attacking each other go through `cs::Game::attackPlayer` instead, with the players' hit
+groups, armor and combat rules ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 
 Sight uses the configured range, field of view, per-agent candidate budget and the server's
 solid traces. A brain pursues a visible target or its last observed position, never an unseen

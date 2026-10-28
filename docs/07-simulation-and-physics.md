@@ -421,9 +421,13 @@ original's `TraceAttack`, then `ApplyMultiDamage` and `TakeDamage`), which says 
 (`nx::game::Harm`: the damage taken, and whether it killed); an entity of a kind that takes none
 takes nothing (`nx::game::attackEntity`). A trace through a hitbox carries its hit group
 (`collision::Trace::hitGroup`, `trace_t::hitgroup`). The knife's blows and the shots' rounds are dealt
-so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). A player takes a harm its armor does not
-take, a hard landing's, as `CBasePlayer::TakeDamage` deals it (`cs::harmPlayer`): the whole points of it
-off its health, killed with none left, as the same section says.
+so today ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). A player's body (`cs::PlayerBody`) is
+solid as its box, standing or ducked, and a line meets it by its model's hitboxes, posed as the server's
+game poses a client's (`cs.server:playerBodies`); an attack on it is dealt by the server's game, as
+`CBasePlayer::TraceAttack` and `TakeDamage` deal it, and a harm of the world as the latter deals it
+(`cs::harmPlayer`): its armor's share, then the whole points of it off its health, killed with none
+left, as the same section says. The pushers leave the body they push out of its own way, not solid
+themselves meanwhile (`SV_PushMove`, `SV_PushEntity`, `SV_TestEntityPosition`).
 
 ## 6. Determinism
 

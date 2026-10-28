@@ -3,7 +3,7 @@
 
 /// Where an attack meets a body, and what that makes of its damage (docs/10-counter-strike-gameplay.md,
 /// section 7.4): data/cstrike/hitGroups.toml, with ReGameDLL_CS's shares (CBaseMonster::TraceAttack,
-/// CHostage::GetModifiedDamage; GPL, consulted: docs/20 section 3).
+/// CHostage::GetModifiedDamage, CBasePlayer::TraceAttack; GPL, consulted: docs/20 section 3).
 export module cs.shared:hitGroups;
 
 import std;
@@ -48,10 +48,12 @@ struct HitGroupShares {
 };
 
 /// data/cstrike/hitGroups.toml: the shares of the monsters' TraceAttack, which a hostage takes an
-/// attack by first, and of the hostages' TakeDamage (GetModifiedDamage), then.
+/// attack by first, and of the hostages' TakeDamage (GetModifiedDamage), then; and of the players'
+/// TraceAttack.
 struct HitGroupRules {
     HitGroupShares monster{};
     HitGroupShares hostage{};
+    HitGroupShares player{};
 };
 
 /// Reads `text`, the file `sourceName`. Errors: DataInvalid.
@@ -81,5 +83,6 @@ struct nx::meta::Description<cs::HitGroupRules> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::HitGroupRules::monster>("monster"),
         nx::meta::field<&cs::HitGroupRules::hostage>("hostage"),
+        nx::meta::field<&cs::HitGroupRules::player>("player"),
     };
 };

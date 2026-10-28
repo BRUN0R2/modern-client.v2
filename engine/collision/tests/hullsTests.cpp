@@ -181,6 +181,33 @@ TEST(HitboxTraceTest, ATurnedHitboxStopsATraceAtItsFace) {
     EXPECT_EQ(beside.trace.fraction, 1.0F) << "past its y, the world's x";
 }
 
+TEST(HitboxTraceTest, AGrownHitboxsFacesMoveOutByTheGrowthAlongThem) {
+    // A quarter turn about z: each face's normal lies along one of the world's axes, its growth that
+    // axis's; then an eighth turn, its sides' normals half along x and half along y.
+    const nx::Aabb unit{.min = {.x = -1.0F, .y = -1.0F, .z = -1.0F},
+                        .max = {.x = 1.0F, .y = 1.0F, .z = 1.0F}};
+    nx::collision::PlacedBox turned = turnedHitbox({.x = 50.0F}, unit);
+    turned.grownBy = {.x = 0.5F, .y = 2.0F, .z = 0.5F};
+    const nx::collision::HitboxTrace along =
+        nx::collision::traceHitboxes(std::array{turned}, {.x = 50.0F, .y = -50.0F}, {.x = 50.0F, .y = 50.0F});
+    EXPECT_NEAR(along.trace.end.y, -3.03125F, kTolerance) << "its x, the world's y, grown by 2";
+    const nx::collision::HitboxTrace beside = nx::collision::traceHitboxes(
+        std::array{turned}, {.x = 51.25F, .y = -50.0F}, {.x = 51.25F, .y = 50.0F});
+    EXPECT_LT(beside.trace.fraction, 1.0F) << "its y, the world's x, grown by half a unit";
+
+    const float diagonal = std::sqrt(0.5F);
+    nx::collision::PlacedBox eighth{
+        .placement = {.rows = {nx::Vec4{.x = diagonal, .y = -diagonal},
+                               nx::Vec4{.x = diagonal, .y = diagonal}, nx::Vec4{.z = 1.0F}}},
+        .bounds = unit,
+        .grownBy = {.x = 0.5F, .y = 0.5F, .z = 0.5F}};
+    // Its x face, along (diagonal, diagonal), moved out by half a unit times twice the diagonal.
+    const nx::collision::HitboxTrace face =
+        nx::collision::traceHitboxes(std::array{eighth}, {.x = 10.0F, .y = 10.0F}, {});
+    const float reach = 1.0F + (2.0F * 0.5F * diagonal);
+    EXPECT_NEAR(face.trace.end.x, (reach + 0.03125F) * diagonal, kTolerance);
+}
+
 TEST(HitboxTraceTest, TheHitboxMetFirstGivesTheTrace) {
     const nx::Aabb unit{.min = {.x = -1.0F, .y = -1.0F, .z = -1.0F},
                         .max = {.x = 1.0F, .y = 1.0F, .z = 1.0F}};
