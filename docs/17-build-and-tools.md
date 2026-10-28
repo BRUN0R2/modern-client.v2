@@ -290,9 +290,17 @@ Every build job also checks the module layers when CMake configures
 ([01 §1.1](01-architecture.md#11-module-catalog)): a dependency on the same or a higher layer fails
 the configuration.
 
-CMake and Ninja come from `pip` with a version range, and vcpkg is cloned on the fly, with
-a binary cache between runs. CI does not depend on what comes preinstalled on the runner
-image.
+CMake and Ninja come from `pip` with a version range, and vcpkg is cloned on the fly at the
+manifest's `builtin-baseline`, so its tool and scripts are as pinned as its ports. CI does not
+depend on what comes preinstalled on the runner image, nor on a download server being up:
+
+- **vcpkg's binary cache** is restored from the newest one `main` saved. Only runs on `main`
+  save it, and only when they built a package, under a key of their own: pull requests read
+  `main`'s cache instead of crowding it out of the repository's quota, and a new compiler on
+  the runner image costs one rebuild instead of one per run.
+- **Installers** (the Vulkan SDK, LLVM) are pinned by SHA-256 and downloaded once
+  (`.github/actions/cachedDownload`); later runs restore them from the cache.
+- **Every job has a time limit**, so a stalled download or test fails it within the hour.
 
 **Planned:**
 
