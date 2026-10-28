@@ -99,6 +99,10 @@ public:
     [[nodiscard]] inline auto bloodSprites() const noexcept -> const EffectSprites& {
         return bloodSpriteFiles;
     }
+    /// The sprite the streaks are drawn with (kStreakSprite), read as it was loaded.
+    [[nodiscard]] inline auto streakSprites() const noexcept -> const EffectSprites& {
+        return streakSpriteFiles;
+    }
     /// How the blood looks, of the content it was loaded from.
     [[nodiscard]] inline auto blood() const noexcept -> const BloodRules& { return *bloodRules; }
     /// The engine's palette (gfx/palette.lmp), which the blood's colors are entries of; none when the
@@ -157,6 +161,7 @@ private:
     std::vector<WeaponViewModel> m_viewModels; ///< By WeaponIndex.
     EffectSprites m_muzzleFlashes;
     EffectSprites bloodSpriteFiles;
+    EffectSprites streakSpriteFiles;
     const BloodRules* bloodRules = nullptr; ///< Of the content it was loaded from, which outlives it.
     std::optional<nx::assets::Palette> enginePalette;
 };

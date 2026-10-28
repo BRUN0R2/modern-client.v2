@@ -382,6 +382,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .bloodMarks = bloodMarks,
                           .bloodSprays = bloodSprays,
                           .bloodStreams = bloodStreams,
+                          .streakSplashes = streakSplashes,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
@@ -394,6 +395,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     bloodMarks.clear();
     bloodSprays.clear();
     bloodStreams.clear();
+    streakSplashes.clear();
     for (Player& player : playersIn(m_players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
@@ -627,6 +629,16 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
     const bool isSpared = isTeammate && !m_cvars.isFriendlyFireOn();
     victim.lastHitGroup = hitGroupOf(attack.trace);
     nx::Damage damage = scaled(attack.damage, m_content->hitGroups.player.of(victim.lastHitGroup));
+    // A helmet sparks, whoever's attack met it.
+    if (sparksOffHelmet(victim.lastHitGroup, victim.status.armorKind)) {
+        const HelmetSparks& sparks = rules.helmetSparks;
+        streakSplashes.push_back(StreakSplash{.position = attack.trace.end,
+                                              .direction = attack.trace.plane.normal,
+                                              .color = sparks.color,
+                                              .count = sparks.count,
+                                              .speed = sparks.speed,
+                                              .spread = sparks.spread});
+    }
     if (isSpared) {
         return;
     }

@@ -3,7 +3,9 @@
 
 // The client's particles (docs/05, section 10): the stream of blood a hit makes a head shed, as
 // R_BloodStream makes it from the repository's data/cstrike/blood.toml, each particle moving and falling
-// at its share of the world's gravity, fading out as it goes, none past the original's most.
+// at its share of the world's gravity, fading out as it goes; the sparks a hit strikes off a helmet, as
+// R_StreakSplash makes them, each streak falling, slowing across the ground and fading out as
+// CL_DrawTracers moves it; none past the original's most.
 
 #include <gtest/gtest.h>
 
@@ -11,6 +13,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.platform;
+import nx.render;
 import cs.shared;
 import cs.client;
 
@@ -22,6 +25,13 @@ constexpr cs::BloodStream kStream{
 /// Its particles: the stream's 100, and 50 over 5 splashed, each with two companions.
 constexpr std::size_t kStreamParticles = 100;
 constexpr std::size_t kSplashParticles = 30;
+/// A helmet's sparks of the tests, off a face looking back along x.
+constexpr cs::StreakSplash kSplash{.position = {.x = 10.0F, .y = 20.0F, .z = 30.0F},
+                                   .direction = {.x = -1.0F},
+                                   .color = 5,
+                                   .count = 22,
+                                   .speed = nx::UnitsPerSecond{25.0F},
+                                   .spread = nx::UnitsPerSecond{65.0F}};
 /// A frame of the tests, a hundredth of a second.
 constexpr nx::Seconds kFrame{0.01F};
 /// The world's gravity, sv_gravity's.
@@ -144,6 +154,65 @@ TEST_F(ParticlesTest, NoneIsMadePastTheOriginalsMost) {
         particles.streamBlood(fastest, look, {});
     }
     EXPECT_EQ(particles.shown().size(), cs::kMostParticles);
+}
+
+TEST_F(ParticlesTest, ASplashIsItsCountOfStreaksAlongItsWayEachDrawnOffAsMuchOnEachAxis) {
+    particles.splashStreaks(kSplash, {});
+    ASSERT_EQ(particles.shownStreaks().size(), 22U);
+    for (const cs::Streak& streak : particles.shownStreaks()) {
+        EXPECT_EQ(streak.origin, kSplash.position);
+        // Its way has no y: what it has of y is what was drawn off it.
+        const float off = streak.velocity.y;
+        EXPECT_LE(std::abs(off), 65.0F);
+        EXPECT_NEAR(streak.velocity.x, -25.0F + off, kTolerance);
+        EXPECT_NEAR(streak.velocity.z, off, kTolerance);
+        EXPECT_EQ(streak.color, (nx::render::RenderColor{.red = 255, .green = 167, .blue = 17}))
+            << "sparks' yellow and orange";
+        EXPECT_GE(streak.goesAt, nx::Seconds{0.1F});
+        EXPECT_LE(streak.goesAt, nx::Seconds{0.5F});
+    }
+}
+
+TEST_F(ParticlesTest, AStreakMovesThenFallsAtTheWholeGravitySlowingAcrossTheGround) {
+    particles.splashStreaks(kSplash, {});
+    const std::vector<cs::Streak> before = particles.shownStreaks() | std::ranges::to<std::vector>();
+    particles.update(kFrame, kFrame, kGravity);
+    ASSERT_EQ(particles.shownStreaks().size(), before.size()) << "none gone before a tenth";
+    for (std::size_t index = 0; index < before.size(); ++index) {
+        const cs::Streak& after = particles.shownStreaks()[index];
+        const cs::Streak& was = before[index];
+        expectNear(after.origin, was.origin + (was.velocity * kFrame.count()), "moved");
+        EXPECT_NEAR(after.velocity.x, was.velocity.x * (1.0F - 0.009F), kTolerance) << "0.9 a second";
+        EXPECT_NEAR(after.velocity.y, was.velocity.y * (1.0F - 0.009F), kTolerance);
+        EXPECT_NEAR(after.velocity.z, was.velocity.z - 8.0F, kTolerance) << "800 a second, a hundredth";
+    }
+    particles.update(nx::Seconds{0.5F}, kFrame, kGravity);
+    EXPECT_TRUE(particles.shownStreaks().empty()) << "all gone by half a second";
+}
+
+TEST(StreakTest, AStreakIsDrawnAsFarAsItMovesInItsTimeLeftATenthAtMostFadingInItsLastHalfSecond) {
+    const cs::Streak streak{.velocity = {.x = 100.0F}, .goesAt = nx::Seconds{1.0F}};
+    expectNear(cs::endOf(streak, {}), {.x = 10.0F}, "a tenth of a second of it");
+    expectNear(cs::endOf(streak, nx::Seconds{0.95F}), {.x = 5.0F}, "the twentieth it has left");
+    EXPECT_EQ(cs::amountOf(streak, nx::Seconds{0.5F}), 255U);
+    EXPECT_EQ(cs::amountOf(streak, nx::Seconds{0.75F}), 127U) << "255 times a half";
+    EXPECT_EQ(cs::amountOf(streak, nx::Seconds{1.0F}), 0U);
+}
+
+TEST(StreakTest, AStreakColorIsTheOriginalsByItsIndexTheTracerCvarsPastThem) {
+    EXPECT_EQ(cs::streakColorOf(0), (nx::render::RenderColor{.red = 255, .green = 255, .blue = 255}));
+    EXPECT_EQ(cs::streakColorOf(5), (nx::render::RenderColor{.red = 255, .green = 167, .blue = 17}));
+    EXPECT_EQ(cs::streakColorOf(11), (nx::render::RenderColor{.red = 255, .green = 120, .blue = 70}));
+    EXPECT_EQ(cs::streakColorOf(12), (nx::render::RenderColor{.red = 102, .green = 102, .blue = 51}));
+}
+
+TEST_F(ParticlesTest, ParticlesAndStreaksShareTheOriginalsMost) {
+    cs::StreakSplash many = kSplash;
+    many.count = 5000;
+    particles.splashStreaks(many, {});
+    EXPECT_EQ(particles.shownStreaks().size(), cs::kMostParticles);
+    particles.streamBlood(kStream, look, {});
+    EXPECT_TRUE(particles.shown().empty()) << "no room left";
 }
 
 } // namespace

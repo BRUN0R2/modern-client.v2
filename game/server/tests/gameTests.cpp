@@ -580,6 +580,30 @@ TEST_F(GameTest, AHelmetTakesItsShareOfAHitInTheHeadAndSpillsNoBlood) {
     EXPECT_TRUE(made(victim, content().playerHarm.helmetPain));
     EXPECT_TRUE(hurt.bloodMarks.empty());
     EXPECT_TRUE(hurt.bloodStreams.empty()) << "the helmet keeps the head's stream in";
+    // It strikes sparks off the helmet where the blade met it, off the face it met.
+    ASSERT_EQ(hurt.streakSplashes.size(), 1U);
+    const cs::StreakSplash& sparks = hurt.streakSplashes.front();
+    EXPECT_EQ(sparks.color, content().playerHarm.helmetSparks.color);
+    EXPECT_EQ(sparks.count, content().playerHarm.helmetSparks.count);
+    EXPECT_EQ(sparks.speed, content().playerHarm.helmetSparks.speed);
+    EXPECT_EQ(sparks.spread, content().playerHarm.helmetSparks.spread);
+    EXPECT_NEAR(nx::length(sparks.direction), 1.0F, kTolerance) << "a face's normal";
+    EXPECT_NEAR(sparks.position.x, kVictimAhead, cs::kStandingBox.max.x);
+}
+
+TEST_F(GameTest, ATeammatesAttackSparksOffAHelmetThoughItHurtsNone) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex teammate =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, teammate, "knife");
+    game().giveArmor(teammate, cs::ArmorKind::KevlarAndHelmet);
+    std::ignore = press(attacker, {cs::Button::Attack});
+    const cs::PlayerSnapshot spared = game().snapshotFor(teammate);
+    EXPECT_EQ(spared.status.health, cs::kSpawnHealth) << "mp_friendlyfire 0";
+    EXPECT_EQ(spared.streakSplashes.size(), 1U) << "TraceAttack sparks before TakeDamage spares it";
 }
 
 TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {

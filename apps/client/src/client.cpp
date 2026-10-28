@@ -469,9 +469,10 @@ private:
     void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Moves the session's temporary entities and particles over `elapsed`, then shows the blood the hits
-    /// sprayed since the last frame (cs::TempEntities::sprayBlood) and the streams the hits in the head
-    /// made (cs::Particles::streamBlood), but without the engine's palette, as the level logged.
+    /// Moves the session's temporary entities and particles over `elapsed`, then shows the splashes of
+    /// streaks since the last frame, the helmets' sparks (cs::Particles::splashStreaks), the blood the
+    /// hits sprayed (cs::TempEntities::sprayBlood) and the streams the hits in the head made
+    /// (cs::Particles::streamBlood), the blood but without the engine's palette, as the level logged.
     void showEffects(nx::Seconds elapsed);
     /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
     /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
@@ -1288,11 +1289,15 @@ void Client::hearSession(const cs::Hearing& hearing) {
 void Client::showEffects(nx::Seconds elapsed) {
     const std::vector<cs::BloodSpray> sprays = m_session->client.takeBloodSprays();
     const std::vector<cs::BloodStream> streams = m_session->client.takeBloodStreams();
+    const std::vector<cs::StreakSplash> splashes = m_session->client.takeStreakSplashes();
     const nx::Seconds now{m_mapClock.elapsed()};
     const cs::Level& level = *m_session->level;
     const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
     m_session->effects.update(now, elapsed, level.hulls(), gravity);
     m_session->particles.update(now, elapsed, gravity);
+    for (const cs::StreakSplash& splash : splashes) {
+        m_session->particles.splashStreaks(splash, now);
+    }
     const std::optional<nx::assets::Palette>& palette = level.palette();
     if (!palette) {
         return;
@@ -1470,6 +1475,7 @@ auto Client::sessionView() -> cs::SceneView {
             .viewModel = m_viewPose,
             .tempEntities = m_session->effects.shown(),
             .particles = m_session->particles.shown(),
+            .streaks = m_session->particles.shownStreaks(),
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};
 }

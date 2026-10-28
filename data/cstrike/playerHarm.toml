@@ -22,7 +22,11 @@
 # `attacks.knockbackBelowSpeed`. `pain` is heard as a harm hurts it but in the head, its armor taking
 # none (or in the legs); `kevlarPain` its armor taking a share; `headPain` in the head, `helmetPain`
 # with a helmet; `splat` as it lands harder than its health can take, and `death` as it dies, one of
-# their files at random.
+# their files at random. Another player's attack in its head with a helmet, a teammate's that spares it
+# too, strikes sparks off the helmet (TraceAttack's TE_STREAK_SPLASH), where it met the helmet, off its
+# face: `helmetSparks.count` of the streak color `helmetSparks.color` (5, yellow and orange), flying off
+# at `helmetSparks.speed` units a second, each up to `helmetSparks.spread` faster or slower on each
+# axis.
 
 pain = { files = ["player/bhit_flesh-1.wav", "player/bhit_flesh-2.wav", "player/bhit_flesh-3.wav"], channel = "voice", volume = 1.0 }
 headPain = { files = ["player/headshot1.wav", "player/headshot2.wav", "player/headshot3.wav"], channel = "voice", volume = 1.0 }
@@ -36,6 +40,12 @@ safeSpeed = 500.0
 fatalSpeed = 1100.0
 damageAtFatalSpeed = 100.0
 scale = 1.25
+
+[helmetSparks]
+color = 5
+count = 22
+speed = 25.0
+spread = 65.0
 
 [drowning]
 interval = 1.0

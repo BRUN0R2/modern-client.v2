@@ -102,6 +102,16 @@ struct HarmfulWater {
     nx::Damage lava{10.0F};
 };
 
+/// The sparks a hit in the head strikes off a helmet, as the server tells its clients of them
+/// (TraceAttack's TE_STREAK_SPLASH): the streak color of their color, how many, how fast they fly off
+/// the helmet, and the most each is drawn faster or slower than that, as much on each axis.
+struct HelmetSparks {
+    std::uint8_t color = 0;
+    std::uint32_t count = 0;
+    nx::UnitsPerSecond speed{};
+    nx::UnitsPerSecond spread{};
+};
+
 /// data/cstrike/playerHarm.toml.
 struct PlayerHarmRules {
     FallDamage fall{};
@@ -112,6 +122,7 @@ struct PlayerHarmRules {
     GameSound pain{};       ///< As a harm hurts it but in the head, its armor taking none (Pain).
     GameSound headPain{};   ///< In the head, without a helmet.
     GameSound helmetPain{}; ///< In the head, with a helmet.
+    HelmetSparks helmetSparks{};
     GameSound kevlarPain{}; ///< But in the head and the legs, its armor taking a share.
     GameSound splat{};      ///< As it lands harder than its health can take.
     GameSound death{};      ///< As it dies (DeathSound).
@@ -120,8 +131,8 @@ struct PlayerHarmRules {
     [[nodiscard]] auto soundFiles() const -> std::vector<std::string_view>;
 };
 
-/// Reads `text`, the file `sourceName`: a fatal speed above the safe one, and each sound with a file.
-/// Errors: DataInvalid.
+/// Reads `text`, the file `sourceName`: a fatal speed above the safe one, each sound with a file, and a
+/// helmet's sparks, some, their speeds no less than none. Errors: DataInvalid.
 [[nodiscard]] auto readPlayerHarmRules(std::string_view text, std::string_view sourceName)
     -> nx::Result<PlayerHarmRules, PlayerHarmError>;
 
@@ -220,6 +231,10 @@ struct PlayerHarmed {
 /// without armor; in the legs and in no group always; never on a shield.
 [[nodiscard]] auto shedsBlood(HitGroup group, ArmorKind kind) noexcept -> bool;
 
+/// Whether a player of armor `kind` met in hit group `group` by another's attack, a teammate's that
+/// spares it too, strikes sparks off its helmet (TraceAttack's bShouldSpark): in the head with a helmet.
+[[nodiscard]] auto sparksOffHelmet(HitGroup group, ArmorKind kind) noexcept -> bool;
+
 /// How an attack's `damage`, its hit group's share taken, punches the view of a player of armor `kind`
 /// met in hit group `group` (TraceAttack), its blood shed (shedsBlood): in the head, its pitch half
 /// the damage up, 12 degrees at most, and its roll as much as the damage, drawn from `random` either
@@ -293,6 +308,17 @@ struct nx::meta::Description<cs::PlayerAttackRules> {
 };
 
 template <>
+struct nx::meta::Description<cs::HelmetSparks> {
+    static constexpr std::string_view kName = "cs::HelmetSparks";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::HelmetSparks::color>("color"),
+        nx::meta::field<&cs::HelmetSparks::count>("count"),
+        nx::meta::field<&cs::HelmetSparks::speed>("speed"),
+        nx::meta::field<&cs::HelmetSparks::spread>("spread"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::PlayerHarmRules> {
     static constexpr std::string_view kName = "cs::PlayerHarmRules";
     static constexpr std::tuple kFields{
@@ -304,6 +330,7 @@ struct nx::meta::Description<cs::PlayerHarmRules> {
         nx::meta::field<&cs::PlayerHarmRules::pain>("pain"),
         nx::meta::field<&cs::PlayerHarmRules::headPain>("headPain"),
         nx::meta::field<&cs::PlayerHarmRules::helmetPain>("helmetPain"),
+        nx::meta::field<&cs::PlayerHarmRules::helmetSparks>("helmetSparks"),
         nx::meta::field<&cs::PlayerHarmRules::kevlarPain>("kevlarPain"),
         nx::meta::field<&cs::PlayerHarmRules::splat>("splat"),
         nx::meta::field<&cs::PlayerHarmRules::death>("death"),

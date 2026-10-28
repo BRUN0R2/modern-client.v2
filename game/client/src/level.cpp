@@ -172,6 +172,12 @@ auto Level::load(const GameContent& content, const GameMap& map)
         !missing.empty()) {
         nx::log::warning(kLog, "the blood's sprites that cannot be read: {}", listed(missing));
     }
+    const std::array streakSprites{std::string{kStreakSprite}};
+    if (const std::vector<std::string> missing = level.streakSpriteFiles.read(content.vfs, streakSprites);
+        !missing.empty()) {
+        nx::log::warning(kLog, "the streaks' sprite that cannot be read, no streak drawn: {}",
+                         listed(missing));
+    }
     level.m_players = PlayerModels::read(content.vfs, content.characters, content.weapons);
     if (!level.m_players->missing().empty()) {
         nx::log::warning(kLog, "models the players are drawn with that cannot be read: {}",
