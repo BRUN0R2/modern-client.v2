@@ -47,8 +47,10 @@ constexpr std::chrono::seconds kSoundFailureInterval{5};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
 /// the original's game chooses it among them.
 constexpr std::string_view kBulletHoleStream = "bulletHoles";
-/// The seed of the stream the temporary entities of each map's client draw their chances from.
+/// The seeds of the streams the temporary entities and the particles of each map's client draw their
+/// chances from.
 constexpr std::uint64_t kTempEntitySeed = 0;
+constexpr std::uint64_t kParticleSeed = 0;
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -195,7 +197,7 @@ void savePipelineCache(const nx::rhi::Device& device) {
 
 /// A map being played, as a listen server plays it (docs/01-architecture.md, section 3): the map as the
 /// game plays it; the level the client draws of it; the game its server plays of it, and the player the
-/// client plays in it; the game as the client knows it, and its temporary entities; and the test
+/// client plays in it; the game as the client knows it, its temporary entities and particles; and the test
 /// zombies and the bots in the game, once asked for. Each goes before what it points into.
 struct Session {
     std::unique_ptr<cs::GameMap> map;
@@ -204,6 +206,7 @@ struct Session {
     cs::PlayerIndex player;
     cs::ClientGame client;
     cs::TempEntities effects;
+    cs::Particles particles;
     /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, ConsoleError> agentMesh;
@@ -361,6 +364,7 @@ struct AgentMeshLoad {
                                              .player = joined,
                                              .client = std::move(known),
                                              .effects = cs::TempEntities{kTempEntitySeed},
+                                             .particles = cs::Particles{kParticleSeed},
                                              .agentMesh = std::move(mesh)});
 }
 
@@ -465,9 +469,9 @@ private:
     void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Moves the session's temporary entities over `elapsed`, then shows the blood the hits sprayed since
-    /// the last frame (cs::TempEntities::sprayBlood), but without the engine's palette, as the level
-    /// logged.
+    /// Moves the session's temporary entities and particles over `elapsed`, then shows the blood the hits
+    /// sprayed since the last frame (cs::TempEntities::sprayBlood) and the streams the hits in the head
+    /// made (cs::Particles::streamBlood), but without the engine's palette, as the level logged.
     void showEffects(nx::Seconds elapsed);
     /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
     /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
@@ -505,7 +509,8 @@ private:
     nx::Result<nx::game::NavigationData, ConsoleError> navigationData{};
     std::optional<cs::GameContent> m_content;
     std::filesystem::path dataFolder;
-    std::unique_ptr<nx::jobs::JobSystem> m_jobs; ///< The maps' meshes are built in it as they load.
+    /// The maps' meshes are built in it as they load, and their agents decide in it each tick.
+    std::unique_ptr<nx::jobs::JobSystem> m_jobs;
     std::optional<cs::EntityTypeIndex> zombieType{};
     std::optional<zombies::Settings> zombieSettings{};
     std::vector<cs::ShownEntity> shownEntities;
@@ -851,7 +856,7 @@ auto Client::botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionErro
     if (!session.agentMesh) {
         return nx::fail(cs::BotActionError::Unavailable, session.agentMesh.error());
     }
-    auto bots = cs::Bots::create(*session.game, *session.agentMesh, *botRules);
+    auto bots = cs::Bots::create(*session.game, *session.agentMesh, *m_jobs, *botRules);
     if (!bots) {
         return nx::fail(cs::BotActionError::Unavailable, std::move(bots.error()));
     }
@@ -929,8 +934,8 @@ auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<v
         if (!session->agentMesh) {
             return std::unexpected{session->agentMesh.error()};
         }
-        auto horde =
-            zombies::Horde::create(*session->game, *session->agentMesh, *zombieType, *zombieSettings);
+        auto horde = zombies::Horde::create(*session->game, *session->agentMesh, *m_jobs, *zombieType,
+                                            *zombieSettings);
         if (!horde) {
             return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
         }
@@ -1282,17 +1287,23 @@ void Client::hearSession(const cs::Hearing& hearing) {
 
 void Client::showEffects(nx::Seconds elapsed) {
     const std::vector<cs::BloodSpray> sprays = m_session->client.takeBloodSprays();
+    const std::vector<cs::BloodStream> streams = m_session->client.takeBloodStreams();
     const nx::Seconds now{m_mapClock.elapsed()};
     const cs::Level& level = *m_session->level;
-    m_session->effects.update(now, elapsed, level.hulls(), cs::MovementSettings{}.gravity);
+    const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
+    m_session->effects.update(now, elapsed, level.hulls(), gravity);
+    m_session->particles.update(now, elapsed, gravity);
     const std::optional<nx::assets::Palette>& palette = level.palette();
     if (!palette) {
         return;
     }
-    const cs::BloodSprayLook& look = m_content->blood.look;
+    const cs::BloodSprayLook& look = m_content->blood.sprayLook;
     const cs::BloodSpriteFrames frames = cs::bloodSpriteFramesOf(level.bloodSprites(), look);
     for (const cs::BloodSpray& spray : sprays) {
         m_session->effects.sprayBlood(spray, look, *palette, frames, now);
+    }
+    for (const cs::BloodStream& stream : streams) {
+        m_session->particles.streamBlood(stream, m_content->blood.streamLook, now);
     }
 }
 
@@ -1458,6 +1469,7 @@ auto Client::sessionView() -> cs::SceneView {
             .entities = shownEntities,
             .viewModel = m_viewPose,
             .tempEntities = m_session->effects.shown(),
+            .particles = m_session->particles.shown(),
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};
 }

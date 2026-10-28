@@ -6,7 +6,7 @@ nxAddModuleLibrary(modZombies
     LAYER 5
     MODULES src/mod.zombies.cppm
     SOURCES src/horde.cpp
-    DEPENDS nx::core nx::math nx::meta nx::data nx::ecs nx::assets nx::game
+    DEPENDS nx::core nx::math nx::meta nx::data nx::jobs nx::ecs nx::assets nx::game
             nx::navigation nx::agents cs::shared cs::server
     LATERAL cs::shared cs::server)
 

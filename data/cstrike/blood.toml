@@ -45,7 +45,7 @@ largestSize = 16
 # at -256 to -255 degrees a second, fall at half the world's gravity (FTENT_SLOWGRAVITY), stop where
 # they meet the world (FTENT_COLLIDEWORLD) and go after 1 to 3 seconds, each on one of its sprite's
 # frames from the second, the last for one beyond the eighth.
-[look]
+[sprayLook]
 spraySprite = "sprites/bloodspray.spr"
 dropSprite = "sprites/blood.spr"
 colorShift = 3
@@ -69,3 +69,38 @@ dropGravity = 0.5
 leastDropLife = 1.0
 mostDropLife = 3.0
 mostDropFrame = 8
+
+# The stream of blood a head without a helmet sheds where the hit met it, the way the hit went, as the
+# server tells its clients of it (BloodSplat, TE_BLOODSTREAM): BLOOD_COLOR_DARKRED, the palette's entry
+# 223; its speed the head's damage times 5, cut to a whole number, and 0 to 100 more, 255 at most. The
+# original writes it as a byte that wraps past 255; ReGameDLL_CS holds it there (UTIL_BloodStream).
+[stream]
+color = 223
+speedPerDamage = 5
+mostExtraSpeed = 100
+fastest = 255
+
+# How a client shows it, as Xash3D-FWGS's R_BloodStream does (GPL, consulted), each particle of the
+# entry 0 to 9 after the server's. Its stream, 100 particles, their way dipped by 0.05 less 0.005 for each
+# before (rising after the tenth), the first at the stream's speed and each a unit a second slower, none
+# slower than still (GoldSrc keeps their speed a whole number, its decrement of 0.00001 cutting a unit
+# each time), falling at 8 twentieths of the world's gravity (pt_8x_slowgrav), gone after 2 seconds.
+# Its splash, a particle for each 5 of its speed, their way dipped by 0.075 less 0.005 for each before,
+# at a share of its speed drawn from 0 to 1, cut to a whole number, times that share times 1.7, with two
+# more each, as fast, dipped a step less and up to a unit off it, as much on each axis; all falling at 4
+# twentieths of the world's gravity (pt_4x_slowgrav), gone after 3 seconds.
+[streamLook]
+colorRange = 10
+streamParticles = 100
+firstDip = 0.05
+dipStep = 0.005
+speedStep = 1.0
+streamGravity = 0.4
+streamLife = 2.0
+splashPerSpeed = 5
+firstSplashDip = 0.075
+splashSpread = 1.7
+splashCompanions = 2
+companionJitter = 1.0
+splashGravity = 0.2
+splashLife = 3.0

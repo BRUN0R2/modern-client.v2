@@ -81,7 +81,10 @@ path yields `Blocked` with its navigation error; it does not enable direct movem
 is built once per map as it loads, in jobs, overlapping the client's level
 (`nx::navigation::MeshBuild`), or read from the cache folder where an earlier load kept it, and the
 horde and the bots borrow it: `zombie_add` and `bot_add`
-build nothing. Agent commands and body updates have deterministic order. The session removes the
+build nothing. Each tick the bodies perceive one by one, then their brains decide together in
+batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at
+its body's index, so that the commands are the same with any number of workers. Agent commands and
+body updates have deterministic order. The session removes the
 horde's owned bodies, including their borrowed corridors, before destroying the mesh. Native extensions attach typed components through `Game` without exposing its world.
 The application owns each session as one unit: replacing a map destroys its horde before
 its game, level and map, including when another map command replaces a pending session.
@@ -100,9 +103,10 @@ and roll back a partially placed batch when the reachable area cannot hold it. A
 pushes an airborne target against a wall and checks its boundary position and floor height.
 Base tests also reject missing points and prevent a full small base from spilling into the
 rest of the map or removing previously created bodies.
-Navigation determinism compares the same mesh with 0, 1, 3 and 15 workers.
-`nxBenchNavigation` measures navigation and pure agent memory/decisions for 64, 256 and
-1024 agents; it does not represent the cost of the full render/physics frame.
+Navigation determinism compares the same mesh, and the decisions of 100 brains over 8 ticks, with
+0, 1, 3 and 15 workers. `nxBenchNavigation` measures navigation and pure agent memory/decisions
+for 32, 64, 256 and 1024 agents, one by one and in batches in jobs; it does not represent the cost
+of the full render/physics frame.
 
 For a local lifetime/rendering smoke test, run `next --validation` with
 `+map de_dust2 +zombie_add 3 +map de_dust2 +zombie_add 3`. This replaces a pending map that

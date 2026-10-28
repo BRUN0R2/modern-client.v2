@@ -65,6 +65,18 @@ struct BloodSpray {
     [[nodiscard]] inline auto operator==(const BloodSpray&) const noexcept -> bool = default;
 };
 
+/// The stream of blood a hit makes a head without a helmet shed where it met it (TE_BLOODSTREAM): the
+/// point, the way the hit went, the palette entry of its color, and its speed, in whole units a second
+/// (streamSpeedOf).
+struct BloodStream {
+    nx::Vec3 position{};
+    nx::Vec3 direction{};
+    std::uint8_t color = 0;
+    std::uint32_t speed = 0;
+
+    [[nodiscard]] inline auto operator==(const BloodStream&) const noexcept -> bool = default;
+};
+
 /// Where the blood a hit shed met what is solid behind it: the point, what it is on, and the decal it
 /// leaves there, of BloodRules::decals.
 struct BloodMark {
@@ -116,9 +128,10 @@ struct PlayerSnapshot {
     /// The sounds it made in the tick, which it hears, each with the moment it was made: its weapons',
     /// then its breath's, its feet's, its use's, its pain's and its death's.
     std::vector<SoundMade> sounds{};
-    std::vector<Impact> impacts{};         ///< Of the tick's shots, in their order.
-    std::vector<BloodMark> bloodMarks{};   ///< Of the tick's hits, in their order.
-    std::vector<BloodSpray> bloodSprays{}; ///< Of the tick's hits, in their order.
+    std::vector<Impact> impacts{};           ///< Of the tick's shots, in their order.
+    std::vector<BloodMark> bloodMarks{};     ///< Of the tick's hits, in their order.
+    std::vector<BloodSpray> bloodSprays{};   ///< Of the tick's hits, in their order.
+    std::vector<BloodStream> bloodStreams{}; ///< Of the tick's hits in the head, in their order.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};

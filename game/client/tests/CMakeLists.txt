@@ -10,6 +10,7 @@ nxAddTest(csClientTests
         hudTests.cpp
         muzzleFlashTests.cpp
         tempEntitiesTests.cpp
+        particlesTests.cpp
         modelMaterialsTests.cpp
         viewModelTests.cpp
         decalsTests.cpp

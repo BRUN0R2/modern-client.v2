@@ -20,6 +20,7 @@ nxAddModuleLibrary(nxRender
         src/world.cppm
         src/studio.cppm
         src/sprite.cppm
+        src/particle.cppm
         src/screen.cppm
         src/post.cppm
         src/probes.cppm
@@ -35,6 +36,7 @@ nxAddModuleLibrary(nxRender
         src/world.cpp
         src/studio.cpp
         src/sprite.cpp
+        src/particle.cpp
         src/screen.cpp
         src/post.cpp
         src/probes.cpp
