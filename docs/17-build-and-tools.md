@@ -333,9 +333,10 @@ depend on what comes preinstalled on the runner image, nor on a download server 
 - **Up to date, one at a time:** GitHub offers its merge queue only to organizations, so
   `.github/workflows/updateBranches.yml` does its work. Whenever `main` moves, a CI run ends or
   a pull request is set to auto-merge, it brings the oldest pull request set to auto-merge that
-  is behind `main` up to date (a merge of `main`, signed by GitHub), unless the CI of one of them
-  is still running; a pull request in conflict with `main` is skipped, for its author to
-  resolve. It updates with the `UPDATE_BRANCHES_TOKEN` secret, a fine-grained token of the
+  is behind `main` up to date (a merge of `main`, signed by GitHub), unless one of them that is
+  up to date still runs its CI: that one merges or fails first. Those whose CI last failed come
+  after the others, so a broken one does not hold them back each time `main` moves, and one in
+  conflict with `main` is skipped, for its author to resolve. It updates with the `UPDATE_BRANCHES_TOKEN` secret, a fine-grained token of the
   repository's owner for this repository alone (Contents, Pull requests and Workflows: read
   and write), because pushes with the workflow's own token start no workflow and so no CI.
 - The squash commit takes the pull request title as its subject and an explicit message with
