@@ -37,6 +37,7 @@ says where.
 | [0026](0026-clean-room-source-policy.md) | One clean room source policy, with consultation of public open-source references | Accepted |
 | [0027](0027-private-member-camelcase.md) | Private members use ordinary camelCase, without a prefix | Accepted |
 | [0028](0028-native-agent-test-mod.md) | Exercise generic entities and agents with an isolated native zombie test mod before Rook | Accepted |
+| [0029](0029-submission-thread.md) | The device submits and presents its frames on a thread of its own | Accepted |
 
 ## Template
 

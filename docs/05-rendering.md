@@ -72,8 +72,10 @@ express**. The vocabulary is close to WebGPU's.
   viewport of negative height.
 
 **Today** (`engine/rhi`, `engine/rhiVulkan`): the device and its frames in flight
-(`beginFrame` waits for the frame's slot and gives its `CommandList`, `submitFrame` submits and
-presents), the swapchain with its recreation on resize and while minimized, and generational
+(`beginFrame` waits until the frame before is taken to the GPU and for the frame's slot, and gives
+its `CommandList`; `submitFrame` hands the frame to the device's submission thread, which submits it
+and presents it, [ADR-0029](adr/0029-submission-thread.md)), the swapchain with its recreation on
+resize and while minimized, and generational
 handles (`HandlePool`: a stale handle is a contract violation) to buffers (device memory, or mapped
 memory to upload and read back, through VMA), textures (with mip levels, and arrays of layers that
 shaders sample as `Texture2DArray`), samplers, shaders, bind group layouts and
@@ -107,6 +109,7 @@ if (!lightmapAtlas) {
 | Memory | Vulkan Memory Allocator (VMA) |
 | Frames in flight | 2 (default) or 3, configurable (`r_frames_in_flight`) |
 | Present | `vid_vsync 0/1`, `r_present_mode immediate/mailbox/fifo` |
+| Submission | A thread of the device's own (`nx::platform::Thread`) submits the frames in the order they were handed and shows them: the only user of the queue and the swapchain while it has frames ([ADR-0029](adr/0029-submission-thread.md)). The frame's pass that draws to the window's image is recorded into a secondary command buffer, which that thread runs inside its own render pass on the image it acquired; it acquires the next image once it has shown a frame, before it takes the next one |
 | Pipeline cache | Persisted on disk per GPU/driver, invalidated by UUID. Today: `next` gives the device what its GPU learned last time (`vulkan::DeviceDesc::pipelineCache`, from `pipelineCache.bin` in the cache folder, `nx::platform::cacheDirectory`: `%LOCALAPPDATA%\Modern-Client.v2`, or `$XDG_CACHE_HOME`/`~/.cache` `modern-client.v2`), kept only when its header names the same vendor, device and cache UUID, and writes what it learned there as it ends (`Device::pipelineCache`, written whole or not at all) |
 | Parallel recording | One `VkCommandPool` per worker per frame in flight |
 | Validation | Validation layers + sync validation in development builds (`--validation` in `next` and `nxview`; always in the tests) |
@@ -148,7 +151,8 @@ if (!lightmapAtlas) {
   - elimination of passes whose result is not consumed;
   - execution order and parallel recording points.
 - Passes record command lists in **parallel jobs**. The render thread submits them in
-  order.
+  order; the device's submission thread takes them to the GPU and shows the frame
+  ([ADR-0029](adr/0029-submission-thread.md)).
 
 ### 7.1 Frame passes (legacy mode)
 
@@ -165,7 +169,7 @@ if (!lightmapAtlas) {
 | 9 | `ScreenEffects` | Flashbang, fade, *screen shake* (applied to the camera), NVG tint |
 | 10 | `Gamma` | Output curve of `r_fidelity enhanced` (HDR); the GoldSrc curves are applied where the original applies them (§11) |
 | 11 | `Hud` | Sprite HUD, crosshair, text, menus ([12](12-ui-hud-and-console.md)) |
-| 12 | `Present` | Copy to the swapchain |
+| 12 | `Present` | The `Hud` pass drawn on the window's image once the device's submission thread has acquired it, then shown ([ADR-0029](adr/0029-submission-thread.md)): no copy |
 
 **Today** (`nx.render:blendedOrder`): until the render graph comes, a frame is one render pass drawn
 in the original's order (`R_DrawEntitiesOnList`, as Xash3D-FWGS reconstructs it). Each renderer
@@ -702,7 +706,10 @@ Xash3D-FWGS project records from the original for its tests.
   lateness (`nx::platform::WakeLateness`), and the clock is read for the rest, the thread yielding its
   core between reads.
 - In low-latency mode, the limiter waits **before** sampling input, so that the frame is
-  built with the most recent input.
+  built with the most recent input. So do the frame's own waits: `next` begins its frame
+  (`Device::beginFrame`: the frame before taken to the GPU, then the frame's slot free) right after
+  the limiter, before it reads the input, so that no frame waits behind another to be submitted
+  ([ADR-0029](adr/0029-submission-thread.md)).
 - The frame rate shown is one measure (`nx::platform::FrameRateMeter`), the original's `net_graph`'s,
   which changes with every frame: an average of the frames' times, each frame's moving it half way to
   its own (`FRAMERATE_AVG_FRAC`), from none, a frame counting for 0.25 s at most as `Host_FilterTime`

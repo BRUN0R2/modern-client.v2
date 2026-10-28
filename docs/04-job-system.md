@@ -183,10 +183,12 @@ scope.spawn(std::move(loadAndUpload));  // async scope bound to the asset system
 | Network | Blocks on `recv`/waits for OS events. Packet latency cannot depend on the frame load |
 | I/O | Blocking OS calls. Delivers results as `Low` jobs |
 | Main | OS requirement for the window and input (SDL3) |
+| Render submission | Blocks in the driver's submit and present and on the display (`vkQueuePresentKHR`, `vkAcquireNextImageKHR`); one per GPU device, which owns it ([ADR-0029](adr/0029-submission-thread.md)) |
 
 All communication between these threads and the jobs uses **lock-free queues** (SPSC/MPSC)
 from `nx.core`, with a named capacity and a typed error if they fill up
-(`QueueError::Full` produces a metric and a log with a *rate limit*).
+(`QueueError::Full` produces a metric and a log with a *rate limit*). Today the queues are
+`nx.jobs`'s (`SpscQueue`), and these threads are `nx::platform::Thread`s, named for the debuggers.
 
 ## 6. How the frame uses the Job System
 

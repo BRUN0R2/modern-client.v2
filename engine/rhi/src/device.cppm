@@ -159,7 +159,10 @@ struct SwapchainDesc {
     PresentMode presentMode = PresentMode::Fifo;
 };
 
-/// The image of the frame: draw to it, then leave it in TextureState::Present.
+/// The window's image of the frame: draw to it in one render pass, the frame's last, as the pass's
+/// only color attachment; it goes from TextureState::Undefined to RenderTarget before the pass, and to
+/// Present after it. It is never copied, sampled nor read back: the device draws the pass on the
+/// window's image once it has one (docs/adr/0029-submission-thread.md).
 struct SwapchainImage {
     TextureHandle texture{}; ///< TextureState::Undefined when acquired: its old content is gone.
     Extent2d size{};
@@ -177,9 +180,9 @@ public:
     virtual ~Swapchain() = default;
 
     /// The image to draw this frame, between Device::beginFrame and Device::submitFrame; nullopt
-    /// when there is none to draw to (the window is minimized, or the swapchain was out of date and
-    /// is recreated for the next frame). Errors: SurfaceLost, DeviceLost, OutOfHostMemory,
-    /// OutOfDeviceMemory, DriverRefused.
+    /// when there is none to draw to (the window is minimized). A swapchain out of date is recreated
+    /// here first. Errors: SurfaceLost, DeviceLost, OutOfHostMemory, OutOfDeviceMemory, DriverRefused,
+    /// and those of an earlier frame's submission.
     [[nodiscard]] virtual auto acquire() -> Result<std::optional<SwapchainImage>, RhiError> = 0;
 
     /// Recreates the images for the window's new drawable size. Errors: as acquire.
@@ -232,7 +235,9 @@ using OwnedBindGroup = Owned<BindGroupTag>;
 using OwnedRenderPipeline = Owned<RenderPipelineTag>;
 
 /// A GPU, its resources and the frames it runs: up to a backend's frames in flight are recorded
-/// while the GPU runs the ones before. Use it from one thread: the render thread.
+/// while the GPU runs the ones before. Use it from one thread: the render thread. The device takes
+/// the frames to the GPU and shows them on a thread of its own, in the order they are submitted
+/// (docs/adr/0029-submission-thread.md).
 ///
 /// Each resource has an owner (Owned), which destroys it; the device then keeps it until the GPU has
 /// finished every frame that may use it. Every owner ends before its device.
@@ -274,17 +279,22 @@ public:
     [[nodiscard]] virtual auto createSwapchain(const SwapchainDesc& desc)
         -> Result<std::unique_ptr<Swapchain>, RhiError> = 0;
 
-    /// Starts a frame: waits until the GPU has finished the frame that last used this frame's
-    /// resources, and gives the command list to record it in. Errors: DeviceLost, DriverRefused.
+    /// Starts a frame: waits until the device has taken the frame before to the GPU, so that no frame
+    /// waits behind another, and until the GPU has finished the frame that last used this frame's
+    /// resources; then gives the command list to record it in. Begin a frame before reading its
+    /// input: the waits then come before it. Errors: DeviceLost, DriverRefused, and those of an
+    /// earlier frame's submission.
     [[nodiscard]] virtual auto beginFrame() -> Result<std::reference_wrapper<CommandList>, RhiError> = 0;
 
-    /// Submits the frame's commands; with `presentTo`, shows the image acquired from it this frame,
-    /// once the commands have drawn it. Errors: DeviceLost, SurfaceLost, OutOfHostMemory,
-    /// OutOfDeviceMemory, DriverRefused.
+    /// Hands the frame's commands to the device, which submits them; with `presentTo`, shows the image
+    /// acquired from it this frame, once the commands have drawn it. Returns without waiting for
+    /// either. Errors: OutOfHostMemory, OutOfDeviceMemory (ending the frame's commands); and a failure
+    /// to submit or show an earlier frame: DeviceLost, SurfaceLost, OutOfHostMemory,
+    /// OutOfDeviceMemory, DriverRefused, which every later frame returns too.
     [[nodiscard]] virtual auto submitFrame() -> Result<void, RhiError> = 0;
     [[nodiscard]] virtual auto submitFrame(Swapchain& presentTo) -> Result<void, RhiError> = 0;
 
-    /// Waits until the GPU has finished everything submitted.
+    /// Waits until everything submitted has been taken to the GPU, and the GPU has finished it.
     virtual void waitIdle() noexcept = 0;
 
     /// Errors the backend's validation reported (the Vulkan validation layers in development
