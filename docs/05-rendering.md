@@ -469,12 +469,18 @@ flowchart LR
    texture's orange where the original's turns yellow. In the enhanced look its `light` lights the
    weapon in hand from the flash (a `StudioLight`, after the key light), dimming to nothing over its
    own time, the lights of a muzzle's flashes added into one. The sprites a view model's flashes show are read
-   with it, by their paths (`cs::MuzzleFlashSprites`, `Level::updateViewModels`), and put on the GPU
+   with it, by their paths (`cs::EffectSprites`, `Level::updateViewModels`), and put on the GPU
    with it (`Scene::loadWeapons`), so that no file is read as a frame plays: one missing is logged
    and its flashes are not shown. A sound's (5004) plays the sound its options name
    ([11 §2](11-audio.md#2-architecture)). `cs::ViewModelEvents` follows the play from a frame to the
    next, for the scene and the sound alike. The original's light of a shot on the world and its
-   models (`EF_MUZZLEFLASH`) comes with the dynamic lights, the shells with the temporary entities. A
+   models (`EF_MUZZLEFLASH`) comes with the dynamic lights, the shells with more temporary entities.
+   The client's temporary entities (`cs.client:tempEntities`) are sprites shown a while where the game
+   tells of an effect, moving on their own, drawn among the map's sprites as translucent as they are
+   (`kRenderTransTexture`), their sprites read with the level (`cs::EffectSprites`): today the blood a
+   hit sprays ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). The original's client moves them in its
+   closed `HUD_TempEntUpdate`: here each falls at its share of the world's gravity, spins, and rests
+   where a line from where it was meets the world. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its

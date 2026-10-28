@@ -4,6 +4,7 @@
 nxAddTest(nxAssetsTests
     SOURCES
         vfsTests.cpp
+        paletteTests.cpp
         contentTests.cpp
         steamTests.cpp
         wadTests.cpp

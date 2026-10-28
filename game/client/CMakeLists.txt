@@ -17,7 +17,9 @@ nxAddModuleLibrary(csClient
         src/entityModels.cppm
         src/modelMaterials.cppm
         src/viewModel.cppm
+        src/effectSprites.cppm
         src/muzzleFlash.cppm
+        src/tempEntities.cppm
         src/levelDecals.cppm
         src/bulletMarks.cppm
         src/level.cppm
@@ -40,7 +42,9 @@ nxAddModuleLibrary(csClient
         src/entityModels.cpp
         src/modelMaterials.cpp
         src/viewModel.cpp
+        src/effectSprites.cpp
         src/muzzleFlash.cpp
+        src/tempEntities.cpp
         src/levelDecals.cpp
         src/bulletMarks.cpp
         src/level.cpp

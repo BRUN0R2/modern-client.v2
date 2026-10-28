@@ -380,6 +380,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .sounds = player.sounds,
                           .impacts = m_impacts,
                           .bloodMarks = bloodMarks,
+                          .bloodSprays = bloodSprays,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
@@ -390,6 +391,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
 void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
     m_impacts.clear();
     bloodMarks.clear();
+    bloodSprays.clear();
     for (Player& player : playersIn(m_players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
@@ -671,6 +673,9 @@ void Game::bleed(const Player& victim, const nx::game::Attack& attack, nx::Damag
                  nx::Random& random) {
     const BloodRules& rules = m_content->blood;
     const nx::Vec3 from = attack.trace.end;
+    if (const std::optional<std::uint32_t> size = spraySizeOf(rules.spray, damage)) {
+        bloodSprays.push_back(BloodSpray{.position = from, .color = rules.spray.color, .size = *size});
+    }
     for (const nx::Vec3 way : bleedingWaysOf(rules, damage, attack.direction, random)) {
         const nx::game::SolidHit hit = nx::game::traceSolidsHit(m_world, m_map->hulls(),
                                                                 {.start = from,

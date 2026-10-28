@@ -15,10 +15,6 @@ export namespace nx::assets {
 /// The levels of a mip texture: the full size, then halved three times.
 inline constexpr std::size_t kMipLevels = 4;
 
-/// A texture palette: 256 RGB colors.
-inline constexpr std::size_t kPaletteColors = 256;
-inline constexpr std::size_t kPaletteBytes = kPaletteColors * kRgbBytes;
-
 /// The name field of WAD3 entries and mip textures: up to 15 characters and a terminator.
 inline constexpr std::size_t kTextureNameBytes = 16;
 

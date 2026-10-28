@@ -72,6 +72,31 @@ TEST(BloodTest, OneInThreeWaysThatMeetWhatIsSolidLeavesADecalEachAsLikely) {
     EXPECT_TRUE(std::ranges::none_of(counts, [](std::uint32_t count) { return count == 0; })) << "each drawn";
 }
 
+TEST(BloodTest, ASpraysSizeIsItsDamagesWholePointsDoubledOverTenFromThreeToSixteen) {
+    const cs::BloodSprayRules spray = repositoryRules().spray;
+    EXPECT_EQ(spray.color, 247U) << "BLOOD_COLOR_RED";
+    for (const auto& [damage, size] :
+         {std::pair{0.9F, std::optional<std::uint32_t>{}}, std::pair{1.0F, std::optional<std::uint32_t>{3}},
+          std::pair{15.9F, std::optional<std::uint32_t>{3}},
+          std::pair{35.0F, std::optional<std::uint32_t>{7}},
+          std::pair{60.0F, std::optional<std::uint32_t>{12}},
+          std::pair{100.0F, std::optional<std::uint32_t>{16}},
+          std::pair{1000.0F, std::optional<std::uint32_t>{16}}}) {
+        EXPECT_EQ(cs::spraySizeOf(spray, nx::Damage{damage}), size) << damage;
+    }
+}
+
+TEST(BloodTest, ASpraysLookIsRBloodSprites) {
+    const cs::BloodSprayLook look = repositoryRules().look;
+    EXPECT_EQ(look.spraySprite, "sprites/bloodspray.spr");
+    EXPECT_EQ(look.dropSprite, "sprites/blood.spr");
+    EXPECT_EQ(look.colorShift, 3U);
+    EXPECT_EQ(look.amount, 250U);
+    EXPECT_EQ(look.sprayTime, nx::Seconds{0.25F});
+    EXPECT_EQ(look.dropGravity, nx::Scale{0.5F}) << "FTENT_SLOWGRAVITY";
+    EXPECT_EQ(look.mostDropFrame, 8U);
+}
+
 TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
     const std::string text = repositoryText();
     for (const auto& [line, changed] :
@@ -80,7 +105,12 @@ TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
           std::pair{R"(decals = ["{blood1", "{blood2", "{blood3", "{blood4", "{blood5", "{blood6"])",
                     "decals = []"},
           std::pair{"traces = 4\nnoise = 0.3", "below = 50.0\ntraces = 4\nnoise = 0.3"},
-          std::pair{"traces = 1", "traces = 0"}}) {
+          std::pair{"traces = 1", "traces = 0"}, std::pair{"color = 247", "color = 254"},
+          std::pair{"smallestSize = 3", "smallestSize = 17"},
+          std::pair{"amountPerSize = 10", "amountPerSize = 0"},
+          std::pair{"leastDropLife = 1.0", "leastDropLife = 4.0"},
+          std::pair{"sprayTime = 0.25", "sprayTime = 0.0"},
+          std::pair{R"(dropSprite = "sprites/blood.spr")", R"(dropSprite = "")"}}) {
         std::string broken = text;
         const std::size_t at = broken.find(line);
         ASSERT_NE(at, std::string::npos) << line;

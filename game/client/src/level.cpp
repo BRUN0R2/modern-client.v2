@@ -19,6 +19,8 @@ namespace cs {
 namespace {
 
 constexpr nx::log::Category kLog{"client"};
+/// The engine's palette, in the base game's folder.
+constexpr std::string_view kPalettePath = "gfx/palette.lmp";
 
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names at
 /// the root of the VFS, as the original looks them up: their bytes, and the names of those the
@@ -97,6 +99,28 @@ struct WadFiles {
     return {};
 }
 
+/// The engine's palette in `vfs`; none, logged, when it is missing or unreadable.
+[[nodiscard]] auto readPalette(const nx::assets::Vfs& vfs) -> std::optional<nx::assets::Palette> {
+    const auto unread = [](std::string_view why) {
+        nx::log::warning(kLog, "the engine's palette {} cannot be read: {}; no blood is sprayed",
+                         kPalettePath, why);
+    };
+    const auto bytes =
+        nx::assets::VfsPath::parse(kPalettePath).and_then([&vfs](const nx::assets::VfsPath& path) {
+            return vfs.readAll(path);
+        });
+    if (!bytes) {
+        unread(nx::describe(bytes.error()));
+        return std::nullopt;
+    }
+    auto palette = nx::assets::Palette::read(*bytes);
+    if (!palette) {
+        unread(nx::describe(palette.error()));
+        return std::nullopt;
+    }
+    return std::move(*palette);
+}
+
 /// `names`, separated by commas.
 template <class Names>
 [[nodiscard]] auto listed(const Names& names) -> std::string {
@@ -139,6 +163,14 @@ auto Level::load(const GameContent& content, const GameMap& map)
     if (!level.m_models->missing().empty()) {
         nx::log::warning(kLog, "models the map's entities show that cannot be read: {}",
                          listed(level.m_models->missing()));
+    }
+    level.enginePalette = readPalette(content.vfs);
+    level.sprayLook = &content.blood.look;
+    const std::vector<std::string> bloodSprites{content.blood.look.spraySprite,
+                                                content.blood.look.dropSprite};
+    if (const std::vector<std::string> missing = level.bloodSpriteFiles.read(content.vfs, bloodSprites);
+        !missing.empty()) {
+        nx::log::warning(kLog, "the blood's sprites that cannot be read: {}", listed(missing));
     }
     level.m_players = PlayerModels::read(content.vfs, content.characters, content.weapons);
     if (!level.m_players->missing().empty()) {

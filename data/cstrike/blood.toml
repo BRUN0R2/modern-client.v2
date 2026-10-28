@@ -25,3 +25,47 @@ noise = 0.2
 [[spreads]]
 traces = 4
 noise = 0.3
+
+# The blood a hit sprays where it meets the body, as the server tells its clients of it
+# (UTIL_BloodDrips, TE_BLOODSPRITE): BLOOD_COLOR_RED, the palette's entry 247; its size the damage's
+# whole points, doubled as the multiplayer rules double them, 255 at most, over 10, from 3 to 16.
+[spray]
+color = 247
+amountPerDamage = 2
+mostAmount = 255
+amountPerSize = 10
+smallestSize = 3
+largestSize = 16
+
+# How a client shows it, as Xash3D-FWGS's R_BloodSprite does (GPL, consulted): the spray's color the
+# entry 1 to 3 after the server's, the drops' the one before that, both 250 of 255 opaque. The spray,
+# 2 to 4 units above where the hit met the body, its scale its size over 35 to over 25, plays its
+# frames once in a quarter of a second. Its drops, its size and two dice of eight, their scales its size
+# over 25 to over 15, fly off at -96 to 95 units a second across the ground and -32 to 95 up, spin
+# at -256 to -255 degrees a second, fall at half the world's gravity (FTENT_SLOWGRAVITY), stop where
+# they meet the world (FTENT_COLLIDEWORLD) and go after 1 to 3 seconds, each on one of its sprite's
+# frames from the second, the last for one beyond the eighth.
+[look]
+spraySprite = "sprites/bloodspray.spr"
+dropSprite = "sprites/blood.spr"
+colorShift = 3
+amount = 250
+leastLift = 2.0
+mostLift = 4.0
+leastSprayScale = 0.028571429
+mostSprayScale = 0.04
+sprayTime = 0.25
+extraDropDice = 2
+extraDropFaces = 8
+leastDropScale = 0.04
+mostDropScale = 0.066666667
+leastDropSpeed = -96.0
+mostDropSpeed = 95.0
+leastDropRise = -32.0
+mostDropRise = 95.0
+leastDropSpin = -256.0
+mostDropSpin = -255.0
+dropGravity = 0.5
+leastDropLife = 1.0
+mostDropLife = 3.0
+mostDropFrame = 8

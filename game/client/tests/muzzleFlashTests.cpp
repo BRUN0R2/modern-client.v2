@@ -325,7 +325,7 @@ TEST(MuzzleFlashTest, ItsSpritesAreReadOnceByTheirPathsThoseMissingLeftOut) {
     auto vfs = nx::assets::Vfs::create(std::array{files.path()});
     ASSERT_TRUE(vfs.has_value()) << nx::describe(vfs.error());
 
-    cs::MuzzleFlashSprites sprites;
+    cs::EffectSprites sprites;
     const std::vector<std::string> paths{"sprites/muzzleflash1.spr", "sprites/missing.spr",
                                          "sprites/broken.spr"};
     const std::vector<std::string> missing = sprites.read(*vfs, paths);
@@ -336,6 +336,8 @@ TEST(MuzzleFlashTest, ItsSpritesAreReadOnceByTheirPathsThoseMissingLeftOut) {
     EXPECT_EQ(sprites.indexOf("sprites/muzzleflash1.spr"), 0U);
     EXPECT_EQ(sprites.indexOf("sprites/broken.spr"), 2U) << "left out, yet read";
     EXPECT_EQ(sprites.indexOf("sprites/muzzleflash2.spr"), std::nullopt);
+    EXPECT_EQ(sprites.frameCountOf(0), 1U);
+    EXPECT_EQ(sprites.frameCountOf(1), std::nullopt) << "left out";
 
     EXPECT_TRUE(sprites.read(*vfs, paths).empty()) << "each read once";
     EXPECT_EQ(sprites.count(), 3U);

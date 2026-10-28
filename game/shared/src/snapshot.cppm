@@ -55,6 +55,16 @@ struct Impact {
     [[nodiscard]] inline auto operator==(const Impact&) const noexcept -> bool = default;
 };
 
+/// The blood a hit sprays where it met a body (TE_BLOODSPRITE): the point, the palette entry of its
+/// color, and its size (spraySizeOf).
+struct BloodSpray {
+    nx::Vec3 position{};
+    std::uint8_t color = 0;
+    std::uint32_t size = 0;
+
+    [[nodiscard]] inline auto operator==(const BloodSpray&) const noexcept -> bool = default;
+};
+
 /// Where the blood a hit shed met what is solid behind it: the point, what it is on, and the decal it
 /// leaves there, of BloodRules::decals.
 struct BloodMark {
@@ -88,7 +98,7 @@ struct PlayerEntityState {
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
 /// what the tick did to it and made it make; where the tick's shots and the blood they shed met what is
-/// solid; and the world
+/// solid, and the blood they sprayed; and the world
 /// it sees: the brush entities, the hostages, the other players and the light-style patterns.
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
@@ -106,8 +116,9 @@ struct PlayerSnapshot {
     /// The sounds it made in the tick, which it hears, each with the moment it was made: its weapons',
     /// then its breath's, its feet's, its use's, its pain's and its death's.
     std::vector<SoundMade> sounds{};
-    std::vector<Impact> impacts{};       ///< Of the tick's shots, in their order.
-    std::vector<BloodMark> bloodMarks{}; ///< Of the tick's hits, in their order.
+    std::vector<Impact> impacts{};         ///< Of the tick's shots, in their order.
+    std::vector<BloodMark> bloodMarks{};   ///< Of the tick's hits, in their order.
+    std::vector<BloodSpray> bloodSprays{}; ///< Of the tick's hits, in their order.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
