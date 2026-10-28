@@ -87,7 +87,7 @@ TEST(BloodTest, ASpraysSizeIsItsDamagesWholePointsDoubledOverTenFromThreeToSixte
 }
 
 TEST(BloodTest, ASpraysLookIsRBloodSprites) {
-    const cs::BloodSprayLook look = repositoryRules().look;
+    const cs::BloodSprayLook look = repositoryRules().sprayLook;
     EXPECT_EQ(look.spraySprite, "sprites/bloodspray.spr");
     EXPECT_EQ(look.dropSprite, "sprites/blood.spr");
     EXPECT_EQ(look.colorShift, 3U);
@@ -95,6 +95,38 @@ TEST(BloodTest, ASpraysLookIsRBloodSprites) {
     EXPECT_EQ(look.sprayTime, nx::Seconds{0.25F});
     EXPECT_EQ(look.dropGravity, nx::Scale{0.5F}) << "FTENT_SLOWGRAVITY";
     EXPECT_EQ(look.mostDropFrame, 8U);
+}
+
+TEST(BloodTest, AHeadsStreamIsItsDamageTimesFiveAndUpToAHundredMoreAByteAtMost) {
+    const cs::BloodStreamRules stream = repositoryRules().stream;
+    EXPECT_EQ(stream.color, 223U) << "BLOOD_COLOR_DARKRED";
+    nx::Random random{1, "stream"};
+    // 26.9 times 5 is 134.5, cut to 134; 40 times 5 and 100 more pass 255.
+    for (const auto& [damage, slowest, fastest] :
+         {std::tuple{0.0F, 0U, 100U}, std::tuple{10.0F, 50U, 150U}, std::tuple{26.9F, 134U, 234U},
+          std::tuple{40.0F, 200U, 255U}, std::tuple{144.0F, 255U, 255U}}) {
+        std::uint32_t least = std::numeric_limits<std::uint32_t>::max();
+        std::uint32_t most = 0;
+        for (std::uint32_t draw = 0; draw < kDraws; ++draw) {
+            const std::uint32_t speed = cs::streamSpeedOf(stream, nx::Damage{damage}, random);
+            least = std::min(least, speed);
+            most = std::max(most, speed);
+        }
+        EXPECT_EQ(least, slowest) << damage;
+        EXPECT_EQ(most, fastest) << damage;
+    }
+}
+
+TEST(BloodTest, AStreamsLookIsRBloodStreams) {
+    const cs::BloodStreamLook look = repositoryRules().streamLook;
+    EXPECT_EQ(look.colorRange, 10U) << "RandomLong(0, 9)";
+    EXPECT_EQ(look.streamParticles, 100U);
+    EXPECT_EQ(look.streamGravity, nx::Scale{0.4F}) << "pt_8x_slowgrav";
+    EXPECT_EQ(look.splashGravity, nx::Scale{0.2F}) << "pt_4x_slowgrav";
+    EXPECT_EQ(look.streamLife, nx::Seconds{2.0F});
+    EXPECT_EQ(look.splashLife, nx::Seconds{3.0F});
+    EXPECT_EQ(look.splashPerSpeed, 5U);
+    EXPECT_EQ(look.splashCompanions, 2U);
 }
 
 TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
@@ -110,7 +142,10 @@ TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
           std::pair{"amountPerSize = 10", "amountPerSize = 0"},
           std::pair{"leastDropLife = 1.0", "leastDropLife = 4.0"},
           std::pair{"sprayTime = 0.25", "sprayTime = 0.0"},
-          std::pair{R"(dropSprite = "sprites/blood.spr")", R"(dropSprite = "")"}}) {
+          std::pair{R"(dropSprite = "sprites/blood.spr")", R"(dropSprite = "")"},
+          std::pair{"fastest = 255", "fastest = 256"}, std::pair{"colorRange = 10", "colorRange = 40"},
+          std::pair{"streamLife = 2.0", "streamLife = 0.0"},
+          std::pair{"splashPerSpeed = 5", "splashPerSpeed = 0"}}) {
         std::string broken = text;
         const std::size_t at = broken.find(line);
         ASSERT_NE(at, std::string::npos) << line;

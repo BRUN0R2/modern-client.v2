@@ -15,6 +15,7 @@ nxAddTest(nxRenderTests
         probeTests.cpp
         screenTests.cpp
         spriteTests.cpp
+        particleTests.cpp
         studioTests.cpp
         worldTests.cpp
     DEPENDS

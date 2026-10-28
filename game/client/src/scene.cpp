@@ -44,7 +44,8 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
     SceneShaders shaders;
     for (const auto& [file, code] :
          {std::pair{"world.spv", &shaders.world}, std::pair{"studio.spv", &shaders.studio},
-          std::pair{"sprite.spv", &shaders.sprite}, std::pair{"probe.spv", &shaders.probe}}) {
+          std::pair{"sprite.spv", &shaders.sprite}, std::pair{"particle.spv", &shaders.particle},
+          std::pair{"probe.spv", &shaders.probe}}) {
         auto read = nx::platform::readFile(folder / file);
         if (!read) {
             return nx::fail(SceneError::ShadersUnreadable, std::move(read.error()));
@@ -57,10 +58,11 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             nx::render::SpriteRenderer viewSprites) noexcept
+             nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
-      m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)} {}
+      m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)},
+      particleRenderer{std::move(particles)} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format, nx::rhi::Format effectsFormat,
@@ -106,6 +108,11 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     if (!viewSprites) {
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(viewSprites.error()));
     }
+    auto particles = nx::render::ParticleRenderer::create(
+        device, commands, {.shaderCode = shaders.particle, .colorFormat = format, .encoding = encoding});
+    if (!particles) {
+        return nx::fail(SceneError::CreateFailed, "the particles", std::move(particles.error()));
+    }
     auto spriteModels = level.sprites().load(*sprites, commands);
     if (!spriteModels) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(spriteModels.error()));
@@ -142,7 +149,8 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     Scene scene{std::move(*world),      nx::render::WorldLight{level.map()},
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
-                std::move(*viewModels), std::move(*viewSprites)};
+                std::move(*viewModels), std::move(*viewSprites),
+                std::move(*particles)};
     scene.m_look = look;
     scene.m_playerModels = std::move(*playerModels);
     auto bloodModels = level.bloodSprites().load(scene.m_sprites, commands, 0);
@@ -151,7 +159,8 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     }
     scene.bloodModels = std::move(*bloodModels);
     for (const TempSprite sprite : nx::EnumArray<TempSprite, bool>::keys()) {
-        scene.tempSpriteIndices[sprite] = level.bloodSprites().indexOf(pathOf(sprite, level.bloodLook()));
+        scene.tempSpriteIndices[sprite] =
+            level.bloodSprites().indexOf(pathOf(sprite, level.blood().sprayLook));
     }
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
@@ -245,6 +254,25 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
     }
     nx::render::drawInOrder(list, m_world, m_studio, m_sprites);
+    // The particles, over everything blended (CL_DrawEFX's last pass): each of its entry of the engine's
+    // palette, none without it.
+    std::vector<nx::render::ParticleInstance> particles;
+    if (const std::optional<nx::assets::Palette>& palette = level.palette()) {
+        particles.reserve(view.particles.size());
+        for (const Particle& particle : view.particles) {
+            const nx::assets::PaletteColor color = palette->color(particle.color);
+            particles.push_back(nx::render::ParticleInstance{
+                .origin = particle.origin,
+                .color = {.red = color.red, .green = color.green, .blue = color.blue},
+                .amount = amountOf(particle, view.time)});
+        }
+    }
+    if (auto prepared =
+            particleRenderer.prepare({.camera = view.camera, .aspect = view.aspect, .particles = particles});
+        !prepared) {
+        return nx::fail(SceneError::DrawFailed, "the particles", std::move(prepared.error()));
+    }
+    particleRenderer.drawPrepared(list);
     // The weapon's flashes, for drawEffects, after it, in its depths: added over what of it is behind
     // them, hidden by what of it is in front, and never by a wall the muzzle is pushed against.
     std::vector<nx::render::SpriteInstance> flashes;

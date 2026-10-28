@@ -581,16 +581,27 @@ as likely (`UTIL_BloodDecalTrace`), which the server chooses and tells its clien
 palette's entry 247 (`BLOOD_COLOR_RED`) and its size the hit's whole points doubled (the multiplayer
 rules'), 255 at most, over 10, from 3 to 16; a hit of no whole point sprays none. A client shows it as
 Xash3D-FWGS's `R_BloodSprite` does (GPL, consulted; `cs.client:tempEntities`, `data/cstrike/blood.toml`'s
-`look`): `sprites/bloodspray.spr`, 2 to 4 units above where the hit met the body, its scale its size
+`sprayLook`): `sprites/bloodspray.spr`, 2 to 4 units above where the hit met the body, its scale its size
 over 35 to over 25, its color the engine palette's entry 1 to 3 after the server's
 (`gfx/palette.lmp`), plays its frames once in a quarter of a second; and its drops of
 `sprites/blood.spr`, as many as its size and two dice of eight, their scales its size over 25 to over
 15, the entry before the spray's, fly off at -96 to 95 units a second across the ground and -32 to 95
 up, spin, fall at half the world's gravity, stop where they meet the world and go after 1 to 3
 seconds, each on one of its frames from the second, the last for one beyond the eighth; both 250 of
-255 opaque. A head's stream (`BloodSplat`, `TE_BLOODSTREAM`) and a helmet's sparks
-(`TE_STREAK_SPLASH`) come with particles; the scores and the kill feed with what they need
-([TODO](TODO.md)).
+255 opaque. Before both, a head without a helmet streams its blood the way the hit went (`BloodSplat`,
+`TE_BLOODSTREAM`): the server tells its clients of the stream (`cs::BloodStream`), its color the
+palette's entry 223 (`BLOOD_COLOR_DARKRED`) and its speed the head's damage times 5, cut to a whole
+number, and 0 to 100 more, 255 at most. The original writes the speed as a byte that wraps past 255,
+so that a head shot's stream may be slow; ReGameDLL_CS holds it at 255 (`UTIL_BloodStream`), as here.
+A client shows it as Xash3D-FWGS's `R_BloodStream` does (GPL, consulted; `cs.client:particles`,
+`streamLook`), its particles of the entries 0 to 9 after the server's: a stream of 100 from where the
+hit met the head, the way of each dipped by 0.05 less 0.005 for each before it, the first at the
+stream's speed and each a unit a second slower, none slower than still (GoldSrc keeps that speed a
+whole number), falling at 8 twentieths of the world's gravity and gone after 2 seconds; and a splash of
+one for each 5 of its speed, each at a share of it drawn from 0 to 1, cut to a whole number, times
+that share times 1.7, with two more a step less dipped and up to a unit off it, falling at 4
+twentieths of the world's gravity and gone after 3 seconds. A helmet's sparks (`TE_STREAK_SPLASH`)
+come with streaks; the scores and the kill feed with what they need ([TODO](TODO.md)).
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's
