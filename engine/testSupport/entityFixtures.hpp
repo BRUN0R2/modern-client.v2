@@ -28,9 +28,9 @@ inline void writeEntityModel(const TemporaryDirectory& directory) {
     model.put(model.hitbox + 8, nx::Vec3{.x = -8, .y = -8, .z = -40});
     model.put(model.hitbox + 20, nx::Vec3{.x = 8, .y = 8, .z = 20});
     // The second sequence is a one-shot attack/death; the idle sequence keeps looping.
-    constexpr std::size_t sequenceRecordSize = 176;
-    constexpr std::size_t sequenceFlagsOffset = 36;
-    model.put(model.sequences + sequenceRecordSize + sequenceFlagsOffset, std::int32_t{0});
+    constexpr std::size_t kSequenceRecordSize = 176;
+    constexpr std::size_t kSequenceFlagsOffset = 36;
+    model.put(model.sequences + kSequenceRecordSize + kSequenceFlagsOffset, std::int32_t{0});
     const auto textOf = [](const Bytes& bytes) {
         return bytes | std::views::transform([](std::byte value) { return static_cast<char>(value); }) |
                std::ranges::to<std::string>();

@@ -16,10 +16,10 @@ import cs.server;
 
 namespace zombies {
 namespace {
-constexpr nx::log::Category zombieLog{"zombies"};
-constexpr float halfTurnDegrees = 180.0F;
-constexpr float fullTurnDegrees = halfTurnDegrees * 2.0F;
-constexpr std::string_view walkingProfile = "player";
+constexpr nx::log::Category kLog{"zombies"};
+constexpr float kHalfTurnDegrees = 180.0F;
+constexpr float kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
+constexpr std::string_view kWalkingProfile = "player";
 [[nodiscard]] auto feetOf(nx::Vec3 origin) -> nx::Vec3 {
     return origin + nx::Vec3{.z = cs::kStandingBox.min.z};
 }
@@ -92,7 +92,7 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
         return std::isfinite(value) && value > 0.0F;
     };
     if (!positive(read->sightRange.value()) || !positive(read->fieldOfView.value()) ||
-        read->fieldOfView.value() > fullTurnDegrees || !positive(read->memoryLifetime.count()) ||
+        read->fieldOfView.value() > kFullTurnDegrees || !positive(read->memoryLifetime.count()) ||
         !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
         !positive(read->spawnRadius.value()) || !positive(read->spawnSpacing.value()) ||
         read->memoryLimit == 0 || read->perceptionBudget == 0 || read->spawnBatchLimit == 0) {
@@ -119,7 +119,7 @@ auto Horde::create(nx::jobs::JobSystem& jobs, cs::Game& game, const nx::game::Na
                    cs::EntityTypeIndex type, Settings settings)
     -> nx::Result<std::unique_ptr<Horde>, ZombieError> {
     const auto profile =
-        std::ranges::find(navigation.profiles, walkingProfile, &nx::navigation::AgentProfile::name);
+        std::ranges::find(navigation.profiles, kWalkingProfile, &nx::navigation::AgentProfile::name);
     if (profile == navigation.profiles.end()) {
         return nx::fail(ZombieError::NavigationUnavailable,
                         "the humanoid body requires the player navigation profile");
@@ -142,7 +142,7 @@ auto Horde::create(nx::jobs::JobSystem& jobs, cs::Game& game, const nx::game::Na
     if (auto registered = game.registerEntityComponent<nx::agents::Agent>("nx::agents::Agent"); !registered) {
         return nx::fail(ZombieError::SpawnFailed, std::move(registered.error()));
     }
-    nx::log::info(zombieLog, "navigation ready: {} polygons", mesh->polygonCount());
+    nx::log::info(kLog, "navigation ready: {} polygons", mesh->polygonCount());
     return std::make_unique<Horde>(CreateToken{}, type, std::move(settings), std::move(*mesh), game);
 }
 
@@ -244,7 +244,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
     const nx::game::TickTime time = game.time();
     std::vector<cs::EntityCommand> commands;
     const float minimumDot =
-        std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / fullTurnDegrees);
+        std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / kFullTurnDegrees);
     for (const nx::ecs::Entity entity : agents) {
         const auto found = std::ranges::lower_bound(bodies, entity, {}, &cs::EntityState::entity);
         if (found == bodies.end() || found->entity != entity || found->health <= nx::HitPoints{}) {
@@ -276,7 +276,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
                 const std::string failure = decision.navigationError
                                                 ? std::format(", {}", nx::enumName(*decision.navigationError))
                                                 : std::string{};
-                nx::log::info(zombieLog, "agent {}:{}: {} -> {}{} ({} transitions suppressed)",
+                nx::log::info(kLog, "agent {}:{}: {} -> {}{} ({} transitions suppressed)",
                               std::to_underlying(entity.index()), std::to_underlying(entity.generation()),
                               nx::enumName(agent.behavior), nx::enumName(decision.behavior), failure,
                               transitionLogs.takeSuppressed());
@@ -293,9 +293,9 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         }
         if (nx::length(aim) > 0.0F) {
             command.viewAngles.yaw =
-                nx::Degrees{std::atan2(aim.y, aim.x) * halfTurnDegrees / std::numbers::pi_v<float>};
+                nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
             command.viewAngles.pitch = nx::Degrees{-std::atan2(aim.z, std::hypot(aim.x, aim.y)) *
-                                                   halfTurnDegrees / std::numbers::pi_v<float>};
+                                                   kHalfTurnDegrees / std::numbers::pi_v<float>};
         }
         commands.push_back({.entity = entity, .command = command});
     }

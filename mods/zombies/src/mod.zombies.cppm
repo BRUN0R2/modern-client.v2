@@ -18,8 +18,14 @@ import cs.shared;
 import cs.server;
 
 export namespace zombies {
-enum class ZombieError : std::uint8_t { InvalidData, NavigationUnavailable, SpawnFailed };
+/// Why the zombies' settings could not be read, or a horde made, spawned or cleared.
+enum class ZombieError : std::uint8_t {
+    InvalidData,           ///< The settings break their schema or their budgets.
+    NavigationUnavailable, ///< No navigation profile matches the standing body, or its mesh was not built.
+    SpawnFailed,           ///< A body could not be placed, registered or removed.
+};
 
+/// data/mods/zombies.toml: the zombies' body, sight, memory, navigation and spawning budgets.
 struct Settings {
     cs::EntityDefinition body{};
     nx::HammerUnits sightRange{};
@@ -39,6 +45,7 @@ struct Settings {
 [[nodiscard]] auto readSettings(std::string_view text, std::string_view source)
     -> nx::Result<Settings, ZombieError>;
 
+/// The zombies of one map, their bodies of one type driven by brains along the standing body's mesh.
 class Horde {
     struct CreateToken {
         explicit CreateToken() = default;
@@ -71,6 +78,7 @@ public:
     [[nodiscard]] auto commands() -> std::vector<cs::EntityCommand>;
     /// Removes tracked bodies and their corridors. Errors: SpawnFailed, retaining a removal's cause.
     [[nodiscard]] auto clear() -> nx::Result<void, ZombieError>;
+    /// How many bodies the horde tracks.
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return agents.size(); }
 
 private:
@@ -80,8 +88,8 @@ private:
     nx::navigation::NavigationQuery query;
     std::vector<nx::ecs::Entity> agents;
     cs::Game* const owner;
-    static constexpr auto transitionLogInterval = std::chrono::seconds{1};
-    nx::log::RateLimit transitionLogs{transitionLogInterval};
+    static constexpr auto kTransitionLogInterval = std::chrono::seconds{1};
+    nx::log::RateLimit transitionLogs{kTransitionLogInterval};
 };
 } // namespace zombies
 
