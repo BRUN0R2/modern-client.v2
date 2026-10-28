@@ -44,6 +44,28 @@ TEST(GameTime, AMomentInsideATickKeepsItsFraction) {
     EXPECT_NEAR(carried.fraction(), 0.25F, 1e-6F);
 }
 
+TEST(GameTime, ADurationThatIsAWholeNumberOfTicksAsAFloatLastsThatNumber) {
+    // Each a hair above or below its ticks as a float: 0.1 is 0.100000001, 0.7 is 0.699999988.
+    for (const auto& [seconds, ticks] :
+         {std::pair{0.1F, std::int64_t{10}}, std::pair{0.3F, std::int64_t{30}},
+          std::pair{0.7F, std::int64_t{70}}, std::pair{0.01F, std::int64_t{1}},
+          std::pair{-0.1F, std::int64_t{-10}}, std::pair{6.0F, std::int64_t{600}}}) {
+        const GameTime later = GameTime::atTick(kMonth).after(Seconds{seconds}, kRate);
+        EXPECT_EQ(later, GameTime::atTick(kMonth + ticks)) << seconds;
+        EXPECT_EQ(later.since(GameTime::atTick(kMonth), kRate), Seconds{seconds}) << seconds;
+    }
+    const nx::TickRate sixtyFour{64};
+    EXPECT_EQ(GameTime{}.after(Seconds{0.1F}, sixtyFour).tick(), 6) << "6.4 ticks: no whole number";
+    EXPECT_NEAR(GameTime{}.after(Seconds{0.1F}, sixtyFour).fraction(), 0.4F, 1e-5F);
+    EXPECT_EQ(GameTime{}.after(Seconds{5.0F / 64.0F}, sixtyFour), GameTime::atTick(5));
+}
+
+TEST(GameTime, ADurationBetweenTicksKeepsItsShareOfThem) {
+    const GameTime between = GameTime::atTick(kMonth, 0.25F).after(Seconds{0.105F}, kRate);
+    EXPECT_EQ(between.tick(), kMonth + 10);
+    EXPECT_NEAR(between.fraction(), 0.75F, 1e-5F);
+}
+
 TEST(GameTime, ItGoesBackAndMeasuresBackwards) {
     const GameTime earlier = GameTime::atTick(10).after(Seconds{-0.005F}, kRate);
     EXPECT_EQ(earlier.tick(), 9);

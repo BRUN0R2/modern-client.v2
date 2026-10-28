@@ -18,14 +18,6 @@ namespace {
     return nx::HammerUnits{std::hypot(spot.x - eye.x, spot.y - eye.y)};
 }
 
-/// The whole ticks nearest to `interval` at `rate`, one at least: a float tenth of a second is ten ticks
-/// and a hair more, which GameTime::after would carry into an eleventh.
-[[nodiscard]] auto wholeTicksOf(nx::Seconds interval, nx::TickRate rate) noexcept -> std::int64_t {
-    const auto ticks = static_cast<std::int64_t>(
-        std::llround(static_cast<double>(interval.count()) * static_cast<double>(rate.value())));
-    return std::max<std::int64_t>(1, ticks);
-}
-
 [[nodiscard]] auto drawPause(const BotPause& pause, nx::Random& random) noexcept -> nx::Seconds {
     return nx::Seconds{random.between(pause.shortest.count(), pause.longest.count())};
 }
@@ -80,7 +72,7 @@ auto pullTrigger(BotTrigger& trigger, const BotShot& shot, const BotFireRules& r
         return trigger.isDown;
     }
     // A full think: its buttons set anew (ResetCommand), pressed when it may (FireWeaponAtEnemy).
-    trigger.nextThinkAt = shot.now.ticksLater(wholeTicksOf(rules.thinkInterval, shot.rate));
+    trigger.nextThinkAt = shot.now.after(rules.thinkInterval, shot.rate);
     trigger.isPressed = shot.now > trigger.nextPressAt &&
                         shot.now.since(trigger.enemySince, shot.rate) >= shot.attackDelay &&
                         isAimedAt(shot.eye, shot.viewYaw, *shot.aimSpot, rules.aimHalfWidth);
