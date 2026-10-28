@@ -834,7 +834,7 @@ auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const Bsp
     world.m_faceIndices = std::move(geometry.faceIndices);
     world.m_models = modelDrawsOf(map);
     world.m_faceGathered.resize(world.m_faces.size());
-    world.m_bucketIndices.resize(geometry.bucketTextures.size());
+    world.m_bucketFaces.resize(geometry.bucketTextures.size());
     world.m_stats = WorldStats{.faces = faces.size(),
                                .triangles = world.m_faceIndices.size() / kTriangleCorners,
                                .textures = textures->loaded,
@@ -921,18 +921,15 @@ void BspWorld::addFace(std::uint32_t face, Vec3 eye) {
     if (!isSeen(face, eye, false)) {
         return;
     }
-    const FaceDraw& draw = m_faces[face];
-    std::vector<std::uint32_t>& indices =
-        draw.bucket == kSkyBucket ? m_skyIndices : m_bucketIndices[draw.bucket];
-    const auto triangles = std::span{m_faceIndices}.subspan(draw.firstIndex, draw.indexCount);
-    indices.insert(indices.end(), triangles.begin(), triangles.end());
+    const std::uint32_t bucket = m_faces[face].bucket;
+    (bucket == kSkyBucket ? m_skyFaces : m_bucketFaces[bucket]).push_back(face);
     ++m_lastFrame.faces;
 }
 
 void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelPlacement& placement) {
     const ModelDraw& drawn = m_models[model];
     const bool isTurned = placement.angles != EulerAngles{};
-    const AngleVectors axes = angleVectors(placement.angles);
+    const AngleVectors axes = isTurned ? angleVectors(placement.angles) : AngleVectors{}; // read when turned
     // The eye in the model's space, as the original's R_DrawBrushModel turns it.
     const Vec3 eye =
         isTurned ? intoAxes(axes, camera.position - placement.origin) : camera.position - placement.origin;
@@ -964,17 +961,6 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
                                      return dot(placed(m_faces[face.face].middle), forward);
                                  });
     }
-    for (EntityFace& face : std::span{m_entityFaces}.subspan(first, count)) {
-        if (face.isFromBehind) {
-            continue;
-        }
-        const FaceDraw& draw = m_faces[face.face];
-        const auto firstIndex = narrow<std::uint32_t>(m_entityIndices.size());
-        const auto triangles = std::span{m_faceIndices}.subspan(draw.firstIndex, draw.indexCount);
-        m_entityIndices.insert(m_entityIndices.end(), triangles.begin(), triangles.end());
-        face.triangles = IndexRange{.firstIndex = firstIndex,
-                                    .indexCount = narrow<std::uint32_t>(m_entityIndices.size()) - firstIndex};
-    }
     m_entityDraws.push_back(
         EntityDraw{.model = model,
                    .distance = lengthSquared(drawn.bounds.center() + placement.origin - camera.position),
@@ -984,14 +970,13 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
 
 void BspWorld::gather(const Camera& camera, float aspect) {
     m_lastFrame = {};
-    for (std::vector<std::uint32_t>& indices : m_bucketIndices) {
-        indices.clear();
+    for (std::vector<std::uint32_t>& faces : m_bucketFaces) {
+        faces.clear();
     }
-    m_skyIndices.clear();
+    m_skyFaces.clear();
     m_entityDraws.clear();
     m_blendedDraws.clear();
     m_entityFaces.clear();
-    m_entityIndices.clear();
 
     // The leaves the camera's leaf may see, found again when it moves to another leaf.
     const assets::LeafIndex leaf = m_map->leafAt(camera.position);
@@ -1086,23 +1071,38 @@ void BspWorld::prepare(const WorldFrame& view) {
     m_animationStep = static_cast<std::size_t>(std::max(view.time.count(), 0.0F) * kAnimationFramesPerSecond);
     const std::span<std::byte> indexBytes = m_device->mappedBytes(slot.indices.get());
     std::uint32_t written = 0;
-    const auto write = [&indexBytes, &written](std::span<const std::uint32_t> indices) {
-        std::ranges::copy(std::as_bytes(indices),
+    // The triangles of a face after those written, copied once from all the faces' to the slot.
+    const auto writeFace = [this, &indexBytes, &written](std::uint32_t face) {
+        const FaceDraw& draw = m_faces[face];
+        std::ranges::copy(std::as_bytes(std::span{m_faceIndices}.subspan(draw.firstIndex, draw.indexCount)),
                           indexBytes.subspan(std::size_t{written} * sizeof(std::uint32_t)).begin());
-        const IndexRange range{.firstIndex = written, .indexCount = narrow<std::uint32_t>(indices.size())};
-        written += range.indexCount;
+        const IndexRange range{.firstIndex = written, .indexCount = draw.indexCount};
+        written += draw.indexCount;
         return range;
     };
+    const auto writeFaces = [&writeFace, &written](std::span<const std::uint32_t> faces) {
+        const std::uint32_t first = written;
+        std::ranges::for_each(faces, writeFace);
+        return IndexRange{.firstIndex = first, .indexCount = written - first};
+    };
     m_batches.clear();
-    for (std::size_t bucket = 0; bucket < m_bucketIndices.size(); ++bucket) {
-        if (!m_bucketIndices[bucket].empty()) {
+    for (std::size_t bucket = 0; bucket < m_bucketFaces.size(); ++bucket) {
+        if (!m_bucketFaces[bucket].empty()) {
             const std::vector<rhi::OwnedBindGroup>& frames = m_bucketFrames[bucket].frames;
-            m_batches.push_back(Batch{.indices = write(m_bucketIndices[bucket]),
+            m_batches.push_back(Batch{.indices = writeFaces(m_bucketFaces[bucket]),
                                       .textures = frames[m_animationStep % frames.size()].get()});
         }
     }
-    m_sky = write(m_skyIndices);
-    m_firstEntityIndex = write(m_entityIndices).firstIndex;
+    m_sky = writeFaces(m_skyFaces);
+    // The brush entities' faces in their order, each entity's sorted as addEntity sorted them.
+    m_firstEntityIndex = written;
+    for (EntityFace& face : m_entityFaces) {
+        if (!face.isFromBehind) {
+            const IndexRange range = writeFace(face.face);
+            face.triangles = IndexRange{.firstIndex = range.firstIndex - m_firstEntityIndex,
+                                        .indexCount = range.indexCount};
+        }
+    }
     m_lastFrame.triangles = written / kTriangleCorners;
 }
 
