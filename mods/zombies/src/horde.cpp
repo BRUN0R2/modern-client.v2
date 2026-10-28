@@ -7,6 +7,7 @@ import nx.core;
 import nx.math;
 import nx.data;
 import nx.ecs;
+import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -104,8 +105,9 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
 }
 
 Horde::Horde(CreateToken /*token*/, cs::EntityTypeIndex entityType, Settings rules,
-             const nx::navigation::NavigationMesh& mesh, cs::Game& game)
-    : type{entityType}, settings{std::move(rules)}, query{mesh}, owner{&game} {}
+             const nx::navigation::NavigationMesh& mesh, nx::jobs::JobSystem& jobSystem, cs::Game& game)
+    : type{entityType}, settings{std::move(rules)}, jobs{&jobSystem}, query{mesh}, deciders{mesh},
+      owner{&game} {}
 
 Horde::~Horde() {
     const auto cleared = clear();
@@ -113,13 +115,14 @@ Horde::~Horde() {
                   "Horde: owned bodies and their borrowed corridors are destroyed while the mesh is there");
 }
 
-auto Horde::create(cs::Game& game, const nx::navigation::NavigationMesh& mesh, cs::EntityTypeIndex type,
-                   Settings settings) -> nx::Result<std::unique_ptr<Horde>, ZombieError> {
+auto Horde::create(cs::Game& game, const nx::navigation::NavigationMesh& mesh, nx::jobs::JobSystem& jobs,
+                   cs::EntityTypeIndex type, Settings settings)
+    -> nx::Result<std::unique_ptr<Horde>, ZombieError> {
     if (auto registered = game.registerEntityComponent<nx::agents::Agent>("nx::agents::Agent"); !registered) {
         return nx::fail(ZombieError::SpawnFailed, std::move(registered.error()));
     }
     nx::log::info(kLog, "zombies walk {} polygons", mesh.polygonCount());
-    return std::make_unique<Horde>(CreateToken{}, type, std::move(settings), mesh, game);
+    return std::make_unique<Horde>(CreateToken{}, type, std::move(settings), mesh, jobs, game);
 }
 
 auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
@@ -218,9 +221,17 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
     const std::vector<cs::EntityState> bodies = game.entities();
     const std::vector<cs::PerceptionTarget> targets = game.perceptionTargets();
     const nx::game::TickTime time = game.time();
-    std::vector<cs::EntityCommand> commands;
     const float minimumDot =
         std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / kFullTurnDegrees);
+    // A body alive this tick, its agent and its eye, between what it perceives and what it decides.
+    struct Turn {
+        nx::ecs::Entity entity{};
+        const cs::EntityState* body = nullptr;
+        nx::agents::Agent* agent = nullptr;
+        nx::Vec3 eye{};
+    };
+    std::vector<Turn> turns;
+    std::vector<nx::agents::DecisionRequest> requests;
     for (const nx::ecs::Entity entity : agents) {
         const auto found = std::ranges::lower_bound(bodies, entity, {}, &cs::EntityState::entity);
         if (found == bodies.end() || found->entity != entity || found->health <= nx::HitPoints{}) {
@@ -246,7 +257,18 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         }
         agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
         agent.brain.perceive(seen, time.now, time.rate);
-        const nx::agents::Decision decision = agent.brain.decide(feetOf(found->origin), query);
+        turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
+        requests.push_back({.brain = &agent.brain, .feet = feetOf(found->origin)});
+    }
+    // What a body perceives does not depend on what another decides, nor a decision on another's.
+    std::vector<nx::agents::Decision> decisions(requests.size());
+    deciders.decide(*jobs, requests, decisions);
+    std::vector<cs::EntityCommand> commands;
+    commands.reserve(turns.size());
+    for (std::size_t index = 0; index < turns.size(); ++index) {
+        const auto [entity, found, component, eye] = turns[index];
+        nx::agents::Agent& agent = *component;
+        const nx::agents::Decision& decision = decisions[index];
         if (agent.behavior != decision.behavior) {
             if (transitionLogs.allow()) {
                 const std::string failure = decision.navigationError

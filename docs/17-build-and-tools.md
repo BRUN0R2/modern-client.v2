@@ -290,9 +290,17 @@ Every build job also checks the module layers when CMake configures
 ([01 §1.1](01-architecture.md#11-module-catalog)): a dependency on the same or a higher layer fails
 the configuration.
 
-CMake and Ninja come from `pip` with a version range, and vcpkg is cloned on the fly, with
-a binary cache between runs. CI does not depend on what comes preinstalled on the runner
-image.
+CMake and Ninja come from `pip` with a version range, and vcpkg is cloned on the fly at the
+manifest's `builtin-baseline`, so its tool and scripts are as pinned as its ports. CI does not
+depend on what comes preinstalled on the runner image, nor on a download server being up:
+
+- **vcpkg's binary cache** is restored from the newest one `main` saved. Only runs on `main`
+  save it, and only when they built a package, under a key of their own: pull requests read
+  `main`'s cache instead of crowding it out of the repository's quota, and a new compiler on
+  the runner image costs one rebuild instead of one per run.
+- **Installers** (the Vulkan SDK, LLVM) are pinned by SHA-256 and downloaded once
+  (`.github/actions/cachedDownload`); later runs restore them from the cache.
+- **Every job has a time limit**, so a stalled download or test fails it within the hour.
 
 **Planned:**
 
@@ -322,6 +330,14 @@ image.
   merged branches are deleted. GitHub applies the signature rule to the commits of the pull
   request's branch too, so contributors sign every commit they make
   ([CONTRIBUTING.md](../CONTRIBUTING.md#commits)); the squash commit is signed by GitHub.
+- **Up to date, one at a time:** GitHub offers its merge queue only to organizations, so
+  `.github/workflows/updateBranches.yml` does its work. Whenever `main` moves, a CI run ends or
+  a pull request is set to auto-merge, it brings the oldest pull request set to auto-merge that
+  is behind `main` up to date (a merge of `main`, signed by GitHub), unless the CI of one of them
+  is still running; a pull request in conflict with `main` is skipped, for its author to
+  resolve. It updates with the `UPDATE_BRANCHES_TOKEN` secret, a fine-grained token of the
+  repository's owner for this repository alone (Contents, Pull requests and Workflows: read
+  and write), because pushes with the workflow's own token start no workflow and so no CI.
 - The squash commit takes the pull request title as its subject and an explicit message with
   the body and the trailers (`Signed-off-by`, `Co-Authored-By`), given at merge time:
   `gh pr merge --squash --subject "<title>" --body "<message>"`.

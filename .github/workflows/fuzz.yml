@@ -31,7 +31,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     env:
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+      # Inside the workspace: actions/cache refuses paths with `..`.
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\build\vcpkgCache
       FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '60' || '600' }}
     steps:
       - uses: actions/checkout@v7
@@ -43,23 +44,30 @@ jobs:
       - name: Install CMake and Ninja
         run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
 
-      - name: Bootstrap vcpkg
+      - name: Bootstrap vcpkg at the manifest's baseline
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
-          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
-          "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+          $vcpkgRoot = "$env:RUNNER_TEMP\vcpkg"
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          git -C $vcpkgRoot checkout --quiet (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
 
-      - name: Cache vcpkg binaries
-        uses: actions/cache@v6
+      # As in ci.yml: main saves what it builds under a new key, and every run restores the newest.
+      - name: Restore vcpkg binaries
+        id: vcpkgCache
+        uses: actions/cache/restore@v6
         with:
-          path: ${{ github.workspace }}\..\vcpkg-cache
-          key: vcpkg-windows-fuzz-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
-          restore-keys: vcpkg-windows-fuzz-
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-windows-fuzz-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-windows-fuzz-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}-
+            vcpkg-windows-fuzz-
 
       - name: Configure, build and fuzz (10 minutes per target; 1 on pull requests)
+        id: build
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -68,9 +76,18 @@ jobs:
           $cmakeDirectory = Split-Path (Get-Command cmake).Source
           . ./scripts/devShell.ps1
           $env:PATH = "$cmakeDirectory;$env:PATH"
+          $cachedBinaries = (Get-ChildItem $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File).Count
           cmake --preset fuzz-windows-msvc "-DNX_FUZZ_SECONDS=$env:FUZZ_SECONDS"
+          "vcpkgBuilt=$((Get-ChildItem $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File).Count -ne $cachedBinaries)" >> $env:GITHUB_OUTPUT
           cmake --build --preset fuzz-windows-msvc
           ctest --preset fuzz-windows-msvc
+
+      - name: Save vcpkg binaries
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.build.outputs.vcpkgBuilt == 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.vcpkgCache.outputs.cache-primary-key }}
 
       - name: Keep the inputs that crashed
         if: failure()

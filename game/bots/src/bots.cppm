@@ -16,6 +16,7 @@ export module cs.bots:bots;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -59,13 +60,16 @@ class Bots {
 
 public:
     /// The bots of `game`, none yet, on `mesh`, the mesh of the game's map for standingPlayerProfile: a
-    /// bot does not duck through what is only passed ducked. Both must outlive them. The bodies'
-    /// components are registered in the game. Errors: Unregistered (a component: its cause).
-    [[nodiscard]] static auto create(Game& game, const nx::navigation::NavigationMesh& mesh, BotRules rules)
+    /// bot does not duck through what is only passed ducked; they decide together in jobs of `jobs`. All
+    /// three must outlive them. The bodies' components are registered in the game. Errors: Unregistered
+    /// (a component: its cause).
+    [[nodiscard]] static auto create(Game& game, const nx::navigation::NavigationMesh& mesh,
+                                     nx::jobs::JobSystem& jobs, BotRules rules)
         -> nx::Result<std::unique_ptr<Bots>, BotError>;
 
     /// Use create(). Public only so that create() can use std::make_unique.
-    Bots(CreateToken token, Game& game, BotRules rules, const nx::navigation::NavigationMesh& mesh);
+    Bots(CreateToken token, Game& game, BotRules rules, const nx::navigation::NavigationMesh& mesh,
+         nx::jobs::JobSystem& jobs);
     /// Each bot leaves the game, its body and its brain's corridor with it, while the mesh the corridor
     /// borrows is there.
     ~Bots();
@@ -98,13 +102,14 @@ public:
     void keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_view prefix);
     /// The commands of the bots for the game's next tick, one for each, in the order they joined: each
     /// alive looks at the enemies its budget lets it look at, in turn, and remembers those it sees, each
-    /// known to it its level's reaction time after it first saw it; thinks (nx::agents::Brain::decide);
-    /// turns its view by its spring (turnView) towards where it aims at what it attacks, ahead of it
-    /// above BotAimRules::leadingSkill (leadSpot) and off by its aim's error (settleAimError), or at what
-    /// it looks at, or along its way; moves along its corridor at its full speed; and presses its attack
-    /// as its trigger lets it (pullTrigger), its level's attack delay after it took its enemy on. With
-    /// nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius. Spawning again,
-    /// it starts with a new brain, its view still, its aim and its trigger anew.
+    /// known to it its level's reaction time after it first saw it; thinks (nx::agents::Brain::decide),
+    /// those alive together, in batches in jobs (nx::agents::Deciders); turns its view by its spring
+    /// (turnView) towards where it aims at what it attacks, ahead of it above BotAimRules::leadingSkill
+    /// (leadSpot) and off by its aim's error (settleAimError), or at what it looks at, or along its way;
+    /// moves along its corridor at its full speed; and presses its attack as its trigger lets it
+    /// (pullTrigger), its level's attack delay after it took its enemy on. With nothing to pursue, it hunts a
+    /// place drawn on the mesh within BotRules::huntRadius. Spawning again, it starts with a new brain, its
+    /// view still, its aim and its trigger anew.
     [[nodiscard]] auto commands() -> std::vector<PlayerCommand>;
 
     /// How many bots are in the game.
@@ -115,9 +120,14 @@ public:
     [[nodiscard]] auto skillLevelOf(PlayerIndex player) -> const BotSkillLevel&;
 
 private:
-    /// The command of the bot `player` for the next tick, knowing `targets`.
-    [[nodiscard]] auto commandOf(PlayerIndex player, std::span<const PerceptionTarget> targets)
-        -> UserCommand;
+    struct Turn; // a bot's command being made, between what it perceives and what it decides
+
+    /// The bot `player`'s turn as the next tick's command begins: numbered and, alive, perceiving
+    /// `targets`.
+    [[nodiscard]] auto beginTurn(PlayerIndex player, std::span<const PerceptionTarget> targets) -> Turn;
+    /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `targets`.
+    [[nodiscard]] auto finishTurn(Turn& turn, const nx::agents::Decision& decision,
+                                  std::span<const PerceptionTarget> targets) -> UserCommand;
     /// What the bot `player`, its agent `agent`, alive as `self`, sees of `targets` this tick, within its
     /// budget.
     [[nodiscard]] auto perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
@@ -146,7 +156,9 @@ private:
 
     Game* game;
     BotRules rules;
+    nx::jobs::JobSystem* jobs;
     nx::navigation::NavigationQuery query; ///< Of the mesh the bots borrow.
+    nx::agents::Deciders deciders;         ///< Of the mesh the bots borrow.
     std::vector<PlayerIndex> bots;         ///< Their bodies' corridors borrow the mesh: they leave first.
     nx::GameTime nextQuotaCheck{};
 };

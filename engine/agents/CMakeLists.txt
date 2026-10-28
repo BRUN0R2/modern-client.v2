@@ -5,8 +5,8 @@ nxAddModuleLibrary(nxAgents
     ALIAS nx::agents
     LAYER 4
     MODULES src/nx.agents.cppm
-    SOURCES src/brain.cpp
-    DEPENDS nx::core nx::math nx::ecs nx::navigation)
+    SOURCES src/brain.cpp src/decisions.cpp
+    DEPENDS nx::core nx::math nx::ecs nx::jobs nx::navigation)
 
 if(NX_BUILD_TESTS)
     add_subdirectory(tests)

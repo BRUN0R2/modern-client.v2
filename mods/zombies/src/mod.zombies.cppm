@@ -10,6 +10,7 @@ import nx.meta;
 import nx.data;
 import nx.ecs;
 import nx.assets;
+import nx.jobs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -51,15 +52,16 @@ class Horde {
 
 public:
     /// The horde walks `mesh`, the mesh of the game's map for cs::standingPlayerProfile: this adapter
-    /// cannot crouch, so it leaves out crouch-only passages. The game, its content and the mesh must
-    /// outlive the horde; destroying the horde removes its bodies while their mesh is there.
+    /// cannot crouch, so it leaves out crouch-only passages. Its brains decide together in jobs of
+    /// `jobs`. The game, its content, the mesh and the jobs must outlive the horde; destroying the horde
+    /// removes its bodies while their mesh is there.
     /// Requires validated settings and a matching type issued by the game's catalog.
     /// Errors: SpawnFailed (component registration).
     [[nodiscard]] static auto create(cs::Game& game, const nx::navigation::NavigationMesh& mesh,
-                                     cs::EntityTypeIndex type, Settings settings)
+                                     nx::jobs::JobSystem& jobs, cs::EntityTypeIndex type, Settings settings)
         -> nx::Result<std::unique_ptr<Horde>, ZombieError>;
     Horde(CreateToken token, cs::EntityTypeIndex type, Settings settings,
-          const nx::navigation::NavigationMesh& mesh, cs::Game& game);
+          const nx::navigation::NavigationMesh& mesh, nx::jobs::JobSystem& jobs, cs::Game& game);
     ~Horde();
     Horde(const Horde&) = delete;
     auto operator=(const Horde&) -> Horde& = delete;
@@ -73,7 +75,9 @@ public:
     /// an invalid query or insufficient clear reachable positions. Occupied candidates are excluded.
     [[nodiscard]] auto spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
         -> nx::Result<void, ZombieError>;
-    /// Samples sight and advances brains once, immediately before the owner's next tick.
+    /// Samples sight and advances brains once, immediately before the owner's next tick: each body
+    /// alive perceives in turn, then their brains decide together, in batches in jobs
+    /// (nx::agents::Deciders).
     [[nodiscard]] auto commands() -> std::vector<cs::EntityCommand>;
     /// Removes tracked bodies and their corridors. Errors: SpawnFailed, retaining a removal's cause.
     [[nodiscard]] auto clear() -> nx::Result<void, ZombieError>;
@@ -83,7 +87,9 @@ public:
 private:
     cs::EntityTypeIndex type;
     Settings settings;
+    nx::jobs::JobSystem* jobs;
     nx::navigation::NavigationQuery query; ///< Of the mesh the horde borrows.
+    nx::agents::Deciders deciders;         ///< Of the mesh the horde borrows.
     std::vector<nx::ecs::Entity> agents;
     cs::Game* const owner;
     static constexpr auto kTransitionLogInterval = std::chrono::seconds{1};
