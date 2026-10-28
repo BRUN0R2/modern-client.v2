@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// The client's cvars (docs/12-ui-hud-and-console.md, section 5.1): the original's names and values,
-/// archived as it archives them, and the project's keyboard mapping choice.
+/// The client's cvars (docs/12-ui-hud-and-console.md, section 5.1): the original's names and values
+/// (but gl_vsync, off), archived as it archives them, and the project's keyboard mapping choice.
 export module nx.settings:clientCvars;
 
 import std;
