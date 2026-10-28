@@ -111,6 +111,72 @@ struct MeshPoint {
     std::array<float, 3> position{};
 };
 
+/// What starts the bytes of every mesh NavigationMesh::save writes, and the version of what follows: raise
+/// it whenever their layout changes.
+constexpr std::string_view kMeshFileMagic = "NXNAVMSH";
+constexpr std::uint32_t kMeshFileVersion = 1;
+
+/// The header of those bytes, little-endian: the magic, the version, four bytes of nothing, the key and
+/// the hash of the body that follows it.
+constexpr std::size_t kMeshFileVersionAt = kMeshFileMagic.size();
+constexpr std::size_t kMeshFileKeyAt = kMeshFileVersionAt + (2 * sizeof(std::uint32_t));
+constexpr std::size_t kMeshFileHashAt = kMeshFileKeyAt + sizeof(std::uint64_t);
+constexpr std::size_t kMeshFileBodyAt = kMeshFileHashAt + sizeof(std::uint64_t);
+
+/// The body begins with the grid, its first corner and a tile's side in Detour's space, and the tiles'
+/// count; then each tile, its place in the grid, its polygons' count and its bytes' count, then its bytes.
+constexpr std::size_t kGridBytes = (4 * sizeof(float)) + sizeof(std::uint32_t);
+constexpr std::size_t kTileRecordBytes = 4 * sizeof(std::uint32_t);
+
+[[nodiscard]] auto damaged(std::string detail) -> std::unexpected<Failure<MeshFileError>> {
+    return fail(MeshFileError::Damaged, std::move(detail));
+}
+
+/// Reads a body's fields one after another, each little-endian, as long as the body holds them.
+class BodyReader {
+public:
+    explicit BodyReader(std::span<const std::byte> body) noexcept : rest{body} {}
+
+    /// The next `Value`, or none when the body ends first.
+    template <class Value>
+    [[nodiscard]] auto next() noexcept -> std::optional<Value> {
+        if (rest.size() < sizeof(Value)) {
+            return std::nullopt;
+        }
+        const auto value = loadLittleEndian<Value>(rest);
+        rest = rest.subspan(sizeof(Value));
+        return value;
+    }
+
+    /// The next `count` bytes, or none when the body ends first.
+    [[nodiscard]] auto bytes(std::size_t count) noexcept -> std::optional<std::span<const std::byte>> {
+        if (rest.size() < count) {
+            return std::nullopt;
+        }
+        const std::span<const std::byte> taken = rest.first(count);
+        rest = rest.subspan(count);
+        return taken;
+    }
+
+    [[nodiscard]] inline auto left() const noexcept -> std::size_t { return rest.size(); }
+
+private:
+    std::span<const std::byte> rest;
+};
+
+/// Whether `data`, the bytes of the tile at `x`, `y` of `polygonCount` polygons, are a tile of the
+/// Detour this unit is built with, of that place and count: what Detour takes without asking.
+[[nodiscard]] auto isTileOf(std::span<const std::byte> data, std::int32_t x, std::int32_t y,
+                            std::uint32_t polygonCount) noexcept -> bool {
+    if (data.size() < sizeof(dtMeshHeader)) {
+        return false;
+    }
+    dtMeshHeader header{};
+    std::memcpy(&header, data.data(), sizeof(header));
+    return header.magic == DT_NAVMESH_MAGIC && header.version == DT_NAVMESH_VERSION && header.x == x &&
+           header.y == y && std::cmp_equal(header.polyCount, polygonCount);
+}
+
 } // namespace
 
 struct NavigationMesh::Detour {
@@ -127,43 +193,94 @@ NavigationMesh::NavigationMesh(NavigationMesh&& other) noexcept = default;
 auto NavigationMesh::operator=(NavigationMesh&& other) noexcept -> NavigationMesh& = default;
 NavigationMesh::~NavigationMesh() = default;
 
-auto NavigationMesh::build(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
-                           const BuildSettings& settings) -> Result<NavigationMesh, MeshBuildError> {
+struct MeshBuild::State {
+    jobs::JobSystem* jobs = nullptr;
+    std::shared_ptr<detail::TileWork> tiles{}; ///< Until the mesh is made of them.
+    AgentProfile profile{};
+    std::optional<Result<NavigationMesh, MeshBuildError>> mesh{}; ///< Once its job has run.
+    jobs::JobHandle meshMade{};                                   ///< Of the last job.
+};
+
+MeshBuild::MeshBuild(std::unique_ptr<State> state) noexcept : buildState{std::move(state)} {}
+
+MeshBuild::MeshBuild(MeshBuild&& other) noexcept = default;
+
+MeshBuild::~MeshBuild() {
+    if (buildState) {
+        buildState->jobs->wait(buildState->meshMade);
+    }
+}
+
+auto MeshBuild::finish() && -> Result<NavigationMesh, MeshBuildError> {
+    expects(buildState != nullptr, "MeshBuild::finish: a build not finished yet");
+    const std::unique_ptr<State> state = std::move(buildState);
+    state->jobs->wait(state->meshMade);
+    invariant(state->mesh.has_value(), "MeshBuild::finish: the mesh's job has run");
+    return std::move(*state->mesh);
+}
+
+auto NavigationMesh::startBuild(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
+                                const BuildSettings& settings) -> Result<MeshBuild, MeshBuildError> {
     if (auto checked = checkSettings(settings).and_then([&] { return checkProfile(profile, settings); });
         !checked) {
         return std::unexpected{std::move(checked.error())};
     }
-    auto built = detail::buildTiles(jobs, geometry, profile, settings);
-    if (!built) {
-        return std::unexpected{std::move(built.error())};
+    auto tiles = detail::startTiles(jobs, geometry, profile, settings, jobs::Priority::Background);
+    if (!tiles) {
+        return std::unexpected{std::move(tiles.error())};
     }
-    const std::uint32_t tileBits = bitsToNumber(built->tiles.size());
+    auto state = std::make_unique<MeshBuild::State>(
+        MeshBuild::State{.jobs = &jobs, .tiles = std::move(tiles->work), .profile = profile});
+    // The state outlives the job: MeshBuild waits for it before it lets the state go.
+    MeshBuild::State* const shared = state.get();
+    const std::array tilesBuilt{tiles->done};
+    state->meshMade = jobs.submit(
+        {.label = "navigation.mesh", .priority = jobs::Priority::Background, .dependsOn = tilesBuilt},
+        [shared] {
+            shared->mesh = detail::takeTiles(*shared->tiles).and_then([shared](detail::BuiltTiles built) {
+                return assemble(std::move(built), shared->profile);
+            });
+            shared->tiles.reset();
+        });
+    return MeshBuild{std::move(state)};
+}
+
+auto NavigationMesh::build(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
+                           const BuildSettings& settings) -> Result<NavigationMesh, MeshBuildError> {
+    return startBuild(jobs, geometry, profile, settings).and_then([](MeshBuild started) {
+        return std::move(started).finish();
+    });
+}
+
+auto NavigationMesh::assemble(detail::BuiltTiles built, const AgentProfile& profile)
+    -> Result<NavigationMesh, MeshBuildError> {
+    const std::uint32_t tileBits = bitsToNumber(built.tiles.size());
     const std::uint32_t polygonBits = detail::kTileAndPolygonBits - tileBits;
-    for (const detail::BuiltTile& tile : built->tiles) {
+    for (const detail::BuiltTile& tile : built.tiles) {
         if (tile.polygonCount > (std::uint32_t{1} << polygonBits)) {
             return fail(MeshBuildError::TooLarge,
                         std::format("tile {}, {} has {} polygons, more than the {} of each of {} tiles",
                                     tile.x, tile.y, tile.polygonCount, std::uint32_t{1} << polygonBits,
-                                    built->tiles.size()));
+                                    built.tiles.size()));
         }
     }
     auto detour = std::make_unique<Detour>();
     detour->mesh.reset(dtAllocNavMesh());
     dtNavMeshParams params{};
-    std::ranges::copy(built->origin, std::begin(params.orig));
-    params.tileWidth = built->tileSide;
-    params.tileHeight = built->tileSide;
+    std::ranges::copy(built.origin, std::begin(params.orig));
+    params.tileWidth = built.tileSide;
+    params.tileHeight = built.tileSide;
     params.maxTiles = 1 << tileBits;
     params.maxPolys = 1 << polygonBits;
     endUnlessAllocated(detour->mesh != nullptr && dtStatusSucceed(detour->mesh->init(&params)), "a mesh");
-    detour->tiles.reserve(built->tiles.size());
-    for (detail::BuiltTile& tile : built->tiles) {
+    detour->tiles.reserve(built.tiles.size());
+    for (detail::BuiltTile& tile : built.tiles) {
         std::vector<std::byte>& data = detour->tiles.emplace_back(std::move(tile.data));
         // The tile stays theirs (no DT_TILE_FREE_DATA): Detour writes its links into it.
         const dtStatus added = detour->mesh->addTile(reinterpret_cast<unsigned char*>(data.data()),
                                                      narrow<int>(data.size()), 0, 0, nullptr);
         invariant(dtStatusSucceed(added),
-                  "NavigationMesh::build: Detour takes each tile Recast built for it");
+                  "NavigationMesh::assemble: Detour takes each tile Recast built for it");
         if (dtStatusSucceed(added)) {
             detour->polygonCount += tile.polygonCount;
         }
@@ -200,6 +317,96 @@ auto NavigationMesh::outline() const -> MeshOutline {
         }
     }
     return outline;
+}
+
+auto NavigationMesh::save(MeshKey key) const -> std::vector<std::byte> {
+    const dtNavMesh& mesh = *detourState->mesh;
+    const dtNavMeshParams& params = *mesh.getParams();
+    std::vector<std::byte> body;
+    for (const float coordinate : params.orig) {
+        appendLittleEndian(body, coordinate);
+    }
+    appendLittleEndian(body, params.tileWidth);
+    appendLittleEndian(body, narrow<std::uint32_t>(detourState->tiles.size()));
+    // In the order Detour holds them, which is the order they were added in: row by row.
+    for (int index = 0; index < mesh.getMaxTiles(); ++index) {
+        const dtMeshTile* const tile = mesh.getTile(index);
+        if (tile == nullptr || tile->header == nullptr) {
+            continue;
+        }
+        appendLittleEndian(body, std::int32_t{tile->header->x});
+        appendLittleEndian(body, std::int32_t{tile->header->y});
+        appendLittleEndian(body, narrow<std::uint32_t>(tile->header->polyCount));
+        appendLittleEndian(body, narrow<std::uint32_t>(tile->dataSize));
+        const std::span data{tile->data, narrow<std::size_t>(tile->dataSize)};
+        std::ranges::copy(std::as_bytes(data), std::back_inserter(body));
+    }
+    std::vector<std::byte> bytes;
+    bytes.reserve(kMeshFileBodyAt + body.size());
+    std::ranges::transform(kMeshFileMagic, std::back_inserter(bytes),
+                           [](char letter) { return static_cast<std::byte>(letter); });
+    appendLittleEndian(bytes, kMeshFileVersion);
+    appendLittleEndian(bytes, std::uint32_t{0});
+    appendLittleEndian(bytes, key.value);
+    appendLittleEndian(bytes, hash64(body));
+    bytes.insert(bytes.end(), body.begin(), body.end());
+    return bytes;
+}
+
+auto NavigationMesh::load(std::span<const std::byte> bytes, MeshKey key, const AgentProfile& profile)
+    -> Result<NavigationMesh, MeshFileError> {
+    const bool isMesh =
+        bytes.size() >= kMeshFileBodyAt &&
+        std::ranges::equal(bytes.first(kMeshFileMagic.size()), kMeshFileMagic, {}, {},
+                           [](char letter) { return static_cast<std::byte>(letter); }) &&
+        loadLittleEndian<std::uint32_t>(bytes.subspan(kMeshFileVersionAt)) == kMeshFileVersion;
+    if (!isMesh) {
+        return fail(MeshFileError::NotAMesh, std::format("{} bytes", bytes.size()));
+    }
+    if (const auto kept = loadLittleEndian<std::uint64_t>(bytes.subspan(kMeshFileKeyAt)); kept != key.value) {
+        return fail(MeshFileError::OtherMesh,
+                    std::format("the mesh of {:016x}, not of {:016x}", kept, key.value));
+    }
+    const std::span<const std::byte> body = bytes.subspan(kMeshFileBodyAt);
+    if (hash64(body) != loadLittleEndian<std::uint64_t>(bytes.subspan(kMeshFileHashAt))) {
+        return damaged("its body is not the one it was written with");
+    }
+    if (body.size() < kGridBytes) {
+        return damaged(std::format("{} bytes of body, fewer than its grid", body.size()));
+    }
+    BodyReader reader{body};
+    detail::BuiltTiles built;
+    // The body holds the grid: none of its fields is missing.
+    for (float& coordinate : built.origin) {
+        coordinate = reader.next<float>().value_or(0.0F);
+    }
+    built.tileSide = reader.next<float>().value_or(0.0F);
+    const std::uint32_t tileCount = reader.next<std::uint32_t>().value_or(0);
+    if (tileCount > reader.left() / kTileRecordBytes) {
+        return damaged(std::format("{} tiles in {} bytes", tileCount, reader.left()));
+    }
+    built.tiles.reserve(tileCount);
+    std::set<std::pair<std::int32_t, std::int32_t>> places;
+    for (std::uint32_t index = 0; index < tileCount; ++index) {
+        const auto x = reader.next<std::int32_t>();
+        const auto y = reader.next<std::int32_t>();
+        const auto polygonCount = reader.next<std::uint32_t>();
+        const auto byteCount = reader.next<std::uint32_t>();
+        const auto data = byteCount ? reader.bytes(*byteCount) : std::nullopt;
+        if (!data || !isTileOf(*data, *x, *y, *polygonCount) || !places.emplace(*x, *y).second) {
+            return damaged(std::format("its tile {} of {}", index + 1, tileCount));
+        }
+        built.tiles.push_back(detail::BuiltTile{
+            .x = *x, .y = *y, .polygonCount = *polygonCount, .data = {data->begin(), data->end()}});
+    }
+    if (reader.left() != 0) {
+        return damaged(std::format("{} bytes after its last tile", reader.left()));
+    }
+    auto mesh = assemble(std::move(built), profile);
+    if (!mesh) {
+        return damaged(std::move(mesh.error().detail));
+    }
+    return std::move(*mesh);
 }
 
 struct NavigationQuery::Detour {

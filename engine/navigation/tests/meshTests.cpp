@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // Meshes built from geometry made here: where the polygons are and of which kind, the same mesh with
-// any number of workers, what a profile and a geometry may not be, and the meshes of each profile.
+// any number of workers or started and finished later, what a profile and a geometry may not be, and the
+// meshes of each profile.
 
 #include <gtest/gtest.h>
 
@@ -73,6 +74,62 @@ TEST(NavigationMeshTest, TheSameMeshIsBuiltWithAnyNumberOfWorkers) {
     for (const std::uint32_t workers : {1U, 3U, 15U}) {
         EXPECT_EQ(nx::test::playerMesh(geometry, workers).outline(), serial) << workers << " workers";
     }
+}
+
+TEST(NavigationMeshTest, ABuildStartedGoesOnWithoutItsGeometryAndGivesTheSameMesh) {
+    const auto floorAndBox = [] {
+        Geometry geometry;
+        nx::test::addFloor(geometry, {.x = -640.0F, .y = -512.0F}, {.x = 640.0F, .y = 512.0F}, 0.0F);
+        nx::test::addBox(geometry, {.x = -96.0F, .y = -300.0F, .z = 0.0F},
+                         {.x = 96.0F, .y = 200.0F, .z = 128.0F});
+        return geometry;
+    };
+    const MeshOutline expected = nx::test::playerMesh(floorAndBox()).outline();
+    for (const std::uint32_t workers : {0U, 3U}) {
+        auto jobs = nx::test::jobSystem(workers);
+        auto started = [&jobs, &floorAndBox] {
+            nx::navigation::AgentProfile profile = nx::test::playerProfile();
+            nx::navigation::BuildSettings settings = nx::test::testSettings();
+            return NavigationMesh::startBuild(*jobs, floorAndBox(), profile, settings);
+        }(); // the geometry, profile and settings it was started with are gone
+        ASSERT_TRUE(started.has_value()) << nx::describe(started.error());
+        auto mesh = std::move(*started).finish();
+        ASSERT_TRUE(mesh.has_value()) << nx::describe(mesh.error());
+        EXPECT_EQ(mesh->outline(), expected) << workers << " workers";
+        EXPECT_EQ(mesh->profile().name, nx::test::playerProfile().name);
+    }
+}
+
+TEST(NavigationMeshTest, ABuildLeftUnfinishedWaitsForItsJobsAsItGoes) {
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -640.0F, .y = -512.0F}, {.x = 640.0F, .y = 512.0F}, 0.0F);
+    auto jobs = nx::test::jobSystem(3);
+    {
+        auto started =
+            NavigationMesh::startBuild(*jobs, geometry, nx::test::playerProfile(), nx::test::testSettings());
+        ASSERT_TRUE(started.has_value());
+    } // its jobs ran before what they write went
+    const nx::jobs::JobSystemStats stats = jobs->stats();
+    const std::uint64_t executed =
+        std::ranges::fold_left(stats.workers | std::views::transform(&nx::jobs::WorkerStats::executedJobs),
+                               stats.jobsExecutedByWaiters, std::plus{});
+    EXPECT_GT(executed, 1U); // the tiles' and the mesh's
+}
+
+TEST(NavigationMeshTest, ABuildIsRefusedAsItStartsForWhatItCannotBuild) {
+    auto jobs = nx::test::jobSystem(0);
+    nx::navigation::AgentProfile taller = nx::test::playerProfile();
+    taller.crouchedHeight = nx::HammerUnits{80.0F};
+    const auto refusedProfile =
+        NavigationMesh::startBuild(*jobs, Geometry{}, taller, nx::test::testSettings());
+    ASSERT_FALSE(refusedProfile.has_value());
+    EXPECT_EQ(refusedProfile.error().code, MeshBuildError::InvalidProfile);
+    Geometry geometry;
+    geometry.triangles.push_back({.corners = {0, 1, 2}});
+    const auto refusedGeometry =
+        NavigationMesh::startBuild(*jobs, geometry, nx::test::playerProfile(), nx::test::testSettings());
+    ASSERT_FALSE(refusedGeometry.has_value());
+    EXPECT_EQ(refusedGeometry.error().code, MeshBuildError::InvalidGeometry);
 }
 
 TEST(NavigationMeshTest, AFloorSteeperThanTheProfilesIsNone) {

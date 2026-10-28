@@ -9,7 +9,6 @@ import nx.math;
 import nx.meta;
 import nx.data;
 import nx.ecs;
-import nx.jobs;
 import nx.assets;
 import nx.game;
 import nx.navigation;
@@ -20,9 +19,8 @@ import cs.server;
 export namespace zombies {
 /// Why the zombies' settings could not be read, or a horde made, spawned or cleared.
 enum class ZombieError : std::uint8_t {
-    InvalidData,           ///< The settings break their schema or their budgets.
-    NavigationUnavailable, ///< No navigation profile matches the standing body, or its mesh was not built.
-    SpawnFailed,           ///< A body could not be placed, registered or removed.
+    InvalidData, ///< The settings break their schema or their budgets.
+    SpawnFailed, ///< A body could not be placed, registered or removed.
 };
 
 /// data/mods/zombies.toml: the zombies' body, sight, memory, navigation and spawning budgets.
@@ -52,15 +50,16 @@ class Horde {
     };
 
 public:
-    /// Builds the standing-body mesh in jobs. The game and its content must outlive the horde;
-    /// destroying the horde removes its bodies before releasing their mesh.
+    /// The horde walks `mesh`, the mesh of the game's map for cs::standingPlayerProfile: this adapter
+    /// cannot crouch, so it leaves out crouch-only passages. The game, its content and the mesh must
+    /// outlive the horde; destroying the horde removes its bodies while their mesh is there.
     /// Requires validated settings and a matching type issued by the game's catalog.
-    /// Errors: NavigationUnavailable, SpawnFailed (component registration).
-    [[nodiscard]] static auto create(nx::jobs::JobSystem& jobs, cs::Game& game,
-                                     const nx::game::NavigationData& navigation, cs::EntityTypeIndex type,
-                                     Settings settings) -> nx::Result<std::unique_ptr<Horde>, ZombieError>;
-    Horde(CreateToken token, cs::EntityTypeIndex type, Settings settings, nx::navigation::NavigationMesh mesh,
-          cs::Game& game);
+    /// Errors: SpawnFailed (component registration).
+    [[nodiscard]] static auto create(cs::Game& game, const nx::navigation::NavigationMesh& mesh,
+                                     cs::EntityTypeIndex type, Settings settings)
+        -> nx::Result<std::unique_ptr<Horde>, ZombieError>;
+    Horde(CreateToken token, cs::EntityTypeIndex type, Settings settings,
+          const nx::navigation::NavigationMesh& mesh, cs::Game& game);
     ~Horde();
     Horde(const Horde&) = delete;
     auto operator=(const Horde&) -> Horde& = delete;
@@ -84,8 +83,7 @@ public:
 private:
     cs::EntityTypeIndex type;
     Settings settings;
-    nx::navigation::NavigationMesh mesh;
-    nx::navigation::NavigationQuery query;
+    nx::navigation::NavigationQuery query; ///< Of the mesh the horde borrows.
     std::vector<nx::ecs::Entity> agents;
     cs::Game* const owner;
     static constexpr auto kTransitionLogInterval = std::chrono::seconds{1};

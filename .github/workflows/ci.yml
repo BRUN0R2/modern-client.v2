@@ -23,6 +23,7 @@ jobs:
   checks:
     name: Licenses, formatting and line endings
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -51,6 +52,9 @@ jobs:
   windows:
     name: Windows · ${{ matrix.compiler }} · ${{ matrix.preset }}
     runs-on: windows-latest
+    # Well past the longest run, which builds every dependency: a stalled step fails the job
+    # instead of holding it for the six hours GitHub allows.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -59,8 +63,10 @@ jobs:
           - { preset: release-windows-msvc, compiler: MSVC }
           - { preset: dev-windows-clang, compiler: Clang }
     env:
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\..\vcpkg-cache
+      # Inside the workspace: actions/cache refuses paths with `..`.
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\build\vcpkgCache
       LLVM_VERSION: "23.1.4"
+      LLVM_SHA256: "15E49ACA3540991A6F28A0E57BABAB67DA82155C4F73F79DD5E8666A851F9127"
       VULKAN_SDK_VERSION: "1.4.363.0"
       VULKAN_SDK_SHA256: "94A82D378F7A5E3E54C9DB7D2FB7016AF136E14AC0A18DBF0F2F67A36352D141"
     steps:
@@ -73,43 +79,59 @@ jobs:
       - name: Install CMake and Ninja
         run: python -m pip install --disable-pip-version-check "cmake>=4.3,<5" "ninja>=1.12"
 
+      - name: Download the Vulkan SDK
+        uses: ./.github/actions/cachedDownload
+        with:
+          url: https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/windows/vulkansdk-windows-X64-${{ env.VULKAN_SDK_VERSION }}.exe
+          sha256: ${{ env.VULKAN_SDK_SHA256 }}
+          path: ${{ runner.temp }}\vulkanSdk.exe
+
       - name: Install Vulkan validation layers
         shell: pwsh
         run: |
-          $installer = Join-Path $env:RUNNER_TEMP "vulkansdk-$env:VULKAN_SDK_VERSION.exe"
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_SDK_VERSION.exe" -OutFile $installer
-          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $env:VULKAN_SDK_SHA256) {
-            throw 'The Vulkan SDK installer hash does not match the pinned release'
-          }
-          $installed = Start-Process $installer -ArgumentList @('install', '--accept-licenses', '--default-answer', '--confirm-command') -Wait -PassThru -WindowStyle Hidden
+          $installed = Start-Process "$env:RUNNER_TEMP\vulkanSdk.exe" -ArgumentList @('install', '--accept-licenses', '--default-answer', '--confirm-command') -Wait -PassThru -WindowStyle Hidden
           if ($installed.ExitCode -ne 0) { throw "Vulkan SDK installation failed: $($installed.ExitCode)" }
+
+      - name: Download LLVM
+        if: matrix.compiler == 'Clang'
+        uses: ./.github/actions/cachedDownload
+        with:
+          url: https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/LLVM-${{ env.LLVM_VERSION }}-win64.msi
+          sha256: ${{ env.LLVM_SHA256 }}
+          path: ${{ runner.temp }}\llvm.msi
 
       - name: Install LLVM
         if: matrix.compiler == 'Clang'
         shell: pwsh
         run: |
-          $installer = Join-Path $env:RUNNER_TEMP "LLVM-$env:LLVM_VERSION-win64.msi"
-          Invoke-WebRequest "https://github.com/llvm/llvm-project/releases/download/llvmorg-$env:LLVM_VERSION/LLVM-$env:LLVM_VERSION-win64.msi" -OutFile $installer
-          $installed = Start-Process msiexec.exe -ArgumentList @('/i', "`"$installer`"", '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
+          $installed = Start-Process msiexec.exe -ArgumentList @('/i', "`"$env:RUNNER_TEMP\llvm.msi`"", '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
           if ($installed.ExitCode -ne 0) { throw "LLVM installation failed: $($installed.ExitCode)" }
 
-      - name: Bootstrap vcpkg
+      - name: Bootstrap vcpkg at the manifest's baseline
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
-          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
-          "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+          $vcpkgRoot = "$env:RUNNER_TEMP\vcpkg"
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          git -C $vcpkgRoot checkout --quiet (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
 
-      - name: Cache vcpkg binaries
-        uses: actions/cache@v6
+      # Each run of main that builds a package saves the cache under a new key; every run restores
+      # the newest, so a change of compiler on the runner image costs one rebuild, not one per run.
+      - name: Restore vcpkg binaries
+        id: vcpkgCache
+        uses: actions/cache/restore@v6
         with:
-          path: ${{ github.workspace }}\..\vcpkg-cache
-          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
-          restore-keys: vcpkg-windows-
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-windows-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}-
+            vcpkg-windows-
 
       - name: Configure, build and test
+        id: build
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -122,13 +144,26 @@ jobs:
             clang++ --version
           }
           cmake --version
+          # vcpkg installs the dependencies while CMake configures, adding what it builds to its cache.
+          $cachedBinaries = (Get-ChildItem $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File).Count
           cmake --preset ${{ matrix.preset }}
+          "vcpkgBuilt=$((Get-ChildItem $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File).Count -ne $cachedBinaries)" >> $env:GITHUB_OUTPUT
           cmake --build --preset ${{ matrix.preset }}
           ctest --preset ${{ matrix.preset }}
+
+      # Only main writes caches: pull requests read main's, and their own would crowd main's out of
+      # the repository's cache quota.
+      - name: Save vcpkg binaries
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.build.outputs.vcpkgBuilt == 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.vcpkgCache.outputs.cache-primary-key }}
 
   linux-gcc:
     name: Linux · GCC 16 · ${{ matrix.preset }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     container:
       image: gcc:16
       # TSan must control its process layout via personality(ADDR_NO_RANDOMIZE).
@@ -162,29 +197,39 @@ jobs:
 
       - uses: actions/checkout@v7
 
-      - name: Bootstrap vcpkg
+      - name: Bootstrap vcpkg at the manifest's baseline
         run: |
           git clone --filter=blob:none https://github.com/microsoft/vcpkg.git /opt/vcpkg
+          git -C /opt/vcpkg checkout --quiet "$(python3 -c 'import json; print(json.load(open("vcpkg.json"))["builtin-baseline"])')"
           /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics
           echo VCPKG_ROOT=/opt/vcpkg >> "$GITHUB_ENV"
           mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
 
-      - name: Cache vcpkg binaries
-        uses: actions/cache@v6
+      # As on Windows: main saves what it builds under a new key, and every run restores the newest.
+      - name: Restore vcpkg binaries
+        id: vcpkgCache
+        uses: actions/cache/restore@v6
         with:
-          path: /tmp/vcpkg-cache
-          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}
-          restore-keys: vcpkg-linux-gcc-
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-linux-gcc-${{ hashFiles('vcpkg.json', 'cmake/triplets/**', 'cmake/ports/**') }}-
+            vcpkg-linux-gcc-
 
       - name: Check TSan process layout control
         if: matrix.preset == 'tsan-linux-gcc'
         run: setarch "$(uname -m)" -R true
 
       - name: Configure
+        id: configure
         run: |
           g++ --version | head -n 1
           cmake --version | head -n 1
+          countCached() { find "$VCPKG_DEFAULT_BINARY_CACHE" -type f | wc -l; }
+          cachedBinaries="$(countCached)"
           cmake --preset ${{ matrix.preset }} -DNX_REFLECTION_BACKEND=native
+          [ "$(countCached)" = "$cachedBinaries" ] && vcpkgBuilt=false || vcpkgBuilt=true
+          echo "vcpkgBuilt=$vcpkgBuilt" >> "$GITHUB_OUTPUT"
 
       - name: Build
         # -k 0: keep going after the first error so one run reports every problem.
@@ -197,3 +242,10 @@ jobs:
           else
             ctest --preset ${{ matrix.preset }}
           fi
+
+      - name: Save vcpkg binaries
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.configure.outputs.vcpkgBuilt == 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.vcpkgCache.outputs.cache-primary-key }}
