@@ -40,9 +40,22 @@ jobs:
           ref: main
           sparse-checkout: .github/scripts
 
+      # The workflow's own token cannot do the update: its pushes start no workflow, so no CI, and
+      # it may never change the workflow files that main brings. The repository's GitHub App can;
+      # its token lasts an hour and holds only what the update needs.
+      - name: Mint the branch updater's token
+        id: appToken
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.UPDATE_BRANCHES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UPDATE_BRANCHES_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+
       - name: Bring the oldest pull request behind main up to date
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          UPDATE_BRANCHES_TOKEN: ${{ secrets.UPDATE_BRANCHES_TOKEN }}
+          UPDATE_BRANCHES_TOKEN: ${{ steps.appToken.outputs.token }}
         run: bash .github/scripts/updateNextBranch.sh

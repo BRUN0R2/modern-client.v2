@@ -4,8 +4,8 @@
 
 # Brings the next pull request set to auto-merge that is behind main up to date, unless one of
 # them that is up to date still runs its CI (docs/17, section 8). It reads with GH_TOKEN and
-# updates with UPDATE_BRANCHES_TOKEN, whose pushes start CI where the workflow's own token's
-# pushes do not.
+# updates with UPDATE_BRANCHES_TOKEN, the branch updater's GitHub App token, whose pushes start
+# CI where the workflow's own token's pushes do not.
 set -euo pipefail
 
 # The workflow whose checks main requires.
@@ -15,7 +15,7 @@ readonly startPolls=60
 readonly pollSeconds=5
 
 if [ -z "${UPDATE_BRANCHES_TOKEN:-}" ]; then
-  echo "::error::The UPDATE_BRANCHES_TOKEN secret is missing (docs/17, section 8)." >&2
+  echo "::error::UPDATE_BRANCHES_TOKEN, the branch updater's GitHub App token, is missing (docs/17, section 8)." >&2
   exit 1
 fi
 

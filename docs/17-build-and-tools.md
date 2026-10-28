@@ -336,9 +336,14 @@ depend on what comes preinstalled on the runner image, nor on a download server 
   is behind `main` up to date (a merge of `main`, signed by GitHub), unless one of them that is
   up to date still runs its CI: that one merges or fails first. Those whose CI last failed come
   after the others, so a broken one does not hold them back each time `main` moves, and one in
-  conflict with `main` is skipped, for its author to resolve. It updates with the `UPDATE_BRANCHES_TOKEN` secret, a fine-grained token of the
-  repository's owner for this repository alone (Contents, Pull requests and Workflows: read
-  and write), because pushes with the workflow's own token start no workflow and so no CI.
+  conflict with `main` is skipped, for its author to resolve.
+  It updates as the repository's own GitHub App, the **branch updater**, because the workflow's
+  own token cannot: its pushes start no workflow, so no CI, and it may never change the workflow
+  files that `main` brings. The App belongs to the repository's owner, is installed on this
+  repository alone, has no webhook and holds Contents, Pull requests and Workflows (read and
+  write); each run mints an hour's token from it (`actions/create-github-app-token`) with the
+  `UPDATE_BRANCHES_APP_CLIENT_ID` variable and the `UPDATE_BRANCHES_APP_PRIVATE_KEY` secret. No
+  personal token is involved, and nothing expires.
 - The squash commit takes the pull request title as its subject and an explicit message with
   the body and the trailers (`Signed-off-by`, `Co-Authored-By`), given at merge time:
   `gh pr merge --squash --subject "<title>" --body "<message>"`.
