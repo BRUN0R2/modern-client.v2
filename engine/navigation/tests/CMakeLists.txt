@@ -4,6 +4,7 @@
 nxAddTest(nxNavigationTests
     SOURCES
         meshTests.cpp
+        meshFileTests.cpp
         queryTests.cpp
         corridorTests.cpp
     DEPENDS
