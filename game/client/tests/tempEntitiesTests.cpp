@@ -42,7 +42,7 @@ constexpr float kRestingHeight = 0.03125F;
             .value_or(std::string{}),
         "blood.toml");
     EXPECT_TRUE(rules.has_value());
-    return std::move(rules).value_or(cs::BloodRules{}).look;
+    return std::move(rules).value_or(cs::BloodRules{}).sprayLook;
 }
 
 /// A palette whose entry n is red n.

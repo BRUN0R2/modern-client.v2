@@ -480,7 +480,11 @@ flowchart LR
    (`kRenderTransTexture`), their sprites read with the level (`cs::EffectSprites`): today the blood a
    hit sprays ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). The original's client moves them in its
    closed `HUD_TempEntUpdate`: here each falls at its share of the world's gravity, spins, and rests
-   where a line from where it was meets the world. A
+   where a line from where it was meets the world. The client's particles (`cs.client:particles`, §10)
+   are dots of an entry of the engine's palette, as the original's engine makes and moves them
+   (`R_AllocParticle`, `CL_ThinkParticle`): each moves by its velocity, then falls at its share of the
+   world's gravity, through what is solid, and goes at its time, 4096 at most (`max_particles`): today
+   the stream of blood a hit makes a head shed. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
@@ -613,7 +617,7 @@ same model become one draw call per submesh.
 | Sprites (SPR) | Orientations *parallel*, *parallel upright*, *facing upright*, *oriented*, *parallel oriented*. Formats *normal*, *additive*, *indexalpha*, *alphatest* |
 | High-quality sprites (`.nxspr`) | RGBA with smooth alpha, any resolution the GPU supports, mipmaps, KTX2 compression, per-DPI variants for the HUD, the same orientations and render modes as SPR |
 | Beams | Segments, noise, attachments to entities |
-| Particles | System compatible with the GoldSrc effects (blood, sparks, smoke). Simulation in jobs, upload as instances |
+| Particles | System compatible with the GoldSrc effects (blood, sparks, smoke). Simulation in jobs, upload as instances. Today: the dots of `CL_DrawParticles` (below) |
 | Temp entities | Ephemeral effects (shrapnel, shells, explosions) without a fixed ceiling. Configurable budget with a diagnostic error when exceeded |
 | Decals | Decal atlas from `decals.wad` and player sprays. No fixed ceiling (configurable per-map budget and LRU recycling). Today: the world's decals, in the original's pool of 4096 at most (§8) |
 | Dynamic lights | *dlights* and *elights* without a fixed ceiling, with a per-frame budget |
@@ -649,6 +653,18 @@ its last frame index the end of its loop (one that plays once turning off past i
 player's line of sight stops 8 units or more short of, through glass and models, is hidden
 (`R_SpriteGlowBlend`). The other render effects, sprites that follow an entity and the HUD's come with
 their consumers.
+
+**Today** (`nx.render:particle`, `shaders/particle.slang`): particles drawn as the original's
+`CL_DrawParticles` draws them, as Xash3D-FWGS reconstructs it. Each is a quad facing the view, two units
+across, the engine's own texture of a dot on it (`R_InitParticleTexture`: eight texels a side, clear
+white but for a round dot four texels a side in its first corner, its own corners clear, as GoldSrc has
+it), clamped to its edge, the dot lying in the quarter of the quad toward the view's right and up; a
+particle the distance in front of the view and the quad's half reach 20 units or more grows by 0.002 of
+that, so that the far ones do not vanish. Its color is its entry of the engine's palette, as the game
+gives it, and its opacity as the game makes it (`cs::amountOf`: whole until the last sixteenth of a
+second of its life, then fading out). The particles are drawn after everything the frame draws blended,
+in the world's depths (`CL_DrawEFX`'s last pass), blended over what is there, their depth tested but
+not written; the view's own model is drawn after them.
 
 ## 11. Visual fidelity
 

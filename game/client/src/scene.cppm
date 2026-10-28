@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// What the client draws of a level (docs/05-rendering.md): the world and the light it gives, the
-/// sprites and studio models of its entities, the blended ones of them all in one order, and the weapon
-/// in the player's hand, drawn last in its own depths; then its muzzle flashes, effects added as the
-/// original adds them, in those depths.
+/// sprites and studio models of its entities, the blended ones of them all in one order, the particles
+/// over them, and the weapon in the player's hand, drawn last in its own depths; then its muzzle flashes,
+/// effects added as the original adds them, in those depths.
 export module cs.client:scene;
 
 import std;
@@ -19,6 +19,7 @@ import :entityModels;
 import :viewModel;
 import :muzzleFlash;
 import :tempEntities;
+import :particles;
 
 export namespace cs {
 
@@ -34,11 +35,12 @@ struct SceneShaders {
     std::vector<std::byte> world;
     std::vector<std::byte> studio;
     std::vector<std::byte> sprite;
+    std::vector<std::byte> particle;
     std::vector<std::byte> probe; ///< The enhanced look's reflection probes'.
 };
 
-/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv and probe.spv. Errors:
-/// ShadersUnreadable.
+/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv, particle.spv and probe.spv.
+/// Errors: ShadersUnreadable.
 [[nodiscard]] auto readSceneShaders(const std::filesystem::path& folder)
     -> nx::Result<SceneShaders, SceneError>;
 
@@ -54,6 +56,7 @@ struct SceneView {
     std::span<const ShownEntity> entities{};
     std::optional<ViewModelPose> viewModel{};   ///< None without a weapon in hand.
     std::span<const TempEntity> tempEntities{}; ///< The client's (TempEntities::shown).
+    std::span<const Particle> particles{};      ///< The client's (Particles::shown).
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
     Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
@@ -75,7 +78,9 @@ public:
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
     /// entities, each lit where it is, the sprites of its entities, a glow the player's line of sight
     /// does not reach hidden, and its temporary entities, each as translucent as it is, the blended ones of
-    /// them all in one order (nx.render:blendedOrder); then the weapon in the player's hand, lit where the
+    /// them all in one order (nx.render:blendedOrder); its particles over them, each of its entry of the
+    /// engine's palette, none without it, as opaque as it is at the view's time (amountOf); then the
+    /// weapon in the player's hand, lit where the
     /// player's eye is, as the original lights the view's own model, and in the enhanced look by the light of
     /// its flashes too. It prepares the muzzle flashes, those of the view's client events and those still
     /// showing, for drawEffects to record. Errors: DrawFailed.
@@ -130,7 +135,7 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          nx::render::SpriteRenderer viewSprites) noexcept;
+          nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles) noexcept;
 
     /// Forgets the muzzle flashes over at `time` or of another weapon than `inHand`'s; then adds those
     /// of `events`, the client events passed by `viewModel`, that of `inHand` posed as `bones`, of the
@@ -147,6 +152,7 @@ private:
     nx::render::StudioRenderer m_viewModels;
     /// What the weapon in hand shows, its muzzle flashes: the effects, as display colors.
     nx::render::SpriteRenderer m_viewSprites;
+    nx::render::ParticleRenderer particleRenderer;
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.

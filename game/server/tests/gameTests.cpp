@@ -579,6 +579,7 @@ TEST_F(GameTest, AHelmetTakesItsShareOfAHitInTheHeadAndSpillsNoBlood) {
     EXPECT_EQ(hurt.player.punch, nx::EulerAngles{});
     EXPECT_TRUE(made(victim, content().playerHarm.helmetPain));
     EXPECT_TRUE(hurt.bloodMarks.empty());
+    EXPECT_TRUE(hurt.bloodStreams.empty()) << "the helmet keeps the head's stream in";
 }
 
 TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {
@@ -616,9 +617,16 @@ TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
     // Straight at it, the round meets its head; the USP's 34, less by the way, four times as much, kills.
     placeAttacker(attacker);
     std::ignore = play(attacker, kReadyTicks);
-    std::ignore = press(attacker, {cs::Button::Attack});
+    const cs::PlayerSnapshot headShot = press(attacker, {cs::Button::Attack});
     EXPECT_FALSE(game().snapshotFor(victim).status.isAlive());
     EXPECT_EQ(shown(attacker, victim).sequence, sequence("head"));
+    // Its head streams its blood the way the round went, as fast as a byte holds: over 130 times 5.
+    ASSERT_EQ(headShot.bloodStreams.size(), 1U);
+    const cs::BloodStream& stream = headShot.bloodStreams.front();
+    EXPECT_EQ(stream.color, content().blood.stream.color);
+    EXPECT_EQ(stream.speed, 255U);
+    EXPECT_GT(stream.direction.x, 0.99F) << "toward the victim";
+    EXPECT_NEAR(stream.position.x, kVictimAhead, cs::kStandingBox.max.x);
 
     // Dead, its body is not solid: a round goes through where it lies.
     std::ignore = play(attacker, kReadyTicks);
@@ -648,6 +656,7 @@ TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt
         EXPECT_EQ(shooting.bloodSprays.front().size, 7U);
         EXPECT_EQ(shooting.bloodSprays.front().color, content().blood.spray.color);
         EXPECT_NEAR(shooting.bloodSprays.front().position.x, kVictimAhead, cs::kStandingBox.max.x);
+        EXPECT_TRUE(shooting.bloodStreams.empty()) << "a head's alone";
         std::ignore = play(attacker, kReadyTicks);
     }
     ASSERT_TRUE(game().snapshotFor(victim).status.isAlive()) << "35 twice";

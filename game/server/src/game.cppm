@@ -301,8 +301,9 @@ private:
     /// blood's draws come from streams of the attacker's command and the victim.
     void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
     /// The blood `victim` sheds as `attack` meets it, of `damage` once its hit group took its share, where
-    /// its armor lets it (shedsBlood): a spray of the tick where the attack met it, of its size
-    /// (spraySizeOf, SpawnBlood), then on what is solid behind it, through the world and the brush
+    /// its armor lets it (shedsBlood): met in the head, a stream of the tick where the attack met it, the
+    /// way it went, of its speed (streamSpeedOf, BloodSplat); a spray of the tick there, of its size
+    /// (spraySizeOf, SpawnBlood); then on what is solid behind it, through the world and the brush
     /// entities, the bodies left be, along the ways it traces (bleedingWaysOf), as far as BloodRules::reach,
     /// a mark of the tick where one of them leaves its decal (bloodDecalOf) on the world or a brush entity
     /// (TraceBleed, UTIL_BloodDecalTrace); drawn from `random`.
@@ -407,6 +408,7 @@ private:
     std::vector<Impact> m_impacts;                ///< Of the tick.
     std::vector<BloodMark> bloodMarks;            ///< Of the tick.
     std::vector<BloodSpray> bloodSprays;          ///< Of the tick.
+    std::vector<BloodStream> bloodStreams;        ///< Of the tick.
     MapLightStyles lightStyles;                   ///< Owned by this game; copied into each client's snapshot.
 };
 

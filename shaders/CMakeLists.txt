@@ -7,6 +7,7 @@ nxAddShaders(nxShaders
         world.slang
         studio.slang
         sprite.slang
+        particle.slang
         screen.slang
         post.slang
         probe.slang

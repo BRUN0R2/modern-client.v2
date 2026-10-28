@@ -51,6 +51,31 @@ namespace {
            look.dropGravity >= nx::Scale{};
 }
 
+/// The most a byte holds: the stream's speed, as the original writes it.
+constexpr std::uint32_t kByteTop = 255;
+
+/// Whether `stream` makes speeds within a byte.
+[[nodiscard]] auto isValid(const BloodStreamRules& stream) noexcept -> bool {
+    return stream.speedPerDamage > 0 && stream.fastest > 0 && stream.fastest <= kByteTop &&
+           stream.mostExtraSpeed <= kByteTop;
+}
+
+/// Whether `look` keeps its colors within the palette from `color`, makes particles that last, and
+/// slows its stream by a step that is no less than none.
+[[nodiscard]] auto isValid(const BloodStreamLook& look, std::uint8_t color) noexcept -> bool {
+    const auto isPositive = [](float value) {
+        return std::isfinite(value) && value > 0.0F;
+    };
+    const bool isWithinPalette =
+        look.colorRange > 0 && std::uint64_t{color} + look.colorRange <= nx::assets::kPaletteColors;
+    return isWithinPalette && look.streamParticles > 0 && look.splashPerSpeed > 0 &&
+           isPositive(look.streamLife.count()) && isPositive(look.splashLife.count()) &&
+           std::isfinite(look.firstDip) && std::isfinite(look.dipStep) &&
+           std::isfinite(look.firstSplashDip) && std::isfinite(look.splashSpread) &&
+           look.speedStep >= nx::UnitsPerSecond{} && look.streamGravity >= nx::Scale{} &&
+           look.splashGravity >= nx::Scale{} && look.companionJitter >= nx::HammerUnits{};
+}
+
 /// The spread of a hit of `damage`: the first whose `below` it is below, else the last.
 [[nodiscard]] auto spreadOf(const BloodRules& rules, nx::Damage damage) -> const BleedSpread& {
     const auto spread = std::ranges::find_if(
@@ -70,7 +95,8 @@ auto readBloodRules(std::string_view text, std::string_view sourceName)
     const bool isValidRules =
         !rules->decals.empty() && std::ranges::none_of(rules->decals, &std::string::empty) &&
         rules->reach > nx::HammerUnits{} && rules->marksOneIn > 0 && areSpreadsInOrder(rules->spreads) &&
-        isValid(rules->spray) && isValid(rules->look, rules->spray.color);
+        isValid(rules->spray) && isValid(rules->sprayLook, rules->spray.color) && isValid(rules->stream) &&
+        isValid(rules->streamLook, rules->stream.color);
     if (!isValidRules) {
         return nx::fail(
             BloodError::DataInvalid,
@@ -78,7 +104,8 @@ auto readBloodRules(std::string_view text, std::string_view sourceName)
                         "spreads of traces, each below more than the last's, the last below "
                         "none, a spray's sizes from one, and its look's sprites, color within "
                         "the palette, times and dice more than none, each least no more than its "
-                        "most, are required",
+                        "most, a stream's speeds within a byte, its colors within the palette, and "
+                        "its particles and times more than none, are required",
                         sourceName));
     }
     return std::move(*rules);
@@ -112,6 +139,14 @@ auto spraySizeOf(const BloodSprayRules& rules, nx::Damage damage) -> std::option
         std::uint64_t{static_cast<std::uint32_t>(points)} * rules.amountPerDamage, rules.mostAmount);
     return std::clamp(static_cast<std::uint32_t>(amount / rules.amountPerSize), rules.smallestSize,
                       rules.largestSize);
+}
+
+auto streamSpeedOf(const BloodStreamRules& rules, nx::Damage damage, nx::Random& random) -> std::uint32_t {
+    // int(flDamage * 5), as the original's processors cut it, and RANDOM_LONG(0, 100) more.
+    const std::int32_t base = nx::truncateAsX86(damage.value() * static_cast<float>(rules.speedPerDamage));
+    const auto extra = nx::narrow<std::uint32_t>(random.below(std::uint64_t{rules.mostExtraSpeed} + 1));
+    const std::uint64_t speed = std::uint64_t{static_cast<std::uint32_t>(std::max(base, 0))} + extra;
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(speed, rules.fastest));
 }
 
 auto bloodDecalOf(const BloodRules& rules, nx::Random& random) -> std::optional<std::uint32_t> {

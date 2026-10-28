@@ -99,8 +99,8 @@ public:
     [[nodiscard]] inline auto bloodSprites() const noexcept -> const EffectSprites& {
         return bloodSpriteFiles;
     }
-    /// How a spray of blood looks, of the content it was loaded from.
-    [[nodiscard]] inline auto bloodLook() const noexcept -> const BloodSprayLook& { return *sprayLook; }
+    /// How the blood looks, of the content it was loaded from.
+    [[nodiscard]] inline auto blood() const noexcept -> const BloodRules& { return *bloodRules; }
     /// The engine's palette (gfx/palette.lmp), which the blood's colors are entries of; none when the
     /// installation lacks it, as it was logged.
     [[nodiscard]] inline auto palette() const noexcept -> const std::optional<nx::assets::Palette>& {
@@ -157,7 +157,7 @@ private:
     std::vector<WeaponViewModel> m_viewModels; ///< By WeaponIndex.
     EffectSprites m_muzzleFlashes;
     EffectSprites bloodSpriteFiles;
-    const BloodSprayLook* sprayLook = nullptr; ///< Of the content it was loaded from, which outlives it.
+    const BloodRules* bloodRules = nullptr; ///< Of the content it was loaded from, which outlives it.
     std::optional<nx::assets::Palette> enginePalette;
 };
 
