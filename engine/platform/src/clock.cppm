@@ -41,28 +41,30 @@ private:
     Instant m_start;
 };
 
-/// How long FrameRateMeter counts the frames of before it tells their rate again.
-inline constexpr std::chrono::seconds kFrameRateWindow{1};
+/// The share of each frame's time in FrameRateMeter's average, the rest the average before it: the
+/// original's net_graph's (FRAMERATE_AVG_FRAC).
+inline constexpr double kFrameTimeShare = 0.5;
+/// The longest a frame counts for in FrameRateMeter's average: as long as the original's Host_FilterTime
+/// lets a frame's time be (host_frametime).
+inline constexpr std::chrono::milliseconds kLongestFrameTime{250};
 
-/// The frames a second the client shows, counted over each whole kFrameRateWindow
-/// (docs/05-rendering.md, section 12): one measure for whatever shows the frame rate, cl_showfps and
-/// net_graph alike, so that they never tell two rates as the original's do.
+/// The frames a second the client shows, measured as the original's net_graph measures the rate it
+/// writes, which changes with every frame (docs/05-rendering.md, section 12): an average of the frames'
+/// times, each frame's moving it kFrameTimeShare of the way to its own, from none. One measure for
+/// whatever shows the frame rate, cl_showfps and net_graph alike, so that they never tell two rates as
+/// the original's do.
 class FrameRateMeter {
 public:
-    /// A frame started `at`, no sooner than the one before. Once the frames since the window's first
-    /// span kFrameRateWindow, their rate is told and a new window starts with this one.
+    /// A frame started `at`, no sooner than the one before: the time since that one, held to
+    /// kLongestFrameTime, moves the average. The first frame only starts the count.
     void frameStarted(Instant at) noexcept;
 
-    /// The frames a second of the last window counted: the frames that started after its first, over
-    /// the time from its first to its last. None until a window is counted.
-    [[nodiscard]] inline auto framesPerSecond() const noexcept -> std::optional<double> {
-        return m_framesPerSecond;
-    }
+    /// The frames a second of the average frame's time: none before a frame's time is counted.
+    [[nodiscard]] auto framesPerSecond() const noexcept -> std::optional<double>;
 
 private:
-    std::optional<Instant> m_windowStart; ///< The start of the window's first frame; none before one.
-    std::uint64_t m_frames = 0;           ///< Started since the window's first.
-    std::optional<double> m_framesPerSecond;
+    std::optional<Instant> m_lastStart;                 ///< None before the first frame.
+    std::chrono::duration<double> m_averageFrameTime{}; ///< None counted while zero.
 };
 
 /// The share of the OS's wakes that WakeLateness expects no later than its margin.

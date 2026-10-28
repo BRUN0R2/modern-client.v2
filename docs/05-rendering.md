@@ -710,10 +710,12 @@ Xash3D-FWGS project records from the original for its tests.
   (`Device::beginFrame`: the frame before taken to the GPU, then the frame's slot free) right after
   the limiter, before it reads the input, so that no frame waits behind another to be submitted
   ([ADR-0029](adr/0029-submission-thread.md)).
-- The frame rate shown is one measure (`nx::platform::FrameRateMeter`): the frames that started in
-  each whole second after its first, over the time from its first to its last, told again as each
-  second closes (a frame longer than a second closes it alone). `cl_showfps` shows it now and
-  `net_graph` is to show the same, where the original measures it twice and its two numbers disagree.
+- The frame rate shown is one measure (`nx::platform::FrameRateMeter`), the original's `net_graph`'s,
+  which changes with every frame: an average of the frames' times, each frame's moving it half way to
+  its own (`FRAMERATE_AVG_FRAC`), from none, a frame counting for 0.25 s at most as `Host_FilterTime`
+  holds it; the rate is one over that average. `cl_showfps` shows it now, to a tenth, and `net_graph`
+  is to show the same, where the original measures it twice and its two numbers disagree (its
+  `cl_showfps` counts the frames of each second).
 - No empty window while the client loads: `next` opens its window hidden and shows it with its first
   image (`WindowDesc::isShown`, `Window::show`). A map's scene, its textures and models on the GPU, is
   made with the first image of it, and its game plays from the frame after: the player hears what
