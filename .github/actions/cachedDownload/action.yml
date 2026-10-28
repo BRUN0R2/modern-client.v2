@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# A file pinned by its SHA-256 is downloaded once and then restored from the Actions cache, so an
+# outage of the server it comes from fails no run that already has it (docs/17, section 7).
+name: Cached download
+description: Downloads a file pinned by its SHA-256 through the Actions cache.
+
+inputs:
+  url:
+    description: Where the file is downloaded from.
+    required: true
+  sha256:
+    description: The file's SHA-256, in hexadecimal.
+    required: true
+  path:
+    description: Where the file is written.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Restore
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ inputs.path }}
+        key: download-${{ inputs.sha256 }}
+
+    - name: Download
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: pwsh
+      env:
+        URL: ${{ inputs.url }}
+        FILE: ${{ inputs.path }}
+      run: |
+        # A server that stops sending fails the step within a minute instead of holding the job.
+        Invoke-WebRequest $env:URL -OutFile $env:FILE -ConnectionTimeoutSeconds 60 -OperationTimeoutSeconds 60
+
+    - name: Verify
+      shell: pwsh
+      env:
+        FILE: ${{ inputs.path }}
+        SHA256: ${{ inputs.sha256 }}
+      run: |
+        if ((Get-FileHash $env:FILE -Algorithm SHA256).Hash -ne $env:SHA256) {
+          throw "$env:FILE does not have the pinned SHA-256"
+        }
+
+    # Only main writes caches: pull requests read main's, and their own would crowd main's out of
+    # the repository's cache quota.
+    - name: Save
+      if: steps.restore.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ inputs.path }}
+        key: download-${{ inputs.sha256 }}

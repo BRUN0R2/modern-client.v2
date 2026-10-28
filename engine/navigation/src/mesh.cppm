@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// Navigation meshes (docs/adr/0023-navigation.md): for a profile, the convex polygons its middle may
-/// stand on, built by Recast from a geometry in tiles, each tile a job of its own, and kept by Detour;
-/// and the meshes of one geometry, one for each profile, which a profile's name finds.
+/// stand on, built by Recast from a geometry in tiles, each tile a job of its own, while the thread that
+/// asked for it goes on (MeshBuild), and kept by Detour; and the meshes of one geometry, one for each
+/// profile, which a profile's name finds.
 export module nx.navigation:mesh;
 
 import std;
@@ -13,7 +14,40 @@ import nx.jobs;
 import :profile;
 import :geometry;
 
+namespace nx::navigation::detail {
+
+struct BuiltTiles;
+
+} // namespace nx::navigation::detail
+
 export namespace nx::navigation {
+
+class NavigationMesh;
+
+/// A mesh being built in jobs (NavigationMesh::startBuild): its tiles, each in a job of its own, then
+/// Detour's mesh of them in one more, all of the priority Background. Its jobs read and write only what
+/// it holds, so going before they have run waits for them.
+class MeshBuild {
+public:
+    MeshBuild(MeshBuild&& other) noexcept;
+    auto operator=(MeshBuild&& other) -> MeshBuild& = delete;
+    MeshBuild(const MeshBuild&) = delete;
+    auto operator=(const MeshBuild&) -> MeshBuild& = delete;
+    /// Waits for the jobs that have not run yet, running jobs meanwhile.
+    ~MeshBuild();
+
+    /// The mesh, once its jobs have run: meanwhile the calling thread runs jobs (jobs::JobSystem::wait).
+    /// Errors: TooLarge (a tile of more polygons than Detour numbers), TileRefused.
+    [[nodiscard]] auto finish() && -> Result<NavigationMesh, MeshBuildError>;
+
+private:
+    friend class NavigationMesh;
+    struct State; // the jobs' input and output, and the handle of the last
+
+    explicit MeshBuild(std::unique_ptr<State> state) noexcept;
+
+    std::unique_ptr<State> buildState;
+};
 
 /// Why a query of the meshes could not be answered. The ADR's Rook API names these; where it carries
 /// a position or a name, the failure's detail has it.
@@ -46,9 +80,17 @@ struct MeshOutline {
 /// tiles, read from any thread.
 class NavigationMesh {
 public:
-    /// The mesh of `geometry` for `profile`, built by `settings`, its tiles built in jobs of `jobs`: the
-    /// same mesh with any number of workers. The triangles flat enough for the profile are floor, of
-    /// their kind, where it fits standing; where it fits only crouched, of the kind Crouch. Errors: every
+    /// Starts building the mesh of `geometry` for `profile` by `settings` in jobs of `jobs`, which must
+    /// outlive the build: the same mesh with any number of workers. The triangles flat enough for the
+    /// profile are floor, of their kind, where it fits standing; where it fits only crouched, of the kind
+    /// Crouch. What the jobs need of `geometry` is copied: it may go at once. Errors: InvalidProfile,
+    /// InvalidSettings, InvalidGeometry, TooLarge (more tiles than Detour numbers, or the geometry taller
+    /// than Recast's voxels reach).
+    [[nodiscard]] static auto startBuild(jobs::JobSystem& jobs, const Geometry& geometry,
+                                         const AgentProfile& profile, const BuildSettings& settings)
+        -> Result<MeshBuild, MeshBuildError>;
+
+    /// The mesh startBuild starts, once built: meanwhile the calling thread runs jobs. Errors: every
     /// MeshBuildError.
     [[nodiscard]] static auto build(jobs::JobSystem& jobs, const Geometry& geometry,
                                     const AgentProfile& profile, const BuildSettings& settings)
@@ -71,6 +113,10 @@ private:
     struct Detour; // Detour's mesh and the tiles it reads
 
     NavigationMesh(std::unique_ptr<Detour> detour, AgentProfile profile) noexcept;
+
+    /// Detour's mesh of `built`, for `profile`. Errors: TooLarge.
+    [[nodiscard]] static auto assemble(detail::BuiltTiles built, const AgentProfile& profile)
+        -> Result<NavigationMesh, MeshBuildError>;
 
     std::unique_ptr<Detour> detourState;
     AgentProfile agentProfile;
@@ -175,9 +221,24 @@ struct BuiltTiles {
     std::vector<BuiltTile> tiles{}; ///< Row by row.
 };
 
-/// Builds the tiles of `geometry` for `profile` by `settings`, which passed checkProfile, each in a job
-/// of `jobs`. Errors: InvalidGeometry, TooLarge, TileRefused.
-[[nodiscard]] auto buildTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
-                              const BuildSettings& settings) -> Result<BuiltTiles, MeshBuildError>;
+/// What the jobs that build a geometry's tiles share: what each tile is built from, and its result.
+struct TileWork;
+
+/// The jobs startTiles submitted: the work they share, and the handle that completes once they all ran.
+struct TileJobs {
+    /// Shared only so that a unit without TileWork's definition can hold it: one owner waits for the jobs.
+    std::shared_ptr<TileWork> work{};
+    jobs::JobHandle done{};
+};
+
+/// Submits to `jobs` the jobs that build the tiles of `geometry` for `profile` by `settings`, which passed
+/// checkProfile, each tile in a job of its own of `priority`. Errors: InvalidGeometry, TooLarge.
+[[nodiscard]] auto startTiles(jobs::JobSystem& jobs, const Geometry& geometry, const AgentProfile& profile,
+                              const BuildSettings& settings, jobs::Priority priority)
+    -> Result<TileJobs, MeshBuildError>;
+
+/// The tiles of `work` that hold floor, once its jobs have run; what they were built from goes. Errors:
+/// TileRefused.
+[[nodiscard]] auto takeTiles(TileWork& work) -> Result<BuiltTiles, MeshBuildError>;
 
 } // namespace nx::navigation::detail
