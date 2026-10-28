@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 # SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-# Brings the oldest pull request set to auto-merge that is behind main up to date, unless the CI
-# of one of them is still running (docs/17, section 8). It reads with GH_TOKEN and updates with
-# UPDATE_BRANCHES_TOKEN, whose pushes start CI where the workflow's own token's pushes do not.
+# Brings the next pull request set to auto-merge that is behind main up to date, unless one of
+# them that is up to date still runs its CI (docs/17, section 8). It reads with GH_TOKEN and
+# updates with UPDATE_BRANCHES_TOKEN, whose pushes start CI where the workflow's own token's
+# pushes do not.
 set -euo pipefail
 
 # The workflow whose checks main requires.
@@ -18,25 +19,33 @@ if [ -z "${UPDATE_BRANCHES_TOKEN:-}" ]; then
   exit 1
 fi
 
-ciRunning="any(.statusCheckRollup[]; .workflowName == \"$ciWorkflow\" and .status != \"COMPLETED\")"
+ciChecks="[.statusCheckRollup[] | select(.workflowName == \"$ciWorkflow\")]"
+ciRunning="any(${ciChecks}[]; .status != \"COMPLETED\")"
+ciFailed="any(${ciChecks}[]; .status == \"COMPLETED\" and .conclusion != \"SUCCESS\" and .conclusion != \"SKIPPED\")"
 
-# The open pull requests into main set to auto-merge, oldest first, a line each:
-# "<number> <head commit> <whether its CI is running>".
+# The open pull requests into main set to auto-merge, a line each, "<number> <head commit>
+# <whether its CI is running>": oldest first, but those whose CI last failed after the others,
+# so that a broken one does not hold the rest back each time main moves.
 queued="$(gh pr list --base main --state open --limit 100 \
   --json number,isDraft,autoMergeRequest,headRefOid,statusCheckRollup \
-  --jq "map(select(.autoMergeRequest != null and (.isDraft | not))) | sort_by(.number)[]
+  --jq "map(select(.autoMergeRequest != null and (.isDraft | not))) | sort_by([$ciFailed, .number])[]
         | \"\\(.number) \\(.headRefOid) \\($ciRunning)\"")"
 
-# A pull request whose CI is running merges or fails first: updating another now would only
-# start CI that the first one's merge makes stale.
-if running="$(grep -m 1 ' true$' <<<"$queued")"; then
-  echo "#${running%% *}'s CI is running: it goes first."
-  exit 0
-fi
+behindBy() { gh api "repos/{owner}/{repo}/compare/main...$1" --jq .behind_by; }
+
+# One up to date with main whose CI is running merges or fails first: updating another now would
+# only start CI that its merge makes stale. One behind main cannot merge, so it holds nothing.
+while read -r number head ciRuns; do
+  [ -n "$number" ] && [ "$ciRuns" = true ] || continue
+  if [ "$(behindBy "$head")" -eq 0 ]; then
+    echo "#$number is up to date with main and its CI is running: it goes first."
+    exit 0
+  fi
+done <<<"$queued"
 
 while read -r number head _; do
   [ -n "$number" ] || continue
-  behind="$(gh api "repos/{owner}/{repo}/compare/main...$head" --jq .behind_by)"
+  behind="$(behindBy "$head")"
   [ "$behind" -gt 0 ] || continue
 
   if ! output="$(GH_TOKEN="$UPDATE_BRANCHES_TOKEN" gh api --method PUT \
