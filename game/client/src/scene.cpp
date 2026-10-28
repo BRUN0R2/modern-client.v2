@@ -109,9 +109,18 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
         return nx::fail(SceneError::CreateFailed, "the muzzle flashes", std::move(viewSprites.error()));
     }
     auto particles = nx::render::ParticleRenderer::create(
-        device, commands, {.shaderCode = shaders.particle, .colorFormat = format, .encoding = encoding});
+        device, commands,
+        {.shaderCode = shaders.particle, .colorFormat = format, .gamma = gamma, .encoding = encoding});
     if (!particles) {
         return nx::fail(SceneError::CreateFailed, "the particles", std::move(particles.error()));
+    }
+    // The streaks' sprite, which the level read, or logged it could not.
+    if (const std::optional<std::uint32_t> streak = level.streakSprites().indexOf(kStreakSprite)) {
+        if (const nx::assets::SpriteView* const sprite = level.streakSprites().viewOf(*streak)) {
+            if (auto loaded = particles->loadStreakSprite(commands, *sprite); !loaded) {
+                return nx::fail(SceneError::CreateFailed, "the streaks' sprite", std::move(loaded.error()));
+            }
+        }
     }
     auto spriteModels = level.sprites().load(*sprites, commands);
     if (!spriteModels) {
@@ -254,8 +263,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
     }
     nx::render::drawInOrder(list, m_world, m_studio, m_sprites);
-    // The particles, over everything blended (CL_DrawEFX's last pass): each of its entry of the engine's
-    // palette, none without it.
+    // The particles and the streaks, over everything blended (CL_DrawEFX's last pass): each particle of
+    // its entry of the engine's palette, none without it.
     std::vector<nx::render::ParticleInstance> particles;
     if (const std::optional<nx::assets::Palette>& palette = level.palette()) {
         particles.reserve(view.particles.size());
@@ -267,8 +276,17 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                 .amount = amountOf(particle, view.time)});
         }
     }
-    if (auto prepared =
-            particleRenderer.prepare({.camera = view.camera, .aspect = view.aspect, .particles = particles});
+    std::vector<nx::render::StreakInstance> streaks;
+    streaks.reserve(view.streaks.size());
+    for (const Streak& streak : view.streaks) {
+        streaks.push_back(nx::render::StreakInstance{.start = streak.origin,
+                                                     .end = endOf(streak, view.time),
+                                                     .halfWidth = kStreakHalfWidth,
+                                                     .color = streak.color,
+                                                     .amount = amountOf(streak, view.time)});
+    }
+    if (auto prepared = particleRenderer.prepare(
+            {.camera = view.camera, .aspect = view.aspect, .particles = particles, .streaks = streaks});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the particles", std::move(prepared.error()));
     }

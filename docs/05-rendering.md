@@ -487,8 +487,10 @@ flowchart LR
    where a line from where it was meets the world. The client's particles (`cs.client:particles`, §10)
    are dots of an entry of the engine's palette, as the original's engine makes and moves them
    (`R_AllocParticle`, `CL_ThinkParticle`): each moves by its velocity, then falls at its share of the
-   world's gravity, through what is solid, and goes at its time, 4096 at most (`max_particles`): today
-   the stream of blood a hit makes a head shed. A
+   world's gravity, through what is solid, and goes at its time; and streaks of light (`R_AllocTracer`,
+   `CL_DrawTracers`), each moving, falling at the whole gravity, slowing across the ground, fading out
+   over its last half second; 4096 of both at most (`max_particles`): today the stream of blood a hit
+   makes a head shed, and the sparks it strikes off a helmet. A
    model's render mode blends it as `GL_StudioSetRenderMode` and `R_StudioDrawPoints` set it:
    Normal solid; TransAdd unlit, its vertices' light its `renderamt`, added and not writing its depth;
    any other blended over what is behind, lit, as opaque as `renderamt` says, writing its depth, its
@@ -668,7 +670,12 @@ that, so that the far ones do not vanish. Its color is its entry of the engine's
 gives it, and its opacity as the game makes it (`cs::amountOf`: whole until the last sixteenth of a
 second of its life, then fading out). The particles are drawn after everything the frame draws blended,
 in the world's depths (`CL_DrawEFX`'s last pass), blended over what is there, their depth tested but
-not written; the view's own model is drawn after them.
+not written. Streaks are drawn after them, as `CL_DrawTracers` draws them: each a quad along its line,
+its half width (0.5 for those that fall) each way across the line it makes on the screen, the first
+image of the engine's dot sprite (`sprites/dot.spr`, through `texgamma`, read with the level) across it
+and 0.8 of it along it, of its color, added to what is there as much as it is opaque; one behind the
+view, or seen end on, is not drawn, nor any while the sprite is missing. The view's own model is drawn
+after them.
 
 ## 11. Visual fidelity
 

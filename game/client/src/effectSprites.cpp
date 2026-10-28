@@ -54,6 +54,12 @@ auto EffectSprites::frameCountOf(std::uint32_t index) const noexcept -> std::opt
     return static_cast<std::uint32_t>(file.view->frames.size());
 }
 
+auto EffectSprites::viewOf(std::uint32_t index) const noexcept -> const nx::assets::SpriteView* {
+    nx::expects(index < m_files.size(), "EffectSprites::viewOf: a sprite it read");
+    const File& file = *m_files[index];
+    return file.view ? &*file.view : nullptr;
+}
+
 auto EffectSprites::load(nx::render::SpriteRenderer& renderer, nx::rhi::CommandList& commands,
                          std::size_t first) const
     -> nx::Result<std::vector<std::optional<nx::render::SpriteModel>>, nx::render::SpriteError> {

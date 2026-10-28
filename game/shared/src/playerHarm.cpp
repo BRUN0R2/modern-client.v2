@@ -61,6 +61,14 @@ auto readPlayerHarmRules(std::string_view text, std::string_view sourceName)
                             std::format("{}: {} {}", sourceName, what, *problem));
         }
     }
+    const HelmetSparks& sparks = rules->helmetSparks;
+    if (sparks.count == 0 || !(sparks.speed >= nx::UnitsPerSecond{}) ||
+        !(sparks.spread >= nx::UnitsPerSecond{})) {
+        return nx::fail(
+            PlayerHarmError::DataInvalid,
+            std::format("{}: a helmet's sparks, some, their speeds no less than none, are required",
+                        sourceName));
+    }
     return std::move(*rules);
 }
 
@@ -231,6 +239,10 @@ auto shedsBlood(HitGroup group, ArmorKind kind) noexcept -> bool {
     default:
         return true;
     }
+}
+
+auto sparksOffHelmet(HitGroup group, ArmorKind kind) noexcept -> bool {
+    return group == HitGroup::Head && kind == ArmorKind::KevlarAndHelmet;
 }
 
 void punchByHit(nx::EulerAngles& punch, HitGroup group, nx::Damage damage, ArmorKind kind,

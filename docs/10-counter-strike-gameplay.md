@@ -600,8 +600,16 @@ stream's speed and each a unit a second slower, none slower than still (GoldSrc 
 whole number), falling at 8 twentieths of the world's gravity and gone after 2 seconds; and a splash of
 one for each 5 of its speed, each at a share of it drawn from 0 to 1, cut to a whole number, times
 that share times 1.7, with two more a step less dipped and up to a unit off it, falling at 4
-twentieths of the world's gravity and gone after 3 seconds. A helmet's sparks (`TE_STREAK_SPLASH`)
-come with streaks; the scores and the kill feed with what they need ([TODO](TODO.md)).
+twentieths of the world's gravity and gone after 3 seconds. A hit in the head of a player with a
+helmet, a teammate's that spares it too, strikes sparks off the helmet instead (`TraceAttack`'s
+`bShouldSpark`, `TE_STREAK_SPLASH`; `cs::sparksOffHelmet`): the server tells its clients of them
+(`cs::StreakSplash`) where the hit met the helmet, off the face it met, as `playerHarm.toml`'s
+`helmetSparks` makes them: 22 of the streak color 5, yellow and orange, at 25 units a second, each up to
+65 faster or slower, as much on each axis. A client shows them as Xash3D-FWGS's `R_StreakSplash` and
+`CL_DrawTracers` do (`cs.client:particles`): each streak gone after a tenth to half a second, moving,
+falling at the world's whole gravity and losing 0.9 of its speed across the ground a second, drawn as
+far as it moves in the time it has left, a tenth of a second of it at most, fading out over its last
+half second. The scores and the kill feed come with what they need ([TODO](TODO.md)).
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's

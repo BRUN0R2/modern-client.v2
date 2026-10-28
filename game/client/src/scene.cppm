@@ -57,6 +57,7 @@ struct SceneView {
     std::optional<ViewModelPose> viewModel{};   ///< None without a weapon in hand.
     std::span<const TempEntity> tempEntities{}; ///< The client's (TempEntities::shown).
     std::span<const Particle> particles{};      ///< The client's (Particles::shown).
+    std::span<const Streak> streaks{};          ///< The client's (Particles::shownStreaks).
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
     Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
@@ -79,7 +80,8 @@ public:
     /// entities, each lit where it is, the sprites of its entities, a glow the player's line of sight
     /// does not reach hidden, and its temporary entities, each as translucent as it is, the blended ones of
     /// them all in one order (nx.render:blendedOrder); its particles over them, each of its entry of the
-    /// engine's palette, none without it, as opaque as it is at the view's time (amountOf); then the
+    /// engine's palette, none without it, as opaque as it is at the view's time (amountOf), and its
+    /// streaks after them, each as long and as opaque as it is then (endOf, amountOf); then the
     /// weapon in the player's hand, lit where the
     /// player's eye is, as the original lights the view's own model, and in the enhanced look by the light of
     /// its flashes too. It prepares the muzzle flashes, those of the view's client events and those still

@@ -77,6 +77,20 @@ struct BloodStream {
     [[nodiscard]] inline auto operator==(const BloodStream&) const noexcept -> bool = default;
 };
 
+/// A splash of streaks, a helmet's sparks (TE_STREAK_SPLASH): the point, the way they fly off, the
+/// streak color of their color, how many, how fast, and the most each is drawn faster or slower than
+/// that, as much on each axis (HelmetSparks).
+struct StreakSplash {
+    nx::Vec3 position{};
+    nx::Vec3 direction{};
+    std::uint8_t color = 0;
+    std::uint32_t count = 0;
+    nx::UnitsPerSecond speed{};
+    nx::UnitsPerSecond spread{};
+
+    [[nodiscard]] inline auto operator==(const StreakSplash&) const noexcept -> bool = default;
+};
+
 /// Where the blood a hit shed met what is solid behind it: the point, what it is on, and the decal it
 /// leaves there, of BloodRules::decals.
 struct BloodMark {
@@ -128,10 +142,11 @@ struct PlayerSnapshot {
     /// The sounds it made in the tick, which it hears, each with the moment it was made: its weapons',
     /// then its breath's, its feet's, its use's, its pain's and its death's.
     std::vector<SoundMade> sounds{};
-    std::vector<Impact> impacts{};           ///< Of the tick's shots, in their order.
-    std::vector<BloodMark> bloodMarks{};     ///< Of the tick's hits, in their order.
-    std::vector<BloodSpray> bloodSprays{};   ///< Of the tick's hits, in their order.
-    std::vector<BloodStream> bloodStreams{}; ///< Of the tick's hits in the head, in their order.
+    std::vector<Impact> impacts{};              ///< Of the tick's shots, in their order.
+    std::vector<BloodMark> bloodMarks{};        ///< Of the tick's hits, in their order.
+    std::vector<BloodSpray> bloodSprays{};      ///< Of the tick's hits, in their order.
+    std::vector<BloodStream> bloodStreams{};    ///< Of the tick's hits in the head, in their order.
+    std::vector<StreakSplash> streakSplashes{}; ///< Of the tick, in their order: the helmets' sparks.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};

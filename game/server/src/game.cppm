@@ -290,7 +290,8 @@ private:
     /// by where it was last met (painOf); a fall met it in no group; killed by it, it dies (die).
     void hurt(Player& player, const PlayerHarm& harm);
     /// `attacker`'s `attack` on `victim`, alive, as the victim's TraceAttack and TakeDamage take it: it is
-    /// met in the attack's hit group, its damage that group's share of the players'; its view punched
+    /// met in the attack's hit group, its damage that group's share of the players'; a helmet it met
+    /// sparks where it met it, off its face (sparksOffHelmet, HelmetSparks); its view punched
     /// (punchByHit) and its blood shed (bleed) but by a teammate while mp_friendlyfire is 0, whose attack
     /// then hurts it none (FPlayerCanTakeDamage); a teammate's attack deals its share of it
     /// (PlayerAttackRules); then it
@@ -409,6 +410,7 @@ private:
     std::vector<BloodMark> bloodMarks;            ///< Of the tick.
     std::vector<BloodSpray> bloodSprays;          ///< Of the tick.
     std::vector<BloodStream> bloodStreams;        ///< Of the tick.
+    std::vector<StreakSplash> streakSplashes;     ///< Of the tick.
     MapLightStyles lightStyles;                   ///< Owned by this game; copied into each client's snapshot.
 };
 

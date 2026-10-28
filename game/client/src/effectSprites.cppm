@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The sprites the client's effects show (docs/05-rendering.md, section 9): the muzzle flashes', the
-/// blood's; each read once by its path, before a frame shows it, and put on the GPU of the renderer
-/// that draws it.
+/// blood's, the streaks'; each read once by its path, before a frame shows it, and put on the GPU of
+/// the renderer that draws it.
 export module cs.client:effectSprites;
 
 import std;
@@ -34,6 +34,8 @@ public:
     [[nodiscard]] inline auto count() const noexcept -> std::size_t { return m_files.size(); }
     /// How many frames the sprite at `index` has; none for one left out.
     [[nodiscard]] auto frameCountOf(std::uint32_t index) const noexcept -> std::optional<std::uint32_t>;
+    /// The sprite at `index`; none for one left out.
+    [[nodiscard]] auto viewOf(std::uint32_t index) const noexcept -> const nx::assets::SpriteView*;
 
     /// Each sprite from the one at `first` on the GPU of `renderer`, its uploads recorded in
     /// `commands`; none for one left out. Errors: those of SpriteRenderer::load.

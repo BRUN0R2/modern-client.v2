@@ -105,6 +105,11 @@ TEST(PlayerHarmTest, TheRepositorysHarmIsTheOriginals) {
     EXPECT_EQ(rules.headPain.files, (std::vector<std::string>{"player/headshot1.wav", "player/headshot2.wav",
                                                               "player/headshot3.wav"}));
     EXPECT_EQ(rules.helmetPain.files, (std::vector<std::string>{"player/bhit_helmet-1.wav"}));
+    // TraceAttack's TE_STREAK_SPLASH: color 5, 22 of them, 25 units a second, 65 either way.
+    EXPECT_EQ(rules.helmetSparks.color, 5U);
+    EXPECT_EQ(rules.helmetSparks.count, 22U);
+    EXPECT_EQ(rules.helmetSparks.speed, nx::UnitsPerSecond{25.0F});
+    EXPECT_EQ(rules.helmetSparks.spread, nx::UnitsPerSecond{65.0F});
     EXPECT_EQ(rules.kevlarPain.files, (std::vector<std::string>{"player/bhit_kevlar-1.wav"}));
     for (const cs::GameSound* const pain : {&rules.headPain, &rules.helmetPain, &rules.kevlarPain}) {
         EXPECT_EQ(pain->channel, cs::SoundChannel::Voice);
@@ -125,14 +130,22 @@ TEST(PlayerHarmTest, TheRepositorysHarmIsTheOriginals) {
     EXPECT_EQ(rules.soundFiles().size(), 13U);
 }
 
-/// A file of the harm: `painFiles` for its pain, and a fall from `safeSpeed` to `fatalSpeed`.
-[[nodiscard]] auto harmFile(std::string_view painFiles, float safeSpeed, float fatalSpeed) -> std::string {
+/// A file of the harm: `painFiles` for its pain, a fall from `safeSpeed` to `fatalSpeed`, and `sparks`
+/// sparks off a helmet.
+[[nodiscard]] auto harmFile(std::string_view painFiles, float safeSpeed, float fatalSpeed,
+                            std::uint32_t sparks = 22) -> std::string {
     return std::format(R"(pain = {{ files = [{}], channel = "voice", volume = 1.0 }}
 headPain = {{ files = ["d.wav"], channel = "voice", volume = 1.0 }}
 helmetPain = {{ files = ["e.wav"], channel = "voice", volume = 1.0 }}
 kevlarPain = {{ files = ["f.wav"], channel = "voice", volume = 1.0 }}
 splat = {{ files = ["b.wav"], channel = "item", volume = 1.0 }}
 death = {{ files = ["c.wav"], channel = "voice", volume = 1.0 }}
+
+[helmetSparks]
+color = 5
+count = {}
+speed = 25.0
+spread = 65.0
 
 [fall]
 safeSpeed = {:.1f}
@@ -162,11 +175,13 @@ knockbackBelowSpeed = 300.0
 flinchSpeedShare = 0.5
 largeFlinchSpeedShare = 0.65
 )",
-                       painFiles, safeSpeed, fatalSpeed);
+                       painFiles, sparks, safeSpeed, fatalSpeed);
 }
 
-TEST(PlayerHarmTest, TheReaderRefusesAFatalSpeedNotAboveTheSafeOneAndASoundWithoutAFile) {
+TEST(PlayerHarmTest, TheReaderRefusesAFatalSpeedNotAboveTheSafeOneASoundWithoutAFileAndNoSparks) {
     EXPECT_TRUE(cs::readPlayerHarmRules(harmFile(R"("a.wav")", 500.0F, 1100.0F), "harm.toml").has_value());
+    EXPECT_FALSE(
+        cs::readPlayerHarmRules(harmFile(R"("a.wav")", 500.0F, 1100.0F, 0), "dull.toml").has_value());
     EXPECT_FALSE(cs::readPlayerHarmRules(harmFile(R"("a.wav")", 500.0F, 500.0F), "same.toml").has_value());
     EXPECT_FALSE(cs::readPlayerHarmRules(harmFile(R"("a.wav")", 600.0F, 500.0F), "slower.toml").has_value());
     EXPECT_FALSE(cs::readPlayerHarmRules(harmFile("", 500.0F, 1100.0F), "silent.toml").has_value());
@@ -298,6 +313,18 @@ TEST(PlayerHarmTest, AHitShedsBloodWhereNoArmorCoversThePlayer) {
                                              std::tuple{HitGroup::Generic, ArmorKind::KevlarAndHelmet, true},
                                              std::tuple{HitGroup::Shield, ArmorKind::None, false}}) {
         EXPECT_EQ(cs::shedsBlood(group, kind), sheds) << nx::enumName(group) << " " << nx::enumName(kind);
+    }
+}
+
+TEST(PlayerHarmTest, AHitInTheHeadOfAPlayerWithAHelmetStrikesSparksOffIt) {
+    for (const auto& [group, kind, sparks] :
+         {std::tuple{HitGroup::Head, ArmorKind::KevlarAndHelmet, true},
+          std::tuple{HitGroup::Head, ArmorKind::Kevlar, false},
+          std::tuple{HitGroup::Head, ArmorKind::None, false},
+          std::tuple{HitGroup::Chest, ArmorKind::KevlarAndHelmet, false},
+          std::tuple{HitGroup::Shield, ArmorKind::KevlarAndHelmet, false}}) {
+        EXPECT_EQ(cs::sparksOffHelmet(group, kind), sparks)
+            << nx::enumName(group) << " " << nx::enumName(kind);
     }
 }
 
