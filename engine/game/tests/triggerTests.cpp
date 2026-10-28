@@ -206,8 +206,8 @@ TEST(TriggerTest, ATriggerOnceFiresOnceAndGoes) {
     game.touchAt(kInside);
     EXPECT_EQ(game.countOf<DelayedUse>(), 1U);
     EXPECT_EQ(game.countOf<Trigger>(), 1U);
-    // A float tenth of a second is a hair more than 10 ticks: it goes in the 11th.
-    game.run(10);
+    // A tenth of a second is 10 ticks: it goes in the 10th, whose thinks run what is due by its end.
+    game.run(9);
     EXPECT_EQ(game.countOf<Trigger>(), 1U);
     game.run(1);
     EXPECT_EQ(game.countOf<Trigger>(), 0U) << "gone a tenth of a second after";

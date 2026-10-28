@@ -17,7 +17,9 @@ preserves the original movement behavior.
 `nx::GameTime`, a signed 64-bit count of ticks since the map started and a `float` fraction of the
 next, from 0 up to 1, ordered by tick then fraction. `after(seconds, rate)` moves it by a duration,
 carrying the fraction's whole ticks into the count (a fraction that rounds up to 1 is the next tick's
-start), and `since(earlier, rate)` measures from another moment, both in double precision: a moment
+start); a duration that is the float nearest to a whole number of ticks lasts that number exactly,
+as one written in seconds is (0.1 is 0.100000001, ten ticks and a hair more at 100, which would land
+on the eleventh). `since(earlier, rate)` measures from another moment, the two in double precision: a moment
 a month into a map is as precise as one at its start, where float seconds a month in are a quarter
 of a second apart. Each game world holds a `TickTime` resource, its rate and its `now`, which
 `registerComponents` gives it at the map's start and `advanceTick` moves on; the pushers' own clocks

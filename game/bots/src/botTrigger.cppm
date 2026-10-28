@@ -55,11 +55,11 @@ struct BotShot {
 
 /// Whether a bot's attack is down in the command of `shot`, `trigger` kept for its next: a new target
 /// pursued is its enemy from then on; attacking none, its attack is up and it fires as fast as it may no
-/// more. At a full think, each BotFireRules::thinkInterval in whole ticks, the nearest, it presses, held
-/// until the next, once its pause and its attack delay went by, aimed at where it aims (isAimedAt,
-/// BotFireRules::aimHalfWidth), and draws its next pause from `random` (BotFireRules), a think less, as
-/// the original takes that latency off it; between, its attack stays as it was set, or goes up and down
-/// each command while it fires as fast as it may.
+/// more. At a full think, each BotFireRules::thinkInterval, it presses, held until the next, once its
+/// pause and its attack delay went by, aimed at where it aims (isAimedAt, BotFireRules::aimHalfWidth),
+/// and draws its next pause from `random` (BotFireRules), a think less, as the original takes that
+/// latency off it; between, its attack stays as it was set, or goes up and down each command while it
+/// fires as fast as it may.
 [[nodiscard]] auto pullTrigger(BotTrigger& trigger, const BotShot& shot, const BotFireRules& rules,
                                nx::Random& random) noexcept -> bool;
 

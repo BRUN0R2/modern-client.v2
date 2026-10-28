@@ -34,8 +34,8 @@ constexpr float kRowY = 1000.0F;
 constexpr float kStandingEye = cs::kStandingViewHeight.value() + 1.0F;
 /// How far from a bot the players of the tests stand, ahead of it or behind.
 constexpr float kApart = 300.0F;
-/// Ticks of bot_quota's interval, 0.3 seconds, and one more.
-constexpr std::uint32_t kPastAQuotaCheck = 31;
+/// Ticks of bot_quota's interval, 0.3 seconds.
+constexpr std::uint32_t kPastAQuotaCheck = 30;
 /// Ticks past the first freeze of a map: mp_freezetime's default and its extra two seconds, 800 ticks.
 constexpr std::uint32_t kPastTheFirstFreeze = 810;
 /// Ticks past the restart Game Commencing asks for (kCommenceDelay, 300 ticks).

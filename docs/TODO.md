@@ -142,7 +142,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `typeName` and `enumName` through the native path (P2996) once every supported compiler offers it (GCC 16 does and `nx.meta` already uses it; MSVC does not)
 - [x] `nx::Quantity` and units (`HammerUnits`, `UnitsPerSecond`, `HitPoints`, `ArmorPoints`, `Damage`, `Money`, `Scale`, angles, time) with literals
 - [x] `nx::narrow`, `nx::tryNarrow`, `nx::truncate`, `nx::tryRound`, checked and saturating arithmetic
-- [ ] `GameTime::after` of a float duration a hair past a whole number of ticks lands a tick later (a tenth of a second is 10.0000001 ticks at 100): a count within the duration's float rounding of a whole number taken as that number, the timings tuned to the tick after reviewed (`bot_quota`'s 31 ticks, the hostages' thinks, the rounds' timers); the bots' full thinks count whole ticks meanwhile (`cs.bots:botTrigger`)
+- [x] `GameTime::after` of a duration that is the float nearest to a whole number of ticks lasts that number exactly, as `since` measures it back (a tenth of a second is ten ticks at 100, not ten and a hair, which landed on the eleventh): `bot_quota` looked at each 30 ticks, a spent `trigger_once` gone in the tenth, the bots' full thinks on `after` again
 - [x] `EnumArray` and `Flags<E>`
 - [ ] `inplace_vector` (facade), when the first consumer exists (ECS or jobs)
 - [ ] `function_ref` (own implementation of `std::function_ref`), when the first consumer exists
