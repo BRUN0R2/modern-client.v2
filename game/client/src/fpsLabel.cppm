@@ -41,14 +41,17 @@ public:
     [[nodiscard]] auto load(nx::render::ScreenRenderer& screen, nx::rhi::CommandList& commands)
         -> nx::Result<void, nx::render::ScreenError>;
 
-    /// Appends to `quads` the label of `framesPerSecond` (fpsText), once loaded; nothing before.
-    void append(std::vector<nx::render::ScreenQuad>& quads, double framesPerSecond) const;
+    /// Appends to `quads` the label of `framesPerSecond` (fpsText), once loaded; nothing before. The
+    /// label is written again only when the number it shows changes, once a second at most
+    /// (nx::platform::FrameRateMeter): the quads of the last call are appended again until then.
+    void append(std::vector<nx::render::ScreenQuad>& quads, double framesPerSecond);
 
 private:
     explicit FpsLabel(nx::ui::GlyphAtlas atlas) noexcept;
 
     nx::ui::GlyphAtlas m_atlas;
-    std::optional<nx::render::ScreenImage> m_image; ///< The atlas on the GPU, once loaded.
+    std::optional<nx::render::ScreenImage> m_image;  ///< The atlas on the GPU, once loaded.
+    nx::render::RetainedQuads<std::int64_t> m_shown; ///< Of the number the label shows.
 };
 
 } // namespace cs

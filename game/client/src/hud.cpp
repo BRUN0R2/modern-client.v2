@@ -451,6 +451,13 @@ auto Hud::load(const nx::assets::Vfs& vfs, std::span<const AmmoType> ammo, nx::r
 }
 
 void Hud::append(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
+                 const CrosshairStyle& crosshair, nx::rhi::Extent2d size) {
+    m_shown.append(
+        quads, Shown{.view = view, .crosshair = crosshair, .size = size},
+        [&](std::vector<nx::render::ScreenQuad>& laidOut) { layOut(laidOut, view, crosshair, size); });
+}
+
+void Hud::layOut(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
                  const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const {
     const auto addMark = [&](const HudMark& mark) {
         nx::assets::SpriteRect source = m_sheet[mark.picture].rect;
