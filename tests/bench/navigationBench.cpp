@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The navigation's queries, which agents ask every tick (docs/adr/0023-navigation.md): a way across a
-// map-sized floor among pillars, the nearest point, and a corridor's corners; and the build of its mesh.
+// map-sized floor among pillars, the nearest point, and a corridor's corners; the brains' decisions, one by
+// one and in batches in jobs; and the build of its mesh.
 // The data/cstrike/navigation.toml settings and the player's profile.
 
 #include <benchmark/benchmark.h>
@@ -157,12 +158,15 @@ void buildMesh(benchmark::State& state) {
 } // namespace
 
 namespace {
-void agentDecisions(benchmark::State& state) {
-    auto mesh = pillarMesh();
+/// Where the brains of agentDecisions stand, and the target they chase across the map.
+constexpr nx::Vec3 kStart{.x = 64, .y = 64};
+constexpr nx::Vec3 kGoal{.x = kFloorSide - kPillarSide, .y = kFloorSide - kPillarSide};
+
+/// `count` brains that chase `target` at kGoal from kStart along their corridors on `mesh`; none when
+/// the target cannot be reached.
+[[nodiscard]] auto chasingBrains(const NavigationMesh& mesh, nx::ecs::Entity target, std::size_t count)
+    -> std::vector<nx::agents::Brain> {
     NavigationQuery query{mesh};
-    nx::ecs::World world;
-    const auto target = world.spawn();
-    const auto count = nx::narrow<std::size_t>(state.range(0));
     std::vector<nx::agents::Brain> brains;
     brains.reserve(count);
     const nx::agents::Rules rules{.memoryLifetime = nx::Seconds{6},
@@ -170,28 +174,73 @@ void agentDecisions(benchmark::State& state) {
                                   .arrivalDistance = nx::HammerUnits{8},
                                   .replanDistance = nx::HammerUnits{24},
                                   .memoryLimit = 32};
-    const nx::Vec3 start{.x = 64, .y = 64};
-    const nx::Vec3 goal{.x = kFloorSide - kPillarSide, .y = kFloorSide - kPillarSide};
-    const std::array seen{nx::agents::Observation{target, goal}};
+    const std::array seen{nx::agents::Observation{target, kGoal}};
     for (std::size_t index = 0; index < count; ++index) {
         brains.emplace_back(rules);
         brains.back().perceive(seen, {}, nx::kDefaultTickRate);
-        const auto ready = brains.back().decide(start, query);
-        if (ready.behavior != nx::agents::Behavior::Chase) {
-            state.SkipWithError("the benchmark's target must be reachable");
-            return;
+        if (brains.back().decide(kStart, query).behavior != nx::agents::Behavior::Chase) {
+            return {};
         }
     }
+    return brains;
+}
+
+/// The brains decide one by one on the calling thread, each tick.
+void agentDecisions(benchmark::State& state) {
+    auto mesh = pillarMesh();
+    NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    const auto count = nx::narrow<std::size_t>(state.range(0));
+    std::vector<nx::agents::Brain> brains = chasingBrains(mesh, target, count);
+    if (brains.empty()) {
+        state.SkipWithError("the benchmark's target must be reachable");
+        return;
+    }
+    const std::array seen{nx::agents::Observation{target, kGoal}};
     for (auto iteration : state) {
         for (auto& brain : brains) {
             brain.perceive(seen, {}, nx::kDefaultTickRate);
-            auto decision = brain.decide(start, query);
+            auto decision = brain.decide(kStart, query);
             benchmark::DoNotOptimize(decision);
         }
     }
     state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(count));
 }
-BENCHMARK(agentDecisions)->Arg(64)->Arg(256)->Arg(1024);
+BENCHMARK(agentDecisions)->Arg(32)->Arg(64)->Arg(256)->Arg(1024);
+
+/// The same brains perceive one by one, then decide together in batches in jobs (nx::agents::Deciders),
+/// as the bots and the horde do each tick.
+void agentDecisionsInJobs(benchmark::State& state) {
+    auto mesh = pillarMesh();
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    const auto count = nx::narrow<std::size_t>(state.range(0));
+    std::vector<nx::agents::Brain> brains = chasingBrains(mesh, target, count);
+    if (brains.empty()) {
+        state.SkipWithError("the benchmark's target must be reachable");
+        return;
+    }
+    auto jobs = nx::jobs::JobSystem::create();
+    nx::invariant(jobs.has_value(), "navigationBench: a job system starts");
+    nx::agents::Deciders deciders{mesh};
+    const std::vector<nx::agents::DecisionRequest> requests =
+        brains | std::views::transform([](nx::agents::Brain& brain) {
+            return nx::agents::DecisionRequest{.brain = &brain, .feet = kStart};
+        }) |
+        std::ranges::to<std::vector>();
+    std::vector<nx::agents::Decision> decisions(count);
+    const std::array seen{nx::agents::Observation{target, kGoal}};
+    for (auto iteration : state) {
+        for (auto& brain : brains) {
+            brain.perceive(seen, {}, nx::kDefaultTickRate);
+        }
+        deciders.decide(**jobs, requests, decisions);
+        benchmark::DoNotOptimize(decisions.data());
+    }
+    state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(count));
+}
+BENCHMARK(agentDecisionsInJobs)->Arg(32)->Arg(64)->Arg(256)->Arg(1024)->UseRealTime();
 } // namespace
 
 BENCHMARK(findPath);

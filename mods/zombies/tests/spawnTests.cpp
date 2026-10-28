@@ -85,7 +85,7 @@ protected:
                                                            navigation->build);
         ASSERT_TRUE(built.has_value()) << (built ? "" : nx::describe(built.error()));
         mesh.emplace(std::move(*built));
-        auto created = zombies::Horde::create(*game, *mesh, type, settings);
+        auto created = zombies::Horde::create(*game, *mesh, *jobs, type, settings);
         ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
         horde = std::move(*created);
         anchor = {.x = width.value() * kHalf,

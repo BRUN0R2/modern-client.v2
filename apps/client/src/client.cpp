@@ -505,7 +505,8 @@ private:
     nx::Result<nx::game::NavigationData, ConsoleError> navigationData{};
     std::optional<cs::GameContent> m_content;
     std::filesystem::path dataFolder;
-    std::unique_ptr<nx::jobs::JobSystem> m_jobs; ///< The maps' meshes are built in it as they load.
+    /// The maps' meshes are built in it as they load, and their agents decide in it each tick.
+    std::unique_ptr<nx::jobs::JobSystem> m_jobs;
     std::optional<cs::EntityTypeIndex> zombieType{};
     std::optional<zombies::Settings> zombieSettings{};
     std::vector<cs::ShownEntity> shownEntities;
@@ -851,7 +852,7 @@ auto Client::botsOf(Session& session) -> nx::Result<cs::Bots*, cs::BotActionErro
     if (!session.agentMesh) {
         return nx::fail(cs::BotActionError::Unavailable, session.agentMesh.error());
     }
-    auto bots = cs::Bots::create(*session.game, *session.agentMesh, *botRules);
+    auto bots = cs::Bots::create(*session.game, *session.agentMesh, *m_jobs, *botRules);
     if (!bots) {
         return nx::fail(cs::BotActionError::Unavailable, std::move(bots.error()));
     }
@@ -929,8 +930,8 @@ auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<v
         if (!session->agentMesh) {
             return std::unexpected{session->agentMesh.error()};
         }
-        auto horde =
-            zombies::Horde::create(*session->game, *session->agentMesh, *zombieType, *zombieSettings);
+        auto horde = zombies::Horde::create(*session->game, *session->agentMesh, *m_jobs, *zombieType,
+                                            *zombieSettings);
         if (!horde) {
             return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
         }
