@@ -161,6 +161,10 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     if (!hitGroups) {
         return std::unexpected{std::move(hitGroups.error())};
     }
+    auto blood = readDataFile(gameDataOf(data) / "blood.toml", readBloodRules);
+    if (!blood) {
+        return std::unexpected{std::move(blood.error())};
+    }
     auto playerHarm = readDataFile(gameDataOf(data) / "playerHarm.toml", readPlayerHarmRules);
     if (!playerHarm) {
         return std::unexpected{std::move(playerHarm.error())};
@@ -186,6 +190,7 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
                        .footsteps = std::move(*footsteps),
                        .breath = std::move(*breath),
                        .hitGroups = std::move(*hitGroups),
+                       .blood = std::move(*blood),
                        .playerHarm = std::move(*playerHarm),
                        .use = std::move(*use),
                        .characters = std::move(*characters),

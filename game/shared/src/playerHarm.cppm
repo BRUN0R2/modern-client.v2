@@ -215,8 +215,13 @@ struct PlayerHarmed {
 [[nodiscard]] auto painOf(const PlayerHarmRules& rules, const PlayerStatus& status, HitGroup group,
                           bool isArmored) noexcept -> const GameSound&;
 
+/// Whether a player of armor `kind` met in hit group `group` by another's attack sheds blood
+/// (TraceAttack's bShouldBleed): in the head without a helmet; in the chest, the stomach and the arms
+/// without armor; in the legs and in no group always; never on a shield.
+[[nodiscard]] auto shedsBlood(HitGroup group, ArmorKind kind) noexcept -> bool;
+
 /// How an attack's `damage`, its hit group's share taken, punches the view of a player of armor `kind`
-/// met in hit group `group` (TraceAttack), its blood shed: in the head, without a helmet, its pitch half
+/// met in hit group `group` (TraceAttack), its blood shed (shedsBlood): in the head, its pitch half
 /// the damage up, 12 degrees at most, and its roll as much as the damage, drawn from `random` either
 /// way, 9 degrees at most; in the chest or the stomach, without armor, its pitch a tenth of the damage
 /// up, 4 at most; elsewhere none, and the punch as it was.

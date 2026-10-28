@@ -22,6 +22,7 @@ nxAddModuleLibrary(csShared
         src/footsteps.cppm
         src/breath.cppm
         src/hitGroups.cppm
+        src/blood.cppm
         src/hostages.cppm
         src/playerHarm.cppm
         src/use.cppm
@@ -47,6 +48,7 @@ nxAddModuleLibrary(csShared
         src/footsteps.cpp
         src/breath.cpp
         src/hitGroups.cpp
+        src/blood.cpp
         src/hostages.cpp
         src/player.cpp
         src/playerHarm.cpp

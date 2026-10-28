@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# The blood a hit sheds on what is behind it (docs/10, section 7.4), read into cs::BloodRules, as
+# ReGameDLL_CS's CBaseEntity::TraceBleed and UTIL_BloodDecalTrace shed it (GPL, consulted: docs/20
+# section 3): a hit traces its blood along its way and a little off it, 172 units behind where it met
+# the body, through the world and the brush entities; one in three of the ways that meet one leaves a
+# red blood decal there, each as likely.
+
+decals = ["{blood1", "{blood2", "{blood3", "{blood4", "{blood5", "{blood6"]
+reach = 172.0
+marksOneIn = 3
+
+# Below 10 damage, one way, a tenth off; below 25, two, a fifth off; above, four, three tenths off.
+[[spreads]]
+below = 10.0
+traces = 1
+noise = 0.1
+
+[[spreads]]
+below = 25.0
+traces = 2
+noise = 0.2
+
+[[spreads]]
+traces = 4
+noise = 0.3

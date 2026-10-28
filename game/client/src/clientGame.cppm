@@ -109,6 +109,11 @@ public:
     /// Where the shots met the world and the brush entities since the last call, in their order: where
     /// a bullet leaves its mark.
     [[nodiscard]] inline auto takeImpacts() -> std::vector<Impact> { return std::exchange(m_impacts, {}); }
+    /// Where the blood the hits shed met the world and the brush entities since the last call, in their
+    /// order: where it leaves its decal.
+    [[nodiscard]] inline auto takeBloodMarks() -> std::vector<BloodMark> {
+        return std::exchange(bloodMarks, {});
+    }
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye is
@@ -131,6 +136,7 @@ private:
     std::optional<nx::EulerAngles> m_turnedView{}; ///< Since takeTurnedView.
     std::vector<SoundMade> m_sounds;               ///< Since takeSounds.
     std::vector<Impact> m_impacts;                 ///< Since takeImpacts.
+    std::vector<BloodMark> bloodMarks;             ///< Since takeBloodMarks.
 };
 
 } // namespace cs

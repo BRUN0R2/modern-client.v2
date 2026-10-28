@@ -3,6 +3,7 @@
 
 nxAddTest(csSharedTests
     SOURCES
+        bloodTests.cpp
         breathTests.cpp
         bulletsTests.cpp
         economyTests.cpp

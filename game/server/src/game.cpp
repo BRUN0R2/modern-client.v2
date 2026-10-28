@@ -35,6 +35,9 @@ constexpr std::string_view kAnimationStream = "player animation";
 constexpr std::uint32_t kFlyActivityNumber = 5;
 /// The stream of random numbers an attack on a player draws from, of the attacker's command and the victim.
 constexpr std::string_view kAttackStream = "player attack";
+/// The stream of random numbers the blood a player's attack sheds draws from, of its command and the
+/// victim.
+constexpr std::string_view kBloodStream = "player blood";
 /// How much less slow a player slowed down by a hit is each command it starts on the ground (PreThink).
 constexpr double kSpeedShareRecovery = 0.01;
 /// The stream of random numbers the team of a player joining by auto-select is drawn from.
@@ -359,6 +362,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .wasPlaced = player.wasPlaced,
                           .sounds = player.sounds,
                           .impacts = m_impacts,
+                          .bloodMarks = bloodMarks,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
@@ -368,6 +372,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
 
 void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
     m_impacts.clear();
+    bloodMarks.clear();
     for (Player& player : playersIn(m_players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
@@ -605,10 +610,14 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
         return;
     }
     constexpr unsigned kVictimBits = 32;
-    nx::Random random{(static_cast<std::uint64_t>(attacker.randomSeed.value) << kVictimBits) ^
-                          m_world.get<PlayerBody>(victim.body)->player.value,
-                      kAttackStream};
+    const std::uint64_t seed = (static_cast<std::uint64_t>(attacker.randomSeed.value) << kVictimBits) ^
+                               m_world.get<PlayerBody>(victim.body)->player.value;
+    nx::Random random{seed, kAttackStream};
     punchByHit(victim.movement.punch, victim.lastHitGroup, damage, victim.status.armorKind, random);
+    if (shedsBlood(victim.lastHitGroup, victim.status.armorKind)) {
+        nx::Random blood{seed, kBloodStream};
+        bleed(victim, attack, damage, blood);
+    }
     // TakeDamage.
     if (isTeammate) {
         damage = scaled(damage, rules.attacks.teammateShare);
@@ -638,6 +647,29 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
     makeSound(victim, painOf(rules, victim.status, victim.lastHitGroup, harmed.isArmored));
     if (harmed.isKilled) {
         die(victim, &attacker);
+    }
+}
+
+void Game::bleed(const Player& victim, const nx::game::Attack& attack, nx::Damage damage,
+                 nx::Random& random) {
+    const BloodRules& rules = m_content->blood;
+    const nx::Vec3 from = attack.trace.end;
+    for (const nx::Vec3 way : bleedingWaysOf(rules, damage, attack.direction, random)) {
+        const nx::game::SolidHit hit = nx::game::traceSolidsHit(m_world, m_map->hulls(),
+                                                                {.start = from,
+                                                                 .end = from + (way * rules.reach.value()),
+                                                                 .type = nx::game::TraceType::NoMonsters,
+                                                                 .ignored = victim.body});
+        if (hit.trace.fraction >= 1.0F) {
+            continue;
+        }
+        const std::optional<std::uint32_t> decal = bloodDecalOf(rules, random);
+        // A decal lies on the world or on a brush entity alone (UTIL_DecalTrace).
+        const bool isBrush = !hit.entity || m_world.has<nx::game::BrushModel>(*hit.entity);
+        if (decal && isBrush) {
+            bloodMarks.push_back(BloodMark{
+                .position = hit.trace.end, .on = stampTargetOf(m_world, hit.entity), .decal = *decal});
+        }
     }
 }
 

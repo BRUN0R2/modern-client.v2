@@ -17,6 +17,7 @@ import :materials;
 import :footsteps;
 import :breath;
 import :hitGroups;
+import :blood;
 import :playerHarm;
 import :use;
 import :characters;
@@ -35,7 +36,8 @@ enum class GameContentError : std::uint8_t {
 /// data/cstrike/weapons/<id>.toml), what a player of each team spawns with
 /// (data/cstrike/loadouts.toml), the money of its rounds (data/cstrike/economy.toml), the sounds of a
 /// player's feet (data/cstrike/footsteps.toml) and of its breath in water (data/cstrike/breath.toml),
-/// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), how a player is hurt
+/// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), the blood a hit sheds
+/// (data/cstrike/blood.toml), how a player is hurt
 /// and killed (data/cstrike/playerHarm.toml), what it hears as it uses (data/cstrike/use.toml), the
 /// characters each team plays as (data/cstrike/characters.toml), the world's light styles
 /// (data/cstrike/lightStyles.toml), and what the textures are made of (the
@@ -49,6 +51,7 @@ struct GameContent {
     FootstepRules footsteps;
     BreathRules breath;
     HitGroupRules hitGroups;
+    BloodRules blood;
     PlayerHarmRules playerHarm;
     UseRules use;
     Characters characters;

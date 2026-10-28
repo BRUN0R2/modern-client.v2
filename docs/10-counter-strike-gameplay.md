@@ -556,8 +556,18 @@ not, the armor none then; its whole points off its health; heard in its pain by 
 legs, else its flesh's). Killed by it, it plays its death by where it was met (§2), and its killer gets
 300 for an enemy and loses 3300 for a teammate (`data/cstrike/economy.toml`'s `kills`,
 `CHalfLifeMultiplay::PlayerKilled`). A player wears armor as an item of it gives it (`cs::wearArmor`:
-100, `item_kevlar` a vest, `item_assaultsuit` a vest and a helmet), until it is killed. The blood, the
-scores and the kill feed come with what they need ([TODO](TODO.md)).
+100, `item_kevlar` a vest, `item_assaultsuit` a vest and a helmet), until it is killed. A hit sheds
+its blood (`cs::shedsBlood`, `TraceAttack`'s `bShouldBleed`) but on a teammate while
+`mp_friendlyfire` is 0, in the head with a helmet, and in the chest, the stomach and the arms with
+armor; then it is traced behind the player (`cs.shared:blood`, `data/cstrike/blood.toml`,
+`CBaseEntity::TraceBleed`): along the hit's way and a little off it, by its damage once its hit group
+took its share (one way a tenth off below 10, two a fifth off below 25, else four three tenths off),
+172 units on from where it met the body through the world and the brush entities, the bodies left
+be; one in three of the ways that meet one leaves a red blood decal there, `{blood1` to `{blood6` each
+as likely (`UTIL_BloodDecalTrace`), which the server chooses and tells its clients
+(`cs::BloodMark`). The blood that sprays where a hit meets the body (`TE_BLOODSPRITE`), a head's
+stream (`BloodSplat`) and a helmet's sparks (`TE_STREAK_SPLASH`), the scores and the kill feed come
+with what they need ([TODO](TODO.md)).
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's
@@ -762,8 +772,8 @@ in Rook ([15 §2](15-mod-api.md#2-module-organization)).
 
 The planned layout; today `entities.toml`
 ([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml`, `weapons/` (section 7.2), `loadouts.toml`,
-`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml` and
-`playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
+`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml`,
+`blood.toml` and `playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
 ([11 §3](11-audio.md#3-original-semantics-to-preserve)), `use.toml`
 ([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) and `characters.toml` (section 2)
 exist. The hull sizes are not data:
@@ -774,6 +784,7 @@ data/cstrike/
 ├── cvars.toml          # all game cvars: name, type, default, range, flags
 ├── economy.toml
 ├── hitGroups.toml
+├── blood.toml          # the blood a hit sheds on what is behind it
 ├── playerHarm.toml     # how a player is hurt and killed: its falls, its pain and death
 ├── movement.toml       # derived constants not exposed as cvars
 ├── navigation.toml     # the agents' profiles: the size and moves of each (ADR-0023)
