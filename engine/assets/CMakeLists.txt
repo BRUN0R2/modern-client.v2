@@ -8,6 +8,7 @@ nxAddModuleLibrary(nxAssets
         src/nx.assets.cppm
         src/binary.cppm
         src/image.cppm
+        src/palette.cppm
         src/vfs.cppm
         src/content.cppm
         src/steam.cppm
@@ -26,6 +27,7 @@ nxAddModuleLibrary(nxAssets
         src/bmp.cppm
     SOURCES
         src/binary.cpp
+        src/palette.cpp
         src/vfs.cpp
         src/content.cpp
         src/steam.cpp

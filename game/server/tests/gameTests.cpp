@@ -643,6 +643,11 @@ TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt
     for (std::uint32_t shot = 0; shot < 2; ++shot) {
         const cs::PlayerSnapshot shooting = press(attacker, {cs::Button::Attack}, down);
         std::ranges::copy(shooting.bloodMarks, std::back_inserter(marks));
+        // Its blood sprayed where the round met its chest: 35 doubled, over 10.
+        ASSERT_EQ(shooting.bloodSprays.size(), 1U);
+        EXPECT_EQ(shooting.bloodSprays.front().size, 7U);
+        EXPECT_EQ(shooting.bloodSprays.front().color, content().blood.spray.color);
+        EXPECT_NEAR(shooting.bloodSprays.front().position.x, kVictimAhead, cs::kStandingBox.max.x);
         std::ignore = play(attacker, kReadyTicks);
     }
     ASSERT_TRUE(game().snapshotFor(victim).status.isAlive()) << "35 twice";
@@ -656,7 +661,9 @@ TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt
 
     // A vest keeps the chest's blood in.
     game().giveArmor(victim, cs::ArmorKind::Kevlar);
-    EXPECT_TRUE(press(attacker, {cs::Button::Attack}, down).bloodMarks.empty());
+    const cs::PlayerSnapshot vested = press(attacker, {cs::Button::Attack}, down);
+    EXPECT_TRUE(vested.bloodMarks.empty());
+    EXPECT_TRUE(vested.bloodSprays.empty());
     EXPECT_LT(game().snapshotFor(victim).status.armor.value(), 100.0F) << "it met the vest";
 }
 

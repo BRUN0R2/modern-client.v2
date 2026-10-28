@@ -46,6 +46,8 @@ constexpr std::chrono::seconds kSoundFailureInterval{5};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
 /// the original's game chooses it among them.
 constexpr std::string_view kBulletHoleStream = "bulletHoles";
+/// The seed of the stream the temporary entities of each map's client draw their chances from.
+constexpr std::uint64_t kTempEntitySeed = 0;
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -192,14 +194,15 @@ void savePipelineCache(const nx::rhi::Device& device) {
 
 /// A map being played, as a listen server plays it (docs/01-architecture.md, section 3): the map as the
 /// game plays it; the level the client draws of it; the game its server plays of it, and the player the
-/// client plays in it; the game as the client knows it; and the test zombies and the bots in the game,
-/// once asked for. Each goes before what it points into.
+/// client plays in it; the game as the client knows it, and its temporary entities; and the test
+/// zombies and the bots in the game, once asked for. Each goes before what it points into.
 struct Session {
     std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Level> level;
     std::unique_ptr<cs::Game> game;
     cs::PlayerIndex player;
     cs::ClientGame client;
+    cs::TempEntities effects;
     std::unique_ptr<zombies::Horde> horde{};
     std::unique_ptr<cs::Bots> bots{};
 };
@@ -230,7 +233,8 @@ struct Session {
                                              .level = std::move(*level),
                                              .game = std::move(*game),
                                              .player = joined,
-                                             .client = std::move(known)});
+                                             .client = std::move(known),
+                                             .effects = cs::TempEntities{kTempEntitySeed}});
 }
 
 /// The client: the player's settings and console, the map it plays, and the window and GPU it plays
@@ -335,6 +339,10 @@ private:
     void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
+    /// Moves the session's temporary entities over `elapsed`, then shows the blood the hits sprayed since
+    /// the last frame (cs::TempEntities::sprayBlood), but without the engine's palette, as the level
+    /// logged.
+    void showEffects(nx::Seconds elapsed);
     /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
     /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
     /// (cs::bulletDecalOf); then blood's where the blood a hit shed met it, the decal the server chose.
@@ -989,6 +997,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             turnAsTheGameDid();
             hearSession(hearing);
             stampMarks();
+            showEffects(elapsed);
         }
         if (auto drawn = drawFrame(); !drawn) {
             return drawn;
@@ -1144,6 +1153,22 @@ void Client::hearSession(const cs::Hearing& hearing) {
             const nx::GameTime at = m_viewPose->start.after(passed.intoPlay, hearing.rate);
             reportSound(m_audio->playLocal(passed.event->options, kFullVolume, hearing.delayOf(at)));
         }
+    }
+}
+
+void Client::showEffects(nx::Seconds elapsed) {
+    const std::vector<cs::BloodSpray> sprays = m_session->client.takeBloodSprays();
+    const nx::Seconds now{m_mapClock.elapsed()};
+    const cs::Level& level = *m_session->level;
+    m_session->effects.update(now, elapsed, level.hulls(), cs::MovementSettings{}.gravity);
+    const std::optional<nx::assets::Palette>& palette = level.palette();
+    if (!palette) {
+        return;
+    }
+    const cs::BloodSprayLook& look = m_content->blood.look;
+    const cs::BloodSpriteFrames frames = cs::bloodSpriteFramesOf(level.bloodSprites(), look);
+    for (const cs::BloodSpray& spray : sprays) {
+        m_session->effects.sprayBlood(spray, look, *palette, frames, now);
     }
 }
 
@@ -1313,6 +1338,7 @@ auto Client::sessionView() -> cs::SceneView {
             .players = m_players,
             .entities = shownEntities,
             .viewModel = m_viewPose,
+            .tempEntities = m_session->effects.shown(),
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand()};
 }

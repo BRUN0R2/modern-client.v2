@@ -16,6 +16,10 @@ inline constexpr std::size_t kRgbaBytes = 4;
 /// A channel at its most: a color at its brightest, an alpha that hides what is behind.
 inline constexpr std::byte kFullChannel{255};
 
+/// A palette of 8-bit images: 256 RGB colors.
+inline constexpr std::size_t kPaletteColors = 256;
+inline constexpr std::size_t kPaletteBytes = kPaletteColors * kRgbBytes;
+
 /// An image of 8-bit red, green, blue and alpha, row by row from the top-left corner.
 struct RgbaImage {
     std::uint32_t width = 0;

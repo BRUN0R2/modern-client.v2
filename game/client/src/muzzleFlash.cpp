@@ -6,8 +6,6 @@ module cs.client;
 import std;
 import nx.core;
 import nx.math;
-import nx.assets;
-import nx.rhi;
 import nx.render;
 import cs.shared;
 
@@ -254,59 +252,6 @@ auto MuzzleFlashes::lightsAt(nx::Seconds time, const AnchorPlace& placeOf) const
         same->second.reach = std::max(same->second.reach, light->reach);
     }
     return byMuzzle | std::views::values | std::ranges::to<std::vector>();
-}
-
-auto MuzzleFlashSprites::read(const nx::assets::Vfs& vfs, std::span<const std::string> paths)
-    -> std::vector<std::string> {
-    std::vector<std::string> missing;
-    for (const std::string& path : paths) {
-        if (indexOf(path)) {
-            continue;
-        }
-        File& file = *m_files.emplace_back(std::make_unique<File>(File{.path = path}));
-        auto bytes = nx::assets::VfsPath::parse(path).and_then(
-            [&vfs](const nx::assets::VfsPath& at) { return vfs.readAll(at); });
-        if (!bytes) {
-            missing.push_back(std::format("{} ({})", path, nx::describe(bytes.error())));
-            continue;
-        }
-        file.bytes = std::move(*bytes);
-        auto view = nx::assets::SpriteView::parse(file.bytes);
-        if (!view) {
-            missing.push_back(std::format("{} ({})", path, nx::describe(view.error())));
-            continue;
-        }
-        file.view = std::move(*view);
-    }
-    return missing;
-}
-
-auto MuzzleFlashSprites::indexOf(std::string_view path) const noexcept -> std::optional<std::uint32_t> {
-    const auto found = std::ranges::find_if(
-        m_files, [path](const std::unique_ptr<File>& file) { return file->path == path; });
-    if (found == m_files.end()) {
-        return std::nullopt;
-    }
-    return static_cast<std::uint32_t>(found - m_files.begin());
-}
-
-auto MuzzleFlashSprites::load(nx::render::SpriteRenderer& renderer, nx::rhi::CommandList& commands,
-                              std::size_t first) const
-    -> nx::Result<std::vector<std::optional<nx::render::SpriteModel>>, nx::render::SpriteError> {
-    std::vector<std::optional<nx::render::SpriteModel>> models;
-    for (std::size_t index = first; index < m_files.size(); ++index) {
-        const File& file = *m_files[index];
-        if (!file.view) {
-            models.emplace_back();
-            continue;
-        }
-        auto model = renderer.load(commands, *file.view, file.path);
-        if (!model) {
-            return std::unexpected{std::move(model.error())};
-        }
-        models.emplace_back(std::move(*model));
-    }
-    return models;
 }
 
 } // namespace cs

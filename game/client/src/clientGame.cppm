@@ -114,6 +114,10 @@ public:
     [[nodiscard]] inline auto takeBloodMarks() -> std::vector<BloodMark> {
         return std::exchange(bloodMarks, {});
     }
+    /// The blood the hits sprayed since the last call, in their order.
+    [[nodiscard]] inline auto takeBloodSprays() -> std::vector<BloodSpray> {
+        return std::exchange(bloodSprays, {});
+    }
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye is
@@ -137,6 +141,7 @@ private:
     std::vector<SoundMade> m_sounds;               ///< Since takeSounds.
     std::vector<Impact> m_impacts;                 ///< Since takeImpacts.
     std::vector<BloodMark> bloodMarks;             ///< Since takeBloodMarks.
+    std::vector<BloodSpray> bloodSprays;           ///< Since takeBloodSprays.
 };
 
 } // namespace cs

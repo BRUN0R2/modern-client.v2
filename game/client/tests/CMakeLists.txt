@@ -9,6 +9,7 @@ nxAddTest(csClientTests
         clientGameTests.cpp
         hudTests.cpp
         muzzleFlashTests.cpp
+        tempEntitiesTests.cpp
         modelMaterialsTests.cpp
         viewModelTests.cpp
         decalsTests.cpp
@@ -21,6 +22,7 @@ nxAddTest(csClientTests
         cs::shared
         nx::game
         nx::ecs
+        nx::collision
         nx::console
         nx::assets
         nx::render

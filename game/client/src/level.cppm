@@ -18,6 +18,7 @@ import :mapSprites;
 import :mapModels;
 import :playerModels;
 import :viewModel;
+import :effectSprites;
 import :muzzleFlash;
 import :levelDecals;
 import :bulletMarks;
@@ -91,8 +92,19 @@ public:
     [[nodiscard]] inline auto entityCatalog() const noexcept -> const EntityCatalog& { return *entities; }
     /// The sprites of the weapons' muzzle flashes: those their view models' events show, as their
     /// weapons' data styles them.
-    [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const MuzzleFlashSprites& {
+    [[nodiscard]] inline auto muzzleFlashes() const noexcept -> const EffectSprites& {
         return m_muzzleFlashes;
+    }
+    /// The sprites of a spray of blood: its own and its drops' (BloodSprayLook), read as it was loaded.
+    [[nodiscard]] inline auto bloodSprites() const noexcept -> const EffectSprites& {
+        return bloodSpriteFiles;
+    }
+    /// How a spray of blood looks, of the content it was loaded from.
+    [[nodiscard]] inline auto bloodLook() const noexcept -> const BloodSprayLook& { return *sprayLook; }
+    /// The engine's palette (gfx/palette.lmp), which the blood's colors are entries of; none when the
+    /// installation lacks it, as it was logged.
+    [[nodiscard]] inline auto palette() const noexcept -> const std::optional<nx::assets::Palette>& {
+        return enginePalette;
     }
     /// The weapons the level read the view models of: those of the catalog as it last read it.
     [[nodiscard]] auto weapons() const -> std::vector<WeaponIndex>;
@@ -143,7 +155,10 @@ private:
     void readMuzzleFlashes(const nx::assets::Vfs& vfs, const ViewModel& viewModel);
 
     std::vector<WeaponViewModel> m_viewModels; ///< By WeaponIndex.
-    MuzzleFlashSprites m_muzzleFlashes;
+    EffectSprites m_muzzleFlashes;
+    EffectSprites bloodSpriteFiles;
+    const BloodSprayLook* sprayLook = nullptr; ///< Of the content it was loaded from, which outlives it.
+    std::optional<nx::assets::Palette> enginePalette;
 };
 
 /// The view of a player standing at the first spawn point of `map` (firstSpawnOf), its eye and the way

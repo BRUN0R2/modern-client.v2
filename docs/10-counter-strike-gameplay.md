@@ -576,9 +576,21 @@ took its share (one way a tenth off below 10, two a fifth off below 25, else fou
 172 units on from where it met the body through the world and the brush entities, the bodies left
 be; one in three of the ways that meet one leaves a red blood decal there, `{blood1` to `{blood6` each
 as likely (`UTIL_BloodDecalTrace`), which the server chooses and tells its clients
-(`cs::BloodMark`). The blood that sprays where a hit meets the body (`TE_BLOODSPRITE`), a head's
-stream (`BloodSplat`) and a helmet's sparks (`TE_STREAK_SPLASH`), the scores and the kill feed come
-with what they need ([TODO](TODO.md)).
+(`cs::BloodMark`). Before that, it sprays where it met the body (`SpawnBlood`, `UTIL_BloodDrips`,
+`TE_BLOODSPRITE`): the server tells its clients of the spray (`cs::BloodSpray`), its color the
+palette's entry 247 (`BLOOD_COLOR_RED`) and its size the hit's whole points doubled (the multiplayer
+rules'), 255 at most, over 10, from 3 to 16; a hit of no whole point sprays none. A client shows it as
+Xash3D-FWGS's `R_BloodSprite` does (GPL, consulted; `cs.client:tempEntities`, `data/cstrike/blood.toml`'s
+`look`): `sprites/bloodspray.spr`, 2 to 4 units above where the hit met the body, its scale its size
+over 35 to over 25, its color the engine palette's entry 1 to 3 after the server's
+(`gfx/palette.lmp`), plays its frames once in a quarter of a second; and its drops of
+`sprites/blood.spr`, as many as its size and two dice of eight, their scales its size over 25 to over
+15, the entry before the spray's, fly off at -96 to 95 units a second across the ground and -32 to 95
+up, spin, fall at half the world's gravity, stop where they meet the world and go after 1 to 3
+seconds, each on one of its frames from the second, the last for one beyond the eighth; both 250 of
+255 opaque. A head's stream (`BloodSplat`, `TE_BLOODSTREAM`) and a helmet's sparks
+(`TE_STREAK_SPLASH`) come with particles; the scores and the kill feed with what they need
+([TODO](TODO.md)).
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's

@@ -145,6 +145,14 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*viewModels), std::move(*viewSprites)};
     scene.m_look = look;
     scene.m_playerModels = std::move(*playerModels);
+    auto bloodModels = level.bloodSprites().load(scene.m_sprites, commands, 0);
+    if (!bloodModels) {
+        return nx::fail(SceneError::CreateFailed, "the blood's sprites", std::move(bloodModels.error()));
+    }
+    scene.bloodModels = std::move(*bloodModels);
+    for (const TempSprite sprite : nx::EnumArray<TempSprite, bool>::keys()) {
+        scene.tempSpriteIndices[sprite] = level.bloodSprites().indexOf(pathOf(sprite, level.bloodLook()));
+    }
     if (auto loaded = scene.loadWeapons(commands, level, level.weapons()); !loaded) {
         return std::unexpected{std::move(loaded.error())};
     }
@@ -211,6 +219,21 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
             sprite.isHidden = level.glowBlockers().hides(level.hulls(), view.placements, view.camera.position,
                                                          sprite.origin);
         }
+    }
+    // The temporary entities: their textures, as translucent as they are (kRenderTransTexture).
+    for (const TempEntity& entity : view.tempEntities) {
+        const std::optional<std::uint32_t> index = tempSpriteIndices[entity.sprite];
+        if (!index || !bloodModels[*index]) {
+            continue; // the level could not read its sprite, as it logged
+        }
+        sprites.push_back(nx::render::SpriteInstance{.model = *bloodModels[*index],
+                                                     .origin = entity.origin,
+                                                     .angles = {.roll = entity.roll},
+                                                     .frame = entity.frame,
+                                                     .scale = entity.scale,
+                                                     .mode = nx::render::RenderMode::TransTexture,
+                                                     .amount = entity.amount,
+                                                     .color = entity.color});
     }
     if (auto prepared = m_sprites.prepare({.camera = view.camera,
                                            .aspect = view.aspect,

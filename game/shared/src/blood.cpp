@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.data;
+import nx.assets;
 
 namespace cs {
 
@@ -27,6 +28,29 @@ namespace {
     return std::ranges::all_of(spreads, [](const BleedSpread& spread) { return spread.traces > 0; });
 }
 
+/// Whether `spray` makes sizes from one, from its smallest to its largest.
+[[nodiscard]] auto isValid(const BloodSprayRules& spray) noexcept -> bool {
+    return spray.amountPerDamage > 0 && spray.mostAmount > 0 && spray.amountPerSize > 0 &&
+           spray.smallestSize > 0 && spray.smallestSize <= spray.largestSize;
+}
+
+/// Whether `look` names its sprites, shifts its color within the palette, shows something for a while,
+/// draws its drops, and has each least no more than its most.
+[[nodiscard]] auto isValid(const BloodSprayLook& look, std::uint8_t color) noexcept -> bool {
+    const auto isPositive = [](float value) {
+        return std::isfinite(value) && value > 0.0F;
+    };
+    const bool isShifted = look.colorShift > 0 &&
+                           std::uint32_t{color} + std::uint32_t{look.colorShift} < nx::assets::kPaletteColors;
+    return !look.spraySprite.empty() && !look.dropSprite.empty() && isShifted && look.amount > 0 &&
+           isPositive(look.sprayTime.count()) && look.extraDropFaces > 0 && look.mostDropFrame > 0 &&
+           isPositive(look.leastDropLife.count()) && look.leastLift <= look.mostLift &&
+           look.leastSprayScale <= look.mostSprayScale && look.leastDropScale <= look.mostDropScale &&
+           look.leastDropSpeed <= look.mostDropSpeed && look.leastDropRise <= look.mostDropRise &&
+           look.leastDropSpin <= look.mostDropSpin && look.leastDropLife <= look.mostDropLife &&
+           look.dropGravity >= nx::Scale{};
+}
+
 /// The spread of a hit of `damage`: the first whose `below` it is below, else the last.
 [[nodiscard]] auto spreadOf(const BloodRules& rules, nx::Damage damage) -> const BleedSpread& {
     const auto spread = std::ranges::find_if(
@@ -43,15 +67,18 @@ auto readBloodRules(std::string_view text, std::string_view sourceName)
     if (!rules) {
         return nx::fail(BloodError::DataInvalid, std::string{sourceName}, std::move(rules.error()));
     }
-    const bool isValid = !rules->decals.empty() && std::ranges::none_of(rules->decals, &std::string::empty) &&
-                         rules->reach > nx::HammerUnits{} && rules->marksOneIn > 0 &&
-                         areSpreadsInOrder(rules->spreads);
-    if (!isValid) {
+    const bool isValidRules =
+        !rules->decals.empty() && std::ranges::none_of(rules->decals, &std::string::empty) &&
+        rules->reach > nx::HammerUnits{} && rules->marksOneIn > 0 && areSpreadsInOrder(rules->spreads) &&
+        isValid(rules->spray) && isValid(rules->look, rules->spray.color);
+    if (!isValidRules) {
         return nx::fail(
             BloodError::DataInvalid,
             std::format("{}: decals, a reach and one in how many ways leave a mark, more than none, "
-                        "and spreads of traces, each below more than the last's, the last below "
-                        "none, are required",
+                        "spreads of traces, each below more than the last's, the last below "
+                        "none, a spray's sizes from one, and its look's sprites, color within "
+                        "the palette, times and dice more than none, each least no more than its "
+                        "most, are required",
                         sourceName));
     }
     return std::move(*rules);
@@ -73,6 +100,18 @@ auto bleedingWaysOf(const BloodRules& rules, nx::Damage damage, nx::Vec3 directi
         ways.push_back(direction + nx::Vec3{.x = x, .y = y, .z = z});
     }
     return ways;
+}
+
+auto spraySizeOf(const BloodSprayRules& rules, nx::Damage damage) -> std::optional<std::uint32_t> {
+    // int(flDamage): its whole points, as the original's processors cut it.
+    const std::int32_t points = nx::truncateAsX86(damage.value());
+    if (points <= 0) {
+        return std::nullopt;
+    }
+    const std::uint64_t amount = std::min<std::uint64_t>(
+        std::uint64_t{static_cast<std::uint32_t>(points)} * rules.amountPerDamage, rules.mostAmount);
+    return std::clamp(static_cast<std::uint32_t>(amount / rules.amountPerSize), rules.smallestSize,
+                      rules.largestSize);
 }
 
 auto bloodDecalOf(const BloodRules& rules, nx::Random& random) -> std::optional<std::uint32_t> {

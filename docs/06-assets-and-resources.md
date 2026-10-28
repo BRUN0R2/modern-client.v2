@@ -164,6 +164,8 @@ the profiles they switch between.
 
 Readers today:
 
+- The engine's palette (`nx.assets:palette`, `gfx/palette.lmp`): 256 colors of red, green and blue,
+  which the game names by their entry (the blood's colors).
 - WAD3 (`nx.assets:wad`): the directory, looked up by name ignoring ASCII case with the first
   entry of a name winning, as in GoldSrc, and the mip textures, with their four levels and
   palette, as views of the file's bytes. Its pictures (`readPicture`: a size, palette indices and

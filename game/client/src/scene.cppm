@@ -18,6 +18,7 @@ import :playerModels;
 import :entityModels;
 import :viewModel;
 import :muzzleFlash;
+import :tempEntities;
 
 export namespace cs {
 
@@ -51,7 +52,8 @@ struct SceneView {
     std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (ClientGame::writeHostages).
     std::span<const ShownPlayer> players{};   ///< How the other players show (ClientGame::updatePlayers).
     std::span<const ShownEntity> entities{};
-    std::optional<ViewModelPose> viewModel{}; ///< None without a weapon in hand.
+    std::optional<ViewModelPose> viewModel{};   ///< None without a weapon in hand.
+    std::span<const TempEntity> tempEntities{}; ///< The client's (TempEntities::shown).
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
     Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
@@ -71,12 +73,12 @@ public:
         -> nx::Result<Scene, SceneError>;
 
     /// Draws `view` of `level`, the level the scene was made of: the world, the studio models of its
-    /// entities, each lit where it is, and the sprites of its entities, a glow the player's line of
-    /// sight does not reach hidden, the blended ones of them all in one order
-    /// (nx.render:blendedOrder); then the weapon in the player's hand, lit where the player's eye is, as
-    /// the original lights the view's own model, and in the enhanced look by the light of its flashes
-    /// too. It prepares the muzzle flashes, those of the view's client events and those still showing,
-    /// for drawEffects to record. Errors: DrawFailed.
+    /// entities, each lit where it is, the sprites of its entities, a glow the player's line of sight
+    /// does not reach hidden, and its temporary entities, each as translucent as it is, the blended ones of
+    /// them all in one order (nx.render:blendedOrder); then the weapon in the player's hand, lit where the
+    /// player's eye is, as the original lights the view's own model, and in the enhanced look by the light of
+    /// its flashes too. It prepares the muzzle flashes, those of the view's client events and those still
+    /// showing, for drawEffects to record. Errors: DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
     /// Records the effects the last draw prepared, the weapon's muzzle flashes, as the original adds
@@ -150,9 +152,13 @@ private:
     PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.
     EntityModels entityModels;
     /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
-    /// MuzzleFlashSprites.
+    /// muzzle flashes' EffectSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;
-    MuzzleFlashes m_flashes;        ///< Those showing, or their light.
+    MuzzleFlashes m_flashes; ///< Those showing, or their light.
+    /// The blood's sprites, on m_sprites, by their place in the level's bloodSprites; and each temporary
+    /// entity's sprite's place among them, none for one the level could not read.
+    std::vector<std::optional<nx::render::SpriteModel>> bloodModels;
+    nx::EnumArray<TempSprite, std::optional<std::uint32_t>> tempSpriteIndices{};
     std::uint64_t m_flashCount = 0; ///< The flashes made, which seed each one's chances.
     std::optional<nx::render::ReflectionProbes> m_probes; ///< The enhanced look's.
     nx::render::StudioLook m_look = nx::render::StudioLook::Legacy;

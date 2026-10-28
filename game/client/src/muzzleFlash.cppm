@@ -29,8 +29,6 @@ export module cs.client:muzzleFlash;
 import std;
 import nx.core;
 import nx.math;
-import nx.assets;
-import nx.rhi;
 import nx.render;
 import cs.shared;
 
@@ -132,42 +130,6 @@ public:
 
 private:
     std::vector<MuzzleFlash> m_flashes;
-};
-
-/// The sprites the muzzle flashes show, each read once by its path, before a frame shows it.
-class MuzzleFlashSprites {
-public:
-    MuzzleFlashSprites() = default;
-    MuzzleFlashSprites(MuzzleFlashSprites&& other) noexcept = default;
-    auto operator=(MuzzleFlashSprites&& other) noexcept -> MuzzleFlashSprites& = default;
-    MuzzleFlashSprites(const MuzzleFlashSprites&) = delete;
-    auto operator=(const MuzzleFlashSprites&) -> MuzzleFlashSprites& = delete;
-    ~MuzzleFlashSprites() = default;
-
-    /// Reads from `vfs` each sprite of `paths` not read yet. Returns those missing or unreadable, with
-    /// why: they are left out, and their flashes not shown.
-    auto read(const nx::assets::Vfs& vfs, std::span<const std::string> paths) -> std::vector<std::string>;
-
-    /// The place of the sprite `path` names among those read; none for one not read.
-    [[nodiscard]] auto indexOf(std::string_view path) const noexcept -> std::optional<std::uint32_t>;
-    /// How many it read, those left out among them.
-    [[nodiscard]] inline auto count() const noexcept -> std::size_t { return m_files.size(); }
-
-    /// Each sprite from the one at `first` on the GPU of `renderer`, its uploads recorded in
-    /// `commands`; none for one left out. Errors: those of SpriteRenderer::load.
-    [[nodiscard]] auto load(nx::render::SpriteRenderer& renderer, nx::rhi::CommandList& commands,
-                            std::size_t first) const
-        -> nx::Result<std::vector<std::optional<nx::render::SpriteModel>>, nx::render::SpriteError>;
-
-private:
-    /// A sprite file: its path, its bytes, which its view points into; no view for one left out.
-    struct File {
-        std::string path{};
-        std::vector<std::byte> bytes{};
-        std::optional<nx::assets::SpriteView> view{};
-    };
-
-    std::vector<std::unique_ptr<File>> m_files; ///< Pointers: the views stay as more are read.
 };
 
 } // namespace cs
