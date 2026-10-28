@@ -145,9 +145,9 @@ TEST(AgentBrain, FinishesInvestigationAtTheWalkablePointBelowItsLastObservation)
     nx::ecs::World world;
     const auto target = world.spawn();
     nx::agents::Brain brain{rules()};
-    constexpr float observedJumpHeight = 16.0F;
+    constexpr float kObservedJumpHeight = 16.0F;
     const nx::Vec3 feet{.x = 100};
-    const nx::Vec3 observedFeet{.x = feet.x, .z = observedJumpHeight};
+    const nx::Vec3 observedFeet{.x = feet.x, .z = kObservedJumpHeight};
     brain.perceive(std::array{nx::agents::Observation{.entity = target, .position = observedFeet}}, {},
                    nx::kDefaultTickRate);
     brain.perceive({}, {}, nx::kDefaultTickRate);

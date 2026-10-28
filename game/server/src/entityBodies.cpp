@@ -12,7 +12,7 @@ import cs.shared;
 
 namespace cs {
 namespace {
-constexpr nx::log::Category entityLog{"entities"};
+constexpr nx::log::Category kLog{"entities"};
 struct EntityBodyData {
     const EntityCatalog* catalog = nullptr;
 };
@@ -106,8 +106,8 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
         body.movement.isDead = true;
         world.get<nx::game::Body>(entity)->isPushed = false;
         world.remove<nx::game::BoxSolidity>(entity);
-        nx::log::info(entityLog, "entity {:?} {}:{} dies", type.definition.id,
-                      std::to_underlying(entity.index()), std::to_underlying(entity.generation()));
+        nx::log::info(kLog, "entity {:?} {}:{} dies", type.definition.id, std::to_underlying(entity.index()),
+                      std::to_underlying(entity.generation()));
     }
     return {.damage = taken, .isKilled = isKilled};
 }
@@ -149,7 +149,7 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         placement, body, bodyOf(body.movement), nx::game::BoxSolidity{.box = kStandingBox},
         nx::game::ClipMethod{.clip = &clipEntity}, nx::game::DamageMethod{.takeAttack = &harmEntity},
         nx::game::Classified{.classification = nx::game::Classification::Organic});
-    nx::log::info(entityLog, "entity {:?} {}:{} spawns at {}", type.definition.id,
+    nx::log::info(kLog, "entity {:?} {}:{} spawns at {}", type.definition.id,
                   std::to_underlying(entity.index()), std::to_underlying(entity.generation()),
                   placement.origin);
     return entity;

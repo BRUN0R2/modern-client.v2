@@ -21,11 +21,17 @@ enum class Behavior : std::uint8_t {
     MoveTo,      ///< Moves along its corridor to the goal it was given, with no target to pursue.
 };
 
+/// How a brain perceives and decides, a kind's settings.
 struct Rules {
+    /// How long a target unseen is remembered.
     Seconds memoryLifetime{};
+    /// How near a target it sees must be to be attacked.
     HammerUnits attackDistance{};
+    /// How near the corridor's end counts as arrived.
     HammerUnits arrivalDistance{};
+    /// How far a goal moves, or the agent after a failed path, before another path is searched.
     HammerUnits replanDistance{};
+    /// How many targets are remembered at once, the one seen longest ago forgotten first.
     std::size_t memoryLimit = 0;
 };
 
@@ -36,18 +42,22 @@ struct Observation {
     std::optional<Vec3> aimAt{}; ///< The observed aim point, distinct from the navigation destination.
 };
 
+/// What a brain remembers of a target: its last observation, when, and whether it sees it now.
 struct Memory {
     Observation observation{};
     GameTime seenAt{};
     bool isVisible = false;
 };
 
+/// What a decision asks of a body, as a player's command would: where to move, where to look, whether
+/// to attack.
 struct Intent {
     Vec3 direction{}; ///< A unit direction on the ground plane, or zero.
     std::optional<Vec3> lookAt{};
     bool attacks = false;
 };
 
+/// A brain's decision of a tick: its intent, its behavior and, Blocked, why no path was found.
 struct Decision {
     Intent intent{};
     Behavior behavior = Behavior::Idle;

@@ -17,24 +17,28 @@ import :hitGroups;
 
 export namespace cs {
 
+/// Why an entity's type or body could not be made.
 enum class EntityError : std::uint8_t {
-    InvalidDefinition,
-    ModelUnreadable,
-    UnknownSequence,
-    InvalidPlacement,
-    UnknownEntity
+    InvalidDefinition, ///< A value out of its range, an id taken, a model without hitboxes, a looping death.
+    ModelUnreadable,   ///< Its model could not be read (cause: the model's error).
+    UnknownSequence,   ///< A sequence it names is not in its model.
+    InvalidPlacement,  ///< Nonfinite, not upright, or in what is solid.
+    UnknownEntity,     ///< No body of that handle lives.
 };
 
+/// A type's place in its EntityCatalog, as the catalog issued it.
 struct EntityTypeIndex {
     std::uint32_t value = 0;
     [[nodiscard]] inline auto operator==(const EntityTypeIndex&) const noexcept -> bool = default;
 };
 
+/// A model's place in its EntityCatalog, as the catalog issued it.
 struct EntityModelIndex {
     std::uint32_t value = 0;
     [[nodiscard]] inline auto operator==(const EntityModelIndex&) const noexcept -> bool = default;
 };
 
+/// How far a type's model is drawn from its body's origin, each way.
 struct EntityModelOffset {
     nx::HammerUnits x{};
     nx::HammerUnits y{};
@@ -61,6 +65,7 @@ struct EntityDefinition {
     HitGroupShares hitGroups{};
 };
 
+/// The sequences of a type's model its body plays by its EntityMotion, found by their names.
 struct EntitySequences {
     nx::assets::SequenceIndex idle{};
     nx::assets::SequenceIndex walk{};
@@ -68,6 +73,7 @@ struct EntitySequences {
     nx::assets::SequenceIndex death{};
 };
 
+/// A type of the catalog: its definition, its model and its sequences, validated.
 struct EntityType {
     EntityDefinition definition{};
     EntityModelIndex model{};
@@ -86,7 +92,9 @@ public:
     [[nodiscard]] auto type(EntityTypeIndex index) const -> const EntityType&;
     /// Requires a model index issued by this catalog.
     [[nodiscard]] auto model(EntityModelIndex index) const -> const AnimatedModel&;
+    /// How many models the catalog holds.
     [[nodiscard]] inline auto modelCount() const noexcept -> std::size_t { return models.size(); }
+    /// How many types the catalog holds.
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return types.size(); }
 
 private:
@@ -104,6 +112,7 @@ struct EntityState {
     nx::HitPoints health{};
 };
 
+/// An entity as a client draws it: its type, where it is, and its model's sequence at a frame.
 struct ShownEntity {
     EntityTypeIndex type{};
     nx::Vec3 origin{};
