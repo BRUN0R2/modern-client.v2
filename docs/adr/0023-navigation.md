@@ -28,7 +28,8 @@ convex polygons, through Recast and Detour.
   without exceptions or RTTI as they are ([RULES §9](../RULES.md#9-dependencies)).
 - **Profiles.** An agent's size and moves are a profile in data
   (`data/cstrike/navigation.toml`): radius, height standing and crouched, step, jump, steepest
-  walkable floor. Each profile has its own mesh. The player's (16, 72 and 36, 18, 41.8, the
+  walkable floor, and the clearance it would rather keep from walls where there is room (the floor
+  within it of the kind edge, weighed as the other kinds are). Each profile has its own mesh. The player's (16, 72 and 36, 18, 41.8, the
   movement's floor) is the first; a mod adds its own (a boss of 64 by 128 that no narrow door
   lets through).
 - **Areas and costs.** Each polygon has a kind: floor, crouch, water, ladder, jump, door,

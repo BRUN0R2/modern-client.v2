@@ -81,6 +81,52 @@ TEST(NavigationQueryTest, AWayGoesAroundAWall) {
     EXPECT_GT(nx::test::lengthOf(path->points), 1000.0F); // 824 straight through the wall
 }
 
+/// The least distance across from the corners of `points` to `corner`.
+[[nodiscard]] auto leastDistanceTo(std::span<const Vec3> points, Vec3 corner) -> float {
+    float least = std::numeric_limits<float>::max();
+    for (const Vec3 point : points) {
+        least = std::min(least, nx::test::distanceAcross(point, corner));
+    }
+    return least;
+}
+
+TEST(NavigationQueryTest, AWayKeepsTheWallClearanceFromAWallsEndWhereThereIsRoom) {
+    constexpr float kClearance = 16.0F;
+    const Vec3 from{.x = 100.0F, .y = 100.0F};
+    const Vec3 to{.x = 924.0F, .y = 100.0F};
+    const Vec3 wallsEnd{.x = 480.0F, .y = 384.0F};
+    const NavigationMesh hugging = nx::test::playerMesh(wallAcrossAFloor());
+    NavigationQuery huggingQuery{hugging};
+    const auto tight = huggingQuery.findPath({.from = from, .to = to});
+    ASSERT_TRUE(tight.has_value()) << nx::describe(tight.error());
+    EXPECT_LT(leastDistanceTo(tight->points, wallsEnd), kRadius + kCell) << "the shortest way, at its radius";
+
+    const NavigationMesh cleared =
+        nx::test::playerMesh(wallAcrossAFloor(), 3, nx::test::clearedPlayerProfile());
+    NavigationQuery clearedQuery{cleared};
+    const auto kept = clearedQuery.findPath({.from = from, .to = to});
+    ASSERT_TRUE(kept.has_value()) << nx::describe(kept.error());
+    EXPECT_GE(leastDistanceTo(kept->points, wallsEnd), kRadius + kClearance - kCell)
+        << "128 units between the wall's end and the floor's side leave room for its clearance";
+}
+
+TEST(NavigationQueryTest, AWayStillPassesWhereThereIsRoomForTheRadiusAlone) {
+    // Two walls leave a gap of 48 units at y = 232 to 280: room for a player, not for its clearance.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 480.0F, .y = -32.0F, .z = 0.0F},
+                     {.x = 544.0F, .y = 232.0F, .z = 128.0F});
+    nx::test::addBox(geometry, {.x = 480.0F, .y = 280.0F, .z = 0.0F},
+                     {.x = 544.0F, .y = 544.0F, .z = 128.0F});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry, 3, nx::test::clearedPlayerProfile());
+    NavigationQuery query{mesh};
+    const auto way = query.findPath({.from = {.x = 100.0F, .y = 100.0F}, .to = {.x = 924.0F, .y = 100.0F}});
+    ASSERT_TRUE(way.has_value()) << nx::describe(way.error());
+    EXPECT_TRUE(std::ranges::any_of(way->points, [](Vec3 point) {
+        return point.y > 232.0F && point.y < 280.0F;
+    })) << "through the gap";
+}
+
 TEST(NavigationQueryTest, TheSameRequestGivesTheSameWay) {
     const Geometry geometry = wallAcrossAFloor();
     const NavigationMesh mesh = nx::test::playerMesh(geometry, 0);

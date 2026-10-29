@@ -168,6 +168,32 @@ TEST(NavigationMeshTest, LowRoomIsCrouchedAndLowerIsNone) {
     }
 }
 
+TEST(NavigationMeshTest, TheFloorWithinTheWallClearanceOfItsEdgesIsOfTheKindEdge) {
+    constexpr float kClearance = 16.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 384.0F}, 0.0F);
+    const MeshOutline outline = nx::test::playerMesh(geometry, 3, nx::test::clearedPlayerProfile()).outline();
+    ASSERT_TRUE(hasKind(outline, AreaKind::Edge));
+    ASSERT_TRUE(hasKind(outline, AreaKind::Floor));
+    // The floor past the radius and the clearance from the edges; the edge's polygons between, as far
+    // as the radius.
+    constexpr float kKept = kRadius + kClearance;
+    bool reachesTheRadius = false;
+    for (const nx::navigation::MeshPolygon& polygon : outline.polygons) {
+        for (const Vec3 corner :
+             std::span{outline.corners}.subspan(polygon.firstCorner, polygon.cornerCount)) {
+            if (polygon.kind == AreaKind::Floor) {
+                EXPECT_GE(corner.x, kKept - kCell);
+                EXPECT_LE(corner.x, 512.0F - kKept + kCell);
+                EXPECT_GE(corner.y, kKept - kCell);
+                EXPECT_LE(corner.y, 384.0F - kKept + kCell);
+            }
+            reachesTheRadius = reachesTheRadius || corner.x <= kRadius + kCell;
+        }
+    }
+    EXPECT_TRUE(reachesTheRadius) << "the floor along the edges is still walked";
+}
+
 TEST(NavigationMeshTest, AFloorKeepsItsKind) {
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 256.0F, .y = 256.0F}, 0.0F, AreaKind::Water);
@@ -230,12 +256,15 @@ TEST(NavigationMeshTest, AProfileBreakingItsRulesIsRefused) {
     twice.areaCosts.push_back({.area = AreaKind::Crouch, .cost = 2.0F});
     nx::navigation::AgentProfile flat = nx::test::playerProfile();
     flat.minGroundNormalZ = 0.0F;
-    for (const nx::navigation::AgentProfile& profile : {taller, cheaper, twice, flat}) {
+    nx::navigation::AgentProfile hugging = nx::test::playerProfile();
+    hugging.wallClearance = nx::HammerUnits{-1.0F};
+    for (const nx::navigation::AgentProfile& profile : {taller, cheaper, twice, flat, hugging}) {
         const auto checked = nx::navigation::checkProfile(profile, settings);
         ASSERT_FALSE(checked.has_value());
         EXPECT_EQ(checked.error().code, MeshBuildError::InvalidProfile);
     }
     EXPECT_TRUE(nx::navigation::checkProfile(nx::test::playerProfile(), settings).has_value());
+    EXPECT_TRUE(nx::navigation::checkProfile(nx::test::clearedPlayerProfile(), settings).has_value());
     nx::navigation::BuildSettings noCells = settings;
     noCells.cellSize = nx::HammerUnits{0.0F};
     const auto checked = nx::navigation::checkSettings(noCells);
