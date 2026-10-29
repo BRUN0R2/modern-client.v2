@@ -9,6 +9,7 @@ import nx.ecs;
 import nx.jobs;
 import nx.navigation;
 import nx.agents;
+#include "testAgents.hpp"
 #include "testGeometry.hpp"
 
 namespace {
@@ -162,6 +163,59 @@ TEST(AgentBrain, MovesToItsGoalWithNoTargetAndForgetsItAsItArrives) {
     EXPECT_FALSE(brain.goal().has_value());
 }
 
+TEST(AgentBrain, FacesAheadAlongItsWayAsItMoves) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.y = 200});
+    const nx::agents::Intent intent = brain.decide({}, query).intent;
+    EXPECT_EQ(intent.ahead, intent.direction) << "until it steers or wiggles";
+    EXPECT_FALSE(intent.jumps);
+}
+
+TEST(AgentBrain, GivingUpItForgetsItsGoalOrTheTargetItInvestigates) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.y = 200});
+    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::MoveTo);
+    brain.giveUp();
+    EXPECT_FALSE(brain.goal().has_value());
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle)
+        << "for its owner to give another";
+
+    nx::ecs::World world;
+    const auto lost = world.spawn();
+    brain.perceive(std::array{nx::agents::Observation{lost, {.x = 200}}}, {}, nx::kDefaultTickRate);
+    brain.perceive({}, {}, nx::kDefaultTickRate);
+    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
+    brain.giveUp();
+    EXPECT_TRUE(brain.memories().empty());
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
+}
+
+TEST(AgentBrain, GivingUpItSearchesItsWayAnewToTheTargetItChases) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto chased = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.perceive(std::array{nx::agents::Observation{chased, {.x = 200}}}, {}, nx::kDefaultTickRate);
+    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Chase);
+    brain.giveUp();
+    EXPECT_EQ(brain.memories().size(), 1U) << "it still sees it";
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    EXPECT_TRUE(way.empty()) << "its corridor dropped";
+    const nx::Vec3 elsewhere{.y = 100};
+    const auto chase = brain.decide(elsewhere, query);
+    EXPECT_EQ(chase.behavior, nx::agents::Behavior::Chase);
+    brain.appendWay(query, way);
+    ASSERT_FALSE(way.empty());
+    EXPECT_NEAR(way.front().x, elsewhere.x, 1.0F) << "searched from where it is";
+    EXPECT_NEAR(way.front().y, elsewhere.y, 1.0F);
+}
+
 TEST(AgentBrain, ItsWayGoesFromWhereItIsToItsGoal) {
     constexpr float kOnTheMesh = 1.0F;
     auto mesh = floorMesh();
@@ -183,7 +237,7 @@ TEST(AgentBrain, ItsWayGoesFromWhereItIsToItsGoal) {
 TEST(AgentBrain, AnAgentHasAWayOnlyWhileItsLastDecisionFollowsTheCorridor) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
-    nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}};
+    nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()};
     const nx::Vec3 goal{.y = 200};
     agent.brain.setGoal(goal);
     const auto wayOf = [&query](const auto& follower) {

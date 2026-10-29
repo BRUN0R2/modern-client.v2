@@ -772,7 +772,8 @@ Xash3D-FWGS project records from the original for its tests.
   arrows pointing to where it goes, the size and spacing of a plugin's beam of `sprites/arrow1.spr`
   (12.8 units across, one every 50, 16 above the way): their shafts in the color of its team
   (counter-terrorists blue, terrorists red, zombies purple), their heads in that of why it goes there
-  (its route cyan, where it saw an enemy last amber, an enemy it sees white). The ways are found again
+  (its route cyan, where it saw an enemy last amber, an enemy it sees white), magenta while it is stuck
+  on it (`nx::agents::StuckWatch`). The ways are found again
   once a tick, not once a frame, in batches in jobs. In the enhanced look the edges glow a little and
   the arrows brightly (`nx.render:overlay`, [ADR-0023](adr/0023-navigation.md)).
 - `r_speeds` (draws, triangles, time per pass), `r_drawentities`, `r_wireframe`,

@@ -810,8 +810,16 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   along its way. It steers among the other players and the walls as it goes, its next turn taken wide,
   the velocity it runs at one that meets no body nor wall in the time ahead, slower or waiting when it
   must ([ADR-0024](adr/0024-agents.md)'s local avoidance, `nx::navigation::Corridor::steer`), so that two
-  bots meeting in a passage pass each other. Spawning again, it starts with a new brain, its view still,
-  its aim and its trigger anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
+  bots meeting in a passage pass each other. When it gets stuck on its way anyway, it gets out as
+  Condition Zero's bot does (`StuckCheck`, `Wiggle`, `nx::agents::StuckWatch`, the `stuck` table of
+  `bots.toml`): sampled each tenth of a second, it is stuck when across the last five samples it went
+  slower than 20 units a second, back and forth included, as long as it means to move along its way and
+  may run faster than that (not in a frozen round); stuck, it moves ahead, back or to a side drawn each
+  0.5 to 1.5 seconds, its view still along its way, jumping within half a second and then each 1 to 2,
+  until it is 75 units from where it got stuck. Stuck 4.5 seconds, five since it last made its way
+  (`UpdatePathMovement`'s `giveUpDuration`), it gives up where it goes and hunts another place, or
+  searches its way anew to the enemy it chases. Spawning again, it starts with a new brain, its watch,
+  its view still, its aim and its trigger anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.
 - The spot of its enemy it aims at by its skill and the parts it sees, the knife's,

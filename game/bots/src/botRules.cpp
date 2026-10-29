@@ -103,6 +103,14 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
                                     "of a whole turn at most, are required",
                                     sourceName));
     }
+    if (!nx::agents::isValid(rules->stuck)) {
+        return nx::fail(
+            BotError::InvalidData,
+            std::format("{}: stuck's interval, samples, speed, distance and give-up time more than "
+                        "none, its first jump none or more, and each range's shortest more than "
+                        "none, its longest no shorter, are required",
+                        sourceName));
+    }
     const auto isValidLevel = [](const BotSkillLevel& level) {
         return isValid(level);
     };

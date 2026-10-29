@@ -41,5 +41,7 @@ nxAddTest(csClientTests
 # the repository's data/cstrike/.
 target_compile_definitions(csClientTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus"
                                                  NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")
-# The navigation drawing's meshes are built of the navigation tests' geometry.
-target_include_directories(csClientTests PRIVATE "${PROJECT_SOURCE_DIR}/engine/navigation/tests")
+# The navigation drawing's meshes are built of the navigation tests' geometry, its agents of the agents
+# tests' watch.
+target_include_directories(csClientTests PRIVATE "${PROJECT_SOURCE_DIR}/engine/navigation/tests"
+                                                 "${PROJECT_SOURCE_DIR}/engine/agents/tests")

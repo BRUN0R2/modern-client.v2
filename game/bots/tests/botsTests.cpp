@@ -47,6 +47,8 @@ constexpr std::uint32_t kPastTheFirstFreeze = 810;
 constexpr std::uint32_t kPastTheCommence = 301;
 /// Ticks past a round's freeze, mp_freezetime's default (600 ticks).
 constexpr std::uint32_t kPastAFreeze = 610;
+/// Ticks well within a round's freeze, far longer than a stuck bot's watch takes to find it stuck.
+constexpr std::uint32_t kWithinAFreeze = 300;
 /// Ticks a bot is given to kill an enemy it sees once the freeze is over.
 constexpr std::uint32_t kKillingTicks = 1000;
 /// Ticks an expert bot is given to see an enemy, react to it and turn to fire at it: two seconds.
@@ -296,6 +298,22 @@ TEST_F(BotsTest, ABotFiresAtNoTeammateAndSeesNoEnemyBehindIt) {
     const cs::UserCommand hunting = bots->commands()[0].command;
     EXPECT_FALSE(hunting.buttons.test(cs::Button::Attack));
     EXPECT_GT(hunting.move.forward.value(), 0.0F) << "along its way, facing it";
+}
+
+TEST_F(BotsTest, ABotFrozenByTheRoundIsNotStuckAndNeitherWigglesNorJumps) {
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy, kNoPrefix);
+    std::ignore = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    // Both teams have players: Game Commencing restarts the game, its round frozen.
+    play(kPastTheCommence);
+    const nx::agents::Agent* const agent = game->playerComponent<nx::agents::Agent>(bot);
+    ASSERT_NE(agent, nullptr);
+    for (std::uint32_t tick = 0; tick < kWithinAFreeze; ++tick) {
+        const std::vector<cs::PlayerCommand> made = bots->commands();
+        game->tick(made);
+        ASSERT_EQ(made.size(), 1U);
+        EXPECT_FALSE(made.front().command.buttons.test(cs::Button::Jump)) << "at " << tick;
+        EXPECT_FALSE(agent->stuck.isStuck()) << "at " << tick;
+    }
 }
 
 TEST_F(BotsTest, AnExpertBotKillsAnEnemyItSeesOnceTheFreezeIsOver) {

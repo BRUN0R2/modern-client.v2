@@ -21,6 +21,8 @@ namespace {
 constexpr nx::log::Category kLog{"bots"};
 /// The stream of random numbers a bot's hunt draws its places from, of the player it plays.
 constexpr std::string_view kHuntStream = "bot hunt";
+/// The stream of random numbers a stuck bot's wiggles and jumps draw from, of the player it plays.
+constexpr std::string_view kStuckStream = "bot stuck";
 /// The stream of random numbers the team a bot leaves to keep bot_quota is drawn from, of the tick.
 constexpr std::string_view kQuotaStream = "bot quota";
 /// The stream of random numbers a bot's profile is drawn from, of the tick it joins and the bots in the
@@ -42,21 +44,25 @@ constexpr std::uint32_t kPlayingTeams = 2;
 }
 
 /// Where a player that knows itself as `self` wants to look: at `aimSpot`, else where `intent` looks,
-/// else ahead along the way it moves, level (SetLookAngles of m_lookAheadAngle), else where it looks.
+/// else ahead along its way, level, however it steers or wiggles (SetLookAngles of m_lookAheadAngle),
+/// else where it looks.
 [[nodiscard]] auto viewWanted(const nx::agents::Intent& intent, std::optional<nx::Vec3> aimSpot,
                               const PlayerOwnState& self) noexcept -> nx::EulerAngles {
     if (const std::optional<nx::Vec3> looked = aimSpot ? aimSpot : intent.lookAt) {
         return viewFacing(self.eye, *looked, self.view);
     }
-    if (nx::length(intent.direction) > 0.0F) {
-        return nx::EulerAngles{.yaw = nx::vectorAngles(intent.direction).yaw};
+    if (nx::length(intent.ahead) > 0.0F) {
+        return nx::EulerAngles{.yaw = nx::vectorAngles(intent.ahead).yaw};
     }
     return self.view;
 }
 
 /// Moves `command`, its view turned, the way `intent` moves at its share of `maxSpeed`, its full speed
-/// (GetMoveSpeed of a running bot: pev->maxspeed).
+/// (GetMoveSpeed of a running bot: pev->maxspeed), and jumps as it does.
 void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::UnitsPerSecond maxSpeed) noexcept {
+    if (intent.jumps) {
+        command.buttons.set(Button::Jump);
+    }
     const nx::Vec3 way = intent.direction;
     if (nx::length(way) == 0.0F) {
         return;
@@ -168,7 +174,9 @@ auto Bots::join(std::size_t level, std::string_view profile, std::optional<Team>
     const PlayerIndex player =
         game->join(team.value_or(game->defaultTeam()), AutoSwitch::ToHeavier, botNameOf(profile, prefix));
     game->attachPlayerComponent(
-        player, nx::agents::Agent{.brain = nx::agents::Brain{brainRulesOf(rules, skill.reactionTime)}});
+        player, nx::agents::Agent{
+                    .brain = nx::agents::Brain{brainRulesOf(rules, skill.reactionTime)},
+                    .stuck = nx::agents::StuckWatch{rules.stuck, nx::Random{player.value, kStuckStream}}});
     game->attachPlayerComponent(player, BotDriver{.profile = std::string{profile},
                                                   .skillLevel = level,
                                                   .hunt = nx::Random{player.value, kHuntStream},
@@ -279,7 +287,9 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
                                 .feet = turn.self.feet,
                                 .velocity = turn.self.velocity,
                                 .maxSpeed = turn.self.maxSpeed,
-                                .body = self != targets.end() ? std::optional{self->entity} : std::nullopt});
+                                .body = self != targets.end() ? std::optional{self->entity} : std::nullopt,
+                                .stuck = &turn.agent->stuck,
+                                .elapsed = turn.command.duration});
         }
     }
     // What a bot perceives does not depend on what another decides, nor a decision on another's.
@@ -376,6 +386,7 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
         // Spawned again: what it knew, where it went, how it turned, aimed and fired are of its last life.
         const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
         agent->brain = nx::agents::Brain{brainRulesOf(rules, level.reactionTime)};
+        agent->stuck.reset();
         driver->turn = {};
         driver->aimError = {};
         driver->trigger = {};

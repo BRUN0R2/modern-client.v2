@@ -85,6 +85,13 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
                 bodiesNear(request, work.bodies, work.range, work.height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
             }
+            // Last, so that what gets a stuck body out overrides how it steers (UpdatePathMovement).
+            if (request.stuck != nullptr &&
+                request.stuck->watch(decision.intent, request.feet, request.maxSpeed,
+                                     followsCorridor(decision.behavior),
+                                     request.elapsed) == Progress::GivesUp) {
+                request.brain->giveUp();
+            }
             work.decisions[index] = decision;
         }
     };

@@ -127,9 +127,9 @@ struct BotFireRules {
 
 /// data/cstrike/bots.toml: what a bot sees (the cone about its view's yaw, the players it looks at each
 /// tick in turn, and the spots of each), how long and how many it remembers, how near it attacks, how
-/// near it arrives and how far a goal moves before it finds another way, how far its hunt's next place
-/// is drawn, how often bot_quota is looked at, the levels of skill it plays with, and how it turns its
-/// view, aims and fires.
+/// near it arrives and how far a goal moves before it finds another way, how it finds itself stuck and
+/// gets out, how far its hunt's next place is drawn, how often bot_quota is looked at, the levels of
+/// skill it plays with, and how it turns its view, aims and fires.
 struct BotRules {
     nx::Degrees fieldOfView{};
     std::uint32_t perceptionBudget = 0;
@@ -139,6 +139,7 @@ struct BotRules {
     nx::HammerUnits attackDistance{};
     nx::HammerUnits arrivalDistance{};
     nx::HammerUnits replanDistance{};
+    nx::agents::StuckRules stuck{};
     nx::HammerUnits huntRadius{};
     nx::Seconds quotaInterval{};
     std::vector<BotSkillLevel> skillLevels;
@@ -148,10 +149,10 @@ struct BotRules {
 };
 
 /// Reads `text`, the file `sourceName`: every distance, time and budget more than none, the cone a
-/// whole turn at most; a level of skill for each difficulty, each of none or more time and of profiles
-/// named as the server names a player and as no other profile is, in any case; each pause's
-/// shortest none or more and its longest no shorter, the springs and the pitch's limit more than none
-/// (a quarter turn at most). Errors: InvalidData.
+/// whole turn at most; rules a stuck bot's watch may follow (nx::agents::isValid); a level of skill for each
+/// difficulty, each of none or more time and of profiles named as the server names a player and as no other
+/// profile is, in any case; each pause's shortest none or more and its longest no shorter, the springs and
+/// the pitch's limit more than none (a quarter turn at most). Errors: InvalidData.
 [[nodiscard]] auto readBotRules(std::string_view text, std::string_view sourceName)
     -> nx::Result<BotRules, BotError>;
 
@@ -268,6 +269,7 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::attackDistance>("attackDistance"),
         nx::meta::field<&cs::BotRules::arrivalDistance>("arrivalDistance"),
         nx::meta::field<&cs::BotRules::replanDistance>("replanDistance"),
+        nx::meta::field<&cs::BotRules::stuck>("stuck"),
         nx::meta::field<&cs::BotRules::huntRadius>("huntRadius"),
         nx::meta::field<&cs::BotRules::quotaInterval>("quotaInterval"),
         nx::meta::field<&cs::BotRules::skillLevels>("skillLevels"),

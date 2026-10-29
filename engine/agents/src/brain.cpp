@@ -151,8 +151,24 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
                                      : toNext;
         const Vec3 direction = length(anticipated) > 0.0F ? anticipated : toNext;
         decision.intent.direction = direction / length(direction);
+        decision.intent.ahead = decision.intent.direction;
     }
     return decision;
+}
+
+void Brain::giveUp() {
+    if (!target) {
+        givenGoal.reset();
+    } else if (const auto pursued = std::ranges::find(
+                   memory, *target, [](const Memory& record) { return record.observation.entity; });
+               pursued != memory.end() && !pursued->isVisible) {
+        memory.erase(pursued);
+    }
+    // Whatever it pursues next, its way is searched anew from where it is.
+    plannedGoal.reset();
+    plannedFrom.reset();
+    corridor.reset();
+    pathError.reset();
 }
 
 void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,

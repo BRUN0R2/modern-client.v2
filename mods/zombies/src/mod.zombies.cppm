@@ -24,7 +24,8 @@ enum class ZombieError : std::uint8_t {
     SpawnFailed, ///< A body could not be placed, registered or removed.
 };
 
-/// data/mods/zombies.toml: the zombies' body, sight, memory, navigation and spawning budgets.
+/// data/mods/zombies.toml: the zombies' body, sight, memory, navigation, how one finds itself stuck and
+/// gets out, and spawning budgets.
 struct Settings {
     cs::EntityDefinition body{};
     nx::HammerUnits sightRange{};
@@ -32,6 +33,7 @@ struct Settings {
     nx::Seconds memoryLifetime{};
     nx::HammerUnits arrivalDistance{};
     nx::HammerUnits replanDistance{};
+    nx::agents::StuckRules stuck{};
     std::uint32_t memoryLimit = 0;
     std::uint32_t perceptionBudget = 0;
     std::uint32_t spawnBatchLimit = 0;
@@ -39,7 +41,8 @@ struct Settings {
     nx::HammerUnits spawnSpacing{};
 };
 
-/// Parses the mod settings and validates perception/spawn budgets. Errors: InvalidData. The body's
+/// Parses the mod settings and validates perception/spawn budgets and the stuck rules (nx::agents::isValid).
+/// Errors: InvalidData. The body's
 /// stats and model are validated separately by EntityCatalog::add before creating a horde.
 [[nodiscard]] auto readSettings(std::string_view text, std::string_view source)
     -> nx::Result<Settings, ZombieError>;
@@ -107,6 +110,7 @@ struct nx::meta::Description<zombies::Settings> {
         nx::meta::field<&zombies::Settings::memoryLifetime>("memoryLifetime"),
         nx::meta::field<&zombies::Settings::arrivalDistance>("arrivalDistance"),
         nx::meta::field<&zombies::Settings::replanDistance>("replanDistance"),
+        nx::meta::field<&zombies::Settings::stuck>("stuck"),
         nx::meta::field<&zombies::Settings::memoryLimit>("memoryLimit"),
         nx::meta::field<&zombies::Settings::perceptionBudget>("perceptionBudget"),
         nx::meta::field<&zombies::Settings::spawnBatchLimit>("spawnBatchLimit"),

@@ -13,6 +13,7 @@ It does not implement Counter-Strike's player bots or claim CSO gameplay parity.
    `entities/zombies.toml`. Set its model path and the exact sequence labels that model has.
    Death must be non-looping; attacks may loop and are paced by the server's cooldown. Missing
    files, hitboxes, sequences and invalid numeric values are reported before a body is created.
+   Copy it again when the example gains a table, as it gained `stuck`: a missing key is reported.
 3. Build `next` as [17](17-build-and-tools.md) describes, then run:
 
    ```powershell
@@ -85,14 +86,17 @@ is built once per map as it loads, in jobs, overlapping the client's level
 (`nx::navigation::MeshBuild`), or read from the cache folder where an earlier load kept it, and the
 horde and the bots borrow it: `zombie_add` and `bot_add`
 build nothing. `nav_draw` draws the mesh over the scene and the way each living bot and zombie follows
-on it while it moves along its corridor, as arrows in the colors of its team and of why it moves, found
+on it while it moves along its corridor, as arrows in the colors of its team and of why it moves
+(magenta heads while it is stuck), found
 again once a tick in batches in jobs; a dead body's agent, which decides nothing, is not drawn
 (`cs::Game::bodyStatusOf`). `nav_generate` builds the mesh
 again, what the cache keeps left aside, and plays the map again on it, as Condition Zero restarts
 the game once it analyzed a map. A brain's decision that moves is steered along its corridor among the
 six nearest living bodies, players' and zombies', and the walls about it (`nx::agents::Brain::steer`,
 `nx::navigation::Corridor::steer`: Detour's obstacle avoidance), its turns taken wide, waiting when it
-must. Each tick the bodies perceive one by one, then their brains decide together in
+must. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
+`stuck` table): it moves ahead, back or to a side, jumping now and then, and gives up where it goes
+when it stays stuck, searching its way anew. Each tick the bodies perceive one by one, then their brains decide together in
 batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at
 its body's index, so that the commands are the same with any number of workers. Agent commands and
 body updates have deterministic order. The session removes the
