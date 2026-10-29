@@ -85,10 +85,19 @@ struct BodyStatus {
     std::optional<Team> team{};
 };
 
+/// Where an attack a player took came from, as its HUD's damage indicator shows it (the Damage message's
+/// origin): the way toward its attacker across, a unit direction, and the team of the player that made it,
+/// none for an entity's body.
+struct HurtFrom {
+    nx::Vec3 toward{};
+    std::optional<Team> team{};
+};
+
 /// What a player knows of itself, as its own client is told it: its team, whether it is alive, when it
 /// last spawned (alive already or not: a round's start spawns the living too), its eye and its feet, how
 /// it moves, where it looks (pev->v_angle, which the game turns as it spawns), how fast it may run
-/// (pev->maxspeed), and the slot of the weapon it holds, none while it holds none.
+/// (pev->maxspeed), the slot of the weapon it holds, none while it holds none, and where the last
+/// attack it took in the last tick came from, none when none hurt it.
 struct PlayerOwnState {
     Team team{};
     bool isAlive = false;
@@ -99,6 +108,7 @@ struct PlayerOwnState {
     nx::EulerAngles view{};
     nx::UnitsPerSecond maxSpeed{};
     std::optional<WeaponSlot> heldSlot{};
+    std::optional<HurtFrom> hurtFrom{};
 };
 
 } // namespace cs
@@ -129,8 +139,9 @@ struct Player {
     nx::ecs::Entity body{};
     nx::Flags<Button> lastButtons{}; ///< m_afButtonLast: the use button acts as it goes down.
     bool isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
-    std::uint32_t spawnsThisRound = 0; ///< m_iNumSpawns.
-    nx::GameTime spawnedAt{};          ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
+    std::uint32_t spawnsThisRound = 0;  ///< m_iNumSpawns.
+    nx::GameTime spawnedAt{};           ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
+    std::optional<HurtFrom> hurtFrom{}; ///< In the tick: where the last attack it took came from.
     RoundTimer roundTimer{};
     std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
     bool wasPlaced = false;                      ///< In the tick.
@@ -390,6 +401,9 @@ private:
     void poseBody(Player& player);
     /// `player` makes `sound` at the tick, at its own volume.
     void makeSound(Player& player, const GameSound& sound);
+    /// `victim` feels `attack` of a player of `team`, none for an entity's body: where it came from, back
+    /// along its way (PlayerOwnState::hurtFrom).
+    void feelHurt(Player& victim, const nx::game::Attack& attack, std::optional<Team> team);
     /// `player`'s model plays `action` (setPlayerAnimation, CBasePlayer::SetAnimation), as the player
     /// stands and moves, by the weapon it holds, drawing from its command's seed; nothing for a character
     /// whose model could not be read.

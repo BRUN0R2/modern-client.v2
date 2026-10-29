@@ -46,15 +46,15 @@ struct Rules {
     Seconds reactionTime{};
 };
 
-/// A sensed fact: where a target was seen, or roughly where it was heard (Brain::hear), never a position
-/// no sense gave, as a target's through a wall it makes no noise behind.
+/// A sensed fact: where a target was seen, touched, or roughly where it was heard (Brain::sense), never a
+/// position no sense gave, as a target's through a wall it makes no noise behind.
 struct Observation {
     ecs::Entity entity{};
     Vec3 position{};
     std::optional<Vec3> aimAt{}; ///< The observed aim point, distinct from the navigation destination.
 };
 
-/// What a brain remembers of a target: its last observation, when it perceived it last (seen or heard),
+/// What a brain remembers of a target: its last observation, when it perceived it last (seen or sensed),
 /// when it first perceived it since it remembers it, whether it sees it now, and whether its reaction
 /// time since it first perceived it went by.
 struct Memory {
@@ -97,11 +97,12 @@ public:
     /// Each tick replaces visibility and forgets expired records; fresh observations update memory, a
     /// target seen anew noticed now; the targets noticed at least the reaction time ago are recognized.
     void perceive(std::span<const Observation> seen, GameTime now, TickRate rate);
-    /// After perceive of the same tick, remembers where each target of `heard`, roughly where it was heard
-    /// (cs::heardBy), was perceived now, unless it sees it, its sight the better; a target heard anew
-    /// noticed now, and recognized once its reaction time went by, as one seen. It investigates a target
-    /// it heard as one it lost sight of: it turns to look where it was heard, and goes there.
-    void hear(std::span<const Observation> heard, GameTime now, TickRate rate);
+    /// After perceive of the same tick, remembers where each target of `sensed`, perceived by a sense but
+    /// sight (heard roughly where it made a noise: cs::heardBy; touched where it is: cs::touchedBy), was
+    /// perceived now, unless it sees it, its sight the better; a target sensed anew noticed now, and
+    /// recognized once its reaction time went by, as one seen. It investigates a target it sensed as one
+    /// it lost sight of: it turns to look where it sensed it, and goes there.
+    void sense(std::span<const Observation> sensed, GameTime now, TickRate rate);
     /// Forgets every target it remembers that is not among `present`, sorted: the targets there still are
     /// to perceive, so that it pursues none that died or left, and plans no way to where one was last.
     void forgetAbsent(std::span<const ecs::Entity> present);

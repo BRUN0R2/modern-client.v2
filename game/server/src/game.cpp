@@ -260,7 +260,8 @@ auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
                           .maxSpeed = player.movement.maxSpeed,
                           .heldSlot = held != nullptr
                                           ? std::optional{m_content->weapons.weapon(held->weapon).slot}
-                                          : std::nullopt};
+                                          : std::nullopt,
+                          .hurtFrom = player.hurtFrom};
 }
 
 auto Game::canSpawn(const Player& player) const -> bool {
@@ -413,6 +414,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
         player.turnedView.reset();
         player.wasPlaced = false;
         player.sounds.clear();
+        player.hurtFrom.reset();
     }
     for (const PlayerCommand& command : commands) {
         runCommand(playerAt(command.player), command.command);
@@ -422,6 +424,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
             // A strike met the player where its trace did, as a TraceAttack sets m_LastHitGroup.
             Player& struck = playerAt(body->player);
             struck.lastHitGroup = hitGroupOf(strike.attack.trace);
+            feelHurt(struck, strike.attack, std::nullopt);
             hurt(struck, {.damage = strike.attack.damage, .kind = HarmKind::Melee});
         } else {
             std::ignore = nx::game::attackEntity(m_world, strike.target, strike.attack);
@@ -655,6 +658,7 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
     if (isSpared) {
         return;
     }
+    feelHurt(victim, attack, attacker.team);
     constexpr unsigned kVictimBits = 32;
     const std::uint64_t seed = (static_cast<std::uint64_t>(attacker.randomSeed.value) << kVictimBits) ^
                                m_world.get<PlayerBody>(victim.body)->player.value;
@@ -791,6 +795,14 @@ void Game::animateAfterCommand(Player& player, nx::Seconds frameTime) {
     }
     processGait(player.animation.gait, *model->view, player.animation.gaitSequence, player.movement.origin,
                 bodyAnglesOf(player.view), frameTime, player.animation.torso.framerate);
+}
+
+void Game::feelHurt(Player& victim, const nx::game::Attack& attack, std::optional<Team> team) {
+    const nx::Vec3 back{.x = -attack.direction.x, .y = -attack.direction.y};
+    const float across = nx::length(back);
+    if (across > 0.0F && victim.status.isAlive()) {
+        victim.hurtFrom = HurtFrom{.toward = back / across, .team = team};
+    }
 }
 
 void Game::makeSound(Player& player, const GameSound& sound) {

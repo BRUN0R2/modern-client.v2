@@ -296,8 +296,12 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         agent.brain.perceive(seen, time.now, time.rate);
         // A zombie plays in no team: it hears every player.
         nx::Random hearing{seedOf(entity) ^ std::bit_cast<std::uint64_t>(time.now.tick()), kHearingStream};
-        agent.brain.hear(cs::heardBy({.ear = eye}, noises, settings.hearing, query, hearing), time.now,
-                         time.rate);
+        agent.brain.sense(cs::heardBy({.ear = eye}, noises, settings.hearing, query, hearing), time.now,
+                          time.rate);
+        // Felt where they are, last: the players its body touches.
+        agent.brain.sense(
+            cs::touchedBy({.entity = entity, .origin = found->origin, .box = cs::kStandingBox}, targets),
+            time.now, time.rate);
         turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
         requests.push_back({.brain = &agent.brain,
                             .feet = feetOf(found->origin),

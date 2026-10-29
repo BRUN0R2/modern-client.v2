@@ -78,7 +78,7 @@ TEST(AgentBrain, ATargetHeardIsInvestigatedWhereItWasHeardLookingThere) {
     nx::agents::Brain brain{rules()};
     brain.perceive({}, {}, nx::kDefaultTickRate);
     const nx::Vec3 eye{.x = -300, .y = 50, .z = 53};
-    brain.hear(
+    brain.sense(
         std::array{nx::agents::Observation{.entity = heard, .position = {.x = -300, .y = 50}, .aimAt = eye}},
         {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.memories().size(), 1U);
@@ -101,7 +101,7 @@ TEST(AgentBrain, WhatItHearsOfATargetItSeesChangesNothingAndAHeardOneIsRecognize
     nx::agents::Brain brain{withReaction};
     const nx::Vec3 seenAt{.x = 200};
     brain.perceive(std::array{nx::agents::Observation{target, seenAt}}, {}, nx::kDefaultTickRate);
-    brain.hear(std::array{nx::agents::Observation{target, {.x = 260, .y = 40}}}, {}, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Observation{target, {.x = 260, .y = 40}}}, {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.memories().size(), 1U);
     EXPECT_EQ(brain.memories().front().observation.position, seenAt) << "its sight the better";
     EXPECT_TRUE(brain.memories().front().isVisible);
@@ -109,14 +109,14 @@ TEST(AgentBrain, WhatItHearsOfATargetItSeesChangesNothingAndAHeardOneIsRecognize
     const auto other = world.spawn();
     const nx::GameTime later = nx::GameTime{}.after(nx::Seconds{0.25F}, nx::kDefaultTickRate);
     brain.perceive({}, later, nx::kDefaultTickRate);
-    brain.hear(std::array{nx::agents::Observation{other, {.y = -200}}}, later, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Observation{other, {.y = -200}}}, later, nx::kDefaultTickRate);
     const auto heardRecord = std::ranges::find(
         brain.memories(), other, [](const nx::agents::Memory& record) { return record.observation.entity; });
     ASSERT_NE(heardRecord, brain.memories().end());
     EXPECT_FALSE(heardRecord->isRecognized) << "heard just now";
     const nx::GameTime reacted = later.after(nx::Seconds{0.5F}, nx::kDefaultTickRate);
     brain.perceive({}, reacted, nx::kDefaultTickRate);
-    brain.hear(std::array{nx::agents::Observation{other, {.y = -210}}}, reacted, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Observation{other, {.y = -210}}}, reacted, nx::kDefaultTickRate);
     const auto recognized = std::ranges::find(
         brain.memories(), other, [](const nx::agents::Memory& record) { return record.observation.entity; });
     ASSERT_NE(recognized, brain.memories().end());

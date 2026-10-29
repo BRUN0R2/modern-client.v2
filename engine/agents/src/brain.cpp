@@ -55,8 +55,8 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
     }
 }
 
-void Brain::hear(std::span<const Observation> heard, GameTime now, TickRate rate) {
-    for (const Observation& observation : heard) {
+void Brain::sense(std::span<const Observation> sensed, GameTime now, TickRate rate) {
+    for (const Observation& observation : sensed) {
         auto found = std::ranges::find(memory, observation.entity,
                                        [](const Memory& record) { return record.observation.entity; });
         if (found == memory.end()) {

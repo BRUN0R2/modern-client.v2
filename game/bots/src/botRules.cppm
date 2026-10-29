@@ -114,6 +114,22 @@ struct BotPause {
 /// with a pistol, as fast as it may above rapidPistolSkill (StartRapidFire), else after pistolPause;
 /// with a gun, at once below spraySkill or nearer than sprayRange, after distantPause beyond
 /// distantRange, else after burstPause.
+/// How a bot hurt by an enemy looks about (CCSBot::TakeDamage, Panic): unless it sees an enemy as it
+/// attacks, or else at random, chance times the square of how much skill it lacks, it looks at a spot about
+/// it. From skilledFrom of skill, on the side the attack came from, ahead, behind or either way across of
+/// where it looks: `near` that way and up to `shift` the other way; below it, `far` behind and up to
+/// `farSide` to a side. Up to `height` up or down, until its view is within lookedWithin of it.
+struct BotPanicRules {
+    BotSkill skilledFrom{};
+    float chance = 0.0F;
+    nx::HammerUnits near{};
+    nx::HammerUnits shift{};
+    nx::HammerUnits far{};
+    nx::HammerUnits farSide{};
+    nx::HammerUnits height{};
+    nx::Degrees lookedWithin{};
+};
+
 struct BotFireRules {
     nx::HammerUnits aimHalfWidth{};
     nx::Seconds thinkInterval{};
@@ -130,7 +146,8 @@ struct BotFireRules {
 /// tick in turn, and the spots of each), how long and how many it remembers, how near it attacks, how
 /// near it arrives and how far a goal moves before it finds another way, how it finds itself stuck and
 /// gets out, how far it hears each kind of noise, how far its hunt's next place is drawn, how often bot_quota
-/// is looked at, the levels of skill it plays with, and how it turns its view, aims and fires.
+/// is looked at, the levels of skill it plays with, how it turns its view, aims and fires, and how it looks
+/// about when it is hurt.
 struct BotRules {
     nx::Degrees fieldOfView{};
     std::uint32_t perceptionBudget = 0;
@@ -148,6 +165,7 @@ struct BotRules {
     BotLookRules look{};
     BotAimRules aim{};
     BotFireRules fire{};
+    BotPanicRules panic{};
 };
 
 /// Reads `text`, the file `sourceName`: every distance, time and budget more than none, the cone a
@@ -261,6 +279,23 @@ struct nx::meta::Description<cs::BotFireRules> {
 };
 
 template <>
+struct nx::meta::Description<cs::BotPanicRules> {
+    static constexpr std::string_view kName = "cs::BotPanicRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotPanicRules::skilledFrom>("skilledFrom",
+                                                         nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotPanicRules::chance>("chance",
+                                                    nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotPanicRules::near>("near", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotPanicRules::shift>("shift", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotPanicRules::far>("far", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotPanicRules::farSide>("farSide", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotPanicRules::height>("height", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotPanicRules::lookedWithin>("lookedWithin", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::BotRules> {
     static constexpr std::string_view kName = "cs::BotRules";
     static constexpr std::tuple kFields{
@@ -280,5 +315,6 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::look>("look"),
         nx::meta::field<&cs::BotRules::aim>("aim"),
         nx::meta::field<&cs::BotRules::fire>("fire"),
+        nx::meta::field<&cs::BotRules::panic>("panic"),
     };
 };
