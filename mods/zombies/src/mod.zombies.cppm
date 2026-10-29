@@ -35,6 +35,8 @@ struct Settings {
     nx::HammerUnits replanDistance{};
     float replanShare = 0.0F;
     nx::Seconds shortTermMemory{};
+    nx::Seconds threatRecency{};
+    nx::HammerUnits threatMargin{};
     nx::agents::StuckRules stuck{};
     cs::HearingRules hearing{};
     std::uint32_t memoryLimit = 0;
@@ -117,6 +119,8 @@ struct nx::meta::Description<zombies::Settings> {
         nx::meta::field<&zombies::Settings::replanShare>("replanShare", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::shortTermMemory>("shortTermMemory",
                                                              nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&zombies::Settings::threatRecency>("threatRecency", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&zombies::Settings::threatMargin>("threatMargin", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::stuck>("stuck"),
         nx::meta::field<&zombies::Settings::hearing>("hearing"),
         nx::meta::field<&zombies::Settings::memoryLimit>("memoryLimit"),

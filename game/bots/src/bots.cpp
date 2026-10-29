@@ -36,6 +36,8 @@ constexpr std::string_view kHearingStream = "bot hearing";
 /// The stream of random numbers whether a hurt bot panics and the spot it looks at draw from, of the player
 /// it plays.
 constexpr std::string_view kPanicStream = "bot panic";
+/// The stream of random numbers how a bot dodges and the range it keeps draw from, of the player it plays.
+constexpr std::string_view kFightingStream = "bot fighting";
 /// How far the tick a bot joins at is shifted from the count of bots in the seed of its profile's draw.
 constexpr int kCountBits = 32;
 /// The teams a bot may play in, which MaintainBotQuota draws one of.
@@ -187,7 +189,8 @@ auto Bots::join(std::size_t level, std::string_view profile, std::optional<Team>
                                                   .hunt = nx::Random{player.value, kHuntStream},
                                                   .aim = nx::Random{player.value, kAimStream},
                                                   .hearing = nx::Random{player.value, kHearingStream},
-                                                  .panic = nx::Random{player.value, kPanicStream}});
+                                                  .panic = nx::Random{player.value, kPanicStream},
+                                                  .fighting = nx::Random{player.value, kFightingStream}});
     bots.push_back(player);
     nx::log::info(kLog, "{} plays at the {} level", game->nameOf(player), skill.name);
     return player;
@@ -399,6 +402,7 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
         driver->aimError = {};
         driver->trigger = {};
         driver->panicSpot.reset();
+        driver->combat = spawnedCombat(rules.combat, driver->fighting);
         driver->lifeSpawnedAt = turn.self.spawnedAt;
     }
     agent->brain.forgetAbsent(sights.present);
@@ -419,6 +423,30 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
         driver->panicSpot = spot;
     }
     return turn;
+}
+
+void Bots::fight(UserCommand& command, BotDriver& driver, PlayerIndex player, const PlayerOwnState& self,
+                 nx::ecs::Entity enemy, std::span<const PerceptionTarget> targets) {
+    const nx::game::TickTime time = game->time();
+    const auto body = std::ranges::find(targets, player, &PerceptionTarget::player);
+    const auto foe = std::ranges::find(targets, enemy, &PerceptionTarget::entity);
+    nx::invariant(body != targets.end() && foe != targets.end(), "Bots: a bot attacks alive an enemy alive");
+    const BotFightMove move = fightMove(driver.combat,
+                                        {.origin = body->origin,
+                                         .velocity = self.velocity,
+                                         .enemyOrigin = foe->origin,
+                                         .enemyView = foe->view,
+                                         .skill = rules.skillLevels[driver.skillLevel].skill,
+                                         .holdsKnife = self.heldSlot == WeaponSlot::Knife,
+                                         .maxSpeed = self.maxSpeed,
+                                         .now = time.now,
+                                         .rate = time.rate},
+                                        rules.combat, driver.fighting);
+    command.move.forward = move.forward;
+    command.move.side = move.side;
+    if (move.jumps) {
+        command.buttons.set(Button::Jump);
+    }
 }
 
 auto Bots::panic(const nx::agents::Agent& agent, BotDriver& driver, const PlayerOwnState& self)
@@ -490,6 +518,11 @@ auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision,
         driver->panicSpot.reset();
     }
     moveAlong(command, decision.intent, self.maxSpeed);
+    if (attacks) {
+        fight(command, *driver, turn.player, self, *decision.target, targets);
+    } else {
+        endFight(driver->combat);
+    }
     const bool presses = pullTrigger(driver->trigger,
                                      {.pursued = decision.target,
                                       .eye = self.eye,

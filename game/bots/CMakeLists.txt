@@ -11,6 +11,7 @@ nxAddModuleLibrary(csBots
         src/botSight.cppm
         src/botAim.cppm
         src/botTrigger.cppm
+        src/botCombat.cppm
         src/bots.cppm
         src/botCommands.cppm
     SOURCES
@@ -18,6 +19,7 @@ nxAddModuleLibrary(csBots
         src/botSight.cpp
         src/botAim.cpp
         src/botTrigger.cpp
+        src/botCombat.cpp
         src/bots.cpp
         src/botCommands.cpp
     DEPENDS

@@ -24,6 +24,10 @@ replanShare = 0.25
 # heard no nearer (OnEvent's short-term memory of a noise, 3 seconds): a step heard does not move where
 # it heard a shot, nor a farther step a nearer one, so that its way and its eyes keep still.
 shortTermMemory = 3.0
+# A bot that lost sight of the enemy it fought keeps after it, unless a shot heard within half a second
+# was made at least 100 units nearer than where it last saw it (CanHearNearbyEnemyGunfire).
+threatRecency = 0.5
+threatMargin = 100.0
 # How far from a bot the next place its hunt goes to is drawn on the mesh (the project's: a map's).
 huntRadius = 4096.0
 # How often bot_quota is looked at (MonitorBotCVars: 0.3 seconds).
@@ -226,3 +230,21 @@ far = 200.0
 farSide = 400.0
 height = 50.0
 lookedWithin = 5.0
+
+# How a bot moves as it fights (AttackState::OnEnter and OnUpdate): it dodges a fight at 80 percent of
+# its skill, twice that with a knife. Dodging, while its enemy within 2000 units faces it
+# (IsPlayerFacingMe), it holds still or slides left or right, a way other than the last drawn each 0.3 to
+# 1 second; the first of a fight a jump at a third, above half a skill, moving faster than 10 units a
+# second (IsNotMoving). Below 0.66 of skill it keeps its combat range, drawn within 325 to 425 as it
+# spawns (ResetValues), 125 either way (hysterisRange), going ahead or back.
+[combat]
+dodgeChance = 0.8
+knifeDodgeFactor = 2.0
+dodgeRange = 2000.0
+dodgeTime = { shortest = 0.3, longest = 1.0 }
+jumpSkill = 0.5
+jumpChance = 0.333
+movingSpeed = 10.0
+combatRange = { nearest = 325.0, farthest = 425.0 }
+rangeSlack = 125.0
+rangeSkill = 0.66

@@ -31,7 +31,9 @@ enum class Behavior : std::uint8_t {
 
 /// How a brain perceives and decides, a kind's settings.
 struct Rules {
-    /// How long a target unseen is remembered.
+    /// How long a target unseen is remembered: from when it was last perceived, or from when the brain last
+    /// fought (saw a target it recognized), the later, so that what it perceived while it fought waits for
+    /// it to look into once the fight is over.
     Seconds memoryLifetime{};
     /// How near a target it sees must be to be attacked.
     HammerUnits attackDistance{};
@@ -48,6 +50,10 @@ struct Rules {
     /// sensed farther (Condition Zero's short-term memory of a noise, OnEvent's 3 seconds), so that its way
     /// and its eyes do not jump at each step heard. None, every estimate moves it.
     Seconds shortTermMemory{};
+    /// How recent a high-salience estimate is a threat that draws a brain off the target it lost sight of,
+    /// and how much nearer than it it must be (CanHearNearbyEnemyGunfire: 0.5 seconds, 100 units).
+    Seconds threatRecency{};
+    HammerUnits threatMargin{};
     /// How many targets are remembered at once, the one seen longest ago forgotten first.
     std::size_t memoryLimit = 0;
     /// How long after it first sees a target it knows of it: none before then pursues it (a CS bot's
@@ -94,6 +100,8 @@ struct Memory {
     Salience salience = Salience::Certain;
     HammerUnits distance{};
     GameTime placedAt{};
+    /// Unseen, placed by a high-salience estimate within threatRecency: a threat (Rules::threatRecency).
+    bool isThreat = false;
 };
 
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
@@ -139,15 +147,16 @@ public:
     /// Forgets every target it remembers that is not among `present`, sorted: the targets there still are
     /// to perceive, so that it pursues none that died or left, and plans no way to where one was last.
     void forgetAbsent(std::span<const ecs::Entity> present);
-    /// A deterministic choice among the targets recognized: closest visible target, else freshest
-    /// remembered target. Ties retain memory order. A failed path is attempted again only when its goal or
-    /// source moves sufficiently. Observation changes smaller than replanDistance, or than replanShare of how
-    /// far the target is, update the corridor's destination without another full search; a body farther
-    /// across from its corridor than the replan distance (spawned again, teleported, pushed off the mesh)
-    /// searches its way anew from where it is. Query/path failures become Blocked decisions carrying their
-    /// NavigationError. Investigations finish at the corridor's projected destination, including an airborne
-    /// observation. With no target remembered, it moves to its goal (MoveTo), which it forgets as it arrives
-    /// (Idle).
+    /// A deterministic choice among the targets recognized: the closest it sees; else the one it pursued
+    /// last, lost from sight (AttackState chases its last known position), unless a threat (Memory::isThreat)
+    /// is threatMargin nearer than it; else the freshest remembered. Ties retain memory order. A failed path
+    /// is attempted again only when its goal or source moves sufficiently. Observation changes smaller than
+    /// replanDistance, or than replanShare of how far the target is, update the corridor's destination
+    /// without another full search; a body farther across from its corridor than the replan distance (spawned
+    /// again, teleported, pushed off the mesh) searches its way anew from where it is. Query/path failures
+    /// become Blocked decisions carrying their NavigationError. Investigations finish at the corridor's
+    /// projected destination, including an airborne observation. With no target remembered, it moves to its
+    /// goal (MoveTo), which it forgets as it arrives (Idle).
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
@@ -184,6 +193,10 @@ private:
     /// Whether another way is searched for `goal` from `feet`: with no search yet, or once it moved from
     /// where the last search aimed more than replanDistance, or replanShare of how far it is, the farther.
     [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
+    /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
+    [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
+    /// Marks which records are threats `now` (Memory::isThreat).
+    void markThreats(GameTime now, TickRate rate);
 
     Rules rules;
     std::vector<Memory> memory;
@@ -195,6 +208,10 @@ private:
     std::optional<navigation::NavigationError> pathError{};
     /// Where its body got stuck on its way to what it pursues, which its ways keep away from (giveUp).
     std::vector<navigation::AvoidedPlace> avoided{};
+    /// The target its last decision pursued, attacked or not; none for a goal or nothing.
+    std::optional<ecs::Entity> focus{};
+    /// When it last saw a target it recognized, which its memory's lifetime counts from too.
+    std::optional<GameTime> foughtAt{};
 };
 
 /// A time drawn at random, from its shortest to its longest.

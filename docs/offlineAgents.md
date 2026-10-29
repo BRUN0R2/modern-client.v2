@@ -102,7 +102,9 @@ pushed off the mesh, searches its way anew from where it is. A zombie hears ever
 within the ranges of its `hearing` table, roughly where it was made (`cs::heardBy`), and goes to look,
 where it placed it holding 3 seconds against a vaguer or farther noise (`shortTermMemory`); a far goal
 that moves less than `replanShare` of how far it is keeps its way;
-a player its body touches it feels where it is (`cs::touchedBy`).
+a player its body touches it feels where it is (`cs::touchedBy`). What it perceived while it chased a
+player it saw waits for the chase to be over, and losing sight of that player it keeps after it but for a
+shot heard much nearer.
 Each tick the bodies perceive one by one, then their brains decide together in
 batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at
 its body's index, so that the commands are the same with any number of workers. Agent commands and

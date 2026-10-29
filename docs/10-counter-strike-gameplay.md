@@ -847,6 +847,18 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   and its eyes do not jump at each step heard; a body it touches it is sure of at once. And a goal that
   moves less than a quarter of how far it is (`replanShare`), more than `replanDistance`, keeps its way,
   the corridor's end slid to it along the mesh, as DetourCrowd adjusts a target without a search.
+- It fights as Condition Zero's bot does (`AttackState::OnEnter`, `OnUpdate`; `cs.bots:botCombat`, the
+  `combat` table of `bots.toml`): as a fight begins it dodges it at 80 percent of its skill, twice that
+  with a knife. Dodging, while its enemy within 2000 units faces it (`IsPlayerFacingMe`), it holds still
+  or slides left or right, a way other than the last drawn each 0.3 to 1 second, the first of a fight a
+  jump at a third above half a skill while it moves (`IsNotMoving`'s 10 units a second); below 0.66 of
+  skill it keeps its combat range, drawn within 325 to 425 as it spawns, 125 either way, going ahead or
+  back. It crouches and holds, turns coward or retreats once the profiles' aggression comes in.
+- What it perceives while it fights waits for the fight to be over: its memory's 10 seconds count from
+  the last moment it saw an enemy too (`nx::agents::Rules::memoryLifetime`), so that it looks into a step
+  it heard mid-fight once the fight is done. Losing sight of the enemy it fought, it keeps after it to
+  where it saw it last (AttackState's chase), but a shot heard within half a second at least 100 units
+  nearer draws it off (`CanHearNearbyEnemyGunfire`; `threatRecency`, `threatMargin`).
 - It feels an enemy its body touches where it is (`cs::touchedBy`: their boxes within a unit of each
   other), and remembers it as it remembers one it heard. Hurt by an enemy, it knows only the side the
   attack came from, as a player's damage indicator shows it (`cs::PlayerOwnState::hurtFrom`), and looks

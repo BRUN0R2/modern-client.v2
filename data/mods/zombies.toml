@@ -13,6 +13,10 @@ replanDistance = 24.0
 # zombie placed a player holds 3 seconds against a vaguer or farther noise of it, as a bot's does.
 replanShare = 0.25
 shortTermMemory = 3.0
+# A zombie that lost sight of the player it chased keeps after it, unless a shot heard within half a
+# second was made at least 100 units nearer, as a bot does.
+threatRecency = 0.5
+threatMargin = 100.0
 memoryLimit = 32
 perceptionBudget = 8
 spawnBatchLimit = 64
