@@ -105,6 +105,7 @@ if (!lightmapAtlas) {
 | Item | Decision |
 |------|----------|
 | Minimum version | Vulkan **1.3** (dynamic rendering, synchronization2, timeline semaphores, maintenance4) |
+| Required features | Shader draw parameters, cube arrays and dual-source blending (the enhanced look's decals, §9.2), which every Direct3D 11 card has; anisotropic filtering when the GPU has it |
 | Loader | `volk` |
 | Memory | Vulkan Memory Allocator (VMA) |
 | Frames in flight | 2 (default) or 3, configurable (`r_frames_in_flight`) |
@@ -345,7 +346,8 @@ so that decals past a lowered limit stay until their slots come back into the ri
 no more. The world's decals are drawn right after the world's
 faces, oldest first so that the newest lies over the others, each texel lit as the face is there and
 blended over the lit face as opaque as its alpha: the original draws them over the face's texture
-before it multiplies both by the lightmap, which comes out the same. Their depth is tested against
+before it multiplies both by the lightmap, which comes out the same (in the enhanced look, as the
+original blends display colors, §9.2). Their depth is tested against
 the faces' pulled toward the eye by the original's polygon offset (2 units of the depth's least
 step, plus the slope), and not written. A brush entity's decals are drawn with it, where it is drawn,
 on its faces drawn that frame: a normal one's after all of its faces, as one batch
@@ -591,7 +593,16 @@ constant image's light, and the shoulder scales a color's channels by one gain f
 that a bright gold stays gold. The additive effects (the weapon's muzzle flashes) are drawn apart, to
 a layer of display colors over the scene's depths, which the tone pass adds over the mapped scene,
 each channel stopping at white, as the original adds them, and whose own light the bloom spreads
-about them, as about any light. The colors are encoded for the screen once, before the HUD
+about them, as about any light. The decals keep the original's blend of display colors: their images
+stay its display colors, mipmapped as it mipmaps them, and a texel of color c as opaque as a, which
+the original blends over a face's display color w as c a + w (1 - a), gives the blend two colors
+(dual-source blending, `rhi::BlendFactor::SecondSourceColor`): the light it adds, (c a)^2.2, times the
+face's light when it is lit, and the share it keeps of the light under it, (1 - a + c a)^2.2 -
+(c a)^2.2, channel by channel. That is the original's blend as light exactly over a black face, a
+white one, and for a black texel over any face, and a little darker between them (the game's blood,
+by 2 of 255 on average on its red channel, 16 at most); blended as light with their alpha, a mark half
+opaque kept about twice the light of the face that the original keeps, and bullet holes and blood
+faded. The colors are encoded for the screen once, before the HUD
 (`shaders/colorEncoding.slang` holds the display's gamma every shader converts by). The enhanced
 look's model textures are filtered anisotropically, by up to 16 texels as the device allows; the
 original's look keeps its own filtering.
