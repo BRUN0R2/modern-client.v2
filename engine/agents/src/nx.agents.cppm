@@ -65,7 +65,8 @@ struct Memory {
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
 /// to attack.
 struct Intent {
-    Vec3 direction{}; ///< A unit direction on the ground plane, or zero.
+    Vec3 direction{};        ///< A unit direction on the ground plane, or zero.
+    float speedShare = 1.0F; ///< How much of its full speed it moves at along direction, more than 0 to 1.
     std::optional<Vec3> lookAt{};
     bool attacks = false;
 };
@@ -100,6 +101,12 @@ public:
     /// With no target remembered, it moves to its goal (MoveTo), which it forgets as it arrives
     /// (Idle).
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
+    /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
+    /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
+    /// `velocity`, at `maxSpeed` at most. It waits, its direction none, when no way on is worth a tenth of
+    /// its speed; else it goes the way it steers to, as fast as that.
+    void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
+               std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
     /// Gives it `goal`, a point of the mesh to move to when it has no target to pursue; none forgets it.
     inline void setGoal(std::optional<Vec3> goal) noexcept { givenGoal = goal; }
     /// The goal it was given and has not reached yet.
@@ -122,10 +129,23 @@ private:
     std::optional<navigation::NavigationError> pathError{};
 };
 
-/// A brain to decide with, and where its body's feet are this tick (Deciders::decide).
+/// A body agents steer around (Deciders::decide): the entity it is, where its feet are, how it moves, and
+/// how far it reaches across from its middle.
+struct Body {
+    ecs::Entity entity{};
+    Vec3 feet{};
+    Vec3 velocity{};
+    HammerUnits radius{};
+};
+
+/// A brain to decide with, and its body this tick (Deciders::decide): where its feet are, how it moves,
+/// how fast it may run, and the entity it is, none for a body it steers no other body around.
 struct DecisionRequest {
     Brain* brain = nullptr;
     Vec3 feet{};
+    Vec3 velocity{};
+    UnitsPerSecond maxSpeed{};
+    std::optional<ecs::Entity> body{};
 };
 
 /// The fewest brains a batch of Deciders decides: a decision costs some microseconds on a large map
@@ -142,12 +162,14 @@ public:
     /// Deciders on `mesh`, which must outlive them and the corridors of the brains they decide for.
     explicit Deciders(const navigation::NavigationMesh& mesh) noexcept;
 
-    /// Each request's brain decides at its feet (Brain::decide), its decision written at its index of
-    /// `decisions`, which must be as long, in jobs of `jobs` of the priority Critical, which the calling
-    /// thread runs too while it waits for them. The brains must be distinct, and none of them used by
-    /// another thread meanwhile.
+    /// Each request's brain decides at its feet (Brain::decide), then steers its decision among `bodies`,
+    /// those of the tick, when it moves and its request has a speed (Brain::steer): the bodies within the
+    /// steering range of it across and a standing height up or down, but its own, the nearest first, ties
+    /// by entity. Its decision is written at its index of `decisions`, which must be as long, in jobs of
+    /// `jobs` of the priority Critical, which the calling thread runs too while it waits for them. The
+    /// brains must be distinct, and none of them used by another thread meanwhile.
     void decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> requests,
-                std::span<Decision> decisions);
+                std::span<Decision> decisions, std::span<const Body> bodies = {});
 
 private:
     const navigation::NavigationMesh* decidedOn;

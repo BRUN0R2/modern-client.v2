@@ -147,6 +147,31 @@ TEST(CorridorTest, ItsWayIsTheWayFoundUntilTheAgentMovesThenStartsWhereItIs) {
     EXPECT_EQ(left.back(), corridor->target());
 }
 
+TEST(CorridorTest, ItSteersAsItWantsWithNothingInTheWayAndAroundABodyStandingInIt) {
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    auto corridor =
+        Corridor::plan(query, {.from = {.x = 100.0F, .y = 256.0F}, .to = {.x = 900.0F, .y = 256.0F}});
+    ASSERT_TRUE(corridor.has_value());
+    const Vec3 desired{.x = kSpeed.value()};
+    const Vec3 free = corridor->steer(query, {.velocity = desired, .desired = desired, .maxSpeed = kSpeed});
+    EXPECT_GT(free.x, 0.9F * kSpeed.value()) << "on its way, nothing about it";
+    EXPECT_LT(std::abs(free.y), 0.1F * kSpeed.value());
+
+    const std::array standing{nx::navigation::SteeringBody{.feet = corridor->position() + Vec3{.x = 48.0F},
+                                                           .radius = nx::HammerUnits{16.0F}}};
+    const Vec3 around = corridor->steer(
+        query, {.velocity = desired, .desired = desired, .maxSpeed = kSpeed, .bodies = standing});
+    EXPECT_GT(std::abs(around.y), 0.2F * kSpeed.value()) << "to a side of the body ahead";
+    EXPECT_EQ(around,
+              corridor->steer(
+                  query, {.velocity = desired, .desired = desired, .maxSpeed = kSpeed, .bodies = standing}))
+        << "the same for the same inputs";
+}
+
 TEST(CorridorTest, NoCorridorJoinsAPointOffTheMesh) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

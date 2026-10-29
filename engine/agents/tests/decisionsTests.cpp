@@ -117,6 +117,58 @@ TEST(AgentDeciders, DecideAsEachBrainAloneWouldWithAnyNumberOfWorkers) {
     }
 }
 
+TEST(AgentDeciders, TwoAgentsMeetingHeadOnInAPassageSteerPastEachOther) {
+    // A passage 160 units wide: room for two bodies of 32 side by side, not for one to walk through the
+    // other.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -80}, {.x = 512, .y = 80}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr nx::HammerUnits kRadius{16.0F};
+    constexpr float kTick = 0.01F;
+    constexpr float kArrived = 24.0F;
+    const std::array goals{nx::Vec3{.x = 400}, nx::Vec3{.x = -400}};
+    std::array feet{nx::Vec3{.x = -400}, nx::Vec3{.x = 400}};
+    std::array<nx::Vec3, 2> velocities{};
+    const std::array entities{world.spawn(), world.spawn()};
+    std::vector<nx::agents::Brain> brains;
+    for (const nx::Vec3 goal : goals) {
+        brains.emplace_back(rules()).setGoal(goal);
+    }
+    float closest = std::numeric_limits<float>::max();
+    for (int tick = 0; tick < 600; ++tick) {
+        std::vector<nx::agents::DecisionRequest> requests;
+        std::vector<nx::agents::Body> bodies;
+        for (std::size_t agent = 0; agent < brains.size(); ++agent) {
+            requests.push_back({.brain = &brains[agent],
+                                .feet = feet[agent],
+                                .velocity = velocities[agent],
+                                .maxSpeed = kSpeed,
+                                .body = entities[agent]});
+            bodies.push_back({.entity = entities[agent],
+                              .feet = feet[agent],
+                              .velocity = velocities[agent],
+                              .radius = kRadius});
+        }
+        std::vector<nx::agents::Decision> decisions(brains.size());
+        deciders.decide(*jobs, requests, decisions, bodies);
+        for (std::size_t agent = 0; agent < brains.size(); ++agent) {
+            const nx::agents::Intent& intent = decisions[agent].intent;
+            velocities[agent] = intent.direction * (kSpeed.value() * intent.speedShare);
+            feet[agent] += velocities[agent] * kTick;
+        }
+        closest = std::min(closest, nx::test::distanceAcross(feet[0], feet[1]));
+    }
+    EXPECT_GE(closest, 2.0F * kRadius.value() - 4.0F) << "never through each other";
+    for (std::size_t agent = 0; agent < brains.size(); ++agent) {
+        EXPECT_LT(nx::test::distanceAcross(feet[agent], goals[agent]), kArrived)
+            << "agent " << agent << " got by";
+    }
+}
+
 TEST(AgentDeciders, FewerBrainsThanABatchAndNoneDecideToo) {
     const auto mesh = boxesMesh();
     const std::size_t few = nx::agents::kSmallestBatch - 1;

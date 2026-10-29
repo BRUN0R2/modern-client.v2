@@ -11,6 +11,15 @@ import nx.navigation;
 namespace nx::agents {
 namespace {
 constexpr std::size_t kSteeringCorners = 4;
+/// The least share of its full speed a steered way is worth going: below it, the agent waits.
+constexpr float kLeastSteeredSpeedShare = 0.1F;
+/// How far back from the corner after the next an agent aims, in shares of how far the next is: as
+/// DetourCrowd anticipates a turn (calcSmoothSteerDirection), so that it takes a corner wide.
+constexpr float kTurnAnticipation = 0.5F;
+/// `vector` across the ground, its height left out.
+[[nodiscard]] auto acrossOf(Vec3 vector) noexcept -> Vec3 {
+    return Vec3{.x = vector.x, .y = vector.y};
+}
 [[nodiscard]] auto groundDistance(Vec3 first, Vec3 second) noexcept -> float {
     return std::hypot(first.x - second.x, first.y - second.y);
 }
@@ -128,15 +137,40 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         decision.behavior = Behavior::Idle;
         return decision;
     }
+    // Toward the next corner farther than arrival, the turn after it anticipated (calcSmoothSteerDirection).
     const std::vector<Vec3> corners = corridor->corners(query, kSteeringCorners);
-    for (const Vec3 corner : corners) {
-        if (groundDistance(feet, corner) > rules.arrivalDistance.value()) {
-            const Vec3 direction{.x = corner.x - feet.x, .y = corner.y - feet.y};
-            decision.intent.direction = direction / length(direction);
-            break;
-        }
+    const auto next = std::ranges::find_if(corners, [this, feet](Vec3 corner) {
+        return groundDistance(feet, corner) > rules.arrivalDistance.value();
+    });
+    if (next != corners.end()) {
+        const Vec3 toNext = acrossOf(*next - feet);
+        const Vec3 toAfter = acrossOf(*std::ranges::next(next, 1, corners.end() - 1) - feet);
+        const float afterLength = length(toAfter);
+        const Vec3 anticipated = afterLength > 0.0F
+                                     ? toNext - (toAfter * (length(toNext) * kTurnAnticipation / afterLength))
+                                     : toNext;
+        const Vec3 direction = length(anticipated) > 0.0F ? anticipated : toNext;
+        decision.intent.direction = direction / length(direction);
     }
     return decision;
+}
+
+void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
+                  std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query) {
+    if (!corridor || length(intent.direction) == 0.0F || maxSpeed <= UnitsPerSecond{}) {
+        return;
+    }
+    const Vec3 steered = acrossOf(corridor->steer(query, {.velocity = velocity,
+                                                          .desired = intent.direction * maxSpeed.value(),
+                                                          .maxSpeed = maxSpeed,
+                                                          .bodies = nearby}));
+    const float speed = length(steered);
+    if (speed < kLeastSteeredSpeedShare * maxSpeed.value()) {
+        intent.direction = {};
+        return;
+    }
+    intent.direction = steered / speed;
+    intent.speedShare = std::min(speed / maxSpeed.value(), 1.0F);
 }
 
 void Brain::appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const {

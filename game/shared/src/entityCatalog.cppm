@@ -107,6 +107,7 @@ struct EntityState {
     nx::ecs::Entity entity{};
     EntityTypeIndex type{};
     nx::Vec3 origin{};
+    nx::Vec3 velocity{};
     nx::EulerAngles angles{};
     Animation animation{};
     nx::HitPoints health{};

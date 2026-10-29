@@ -57,6 +57,15 @@ struct PerceptionTarget {
     bool isDucked = false;
 };
 
+/// A living body that moves among the others, which agents steer around: its entity, where its feet are,
+/// how it moves, and how far its box reaches across from its middle.
+struct MovingBody {
+    nx::ecs::Entity entity{};
+    nx::Vec3 feet{};
+    nx::Vec3 velocity{};
+    nx::HammerUnits radius{};
+};
+
 /// What the game tells its tools (nav_draw) of a body: whether it lives, and the team of the player whose
 /// body it is, none for a body createEntity made.
 struct BodyStatus {
@@ -191,6 +200,8 @@ public:
     [[nodiscard]] auto removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError>;
     /// Body states, including corpses, ordered by their complete generational handles.
     [[nodiscard]] auto entities() -> std::vector<EntityState>;
+    /// The living bodies, players' and createEntity's, solid as boxes: what agents steer around.
+    [[nodiscard]] auto movingBodies() -> std::vector<MovingBody>;
     /// Living player bodies a mod may consider; these are candidates, not already perceived facts.
     /// Feet come from each active collision hull, independently of its current eye height.
     [[nodiscard]] auto perceptionTargets() const -> std::vector<PerceptionTarget>;

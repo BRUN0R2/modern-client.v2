@@ -265,11 +265,22 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         agent.brain.forgetAbsent(present);
         agent.brain.perceive(seen, time.now, time.rate);
         turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
-        requests.push_back({.brain = &agent.brain, .feet = feetOf(found->origin)});
+        requests.push_back({.brain = &agent.brain,
+                            .feet = feetOf(found->origin),
+                            .velocity = found->velocity,
+                            .maxSpeed = settings.body.speed,
+                            .body = entity});
     }
+    // The bodies the horde steers around, players' and its own.
+    const std::vector<nx::agents::Body> steeredAround =
+        game.movingBodies() | std::views::transform([](const cs::MovingBody& body) {
+            return nx::agents::Body{
+                .entity = body.entity, .feet = body.feet, .velocity = body.velocity, .radius = body.radius};
+        }) |
+        std::ranges::to<std::vector>();
     // What a body perceives does not depend on what another decides, nor a decision on another's.
     std::vector<nx::agents::Decision> decisions(requests.size());
-    deciders.decide(*jobs, requests, decisions);
+    deciders.decide(*jobs, requests, decisions, steeredAround);
     std::vector<cs::EntityCommand> commands;
     commands.reserve(turns.size());
     for (std::size_t index = 0; index < turns.size(); ++index) {
@@ -294,7 +305,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             aim = *decision.intent.lookAt - eye;
             command.buttons.set(cs::Button::Attack);
         } else if (nx::length(decision.intent.direction) > 0.0F) {
-            command.move.forward = settings.body.speed;
+            command.move.forward = settings.body.speed * decision.intent.speedShare;
         }
         if (nx::length(aim) > 0.0F) {
             command.viewAngles.yaw =

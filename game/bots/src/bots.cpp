@@ -54,16 +54,28 @@ constexpr std::uint32_t kPlayingTeams = 2;
     return self.view;
 }
 
-/// Moves `command`, its view turned, the way `intent` moves at `maxSpeed`, its full speed (GetMoveSpeed
-/// of a running bot: pev->maxspeed).
+/// Moves `command`, its view turned, the way `intent` moves at its share of `maxSpeed`, its full speed
+/// (GetMoveSpeed of a running bot: pev->maxspeed).
 void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::UnitsPerSecond maxSpeed) noexcept {
     const nx::Vec3 way = intent.direction;
     if (nx::length(way) == 0.0F) {
         return;
     }
     const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{.yaw = command.viewAngles.yaw});
-    command.move.forward = maxSpeed * nx::dot(way, axes.forward);
-    command.move.side = maxSpeed * nx::dot(way, axes.right);
+    const nx::UnitsPerSecond speed = maxSpeed * intent.speedShare;
+    command.move.forward = speed * nx::dot(way, axes.forward);
+    command.move.side = speed * nx::dot(way, axes.right);
+}
+
+/// `moving`, the game's, as the agents steer around them.
+[[nodiscard]] auto bodiesOf(std::span<const MovingBody> moving) -> std::vector<nx::agents::Body> {
+    return moving | std::views::transform([](const MovingBody& body) {
+               return nx::agents::Body{.entity = body.entity,
+                                       .feet = body.feet,
+                                       .velocity = body.velocity,
+                                       .radius = body.radius};
+           }) |
+           std::ranges::to<std::vector>();
 }
 
 /// A profile of the bots' rules: the index of its level of skill and its name.
@@ -254,18 +266,25 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
     // Nothing moves while the bots perceive: what is solid to their sights is gathered once.
     const nx::game::Solids solids = game->sightSolids();
     const Sights sights{.targets = targets, .present = present, .solids = solids};
+    // The bodies the bots steer around, players' and others'.
+    const std::vector<nx::agents::Body> bodies = bodiesOf(game->movingBodies());
     std::vector<Turn> turns;
     turns.reserve(bots.size());
     std::vector<nx::agents::DecisionRequest> requests;
     for (const PlayerIndex bot : bots) {
         Turn& turn = turns.emplace_back(beginTurn(bot, sights));
         if (turn.self.isAlive) {
-            requests.push_back({.brain = &turn.agent->brain, .feet = turn.self.feet});
+            const auto self = std::ranges::find(targets, bot, &PerceptionTarget::player);
+            requests.push_back({.brain = &turn.agent->brain,
+                                .feet = turn.self.feet,
+                                .velocity = turn.self.velocity,
+                                .maxSpeed = turn.self.maxSpeed,
+                                .body = self != targets.end() ? std::optional{self->entity} : std::nullopt});
         }
     }
     // What a bot perceives does not depend on what another decides, nor a decision on another's.
     std::vector<nx::agents::Decision> decisions(requests.size());
-    deciders.decide(*jobs, requests, decisions);
+    deciders.decide(*jobs, requests, decisions, bodies);
     std::vector<PlayerCommand> made;
     made.reserve(turns.size());
     auto decision = decisions.begin();

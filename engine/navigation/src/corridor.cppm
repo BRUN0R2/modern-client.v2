@@ -3,7 +3,9 @@
 
 /// A corridor (docs/adr/0023-navigation.md): the polygons of a way an agent follows, which follow the
 /// agent as it moves, and its target as that moves, instead of a search again; the next corners it
-/// steers to along them, and the whole way left, which nav_draw draws. Detour's path corridor.
+/// steers to along them, and the whole way left, which nav_draw draws; and how it steers among the bodies
+/// and the walls near it (ADR-0024's local avoidance). Detour's path corridor, local boundary and
+/// obstacle avoidance.
 export module nx.navigation:corridor;
 
 import std;
@@ -13,6 +15,28 @@ import :mesh;
 import :query;
 
 export namespace nx::navigation {
+
+/// How far about it an agent looks for the walls and the bodies it steers around, in its radii, and the
+/// most bodies it weighs, the nearest: DetourCrowd's sample's (its collision query range, its neighbours).
+inline constexpr float kSteeringRangeRadii = 12.0F;
+inline constexpr std::size_t kMostSteeringBodies = 6;
+
+/// A body an agent steers around: where its feet are, how it moves, and how far it reaches across from its
+/// middle.
+struct SteeringBody {
+    Vec3 feet{};
+    Vec3 velocity{};
+    HammerUnits radius{};
+};
+
+/// What an agent steering along its corridor asks (Corridor::steer): how it moves, the velocity it wants,
+/// how fast it may go, and the bodies near it, the nearest first.
+struct SteeringRequest {
+    Vec3 velocity{};
+    Vec3 desired{};
+    UnitsPerSecond maxSpeed{};
+    std::span<const SteeringBody> bodies{};
+};
 
 /// The polygons an agent follows to its target, on the mesh of the queries it is given, which must be
 /// the mesh of the query that planned it.
@@ -45,6 +69,14 @@ public:
     /// The next corners, at most `count`, the agent steers to along the corridor, the target last when it
     /// is among them.
     [[nodiscard]] auto corners(NavigationQuery& query, std::size_t count) -> std::vector<Vec3>;
+
+    /// The velocity the agent takes, near request.desired, that meets neither request.bodies, the first
+    /// kMostSteeringBodies of them, nor the walls and ledges of the mesh about it within the time ahead it
+    /// looks: velocities about its own sampled as DetourCrowd samples them (dtObstacleAvoidanceQuery), each
+    /// body a circle moving at its velocity, each wall within kSteeringRangeRadii of its radii that it does
+    /// not have behind it a segment (dtLocalBoundary, found again as it moves a quarter of that). Across
+    /// the ground; the same for the same inputs.
+    [[nodiscard]] auto steer(NavigationQuery& query, const SteeringRequest& request) -> Vec3;
     /// Appends to `points` the way left along the corridor, straightened as findPath straightens a way:
     /// from where the agent is to the target, both among its points. It allocates nothing once `points`
     /// and the query hold the longest way.

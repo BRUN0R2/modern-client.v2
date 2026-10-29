@@ -89,7 +89,10 @@ on it while it moves along its corridor, as arrows in the colors of its team and
 again once a tick in batches in jobs; a dead body's agent, which decides nothing, is not drawn
 (`cs::Game::bodyStatusOf`). `nav_generate` builds the mesh
 again, what the cache keeps left aside, and plays the map again on it, as Condition Zero restarts
-the game once it analyzed a map. Each tick the bodies perceive one by one, then their brains decide together in
+the game once it analyzed a map. A brain's decision that moves is steered along its corridor among the
+six nearest living bodies, players' and zombies', and the walls about it (`nx::agents::Brain::steer`,
+`nx::navigation::Corridor::steer`: Detour's obstacle avoidance), its turns taken wide, waiting when it
+must. Each tick the bodies perceive one by one, then their brains decide together in
 batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at
 its body's index, so that the commands are the same with any number of workers. Agent commands and
 body updates have deterministic order. The session removes the

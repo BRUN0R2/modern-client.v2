@@ -807,8 +807,11 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
 - It chases what it no longer sees to where it saw it, and, with nothing to pursue, hunts a place of
   the mesh drawn within `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its
   corridor, standing (the mesh leaves out what only a ducked player passes), its view level ahead
-  along its way. Spawning again, it starts with a new brain, its view still, its aim and its trigger
-  anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
+  along its way. It steers among the other players and the walls as it goes, its next turn taken wide,
+  the velocity it runs at one that meets no body nor wall in the time ahead, slower or waiting when it
+  must ([ADR-0024](adr/0024-agents.md)'s local avoidance, `nx::navigation::Corridor::steer`), so that two
+  bots meeting in a passage pass each other. Spawning again, it starts with a new brain, its view still,
+  its aim and its trigger anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.
 - The spot of its enemy it aims at by its skill and the parts it sees, the knife's,
