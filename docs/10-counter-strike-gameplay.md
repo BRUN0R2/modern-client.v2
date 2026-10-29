@@ -826,7 +826,9 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   (`nx::navigation::PathRequest::avoided`), so that it goes around a jammed passage when there is
   another way, and through it when there is not; stuck once more on its way, it gives up where it goes
   and hunts another place (where the original drops its goal at once), while it keeps away from the
-  last place it got stuck at on its way to an enemy it chases. Spawning again, it starts with a new brain, its watch,
+  last place it got stuck at on its way to an enemy it chases. A body farther across from its corridor than
+  `replanDistance` (teleported, pushed off the mesh) searches its way anew from where it is. Spawning
+  again, killed or alive as a round starts (`SpawnBot`'s `ResetValues`), it starts with a new brain, its watch,
   its view still, its aim and its trigger anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.

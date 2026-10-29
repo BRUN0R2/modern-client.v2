@@ -36,14 +36,14 @@ enum class BotJoinError : std::uint8_t {
 };
 
 /// What drives a bot's player besides its brain, a component of its body: the number of its last
-/// command, the profile it plays as, its name and its level of skill (of BotRules::skillLevels), whether
-/// it was alive at its last command, how its view turns, how its aim errs, its trigger, and the streams
-/// its hunt and its aim draw from.
+/// command, the profile it plays as, its name and its level of skill (of BotRules::skillLevels), when the
+/// life it played its last living command in began (PlayerOwnState::spawnedAt), how its view turns, how
+/// its aim errs, its trigger, and the streams its hunt and its aim draw from.
 struct BotDriver {
     CommandNumber lastCommand{};
     std::string profile{};
     std::size_t skillLevel = 0;
-    bool wasAlive = false;
+    std::optional<nx::GameTime> lifeSpawnedAt{};
     BotViewTurn turn{};
     BotAimError aimError{};
     BotTrigger trigger{};
@@ -110,8 +110,9 @@ public:
     /// moves along its corridor as it steers, wiggling and jumping while it is stuck (BotRules::stuck);
     /// and presses its attack as its trigger lets it (pullTrigger), its level's attack delay after it took
     /// its enemy on. With nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius,
-    /// another when it gives the last up, stuck too long. Spawning again, it starts with a new brain, its
-    /// watch, its view still, its aim and its trigger anew.
+    /// another when it gives the last up, stuck too long. Spawning again, killed or alive at a round's
+    /// start (SpawnBot's ResetValues), it starts with a new brain, its watch, its view still, its aim and
+    /// its trigger anew.
     [[nodiscard]] auto commands() -> std::vector<PlayerCommand>;
 
     /// How many bots are in the game.

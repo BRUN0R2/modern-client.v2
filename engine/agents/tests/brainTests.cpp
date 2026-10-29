@@ -222,6 +222,26 @@ TEST(AgentBrain, GivingUpItSearchesAnotherWayAroundWhereItGotStuckThenGivesUpIts
     EXPECT_TRUE(std::ranges::all_of(wayFrom(from), [](nx::Vec3 point) { return point.y < 256; }));
 }
 
+TEST(AgentBrain, ABodyAwayFromItsCorridorSearchesItsWayAnewFromWhereItIs) {
+    const auto mesh = twoWaysMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 goal{.x = 896, .y = 128};
+    brain.setGoal(goal);
+    ASSERT_EQ(brain.decide({.x = 512, .y = 128}, query).behavior, nx::agents::Behavior::MoveTo);
+    // Spawned again across the hole from where its corridor is, alive all along: its corridor cannot
+    // follow it there along the mesh.
+    const nx::Vec3 elsewhere{.x = 512, .y = 640};
+    const nx::agents::Decision decision = brain.decide(elsewhere, query);
+    EXPECT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_FALSE(way.empty());
+    EXPECT_LT(nx::test::distanceAcross(way.front(), elsewhere), 1.0F) << "from where it is";
+    EXPECT_LT(nx::test::distanceAcross(way.back(), goal), 1.0F);
+    EXPECT_GT(decision.intent.direction.x, 0.0F) << "along the far corridor, not at the hole";
+}
+
 TEST(AgentBrain, GivingUpWithNoWayAroundItKeepsTheOnlyWayAndThenTheTargetItInvestigatesIsForgotten) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

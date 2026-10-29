@@ -379,18 +379,18 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
     turn.command = UserCommand{
         .number = driver->lastCommand, .duration = nx::tickLengthOf(time.rate), .viewAngles = turn.self.view};
     if (!turn.self.isAlive) {
-        driver->wasAlive = false;
         return turn;
     }
-    if (!driver->wasAlive) {
-        // Spawned again: what it knew, where it went, how it turned, aimed and fired are of its last life.
+    if (driver->lifeSpawnedAt != turn.self.spawnedAt) {
+        // Spawned again, killed or alive at a round's start (SpawnBot's ResetValues): what it knew, where it
+        // went, how it turned, aimed and fired are of its last life.
         const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
         agent->brain = nx::agents::Brain{brainRulesOf(rules, level.reactionTime)};
         agent->stuck.reset();
         driver->turn = {};
         driver->aimError = {};
         driver->trigger = {};
-        driver->wasAlive = true;
+        driver->lifeSpawnedAt = turn.self.spawnedAt;
     }
     agent->brain.forgetAbsent(sights.present);
     agent->brain.perceive(perceive(player, *agent, turn.self, sights), time.now, time.rate);
