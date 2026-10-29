@@ -17,6 +17,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.jobs;
+import nx.ecs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
