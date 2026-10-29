@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// A corridor (docs/adr/0023-navigation.md): the polygons of a way an agent follows, which follow the
-/// agent as it moves, and its target as that moves, instead of a search again; and the next corners it
-/// steers to along them. Detour's path corridor.
+/// agent as it moves, and its target as that moves, instead of a search again; the next corners it
+/// steers to along them, and the whole way left, which nav_draw draws. Detour's path corridor.
 export module nx.navigation:corridor;
 
 import std;
@@ -45,6 +45,10 @@ public:
     /// The next corners, at most `count`, the agent steers to along the corridor, the target last when it
     /// is among them.
     [[nodiscard]] auto corners(NavigationQuery& query, std::size_t count) -> std::vector<Vec3>;
+    /// Appends to `points` the way left along the corridor, straightened as findPath straightens a way:
+    /// from where the agent is to the target, both among its points. It allocates nothing once `points`
+    /// and the query hold the longest way.
+    void appendWay(NavigationQuery& query, std::vector<Vec3>& points) const;
 
 private:
     struct Detour; // Detour's path corridor

@@ -182,6 +182,21 @@ first, then the farthest middle of its bounds first, at one distance by mode (`R
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
 of its own.
 
+**Today** (`nx.render:overlay`, `shaders/overlay.slang`): after the particles and before the view's own
+model, `OverlayRenderer` draws what the tools show over the scene, `nav_draw`'s
+([ADR-0023](adr/0023-navigation.md)), behind what the scene drew in front, whose depth it tests and
+never writes. A mesh it keeps in GPU memory (`keep`, outside a render pass, once), drawn with no upload
+in a frame that shows it: triangles and lines (`PrimitiveTopology::LineList`, a pixel wide) in the
+map's space, each vertex of its own display color, blended by its alpha. Arrows along ways, as the
+original's beam draws `sprites/arrow1.spr` (`TE_BEAMPOINTS`; `R_DrawSegs` as Xash3D-FWGS reconstructs
+it): for each stretch, 48 bytes of a storage buffer, one instance whose six vertices the shader places
+(no vertex buffer) on a band facing the view about the stretch; on it an arrow every spacing back from
+the stretch's end, pointing to it, the sprite's shape drawn by the shader, smoothed over a pixel (a head
+brightest at its tip, then a shaft that fades to its tail, each of its own color), added to what is
+there. In the enhanced look their colors are made linear light as the others' are, times each vertex's
+or stretch's brightness, so that what is brighter than white glows through the bloom; the legacy look
+draws their display colors as they are.
+
 **Today** (`nx.render:screen`, the `Hud` pass): `ScreenRenderer` draws rectangles in pixels of the
 target from its top left, over everything the frame drew, its depth neither tested nor written: a
 part of a picture stretched over a rectangle, times a color, or a color alone, in the order given,
@@ -751,6 +766,15 @@ Xash3D-FWGS project records from the original for its tests.
 ## 13. Debugging tools
 
 - RenderDoc integration (`r_capture`).
+- `nav_draw`: the agents' navigation mesh of the map played, its polygons see-through in the color of
+  their kind of area (floor green, the room only crouching fits yellow, under water blue) and their
+  edges, and the way each living bot and zombie follows on it while it moves along its corridor, as
+  arrows pointing to where it goes, the size and spacing of a plugin's beam of `sprites/arrow1.spr`
+  (12.8 units across, one every 50, 16 above the way): their shafts in the color of its team
+  (counter-terrorists blue, terrorists red, zombies purple), their heads in that of why it goes there
+  (its route cyan, where it saw an enemy last amber, an enemy it sees white). The ways are found again
+  once a tick, not once a frame, in batches in jobs. In the enhanced look the edges glow a little and
+  the arrows brightly (`nx.render:overlay`, [ADR-0023](adr/0023-navigation.md)).
 - `r_speeds` (draws, triangles, time per pass), `r_drawentities`, `r_wireframe`,
   `r_showtris`, `r_lightmap`, `r_fullbright`, `r_drawviewmodel` and overdraw visualization.
 - ImGui overlay with the frame's render graph (passes, resources, aliasing).

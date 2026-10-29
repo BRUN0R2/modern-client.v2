@@ -516,12 +516,23 @@ struct VertexInput {
 
 [[nodiscard]] auto inputAssemblyOf(PrimitiveTopology topology) noexcept
     -> VkPipelineInputAssemblyStateCreateInfo {
+    VkPrimitiveTopology vulkanTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    switch (topology) {
+    case PrimitiveTopology::TriangleList:
+        vulkanTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        break;
+    case PrimitiveTopology::TriangleStrip:
+        vulkanTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+        break;
+    case PrimitiveTopology::LineList:
+        vulkanTopology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+        break;
+    }
     return VkPipelineInputAssemblyStateCreateInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .topology = topology == PrimitiveTopology::TriangleList ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-                                                                : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+        .topology = vulkanTopology,
         .primitiveRestartEnable = VK_FALSE};
 }
 

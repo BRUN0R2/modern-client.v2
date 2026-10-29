@@ -237,6 +237,16 @@ auto Game::playerNamed(std::string_view name) const -> std::optional<PlayerIndex
     return std::nullopt;
 }
 
+auto Game::bodyStatusOf(nx::ecs::Entity body) const -> BodyStatus {
+    for (const std::optional<Player>& player : m_players) {
+        if (player && player->body == body) {
+            return BodyStatus{.isAlive = player->status.isAlive(), .team = player->team};
+        }
+    }
+    const EntityBody* const entity = m_world.isAlive(body) ? m_world.get<EntityBody>(body) : nullptr;
+    return BodyStatus{.isAlive = entity != nullptr && entity->motion != EntityMotion::Dead};
+}
+
 auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
     const Player& player = playerAt(index);
     const OwnedWeapon* const held = player.inventory.held();

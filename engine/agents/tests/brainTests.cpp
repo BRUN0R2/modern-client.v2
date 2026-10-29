@@ -64,6 +64,9 @@ TEST(AgentBrain, ForgetsATargetThatIsNoLongerThereAndPlansNoWayToIt) {
     brain.forgetAbsent({});
     EXPECT_TRUE(brain.memories().empty());
     EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle) << "nothing left to go to";
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    EXPECT_TRUE(way.empty()) << "its corridor forgotten with it";
 }
 
 TEST(AgentBrain, CapsMemoryAndEvictsTheOldestFact) {
@@ -157,6 +160,45 @@ TEST(AgentBrain, MovesToItsGoalWithNoTargetAndForgetsItAsItArrives) {
     EXPECT_FALSE(moving.intent.attacks);
     EXPECT_EQ(brain.decide(goal, query).behavior, nx::agents::Behavior::Idle);
     EXPECT_FALSE(brain.goal().has_value());
+}
+
+TEST(AgentBrain, ItsWayGoesFromWhereItIsToItsGoal) {
+    constexpr float kOnTheMesh = 1.0F;
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    EXPECT_TRUE(way.empty()) << "no corridor before it decides";
+    const nx::Vec3 feet{.x = 10};
+    const nx::Vec3 goal{.y = 200};
+    brain.setGoal(goal);
+    ASSERT_EQ(brain.decide(feet, query).behavior, nx::agents::Behavior::MoveTo);
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 2U);
+    EXPECT_LT(nx::test::distanceAcross(way.front(), feet), kOnTheMesh);
+    EXPECT_LT(nx::test::distanceAcross(way.back(), goal), kOnTheMesh);
+}
+
+TEST(AgentBrain, AnAgentHasAWayOnlyWhileItsLastDecisionFollowsTheCorridor) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}};
+    const nx::Vec3 goal{.y = 200};
+    agent.brain.setGoal(goal);
+    const auto wayOf = [&query](const auto& follower) {
+        std::vector<nx::Vec3> points;
+        follower.appendWay(query, points);
+        return points;
+    };
+    agent.behavior = agent.brain.decide({}, query).behavior;
+    ASSERT_TRUE(nx::agents::followsCorridor(agent.behavior));
+    EXPECT_FALSE(wayOf(agent).empty());
+    EXPECT_EQ(wayOf(agent), wayOf(agent.brain));
+    agent.behavior = agent.brain.decide(goal, query).behavior;
+    ASSERT_EQ(agent.behavior, nx::agents::Behavior::Idle);
+    EXPECT_FALSE(wayOf(agent.brain).empty()) << "the corridor it arrived by is kept";
+    EXPECT_TRUE(wayOf(agent).empty());
 }
 
 TEST(AgentBrain, ATargetItSeesComesBeforeItsGoal) {

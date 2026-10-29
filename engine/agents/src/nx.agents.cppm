@@ -23,6 +23,11 @@ enum class Behavior : std::uint8_t {
     MoveTo,      ///< Moves along its corridor to the goal it was given, with no target to pursue.
 };
 
+/// Whether a decision of `behavior` moves along the brain's corridor: Chase, Investigate and MoveTo.
+[[nodiscard]] constexpr auto followsCorridor(Behavior behavior) noexcept -> bool {
+    return behavior == Behavior::Chase || behavior == Behavior::Investigate || behavior == Behavior::MoveTo;
+}
+
 /// How a brain perceives and decides, a kind's settings.
 struct Rules {
     /// How long a target unseen is remembered.
@@ -99,6 +104,11 @@ public:
     inline void setGoal(std::optional<Vec3> goal) noexcept { givenGoal = goal; }
     /// The goal it was given and has not reached yet.
     [[nodiscard]] inline auto goal() const noexcept -> std::optional<Vec3> { return givenGoal; }
+    /// Appends to `points` the way left along its corridor (navigation::Corridor::appendWay), from where
+    /// its last decision left it to its target or its goal, on the mesh of `query`, which must be the one
+    /// it decides on; nothing without a corridor. A decision that does not follow it (followsCorridor)
+    /// leaves it as it was.
+    void appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const;
     [[nodiscard]] inline auto memories() const noexcept -> std::span<const Memory> { return memory; }
 
 private:
@@ -148,8 +158,12 @@ private:
 /// choose its observations; the shared brain owns its memory and corridor.
 struct Agent {
     Brain brain;
-    Behavior behavior = Behavior::Idle;
+    Behavior behavior = Behavior::Idle; ///< Of its brain's last decision.
     std::size_t nextCandidate = 0;
+
+    /// Appends to `points` the way its brain follows (Brain::appendWay) while its last decision follows
+    /// its corridor; else nothing.
+    void appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const;
 };
 
 } // namespace nx::agents

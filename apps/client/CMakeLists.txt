@@ -17,6 +17,9 @@ nxAddModuleLibrary(appClient
         nx::math
         nx::jobs
         nx::game
+        nx::navigation
+        nx::ecs
+        nx::agents
         nx::platform
         nx::console
         nx::settings
