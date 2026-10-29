@@ -1033,6 +1033,31 @@ auto Game::entities() -> std::vector<EntityState> {
     return entityStatesOf(m_world);
 }
 
+auto Game::movingBodies() -> std::vector<MovingBody> {
+    std::vector<MovingBody> bodies;
+    for (const std::optional<Player>& player : m_players) {
+        if (player && player->status.isAlive()) {
+            const nx::Aabb box = player->movement.isDucked ? kDuckedBox : kStandingBox;
+            bodies.push_back({.entity = player->body,
+                              .feet = feetOf(player->movement),
+                              .velocity = player->movement.velocity,
+                              .radius = nx::HammerUnits{box.max.x}});
+        }
+    }
+    nx::ecs::Query<nx::ecs::Entity, const EntityBody&, const nx::game::Transform&,
+                   const nx::game::BoxSolidity&>{m_world}
+        .forEach([&bodies](nx::ecs::Entity entity, const EntityBody& body,
+                           const nx::game::Transform& transform, const nx::game::BoxSolidity& solidity) {
+            if (body.motion != EntityMotion::Dead) {
+                bodies.push_back({.entity = entity,
+                                  .feet = transform.origin + nx::Vec3{.z = solidity.box.min.z},
+                                  .velocity = body.movement.velocity,
+                                  .radius = nx::HammerUnits{solidity.box.max.x}});
+            }
+        });
+    return bodies;
+}
+
 auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
     std::vector<PerceptionTarget> targets;
     for (const auto& [slot, player] : std::views::enumerate(m_players)) {

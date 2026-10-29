@@ -322,6 +322,23 @@ TEST_F(GameTest, TellsWhetherABodyLivesAndTheTeamOfThePlayerWhoseBodyItIs) {
     EXPECT_FALSE(game().bodyStatusOf(*created).isAlive) << "gone";
 }
 
+TEST_F(GameTest, TheMovingBodiesAreTheLivingPlayersAndEntities) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, kPastTheFirstFreeze);
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    const std::vector<cs::MovingBody> bodies = game().movingBodies();
+    ASSERT_EQ(bodies.size(), 2U);
+    const auto entity = std::ranges::find(bodies, *created, &cs::MovingBody::entity);
+    ASSERT_NE(entity, bodies.end());
+    EXPECT_EQ(entity->radius, nx::HammerUnits{16.0F});
+    EXPECT_FLOAT_EQ(entity->feet.z, game().entities().front().origin.z + cs::kStandingBox.min.z);
+    std::ignore = killByFall(player);
+    EXPECT_EQ(game().movingBodies().size(), 1U) << "a dead player's body moves no more";
+}
+
 TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredInterval) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     game().placeEye(player, {.x = 0, .y = 0, .z = 53});

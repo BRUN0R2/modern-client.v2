@@ -274,6 +274,7 @@ auto entityStatesOf(nx::ecs::World& world) -> std::vector<EntityState> {
             states.push_back({.entity = entity,
                               .type = body.type,
                               .origin = transform.origin,
+                              .velocity = body.movement.velocity,
                               .angles = transform.angles,
                               .animation = body.animation,
                               .health = body.health});

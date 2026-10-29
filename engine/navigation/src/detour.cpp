@@ -6,9 +6,11 @@ module;
 // Detour stays in this unit (docs/02-coding-standards.md, section 2): the meshes, queries and
 // corridors of the interface hold it behind their own types.
 #include <DetourCommon.h>
+#include <DetourLocalBoundary.h>
 #include <DetourNavMesh.h>
 #include <DetourNavMeshQuery.h>
 #include <DetourNode.h>
+#include <DetourObstacleAvoidance.h>
 #include <DetourPathCorridor.h>
 #include <DetourStatus.h>
 
@@ -49,6 +51,36 @@ struct NavMeshFree {
 struct NavMeshQueryFree {
     void operator()(dtNavMeshQuery* query) const noexcept { dtFreeNavMeshQuery(query); }
 };
+
+struct ObstacleAvoidanceFree {
+    void operator()(dtObstacleAvoidanceQuery* avoidance) const noexcept {
+        dtFreeObstacleAvoidanceQuery(avoidance);
+    }
+};
+
+/// The wall segments one avoidance weighs at most: a local boundary's own room (dtLocalBoundary).
+constexpr int kMostSteeringWalls = 8;
+/// How far an agent moves, in shares of how far it looks about it, before it looks for the walls again:
+/// DetourCrowd's.
+constexpr float kWallsFoundAgainShare = 0.25F;
+/// How the avoidance weighs a velocity: dtCrowd::init's defaults (its adaptive sampling's divisions, rings
+/// and depth; its bias toward the desired velocity; the weights of the desired and current velocities, of
+/// a side and of the time of impact; and how far ahead it looks, in seconds).
+constexpr dtObstacleAvoidanceParams kAvoidance{.velBias = 0.4F,
+                                               .weightDesVel = 2.0F,
+                                               .weightCurVel = 0.75F,
+                                               .weightSide = 0.75F,
+                                               .weightToi = 2.5F,
+                                               .horizTime = 2.5F,
+                                               .gridSize = 33,
+                                               .adaptiveDivs = 7,
+                                               .adaptiveRings = 2,
+                                               .adaptiveDepth = 5};
+
+/// `vector` of the game's space across the ground, in Detour's: its height left out.
+[[nodiscard]] auto acrossOf(Vec3 vector) noexcept -> std::array<float, 3> {
+    return detail::detourOf(Vec3{.x = vector.x, .y = vector.y});
+}
 
 /// Ends the process when Detour could not allocate `what`: out of memory, as a failed allocation of the
 /// standard library ends it in a build without exceptions.
@@ -417,6 +449,8 @@ struct NavigationQuery::Detour {
     std::vector<dtPolyRef> polygons; ///< Room for a way's polygons, or those a circle reaches.
     std::vector<float> points;       ///< Room for a way's corners.
     std::string profileName;
+    /// The avoidance Corridor::steer samples velocities with, made as it is first asked for.
+    std::unique_ptr<dtObstacleAvoidanceQuery, ObstacleAvoidanceFree> avoidance;
 
     /// The point of the mesh nearest `position`. Errors: OutsideMesh.
     [[nodiscard]] auto nearest(Vec3 position) const -> Result<MeshPoint, NavigationError> {
@@ -635,6 +669,7 @@ auto NavigationQuery::isReachable(Vec3 from, Vec3 to) -> Result<bool, Navigation
 
 struct Corridor::Detour {
     dtPathCorridor corridor;
+    dtLocalBoundary walls; ///< About the agent, which steer looks for again as it moves.
 };
 
 Corridor::Corridor(std::unique_ptr<Detour> detour, const NavigationMesh& mesh) noexcept
@@ -759,6 +794,51 @@ void Corridor::appendWay(NavigationQuery& query, std::vector<Vec3>& points) cons
     for (std::size_t point = 0; point < narrow<std::size_t>(count); ++point) {
         points.push_back(detail::positionOf(pointAt(found, point)));
     }
+}
+
+auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> Vec3 {
+    expects(&query.mesh() == navigationMesh, "Corridor::steer: a query of the corridor's mesh");
+    if (&query.mesh() != navigationMesh) {
+        return request.desired;
+    }
+    NavigationQuery::Detour& search = *query.detourState;
+    if (!search.avoidance) {
+        search.avoidance.reset(dtAllocObstacleAvoidanceQuery());
+        endUnlessAllocated(search.avoidance != nullptr &&
+                               search.avoidance->init(narrow<int>(kMostSteeringBodies), kMostSteeringWalls),
+                           "an obstacle avoidance");
+    }
+    const float radius = navigationMesh->profile().radius.value();
+    const float range = radius * kSteeringRangeRadii;
+    const dtPathCorridor& corridor = detourState->corridor;
+    const float* const position = corridor.getPos();
+    dtLocalBoundary& walls = detourState->walls;
+    if (dtVdist2DSqr(position, walls.getCenter()) > dtSqr(range * kWallsFoundAgainShare) ||
+        !walls.isValid(search.query.get(), &search.filter)) {
+        walls.update(corridor.getFirstPoly(), position, range, search.query.get(), &search.filter);
+    }
+    dtObstacleAvoidanceQuery& avoidance = *search.avoidance;
+    avoidance.reset();
+    for (const SteeringBody& body :
+         request.bodies.first(std::min(request.bodies.size(), kMostSteeringBodies))) {
+        const std::array<float, 3> feet = detail::detourOf(body.feet);
+        const std::array<float, 3> velocity = acrossOf(body.velocity);
+        avoidance.addCircle(feet.data(), body.radius.value(), velocity.data(), velocity.data());
+    }
+    for (int wall = 0; wall < walls.getSegmentCount(); ++wall) {
+        const float* const segment = walls.getSegment(wall);
+        // A wall it has behind it, it is leaving: DetourCrowd leaves it out too.
+        if (dtTriArea2D(position, segment, segment + kCoordinates) < 0.0F) {
+            continue;
+        }
+        avoidance.addSegment(segment, segment + kCoordinates);
+    }
+    const std::array<float, 3> velocity = acrossOf(request.velocity);
+    const std::array<float, 3> desired = acrossOf(request.desired);
+    std::array<float, 3> chosen{};
+    avoidance.sampleVelocityAdaptive(position, radius, request.maxSpeed.value(), velocity.data(),
+                                     desired.data(), chosen.data(), &kAvoidance);
+    return detail::positionOf(chosen);
 }
 
 NavigationMeshes::NavigationMeshes(std::vector<AgentProfile> profiles, BuildSettings settings) noexcept
