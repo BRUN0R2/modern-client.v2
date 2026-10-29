@@ -20,6 +20,7 @@ import nx.math;
 import nx.platform;
 import nx.console;
 import nx.assets;
+import nx.ecs;
 import cs.shared;
 import cs.server;
 
