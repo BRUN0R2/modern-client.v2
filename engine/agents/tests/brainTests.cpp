@@ -41,6 +41,34 @@ TEST(AgentBrain, KnowsOnlyObservedTargetsAndForgetsThemAtTheLifetimeBoundary) {
     EXPECT_TRUE(brain.memories().empty());
 }
 
+TEST(AgentBrain, ForgetsATargetThatIsNoLongerThereAndPlansNoWayToIt) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto dying = world.spawn();
+    const auto living = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.perceive(
+        std::array{nx::agents::Observation{dying, {.x = 200}}, nx::agents::Observation{living, {.y = -200}}},
+        {}, nx::kDefaultTickRate);
+    brain.perceive({}, {}, nx::kDefaultTickRate);
+    ASSERT_EQ(brain.memories().size(), 2U);
+    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
+
+    std::array present{living};
+    std::ranges::sort(present);
+    brain.forgetAbsent(present);
+    ASSERT_EQ(brain.memories().size(), 1U);
+    EXPECT_EQ(brain.memories().front().observation.entity, living);
+
+    brain.forgetAbsent({});
+    EXPECT_TRUE(brain.memories().empty());
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle) << "nothing left to go to";
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    EXPECT_TRUE(way.empty()) << "its corridor forgotten with it";
+}
+
 TEST(AgentBrain, CapsMemoryAndEvictsTheOldestFact) {
     nx::ecs::World world;
     const auto first = world.spawn();

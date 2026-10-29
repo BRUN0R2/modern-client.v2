@@ -69,7 +69,10 @@ Players attacking each other go through `cs::Game::attackPlayer` instead, with t
 groups, armor and combat rules ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 
 Sight uses the configured range, field of view, per-agent candidate budget and the server's
-solid traces. A brain pursues a visible target or its last observed position, never an unseen
+solid traces, through the solids gathered once for the tick's sights (`cs::Game::sightSolids`); a
+body's hitboxes are placed once for its pose and kept ([07 §4.2](07-simulation-and-physics.md#42-entities)). A brain forgets each
+target that is no longer among the living players (`nx::agents::Brain::forgetAbsent`): a dead or
+departed enemy's last position is neither investigated nor planned a way to. A brain pursues a visible target or its last observed position, never an unseen
 current position. The server supplies the target's feet from its active standing/crouched hull,
 separately from its eye position; the mod does not infer the target's stance. Memory expires
 or is forgotten after reaching the corridor's walkable destination, including when the target

@@ -194,11 +194,16 @@ public:
     /// Living player bodies a mod may consider; these are candidates, not already perceived facts.
     /// Feet come from each active collision hull, independently of its current eye height.
     [[nodiscard]] auto perceptionTargets() const -> std::vector<PerceptionTarget>;
-    /// Whether the solid trace from eye reaches this candidate's eye, leaving out the observer.
-    [[nodiscard]] auto sees(nx::ecs::Entity observer, nx::Vec3 eye, const PerceptionTarget& target) -> bool;
-    /// Whether a line from `eye` reaches `spot` through the world and the solid brush entities alone, the
+    /// What is solid to the sights now (nx::game::solidsOf), for an agent's eyes to trace many while
+    /// nothing moves (sees, seesSpot), gathered once instead of once a sight.
+    [[nodiscard]] auto sightSolids() -> nx::game::Solids;
+    /// Whether the solid trace from eye reaches this candidate's eye, leaving out the observer, through
+    /// `solids`, gathered since nothing moved (sightSolids).
+    [[nodiscard]] auto sees(const nx::game::Solids& solids, nx::ecs::Entity observer, nx::Vec3 eye,
+                            const PerceptionTarget& target) -> bool;
+    /// Whether a line from `eye` reaches `spot` through the world and `solids`' brush entities alone, the
     /// bodies leaving it be, as a bot's IsVisible traces one (UTIL_TraceLine with ignore_monsters).
-    [[nodiscard]] auto seesSpot(nx::Vec3 eye, nx::Vec3 spot) -> bool;
+    [[nodiscard]] auto seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) -> bool;
     /// World and solid brush surfaces where they are now, without moving bodies.
     [[nodiscard]] auto navigationGeometry() -> nx::navigation::Geometry;
     /// The authoritative clock, independent of a command's requested duration.

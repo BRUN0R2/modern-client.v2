@@ -7,6 +7,7 @@ import std;
 import nx.core;
 import nx.math;
 import nx.jobs;
+import nx.ecs;
 import nx.game;
 import nx.navigation;
 import nx.agents;
@@ -246,11 +247,18 @@ void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_
 
 auto Bots::commands() -> std::vector<PlayerCommand> {
     const std::vector<PerceptionTarget> targets = game->perceptionTargets();
+    // The enemies there still are, living: a bot forgets the others (nx::agents::Brain::forgetAbsent).
+    std::vector<nx::ecs::Entity> present =
+        targets | std::views::transform(&PerceptionTarget::entity) | std::ranges::to<std::vector>();
+    std::ranges::sort(present);
+    // Nothing moves while the bots perceive: what is solid to their sights is gathered once.
+    const nx::game::Solids solids = game->sightSolids();
+    const Sights sights{.targets = targets, .present = present, .solids = solids};
     std::vector<Turn> turns;
     turns.reserve(bots.size());
     std::vector<nx::agents::DecisionRequest> requests;
     for (const PlayerIndex bot : bots) {
-        Turn& turn = turns.emplace_back(beginTurn(bot, targets));
+        Turn& turn = turns.emplace_back(beginTurn(bot, sights));
         if (turn.self.isAlive) {
             requests.push_back({.brain = &turn.agent->brain, .feet = turn.self.feet});
         }
@@ -270,7 +278,8 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
 }
 
 auto Bots::perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
-                    std::span<const PerceptionTarget> targets) -> std::vector<nx::agents::Observation> {
+                    const Sights& sights) -> std::vector<nx::agents::Observation> {
+    const std::span<const PerceptionTarget> targets = sights.targets;
     std::vector<nx::agents::Observation> seen;
     const std::size_t budget = std::min<std::size_t>(targets.size(), rules.perceptionBudget);
     for (std::size_t looked = 0; looked < budget; ++looked) {
@@ -281,7 +290,7 @@ auto Bots::perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOw
         // The first spot of it in its cone that a line reaches is the one it aims at.
         for (const nx::Vec3 spot : sightSpotsOf(target, self.eye, rules.spots)) {
             if (isInViewCone(self.eye, self.view.yaw, rules.fieldOfView, spot) &&
-                game->seesSpot(self.eye, spot)) {
+                game->seesSpot(sights.solids, self.eye, spot)) {
                 seen.push_back({.entity = target.entity, .position = target.feet, .aimAt = spot});
                 break;
             }
@@ -327,7 +336,7 @@ auto Bots::aimSpotOf(BotDriver& driver, const PlayerOwnState& self, const nx::ag
     return spot + driver.aimError.offset;
 }
 
-auto Bots::beginTurn(PlayerIndex player, std::span<const PerceptionTarget> targets) -> Turn {
+auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
     const nx::game::TickTime time = game->time();
     Turn turn{.player = player,
               .agent = game->playerComponent<nx::agents::Agent>(player),
@@ -353,7 +362,8 @@ auto Bots::beginTurn(PlayerIndex player, std::span<const PerceptionTarget> targe
         driver->trigger = {};
         driver->wasAlive = true;
     }
-    agent->brain.perceive(perceive(player, *agent, turn.self, targets), time.now, time.rate);
+    agent->brain.forgetAbsent(sights.present);
+    agent->brain.perceive(perceive(player, *agent, turn.self, sights), time.now, time.rate);
     return turn;
 }
 

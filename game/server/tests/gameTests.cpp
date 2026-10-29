@@ -21,6 +21,7 @@ import nx.platform;
 import nx.console;
 import nx.assets;
 import nx.ecs;
+import nx.game;
 import cs.shared;
 import cs.server;
 
@@ -362,9 +363,9 @@ TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
     const auto found = std::ranges::find(states, *observer, &cs::EntityState::entity);
     ASSERT_NE(found, states.end());
     const nx::Vec3 eye = found->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()};
-    EXPECT_FALSE(game().sees(*observer, eye, targets.front()));
+    EXPECT_FALSE(game().sees(game().sightSolids(), *observer, eye, targets.front()));
     ASSERT_TRUE(game().removeEntity(*blocker).has_value());
-    EXPECT_TRUE(game().sees(*observer, eye, targets.front()));
+    EXPECT_TRUE(game().sees(game().sightSolids(), *observer, eye, targets.front()));
 }
 
 TEST_F(GameTest, PerceivedFeetUseThePlayersActiveStanceIndependentlyOfTheAimPoint) {
@@ -852,8 +853,10 @@ TEST_F(GameTest, ASpotIsSeenThroughTheBodiesButNotThroughTheWorld) {
     const nx::Vec3 beyond = eye + nx::Vec3{.x = 2.0F * kVictimAhead};
     const cs::PerceptionTarget body = game().perceptionTargets()[1];
     ASSERT_EQ(body.player, between);
-    EXPECT_TRUE(game().seesSpot(eye, beyond)) << "the body in between leaves the line be";
-    EXPECT_FALSE(game().seesSpot(eye, beyond - nx::Vec3{.z = 2.0F * kStandingEye})) << "under the floor";
+    const nx::game::Solids solids = game().sightSolids();
+    EXPECT_TRUE(game().seesSpot(solids, eye, beyond)) << "the body in between leaves the line be";
+    EXPECT_FALSE(game().seesSpot(solids, eye, beyond - nx::Vec3{.z = 2.0F * kStandingEye}))
+        << "under the floor";
     EXPECT_TRUE(body.feet.z < body.origin.z && !body.isDucked);
     EXPECT_EQ(game().ownStateOf(watcher).feet,
               game().ownStateOf(watcher).eye -

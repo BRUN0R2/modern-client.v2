@@ -89,6 +89,9 @@ public:
     /// Each tick replaces visibility and forgets expired records; fresh observations update memory, a
     /// target seen anew noticed now; the targets noticed at least the reaction time ago are recognized.
     void perceive(std::span<const Observation> seen, GameTime now, TickRate rate);
+    /// Forgets every target it remembers that is not among `present`, sorted: the targets there still are
+    /// to perceive, so that it pursues none that died or left, and plans no way to where one was last.
+    void forgetAbsent(std::span<const ecs::Entity> present);
     /// A deterministic choice among the targets recognized: closest visible target, else freshest
     /// remembered target. Ties retain memory order. A failed path is attempted again only when its goal or
     /// source moves sufficiently. Smaller observation changes update the corridor's destination without
