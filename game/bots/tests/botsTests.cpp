@@ -343,6 +343,49 @@ TEST_F(BotsTest, ABotAliveAsTheGameRestartsBeginsItsNewLifeAnew) {
     EXPECT_TRUE(agent->brain.memories().empty());
 }
 
+TEST_F(BotsTest, ABotHearsAnEnemyShootBehindItAndTurnsToLookAtIt) {
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    play(kPastTheCommence + kPastAFreeze);
+    const nx::agents::Agent* const agent = game->playerComponent<nx::agents::Agent>(bot);
+    ASSERT_NE(agent, nullptr);
+    // The enemy behind the bot, along the way it looks.
+    standAt(bot, kMapSide * 0.5F);
+    const nx::Degrees yaw = game->ownStateOf(bot).view.yaw;
+    const float radians = yaw.value() * std::numbers::pi_v<float> / 180.0F;
+    standAt(enemy, (kMapSide * 0.5F) - (std::cos(radians) * kApart), -std::sin(radians) * kApart);
+    const std::vector<cs::PerceptionTarget> targets = game->perceptionTargets();
+    const auto enemyBody = std::ranges::find(targets, enemy, &cs::PerceptionTarget::player);
+    ASSERT_NE(enemyBody, targets.end());
+    const auto rememberedEnemy = [&]() -> const nx::agents::Memory* {
+        const auto found =
+            std::ranges::find(agent->brain.memories(), enemyBody->entity,
+                              [](const nx::agents::Memory& record) { return record.observation.entity; });
+        return found != agent->brain.memories().end() ? &*found : nullptr;
+    };
+    ASSERT_EQ(rememberedEnemy(), nullptr) << "it does not know of it yet";
+    // The enemy fires once.
+    std::vector<cs::PlayerCommand> made = bots->commands();
+    made.push_back({.player = enemy,
+                    .command = cs::UserCommand{.number = cs::CommandNumber{1},
+                                               .duration = nx::Milliseconds{10.0F},
+                                               .viewAngles = game->ownStateOf(enemy).view,
+                                               .buttons = {cs::Button::Attack}}});
+    game->tick(made);
+    play(1);
+    const nx::agents::Memory* const heard = rememberedEnemy();
+    ASSERT_NE(heard, nullptr) << "it heard the shot";
+    EXPECT_FALSE(heard->isVisible) << "heard, not seen";
+    // It turns to look where it heard it, and sees it.
+    bool sees = false;
+    for (std::uint32_t tick = 0; tick < kReactingTicks && !sees; ++tick) {
+        play(1);
+        const nx::agents::Memory* const record = rememberedEnemy();
+        sees = record != nullptr && record->isVisible;
+    }
+    EXPECT_TRUE(sees);
+}
+
 TEST_F(BotsTest, AnExpertBotKillsAnEnemyItSeesOnceTheFreezeIsOver) {
     const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
     const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");

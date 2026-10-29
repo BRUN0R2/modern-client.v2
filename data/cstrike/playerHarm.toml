@@ -32,7 +32,7 @@ pain = { files = ["player/bhit_flesh-1.wav", "player/bhit_flesh-2.wav", "player/
 headPain = { files = ["player/headshot1.wav", "player/headshot2.wav", "player/headshot3.wav"], channel = "voice", volume = 1.0 }
 helmetPain = { files = ["player/bhit_helmet-1.wav"], channel = "voice", volume = 1.0 }
 kevlarPain = { files = ["player/bhit_kevlar-1.wav"], channel = "voice", volume = 1.0 }
-splat = { files = ["common/bodysplat.wav"], channel = "item", volume = 1.0 }
+splat = { files = ["common/bodysplat.wav"], channel = "item", volume = 1.0, noise = "landing" }
 death = { files = ["player/die1.wav", "player/die2.wav", "player/die3.wav", "player/death6.wav"], channel = "voice", volume = 1.0 }
 
 [fall]

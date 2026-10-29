@@ -38,7 +38,7 @@ enum class BotJoinError : std::uint8_t {
 /// What drives a bot's player besides its brain, a component of its body: the number of its last
 /// command, the profile it plays as, its name and its level of skill (of BotRules::skillLevels), when the
 /// life it played its last living command in began (PlayerOwnState::spawnedAt), how its view turns, how
-/// its aim errs, its trigger, and the streams its hunt and its aim draw from.
+/// its aim errs, its trigger, and the streams its hunt, its aim and its hearing draw from.
 struct BotDriver {
     CommandNumber lastCommand{};
     std::string profile{};
@@ -49,6 +49,7 @@ struct BotDriver {
     BotTrigger trigger{};
     nx::Random hunt;
     nx::Random aim;
+    nx::Random hearing;
 };
 
 /// The bots of one game, which must outlive them: each a player of it whose body is an agent
@@ -126,15 +127,18 @@ private:
     struct Turn; // a bot's command being made, between what it perceives and what it decides
 
     /// What the bots perceive in a tick, the same for each: the living players, as candidates and, sorted,
-    /// by their entities; and what is solid to their sights, gathered once (Game::sightSolids).
+    /// by their entities; what is solid to their sights, gathered once (Game::sightSolids); and the noises
+    /// the players made (Game::noises).
     struct Sights {
         std::span<const PerceptionTarget> targets;
         std::span<const nx::ecs::Entity> present;
         const nx::game::Solids& solids;
+        std::span<const GameNoise> noises;
     };
 
     /// The bot `player`'s turn as the next tick's command begins: numbered and, alive, forgetting the
-    /// enemies there no longer are and perceiving the targets of `sights`.
+    /// enemies there no longer are, perceiving the targets of `sights` and hearing its enemies' noises
+    /// (cs::heardBy, BotRules::hearing).
     [[nodiscard]] auto beginTurn(PlayerIndex player, const Sights& sights) -> Turn;
     /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `targets`.
     [[nodiscard]] auto finishTurn(Turn& turn, const nx::agents::Decision& decision,

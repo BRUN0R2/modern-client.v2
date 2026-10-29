@@ -19,3 +19,4 @@ export import :playerNames;
 export import :game;
 export import :entityBodies;
 export import :agentNavigation;
+export import :agentHearing;

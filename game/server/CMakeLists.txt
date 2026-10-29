@@ -14,6 +14,7 @@ nxAddModuleLibrary(csServer
         src/game.cppm
         src/entityBodies.cppm
         src/agentNavigation.cppm
+        src/agentHearing.cppm
     SOURCES
         src/gameCvars.cpp
         src/gameModels.cpp
@@ -22,6 +23,7 @@ nxAddModuleLibrary(csServer
         src/game.cpp
         src/entityBodies.cpp
         src/agentNavigation.cpp
+        src/agentHearing.cpp
     DEPENDS
         nx::core
         nx::math
@@ -30,6 +32,7 @@ nxAddModuleLibrary(csServer
         nx::ecs
         nx::collision
         nx::navigation
+        nx::agents
         nx::game
         cs::shared
     LATERAL

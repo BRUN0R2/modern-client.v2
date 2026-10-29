@@ -103,6 +103,12 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
                                     "of a whole turn at most, are required",
                                     sourceName));
     }
+    if (!isValid(rules->hearing)) {
+        return nx::fail(BotError::InvalidData,
+                        std::format("{}: each of hearing's ranges more than none and its error share none or "
+                                    "more are required",
+                                    sourceName));
+    }
     if (!nx::agents::isValid(rules->stuck)) {
         return nx::fail(
             BotError::InvalidData,

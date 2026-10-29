@@ -61,11 +61,13 @@ standing = { upBase = 1.0, lateralBase = 0.375, upModifier = 0.175, lateralModif
 files = ["weapons/ak47-1.wav", "weapons/ak47-2.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "shot"
 
 [firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_rifle.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [reload]
 time = 2.45

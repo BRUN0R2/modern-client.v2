@@ -34,7 +34,7 @@ Brain::Brain(Rules settings) : rules{settings} {
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
     std::erase_if(memory, [this, now, rate](const Memory& record) {
-        return now.since(record.seenAt, rate) >= rules.memoryLifetime;
+        return now.since(record.perceivedAt, rate) >= rules.memoryLifetime;
     });
     for (Memory& record : memory) {
         record.isVisible = false;
@@ -44,21 +44,40 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
                                        [](const Memory& record) { return record.observation.entity; });
         if (found != memory.end()) {
             found->observation = observation;
-            found->seenAt = now;
+            found->perceivedAt = now;
             found->isVisible = true;
         } else {
-            if (memory.size() == rules.memoryLimit) {
-                // The oldest unobserved fact has the weakest confidence.
-                const auto weakest = std::ranges::min_element(memory, {}, &Memory::seenAt);
-                memory.erase(weakest);
-            }
-            memory.push_back(
-                {.observation = observation, .seenAt = now, .noticedAt = now, .isVisible = true});
+            remember(observation, now, true);
         }
     }
     for (Memory& record : memory) {
         record.isRecognized = now.since(record.noticedAt, rate) >= rules.reactionTime;
     }
+}
+
+void Brain::hear(std::span<const Observation> heard, GameTime now, TickRate rate) {
+    for (const Observation& observation : heard) {
+        auto found = std::ranges::find(memory, observation.entity,
+                                       [](const Memory& record) { return record.observation.entity; });
+        if (found == memory.end()) {
+            remember(observation, now, false);
+            memory.back().isRecognized = rules.reactionTime <= Seconds{};
+        } else if (!found->isVisible) {
+            found->observation = observation;
+            found->perceivedAt = now;
+            found->isRecognized = now.since(found->noticedAt, rate) >= rules.reactionTime;
+        }
+    }
+}
+
+void Brain::remember(const Observation& observation, GameTime now, bool isVisible) {
+    if (memory.size() == rules.memoryLimit) {
+        // The oldest unobserved fact has the weakest confidence.
+        const auto weakest = std::ranges::min_element(memory, {}, &Memory::perceivedAt);
+        memory.erase(weakest);
+    }
+    memory.push_back(
+        {.observation = observation, .perceivedAt = now, .noticedAt = now, .isVisible = isVisible});
 }
 
 void Brain::forgetAbsent(std::span<const ecs::Entity> present) {
@@ -75,7 +94,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
             (candidate.isVisible && selected->isVisible &&
              groundDistance(feet, candidate.observation.position) <
                  groundDistance(feet, selected->observation.position)) ||
-            (!candidate.isVisible && !selected->isVisible && candidate.seenAt > selected->seenAt)) {
+            (!candidate.isVisible && !selected->isVisible && candidate.perceivedAt > selected->perceivedAt)) {
             selected = &candidate;
         }
     }

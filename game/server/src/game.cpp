@@ -1060,6 +1060,28 @@ auto Game::movingBodies() -> std::vector<MovingBody> {
     return bodies;
 }
 
+auto Game::noises() const -> std::vector<GameNoise> {
+    std::vector<GameNoise> made;
+    for (const Player& player : playersIn(m_players)) {
+        if (!player.status.isAlive()) {
+            continue;
+        }
+        for (const SoundMade& sound : player.sounds) {
+            if (sound.sound == nullptr || !sound.sound->noise) {
+                continue;
+            }
+            const float own = sound.sound->volume;
+            made.push_back({.entity = player.body,
+                            .team = player.team,
+                            .feet = feetOf(player.movement),
+                            .eye = eyeOf(player.movement),
+                            .kind = *sound.sound->noise,
+                            .loudness = own > 0.0F ? std::min(sound.volume / own, 1.0F) : 0.0F});
+        }
+    }
+    return made;
+}
+
 auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
     std::vector<PerceptionTarget> targets;
     for (const auto& [slot, player] : std::views::enumerate(m_players)) {

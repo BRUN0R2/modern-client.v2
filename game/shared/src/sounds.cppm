@@ -36,13 +36,27 @@ struct PitchRange {
     std::uint32_t most{kNormalPitch};
 };
 
+/// What an agent that hears a sound takes it for, which tells how far it carries (the game events
+/// Condition Zero's bot hears, IsGameEventAudible): a step, a hard landing, a shot, a quiet one (a
+/// knife's, a silenced weapon's), and a dry fire.
+enum class NoiseKind : std::uint8_t {
+    Footstep,  ///< EVENT_PLAYER_FOOTSTEP.
+    Landing,   ///< EVENT_PLAYER_LANDED_FROM_HEIGHT.
+    Shot,      ///< EVENT_WEAPON_FIRED, of a weapon of its normal range.
+    QuietShot, ///< EVENT_WEAPON_FIRED, of a knife or a silenced weapon (its short range).
+    EmptyShot, ///< EVENT_WEAPON_FIRED_ON_EMPTY.
+    Count,
+};
+
 /// A sound the game makes: one of its files at random (paths under `sound/`), on a channel of the
-/// entity that makes it, at `volume`, from 0 to 1, and a pitch of its range, as recorded without one.
+/// entity that makes it, at `volume`, from 0 to 1, a pitch of its range, as recorded without one, and
+/// the noise an agent that hears it takes it for, none for a sound agents do not heed.
 struct GameSound {
     std::vector<std::string> files{};
     SoundChannel channel{};
     float volume{1.0F};
     std::optional<PitchRange> pitch{};
+    std::optional<NoiseKind> noise{};
 };
 
 /// A sound the game made, the moment of the tick it made it at, and how loud: what lets it be heard
@@ -78,5 +92,6 @@ struct nx::meta::Description<cs::GameSound> {
         nx::meta::field<&cs::GameSound::channel>("channel"),
         nx::meta::field<&cs::GameSound::volume>("volume", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::GameSound::pitch>("pitch"),
+        nx::meta::field<&cs::GameSound::noise>("noise"),
     };
 };

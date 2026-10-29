@@ -61,7 +61,9 @@ precision at the WAV's own instants.
 The player's own sounds come from the game as data, `cs::GameSound` (`cs.shared:sounds`): its
 files, one at random, its channel of the player (`auto`, `weapon`, `voice`, `item`, `body`), its
 volume and its pitch range, in hundredths of the recorded speed (the original's 100 normal, 255 at
-most). The game says which sound it makes; `cs::ClientAudio` chooses the file and the pitch with its
+most), and the noise an agent that hears it takes it for (`noise`, `cs::NoiseKind`: a step, a hard
+landing, a shot, a quiet one, a dry fire; docs/10 §11), none for a sound agents do not heed. The game
+says which sound it makes; `cs::ClientAudio` chooses the file and the pitch with its
 own random numbers, as the original's client and engine choose them, so that hearing never changes
 what the game draws. A sound on a channel other than `auto` replaces the one the player's channel
 plays (§3): an AK-47's shot cuts the last one's tail, as on `CHAN_WEAPON`. The weapons make theirs

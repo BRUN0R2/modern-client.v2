@@ -23,6 +23,14 @@ constexpr float kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
 constexpr std::string_view kStuckStream = "zombie stuck";
 /// How far a body's slot is shifted from its generation in the seed of its stuck watch's draws.
 constexpr int kGenerationBits = 32;
+/// The stream of random numbers how far off a zombie places what it hears draws from, of its body and the
+/// tick.
+constexpr std::string_view kHearingStream = "zombie hearing";
+/// The seed of the draws of `entity`'s body: its slot above its generation.
+[[nodiscard]] auto seedOf(nx::ecs::Entity entity) noexcept -> std::uint64_t {
+    return (std::uint64_t{std::to_underlying(entity.index())} << kGenerationBits) |
+           std::to_underlying(entity.generation());
+}
 [[nodiscard]] auto feetOf(nx::Vec3 origin) -> nx::Vec3 {
     return origin + nx::Vec3{.z = cs::kStandingBox.min.z};
 }
@@ -104,6 +112,12 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
             std::format(
                 "{}: positive perception, memory and spawn budgets and an FOV at most 360 are required",
                 source));
+    }
+    if (!cs::isValid(read->hearing)) {
+        return nx::fail(ZombieError::InvalidData,
+                        std::format("{}: each of hearing's ranges more than none and its error share none or "
+                                    "more are required",
+                                    source));
     }
     if (!nx::agents::isValid(read->stuck)) {
         return nx::fail(
@@ -220,8 +234,7 @@ auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
                         born.size(), count));
     }
     for (const nx::ecs::Entity entity : born) {
-        const std::uint64_t seed = (std::uint64_t{std::to_underlying(entity.index())} << kGenerationBits) |
-                                   std::to_underlying(entity.generation());
+        const std::uint64_t seed = seedOf(entity);
         auto attached = game.attachEntityComponent(
             entity, nx::agents::Agent{
                         .brain = nx::agents::Brain{rulesOf(settings)},
@@ -236,6 +249,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
     cs::Game& game = *owner;
     const std::vector<cs::EntityState> bodies = game.entities();
     const std::vector<cs::PerceptionTarget> targets = game.perceptionTargets();
+    const std::vector<cs::GameNoise> noises = game.noises();
     // The players there still are, living: a zombie forgets the others (nx::agents::Brain::forgetAbsent).
     std::vector<nx::ecs::Entity> present =
         targets | std::views::transform(&cs::PerceptionTarget::entity) | std::ranges::to<std::vector>();
@@ -280,6 +294,10 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
         agent.brain.forgetAbsent(present);
         agent.brain.perceive(seen, time.now, time.rate);
+        // A zombie plays in no team: it hears every player.
+        nx::Random hearing{seedOf(entity) ^ std::bit_cast<std::uint64_t>(time.now.tick()), kHearingStream};
+        agent.brain.hear(cs::heardBy({.ear = eye}, noises, settings.hearing, query, hearing), time.now,
+                         time.rate);
         turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
         requests.push_back({.brain = &agent.brain,
                             .feet = feetOf(found->origin),
