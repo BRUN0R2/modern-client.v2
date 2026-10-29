@@ -31,6 +31,8 @@ constexpr std::string_view kProfileStream = "bot profile";
 /// The stream of random numbers a bot's aim's errors and its pauses between presses draw from, of the
 /// player it plays.
 constexpr std::string_view kAimStream = "bot aim";
+/// The stream of random numbers how far off a bot places what it hears draws from, of the player it plays.
+constexpr std::string_view kHearingStream = "bot hearing";
 /// How far the tick a bot joins at is shifted from the count of bots in the seed of its profile's draw.
 constexpr int kCountBits = 32;
 /// The teams a bot may play in, which MaintainBotQuota draws one of.
@@ -180,7 +182,8 @@ auto Bots::join(std::size_t level, std::string_view profile, std::optional<Team>
     game->attachPlayerComponent(player, BotDriver{.profile = std::string{profile},
                                                   .skillLevel = level,
                                                   .hunt = nx::Random{player.value, kHuntStream},
-                                                  .aim = nx::Random{player.value, kAimStream}});
+                                                  .aim = nx::Random{player.value, kAimStream},
+                                                  .hearing = nx::Random{player.value, kHearingStream}});
     bots.push_back(player);
     nx::log::info(kLog, "{} plays at the {} level", game->nameOf(player), skill.name);
     return player;
@@ -273,7 +276,8 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
     std::ranges::sort(present);
     // Nothing moves while the bots perceive: what is solid to their sights is gathered once.
     const nx::game::Solids solids = game->sightSolids();
-    const Sights sights{.targets = targets, .present = present, .solids = solids};
+    const std::vector<GameNoise> noises = game->noises();
+    const Sights sights{.targets = targets, .present = present, .solids = solids, .noises = noises};
     // The bodies the bots steer around, players' and others'.
     const std::vector<nx::agents::Body> bodies = bodiesOf(game->movingBodies());
     std::vector<Turn> turns;
@@ -394,6 +398,9 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
     }
     agent->brain.forgetAbsent(sights.present);
     agent->brain.perceive(perceive(player, *agent, turn.self, sights), time.now, time.rate);
+    agent->brain.hear(heardBy({.team = turn.self.team, .ear = turn.self.eye}, sights.noises, rules.hearing,
+                              query, driver->hearing),
+                      time.now, time.rate);
     return turn;
 }
 

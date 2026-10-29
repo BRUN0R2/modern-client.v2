@@ -63,11 +63,13 @@ standing = { base = 0.0, scale = 0.1 }
 files = ["weapons/glock18-1.wav", "weapons/glock18-2.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "shot"
 
 [firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_pistol.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [reload]
 time = 2.2
@@ -106,11 +108,13 @@ standing = { base = 0.0, scale = 0.3 }
 files = ["weapons/glock18-1.wav", "weapons/glock18-2.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "shot"
 
 [alternate.firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_pistol.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [harm] # what its attacks do to the players they hurt (TakeDamage's flRatio, ShouldDoLargeFlinch)
 armorRatio = 1.05
