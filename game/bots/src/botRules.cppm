@@ -40,14 +40,15 @@ struct BotSkillTag {};
 using BotSkill = nx::Quantity<float, BotSkillTag>;
 
 /// A level of skill a bot plays with, as a template of BotProfile.db makes one: its name, the
-/// difficulties a bot of it joins at, the names of its profiles, the bots that play with it, its skill,
-/// how long after it first sees an enemy it knows of it (ReactionTime), and how long after it took an
-/// enemy on it fires at it (AttackDelay).
+/// difficulties a bot of it joins at, the names of its profiles, the bots that play with it, its skill, its
+/// aggression, from 0 to 1 (Aggression, a hundredth of the template's), how long after it first sees an
+/// enemy it knows of it (ReactionTime), and how long after it took an enemy on it fires at it (AttackDelay).
 struct BotSkillLevel {
     std::string name;
     std::vector<BotDifficulty> difficulties;
     std::vector<std::string> profiles;
     BotSkill skill{};
+    float aggression = 0.0F;
     nx::Seconds reactionTime{};
     nx::Seconds attackDelay{};
 };
@@ -120,12 +121,18 @@ struct BotRange {
     nx::HammerUnits farthest{};
 };
 
-/// How a bot moves as it fights (AttackState, cs.bots:botCombat): whether it dodges a fight, dodgeChance
-/// of its skill, knifeDodgeFactor times that with a knife; dodging, within dodgeRange of an enemy that faces
-/// it, a way drawn each dodgeTime, the first of a fight a jump at jumpChance from jumpSkill, moving faster
-/// than movingSpeed (IsNotMoving's still speed); and, below rangeSkill, the combat range it keeps, drawn
-/// within combatRange as it spawns, rangeSlack either way.
+/// How a bot moves as it fights (AttackState, cs.bots:botCombat): whether it crouches and holds as a fight
+/// begins, farCrouchChance with its enemy farther than crouchFarFrom, else nearCrouchChance of how much
+/// aggression it lacks, its sight crouchSightDrop lower clear to its enemy's eye; whether it dodges a fight,
+/// dodgeChance of its skill, knifeDodgeFactor times that with a knife; dodging, within dodgeRange of an enemy
+/// that faces it, a way drawn each dodgeTime, the first of a fight a jump at jumpChance from jumpSkill,
+/// moving faster than movingSpeed (IsNotMoving's still speed); and, below rangeSkill, the combat range it
+/// keeps, drawn within combatRange as it spawns, rangeSlack either way.
 struct BotCombatRules {
+    float farCrouchChance = 0.0F;
+    nx::HammerUnits crouchFarFrom{};
+    float nearCrouchChance = 0.0F;
+    nx::HammerUnits crouchSightDrop{};
     float dodgeChance = 0.0F;
     float knifeDodgeFactor = 0.0F;
     nx::HammerUnits dodgeRange{};
@@ -224,6 +231,8 @@ struct nx::meta::Description<cs::BotSkillLevel> {
         nx::meta::field<&cs::BotSkillLevel::skill>("skill", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BotSkillLevel::reactionTime>("reactionTime"),
         nx::meta::field<&cs::BotSkillLevel::attackDelay>("attackDelay"),
+        nx::meta::field<&cs::BotSkillLevel::aggression>("aggression",
+                                                        nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
     };
 };
 
@@ -321,6 +330,13 @@ template <>
 struct nx::meta::Description<cs::BotCombatRules> {
     static constexpr std::string_view kName = "cs::BotCombatRules";
     static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotCombatRules::farCrouchChance>(
+            "farCrouchChance", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotCombatRules::crouchFarFrom>("crouchFarFrom", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotCombatRules::nearCrouchChance>(
+            "nearCrouchChance", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotCombatRules::crouchSightDrop>("crouchSightDrop",
+                                                              nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotCombatRules::dodgeChance>("dodgeChance", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotCombatRules::knifeDodgeFactor>("knifeDodgeFactor",
                                                                nx::data::Range{.minimum = 0.0}),

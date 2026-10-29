@@ -162,6 +162,40 @@ TEST(BotCombatTest, ALessSkilledBotKeepsItsCombatRangeAndAMoreSkilledOneHoldsIts
         << "from 0.66 of skill it holds its ground";
 }
 
+TEST(BotCombatTest, AFightBegunCrouchesAndHoldsByItsAggressionOnlyWithAClearCrouchedSight) {
+    auto rules = alwaysDodging();
+    rules.nearCrouchChance = 1.0F;
+    rules.farCrouchChance = 1.0F;
+    nx::Random random{9, "combat tests"};
+    cs::BotCombat combat = cs::spawnedCombat(rules, random);
+    combat.range = nx::HammerUnits{375.0F};
+    const auto begin = [&](cs::BotFight fight) {
+        cs::endFight(combat);
+        return cs::fightMove(combat, fight, rules, random);
+    };
+    auto timid = fightAt(600.0F, cs::BotSkill{0.5F});
+    timid.seesCrouched = true;
+    const cs::BotFightMove holding = begin(timid);
+    EXPECT_TRUE(combat.crouches && holding.crouches) << "no aggression, a clear crouched sight";
+    EXPECT_EQ(holding.forward, nx::UnitsPerSecond{}) << "holding, it keeps no range";
+    EXPECT_EQ(holding.side, nx::UnitsPerSecond{}) << "nor dodges";
+    EXPECT_TRUE(cs::fightMove(combat, timid, rules, random).crouches) << "all fight long";
+
+    timid.seesCrouched = false;
+    EXPECT_FALSE(begin(timid).crouches) << "its crouched sight blocked";
+    auto bold = fightAt(600.0F, cs::BotSkill{0.5F});
+    bold.seesCrouched = true;
+    bold.aggression = 1.0F;
+    EXPECT_FALSE(begin(bold).crouches) << "all aggression, near";
+    auto far = fightAt(900.0F, cs::BotSkill{0.5F});
+    far.seesCrouched = true;
+    far.aggression = 1.0F;
+    EXPECT_TRUE(begin(far).crouches) << "farther than 750, whatever its aggression";
+    timid.seesCrouched = true;
+    timid.holdsKnife = true;
+    EXPECT_FALSE(begin(timid).crouches) << "never with a knife";
+}
+
 TEST(BotCombatTest, AKnifeDoublesTheChanceToDodge) {
     auto rules = repositoryRules();
     rules.dodgeChance = 0.5F;

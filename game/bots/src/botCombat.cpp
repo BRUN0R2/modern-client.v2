@@ -36,18 +36,25 @@ auto isFacing(nx::Vec3 enemyOrigin, nx::EulerAngles enemyView, nx::Vec3 origin) 
 
 auto fightMove(BotCombat& combat, const BotFight& fight, const BotCombatRules& rules,
                nx::Random& random) noexcept -> BotFightMove {
-    if (!combat.isFighting) {
-        // OnEnter: whether it dodges this fight.
-        const float chance =
-            rules.dodgeChance * fight.skill.value() * (fight.holdsKnife ? rules.knifeDodgeFactor : 1.0F);
-        combat = BotCombat{.isFighting = true, .dodges = drawsWithin(random, chance), .range = combat.range};
-    }
-    BotFightMove move{};
-    if (!combat.dodges) {
-        return move;
-    }
     const nx::Vec3 toEnemy = fight.enemyOrigin - fight.origin;
     const float range = std::hypot(toEnemy.x, toEnemy.y);
+    if (!combat.isFighting) {
+        // OnEnter: whether it crouches and holds, then whether it dodges this fight.
+        const float crouchChance = range > rules.crouchFarFrom.value()
+                                       ? rules.farCrouchChance
+                                       : rules.nearCrouchChance * (1.0F - fight.aggression);
+        const bool crouches = !fight.holdsKnife && drawsWithin(random, crouchChance) && fight.seesCrouched;
+        const float dodgeChance =
+            rules.dodgeChance * fight.skill.value() * (fight.holdsKnife ? rules.knifeDodgeFactor : 1.0F);
+        combat = BotCombat{.isFighting = true,
+                           .crouches = crouches,
+                           .dodges = drawsWithin(random, dodgeChance),
+                           .range = combat.range};
+    }
+    BotFightMove move{.crouches = combat.crouches};
+    if (!combat.dodges || combat.crouches) {
+        return move;
+    }
     // Its combat range, within its slack, below the skill that holds its ground.
     if (fight.skill < rules.rangeSkill) {
         if (range > combat.range.value() + rules.rangeSlack.value()) {

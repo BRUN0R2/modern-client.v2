@@ -311,7 +311,7 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
     auto decision = decisions.begin();
     for (Turn& turn : turns) {
         made.push_back(PlayerCommand{.player = turn.player,
-                                     .command = turn.self.isAlive ? finishTurn(turn, *decision++, targets)
+                                     .command = turn.self.isAlive ? finishTurn(turn, *decision++, sights)
                                                                   : turn.command});
     }
     return made;
@@ -426,18 +426,29 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
 }
 
 void Bots::fight(UserCommand& command, BotDriver& driver, PlayerIndex player, const PlayerOwnState& self,
-                 nx::ecs::Entity enemy, std::span<const PerceptionTarget> targets) {
+                 nx::ecs::Entity enemy, const Sights& sights) {
+    const std::span<const PerceptionTarget> targets = sights.targets;
     const nx::game::TickTime time = game->time();
     const auto body = std::ranges::find(targets, player, &PerceptionTarget::player);
     const auto foe = std::ranges::find(targets, enemy, &PerceptionTarget::entity);
     nx::invariant(body != targets.end() && foe != targets.end(), "Bots: a bot attacks alive an enemy alive");
+    const BotSkillLevel& level = rules.skillLevels[driver.skillLevel];
+    // OnEnter's line from its origin crouched, lower by as much standing, to its enemy's eye.
+    const bool seesCrouched =
+        !driver.combat.isFighting &&
+        game->seesSpot(sights.solids,
+                       body->origin -
+                           nx::Vec3{.z = body->isDucked ? 0.0F : rules.combat.crouchSightDrop.value()},
+                       foe->eye);
     const BotFightMove move = fightMove(driver.combat,
                                         {.origin = body->origin,
                                          .velocity = self.velocity,
                                          .enemyOrigin = foe->origin,
                                          .enemyView = foe->view,
-                                         .skill = rules.skillLevels[driver.skillLevel].skill,
+                                         .skill = level.skill,
+                                         .aggression = level.aggression,
                                          .holdsKnife = self.heldSlot == WeaponSlot::Knife,
+                                         .seesCrouched = seesCrouched,
                                          .maxSpeed = self.maxSpeed,
                                          .now = time.now,
                                          .rate = time.rate},
@@ -446,6 +457,9 @@ void Bots::fight(UserCommand& command, BotDriver& driver, PlayerIndex player, co
     command.move.side = move.side;
     if (move.jumps) {
         command.buttons.set(Button::Jump);
+    }
+    if (move.crouches) {
+        command.buttons.set(Button::Duck);
     }
 }
 
@@ -491,8 +505,8 @@ auto Bots::panic(const nx::agents::Agent& agent, BotDriver& driver, const Player
     return self.eye + nx::Vec3{.x = offset.x, .y = offset.y, .z = height};
 }
 
-auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision,
-                      std::span<const PerceptionTarget> targets) -> UserCommand {
+auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Sights& sights) -> UserCommand {
+    const std::span<const PerceptionTarget> targets = sights.targets;
     const nx::game::TickTime time = game->time();
     const PlayerOwnState& self = turn.self;
     nx::agents::Agent* const agent = turn.agent;
@@ -519,7 +533,7 @@ auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision,
     }
     moveAlong(command, decision.intent, self.maxSpeed);
     if (attacks) {
-        fight(command, *driver, turn.player, self, *decision.target, targets);
+        fight(command, *driver, turn.player, self, *decision.target, sights);
     } else {
         endFight(driver->combat);
     }
