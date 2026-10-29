@@ -139,8 +139,18 @@ TEST(PlayerInputTest, SpeedWalksAndTheLimitCapsTheSpeedsTogether) {
 
     player.run("-moveright 18; +speed");
     const cs::UserCommand walking = player.next(nx::UnitsPerSecond{250.0F});
-    EXPECT_FLOAT_EQ(walking.move.forward.value(), 400.0F * 0.52F) << "under the limit";
+    EXPECT_FLOAT_EQ(walking.move.forward.value(), 250.0F * 0.52F) << "a share of its own speed: 130";
+    EXPECT_LT(walking.move.forward.value(), 150.0F) << "below the speed its steps sound at";
     EXPECT_EQ(walking.move.side.value(), 0.0F);
+
+    player.run("cl_movespeedkey 0.9");
+    EXPECT_FLOAT_EQ(player.next(nx::UnitsPerSecond{250.0F}).move.forward.value(), 250.0F * 0.52F)
+        << "the key 0.52 at most";
+    player.run("cl_movespeedkey 0.3");
+    EXPECT_FLOAT_EQ(player.next(nx::UnitsPerSecond{250.0F}).move.forward.value(), 250.0F * 0.3F);
+    player.run("cl_forwardspeed 100");
+    EXPECT_FLOAT_EQ(player.next(nx::UnitsPerSecond{250.0F}).move.forward.value(), 100.0F * 0.3F)
+        << "of what it asks under the limit";
 }
 
 TEST(PlayerInputTest, AJumpPressedAndReleasedWithinACommandStillJumps) {
