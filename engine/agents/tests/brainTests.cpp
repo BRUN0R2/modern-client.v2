@@ -139,12 +139,14 @@ TEST(AgentBrain, ItsWayGoesFromWhereItIsToItsGoal) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
-    EXPECT_TRUE(brain.way(query).empty()) << "no corridor before it decides";
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    EXPECT_TRUE(way.empty()) << "no corridor before it decides";
     const nx::Vec3 feet{.x = 10};
     const nx::Vec3 goal{.y = 200};
     brain.setGoal(goal);
     ASSERT_EQ(brain.decide(feet, query).behavior, nx::agents::Behavior::MoveTo);
-    const std::vector<nx::Vec3> way = brain.way(query);
+    brain.appendWay(query, way);
     ASSERT_GE(way.size(), 2U);
     EXPECT_LT(nx::test::distanceAcross(way.front(), feet), kOnTheMesh);
     EXPECT_LT(nx::test::distanceAcross(way.back(), goal), kOnTheMesh);
@@ -156,14 +158,19 @@ TEST(AgentBrain, AnAgentHasAWayOnlyWhileItsLastDecisionFollowsTheCorridor) {
     nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}};
     const nx::Vec3 goal{.y = 200};
     agent.brain.setGoal(goal);
+    const auto wayOf = [&query](const auto& follower) {
+        std::vector<nx::Vec3> points;
+        follower.appendWay(query, points);
+        return points;
+    };
     agent.behavior = agent.brain.decide({}, query).behavior;
     ASSERT_TRUE(nx::agents::followsCorridor(agent.behavior));
-    EXPECT_FALSE(agent.way(query).empty());
-    EXPECT_EQ(agent.way(query), agent.brain.way(query));
+    EXPECT_FALSE(wayOf(agent).empty());
+    EXPECT_EQ(wayOf(agent), wayOf(agent.brain));
     agent.behavior = agent.brain.decide(goal, query).behavior;
     ASSERT_EQ(agent.behavior, nx::agents::Behavior::Idle);
-    EXPECT_FALSE(agent.brain.way(query).empty()) << "the corridor it arrived by is kept";
-    EXPECT_TRUE(agent.way(query).empty());
+    EXPECT_FALSE(wayOf(agent.brain).empty()) << "the corridor it arrived by is kept";
+    EXPECT_TRUE(wayOf(agent).empty());
 }
 
 TEST(AgentBrain, ATargetItSeesComesBeforeItsGoal) {

@@ -18,6 +18,7 @@ nxAddModuleLibrary(appClient
         nx::jobs
         nx::game
         nx::navigation
+        nx::ecs
         nx::agents
         nx::platform
         nx::console

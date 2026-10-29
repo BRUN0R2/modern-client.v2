@@ -101,10 +101,11 @@ public:
     inline void setGoal(std::optional<Vec3> goal) noexcept { givenGoal = goal; }
     /// The goal it was given and has not reached yet.
     [[nodiscard]] inline auto goal() const noexcept -> std::optional<Vec3> { return givenGoal; }
-    /// The way left along its corridor (navigation::Corridor::way), from where its last decision left it
-    /// to its target or its goal, on the mesh of `query`, which must be the one it decides on; none
-    /// without a corridor. A decision that does not follow it (followsCorridor) leaves it as it was.
-    [[nodiscard]] auto way(navigation::NavigationQuery& query) const -> std::vector<Vec3>;
+    /// Appends to `points` the way left along its corridor (navigation::Corridor::appendWay), from where
+    /// its last decision left it to its target or its goal, on the mesh of `query`, which must be the one
+    /// it decides on; nothing without a corridor. A decision that does not follow it (followsCorridor)
+    /// leaves it as it was.
+    void appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const;
     [[nodiscard]] inline auto memories() const noexcept -> std::span<const Memory> { return memory; }
 
 private:
@@ -157,8 +158,9 @@ struct Agent {
     Behavior behavior = Behavior::Idle; ///< Of its brain's last decision.
     std::size_t nextCandidate = 0;
 
-    /// The way its brain follows (Brain::way) while its last decision follows its corridor; else none.
-    [[nodiscard]] auto way(navigation::NavigationQuery& query) const -> std::vector<Vec3>;
+    /// Appends to `points` the way its brain follows (Brain::appendWay) while its last decision follows
+    /// its corridor; else nothing.
+    void appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const;
 };
 
 } // namespace nx::agents

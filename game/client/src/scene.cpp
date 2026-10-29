@@ -299,8 +299,9 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     particleRenderer.drawPrepared(list);
     if (auto drawn = overlayRenderer.draw(list, {.camera = view.camera,
                                                  .aspect = view.aspect,
-                                                 .triangles = view.overlay.triangles,
-                                                 .lines = view.overlay.lines});
+                                                 .isMeshShown = view.overlay.isMeshShown,
+                                                 .arrows = view.overlay.arrows,
+                                                 .arrowStyle = view.overlay.arrowStyle});
         !drawn) {
         return nx::fail(SceneError::DrawFailed, "the overlay", std::move(drawn.error()));
     }
@@ -367,6 +368,14 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
 
 void Scene::drawEffects(nx::rhi::CommandList& list) const {
     nx::render::drawInOrder(list, m_viewSprites);
+}
+
+auto Scene::keepOverlay(nx::rhi::CommandList& commands, const nx::render::OverlayMesh& mesh)
+    -> nx::Result<void, SceneError> {
+    if (auto kept = overlayRenderer.keep(commands, mesh); !kept) {
+        return nx::fail(SceneError::CreateFailed, "the overlay's mesh", std::move(kept.error()));
+    }
+    return {};
 }
 
 void Scene::bakeReflections(nx::rhi::CommandList& list, const SceneView& view) {

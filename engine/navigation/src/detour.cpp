@@ -741,27 +741,24 @@ auto Corridor::corners(NavigationQuery& query, std::size_t count) -> std::vector
     return corners;
 }
 
-auto Corridor::way(NavigationQuery& query) const -> Path {
-    expects(&query.mesh() == navigationMesh, "Corridor::way: a query of the corridor's mesh");
+void Corridor::appendWay(NavigationQuery& query, std::vector<Vec3>& points) const {
+    expects(&query.mesh() == navigationMesh, "Corridor::appendWay: a query of the corridor's mesh");
     if (&query.mesh() != navigationMesh) {
-        return {};
+        return;
     }
     const dtPathCorridor& corridor = detourState->corridor;
     // The funnel adds a corner at most at each polygon it crosses, besides the agent's and the target's.
     const std::size_t mostPoints = narrow<std::size_t>(corridor.getPathCount()) + 2;
-    std::vector<float>& points = query.detourState->points;
-    points.resize(mostPoints * kCoordinates);
+    std::vector<float>& found = query.detourState->points;
+    found.resize(mostPoints * kCoordinates);
     int count = 0;
     const dtStatus status = query.detourState->query->findStraightPath(
-        corridor.getPos(), corridor.getTarget(), corridor.getPath(), corridor.getPathCount(), points.data(),
+        corridor.getPos(), corridor.getTarget(), corridor.getPath(), corridor.getPathCount(), found.data(),
         nullptr, nullptr, &count, narrow<int>(mostPoints));
-    invariant(dtStatusSucceed(status), "Corridor::way: Detour straightens the corridor's polygons");
-    Path way;
-    way.points.reserve(narrow<std::size_t>(count));
+    invariant(dtStatusSucceed(status), "Corridor::appendWay: Detour straightens the corridor's polygons");
     for (std::size_t point = 0; point < narrow<std::size_t>(count); ++point) {
-        way.points.push_back(detail::positionOf(pointAt(points, point)));
+        points.push_back(detail::positionOf(pointAt(found, point)));
     }
-    return way;
 }
 
 NavigationMeshes::NavigationMeshes(std::vector<AgentProfile> profiles, BuildSettings settings) noexcept

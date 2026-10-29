@@ -22,7 +22,6 @@ using nx::navigation::Geometry;
 using nx::navigation::NavigationError;
 using nx::navigation::NavigationMesh;
 using nx::navigation::NavigationQuery;
-using nx::navigation::Path;
 using nx::navigation::PathRequest;
 
 constexpr float kTolerance = 8.0F;
@@ -132,17 +131,20 @@ TEST(CorridorTest, ItsWayIsTheWayFoundUntilTheAgentMovesThenStartsWhereItIs) {
     ASSERT_TRUE(corridor.has_value());
     const auto found = query.findPath(request);
     ASSERT_TRUE(found.has_value());
-    const Path planned = corridor->way(query);
-    EXPECT_EQ(planned.points, found->points);
-    ASSERT_GE(planned.points.size(), 3U) << "around the wall's end";
-    EXPECT_EQ(planned.points.front(), corridor->position());
-    EXPECT_EQ(planned.points.back(), corridor->target());
+    std::vector<Vec3> planned;
+    corridor->appendWay(query, planned);
+    EXPECT_EQ(planned, found->points);
+    ASSERT_GE(planned.size(), 3U) << "around the wall's end";
+    EXPECT_EQ(planned.front(), corridor->position());
+    EXPECT_EQ(planned.back(), corridor->target());
 
     const Vec3 moved = corridor->moveAgent(query, {.x = 100.0F, .y = 200.0F});
-    const Path left = corridor->way(query);
-    ASSERT_FALSE(left.points.empty());
-    EXPECT_EQ(left.points.front(), moved);
-    EXPECT_EQ(left.points.back(), corridor->target());
+    std::vector<Vec3> left{Vec3{.z = -1.0F}};
+    corridor->appendWay(query, left);
+    ASSERT_GE(left.size(), 2U);
+    EXPECT_EQ(left.front(), (Vec3{.z = -1.0F})) << "appended after what was there";
+    EXPECT_EQ(left[1], moved);
+    EXPECT_EQ(left.back(), corridor->target());
 }
 
 TEST(CorridorTest, NoCorridorJoinsAPointOffTheMesh) {

@@ -14,6 +14,7 @@ import nx.math;
 import nx.jobs;
 import nx.game;
 import nx.navigation;
+import nx.ecs;
 import nx.agents;
 import nx.platform;
 import nx.console;
@@ -211,7 +212,8 @@ struct Session {
     /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, ConsoleError> agentMesh;
-    /// What nav_draw draws of agentMesh, made as it is first drawn: it goes before the mesh.
+    /// What nav_draw draws of agentMesh, made as it is first drawn, its mesh then kept by the scene: it
+    /// goes before the mesh.
     std::optional<cs::NavigationDrawing> navigationDrawing{};
     std::unique_ptr<zombies::Horde> horde{};
     std::unique_ptr<cs::Bots> bots{};
@@ -509,8 +511,8 @@ private:
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
     /// gave it, the brush entities where the game puts them, the weapon in hand, and what nav_draw draws.
     [[nodiscard]] auto sessionView() -> cs::SceneView;
-    /// What nav_draw draws over the session's frame, while it draws: its agents' mesh and the way each of
-    /// its agents follows on it.
+    /// What nav_draw draws over the session's frame, while it draws: its agents' mesh, which upload put on
+    /// the GPU, and the way each of its living agents follows on it, found again as the game ticks.
     [[nodiscard]] auto navigationOverlay() -> cs::SceneOverlay;
     /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, and the console's
     /// window when open.
@@ -532,6 +534,9 @@ private:
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
+    /// navigationOverlay's, kept for their room: the bodies of the agents, and those living that it shows.
+    std::vector<std::pair<nx::ecs::Entity, const nx::agents::Agent*>> agentBodies;
+    std::vector<cs::ShownAgent> shownAgents;
     /// Read as the client starts, so that making the bots reads nothing during a frame.
     nx::Result<cs::BotRules, cs::BotActionError> botRules{};
     /// Read as the client starts: each map's agents' mesh is built by it as the map loads.
@@ -1517,6 +1522,15 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
             return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
         }
     }
+    if (m_scene && drawsNavigation && m_session->agentMesh && navigationData &&
+        !m_session->navigationDrawing) {
+        // nav_draw's mesh, put on the GPU once: the session's scene keeps it as long as the drawing lives.
+        const cs::NavigationDrawing& drawing =
+            m_session->navigationDrawing.emplace(*m_session->agentMesh, navigationData->build.cellHeight);
+        if (auto kept = m_scene->keepOverlay(list, drawing.mesh()); !kept) {
+            return nx::fail(ClientError::GpuFailed, std::move(kept.error()));
+        }
+    }
     return {};
 }
 
@@ -1550,16 +1564,29 @@ auto Client::sessionView() -> cs::SceneView {
 
 auto Client::navigationOverlay() -> cs::SceneOverlay {
     Session& session = *m_session;
-    if (!drawsNavigation || !session.agentMesh || !navigationData) {
+    if (!drawsNavigation || !session.navigationDrawing) {
         return {};
     }
-    if (!session.navigationDrawing) {
-        session.navigationDrawing.emplace(*session.agentMesh, navigationData->build.cellHeight);
-    }
     cs::NavigationDrawing& drawing = *session.navigationDrawing;
-    drawing.clearWays();
-    session.game->forEachEntityComponent<nx::agents::Agent>(
-        [&drawing](const nx::agents::Agent& agent) { drawing.showWayOf(agent); });
+    // The ways change only as the game ticks: found again once a tick, not once a frame.
+    const nx::GameTime now = session.game->time().now;
+    if (!drawing.showsWaysOf(now)) {
+        agentBodies.clear();
+        session.game->forEachEntityComponent<nx::agents::Agent>(
+            [this](nx::ecs::Entity body, const nx::agents::Agent& agent) {
+                agentBodies.emplace_back(body, &agent);
+            });
+        // A dead body decides nothing: its agent's last decision and corridor are of its last life.
+        shownAgents.clear();
+        for (const auto& [body, agent] : agentBodies) {
+            if (const cs::BodyStatus status = session.game->bodyStatusOf(body); status.isAlive) {
+                shownAgents.push_back(cs::ShownAgent{.agent = agent, .team = status.team});
+            }
+        }
+        drawing.showWays(*m_jobs, now, shownAgents);
+        agentBodies.clear(); // borrowed only until the world's entities change
+        shownAgents.clear();
+    }
     return drawing.overlay();
 }
 

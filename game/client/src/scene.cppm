@@ -45,11 +45,12 @@ struct SceneShaders {
 [[nodiscard]] auto readSceneShaders(const std::filesystem::path& folder)
     -> nx::Result<SceneShaders, SceneError>;
 
-/// What the tools draw over a frame of the scene, in the map's space: every three vertices of triangles
-/// one, every two of lines one.
+/// What the tools draw over a frame of the scene: the mesh the scene keeps for them (Scene::keepOverlay)
+/// when `isMeshShown`, and `arrows` in `arrowStyle`.
 struct SceneOverlay {
-    std::span<const nx::render::OverlayVertex> triangles{};
-    std::span<const nx::render::OverlayVertex> lines{};
+    bool isMeshShown = false;
+    std::span<const nx::render::OverlayArrows> arrows{};
+    nx::render::OverlayArrowStyle arrowStyle{};
 };
 
 /// What a frame of the scene shows.
@@ -104,6 +105,10 @@ public:
     /// look, nx::render::PostRenderer's effects' layer in the enhanced look, its depth target the one
     /// draw drew with.
     void drawEffects(nx::rhi::CommandList& list) const;
+    /// Keeps `mesh` on the GPU for the tools to draw over the scene (SceneOverlay::isMeshShown) in place of
+    /// the one it kept, its uploads recorded in `commands`, outside a render pass. Errors: CreateFailed.
+    [[nodiscard]] auto keepOverlay(nx::rhi::CommandList& commands, const nx::render::OverlayMesh& mesh)
+        -> nx::Result<void, SceneError>;
 
     /// Puts on the GPU the view models `level` has now of `weapons` (none for one it has none of), and
     /// the sprites of the muzzle flashes it read since, its uploads recorded in `commands`. The GPU must

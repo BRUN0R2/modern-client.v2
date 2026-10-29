@@ -57,6 +57,13 @@ struct PerceptionTarget {
     bool isDucked = false;
 };
 
+/// What the game tells its tools (nav_draw) of a body: whether it lives, and the team of the player whose
+/// body it is, none for a body createEntity made.
+struct BodyStatus {
+    bool isAlive = false;
+    std::optional<Team> team{};
+};
+
 /// What a player knows of itself, as its own client is told it: its team, whether it is alive, its eye
 /// and its feet, how it moves, where it looks (pev->v_angle, which the game turns as it spawns), how
 /// fast it may run (pev->maxspeed), and the slot of the weapon it holds, none while it holds none.
@@ -237,15 +244,19 @@ public:
     [[nodiscard]] auto playerComponent(PlayerIndex player) -> Component* {
         return m_world.get<Component>(playerAt(player).body);
     }
-    /// Calls `visit` with the component of each body that has one, of a player's or of createEntity's, in
-    /// the world's order: none while no extension registered it.
-    template <nx::ecs::Component Component, std::invocable<const Component&> Visit>
+    /// Calls `visit` with each body that has the component, of a player's or of createEntity's, and its
+    /// component, in the world's order: none while no extension registered it. The world's entities may
+    /// not change meanwhile.
+    template <nx::ecs::Component Component, std::invocable<nx::ecs::Entity, const Component&> Visit>
     void forEachEntityComponent(Visit&& visit) {
         if (!m_world.components().find<Component>()) {
             return;
         }
-        nx::ecs::Query<const Component&>{m_world}.forEach(std::forward<Visit>(visit));
+        nx::ecs::Query<nx::ecs::Entity, const Component&>{m_world}.forEach(std::forward<Visit>(visit));
     }
+    /// What `body` is: a player's, living or dead, of its team; a body createEntity made, living or a
+    /// corpse, of no team; anything else, neither alive nor of a team.
+    [[nodiscard]] auto bodyStatusOf(nx::ecs::Entity body) const -> BodyStatus;
 
     /// What `player`'s client is told after the last tick (PlayerSnapshot).
     [[nodiscard]] auto snapshotFor(PlayerIndex player) -> PlayerSnapshot;
