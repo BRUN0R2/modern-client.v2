@@ -97,7 +97,8 @@ six nearest living bodies, players' and zombies', and the walls about it (`nx::a
 must. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
-while it chases. Each tick the bodies perceive one by one, then their brains decide together in
+while it chases. A body farther across from its corridor than its replan distance, teleported or
+pushed off the mesh, searches its way anew from where it is. Each tick the bodies perceive one by one, then their brains decide together in
 batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at
 its body's index, so that the commands are the same with any number of workers. Agent commands and
 body updates have deterministic order. The session removes the

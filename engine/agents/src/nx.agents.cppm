@@ -101,10 +101,11 @@ public:
     /// A deterministic choice among the targets recognized: closest visible target, else freshest
     /// remembered target. Ties retain memory order. A failed path is attempted again only when its goal or
     /// source moves sufficiently. Smaller observation changes update the corridor's destination without
-    /// another full search. Query/path failures become Blocked decisions carrying their NavigationError.
-    /// Investigations finish at the corridor's projected destination, including an airborne observation.
-    /// With no target remembered, it moves to its goal (MoveTo), which it forgets as it arrives
-    /// (Idle).
+    /// another full search; a body farther across from its corridor than the replan distance (spawned
+    /// again, teleported, pushed off the mesh) searches its way anew from where it is. Query/path failures
+    /// become Blocked decisions carrying their NavigationError. Investigations finish at the corridor's
+    /// projected destination, including an airborne observation. With no target remembered, it moves to its
+    /// goal (MoveTo), which it forgets as it arrives (Idle).
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at

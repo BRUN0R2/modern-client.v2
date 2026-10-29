@@ -252,6 +252,7 @@ auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
     const OwnedWeapon* const held = player.inventory.held();
     return PlayerOwnState{.team = player.team,
                           .isAlive = player.status.isAlive(),
+                          .spawnedAt = player.spawnedAt,
                           .eye = eyeOf(player.movement),
                           .feet = feetOf(player.movement),
                           .velocity = player.movement.velocity,
@@ -907,6 +908,7 @@ void Game::spawn(Player& player) {
     player.breath.fill(time);
     player.timedHarms.spawned();
     player.roundTimer = m_rounds.timerAt(time.now, time.rate);
+    player.spawnedAt = time.now;
 }
 
 void Game::equip(Player& player) {

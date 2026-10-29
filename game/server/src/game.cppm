@@ -73,12 +73,14 @@ struct BodyStatus {
     std::optional<Team> team{};
 };
 
-/// What a player knows of itself, as its own client is told it: its team, whether it is alive, its eye
-/// and its feet, how it moves, where it looks (pev->v_angle, which the game turns as it spawns), how
-/// fast it may run (pev->maxspeed), and the slot of the weapon it holds, none while it holds none.
+/// What a player knows of itself, as its own client is told it: its team, whether it is alive, when it
+/// last spawned (alive already or not: a round's start spawns the living too), its eye and its feet, how
+/// it moves, where it looks (pev->v_angle, which the game turns as it spawns), how fast it may run
+/// (pev->maxspeed), and the slot of the weapon it holds, none while it holds none.
 struct PlayerOwnState {
     Team team{};
     bool isAlive = false;
+    nx::GameTime spawnedAt{};
     nx::Vec3 eye{};
     nx::Vec3 feet{};
     nx::Vec3 velocity{};
@@ -116,6 +118,7 @@ struct Player {
     nx::Flags<Button> lastButtons{}; ///< m_afButtonLast: the use button acts as it goes down.
     bool isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
     std::uint32_t spawnsThisRound = 0; ///< m_iNumSpawns.
+    nx::GameTime spawnedAt{};          ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
     RoundTimer roundTimer{};
     std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
     bool wasPlaced = false;                      ///< In the tick.

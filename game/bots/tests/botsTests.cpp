@@ -47,6 +47,10 @@ constexpr std::uint32_t kPastTheFirstFreeze = 810;
 constexpr std::uint32_t kPastTheCommence = 301;
 /// Ticks past a round's freeze, mp_freezetime's default (600 ticks).
 constexpr std::uint32_t kPastAFreeze = 610;
+/// Ticks past a restart sv_restart asks for one second on, read once a second.
+constexpr std::uint32_t kPastARestart = 250;
+/// Ticks a bot looking at an enemy in its cone is given to remember it: it looks each tick.
+constexpr std::uint32_t kSightTicks = 10;
 /// Ticks well within a round's freeze, far longer than a stuck bot's watch takes to find it stuck.
 constexpr std::uint32_t kWithinAFreeze = 300;
 /// Ticks a bot is given to kill an enemy it sees once the freeze is over.
@@ -314,6 +318,29 @@ TEST_F(BotsTest, ABotFrozenByTheRoundIsNotStuckAndNeitherWigglesNorJumps) {
         EXPECT_FALSE(made.front().command.buttons.test(cs::Button::Jump)) << "at " << tick;
         EXPECT_FALSE(agent->stuck.isStuck()) << "at " << tick;
     }
+}
+
+TEST_F(BotsTest, ABotAliveAsTheGameRestartsBeginsItsNewLifeAnew) {
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy, kNoPrefix);
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    play(kPastTheCommence);
+    // It faces +x as its spawn point does, the enemy ahead of it: it remembers the enemy.
+    standAt(bot, 0.0F);
+    standAt(enemy, kApart);
+    play(kSightTicks);
+    const nx::agents::Agent* const agent = game->playerComponent<nx::agents::Agent>(bot);
+    ASSERT_NE(agent, nullptr);
+    ASSERT_FALSE(agent->brain.memories().empty());
+    const nx::GameTime spawned = game->ownStateOf(bot).spawnedAt;
+    ASSERT_TRUE(cvars->restart.set(1.0F).has_value());
+    for (std::uint32_t tick = 0; tick < kPastARestart && game->ownStateOf(bot).spawnedAt == spawned; ++tick) {
+        play(1);
+    }
+    ASSERT_NE(game->ownStateOf(bot).spawnedAt, spawned) << "spawned again as the game restarts";
+    ASSERT_TRUE(game->ownStateOf(bot).isAlive) << "alive all along";
+    // At its spawn point again, the enemy at its own off its cone: what it knew is of its last life.
+    play(1);
+    EXPECT_TRUE(agent->brain.memories().empty());
 }
 
 TEST_F(BotsTest, AnExpertBotKillsAnEnemyItSeesOnceTheFreezeIsOver) {

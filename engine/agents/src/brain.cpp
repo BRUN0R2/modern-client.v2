@@ -102,7 +102,11 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
             return decision;
         }
     }
-    if (target != pursued || !plannedGoal ||
+    // A body away from its corridor (spawned again, teleported, pushed off the mesh) searches its way anew
+    // from where it is, rather than walking straight at a corridor left behind.
+    const bool isAwayFromCorridor =
+        corridor && groundDistance(corridor->moveAgent(query, feet), feet) > rules.replanDistance.value();
+    if (target != pursued || !plannedGoal || isAwayFromCorridor ||
         groundDistance(*plannedGoal, goal) >= rules.replanDistance.value() ||
         (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value())) {
         if (target != pursued) {
