@@ -34,7 +34,9 @@ convex polygons, through Recast and Detour.
   lets through).
 - **Areas and costs.** Each polygon has a kind: floor, crouch, water, ladder, jump, door,
   danger… Each profile and each query weighs the kinds, so that a bot avoids danger and a zombie
-  does not.
+  does not. A query also weighs places of its own, the polygons about them costing more (an agent
+  keeping away from where it got stuck), through a query filter of ours: Detour is built with its
+  filter virtual for it.
 - **Links.** Ladders, jumps, drops and teleporters are links between polygons, found in the map
   (`func_ladder`, ledges, `trigger_teleport`) and added by plugins.
 - **What changes in a match.** Doors and breakables turn their areas and links on and off as the

@@ -90,7 +90,7 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
                 request.stuck->watch(decision.intent, request.feet, request.maxSpeed,
                                      followsCorridor(decision.behavior),
                                      request.elapsed) == Progress::GivesUp) {
-                request.brain->giveUp();
+                request.brain->giveUp(request.stuck->stuckPlace(), request.stuck->reroutes());
             }
             work.decisions[index] = decision;
         }

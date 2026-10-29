@@ -31,6 +31,14 @@ TEST(NavigationQueryValidation, RejectsNonfiniteCoordinatesInvalidCostsAndNegati
     EXPECT_EQ(query.findPath(request).error().code, nx::navigation::NavigationError::InvalidQuery);
     EXPECT_EQ(nx::navigation::Corridor::plan(query, request).error().code,
               nx::navigation::NavigationError::InvalidQuery);
+    const std::array avoided{nx::navigation::AvoidedPlace{.radius = nx::HammerUnits{-1}}};
+    const nx::navigation::PathRequest avoiding{.from = {}, .to = {.x = 128}, .avoided = avoided};
+    EXPECT_EQ(query.findPath(avoiding).error().code, nx::navigation::NavigationError::InvalidQuery);
+    const std::array cheaper{nx::navigation::AvoidedPlace{.radius = nx::HammerUnits{8}, .cost = 0.5F}};
+    EXPECT_EQ(nx::navigation::Corridor::plan(query, {.from = {}, .to = {.x = 128}, .avoided = cheaper})
+                  .error()
+                  .code,
+              nx::navigation::NavigationError::InvalidQuery);
     nx::Random random{1, "query validation"};
     EXPECT_EQ(query.randomPoint({}, nx::HammerUnits{-1}, random).error().code,
               nx::navigation::NavigationError::InvalidQuery);
@@ -180,6 +188,52 @@ TEST(NavigationQueryTest, APointFarFromTheMeshIsOutsideIt) {
     const auto onIt = query.nearestPoint({.x = 100.0F, .y = 100.0F, .z = 36.0F});
     ASSERT_TRUE(onIt.has_value());
     EXPECT_NEAR(onIt->z, 0.0F, kTolerance);
+}
+
+TEST(NavigationQueryTest, AWayKeepsAwayFromAnAvoidedPlaceWhereAnotherWayGoes) {
+    // A corridor along y = 0 to 256 and another along y = 512 to 768, joined at both ends.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 256.0F, .y = 768.0F}, 0.0F);
+    nx::test::addFloor(geometry, {.x = 256.0F, .y = 0.0F}, {.x = 768.0F, .y = 256.0F}, 0.0F);
+    nx::test::addFloor(geometry, {.x = 256.0F, .y = 512.0F}, {.x = 768.0F, .y = 768.0F}, 0.0F);
+    nx::test::addFloor(geometry, {.x = 768.0F, .y = 0.0F}, {.x = 1024.0F, .y = 768.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const std::array jammed{nx::navigation::AvoidedPlace{
+        .position = {.x = 512.0F, .y = 128.0F}, .radius = nx::HammerUnits{75.0F}, .cost = 20.0F}};
+    PathRequest request{.from = {.x = 128.0F, .y = 128.0F}, .to = {.x = 896.0F, .y = 128.0F}};
+    const auto near = query.findPath(request);
+    ASSERT_TRUE(near.has_value());
+    EXPECT_TRUE(std::ranges::all_of(near->points, [](Vec3 point) { return point.y < 256.0F; }));
+    request.avoided = jammed;
+    const auto around = query.findPath(request);
+    ASSERT_TRUE(around.has_value()) << nx::describe(around.error());
+    EXPECT_TRUE(std::ranges::any_of(around->points, [](Vec3 point) { return point.y > 512.0F; }));
+    const auto corridor = nx::navigation::Corridor::plan(query, request);
+    ASSERT_TRUE(corridor.has_value());
+    std::vector<Vec3> way;
+    corridor->appendWay(query, way);
+    EXPECT_TRUE(std::ranges::any_of(way, [](Vec3 point) { return point.y > 512.0F; })) << "a corridor too";
+    // A place off the mesh avoids nothing.
+    const std::array offTheMesh{
+        nx::navigation::AvoidedPlace{.position = {.x = 512.0F, .y = 384.0F, .z = 4096.0F},
+                                     .radius = nx::HammerUnits{75.0F},
+                                     .cost = 20.0F}};
+    request.avoided = offTheMesh;
+    EXPECT_EQ(query.findPath(request)->points, near->points);
+}
+
+TEST(NavigationQueryTest, AWayStillGoesThroughAnAvoidedPlaceWhenNoOtherWayDoes) {
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 256.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const std::array jammed{nx::navigation::AvoidedPlace{
+        .position = {.x = 512.0F, .y = 128.0F}, .radius = nx::HammerUnits{75.0F}, .cost = 20.0F}};
+    const auto path = query.findPath(
+        {.from = {.x = 128.0F, .y = 128.0F}, .to = {.x = 896.0F, .y = 128.0F}, .avoided = jammed});
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_LT(nx::test::distanceAcross(path->points.back(), {.x = 896.0F, .y = 128.0F}), kTolerance);
 }
 
 TEST(NavigationQueryTest, CostsChooseTheWay) {

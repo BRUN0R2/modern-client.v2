@@ -105,12 +105,15 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     if (target != pursued || !plannedGoal ||
         groundDistance(*plannedGoal, goal) >= rules.replanDistance.value() ||
         (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value())) {
+        if (target != pursued) {
+            avoided.clear(); // another pursuit, which got stuck nowhere yet
+        }
         target = pursued;
         plannedGoal = goal;
         plannedFrom = feet;
         corridor.reset();
         pathError.reset();
-        auto planned = navigation::Corridor::plan(query, {.from = feet, .to = goal});
+        auto planned = navigation::Corridor::plan(query, {.from = feet, .to = goal, .avoided = avoided});
         if (planned) {
             corridor.emplace(std::move(*planned));
         } else {
@@ -156,13 +159,27 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     return decision;
 }
 
-void Brain::giveUp() {
-    if (!target) {
-        givenGoal.reset();
-    } else if (const auto pursued = std::ranges::find(
-                   memory, *target, [](const Memory& record) { return record.observation.entity; });
-               pursued != memory.end() && !pursued->isVisible) {
-        memory.erase(pursued);
+void Brain::giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes) {
+    const auto pursued =
+        target ? std::ranges::find(memory, *target,
+                                   [](const Memory& record) { return record.observation.entity; })
+               : memory.end();
+    const bool chases = pursued != memory.end() && pursued->isVisible;
+    if (avoided.size() < reroutes) {
+        avoided.push_back(stuckAt);
+    } else if (chases) {
+        // A target it sees it never gives up: it keeps away from the last places it got stuck at.
+        if (!avoided.empty()) {
+            avoided.erase(avoided.begin());
+            avoided.push_back(stuckAt);
+        }
+    } else {
+        if (!target) {
+            givenGoal.reset();
+        } else if (pursued != memory.end()) {
+            memory.erase(pursued);
+        }
+        avoided.clear();
     }
     // Whatever it pursues next, its way is searched anew from where it is.
     plannedGoal.reset();

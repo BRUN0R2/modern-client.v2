@@ -28,7 +28,10 @@ quotaInterval = 0.3
 # it went slower than 20 units a second across the last five (MAX_VEL_SAMPLES); stuck, it moves ahead,
 # back or to a side drawn each 0.5 to 1.5 seconds, jumping within 0.5 seconds and then each 1 to 2,
 # until it is 75 units from where it got stuck. UpdatePathMovement gives its way up 5 seconds after it
-# last made some (giveUpDuration): stuck the half second its samples take, then 4.5 more.
+# last made some (giveUpDuration): stuck the half second its samples take, then 4.5 more. Then it
+# searches another way, on which the floor within those 75 units costs twenty times its length, so
+# that it takes any other less than some 2850 units longer (the project's own; the original drops its
+# goal at once); stuck once more on its way, it gives up where it goes and hunts another place.
 [stuck]
 sampleInterval = 0.1
 samples = 5
@@ -38,6 +41,8 @@ wiggle = { shortest = 0.5, longest = 1.5 }
 firstJump = 0.5
 jumpInterval = { shortest = 1.0, longest = 2.0 }
 giveUpTime = 4.5
+avoidedCost = 20.0
+reroutes = 1
 
 # The spots of a player a bot looks for from its origin (CCSBot::IsVisible): its head 25 above, its
 # feet 34 below standing and 14 ducked, and its sides 13 across.
