@@ -839,8 +839,17 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   its sound's volume goes (a ducked step nearer: the original's own TODO), a teammate's never. It places
   what it hears off where it was made by up to a fifth of how far it is along each axis, kept on the mesh
   from there (`OnEvent`'s 400 at 2000), and remembers it as an enemy it lost sight of
-  (`nx::agents::Brain::hear`): its reaction time later it turns to look there and goes there, and only
+  (`nx::agents::Brain::sense`): its reaction time later it turns to look there and goes there, and only
   what it sees it fires at. A noise of an enemy it sees changes nothing.
+- It feels an enemy its body touches where it is (`cs::touchedBy`: their boxes within a unit of each
+  other), and remembers it as it remembers one it heard. Hurt by an enemy, it knows only the side the
+  attack came from, as a player's damage indicator shows it (`cs::PlayerOwnState::hurtFrom`), and looks
+  about as Condition Zero's bot panics (`CCSBot::TakeDamage`, `Panic`; the `panic` table of `bots.toml`):
+  unless it sees an enemy as it attacks, or else at random, half the square of how much skill it lacks,
+  it looks at a spot 100 units ahead, behind or to either side of where it looks, the one the attack came
+  from, up to 75 off it, from half a skill; below, 200 behind and up to 400 to a side; up to 50 up or down,
+  above anything but an enemy it attacks, until its view is within 5 degrees of it. It never learns from
+  a hurt where its attacker is: it turns, and its sight tells it.
 - The spot of its enemy it aims at by its skill and the parts it sees, the knife's,
   the sniper rifles', the shotguns' and the machine gun's own ways of firing, the weapons it chooses
   and buys, the objectives, the radio and `bot_chatter` come next.

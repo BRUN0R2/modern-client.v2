@@ -8,6 +8,7 @@ nxAddTest(csServerTests
         playerNamesTests.cpp
         agentNavigationTests.cpp
         agentHearingTests.cpp
+        agentTouchTests.cpp
     DEPENDS
         cs::server
         cs::shared

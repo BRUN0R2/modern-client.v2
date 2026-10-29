@@ -15,6 +15,7 @@ nxAddModuleLibrary(csServer
         src/entityBodies.cppm
         src/agentNavigation.cppm
         src/agentHearing.cppm
+        src/agentTouch.cppm
     SOURCES
         src/gameCvars.cpp
         src/gameModels.cpp
@@ -24,6 +25,7 @@ nxAddModuleLibrary(csServer
         src/entityBodies.cpp
         src/agentNavigation.cpp
         src/agentHearing.cpp
+        src/agentTouch.cpp
     DEPENDS
         nx::core
         nx::math

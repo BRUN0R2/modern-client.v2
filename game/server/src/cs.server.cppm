@@ -20,3 +20,4 @@ export import :game;
 export import :entityBodies;
 export import :agentNavigation;
 export import :agentHearing;
+export import :agentTouch;
