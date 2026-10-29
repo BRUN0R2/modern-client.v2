@@ -44,7 +44,8 @@ struct PlayerCommand {
 };
 
 /// A living player's body that an agent's perception may consider: its entity, the player and its team,
-/// its origin and eye, its feet, how it moves, and whether it is ducked. A candidate, not a fact
+/// its origin and eye, its feet, how it moves, whether it is ducked, and where it looks (which its model's
+/// facing shows). A candidate, not a fact
 /// perceived: Game::sees and Game::seesSpot tell whether an eye sees it.
 struct PerceptionTarget {
     nx::ecs::Entity entity{};
@@ -55,6 +56,7 @@ struct PerceptionTarget {
     nx::Vec3 feet{}; ///< The active body's lower center, independent of its stance.
     nx::Vec3 velocity{};
     bool isDucked = false;
+    nx::EulerAngles view{};
 };
 
 /// A noise a living player made in the last tick that agents heed (GameSound::noise): the body that made

@@ -106,6 +106,19 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
                         "most, are required",
                         sourceName));
     }
+    const BotCombatRules& combat = rules->combat;
+    if (!isValid(combat.dodgeTime) || !isPositive(combat.dodgeRange.value()) ||
+        !isNoneOrMore(combat.combatRange.nearest.value()) ||
+        combat.combatRange.nearest > combat.combatRange.farthest ||
+        !isNoneOrMore(combat.rangeSlack.value()) || !isNoneOrMore(combat.movingSpeed.value()) ||
+        !isNoneOrMore(rules->threatRecency.count()) || !isNoneOrMore(rules->threatMargin.value())) {
+        return nx::fail(
+            BotError::InvalidData,
+            std::format("{}: combat's dodge range more than none, its dodge time a pause, its combat "
+                        "range's nearest none or more and no farther than its farthest, and the "
+                        "threat's recency and margin none or more, are required",
+                        sourceName));
+    }
     const BotPanicRules& panic = rules->panic;
     if (!isPositive(panic.near.value()) || !isPositive(panic.far.value()) ||
         !isNoneOrMore(panic.shift.value()) || !isNoneOrMore(panic.farSide.value()) ||
@@ -158,6 +171,8 @@ auto brainRulesOf(const BotRules& rules, nx::Seconds reactionTime) noexcept -> n
                              .replanDistance = rules.replanDistance,
                              .replanShare = rules.replanShare,
                              .shortTermMemory = rules.shortTermMemory,
+                             .threatRecency = rules.threatRecency,
+                             .threatMargin = rules.threatMargin,
                              .memoryLimit = rules.memoryLimit,
                              .reactionTime = reactionTime};
 }

@@ -92,6 +92,8 @@ struct SpawnAnchor {
             .replanDistance = settings.replanDistance,
             .replanShare = settings.replanShare,
             .shortTermMemory = settings.shortTermMemory,
+            .threatRecency = settings.threatRecency,
+            .threatMargin = settings.threatMargin,
             .memoryLimit = settings.memoryLimit};
 }
 } // namespace
@@ -109,6 +111,8 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
         !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
         !std::isfinite(read->replanShare) || read->replanShare < 0.0F ||
         !std::isfinite(read->shortTermMemory.count()) || read->shortTermMemory < nx::Seconds{} ||
+        !std::isfinite(read->threatRecency.count()) || read->threatRecency < nx::Seconds{} ||
+        !std::isfinite(read->threatMargin.value()) || read->threatMargin < nx::HammerUnits{} ||
         !positive(read->spawnRadius.value()) || !positive(read->spawnSpacing.value()) ||
         read->memoryLimit == 0 || read->perceptionBudget == 0 || read->spawnBatchLimit == 0) {
         return nx::fail(

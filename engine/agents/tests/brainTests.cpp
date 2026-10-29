@@ -238,6 +238,94 @@ TEST(AgentBrain, AFarGoalThatMovesLessThanItsShareKeepsItsWayAndOneThatMovesMore
     EXPECT_LT(nx::test::distanceAcross(around, {.x = 1000, .y = 740}), 1.0F);
 }
 
+TEST(AgentBrain, WhatItPerceivedWhileItFoughtWaitsForTheFightToBeOver) {
+    using nx::agents::Salience;
+    nx::ecs::World world;
+    const auto fought = world.spawn();
+    const auto heard = world.spawn();
+    nx::agents::Brain brain{rules()}; // remembers 2 seconds
+    const auto at = [](float seconds) {
+        return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
+    };
+    const auto remembers = [&brain](nx::ecs::Entity entity) {
+        return std::ranges::contains(brain.memories(), entity, [](const nx::agents::Memory& record) {
+            return record.observation.entity;
+        });
+    };
+    brain.perceive(std::array{nx::agents::Observation{fought, {.x = 300}}}, at(0.0F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(heard, {.y = 200}, Salience::Low, 200)}, at(0.0F),
+                nx::kDefaultTickRate);
+    // It fights for 5 seconds, longer than it remembers: what it heard at the start waits.
+    for (int second = 1; second <= 5; ++second) {
+        brain.perceive(std::array{nx::agents::Observation{fought, {.x = 300}}},
+                       at(static_cast<float>(second)), nx::kDefaultTickRate);
+        ASSERT_TRUE(remembers(heard)) << "at " << second;
+    }
+    // The fight over, as its enemy died, it has its memory's lifetime to look into it.
+    brain.forgetAbsent(std::array{heard});
+    brain.perceive({}, at(6.9F), nx::kDefaultTickRate);
+    EXPECT_TRUE(remembers(heard));
+    brain.perceive({}, at(7.1F), nx::kDefaultTickRate);
+    EXPECT_FALSE(remembers(heard));
+}
+
+TEST(AgentBrain, LosingSightOfWhatItFoughtItKeepsAfterItUnlessAThreatIsMuchNearer) {
+    using nx::agents::Salience;
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto fought = world.spawn();
+    const auto stepping = world.spawn();
+    const auto shooting = world.spawn();
+    auto threats = rules();
+    threats.memoryLifetime = nx::Seconds{10.0F};
+    threats.threatRecency = nx::Seconds{0.5F};
+    threats.threatMargin = nx::HammerUnits{100.0F};
+    nx::agents::Brain brain{threats};
+    const auto at = [](float seconds) {
+        return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
+    };
+    brain.perceive(std::array{nx::agents::Observation{fought, {.x = 400}}}, at(0.0F), nx::kDefaultTickRate);
+    ASSERT_EQ(brain.decide({}, query).target, fought);
+    // Lost from sight; a step heard since, nearer and fresher, does not draw it off.
+    brain.perceive({}, at(0.1F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(stepping, {.y = 200}, Salience::Low, 200)}, at(0.1F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(brain.decide({}, query).target, fought) << "it keeps after what it fought";
+    // A shot fired 250 nearer does.
+    brain.perceive({}, at(0.2F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(shooting, {.y = -150}, Salience::High, 150)}, at(0.2F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(brain.decide({}, query).target, shooting) << "a threat much nearer";
+}
+
+TEST(AgentBrain, AShotHeardLessThanTheThreatsMarginNearerOrLongAgoDrawsItNotOff) {
+    using nx::agents::Salience;
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto fought = world.spawn();
+    const auto shooting = world.spawn();
+    auto threats = rules();
+    threats.memoryLifetime = nx::Seconds{10.0F};
+    threats.threatRecency = nx::Seconds{0.5F};
+    threats.threatMargin = nx::HammerUnits{100.0F};
+    nx::agents::Brain brain{threats};
+    const auto at = [](float seconds) {
+        return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
+    };
+    brain.perceive(std::array{nx::agents::Observation{fought, {.x = 300}}}, at(0.0F), nx::kDefaultTickRate);
+    ASSERT_EQ(brain.decide({}, query).target, fought);
+    brain.perceive({}, at(0.1F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(shooting, {.y = -250}, Salience::High, 250)}, at(0.1F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(brain.decide({}, query).target, fought) << "50 nearer, not 100";
+    brain.sense(std::array{estimateOf(shooting, {.y = -150}, Salience::High, 150)}, at(0.1F),
+                nx::kDefaultTickRate);
+    brain.perceive({}, at(1.0F), nx::kDefaultTickRate);
+    EXPECT_EQ(brain.decide({}, query).target, fought) << "a shot heard long ago is no threat";
+}
+
 TEST(AgentBrain, CapsMemoryAndEvictsTheOldestFact) {
     nx::ecs::World world;
     const auto first = world.spawn();

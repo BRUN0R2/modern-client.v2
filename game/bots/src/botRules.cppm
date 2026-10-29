@@ -114,6 +114,30 @@ struct BotPause {
 /// with a pistol, as fast as it may above rapidPistolSkill (StartRapidFire), else after pistolPause;
 /// with a gun, at once below spraySkill or nearer than sprayRange, after distantPause beyond
 /// distantRange, else after burstPause.
+/// A distance drawn at random, from its nearest to its farthest.
+struct BotRange {
+    nx::HammerUnits nearest{};
+    nx::HammerUnits farthest{};
+};
+
+/// How a bot moves as it fights (AttackState, cs.bots:botCombat): whether it dodges a fight, dodgeChance
+/// of its skill, knifeDodgeFactor times that with a knife; dodging, within dodgeRange of an enemy that faces
+/// it, a way drawn each dodgeTime, the first of a fight a jump at jumpChance from jumpSkill, moving faster
+/// than movingSpeed (IsNotMoving's still speed); and, below rangeSkill, the combat range it keeps, drawn
+/// within combatRange as it spawns, rangeSlack either way.
+struct BotCombatRules {
+    float dodgeChance = 0.0F;
+    float knifeDodgeFactor = 0.0F;
+    nx::HammerUnits dodgeRange{};
+    BotPause dodgeTime{};
+    BotSkill jumpSkill{};
+    float jumpChance = 0.0F;
+    nx::UnitsPerSecond movingSpeed{};
+    BotRange combatRange{};
+    nx::HammerUnits rangeSlack{};
+    BotSkill rangeSkill{};
+};
+
 /// How a bot hurt by an enemy looks about (CCSBot::TakeDamage, Panic): unless it sees an enemy as it
 /// attacks, or else at random, chance times the square of how much skill it lacks, it looks at a spot about
 /// it. From skilledFrom of skill, on the side the attack came from, ahead, behind or either way across of
@@ -147,8 +171,8 @@ struct BotFireRules {
 /// near it arrives and how far a goal moves before it finds another way (at least, and in shares of how far
 /// it is), how long where it placed an enemy holds against a vaguer estimate, how it finds itself stuck and
 /// gets out, how far it hears each kind of noise, how far its hunt's next place is drawn, how often bot_quota
-/// is looked at, the levels of skill it plays with, how it turns its view, aims and fires, and how it looks
-/// about when it is hurt.
+/// is looked at, the levels of skill it plays with, how it turns its view, aims and fires, how it looks
+/// about when it is hurt, how it moves as it fights, and when a threat draws it off an enemy it lost.
 struct BotRules {
     nx::Degrees fieldOfView{};
     std::uint32_t perceptionBudget = 0;
@@ -160,6 +184,8 @@ struct BotRules {
     nx::HammerUnits replanDistance{};
     float replanShare = 0.0F;
     nx::Seconds shortTermMemory{};
+    nx::Seconds threatRecency{};
+    nx::HammerUnits threatMargin{};
     nx::agents::StuckRules stuck{};
     HearingRules hearing{};
     nx::HammerUnits huntRadius{};
@@ -169,6 +195,7 @@ struct BotRules {
     BotAimRules aim{};
     BotFireRules fire{};
     BotPanicRules panic{};
+    BotCombatRules combat{};
 };
 
 /// Reads `text`, the file `sourceName`: every distance, time and budget more than none, the cone a
@@ -282,6 +309,36 @@ struct nx::meta::Description<cs::BotFireRules> {
 };
 
 template <>
+struct nx::meta::Description<cs::BotRange> {
+    static constexpr std::string_view kName = "cs::BotRange";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotRange::nearest>("nearest", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotRange::farthest>("farthest", nx::data::Range{.minimum = 0.0}),
+    };
+};
+
+template <>
+struct nx::meta::Description<cs::BotCombatRules> {
+    static constexpr std::string_view kName = "cs::BotCombatRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BotCombatRules::dodgeChance>("dodgeChance", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotCombatRules::knifeDodgeFactor>("knifeDodgeFactor",
+                                                               nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotCombatRules::dodgeRange>("dodgeRange", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotCombatRules::dodgeTime>("dodgeTime"),
+        nx::meta::field<&cs::BotCombatRules::jumpSkill>("jumpSkill",
+                                                        nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotCombatRules::jumpChance>("jumpChance",
+                                                         nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotCombatRules::movingSpeed>("movingSpeed", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotCombatRules::combatRange>("combatRange"),
+        nx::meta::field<&cs::BotCombatRules::rangeSlack>("rangeSlack", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotCombatRules::rangeSkill>("rangeSkill",
+                                                         nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::BotPanicRules> {
     static constexpr std::string_view kName = "cs::BotPanicRules";
     static constexpr std::tuple kFields{
@@ -312,6 +369,8 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::replanDistance>("replanDistance"),
         nx::meta::field<&cs::BotRules::replanShare>("replanShare", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::shortTermMemory>("shortTermMemory", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotRules::threatRecency>("threatRecency", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotRules::threatMargin>("threatMargin", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::stuck>("stuck"),
         nx::meta::field<&cs::BotRules::hearing>("hearing"),
         nx::meta::field<&cs::BotRules::huntRadius>("huntRadius"),
@@ -321,5 +380,6 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::aim>("aim"),
         nx::meta::field<&cs::BotRules::fire>("fire"),
         nx::meta::field<&cs::BotRules::panic>("panic"),
+        nx::meta::field<&cs::BotRules::combat>("combat"),
     };
 };

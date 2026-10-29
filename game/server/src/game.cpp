@@ -1105,7 +1105,8 @@ auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
                                .eye = eyeOf(player->movement),
                                .feet = feetOf(player->movement),
                                .velocity = player->movement.velocity,
-                               .isDucked = player->movement.isDucked});
+                               .isDucked = player->movement.isDucked,
+                               .view = player->view});
         }
     }
     return targets;

@@ -7,6 +7,7 @@ nxAddTest(csBotsTests
         botSightTests.cpp
         botAimTests.cpp
         botTriggerTests.cpp
+        botCombatTests.cpp
         botsTests.cpp
         botCommandsTests.cpp
     DEPENDS

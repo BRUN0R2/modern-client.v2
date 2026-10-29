@@ -16,5 +16,6 @@ export import :botRules;
 export import :botSight;
 export import :botAim;
 export import :botTrigger;
+export import :botCombat;
 export import :bots;
 export import :botCommands;

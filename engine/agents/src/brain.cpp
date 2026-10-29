@@ -30,14 +30,16 @@ Brain::Brain(Rules settings) : rules{settings} {
                 rules.attackDistance > HammerUnits{} && rules.arrivalDistance > HammerUnits{} &&
                 rules.replanDistance > HammerUnits{} && rules.reactionTime >= Seconds{} &&
                 std::isfinite(rules.replanShare) && rules.replanShare >= 0.0F &&
-                rules.shortTermMemory >= Seconds{},
-            "Brain: positive rules, a memory budget, and a reaction time, a replan share and a short-term "
-            "memory of none or more");
+                rules.shortTermMemory >= Seconds{} && rules.threatRecency >= Seconds{} &&
+                rules.threatMargin >= HammerUnits{},
+            "Brain: positive rules, a memory budget, and a reaction time, a replan share, a short-term "
+            "memory and a threat's recency and margin of none or more");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
     std::erase_if(memory, [this, now, rate](const Memory& record) {
-        return now.since(record.perceivedAt, rate) >= rules.memoryLifetime;
+        const GameTime since = foughtAt ? std::max(record.perceivedAt, *foughtAt) : record.perceivedAt;
+        return now.since(since, rate) >= rules.memoryLifetime;
     });
     for (Memory& record : memory) {
         record.isVisible = false;
@@ -58,6 +60,18 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
     }
     for (Memory& record : memory) {
         record.isRecognized = now.since(record.noticedAt, rate) >= rules.reactionTime;
+    }
+    if (std::ranges::any_of(memory,
+                            [](const Memory& record) { return record.isVisible && record.isRecognized; })) {
+        foughtAt = now;
+    }
+    markThreats(now, rate);
+}
+
+void Brain::markThreats(GameTime now, TickRate rate) {
+    for (Memory& record : memory) {
+        record.isThreat = !record.isVisible && record.salience == Salience::High &&
+                          now.since(record.placedAt, rate) <= rules.threatRecency;
     }
 }
 
@@ -87,6 +101,7 @@ void Brain::sense(std::span<const Sensed> sensed, GameTime now, TickRate rate) {
         found->perceivedAt = now;
         found->isRecognized = now.since(found->noticedAt, rate) >= rules.reactionTime;
     }
+    markThreats(now, rate);
 }
 
 void Brain::remember(const Sensed& sensed, GameTime now, bool isVisible) {
@@ -120,17 +135,46 @@ void Brain::forgetAbsent(std::span<const ecs::Entity> present) {
     });
 }
 
-auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
-    const Memory* selected = nullptr;
+auto Brain::choose(Vec3 feet) const -> const Memory* {
+    const auto distanceTo = [feet](const Memory* record) {
+        return groundDistance(feet, record->observation.position);
+    };
+    const Memory* seen = nullptr;
+    const Memory* focused = nullptr;
+    const Memory* threat = nullptr;
+    const Memory* freshest = nullptr;
     for (const Memory& candidate : memory | std::views::filter(&Memory::isRecognized)) {
-        if (selected == nullptr || (candidate.isVisible && !selected->isVisible) ||
-            (candidate.isVisible && selected->isVisible &&
-             groundDistance(feet, candidate.observation.position) <
-                 groundDistance(feet, selected->observation.position)) ||
-            (!candidate.isVisible && !selected->isVisible && candidate.perceivedAt > selected->perceivedAt)) {
-            selected = &candidate;
+        if (candidate.isVisible) {
+            if (seen == nullptr || distanceTo(&candidate) < distanceTo(seen)) {
+                seen = &candidate;
+            }
+            continue;
+        }
+        if (focus == candidate.observation.entity) {
+            focused = &candidate;
+        }
+        if (candidate.isThreat && (threat == nullptr || distanceTo(&candidate) < distanceTo(threat))) {
+            threat = &candidate;
+        }
+        if (freshest == nullptr || candidate.perceivedAt > freshest->perceivedAt) {
+            freshest = &candidate;
         }
     }
+    if (seen != nullptr) {
+        return seen;
+    }
+    if (focused != nullptr) {
+        // Lost from sight, it keeps after it, unless a threat is much nearer (CanHearNearbyEnemyGunfire).
+        const bool isThreatNearer = threat != nullptr && threat != focused &&
+                                    distanceTo(threat) + rules.threatMargin.value() <= distanceTo(focused);
+        return isThreatNearer ? threat : focused;
+    }
+    return freshest;
+}
+
+auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
+    const Memory* const selected = choose(feet);
+    focus = selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
     if (selected == nullptr && !givenGoal) {
         target.reset();
         plannedGoal.reset();

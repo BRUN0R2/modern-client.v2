@@ -26,6 +26,7 @@ import cs.server;
 import :botRules;
 import :botAim;
 import :botTrigger;
+import :botCombat;
 
 export namespace cs {
 
@@ -38,8 +39,9 @@ enum class BotJoinError : std::uint8_t {
 /// What drives a bot's player besides its brain, a component of its body: the number of its last
 /// command, the profile it plays as, its name and its level of skill (of BotRules::skillLevels), when the
 /// life it played its last living command in began (PlayerOwnState::spawnedAt), how its view turns, how
-/// its aim errs, its trigger, the spot it looks at, hurt, until it does (BotRules::panic), and the streams
-/// its hunt, its aim, its hearing and its panic draw from.
+/// its aim errs, its trigger, the spot it looks at, hurt, until it does (BotRules::panic), how it moves as
+/// it fights (BotRules::combat), and the streams its hunt, its aim, its hearing, its panic and its fighting
+/// draw from.
 struct BotDriver {
     CommandNumber lastCommand{};
     std::string profile{};
@@ -49,10 +51,12 @@ struct BotDriver {
     BotAimError aimError{};
     BotTrigger trigger{};
     std::optional<nx::Vec3> panicSpot{};
+    BotCombat combat{};
     nx::Random hunt;
     nx::Random aim;
     nx::Random hearing;
     nx::Random panic;
+    nx::Random fighting;
 };
 
 /// The bots of one game, which must outlive them: each a player of it whose body is an agent
@@ -112,7 +116,8 @@ public:
     /// (turnView) towards where it aims at what it attacks, ahead of it above BotAimRules::leadingSkill
     /// (leadSpot) and off by its aim's error (settleAimError), or at what it looks at, or along its way;
     /// or, hurt, at the spot it panics to (BotRules::panic), until its view is within lookedWithin of it;
-    /// moves along its corridor as it steers, wiggling and jumping while it is stuck (BotRules::stuck);
+    /// moves along its corridor as it steers, wiggling and jumping while it is stuck (BotRules::stuck), or,
+    /// as it attacks, dodges and keeps its range (fightMove, BotRules::combat);
     /// and presses its attack as its trigger lets it (pullTrigger), its level's attack delay after it took
     /// its enemy on. With nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius,
     /// another when it gives the last up, stuck too long. Spawning again, killed or alive at a round's
@@ -152,6 +157,10 @@ private:
     /// within its budget.
     [[nodiscard]] auto perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
                                 const Sights& sights) -> std::vector<nx::agents::Observation>;
+    /// Moves `command` of the bot `player`, with `driver`, alive as `self`, as it attacks `enemy` among
+    /// `targets`: it dodges and keeps its range (fightMove, BotRules::combat).
+    void fight(UserCommand& command, BotDriver& driver, PlayerIndex player, const PlayerOwnState& self,
+               nx::ecs::Entity enemy, std::span<const PerceptionTarget> targets);
     /// The spot a bot with `driver`, as `self` knows itself, looks at, hurt by an enemy from
     /// self.hurtFrom (BotRules::panic, Panic), unless it sees an enemy as it attacks, as `agent` last
     /// decided, but at random; none while it looks at one already.
