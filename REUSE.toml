@@ -28,3 +28,10 @@ path = "cmake/ports/gtest/**"
 precedence = "override"
 SPDX-FileCopyrightText = ["Microsoft Corporation", "2007-2008 Google Inc.", "2026 Modern-Client.v2 contributors"]
 SPDX-License-Identifier = "MIT AND BSD-3-Clause"
+
+# The pinned vcpkg Recast and Detour recipe, built with its virtual query filter, and its upstream fix.
+[[annotations]]
+path = "cmake/ports/recastnavigation/**"
+precedence = "override"
+SPDX-FileCopyrightText = ["Microsoft Corporation", "2009-2010 Mikko Mononen", "2026 Modern-Client.v2 contributors"]
+SPDX-License-Identifier = "MIT AND Zlib"
