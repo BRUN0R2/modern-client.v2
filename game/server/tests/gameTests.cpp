@@ -356,6 +356,24 @@ TEST_F(GameTest, TheNoisesAreTheSoundsTheLivingPlayersMadeInTheLastTickThatAgent
     EXPECT_TRUE(stepped);
 }
 
+TEST_F(GameTest, APlayerFeelsTheWayTheAttackItTookCameFromInTheLastTick) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "knife");
+    EXPECT_FALSE(game().ownStateOf(victim).hurtFrom.has_value());
+    std::ignore = press(attacker, {cs::Button::Attack});
+    const std::optional<cs::HurtFrom> hurt = game().ownStateOf(victim).hurtFrom;
+    ASSERT_TRUE(hurt.has_value());
+    EXPECT_NEAR(hurt->toward.x, -1.0F, 0.01F) << "back along +x, toward its attacker behind it";
+    EXPECT_NEAR(hurt->toward.y, 0.0F, 0.01F);
+    EXPECT_EQ(hurt->team, cs::Team::CounterTerrorists);
+    EXPECT_FALSE(game().ownStateOf(attacker).hurtFrom.has_value());
+    idle(1);
+    EXPECT_FALSE(game().ownStateOf(victim).hurtFrom.has_value()) << "a tick's own";
+}
+
 TEST_F(GameTest, TheMovingBodiesAreTheLivingPlayersAndEntities) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     std::ignore = play(player, kPastTheFirstFreeze);

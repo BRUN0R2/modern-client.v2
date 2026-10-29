@@ -45,7 +45,7 @@ struct Listener {
 };
 
 /// What `listener` hears of `noises`, by `rules`, as observations of the enemies that made them
-/// (nx::agents::Brain::hear), the nearest noise of each, in the order of `noises`: those of another team
+/// (nx::agents::Brain::sense), the nearest noise of each, in the order of `noises`: those of another team
 /// than its own, within the range of their kind times their loudness of its ear; each placed off where
 /// it was made by its error across, drawn from `random`, then walked back onto the mesh of `query` from
 /// where it was made (as OnEvent keeps it on the noise's area), off the mesh where it was made off it,

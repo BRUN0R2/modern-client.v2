@@ -103,6 +103,16 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
                                     "of a whole turn at most, are required",
                                     sourceName));
     }
+    const BotPanicRules& panic = rules->panic;
+    if (!isPositive(panic.near.value()) || !isPositive(panic.far.value()) ||
+        !isNoneOrMore(panic.shift.value()) || !isNoneOrMore(panic.farSide.value()) ||
+        !isNoneOrMore(panic.height.value()) || !isPositive(panic.lookedWithin.value())) {
+        return nx::fail(
+            BotError::InvalidData,
+            std::format("{}: panic's near, far and the angle it looks within more than none, and its "
+                        "shift, side and height none or more, are required",
+                        sourceName));
+    }
     if (!isValid(rules->hearing)) {
         return nx::fail(BotError::InvalidData,
                         std::format("{}: each of hearing's ranges more than none and its error share none or "

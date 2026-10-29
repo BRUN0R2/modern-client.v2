@@ -386,6 +386,34 @@ TEST_F(BotsTest, ABotHearsAnEnemyShootBehindItAndTurnsToLookAtIt) {
     EXPECT_TRUE(sees);
 }
 
+TEST_F(BotsTest, ABotHurtByAnEnemyItDoesNotSeeLooksAboutOnTheSideTheAttackCameFrom) {
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
+    const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    play(kPastTheCommence + kPastAFreeze);
+    const cs::BotDriver* const driver = game->playerComponent<cs::BotDriver>(bot);
+    ASSERT_NE(driver, nullptr);
+    // The enemy right behind the bot, along the way it looks, its pistol at the bot's head.
+    standAt(bot, kMapSide * 0.5F);
+    const nx::Degrees yaw = game->ownStateOf(bot).view.yaw;
+    const float radians = yaw.value() * std::numbers::pi_v<float> / 180.0F;
+    constexpr float kBehind = 100.0F;
+    standAt(enemy, (kMapSide * 0.5F) - (std::cos(radians) * kBehind), -std::sin(radians) * kBehind);
+    ASSERT_FALSE(driver->panicSpot.has_value());
+    std::vector<cs::PlayerCommand> made = bots->commands();
+    made.push_back({.player = enemy,
+                    .command = cs::UserCommand{.number = cs::CommandNumber{1},
+                                               .duration = nx::Milliseconds{10.0F},
+                                               .viewAngles = {.yaw = yaw},
+                                               .buttons = {cs::Button::Attack}}});
+    game->tick(made);
+    ASSERT_TRUE(game->ownStateOf(bot).hurtFrom.has_value()) << "the shot met it";
+    play(1);
+    ASSERT_TRUE(driver->panicSpot.has_value()) << "hurt by an enemy it does not see";
+    const nx::Vec3 eye = game->ownStateOf(bot).eye;
+    const nx::Vec3 ahead{.x = std::cos(radians), .y = std::sin(radians)};
+    EXPECT_LT(nx::dot(*driver->panicSpot - eye, ahead), 0.0F) << "behind it, where the attack came from";
+}
+
 TEST_F(BotsTest, AnExpertBotKillsAnEnemyItSeesOnceTheFreezeIsOver) {
     const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Expert, kNoPrefix);
     const cs::PlayerIndex enemy = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");

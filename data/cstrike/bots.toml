@@ -205,3 +205,18 @@ longest = 0.7
 [fire.burstPause]
 shortest = 0.15
 longest = 0.5
+
+# How a bot hurt by an enemy looks about (CCSBot::TakeDamage, Panic): unless it sees an enemy as it
+# attacks, or else at random, half the square of how much skill it lacks, it looks at a spot about it.
+# From half a skill, on the side the attack came from: 100 units that way, ahead, behind or either way
+# across of where it looks, and up to 75 the other way; below half, 200 behind and up to 400 to a side.
+# Up to 50 up or down, until its view is within 5 degrees of it (SetLookAt's angle tolerance).
+[panic]
+skilledFrom = 0.5
+chance = 0.5
+near = 100.0
+shift = 75.0
+far = 200.0
+farSide = 400.0
+height = 50.0
+lookedWithin = 5.0

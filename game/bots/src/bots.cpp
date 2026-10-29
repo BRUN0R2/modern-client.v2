@@ -33,6 +33,9 @@ constexpr std::string_view kProfileStream = "bot profile";
 constexpr std::string_view kAimStream = "bot aim";
 /// The stream of random numbers how far off a bot places what it hears draws from, of the player it plays.
 constexpr std::string_view kHearingStream = "bot hearing";
+/// The stream of random numbers whether a hurt bot panics and the spot it looks at draw from, of the player
+/// it plays.
+constexpr std::string_view kPanicStream = "bot panic";
 /// How far the tick a bot joins at is shifted from the count of bots in the seed of its profile's draw.
 constexpr int kCountBits = 32;
 /// The teams a bot may play in, which MaintainBotQuota draws one of.
@@ -183,7 +186,8 @@ auto Bots::join(std::size_t level, std::string_view profile, std::optional<Team>
                                                   .skillLevel = level,
                                                   .hunt = nx::Random{player.value, kHuntStream},
                                                   .aim = nx::Random{player.value, kAimStream},
-                                                  .hearing = nx::Random{player.value, kHearingStream}});
+                                                  .hearing = nx::Random{player.value, kHearingStream},
+                                                  .panic = nx::Random{player.value, kPanicStream}});
     bots.push_back(player);
     nx::log::info(kLog, "{} plays at the {} level", game->nameOf(player), skill.name);
     return player;
@@ -394,14 +398,69 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
         driver->turn = {};
         driver->aimError = {};
         driver->trigger = {};
+        driver->panicSpot.reset();
         driver->lifeSpawnedAt = turn.self.spawnedAt;
     }
     agent->brain.forgetAbsent(sights.present);
     agent->brain.perceive(perceive(player, *agent, turn.self, sights), time.now, time.rate);
-    agent->brain.hear(heardBy({.team = turn.self.team, .ear = turn.self.eye}, sights.noises, rules.hearing,
-                              query, driver->hearing),
-                      time.now, time.rate);
+    agent->brain.sense(heardBy({.team = turn.self.team, .ear = turn.self.eye}, sights.noises, rules.hearing,
+                               query, driver->hearing),
+                       time.now, time.rate);
+    // Felt where it is, last: what it touches it knows better than what it hears.
+    if (const auto self = std::ranges::find(sights.targets, player, &PerceptionTarget::player);
+        self != sights.targets.end()) {
+        const Toucher toucher{.entity = self->entity,
+                              .team = self->team,
+                              .origin = self->origin,
+                              .box = self->isDucked ? kDuckedBox : kStandingBox};
+        agent->brain.sense(touchedBy(toucher, sights.targets), time.now, time.rate);
+    }
+    if (const std::optional<nx::Vec3> spot = panic(*agent, *driver, turn.self)) {
+        driver->panicSpot = spot;
+    }
     return turn;
+}
+
+auto Bots::panic(const nx::agents::Agent& agent, BotDriver& driver, const PlayerOwnState& self)
+    -> std::optional<nx::Vec3> {
+    const std::optional<HurtFrom>& hurt = self.hurtFrom;
+    if (!hurt || hurt->team == self.team || driver.panicSpot) {
+        return std::nullopt;
+    }
+    const BotPanicRules& panicRules = rules.panic;
+    const BotSkill skill = rules.skillLevels[driver.skillLevel].skill;
+    // TakeDamage: it panics unless it sees an enemy as it attacks, and then at random, the less skilled
+    // the likelier.
+    const bool seesEnemy = std::ranges::any_of(agent.brain.memories(), &nx::agents::Memory::isVisible);
+    const bool attacks = agent.behavior == nx::agents::Behavior::Attack;
+    const float unskill = 1.0F - skill.value();
+    if (attacks && seesEnemy && driver.panic.between(0.0F, 1.0F) >= panicRules.chance * unskill * unskill) {
+        return std::nullopt;
+    }
+    // Panic: the way it looks and across it, level.
+    const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{.yaw = self.view.yaw});
+    const nx::Vec3 ahead = axes.forward;
+    const nx::Vec3 across{.x = -ahead.y, .y = ahead.x};
+    nx::Vec3 offset{};
+    if (skill >= panicRules.skilledFrom) {
+        constexpr float kHalfRightAngleCosine = 0.7071F; // c45: within 45 degrees of a way
+        const float shift = driver.panic.between(-panicRules.shift.value(), panicRules.shift.value());
+        const float along = nx::dot(hurt->toward, ahead);
+        if (along > kHalfRightAngleCosine) {
+            offset = (ahead * panicRules.near.value()) + (across * shift);
+        } else if (along < -kHalfRightAngleCosine) {
+            offset = (ahead * -panicRules.near.value()) + (across * shift);
+        } else if (nx::dot(hurt->toward, across) > 0.0F) {
+            offset = (across * panicRules.near.value()) + (ahead * shift);
+        } else {
+            offset = (across * -panicRules.near.value()) + (ahead * shift);
+        }
+    } else {
+        const float side = driver.panic.between(-panicRules.farSide.value(), panicRules.farSide.value());
+        offset = (ahead * -panicRules.far.value()) + (across * side);
+    }
+    const float height = driver.panic.between(-panicRules.height.value(), panicRules.height.value());
+    return self.eye + nx::Vec3{.x = offset.x, .y = offset.y, .z = height};
 }
 
 auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision,
@@ -417,9 +476,19 @@ auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision,
     const bool attacks = decision.behavior == nx::agents::Behavior::Attack;
     const std::optional<nx::Vec3> aimSpot =
         attacks ? std::optional{aimSpotOf(*driver, self, decision, targets, command.duration)} : std::nullopt;
+    // Hurt, it looks where it panics to, above all but an enemy it attacks (SetLookAt's PRIORITY_HIGH).
+    if (attacks) {
+        driver->panicSpot.reset();
+    }
+    const std::optional<nx::Vec3> looked = aimSpot ? aimSpot : driver->panicSpot;
+    const nx::EulerAngles wanted = viewWanted(decision.intent, looked, self);
     command.viewAngles =
-        turnView(self.view, viewWanted(decision.intent, aimSpot, self), driver->turn,
-                 attacks ? rules.look.attacking : rules.look.roaming, rules.look, command.duration);
+        turnView(self.view, wanted, driver->turn, attacks ? rules.look.attacking : rules.look.roaming,
+                 rules.look, command.duration);
+    if (driver->panicSpot && std::abs(nx::normalizeAngle(command.viewAngles.yaw - wanted.yaw).value()) <=
+                                 rules.panic.lookedWithin.value()) {
+        driver->panicSpot.reset();
+    }
     moveAlong(command, decision.intent, self.maxSpeed);
     const bool presses = pullTrigger(driver->trigger,
                                      {.pursued = decision.target,
