@@ -131,6 +131,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] ASan + UBSan jobs (with Clang)
 - [x] Line endings (`git ls-files --eol`) in the `checks` job
 - [x] `reuse lint` in the `checks` job
+- [x] vcpkg's binary cache restored from the newest one `main` saved, and saved only by `main` when it built a package; the Vulkan SDK and LLVM installers pinned by SHA-256 and cached; a time limit on every job ([17 §7](17-build-and-tools.md#7-continuous-integration))
+- [x] Pull requests set to auto-merge brought up to date with `main` one at a time, by the repository's branch updater GitHub App (`updateBranches` workflow, [17 §8](17-build-and-tools.md#8-workflow))
 
 ### `nx.core`
 - [x] `nx::Failure<E>`, `nx::Result<T, E>`, `nx::fail`, chained cause, `nx::describe` and `std::formatter`
