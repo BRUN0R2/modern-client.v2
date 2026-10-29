@@ -85,8 +85,7 @@ TEST(AgentHearingTest, AnEnemysNoiseIsHeardWithinItsKindsRangeAsLoudAsItWasMade)
         noiseAt(teammate, cs::Team::CounterTerrorists, {.y = -100}, cs::NoiseKind::Shot),
     };
     nx::Random random{1, "hearing tests"};
-    const std::vector<nx::agents::Sensed> heard =
-        cs::heardBy(listener, noises, hearing(), query, random);
+    const std::vector<nx::agents::Sensed> heard = cs::heardBy(listener, noises, hearing(), query, random);
     ASSERT_EQ(heard.size(), 1U)
         << "a step 1000 away; none 1200 away, half as loud 1000 away, nor a teammate's";
     EXPECT_EQ(heard.front().observation.entity, near);
