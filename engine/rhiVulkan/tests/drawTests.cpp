@@ -219,8 +219,15 @@ struct FillPipeline {
     nx::rhi::OwnedRenderPipeline pipeline;
 };
 
+/// The fill pipeline's fragments, of the entry point `fragment` of fill.slang, blend as `blend` says.
+struct FillBlend {
+    std::string_view fragment = "fragmentMain";
+    std::optional<nx::rhi::BlendState> blend{};
+};
+
 [[nodiscard]] auto createFillPipeline(Device& device, std::optional<nx::rhi::DepthState> depth,
-                                      Format format = Format::Rgba8Unorm) -> std::optional<FillPipeline> {
+                                      Format format = Format::Rgba8Unorm, const FillBlend& blend = {})
+    -> std::optional<FillPipeline> {
     const std::vector<std::byte> code = shaderCode("fill.spv");
     auto shader = device.createShader({.label = "test.fill", .code = code});
     const std::array bindings{nx::rhi::BindingLayout{.binding = 0,
@@ -235,12 +242,12 @@ struct FillPipeline {
         nx::rhi::VertexAttribute{.location = 0, .format = nx::rhi::VertexFormat::Float2, .offset = 0}};
     const std::array vertexBuffers{
         nx::rhi::VertexBufferLayout{.stride = 2 * sizeof(float), .attributes = attributes}};
-    const std::array targets{nx::rhi::ColorTarget{.format = format}};
+    const std::array targets{nx::rhi::ColorTarget{.format = format, .blend = blend.blend}};
     const std::array layouts{layout->get()};
     auto pipeline =
         device.createRenderPipeline({.label = "test.fill",
                                      .vertex = {.shader = shader->get(), .entryPoint = "vertexMain"},
-                                     .fragment = {.shader = shader->get(), .entryPoint = "fragmentMain"},
+                                     .fragment = {.shader = shader->get(), .entryPoint = blend.fragment},
                                      .vertexBuffers = vertexBuffers,
                                      .colorTargets = targets,
                                      .depth = depth,
@@ -301,6 +308,40 @@ TEST_F(DrawTest, DrawsAVertexBufferInAUniformColor) {
         commands.draw(3, 1, 0, 0);
     });
     EXPECT_EQ(pixels, std::vector<Pixel>(16, kGreen));
+}
+
+TEST_F(DrawTest, AFragmentsSecondColorScalesWhatIsUnderItChannelByChannel) {
+    // White, then a fragment that adds nothing and keeps a fifth of the red, three fifths of the green
+    // and four fifths of the blue under it: dual-source blending.
+    const auto white = createFillPipeline(device(), std::nullopt);
+    const auto keeping = createFillPipeline(
+        device(), std::nullopt, Format::Rgba8Unorm,
+        {.fragment = "keepingFragmentMain",
+         .blend = nx::rhi::BlendState{.sourceColor = nx::rhi::BlendFactor::One,
+                                      .destinationColor = nx::rhi::BlendFactor::SecondSourceColor,
+                                      .sourceAlpha = nx::rhi::BlendFactor::One,
+                                      .destinationAlpha = nx::rhi::BlendFactor::One}});
+    ASSERT_TRUE(white.has_value());
+    ASSERT_TRUE(keeping.has_value());
+    const auto whiteGroup = fillGroup(device(), *white, {1.0F, 1.0F, 1.0F, 1.0F});
+    const auto keptGroup = fillGroup(device(), *keeping, {0.2F, 0.6F, 0.8F, 0.0F});
+    auto vertices =
+        upload("test.vertices", {BufferUsage::Vertex}, std::as_bytes(std::span{kCoveringTriangle}));
+    ASSERT_TRUE(whiteGroup.has_value());
+    ASSERT_TRUE(keptGroup.has_value());
+    ASSERT_TRUE(vertices.has_value()) << nx::describe(vertices.error());
+
+    const auto pixels = drawAndRead({.width = 2, .height = 2}, [&](CommandList& commands) {
+        commands.setVertexBuffer(0, vertices->get(), 0);
+        commands.setPipeline(white->pipeline.get());
+        commands.setBindGroup(0, whiteGroup->group.get());
+        commands.draw(3, 1, 0, 0);
+        commands.setPipeline(keeping->pipeline.get());
+        commands.setBindGroup(0, keptGroup->group.get());
+        commands.draw(3, 1, 0, 0);
+    });
+    constexpr Pixel kKept{51, 153, 204, 255};
+    EXPECT_EQ(pixels, std::vector<Pixel>(4, kKept));
 }
 
 TEST_F(DrawTest, ClipSpaceYPointsUp) {

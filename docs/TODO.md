@@ -302,6 +302,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Permanent decals: the maps' `infodecal`s (`nx::game::staticDecalsOf`, `DecalLife::Permanent`), stamped as the scene is made
 - [ ] An `infodecal` with a `targetname`, stamped when it is used (`TriggerDecal`), with the game's decal events
 - [x] `r_decals` and `mp_decals`: the pool's limit read at each decal, `r_decals` held to `mp_decals` as a game of more than one player is entered
+- [x] Decals in the enhanced look blended as the original blends display colors (dual-source blending, `rhi::BlendFactor::SecondSourceColor`): bullet holes and blood as dark as the original's, where blended as light they kept about twice the light under them ([05 §9.2](05-rendering.md#92-mdl-format-features-to-support))
 - [ ] Decals on masked faces (stencil)
 - [x] Emulation of gamma, brightness, texgamma and lightgamma (`nx.render:gamma`: palettes through `texgamma`, the light through the original's `lightgammatable`, no overbright)
 - [x] Studio models: bones posed on the CPU as the original poses them (`cs::poseBones`: one or two blends, bone controllers, the mouth), every model of the installation posed by `nxcheck`

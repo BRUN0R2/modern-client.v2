@@ -11,7 +11,8 @@
 // The sky's faces show the side of the sky they are seen toward, projected as the original projects
 // it (skyDirection.slang).
 // Drawn as linear light (colorEncoding.slang), the textures are sampled from sRGB as light, and the
-// light and colors the original gives as display colors are made light too; how opaque, as it is.
+// light and colors the original gives as display colors are made light too; how opaque, as it is. The
+// decals' images stay the original's display colors, blended as the original blends them.
 
 import colorEncoding;
 import skyDirection;
@@ -265,42 +266,128 @@ float4 solidFragmentMain(VertexOutput input) : SV_Target
     return litOrDiscarded(input, kSolidAlphaTest);
 }
 
-// A decal over the face it lies on (nx.render:decals), of the world or of a brush entity drawn
-// normally or solid (kRenderTransAlpha): its texel lit as the face is there, blended over the lit
-// face as opaque as its alpha. The original draws its decals over the face's texture and then
-// multiplies both by the lightmap; lit first, they come out the same.
-[shader("fragment")]
-float4 decalFragmentMain(VertexOutput input) : SV_Target
+// A decal over the face it lies on (nx.render:decals): its image's texel, a display color as the
+// original makes it, laid over the face as opaque as its alpha. The original blends it over the face's
+// display color w: c a + w (1 - a). A decal of the world or of a brush entity drawn normally or solid
+// (kRenderTransAlpha) is lit as the face is there: the original draws its decals over the face's
+// texture and then multiplies both by the lightmap; lit first, they come out the same. The decals of a
+// brush entity drawn otherwise are unlit as its faces are, each texel times the color the original's
+// R_SetRenderMode leaves set for its faces.
+struct DecalCover
 {
-    const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding), color.a);
+    float3 color;
+    float opacity;
+};
+
+// The world's and kRenderNormal's and kRenderTransAlpha's: the texel, as opaque as its alpha.
+DecalCover litDecalCoverOf(VertexOutput input)
+{
+    const float4 texel = albedo.Sample(albedoSampler, input.uv);
+    return { texel.rgb, texel.a };
 }
 
-// The decals of a brush entity drawn otherwise, unlit as its faces are, each texel times the color
-// the original's R_SetRenderMode leaves set for its faces, blended over them as opaque as its alpha.
-
 // kRenderTransTexture and kRenderGlow: the texel, as opaque as renderamt makes it.
-[shader("fragment")]
-float4 textureDecalFragmentMain(VertexOutput input) : SV_Target
+DecalCover textureDecalCoverOf(VertexOutput input)
 {
-    const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb, color.a * entity.color.a);
+    const float4 texel = albedo.Sample(albedoSampler, input.uv);
+    return { texel.rgb, texel.a * entity.color.a };
 }
 
 // kRenderTransColor: the texel times rendercolor, as opaque as renderamt makes it.
-[shader("fragment")]
-float4 colorDecalFragmentMain(VertexOutput input) : SV_Target
+DecalCover colorDecalCoverOf(VertexOutput input)
 {
-    const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb * encodedOf(entity.color.rgb, frame.colorEncoding), color.a * entity.color.a);
+    const float4 texel = albedo.Sample(albedoSampler, input.uv);
+    return { texel.rgb * entity.color.rgb, texel.a * entity.color.a };
 }
 
 // kRenderTransAdd: the texel times renderamt, blended rather than added.
+DecalCover additiveDecalCoverOf(VertexOutput input)
+{
+    const float4 texel = albedo.Sample(albedoSampler, input.uv);
+    return { texel.rgb * entity.color.a, texel.a };
+}
+
+// Drawn as display colors (kDisplayEncoding), a decal is blended as the original blends it: its
+// color, as opaque as its alpha.
+
+[shader("fragment")]
+float4 decalFragmentMain(VertexOutput input) : SV_Target
+{
+    const DecalCover cover = litDecalCoverOf(input);
+    return float4(cover.color * lightAt(input.lightmapPosition, input.styles), cover.opacity);
+}
+
+[shader("fragment")]
+float4 textureDecalFragmentMain(VertexOutput input) : SV_Target
+{
+    const DecalCover cover = textureDecalCoverOf(input);
+    return float4(cover.color, cover.opacity);
+}
+
+[shader("fragment")]
+float4 colorDecalFragmentMain(VertexOutput input) : SV_Target
+{
+    const DecalCover cover = colorDecalCoverOf(input);
+    return float4(cover.color, cover.opacity);
+}
+
 [shader("fragment")]
 float4 additiveDecalFragmentMain(VertexOutput input) : SV_Target
 {
-    const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb * entity.color.a, color.a);
+    const DecalCover cover = additiveDecalCoverOf(input);
+    return float4(cover.color, cover.opacity);
+}
+
+// Drawn as linear light (kLinearEncoding), the original's blend is a power of the display's gamma of
+// it, (c a + w (1 - a))^2.2, which no blend of the light under the decal by one factor gives: blended
+// as light with its alpha, a mark half opaque would keep about twice the light of the face that the
+// original keeps, and the dark ones, a bullet hole or blood, fade. So a decal gives the blend two colors
+// (dual-source blending), what it adds and the share it keeps of the light under it, channel by
+// channel: (c a)^2.2 and (1 - a + c a)^2.2 - (c a)^2.2. The face's light is the light of the face's
+// display color w, w^2.2, so that the blend is the original's exactly over a black face, over a white
+// one, and for a black texel over any face (a bullet hole); between them, a little darker (the game's
+// blood on its red channel: by 2 of 255 on average, 16 at most). A lit decal's light multiplies the
+// first, as the face's is already in the light the second keeps.
+struct DisplayBlend
+{
+    [[vk::location(0), vk::index(0)]] float4 added : SV_Target0;
+    [[vk::location(0), vk::index(1)]] float4 kept : SV_Target1;
+};
+
+DisplayBlend displayBlendOf(DecalCover cover, float3 light)
+{
+    const float3 covered = cover.color * cover.opacity;
+    const float3 added = linearOf(covered);
+    DisplayBlend blend;
+    blend.added = float4(added * light, cover.opacity);
+    blend.kept = float4(linearOf((1.0 - cover.opacity) + covered) - added, 0.0);
+    return blend;
+}
+
+static const float3 kUnlit = float3(1.0, 1.0, 1.0);
+
+[shader("fragment")]
+DisplayBlend linearDecalFragmentMain(VertexOutput input)
+{
+    return displayBlendOf(litDecalCoverOf(input), linearOf(lightAt(input.lightmapPosition, input.styles)));
+}
+
+[shader("fragment")]
+DisplayBlend linearTextureDecalFragmentMain(VertexOutput input)
+{
+    return displayBlendOf(textureDecalCoverOf(input), kUnlit);
+}
+
+[shader("fragment")]
+DisplayBlend linearColorDecalFragmentMain(VertexOutput input)
+{
+    return displayBlendOf(colorDecalCoverOf(input), kUnlit);
+}
+
+[shader("fragment")]
+DisplayBlend linearAdditiveDecalFragmentMain(VertexOutput input)
+{
+    return displayBlendOf(additiveDecalCoverOf(input), kUnlit);
 }
 
 // kRenderTransTexture and kRenderGlow: the texture, as opaque as renderamt makes it.

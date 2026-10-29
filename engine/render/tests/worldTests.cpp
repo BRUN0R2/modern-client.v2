@@ -849,4 +849,154 @@ TEST(BspWorldTest, DrawnAsLinearLightABrushsAmountScalesItsLight) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+/// A decal of 16 x 16 texels, each of index `index`, its palette's last color `tint`, as the game's
+/// decals are made: one color throughout, as opaque as each index.
+class TintedDecal {
+public:
+    TintedDecal(std::array<std::uint8_t, 3> tint, std::uint8_t index)
+        : m_indices(std::size_t{kSide} * kSide, std::byte{index}) {
+        std::ranges::transform(tint, m_palette.end() - static_cast<std::ptrdiff_t>(tint.size()),
+                               [](std::uint8_t channel) { return std::byte{channel}; });
+    }
+
+    [[nodiscard]] auto textures() const -> std::array<nx::assets::MipTexture, 1> {
+        return {nx::assets::MipTexture{.name = "{blood1",
+                                       .width = kSide,
+                                       .height = kSide,
+                                       .levels = {m_indices, m_indices, m_indices, m_indices},
+                                       .palette = m_palette}};
+    }
+
+private:
+    static constexpr std::uint32_t kSide = 16;
+    std::vector<std::byte> m_indices;
+    std::vector<std::byte> m_palette = std::vector<std::byte>(std::size_t{256} * 3, std::byte{0});
+};
+
+/// What the middle of the floor shows under `decal` once its textures are painted `paint`, drawn as
+/// the original draws it and as linear light.
+struct DecalOnTheFloor {
+    Pixel display{};
+    Pixel linear{};
+};
+
+[[nodiscard]] auto decalOnTheFloor(nx::rhi::Device& device, std::array<int, 3> paint,
+                                   const TintedDecal& decal) -> DecalOnTheFloor {
+    std::vector<std::byte> file = readSeed();
+    paintTextures(file, paint);
+    const auto map = nx::assets::BspView::parse(file);
+    EXPECT_TRUE(map.has_value());
+    if (!map) {
+        return {};
+    }
+    const auto shader = worldShader();
+    const auto decals = decal.textures();
+    OffscreenTarget target{device};
+    // Looking down at the floor from the middle: 2 units a pixel, the decal 8 pixels wide.
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.pitch = nx::Degrees{90.0F}}};
+    const auto drawnAs = [&](nx::render::ColorEncoding encoding) -> Pixel {
+        auto world = createWorld(device, {.map = *map,
+                                          .shaderCode = shader,
+                                          .colorFormat = Format::Rgba8Unorm,
+                                          .decals = decals,
+                                          .encoding = encoding});
+        EXPECT_TRUE(world.has_value()) << (world ? "" : nx::describe(world.error()));
+        if (!world) {
+            return {};
+        }
+        EXPECT_EQ(world->shootDecal(nx::render::DecalImageIndex{0}, {.x = 32.0F, .y = 32.0F, .z = 0.0F}), 1U);
+        return pixelAt(drawWorld(target, *world, camera), kExtent.width / 2, kExtent.height / 2);
+    };
+    return {.display = drawnAs(nx::render::ColorEncoding::Display),
+            .linear = drawnAs(nx::render::ColorEncoding::Linear)};
+}
+
+/// `display`, a display color of 0 to 255, as linear light of 0 to 255.
+[[nodiscard]] auto lightOfDisplay(int display) -> double {
+    constexpr double kChannelTop = 255.0;
+    constexpr double kDisplayGamma = 2.2;
+    return std::pow(display / kChannelTop, kDisplayGamma) * kChannelTop;
+}
+
+TEST(BspWorldTest, DrawnAsLinearLightADecalBlendsAsTheOriginalBlendsDisplayColors) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    constexpr std::size_t kRgbChannels = 3;
+    constexpr std::uint8_t kHalf = 128;
+    // A decal half opaque leaves the original's display color under it, as light: exactly when the
+    // decal is black, whatever the face (a bullet hole, which blended as light kept about twice the
+    // light the original keeps), and over a black face or a white one, whatever the decal.
+    constexpr double kQuantized = 2.5;
+    struct Exact {
+        std::string_view what;
+        std::array<int, 3> paint;
+        std::array<std::uint8_t, 3> tint;
+    };
+    for (const Exact& exact :
+         {Exact{.what = "a black decal", .paint = {200, 150, 100}, .tint = {0, 0, 0}},
+          Exact{.what = "over a black face", .paint = {0, 0, 0}, .tint = {240, 120, 0}},
+          Exact{.what = "over a white face", .paint = {255, 255, 255}, .tint = {240, 120, 0}}}) {
+        const DecalOnTheFloor drawn = decalOnTheFloor(**device, exact.paint, TintedDecal{exact.tint, kHalf});
+        for (std::size_t channel = 0; channel < kRgbChannels; ++channel) {
+            EXPECT_NEAR(drawn.linear[channel], lightOfDisplay(drawn.display[channel]), kQuantized)
+                << exact.what << ", channel " << channel;
+        }
+    }
+
+    // The game's blood, a dark red, over a face between: its green and blue those of a black decal,
+    // its red a little darker than the original's, by 16 of 255 at most as a display color.
+    const DecalOnTheFloor blood = decalOnTheFloor(**device, {200, 150, 100}, TintedDecal{{40, 0, 0}, kHalf});
+    constexpr std::size_t kBloodRed = 0;
+    constexpr int kMostBloodShortfall = 16;
+    EXPECT_LE(blood.linear[kBloodRed], lightOfDisplay(blood.display[kBloodRed]) + kQuantized);
+    EXPECT_GE(blood.linear[kBloodRed],
+              lightOfDisplay(blood.display[kBloodRed] - kMostBloodShortfall) - kQuantized);
+    for (std::size_t channel = 1; channel < kRgbChannels; ++channel) {
+        EXPECT_NEAR(blood.linear[channel], lightOfDisplay(blood.display[channel]), kQuantized)
+            << "channel " << channel;
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(BspWorldTest, DrawnAsLinearLightADecalOnABrushEntityKeepsTheShareTheOriginalKeeps) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    // TransTexture at half, the hole decal over the square: the original keeps 1 - a of the display
+    // color under it, a its opacity times renderamt, which is that share to the power of the display's
+    // gamma of its light.
+    const WallWithDecals wall{"2", "128"};
+    ASSERT_TRUE(wall.map.has_value());
+    auto world = createWorld(**device, {.map = *wall.map,
+                                        .shaderCode = shader,
+                                        .colorFormat = Format::Rgba8Unorm,
+                                        .decals = wall.decals,
+                                        .encoding = nx::render::ColorEncoding::Linear});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    const std::vector<std::byte> plain = drawWorld(target, *world, camera);
+    ASSERT_EQ(world->shootDecal(nx::render::DecalImageIndex{0}, kSquareMiddle, kOnTheWall), 1U);
+    const std::vector<std::byte> holed = drawWorld(target, *world, camera);
+    const Pixel under = pixelAt(plain, kExtent.width / 2, kExtent.height / 2);
+    const Pixel over = pixelAt(holed, kExtent.width / 2, kExtent.height / 2);
+    constexpr double kDisplayGamma = 2.2;
+    constexpr double kAmount = 128.0 / 255.0;
+    constexpr std::size_t kRgbChannels = 3;
+    const double opacity = static_cast<double>(HoleDecal::kOpacity) * kAmount;
+    const double kept = std::pow(1.0 - opacity, kDisplayGamma);
+    for (std::size_t channel = 0; channel < kRgbChannels; ++channel) {
+        EXPECT_NEAR(over.at(channel), under.at(channel) * kept, 2.0) << "channel " << channel;
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 } // namespace

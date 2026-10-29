@@ -279,6 +279,9 @@ enum class BlendFactor : std::uint8_t {
     OneMinusSourceAlpha,
     SourceColor,
     DestinationColor,
+    /// The fragment's second color for its first target (dual-source blending: an output of location 0
+    /// and index 1), channel by channel; every Direct3D 11 card blends with it.
+    SecondSourceColor,
 };
 
 /// result = source * sourceFactor + destination * destinationFactor, for color and alpha.
