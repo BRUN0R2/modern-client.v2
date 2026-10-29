@@ -28,10 +28,10 @@ struct Toucher {
     nx::Aabb box{};
 };
 
-/// The enemies `toucher` touches among `targets`, as observations of where they are
-/// (nx::agents::Brain::sense), in the order of `targets`: the players of another team than its own, but
-/// itself, whose boxes, standing or ducked at their origins, come within kTouchMargin of its own.
+/// The enemies `toucher` touches among `targets`, certain of where they are (nx::agents::Brain::sense),
+/// in the order of `targets`: the players of another team than its own, but itself, whose boxes, standing
+/// or ducked at their origins, come within kTouchMargin of its own.
 [[nodiscard]] auto touchedBy(const Toucher& toucher, std::span<const PerceptionTarget> targets)
-    -> std::vector<nx::agents::Observation>;
+    -> std::vector<nx::agents::Sensed>;
 
 } // namespace cs

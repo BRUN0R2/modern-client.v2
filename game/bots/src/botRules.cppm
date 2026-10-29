@@ -144,7 +144,8 @@ struct BotFireRules {
 
 /// data/cstrike/bots.toml: what a bot sees (the cone about its view's yaw, the players it looks at each
 /// tick in turn, and the spots of each), how long and how many it remembers, how near it attacks, how
-/// near it arrives and how far a goal moves before it finds another way, how it finds itself stuck and
+/// near it arrives and how far a goal moves before it finds another way (at least, and in shares of how far
+/// it is), how long where it placed an enemy holds against a vaguer estimate, how it finds itself stuck and
 /// gets out, how far it hears each kind of noise, how far its hunt's next place is drawn, how often bot_quota
 /// is looked at, the levels of skill it plays with, how it turns its view, aims and fires, and how it looks
 /// about when it is hurt.
@@ -157,6 +158,8 @@ struct BotRules {
     nx::HammerUnits attackDistance{};
     nx::HammerUnits arrivalDistance{};
     nx::HammerUnits replanDistance{};
+    float replanShare = 0.0F;
+    nx::Seconds shortTermMemory{};
     nx::agents::StuckRules stuck{};
     HearingRules hearing{};
     nx::HammerUnits huntRadius{};
@@ -307,6 +310,8 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::attackDistance>("attackDistance"),
         nx::meta::field<&cs::BotRules::arrivalDistance>("arrivalDistance"),
         nx::meta::field<&cs::BotRules::replanDistance>("replanDistance"),
+        nx::meta::field<&cs::BotRules::replanShare>("replanShare", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BotRules::shortTermMemory>("shortTermMemory", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::stuck>("stuck"),
         nx::meta::field<&cs::BotRules::hearing>("hearing"),
         nx::meta::field<&cs::BotRules::huntRadius>("huntRadius"),

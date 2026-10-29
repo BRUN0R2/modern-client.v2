@@ -28,8 +28,11 @@ constexpr float kTurnAnticipation = 0.5F;
 Brain::Brain(Rules settings) : rules{settings} {
     expects(rules.memoryLimit > 0 && rules.memoryLifetime > Seconds{} &&
                 rules.attackDistance > HammerUnits{} && rules.arrivalDistance > HammerUnits{} &&
-                rules.replanDistance > HammerUnits{} && rules.reactionTime >= Seconds{},
-            "Brain: positive rules, a memory budget and a reaction time of none or more");
+                rules.replanDistance > HammerUnits{} && rules.reactionTime >= Seconds{} &&
+                std::isfinite(rules.replanShare) && rules.replanShare >= 0.0F &&
+                rules.shortTermMemory >= Seconds{},
+            "Brain: positive rules, a memory budget, and a reaction time, a replan share and a short-term "
+            "memory of none or more");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
@@ -46,8 +49,11 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
             found->observation = observation;
             found->perceivedAt = now;
             found->isVisible = true;
+            found->salience = Salience::Certain;
+            found->distance = {};
+            found->placedAt = now;
         } else {
-            remember(observation, now, true);
+            remember({.observation = observation, .salience = Salience::Certain}, now, true);
         }
     }
     for (Memory& record : memory) {
@@ -55,29 +61,56 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
     }
 }
 
-void Brain::sense(std::span<const Observation> sensed, GameTime now, TickRate rate) {
-    for (const Observation& observation : sensed) {
-        auto found = std::ranges::find(memory, observation.entity,
+void Brain::sense(std::span<const Sensed> sensed, GameTime now, TickRate rate) {
+    for (const Sensed& estimate : sensed) {
+        auto found = std::ranges::find(memory, estimate.observation.entity,
                                        [](const Memory& record) { return record.observation.entity; });
         if (found == memory.end()) {
-            remember(observation, now, false);
+            remember(estimate, now, false);
             memory.back().isRecognized = rules.reactionTime <= Seconds{};
-        } else if (!found->isVisible) {
-            found->observation = observation;
-            found->perceivedAt = now;
-            found->isRecognized = now.since(found->noticedAt, rate) >= rules.reactionTime;
+            continue;
         }
+        if (found->isVisible) {
+            continue; // its sight the better
+        }
+        // OnEvent's short-term memory: a vaguer or no nearer estimate leaves a recent one where it is.
+        const bool holds = estimate.salience != Salience::Certain &&
+                           now.since(found->placedAt, rate) < rules.shortTermMemory &&
+                           (estimate.salience < found->salience ||
+                            (estimate.salience == found->salience && estimate.distance >= found->distance));
+        if (!holds) {
+            found->observation = estimate.observation;
+            found->salience = estimate.salience;
+            found->distance = estimate.distance;
+            found->placedAt = now;
+        }
+        found->perceivedAt = now;
+        found->isRecognized = now.since(found->noticedAt, rate) >= rules.reactionTime;
     }
 }
 
-void Brain::remember(const Observation& observation, GameTime now, bool isVisible) {
+void Brain::remember(const Sensed& sensed, GameTime now, bool isVisible) {
     if (memory.size() == rules.memoryLimit) {
         // The oldest unobserved fact has the weakest confidence.
         const auto weakest = std::ranges::min_element(memory, {}, &Memory::perceivedAt);
         memory.erase(weakest);
     }
-    memory.push_back(
-        {.observation = observation, .perceivedAt = now, .noticedAt = now, .isVisible = isVisible});
+    memory.push_back({.observation = sensed.observation,
+                      .perceivedAt = now,
+                      .noticedAt = now,
+                      .isVisible = isVisible,
+                      .salience = sensed.salience,
+                      .distance = sensed.distance,
+                      .placedAt = now});
+}
+
+auto Brain::movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool {
+    if (!plannedGoal) {
+        return true;
+    }
+    const float threshold =
+        std::max(rules.replanDistance.value(), rules.replanShare * groundDistance(feet, goal));
+    return groundDistance(*plannedGoal, goal) >= threshold;
 }
 
 void Brain::forgetAbsent(std::span<const ecs::Entity> present) {
@@ -125,8 +158,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     // from where it is, rather than walking straight at a corridor left behind.
     const bool isAwayFromCorridor =
         corridor && groundDistance(corridor->moveAgent(query, feet), feet) > rules.replanDistance.value();
-    if (target != pursued || !plannedGoal || isAwayFromCorridor ||
-        groundDistance(*plannedGoal, goal) >= rules.replanDistance.value() ||
+    if (target != pursued || !plannedGoal || isAwayFromCorridor || movedFarEnough(feet, goal) ||
         (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value())) {
         if (target != pursued) {
             avoided.clear(); // another pursuit, which got stuck nowhere yet

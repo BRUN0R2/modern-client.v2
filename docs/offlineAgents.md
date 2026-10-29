@@ -99,7 +99,9 @@ must. A body stuck on its way all the same gets out as a bot does (`nx::agents::
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
 while it chases. A body farther across from its corridor than its replan distance, teleported or
 pushed off the mesh, searches its way anew from where it is. A zombie hears every player's noise
-within the ranges of its `hearing` table, roughly where it was made (`cs::heardBy`), and goes to look;
+within the ranges of its `hearing` table, roughly where it was made (`cs::heardBy`), and goes to look,
+where it placed it holding 3 seconds against a vaguer or farther noise (`shortTermMemory`); a far goal
+that moves less than `replanShare` of how far it is keeps its way;
 a player its body touches it feels where it is (`cs::touchedBy`).
 Each tick the bodies perceive one by one, then their brains decide together in
 batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at

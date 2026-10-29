@@ -9,6 +9,10 @@ fieldOfView = 180.0
 memoryLifetime = 6.0
 arrivalDistance = 8.0
 replanDistance = 24.0
+# A far goal that moves less than a quarter of how far it is keeps its way, its end slid to it; where a
+# zombie placed a player holds 3 seconds against a vaguer or farther noise of it, as a bot's does.
+replanShare = 0.25
+shortTermMemory = 3.0
 memoryLimit = 32
 perceptionBudget = 8
 spawnBatchLimit = 64

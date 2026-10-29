@@ -78,9 +78,9 @@ TEST(AgentBrain, ATargetHeardIsInvestigatedWhereItWasHeardLookingThere) {
     nx::agents::Brain brain{rules()};
     brain.perceive({}, {}, nx::kDefaultTickRate);
     const nx::Vec3 eye{.x = -300, .y = 50, .z = 53};
-    brain.sense(
-        std::array{nx::agents::Observation{.entity = heard, .position = {.x = -300, .y = 50}, .aimAt = eye}},
-        {}, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Sensed{
+                    .observation = {.entity = heard, .position = {.x = -300, .y = 50}, .aimAt = eye}}},
+                {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.memories().size(), 1U);
     EXPECT_FALSE(brain.memories().front().isVisible) << "heard, not seen";
     const nx::agents::Decision decision = brain.decide({}, query);
@@ -101,7 +101,8 @@ TEST(AgentBrain, WhatItHearsOfATargetItSeesChangesNothingAndAHeardOneIsRecognize
     nx::agents::Brain brain{withReaction};
     const nx::Vec3 seenAt{.x = 200};
     brain.perceive(std::array{nx::agents::Observation{target, seenAt}}, {}, nx::kDefaultTickRate);
-    brain.sense(std::array{nx::agents::Observation{target, {.x = 260, .y = 40}}}, {}, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Sensed{.observation = {target, {.x = 260, .y = 40}}}}, {},
+                nx::kDefaultTickRate);
     ASSERT_EQ(brain.memories().size(), 1U);
     EXPECT_EQ(brain.memories().front().observation.position, seenAt) << "its sight the better";
     EXPECT_TRUE(brain.memories().front().isVisible);
@@ -109,19 +110,132 @@ TEST(AgentBrain, WhatItHearsOfATargetItSeesChangesNothingAndAHeardOneIsRecognize
     const auto other = world.spawn();
     const nx::GameTime later = nx::GameTime{}.after(nx::Seconds{0.25F}, nx::kDefaultTickRate);
     brain.perceive({}, later, nx::kDefaultTickRate);
-    brain.sense(std::array{nx::agents::Observation{other, {.y = -200}}}, later, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Sensed{.observation = {other, {.y = -200}}}}, later,
+                nx::kDefaultTickRate);
     const auto heardRecord = std::ranges::find(
         brain.memories(), other, [](const nx::agents::Memory& record) { return record.observation.entity; });
     ASSERT_NE(heardRecord, brain.memories().end());
     EXPECT_FALSE(heardRecord->isRecognized) << "heard just now";
     const nx::GameTime reacted = later.after(nx::Seconds{0.5F}, nx::kDefaultTickRate);
     brain.perceive({}, reacted, nx::kDefaultTickRate);
-    brain.sense(std::array{nx::agents::Observation{other, {.y = -210}}}, reacted, nx::kDefaultTickRate);
+    brain.sense(std::array{nx::agents::Sensed{.observation = {other, {.y = -210}}}}, reacted,
+                nx::kDefaultTickRate);
     const auto recognized = std::ranges::find(
         brain.memories(), other, [](const nx::agents::Memory& record) { return record.observation.entity; });
     ASSERT_NE(recognized, brain.memories().end());
     EXPECT_TRUE(recognized->isRecognized);
     EXPECT_EQ(recognized->observation.position, (nx::Vec3{.y = -210})) << "where it was heard last";
+}
+
+/// An estimate of `entity` at `position`, as salient as `salience`, sensed `distance` away.
+auto estimateOf(nx::ecs::Entity entity, nx::Vec3 position, nx::agents::Salience salience, float distance)
+    -> nx::agents::Sensed {
+    return {.observation = {.entity = entity, .position = position, .aimAt = position + nx::Vec3{.z = 53}},
+            .salience = salience,
+            .distance = nx::HammerUnits{distance}};
+}
+
+/// Where `brain` remembers `entity` to be.
+auto rememberedAt(const nx::agents::Brain& brain, nx::ecs::Entity entity) -> std::optional<nx::Vec3> {
+    const auto found = std::ranges::find(
+        brain.memories(), entity, [](const nx::agents::Memory& record) { return record.observation.entity; });
+    return found != brain.memories().end() ? std::optional{found->observation.position} : std::nullopt;
+}
+
+TEST(AgentBrain, ARecentEstimateHoldsAgainstAVaguerOrNoNearerOneUntilItsShortTermMemoryWentBy) {
+    using nx::agents::Salience;
+    nx::ecs::World world;
+    const auto enemy = world.spawn();
+    auto shortTerm = rules();
+    shortTerm.shortTermMemory = nx::Seconds{3.0F};
+    shortTerm.memoryLifetime = nx::Seconds{10.0F};
+    nx::agents::Brain brain{shortTerm};
+    const auto at = [](float seconds) {
+        return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
+    };
+    const nx::Vec3 shot{.x = 500};
+    brain.perceive({}, at(0.0F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, shot, Salience::High, 500)}, at(0.0F), nx::kDefaultTickRate);
+    ASSERT_EQ(rememberedAt(brain, enemy), shot);
+
+    brain.perceive({}, at(0.5F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, {.x = 380}, Salience::Low, 380)}, at(0.5F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), shot) << "a step heard does not move where it heard a shot";
+    brain.perceive({}, at(1.0F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, {.x = 640}, Salience::High, 640)}, at(1.0F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), shot) << "nor a farther shot";
+    const nx::Vec3 nearer{.x = 450, .y = 30};
+    brain.perceive({}, at(1.5F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, nearer, Salience::High, 450)}, at(1.5F), nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), nearer) << "a nearer shot does";
+
+    // Three seconds after the nearer shot placed it, a step moves it.
+    const nx::Vec3 step{.x = 700};
+    brain.perceive({}, at(4.6F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, step, Salience::Low, 700)}, at(4.6F), nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), step) << "its short-term memory went by";
+    const nx::Vec3 touched{.x = 20};
+    brain.perceive({}, at(4.7F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, touched, Salience::Certain, 32)}, at(4.7F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), touched) << "what it touches it is sure of";
+}
+
+TEST(AgentBrain, WhereItSawATargetHoldsAgainstWhatItHearsOfItForItsShortTermMemory) {
+    using nx::agents::Salience;
+    nx::ecs::World world;
+    const auto enemy = world.spawn();
+    auto shortTerm = rules();
+    shortTerm.shortTermMemory = nx::Seconds{3.0F};
+    shortTerm.memoryLifetime = nx::Seconds{10.0F};
+    nx::agents::Brain brain{shortTerm};
+    const auto at = [](float seconds) {
+        return nx::GameTime{}.after(nx::Seconds{seconds}, nx::kDefaultTickRate);
+    };
+    const nx::Vec3 seen{.x = 300};
+    brain.perceive(std::array{nx::agents::Observation{enemy, seen}}, at(0.0F), nx::kDefaultTickRate);
+    brain.perceive({}, at(1.0F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, {.x = 380}, Salience::High, 380)}, at(1.0F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), seen) << "where it saw it, lately";
+    brain.perceive({}, at(3.5F), nx::kDefaultTickRate);
+    brain.sense(std::array{estimateOf(enemy, {.x = 420}, Salience::Low, 420)}, at(3.5F),
+                nx::kDefaultTickRate);
+    EXPECT_EQ(rememberedAt(brain, enemy), (nx::Vec3{.x = 420}));
+}
+
+TEST(AgentBrain, AFarGoalThatMovesLessThanItsShareKeepsItsWayAndOneThatMovesMoreGetsANewOne) {
+    // Two corridors along y = 0 to 256 and 512 to 768, joined only at their far ends, x below 256 and above
+    // 1792: a goal across the hole from where the last search aimed, about x 1000, is a long way around,
+    // beyond what the corridor's end slides through.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 256, .y = 768}, 0);
+    nx::test::addFloor(geometry, {.x = 256, .y = 0}, {.x = 1792, .y = 256}, 0);
+    nx::test::addFloor(geometry, {.x = 256, .y = 512}, {.x = 1792, .y = 768}, 0);
+    nx::test::addFloor(geometry, {.x = 1792, .y = 0}, {.x = 2048, .y = 768}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    auto shared = rules();
+    shared.replanShare = 0.35F;
+    nx::agents::Brain brain{shared};
+    const nx::Vec3 feet{.x = 128, .y = 128};
+    const auto wayEnd = [&](nx::Vec3 goal) {
+        brain.setGoal(goal);
+        std::ignore = brain.decide(feet, query);
+        std::vector<nx::Vec3> way;
+        brain.appendWay(query, way);
+        return way.empty() ? nx::Vec3{} : way.back();
+    };
+    ASSERT_LT(nx::test::distanceAcross(wayEnd({.x = 1000, .y = 232}), {.x = 1000, .y = 232}), 1.0F);
+    // 304 across the hole, less than 0.35 of how far it is (963): the way's end slides, and stops at the
+    // edge.
+    const nx::Vec3 slid = wayEnd({.x = 1000, .y = 536});
+    EXPECT_LT(slid.y, 300.0F) << "the same way, no search";
+    // 508 from where the search aimed, more than 0.35 of how far it is (1066): a new way, around.
+    const nx::Vec3 around = wayEnd({.x = 1000, .y = 740});
+    EXPECT_LT(nx::test::distanceAcross(around, {.x = 1000, .y = 740}), 1.0F);
 }
 
 TEST(AgentBrain, CapsMemoryAndEvictsTheOldestFact) {

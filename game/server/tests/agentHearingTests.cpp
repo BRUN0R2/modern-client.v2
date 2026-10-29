@@ -64,6 +64,9 @@ TEST(AgentHearingTest, HearingIsValidWithRangesAndAnErrorOfNoneOrMore) {
     EXPECT_FALSE(cs::isValid(rules));
     EXPECT_EQ(cs::rangeOf(hearing(), cs::NoiseKind::Shot), nx::HammerUnits{2000.0F});
     EXPECT_EQ(cs::rangeOf(hearing(), cs::NoiseKind::QuietShot), nx::HammerUnits{1000.0F});
+    EXPECT_EQ(cs::salienceOf(cs::NoiseKind::Shot), nx::agents::Salience::High);
+    EXPECT_EQ(cs::salienceOf(cs::NoiseKind::QuietShot), nx::agents::Salience::High);
+    EXPECT_EQ(cs::salienceOf(cs::NoiseKind::Footstep), nx::agents::Salience::Low);
 }
 
 TEST(AgentHearingTest, AnEnemysNoiseIsHeardWithinItsKindsRangeAsLoudAsItWasMade) {
@@ -82,11 +85,12 @@ TEST(AgentHearingTest, AnEnemysNoiseIsHeardWithinItsKindsRangeAsLoudAsItWasMade)
         noiseAt(teammate, cs::Team::CounterTerrorists, {.y = -100}, cs::NoiseKind::Shot),
     };
     nx::Random random{1, "hearing tests"};
-    const std::vector<nx::agents::Observation> heard =
-        cs::heardBy(listener, noises, hearing(), query, random);
+    const std::vector<nx::agents::Sensed> heard = cs::heardBy(listener, noises, hearing(), query, random);
     ASSERT_EQ(heard.size(), 1U)
         << "a step 1000 away; none 1200 away, half as loud 1000 away, nor a teammate's";
-    EXPECT_EQ(heard.front().entity, near);
+    EXPECT_EQ(heard.front().observation.entity, near);
+    EXPECT_EQ(heard.front().salience, nx::agents::Salience::Low) << "a step";
+    EXPECT_NEAR(heard.front().distance.value(), 1000.0F, 1.0F) << "heard as far as it was made";
 
     nx::Random again{1, "hearing tests"};
     const auto everyone = cs::heardBy({.ear = eyeAbove({})}, noises, hearing(), query, again);
@@ -107,7 +111,7 @@ TEST(AgentHearingTest, WhatIsHeardIsPlacedOffWhereItWasMadeByAnErrorThatGrowsWit
         nx::Random random{seed, "hearing tests"};
         const auto heard = cs::heardBy(listener, noises, hearing(), query, random);
         ASSERT_EQ(heard.size(), 1U);
-        const nx::agents::Observation& observation = heard.front();
+        const nx::agents::Observation& observation = heard.front().observation;
         EXPECT_LE(std::abs(observation.position.x - made.x), 0.2F * distance + 1.0F);
         EXPECT_LE(std::abs(observation.position.y - made.y), 0.2F * distance + 1.0F);
         EXPECT_NEAR(observation.position.z, 0.0F, 8.0F) << "on the floor's mesh";
@@ -123,7 +127,7 @@ TEST(AgentHearingTest, WhatIsHeardIsPlacedOffWhereItWasMadeByAnErrorThatGrowsWit
     nx::Random random{1, "hearing tests"};
     const auto heard = cs::heardBy(listener, noises, exact, query, random);
     ASSERT_EQ(heard.size(), 1U);
-    EXPECT_LT(nx::test::distanceAcross(heard.front().position, made), 1.0F)
+    EXPECT_LT(nx::test::distanceAcross(heard.front().observation.position, made), 1.0F)
         << "with no error, where it was made";
 }
 
@@ -142,14 +146,14 @@ TEST(AgentHearingTest, EachEnemyIsHeardOnceByItsNearestNoiseAndTheSameDrawsHearT
     const auto heard =
         cs::heardBy({.team = cs::Team::CounterTerrorists, .ear = eyeAbove({})}, noises, exact, query, random);
     ASSERT_EQ(heard.size(), 1U);
-    EXPECT_NEAR(heard.front().position.x, 300.0F, 1.0F) << "its nearest";
+    EXPECT_NEAR(heard.front().observation.position.x, 300.0F, 1.0F) << "its nearest";
 
     nx::Random first{7, "hearing tests"};
     nx::Random second{7, "hearing tests"};
     const auto once = cs::heardBy({.ear = eyeAbove({})}, noises, hearing(), query, first);
     const auto twice = cs::heardBy({.ear = eyeAbove({})}, noises, hearing(), query, second);
     ASSERT_EQ(once.size(), twice.size());
-    EXPECT_EQ(once.front().position, twice.front().position);
+    EXPECT_EQ(once.front().observation.position, twice.front().observation.position);
 }
 
 } // namespace
