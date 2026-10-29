@@ -45,7 +45,7 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
     for (const auto& [file, code] :
          {std::pair{"world.spv", &shaders.world}, std::pair{"studio.spv", &shaders.studio},
           std::pair{"sprite.spv", &shaders.sprite}, std::pair{"particle.spv", &shaders.particle},
-          std::pair{"probe.spv", &shaders.probe}}) {
+          std::pair{"probe.spv", &shaders.probe}, std::pair{"overlay.spv", &shaders.overlay}}) {
         auto read = nx::platform::readFile(folder / file);
         if (!read) {
             return nx::fail(SceneError::ShadersUnreadable, std::move(read.error()));
@@ -58,11 +58,12 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
 Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-             nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles) noexcept
+             nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles,
+             nx::render::OverlayRenderer overlay) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
       m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)},
-      particleRenderer{std::move(particles)} {}
+      particleRenderer{std::move(particles)}, overlayRenderer{std::move(overlay)} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format, nx::rhi::Format effectsFormat,
@@ -122,6 +123,11 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
             }
         }
     }
+    auto overlay = nx::render::OverlayRenderer::create(
+        device, {.shaderCode = shaders.overlay, .colorFormat = format, .encoding = encoding});
+    if (!overlay) {
+        return nx::fail(SceneError::CreateFailed, "the overlay", std::move(overlay.error()));
+    }
     auto spriteModels = level.sprites().load(*sprites, commands);
     if (!spriteModels) {
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(spriteModels.error()));
@@ -159,7 +165,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(*viewSprites),
-                std::move(*particles)};
+                std::move(*particles),  std::move(*overlay)};
     scene.m_look = look;
     scene.m_playerModels = std::move(*playerModels);
     auto bloodModels = level.bloodSprites().load(scene.m_sprites, commands, 0);
@@ -291,6 +297,13 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the particles", std::move(prepared.error()));
     }
     particleRenderer.drawPrepared(list);
+    if (auto drawn = overlayRenderer.draw(list, {.camera = view.camera,
+                                                 .aspect = view.aspect,
+                                                 .triangles = view.overlay.triangles,
+                                                 .lines = view.overlay.lines});
+        !drawn) {
+        return nx::fail(SceneError::DrawFailed, "the overlay", std::move(drawn.error()));
+    }
     // The weapon's flashes, for drawEffects, after it, in its depths: added over what of it is behind
     // them, hidden by what of it is in front, and never by a wall the muzzle is pushed against.
     std::vector<nx::render::SpriteInstance> flashes;

@@ -263,6 +263,31 @@ TEST_F(GameTest, GenericEntitiesConsumeNoPlayerSlotAndCanBeRemovedOnlyByTheirCur
     EXPECT_TRUE(game().snapshotFor(player).entities.empty());
 }
 
+/// A component an extension attaches to bodies, as the bots and the zombies attach their brains.
+struct ExtensionMark {
+    int value = 0;
+};
+
+TEST_F(GameTest, VisitsTheComponentOfEachBodyThatHasOneOfAPlayerOrNot) {
+    int visits = 0;
+    game().forEachEntityComponent<ExtensionMark>([&visits](const ExtensionMark& /*mark*/) { ++visits; });
+    EXPECT_EQ(visits, 0) << "no extension registered it";
+    ASSERT_TRUE(game().registerEntityComponent<ExtensionMark>("ExtensionMark").has_value());
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    game().attachPlayerComponent(player, ExtensionMark{.value = 1});
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    ASSERT_TRUE(game().attachEntityComponent(*created, ExtensionMark{.value = 2}).has_value());
+    std::ignore = game().createEntity(*type, {.origin = {.x = -200, .y = 32, .z = 40}}); // with none
+    std::vector<int> values;
+    game().forEachEntityComponent<ExtensionMark>(
+        [&values](const ExtensionMark& mark) { values.push_back(mark.value); });
+    std::ranges::sort(values);
+    EXPECT_EQ(values, (std::vector{1, 2}));
+}
+
 TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredInterval) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     game().placeEye(player, {.x = 0, .y = 0, .z = 53});

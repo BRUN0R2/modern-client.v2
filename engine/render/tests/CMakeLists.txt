@@ -16,6 +16,7 @@ nxAddTest(nxRenderTests
         screenTests.cpp
         spriteTests.cpp
         particleTests.cpp
+        overlayTests.cpp
         studioTests.cpp
         worldTests.cpp
     DEPENDS
@@ -24,6 +25,7 @@ nxAddTest(nxRenderTests
         nx::platform)
 
 # The world test draws the BSP seed of the fuzz corpus with the build's world shader, and the light and
-# sprite tests read its lightmaps; the studio, sprite and screen tests draw with their shaders.
+# sprite tests read its lightmaps; the studio, sprite, particle, overlay and screen tests draw with their
+# shaders.
 target_compile_definitions(nxRenderTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")
 add_dependencies(nxRenderTests nxShaders)

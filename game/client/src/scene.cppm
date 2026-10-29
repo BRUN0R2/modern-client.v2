@@ -3,8 +3,8 @@
 
 /// What the client draws of a level (docs/05-rendering.md): the world and the light it gives, the
 /// sprites and studio models of its entities, the blended ones of them all in one order, the particles
-/// over them, and the weapon in the player's hand, drawn last in its own depths; then its muzzle flashes,
-/// effects added as the original adds them, in those depths.
+/// over them, what the tools draw over it all (nav_draw's), and the weapon in the player's hand, drawn last
+/// in its own depths; then its muzzle flashes, effects added as the original adds them, in those depths.
 export module cs.client:scene;
 
 import std;
@@ -36,13 +36,21 @@ struct SceneShaders {
     std::vector<std::byte> studio;
     std::vector<std::byte> sprite;
     std::vector<std::byte> particle;
-    std::vector<std::byte> probe; ///< The enhanced look's reflection probes'.
+    std::vector<std::byte> probe;   ///< The enhanced look's reflection probes'.
+    std::vector<std::byte> overlay; ///< What the tools draw over the scene.
 };
 
-/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv, particle.spv and probe.spv.
-/// Errors: ShadersUnreadable.
+/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv, particle.spv, probe.spv and
+/// overlay.spv. Errors: ShadersUnreadable.
 [[nodiscard]] auto readSceneShaders(const std::filesystem::path& folder)
     -> nx::Result<SceneShaders, SceneError>;
+
+/// What the tools draw over a frame of the scene, in the map's space: every three vertices of triangles
+/// one, every two of lines one.
+struct SceneOverlay {
+    std::span<const nx::render::OverlayVertex> triangles{};
+    std::span<const nx::render::OverlayVertex> lines{};
+};
 
 /// What a frame of the scene shows.
 struct SceneView {
@@ -61,6 +69,7 @@ struct SceneView {
     /// The client events the view model passed since the last frame (ViewModelEvents).
     std::span<const PassedEvent> clientEvents{};
     Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
+    SceneOverlay overlay{};  ///< Drawn after the particles, before the weapon in hand.
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
@@ -81,11 +90,11 @@ public:
     /// does not reach hidden, and its temporary entities, each as translucent as it is, the blended ones of
     /// them all in one order (nx.render:blendedOrder); its particles over them, each of its entry of the
     /// engine's palette, none without it, as opaque as it is at the view's time (amountOf), and its
-    /// streaks after them, each as long and as opaque as it is then (endOf, amountOf); then the
-    /// weapon in the player's hand, lit where the
-    /// player's eye is, as the original lights the view's own model, and in the enhanced look by the light of
-    /// its flashes too. It prepares the muzzle flashes, those of the view's client events and those still
-    /// showing, for drawEffects to record. Errors: DrawFailed.
+    /// streaks after them, each as long and as opaque as it is then (endOf, amountOf); then its overlay;
+    /// then the weapon in the player's hand, lit where the player's eye is, as the original lights the
+    /// view's own model, and in the enhanced look by the light of its flashes too. It prepares the muzzle
+    /// flashes, those of the view's client events and those still showing, for drawEffects to record. Errors:
+    /// DrawFailed.
     [[nodiscard]] auto draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
         -> nx::Result<void, SceneError>;
     /// Records the effects the last draw prepared, the weapon's muzzle flashes, as the original adds
@@ -137,7 +146,8 @@ private:
     Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::render::SpriteRenderer sprites,
           std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
           std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
-          nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles) noexcept;
+          nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles,
+          nx::render::OverlayRenderer overlay) noexcept;
 
     /// Forgets the muzzle flashes over at `time` or of another weapon than `inHand`'s; then adds those
     /// of `events`, the client events passed by `viewModel`, that of `inHand` posed as `bones`, of the
@@ -155,6 +165,7 @@ private:
     /// What the weapon in hand shows, its muzzle flashes: the effects, as display colors.
     nx::render::SpriteRenderer m_viewSprites;
     nx::render::ParticleRenderer particleRenderer;
+    nx::render::OverlayRenderer overlayRenderer;
     /// The weapons' view models, by their WeaponIndex; none for one the level has none of.
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.

@@ -14,6 +14,7 @@ import nx.math;
 import nx.jobs;
 import nx.game;
 import nx.navigation;
+import nx.agents;
 import nx.platform;
 import nx.console;
 import nx.assets;
@@ -210,6 +211,8 @@ struct Session {
     /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, ConsoleError> agentMesh;
+    /// What nav_draw draws of agentMesh, made as it is first drawn: it goes before the mesh.
+    std::optional<cs::NavigationDrawing> navigationDrawing{};
     std::unique_ptr<zombies::Horde> horde{};
     std::unique_ptr<cs::Bots> bots{};
 };
@@ -277,14 +280,22 @@ struct AgentMeshLoad {
     std::variant<nx::navigation::NavigationMesh, nx::navigation::MeshBuild> mesh;
     nx::navigation::MeshKey key{};
     std::optional<std::filesystem::path> file{}; ///< Where it is kept, when the system names a cache folder.
+    nx::platform::Stopwatch sinceStart{};        ///< Since its build started, when it is built.
+};
+
+/// Whether a map's agents' mesh is read from the cache when the cache keeps it, or built again
+/// (nav_generate).
+enum class KeptMesh : std::uint8_t {
+    Read,
+    Ignored,
 };
 
 /// The mesh of `game`'s map, the map `map`, that the agents walk: cs::standingPlayerProfile of `navigation`,
-/// by its settings; read from the cache when it keeps it, else started in `jobs`. Errors: CommandFailed,
-/// with the cause (also `navigation`'s).
+/// by its settings; read from the cache when it keeps it and `kept` reads it, else started in `jobs`.
+/// Errors: CommandFailed, with the cause (also `navigation`'s).
 [[nodiscard]] auto startAgentMesh(nx::jobs::JobSystem& jobs, cs::Game& game, std::string_view map,
-                                  const nx::Result<nx::game::NavigationData, ConsoleError>& navigation)
-    -> nx::Result<AgentMeshLoad, ConsoleError> {
+                                  const nx::Result<nx::game::NavigationData, ConsoleError>& navigation,
+                                  KeptMesh kept) -> nx::Result<AgentMeshLoad, ConsoleError> {
     if (!navigation) {
         return std::unexpected{navigation.error()};
     }
@@ -295,9 +306,9 @@ struct AgentMeshLoad {
     const nx::navigation::Geometry geometry = game.navigationGeometry();
     const nx::navigation::MeshKey key = nx::navigation::meshKeyOf(geometry, *profile, navigation->build);
     std::optional<std::filesystem::path> file = meshFileOf(map, profile->name);
-    if (file) {
-        if (auto kept = readKeptMesh(*file, key, *profile)) {
-            return AgentMeshLoad{.mesh = std::move(*kept), .key = key, .file = std::move(file)};
+    if (file && kept == KeptMesh::Read) {
+        if (auto read = readKeptMesh(*file, key, *profile)) {
+            return AgentMeshLoad{.mesh = std::move(*read), .key = key, .file = std::move(file)};
         }
     }
     auto started = nx::navigation::NavigationMesh::startBuild(jobs, geometry, *profile, navigation->build);
@@ -307,8 +318,8 @@ struct AgentMeshLoad {
     return AgentMeshLoad{.mesh = std::move(*started), .key = key, .file = std::move(file)};
 }
 
-/// The mesh `load` has, once built, then kept for the next time when it was built. Errors:
-/// CommandFailed, with the cause.
+/// The mesh `load` has, once built, then kept for the next time when it was built, which is logged.
+/// Errors: CommandFailed, with the cause.
 [[nodiscard]] auto finishAgentMesh(nx::Result<AgentMeshLoad, ConsoleError> load)
     -> nx::Result<nx::navigation::NavigationMesh, ConsoleError> {
     if (!load) {
@@ -321,6 +332,9 @@ struct AgentMeshLoad {
     if (!mesh) {
         return nx::fail(ConsoleError::CommandFailed, std::move(mesh.error()));
     }
+    nx::log::info(kLog, "the agents' navigation mesh was built in {}: {} polygons in {} tiles",
+                  std::chrono::duration_cast<std::chrono::milliseconds>(load->sinceStart.elapsed()),
+                  mesh->polygonCount(), mesh->tileCount());
     if (load->file) {
         keepMesh(*load->file, *mesh, load->key);
     }
@@ -330,13 +344,13 @@ struct AgentMeshLoad {
 /// The map `name` of `content`, its game started by the rules `cvars` set, the client's player joined
 /// in the team of its first spawn point, asking for the name `player` holds and drawing its weapons as
 /// `player` says, and its client's level read; meanwhile the workers of `jobs` build the map's mesh of
-/// `navigation` the agents walk, unless the cache keeps it, which a map plays without when it cannot be
-/// built. Errors: CommandFailed, with the cause.
+/// `navigation` the agents walk, unless the cache keeps it and `kept` reads it, which a map plays without
+/// when it cannot be built. Errors: CommandFailed, with the cause.
 [[nodiscard]] auto startSession(const cs::GameContent& content, std::string_view name,
                                 const nx::settings::PlayerCvars& player, const cs::GameCvars& cvars,
                                 nx::jobs::JobSystem& jobs,
-                                const nx::Result<nx::game::NavigationData, ConsoleError>& navigation)
-    -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
+                                const nx::Result<nx::game::NavigationData, ConsoleError>& navigation,
+                                KeptMesh kept) -> nx::Result<std::unique_ptr<Session>, ConsoleError> {
     const std::string failed = std::format("map {}", name);
     auto map = cs::GameMap::load(content.vfs, name);
     if (!map) {
@@ -348,7 +362,7 @@ struct AgentMeshLoad {
     }
     const cs::PlayerIndex joined =
         (*game)->join(cs::spawnTeam((*map)->map()), autoSwitchOf(player), player.name.value());
-    auto agentMesh = startAgentMesh(jobs, **game, (*map)->name(), navigation);
+    auto agentMesh = startAgentMesh(jobs, **game, (*map)->name(), navigation, kept);
     auto level = cs::Level::load(content, **map); // while the workers build the mesh
     if (!level) {
         return nx::fail(ConsoleError::CommandFailed, failed, std::move(level.error()));
@@ -406,6 +420,16 @@ private:
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
+    /// Draws over the scene the agents' mesh of the map played and the way each of its agents follows on
+    /// it, or stops (nav_draw). Errors: InvalidArguments, CommandFailed (the map has no mesh, the cause
+    /// told).
+    [[nodiscard]] auto drawNavigationCommand(const nx::console::CommandLine& line)
+        -> nx::Result<void, ConsoleError>;
+    /// Builds the agents' mesh of the map played again, what the cache keeps of it left aside, and plays
+    /// the map again on it from the next frame (nav_generate), as Condition Zero restarts the game once it
+    /// analyzed a map. Errors: InvalidArguments, CommandFailed.
+    [[nodiscard]] auto generateNavigationCommand(const nx::console::CommandLine& line)
+        -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     [[nodiscard]] auto removeZombies() -> nx::Result<void, ConsoleError>;
     /// Registers the bot commands (cs::registerBotCommands), acting on the map loaded last.
@@ -483,8 +507,11 @@ private:
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
         -> nx::Result<void, ClientError>;
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
-    /// gave it, the brush entities where the game puts them, and the weapon in hand.
+    /// gave it, the brush entities where the game puts them, the weapon in hand, and what nav_draw draws.
     [[nodiscard]] auto sessionView() -> cs::SceneView;
+    /// What nav_draw draws over the session's frame, while it draws: its agents' mesh and the way each of
+    /// its agents follows on it.
+    [[nodiscard]] auto navigationOverlay() -> cs::SceneOverlay;
     /// The screen's pictures over the frame, of `size`: the HUD, cl_showfps's label, and the console's
     /// window when open.
     void appendScreen(nx::rhi::Extent2d size);
@@ -504,6 +531,7 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
+    bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
     /// Read as the client starts, so that making the bots reads nothing during a frame.
     nx::Result<cs::BotRules, cs::BotActionError> botRules{};
     /// Read as the client starts: each map's agents' mesh is built by it as the map loads.
@@ -694,6 +722,14 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
     for (auto&& registered :
          {add({.name = "map", .description = "Plays a map: map <name>."},
               [this](Console&, const CommandLine& line) { return mapCommand(line); }),
+          add({.name = "nav_draw",
+               .description = "Draws the agents' navigation mesh and the way each bot and zombie follows "
+                              "over the scene, or stops."},
+              [this](Console&, const CommandLine& line) { return drawNavigationCommand(line); }),
+          add({.name = "nav_generate",
+               .description = "Builds the agents' navigation mesh of the map again, the cache's left "
+                              "aside, and plays the map again on it."},
+              [this](Console&, const CommandLine& line) { return generateNavigationCommand(line); }),
           add({.name = "zombie_add",
                .description = "Spawns entity agents at the terrorist base: zombie_add [count]."},
               [this](Console&, const CommandLine& line) { return zombieCommand(line); }),
@@ -884,7 +920,38 @@ auto Client::mapCommand(const nx::console::CommandLine& line) -> nx::Result<void
         return nx::fail(ConsoleError::InvalidArguments, "usage: map <name>");
     }
     const std::string& name = line.arguments().front();
-    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars, *m_jobs, navigationData);
+    auto session = startSession(*m_content, name, m_cvars->player, *m_gameCvars, *m_jobs, navigationData,
+                                KeptMesh::Read);
+    if (!session) {
+        return std::unexpected{std::move(session.error())};
+    }
+    m_nextSession = std::move(*session);
+    return {};
+}
+
+auto Client::drawNavigationCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
+    if (!line.arguments().empty()) {
+        return nx::fail(ConsoleError::InvalidArguments, "usage: nav_draw");
+    }
+    if (!drawsNavigation && m_session && !m_session->agentMesh) {
+        return nx::fail(ConsoleError::CommandFailed,
+                        std::format("nav_draw: {} has no navigation mesh: {}", m_session->map->name(),
+                                    nx::describe(m_session->agentMesh.error())));
+    }
+    drawsNavigation = !drawsNavigation;
+    return {};
+}
+
+auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
+    -> nx::Result<void, ConsoleError> {
+    if (!line.arguments().empty()) {
+        return nx::fail(ConsoleError::InvalidArguments, "usage: nav_generate");
+    }
+    if (!m_session) {
+        return nx::fail(ConsoleError::CommandFailed, "nav_generate: load a map first");
+    }
+    auto session = startSession(*m_content, m_session->map->name(), m_cvars->player, *m_gameCvars, *m_jobs,
+                                navigationData, KeptMesh::Ignored);
     if (!session) {
         return std::unexpected{std::move(session.error())};
     }
@@ -1477,7 +1544,23 @@ auto Client::sessionView() -> cs::SceneView {
             .particles = m_session->particles.shown(),
             .streaks = m_session->particles.shownStreaks(),
             .clientEvents = m_clientEvents,
-            .hand = m_hudCvars->hand()};
+            .hand = m_hudCvars->hand(),
+            .overlay = navigationOverlay()};
+}
+
+auto Client::navigationOverlay() -> cs::SceneOverlay {
+    Session& session = *m_session;
+    if (!drawsNavigation || !session.agentMesh || !navigationData) {
+        return {};
+    }
+    if (!session.navigationDrawing) {
+        session.navigationDrawing.emplace(*session.agentMesh, navigationData->build.cellHeight);
+    }
+    cs::NavigationDrawing& drawing = *session.navigationDrawing;
+    drawing.clearWays();
+    session.game->forEachEntityComponent<nx::agents::Agent>(
+        [&drawing](const nx::agents::Agent& agent) { drawing.showWayOf(agent); });
+    return drawing.overlay();
 }
 
 void Client::appendScreen(nx::rhi::Extent2d size) {

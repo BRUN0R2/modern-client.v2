@@ -81,7 +81,10 @@ path yields `Blocked` with its navigation error; it does not enable direct movem
 is built once per map as it loads, in jobs, overlapping the client's level
 (`nx::navigation::MeshBuild`), or read from the cache folder where an earlier load kept it, and the
 horde and the bots borrow it: `zombie_add` and `bot_add`
-build nothing. Each tick the bodies perceive one by one, then their brains decide together in
+build nothing. `nav_draw` draws the mesh over the scene and the way each bot and zombie follows on it
+while it moves along its corridor, in the color of why it moves; `nav_generate` builds the mesh
+again, what the cache keeps left aside, and plays the map again on it, as Condition Zero restarts
+the game once it analyzed a map. Each tick the bodies perceive one by one, then their brains decide together in
 batches in jobs (`nx::agents::Deciders`), each batch with a query of its own and each decision at
 its body's index, so that the commands are the same with any number of workers. Agent commands and
 body updates have deterministic order. The session removes the

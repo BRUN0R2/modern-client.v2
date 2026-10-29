@@ -237,6 +237,15 @@ public:
     [[nodiscard]] auto playerComponent(PlayerIndex player) -> Component* {
         return m_world.get<Component>(playerAt(player).body);
     }
+    /// Calls `visit` with the component of each body that has one, of a player's or of createEntity's, in
+    /// the world's order: none while no extension registered it.
+    template <nx::ecs::Component Component, std::invocable<const Component&> Visit>
+    void forEachEntityComponent(Visit&& visit) {
+        if (!m_world.components().find<Component>()) {
+            return;
+        }
+        nx::ecs::Query<const Component&>{m_world}.forEach(std::forward<Visit>(visit));
+    }
 
     /// What `player`'s client is told after the last tick (PlayerSnapshot).
     [[nodiscard]] auto snapshotFor(PlayerIndex player) -> PlayerSnapshot;

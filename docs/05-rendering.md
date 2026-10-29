@@ -182,6 +182,15 @@ first, then the farthest middle of its bounds first, at one distance by mode (`R
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
 of its own.
 
+**Today** (`nx.render:overlay`, `shaders/overlay.slang`): after the particles and before the view's own
+model, `OverlayRenderer` draws what the tools show over the scene, `nav_draw`'s
+([ADR-0023](adr/0023-navigation.md)): triangles and lines (`PrimitiveTopology::LineList`, a pixel
+wide) in the map's space, each vertex of its own display color, blended by its alpha over what the
+scene drew, behind what the scene drew in front of them, whose depth they test and never write. In
+the enhanced look their colors are made linear light as the others' are, times each vertex's
+brightness, so that a line brighter than white glows through the bloom; the legacy look draws their
+display colors as they are.
+
 **Today** (`nx.render:screen`, the `Hud` pass): `ScreenRenderer` draws rectangles in pixels of the
 target from its top left, over everything the frame drew, its depth neither tested nor written: a
 part of a picture stretched over a rectangle, times a color, or a color alone, in the order given,
@@ -751,6 +760,12 @@ Xash3D-FWGS project records from the original for its tests.
 ## 13. Debugging tools
 
 - RenderDoc integration (`r_capture`).
+- `nav_draw`: the agents' navigation mesh of the map played, its polygons see-through in the color of
+  their kind of area (floor green, the room only crouching fits yellow, under water blue) and their
+  edges, and the way each bot and zombie follows on it while it moves along its corridor: red while
+  it chases an enemy it sees, orange while it goes where it saw one last, white while it goes to its
+  goal, a mark standing where the way ends. In the enhanced look the edges glow a little and the ways
+  brightly (`nx.render:overlay`, [ADR-0023](adr/0023-navigation.md)).
 - `r_speeds` (draws, triangles, time per pass), `r_drawentities`, `r_wireframe`,
   `r_showtris`, `r_lightmap`, `r_fullbright`, `r_drawviewmodel` and overdraw visualization.
 - ImGui overlay with the frame's render graph (passes, resources, aliasing).
