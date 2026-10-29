@@ -107,10 +107,11 @@ public:
     /// those alive together, in batches in jobs (nx::agents::Deciders); turns its view by its spring
     /// (turnView) towards where it aims at what it attacks, ahead of it above BotAimRules::leadingSkill
     /// (leadSpot) and off by its aim's error (settleAimError), or at what it looks at, or along its way;
-    /// moves along its corridor at its full speed; and presses its attack as its trigger lets it
-    /// (pullTrigger), its level's attack delay after it took its enemy on. With nothing to pursue, it hunts a
-    /// place drawn on the mesh within BotRules::huntRadius. Spawning again, it starts with a new brain, its
-    /// view still, its aim and its trigger anew.
+    /// moves along its corridor as it steers, wiggling and jumping while it is stuck (BotRules::stuck);
+    /// and presses its attack as its trigger lets it (pullTrigger), its level's attack delay after it took
+    /// its enemy on. With nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius,
+    /// another when it gives the last up, stuck too long. Spawning again, it starts with a new brain, its
+    /// watch, its view still, its aim and its trigger anew.
     [[nodiscard]] auto commands() -> std::vector<PlayerCommand>;
 
     /// How many bots are in the game.

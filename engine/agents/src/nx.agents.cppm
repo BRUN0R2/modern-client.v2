@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-/// Intent and perception memory, independent of the body's kind (ADRs 0024 and 0028), and the decisions
-/// of many brains at once, in batches in jobs.
+/// Intent and perception memory, independent of the body's kind (ADRs 0024 and 0028), the watch that gets
+/// a stuck body out, and the decisions of many brains at once, in batches in jobs.
 export module nx.agents;
 import std;
 import nx.core;
+import nx.meta;
 import nx.math;
 import nx.ecs;
 import nx.jobs;
@@ -63,12 +64,16 @@ struct Memory {
 };
 
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
-/// to attack.
+/// to attack or to jump.
 struct Intent {
     Vec3 direction{};        ///< A unit direction on the ground plane, or zero.
     float speedShare = 1.0F; ///< How much of its full speed it moves at along direction, more than 0 to 1.
+    /// The way on along its corridor, a unit direction on the ground plane, or zero: where it faces with
+    /// nothing to look at, however it steers or wiggles (SetLookAngles of m_lookAheadAngle).
+    Vec3 ahead{};
     std::optional<Vec3> lookAt{};
     bool attacks = false;
+    bool jumps = false;
 };
 
 /// A brain's decision of a tick: its intent, its behavior, the target it pursues (none for its goal or
@@ -107,6 +112,10 @@ public:
     /// its speed; else it goes the way it steers to, as fast as that.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
+    /// Gives up where it goes, its body stuck on its way too long (StuckWatch): forgets its goal when it
+    /// pursues none, the target it investigates, and searches its way anew to the one it chases
+    /// (UpdatePathMovement's PATH_FAILURE, after which a hunt picks another place).
+    void giveUp();
     /// Gives it `goal`, a point of the mesh to move to when it has no target to pursue; none forgets it.
     inline void setGoal(std::optional<Vec3> goal) noexcept { givenGoal = goal; }
     /// The goal it was given and has not reached yet.
@@ -129,6 +138,84 @@ private:
     std::optional<navigation::NavigationError> pathError{};
 };
 
+/// A time drawn at random, from its shortest to its longest.
+struct TimeRange {
+    Seconds shortest{};
+    Seconds longest{};
+};
+
+/// How an agent finds its body stuck on its way and gets it out, Condition Zero's bot's (StuckCheck,
+/// Wiggle, cs_bot_nav.cpp; UpdatePathMovement's giving up, cs_bot_pathfind.cpp): where its feet are is
+/// sampled each sampleInterval, and it is stuck when across the last `samples` intervals it went slower
+/// than stuckSpeed; stuck, it moves a way drawn among ahead, back and either side for a wiggle's time,
+/// jumping within firstJump and then each jumpInterval, until it is unstuckDistance from where it got stuck;
+/// stuck giveUpTime, it gives up where it goes (Brain::giveUp).
+struct StuckRules {
+    Seconds sampleInterval{};
+    std::uint32_t samples = 0;
+    UnitsPerSecond stuckSpeed{};
+    HammerUnits unstuckDistance{};
+    TimeRange wiggle{};
+    Seconds firstJump{};
+    TimeRange jumpInterval{};
+    Seconds giveUpTime{};
+};
+
+/// Whether a watch may follow `rules`: its interval, samples, speed, distance and give-up time more than
+/// none, its first jump none or more, and each range's shortest more than none, its longest no shorter.
+[[nodiscard]] auto isValid(const StuckRules& rules) noexcept -> bool;
+
+/// What a watch makes of its body's progress (StuckWatch::watch).
+enum class Progress : std::uint8_t {
+    Moving,  ///< It makes its way, or means to make none.
+    Stuck,   ///< Stuck: the intent wiggles it out.
+    GivesUp, ///< Stuck too long: its brain gives up where it goes (Brain::giveUp).
+};
+
+/// Watches an agent's body make its way along its corridor, and gets it out when it is stuck (StuckRules).
+/// How fast it went is how far across its last sample is from its first, over their time, not Condition
+/// Zero's mean of each interval's speed, so that a body going back and forth in a doorway is stuck too.
+/// The same for the same inputs and draws.
+class StuckWatch {
+public:
+    /// A watch by `rules`, which must be valid (isValid), its wiggles and jumps drawn from `random`.
+    StuckWatch(StuckRules rules, Random random);
+    /// Watches its body, its feet at `feet`, `elapsed` after it last did, meaning to move along its way when
+    /// `moves`, and able to when its `maxSpeed` is more than stuckSpeed (a frozen round's player is not):
+    /// else it forgets how it moved (reset). Stuck, it makes `intent` move its wiggle's way at its full
+    /// speed, turned from intent.ahead, and jump as its jumps are due.
+    [[nodiscard]] auto watch(Intent& intent, Vec3 feet, UnitsPerSecond maxSpeed, bool moves, Seconds elapsed)
+        -> Progress;
+    /// Forgets how its body moved: none of its samples, not stuck.
+    void reset() noexcept;
+    [[nodiscard]] inline auto isStuck() const noexcept -> bool { return stuckAt.has_value(); }
+
+private:
+    /// The ways a wiggle moves, from where it faces: CZ's NavRelativeDirType.
+    enum class Way : std::uint8_t { Ahead, Back, Left, Right, Count };
+
+    /// Samples `feet` when its interval went by, `elapsed` after the last watch.
+    void sample(Vec3 feet, Seconds elapsed);
+    /// Whether the samples span the whole of `samples` intervals, and its body went slower across them than
+    /// stuckSpeed.
+    [[nodiscard]] auto isTooSlow() const noexcept -> bool;
+    /// Makes `intent` wiggle, `elapsed` after the last watch.
+    void wiggle(Intent& intent, Seconds elapsed);
+    /// `ahead` turned to `way`: itself, back, or a quarter turn to either side.
+    [[nodiscard]] static auto turnedTo(Way way, Vec3 ahead) noexcept -> Vec3;
+    [[nodiscard]] auto drawn(const TimeRange& range) noexcept -> Seconds;
+
+    StuckRules rules;
+    Random random;
+    std::vector<Vec3> sampled; ///< The last of where its feet were, oldest first.
+    Seconds sinceSample{};
+    std::optional<Vec3> stuckAt{};
+    Seconds stuckFor{};
+    Way way = Way::Ahead;
+    Seconds wiggleLeft{};
+    Seconds jumpIn{};
+};
+
 /// A body agents steer around (Deciders::decide): the entity it is, where its feet are, how it moves, and
 /// how far it reaches across from its middle.
 struct Body {
@@ -139,13 +226,16 @@ struct Body {
 };
 
 /// A brain to decide with, and its body this tick (Deciders::decide): where its feet are, how it moves,
-/// how fast it may run, and the entity it is, none for a body it steers no other body around.
+/// how fast it may run, the entity it is, none for a body it steers no other body around, and the watch of
+/// its progress, none for a body nothing gets out, `elapsed` after its last request.
 struct DecisionRequest {
     Brain* brain = nullptr;
     Vec3 feet{};
     Vec3 velocity{};
     UnitsPerSecond maxSpeed{};
     std::optional<ecs::Entity> body{};
+    StuckWatch* stuck = nullptr;
+    Seconds elapsed{};
 };
 
 /// The fewest brains a batch of Deciders decides: a decision costs some microseconds on a large map
@@ -165,9 +255,11 @@ public:
     /// Each request's brain decides at its feet (Brain::decide), then steers its decision among `bodies`,
     /// those of the tick, when it moves and its request has a speed (Brain::steer): the bodies within the
     /// steering range of it across and a standing height up or down, but its own, the nearest first, ties
-    /// by entity. Its decision is written at its index of `decisions`, which must be as long, in jobs of
-    /// `jobs` of the priority Critical, which the calling thread runs too while it waits for them. The
-    /// brains must be distinct, and none of them used by another thread meanwhile.
+    /// by entity. Its watch, last, gets its body out when it is stuck on the way its decision follows
+    /// (StuckWatch::watch, followsCorridor), and its brain gives up where it goes when it is stuck too long
+    /// (Brain::giveUp). Its decision is written at its index of `decisions`, which must be as long, in jobs
+    /// of `jobs` of the priority Critical, which the calling thread runs too while it waits for them. The
+    /// brains and the watches must be distinct, and none of them used by another thread meanwhile.
     void decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> requests,
                 std::span<Decision> decisions, std::span<const Body> bodies = {});
 
@@ -176,10 +268,12 @@ private:
     std::vector<navigation::NavigationQuery> queries; ///< One for each batch, made as batches need them.
 };
 
-/// The brain component attached to the same generational entity as its body. Mod-specific rules
-/// choose its observations; the shared brain owns its memory and corridor.
+/// The brain component attached to the same generational entity as its body, with the watch that gets its
+/// body out when it is stuck. Mod-specific rules choose its observations; the shared brain owns its memory
+/// and corridor.
 struct Agent {
     Brain brain;
+    StuckWatch stuck;
     Behavior behavior = Behavior::Idle; ///< Of its brain's last decision.
     std::size_t nextCandidate = 0;
 
@@ -189,3 +283,27 @@ struct Agent {
 };
 
 } // namespace nx::agents
+
+template <>
+struct nx::meta::Description<nx::agents::TimeRange> {
+    static constexpr std::string_view kName = "nx::agents::TimeRange";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::agents::TimeRange::shortest>("shortest"),
+        nx::meta::field<&nx::agents::TimeRange::longest>("longest"),
+    };
+};
+
+template <>
+struct nx::meta::Description<nx::agents::StuckRules> {
+    static constexpr std::string_view kName = "nx::agents::StuckRules";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&nx::agents::StuckRules::sampleInterval>("sampleInterval"),
+        nx::meta::field<&nx::agents::StuckRules::samples>("samples"),
+        nx::meta::field<&nx::agents::StuckRules::stuckSpeed>("stuckSpeed"),
+        nx::meta::field<&nx::agents::StuckRules::unstuckDistance>("unstuckDistance"),
+        nx::meta::field<&nx::agents::StuckRules::wiggle>("wiggle"),
+        nx::meta::field<&nx::agents::StuckRules::firstJump>("firstJump"),
+        nx::meta::field<&nx::agents::StuckRules::jumpInterval>("jumpInterval"),
+        nx::meta::field<&nx::agents::StuckRules::giveUpTime>("giveUpTime"),
+    };
+};

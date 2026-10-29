@@ -40,6 +40,7 @@ constexpr OverlayColor kNoTeamColor{.red = 184, .green = 72, .blue = 255}; // pu
 constexpr OverlayColor kRouteColor{.red = 0, .green = 224, .blue = 255};       // its route to its goal: cyan
 constexpr OverlayColor kInvestigateColor{.red = 255, .green = 176, .blue = 0}; // where it saw one: amber
 constexpr OverlayColor kChaseColor{.red = 255, .green = 255, .blue = 255};     // an enemy it sees: white
+constexpr OverlayColor kStuckColor{.red = 255, .green = 0, .blue = 160};       // stuck on its way: magenta
 
 /// How many times its light a line or an arrow gives in the enhanced look, a glow its bloom spreads
 /// about it: the mesh's edges a little, the ways' arrows enough to stand out of the mesh.
@@ -57,9 +58,13 @@ constexpr nx::Vec3 kArrowLift{.z = 16.0F};
 /// as a decision does (nx::agents::kSmallestBatch), so that a batch outweighs handing it to a worker.
 constexpr std::size_t kSmallestWayBatch = nx::agents::kSmallestBatch;
 
-/// The color of the arrows' heads of an agent whose last decision was of `behavior`, one that follows its
-/// corridor.
-[[nodiscard]] constexpr auto headColorOf(Behavior behavior) noexcept -> OverlayColor {
+/// The color of the arrows' heads of `agent`, whose last decision follows its corridor: stuck, whatever it
+/// pursues, else of why it goes there.
+[[nodiscard]] auto headColorOf(const nx::agents::Agent& agent) noexcept -> OverlayColor {
+    if (agent.stuck.isStuck()) {
+        return kStuckColor;
+    }
+    const Behavior behavior = agent.behavior;
     if (behavior == Behavior::Chase) {
         return kChaseColor;
     }
@@ -131,7 +136,7 @@ void NavigationDrawing::showWays(nx::jobs::JobSystem& jobs, nx::GameTime now,
 void NavigationDrawing::addWayOf(const ShownAgent& shown, WayBatch& batch) const {
     batch.points.clear();
     shown.agent->appendWay(batch.query, batch.points);
-    const OverlayColor head = headColorOf(shown.agent->behavior);
+    const OverlayColor head = headColorOf(*shown.agent);
     const OverlayColor shaft = shown.team ? kTeamColors[*shown.team] : kNoTeamColor;
     for (std::size_t point = 1; point < batch.points.size(); ++point) {
         batch.arrows.push_back(OverlayArrows{.start = batch.points[point - 1] + kArrowLift,

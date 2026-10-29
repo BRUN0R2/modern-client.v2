@@ -19,6 +19,10 @@ namespace {
 constexpr nx::log::Category kLog{"zombies"};
 constexpr float kHalfTurnDegrees = 180.0F;
 constexpr float kFullTurnDegrees = kHalfTurnDegrees * 2.0F;
+/// The stream of random numbers a stuck zombie's wiggles and jumps draw from, of its body.
+constexpr std::string_view kStuckStream = "zombie stuck";
+/// How far a body's slot is shifted from its generation in the seed of its stuck watch's draws.
+constexpr int kGenerationBits = 32;
 [[nodiscard]] auto feetOf(nx::Vec3 origin) -> nx::Vec3 {
     return origin + nx::Vec3{.z = cs::kStandingBox.min.z};
 }
@@ -100,6 +104,14 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
             std::format(
                 "{}: positive perception, memory and spawn budgets and an FOV at most 360 are required",
                 source));
+    }
+    if (!nx::agents::isValid(read->stuck)) {
+        return nx::fail(
+            ZombieError::InvalidData,
+            std::format("{}: stuck's interval, samples, speed, distance and give-up time more than "
+                        "none, its first jump none or more, and each range's shortest more than "
+                        "none, its longest no shorter, are required",
+                        source));
     }
     return std::move(*read);
 }
@@ -208,8 +220,12 @@ auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
                         born.size(), count));
     }
     for (const nx::ecs::Entity entity : born) {
+        const std::uint64_t seed = (std::uint64_t{std::to_underlying(entity.index())} << kGenerationBits) |
+                                   std::to_underlying(entity.generation());
         auto attached = game.attachEntityComponent(
-            entity, nx::agents::Agent{.brain = nx::agents::Brain{rulesOf(settings)}});
+            entity, nx::agents::Agent{
+                        .brain = nx::agents::Brain{rulesOf(settings)},
+                        .stuck = nx::agents::StuckWatch{settings.stuck, nx::Random{seed, kStuckStream}}});
         nx::invariant(attached.has_value(), "Horde: a newly created body accepts its brain");
         agents.push_back(entity);
     }
@@ -269,7 +285,9 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
                             .feet = feetOf(found->origin),
                             .velocity = found->velocity,
                             .maxSpeed = settings.body.speed,
-                            .body = entity});
+                            .body = entity,
+                            .stuck = &agent.stuck,
+                            .elapsed = nx::tickLengthOf(time.rate)});
     }
     // The bodies the horde steers around, players' and its own.
     const std::vector<nx::agents::Body> steeredAround =
@@ -305,7 +323,11 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             aim = *decision.intent.lookAt - eye;
             command.buttons.set(cs::Button::Attack);
         } else if (nx::length(decision.intent.direction) > 0.0F) {
+            // It faces the way it moves, steered or wiggling: its model walks ahead only.
             command.move.forward = settings.body.speed * decision.intent.speedShare;
+        }
+        if (decision.intent.jumps) {
+            command.buttons.set(cs::Button::Jump);
         }
         if (nx::length(aim) > 0.0F) {
             command.viewAngles.yaw =

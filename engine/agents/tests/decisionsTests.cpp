@@ -12,6 +12,7 @@ import nx.ecs;
 import nx.jobs;
 import nx.navigation;
 import nx.agents;
+#include "testAgents.hpp"
 #include "testGeometry.hpp"
 
 namespace {
@@ -167,6 +168,40 @@ TEST(AgentDeciders, TwoAgentsMeetingHeadOnInAPassageSteerPastEachOther) {
         EXPECT_LT(nx::test::distanceAcross(feet[agent], goals[agent]), kArrived)
             << "agent " << agent << " got by";
     }
+}
+
+TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutAndThenGivesUpItsGoal) {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    constexpr nx::Seconds kTick{0.01F};
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    nx::agents::Agent agent{.brain = nx::agents::Brain{rules()}, .stuck = nx::test::stuckWatch()};
+    agent.brain.setGoal(nx::Vec3{.x = 400});
+    // Its feet stay where they are, as a body pinned on something the mesh does not know of.
+    const std::array requests{nx::agents::DecisionRequest{
+        .brain = &agent.brain, .feet = {}, .maxSpeed = kSpeed, .stuck = &agent.stuck, .elapsed = kTick}};
+    std::array<nx::agents::Decision, 1> decisions{};
+    bool wiggled = false;
+    bool jumped = false;
+    int ticks = 0;
+    for (; ticks < 1000 && agent.brain.goal(); ++ticks) {
+        deciders.decide(*jobs, requests, decisions);
+        const nx::agents::Intent& intent = decisions.front().intent;
+        EXPECT_EQ(intent.ahead, nx::Vec3{.x = 1.0F}) << "it faces its way all along";
+        // Back or aside: a way of its wiggle's other than ahead.
+        wiggled = wiggled || (agent.stuck.isStuck() && intent.direction.x < 0.5F);
+        jumped = jumped || intent.jumps;
+    }
+    EXPECT_TRUE(wiggled);
+    EXPECT_TRUE(jumped);
+    EXPECT_FALSE(agent.brain.goal().has_value()) << "given up";
+    EXPECT_NEAR(static_cast<float>(ticks) * kTick.count(), 5.0F, 0.05F) << "stuck half a second, then 4.5";
+    deciders.decide(*jobs, requests, decisions);
+    EXPECT_EQ(decisions.front().behavior, nx::agents::Behavior::Idle);
+    EXPECT_FALSE(agent.stuck.isStuck());
 }
 
 TEST(AgentDeciders, FewerBrainsThanABatchAndNoneDecideToo) {

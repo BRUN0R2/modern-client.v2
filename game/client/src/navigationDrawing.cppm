@@ -47,7 +47,8 @@ public:
     /// decide on, while its last decision follows its corridor (nx::agents::Agent::appendWay), as of `now`'s
     /// tick: as arrows whose shafts are of its team's color (a counter-terrorist's blue, a terrorist's red,
     /// purple for no team) and whose heads are of why it goes there (cyan along its route to its goal,
-    /// amber where it saw an enemy last, white to an enemy it sees). They are found in batches in jobs of
+    /// amber where it saw an enemy last, white to an enemy it sees), magenta while it is stuck on it
+    /// (nx::agents::StuckWatch). They are found in batches in jobs of
     /// `jobs`, each with a query of its own, which the calling thread runs too; a few agents, on the
     /// calling thread alone. Nothing is allocated once the ways have had their longest.
     void showWays(nx::jobs::JobSystem& jobs, nx::GameTime now, std::span<const ShownAgent> agents);

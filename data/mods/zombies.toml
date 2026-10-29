@@ -15,6 +15,20 @@ spawnBatchLimit = 64
 spawnRadius = 512.0
 spawnSpacing = 64.0
 
+# How a zombie finds itself stuck and gets out, as a bot of data/cstrike/bots.toml does (Condition
+# Zero's StuckCheck and Wiggle): stuck below 20 units a second across five samples a tenth of a second
+# apart, it moves ahead, back or to a side, jumping now and then, until it is 75 units from where it got
+# stuck; stuck 4.5 seconds, it gives up where it goes and searches its way anew.
+[stuck]
+sampleInterval = 0.1
+samples = 5
+stuckSpeed = 20.0
+unstuckDistance = 75.0
+wiggle = { shortest = 0.5, longest = 1.5 }
+firstJump = 0.5
+jumpInterval = { shortest = 1.0, longest = 2.0 }
+giveUpTime = 4.5
+
 [body]
 id = "testZombie"
 model = "models/player/zombi/zombi.mdl"
