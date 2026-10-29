@@ -101,10 +101,12 @@ public:
     /// is held. Once a frame: it takes the edges of the buttons it reads.
     void turn(nx::EulerAngles& view, nx::Seconds elapsed);
 
-    /// The command for the next `duration`, looking along `view`, as the original's CL_CreateMove
+    /// The command for the next `duration`, looking along `view`, as Counter-Strike 1.6's CL_CreateMove
     /// makes it: each movement button asks its speed (cl_forwardspeed...) for the share of the
-    /// command it was held (heldShare), all of them cl_movespeedkey of that while `+speed` is held,
-    /// together no more than `maxSpeed` (the player's, from the server; zero for no limit). The
+    /// command it was held (heldShare), together no more than `maxSpeed` (the player's, from the
+    /// server; zero for no limit), then all of them cl_movespeedkey of that while `+speed` is held,
+    /// 0.52 at most, so that a player walks at a share of its own speed, below the one its steps sound
+    /// at (Half-Life's own client takes the share before the limit, and walks at 208). The
     /// movement buttons are set while held; `+jump`, `+duck`, `+use`, `+attack`, `+attack2` and
     /// `+reload` also when pressed during the command, so that a press and a release within one (a
     /// bind on the mouse wheel) still counts.
