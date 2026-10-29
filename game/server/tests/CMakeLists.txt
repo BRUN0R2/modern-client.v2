@@ -7,9 +7,13 @@ nxAddTest(csServerTests
         entityBodiesTests.cpp
         playerNamesTests.cpp
         agentNavigationTests.cpp
+        agentHearingTests.cpp
     DEPENDS
         cs::server
         cs::shared
+        nx::agents
+        nx::jobs
+        nx::math
         nx::console
         nx::assets
         nx::ecs
@@ -22,3 +26,5 @@ nxAddTest(csServerTests
 # repository's data/.
 target_compile_definitions(csServerTests PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus"
                                                  NX_DATA_DIRECTORY="${PROJECT_SOURCE_DIR}/data")
+# What the agents hear is placed on meshes of the navigation tests' geometry.
+target_include_directories(csServerTests PRIVATE "${PROJECT_SOURCE_DIR}/engine/navigation/tests")

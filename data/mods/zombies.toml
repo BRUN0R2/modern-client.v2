@@ -32,6 +32,15 @@ giveUpTime = 4.5
 avoidedCost = 20.0
 reroutes = 1
 
+# How far a zombie hears each kind of noise, as a bot of data/cstrike/bots.toml does.
+[hearing]
+footstep = 1100.0
+landing = 1100.0
+shot = 2000.0
+quietShot = 1000.0
+emptyShot = 1100.0
+errorShare = 0.2
+
 [body]
 id = "testZombie"
 model = "models/player/zombi/zombi.mdl"

@@ -44,6 +44,18 @@ giveUpTime = 4.5
 avoidedCost = 20.0
 reroutes = 1
 
+# How far a bot hears an enemy's noise at its sound's full volume (IsGameEventAudible: a step, a hard
+# landing and a dry fire 1100 units; a shot 2000, a knife's or a silenced weapon's 1000), its sound's
+# volume a share of that (a ducked step nearer: the original's TODO, "use actual volume"), and how far
+# off it places it: a fifth of how far it is either way along each axis (OnEvent's 400 at 2000).
+[hearing]
+footstep = 1100.0
+landing = 1100.0
+shot = 2000.0
+quietShot = 1000.0
+emptyShot = 1100.0
+errorShare = 0.2
+
 # The spots of a player a bot looks for from its origin (CCSBot::IsVisible): its head 25 above, its
 # feet 34 below standing and 14 ducked, and its sides 13 across.
 [spots]

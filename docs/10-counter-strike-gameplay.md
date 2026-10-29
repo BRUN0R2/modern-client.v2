@@ -832,6 +832,15 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   its view still, its aim and its trigger anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.
+- It hears its enemies as Condition Zero's bot does (`CCSBot::OnEvent`, `IsGameEventAudible`;
+  `cs::heardBy`, the `hearing` table of `bots.toml`): the noises the players made in the last tick
+  (`cs::Game::noises`, the sounds whose `noise` says what they are), within 1100 units for a step, a
+  hard landing or a dry fire, 2000 for a shot, 1000 for a knife's or a silenced weapon's, each as far as
+  its sound's volume goes (a ducked step nearer: the original's own TODO), a teammate's never. It places
+  what it hears off where it was made by up to a fifth of how far it is along each axis, kept on the mesh
+  from there (`OnEvent`'s 400 at 2000), and remembers it as an enemy it lost sight of
+  (`nx::agents::Brain::hear`): its reaction time later it turns to look there and goes there, and only
+  what it sees it fires at. A noise of an enemy it sees changes nothing.
 - The spot of its enemy it aims at by its skill and the parts it sees, the knife's,
   the sniper rifles', the shotguns' and the machine gun's own ways of firing, the weapons it chooses
   and buys, the objectives, the radio and `bot_chatter` come next.

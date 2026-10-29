@@ -61,11 +61,13 @@ standing = { upBase = 0.65, lateralBase = 0.35, upModifier = 0.25, lateralModifi
 files = ["weapons/m4a1_unsil-1.wav", "weapons/m4a1_unsil-2.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "shot"
 
 [firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_rifle.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [reload]
 time = 3.05
@@ -111,11 +113,13 @@ standing = { upBase = 0.65, lateralBase = 0.35, upModifier = 0.25, lateralModifi
 files = ["weapons/m4a1-1.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "quietShot"
 
 [alternate.firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_rifle.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [alternate.reload]
 time = 3.05

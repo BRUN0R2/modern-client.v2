@@ -322,6 +322,40 @@ TEST_F(GameTest, TellsWhetherABodyLivesAndTheTeamOfThePlayerWhoseBodyItIs) {
     EXPECT_FALSE(game().bodyStatusOf(*created).isAlive) << "gone";
 }
 
+TEST_F(GameTest, TheNoisesAreTheSoundsTheLivingPlayersMadeInTheLastTickThatAgentsHeed) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "usp");
+    std::ignore = press(attacker, {cs::Button::Attack});
+    const std::vector<cs::PerceptionTarget> targets = game().perceptionTargets();
+    const auto bodyOf = [&targets](cs::PlayerIndex player) {
+        const auto found = std::ranges::find(targets, player, &cs::PerceptionTarget::player);
+        return found != targets.end() ? found->entity : nx::ecs::Entity{};
+    };
+    const std::vector<cs::GameNoise> noises = game().noises();
+    const auto shot = std::ranges::find(noises, bodyOf(attacker), &cs::GameNoise::entity);
+    ASSERT_NE(shot, noises.end());
+    EXPECT_EQ(shot->kind, cs::NoiseKind::Shot) << "the unsilenced usp's";
+    EXPECT_EQ(shot->team, cs::Team::CounterTerrorists);
+    EXPECT_FLOAT_EQ(shot->loudness, 1.0F);
+    EXPECT_FALSE(std::ranges::contains(noises, bodyOf(victim), &cs::GameNoise::entity))
+        << "its pain is no noise agents heed";
+    idle(1);
+    EXPECT_TRUE(game().noises().empty()) << "a tick's noises are its own";
+
+    // Running on the floor, its steps.
+    bool stepped = false;
+    for (std::uint32_t tick = 0; tick < kReadyTicks && !stepped; ++tick) {
+        std::ignore = play(attacker, 1, {.forward = nx::UnitsPerSecond{250.0F}});
+        stepped = std::ranges::any_of(game().noises(), [](const cs::GameNoise& noise) {
+            return noise.kind == cs::NoiseKind::Footstep && noise.loudness == 1.0F;
+        });
+    }
+    EXPECT_TRUE(stepped);
+}
+
 TEST_F(GameTest, TheMovingBodiesAreTheLivingPlayersAndEntities) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     std::ignore = play(player, kPastTheFirstFreeze);

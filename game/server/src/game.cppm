@@ -57,6 +57,18 @@ struct PerceptionTarget {
     bool isDucked = false;
 };
 
+/// A noise a living player made in the last tick that agents heed (GameSound::noise): the body that made
+/// it, its team, where its feet and its eye were, what kind of noise, and how loud a share of its sound's
+/// own volume it made it (a ducked player's step is quieter).
+struct GameNoise {
+    nx::ecs::Entity entity{};
+    Team team{};
+    nx::Vec3 feet{};
+    nx::Vec3 eye{};
+    NoiseKind kind{};
+    float loudness = 1.0F;
+};
+
 /// A living body that moves among the others, which agents steer around: its entity, where its feet are,
 /// how it moves, and how far its box reaches across from its middle.
 struct MovingBody {
@@ -203,6 +215,9 @@ public:
     [[nodiscard]] auto removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError>;
     /// Body states, including corpses, ordered by their complete generational handles.
     [[nodiscard]] auto entities() -> std::vector<EntityState>;
+    /// The noises the living players made in the last tick that agents heed, in the players' order and,
+    /// each player's, as it made them (cs::heardBy).
+    [[nodiscard]] auto noises() const -> std::vector<GameNoise>;
     /// The living bodies, players' and createEntity's, solid as boxes: what agents steer around.
     [[nodiscard]] auto movingBodies() -> std::vector<MovingBody>;
     /// Living player bodies a mod may consider; these are candidates, not already perceived facts.

@@ -70,6 +70,60 @@ TEST(AgentBrain, ForgetsATargetThatIsNoLongerThereAndPlansNoWayToIt) {
     EXPECT_TRUE(way.empty()) << "its corridor forgotten with it";
 }
 
+TEST(AgentBrain, ATargetHeardIsInvestigatedWhereItWasHeardLookingThere) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto heard = world.spawn();
+    nx::agents::Brain brain{rules()};
+    brain.perceive({}, {}, nx::kDefaultTickRate);
+    const nx::Vec3 eye{.x = -300, .y = 50, .z = 53};
+    brain.hear(
+        std::array{nx::agents::Observation{.entity = heard, .position = {.x = -300, .y = 50}, .aimAt = eye}},
+        {}, nx::kDefaultTickRate);
+    ASSERT_EQ(brain.memories().size(), 1U);
+    EXPECT_FALSE(brain.memories().front().isVisible) << "heard, not seen";
+    const nx::agents::Decision decision = brain.decide({}, query);
+    EXPECT_EQ(decision.behavior, nx::agents::Behavior::Investigate);
+    EXPECT_EQ(decision.target, heard);
+    EXPECT_EQ(decision.intent.lookAt, eye) << "it turns to look where it heard it";
+    EXPECT_FALSE(decision.intent.attacks) << "only a target it sees it attacks";
+    EXPECT_LT(decision.intent.direction.x, 0.0F) << "and goes there";
+}
+
+TEST(AgentBrain, WhatItHearsOfATargetItSeesChangesNothingAndAHeardOneIsRecognizedAfterItsReactionTime) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    auto withReaction = rules();
+    withReaction.reactionTime = nx::Seconds{0.5F};
+    nx::agents::Brain brain{withReaction};
+    const nx::Vec3 seenAt{.x = 200};
+    brain.perceive(std::array{nx::agents::Observation{target, seenAt}}, {}, nx::kDefaultTickRate);
+    brain.hear(std::array{nx::agents::Observation{target, {.x = 260, .y = 40}}}, {}, nx::kDefaultTickRate);
+    ASSERT_EQ(brain.memories().size(), 1U);
+    EXPECT_EQ(brain.memories().front().observation.position, seenAt) << "its sight the better";
+    EXPECT_TRUE(brain.memories().front().isVisible);
+
+    const auto other = world.spawn();
+    const nx::GameTime later = nx::GameTime{}.after(nx::Seconds{0.25F}, nx::kDefaultTickRate);
+    brain.perceive({}, later, nx::kDefaultTickRate);
+    brain.hear(std::array{nx::agents::Observation{other, {.y = -200}}}, later, nx::kDefaultTickRate);
+    const auto heardRecord = std::ranges::find(
+        brain.memories(), other, [](const nx::agents::Memory& record) { return record.observation.entity; });
+    ASSERT_NE(heardRecord, brain.memories().end());
+    EXPECT_FALSE(heardRecord->isRecognized) << "heard just now";
+    const nx::GameTime reacted = later.after(nx::Seconds{0.5F}, nx::kDefaultTickRate);
+    brain.perceive({}, reacted, nx::kDefaultTickRate);
+    brain.hear(std::array{nx::agents::Observation{other, {.y = -210}}}, reacted, nx::kDefaultTickRate);
+    const auto recognized = std::ranges::find(
+        brain.memories(), other, [](const nx::agents::Memory& record) { return record.observation.entity; });
+    ASSERT_NE(recognized, brain.memories().end());
+    EXPECT_TRUE(recognized->isRecognized);
+    EXPECT_EQ(recognized->observation.position, (nx::Vec3{.y = -210})) << "where it was heard last";
+}
+
 TEST(AgentBrain, CapsMemoryAndEvictsTheOldestFact) {
     nx::ecs::World world;
     const auto first = world.spawn();

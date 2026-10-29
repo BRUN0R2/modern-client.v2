@@ -60,11 +60,13 @@ punch = 2.0
 files = ["weapons/usp_unsil-1.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "shot"
 
 [firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_pistol.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [reload]
 time = 2.7
@@ -109,11 +111,13 @@ punch = 2.0
 files = ["weapons/usp1.wav", "weapons/usp2.wav"]
 channel = "weapon"
 volume = 1.0
+noise = "quietShot"
 
 [alternate.firing.emptySound] # PlayEmptySound
 files = ["weapons/dryfire_pistol.wav"]
 channel = "weapon"
 volume = 0.8
+noise = "emptyShot"
 
 [alternate.reload]
 time = 2.7
