@@ -807,9 +807,13 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
 - It chases what it no longer sees to where it saw it, and, with nothing to pursue, hunts a place of
   the mesh drawn within `huntRadius` of it, running at its full speed (`GetMoveSpeed`) along its
   corridor, standing (the mesh leaves out what only a ducked player passes), its view level ahead
-  along its way. It steers among the other players and the walls as it goes, its next turn taken wide,
-  the velocity it runs at one that meets no body nor wall in the time ahead, slower or waiting when it
-  must ([ADR-0024](adr/0024-agents.md)'s local avoidance, `nx::navigation::Corridor::steer`), so that two
+  along its way. Its ways keep a player's half width farther from walls and ledges than its radius
+  where there is room (`wallClearance` in `data/cstrike/navigation.toml`): the floor along them is of
+  the kind `edge`, which costs it twice its length, so that its square box, whose corners reach 22.6
+  units from its middle on a diagonal, does not catch on corners; a narrow door is still a way. It
+  steers among the other players and the walls as it goes, its next turn taken wide, the velocity it
+  runs at one that meets no body nor wall in the time ahead, slower or waiting when it must
+  ([ADR-0024](adr/0024-agents.md)'s local avoidance, `nx::navigation::Corridor::steer`), so that two
   bots meeting in a passage pass each other. When it gets stuck on its way anyway, it gets out as
   Condition Zero's bot does (`StuckCheck`, `Wiggle`, `nx::agents::StuckWatch`, the `stuck` table of
   `bots.toml`): sampled each tenth of a second, it is stuck when across the last five samples it went

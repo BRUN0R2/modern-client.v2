@@ -74,6 +74,8 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     EXPECT_EQ(costs[AreaKind::Floor], 1.0F);
     EXPECT_EQ(costs[AreaKind::Crouch], 3.0F);
     EXPECT_EQ(costs[AreaKind::Water], 1.25F);
+    EXPECT_EQ(costs[AreaKind::Edge], 2.0F);
+    EXPECT_EQ(player.wallClearance, nx::HammerUnits{16.0F});
     EXPECT_EQ(read->build.cellSize, nx::HammerUnits{4.0F});
     EXPECT_EQ(read->build.tileCells, 64U);
 }
@@ -95,6 +97,7 @@ detailHeightError = 2.0
 [[profiles]]
 name = "player"
 radius = 16.0
+wallClearance = 0.0
 standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
@@ -106,6 +109,7 @@ areaCosts = []
 [[profiles]]
 name = "cheap"
 radius = 16.0
+wallClearance = 0.0
 standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
