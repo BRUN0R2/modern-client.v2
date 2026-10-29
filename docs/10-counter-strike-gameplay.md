@@ -840,7 +840,13 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   what it hears off where it was made by up to a fifth of how far it is along each axis, kept on the mesh
   from there (`OnEvent`'s 400 at 2000), and remembers it as an enemy it lost sight of
   (`nx::agents::Brain::sense`): its reaction time later it turns to look there and goes there, and only
-  what it sees it fires at. A noise of an enemy it sees changes nothing.
+  what it sees it fires at. A noise of an enemy it sees changes nothing. As Condition Zero's bot keeps a
+  noise for 3 seconds against a less important or a farther one (`OnEvent`'s short-term memory), where
+  it placed an enemy holds that long against an estimate less salient (a step after a shot, a sound after
+  a sight), or as salient and heard no nearer (`shortTermMemory`, `nx::agents::Salience`), so that its way
+  and its eyes do not jump at each step heard; a body it touches it is sure of at once. And a goal that
+  moves less than a quarter of how far it is (`replanShare`), more than `replanDistance`, keeps its way,
+  the corridor's end slid to it along the mesh, as DetourCrowd adjusts a target without a search.
 - It feels an enemy its body touches where it is (`cs::touchedBy`: their boxes within a unit of each
   other), and remembers it as it remembers one it heard. Hurt by an enemy, it knows only the side the
   attack came from, as a player's damage indicator shows it (`cs::PlayerOwnState::hurtFrom`), and looks

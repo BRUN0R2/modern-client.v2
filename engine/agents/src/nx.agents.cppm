@@ -39,6 +39,15 @@ struct Rules {
     HammerUnits arrivalDistance{};
     /// How far a goal moves, or the agent after a failed path, before another path is searched.
     HammerUnits replanDistance{};
+    /// How far a goal moves before another path is searched, in shares of how far it is across, when that
+    /// is more than replanDistance: a far goal that moves a little keeps its way, the corridor's end slid
+    /// to it along the mesh, as DetourCrowd adjusts a target without a search (adjustMoveTarget). None,
+    /// replanDistance alone.
+    float replanShare = 0.0F;
+    /// How long where a target was placed holds against an estimate of it less salient, or as salient and
+    /// sensed farther (Condition Zero's short-term memory of a noise, OnEvent's 3 seconds), so that its way
+    /// and its eyes do not jump at each step heard. None, every estimate moves it.
+    Seconds shortTermMemory{};
     /// How many targets are remembered at once, the one seen longest ago forgotten first.
     std::size_t memoryLimit = 0;
     /// How long after it first sees a target it knows of it: none before then pursues it (a CS bot's
@@ -54,15 +63,37 @@ struct Observation {
     std::optional<Vec3> aimAt{}; ///< The observed aim point, distinct from the navigation destination.
 };
 
+/// How much what a sense tells of where a target is matters, as Condition Zero ranks the noises a bot hears
+/// (PriorityType: PRIORITY_LOW, PRIORITY_MEDIUM, PRIORITY_HIGH), and Certain for what is seen or touched.
+enum class Salience : std::uint8_t {
+    Low,
+    Medium,
+    High,
+    Certain,
+    Count,
+};
+
+/// What a sense but sight tells a brain of a target (Brain::sense): the observation, how salient it is,
+/// and how far across from the agent it was sensed.
+struct Sensed {
+    Observation observation{};
+    Salience salience = Salience::Low;
+    HammerUnits distance{};
+};
+
 /// What a brain remembers of a target: its last observation, when it perceived it last (seen or sensed),
 /// when it first perceived it since it remembers it, whether it sees it now, and whether its reaction
-/// time since it first perceived it went by.
+/// time since it first perceived it went by; and how salient and how far what placed it where it is was,
+/// and when it was placed there (Rules::shortTermMemory).
 struct Memory {
     Observation observation{};
     GameTime perceivedAt{};
     GameTime noticedAt{};
     bool isVisible = false;
     bool isRecognized = false;
+    Salience salience = Salience::Certain;
+    HammerUnits distance{};
+    GameTime placedAt{};
 };
 
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
@@ -99,21 +130,24 @@ public:
     void perceive(std::span<const Observation> seen, GameTime now, TickRate rate);
     /// After perceive of the same tick, remembers where each target of `sensed`, perceived by a sense but
     /// sight (heard roughly where it made a noise: cs::heardBy; touched where it is: cs::touchedBy), was
-    /// perceived now, unless it sees it, its sight the better; a target sensed anew noticed now, and
-    /// recognized once its reaction time went by, as one seen. It investigates a target it sensed as one
-    /// it lost sight of: it turns to look where it sensed it, and goes there.
-    void sense(std::span<const Observation> sensed, GameTime now, TickRate rate);
+    /// perceived now, unless it sees it, its sight the better. Within shortTermMemory of where it was placed,
+    /// an estimate less salient, or as salient and sensed no nearer, leaves it there, and it was perceived
+    /// now all the same; a certain one, touched, always places it. A target sensed anew is noticed now, and
+    /// recognized once its reaction time went by, as one seen. It investigates a target it sensed as one it
+    /// lost sight of: it turns to look where it sensed it, and goes there.
+    void sense(std::span<const Sensed> sensed, GameTime now, TickRate rate);
     /// Forgets every target it remembers that is not among `present`, sorted: the targets there still are
     /// to perceive, so that it pursues none that died or left, and plans no way to where one was last.
     void forgetAbsent(std::span<const ecs::Entity> present);
     /// A deterministic choice among the targets recognized: closest visible target, else freshest
     /// remembered target. Ties retain memory order. A failed path is attempted again only when its goal or
-    /// source moves sufficiently. Smaller observation changes update the corridor's destination without
-    /// another full search; a body farther across from its corridor than the replan distance (spawned
-    /// again, teleported, pushed off the mesh) searches its way anew from where it is. Query/path failures
-    /// become Blocked decisions carrying their NavigationError. Investigations finish at the corridor's
-    /// projected destination, including an airborne observation. With no target remembered, it moves to its
-    /// goal (MoveTo), which it forgets as it arrives (Idle).
+    /// source moves sufficiently. Observation changes smaller than replanDistance, or than replanShare of how
+    /// far the target is, update the corridor's destination without another full search; a body farther
+    /// across from its corridor than the replan distance (spawned again, teleported, pushed off the mesh)
+    /// searches its way anew from where it is. Query/path failures become Blocked decisions carrying their
+    /// NavigationError. Investigations finish at the corridor's projected destination, including an airborne
+    /// observation. With no target remembered, it moves to its goal (MoveTo), which it forgets as it arrives
+    /// (Idle).
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
@@ -144,9 +178,12 @@ public:
     [[nodiscard]] inline auto memories() const noexcept -> std::span<const Memory> { return memory; }
 
 private:
-    /// Remembers `observation` of a target it remembers nothing of, perceived now, seen or not, the record
+    /// Remembers `sensed` of a target it remembers nothing of, perceived now, seen or not, the record
     /// perceived longest ago forgotten first when its memory is full.
-    void remember(const Observation& observation, GameTime now, bool isVisible);
+    void remember(const Sensed& sensed, GameTime now, bool isVisible);
+    /// Whether another way is searched for `goal` from `feet`: with no search yet, or once it moved from
+    /// where the last search aimed more than replanDistance, or replanShare of how far it is, the farther.
+    [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
 
     Rules rules;
     std::vector<Memory> memory;

@@ -45,13 +45,15 @@ TEST(AgentTouchTest, AnAgentFeelsTheEnemiesItsBodyTouchesWhereTheyAre) {
     };
     const cs::Toucher toucher{
         .entity = self, .team = cs::Team::CounterTerrorists, .origin = {}, .box = cs::kStandingBox};
-    const std::vector<nx::agents::Observation> touched = cs::touchedBy(toucher, targets);
+    const std::vector<nx::agents::Sensed> touched = cs::touchedBy(toucher, targets);
     ASSERT_EQ(touched.size(), 2U)
         << "the one beside it and the ducked one; not one apart, a teammate, itself";
-    EXPECT_EQ(touched[0].entity, touching);
-    EXPECT_EQ(touched[0].position, targets[1].feet) << "where it is";
-    EXPECT_EQ(touched[0].aimAt, targets[1].eye);
-    EXPECT_EQ(touched[1].entity, ducked);
+    EXPECT_EQ(touched[0].observation.entity, touching);
+    EXPECT_EQ(touched[0].salience, nx::agents::Salience::Certain);
+    EXPECT_NEAR(touched[0].distance.value(), 32.5F, 0.01F);
+    EXPECT_EQ(touched[0].observation.position, targets[1].feet) << "where it is";
+    EXPECT_EQ(touched[0].observation.aimAt, targets[1].eye);
+    EXPECT_EQ(touched[1].observation.entity, ducked);
 
     const cs::Toucher ofNoTeam{.entity = self, .origin = {}, .box = cs::kStandingBox};
     EXPECT_EQ(cs::touchedBy(ofNoTeam, targets).size(), 3U) << "an agent of no team feels every player";

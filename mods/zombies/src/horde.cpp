@@ -90,6 +90,8 @@ struct SpawnAnchor {
             .attackDistance = settings.body.meleeReach,
             .arrivalDistance = settings.arrivalDistance,
             .replanDistance = settings.replanDistance,
+            .replanShare = settings.replanShare,
+            .shortTermMemory = settings.shortTermMemory,
             .memoryLimit = settings.memoryLimit};
 }
 } // namespace
@@ -105,6 +107,8 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
     if (!positive(read->sightRange.value()) || !positive(read->fieldOfView.value()) ||
         read->fieldOfView.value() > kFullTurnDegrees || !positive(read->memoryLifetime.count()) ||
         !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
+        !std::isfinite(read->replanShare) || read->replanShare < 0.0F ||
+        !std::isfinite(read->shortTermMemory.count()) || read->shortTermMemory < nx::Seconds{} ||
         !positive(read->spawnRadius.value()) || !positive(read->spawnSpacing.value()) ||
         read->memoryLimit == 0 || read->perceptionBudget == 0 || read->spawnBatchLimit == 0) {
         return nx::fail(

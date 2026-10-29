@@ -96,12 +96,15 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
         rules->perceptionBudget > 0 && isPositive(rules->memoryLifetime.count()) && rules->memoryLimit > 0 &&
         isPositive(rules->attackDistance.value()) && isPositive(rules->arrivalDistance.value()) &&
         isPositive(rules->replanDistance.value()) && isPositive(rules->huntRadius.value()) &&
-        isPositive(rules->quotaInterval.count());
+        isPositive(rules->quotaInterval.count()) && isNoneOrMore(rules->replanShare) &&
+        isNoneOrMore(rules->shortTermMemory.count());
     if (!isValidRules) {
-        return nx::fail(BotError::InvalidData,
-                        std::format("{}: every distance, time and budget more than none, and a field of view "
-                                    "of a whole turn at most, are required",
-                                    sourceName));
+        return nx::fail(
+            BotError::InvalidData,
+            std::format("{}: every distance, time and budget more than none, the replan share and "
+                        "the short-term memory none or more, and a field of view of a whole turn at "
+                        "most, are required",
+                        sourceName));
     }
     const BotPanicRules& panic = rules->panic;
     if (!isPositive(panic.near.value()) || !isPositive(panic.far.value()) ||
@@ -153,6 +156,8 @@ auto brainRulesOf(const BotRules& rules, nx::Seconds reactionTime) noexcept -> n
                              .attackDistance = rules.attackDistance,
                              .arrivalDistance = rules.arrivalDistance,
                              .replanDistance = rules.replanDistance,
+                             .replanShare = rules.replanShare,
+                             .shortTermMemory = rules.shortTermMemory,
                              .memoryLimit = rules.memoryLimit,
                              .reactionTime = reactionTime};
 }

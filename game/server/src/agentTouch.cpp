@@ -30,15 +30,19 @@ namespace {
 } // namespace
 
 auto touchedBy(const Toucher& toucher, std::span<const PerceptionTarget> targets)
-    -> std::vector<nx::agents::Observation> {
-    std::vector<nx::agents::Observation> touched;
+    -> std::vector<nx::agents::Sensed> {
+    std::vector<nx::agents::Sensed> touched;
     for (const PerceptionTarget& target : targets) {
         if (target.entity == toucher.entity || toucher.team == target.team) {
             continue;
         }
         const nx::Aabb& box = target.isDucked ? kDuckedBox : kStandingBox;
         if (areTouching(toucher.origin, toucher.box, target.origin, box)) {
-            touched.push_back({.entity = target.entity, .position = target.feet, .aimAt = target.eye});
+            const nx::Vec3 between = target.origin - toucher.origin;
+            touched.push_back(
+                {.observation = {.entity = target.entity, .position = target.feet, .aimAt = target.eye},
+                 .salience = nx::agents::Salience::Certain,
+                 .distance = nx::HammerUnits{std::hypot(between.x, between.y)}});
         }
     }
     return touched;

@@ -45,9 +45,22 @@ auto rangeOf(const HearingRules& rules, NoiseKind kind) noexcept -> nx::HammerUn
     return nx::HammerUnits{};
 }
 
+auto salienceOf(NoiseKind kind) noexcept -> nx::agents::Salience {
+    switch (kind) {
+    case NoiseKind::Shot:
+    case NoiseKind::QuietShot:
+        return nx::agents::Salience::High;
+    case NoiseKind::Footstep:
+    case NoiseKind::Landing:
+    case NoiseKind::EmptyShot:
+    case NoiseKind::Count:
+        break;
+    }
+    return nx::agents::Salience::Low;
+}
+
 auto heardBy(const Listener& listener, std::span<const GameNoise> noises, const HearingRules& rules,
-             nx::navigation::NavigationQuery& query, nx::Random& random)
-    -> std::vector<nx::agents::Observation> {
+             nx::navigation::NavigationQuery& query, nx::Random& random) -> std::vector<nx::agents::Sensed> {
     // The nearest noise of each enemy heard, in the order of the noises.
     std::vector<std::pair<const GameNoise*, float>> heard;
     for (const GameNoise& noise : noises) {
@@ -66,8 +79,8 @@ auto heardBy(const Listener& listener, std::span<const GameNoise> noises, const 
             *same = {&noise, distance};
         }
     }
-    std::vector<nx::agents::Observation> observations;
-    observations.reserve(heard.size());
+    std::vector<nx::agents::Sensed> estimates;
+    estimates.reserve(heard.size());
     for (const auto& [noise, distance] : heard) {
         const float error = rules.errorShare * distance;
         const nx::Vec3 offset{.x = random.between(-error, error), .y = random.between(-error, error)};
@@ -75,10 +88,13 @@ auto heardBy(const Listener& listener, std::span<const GameNoise> noises, const 
         // error all the same where it was made off the mesh.
         const auto walked = query.raycast(noise->feet, noise->feet + offset);
         const nx::Vec3 position = walked ? walked->end : noise->feet + offset;
-        observations.push_back(
-            {.entity = noise->entity, .position = position, .aimAt = position + (noise->eye - noise->feet)});
+        estimates.push_back({.observation = {.entity = noise->entity,
+                                             .position = position,
+                                             .aimAt = position + (noise->eye - noise->feet)},
+                             .salience = salienceOf(noise->kind),
+                             .distance = nx::HammerUnits{distance}});
     }
-    return observations;
+    return estimates;
 }
 
 } // namespace cs

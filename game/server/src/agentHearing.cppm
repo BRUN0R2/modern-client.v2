@@ -38,21 +38,25 @@ struct HearingRules {
 /// How far a noise of `kind` carries by `rules`, at its sound's full volume.
 [[nodiscard]] auto rangeOf(const HearingRules& rules, NoiseKind kind) noexcept -> nx::HammerUnits;
 
+/// How salient a noise of `kind` is, as IsGameEventAudible ranks it: a shot, quiet or not, high; a step, a
+/// hard landing and a dry fire low.
+[[nodiscard]] auto salienceOf(NoiseKind kind) noexcept -> nx::agents::Salience;
+
 /// Who hears: the team it plays in, none for an agent of no team, which hears every player, and its ear.
 struct Listener {
     std::optional<Team> team{};
     nx::Vec3 ear{};
 };
 
-/// What `listener` hears of `noises`, by `rules`, as observations of the enemies that made them
+/// What `listener` hears of `noises`, by `rules`, as estimates of the enemies that made them
 /// (nx::agents::Brain::sense), the nearest noise of each, in the order of `noises`: those of another team
 /// than its own, within the range of their kind times their loudness of its ear; each placed off where
 /// it was made by its error across, drawn from `random`, then walked back onto the mesh of `query` from
 /// where it was made (as OnEvent keeps it on the noise's area), off the mesh where it was made off it,
-/// its eye as high above that.
+/// its eye as high above that; as salient as its kind (salienceOf), heard as far as it is from the ear.
 [[nodiscard]] auto heardBy(const Listener& listener, std::span<const GameNoise> noises,
                            const HearingRules& rules, nx::navigation::NavigationQuery& query,
-                           nx::Random& random) -> std::vector<nx::agents::Observation>;
+                           nx::Random& random) -> std::vector<nx::agents::Sensed>;
 
 } // namespace cs
 

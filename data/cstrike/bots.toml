@@ -14,10 +14,16 @@ memoryLifetime = 10.0
 memoryLimit = 32
 # A bot fires at an enemy it sees as far as a shot goes (FireBullets3's 8192 units).
 attackDistance = 8192.0
-# How near the end of its way a bot arrives, and how far a goal moves before it finds another way
-# (the project's, as the zombies' of data/mods/zombies.toml).
+# How near the end of its way a bot arrives, and how far a goal moves before it finds another way: 24
+# units, or a quarter of how far it is when that is more, so that a far one that moves a little keeps
+# its way, its end slid to it (the project's, as the zombies' of data/mods/zombies.toml).
 arrivalDistance = 8.0
 replanDistance = 24.0
+replanShare = 0.25
+# How long where a bot placed an enemy holds against an estimate of it less salient, or as salient and
+# heard no nearer (OnEvent's short-term memory of a noise, 3 seconds): a step heard does not move where
+# it heard a shot, nor a farther step a nearer one, so that its way and its eyes keep still.
+shortTermMemory = 3.0
 # How far from a bot the next place its hunt goes to is drawn on the mesh (the project's: a map's).
 huntRadius = 4096.0
 # How often bot_quota is looked at (MonitorBotCVars: 0.3 seconds).
