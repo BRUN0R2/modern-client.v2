@@ -4,13 +4,13 @@
 #pragma once
 
 // Test helper: geometry built in the tests (floors, boxes, ramps), the player's profile as
-// data/cstrike/navigation.toml gives it, and build settings of small tiles, so that small worlds span
-// several. Include after <gtest/gtest.h>, `import std;`, `import nx.core;`, `import nx.math;`,
-// `import nx.jobs;` and `import nx.navigation;`.
+// data/cstrike/navigation.toml gives it, with its wall clearance or without, and build settings of small
+// tiles, so that small worlds span several. Include after <gtest/gtest.h>, `import std;`, `import nx.core;`,
+// `import nx.math;`, `import nx.jobs;` and `import nx.navigation;`.
 
 namespace nx::test {
 
-/// The player's profile.
+/// The player's profile, but its wall clearance (clearedPlayerProfile): its polygons all its floor's kinds.
 [[nodiscard]] inline auto playerProfile() -> nx::navigation::AgentProfile {
     return nx::navigation::AgentProfile{
         .name = "player",
@@ -21,6 +21,14 @@ namespace nx::test {
         .jumpHeight = nx::HammerUnits{41.8F},
         .minGroundNormalZ = 0.7F,
         .areaCosts = {{.area = nx::navigation::AreaKind::Crouch, .cost = 3.0F}}};
+}
+
+/// The player's profile with its wall clearance and the cost of the floor along walls.
+[[nodiscard]] inline auto clearedPlayerProfile() -> nx::navigation::AgentProfile {
+    nx::navigation::AgentProfile profile = playerProfile();
+    profile.wallClearance = nx::HammerUnits{16.0F};
+    profile.areaCosts.push_back({.area = nx::navigation::AreaKind::Edge, .cost = 2.0F});
+    return profile;
 }
 
 /// Cells of 4 units by 2 in tiles of 32 cells: 128 units.
@@ -80,11 +88,12 @@ inline void addBox(nx::navigation::Geometry& geometry, nx::Vec3 low, nx::Vec3 hi
     return std::move(created).value();
 }
 
-/// The mesh of `geometry` for the player, which the test needs.
-[[nodiscard]] inline auto playerMesh(const nx::navigation::Geometry& geometry, std::uint32_t workerCount = 3)
+/// The mesh of `geometry` for the player, `profile` when given, which the test needs.
+[[nodiscard]] inline auto playerMesh(const nx::navigation::Geometry& geometry, std::uint32_t workerCount = 3,
+                                     const nx::navigation::AgentProfile& profile = playerProfile())
     -> nx::navigation::NavigationMesh {
     auto jobs = jobSystem(workerCount);
-    auto mesh = nx::navigation::NavigationMesh::build(*jobs, geometry, playerProfile(), testSettings());
+    auto mesh = nx::navigation::NavigationMesh::build(*jobs, geometry, profile, testSettings());
     EXPECT_TRUE(mesh.has_value()) << (mesh ? "" : nx::describe(mesh.error()));
     return std::move(mesh).value();
 }

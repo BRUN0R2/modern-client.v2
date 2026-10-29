@@ -17,6 +17,9 @@ enum class AreaKind : std::uint8_t {
     Floor,  ///< Walked on standing.
     Crouch, ///< Under too little room to stand: crossed crouched.
     Water,  ///< Under a liquid: waded or swum.
+    /// Floor along walls and ledges, within the profile's wallClearance of where it may not stand: walked,
+    /// and weighed, so that the ways keep off walls where there is room.
+    Edge,
     Count,
 };
 
@@ -35,6 +38,9 @@ struct AgentProfile {
     std::string name{}; ///< How data, the console and plugins name it ("player").
     /// Half its width: its middle stays this far from walls and ledges.
     HammerUnits radius{};
+    /// How much farther than its radius it would rather keep from walls and ledges where there is room:
+    /// the floor within it is of the kind Edge, which areaCosts weighs; none for none.
+    HammerUnits wallClearance{};
     HammerUnits standingHeight{};
     /// Where less room than standingHeight but this much is above the floor, it crouches (Crouch); less
     /// room than this is no way.
@@ -84,7 +90,8 @@ enum class MeshBuildError : std::uint8_t {
 [[nodiscard]] auto checkSettings(const BuildSettings& settings) -> Result<void, MeshBuildError>;
 
 /// Whether `profile` can be built by `settings`, which must pass checkSettings: a name; a radius, heights
-/// and a step positive, crouched no taller than standing, the jump no lower than the step; a floor's
+/// and a step positive, a wall clearance of none or more, crouched no taller than standing, the jump no
+/// lower than the step; a floor's
 /// normal from just above 0 to 1; each kind's cost once and at least 1; and its heights within the
 /// voxels a span counts. Errors: InvalidProfile.
 [[nodiscard]] auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
@@ -107,6 +114,7 @@ struct nx::meta::Description<nx::navigation::AgentProfile> {
     static constexpr std::tuple kFields{
         nx::meta::field<&nx::navigation::AgentProfile::name>("name"),
         nx::meta::field<&nx::navigation::AgentProfile::radius>("radius"),
+        nx::meta::field<&nx::navigation::AgentProfile::wallClearance>("wallClearance"),
         nx::meta::field<&nx::navigation::AgentProfile::standingHeight>("standingHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::crouchedHeight>("crouchedHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::stepHeight>("stepHeight"),
