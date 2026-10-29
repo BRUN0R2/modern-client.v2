@@ -15,12 +15,23 @@ import :mesh;
 
 export namespace nx::navigation {
 
-/// What a way is asked for: from where, to where, and what each kind of area costs it; the mesh's
-/// profile's costs when none are given.
+/// A place a way keeps away from where another way goes (PathRequest::avoided): the polygons of the mesh
+/// within `radius` across of `position`, reached from the one nearest it, cost `cost` times as much. A
+/// place off the mesh avoids nothing.
+struct AvoidedPlace {
+    Vec3 position{};
+    HammerUnits radius{};
+    float cost = 1.0F;
+};
+
+/// What a way is asked for: from where, to where, what each kind of area costs it, the mesh's profile's
+/// costs when none are given, and the places it keeps away from, a polygon several of them reach costing
+/// the most any of them makes it.
 struct PathRequest {
     Vec3 from{};
     Vec3 to{};
     std::optional<AreaCosts> costs{};
+    std::span<const AvoidedPlace> avoided{};
 };
 
 /// A way on a mesh: the points an agent walks straight between, the first on the mesh nearest the
@@ -60,7 +71,8 @@ public:
 
     [[nodiscard]] inline auto mesh() const noexcept -> const NavigationMesh& { return *navigationMesh; }
 
-    /// The cheapest way of `request` by its costs, straightened. Errors: OutsideMesh (its start or its
+    /// The cheapest way of `request` by its costs, straightened. Errors: InvalidQuery (a cost below 1 or
+    /// not finite, an avoided place not finite or of a negative radius), OutsideMesh (its start or its
     /// end), Unreachable (also a way past the polygons the search reaches, the detail says so).
     [[nodiscard]] auto findPath(const PathRequest& request) -> Result<Path, NavigationError>;
 

@@ -5,6 +5,7 @@
 import std;
 import nx.core;
 import nx.math;
+import nx.navigation;
 import nx.agents;
 #include "testAgents.hpp"
 
@@ -47,6 +48,12 @@ TEST(StuckRules, AreValidWithPositiveTimesSpeedsAndDistancesAndOrderedRanges) {
     rules = nx::test::stuckRules();
     rules.stuckSpeed = nx::UnitsPerSecond{std::numeric_limits<float>::infinity()};
     EXPECT_FALSE(nx::agents::isValid(rules));
+    rules = nx::test::stuckRules();
+    rules.avoidedCost = 0.5F;
+    EXPECT_FALSE(nx::agents::isValid(rules)) << "an avoided place costs no less than its own";
+    rules.avoidedCost = 1.0F;
+    rules.reroutes = 0;
+    EXPECT_TRUE(nx::agents::isValid(rules)) << "no way searched around it";
 }
 
 TEST(StuckWatch, ABodyMakingItsWayIsNotStuckAndItsIntentIsLeftAsItIs) {
@@ -139,14 +146,20 @@ TEST(StuckWatch, ItIsUnstuckOnceItsBodyIsFarEnoughFromWhereItGotStuck) {
 
 TEST(StuckWatch, StuckTooLongItGivesUpOnceAndWatchesAnew) {
     auto watched = watch();
-    const int stuck = ticksToStuck(watched, {}, 1000);
+    const nx::Vec3 pinned{.x = 64.0F, .y = 32.0F};
+    const int stuck = ticksToStuck(watched, pinned, 1000);
     int ticks = 0;
     nx::agents::Progress progress = nx::agents::Progress::Stuck;
     for (; ticks < 1000 && progress == nx::agents::Progress::Stuck; ++ticks) {
         nx::agents::Intent intent = alongX();
-        progress = watched.watch(intent, {}, kSpeed, true, kTick);
+        progress = watched.watch(intent, pinned, kSpeed, true, kTick);
     }
     EXPECT_EQ(progress, nx::agents::Progress::GivesUp);
+    const nx::navigation::AvoidedPlace place = watched.stuckPlace();
+    EXPECT_EQ(place.position, pinned) << "where it got stuck";
+    EXPECT_EQ(place.radius, nx::test::stuckRules().unstuckDistance);
+    EXPECT_EQ(place.cost, nx::test::stuckRules().avoidedCost);
+    EXPECT_EQ(watched.reroutes(), 1U);
     EXPECT_NEAR(static_cast<float>(ticks) * kTick.count(), 4.5F, 2.0F * kTick.count()) << "after " << stuck;
     EXPECT_FALSE(watched.isStuck());
     EXPECT_GE(ticksToStuck(watched, {}, 1000), 49) << "its samples taken anew";

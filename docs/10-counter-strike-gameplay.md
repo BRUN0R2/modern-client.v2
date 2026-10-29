@@ -821,8 +821,12 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   may run faster than that (not in a frozen round); stuck, it moves ahead, back or to a side drawn each
   0.5 to 1.5 seconds, its view still along its way, jumping within half a second and then each 1 to 2,
   until it is 75 units from where it got stuck. Stuck 4.5 seconds, five since it last made its way
-  (`UpdatePathMovement`'s `giveUpDuration`), it gives up where it goes and hunts another place, or
-  searches its way anew to the enemy it chases. Spawning again, it starts with a new brain, its watch,
+  (`UpdatePathMovement`'s `giveUpDuration`), it gives its way up and searches another to the same
+  place, on which the floor within those 75 units costs twenty times its length
+  (`nx::navigation::PathRequest::avoided`), so that it goes around a jammed passage when there is
+  another way, and through it when there is not; stuck once more on its way, it gives up where it goes
+  and hunts another place (where the original drops its goal at once), while it keeps away from the
+  last place it got stuck at on its way to an enemy it chases. Spawning again, it starts with a new brain, its watch,
   its view still, its aim and its trigger anew. Its body is an agent ([ADR-0024](adr/0024-agents.md)): the brain every kind shares
   (`nx::agents::Agent`) and its driver (`cs::BotDriver`) are components of its player's body, gone
   with it as it leaves.

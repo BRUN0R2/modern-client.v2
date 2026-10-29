@@ -173,28 +173,73 @@ TEST(AgentBrain, FacesAheadAlongItsWayAsItMoves) {
     EXPECT_FALSE(intent.jumps);
 }
 
-TEST(AgentBrain, GivingUpItForgetsItsGoalOrTheTargetItInvestigates) {
-    auto mesh = floorMesh();
+/// Where a body got stuck, as its watch tells it: the polygons within 75 units cost twenty times their own.
+auto stuckAt(nx::Vec3 position) -> nx::navigation::AvoidedPlace {
+    return {.position = position, .radius = nx::HammerUnits{75.0F}, .cost = 20.0F};
+}
+
+/// A corridor along y = 0 to 256 and another along y = 512 to 768, joined at both ends, with nothing
+/// between them: two ways from one end to the other.
+auto twoWaysMesh() -> nx::navigation::NavigationMesh {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 256, .y = 768}, 0);
+    nx::test::addFloor(geometry, {.x = 256, .y = 0}, {.x = 768, .y = 256}, 0);
+    nx::test::addFloor(geometry, {.x = 256, .y = 512}, {.x = 768, .y = 768}, 0);
+    nx::test::addFloor(geometry, {.x = 768, .y = 0}, {.x = 1024, .y = 768}, 0);
+    return nx::test::playerMesh(geometry, 0);
+}
+
+TEST(AgentBrain, GivingUpItSearchesAnotherWayAroundWhereItGotStuckThenGivesUpItsGoal) {
+    const auto mesh = twoWaysMesh();
     nx::navigation::NavigationQuery query{mesh};
     nx::agents::Brain brain{rules()};
-    brain.setGoal(nx::Vec3{.y = 200});
-    ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::MoveTo);
-    brain.giveUp();
-    EXPECT_FALSE(brain.goal().has_value());
-    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle)
-        << "for its owner to give another";
+    const nx::Vec3 from{.x = 128, .y = 128};
+    const nx::Vec3 goal{.x = 896, .y = 128};
+    const auto wayFrom = [&](nx::Vec3 feet) {
+        std::ignore = brain.decide(feet, query);
+        std::vector<nx::Vec3> way;
+        brain.appendWay(query, way);
+        return way;
+    };
+    brain.setGoal(goal);
+    const std::vector<nx::Vec3> straight = wayFrom(from);
+    ASSERT_FALSE(straight.empty());
+    EXPECT_TRUE(std::ranges::all_of(straight, [](nx::Vec3 point) { return point.y < 256; }))
+        << "the near way";
 
+    // Stuck in the near corridor, on its way: once, it searches the far one, its goal kept.
+    const nx::Vec3 jammed{.x = 512, .y = 128};
+    brain.giveUp(stuckAt(jammed), 1);
+    ASSERT_TRUE(brain.goal().has_value());
+    const std::vector<nx::Vec3> around = wayFrom(from);
+    EXPECT_TRUE(std::ranges::any_of(around, [](nx::Vec3 point) { return point.y > 512; })) << "the far way";
+    // Stuck again: it gives its goal up, and pursues nothing for its owner to give it another.
+    brain.giveUp(stuckAt({.x = 128, .y = 600}), 1);
+    EXPECT_FALSE(brain.goal().has_value());
+    EXPECT_EQ(brain.decide(from, query).behavior, nx::agents::Behavior::Idle);
+    // A goal given anew is pursued anew, by the near way again.
+    brain.setGoal(goal);
+    EXPECT_TRUE(std::ranges::all_of(wayFrom(from), [](nx::Vec3 point) { return point.y < 256; }));
+}
+
+TEST(AgentBrain, GivingUpWithNoWayAroundItKeepsTheOnlyWayAndThenTheTargetItInvestigatesIsForgotten) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
     nx::ecs::World world;
     const auto lost = world.spawn();
+    nx::agents::Brain brain{rules()};
     brain.perceive(std::array{nx::agents::Observation{lost, {.x = 200}}}, {}, nx::kDefaultTickRate);
     brain.perceive({}, {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
-    brain.giveUp();
+    brain.giveUp(stuckAt({.x = 100}), 1);
+    EXPECT_EQ(brain.memories().size(), 1U) << "investigated still, by another way";
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Investigate);
+    brain.giveUp(stuckAt({.x = 100}), 1);
     EXPECT_TRUE(brain.memories().empty());
     EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Idle);
 }
 
-TEST(AgentBrain, GivingUpItSearchesItsWayAnewToTheTargetItChases) {
+TEST(AgentBrain, GivingUpItNeverGivesUpATargetItSeesAndSearchesItsWayAnew) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
     nx::ecs::World world;
@@ -202,8 +247,10 @@ TEST(AgentBrain, GivingUpItSearchesItsWayAnewToTheTargetItChases) {
     nx::agents::Brain brain{rules()};
     brain.perceive(std::array{nx::agents::Observation{chased, {.x = 200}}}, {}, nx::kDefaultTickRate);
     ASSERT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Chase);
-    brain.giveUp();
-    EXPECT_EQ(brain.memories().size(), 1U) << "it still sees it";
+    for (int stuck = 0; stuck < 3; ++stuck) {
+        brain.giveUp(stuckAt({.x = 100}), 1);
+        EXPECT_EQ(brain.memories().size(), 1U) << "it still sees it";
+    }
     std::vector<nx::Vec3> way;
     brain.appendWay(query, way);
     EXPECT_TRUE(way.empty()) << "its corridor dropped";

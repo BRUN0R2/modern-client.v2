@@ -5,6 +5,7 @@ module nx.agents;
 import std;
 import nx.core;
 import nx.math;
+import nx.navigation;
 
 namespace nx::agents {
 namespace {
@@ -24,7 +25,8 @@ auto isValid(const StuckRules& rules) noexcept -> bool {
     return isPositive(rules.sampleInterval.count()) && rules.samples > 0 &&
            isPositive(rules.stuckSpeed.value()) && isPositive(rules.unstuckDistance.value()) &&
            isValid(rules.wiggle) && std::isfinite(rules.firstJump.count()) && rules.firstJump >= Seconds{} &&
-           isValid(rules.jumpInterval) && isPositive(rules.giveUpTime.count());
+           isValid(rules.jumpInterval) && isPositive(rules.giveUpTime.count()) &&
+           std::isfinite(rules.avoidedCost) && rules.avoidedCost >= 1.0F;
 }
 
 StuckWatch::StuckWatch(StuckRules settings, Random drawn) : rules{settings}, random{drawn} {
@@ -45,6 +47,7 @@ auto StuckWatch::watch(Intent& intent, Vec3 feet, UnitsPerSecond maxSpeed, bool 
         }
         // Stuck: where, and its first jump soon (StuckCheck's m_stuckJumpTimestamp).
         stuckAt = feet;
+        lastStuckAt = feet;
         stuckFor = {};
         wiggleLeft = {};
         jumpIn = Seconds{random.between(0.0F, rules.firstJump.count())};
@@ -60,6 +63,10 @@ auto StuckWatch::watch(Intent& intent, Vec3 feet, UnitsPerSecond maxSpeed, bool 
     }
     wiggle(intent, elapsed);
     return Progress::Stuck;
+}
+
+auto StuckWatch::stuckPlace() const noexcept -> navigation::AvoidedPlace {
+    return {.position = lastStuckAt, .radius = rules.unstuckDistance, .cost = rules.avoidedCost};
 }
 
 void StuckWatch::reset() noexcept {

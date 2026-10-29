@@ -9,7 +9,8 @@
 namespace nx::test {
 
 /// Condition Zero's: samples each 0.1 s, five of them, stuck below 20 units a second, unstuck 75 away;
-/// a wiggle of 0.5 to 1.5 s, the first jump within 0.5 s, then each 1 to 2 s; given up stuck 4.5 s.
+/// a wiggle of 0.5 to 1.5 s, the first jump within 0.5 s, then each 1 to 2 s; given up stuck 4.5 s, its
+/// way searched once around where it got stuck, which costs twenty times its own.
 [[nodiscard]] inline auto stuckRules() -> nx::agents::StuckRules {
     return {.sampleInterval = nx::Seconds{0.1F},
             .samples = 5,
@@ -18,7 +19,9 @@ namespace nx::test {
             .wiggle = {.shortest = nx::Seconds{0.5F}, .longest = nx::Seconds{1.5F}},
             .firstJump = nx::Seconds{0.5F},
             .jumpInterval = {.shortest = nx::Seconds{1.0F}, .longest = nx::Seconds{2.0F}},
-            .giveUpTime = nx::Seconds{4.5F}};
+            .giveUpTime = nx::Seconds{4.5F},
+            .avoidedCost = 20.0F,
+            .reroutes = 1};
 }
 
 /// A watch of `rules`, its draws of the seed `seed`.

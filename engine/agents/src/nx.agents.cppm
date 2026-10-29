@@ -112,12 +112,19 @@ public:
     /// its speed; else it goes the way it steers to, as fast as that.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
-    /// Gives up where it goes, its body stuck on its way too long (StuckWatch): forgets its goal when it
-    /// pursues none, the target it investigates, and searches its way anew to the one it chases
-    /// (UpdatePathMovement's PATH_FAILURE, after which a hunt picks another place).
-    void giveUp();
-    /// Gives it `goal`, a point of the mesh to move to when it has no target to pursue; none forgets it.
-    inline void setGoal(std::optional<Vec3> goal) noexcept { givenGoal = goal; }
+    /// Gives up its way, its body stuck on it too long (StuckWatch), and searches another from where it is:
+    /// around `stuckAt`, a place its ways keep away from while it pursues what it pursues, as long as it
+    /// keeps away from fewer than `reroutes` places. Past them, it gives up what it pursues as well: forgets
+    /// its goal when it pursues no target, the target it investigates (UpdatePathMovement's PATH_FAILURE,
+    /// after which a hunt picks another place), and keeps away from its last `reroutes` places on its way
+    /// to the one it chases.
+    void giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes);
+    /// Gives it `goal`, a point of the mesh to move to when it has no target to pursue; none forgets it. A
+    /// goal is pursued anew: its ways keep away from none of the places it got stuck at.
+    inline void setGoal(std::optional<Vec3> goal) noexcept {
+        givenGoal = goal;
+        avoided.clear();
+    }
     /// The goal it was given and has not reached yet.
     [[nodiscard]] inline auto goal() const noexcept -> std::optional<Vec3> { return givenGoal; }
     /// Appends to `points` the way left along its corridor (navigation::Corridor::appendWay), from where
@@ -136,6 +143,8 @@ private:
     std::optional<Vec3> plannedFrom{};
     std::optional<navigation::Corridor> corridor{};
     std::optional<navigation::NavigationError> pathError{};
+    /// Where its body got stuck on its way to what it pursues, which its ways keep away from (giveUp).
+    std::vector<navigation::AvoidedPlace> avoided{};
 };
 
 /// A time drawn at random, from its shortest to its longest.
@@ -149,7 +158,9 @@ struct TimeRange {
 /// sampled each sampleInterval, and it is stuck when across the last `samples` intervals it went slower
 /// than stuckSpeed; stuck, it moves a way drawn among ahead, back and either side for a wiggle's time,
 /// jumping within firstJump and then each jumpInterval, until it is unstuckDistance from where it got stuck;
-/// stuck giveUpTime, it gives up where it goes (Brain::giveUp).
+/// stuck giveUpTime, it gives up its way (Brain::giveUp), and searches another on which the polygons
+/// within unstuckDistance of where it got stuck cost avoidedCost times their own; stuck `reroutes` times
+/// so on its way to what it pursues, it gives up what it pursues.
 struct StuckRules {
     Seconds sampleInterval{};
     std::uint32_t samples = 0;
@@ -159,10 +170,13 @@ struct StuckRules {
     Seconds firstJump{};
     TimeRange jumpInterval{};
     Seconds giveUpTime{};
+    float avoidedCost = 1.0F;
+    std::uint32_t reroutes = 0;
 };
 
 /// Whether a watch may follow `rules`: its interval, samples, speed, distance and give-up time more than
-/// none, its first jump none or more, and each range's shortest more than none, its longest no shorter.
+/// none, its first jump none or more, each range's shortest more than none, its longest no shorter, and
+/// its avoided cost finite, at least 1.
 [[nodiscard]] auto isValid(const StuckRules& rules) noexcept -> bool;
 
 /// What a watch makes of its body's progress (StuckWatch::watch).
@@ -189,6 +203,11 @@ public:
     /// Forgets how its body moved: none of its samples, not stuck.
     void reset() noexcept;
     [[nodiscard]] inline auto isStuck() const noexcept -> bool { return stuckAt.has_value(); }
+    /// Where its body last got stuck, the polygons within unstuckDistance of it costing avoidedCost times
+    /// their own: what its ways keep away from as its brain gives its way up (Brain::giveUp).
+    [[nodiscard]] auto stuckPlace() const noexcept -> navigation::AvoidedPlace;
+    /// How many places its brain keeps away from before it gives up what it pursues (StuckRules::reroutes).
+    [[nodiscard]] inline auto reroutes() const noexcept -> std::size_t { return rules.reroutes; }
 
 private:
     /// The ways a wiggle moves, from where it faces: CZ's NavRelativeDirType.
@@ -210,6 +229,7 @@ private:
     std::vector<Vec3> sampled; ///< The last of where its feet were, oldest first.
     Seconds sinceSample{};
     std::optional<Vec3> stuckAt{};
+    Vec3 lastStuckAt{}; ///< Kept as it gives up, which forgets stuckAt.
     Seconds stuckFor{};
     Way way = Way::Ahead;
     Seconds wiggleLeft{};
@@ -305,5 +325,7 @@ struct nx::meta::Description<nx::agents::StuckRules> {
         nx::meta::field<&nx::agents::StuckRules::firstJump>("firstJump"),
         nx::meta::field<&nx::agents::StuckRules::jumpInterval>("jumpInterval"),
         nx::meta::field<&nx::agents::StuckRules::giveUpTime>("giveUpTime"),
+        nx::meta::field<&nx::agents::StuckRules::avoidedCost>("avoidedCost"),
+        nx::meta::field<&nx::agents::StuckRules::reroutes>("reroutes"),
     };
 };

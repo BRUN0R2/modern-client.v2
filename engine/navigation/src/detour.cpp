@@ -44,6 +44,27 @@ constexpr std::size_t kCoordinates = 3;
     });
 }
 
+[[nodiscard]] auto validAvoided(std::span<const AvoidedPlace> avoided) noexcept -> bool {
+    return std::ranges::all_of(avoided, [](const AvoidedPlace& place) {
+        return isFinite(place.position) && std::isfinite(place.radius.value()) &&
+               place.radius >= HammerUnits{} && std::isfinite(place.cost) && place.cost >= 1.0F;
+    });
+}
+
+/// Whether a way may be searched for `request`. Errors: InvalidQuery (a cost or an avoided place out of
+/// bounds).
+[[nodiscard]] auto checkRequest(const PathRequest& request) -> Result<void, NavigationError> {
+    if (request.costs && !validCosts(*request.costs)) {
+        return fail(NavigationError::InvalidQuery, "area costs must be finite and at least one");
+    }
+    if (!validAvoided(request.avoided)) {
+        return fail(
+            NavigationError::InvalidQuery,
+            "an avoided place must be finite, of a radius of none or more and a cost of at least one");
+    }
+    return {};
+}
+
 struct NavMeshFree {
     void operator()(dtNavMesh* mesh) const noexcept { dtFreeNavMesh(mesh); }
 };
@@ -100,6 +121,35 @@ void endUnlessAllocated(bool isAllocated, std::string_view what) noexcept {
     }
     return filter;
 }
+
+/// A polygon an avoided place reaches, and how many times its own cost it costs (PathRequest::avoided).
+struct AvoidedPolygon {
+    dtPolyRef polygon = 0;
+    float cost = 1.0F;
+};
+
+/// Detour's filter of a way: `base`'s, each polygon of `avoided` (sorted by polygon, each once, outliving
+/// the filter) costing its share times its own. Detour is built with its filter virtual for it
+/// (DT_VIRTUAL_QUERYFILTER, cmake/ports/recastnavigation).
+class WayFilter final : public dtQueryFilter {
+public:
+    WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided) noexcept
+        : dtQueryFilter{base}, avoidedPolygons{avoided} {}
+
+    [[nodiscard]] auto getCost(const float* from, const float* to, dtPolyRef previous,
+                               const dtMeshTile* previousTile, const dtPoly* previousPolygon,
+                               dtPolyRef current, const dtMeshTile* currentTile, const dtPoly* currentPolygon,
+                               dtPolyRef next, const dtMeshTile* nextTile, const dtPoly* nextPolygon) const
+        -> float override {
+        const float cost = dtQueryFilter::getCost(from, to, previous, previousTile, previousPolygon, current,
+                                                  currentTile, currentPolygon, next, nextTile, nextPolygon);
+        const auto avoided = std::ranges::lower_bound(avoidedPolygons, current, {}, &AvoidedPolygon::polygon);
+        return avoided != avoidedPolygons.end() && avoided->polygon == current ? cost * avoided->cost : cost;
+    }
+
+private:
+    std::span<const AvoidedPolygon> avoidedPolygons;
+};
 
 /// The bits that number `count` things, at least one.
 [[nodiscard]] auto bitsToNumber(std::size_t count) noexcept -> std::uint32_t {
@@ -446,8 +496,9 @@ struct NavigationQuery::Detour {
     dtQueryFilter filter; ///< Of the profile's costs.
     /// How far from a point the polygon under it is looked for: the profile's standing box.
     std::array<float, 3> reach{};
-    std::vector<dtPolyRef> polygons; ///< Room for a way's polygons, or those a circle reaches.
-    std::vector<float> points;       ///< Room for a way's corners.
+    std::vector<dtPolyRef> polygons;     ///< Room for a way's polygons, or those a circle reaches.
+    std::vector<float> points;           ///< Room for a way's corners.
+    std::vector<AvoidedPolygon> avoided; ///< Room for the polygons a way's avoided places reach.
     std::string profileName;
     /// The avoidance Corridor::steer samples velocities with, made as it is first asked for.
     std::unique_ptr<dtObstacleAvoidanceQuery, ObstacleAvoidanceFree> avoidance;
@@ -465,6 +516,34 @@ struct NavigationQuery::Detour {
             return outside(position);
         }
         return found;
+    }
+
+    /// The polygons the places of `places` reach, sorted, each once with the most any of them makes it cost:
+    /// those within a place's radius of the polygon nearest it. Valid until the next call.
+    [[nodiscard]] auto avoidedPolygonsOf(std::span<const AvoidedPlace> places)
+        -> std::span<const AvoidedPolygon> {
+        avoided.clear();
+        for (const AvoidedPlace& place : places) {
+            const auto center = nearest(place.position);
+            if (!center) {
+                continue; // off the mesh, it avoids nothing
+            }
+            int count = 0;
+            const dtStatus status = query->findPolysAroundCircle(
+                center->polygon, center->position.data(), place.radius.value(), &filter, polygons.data(),
+                nullptr, nullptr, &count, narrow<int>(polygons.size()));
+            invariant(dtStatusSucceed(status), "NavigationQuery: a circle reaches the polygon it starts on");
+            for (const dtPolyRef polygon : std::span{polygons}.first(narrow<std::size_t>(count))) {
+                avoided.push_back({.polygon = polygon, .cost = place.cost});
+            }
+        }
+        std::ranges::sort(avoided, [](const AvoidedPolygon& first, const AvoidedPolygon& second) {
+            return first.polygon != second.polygon ? first.polygon < second.polygon
+                                                   : first.cost > second.cost;
+        });
+        const auto repeated = std::ranges::unique(avoided, {}, &AvoidedPolygon::polygon);
+        avoided.erase(repeated.begin(), repeated.end());
+        return avoided;
     }
 
     /// The polygons of the cheapest way from `from` to `to` by `wayFilter`. Errors: Unreachable.
@@ -519,8 +598,8 @@ auto NavigationQuery::operator=(NavigationQuery&& other) noexcept -> NavigationQ
 NavigationQuery::~NavigationQuery() = default;
 
 auto NavigationQuery::findPath(const PathRequest& request) -> Result<Path, NavigationError> {
-    if (request.costs && !validCosts(*request.costs)) {
-        return fail(NavigationError::InvalidQuery, "area costs must be finite and at least one");
+    if (auto checked = checkRequest(request); !checked) {
+        return std::unexpected{std::move(checked.error())};
     }
     const auto from = detourState->nearest(request.from);
     if (!from) {
@@ -530,7 +609,8 @@ auto NavigationQuery::findPath(const PathRequest& request) -> Result<Path, Navig
     if (!to) {
         return std::unexpected{to.error()};
     }
-    const dtQueryFilter filter = request.costs ? filterOf(*request.costs) : detourState->filter;
+    const WayFilter filter{request.costs ? filterOf(*request.costs) : detourState->filter,
+                           detourState->avoidedPolygonsOf(request.avoided)};
     const auto polygons = detourState->polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
@@ -680,8 +760,8 @@ auto Corridor::operator=(Corridor&& other) noexcept -> Corridor& = default;
 Corridor::~Corridor() = default;
 
 auto Corridor::plan(NavigationQuery& query, const PathRequest& request) -> Result<Corridor, NavigationError> {
-    if (request.costs && !validCosts(*request.costs)) {
-        return fail(NavigationError::InvalidQuery, "area costs must be finite and at least one");
+    if (auto checked = checkRequest(request); !checked) {
+        return std::unexpected{std::move(checked.error())};
     }
     NavigationQuery::Detour& search = *query.detourState;
     const auto from = search.nearest(request.from);
@@ -692,7 +772,8 @@ auto Corridor::plan(NavigationQuery& query, const PathRequest& request) -> Resul
     if (!to) {
         return std::unexpected{to.error()};
     }
-    const dtQueryFilter filter = request.costs ? filterOf(*request.costs) : search.filter;
+    const WayFilter filter{request.costs ? filterOf(*request.costs) : search.filter,
+                           search.avoidedPolygonsOf(request.avoided)};
     const auto polygons = search.polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};

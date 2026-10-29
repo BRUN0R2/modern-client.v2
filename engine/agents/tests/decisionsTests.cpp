@@ -170,7 +170,7 @@ TEST(AgentDeciders, TwoAgentsMeetingHeadOnInAPassageSteerPastEachOther) {
     }
 }
 
-TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutAndThenGivesUpItsGoal) {
+TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutSearchesAnotherWayAndThenGivesUpItsGoal) {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
     const auto mesh = nx::test::playerMesh(geometry, 0);
@@ -187,10 +187,10 @@ TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutAndThenGivesUpItsGoal) {
     bool wiggled = false;
     bool jumped = false;
     int ticks = 0;
-    for (; ticks < 1000 && agent.brain.goal(); ++ticks) {
+    for (; ticks < 2000 && agent.brain.goal(); ++ticks) {
         deciders.decide(*jobs, requests, decisions);
         const nx::agents::Intent& intent = decisions.front().intent;
-        EXPECT_EQ(intent.ahead, nx::Vec3{.x = 1.0F}) << "it faces its way all along";
+        EXPECT_GT(intent.ahead.x, 0.9F) << "it faces its way all along";
         // Back or aside: a way of its wiggle's other than ahead.
         wiggled = wiggled || (agent.stuck.isStuck() && intent.direction.x < 0.5F);
         jumped = jumped || intent.jumps;
@@ -198,7 +198,9 @@ TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutAndThenGivesUpItsGoal) {
     EXPECT_TRUE(wiggled);
     EXPECT_TRUE(jumped);
     EXPECT_FALSE(agent.brain.goal().has_value()) << "given up";
-    EXPECT_NEAR(static_cast<float>(ticks) * kTick.count(), 5.0F, 0.05F) << "stuck half a second, then 4.5";
+    // Stuck half a second, then 4.5 more: its way searched around where it got stuck, its goal kept; then
+    // the same again, and its goal given up.
+    EXPECT_NEAR(static_cast<float>(ticks) * kTick.count(), 10.0F, 0.05F);
     deciders.decide(*jobs, requests, decisions);
     EXPECT_EQ(decisions.front().behavior, nx::agents::Behavior::Idle);
     EXPECT_FALSE(agent.stuck.isStuck());
