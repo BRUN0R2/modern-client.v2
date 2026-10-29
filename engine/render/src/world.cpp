@@ -324,29 +324,20 @@ struct DecalTextures {
     std::vector<DecalSize> sizes;
 };
 
-/// The texels of decal `image` and its mip levels as a color texture of `encoding` stores them: those
-/// the original makes (decalLevelsOf); for Linear, levels made by their light.
-[[nodiscard]] auto decalTexelsOf(const assets::RgbaImage& image, ColorEncoding encoding) -> MipChain {
-    if (encoding == ColorEncoding::Linear) {
-        return colorMipChainOf(image.pixels, image.width, image.height, encoding);
-    }
-    DecalLevels levels = decalLevelsOf(image);
-    return {.texels = std::move(levels.bytes), .offsets = std::move(levels.offsets)};
-}
-
 /// The images of `desc.decals`, made as the original makes them, their palettes through `texgamma`,
-/// each with its levels. Errors: those of the uploads.
+/// each with its levels (decalLevelsOf): display colors in either encoding, which the decals' blend
+/// takes as the original's (shaders/world.slang). Errors: those of the uploads.
 [[nodiscard]] auto loadDecalTextures(Uploader& uploader, const BspWorldDesc& desc)
     -> Result<DecalTextures, rhi::RhiError> {
     const ChannelTable textureGamma = textureGammaTable(desc.gamma);
     DecalTextures decals;
     for (const assets::MipTexture& texture : desc.decals) {
         const assets::RgbaImage image = decalImageOf(texture, textureGamma);
-        const MipChain levels = decalTexelsOf(image, desc.encoding);
+        const DecalLevels levels = decalLevelsOf(image);
         auto uploaded = uploader.texture(std::format("world.decal.{}", texture.name),
                                          {.width = image.width, .height = image.height},
-                                         narrow<std::uint32_t>(levels.offsets.size()), 1, levels.texels,
-                                         levels.offsets, colorFormatOf(desc.encoding));
+                                         narrow<std::uint32_t>(levels.offsets.size()), 1, levels.bytes,
+                                         levels.offsets, rhi::Format::Rgba8Unorm);
         if (!uploaded) {
             return std::unexpected{std::move(uploaded.error())};
         }
@@ -1454,13 +1445,21 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
                              Depth::Tested, layouts);
     // Decals over the faces they lie on: blended, their depth tested against the faces' pulled toward
     // the eye; written only on a TransColor entity, whose mode leaves the original's depth writes on
-    // around its decals.
-    const std::array decalTargets{rhi::ColorTarget{.format = colorFormat, .blend = alphaBlend}};
-    const auto decalPipeline = [&](std::string_view label, std::string_view fragment, Depth depth) {
+    // around its decals. Drawn as linear light, each blends as the original blends display colors: what
+    // it adds, then what is under it times the share it keeps, its second color (shaders/world.slang).
+    const bool isLinear = m_encoding == ColorEncoding::Linear;
+    const rhi::BlendState displayBlend{.sourceColor = rhi::BlendFactor::One,
+                                       .destinationColor = rhi::BlendFactor::SecondSourceColor,
+                                       .sourceAlpha = rhi::BlendFactor::SourceAlpha,
+                                       .destinationAlpha = rhi::BlendFactor::OneMinusSourceAlpha};
+    const std::array decalTargets{
+        rhi::ColorTarget{.format = colorFormat, .blend = isLinear ? displayBlend : alphaBlend}};
+    const auto decalPipeline = [&](std::string_view label, std::string_view fragment,
+                                   std::string_view linearFragment, Depth depth) {
         return device.createRenderPipeline(
             {.label = label,
              .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
-             .fragment = {.shader = m_shader.get(), .entryPoint = fragment},
+             .fragment = {.shader = m_shader.get(), .entryPoint = isLinear ? linearFragment : fragment},
              .vertexBuffers = vertexBuffers,
              .colorTargets = decalTargets,
              .depth = rhi::DepthState{.isWriteEnabled = depth == Depth::TestedAndWritten,
@@ -1468,10 +1467,13 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
                                       .bias = kDecalBias},
              .bindGroupLayouts = layouts});
     };
-    auto decal = decalPipeline("world.decal", "decalFragmentMain", Depth::Tested);
-    auto textureDecal = decalPipeline("world.decal.texture", "textureDecalFragmentMain", Depth::Tested);
-    auto colorDecal = decalPipeline("world.decal.color", "colorDecalFragmentMain", Depth::TestedAndWritten);
-    auto additiveDecal = decalPipeline("world.decal.additive", "additiveDecalFragmentMain", Depth::Tested);
+    auto decal = decalPipeline("world.decal", "decalFragmentMain", "linearDecalFragmentMain", Depth::Tested);
+    auto textureDecal = decalPipeline("world.decal.texture", "textureDecalFragmentMain",
+                                      "linearTextureDecalFragmentMain", Depth::Tested);
+    auto colorDecal = decalPipeline("world.decal.color", "colorDecalFragmentMain",
+                                    "linearColorDecalFragmentMain", Depth::TestedAndWritten);
+    auto additiveDecal = decalPipeline("world.decal.additive", "additiveDecalFragmentMain",
+                                       "linearAdditiveDecalFragmentMain", Depth::Tested);
     for (auto* const created : {&opaque, &sky, &solid, &texture, &color, &additive, &decal, &textureDecal,
                                 &colorDecal, &additiveDecal}) {
         if (!*created) {

@@ -59,6 +59,13 @@ card draws the same look.
   the scene's depths, which the last pass adds once the scene is mapped, each channel stopping at
   white as the original adds them. A flame authored that way turns yellow, then white, as it was
   made, where a curve that keeps a color's hue would keep it orange; its own light feeds the bloom.
+- The decals made for the original's blend of display colors (a bullet hole, blood on a wall) keep
+  it: blended as light with their alpha, a mark half opaque would keep about twice the light of the
+  wall under it that the original keeps, and the dark ones fade. Each texel gives the blend two
+  colors (dual-source blending), the light it adds and the share it keeps of the light under it,
+  channel by channel, so that a mark is the original's exactly over a black wall, a white one, and
+  when it is black over any; a little darker between them (the game's blood, by at most 16 of 255
+  on its red channel).
 
 ### 2. Bloom, energy-conserving, without a threshold
 
@@ -118,7 +125,8 @@ card draws the same look.
 ### Every card, the same look
 
 - Nothing in enhanced needs more than the RHI's baseline: Vulkan 1.3's core and what Direct3D 11's
-  feature level 11_0 has (cubemap arrays, BC7, BC5, floating-point targets, Shader Model 5.0), so
+  feature level 11_0 has (cubemap arrays, BC7, BC5, floating-point targets, dual-source blending,
+  Shader Model 5.0), so
   the Direct3D 11 backend draws it as the Vulkan one does.
 - The cost is bounded by design, not by tiers: a material reads three textures a pixel, a
   reflection one probe and one lookup table; the bloom starts at half resolution and keeps five

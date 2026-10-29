@@ -369,6 +369,8 @@ struct StateAccess {
         return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     case BlendFactor::SourceColor:
         return VK_BLEND_FACTOR_SRC_COLOR;
+    case BlendFactor::SecondSourceColor:
+        return VK_BLEND_FACTOR_SRC1_COLOR;
     case BlendFactor::DestinationColor:
         break;
     }
@@ -656,17 +658,17 @@ public:
     }
 
     /// What the adapter lacks of what the engine requires: Vulkan 1.3 with dynamic rendering,
-    /// synchronization2, timeline semaphores, shader draw parameters and cube arrays (which every
-    /// Direct3D 11 card has); nullopt when nothing.
+    /// synchronization2, timeline semaphores, shader draw parameters, cube arrays and dual-source
+    /// blending (the last two every Direct3D 11 card has); nullopt when nothing.
     [[nodiscard]] auto missingRequirement() const -> std::optional<std::string> {
         if (const std::uint32_t version = m_properties.properties.apiVersion; version < kRequiredApiVersion) {
             return std::format("Vulkan {}.{}", VK_API_VERSION_MAJOR(version), VK_API_VERSION_MINOR(version));
         }
         if (m_features13.dynamicRendering == VK_FALSE || m_features13.synchronization2 == VK_FALSE ||
             m_features12.timelineSemaphore == VK_FALSE || m_features11.shaderDrawParameters == VK_FALSE ||
-            m_features.features.imageCubeArray == VK_FALSE) {
-            return "no dynamic rendering, synchronization2, timeline semaphores, shader draw parameters or "
-                   "cube arrays";
+            m_features.features.imageCubeArray == VK_FALSE || m_features.features.dualSrcBlend == VK_FALSE) {
+            return "no dynamic rendering, synchronization2, timeline semaphores, shader draw parameters, "
+                   "cube arrays or dual-source blending";
         }
         return std::nullopt;
     }
@@ -2100,6 +2102,7 @@ auto VulkanDevice::createLogicalDevice() -> Result<void, RhiError> {
     features.pNext = &features13;
     features.features.samplerAnisotropy = m_hasAnisotropy ? VK_TRUE : VK_FALSE;
     features.features.imageCubeArray = VK_TRUE;
+    features.features.dualSrcBlend = VK_TRUE;
     const std::array swapchainExtension{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     const bool hasSurface = m_surface != VK_NULL_HANDLE;
     const VkDeviceCreateInfo createInfo{

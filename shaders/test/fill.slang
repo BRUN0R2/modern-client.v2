@@ -27,3 +27,20 @@ float4 fragmentMain() : SV_Target
 {
     return fill.color;
 }
+
+// Dual-source blending: nothing added, and what is under the fragment kept by the uniform's color,
+// channel by channel, the fragment's second color.
+struct KeepingOutput
+{
+    [[vk::location(0), vk::index(0)]] float4 added : SV_Target0;
+    [[vk::location(0), vk::index(1)]] float4 kept : SV_Target1;
+};
+
+[shader("fragment")]
+KeepingOutput keepingFragmentMain()
+{
+    KeepingOutput output;
+    output.added = float4(0.0, 0.0, 0.0, 0.0);
+    output.kept = fill.color;
+    return output;
+}
