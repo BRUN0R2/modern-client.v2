@@ -100,12 +100,17 @@ auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
     if (!isPositive(profile.standingHeight) || !isPositive(profile.jumpHeight)) {
         return invalidProfile(profile, "standing and jump heights must be finite and positive");
     }
-    // Recast allocates width * height cells using signed integers; a tile includes its radius
-    // and the three-cell watershed border on either side (build.cpp's border pad).
+    if (!std::isfinite(profile.wallClearance.value()) || profile.wallClearance < HammerUnits{}) {
+        return invalidProfile(profile, "a wall clearance must be finite and none or more");
+    }
+    // Recast allocates width * height cells using signed integers; a tile includes its radius, its wall
+    // clearance and the three-cell watershed border on either side (build.cpp's border pad).
     const double radiusCells = std::ceil(static_cast<double>(profile.radius.value()) /
                                          static_cast<double>(settings.cellSize.value()));
-    const double tileWidth =
-        static_cast<double>(settings.tileCells) + 2.0 * (radiusCells + detail::borderPadCells);
+    const double clearanceCells = std::ceil(static_cast<double>(profile.wallClearance.value()) /
+                                            static_cast<double>(settings.cellSize.value()));
+    const double tileWidth = static_cast<double>(settings.tileCells) +
+                             2.0 * (radiusCells + clearanceCells + detail::borderPadCells);
     if (tileWidth * tileWidth > std::numeric_limits<int>::max() ||
         static_cast<double>(profile.stepHeight.value()) / static_cast<double>(settings.cellHeight.value()) >
             std::numeric_limits<int>::max()) {

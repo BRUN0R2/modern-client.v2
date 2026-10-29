@@ -68,6 +68,7 @@ struct VoxelProfile {
     int standingVoxels = 0;
     int climbVoxels = 0;
     int radiusCells = 0;
+    int clearanceCells = 0; ///< Of the wall clearance.
     int borderCells = 0;
     int edgeCells = 0;
     float edgeErrorCells = 0.0F;
@@ -85,13 +86,18 @@ struct VoxelProfile {
         static_cast<int>(static_cast<double>(settings.smallestRegion.value()) / static_cast<double>(cell));
     const auto radius =
         static_cast<int>(std::ceil(static_cast<double>(profile.radius.value()) / static_cast<double>(cell)));
+    const auto clearance = static_cast<int>(
+        std::ceil(static_cast<double>(profile.wallClearance.value()) / static_cast<double>(cell)));
     return VoxelProfile{
         .crouchedVoxels = static_cast<int>(std::ceil(profile.crouchedHeight.value() / height)),
         .standingVoxels = static_cast<int>(std::ceil(profile.standingHeight.value() / height)),
         .climbVoxels = static_cast<int>(
             std::floor(static_cast<double>(profile.stepHeight.value()) / static_cast<double>(height))),
         .radiusCells = radius,
-        .borderCells = radius + borderPadCells,
+        .clearanceCells = clearance,
+        // A tile reads past its sides as far as its floor is eroded from walls, so that the erosion
+        // at its sides is its neighbors' too.
+        .borderCells = radius + clearance + borderPadCells,
         .edgeCells =
             static_cast<int>(static_cast<double>(settings.longestEdge.value()) / static_cast<double>(cell)),
         .edgeErrorCells = settings.edgeError.value() / cell,
@@ -206,6 +212,27 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
     }
 }
 
+/// Marks the floor of `compact`, eroded by the profile's radius already, that lies within `clearanceCells`
+/// of where the profile may not stand as the kind Edge: Recast erodes a copy of the areas that much farther,
+/// and each span of floor the copy loses lies along a wall or a ledge. Crouching and water keep their
+/// kinds. Returns whether Recast eroded the copy.
+[[nodiscard]] auto markEdges(RecastLog& log, rcCompactHeightfield& compact, int clearanceCells) -> bool {
+    if (clearanceCells <= 0) {
+        return true;
+    }
+    const auto count = narrow<std::size_t>(compact.spanCount);
+    const std::span areas{compact.areas, count};
+    const std::vector<std::uint8_t> kept(areas.begin(), areas.end());
+    if (!rcErodeWalkableArea(&log, clearanceCells, compact)) {
+        return false;
+    }
+    for (std::size_t span = 0; span < count; ++span) {
+        const bool isAlongWall = areas[span] == RC_NULL_AREA && kept[span] == areaIdOf(AreaKind::Floor);
+        areas[span] = isAlongWall ? areaIdOf(AreaKind::Edge) : kept[span];
+    }
+    return true;
+}
+
 /// The bounds of tile `tileX`, `tileY` with the cells it reads past its sides, from `input.low` up.
 struct TileBounds {
     std::array<float, 3> low{};
@@ -308,8 +335,9 @@ struct TileBounds {
 }
 
 /// Tile `tileX`, `tileY` of `input`, as Recast builds it: its voxels, the floor the profile's radius
-/// keeps away from walls and ledges, its regions, their outlines, the polygons of those and their
-/// details. None when it holds no floor. Errors: TileRefused.
+/// keeps away from walls and ledges, that floor along them within its wall clearance (markEdges), its
+/// regions, their outlines, the polygons of those and their details. None when it holds no floor. Errors:
+/// TileRefused.
 [[nodiscard]] auto buildTile(const TileInput& input, std::int32_t tileX, std::int32_t tileY)
     -> Result<std::optional<BuiltTile>, MeshBuildError> {
     RecastLog log;
@@ -332,6 +360,9 @@ struct TileBounds {
         return refused(log, tileX, tileY, "its floor kept from walls");
     }
     markCrouching(*compact, voxels.standingVoxels);
+    if (!markEdges(log, *compact, voxels.clearanceCells)) {
+        return refused(log, tileX, tileY, "its floor along walls");
+    }
     if (!rcBuildDistanceField(&log, *compact) ||
         !rcBuildRegions(&log, *compact, voxels.borderCells, voxels.islandArea, voxels.regionArea)) {
         return refused(log, tileX, tileY, "its regions");
@@ -450,7 +481,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 1;
+constexpr std::uint32_t kTilesVersion = 2;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -467,8 +498,8 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
     appendLittleEndian(bytes, kTilesVersion);
     appendLittleEndian(bytes, std::int32_t{DT_NAVMESH_VERSION});
     for (const float value :
-         {profile.radius.value(), profile.standingHeight.value(), profile.crouchedHeight.value(),
-          profile.stepHeight.value(), profile.minGroundNormalZ}) {
+         {profile.radius.value(), profile.wallClearance.value(), profile.standingHeight.value(),
+          profile.crouchedHeight.value(), profile.stepHeight.value(), profile.minGroundNormalZ}) {
         appendLittleEndian(bytes, value);
     }
     for (const float value :
