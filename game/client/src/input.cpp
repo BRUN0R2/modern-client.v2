@@ -24,6 +24,9 @@ constexpr nx::console::CvarFlags kArchived{CvarFlag::Archive};
 constexpr float kMoveSpeed = 400.0F;
 constexpr float kUpSpeed = 320.0F;
 constexpr float kMoveSpeedKey = 0.52F;
+/// The most of its speed a player walks at, whatever cl_movespeedkey asks: Counter-Strike 1.6's client caps
+/// the key there, so that walking stays below the speed its steps sound at (kStepSpeed, 150).
+constexpr float kMostMoveSpeedKey = 0.52F;
 constexpr float kYawSpeed = 210.0F;
 constexpr float kPitchSpeed = 225.0F;
 constexpr float kAngleSpeedKey = 0.67F;
@@ -170,12 +173,6 @@ auto PlayerInput::nextCommand(nx::EulerAngles view, nx::Milliseconds duration, n
     up -= upSpeed * takeShare(m_buttons.moveDown);
     forward += m_cvars.forwardSpeed.value() * takeShare(m_buttons.forward);
     forward -= m_cvars.backSpeed.value() * takeShare(m_buttons.back);
-    if (m_buttons.speed.isDown()) {
-        const float share = m_cvars.moveSpeedKey.value();
-        forward *= share;
-        side *= share;
-        up *= share;
-    }
     // The speeds together no more than the player's limit, each cut by the same share.
     if (maxSpeed.value() != 0.0F) {
         const auto requested =
@@ -186,6 +183,14 @@ auto PlayerInput::nextCommand(nx::EulerAngles view, nx::Milliseconds duration, n
             side *= share;
             up *= share;
         }
+    }
+    // Walking, after the limit, as Counter-Strike 1.6's client walks: a share of the player's own speed,
+    // 130 with a knife, so that its steps make no sound.
+    if (m_buttons.speed.isDown()) {
+        const float share = std::min(m_cvars.moveSpeedKey.value(), kMostMoveSpeedKey);
+        forward *= share;
+        side *= share;
+        up *= share;
     }
 
     // The movement buttons as they are now: their edges went into the speeds above.

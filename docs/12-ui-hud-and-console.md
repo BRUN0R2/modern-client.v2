@@ -546,10 +546,12 @@ loss. Each notch of the wheel presses its key and releases it at once.
 `+strafe`, `+speed`, `+jump`, `+duck`, `+use`, `+attack`, `+attack2` and `+reload`, and their cvars with Counter-Strike 1.6's
 values: `cl_forwardspeed`, `cl_backspeed` and `cl_sidespeed` (400, archived), `cl_upspeed`
 (320), `cl_movespeedkey` (0.52), `cl_yawspeed` (210), `cl_pitchspeed` (225) and
-`cl_anglespeedkey` (0.67). `nextCommand` makes a user command as the original's `CL_CreateMove`
+`cl_anglespeedkey` (0.67). `nextCommand` makes a user command as Counter-Strike 1.6's `CL_CreateMove`
 makes it: each movement button asks its speed for the share of the command it was held (all of
-it, but half when it went down during the command, as `CL_KeyState` counts), `+speed` asks
-`cl_movespeedkey` of each, and together they are cut to the player's speed limit. `+jump`,
+it, but half when it went down during the command, as `CL_KeyState` counts), together they are cut
+to the player's speed limit, and then `+speed` asks `cl_movespeedkey` of each, 0.52 at most: a player
+walks at a share of its own speed, 130 with a knife, below the 150 its steps sound at, so that it
+walks unheard (Half-Life's client takes the share before the limit and walks at 208). `+jump`,
 `+duck`, `+use`, `+attack`, `+attack2` and `+reload` count also when pressed and released within
 one command, so that `+jump` on `MWHEELDOWN` jumps once a notch. `turn` turns the view each frame as `CL_AdjustAngles` does:
 `+left` and `+right` (which move instead while `+strafe` is held), `+lookup` and `+lookdown`, up
