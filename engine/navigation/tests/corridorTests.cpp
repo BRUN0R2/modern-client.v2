@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // A corridor that follows an agent around a wall as it moves, and its target as that moves, without a
-// search again.
+// search again; and the way left along it.
 
 #include <gtest/gtest.h>
 
@@ -22,6 +22,7 @@ using nx::navigation::Geometry;
 using nx::navigation::NavigationError;
 using nx::navigation::NavigationMesh;
 using nx::navigation::NavigationQuery;
+using nx::navigation::PathRequest;
 
 constexpr float kTolerance = 8.0F;
 /// How far the agent moves in a step: a player's run in a tick of 100 a second, about.
@@ -120,6 +121,30 @@ TEST(CorridorTest, ATargetPushedAgainstAWallStaysOnItsBoundaryAndFloor) {
     const auto corners = corridor->corners(query, 2);
     ASSERT_FALSE(corners.empty());
     EXPECT_EQ(corners.back(), moved);
+}
+
+TEST(CorridorTest, ItsWayIsTheWayFoundUntilTheAgentMovesThenStartsWhereItIs) {
+    const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
+    NavigationQuery query{mesh};
+    const PathRequest request{.from = {.x = 100.0F, .y = 100.0F}, .to = {.x = 924.0F, .y = 100.0F}};
+    auto corridor = Corridor::plan(query, request);
+    ASSERT_TRUE(corridor.has_value());
+    const auto found = query.findPath(request);
+    ASSERT_TRUE(found.has_value());
+    std::vector<Vec3> planned;
+    corridor->appendWay(query, planned);
+    EXPECT_EQ(planned, found->points);
+    ASSERT_GE(planned.size(), 3U) << "around the wall's end";
+    EXPECT_EQ(planned.front(), corridor->position());
+    EXPECT_EQ(planned.back(), corridor->target());
+
+    const Vec3 moved = corridor->moveAgent(query, {.x = 100.0F, .y = 200.0F});
+    std::vector<Vec3> left{Vec3{.z = -1.0F}};
+    corridor->appendWay(query, left);
+    ASSERT_GE(left.size(), 2U);
+    EXPECT_EQ(left.front(), (Vec3{.z = -1.0F})) << "appended after what was there";
+    EXPECT_EQ(left[1], moved);
+    EXPECT_EQ(left.back(), corridor->target());
 }
 
 TEST(CorridorTest, NoCorridorJoinsAPointOffTheMesh) {

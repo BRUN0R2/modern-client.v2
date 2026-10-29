@@ -20,6 +20,7 @@ import nx.math;
 import nx.platform;
 import nx.console;
 import nx.assets;
+import nx.ecs;
 import cs.shared;
 import cs.server;
 
@@ -261,6 +262,63 @@ TEST_F(GameTest, GenericEntitiesConsumeNoPlayerSlotAndCanBeRemovedOnlyByTheirCur
     ASSERT_TRUE(game().removeEntity(*created).has_value());
     EXPECT_FALSE(game().removeEntity(*created).has_value());
     EXPECT_TRUE(game().snapshotFor(player).entities.empty());
+}
+
+/// A component an extension attaches to bodies, as the bots and the zombies attach their brains.
+struct ExtensionMark {
+    int value = 0;
+};
+
+TEST_F(GameTest, VisitsTheComponentOfEachBodyThatHasOneOfAPlayerOrNot) {
+    int visits = 0;
+    game().forEachEntityComponent<ExtensionMark>(
+        [&visits](nx::ecs::Entity /*body*/, const ExtensionMark& /*mark*/) { ++visits; });
+    EXPECT_EQ(visits, 0) << "no extension registered it";
+    ASSERT_TRUE(game().registerEntityComponent<ExtensionMark>("ExtensionMark").has_value());
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    game().attachPlayerComponent(player, ExtensionMark{.value = 1});
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    ASSERT_TRUE(game().attachEntityComponent(*created, ExtensionMark{.value = 2}).has_value());
+    std::ignore = game().createEntity(*type, {.origin = {.x = -200, .y = 32, .z = 40}}); // with none
+    std::vector<int> values;
+    std::vector<nx::ecs::Entity> bodies;
+    game().forEachEntityComponent<ExtensionMark>([&](nx::ecs::Entity body, const ExtensionMark& mark) {
+        values.push_back(mark.value);
+        bodies.push_back(body);
+    });
+    std::ranges::sort(values);
+    EXPECT_EQ(values, (std::vector{1, 2}));
+    EXPECT_TRUE(std::ranges::contains(bodies, *created));
+}
+
+TEST_F(GameTest, TellsWhetherABodyLivesAndTheTeamOfThePlayerWhoseBodyItIs) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    ASSERT_TRUE(game().registerEntityComponent<ExtensionMark>("ExtensionMark").has_value());
+    game().attachPlayerComponent(player, ExtensionMark{});
+    std::optional<nx::ecs::Entity> playerBody;
+    game().forEachEntityComponent<ExtensionMark>(
+        [&playerBody](nx::ecs::Entity body, const ExtensionMark& /*mark*/) { playerBody = body; });
+    ASSERT_TRUE(playerBody.has_value());
+
+    EXPECT_EQ(game().bodyStatusOf(*playerBody).team, cs::Team::CounterTerrorists);
+    EXPECT_EQ(game().bodyStatusOf(*playerBody).isAlive, game().snapshotFor(player).status.isAlive());
+    game().tick({}, {});
+    EXPECT_EQ(game().bodyStatusOf(*playerBody).isAlive, game().snapshotFor(player).status.isAlive());
+    std::ignore = killByFall(player);
+    EXPECT_FALSE(game().bodyStatusOf(*playerBody).isAlive) << "killed";
+    EXPECT_EQ(game().bodyStatusOf(*playerBody).team, cs::Team::CounterTerrorists) << "of its team, dead";
+    const cs::BodyStatus entity = game().bodyStatusOf(*created);
+    EXPECT_TRUE(entity.isAlive);
+    EXPECT_FALSE(entity.team.has_value()) << "a body of no player";
+    ASSERT_TRUE(game().removeEntity(*created).has_value());
+    EXPECT_FALSE(game().bodyStatusOf(*created).isAlive) << "gone";
 }
 
 TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredInterval) {

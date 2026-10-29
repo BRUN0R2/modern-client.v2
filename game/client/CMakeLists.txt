@@ -33,6 +33,7 @@ nxAddModuleLibrary(csClient
         src/fpsLabel.cppm
         src/audio.cppm
         src/weaponCommands.cppm
+        src/navigationDrawing.cppm
     SOURCES
         src/input.cpp
         src/entityKeys.cpp
@@ -59,6 +60,7 @@ nxAddModuleLibrary(csClient
         src/fpsLabel.cpp
         src/audio.cpp
         src/weaponCommands.cpp
+        src/navigationDrawing.cpp
     DEPENDS
         nx::core
         nx::math
@@ -73,7 +75,9 @@ nxAddModuleLibrary(csClient
         nx::audio
         nx::ecs
         nx::collision
+        nx::navigation
         nx::game
+        nx::agents
         cs::shared
     LATERAL
         cs::shared)

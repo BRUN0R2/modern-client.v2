@@ -12,8 +12,9 @@
 /// of it and the screen over it are drawn (FrameRenderer); the game as its player's client knows it,
 /// from what its server tells after each tick (ClientGame); the HUD of its player; the fonts of the
 /// installation's windows, the console's window's place and cl_showfps's label; the sound output with
-/// the sounds the client plays; and the console's weapon commands, which make weapons and set their
-/// values as the game runs.
+/// the sounds the client plays; the console's weapon commands, which make weapons and set their values
+/// as the game runs; and what nav_draw draws over the scene, the agents' mesh and their ways
+/// (NavigationDrawing).
 export module cs.client;
 
 export import :input;
@@ -42,3 +43,4 @@ export import :console;
 export import :fpsLabel;
 export import :audio;
 export import :weaponCommands;
+export import :navigationDrawing;

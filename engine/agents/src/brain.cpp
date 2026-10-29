@@ -131,4 +131,16 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     }
     return decision;
 }
+
+void Brain::appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const {
+    if (corridor) {
+        corridor->appendWay(query, points);
+    }
+}
+
+void Agent::appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const {
+    if (followsCorridor(behavior)) {
+        brain.appendWay(query, points);
+    }
+}
 } // namespace nx::agents
