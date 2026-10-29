@@ -344,6 +344,22 @@ depend on what comes preinstalled on the runner image, nor on a download server 
   write); each run mints an hour's token from it (`actions/create-github-app-token`) with the
   `UPDATE_BRANCHES_APP_CLIENT_ID` variable and the `UPDATE_BRANCHES_APP_PRIVATE_KEY` secret. No
   personal token is involved, and nothing expires.
+- **Setting up the branch updater** (the repository's owner only): this link opens GitHub's form
+  already filled in with the App's settings
+  ([URL parameters](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-using-url-parameters)):
+
+  ```text
+  https://github.com/settings/apps/new?name=modern-client.v2%20branch%20updater&url=https%3A%2F%2Fgithub.com%2FBRUN0R2%2Fmodern-client.v2&public=false&webhook_active=false&contents=write&pull_requests=write&workflows=write
+  ```
+
+  Then make a key under *Credentials → Key pairs* (it downloads as a `.pem` file), install the
+  App on this repository alone and store both values:
+  `gh variable set UPDATE_BRANCHES_APP_CLIENT_ID --body <Client ID>` and
+  `gh secret set UPDATE_BRANCHES_APP_PRIVATE_KEY < <file>.pem`. Use a shell redirection like
+  this one, which stops before `gh` runs when the file is missing; a pipe from a failed read
+  still runs `gh`, which then stores an empty secret. Delete the file afterwards: the secret is
+  the only copy. To replace the key, make a new one, store it the same way and delete the old
+  one on the same page; the App accepts several keys at once, so the updater never stops.
 - The squash commit takes the pull request title as its subject and an explicit message with
   the body and the trailers (`Signed-off-by`, `Co-Authored-By`), given at merge time:
   `gh pr merge --squash --subject "<title>" --body "<message>"`.
