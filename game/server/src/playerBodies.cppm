@@ -34,12 +34,25 @@ struct PlayerPose {
     float yawBlend = 0.0F;
     float pitchBlend = 0.0F;
     nx::EulerAngles angles{};
+
+    [[nodiscard]] inline auto operator==(const PlayerPose&) const noexcept -> bool = default;
 };
 
-/// A player's body: which player it is, and how its model plays.
+/// A player's hitboxes as a trace last placed them on its posed bones (tracedBonesOf), and the pose and
+/// origin they were placed for.
+struct PlacedPlayerHitboxes {
+    PlayerPose pose{};
+    nx::Vec3 origin{};
+    std::vector<nx::collision::PlacedBox> boxes{};
+};
+
+/// A player's body: which player it is, how its model plays, and its hitboxes as a trace last placed
+/// them, which a trace places again only when its pose or origin changed, as the original's studio cache
+/// keeps a pose (R_CheckStudioCache).
 struct PlayerBody {
     PlayerIndex player{};
     PlayerPose pose{};
+    std::optional<PlacedPlayerHitboxes> placed{};
 };
 
 /// Registers PlayerBody in `world`, made ready by nx::game::registerComponents. Errors: those of

@@ -122,17 +122,24 @@ public:
 private:
     struct Turn; // a bot's command being made, between what it perceives and what it decides
 
-    /// The bot `player`'s turn as the next tick's command begins: numbered and, alive, perceiving
-    /// `targets`.
-    [[nodiscard]] auto beginTurn(PlayerIndex player, std::span<const PerceptionTarget> targets) -> Turn;
+    /// What the bots perceive in a tick, the same for each: the living players, as candidates and, sorted,
+    /// by their entities; and what is solid to their sights, gathered once (Game::sightSolids).
+    struct Sights {
+        std::span<const PerceptionTarget> targets;
+        std::span<const nx::ecs::Entity> present;
+        const nx::game::Solids& solids;
+    };
+
+    /// The bot `player`'s turn as the next tick's command begins: numbered and, alive, forgetting the
+    /// enemies there no longer are and perceiving the targets of `sights`.
+    [[nodiscard]] auto beginTurn(PlayerIndex player, const Sights& sights) -> Turn;
     /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `targets`.
     [[nodiscard]] auto finishTurn(Turn& turn, const nx::agents::Decision& decision,
                                   std::span<const PerceptionTarget> targets) -> UserCommand;
-    /// What the bot `player`, its agent `agent`, alive as `self`, sees of `targets` this tick, within its
-    /// budget.
+    /// What the bot `player`, its agent `agent`, alive as `self`, sees of the targets of `sights` this tick,
+    /// within its budget.
     [[nodiscard]] auto perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
-                                std::span<const PerceptionTarget> targets)
-        -> std::vector<nx::agents::Observation>;
+                                const Sights& sights) -> std::vector<nx::agents::Observation>;
     /// Gives `agent`, with `driver`, a place of the mesh within BotRules::huntRadius of `feet` to hunt when
     /// `decision` leaves it nothing to do, another when its way to the last is blocked.
     void hunt(nx::agents::Agent& agent, BotDriver& driver, const nx::agents::Decision& decision,

@@ -52,6 +52,13 @@ void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate r
     }
 }
 
+void Brain::forgetAbsent(std::span<const ecs::Entity> present) {
+    expects(std::ranges::is_sorted(present), "Brain::forgetAbsent: the targets present, sorted");
+    std::erase_if(memory, [present](const Memory& record) {
+        return !std::ranges::binary_search(present, record.observation.entity);
+    });
+}
+
 auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     const Memory* selected = nullptr;
     for (const Memory& candidate : memory | std::views::filter(&Memory::isRecognized)) {

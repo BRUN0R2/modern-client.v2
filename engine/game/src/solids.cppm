@@ -51,6 +51,33 @@ struct SolidHit {
     std::optional<ecs::Entity> entity{};
 };
 
+/// A solid brush entity (Solid::Bsp), where it was when gathered.
+struct SolidBrushEntity {
+    ecs::Entity entity{};
+    collision::ModelIndex model{};
+    Vec3 origin{};
+    EulerAngles angles{};
+};
+
+/// An entity solid as a box (BoxSolidity), where it was when gathered, and how a trace meets it.
+struct SolidBoxEntity {
+    ecs::Entity entity{};
+    Vec3 origin{};
+    Aabb box{};
+    ClipMethod clip{};
+};
+
+/// The entities solid in a world to the server's traces, where they were when gathered (solidsOf): for
+/// many traces while none moves, as an agent's eyes trace their sights, which then gather them once
+/// instead of once a trace.
+struct Solids {
+    std::vector<SolidBrushEntity> brushes{};
+    std::vector<SolidBoxEntity> boxes{};
+};
+
+/// The entities solid in `world`, where they are now, in the world's order.
+[[nodiscard]] auto solidsOf(ecs::World& world) -> Solids;
+
 /// The server's way of `trace` through what is solid in `world`, whose map's hulls are `hulls`, as the
 /// original's game traces a line or a hull (UTIL_TraceLine, UTIL_TraceHull: SV_Move): the world's
 /// first, through the hull the box's size chooses (collision::boxHullOf); when it stops at once, that
@@ -60,6 +87,10 @@ struct SolidHit {
 /// traced, or as its ClipMethod says), kept when it stops it sooner, starts in solid or is all in it
 /// (collision::keepFirstStop), none looked at once all in solid; its fraction then of the whole way.
 [[nodiscard]] auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls,
+                                  const ServerTrace& trace) -> SolidHit;
+/// traceSolidsHit's trace through `solids`, the entities solid in `world` gathered while none has moved
+/// since (solidsOf).
+[[nodiscard]] auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
                                   const ServerTrace& trace) -> SolidHit;
 
 /// traceSolidsHit's trace of `hull` from `start` to `end` (hullTrace).

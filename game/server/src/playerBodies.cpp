@@ -37,7 +37,8 @@ constexpr float kDegreesPerTurn = 360.0F;
                               nx::Vec3 start, nx::Vec3 end) -> nx::collision::Trace {
     const nx::Vec3 origin = world.get<nx::game::Transform>(entity)->origin;
     const nx::Aabb& solid = world.get<nx::game::BoxSolidity>(entity)->box;
-    const PlayerPose& pose = world.get<PlayerBody>(entity)->pose;
+    PlayerBody& body = *world.get<PlayerBody>(entity);
+    const PlayerPose& pose = body.pose;
     if (traced.max != traced.min || pose.model == nullptr) {
         return nx::collision::traceBox({.min = solid.min - traced.max, .max = solid.max - traced.min}, origin,
                                        start, end);
@@ -48,9 +49,14 @@ constexpr float kDegreesPerTurn = 360.0F;
         return nx::collision::Trace{.fraction = 1.0F, .end = end, .isAllSolid = true};
     }
     const std::span<const nx::assets::Hitbox> hitboxes = modelHitboxes.first(modelHitboxes.size() - 1);
-    const nx::Vec3 grownBy{.x = kClientTraceGrowth, .y = kClientTraceGrowth, .z = kClientTraceGrowth};
-    const nx::collision::HitboxTrace hit = nx::collision::traceHitboxes(
-        placedHitboxesOf(hitboxes, tracedBonesOf(pose, origin), grownBy), start, end);
+    if (!body.placed || body.placed->pose != pose || body.placed->origin != origin) {
+        const nx::Vec3 grownBy{.x = kClientTraceGrowth, .y = kClientTraceGrowth, .z = kClientTraceGrowth};
+        body.placed =
+            PlacedPlayerHitboxes{.pose = pose,
+                                 .origin = origin,
+                                 .boxes = placedHitboxesOf(hitboxes, tracedBonesOf(pose, origin), grownBy)};
+    }
+    const nx::collision::HitboxTrace hit = nx::collision::traceHitboxes(body.placed->boxes, start, end);
     nx::collision::Trace met = hit.trace;
     met.hitGroup = hitboxes[hit.hitbox].group;
     return met;

@@ -220,6 +220,12 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
     cs::Game& game = *owner;
     const std::vector<cs::EntityState> bodies = game.entities();
     const std::vector<cs::PerceptionTarget> targets = game.perceptionTargets();
+    // The players there still are, living: a zombie forgets the others (nx::agents::Brain::forgetAbsent).
+    std::vector<nx::ecs::Entity> present =
+        targets | std::views::transform(&cs::PerceptionTarget::entity) | std::ranges::to<std::vector>();
+    std::ranges::sort(present);
+    // Nothing moves while the horde perceives: what is solid to its sights is gathered once.
+    const nx::game::Solids solids = game.sightSolids();
     const nx::game::TickTime time = game.time();
     const float minimumDot =
         std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / kFullTurnDegrees);
@@ -250,12 +256,13 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             const float distance = nx::length(difference);
             if (distance > settings.sightRange.value() ||
                 (distance > 0.0F && nx::dot(forward, difference / distance) < minimumDot) ||
-                !game.sees(entity, eye, candidate)) {
+                !game.sees(solids, entity, eye, candidate)) {
                 continue;
             }
             seen.push_back({.entity = candidate.entity, .position = candidate.feet, .aimAt = candidate.eye});
         }
         agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
+        agent.brain.forgetAbsent(present);
         agent.brain.perceive(seen, time.now, time.rate);
         turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
         requests.push_back({.brain = &agent.brain, .feet = feetOf(found->origin)});

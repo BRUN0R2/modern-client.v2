@@ -846,4 +846,25 @@ TEST(FootstepTest, GoingIntoWaterSplashes) {
     EXPECT_TRUE(std::holds_alternative<cs::Splash>(moved.sounds.front()));
 }
 
+TEST(MovementTest, AMoveMeetsTheBoxesWithinThePhysentReachButItsOwn) {
+    nx::ecs::World world;
+    const nx::ecs::Entity mover = world.spawn();
+    const nx::ecs::Entity near = world.spawn();
+    const nx::ecs::Entity reached = world.spawn();
+    const nx::ecs::Entity far = world.spawn();
+    constexpr nx::Aabb kBox{.min = {.x = -16.0F, .y = -16.0F, .z = -36.0F},
+                            .max = {.x = 16.0F, .y = 16.0F, .z = 36.0F}};
+    const float reach = cs::kPhysentReach.value();
+    const std::array boxes{
+        cs::SolidBox{.origin = {.x = 100.0F}, .box = kBox, .entity = near},
+        cs::SolidBox{.origin = {}, .box = kBox, .entity = mover},
+        cs::SolidBox{.origin = {.y = reach + 15.0F}, .box = kBox, .entity = reached}, // its side within reach
+        cs::SolidBox{.origin = {.x = -(reach + 17.0F)}, .box = kBox, .entity = far}}; // its side beyond it
+    std::vector<cs::SolidBox> met{cs::SolidBox{.entity = far}};
+    cs::boxesNear(boxes, {}, mover, met);
+    ASSERT_EQ(met.size(), 2U) << "what was there replaced";
+    EXPECT_EQ(met[0].entity, near);
+    EXPECT_EQ(met[1].entity, reached);
+}
+
 } // namespace

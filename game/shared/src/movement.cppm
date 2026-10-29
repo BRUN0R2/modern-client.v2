@@ -240,11 +240,16 @@ struct BrushEntity {
 };
 
 /// A box that stops a player, the original's SOLID_SLIDEBOX and SOLID_BBOX physents (a hostage,
-/// another player): `box` about `origin`, never turned.
+/// another player): `box` about `origin`, never turned; the entity it is of.
 struct SolidBox {
     nx::Vec3 origin{};
     nx::Aabb box{};
+    nx::ecs::Entity entity{};
 };
+
+/// How far each way from where a move starts the boxes it may meet lie, as the original lists a move's
+/// physents (SV_AddLinksToPM, 256 units about the player's origin): farther than a tick's move reaches.
+inline constexpr nx::HammerUnits kPhysentReach{256.0F};
 
 /// The brush entities of `world`, made by nx.game, that movement meets, in the world's order, as the
 /// original's engine lists them for it: the solid ones, and the others that hold contents, a ladder
@@ -256,6 +261,11 @@ struct SolidBox {
 /// player alive, an entity's body; all but `ignored`, the body of the one that moves, when there is one.
 [[nodiscard]] auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored = std::nullopt)
     -> std::vector<SolidBox>;
+
+/// Writes to `near` those of `boxes` a move from `origin` may meet, in their order: within kPhysentReach of
+/// `origin` each way, all but `ignored`'s, the entity that moves (SV_AddLinksToPM).
+void boxesNear(std::span<const SolidBox> boxes, nx::Vec3 origin, nx::ecs::Entity ignored,
+               std::vector<SolidBox>& near);
 
 /// The body of a player in `state` that the game's pushers move: its box, standing or ducked, and the
 /// brush model it stands on; not pushed while it noclips or is dead.

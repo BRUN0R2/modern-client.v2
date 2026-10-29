@@ -1304,9 +1304,22 @@ auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored)
             if (ignored == entity) {
                 return;
             }
-            boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box});
+            boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box, .entity = entity});
         });
     return boxes;
+}
+
+void boxesNear(std::span<const SolidBox> boxes, nx::Vec3 origin, nx::ecs::Entity ignored,
+               std::vector<SolidBox>& near) {
+    const float reach = kPhysentReach.value();
+    const nx::Aabb around{.min = origin - nx::Vec3{.x = reach, .y = reach, .z = reach},
+                          .max = origin + nx::Vec3{.x = reach, .y = reach, .z = reach}};
+    near.clear();
+    for (const SolidBox& solid : boxes) {
+        if (solid.entity != ignored && around.intersects(solid.box.translated(solid.origin))) {
+            near.push_back(solid);
+        }
+    }
 }
 
 auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {

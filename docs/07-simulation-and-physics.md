@@ -275,7 +275,15 @@ brush entity through its model's hull, placed and turned as it is; an entity sol
 `nx::game::ClipMethod` says (a hostage's line, its hitboxes: `SV_HullForStudioModel`); kept as
 `keepFirstStop` keeps it, none looked at once all in solid; then its fraction of the whole way. Every
 trace of the game goes through it: the attacks', the pushers' and a drop to the floor; the one that
-finds what a decal lies on meets the brush entities alone.
+finds what a decal lies on meets the brush entities alone. Many traces while nothing moves, an agent's
+eyes tracing their sights, gather the solid entities once (`nx::game::solidsOf`, `cs::Game::sightSolids`)
+instead of once a trace. A body's hitboxes are placed on its posed bones once for its pose (its
+sequence, frame, origin and angles; a player's whole pose), kept with it, and placed again only when
+the pose changed, as the original's studio cache keeps a pose (`R_CheckStudioCache`): the sights of many
+eyes through one body pose it once a tick. A move is given the boxes within 256 units of where it
+starts, as the original lists a move's physents (`SV_AddLinksToPM`, `cs::boxesNear`, `kPhysentReach`),
+farther than a tick's move goes; the bodies of entities gather the boxes and brush entities once a
+tick, each body's box kept where its move left it.
 
 ### 4.3 API
 

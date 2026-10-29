@@ -17,25 +17,9 @@ namespace {
 /// as it bounds the move (SV_MoveBounds).
 constexpr float kLinkMargin = 1.0F;
 
-/// A solid brush entity, where it is now.
-struct SolidBrush {
-    ecs::Entity entity{};
-    collision::ModelIndex model{};
-    Vec3 origin{};
-    EulerAngles angles{};
-};
-
-/// An entity solid as a box, where it is now, and how a trace meets it.
-struct SolidBox {
-    ecs::Entity entity{};
-    Vec3 origin{};
-    Aabb box{};
-    ClipMethod clip{};
-};
-
 /// The solid brush entities of `world`, where they are now.
-[[nodiscard]] auto solidBrushesOf(ecs::World& world) -> std::vector<SolidBrush> {
-    std::vector<SolidBrush> solids;
+[[nodiscard]] auto solidBrushesOf(ecs::World& world) -> std::vector<SolidBrushEntity> {
+    std::vector<SolidBrushEntity> solids;
     ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
         [&solids](ecs::Entity entity, const BrushModel& model, const Transform& transform,
                   const BrushSolidity& solidity) {
@@ -50,8 +34,8 @@ struct SolidBox {
 }
 
 /// The entities of `world` solid as boxes, where they are now.
-[[nodiscard]] auto solidBoxesOf(ecs::World& world) -> std::vector<SolidBox> {
-    std::vector<SolidBox> solids;
+[[nodiscard]] auto solidBoxesOf(ecs::World& world) -> std::vector<SolidBoxEntity> {
+    std::vector<SolidBoxEntity> solids;
     ecs::Query<ecs::Entity, const Transform&, const BoxSolidity&, ecs::Optional<const ClipMethod>>{world}
         .forEach([&solids](ecs::Entity entity, const Transform& transform, const BoxSolidity& solidity,
                            const ClipMethod* clip) {
@@ -89,8 +73,8 @@ struct SolidBox {
 
 /// The trace of `trace`'s box from `start` to `end` through `solid` (SV_ClipMoveToEntity): as its kind
 /// says, else through its box grown by the one traced (SV_HullForBox).
-[[nodiscard]] auto boxTrace(ecs::World& world, const ServerTrace& trace, const SolidBox& solid, Vec3 start,
-                            Vec3 end) -> collision::Trace {
+[[nodiscard]] auto boxTrace(ecs::World& world, const ServerTrace& trace, const SolidBoxEntity& solid,
+                            Vec3 start, Vec3 end) -> collision::Trace {
     if (solid.clip.clip != nullptr) {
         return solid.clip.clip(world, solid.entity, trace.box, start, end);
     }
@@ -105,8 +89,17 @@ auto hullTrace(collision::Hull hull, Vec3 start, Vec3 end) noexcept -> ServerTra
     return ServerTrace{.box = collision::hullBoxOf(hull), .start = start, .end = end};
 }
 
+auto solidsOf(ecs::World& world) -> Solids {
+    return Solids{.brushes = solidBrushesOf(world), .boxes = solidBoxesOf(world)};
+}
+
 auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const ServerTrace& trace)
     -> SolidHit {
+    return traceSolidsHit(world, hulls, solidsOf(world), trace);
+}
+
+auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
+                    const ServerTrace& trace) -> SolidHit {
     SolidHit found{.trace = brushTrace(hulls, trace, collision::kWorldModel, Vec3{}, EulerAngles{},
                                        trace.start, trace.end)};
     if (found.trace.fraction == 0.0F) {
@@ -121,7 +114,7 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
     const auto isLeftOut = [&trace](ecs::Entity entity) {
         return trace.ignored == entity;
     };
-    for (const SolidBrush& solid : solidBrushesOf(world)) {
+    for (const SolidBrushEntity& solid : solids.brushes) {
         if (kept.isAllSolid) {
             break;
         }
@@ -134,7 +127,7 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
         }
     }
     const Vec3 margin{.x = kLinkMargin, .y = kLinkMargin, .z = kLinkMargin};
-    for (const SolidBox& solid : solidBoxesOf(world)) {
+    for (const SolidBoxEntity& solid : solids.boxes) {
         if (kept.isAllSolid) {
             break;
         }

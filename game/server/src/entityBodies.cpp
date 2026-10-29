@@ -17,6 +17,25 @@ struct EntityBodyData {
     const EntityCatalog* catalog = nullptr;
 };
 
+/// What an entity body's hitboxes were placed for: its sequence and frame, and where it stood, turned.
+struct HitboxPose {
+    nx::assets::SequenceIndex sequence{};
+    float frame = 0.0F;
+    nx::Vec3 origin{};
+    nx::EulerAngles angles{};
+
+    [[nodiscard]] auto operator==(const HitboxPose&) const noexcept -> bool = default;
+};
+
+/// An entity body's hitboxes as a trace last placed them on its posed bones, and the pose they were
+/// placed for: a trace through the body places them again only when its pose changed, as the original's
+/// studio cache keeps a pose (R_CheckStudioCache), so that the sights of many eyes through one body pose
+/// it once a tick.
+struct PlacedEntityHitboxes {
+    std::optional<HitboxPose> pose{};
+    std::vector<nx::collision::PlacedBox> boxes{};
+};
+
 [[nodiscard]] auto catalogOf(const nx::ecs::World& world) -> const EntityCatalog& {
     const EntityBodyData* data = world.resource<EntityBodyData>();
     nx::expects(data != nullptr && data->catalog != nullptr, "entities: registered body data");
@@ -74,11 +93,18 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
             start, end);
     }
     const EntityCatalog& catalog = catalogOf(world);
-    const EntityType& type = catalog.type(world.get<EntityBody>(entity)->type);
-    const auto hitboxes = catalog.model(type.model).files->view->hitboxes();
-    const std::vector<nx::Mat3x4> bones = bonesOf(world, entity);
-    const nx::collision::HitboxTrace hit =
-        nx::collision::traceHitboxes(placedHitboxesOf(hitboxes, bones), start, end);
+    const EntityBody& body = *world.get<EntityBody>(entity);
+    const auto hitboxes = catalog.model(catalog.type(body.type).model).files->view->hitboxes();
+    PlacedEntityHitboxes& placed = *world.get<PlacedEntityHitboxes>(entity);
+    const HitboxPose pose{.sequence = body.animation.sequence,
+                          .frame = body.animation.frame,
+                          .origin = transform.origin,
+                          .angles = transform.angles};
+    if (placed.pose != pose) {
+        placed.boxes = placedHitboxesOf(hitboxes, bonesOf(world, entity));
+        placed.pose = pose;
+    }
+    const nx::collision::HitboxTrace hit = nx::collision::traceHitboxes(placed.boxes, start, end);
     nx::collision::Trace trace = hit.trace;
     if (trace.fraction < 1.0F || trace.startsSolid) {
         trace.hitGroup = hitboxes[hit.hitbox].group;
@@ -115,8 +141,11 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
 
 auto registerEntityBodies(nx::ecs::World& world, const EntityCatalog& catalog)
     -> nx::Result<void, nx::ecs::ComponentError> {
-    if (auto registered = world.registerComponent<EntityBody>("cs::EntityBody"); !registered) {
-        return std::unexpected{std::move(registered.error())};
+    for (auto&& registered : {world.registerComponent<EntityBody>("cs::EntityBody"),
+                              world.registerComponent<PlacedEntityHitboxes>("cs::PlacedEntityHitboxes")}) {
+        if (!registered) {
+            return std::unexpected{registered.error()};
+        }
     }
     world.insertResource(EntityBodyData{.catalog = &catalog});
     return {};
@@ -145,10 +174,11 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     resetSequence(body.animation,
                   catalog.model(type.model).files->view->sequences()[type.sequences.idle.value],
                   nx::game::tickTimeOf(world).now);
-    const nx::ecs::Entity entity = world.spawn(
-        placement, body, bodyOf(body.movement), nx::game::BoxSolidity{.box = kStandingBox},
-        nx::game::ClipMethod{.clip = &clipEntity}, nx::game::DamageMethod{.takeAttack = &harmEntity},
-        nx::game::Classified{.classification = nx::game::Classification::Organic});
+    const nx::ecs::Entity entity =
+        world.spawn(placement, body, bodyOf(body.movement), nx::game::BoxSolidity{.box = kStandingBox},
+                    nx::game::ClipMethod{.clip = &clipEntity}, PlacedEntityHitboxes{},
+                    nx::game::DamageMethod{.takeAttack = &harmEntity},
+                    nx::game::Classified{.classification = nx::game::Classification::Organic});
     nx::log::info(kLog, "entity {:?} {}:{} spawns at {}", type.definition.id,
                   std::to_underlying(entity.index()), std::to_underlying(entity.generation()),
                   placement.origin);
@@ -163,6 +193,19 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     std::ranges::sort(entities);
     const nx::game::TickTime time = nx::game::tickTimeOf(world);
     const EntityCatalog& catalog = catalogOf(world);
+    std::vector<const EntityCommand*> requests;
+    requests.reserve(commands.size());
+    for (const EntityCommand& command : commands) {
+        requests.push_back(&command);
+    }
+    std::ranges::stable_sort(requests, {}, &EntityCommand::entity);
+    // What the moves meet, gathered once for the tick, as the original links its entities once and keeps
+    // them linked where they move: the brush entities, which no body moves; and the boxes, by entity, each
+    // body's kept where its move left it, each move given those near it (SV_AddLinksToPM).
+    const std::vector<BrushEntity> brushes = brushEntitiesOf(world);
+    std::vector<SolidBox> boxes = solidBoxesOf(world);
+    std::ranges::sort(boxes, {}, &SolidBox::entity);
+    std::vector<SolidBox> near;
     std::vector<EntityAttack> attacks;
     for (const nx::ecs::Entity entity : entities) {
         EntityBody& body = *world.get<EntityBody>(entity);
@@ -173,19 +216,24 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         const EntityType& type = catalog.type(body.type);
         UserCommand command{.duration = nx::tickLengthOf(time.rate),
                             .viewAngles = world.get<nx::game::Transform>(entity)->angles};
-        const auto requested = std::ranges::find(commands, entity, &EntityCommand::entity);
-        if (requested != commands.end()) {
-            command = requested->command;
+        const auto requested = std::ranges::lower_bound(requests, entity, {}, &EntityCommand::entity);
+        if (requested != requests.end() && (*requested)->entity == entity) {
+            command = (*requested)->command;
         }
         // The server owns the body's time; an agent cannot accelerate it by sending a longer command.
         command.duration = nx::tickLengthOf(time.rate);
         command.buttons.reset(Button::Duck);
         body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
-        const MovementResult moved = simulateMovement(body.movement, command, MovementSettings{}, hulls,
-                                                      brushEntitiesOf(world), solidBoxesOf(world, entity));
+        boxesNear(boxes, body.movement.origin, entity, near);
+        const MovementResult moved =
+            simulateMovement(body.movement, command, MovementSettings{}, hulls, brushes, near);
         body.movement = moved.state;
         nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
         transform.origin = body.movement.origin;
+        if (const auto own = std::ranges::lower_bound(boxes, entity, {}, &SolidBox::entity);
+            own != boxes.end() && own->entity == entity) {
+            own->origin = body.movement.origin;
+        }
         transform.angles = {.yaw = command.viewAngles.yaw};
         *world.get<nx::game::Body>(entity) = bodyOf(body.movement);
         const bool strikes = command.buttons.test(Button::Attack) && time.now >= body.attacksAgainAt;
