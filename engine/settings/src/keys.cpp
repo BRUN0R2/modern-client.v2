@@ -280,7 +280,11 @@ auto keyOf(const platform::KeyChanged& event, KeyMapping mapping) noexcept -> st
     }
     const std::optional<console::KeyId> physical = keyOf(event.key);
     using platform::Key;
-    if (event.key == Key::Space || (event.key >= Key::KeypadDivide && event.key <= Key::KeypadPeriod) ||
+    // The key below Escape is the console's on every layout, as the original's positions make it: the
+    // character a layout types there (' on a Brazilian ABNT keyboard, a superscript 2 on a French one,
+    // ^ on a German one) would leave the console out of reach.
+    if (event.key == Key::Grave || event.key == Key::Space ||
+        (event.key >= Key::KeypadDivide && event.key <= Key::KeypadPeriod) ||
         (physical && (std::to_underlying(*physical) < U' ' || std::to_underlying(*physical) > U'~'))) {
         return physical;
     }

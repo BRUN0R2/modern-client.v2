@@ -35,8 +35,9 @@ inline constexpr console::KeyId kWheelUp{240};
 [[nodiscard]] auto keyOf(platform::Key key) noexcept -> std::optional<console::KeyId>;
 
 /// The key `event` names in `mapping`: its US position for Scancode; its layout's printable ASCII
-/// character, case-insensitive, for Keycode. Named controls, Space and the keypad retain their
-/// original numbers in either mode. None for an unsupported or missing layout character.
+/// character, case-insensitive, for Keycode. Named controls, Space, the keypad and the key below
+/// Escape, the console's (`), retain their original numbers in either mode. None for an unsupported
+/// or missing layout character.
 [[nodiscard]] auto keyOf(const platform::KeyChanged& event, KeyMapping mapping) noexcept
     -> std::optional<console::KeyId>;
 
