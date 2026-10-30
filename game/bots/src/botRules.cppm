@@ -229,10 +229,10 @@ struct nx::meta::Description<cs::BotSkillLevel> {
         nx::meta::field<&cs::BotSkillLevel::difficulties>("difficulties"),
         nx::meta::field<&cs::BotSkillLevel::profiles>("profiles"),
         nx::meta::field<&cs::BotSkillLevel::skill>("skill", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
-        nx::meta::field<&cs::BotSkillLevel::reactionTime>("reactionTime"),
-        nx::meta::field<&cs::BotSkillLevel::attackDelay>("attackDelay"),
         nx::meta::field<&cs::BotSkillLevel::aggression>("aggression",
                                                         nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::BotSkillLevel::reactionTime>("reactionTime"),
+        nx::meta::field<&cs::BotSkillLevel::attackDelay>("attackDelay"),
     };
 };
 
