@@ -225,6 +225,20 @@ TEST(BoundInputTest, AReleaseKeepsItsPressedMappingAcrossLayoutAndModeChanges) {
     EXPECT_TRUE(keys.output.failures.empty());
 }
 
+TEST(BoundInputTest, TheConsolesKeyRunsItsBindWhateverTheLayoutTypesThere) {
+    using nx::platform::Key;
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    Keys keys;
+    keys.run("bind ` \"echo console\"; bind ' \"echo wrong\"");
+    nx::settings::BoundInput input{keys.console, keys.bindings};
+    input.handle(KeyChanged{.key = Key::Grave, .isDown = true, .character = U'\''}, KeyMapping::Keycode);
+    input.handle(KeyChanged{.key = Key::Grave, .isDown = false}, KeyMapping::Keycode);
+    keys.run("");
+    EXPECT_EQ(keys.output.lines, std::vector<std::string>{"console"}) << "a Brazilian ABNT keyboard's";
+    EXPECT_TRUE(keys.output.failures.empty());
+}
+
 TEST(BoundInputTest, RepeatsAndRebindingDoNotChangeWhatAHeldKeyMustRelease) {
     using nx::platform::Key;
     using nx::platform::KeyChanged;

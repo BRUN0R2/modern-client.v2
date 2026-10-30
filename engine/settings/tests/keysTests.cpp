@@ -72,6 +72,21 @@ TEST(KeysTest, KeyboardMappingSelectsThePositionOrTheLayoutsBaseCharacter) {
         << "the keypad retains its KP_ keys even when SDL hides the numpad distinction";
 }
 
+TEST(KeysTest, TheKeyBelowEscapeIsTheConsolesOnAnyLayout) {
+    using nx::platform::KeyChanged;
+    using nx::settings::KeyMapping;
+    // What a Brazilian ABNT, a French and a German layout type below Escape, and none at all.
+    for (const std::optional<char32_t> character :
+         {std::optional{U'\''}, std::optional{U'\u00b2'}, std::optional{U'^'}, std::optional<char32_t>{}}) {
+        for (const KeyMapping mapping : {KeyMapping::Keycode, KeyMapping::Scancode}) {
+            EXPECT_EQ(keyOf(KeyChanged{.key = Key::Grave, .character = character}, mapping), key('`'))
+                << std::to_underlying(mapping);
+        }
+    }
+    EXPECT_EQ(keyOf(KeyChanged{.key = Key::Apostrophe, .character = U'~'}, KeyMapping::Keycode), key('~'))
+        << "a layout's ~ elsewhere is still its own";
+}
+
 TEST(KeysTest, TheMousesButtonsAreMouse1ToMouse5) {
     EXPECT_EQ(keyOf(MouseButton::Left), keyNamed("MOUSE1"));
     EXPECT_EQ(keyOf(MouseButton::Right), keyNamed("MOUSE2"));

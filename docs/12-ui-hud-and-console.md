@@ -521,7 +521,9 @@ for (Print Screen, Scroll Lock, Num Lock, the system keys) run nothing. The plat
 each position with its layout's base character, separately from typed text. `in_keymap keycode`
 (the default, also 1) selects the layout's printable ASCII character; `in_keymap scancode`
 (also 0) selects the US position. Both keep the named controls and the keypad's `KP_` keys,
-regardless of Num Lock or SDL's keypad hints. A character outside the original's bind names,
+regardless of Num Lock or SDL's keypad hints, and the key below Escape as the console's `` ` ``
+on every layout, as the original's positions make it: the `'` a Brazilian ABNT keyboard types
+there, a French one's `²` or a German one's `^` would leave `toggleconsole` out of reach. A character outside the original's bind names,
 or an unknown character, runs nothing in keycode mode; scancode mode remains an explicit choice.
 Like the other enum cvars, the mode is archived by number. `bind <key> [command]`, `unbind`,
 `unbindall` and `bindlist` set and list them: a key is one ASCII character (a letter in either
