@@ -123,8 +123,9 @@ struct BloodStreamLook {
 /// mostRadius, flying off where the hit met the body the way it went, but `backShare` of them back the
 /// way it came, each turned off that way by up to `spread` of its speed on each axis, at leastSpeed to
 /// mostSpeed and up to `rise` faster upward; `mists` mists there, their radii leastMistRadius to
-/// mostMistRadius, growing by mistGrowth a second, as opaque as mistOpacity at first and gone, faded out,
-/// after mistLife; and after it, as a wound gushes, `gushPulses` pulses of `gushDroplets` droplets
+/// mostMistRadius, flying off as the droplets do at up to mistSpeed, growing by mistGrowth a second, as
+/// opaque as mistOpacity at first and gone, faded out, after mistLife; and after it, as a wound gushes,
+/// `gushPulses` pulses of `gushDroplets` droplets
 /// each, one every gushInterval, the way the hit went, each gushSlowing as fast as the one before. All
 /// drawn at random.
 struct BloodBurst {
@@ -140,6 +141,7 @@ struct BloodBurst {
     nx::HammerUnits leastMistRadius{};
     nx::HammerUnits mostMistRadius{};
     nx::UnitsPerSecond mistGrowth{};
+    nx::UnitsPerSecond mistSpeed{};
     float mistOpacity = 0.0F;
     nx::Seconds mistLife{};
     std::uint32_t gushPulses = 0;
@@ -150,9 +152,10 @@ struct BloodBurst {
 
 /// How the enhanced look shows the blood a hit sprays (cs.client:bloodEffects), where the legacy look
 /// shows the original's (sprayLook, streamLook): at most mostDroplets droplets at once, none made past
-/// them, and mostSplats splats, the oldest giving way to a new one; each droplet drawn along streakTime
-/// of its flight, falling at `gravity` of the world's, losing `drag` of its speed a second, gone after
-/// dropletLife unless it lands first; of those that land on the world, splatShare leave a splat, flat
+/// them, and mostSplats splats, the oldest giving way to a new one; the air slowing droplets and mists
+/// alike, their speed falling to e^-drag of itself a second; each droplet drawn along streakTime of its
+/// flight, falling at `gravity` of the world's, gone after dropletLife unless it lands first, fading out
+/// over the last dropletFade of it; of those that land on the world, splatShare leave a splat, flat
 /// on what they met, their radius times leastSplatGrowth to mostSplatGrowth, lying there for splatLife
 /// and fading out over the last splatFade of it; and the bursts of a hit in the head and of a hit
 /// elsewhere.
@@ -163,6 +166,7 @@ struct BloodEnhancedLook {
     nx::Scale gravity{};
     float drag = 0.0F;
     nx::Seconds dropletLife{};
+    nx::Seconds dropletFade{};
     float splatShare = 0.0F;
     nx::Scale leastSplatGrowth{};
     nx::Scale mostSplatGrowth{};
@@ -323,6 +327,7 @@ struct nx::meta::Description<cs::BloodBurst> {
         nx::meta::field<&cs::BloodBurst::leastMistRadius>("leastMistRadius"),
         nx::meta::field<&cs::BloodBurst::mostMistRadius>("mostMistRadius"),
         nx::meta::field<&cs::BloodBurst::mistGrowth>("mistGrowth"),
+        nx::meta::field<&cs::BloodBurst::mistSpeed>("mistSpeed"),
         nx::meta::field<&cs::BloodBurst::mistOpacity>("mistOpacity",
                                                       nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BloodBurst::mistLife>("mistLife"),
@@ -343,6 +348,7 @@ struct nx::meta::Description<cs::BloodEnhancedLook> {
         nx::meta::field<&cs::BloodEnhancedLook::gravity>("gravity"),
         nx::meta::field<&cs::BloodEnhancedLook::drag>("drag", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BloodEnhancedLook::dropletLife>("dropletLife"),
+        nx::meta::field<&cs::BloodEnhancedLook::dropletFade>("dropletFade"),
         nx::meta::field<&cs::BloodEnhancedLook::splatShare>("splatShare",
                                                             nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BloodEnhancedLook::leastSplatGrowth>("leastSplatGrowth"),

@@ -132,14 +132,17 @@ TEST(BloodTest, AStreamsLookIsRBloodStreams) {
 TEST(BloodTest, TheEnhancedLooksBloodGushesMoreFromAHeadThanFromAnywhereElse) {
     const cs::BloodEnhancedLook look = repositoryRules().enhancedLook;
     EXPECT_EQ(look.mostDroplets, 1024U);
-    EXPECT_EQ(look.mostSplats, 256U);
+    EXPECT_EQ(look.mostSplats, 192U);
+    EXPECT_GT(look.dropletLife, look.dropletFade) << "fading out in the air";
+    EXPECT_GT(look.drag, 1.0F) << "the air stops the spray a short way off";
     EXPECT_GT(look.splatLife, look.splatFade);
     EXPECT_GT(look.head.dropletsPerSize, look.body.dropletsPerSize) << "more droplets";
     EXPECT_GT(look.head.mists, look.body.mists) << "more mist";
     EXPECT_GT(look.head.mostSpeed, look.body.mostSpeed) << "faster";
     EXPECT_EQ(look.body.gushPulses, 0U) << "a hit elsewhere does not gush";
-    EXPECT_EQ(look.head.gushPulses, 5U);
-    EXPECT_EQ(look.head.gushDroplets, 8U);
+    EXPECT_EQ(look.head.gushPulses, 6U);
+    EXPECT_EQ(look.head.gushDroplets, 10U);
+    EXPECT_GT(look.head.mistSpeed, look.body.mistSpeed) << "its mist flies farther";
     EXPECT_LT(look.head.gushSlowing, 1.0F) << "each pulse slower";
 }
 
@@ -166,10 +169,12 @@ TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
           std::pair{"mostDroplets = 1024", "mostDroplets = 0"},
           std::pair{"splatFade = 4.0", "splatFade = 20.0"},
           std::pair{"leastSplatGrowth = 2.0", "leastSplatGrowth = 4.0"},
-          std::pair{"leastRadius = 0.2", "leastRadius = 0.0"},
-          std::pair{"mistLife = 0.35", "mistLife = 0.0"},
-          std::pair{"backShare = 0.2", "backShare = 1.5"},
-          std::pair{"gushInterval = 0.15", "gushInterval = 0.0"},
+          std::pair{"leastRadius = 0.25", "leastRadius = 0.0"},
+          std::pair{"mistLife = 0.45", "mistLife = 0.0"},
+          std::pair{"backShare = 0.4", "backShare = 1.5"},
+          std::pair{"gushInterval = 0.1", "gushInterval = 0.0"},
+          std::pair{"dropletFade = 0.35", "dropletFade = 0.9"},
+          std::pair{"mistSpeed = 60.0", "mistSpeed = -1.0"},
           std::pair{"gushSlowing = 0.8", "gushSlowing = 1.5"}}) {
         std::string broken = text;
         const std::size_t at = broken.find(line);

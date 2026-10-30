@@ -44,9 +44,13 @@ void BloodEffects::spray(const BloodSpray& spray, const BloodEnhancedLook& look,
         static_cast<std::uint32_t>(std::lround(burst.dropletsPerSize * static_cast<float>(spray.size)));
     throwDroplets(spray.position, way, burst, count, burst.backShare, 1.0F, shade, look, now);
     for (std::uint32_t mist = 0; mist < burst.mists; ++mist) {
+        // Its draws in their order: its way, its speed and its radius.
+        const nx::Vec3 thrown = thrownWayOf(way, burst.spread, burst.backShare);
+        const float speed = random.between(0.0F, burst.mistSpeed.value());
+        const float radius = random.between(burst.leastMistRadius.value(), burst.mostMistRadius.value());
         drifting.push_back(BloodMist{.position = spray.position,
-                                     .radius = nx::HammerUnits{random.between(burst.leastMistRadius.value(),
-                                                                              burst.mostMistRadius.value())},
+                                     .velocity = thrown * speed,
+                                     .radius = nx::HammerUnits{radius},
                                      .growth = burst.mistGrowth,
                                      .shade = shade,
                                      .opacity = burst.mistOpacity,
@@ -64,22 +68,25 @@ void BloodEffects::spray(const BloodSpray& spray, const BloodEnhancedLook& look,
     }
 }
 
+auto BloodEffects::thrownWayOf(nx::Vec3 way, float spread, float backShare) -> nx::Vec3 {
+    const bool isBack = random.nextUnit() < static_cast<double>(backShare);
+    const nx::Vec3 turn{.x = random.between(-spread, spread),
+                        .y = random.between(-spread, spread),
+                        .z = random.between(-spread, spread)};
+    return (isBack ? way * -1.0F : way) + turn;
+}
+
 void BloodEffects::throwDroplets(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, std::uint32_t count,
                                  float backShare, float speedShare, BloodShade shade,
                                  const BloodEnhancedLook& look, nx::Seconds now) {
     for (std::uint32_t droplet = 0; droplet < count && flying.size() < look.mostDroplets; ++droplet) {
-        // Its draws in their order: back or not, its turn off its way on each axis, its speed, its rise
-        // and its radius.
-        const bool isBack = random.nextUnit() < static_cast<double>(backShare);
-        const nx::Vec3 turn{.x = random.between(-burst.spread, burst.spread),
-                            .y = random.between(-burst.spread, burst.spread),
-                            .z = random.between(-burst.spread, burst.spread)};
+        // Its draws in their order: its way, its speed, its rise and its radius.
+        const nx::Vec3 thrown = thrownWayOf(way, burst.spread, backShare);
         const float speed = random.between(burst.leastSpeed.value(), burst.mostSpeed.value()) * speedShare;
         const float rise = random.between(0.0F, burst.rise.value());
         const float radius = random.between(burst.leastRadius.value(), burst.mostRadius.value());
-        const nx::Vec3 along = isBack ? way * -1.0F : way;
         flying.push_back(BloodDroplet{.position = from,
-                                      .velocity = ((along + turn) * speed) + (kUp * rise),
+                                      .velocity = (thrown * speed) + (kUp * rise),
                                       .radius = nx::HammerUnits{radius},
                                       .shade = shade,
                                       .goesAt = now + look.dropletLife});
@@ -106,7 +113,12 @@ void BloodEffects::update(nx::Seconds now, nx::Seconds elapsed, const nx::collis
     std::erase_if(gushing, [](const BloodGush& gush) { return gush.pulsesLeft == 0; });
     const float seconds = elapsed.count();
     const float fall = gravity.value() * look.gravity.value() * seconds;
-    const float kept = std::max(0.0F, 1.0F - (look.drag * seconds));
+    // e^-drag a second: the share of its speed a drop keeps over the frame, whatever its length.
+    const float kept = std::exp(-look.drag * seconds);
+    for (BloodMist& mist : drifting) {
+        mist.position = mist.position + (mist.velocity * seconds);
+        mist.velocity = mist.velocity * kept;
+    }
     for (BloodDroplet& droplet : flying) {
         const nx::Vec3 moved = droplet.position + (droplet.velocity * seconds);
         const nx::collision::Trace met = hulls.trace({.start = droplet.position, .end = moved});
@@ -158,11 +170,13 @@ auto BloodEffects::shown(nx::Seconds now, const BloodEnhancedLook& look)
                                       .normal = splat.normal});
     }
     for (const BloodDroplet& droplet : flying) {
-        instances.push_back(nx::render::BloodInstance{.position = droplet.position,
-                                                      .velocity = droplet.velocity,
-                                                      .radius = droplet.radius,
-                                                      .color = droplet.shade.color,
-                                                      .light = droplet.shade.light});
+        instances.push_back(nx::render::BloodInstance{
+            .position = droplet.position,
+            .velocity = droplet.velocity,
+            .radius = droplet.radius,
+            .color = droplet.shade.color,
+            .light = droplet.shade.light,
+            .opacity = 1.0F - shareOf(now, droplet.goesAt - look.dropletFade, droplet.goesAt)});
     }
     for (const BloodMist& mist : drifting) {
         const float age = std::max(0.0F, (now - mist.madeAt).count());
