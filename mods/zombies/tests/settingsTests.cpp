@@ -14,6 +14,8 @@ TEST(ZombieSettings, ReadsTheExampleAndRejectsAnUnboundedPerceptionBudget) {
     auto read = zombies::readSettings(*text, "zombies.toml");
     ASSERT_TRUE(read.has_value()) << (read ? "" : nx::describe(read.error()));
     EXPECT_EQ(read->body.health, nx::HitPoints{500});
+    constexpr std::uint8_t kRed = 247; // BLOOD_COLOR_RED
+    EXPECT_EQ(read->body.bloodColor, kRed) << "it bleeds red";
     EXPECT_EQ(read->spawnBatchLimit, 64U);
     EXPECT_EQ(read->spawnRadius, nx::HammerUnits{512});
     const auto at = text->find("perceptionBudget = 8");
