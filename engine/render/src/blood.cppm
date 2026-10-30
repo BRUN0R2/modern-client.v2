@@ -108,21 +108,21 @@ public:
     [[nodiscard]] auto draw(rhi::CommandList& commands, const BloodDraw& draw) -> Result<void, BloodError>;
 
 private:
-    inline BloodRenderer(rhi::Device& device, ColorEncoding encoding) noexcept
-        : m_device{&device}, m_encoding{encoding} {}
+    inline BloodRenderer(rhi::Device& device, ColorEncoding colorEncoding) noexcept
+        : gpu{&device}, encoding{colorEncoding} {}
     /// The shader, the bind group layout and the pipeline.
     [[nodiscard]] auto createPipeline(const BloodRendererDesc& desc) -> Result<void, rhi::RhiError>;
     /// Makes room in `slot` for `drops` drops, at least.
     [[nodiscard]] auto reserve(BloodFrameSlot& slot, std::size_t drops) -> Result<void, rhi::RhiError>;
 
-    rhi::Device* m_device;
-    ColorEncoding m_encoding;
-    rhi::OwnedShader m_shader;
-    rhi::OwnedBindGroupLayout m_frameLayout;
-    rhi::OwnedRenderPipeline m_pipeline;
-    std::vector<BloodFrameSlot> m_frameSlots;
-    std::uint64_t m_drawCount = 0;
-    std::uint32_t m_dropCount = 0; ///< Of the last prepare.
+    rhi::Device* gpu;
+    ColorEncoding encoding;
+    rhi::OwnedShader shader;
+    rhi::OwnedBindGroupLayout frameLayout;
+    rhi::OwnedRenderPipeline pipeline;
+    std::vector<BloodFrameSlot> frameSlots;
+    std::uint64_t drawCount = 0;
+    std::uint32_t dropCount = 0; ///< Of the last prepare.
 };
 
 } // namespace nx::render
