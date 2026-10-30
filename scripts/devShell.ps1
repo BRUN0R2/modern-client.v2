@@ -15,6 +15,9 @@
         ctest --preset dev-windows-msvc
 
     Visual Studio, VS Code (CMake Tools) and CLion load the environment by themselves.
+
+    The presets find vcpkg through VCPKG_ROOT: the one set before, such as the CI's checkout at the
+    manifest's baseline, else the copy bundled with Visual Studio.
 #>
 [CmdletBinding()]
 param()
@@ -33,13 +36,15 @@ if (-not $vsPath) {
 # VsDevCmd calls vswhere by name; make it resolvable to keep the output clean.
 $env:PATH = "$(Split-Path $vswhere);$env:PATH"
 
+# VsDevCmd sets VCPKG_ROOT to the copy bundled with VS, over the one set before it: a vcpkg without
+# its ports, which fetches the registry from GitHub at every configure. The one set before is kept.
+$vcpkgRootBefore = $env:VCPKG_ROOT
+
 Import-Module (Join-Path $vsPath 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
 Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 
-# The presets resolve the vcpkg toolchain through VCPKG_ROOT; default to the copy bundled with VS.
-if (-not $env:VCPKG_ROOT) {
-    $env:VCPKG_ROOT = Join-Path $vsPath 'VC\vcpkg'
-}
+# The presets resolve the vcpkg toolchain through VCPKG_ROOT: the one set before, else VS's copy.
+$env:VCPKG_ROOT = if ($vcpkgRootBefore) { $vcpkgRootBefore } else { Join-Path $vsPath 'VC\vcpkg' }
 
 Write-Host "Visual Studio : $vsPath"
 Write-Host "CMake         : $((cmake --version | Select-Object -First 1))"
