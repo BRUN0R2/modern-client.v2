@@ -5,9 +5,9 @@
 ///
 /// Today: the camera and its matrices, the fog, the original's picture (its gamma curves and light
 /// styles), the BSP world and its decals, the light it gives where things are, studio models, sprites and
-/// particles, the order a frame draws them in, what the tools draw over them (a navigation mesh and the agents'
-/// ways), the screen over them (the pictures and text of the HUD and the console), and the enhanced look's
-/// reflection probes, bloom and tone curve. The render graph and effects come with their consumers.
+/// particles, the order a frame draws them in, what the tools draw over them (a navigation mesh and the
+/// agents' ways), the screen over them (the pictures and text of the HUD and the console), and the enhanced
+/// look's reflection probes, bloom and tone curve. The render graph and effects come with their consumers.
 export module nx.render;
 
 export import :camera;
