@@ -20,6 +20,12 @@ enum class AreaKind : std::uint8_t {
     /// Floor along walls and ledges, within the profile's wallClearance of where it may not stand: walked,
     /// and weighed, so that the ways keep off walls where there is room.
     Edge,
+    /// A link between a ledge and the floor below within the profile's jump height: dropped down, and
+    /// jumped up.
+    Jump,
+    /// A link from a ledge to the floor below, higher than the profile jumps and within its drop height:
+    /// dropped down only.
+    Drop,
     Count,
 };
 
@@ -46,10 +52,10 @@ struct AgentProfile {
     /// room than this is no way.
     HammerUnits crouchedHeight{};
     HammerUnits stepHeight{}; ///< The highest step it walks up.
-    /// The highest ledge it jumps onto: what its jump links will span (TODO.md), at least stepHeight.
+    /// The highest ledge it jumps onto: what its links of the kind Jump span, at least stepHeight.
     HammerUnits jumpHeight{};
     /// The highest ledge it drops from unhurt: how far below a body off the mesh the floor it drops to is
-    /// looked for (NavigationQuery), and what its drop links will span (TODO.md); at least stepHeight.
+    /// looked for (NavigationQuery), and what its links of the kind Drop span; at least stepHeight.
     HammerUnits dropHeight{};
     /// The least upward share of a floor's unit normal it stands on: a steeper floor is a wall.
     float minGroundNormalZ = 0.0F;

@@ -76,6 +76,8 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     EXPECT_EQ(costs[AreaKind::Crouch], 3.0F);
     EXPECT_EQ(costs[AreaKind::Water], 1.25F);
     EXPECT_EQ(costs[AreaKind::Edge], 2.0F);
+    EXPECT_EQ(costs[AreaKind::Jump], 2.0F);
+    EXPECT_EQ(costs[AreaKind::Drop], 1.0F);
     EXPECT_EQ(player.wallClearance, nx::HammerUnits{16.0F});
     EXPECT_EQ(read->build.cellSize, nx::HammerUnits{4.0F});
     EXPECT_EQ(read->build.tileCells, 64U);

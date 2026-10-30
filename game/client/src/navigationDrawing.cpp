@@ -27,7 +27,9 @@ constexpr nx::EnumArray<AreaKind, OverlayColor> kAreaColors{nx::EnumArray<AreaKi
     OverlayColor{.red = 64, .green = 208, .blue = 64},   // Floor: green
     OverlayColor{.red = 240, .green = 200, .blue = 32},  // Crouch: yellow
     OverlayColor{.red = 48, .green = 128, .blue = 255},  // Water: blue
-    OverlayColor{.red = 32, .green = 136, .blue = 96}}}; // Edge: a deeper green
+    OverlayColor{.red = 32, .green = 136, .blue = 96},   // Edge: a deeper green
+    OverlayColor{.red = 255, .green = 136, .blue = 0},   // Jump: orange
+    OverlayColor{.red = 208, .green = 32, .blue = 72}}}; // Drop: crimson
 constexpr std::uint8_t kPolygonAlpha = 32;
 
 /// The colors of the arrows' shafts, one for each team, and for an agent of no team.
@@ -93,6 +95,13 @@ NavigationDrawing::NavigationDrawing(const nx::navigation::NavigationMesh& mesh,
             edges.push_back({.position = corners[(corner + 1) % corners.size()] + lift,
                              .color = edge,
                              .brightness = kEdgeBrightness});
+        }
+    }
+    // A link a line from the ledge it leaves to where it lands, of its kind's color.
+    for (const nx::navigation::MeshLink& link : outline.links) {
+        for (const nx::Vec3 end : {link.start, link.end}) {
+            edges.push_back(
+                {.position = end + lift, .color = kAreaColors[link.kind], .brightness = kEdgeBrightness});
         }
     }
 }

@@ -154,11 +154,17 @@ TEST(MeshFileTest, AKeyChangesWithWhatShapesTheTilesAlone) {
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, wider, nx::test::testSettings()), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, nx::test::playerProfile(), finer), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, nx::test::playerProfile(), largerTiles), key);
+    // Its jump and its drop span the links of the tiles.
+    nx::navigation::AgentProfile higherJump = nx::test::playerProfile();
+    higherJump.jumpHeight = nx::HammerUnits{higherJump.jumpHeight.value() + 10.0F};
+    nx::navigation::AgentProfile higherDrop = nx::test::playerProfile();
+    higherDrop.dropHeight = nx::HammerUnits{higherDrop.dropHeight.value() + 10.0F};
+    EXPECT_NE(nx::navigation::meshKeyOf(geometry, higherJump, nx::test::testSettings()), key);
+    EXPECT_NE(nx::navigation::meshKeyOf(geometry, higherDrop, nx::test::testSettings()), key);
 
-    // Its name, its jump and its costs do not shape the tiles: queries weigh the costs.
+    // Its name and its costs do not shape the tiles: queries weigh the costs.
     nx::navigation::AgentProfile renamed = nx::test::playerProfile();
     renamed.name = "boss";
-    renamed.jumpHeight = nx::HammerUnits{renamed.jumpHeight.value() + 10.0F};
     renamed.areaCosts.clear();
     EXPECT_EQ(nx::navigation::meshKeyOf(geometry, renamed, nx::test::testSettings()), key);
 }

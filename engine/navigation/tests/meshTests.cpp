@@ -21,6 +21,7 @@ using nx::Vec3;
 using nx::navigation::AreaKind;
 using nx::navigation::Geometry;
 using nx::navigation::MeshBuildError;
+using nx::navigation::MeshLink;
 using nx::navigation::MeshOutline;
 using nx::navigation::NavigationError;
 using nx::navigation::NavigationMesh;
@@ -192,6 +193,62 @@ TEST(NavigationMeshTest, TheFloorWithinTheWallClearanceOfItsEdgesIsOfTheKindEdge
         }
     }
     EXPECT_TRUE(reachesTheRadius) << "the floor along the edges is still walked";
+}
+
+/// Whether `point` is over the box from `low` to `high` across.
+[[nodiscard]] auto isOver(Vec3 point, Vec3 low, Vec3 high) -> bool {
+    return point.x >= low.x && point.x <= high.x && point.y >= low.y && point.y <= high.y;
+}
+
+TEST(NavigationMeshTest, ALedgeItJumpsOntoIsLinkedBothWaysAndOneItDropsFromDownOnly) {
+    // On a floor at 0, a box 40 tall, which the player jumps onto, and apart one 120 tall, which it drops
+    // from unhurt.
+    constexpr Vec3 kLowLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
+    constexpr Vec3 kLowHigh{.x = 512.0F, .y = 384.0F, .z = 40.0F};
+    constexpr Vec3 kHighLow{.x = 1024.0F, .y = 128.0F, .z = -16.0F};
+    constexpr Vec3 kHighHigh{.x = 1280.0F, .y = 384.0F, .z = 120.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1536.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLowLow, kLowHigh);
+    nx::test::addBox(geometry, kHighLow, kHighHigh);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    EXPECT_FALSE(hasKind(outline, AreaKind::Jump)) << "a link is no polygon of the outline's";
+    EXPECT_FALSE(hasKind(outline, AreaKind::Drop));
+    ASSERT_FALSE(outline.links.empty());
+    std::size_t jumps = 0;
+    std::size_t drops = 0;
+    for (const MeshLink& link : outline.links) {
+        const bool isLow = isOver(link.start, kLowLow, kLowHigh) || isOver(link.end, kLowLow, kLowHigh);
+        const Vec3 low = isLow ? kLowLow : kHighLow;
+        const Vec3 high = isLow ? kLowHigh : kHighHigh;
+        EXPECT_EQ(link.kind, isLow ? AreaKind::Jump : AreaKind::Drop) << std::format("{}", link.start);
+        EXPECT_TRUE(isOver(link.start, low, high)) << "from the box's top";
+        EXPECT_NEAR(link.start.z, high.z, kCell);
+        EXPECT_FALSE(isOver(link.end, low, high)) << "to the floor beside it";
+        EXPECT_NEAR(link.end.z, 0.0F, kCell);
+        // It lands its radius and a cell past the box's side, where the floor's mesh starts its radius off.
+        const float past =
+            std::max({low.x - link.end.x, link.end.x - high.x, low.y - link.end.y, link.end.y - high.y});
+        EXPECT_NEAR(past, kRadius + kCell, kCell);
+        ++(link.kind == AreaKind::Jump ? jumps : drops);
+    }
+    EXPECT_GT(jumps, 0U);
+    EXPECT_GT(drops, 0U);
+}
+
+TEST(NavigationMeshTest, NoLinkLeavesALedgeHigherThanItDropsFromNorTheFloorAlongAWall) {
+    // A box 200 tall on a floor: its top is too high to drop from unhurt, and its sides are walls to the
+    // floor about it.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 384.0F, .y = 128.0F, .z = -16.0F},
+                     {.x = 640.0F, .y = 384.0F, .z = 200.0F});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const MeshOutline outline = mesh.outline();
+    EXPECT_TRUE(hasCornerOver(outline, {.x = 384.0F, .y = 128.0F}, {.x = 640.0F, .y = 384.0F}))
+        << "the box's top is a floor of the mesh";
+    EXPECT_TRUE(outline.links.empty());
 }
 
 TEST(NavigationMeshTest, AFloorKeepsItsKind) {
