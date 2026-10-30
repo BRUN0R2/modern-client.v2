@@ -8,6 +8,7 @@ nxAddShaders(nxShaders
         studio.slang
         sprite.slang
         particle.slang
+        blood.slang
         overlay.slang
         screen.slang
         post.slang
