@@ -6,6 +6,7 @@ nxAddTest(nxRenderTests
         blendedOrderTests.cpp
         cameraTests.cpp
         decalsTests.cpp
+        fogTests.cpp
         enhancedStudioTests.cpp
         gammaTests.cpp
         lightStyleTests.cpp

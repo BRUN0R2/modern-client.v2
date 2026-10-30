@@ -87,9 +87,11 @@ constexpr std::array kSpriteVertexAttributes{
                          .format = rhi::VertexFormat::Float,
                          .offset = offsetof(SpriteVertex, brightness)}}; // NOLINT
 
-/// The frame's uniform: the rows of the view-projection matrix, and how colors reach the target.
+/// The frame's uniform: the rows of the view-projection matrix, the fog, and how colors reach the
+/// target.
 struct FrameUniform {
     Mat4 viewProjection{};
+    FogBlock fog{};
     std::uint32_t colorEncoding = 0; ///< ColorEncoding's.
 };
 
@@ -327,8 +329,9 @@ auto SpriteRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     auto solid = pipeline("sprite", "fragmentMain", std::nullopt, written);
     auto blended = pipeline("sprite.blended", "fragmentMain", alphaBlend, written);
     auto blendedUnwritten = pipeline("sprite.transAlpha", "fragmentMain", alphaBlend, tested);
-    auto glow = pipeline("sprite.glow", "fragmentMain", additiveBlend, untested);
-    auto added = pipeline("sprite.additive", "fragmentMain", additiveBlend, tested);
+    // What is added is not seen through the fog, as the original's fog leaves it (nx.render:fog).
+    auto glow = pipeline("sprite.glow", "addedFragmentMain", additiveBlend, untested);
+    auto added = pipeline("sprite.additive", "addedFragmentMain", additiveBlend, tested);
     auto light = pipeline("sprite.light", "lightFragmentMain", lightBlend, onTheSprite);
     for (auto* const created : {&solid, &blended, &blendedUnwritten, &glow, &added, &light}) {
         if (!*created) {
@@ -437,6 +440,7 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
     SpriteFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     const FrameUniform uniform{.viewProjection =
                                    inLayer(viewProjectionMatrix(draw.camera, draw.aspect), draw.depth),
+                               .fog = fogBlockOf(draw.fog, draw.camera, m_encoding),
                                .colorEncoding = std::to_underlying(m_encoding)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
 

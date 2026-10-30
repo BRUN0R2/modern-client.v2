@@ -203,7 +203,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                      .aspect = view.aspect,
                      .time = view.time,
                      .lightStyles = styles,
-                     .placements = view.placements});
+                     .placements = view.placements,
+                     .fog = view.fog});
     const PosedModels models =
         level.models().posed(m_models, view.time, view.hostages, m_light, level.skyLight(), styles);
     const PosedModels players =
@@ -213,8 +214,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     std::vector<nx::render::StudioInstance> instances = models.instances;
     std::ranges::copy(players.instances, std::back_inserter(instances));
     std::ranges::copy(entities.instances, std::back_inserter(instances));
-    if (auto prepared =
-            m_studio.prepare({.camera = view.camera, .aspect = view.aspect, .instances = instances});
+    if (auto prepared = m_studio.prepare(
+            {.camera = view.camera, .aspect = view.aspect, .instances = instances, .fog = view.fog});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }
@@ -263,7 +264,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                            .aspect = view.aspect,
                                            .time = view.time,
                                            .lightStyles = styles,
-                                           .instances = sprites},
+                                           .instances = sprites,
+                                           .fog = view.fog},
                                           m_light);
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the sprites", std::move(prepared.error()));
@@ -291,8 +293,11 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                                      .color = streak.color,
                                                      .amount = amountOf(streak, view.time)});
     }
-    if (auto prepared = particleRenderer.prepare(
-            {.camera = view.camera, .aspect = view.aspect, .particles = particles, .streaks = streaks});
+    if (auto prepared = particleRenderer.prepare({.camera = view.camera,
+                                                  .aspect = view.aspect,
+                                                  .particles = particles,
+                                                  .streaks = streaks,
+                                                  .fog = view.fog});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the particles", std::move(prepared.error()));
     }
@@ -328,7 +333,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                                                .time = view.time,
                                                .lightStyles = styles,
                                                .instances = flashes,
-                                               .depth = nx::render::DepthLayer::ViewModel},
+                                               .depth = nx::render::DepthLayer::ViewModel,
+                                               .fog = view.fog},
                                               m_light);
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the weapon's muzzle flashes", std::move(prepared.error()));
@@ -358,8 +364,8 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         .isMirrored = viewModel->isMirroredIn(view.hand),
         .lights = lights,
         .probes = m_probes ? m_probes->blendAt(view.camera.position) : std::nullopt}};
-    if (auto drawn =
-            m_viewModels.draw(list, {.camera = view.camera, .aspect = view.aspect, .instances = held});
+    if (auto drawn = m_viewModels.draw(
+            list, {.camera = view.camera, .aspect = view.aspect, .instances = held, .fog = view.fog});
         !drawn) {
         return nx::fail(SceneError::DrawFailed, "the weapon in hand", std::move(drawn.error()));
     }

@@ -54,6 +54,9 @@ card draws the same look.
 - **Exposure is fixed per map**, calibrated so that a mid-grey surface is as bright as in legacy.
   No eye adaptation: a dark corner never brightens to reveal a player, nor dims one.
 - A tone curve (AgX) maps the scene to the screen; HDR10 output on HDR displays is a later option.
+- Fog mixes in linear light, its color made light as the others are, and measures how far a fragment
+  is from the eye rather than along the view, as the legacy look and the original's cards do, so that
+  it stays where it is as the view turns ([05 §10](../05-rendering.md#10-effects)).
 - The additive effects made for the original's addition (a weapon's muzzle flashes; glows and
   explosions as they come) are not added as light: they are drawn to a layer of display colors over
   the scene's depths, which the last pass adds once the scene is mapped, each channel stopping at

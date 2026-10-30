@@ -22,6 +22,7 @@ import nx.math;
 import nx.rhi;
 import nx.assets;
 import :camera;
+import :fog;
 import :gamma;
 import :lightStyle;
 import :renderMode;
@@ -191,6 +192,8 @@ struct WorldFrame {
     LightStyleValues lightStyles{};
     /// Where the game puts brush models; any other is where the map's entity of it says.
     std::span<const ModelPlacement> placements{};
+    /// The fog the faces, the sky and the decals are seen through; none, clear (nx.render:fog).
+    std::optional<Fog> fog{};
 };
 
 /// What the last draw drew, for r_speeds.

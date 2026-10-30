@@ -184,13 +184,14 @@ constexpr std::array kStudioVertexAttributes{
                          .offset = offsetof(StudioVertex, normalBone)}}; // NOLINT
 
 /// The frame's uniform: the rows of the view-projection matrix, where the view is and its right, the
-/// last mip levels of the environment and of the probes and whether the environment is a sky, and how
-/// colors reach the target and models are shaded.
+/// last mip levels of the environment and of the probes and whether the environment is a sky, the fog,
+/// and how colors reach the target and models are shaded.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 eye{};
     Vec4 right{};
     Vec4 environment{};
+    FogBlock fog{};
     std::uint32_t colorEncoding = 0; ///< ColorEncoding's.
     std::uint32_t look = 0;          ///< StudioLook's.
 };
@@ -649,17 +650,21 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     const bool isEnhanced = look == StudioLook::Enhanced;
     const std::string_view kWhole = isEnhanced ? "enhancedFragmentMain" : "fragmentMain";
     const std::string_view kCut = isEnhanced ? "enhancedMaskedFragmentMain" : "maskedFragmentMain";
+    // What is added is not seen through the fog, as the original's fog leaves it (nx.render:fog).
+    const std::string_view kAddedWhole = isEnhanced ? "enhancedAddedFragmentMain" : "addedFragmentMain";
+    const std::string_view kAddedCut =
+        isEnhanced ? "enhancedAddedMaskedFragmentMain" : "addedMaskedFragmentMain";
     using WaysOfMeshes = EnumArray<MeshKind, Way>;
     const EnumArray<StudioBlending, WaysOfMeshes> ways{{
         WaysOfMeshes{{Way{.fragment = kWhole, .blend = std::nullopt},
                       Way{.fragment = kCut, .blend = std::nullopt},
-                      Way{.fragment = kWhole, .blend = added, .writesDepth = false}}},
+                      Way{.fragment = kAddedWhole, .blend = added, .writesDepth = false}}},
         WaysOfMeshes{{Way{.fragment = kWhole, .blend = overBehind},
                       Way{.fragment = kCut, .blend = overBehind},
-                      Way{.fragment = kWhole, .blend = addedByAlpha}}},
-        WaysOfMeshes{{Way{.fragment = kWhole, .blend = added, .writesDepth = false},
-                      Way{.fragment = kCut, .blend = added, .writesDepth = false},
-                      Way{.fragment = kWhole,
+                      Way{.fragment = kAddedWhole, .blend = addedByAlpha}}},
+        WaysOfMeshes{{Way{.fragment = kAddedWhole, .blend = added, .writesDepth = false},
+                      Way{.fragment = kAddedCut, .blend = added, .writesDepth = false},
+                      Way{.fragment = kAddedWhole,
                           .blend = m_encoding == ColorEncoding::Linear ? added : addedByAlpha,
                           .writesDepth = false}}},
     }};
@@ -914,6 +919,7 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
                                .environment = Vec4{.x = static_cast<float>(m_environmentLevels - 1),
                                                    .y = m_hasEnvironment ? 1.0F : 0.0F,
                                                    .z = static_cast<float>(m_probeLevels - 1)},
+                               .fog = fogBlockOf(frame.fog, frame.camera, m_encoding),
                                .colorEncoding = std::to_underlying(m_encoding),
                                .look = std::to_underlying(m_look)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());

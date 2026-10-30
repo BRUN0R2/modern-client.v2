@@ -8,6 +8,7 @@ nxAddTest(csClientTests
         mapLightTests.cpp
         clientGameTests.cpp
         hudTests.cpp
+        fogCvarsTests.cpp
         muzzleFlashTests.cpp
         tempEntitiesTests.cpp
         particlesTests.cpp

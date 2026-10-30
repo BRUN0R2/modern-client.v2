@@ -67,9 +67,11 @@ constexpr std::array kParticleVertexAttributes{
                          .format = rhi::VertexFormat::Float4,
                          .offset = offsetof(ParticleVertex, color)}}; // NOLINT
 
-/// The frame's uniform: the rows of the view-projection matrix, and how colors reach the target.
+/// The frame's uniform: the rows of the view-projection matrix, the fog, and how colors reach the
+/// target.
 struct FrameUniform {
     Mat4 viewProjection{};
+    FogBlock fog{};
     std::uint32_t colorEncoding = 0; ///< ColorEncoding's.
 };
 
@@ -203,7 +205,8 @@ auto ParticleRenderer::createPipeline(std::span<const std::byte> shaderCode, rhi
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(ParticleVertex), .attributes = kParticleVertexAttributes}};
     const std::array layouts{m_frameLayout.get(), m_imageLayout.get()};
-    const auto pipeline = [&](std::string_view label, rhi::BlendFactor destination) {
+    const auto pipeline = [&](std::string_view label, std::string_view fragment,
+                              rhi::BlendFactor destination) {
         const std::array targets{
             rhi::ColorTarget{.format = colorFormat,
                              .blend = rhi::BlendState{.sourceColor = rhi::BlendFactor::SourceAlpha,
@@ -213,7 +216,7 @@ auto ParticleRenderer::createPipeline(std::span<const std::byte> shaderCode, rhi
         return device.createRenderPipeline(
             {.label = label,
              .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
-             .fragment = {.shader = m_shader.get(), .entryPoint = "fragmentMain"},
+             .fragment = {.shader = m_shader.get(), .entryPoint = fragment},
              .vertexBuffers = vertexBuffers,
              .cullMode = rhi::CullMode::None,
              .frontFace = rhi::FrontFace::CounterClockwise,
@@ -221,8 +224,9 @@ auto ParticleRenderer::createPipeline(std::span<const std::byte> shaderCode, rhi
              .depth = rhi::DepthState{.isWriteEnabled = false, .compare = rhi::CompareOp::Greater},
              .bindGroupLayouts = layouts});
     };
-    auto blended = pipeline("particle", rhi::BlendFactor::OneMinusSourceAlpha);
-    auto added = pipeline("particle.streak", rhi::BlendFactor::One);
+    auto blended = pipeline("particle", "fragmentMain", rhi::BlendFactor::OneMinusSourceAlpha);
+    // The streaks are added, through no fog, as the original's fog leaves what is added (nx.render:fog).
+    auto added = pipeline("particle.streak", "addedFragmentMain", rhi::BlendFactor::One);
     if (!blended || !added) {
         return std::unexpected{!blended ? std::move(blended.error()) : std::move(added.error())};
     }
@@ -320,6 +324,7 @@ auto ParticleRenderer::prepare(const ParticleDraw& draw) -> Result<void, Particl
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     ParticleFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     const FrameUniform uniform{.viewProjection = viewProjectionMatrix(draw.camera, draw.aspect),
+                               .fog = fogBlockOf(draw.fog, draw.camera, m_encoding),
                                .colorEncoding = std::to_underlying(m_encoding)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
     const std::span<const StreakInstance> streaks =

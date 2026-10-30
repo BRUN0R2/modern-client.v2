@@ -13,8 +13,11 @@
 // Drawn as linear light (colorEncoding.slang), the textures are sampled from sRGB as light, and the
 // light and colors the original gives as display colors are made light too; how opaque, as it is. The
 // decals' images stay the original's display colors, blended as the original blends them.
+// The faces, the sky and the decals are seen through the frame's fog (fog.slang), but for what is added
+// (kRenderTransAdd), which the original's fog leaves as it is.
 
 import colorEncoding;
+import fog;
 import skyDirection;
 
 // The styles the frame sets, four to an element of Frame::styles; the ones above keep the normal
@@ -33,6 +36,8 @@ struct Frame
     float4 eye;
     // The brightness of the light styles.
     float4 styles[kSetStyles / kStylesPerElement];
+    // The fog the faces are seen through.
+    Fog fog;
     // How the colors reach the target: kDisplayEncoding or kLinearEncoding.
     uint colorEncoding;
 };
@@ -104,6 +109,8 @@ struct VertexOutput
     float2 uv : TEXCOORD0;
     float2 lightmapPosition : TEXCOORD1;
     nointerpolation uint4 styles : TEXCOORD2;
+    // In the world, where the fog is measured from.
+    float3 worldPosition : TEXCOORD3;
 };
 
 float4 clipPositionOf(float3 position)
@@ -184,7 +191,8 @@ float2 textureCoordinatesOf(VertexInput input)
 VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
-    output.position = clipPositionOf(placedPosition(input.position + float3(0.0, 0.0, waveRiseOf(input))));
+    output.worldPosition = placedPosition(input.position + float3(0.0, 0.0, waveRiseOf(input)));
+    output.position = clipPositionOf(output.worldPosition);
     output.uv = textureCoordinatesOf(input);
     output.lightmapPosition = input.lightmapPosition;
     output.styles = input.styles;
@@ -249,7 +257,8 @@ float4 litOrDiscarded(VertexOutput input, float alphaTest)
     {
         discard;
     }
-    return float4(color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding), 1.0);
+    const float3 lit = color.rgb * encodedOf(lightAt(input.lightmapPosition, input.styles), frame.colorEncoding);
+    return float4(foggedOf(lit, frame.fog, input.worldPosition), 1.0);
 }
 
 // The world and kRenderNormal: what has any alpha is drawn (the original's DEFAULT_ALPHATEST, 0).
@@ -308,34 +317,36 @@ DecalCover additiveDecalCoverOf(VertexOutput input)
 }
 
 // Drawn as display colors (kDisplayEncoding), a decal is blended as the original blends it: its
-// color, as opaque as its alpha.
+// color, as opaque as its alpha, seen through the fog as the face under it is.
 
 [shader("fragment")]
 float4 decalFragmentMain(VertexOutput input) : SV_Target
 {
     const DecalCover cover = litDecalCoverOf(input);
-    return float4(cover.color * lightAt(input.lightmapPosition, input.styles), cover.opacity);
+    return float4(foggedOf(cover.color * lightAt(input.lightmapPosition, input.styles), frame.fog,
+                           input.worldPosition),
+                  cover.opacity);
 }
 
 [shader("fragment")]
 float4 textureDecalFragmentMain(VertexOutput input) : SV_Target
 {
     const DecalCover cover = textureDecalCoverOf(input);
-    return float4(cover.color, cover.opacity);
+    return float4(foggedOf(cover.color, frame.fog, input.worldPosition), cover.opacity);
 }
 
 [shader("fragment")]
 float4 colorDecalFragmentMain(VertexOutput input) : SV_Target
 {
     const DecalCover cover = colorDecalCoverOf(input);
-    return float4(cover.color, cover.opacity);
+    return float4(foggedOf(cover.color, frame.fog, input.worldPosition), cover.opacity);
 }
 
 [shader("fragment")]
 float4 additiveDecalFragmentMain(VertexOutput input) : SV_Target
 {
     const DecalCover cover = additiveDecalCoverOf(input);
-    return float4(cover.color, cover.opacity);
+    return float4(foggedOf(cover.color, frame.fog, input.worldPosition), cover.opacity);
 }
 
 // Drawn as linear light (kLinearEncoding), the original's blend is a power of the display's gamma of
@@ -348,19 +359,25 @@ float4 additiveDecalFragmentMain(VertexOutput input) : SV_Target
 // one, and for a black texel over any face (a bullet hole); between them, a little darker (the game's
 // blood on its red channel: by 2 of 255 on average, 16 at most). A lit decal's light multiplies the
 // first, as the face's is already in the light the second keeps.
+// The light under it is the face's seen through the fog, (1 - f) w + f F for a fog that hides f of a
+// color there and shows its color F: so that the decal is seen through it as the face is, what it adds
+// is (1 - f) times its own, plus f F for what of the fog's color it does not keep.
 struct DisplayBlend
 {
     [[vk::location(0), vk::index(0)]] float4 added : SV_Target0;
     [[vk::location(0), vk::index(1)]] float4 kept : SV_Target1;
 };
 
-DisplayBlend displayBlendOf(DecalCover cover, float3 light)
+DisplayBlend displayBlendOf(DecalCover cover, float3 light, float3 position)
 {
     const float3 covered = cover.color * cover.opacity;
     const float3 added = linearOf(covered);
+    const float3 kept = linearOf((1.0 - cover.opacity) + covered) - added;
+    const float hidden = fogAmountOf(frame.fog, position);
     DisplayBlend blend;
-    blend.added = float4(added * light, cover.opacity);
-    blend.kept = float4(linearOf((1.0 - cover.opacity) + covered) - added, 0.0);
+    blend.added = float4(((1.0 - hidden) * added * light) + (hidden * frame.fog.color.rgb * (1.0 - kept)),
+                         cover.opacity);
+    blend.kept = float4(kept, 0.0);
     return blend;
 }
 
@@ -369,25 +386,26 @@ static const float3 kUnlit = float3(1.0, 1.0, 1.0);
 [shader("fragment")]
 DisplayBlend linearDecalFragmentMain(VertexOutput input)
 {
-    return displayBlendOf(litDecalCoverOf(input), linearOf(lightAt(input.lightmapPosition, input.styles)));
+    return displayBlendOf(litDecalCoverOf(input), linearOf(lightAt(input.lightmapPosition, input.styles)),
+                          input.worldPosition);
 }
 
 [shader("fragment")]
 DisplayBlend linearTextureDecalFragmentMain(VertexOutput input)
 {
-    return displayBlendOf(textureDecalCoverOf(input), kUnlit);
+    return displayBlendOf(textureDecalCoverOf(input), kUnlit, input.worldPosition);
 }
 
 [shader("fragment")]
 DisplayBlend linearColorDecalFragmentMain(VertexOutput input)
 {
-    return displayBlendOf(colorDecalCoverOf(input), kUnlit);
+    return displayBlendOf(colorDecalCoverOf(input), kUnlit, input.worldPosition);
 }
 
 [shader("fragment")]
 DisplayBlend linearAdditiveDecalFragmentMain(VertexOutput input)
 {
-    return displayBlendOf(additiveDecalCoverOf(input), kUnlit);
+    return displayBlendOf(additiveDecalCoverOf(input), kUnlit, input.worldPosition);
 }
 
 // kRenderTransTexture and kRenderGlow: the texture, as opaque as renderamt makes it.
@@ -395,17 +413,18 @@ DisplayBlend linearAdditiveDecalFragmentMain(VertexOutput input)
 float4 textureFragmentMain(VertexOutput input) : SV_Target
 {
     const float4 color = albedo.Sample(albedoSampler, input.uv);
-    return float4(color.rgb, color.a * entity.color.a);
+    return float4(foggedOf(color.rgb, frame.fog, input.worldPosition), color.a * entity.color.a);
 }
 
 // kRenderTransColor: rendercolor, as opaque as renderamt makes it, without the texture.
 [shader("fragment")]
 float4 colorFragmentMain(VertexOutput input) : SV_Target
 {
-    return float4(encodedOf(entity.color.rgb, frame.colorEncoding), entity.color.a);
+    return float4(foggedOf(encodedOf(entity.color.rgb, frame.colorEncoding), frame.fog, input.worldPosition),
+                  entity.color.a);
 }
 
-// kRenderTransAdd: the texture times renderamt, added to what is behind.
+// kRenderTransAdd: the texture times renderamt, added to what is behind, through no fog.
 [shader("fragment")]
 float4 additiveFragmentMain(VertexOutput input) : SV_Target
 {
@@ -431,5 +450,7 @@ SkyVertexOutput skyVertexMain(VertexInput input)
 float4 skyFragmentMain(SkyVertexOutput input) : SV_Target
 {
     const SkyPoint point = skyPointOf(input.direction);
-    return float4(skySides.Sample(skySampler, float3(skyUvOf(point), point.side)).rgb, 1.0);
+    const float3 color = skySides.Sample(skySampler, float3(skyUvOf(point), point.side)).rgb;
+    // The sky is seen through the fog where its faces are, as the original's (fogSkybox).
+    return float4(foggedOf(color, frame.fog, frame.eye.xyz + input.direction), 1.0);
 }
