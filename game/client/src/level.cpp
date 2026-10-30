@@ -19,8 +19,6 @@ namespace cs {
 namespace {
 
 constexpr nx::log::Category kLog{"client"};
-/// The engine's palette, in the base game's folder.
-constexpr std::string_view kPalettePath = "gfx/palette.lmp";
 
 /// The WADs the map's `wad` key names ("\half-life\cstrike\cs_dust.wad;..."), by their file names at
 /// the root of the VFS, as the original looks them up: their bytes, and the names of those the
@@ -103,12 +101,10 @@ struct WadFiles {
 [[nodiscard]] auto readPalette(const nx::assets::Vfs& vfs) -> std::optional<nx::assets::Palette> {
     const auto unread = [](std::string_view why) {
         nx::log::warning(kLog, "the engine's palette {} cannot be read: {}; no blood is sprayed",
-                         kPalettePath, why);
+                         nx::assets::kPalettePath, why);
     };
-    const auto bytes =
-        nx::assets::VfsPath::parse(kPalettePath).and_then([&vfs](const nx::assets::VfsPath& path) {
-            return vfs.readAll(path);
-        });
+    const auto bytes = nx::assets::VfsPath::parse(nx::assets::kPalettePath)
+                           .and_then([&vfs](const nx::assets::VfsPath& path) { return vfs.readAll(path); });
     if (!bytes) {
         unread(nx::describe(bytes.error()));
         return std::nullopt;

@@ -160,6 +160,7 @@ the profiles they switch between.
 | `*_detail.txt` | Per-map detail textures | Optional support, as in CS 1.6 |
 | `overviews/*.txt` + BMP image | Spectator overview map | |
 | `gfx/env/*.tga` | Sky box | Six faces per `skyname` of `worldspawn` |
+| `gfx/palette.lmp` | The engine's palette | 256 colors the game names by entry, as the blood's |
 | `liblist.gam`, `*.cfg`, `mapcycle.txt`, `motd.txt` | Configuration | See [09](09-dedicated-server.md) and [12](12-ui-hud-and-console.md) |
 
 Readers today:

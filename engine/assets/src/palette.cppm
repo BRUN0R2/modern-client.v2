@@ -11,6 +11,9 @@ import :image;
 
 export namespace nx::assets {
 
+/// Where the engine's palette is, in the base game's folder.
+inline constexpr std::string_view kPalettePath = "gfx/palette.lmp";
+
 /// Why a palette could not be read.
 enum class PaletteError : std::uint8_t {
     WrongSize, ///< Not kPaletteBytes long.
