@@ -44,6 +44,7 @@ constexpr std::size_t kWays = 64;
                         .crouchedHeight = nx::HammerUnits{36.0F},
                         .stepHeight = nx::HammerUnits{18.0F},
                         .jumpHeight = nx::HammerUnits{41.8F},
+                        .dropHeight = nx::HammerUnits{156.25F},
                         .minGroundNormalZ = 0.7F,
                         .areaCosts = {}};
 }
