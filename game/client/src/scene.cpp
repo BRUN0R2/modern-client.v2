@@ -38,6 +38,15 @@ constexpr nx::Vec3 kKeyLightColor{.x = 4200.0F, .y = 3900.0F, .z = 3500.0F};
 /// The stream of random numbers the muzzle flashes draw from.
 constexpr std::string_view kFlashStream = "muzzleFlash";
 
+/// How a drop of blood is lit, as a flat-shaded model is (R_StudioLighting, shaders/studio.slang): 0.8 of
+/// its shade on its ambient light, 255 at most, indexing the light curve four steps to a level, its top
+/// 1023.
+constexpr float kFlatShadeShare = 0.8F;
+constexpr float kMostModelLight = 255.0F;
+constexpr float kLightCurveSteps =
+    static_cast<float>(nx::render::kLightTableSize) / static_cast<float>(nx::render::kChannelValues);
+constexpr float kLightCurveTop = static_cast<float>(nx::render::kLightTableSize - 1);
+
 } // namespace
 
 auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneShaders, SceneError> {
@@ -45,7 +54,8 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
     for (const auto& [file, code] :
          {std::pair{"world.spv", &shaders.world}, std::pair{"studio.spv", &shaders.studio},
           std::pair{"sprite.spv", &shaders.sprite}, std::pair{"particle.spv", &shaders.particle},
-          std::pair{"probe.spv", &shaders.probe}, std::pair{"overlay.spv", &shaders.overlay}}) {
+          std::pair{"blood.spv", &shaders.blood}, std::pair{"probe.spv", &shaders.probe},
+          std::pair{"overlay.spv", &shaders.overlay}}) {
         auto read = nx::platform::readFile(folder / file);
         if (!read) {
             return nx::fail(SceneError::ShadersUnreadable, std::move(read.error()));
@@ -59,11 +69,12 @@ Scene::Scene(nx::render::BspWorld world, nx::render::WorldLight light, nx::rende
              std::vector<nx::render::SpriteModel> spriteModels, nx::render::StudioRenderer studio,
              std::vector<nx::render::StudioModel> models, nx::render::StudioRenderer viewModels,
              nx::render::SpriteRenderer viewSprites, nx::render::ParticleRenderer particles,
-             nx::render::OverlayRenderer overlay) noexcept
+             nx::render::BloodRenderer blood, nx::render::OverlayRenderer overlay) noexcept
     : m_world{std::move(world)}, m_light{std::move(light)}, m_sprites{std::move(sprites)},
       m_spriteModels{std::move(spriteModels)}, m_studio{std::move(studio)}, m_models{std::move(models)},
       m_viewModels{std::move(viewModels)}, m_viewSprites{std::move(viewSprites)},
-      particleRenderer{std::move(particles)}, overlayRenderer{std::move(overlay)} {}
+      particleRenderer{std::move(particles)}, bloodRenderer{std::move(blood)},
+      overlayRenderer{std::move(overlay)} {}
 
 auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, const Level& level,
                    const SceneShaders& shaders, nx::rhi::Format format, nx::rhi::Format effectsFormat,
@@ -123,6 +134,11 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
             }
         }
     }
+    auto blood = nx::render::BloodRenderer::create(
+        device, {.shaderCode = shaders.blood, .colorFormat = format, .encoding = encoding});
+    if (!blood) {
+        return nx::fail(SceneError::CreateFailed, "the blood", std::move(blood.error()));
+    }
     auto overlay = nx::render::OverlayRenderer::create(
         device, {.shaderCode = shaders.overlay, .colorFormat = format, .encoding = encoding});
     if (!overlay) {
@@ -165,8 +181,10 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
                 std::move(*sprites),    std::move(*spriteModels),
                 std::move(*studio),     std::move(*models),
                 std::move(*viewModels), std::move(*viewSprites),
-                std::move(*particles),  std::move(*overlay)};
+                std::move(*particles),  std::move(*blood),
+                std::move(*overlay)};
     scene.m_look = look;
+    scene.lightCurve = nx::render::lightGammaTable(gamma);
     scene.m_playerModels = std::move(*playerModels);
     auto bloodModels = level.bloodSprites().load(scene.m_sprites, commands, 0);
     if (!bloodModels) {
@@ -302,6 +320,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
         return nx::fail(SceneError::DrawFailed, "the particles", std::move(prepared.error()));
     }
     particleRenderer.drawPrepared(list);
+    // The enhanced look's blood, over everything blended too.
+    if (auto drawn = bloodRenderer.draw(list, {.camera = view.camera,
+                                               .aspect = view.aspect,
+                                               .drops = view.blood,
+                                               .streakTime = level.blood().enhancedLook.streakTime,
+                                               .fog = view.fog});
+        !drawn) {
+        return nx::fail(SceneError::DrawFailed, "the blood", std::move(drawn.error()));
+    }
     if (auto drawn = overlayRenderer.draw(list, {.camera = view.camera,
                                                  .aspect = view.aspect,
                                                  .isMeshShown = view.overlay.isMeshShown,
@@ -374,6 +401,15 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
 
 void Scene::drawEffects(nx::rhi::CommandList& list) const {
     nx::render::drawInOrder(list, m_viewSprites);
+}
+
+auto Scene::bloodLightAt(const Level& level, nx::Vec3 position,
+                         const nx::render::LightStyleValues& styles) const -> float {
+    const nx::render::ModelLight light =
+        m_light.modelLightAt({.origin = position, .sky = level.skyLight()}, styles);
+    const float summed = std::min(light.ambient + (light.shade * kFlatShadeShare), kMostModelLight);
+    const auto index = std::min(static_cast<std::size_t>(summed * kLightCurveSteps), lightCurve.size() - 1);
+    return static_cast<float>(lightCurve[index]) / kLightCurveTop;
 }
 
 auto Scene::keepOverlay(nx::rhi::CommandList& commands, const nx::render::OverlayMesh& mesh)

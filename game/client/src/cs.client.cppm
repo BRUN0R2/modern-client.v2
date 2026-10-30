@@ -31,6 +31,7 @@ export import :effectSprites;
 export import :muzzleFlash;
 export import :tempEntities;
 export import :particles;
+export import :bloodEffects;
 export import :levelDecals;
 export import :bulletMarks;
 export import :level;

@@ -601,6 +601,23 @@ of what a hit dealt it once its hit group took its share (`nx::game::Harm::dealt
 limits what it takes), it sprays and leaves its marks behind it as a player does, in its own color,
 without a head's stream, which is a player's (`BloodSplat`); a hit that dealt nothing sheds nothing
 (`TraceBleed`).
+
+The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
+`data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
+spray, drops and head's stream, which the legacy look keeps. Where the hit met the body it bursts by
+its part of the body: elsewhere than the head, 1.5 droplets for each of the spray's size, 0.2 to 0.6
+units across, flying off the way the hit went at 40 to 180 units a second, a fifth of them back the
+way it came, each turned off that way by up to half its speed and up to 40 faster upward, and 2 mists
+of 2 to 4 units, growing 14 a second, half opaque, gone in a third of a second; in the head it bursts
+more, 3 droplets for each of its size, faster and larger, with 4 larger mists, then gushes the way the
+hit went for 0.75 seconds, 5 pulses of 8 droplets, each 0.8 as fast as the one before. A droplet is drawn
+along a thirtieth of a second of its flight, falls at the world's gravity, losing 0.8 of its speed a
+second, and goes after 2 seconds unless the world stops it first, where half of them leave a splat flat
+on what they met, 2 to 3.5 times their radius, lying 15 seconds and fading out over the last 4. At most
+1024 droplets fly at once, none made past them, and 256 splats lie, a new one taking the oldest's place.
+Each is of its spray's palette entry's color, lit once, as it is made, by the light where the hit met
+the body, as a flat-shaded model is lit there (`cs::Scene::bloodLightAt`: its ambient light and 0.8 of
+its shade, through the light curve). A gush stays where the hit met the body as the body moves on.
 A client shows it as Xash3D-FWGS's `R_BloodStream` does (GPL, consulted; `cs.client:particles`,
 `streamLook`), its particles of the entries 0 to 9 after the server's: a stream of 100 from where the
 hit met the head, the way of each dipped by 0.05 less 0.005 for each before it, the first at the
