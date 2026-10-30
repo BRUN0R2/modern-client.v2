@@ -22,6 +22,7 @@ nxAddModuleLibrary(nxRender
         src/studio.cppm
         src/sprite.cppm
         src/particle.cppm
+        src/blood.cppm
         src/overlay.cppm
         src/screen.cppm
         src/post.cppm
@@ -40,6 +41,7 @@ nxAddModuleLibrary(nxRender
         src/studio.cpp
         src/sprite.cpp
         src/particle.cpp
+        src/blood.cpp
         src/overlay.cpp
         src/screen.cpp
         src/post.cpp
