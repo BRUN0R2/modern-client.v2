@@ -23,6 +23,7 @@
 // the bloom spreads.
 
 import colorEncoding;
+import fog;
 import numbers;
 import skyDirection;
 
@@ -37,6 +38,8 @@ struct Frame
     // x: the last mip level of the environment, the roughest; y: 1 when it is the map's sky, 0 for none;
     // z: the last mip level of the probes.
     float4 environment;
+    // The fog the models are seen through, but for what they add (fog.slang).
+    Fog fog;
     // How the colors reach the target: kDisplayEncoding or kLinearEncoding.
     uint colorEncoding;
     // How the models are shaded: kLegacyLook or kEnhancedLook.
@@ -299,18 +302,17 @@ float4 shadeLegacy(VertexOutput input)
 }
 
 // Opaque and additive meshes: the texture times the light, its alpha times how opaque the model is.
-[shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+// `color`, a fragment's, seen through the frame's fog.
+float4 foggedFragmentOf(float4 color, VertexOutput input)
 {
-    return shadeLegacy(input);
+    return float4(foggedOf(color.rgb, frame.fog, input.worldPosition), color.a);
 }
 
 // The original's alpha test of masked meshes: what has an alpha above it is drawn.
 static const float kMaskedAlphaTest = 0.5;
 
 // Masked meshes: cut where the texture is transparent.
-[shader("fragment")]
-float4 maskedFragmentMain(VertexOutput input) : SV_Target
+float4 maskedLegacy(VertexOutput input)
 {
     const float4 color = shadeLegacy(input);
     if (color.a <= kMaskedAlphaTest)
@@ -318,6 +320,31 @@ float4 maskedFragmentMain(VertexOutput input) : SV_Target
         discard;
     }
     return color;
+}
+
+[shader("fragment")]
+float4 fragmentMain(VertexOutput input) : SV_Target
+{
+    return foggedFragmentOf(shadeLegacy(input), input);
+}
+
+[shader("fragment")]
+float4 maskedFragmentMain(VertexOutput input) : SV_Target
+{
+    return foggedFragmentOf(maskedLegacy(input), input);
+}
+
+// What is added (an added model's, an additive mesh's), through no fog.
+[shader("fragment")]
+float4 addedFragmentMain(VertexOutput input) : SV_Target
+{
+    return shadeLegacy(input);
+}
+
+[shader("fragment")]
+float4 addedMaskedFragmentMain(VertexOutput input) : SV_Target
+{
+    return maskedLegacy(input);
 }
 
 // --- The enhanced look -------------------------------------------------------------------------
@@ -554,14 +581,7 @@ float4 shadeEnhanced(VertexOutput input, float4 texel)
     return outputOf(color, opacity);
 }
 
-[shader("fragment")]
-float4 enhancedFragmentMain(VertexOutput input) : SV_Target
-{
-    return shadeEnhanced(input, albedo.Sample(albedoSampler, input.uv));
-}
-
-[shader("fragment")]
-float4 enhancedMaskedFragmentMain(VertexOutput input) : SV_Target
+float4 maskedEnhanced(VertexOutput input)
 {
     const float4 texel = albedo.Sample(albedoSampler, input.uv);
     if (texel.a * input.light.a <= kMaskedAlphaTest)
@@ -569,4 +589,29 @@ float4 enhancedMaskedFragmentMain(VertexOutput input) : SV_Target
         discard;
     }
     return shadeEnhanced(input, texel);
+}
+
+[shader("fragment")]
+float4 enhancedFragmentMain(VertexOutput input) : SV_Target
+{
+    return foggedFragmentOf(shadeEnhanced(input, albedo.Sample(albedoSampler, input.uv)), input);
+}
+
+[shader("fragment")]
+float4 enhancedMaskedFragmentMain(VertexOutput input) : SV_Target
+{
+    return foggedFragmentOf(maskedEnhanced(input), input);
+}
+
+// What is added, through no fog.
+[shader("fragment")]
+float4 enhancedAddedFragmentMain(VertexOutput input) : SV_Target
+{
+    return shadeEnhanced(input, albedo.Sample(albedoSampler, input.uv));
+}
+
+[shader("fragment")]
+float4 enhancedAddedMaskedFragmentMain(VertexOutput input) : SV_Target
+{
+    return maskedEnhanced(input);
 }

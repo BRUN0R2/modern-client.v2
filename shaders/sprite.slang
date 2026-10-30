@@ -8,13 +8,19 @@
 // was, its light multiplying what is there.
 // Drawn as linear light (colorEncoding.slang), the images are sampled from sRGB as light, and the
 // entity's color and the light as display colors made light too; how opaque, as it is.
+// Each fragment is seen through the frame's fog (fog.slang), the light of a lit sprite as well, as the
+// original's fog mixes every fragment's color before it is blended; but for those added (kRenderGlow,
+// kRenderTransAdd), which its fog leaves as they are.
 
 import colorEncoding;
+import fog;
 
 struct Frame
 {
     // The rows of the view-projection matrix: clip = (dot(row0, p), dot(row1, p), ...).
     float4 rows[4];
+    // The fog the sprites are seen through.
+    Fog fog;
     // How the colors reach the target: kDisplayEncoding or kLinearEncoding.
     uint colorEncoding;
 };
@@ -46,6 +52,8 @@ struct VertexOutput
     float4 color : COLOR0;
     nointerpolation float alphaTest : TEXCOORD1;
     nointerpolation float brightness : TEXCOORD2;
+    // In the world, where the fog is measured from.
+    float3 worldPosition : TEXCOORD3;
 };
 
 [shader("vertex")]
@@ -59,12 +67,12 @@ VertexOutput vertexMain(VertexInput input)
     output.color = input.color;
     output.alphaTest = input.alphaTest;
     output.brightness = input.brightness;
+    output.worldPosition = input.position;
     return output;
 }
 
 // The image times the color and the brightness, cut by the alpha test.
-[shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+float4 colorOf(VertexOutput input)
 {
     const float4 texel = image.Sample(imageSampler, input.uv);
     const float3 light = encodedOf(input.color.rgb, frame.colorEncoding) * input.brightness;
@@ -76,9 +84,24 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     return color;
 }
 
+[shader("fragment")]
+float4 fragmentMain(VertexOutput input) : SV_Target
+{
+    const float4 color = colorOf(input);
+    return float4(foggedOf(color.rgb, frame.fog, input.worldPosition), color.a);
+}
+
+// An added sprite's, through no fog.
+[shader("fragment")]
+float4 addedFragmentMain(VertexOutput input) : SV_Target
+{
+    return colorOf(input);
+}
+
 // The light of a lit sprite, which the blend multiplies what is there by.
 [shader("fragment")]
 float4 lightFragmentMain(VertexOutput input) : SV_Target
 {
-    return float4(encodedOf(input.color.rgb, frame.colorEncoding), input.color.a);
+    return float4(foggedOf(encodedOf(input.color.rgb, frame.colorEncoding), frame.fog, input.worldPosition),
+                  input.color.a);
 }

@@ -321,6 +321,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] The view model's client events, and the muzzle flashes they show (`cs.client:muzzleFlash`, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning))
 - [x] Muzzle flashes styled by their events and their weapon's data: the original's numbers, Counter-Strike Online's keys (animated sprites of v3), a weapon's `view.muzzleFlash` over them, its brightness, added as the original adds them (the enhanced look's layer of effects), and its light on the weapon in hand in the enhanced look ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml))
 - [ ] The dynamic lights of studio models (*elights*, *dlights*), the muzzle flash's among them; the shells the guns eject
+- [x] Fog in every renderer of the scene ([05 §10](05-rendering.md#10-effects); `nx.render:fog`, `shaders/fog.slang`): the original's `GL_LINEAR`, `GL_EXP` and `GL_EXP2` with a start, an end and an opacity, what is added through none, along the view in the legacy look and from the eye in the enhanced one; coming in from as far as it reaches, going back out and changing color over time (`FogTransition`), as `next`'s `fog_*` cvars ask
+- [ ] The fog of a map and of its water: `env_fog` (its `rendercolor` and `density`, the game's `Fog` message as the player joins), the fog under water of the water texture's colors, and a map's or a mod's environment in data (a dark fog for a zombie match), each through the client's `FogTransition`
 - [x] A frame of a map to a file without a window (`nxview --screenshot`, placed with `--position` and `--angles`, at `--time`), as the client draws it; `next` plays the maps
 - [ ] Model viewer
 - [ ] Reference images in CI (lavapipe)

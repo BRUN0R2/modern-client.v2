@@ -11,6 +11,7 @@ nxAddModuleLibrary(nxRender
         src/camera.cppm
         src/gamma.cppm
         src/lightStyle.cppm
+        src/fog.cppm
         src/renderMode.cppm
         src/blendedOrder.cppm
         src/surface.cppm
@@ -29,6 +30,7 @@ nxAddModuleLibrary(nxRender
         src/camera.cpp
         src/gamma.cpp
         src/lightStyle.cpp
+        src/fog.cpp
         src/blendedOrder.cpp
         src/surface.cpp
         src/upload.cpp

@@ -190,7 +190,8 @@ public:
 
     /// The pixels of `instances` seen by `camera` at `time`, the box's style 0 at 'm'.
     [[nodiscard]] auto draw(OffscreenTarget& target, const nx::render::Camera& camera,
-                            std::span<const SpriteInstance> instances, nx::Seconds time = nx::Seconds{0.0F})
+                            std::span<const SpriteInstance> instances, nx::Seconds time = nx::Seconds{0.0F},
+                            const std::optional<nx::render::Fog>& fog = std::nullopt)
         -> std::vector<std::byte> {
         nx::render::LightStyles styles;
         styles.set(0, "m");
@@ -200,7 +201,8 @@ public:
                                                  .aspect = 1.0F,
                                                  .time = time,
                                                  .lightStyles = styles.valuesAt(nx::Seconds{0.0F}),
-                                                 .instances = instances},
+                                                 .instances = instances,
+                                                 .fog = fog},
                                                 m_light);
             EXPECT_TRUE(drawn.has_value()) << (drawn ? "" : nx::describe(drawn.error()));
         });
@@ -283,6 +285,44 @@ TEST(SpriteRendererTest, AnAddedSpriteAddsItsImageTimesItsColorAndAmount) {
     expectNear(pixelAt(scene.draw(target, cameraAt({}), added), kMiddle, kMiddle),
                {scaled(gamma[200], amount), scaled(gamma[100], 128.0F / 255.0F * amount), 0},
                "texgamma'd, times its color and its amount, added to black");
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(SpriteRendererTest, ASpriteIsSeenThroughTheFogButOneAddedIsNot) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    Scene scene{**device};
+    ASSERT_TRUE(scene.isReady());
+    OffscreenTarget target{**device};
+    const std::array images{imageOf(kFirst, kFirst)};
+    // 20 units ahead along the view, a GL_EXP2 fog hiding half of it: (density 20)^2 = ln 2.
+    constexpr float kAhead = 20.0F;
+    const nx::render::Fog blue{.color = {.blue = 1.0F},
+                               .curve = nx::render::FogCurve::ExponentialSquared,
+                               .density = std::sqrt(std::numbers::ln2_v<float>) / kAhead};
+    const std::array solid{SpriteInstance{.model = scene.load(spriteFile(kParallel, kNormal, images)),
+                                          .origin = {.x = kAhead},
+                                          .mode = RenderMode::Normal}};
+    const Pixel seen = pixelAt(scene.draw(target, cameraAt({}), solid), kMiddle, kMiddle);
+    const Pixel fogged =
+        pixelAt(scene.draw(target, cameraAt({}), solid, nx::Seconds{0.0F}, blue), kMiddle, kMiddle);
+    constexpr std::array kFogColor{0.0, 0.0, 255.0};
+    for (std::size_t channel = 0; channel < kFogColor.size(); ++channel) {
+        EXPECT_NEAR(fogged[channel], std::lerp(static_cast<double>(seen[channel]), kFogColor[channel], 0.5),
+                    2.0)
+            << "half hidden, channel " << channel;
+    }
+    const std::array added{SpriteInstance{.model = scene.load(spriteFile(kParallel, kAdditive, images)),
+                                          .origin = {.x = kAhead},
+                                          .mode = RenderMode::TransAdd,
+                                          .amount = 255}};
+    EXPECT_EQ(scene.draw(target, cameraAt({}), added, nx::Seconds{0.0F}, blue),
+              scene.draw(target, cameraAt({}), added))
+        << "what is added, through no fog";
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

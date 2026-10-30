@@ -30,6 +30,7 @@ import nx.math;
 import nx.rhi;
 import nx.assets;
 import :camera;
+import :fog;
 import :gamma;
 import :world;
 import :light;
@@ -282,6 +283,8 @@ struct StudioFrame {
     Camera camera{};
     float aspect = 1.0F; ///< Of the target: width over height.
     std::span<const StudioInstance> instances{};
+    /// The fog the models are seen through, but for what they add; none, clear (nx.render:fog).
+    std::optional<Fog> fog{};
 };
 
 /// What draws studio models: their shader, pipelines and samplers, the original's light curve, and

@@ -531,6 +531,8 @@ private:
     std::optional<nx::settings::ClientCvars> m_cvars;
     std::optional<cs::PlayerInput> m_input;
     std::optional<cs::HudCvars> m_hudCvars;
+    std::optional<cs::FogCvars> m_fogCvars;
+    cs::FogControl m_fog; ///< The fog the frames show, as the fog's cvars ask for it.
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
@@ -698,6 +700,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(hudCvars.error()));
     }
     m_hudCvars = std::move(*hudCvars);
+    auto fogCvars = cs::FogCvars::registerIn(m_console);
+    if (!fogCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(fogCvars.error()));
+    }
+    m_fogCvars = std::move(*fogCvars);
     auto gameCvars = cs::GameCvars::registerIn(m_console);
     if (!gameCvars) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
@@ -1187,6 +1194,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
         updateWeapons();
         const nx::Seconds elapsed = m_frameClock.restart();
         m_input->turn(m_camera.angles, elapsed);
+        m_fog.update(*m_fogCvars, elapsed);
         // A session plays once its scene is made, from the frame after the first image of it: what the
         // player hears of it, they see.
         if (m_session && m_scene) {
@@ -1559,7 +1567,8 @@ auto Client::sessionView() -> cs::SceneView {
             .streaks = m_session->particles.shownStreaks(),
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand(),
-            .overlay = navigationOverlay()};
+            .overlay = navigationOverlay(),
+            .fog = m_fog.shown()};
 }
 
 auto Client::navigationOverlay() -> cs::SceneOverlay {

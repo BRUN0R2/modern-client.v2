@@ -38,6 +38,7 @@ export import :scene;
 export import :frame;
 export import :clientGame;
 export import :hud;
+export import :fogCvars;
 export import :windowFonts;
 export import :console;
 export import :fpsLabel;

@@ -757,6 +757,116 @@ TEST(BspWorldTest, DrawnAsLinearLightAFaceIsItsTextureTimesItsLightAsLight) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+/// Draws `world` as `camera` sees it through `fog`, with the styles as the map starts, on `target`.
+[[nodiscard]] auto drawThrough(OffscreenTarget& target, nx::render::BspWorld& world,
+                               const nx::render::Camera& camera, const std::optional<nx::render::Fog>& fog)
+    -> std::vector<std::byte> {
+    return target.draw([&](nx::rhi::CommandList& list) {
+        world.draw(list, {.camera = camera, .aspect = 1.0F, .lightStyles = normalStyles(), .fog = fog});
+    });
+}
+
+/// The density of a GL_EXP2 fog that hides half of a color `distance` away: (density d)^2 = ln 2.
+[[nodiscard]] auto halfHiddenAt(float distance) -> float {
+    return std::sqrt(std::numbers::ln2_v<float>) / distance;
+}
+
+TEST(BspWorldTest, AFaceIsSeenThroughTheFogByHowFarItIsAlongTheView) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const auto shader = worldShader();
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    OffscreenTarget target{**device};
+    // The wall 32 units ahead, square to the view: every pixel of it 32 along the view.
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    constexpr float kWall = 32.0F;
+    const nx::render::Fog red{.color = {.red = 1.0F},
+                              .curve = nx::render::FogCurve::ExponentialSquared,
+                              .density = halfHiddenAt(kWall)};
+    const auto clear = drawThrough(target, *world, camera, std::nullopt);
+    const auto fogged = drawThrough(target, *world, camera, red);
+    nx::render::Fog beyond = red;
+    beyond.start = nx::HammerUnits{kWall + 8.0F};
+    const auto nearer = drawThrough(target, *world, camera, beyond);
+    const nx::render::Fog ended{.color = {.red = 1.0F},
+                                .curve = nx::render::FogCurve::Linear,
+                                .end = nx::HammerUnits{kWall / 2.0F},
+                                .opacity = 0.25F};
+    const auto past = drawThrough(target, *world, camera, ended);
+    constexpr std::array kSampleCoordinates{8U, 16U, 24U};
+    constexpr std::array kFogColor{255.0, 0.0, 0.0};
+    for (const auto y : kSampleCoordinates) {
+        for (const auto x : kSampleCoordinates) {
+            const Pixel seen = pixelAt(clear, x, y);
+            for (std::size_t channel = 0; channel < kFogColor.size(); ++channel) {
+                EXPECT_NEAR(pixelAt(fogged, x, y)[channel],
+                            std::lerp(static_cast<double>(seen[channel]), kFogColor[channel], 0.5), 2.0)
+                    << "half hidden: " << x << ", " << y << ", channel " << channel;
+                EXPECT_NEAR(pixelAt(past, x, y)[channel],
+                            std::lerp(static_cast<double>(seen[channel]), kFogColor[channel], 0.25), 2.0)
+                    << "past its end, as much as its opacity: " << x << ", " << y << ", channel " << channel;
+            }
+        }
+    }
+    EXPECT_EQ(nearer, clear) << "nearer than its start, nothing hidden";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(BspWorldTest, DrawnAsLinearLightTheFogIsMeasuredFromTheEye) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const auto shader = worldShader();
+    auto legacy =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    auto linear = createWorld(**device, {.map = *map,
+                                         .shaderCode = shader,
+                                         .colorFormat = Format::Rgba8Unorm,
+                                         .encoding = nx::render::ColorEncoding::Linear});
+    ASSERT_TRUE(legacy.has_value()) << nx::describe(legacy.error());
+    ASSERT_TRUE(linear.has_value()) << nx::describe(linear.error());
+    OffscreenTarget target{**device};
+    const nx::render::Camera camera{.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}};
+    // A white fog from the wall on: along the view, the whole wall is at its start.
+    const nx::render::Fog white{.color = {.red = 1.0F, .green = 1.0F, .blue = 1.0F},
+                                .curve = nx::render::FogCurve::Linear,
+                                .start = nx::HammerUnits{32.0F},
+                                .end = nx::HammerUnits{64.0F}};
+    constexpr std::uint32_t kCorner = 0;
+    constexpr std::uint32_t kCenter = nx::test::kTargetExtent.width / 2;
+    const auto legacyClear = drawThrough(target, *legacy, camera, std::nullopt);
+    const auto legacyFogged = drawThrough(target, *legacy, camera, white);
+    EXPECT_EQ(pixelAt(legacyFogged, kCorner, kCorner), pixelAt(legacyClear, kCorner, kCorner))
+        << "the legacy look: along the view, the corner as near as the middle";
+    const auto linearClear = drawThrough(target, *linear, camera, std::nullopt);
+    const auto linearFogged = drawThrough(target, *linear, camera, white);
+    const Pixel middle = pixelAt(linearFogged, kCenter, kCenter);
+    const Pixel middleClear = pixelAt(linearClear, kCenter, kCenter);
+    const Pixel corner = pixelAt(linearFogged, kCorner, kCorner);
+    const Pixel cornerClear = pixelAt(linearClear, kCorner, kCorner);
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+        EXPECT_NEAR(middle[channel], middleClear[channel], 2) << "straight ahead, at its start";
+        EXPECT_GT(corner[channel], cornerClear[channel] + ((255 - cornerClear[channel]) / 4))
+            << "the corner farther from the eye, a quarter whiter at least";
+    }
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 TEST(BspWorldTest, DrawnAsLinearLightTheSkyIsFilteredAsLight) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});

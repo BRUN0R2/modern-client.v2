@@ -71,6 +71,8 @@ struct SceneView {
     std::span<const PassedEvent> clientEvents{};
     Hand hand = Hand::Right; ///< The player's, which it holds its weapons in (cl_righthand).
     SceneOverlay overlay{};  ///< Drawn after the particles, before the weapon in hand.
+    /// The fog everything is seen through, but for what is added; none, clear (nx.render:fog).
+    std::optional<nx::render::Fog> fog{};
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.

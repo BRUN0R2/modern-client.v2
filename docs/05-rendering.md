@@ -654,6 +654,7 @@ same model become one draw call per submesh.
 | Decals | Decal atlas from `decals.wad` and player sprays. No fixed ceiling (configurable per-map budget and LRU recycling). Today: the world's decals, in the original's pool of 4096 at most (§8) |
 | Dynamic lights | *dlights* and *elights* without a fixed ceiling, with a per-frame budget |
 | Grenade smoke | Visual parity with the original (smoke sprites), with configurable density |
+| Fog | The original's OpenGL fog (`GL_LINEAR`, `GL_EXP`, `GL_EXP2`), with the nearest distance it hides anything at, the farthest it thickens to and the most of a color it hides; it comes in, goes out and changes color over time |
 
 **Today** (`nx.render:sprite`, `shaders/sprite.slang`): sprites drawn as the original's
 `R_DrawSpriteModel` draws them, as Xash3D-FWGS reconstructs it. Each image of a sprite is a texture
@@ -702,6 +703,32 @@ image of the engine's dot sprite (`sprites/dot.spr`, through `texgamma`, read wi
 and 0.8 of it along it, of its color, added to what is there as much as it is opaque; one behind the
 view, or seen end on, is not drawn, nor any while the sprite is missing. The view's own model is drawn
 after them.
+
+**Today** (`nx.render:fog`, `shaders/fog.slang`): fog as the original's OpenGL fog draws it, every
+renderer of the scene mixing the color of each fragment toward the fog's by how much the fog hides
+there (`fogAmountAt`): its curve, `GL_LINEAR` from none at its start to all of it at its end, `GL_EXP`
+1 - e^-(density d) (the original's under water) or `GL_EXP2` 1 - e^-(density d)^2 (a map's
+`env_fog`), at the distance d past its start, held from its end on, times its opacity. With its start
+at 0, no end and an opacity of 1, it is the original's. The world's faces, its sky (`fogSkybox`), its
+decals and its blended brush entities, studio models, sprites (the light of a lit one too, as the
+original's fog mixes every fragment before it is blended) and particles are seen through it; what is
+added (`kRenderGlow`, `kRenderTransAdd`, a model's additive meshes, streaks) is not, as the original
+turns its fog off for them (`GL_SetRenderMode`). A decal drawn as linear light keeps its two colors'
+blend exact through the fog: what it adds is (1 - f) times its own plus f F for what of the fog's
+color F it does not keep. The legacy look measures how far a fragment is along the view, as the
+original's fog does on the common cards; the enhanced look its distance from the eye, so that the fog
+stays where it is as the view turns. Each renderer's frame carries the fog (`FogBlock`: its color as
+the target takes it, its curve, density, start and end, the eye and the view's forward).
+
+A fog comes and goes over time (`FogTransition`), never at once: turned on, it comes in from as far as
+it reaches (where it is 0.99 of as thick as it gets, or its end) to its start, from hiding nothing to its
+opacity; turned off, it goes back out and is gone; changed while it shows, its color, density, opacity,
+start and end go to the other's, from what shows, slowly first and last. `next` shows the fog its
+console asks for (`cs.client:fogCvars`): `fog_enable`, `fog_color` (red, green and blue, from 0 to
+255), `fog_curve` (`linear`, `exp`, `exp2`), `fog_density`, `fog_start`, `fog_end` (0 for no end),
+`fog_opacity` and `fog_fade`, the seconds a change takes; none archived, being a map's or a mod's. A
+fog they make none of (an end not past the start, a linear one without end) is refused with a warning,
+and the one shown stays. A map's `env_fog` and the fog under water are still to come (TODO.md).
 
 ## 11. Visual fidelity
 

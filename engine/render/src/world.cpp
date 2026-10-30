@@ -101,13 +101,14 @@ static_assert(sizeof(EntityUniform) <= kEntityUniformStride);
 
 /// The frame's uniform: the rows of the view-projection matrix; in `lighting`, the original's
 /// lightscale, the size of the lightmaps and the time; the camera's position; the light styles'
-/// brightness.
+/// brightness; the fog.
 struct FrameUniform {
     Mat4 viewProjection{};
     Vec4 lighting{};
     Vec4 eye{};
     std::array<float, kLightStyleCount> styles{}; ///< Four to a float4 in the shader.
-    std::uint32_t colorEncoding = 0;              ///< ColorEncoding's.
+    FogBlock fog{};
+    std::uint32_t colorEncoding = 0; ///< ColorEncoding's.
 };
 
 /// The sky of a world without one: the original's stand-in, gray.
@@ -1029,6 +1030,7 @@ void BspWorld::prepare(const WorldFrame& view) {
     FrameUniform frame{.viewProjection = viewProjectionMatrix(view.camera, view.aspect),
                        .lighting = m_lighting,
                        .eye = extend(view.camera.position, 1.0F),
+                       .fog = fogBlockOf(view.fog, view.camera, m_encoding),
                        .colorEncoding = std::to_underlying(m_encoding)};
     std::ranges::transform(view.lightStyles, frame.styles.begin(),
                            [](std::uint16_t value) { return static_cast<float>(value); });

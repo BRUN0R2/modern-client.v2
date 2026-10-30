@@ -21,6 +21,7 @@ import nx.math;
 import nx.rhi;
 import nx.assets;
 import :camera;
+import :fog;
 import :gamma;
 import :light;
 import :lightStyle;
@@ -154,6 +155,9 @@ struct SpriteDraw {
     /// Where their depths lie: the world's, or with the view's own model, what it shows (its muzzle
     /// flashes), drawn after it.
     DepthLayer depth = DepthLayer::World;
+    /// The fog the sprites are seen through, but for those added (kRenderGlow, kRenderTransAdd); none,
+    /// clear (nx.render:fog).
+    std::optional<Fog> fog{};
 };
 
 /// What draws sprites: their shader, pipelines and sampler, and what each frame in flight writes.

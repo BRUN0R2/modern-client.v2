@@ -17,6 +17,7 @@ import nx.math;
 import nx.rhi;
 import nx.assets;
 import :camera;
+import :fog;
 import :gamma;
 import :renderMode;
 
@@ -75,6 +76,9 @@ struct ParticleDraw {
     float aspect = 1.0F; ///< Of the target: width over height.
     std::span<const ParticleInstance> particles{};
     std::span<const StreakInstance> streaks{};
+    /// The fog the particles are seen through, the streaks added through none; none, clear
+    /// (nx.render:fog).
+    std::optional<Fog> fog{};
 };
 
 /// What draws particles: their shader, pipeline, dot texture, and what each frame in flight writes.
