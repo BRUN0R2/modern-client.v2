@@ -172,6 +172,65 @@ TEST(CorridorTest, ItSteersAsItWantsWithNothingInTheWayAndAroundABodyStandingInI
         << "the same for the same inputs";
 }
 
+/// A floor with a box 120 tall on it, which the player drops from unhurt.
+[[nodiscard]] auto boxOnAFloor() -> Geometry {
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 384.0F, .y = 128.0F, .z = -16.0F},
+                     {.x = 640.0F, .y = 384.0F, .z = 120.0F});
+    return geometry;
+}
+
+TEST(CorridorTest, ItCrossesALinkFromItsStartAndGoesOnFromItsEnd) {
+    const NavigationMesh mesh = nx::test::playerMesh(boxOnAFloor());
+    NavigationQuery query{mesh};
+    const Vec3 to{.x = 900.0F, .y = 256.0F};
+    auto corridor = Corridor::plan(query, {.from = {.x = 512.0F, .y = 256.0F, .z = 120.0F}, .to = to});
+    ASSERT_TRUE(corridor.has_value()) << nx::describe(corridor.error());
+    const std::size_t polygonsAtStart = corridor->polygonCount();
+    const auto next = corridor->nextLink(query);
+    ASSERT_TRUE(next.has_value()) << "off the box";
+    EXPECT_EQ(next->kind, nx::navigation::AreaKind::Drop);
+    EXPECT_GT(next->start.z, next->end.z);
+    const std::vector<Vec3> corners = corridor->corners(query, 4);
+    ASSERT_FALSE(corners.empty());
+    EXPECT_LT(nx::distance(corners.back(), next->start), kTolerance) << "the corners stop at the link";
+    EXPECT_EQ(corridor->nextLink(query), next) << "until it crosses it";
+
+    const auto crossed = corridor->crossLink(query);
+    ASSERT_TRUE(crossed.has_value());
+    EXPECT_EQ(crossed, next);
+    EXPECT_EQ(corridor->position(), crossed->end);
+    EXPECT_LT(corridor->polygonCount(), polygonsAtStart);
+    EXPECT_FALSE(corridor->nextLink(query).has_value()) << "on along the floor";
+    EXPECT_FALSE(corridor->crossLink(query).has_value());
+    const std::vector<Vec3> onFloor = corridor->corners(query, 4);
+    ASSERT_FALSE(onFloor.empty());
+    EXPECT_EQ(onFloor.back(), corridor->target());
+}
+
+TEST(CorridorTest, ItSteersOffTheLedgeItsNextLinkLeavesFromAsItWants) {
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr float kApproach = 24.0F;
+    const NavigationMesh mesh = nx::test::playerMesh(boxOnAFloor());
+    NavigationQuery query{mesh};
+    auto corridor = Corridor::plan(
+        query, {.from = {.x = 560.0F, .y = 256.0F, .z = 120.0F}, .to = {.x = 900.0F, .y = 256.0F}});
+    ASSERT_TRUE(corridor.has_value()) << nx::describe(corridor.error());
+    const auto next = corridor->nextLink(query);
+    ASSERT_TRUE(next.has_value());
+    const Vec3 fromStart = corridor->position() - next->start;
+    const Vec3 across = Vec3{.x = fromStart.x, .y = fromStart.y} /
+                        nx::test::distanceAcross(corridor->position(), next->start);
+    const Vec3 near = corridor->moveAgent(query, next->start + (across * kApproach));
+    ASSERT_NEAR(nx::test::distanceAcross(near, next->start), kApproach, kTolerance);
+    const Vec3 desired = -across * kSpeed.value();
+    const Vec3 steered =
+        corridor->steer(query, {.velocity = desired, .desired = desired, .maxSpeed = kSpeed});
+    EXPECT_GT(nx::dot(steered, desired) / kSpeed.value(), 0.9F * kSpeed.value())
+        << "the ledge it drops from is no wall to it";
+}
+
 TEST(CorridorTest, NoCorridorJoinsAPointOffTheMesh) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

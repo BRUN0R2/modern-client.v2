@@ -33,9 +33,9 @@ struct MeshKey {
 };
 
 /// The key of the mesh of `geometry` for `profile` by `settings`: of the geometry's vertices and triangles,
-/// of what of the profile shapes the tiles (its size, step and steepest floor, not its name or its costs,
-/// which only queries weigh) and of every setting, and of the version of the build and of Detour's tiles,
-/// which change with what they make.
+/// of what of the profile shapes the tiles (its size, step, jump, drop and steepest floor, not its name or
+/// its costs, which only queries weigh) and of every setting, and of the version of the build and of
+/// Detour's tiles, which change with what they make.
 [[nodiscard]] auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile,
                              const BuildSettings& settings) -> MeshKey;
 
@@ -90,10 +90,22 @@ struct MeshPolygon {
     [[nodiscard]] inline auto operator==(const MeshPolygon&) const noexcept -> bool = default;
 };
 
-/// What a mesh is made of, to be drawn: each polygon's corners in the game's space, in order around it.
+/// A link of a mesh between a ledge and the floor below (AreaKind::Jump, AreaKind::Drop): where a body
+/// leaves the ledge, where it lands, and its kind, of which Jump goes both ways.
+struct MeshLink {
+    Vec3 start{};
+    Vec3 end{};
+    AreaKind kind = AreaKind::Drop;
+
+    [[nodiscard]] inline auto operator==(const MeshLink&) const noexcept -> bool = default;
+};
+
+/// What a mesh is made of, to be drawn: each polygon's corners in the game's space, in order around it,
+/// and its links joined to the floor at both ends, their ends on the polygons they join.
 struct MeshOutline {
     std::vector<Vec3> corners{};
     std::vector<MeshPolygon> polygons{};
+    std::vector<MeshLink> links{};
 
     [[nodiscard]] inline auto operator==(const MeshOutline&) const -> bool = default;
 };
@@ -126,6 +138,7 @@ public:
 
     [[nodiscard]] inline auto profile() const noexcept -> const AgentProfile& { return agentProfile; }
     [[nodiscard]] auto tileCount() const noexcept -> std::size_t;
+    /// How many polygons Detour holds of it, one of them for each of its links.
     [[nodiscard]] auto polygonCount() const noexcept -> std::size_t;
     /// Its polygons, tile by tile, in the order Detour numbers them.
     [[nodiscard]] auto outline() const -> MeshOutline;
@@ -236,7 +249,8 @@ inline constexpr std::uint16_t kWalkablePolygon = 1;
 inline constexpr std::uint32_t kTileAndPolygonBits = 22;
 inline constexpr std::uint32_t kMostTileBits = 14;
 
-/// A tile Recast built: where it is in the grid, how many polygons it has, and Detour's data of it.
+/// A tile Recast built: where it is in the grid, how many polygons Detour holds of it, one of them for each
+/// of its links, and Detour's data of it.
 struct BuiltTile {
     std::int32_t x = 0;
     std::int32_t y = 0;

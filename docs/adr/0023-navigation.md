@@ -38,7 +38,13 @@ convex polygons, through Recast and Detour.
   keeping away from where it got stuck), through a query filter of ours: Detour is built with its
   filter virtual for it.
 - **Links.** Ladders, jumps, drops and teleporters are links between polygons, found in the map
-  (`func_ladder`, ledges, `trigger_teleport`) and added by plugins.
+  (`func_ladder`, ledges, `trigger_teleport`) and added by plugins. Jumps and drops are found at the
+  ledges as each tile is built: along each edge of a polygon that no other shares, one every two
+  widths of the profile, where a body walking off lands on floor within its drop height below, its
+  radius and a cell past the ledge; of the kind jump, both ways, within its jump height, else drop,
+  down only, both heights the geometry's. A brain crosses one from its start, jumping once for a
+  link up, and heads for its end without steering, as DetourCrowd moves an agent over a link; the
+  ledge its next link leaves from is no wall to its steering.
 - **What changes in a match.** Doors and breakables turn their areas and links on and off as the
   game reports them, without rebuilding; moving agents avoid each other locally (ADR-0024).
 - **Tactical layer.** Hiding spots, sniper spots, encounter spots, choke points and places (named

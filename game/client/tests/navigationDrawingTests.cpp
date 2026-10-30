@@ -66,7 +66,9 @@ TEST(NavigationDrawingTest, KeepsEachPolygonSeeThroughAndItsEdgesGlowingAboveThe
         triangles += polygon.cornerCount - 2;
     }
     EXPECT_EQ(kept.triangles.size(), triangles * 3);
-    EXPECT_EQ(kept.lines.size(), outline.corners.size() * 2) << "an edge for each corner";
+    ASSERT_FALSE(outline.links.empty()) << "off the box's top";
+    EXPECT_EQ(kept.lines.size(), (outline.corners.size() + outline.links.size()) * 2)
+        << "an edge for each corner, a line for each link";
     for (const OverlayVertex& vertex : kept.triangles) {
         EXPECT_EQ(vertex.color.alpha, kSeeThrough);
         EXPECT_EQ(vertex.brightness, 1.0F) << "see-through, no glow";

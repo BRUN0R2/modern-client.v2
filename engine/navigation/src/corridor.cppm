@@ -67,8 +67,14 @@ public:
     auto moveTarget(NavigationQuery& query, Vec3 target) -> Vec3;
 
     /// The next corners, at most `count`, the agent steers to along the corridor, the target last when it
-    /// is among them.
+    /// is among them; a link's start last when the agent reaches it first.
     [[nodiscard]] auto corners(NavigationQuery& query, std::size_t count) -> std::vector<Vec3>;
+    /// The link the agent crosses next, when the next corner it steers to is the link's start: the way it
+    /// crosses it, from that start to the end it lands on; none.
+    [[nodiscard]] auto nextLink(NavigationQuery& query) -> std::optional<MeshLink>;
+    /// Crosses the link nextLink gives: the corridor goes on from its end, the agent there. Returns that
+    /// link; none when none is next.
+    auto crossLink(NavigationQuery& query) -> std::optional<MeshLink>;
 
     /// The velocity the agent takes, near request.desired, that meets neither request.bodies, the first
     /// kMostSteeringBodies of them, nor the walls and ledges of the mesh about it within the time ahead it

@@ -446,6 +446,113 @@ TEST(AgentBrain, FacesAheadAlongItsWayAsItMoves) {
     EXPECT_FALSE(intent.jumps);
 }
 
+/// A box on a floor at 0 from `low` to `high`, which a body's feet walking a step at a time fall off
+/// at its edge, and climb onto only once it jumped.
+struct Platform {
+    nx::Vec3 low{};
+    nx::Vec3 high{};
+
+    [[nodiscard]] auto isUnder(nx::Vec3 feet) const noexcept -> bool {
+        return feet.x >= low.x && feet.x <= high.x && feet.y >= low.y && feet.y <= high.y;
+    }
+    /// Where `feet` are a step along `direction`, a body that `jumped` or not: on the box's top over it, on
+    /// the floor off it, where they were against its side.
+    [[nodiscard]] auto stepped(nx::Vec3 feet, nx::Vec3 direction, bool jumped) const noexcept -> nx::Vec3 {
+        constexpr float kStep = 3.0F;
+        nx::Vec3 next = feet + (direction * kStep);
+        const bool isOnTop = feet.z >= high.z;
+        if (!isUnder(next)) {
+            next.z = 0.0F;
+        } else if (isOnTop || jumped) {
+            next.z = high.z;
+        } else {
+            return feet;
+        }
+        return next;
+    }
+};
+
+/// The geometry of `platform` on a floor 1024 by 512.
+auto platformGeometry(const Platform& platform) -> nx::navigation::Geometry {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, platform.low, platform.high);
+    return geometry;
+}
+
+/// Where a walk ended, how many times the body jumped on its way, and whether it arrived.
+struct Walked {
+    nx::Vec3 feet{};
+    int jumps = 0;
+    bool isArrived = false;
+};
+
+/// The walk of a body of `brain` from `feet` to its goal about `platform`, a step at a time, at most
+/// `most` decisions, none of them blocked.
+auto walkAbout(const Platform& platform, nx::agents::Brain& brain, nx::navigation::NavigationQuery& query,
+               nx::Vec3 feet, int most) -> Walked {
+    Walked walked{.feet = feet};
+    for (int decision = 0; decision < most; ++decision) {
+        const nx::agents::Decision decided = brain.decide(walked.feet, query);
+        EXPECT_NE(decided.behavior, nx::agents::Behavior::Blocked) << std::format("{}", walked.feet);
+        if (decided.behavior == nx::agents::Behavior::Idle) {
+            walked.isArrived = true;
+            break;
+        }
+        walked.jumps += decided.intent.jumps ? 1 : 0;
+        walked.feet = platform.stepped(walked.feet, decided.intent.direction, walked.jumps > 0);
+    }
+    return walked;
+}
+
+TEST(AgentBrain, ABodyOnABoxItDropsFromWalksOffItAlongItsWay) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 120}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 goal{.x = 900, .y = 256};
+    brain.setGoal(goal);
+    const Walked walked = walkAbout(box, brain, query, {.x = 512, .y = 256, .z = 120}, 1000);
+    EXPECT_TRUE(walked.isArrived);
+    EXPECT_EQ(walked.feet.z, 0.0F) << "down on the floor";
+    EXPECT_LE(nx::length(walked.feet - goal), rules().arrivalDistance.value() + 3.0F);
+    EXPECT_EQ(walked.jumps, 0) << "it walks off a ledge it drops from";
+}
+
+TEST(AgentBrain, ABodyAcrossALinkSearchesNoWayUntilItLands) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 120}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 900, .y = 256});
+    nx::Vec3 feet{.x = 512, .y = 256, .z = 120};
+    for (int decision = 0; decision < 1000 && box.isUnder(feet); ++decision) {
+        feet = box.stepped(feet, brain.decide(feet, query).intent.direction, false);
+    }
+    ASSERT_FALSE(box.isUnder(feet)) << "off the box, short of where its link lands";
+    const nx::Vec3 aside{.x = 700, .y = 480}; // on the floor beside the box
+    brain.setGoal(aside);
+    const nx::Vec3 way = brain.decide(feet, query).intent.direction;
+    EXPECT_GT(way.x, std::abs(way.y)) << "on to where the link lands, not aside";
+    const Walked walked = walkAbout(box, brain, query, feet, 1000);
+    EXPECT_TRUE(walked.isArrived) << "aside once it landed";
+    EXPECT_LE(nx::length(walked.feet - aside), rules().arrivalDistance.value() + 3.0F);
+}
+
+TEST(AgentBrain, ABodyBelowABoxItJumpsOntoJumpsOnceAndWalksOnOnItsTop) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 40}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 goal{.x = 512, .y = 256, .z = 40};
+    brain.setGoal(goal);
+    const Walked walked = walkAbout(box, brain, query, {.x = 100, .y = 256}, 1000);
+    EXPECT_TRUE(walked.isArrived);
+    EXPECT_EQ(walked.feet.z, 40.0F) << "up on the box";
+    EXPECT_LE(nx::length(walked.feet - goal), rules().arrivalDistance.value() + 3.0F);
+    EXPECT_EQ(walked.jumps, 1);
+}
+
 /// Where a body got stuck, as its watch tells it: the polygons within 75 units cost twenty times their own.
 auto stuckAt(nx::Vec3 position) -> nx::navigation::AvoidedPlace {
     return {.position = position, .radius = nx::HammerUnits{75.0F}, .cost = 20.0F};
