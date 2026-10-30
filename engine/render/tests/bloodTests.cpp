@@ -209,7 +209,7 @@ TEST(BloodRendererTest, ASplatLiesFlatOnWhatItLandedOnDarkerWhereItPools) {
     const std::array wall{onTheWall};
     const std::vector<std::byte> pixels = drawn(target, *renderer, wall);
     // The middle pixel's center, half a pixel off its middle each way: lighter by how far out it is.
-    const double middleReach = std::hypot(0.5, 0.5) / kPixelsPerUnit;
+    const double middleReach = std::hypot(0.5, 0.5) / static_cast<double>(kPixelsPerUnit);
     expectNear(pixelAt(pixels, kMiddle, kMiddle), times(kRedChannels, std::lerp(0.7, 1.0, middleReach)), 3.0,
                "where it pools");
     EXPECT_GT(pixelAt(pixels, pixelsRight(0.6F), kMiddle).at(0), pixelAt(pixels, kMiddle, kMiddle).at(0))
