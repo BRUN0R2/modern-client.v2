@@ -199,9 +199,13 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         }
     }
     // A body away from its corridor (spawned again, teleported, pushed off the mesh) searches its way anew
-    // from where it is, rather than walking straight at a corridor left behind.
+    // from where it is, rather than walking straight at a corridor left behind: away from where it stands
+    // on the mesh, so that a body standing past the end of the mesh's floor, or on something it drops from,
+    // keeps the way it walks back on; one nowhere near the mesh searches, and is blocked.
+    const auto standsAt = corridor ? query.nearestPoint(feet) : Result<Vec3, navigation::NavigationError>{};
     const bool isAwayFromCorridor =
-        corridor && groundDistance(corridor->moveAgent(query, feet), feet) > rules.replanDistance.value();
+        corridor && (!standsAt || groundDistance(corridor->moveAgent(query, feet), *standsAt) >
+                                      rules.replanDistance.value());
     if (target != pursued || !plannedGoal || isAwayFromCorridor || movedFarEnough(feet, goal) ||
         (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value())) {
         if (target != pursued) {
