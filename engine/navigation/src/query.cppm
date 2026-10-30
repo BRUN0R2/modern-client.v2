@@ -53,7 +53,10 @@ struct StraightWalk {
 /// any number of queries may share a mesh.
 ///
 /// A point is near the mesh when the polygon under it is within the profile's standing box about it:
-/// its radius across, its standing height up and down. Errors name the failure's position.
+/// its radius across, its standing height up and down; else, when one is within its edge reach: its
+/// radius and its width across, as far as the middle of a body standing at the end of the floor may be
+/// from the mesh, which keeps its radius from where the floor ends (a ledge, the top of a wall too thin
+/// for the mesh), the body standing while its box is over the floor. Errors name the failure's position.
 class NavigationQuery {
 public:
     /// Query inputs must be finite, sampling radii nonnegative, and costs finite and at least one.
