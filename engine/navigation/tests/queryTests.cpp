@@ -153,25 +153,52 @@ TEST(NavigationQueryTest, TheSameRequestGivesTheSameWay) {
 }
 
 TEST(NavigationQueryTest, AStepIsClimbedButAWallIsNot) {
-    // A floor at 0, then one 16 up (a step) and, beside it, one 40 up (a wall to the profile).
+    // A floor at 0, then one 16 up (a step) and, beside it, one 60 up (a wall to the profile, higher than
+    // it jumps).
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 512.0F, .y = 512.0F}, 0.0F);
     nx::test::addBox(geometry, {.x = 512.0F, .y = 0.0F, .z = -16.0F},
                      {.x = 1024.0F, .y = 224.0F, .z = 16.0F});
     nx::test::addBox(geometry, {.x = 512.0F, .y = 288.0F, .z = -16.0F},
-                     {.x = 1024.0F, .y = 512.0F, .z = 40.0F});
+                     {.x = 1024.0F, .y = 512.0F, .z = 60.0F});
     const NavigationMesh mesh = nx::test::playerMesh(geometry);
     NavigationQuery query{mesh};
     const Vec3 below{.x = 100.0F, .y = 256.0F};
     const auto step = query.isReachable(below, {.x = 900.0F, .y = 100.0F, .z = 16.0F});
     ASSERT_TRUE(step.has_value());
     EXPECT_TRUE(*step);
-    const auto wall = query.findPath({.from = below, .to = {.x = 900.0F, .y = 400.0F, .z = 40.0F}});
+    const auto wall = query.findPath({.from = below, .to = {.x = 900.0F, .y = 400.0F, .z = 60.0F}});
     ASSERT_FALSE(wall.has_value());
     EXPECT_EQ(wall.error().code, NavigationError::Unreachable);
-    const auto reachable = query.isReachable(below, {.x = 900.0F, .y = 400.0F, .z = 40.0F});
+    const auto reachable = query.isReachable(below, {.x = 900.0F, .y = 400.0F, .z = 60.0F});
     ASSERT_TRUE(reachable.has_value());
     EXPECT_FALSE(*reachable);
+}
+
+TEST(NavigationQueryTest, AWayGoesUpALedgeItJumpsOntoAndDownOneItDropsFromButNotUpIt) {
+    // On a floor at 0, a box 40 tall, which the player jumps onto, and apart one 120 tall, which it drops
+    // from unhurt.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1536.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 256.0F, .y = 128.0F, .z = -16.0F},
+                     {.x = 512.0F, .y = 384.0F, .z = 40.0F});
+    nx::test::addBox(geometry, {.x = 1024.0F, .y = 128.0F, .z = -16.0F},
+                     {.x = 1280.0F, .y = 384.0F, .z = 120.0F});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const Vec3 floor{.x = 700.0F, .y = 256.0F};
+    const Vec3 lowTop{.x = 384.0F, .y = 256.0F, .z = 40.0F};
+    const Vec3 highTop{.x = 1152.0F, .y = 256.0F, .z = 120.0F};
+    for (const auto& [from, to] :
+         {std::pair{floor, lowTop}, std::pair{lowTop, floor}, std::pair{highTop, floor}}) {
+        const auto path = query.findPath({.from = from, .to = to});
+        ASSERT_TRUE(path.has_value()) << std::format("{} to {}: {}", from, to, nx::describe(path.error()));
+        EXPECT_NEAR(path->points.front().z, from.z, kTolerance);
+        EXPECT_NEAR(path->points.back().z, to.z, kTolerance);
+    }
+    const auto up = query.findPath({.from = floor, .to = highTop});
+    ASSERT_FALSE(up.has_value()) << "no way up a ledge higher than it jumps";
+    EXPECT_EQ(up.error().code, NavigationError::Unreachable);
 }
 
 TEST(NavigationQueryTest, APointFarFromTheMeshIsOutsideIt) {

@@ -156,12 +156,17 @@ public:
     /// again, teleported, pushed off the mesh) searches its way anew from where it is. Query/path failures
     /// become Blocked decisions carrying their NavigationError. Investigations finish at the corridor's
     /// projected destination, including an airborne observation. With no target remembered, it moves to its
-    /// goal (MoveTo), which it forgets as it arrives (Idle).
+    /// goal (MoveTo), which it forgets as it arrives (Idle). Its feet within arrivalDistance of the start of
+    /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
+    /// for the link's end, which its corridor goes on from, until it stands within a step of the end's height
+    /// as far from the start as the end is; across it, it searches no way, as DetourCrowd plans none for an
+    /// agent over a link, the corridor's end following its goal along the mesh.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most. It waits, its direction none, when no way on is worth a tenth of
-    /// its speed; else it goes the way it steers to, as fast as that.
+    /// its speed; else it goes the way it steers to, as fast as that. Across a link, it heads for the
+    /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
     /// Gives up its way, its body stuck on it too long (StuckWatch), and searches another from where it is:
@@ -195,6 +200,12 @@ private:
     [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
     /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
     [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
+    /// Crosses the link its corridor reaches next when `feet` are within arrivalDistance of its start
+    /// (decide), `decision` heading for its end and jumping for a link up. Returns whether it crosses one.
+    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query)
+        -> bool;
+    /// Forgets the corridor it follows, and the link it crosses on it: another is searched.
+    void forgetCorridor() noexcept;
     /// Marks which records are threats `now` (Memory::isThreat).
     void markThreats(GameTime now, TickRate rate);
 
@@ -205,6 +216,9 @@ private:
     std::optional<Vec3> plannedGoal{};
     std::optional<Vec3> plannedFrom{};
     std::optional<navigation::Corridor> corridor{};
+    /// The link of its corridor its body crosses, the corridor gone on from the link's end; none while it
+    /// walks along it.
+    std::optional<navigation::MeshLink> crossing{};
     std::optional<navigation::NavigationError> pathError{};
     /// Where its body got stuck on its way to what it pursues, which its ways keep away from (giveUp).
     std::vector<navigation::AvoidedPlace> avoided{};

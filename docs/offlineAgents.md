@@ -85,7 +85,9 @@ path yields `Blocked` with its navigation error; it does not enable direct movem
 is built once per map as it loads, in jobs, overlapping the client's level
 (`nx::navigation::MeshBuild`), or read from the cache folder where an earlier load kept it, and the
 horde and the bots borrow it: `zombie_add` and `bot_add`
-build nothing. `nav_draw` draws the mesh over the scene and the way each living bot and zombie follows
+build nothing. A bot or a zombie drops off a ledge and jumps up one within its jump height along the
+mesh's links (`nx::navigation::Corridor::crossLink`). `nav_draw` draws the mesh and its links over the
+scene and the way each living bot and zombie follows
 on it while it moves along its corridor, as arrows in the colors of its team and of why it moves
 (magenta heads while it is stuck), found
 again once a tick in batches in jobs; a dead body's agent, which decides nothing, is not drawn

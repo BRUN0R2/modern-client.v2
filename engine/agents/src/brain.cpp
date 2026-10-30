@@ -23,6 +23,23 @@ constexpr float kTurnAnticipation = 0.5F;
 [[nodiscard]] auto groundDistance(Vec3 first, Vec3 second) noexcept -> float {
     return std::hypot(first.x - second.x, first.y - second.y);
 }
+/// Heads `intent` for `point` from `feet`, across the ground: its way and where it faces; as it is when
+/// its feet are right below or above it.
+void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
+    const Vec3 way = acrossOf(point - feet);
+    const float distance = length(way);
+    if (distance > 0.0F) {
+        intent.direction = way / distance;
+        intent.ahead = intent.direction;
+    }
+}
+/// Whether a body at `feet` crossed `link`: it stands within `stepHeight` of the height of the link's end,
+/// as far from its start across as the end is, but `slack`, the way it drops or jumps over.
+[[nodiscard]] auto hasCrossed(const navigation::MeshLink& link, Vec3 feet, float stepHeight,
+                              float slack) noexcept -> bool {
+    return std::abs(feet.z - link.end.z) <= stepHeight &&
+           groundDistance(feet, link.start) + slack >= groundDistance(link.end, link.start);
+}
 } // namespace
 
 Brain::Brain(Rules settings) : rules{settings} {
@@ -179,7 +196,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         target.reset();
         plannedGoal.reset();
         plannedFrom.reset();
-        corridor.reset();
+        forgetCorridor();
         pathError.reset();
         return {};
     }
@@ -198,23 +215,30 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
             return decision;
         }
     }
+    const navigation::AgentProfile& profile = query.mesh().profile();
+    if (crossing && hasCrossed(*crossing, feet, profile.stepHeight.value(), rules.arrivalDistance.value())) {
+        crossing.reset(); // it walks along its corridor again, from the link's end
+    }
     // A body away from its corridor (spawned again, teleported, pushed off the mesh) searches its way anew
     // from where it is, rather than walking straight at a corridor left behind: away from where it stands
     // on the mesh, so that a body standing past the end of the mesh's floor, or on something it drops from,
-    // keeps the way it walks back on; one nowhere near the mesh searches, and is blocked.
-    const auto standsAt = corridor ? query.nearestPoint(feet) : Result<Vec3, navigation::NavigationError>{};
+    // keeps the way it walks back on; one nowhere near the mesh searches, and is blocked. One across a
+    // link searches none until it lands, as DetourCrowd plans none for an agent over a link.
+    const bool walksAlong = corridor && !crossing;
+    const auto standsAt = walksAlong ? query.nearestPoint(feet) : Result<Vec3, navigation::NavigationError>{};
     const bool isAwayFromCorridor =
-        corridor && (!standsAt || groundDistance(corridor->moveAgent(query, feet), *standsAt) >
-                                      rules.replanDistance.value());
-    if (target != pursued || !plannedGoal || isAwayFromCorridor || movedFarEnough(feet, goal) ||
-        (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value())) {
+        walksAlong && (!standsAt || groundDistance(corridor->moveAgent(query, feet), *standsAt) >
+                                        rules.replanDistance.value());
+    if (!crossing &&
+        (target != pursued || !plannedGoal || isAwayFromCorridor || movedFarEnough(feet, goal) ||
+         (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value()))) {
         if (target != pursued) {
             avoided.clear(); // another pursuit, which got stuck nowhere yet
         }
         target = pursued;
         plannedGoal = goal;
         plannedFrom = feet;
-        corridor.reset();
+        forgetCorridor();
         pathError.reset();
         auto planned = navigation::Corridor::plan(query, {.from = feet, .to = goal, .avoided = avoided});
         if (planned) {
@@ -230,6 +254,10 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     }
     invariant(corridor.has_value(), "Brain: a planned corridor or a reported path error");
     std::ignore = corridor->moveTarget(query, goal);
+    if (crossing) {
+        headFor(decision.intent, feet, crossing->end);
+        return decision;
+    }
     const Vec3 walkablePosition = corridor->moveAgent(query, feet);
     if (length(walkablePosition - corridor->target()) <= rules.arrivalDistance.value()) {
         if (selected == nullptr) {
@@ -241,6 +269,9 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
             });
         }
         decision.behavior = Behavior::Idle;
+        return decision;
+    }
+    if (beginCrossing(decision, feet, query)) {
         return decision;
     }
     // Toward the next corner farther than arrival, the turn after it anticipated (calcSmoothSteerDirection).
@@ -260,6 +291,26 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         decision.intent.ahead = decision.intent.direction;
     }
     return decision;
+}
+
+auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query) -> bool {
+    const std::optional<navigation::MeshLink> next = corridor->nextLink(query);
+    if (!next || groundDistance(feet, next->start) > rules.arrivalDistance.value()) {
+        return false;
+    }
+    crossing = corridor->crossLink(query);
+    if (!crossing) {
+        return false;
+    }
+    // A link up it jumps once, from its start; one down it walks off.
+    decision.intent.jumps = crossing->end.z > crossing->start.z;
+    headFor(decision.intent, feet, crossing->end);
+    return true;
+}
+
+void Brain::forgetCorridor() noexcept {
+    corridor.reset();
+    crossing.reset();
 }
 
 void Brain::giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes) {
@@ -287,13 +338,13 @@ void Brain::giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes
     // Whatever it pursues next, its way is searched anew from where it is.
     plannedGoal.reset();
     plannedFrom.reset();
-    corridor.reset();
+    forgetCorridor();
     pathError.reset();
 }
 
 void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                   std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query) {
-    if (!corridor || length(intent.direction) == 0.0F || maxSpeed <= UnitsPerSecond{}) {
+    if (!corridor || crossing || length(intent.direction) == 0.0F || maxSpeed <= UnitsPerSecond{}) {
         return;
     }
     const Vec3 steered = acrossOf(corridor->steer(query, {.velocity = velocity,

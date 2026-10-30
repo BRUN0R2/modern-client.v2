@@ -291,12 +291,253 @@ struct TileBounds {
     return std::optional{std::move(heightfield)};
 }
 
-/// Detour's data of the polygons of `polygons` and `detail`, tile `tileX`, `tileY`. Errors: TileRefused.
+/// How far apart the links along a ledge are, in the profile's radii: a body's two widths, so that one is
+/// within a width of anywhere along it.
+constexpr float kLinkSpacingRadii = 4.0F;
+/// What a ray's direction and a triangle's plane are taken as parallel below, by Möller and Trumbore's
+/// determinant.
+constexpr float kParallel = 1.0e-6F;
+/// What a triangle's area across is taken as a wall's below: a ray down meets no such triangle.
+constexpr float kFlatEnough = 1.0e-4F;
+
+/// A triangle of the geometry about a tile, in the game's space, its bounds across, and its area:
+/// Recast's, none for a wall or a ceiling (areaOf).
+struct NearTriangle {
+    std::array<Vec3, 3> corners{};
+    Vec3 low{};
+    Vec3 high{};
+    std::uint8_t area = RC_NULL_AREA;
+};
+
+/// The triangles of `input` whose footprints come within `margin` across of the tile `bounds` holds.
+[[nodiscard]] auto trianglesAbout(const TileInput& input, const TileBounds& bounds, float margin)
+    -> std::vector<NearTriangle> {
+    std::vector<NearTriangle> near;
+    for (std::size_t triangle = 0; triangle < input.footprints.size(); ++triangle) {
+        const Footprint& footprint = input.footprints[triangle];
+        if (footprint.maxX < bounds.low[0] - margin || footprint.minX > bounds.high[0] + margin ||
+            footprint.maxZ < bounds.low[2] - margin || footprint.minZ > bounds.high[2] + margin) {
+            continue;
+        }
+        NearTriangle found{.low = Vec3{.x = std::numeric_limits<float>::max(),
+                                       .y = std::numeric_limits<float>::max(),
+                                       .z = std::numeric_limits<float>::max()},
+                           .high = Vec3{.x = std::numeric_limits<float>::lowest(),
+                                        .y = std::numeric_limits<float>::lowest(),
+                                        .z = std::numeric_limits<float>::lowest()},
+                           .area = input.areas[triangle]};
+        for (std::size_t corner = 0; corner < found.corners.size(); ++corner) {
+            const auto vertex =
+                narrow<std::size_t>(input.corners[(triangle * found.corners.size()) + corner]);
+            const Vec3 point = positionOf(std::span<const float, 3>{input.vertices.data() + (vertex * 3), 3});
+            found.corners[corner] = point;
+            found.low = componentMin(found.low, point);
+            found.high = componentMax(found.high, point);
+        }
+        near.push_back(found);
+    }
+    return near;
+}
+
+/// Whether the segment from `from` to `to` meets `triangle` (Möller and Trumbore's test).
+[[nodiscard]] auto meets(Vec3 from, Vec3 to, const NearTriangle& triangle) -> bool {
+    const Vec3 low = componentMin(from, to);
+    const Vec3 high = componentMax(from, to);
+    if (triangle.high.x < low.x || triangle.low.x > high.x || triangle.high.y < low.y ||
+        triangle.low.y > high.y || triangle.high.z < low.z || triangle.low.z > high.z) {
+        return false;
+    }
+    const auto& [a, b, c] = triangle.corners;
+    const Vec3 way = to - from;
+    const Vec3 side = b - a;
+    const Vec3 other = c - a;
+    const Vec3 across = cross(way, other);
+    const float determinant = dot(side, across);
+    if (std::abs(determinant) < kParallel) {
+        return false;
+    }
+    const float inverse = 1.0F / determinant;
+    const Vec3 fromCorner = from - a;
+    const float u = dot(fromCorner, across) * inverse;
+    if (u < 0.0F || u > 1.0F) {
+        return false;
+    }
+    const Vec3 up = cross(fromCorner, side);
+    const float v = dot(way, up) * inverse;
+    if (v < 0.0F || u + v > 1.0F) {
+        return false;
+    }
+    const float along = dot(other, up) * inverse;
+    return along >= 0.0F && along <= 1.0F;
+}
+
+/// The height of `triangle` above `point` across, when it is over it and not a wall's; none.
+[[nodiscard]] auto heightAbove(Vec3 point, const NearTriangle& triangle) -> std::optional<float> {
+    if (point.x < triangle.low.x || point.x > triangle.high.x || point.y < triangle.low.y ||
+        point.y > triangle.high.y) {
+        return std::nullopt;
+    }
+    const auto& [a, b, c] = triangle.corners;
+    const float area = ((b.x - a.x) * (c.y - a.y)) - ((c.x - a.x) * (b.y - a.y));
+    if (std::abs(area) < kFlatEnough) {
+        return std::nullopt;
+    }
+    const float u = (((b.x - point.x) * (c.y - point.y)) - ((c.x - point.x) * (b.y - point.y))) / area;
+    const float v = (((c.x - point.x) * (a.y - point.y)) - ((a.x - point.x) * (c.y - point.y))) / area;
+    const float w = 1.0F - u - v;
+    if (u < 0.0F || v < 0.0F || w < 0.0F) {
+        return std::nullopt;
+    }
+    return (u * a.z) + (v * b.z) + (w * c.z);
+}
+
+/// The links of a tile, as Detour's off-mesh connections take them: each one's start and end one after
+/// another, in Detour's space, its radius, flags, area and way.
+struct TileLinks {
+    std::vector<float> points{};
+    std::vector<float> radii{};
+    std::vector<std::uint16_t> flags{};
+    std::vector<std::uint8_t> areas{};
+    std::vector<std::uint8_t> ways{};
+    std::vector<std::uint32_t> ids{};
+
+    void add(Vec3 start, Vec3 end, float radius, AreaKind kind) {
+        std::ranges::copy(detourOf(start), std::back_inserter(points));
+        std::ranges::copy(detourOf(end), std::back_inserter(points));
+        radii.push_back(radius);
+        flags.push_back(kWalkablePolygon);
+        areas.push_back(areaIdOf(kind));
+        ways.push_back(kind == AreaKind::Jump ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
+        ids.push_back(narrow<std::uint32_t>(ids.size()));
+    }
+};
+
+/// The height of the highest triangle of `near` over `point` within `lowest` and `highest`, when it is a
+/// floor the profile stands on; none when there is none, or the highest is no such floor (a slope too
+/// steep, a ceiling).
+[[nodiscard]] auto floorAt(Vec3 point, std::span<const NearTriangle> near, float lowest, float highest)
+    -> std::optional<float> {
+    std::optional<float> top;
+    std::uint8_t topArea = RC_NULL_AREA;
+    for (const NearTriangle& triangle : near) {
+        const std::optional<float> height = heightAbove(point, triangle);
+        if (height && *height >= lowest && *height <= highest && (!top || *height > *top)) {
+            top = height;
+            topArea = triangle.area;
+        }
+    }
+    return topArea != RC_NULL_AREA ? top : std::nullopt;
+}
+
+/// The link of a body leaving the floor at `start`, across the ledge its outward way `outward` faces, to
+/// the floor below `near` holds, the profile of `input` dropping from it unhurt: of the kind Jump, both
+/// ways, within the jump height, else Drop; none where a wall or a step is there instead, or no floor it
+/// lands on. It lands its radius and a cell past where the floor ends, the mesh's floor below starting its
+/// radius from the ledge, so that it lands on the mesh. How high the ledge is is the geometry's, on both
+/// sides: a polygon's corners stand up to a cell above the floor they cover.
+[[nodiscard]] auto linkFrom(Vec3 start, Vec3 outward, const TileInput& input,
+                            std::span<const NearTriangle> near) -> std::optional<std::pair<Vec3, AreaKind>> {
+    const AgentProfile& profile = input.profile;
+    const float step = profile.stepHeight.value();
+    // The floor it leaves within a step of its polygon's corner, as Detour finds the polygon a link starts
+    // on (walkableClimb).
+    const std::optional<float> ledge = floorAt(start, near, start.z - step, start.z + step);
+    if (!ledge) {
+        return std::nullopt;
+    }
+    const Vec3 leaves{.x = start.x, .y = start.y, .z = *ledge};
+    const float across = profile.radius.value() + profile.radius.value() + input.settings.cellSize.value();
+    const Vec3 beyond = leaves + (outward * across);
+    // A wall across the way, above a step, is a wall's edge, no ledge.
+    const Vec3 aboveStep{.z = step + input.settings.cellHeight.value()};
+    if (std::ranges::any_of(near, [&](const NearTriangle& triangle) {
+            return meets(leaves + aboveStep, beyond + aboveStep, triangle);
+        })) {
+        return std::nullopt;
+    }
+    // The highest floor below, within a step up and the drop height down.
+    const std::optional<float> landing =
+        floorAt(beyond, near, *ledge - profile.dropHeight.value(), *ledge + step);
+    if (!landing || *ledge - *landing <= step) {
+        return std::nullopt;
+    }
+    const AreaKind kind = *ledge - *landing <= profile.jumpHeight.value() ? AreaKind::Jump : AreaKind::Drop;
+    return std::pair{Vec3{.x = beyond.x, .y = beyond.y, .z = *landing}, kind};
+}
+
+/// The links of the polygons of `polygons`, tile `tileX`, `tileY` of `input`: along each edge of a polygon
+/// no other polygon shares (a wall's or a ledge's, not the side of the tile), one a body's two widths or
+/// less apart, its middle first, where a body walking off the edge lands on floor below (linkFrom).
+[[nodiscard]] auto linksOf(const TileInput& input, const rcPolyMesh& polygons, std::int32_t tileX,
+                           std::int32_t tileY) -> TileLinks {
+    const AgentProfile& profile = input.profile;
+    const float spacing = profile.radius.value() * kLinkSpacingRadii;
+    const float reach = profile.radius.value() + profile.radius.value() + input.settings.cellSize.value();
+    const std::vector<NearTriangle> near = trianglesAbout(input, boundsOf(input, tileX, tileY), reach);
+    const auto vertexOf = [&polygons](std::uint16_t vertex) {
+        const std::array<float, 3> point{
+            polygons.bmin[0] + (static_cast<float>(polygons.verts[(vertex * 3) + 0]) * polygons.cs),
+            polygons.bmin[1] + (static_cast<float>(polygons.verts[(vertex * 3) + 1]) * polygons.ch),
+            polygons.bmin[2] + (static_cast<float>(polygons.verts[(vertex * 3) + 2]) * polygons.cs)};
+        return positionOf(point);
+    };
+    const auto sides = narrow<std::size_t>(polygons.nvp);
+    TileLinks links;
+    for (std::size_t polygon = 0; polygon < narrow<std::size_t>(polygons.npolys); ++polygon) {
+        const std::span<const std::uint16_t> record{polygons.polys + (polygon * sides * 2), sides * 2};
+        const std::span<const std::uint16_t> corners = record.first(sides);
+        const auto count = static_cast<std::size_t>(
+            std::ranges::find(corners, std::uint16_t{RC_MESH_NULL_IDX}) - corners.begin());
+        Vec3 middle{};
+        for (std::size_t corner = 0; corner < count; ++corner) {
+            middle = middle + vertexOf(record[corner]);
+        }
+        middle = middle / static_cast<float>(count);
+        for (std::size_t edge = 0; edge < count; ++edge) {
+            if (record[sides + edge] != RC_MESH_NULL_IDX) {
+                continue; // shared, or the side of the tile
+            }
+            const Vec3 from = vertexOf(record[edge]);
+            const Vec3 to = vertexOf(record[(edge + 1) % count]);
+            const Vec3 along{.x = to.x - from.x, .y = to.y - from.y};
+            const float length = nx::length(along);
+            if (length <= 0.0F) {
+                continue;
+            }
+            Vec3 outward{.x = along.y / length, .y = -along.x / length};
+            const Vec3 fromMiddle = ((from + to) * 0.5F) - middle;
+            if ((outward.x * fromMiddle.x) + (outward.y * fromMiddle.y) < 0.0F) {
+                outward = outward * -1.0F;
+            }
+            const auto samples =
+                std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(length / spacing)));
+            for (std::size_t sample = 0; sample < samples; ++sample) {
+                const float share = (static_cast<float>(sample) + 0.5F) / static_cast<float>(samples);
+                const Vec3 start = from + ((to - from) * share);
+                if (const auto link = linkFrom(start, outward, input, near)) {
+                    links.add(start, link->first, profile.radius.value(), link->second);
+                }
+            }
+        }
+    }
+    return links;
+}
+
+/// Detour's data of the polygons of `polygons` and `detail`, and of their links (linksOf), tile `tileX`,
+/// `tileY`. Errors: TileRefused.
 [[nodiscard]] auto tileDataOf(const TileInput& input, rcPolyMesh& polygons, const rcPolyMeshDetail& detail,
                               std::int32_t tileX, std::int32_t tileY) -> Result<BuiltTile, MeshBuildError> {
     const auto polygonCount = narrow<std::size_t>(polygons.npolys);
     std::ranges::fill(std::span{polygons.flags, polygonCount}, kWalkablePolygon);
+    const TileLinks links = linksOf(input, polygons, tileX, tileY);
     dtNavMeshCreateParams params{};
+    params.offMeshConVerts = links.points.data();
+    params.offMeshConRad = links.radii.data();
+    params.offMeshConFlags = links.flags.data();
+    params.offMeshConAreas = links.areas.data();
+    params.offMeshConDir = links.ways.data();
+    params.offMeshConUserID = links.ids.data();
+    params.offMeshConCount = narrow<int>(links.radii.size());
     params.verts = polygons.verts;
     params.vertCount = polygons.nverts;
     params.polys = polygons.polys;
@@ -327,7 +568,10 @@ struct TileBounds {
                                 tileY, polygons.nverts, polygons.npolys));
     }
     const std::span bytes{data, narrow<std::size_t>(size)};
-    BuiltTile tile{.x = tileX, .y = tileY, .polygonCount = narrow<std::uint32_t>(polygonCount)};
+    // Its polygons, and one for each link Detour kept, a link that starts in the tile (offMeshConCount).
+    dtMeshHeader header{};
+    std::memcpy(&header, data, sizeof(header));
+    BuiltTile tile{.x = tileX, .y = tileY, .polygonCount = narrow<std::uint32_t>(header.polyCount)};
     tile.data.resize(bytes.size());
     std::ranges::copy(std::as_bytes(bytes), tile.data.begin());
     dtFree(data);
@@ -481,7 +725,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 2;
+constexpr std::uint32_t kTilesVersion = 3;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -499,7 +743,8 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
     appendLittleEndian(bytes, std::int32_t{DT_NAVMESH_VERSION});
     for (const float value :
          {profile.radius.value(), profile.wallClearance.value(), profile.standingHeight.value(),
-          profile.crouchedHeight.value(), profile.stepHeight.value(), profile.minGroundNormalZ}) {
+          profile.crouchedHeight.value(), profile.stepHeight.value(), profile.jumpHeight.value(),
+          profile.dropHeight.value(), profile.minGroundNormalZ}) {
         appendLittleEndian(bytes, value);
     }
     for (const float value :

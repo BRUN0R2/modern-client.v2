@@ -780,7 +780,8 @@ Xash3D-FWGS project records from the original for its tests.
 - `nav_draw`: the agents' navigation mesh of the map played, its polygons see-through in the color of
   their kind of area (floor green, the floor along walls within the wall clearance a deeper green, the
   room only crouching fits yellow, under water blue) and their
-  edges, and the way each living bot and zombie follows on it while it moves along its corridor, as
+  edges, its links a line from the ledge to where they land (jumps orange, drops crimson), and the
+  way each living bot and zombie follows on it while it moves along its corridor, as
   arrows pointing to where it goes, the size and spacing of a plugin's beam of `sprites/arrow1.spr`
   (12.8 units across, one every 50, 16 above the way): their shafts in the color of its team
   (counter-terrorists blue, terrorists red, zombies purple), their heads in that of why it goes there

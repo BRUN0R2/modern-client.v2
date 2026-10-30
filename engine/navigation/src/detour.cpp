@@ -84,6 +84,8 @@ constexpr int kMostSteeringWalls = 8;
 /// How far an agent moves, in shares of how far it looks about it, before it looks for the walls again:
 /// DetourCrowd's.
 constexpr float kWallsFoundAgainShare = 0.25F;
+/// How near a wall a point counts as on it: the avoidance's own (dtObstacleAvoidanceQuery::prepare).
+constexpr float kTouching = 0.01F;
 /// Half: of a box's height, the half extent Detour looks within.
 constexpr float kHalf = 0.5F;
 /// How the avoidance weighs a velocity: dtCrowd::init's defaults (its adaptive sampling's divisions, rings
@@ -161,6 +163,23 @@ private:
 /// Point `index` of `points`, Detour's coordinates one after another.
 [[nodiscard]] auto pointAt(std::span<const float> points, std::size_t index) -> std::span<const float, 3> {
     return points.subspan(index * kCoordinates).first<kCoordinates>();
+}
+
+/// The edges Detour gives the joins of a link's polygon to the floor at its start and at its end
+/// (dtNavMesh::baseOffMeshLinks, connectExtOffMeshLinks).
+constexpr unsigned char kLinkStartEdge = 0;
+constexpr unsigned char kLinkEndEdge = 1;
+
+/// Whether Detour joined the link of `polygon`, of `tile`, to the floor at both its ends: one a body
+/// crosses. One it found no floor for at an end is no way.
+[[nodiscard]] auto isJoined(const dtMeshTile& tile, const dtPoly& polygon) -> bool {
+    bool isStartJoined = false;
+    bool isEndJoined = false;
+    for (unsigned int link = polygon.firstLink; link != DT_NULL_LINK; link = tile.links[link].next) {
+        isStartJoined = isStartJoined || tile.links[link].edge == kLinkStartEdge;
+        isEndJoined = isEndJoined || tile.links[link].edge == kLinkEndEdge;
+    }
+    return isStartJoined && isEndJoined;
 }
 
 /// The corners of `polygon` of `tile`, in Detour's space, one point after another.
@@ -391,6 +410,15 @@ auto NavigationMesh::outline() const -> MeshOutline {
         }
         for (const dtPoly& polygon : std::span{tile->polys, narrow<std::size_t>(tile->header->polyCount)}) {
             const std::vector<float> corners = cornersOf(*tile, polygon);
+            if (polygon.getType() == DT_POLYTYPE_OFFMESH_CONNECTION) {
+                // Its ends where Detour put them, on the polygons it joins.
+                if (isJoined(*tile, polygon)) {
+                    outline.links.push_back(MeshLink{.start = detail::positionOf(pointAt(corners, 0)),
+                                                     .end = detail::positionOf(pointAt(corners, 1)),
+                                                     .kind = detail::kindOfArea(polygon.getArea())});
+                }
+                continue;
+            }
             outline.polygons.push_back(
                 MeshPolygon{.firstCorner = narrow<std::uint32_t>(outline.corners.size()),
                             .cornerCount = polygon.vertCount,
@@ -880,6 +908,82 @@ auto Corridor::corners(NavigationQuery& query, std::size_t count) -> std::vector
     return corners;
 }
 
+namespace {
+
+/// A link a corridor crosses next (Corridor::nextLink), and its polygon.
+struct NextLink {
+    dtPolyRef polygon = 0;
+    MeshLink link{};
+};
+
+/// The link `corridor` crosses next on `mesh`, its next corner the link's start, found by `query` and
+/// `filter`: the way it crosses it, from the polygon before it in the corridor; none.
+[[nodiscard]] auto nextLinkOf(dtPathCorridor& corridor, const dtNavMesh& mesh, dtNavMeshQuery& query,
+                              const dtQueryFilter& filter) -> std::optional<NextLink> {
+    // Room for the agent's own point, which Detour finds first and leaves out, and the next corner: a
+    // link's start, the last it finds.
+    constexpr int kNextCorner = 2;
+    std::array<float, std::size_t{kNextCorner} * kCoordinates> points{};
+    std::array<unsigned char, kNextCorner> flags{};
+    std::array<dtPolyRef, kNextCorner> polygons{};
+    const int found =
+        corridor.findCorners(points.data(), flags.data(), polygons.data(), kNextCorner, &query, &filter);
+    if (found < 1 || (flags[0] & DT_STRAIGHTPATH_OFFMESH_CONNECTION) == 0) {
+        return std::nullopt;
+    }
+    const std::span<const dtPolyRef> path{corridor.getPath(), narrow<std::size_t>(corridor.getPathCount())};
+    const auto link = std::ranges::find(path, polygons[0]);
+    if (link == path.begin() || link == path.end()) {
+        return std::nullopt;
+    }
+    std::array<float, kCoordinates> start{};
+    std::array<float, kCoordinates> end{};
+    const dtMeshTile* tile = nullptr;
+    const dtPoly* polygon = nullptr;
+    if (dtStatusFailed(mesh.getOffMeshConnectionPolyEndPoints(*std::ranges::prev(link), *link, start.data(),
+                                                              end.data())) ||
+        dtStatusFailed(mesh.getTileAndPolyByRef(*link, &tile, &polygon))) {
+        return std::nullopt;
+    }
+    return NextLink{.polygon = *link,
+                    .link = MeshLink{.start = detail::positionOf(start),
+                                     .end = detail::positionOf(end),
+                                     .kind = detail::kindOfArea(polygon->getArea())}};
+}
+
+} // namespace
+
+auto Corridor::nextLink(NavigationQuery& query) -> std::optional<MeshLink> {
+    expects(&query.mesh() == navigationMesh, "Corridor::nextLink: a query of the corridor's mesh");
+    if (&query.mesh() != navigationMesh) {
+        return std::nullopt;
+    }
+    return nextLinkOf(detourState->corridor, *query.detourState->query->getAttachedNavMesh(),
+                      *query.detourState->query, query.detourState->filter)
+        .transform([](const NextLink& next) { return next.link; });
+}
+
+auto Corridor::crossLink(NavigationQuery& query) -> std::optional<MeshLink> {
+    expects(&query.mesh() == navigationMesh, "Corridor::crossLink: a query of the corridor's mesh");
+    if (&query.mesh() != navigationMesh) {
+        return std::nullopt;
+    }
+    const std::optional<NextLink> next =
+        nextLinkOf(detourState->corridor, *query.detourState->query->getAttachedNavMesh(),
+                   *query.detourState->query, query.detourState->filter);
+    if (!next) {
+        return std::nullopt;
+    }
+    std::array<dtPolyRef, 2> crossed{}; // the polygons it leaves and lands on
+    std::array<float, kCoordinates> start{};
+    std::array<float, kCoordinates> end{};
+    if (!detourState->corridor.moveOverOffmeshConnection(next->polygon, crossed.data(), start.data(),
+                                                         end.data(), query.detourState->query.get())) {
+        return std::nullopt;
+    }
+    return next->link;
+}
+
 void Corridor::appendWay(NavigationQuery& query, std::vector<Vec3>& points) const {
     expects(&query.mesh() == navigationMesh, "Corridor::appendWay: a query of the corridor's mesh");
     if (&query.mesh() != navigationMesh) {
@@ -929,10 +1033,19 @@ auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> 
         const std::array<float, 3> velocity = acrossOf(body.velocity);
         avoidance.addCircle(feet.data(), body.radius.value(), velocity.data(), velocity.data());
     }
+    // The ledge the link it crosses next leaves from is its way on, no wall to keep off.
+    const std::optional<std::array<float, 3>> linkStart =
+        nextLinkOf(detourState->corridor, *search.query->getAttachedNavMesh(), *search.query, search.filter)
+            .transform([](const NextLink& next) { return detail::detourOf(next.link.start); });
     for (int wall = 0; wall < walls.getSegmentCount(); ++wall) {
         const float* const segment = walls.getSegment(wall);
         // A wall it has behind it, it is leaving: DetourCrowd leaves it out too.
         if (dtTriArea2D(position, segment, segment + kCoordinates) < 0.0F) {
+            continue;
+        }
+        float along = 0.0F;
+        if (linkStart && dtDistancePtSegSqr2D(linkStart->data(), segment, segment + kCoordinates, along) <
+                             kTouching * kTouching) {
             continue;
         }
         avoidance.addSegment(segment, segment + kCoordinates);
