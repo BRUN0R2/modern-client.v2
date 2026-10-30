@@ -68,9 +68,9 @@ auto BloodRenderer::create(rhi::Device& device, const BloodRendererDesc& desc)
     if (auto made = renderer.createPipeline(desc); !made) {
         return fail(BloodError::GpuFailed, std::move(made.error()));
     }
-    renderer.m_frameSlots.reserve(rhi::kMaxFramesInFlight);
+    renderer.frameSlots.reserve(rhi::kMaxFramesInFlight);
     for (std::uint32_t slot = 0; slot < rhi::kMaxFramesInFlight; ++slot) {
-        if (auto reserved = renderer.reserve(renderer.m_frameSlots.emplace_back(), kFirstDropCapacity);
+        if (auto reserved = renderer.reserve(renderer.frameSlots.emplace_back(), kFirstDropCapacity);
             !reserved) {
             return fail(BloodError::GpuFailed, std::move(reserved.error()));
         }
@@ -79,7 +79,7 @@ auto BloodRenderer::create(rhi::Device& device, const BloodRendererDesc& desc)
 }
 
 auto BloodRenderer::createPipeline(const BloodRendererDesc& desc) -> Result<void, rhi::RhiError> {
-    rhi::Device& device = *m_device;
+    rhi::Device& device = *gpu;
     constexpr Flags<rhi::ShaderStage> kBothStages{rhi::ShaderStage::Vertex, rhi::ShaderStage::Fragment};
     const std::array frameBindings{rhi::BindingLayout{.binding = kFrameUniformBinding,
                                                       .type = rhi::BindingType::UniformBuffer,
@@ -87,13 +87,13 @@ auto BloodRenderer::createPipeline(const BloodRendererDesc& desc) -> Result<void
                                    rhi::BindingLayout{.binding = kDropsBinding,
                                                       .type = rhi::BindingType::StorageBuffer,
                                                       .stages = {rhi::ShaderStage::Vertex}}};
-    auto shader = device.createShader({.label = "blood", .code = desc.shaderCode});
-    auto frameLayout = device.createBindGroupLayout({.label = "blood.frame", .bindings = frameBindings});
-    if (!shader || !frameLayout) {
-        return std::unexpected(!shader ? std::move(shader.error()) : std::move(frameLayout.error()));
+    auto compiled = device.createShader({.label = "blood", .code = desc.shaderCode});
+    auto layout = device.createBindGroupLayout({.label = "blood.frame", .bindings = frameBindings});
+    if (!compiled || !layout) {
+        return std::unexpected(!compiled ? std::move(compiled.error()) : std::move(layout.error()));
     }
-    m_shader = std::move(*shader);
-    m_frameLayout = std::move(*frameLayout);
+    shader = std::move(*compiled);
+    frameLayout = std::move(*layout);
     // Blended over what is there by how opaque it is, its depth tested but not written; no vertex buffer:
     // each quad's corners come of its vertices' numbers, turned to the view, so none is culled.
     const std::array targets{rhi::ColorTarget{
@@ -102,25 +102,25 @@ auto BloodRenderer::createPipeline(const BloodRendererDesc& desc) -> Result<void
                                  .destinationColor = rhi::BlendFactor::OneMinusSourceAlpha,
                                  .sourceAlpha = rhi::BlendFactor::SourceAlpha,
                                  .destinationAlpha = rhi::BlendFactor::OneMinusSourceAlpha}}};
-    const std::array layouts{m_frameLayout.get()};
-    auto pipeline = device.createRenderPipeline(
+    const std::array layouts{frameLayout.get()};
+    auto made = device.createRenderPipeline(
         {.label = "blood",
-         .vertex = {.shader = m_shader.get(), .entryPoint = "vertexMain"},
-         .fragment = {.shader = m_shader.get(), .entryPoint = "fragmentMain"},
+         .vertex = {.shader = shader.get(), .entryPoint = "vertexMain"},
+         .fragment = {.shader = shader.get(), .entryPoint = "fragmentMain"},
          .cullMode = rhi::CullMode::None,
          .frontFace = rhi::FrontFace::CounterClockwise,
          .colorTargets = targets,
          .depth = rhi::DepthState{.isWriteEnabled = false, .compare = rhi::CompareOp::Greater},
          .bindGroupLayouts = layouts});
-    if (!pipeline) {
-        return std::unexpected{std::move(pipeline.error())};
+    if (!made) {
+        return std::unexpected{std::move(made.error())};
     }
-    m_pipeline = std::move(*pipeline);
+    pipeline = std::move(*made);
     return {};
 }
 
 auto BloodRenderer::reserve(BloodFrameSlot& slot, std::size_t drops) -> Result<void, rhi::RhiError> {
-    rhi::Device& device = *m_device;
+    rhi::Device& device = *gpu;
     if (slot.frame.get().isNull()) {
         auto frame = device.createBuffer({.label = "blood.frame",
                                           .size = sizeof(FrameUniform),
@@ -145,7 +145,7 @@ auto BloodRenderer::reserve(BloodFrameSlot& slot, std::size_t drops) -> Result<v
                          .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
             rhi::Binding{.binding = kDropsBinding, .resource = rhi::BufferBinding{.buffer = buffer->get()}}};
         auto group = device.createBindGroup(
-            {.label = "blood.frame", .layout = m_frameLayout.get(), .bindings = bindings});
+            {.label = "blood.frame", .layout = frameLayout.get(), .bindings = bindings});
         if (!group) {
             return std::unexpected{std::move(group.error())};
         }
@@ -157,9 +157,9 @@ auto BloodRenderer::reserve(BloodFrameSlot& slot, std::size_t drops) -> Result<v
 }
 
 auto BloodRenderer::prepare(const BloodDraw& draw) -> Result<void, BloodError> {
-    m_dropCount = 0;
+    dropCount = 0;
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
-    BloodFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
+    BloodFrameSlot& slot = frameSlots[drawCount++ % frameSlots.size()];
     if (draw.drops.empty()) {
         return {};
     }
@@ -171,29 +171,29 @@ auto BloodRenderer::prepare(const BloodDraw& draw) -> Result<void, BloodError> {
                                .eye = rowOf(draw.camera.position),
                                .right = rowOf(view.right),
                                .up = rowOf(view.up),
-                               .fog = fogBlockOf(draw.fog, draw.camera, m_encoding),
+                               .fog = fogBlockOf(draw.fog, draw.camera, encoding),
                                .style = {draw.streakTime.count(), 0.0F, 0.0F, 0.0F},
-                               .colorEncoding = std::to_underlying(m_encoding)};
-    std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
-    const std::span<std::byte> mapped = m_device->mappedBytes(slot.drops.get());
+                               .colorEncoding = std::to_underlying(encoding)};
+    std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), gpu->mappedBytes(slot.frame.get()).begin());
+    const std::span<std::byte> mapped = gpu->mappedBytes(slot.drops.get());
     for (std::size_t index = 0; index < draw.drops.size(); ++index) {
         const GpuDrop drop = gpuDropOf(draw.drops[index]);
         std::ranges::copy(std::as_bytes(std::span{&drop, 1}),
                           mapped.begin() + narrow<std::ptrdiff_t>(index * sizeof(GpuDrop)));
     }
-    m_dropCount = narrow<std::uint32_t>(draw.drops.size());
+    dropCount = narrow<std::uint32_t>(draw.drops.size());
     return {};
 }
 
 void BloodRenderer::drawPrepared(rhi::CommandList& commands) const {
-    if (m_dropCount == 0) {
+    if (dropCount == 0) {
         return;
     }
-    expects(m_drawCount > 0, "BloodRenderer: prepared before it is recorded");
-    const BloodFrameSlot& slot = m_frameSlots[(m_drawCount - 1) % m_frameSlots.size()];
-    commands.setPipeline(m_pipeline.get());
+    expects(drawCount > 0, "BloodRenderer: prepared before it is recorded");
+    const BloodFrameSlot& slot = frameSlots[(drawCount - 1) % frameSlots.size()];
+    commands.setPipeline(pipeline.get());
     commands.setBindGroup(kFrameGroup, slot.group.get());
-    commands.draw(kQuadVertices, m_dropCount, 0, 0);
+    commands.draw(kQuadVertices, dropCount, 0, 0);
 }
 
 auto BloodRenderer::draw(rhi::CommandList& commands, const BloodDraw& draw) -> Result<void, BloodError> {
