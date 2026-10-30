@@ -124,7 +124,8 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
     const EntityType& type = catalog.type(body.type);
     const double scaled = static_cast<double>(attack.damage.value()) *
                           type.definition.hitGroups.of(hitGroupOf(attack.trace)).value();
-    const nx::Damage taken{static_cast<float>(std::min(scaled, static_cast<double>(body.health.value())))};
+    const nx::Damage dealt{static_cast<float>(scaled)};
+    const nx::Damage taken{std::min(dealt.value(), body.health.value())};
     body.health = body.health - taken;
     const bool isKilled = body.health <= nx::HitPoints{};
     if (isKilled) {
@@ -135,7 +136,7 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
         nx::log::info(kLog, "entity {:?} {}:{} dies", type.definition.id, std::to_underlying(entity.index()),
                       std::to_underlying(entity.generation()));
     }
-    return {.damage = taken, .isKilled = isKilled};
+    return {.damage = taken, .dealt = dealt, .isKilled = isKilled};
 }
 } // namespace
 

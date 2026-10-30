@@ -63,3 +63,5 @@ walkSequence = "walk"
 attackSequence = "ref_shoot_knife"
 deathSequence = "death1"
 hitGroups = { generic = 1.0, head = 4.0, chest = 1.0, stomach = 1.25, arm = 1.0, leg = 0.75, shield = 0.0, other = 1.0 }
+# The palette entry of its blood (BLOOD_COLOR_RED); leave it out for a body that does not bleed.
+bloodColor = 247

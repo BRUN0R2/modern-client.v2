@@ -21,6 +21,7 @@ import :weapons;
 import :characters;
 import :lightStyles;
 import :entityCatalog;
+import :hitGroups;
 
 export namespace cs {
 
@@ -55,12 +56,15 @@ struct Impact {
     [[nodiscard]] inline auto operator==(const Impact&) const noexcept -> bool = default;
 };
 
-/// The blood a hit sprays where it met a body (TE_BLOODSPRITE): the point, the palette entry of its
-/// color, and its size (spraySizeOf).
+/// The blood a hit sprays where it met a body (TE_BLOODSPRITE): the point, the way the hit went, the
+/// palette entry of its color, its size (spraySizeOf), and where on the body it met it. The original's
+/// carries neither the way nor the hit group, which the enhanced look sprays it by.
 struct BloodSpray {
     nx::Vec3 position{};
+    nx::Vec3 direction{};
     std::uint8_t color = 0;
     std::uint32_t size = 0;
+    HitGroup hitGroup = HitGroup::Generic;
 
     [[nodiscard]] inline auto operator==(const BloodSpray&) const noexcept -> bool = default;
 };

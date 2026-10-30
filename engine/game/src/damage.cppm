@@ -24,10 +24,11 @@ struct Attack {
     collision::Trace trace{};
 };
 
-/// What an attack did to an entity: the damage it took, after what its kind makes of where it was met,
-/// and whether it killed it.
+/// What an attack did to an entity: the damage it took, as much of what it was dealt as it had health
+/// for; what it was dealt, after what its kind makes of where it was met; and whether it killed it.
 struct Harm {
     Damage damage{};
+    Damage dealt{};
     bool isKilled = false;
 };
 

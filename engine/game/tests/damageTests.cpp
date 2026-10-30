@@ -18,7 +18,7 @@ namespace {
 [[nodiscard]] auto takeHalf(nx::ecs::World& /*world*/, nx::ecs::Entity /*entity*/,
                             const nx::game::Attack& attack) -> nx::game::Harm {
     const nx::Damage taken{attack.damage.value() / 2.0F};
-    return nx::game::Harm{.damage = taken, .isKilled = taken.value() >= 10.0F};
+    return nx::game::Harm{.damage = taken, .dealt = taken, .isKilled = taken.value() >= 10.0F};
 }
 
 TEST(DamageTest, AnAttackIsTakenAsTheEntitysKindTakesIt) {
@@ -30,10 +30,12 @@ TEST(DamageTest, AnAttackIsTakenAsTheEntitysKindTakesIt) {
     const nx::game::Harm harm =
         nx::game::attackEntity(world, taking, nx::game::Attack{.damage = nx::Damage{24.0F}});
     EXPECT_EQ(harm.damage.value(), 12.0F);
+    EXPECT_EQ(harm.dealt.value(), 12.0F);
     EXPECT_TRUE(harm.isKilled);
     const nx::game::Harm none =
         nx::game::attackEntity(world, untouched, nx::game::Attack{.damage = nx::Damage{24.0F}});
     EXPECT_EQ(none.damage.value(), 0.0F) << "a kind that takes no damage";
+    EXPECT_EQ(none.dealt.value(), 0.0F);
     EXPECT_FALSE(none.isKilled);
 }
 

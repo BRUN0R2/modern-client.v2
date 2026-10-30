@@ -579,7 +579,9 @@ as likely (`UTIL_BloodDecalTrace`), which the server chooses and tells its clien
 (`cs::BloodMark`). Before that, it sprays where it met the body (`SpawnBlood`, `UTIL_BloodDrips`,
 `TE_BLOODSPRITE`): the server tells its clients of the spray (`cs::BloodSpray`), its color the
 palette's entry 247 (`BLOOD_COLOR_RED`) and its size the hit's whole points doubled (the multiplayer
-rules'), 255 at most, over 10, from 3 to 16; a hit of no whole point sprays none. A client shows it as
+rules'), 255 at most, over 10, from 3 to 16; a hit of no whole point sprays none. It also tells the way
+the hit went and where it met the body (its hit group), which the enhanced look sprays it by; the
+original's message carries neither. A client shows it as
 Xash3D-FWGS's `R_BloodSprite` does (GPL, consulted; `cs.client:tempEntities`, `data/cstrike/blood.toml`'s
 `sprayLook`): `sprites/bloodspray.spr`, 2 to 4 units above where the hit met the body, its scale its size
 over 35 to over 25, its color the engine palette's entry 1 to 3 after the server's
@@ -593,6 +595,12 @@ seconds, each on one of its frames from the second, the last for one beyond the 
 palette's entry 223 (`BLOOD_COLOR_DARKRED`) and its speed the head's damage times 5, cut to a whole
 number, and 0 to 100 more, 255 at most. The original writes the speed as a byte that wraps past 255,
 so that a head shot's stream may be slow; ReGameDLL_CS holds it at 255 (`UTIL_BloodStream`), as here.
+An entity's body ([ADR-0028](adr/0028-native-agent-test-mod.md)) bleeds as `CBaseMonster::TraceAttack`
+sheds a monster's blood when its type names a `bloodColor` (`m_bloodColor`; none for `DONT_BLEED`):
+of what a hit dealt it once its hit group took its share (`nx::game::Harm::dealt`, before its health
+limits what it takes), it sprays and leaves its marks behind it as a player does, in its own color,
+without a head's stream, which is a player's (`BloodSplat`); a hit that dealt nothing sheds nothing
+(`TraceBleed`).
 A client shows it as Xash3D-FWGS's `R_BloodStream` does (GPL, consulted; `cs.client:particles`,
 `streamLook`), its particles of the entries 0 to 9 after the server's: a stream of 100 from where the
 hit met the head, the way of each dipped by 0.05 less 0.005 for each before it, the first at the
