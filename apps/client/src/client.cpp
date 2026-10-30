@@ -53,6 +53,7 @@ constexpr std::string_view kBulletHoleStream = "bulletHoles";
 /// chances from.
 constexpr std::uint64_t kTempEntitySeed = 0;
 constexpr std::uint64_t kParticleSeed = 0;
+constexpr std::uint64_t kBloodSeed = 0;
 
 /// The console's output: replies on the standard output, failures on the standard error, and both in
 /// the console's window once there is one.
@@ -209,6 +210,7 @@ struct Session {
     cs::ClientGame client;
     cs::TempEntities effects;
     cs::Particles particles;
+    cs::BloodEffects blood; ///< The enhanced look's.
     /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, ConsoleError> agentMesh;
@@ -381,6 +383,7 @@ enum class KeptMesh : std::uint8_t {
                                              .client = std::move(known),
                                              .effects = cs::TempEntities{kTempEntitySeed},
                                              .particles = cs::Particles{kParticleSeed},
+                                             .blood = cs::BloodEffects{kBloodSeed},
                                              .agentMesh = std::move(mesh)});
 }
 
@@ -495,10 +498,13 @@ private:
     void hearSession(const cs::Hearing& hearing);
     /// Reports `played` when it failed, once in kSoundFailureInterval.
     void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Moves the session's temporary entities and particles over `elapsed`, then shows the splashes of
-    /// streaks since the last frame, the helmets' sparks (cs::Particles::splashStreaks), the blood the
-    /// hits sprayed (cs::TempEntities::sprayBlood) and the streams the hits in the head made
-    /// (cs::Particles::streamBlood), the blood but without the engine's palette, as the level logged.
+    /// Moves the session's temporary entities, particles and blood over `elapsed`, then shows the splashes
+    /// of streaks since the last frame, the helmets' sparks (cs::Particles::splashStreaks), and the blood
+    /// the hits sprayed: in the enhanced look as its own (cs::BloodEffects::spray), of its palette entry's
+    /// color and lit where it met the body (cs::Scene::bloodLightAt), its sprays and their heads' gushes
+    /// in place of the original's streams; else as the original's (cs::TempEntities::sprayBlood), and the
+    /// streams the hits in the head made (cs::Particles::streamBlood); the blood but without the engine's
+    /// palette, as the level logged.
     void showEffects(nx::Seconds elapsed);
     /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
     /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
@@ -1375,11 +1381,24 @@ void Client::showEffects(nx::Seconds elapsed) {
     const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
     m_session->effects.update(now, elapsed, level.hulls(), gravity);
     m_session->particles.update(now, elapsed, gravity);
+    const cs::BloodEnhancedLook& enhancedLook = m_content->blood.enhancedLook;
+    m_session->blood.update(now, elapsed, level.hulls(), gravity, enhancedLook);
     for (const cs::StreakSplash& splash : splashes) {
         m_session->particles.splashStreaks(splash, now);
     }
     const std::optional<nx::assets::Palette>& palette = level.palette();
     if (!palette) {
+        return;
+    }
+    if (m_scene && m_scene->look() == nx::render::StudioLook::Enhanced) {
+        const nx::render::LightStyleValues styles = m_session->client.lightStylesAt(now);
+        for (const cs::BloodSpray& spray : sprays) {
+            const nx::assets::PaletteColor color = palette->color(spray.color);
+            m_session->blood.spray(spray, enhancedLook,
+                                   {.color = {.red = color.red, .green = color.green, .blue = color.blue},
+                                    .light = m_scene->bloodLightAt(level, spray.position, styles)},
+                                   now);
+        }
         return;
     }
     const cs::BloodSprayLook& look = m_content->blood.sprayLook;
@@ -1565,6 +1584,7 @@ auto Client::sessionView() -> cs::SceneView {
             .tempEntities = m_session->effects.shown(),
             .particles = m_session->particles.shown(),
             .streaks = m_session->particles.shownStreaks(),
+            .blood = m_session->blood.shown(time, m_content->blood.enhancedLook),
             .clientEvents = m_clientEvents,
             .hand = m_hudCvars->hand(),
             .overlay = navigationOverlay(),

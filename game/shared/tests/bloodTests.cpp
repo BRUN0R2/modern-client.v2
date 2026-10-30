@@ -129,23 +129,48 @@ TEST(BloodTest, AStreamsLookIsRBloodStreams) {
     EXPECT_EQ(look.splashCompanions, 2U);
 }
 
+TEST(BloodTest, TheEnhancedLooksBloodGushesMoreFromAHeadThanFromAnywhereElse) {
+    const cs::BloodEnhancedLook look = repositoryRules().enhancedLook;
+    EXPECT_EQ(look.mostDroplets, 1024U);
+    EXPECT_EQ(look.mostSplats, 256U);
+    EXPECT_GT(look.splatLife, look.splatFade);
+    EXPECT_GT(look.head.dropletsPerSize, look.body.dropletsPerSize) << "more droplets";
+    EXPECT_GT(look.head.mists, look.body.mists) << "more mist";
+    EXPECT_GT(look.head.mostSpeed, look.body.mostSpeed) << "faster";
+    EXPECT_EQ(look.body.gushPulses, 0U) << "a hit elsewhere does not gush";
+    EXPECT_EQ(look.head.gushPulses, 5U);
+    EXPECT_EQ(look.head.gushDroplets, 8U);
+    EXPECT_LT(look.head.gushSlowing, 1.0F) << "each pulse slower";
+}
+
 TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
     const std::string text = repositoryText();
     for (const auto& [line, changed] :
-         {std::pair{"below = 25.0", "below = 5.0"}, std::pair{"marksOneIn = 3", "marksOneIn = 0"},
+         {std::pair{"below = 25.0", "below = 5.0"},
+          std::pair{"marksOneIn = 3", "marksOneIn = 0"},
           std::pair{"reach = 172.0", "reach = 0.0"},
           std::pair{R"(decals = ["{blood1", "{blood2", "{blood3", "{blood4", "{blood5", "{blood6"])",
                     "decals = []"},
           std::pair{"traces = 4\nnoise = 0.3", "below = 50.0\ntraces = 4\nnoise = 0.3"},
-          std::pair{"traces = 1", "traces = 0"}, std::pair{"color = 247", "color = 254"},
+          std::pair{"traces = 1", "traces = 0"},
+          std::pair{"color = 247", "color = 254"},
           std::pair{"smallestSize = 3", "smallestSize = 17"},
           std::pair{"amountPerSize = 10", "amountPerSize = 0"},
           std::pair{"leastDropLife = 1.0", "leastDropLife = 4.0"},
           std::pair{"sprayTime = 0.25", "sprayTime = 0.0"},
           std::pair{R"(dropSprite = "sprites/blood.spr")", R"(dropSprite = "")"},
-          std::pair{"fastest = 255", "fastest = 256"}, std::pair{"colorRange = 10", "colorRange = 40"},
+          std::pair{"fastest = 255", "fastest = 256"},
+          std::pair{"colorRange = 10", "colorRange = 40"},
           std::pair{"streamLife = 2.0", "streamLife = 0.0"},
-          std::pair{"splashPerSpeed = 5", "splashPerSpeed = 0"}}) {
+          std::pair{"splashPerSpeed = 5", "splashPerSpeed = 0"},
+          std::pair{"mostDroplets = 1024", "mostDroplets = 0"},
+          std::pair{"splatFade = 4.0", "splatFade = 20.0"},
+          std::pair{"leastSplatGrowth = 2.0", "leastSplatGrowth = 4.0"},
+          std::pair{"leastRadius = 0.2", "leastRadius = 0.0"},
+          std::pair{"mistLife = 0.35", "mistLife = 0.0"},
+          std::pair{"backShare = 0.2", "backShare = 1.5"},
+          std::pair{"gushInterval = 0.15", "gushInterval = 0.0"},
+          std::pair{"gushSlowing = 0.8", "gushSlowing = 1.5"}}) {
         std::string broken = text;
         const std::size_t at = broken.find(line);
         ASSERT_NE(at, std::string::npos) << line;

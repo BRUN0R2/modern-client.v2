@@ -12,6 +12,7 @@ nxAddTest(csClientTests
         muzzleFlashTests.cpp
         tempEntitiesTests.cpp
         particlesTests.cpp
+        bloodEffectsTests.cpp
         modelMaterialsTests.cpp
         viewModelTests.cpp
         decalsTests.cpp

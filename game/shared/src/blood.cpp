@@ -76,6 +76,32 @@ constexpr std::uint32_t kByteTop = 255;
            look.splashGravity >= nx::Scale{} && look.companionJitter >= nx::HammerUnits{};
 }
 
+/// Whether `burst` makes droplets that fly and mists that last, each least no more than its most, and
+/// gushes, if it does, a pulse after another, none faster than the one before.
+[[nodiscard]] auto isValid(const BloodBurst& burst) noexcept -> bool {
+    const bool areMistsValid =
+        burst.mists == 0 || (burst.leastMistRadius > nx::HammerUnits{} &&
+                             burst.leastMistRadius <= burst.mostMistRadius && burst.mistLife > nx::Seconds{});
+    const bool isGushValid =
+        burst.gushPulses == 0 ||
+        (burst.gushDroplets > 0 && burst.gushInterval > nx::Seconds{} && burst.gushSlowing <= 1.0F);
+    return std::isfinite(burst.dropletsPerSize) && burst.leastRadius > nx::HammerUnits{} &&
+           burst.leastRadius <= burst.mostRadius && burst.leastSpeed >= nx::UnitsPerSecond{} &&
+           burst.leastSpeed <= burst.mostSpeed && std::isfinite(burst.spread) &&
+           burst.rise >= nx::UnitsPerSecond{} && burst.mistGrowth >= nx::UnitsPerSecond{} && areMistsValid &&
+           isGushValid;
+}
+
+/// Whether `look` has room for droplets and splats, droplets that fly a while and splats that lie a while
+/// longer than they fade, each least no more than its most, and bursts that are.
+[[nodiscard]] auto isValid(const BloodEnhancedLook& look) noexcept -> bool {
+    return look.mostDroplets > 0 && look.mostSplats > 0 && look.streakTime >= nx::Seconds{} &&
+           look.gravity >= nx::Scale{} && std::isfinite(look.drag) && look.dropletLife > nx::Seconds{} &&
+           look.leastSplatGrowth > nx::Scale{} && look.leastSplatGrowth <= look.mostSplatGrowth &&
+           look.splatLife > nx::Seconds{} && look.splatFade > nx::Seconds{} &&
+           look.splatFade <= look.splatLife && isValid(look.body) && isValid(look.head);
+}
+
 /// The spread of a hit of `damage`: the first whose `below` it is below, else the last.
 [[nodiscard]] auto spreadOf(const BloodRules& rules, nx::Damage damage) -> const BleedSpread& {
     const auto spread = std::ranges::find_if(
@@ -96,7 +122,7 @@ auto readBloodRules(std::string_view text, std::string_view sourceName)
         !rules->decals.empty() && std::ranges::none_of(rules->decals, &std::string::empty) &&
         rules->reach > nx::HammerUnits{} && rules->marksOneIn > 0 && areSpreadsInOrder(rules->spreads) &&
         isValid(rules->spray) && isValid(rules->sprayLook, rules->spray.color) && isValid(rules->stream) &&
-        isValid(rules->streamLook, rules->stream.color);
+        isValid(rules->streamLook, rules->stream.color) && isValid(rules->enhancedLook);
     if (!isValidRules) {
         return nx::fail(
             BloodError::DataInvalid,
@@ -105,7 +131,9 @@ auto readBloodRules(std::string_view text, std::string_view sourceName)
                         "none, a spray's sizes from one, and its look's sprites, color within "
                         "the palette, times and dice more than none, each least no more than its "
                         "most, a stream's speeds within a byte, its colors within the palette, and "
-                        "its particles and times more than none, are required",
+                        "its particles and times more than none, and the enhanced look's room for "
+                        "droplets and splats, its times, and its bursts' least no more than their "
+                        "most, are required",
                         sourceName));
     }
     return std::move(*rules);

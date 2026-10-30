@@ -717,9 +717,11 @@ smoothed over a pixel. A mist is a soft round puff, as opaque as it is at its mi
 edge. A splat lies flat on what it landed on (`BloodInstance::normal`), 0.1 unit off it so that the
 surface does not hide it, its edge in and out by up to 0.18 of its radius in two waves of lobes turned
 by where it lies, the same each frame, and 0.7 as light at its middle, where it pools. Each is of its
-display color times its light (made linear light first in a target of it), as
-opaque as it is, blended over what is there, its depth tested but not written, seen through the fog;
-they are not sorted, drops of blood overlapping little and alike.
+display color times its light (made linear light first in a target of it), as opaque as it is, blended
+over what is there, its depth tested but not written, seen through the fog; they are not sorted, drops
+of blood overlapping little and alike. The scene draws them after the particles and the streaks, the
+client's simulation giving them (`cs::BloodEffects`, [10 §7.4](10-counter-strike-gameplay.md#74-damage)):
+the splats, then the droplets, then the mists.
 
 **Today** (`nx.render:fog`, `shaders/fog.slang`): fog as the original's OpenGL fog draws it, every
 renderer of the scene mixing the color of each fragment toward the fog's by how much the fog hides
