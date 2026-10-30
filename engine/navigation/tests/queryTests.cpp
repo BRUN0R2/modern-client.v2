@@ -259,6 +259,44 @@ TEST(NavigationQueryTest, CostsChooseTheWay) {
     EXPECT_TRUE(std::ranges::any_of(dry->points, [](Vec3 point) { return point.y > 512.0F; }));
 }
 
+TEST(NavigationQueryTest, ABodyStandingPastTheFloorsEndIsNearTheMeshButOneFartherIsNot) {
+    // A platform 200 tall, nothing under its edge within the standing height: the mesh stops its radius
+    // short of its end, and a body stands until its middle is its radius past it.
+    constexpr float kEnd = 512.0F;
+    Geometry geometry;
+    nx::test::addBox(geometry, {.x = 0.0F, .y = 0.0F, .z = -200.0F}, {.x = kEnd, .y = 512.0F, .z = 0.0F});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const Vec3 standing{.x = kEnd + kRadius, .y = 256.0F};
+    const auto near = query.nearestPoint(standing);
+    ASSERT_TRUE(near.has_value()) << nx::describe(near.error());
+    EXPECT_LE(near->x, kEnd - kRadius);
+    EXPECT_NEAR(near->z, 0.0F, kTolerance);
+    const auto path = query.findPath({.from = standing, .to = {.x = 100.0F, .y = 100.0F}});
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    const Vec3 falling{.x = kEnd + (4.0F * kRadius), .y = 256.0F};
+    const auto beyond = query.nearestPoint(falling);
+    ASSERT_FALSE(beyond.has_value());
+    EXPECT_EQ(beyond.error().code, NavigationError::OutsideMesh);
+}
+
+TEST(NavigationQueryTest, ABodyOnAWallTooThinForTheMeshFindsTheFloorBesideIt) {
+    // A wall 24 thick and 40 tall on a floor, a way around its end: its top is narrower than the body, so
+    // the mesh has none of it, and a body standing on it is near the floor beside it.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 500.0F, .y = 0.0F, .z = -16.0F}, {.x = 524.0F, .y = 384.0F, .z = 40.0F});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const Vec3 onTop{.x = 512.0F, .y = 256.0F, .z = 40.0F};
+    const auto floor = query.nearestPoint(onTop);
+    ASSERT_TRUE(floor.has_value()) << nx::describe(floor.error());
+    EXPECT_NEAR(floor->z, 0.0F, kTolerance);
+    EXPECT_TRUE(floor->x < 500.0F || floor->x > 524.0F) << "beside the wall, not on it";
+    const auto path = query.findPath({.from = onTop, .to = {.x = 900.0F, .y = 256.0F}});
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+}
+
 TEST(NavigationQueryTest, AStraightWalkStopsAtTheEdgeOfTheMesh) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

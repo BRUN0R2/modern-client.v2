@@ -496,6 +496,8 @@ struct NavigationQuery::Detour {
     dtQueryFilter filter; ///< Of the profile's costs.
     /// How far from a point the polygon under it is looked for: the profile's standing box.
     std::array<float, 3> reach{};
+    /// How far it is looked for next, none being within reach: the profile's edge reach (NavigationQuery).
+    std::array<float, 3> edgeReach{};
     std::vector<dtPolyRef> polygons;     ///< Room for a way's polygons, or those a circle reaches.
     std::vector<float> points;           ///< Room for a way's corners.
     std::vector<AvoidedPolygon> avoided; ///< Room for the polygons a way's avoided places reach.
@@ -503,19 +505,22 @@ struct NavigationQuery::Detour {
     /// The avoidance Corridor::steer samples velocities with, made as it is first asked for.
     std::unique_ptr<dtObstacleAvoidanceQuery, ObstacleAvoidanceFree> avoidance;
 
-    /// The point of the mesh nearest `position`. Errors: OutsideMesh.
+    /// The point of the mesh nearest `position`: within reach, else within the edge reach. Errors:
+    /// OutsideMesh.
     [[nodiscard]] auto nearest(Vec3 position) const -> Result<MeshPoint, NavigationError> {
         if (!isFinite(position)) {
             return fail(NavigationError::InvalidQuery, "navigation coordinates must be finite");
         }
         const std::array<float, 3> center = detail::detourOf(position);
-        MeshPoint found;
-        const dtStatus status = query->findNearestPoly(center.data(), reach.data(), &filter, &found.polygon,
-                                                       found.position.data());
-        if (dtStatusFailed(status) || found.polygon == 0) {
-            return outside(position);
+        for (const std::array<float, 3>* const extents : {&reach, &edgeReach}) {
+            MeshPoint found;
+            const dtStatus status = query->findNearestPoly(center.data(), extents->data(), &filter,
+                                                           &found.polygon, found.position.data());
+            if (dtStatusSucceed(status) && found.polygon != 0) {
+                return found;
+            }
         }
-        return found;
+        return outside(position);
     }
 
     /// The polygons the places of `places` reach, sorted, each once with the most any of them makes it cost:
@@ -589,6 +594,12 @@ NavigationQuery::NavigationQuery(const NavigationMesh& mesh)
     const AgentProfile& profile = mesh.profile();
     detourState->filter = filterOf(areaCostsOf(profile));
     detourState->reach = {profile.radius.value(), profile.standingHeight.value(), profile.radius.value()};
+    // The radius the mesh keeps from the floor's end, and the body's width: the half of it past the floor's
+    // end, and the rest for a cell a ledge may take off (rcFilterLedgeSpans) and the outline's
+    // simplification.
+    const float width = profile.radius.value() + profile.radius.value();
+    const float edgeAcross = profile.radius.value() + width;
+    detourState->edgeReach = {edgeAcross, profile.standingHeight.value(), edgeAcross};
     detourState->polygons.resize(nodes);
     detourState->profileName = profile.name;
 }
