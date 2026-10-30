@@ -148,9 +148,10 @@ Each configure preset has a build preset with the same name, and a test preset b
 presets, which build no test. The build directory is `build/<preset>`.
 
 **Windows (command line):** the build uses Ninja + MSVC, which need the Visual Studio
-environment. The `scripts/devShell.ps1` script loads that environment and sets
-`VCPKG_ROOT` to Visual Studio's vcpkg. Visual Studio, VS Code (CMake Tools) and CLion do
-this on their own.
+environment. The `scripts/devShell.ps1` script loads that environment and keeps the `VCPKG_ROOT`
+set before it, such as the CI's checkout of vcpkg at the manifest's baseline, which the Visual
+Studio environment would replace; without one, it sets it to Visual Studio's vcpkg. Visual Studio,
+VS Code (CMake Tools) and CLion do this on their own.
 
 ```powershell
 . .\scripts\devShell.ps1
