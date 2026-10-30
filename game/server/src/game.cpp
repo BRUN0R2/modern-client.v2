@@ -38,6 +38,9 @@ constexpr std::string_view kAttackStream = "player attack";
 /// The stream of random numbers the blood a player's attack sheds draws from, of its command and the
 /// victim.
 constexpr std::string_view kBloodStream = "player blood";
+/// The stream of random numbers the blood a player's attack makes an entity's body shed draws from, of
+/// its command and the entity.
+constexpr std::string_view kEntityBloodStream = "entity blood";
 /// How much less slow a player slowed down by a hit is each command it starts on the ground (PreThink).
 constexpr double kSpeedShareRecovery = 0.01;
 /// The stream of random numbers the team of a player joining by auto-select is drawn from.
@@ -113,6 +116,13 @@ constexpr std::uint32_t kPlayingTeams = 2;
                               .showsAlternateTextures = textures != nullptr && textures->isShown});
         });
     return states;
+}
+
+/// The seed of the random numbers `attacker`'s attack on what it met, `victim`, draws from: of its
+/// command and the victim.
+[[nodiscard]] auto attackSeedOf(const Player& attacker, std::uint64_t victim) noexcept -> std::uint64_t {
+    constexpr unsigned kVictimBits = 32;
+    return (static_cast<std::uint64_t>(attacker.randomSeed.value) << kVictimBits) ^ victim;
 }
 
 } // namespace
@@ -659,14 +669,25 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
         return;
     }
     feelHurt(victim, attack, attacker.team);
-    constexpr unsigned kVictimBits = 32;
-    const std::uint64_t seed = (static_cast<std::uint64_t>(attacker.randomSeed.value) << kVictimBits) ^
-                               m_world.get<PlayerBody>(victim.body)->player.value;
+    const std::uint64_t seed = attackSeedOf(attacker, m_world.get<PlayerBody>(victim.body)->player.value);
     nx::Random random{seed, kAttackStream};
     punchByHit(victim.movement.punch, victim.lastHitGroup, damage, victim.status.armorKind, random);
     if (shedsBlood(victim.lastHitGroup, victim.status.armorKind)) {
         nx::Random blood{seed, kBloodStream};
-        bleed(victim, attack, damage, blood);
+        // BloodSplat: a head streams its blood the way the hit went, before it bleeds.
+        if (victim.lastHitGroup == HitGroup::Head) {
+            const BloodStreamRules& stream = m_content->blood.stream;
+            bloodStreams.push_back(BloodStream{.position = attack.trace.end,
+                                               .direction = attack.direction,
+                                               .color = stream.color,
+                                               .speed = streamSpeedOf(stream, damage, blood)});
+        }
+        bleed(attack,
+              {.body = victim.body,
+               .dealt = damage,
+               .hitGroup = victim.lastHitGroup,
+               .color = m_content->blood.spray.color},
+              blood);
     }
     // TakeDamage.
     if (isTeammate) {
@@ -700,25 +721,26 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
     }
 }
 
-void Game::bleed(const Player& victim, const nx::game::Attack& attack, nx::Damage damage,
-                 nx::Random& random) {
+void Game::bleed(const nx::game::Attack& attack, const Bleeding& bleeding, nx::Random& random) {
+    // TraceBleed: a hit that dealt nothing sheds nothing.
+    if (bleeding.dealt <= nx::Damage{}) {
+        return;
+    }
     const BloodRules& rules = m_content->blood;
     const nx::Vec3 from = attack.trace.end;
-    if (victim.lastHitGroup == HitGroup::Head) {
-        bloodStreams.push_back(BloodStream{.position = from,
-                                           .direction = attack.direction,
-                                           .color = rules.stream.color,
-                                           .speed = streamSpeedOf(rules.stream, damage, random)});
+    if (const std::optional<std::uint32_t> size = spraySizeOf(rules.spray, bleeding.dealt)) {
+        bloodSprays.push_back(BloodSpray{.position = from,
+                                         .direction = attack.direction,
+                                         .color = bleeding.color,
+                                         .size = *size,
+                                         .hitGroup = bleeding.hitGroup});
     }
-    if (const std::optional<std::uint32_t> size = spraySizeOf(rules.spray, damage)) {
-        bloodSprays.push_back(BloodSpray{.position = from, .color = rules.spray.color, .size = *size});
-    }
-    for (const nx::Vec3 way : bleedingWaysOf(rules, damage, attack.direction, random)) {
+    for (const nx::Vec3 way : bleedingWaysOf(rules, bleeding.dealt, attack.direction, random)) {
         const nx::game::SolidHit hit = nx::game::traceSolidsHit(m_world, m_map->hulls(),
                                                                 {.start = from,
                                                                  .end = from + (way * rules.reach.value()),
                                                                  .type = nx::game::TraceType::NoMonsters,
-                                                                 .ignored = victim.body});
+                                                                 .ignored = bleeding.body});
         if (hit.trace.fraction >= 1.0F) {
             continue;
         }
@@ -885,6 +907,18 @@ void Game::attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::
         // The hostage's TakeDamage takes it from its attacker's account.
         player.status.money = addMoney(player.status.money,
                                        nx::Money{} - hostageHarmCost(harm, m_content->economy.hostageHarm));
+    }
+    // CBaseMonster::TraceAttack: a body of a kind that bleeds sprays its blood and traces it behind it.
+    const EntityBody* const body = m_world.get<EntityBody>(entity);
+    if (body == nullptr) {
+        return;
+    }
+    if (const std::optional<std::uint8_t> blood =
+            m_content->entities.type(body->type).definition.bloodColor) {
+        nx::Random random{attackSeedOf(player, std::to_underlying(entity.index())), kEntityBloodStream};
+        bleed(attack,
+              {.body = entity, .dealt = harm.dealt, .hitGroup = hitGroupOf(attack.trace), .color = *blood},
+              random);
     }
 }
 

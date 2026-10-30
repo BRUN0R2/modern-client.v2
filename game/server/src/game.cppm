@@ -359,23 +359,32 @@ private:
     /// `attacker`'s `attack` on `victim`, alive, as the victim's TraceAttack and TakeDamage take it: it is
     /// met in the attack's hit group, its damage that group's share of the players'; a helmet it met
     /// sparks where it met it, off its face (sparksOffHelmet, HelmetSparks); its view punched
-    /// (punchByHit) and its blood shed (bleed) but by a teammate while mp_friendlyfire is 0, whose attack
-    /// then hurts it none (FPlayerCanTakeDamage); a teammate's attack deals its share of it
-    /// (PlayerAttackRules); then it
-    /// flinches, large as its attacker's weapon makes it but in the legs and ducked, knocked back while it
+    /// (punchByHit) and, where its armor lets it (shedsBlood), its blood streamed from a head the way the
+    /// attack went, at its speed (streamSpeedOf, BloodSplat), and shed (bleed) but by a teammate while
+    /// mp_friendlyfire is 0, whose attack then hurts it none (FPlayerCanTakeDamage); a teammate's attack
+    /// deals its share of it (PlayerAttackRules); then it flinches, large as its attacker's weapon makes
+    /// it but in the legs and ducked, knocked back while it
     /// moves slow enough, else small, slowed down; its armor takes its share, its attacker's weapon's
     /// times the armor's ratio (WeaponHarm::armorRatio), and it loses its whole points (harmPlayer), heard
     /// in its pain (painOf); killed by it, it dies, killed by `attacker` (die). The punch's and the
     /// blood's draws come from streams of the attacker's command and the victim.
     void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
-    /// The blood `victim` sheds as `attack` meets it, of `damage` once its hit group took its share, where
-    /// its armor lets it (shedsBlood): met in the head, a stream of the tick where the attack met it, the
-    /// way it went, of its speed (streamSpeedOf, BloodSplat); a spray of the tick there, of its size
-    /// (spraySizeOf, SpawnBlood); then on what is solid behind it, through the world and the brush
+    /// A body an attack draws blood from, as SpawnBlood and TraceBleed take it: the body, the damage the
+    /// attack dealt it once where it met it took its share, where it met it, and the palette entry of its
+    /// blood's color.
+    struct Bleeding {
+        nx::ecs::Entity body{};
+        nx::Damage dealt{};
+        HitGroup hitGroup = HitGroup::Generic;
+        std::uint8_t color = 0;
+    };
+    /// The blood `bleeding`'s body sheds as `attack` meets it, none for an attack that dealt it nothing:
+    /// a spray of the tick where the attack met it, the way it went, of its color, its size (spraySizeOf,
+    /// SpawnBlood) and where it met it; then on what is solid behind it, through the world and the brush
     /// entities, the bodies left be, along the ways it traces (bleedingWaysOf), as far as BloodRules::reach,
     /// a mark of the tick where one of them leaves its decal (bloodDecalOf) on the world or a brush entity
     /// (TraceBleed, UTIL_BloodDecalTrace); drawn from `random`.
-    void bleed(const Player& victim, const nx::game::Attack& attack, nx::Damage damage, nx::Random& random);
+    void bleed(const nx::game::Attack& attack, const Bleeding& bleeding, nx::Random& random);
     /// `player` dies (Killed), killed by `killer`, none for the world: it is heard dying, moves no more
     /// (MovementState::isDead), plays its death by where it was last met, is no longer solid, and its
     /// weapons are gone with it; its killer, another player, gets the money of an enemy's kill, or loses a
@@ -439,7 +448,9 @@ private:
     void payForRound(std::uint32_t hostagesHeld);
     /// `player`'s `attack` on `entity`, as its weapon's TraceAttack and ApplyMultiDamage deal it: to
     /// another player's body as attackPlayer deals it; to another entity as its kind takes it
-    /// (nx::game::attackEntity), a hostage it hurts costing it its money (hostageHarmCost).
+    /// (nx::game::attackEntity), a hostage it hurts costing it its money (hostageHarmCost), and an
+    /// entity's body of a type that bleeds (EntityDefinition::bloodColor) shedding the blood of what it
+    /// was dealt (bleed), drawn from a stream of the attack's command and the entity.
     void attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::Attack& attack);
     /// What the texture a trace from `start` to `end` met, `hit`, is made of, as UTIL_TextureHit finds
     /// it: flesh for a body; of the world's or a brush entity's model, as materials.txt tags it; none for

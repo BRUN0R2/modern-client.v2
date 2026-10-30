@@ -194,13 +194,14 @@ protected:
         return nx::assets::SequenceIndex{nx::test::playerSequenceIndex(label)};
     }
 
-    [[nodiscard]] auto entityType() -> nx::Result<cs::EntityTypeIndex, cs::EntityError> {
+    [[nodiscard]] auto entityType(const cs::EntityDefinition& definition = nx::test::entityDefinition())
+        -> nx::Result<cs::EntityTypeIndex, cs::EntityError> {
         nx::test::writeEntityModel(m_installation);
         auto vfs = nx::assets::Vfs::create(std::array{m_installation.path()});
         if (!vfs) {
             return nx::fail(cs::EntityError::ModelUnreadable, std::move(vfs.error()));
         }
-        return m_content->entities.add(*vfs, nx::test::entityDefinition(), cs::ModelTextures::Skipped);
+        return m_content->entities.add(*vfs, definition, cs::ModelTextures::Skipped);
     }
 
 private:
@@ -478,6 +479,51 @@ TEST_F(GameTest, LocalWeaponsHitAnimatedGenericEntityHitboxesAndKillThem) {
     EXPECT_EQ(snapshot.entities.front().health, nx::HitPoints{});
     EXPECT_EQ(snapshot.entities.front().animation.sequence,
               content().entities.type(snapshot.entities.front().type).sequences.death);
+}
+
+TEST_F(GameTest, AShotSpraysTheBloodOfAnEntitysBodyOfAKindThatBleedsTheWayItWent) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    // Its blood the palette's dark red, not the players' red; its model's one hitbox its head.
+    constexpr std::uint8_t kDarkRed = 223;
+    cs::EntityDefinition bleeding = nx::test::entityDefinition();
+    bleeding.bloodColor = kDarkRed;
+    const auto type = entityType(bleeding);
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    constexpr float kEntityAhead = 200.0F;
+    const auto created = game().createEntity(*type, {.origin = {.x = kEntityAhead, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    game().give(player, *content().weapons.indexOf("ak47"));
+    std::ignore = play(player, kPastTheFirstFreeze);
+
+    const cs::PlayerSnapshot shot = press(player, {cs::Button::Attack}, {.pitch = nx::Degrees{5.0F}});
+    ASSERT_EQ(shot.bloodSprays.size(), 1U);
+    const cs::BloodSpray& spray = shot.bloodSprays.front();
+    EXPECT_EQ(spray.color, kDarkRed);
+    EXPECT_EQ(spray.hitGroup, cs::HitGroup::Head);
+    // The AK-47's 36, a little less by the way it went, twice as much in the head: 71 whole points
+    // doubled, over 10.
+    EXPECT_EQ(spray.size, 14U);
+    EXPECT_GT(spray.direction.x, 0.99F) << "the way the round went";
+    // Where the round met its hitbox, this side of its origin, within the 40 units its box reaches.
+    EXPECT_LT(spray.position.x, kEntityAhead);
+    EXPECT_GT(spray.position.x, kEntityAhead - 40.0F);
+    EXPECT_TRUE(shot.bloodStreams.empty()) << "a player's head's alone";
+}
+
+TEST_F(GameTest, AnEntitysBodyOfAKindThatDoesNotBleedShedsNoBloodAsItIsHurt) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto created = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    game().give(player, *content().weapons.indexOf("ak47"));
+    std::ignore = play(player, kPastTheFirstFreeze);
+
+    const cs::PlayerSnapshot shot = press(player, {cs::Button::Attack}, {.pitch = nx::Degrees{5.0F}});
+    EXPECT_TRUE(shot.bloodSprays.empty());
+    EXPECT_TRUE(shot.bloodMarks.empty());
+    ASSERT_EQ(shot.entities.size(), 1U);
+    EXPECT_LT(shot.entities.front().health, nx::HitPoints{100}) << "hurt all the same";
 }
 
 TEST_F(GameTest, EachTickTellsTheClientWhatItMadeAndPlacedNothingAgain) {
@@ -779,6 +825,9 @@ TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
     EXPECT_EQ(stream.speed, 255U);
     EXPECT_GT(stream.direction.x, 0.99F) << "toward the victim";
     EXPECT_NEAR(stream.position.x, kVictimAhead, cs::kStandingBox.max.x);
+    // And it sprays there, met in the head.
+    ASSERT_EQ(headShot.bloodSprays.size(), 1U);
+    EXPECT_EQ(headShot.bloodSprays.front().hitGroup, cs::HitGroup::Head);
 
     // Dead, its body is not solid: a round goes through where it lies.
     std::ignore = play(attacker, kReadyTicks);
@@ -808,6 +857,9 @@ TEST_F(GameTest, AHitShedsBloodOnTheFloorBehindAPlayerWithNoArmorWhereItCoversIt
         EXPECT_EQ(shooting.bloodSprays.front().size, 7U);
         EXPECT_EQ(shooting.bloodSprays.front().color, content().blood.spray.color);
         EXPECT_NEAR(shooting.bloodSprays.front().position.x, kVictimAhead, cs::kStandingBox.max.x);
+        EXPECT_GT(shooting.bloodSprays.front().direction.x, 0.9F) << "the way the round went, down";
+        EXPECT_LT(shooting.bloodSprays.front().direction.z, 0.0F);
+        EXPECT_EQ(shooting.bloodSprays.front().hitGroup, cs::HitGroup::Chest);
         EXPECT_TRUE(shooting.bloodStreams.empty()) << "a head's alone";
         std::ignore = play(attacker, kReadyTicks);
     }

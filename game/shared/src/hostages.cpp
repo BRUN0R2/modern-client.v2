@@ -230,7 +230,7 @@ auto harmHostage(nx::ecs::World& world, nx::ecs::Entity entity, const nx::game::
         if (hostage.model < models.size()) {
             setActivity(hostage, animation, models[hostage.model], Activity::SmallFlinch, time.now, random);
         }
-        return nx::game::Harm{.damage = taken};
+        return nx::game::Harm{.damage = taken, .dealt = dealt};
     }
     hostage.health = nx::HitPoints{};
     hostage.isDead = true;
@@ -242,7 +242,7 @@ auto harmHostage(nx::ecs::World& world, nx::ecs::Entity entity, const nx::game::
     world.remove<nx::game::BoxSolidity>(entity);
     world.remove<nx::game::ClipMethod>(entity);
     world.remove<nx::game::NextThink>(entity);
-    return nx::game::Harm{.damage = taken, .isKilled = true};
+    return nx::game::Harm{.damage = taken, .dealt = dealt, .isKilled = true};
 }
 
 auto hostageHarmCost(const nx::game::Harm& harm, const HostageHarmCosts& costs) noexcept -> nx::Money {
