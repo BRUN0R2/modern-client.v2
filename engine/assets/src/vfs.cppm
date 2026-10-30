@@ -29,6 +29,7 @@ inline constexpr auto kAllowedExtensions = std::to_array<std::string_view>({
     "gam",
     "bmp",
     "tga",
+    "lmp",
     // Modern (docs/06, section 3.2)
     "gltf",
     "glb",
