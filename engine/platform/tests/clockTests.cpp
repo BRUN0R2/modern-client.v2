@@ -62,9 +62,13 @@ TEST(SleepTimerTest, APassedDeadlineReturnsAtOnce) {
     EXPECT_LT(stopwatch.elapsed(), 100ms);
 }
 
-TEST(SleepTimerTest, PacesAFixedRateLoop) {
-    // Eleven ticks at 500 Hz. A sleep rounded to the default Windows scheduler period (15.6 ms)
-    // would be about 13 ms late every tick; the median lateness must stay below one tick.
+TEST(SleepTimerTest, SleepsEachTickOfA500HertzLoopOnTime) {
+    // Eleven sleeps of a tick at 500 Hz, each until a tick after the last one returned. A sleep rounded
+    // to the default Windows scheduler period (15.6 ms) would be about 13 ms late every tick; the
+    // median lateness must stay below one tick. Each tick is due a tick after the last returned, not on
+    // a schedule of its own: on such a schedule a thread held up once (the OS, or a virtual machine's
+    // host, giving its core away for a while) would make every tick due while it was held up late,
+    // caught up at once, and so the median of a few, though the timer woke each sleep on time.
     constexpr auto kTick = 2ms;
     constexpr int kTicks = 11;
     constexpr auto kMedianLatenessLimit = 2ms;
@@ -72,9 +76,8 @@ TEST(SleepTimerTest, PacesAFixedRateLoop) {
     auto timer = makeTimer();
     ASSERT_TRUE(timer.has_value());
     std::vector<MonotonicClock::duration> lateness;
-    Instant deadline = MonotonicClock::now();
     for (int tick = 0; tick < kTicks; ++tick) {
-        deadline += kTick;
+        const Instant deadline = MonotonicClock::now() + kTick;
         timer->sleepUntil(deadline);
         lateness.push_back(MonotonicClock::now() - deadline);
     }
