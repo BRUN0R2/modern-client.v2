@@ -595,29 +595,6 @@ seconds, each on one of its frames from the second, the last for one beyond the 
 palette's entry 223 (`BLOOD_COLOR_DARKRED`) and its speed the head's damage times 5, cut to a whole
 number, and 0 to 100 more, 255 at most. The original writes the speed as a byte that wraps past 255,
 so that a head shot's stream may be slow; ReGameDLL_CS holds it at 255 (`UTIL_BloodStream`), as here.
-An entity's body ([ADR-0028](adr/0028-native-agent-test-mod.md)) bleeds as `CBaseMonster::TraceAttack`
-sheds a monster's blood when its type names a `bloodColor` (`m_bloodColor`; none for `DONT_BLEED`):
-of what a hit dealt it once its hit group took its share (`nx::game::Harm::dealt`, before its health
-limits what it takes), it sprays and leaves its marks behind it as a player does, in its own color,
-without a head's stream, which is a player's (`BloodSplat`); a hit that dealt nothing sheds nothing
-(`TraceBleed`).
-
-The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
-`data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
-spray, drops and head's stream, which the legacy look keeps. Where the hit met the body it bursts by
-its part of the body: elsewhere than the head, 1.5 droplets for each of the spray's size, 0.2 to 0.6
-units across, flying off the way the hit went at 40 to 180 units a second, a fifth of them back the
-way it came, each turned off that way by up to half its speed and up to 40 faster upward, and 2 mists
-of 2 to 4 units, growing 14 a second, half opaque, gone in a third of a second; in the head it bursts
-more, 3 droplets for each of its size, faster and larger, with 4 larger mists, then gushes the way the
-hit went for 0.75 seconds, 5 pulses of 8 droplets, each 0.8 as fast as the one before. A droplet is drawn
-along a thirtieth of a second of its flight, falls at the world's gravity, losing 0.8 of its speed a
-second, and goes after 2 seconds unless the world stops it first, where half of them leave a splat flat
-on what they met, 2 to 3.5 times their radius, lying 15 seconds and fading out over the last 4. At most
-1024 droplets fly at once, none made past them, and 256 splats lie, a new one taking the oldest's place.
-Each is of its spray's palette entry's color, lit once, as it is made, by the light where the hit met
-the body, as a flat-shaded model is lit there (`cs::Scene::bloodLightAt`: its ambient light and 0.8 of
-its shade, through the light curve). A gush stays where the hit met the body as the body moves on.
 A client shows it as Xash3D-FWGS's `R_BloodStream` does (GPL, consulted; `cs.client:particles`,
 `streamLook`), its particles of the entries 0 to 9 after the server's: a stream of 100 from where the
 hit met the head, the way of each dipped by 0.05 less 0.005 for each before it, the first at the
@@ -635,6 +612,34 @@ helmet, a teammate's that spares it too, strikes sparks off the helmet instead (
 falling at the world's whole gravity and losing 0.9 of its speed across the ground a second, drawn as
 far as it moves in the time it has left, a tenth of a second of it at most, fading out over its last
 half second. The scores and the kill feed come with what they need ([TODO](TODO.md)).
+
+An entity's body ([ADR-0028](adr/0028-native-agent-test-mod.md)) bleeds as `CBaseMonster::TraceAttack`
+sheds a monster's blood when its type names a `bloodColor` (`m_bloodColor`; none for `DONT_BLEED`):
+of what a hit dealt it once its hit group took its share (`nx::game::Harm::dealt`, before its health
+limits what it takes), it sprays and leaves its marks behind it as a player does, in its own color,
+without a head's stream, which is a player's (`BloodSplat`); a hit that dealt nothing sheds nothing
+(`TraceBleed`).
+
+The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
+`data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
+spray, drops and head's stream, which the legacy look keeps: a spray that bursts from where the hit met
+the body and hangs in the air a moment, a little more of it than a real wound sheds, as action games
+show a hit. It bursts by its part of the body: elsewhere than the head, 2.5 droplets for each of the
+spray's size, 0.25 to 0.7 units across, flying off the way the hit went at 120 to 420 units a second,
+two fifths of them back the way it came, each turned off that way by up to 0.7 of its speed and up to
+30 faster upward, and 3 mists of 3 to 5.5 units flying off as the droplets do at up to 60 units a
+second, growing 30 a second, 0.65 opaque, gone in 0.45 seconds; in the head it bursts more, 4 droplets
+for each of its size, faster and larger, with 5 larger mists, then gushes the way the hit went for 0.6
+seconds, 6 pulses of 10 droplets, each 0.8 as fast as the one before. The air slows droplets and mists
+alike, their speed falling to e^-5 of itself a second whatever the frame rate, so that the spray stops
+a short way off; a droplet falls at 0.35 of the world's gravity, is drawn along 0.04 seconds of its
+flight and goes after 0.7 seconds, fading out over the last 0.35, unless the world stops it first,
+where three tenths of them leave a splat flat on what they met, 2 to 3.5 times their radius, lying 15
+seconds and fading out over the last 4. At most 1024 droplets fly at once, none made past them, and 192
+splats lie, a new one taking the oldest's place. Each is of its spray's palette entry's color, lit
+once, as it is made, by the light where the hit met the body, as a flat-shaded model is lit there
+(`cs::Scene::bloodLightAt`: its ambient light and 0.8 of its shade, through the light curve). A gush
+stays where the hit met the body as the body moves on.
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's
