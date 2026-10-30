@@ -8,13 +8,17 @@
 # width, how far its middle stays from walls and ledges; `wallClearance`, how much farther it would
 # rather keep from them where there is room, the floor within it of the kind "edge"; `standingHeight`,
 # and `crouchedHeight`, under which it crouches; `stepHeight`, the highest step it walks up;
-# `jumpHeight`, the highest ledge it jumps onto, which its jump links will span; `minGroundNormalZ`, the
+# `jumpHeight`, the highest ledge it jumps onto, which its jump links will span; `dropHeight`, the
+# highest it drops from unhurt, how far below a body off the mesh the floor it drops to is looked for,
+# which its drop links will span; `minGroundNormalZ`, the
 # least upward share of a floor's unit normal it stands on; and `areaCosts`, the kinds of area ("floor",
 # "crouch", "water", "edge") that cost it more than their length, each 1 or more.
 #
 # The player's is Counter-Strike's movement (cs::kStandingBox, cs::kDuckedBox, sv_stepsize and the
 # ground's normal, cs::kMinGroundNormalZ), with the jump of Condition Zero's bots (ReGameDLL_CS's
-# nav.h; GPL, consulted: docs/20 section 3); a kind of area costs it as many times its length as it
+# nav.h; GPL, consulted: docs/20 section 3), and the drop of playerHarm.toml's `fall.safeSpeed`, 500
+# units a second, reached falling 500² / (2 × 800) units at sv_gravity 800; a kind of area costs it as
+# many times its length as it
 # is slower there: crouched a third of its speed (0.333), in water four fifths (0.8). Its square box
 # reaches 22.6 units from its middle on a diagonal, past its radius, and catches corners: its ways keep
 # a player's half width farther from walls where there is room, the floor along them costing twice its
@@ -28,6 +32,7 @@ standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
 jumpHeight = 41.8
+dropHeight = 156.25
 minGroundNormalZ = 0.7
 areaCosts = [{ area = "crouch", cost = 3.0 }, { area = "water", cost = 1.25 }, { area = "edge", cost = 2.0 }]
 

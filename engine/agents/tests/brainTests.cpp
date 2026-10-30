@@ -403,6 +403,23 @@ TEST(AgentBrain, ReportsAnUnreachableGoalWithoutDirectMovement) {
     EXPECT_FALSE(decision.intent.attacks);
 }
 
+TEST(AgentBrain, ABodyOnAWallOffTheMeshWalksBackToTheFloorAlongItsWay) {
+    // A wall 24 thick and 150 tall on a floor, too thin for the mesh, which the body drops from unhurt.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = -12, .y = -512, .z = -16}, {.x = 12, .y = 256, .z = 150});
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 onTop{.x = 6, .y = -256, .z = 150}; // nearer the side of its goal
+    brain.setGoal(nx::Vec3{.x = 400, .y = -256});
+    for (int decision = 0; decision < 3; ++decision) {
+        const auto moving = brain.decide(onTop, query);
+        ASSERT_EQ(moving.behavior, nx::agents::Behavior::MoveTo) << "not blocked off the mesh";
+        EXPECT_GT(moving.intent.direction.x, 0.0F) << "off the wall, toward its goal";
+    }
+}
+
 TEST(AgentBrain, MovesToItsGoalWithNoTargetAndForgetsItAsItArrives) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

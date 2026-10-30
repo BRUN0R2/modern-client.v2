@@ -297,6 +297,29 @@ TEST(NavigationQueryTest, ABodyOnAWallTooThinForTheMeshFindsTheFloorBesideIt) {
     ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
 }
 
+TEST(NavigationQueryTest, ABodyOnAWallItDropsFromUnhurtFindsTheFloorAndOneOnAHigherWallDoesNot) {
+    // Walls 24 thick on a floor, a way around their ends: one 150 tall, which the player drops from unhurt
+    // (156.25), and one 200 tall, which it does not.
+    constexpr float kLow = 150.0F;
+    constexpr float kHigh = 200.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 1024.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 500.0F, .y = 0.0F, .z = -16.0F}, {.x = 524.0F, .y = 384.0F, .z = kLow});
+    nx::test::addBox(geometry, {.x = 500.0F, .y = 640.0F, .z = -16.0F},
+                     {.x = 524.0F, .y = 1024.0F, .z = kHigh});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const auto floor = query.nearestPoint({.x = 512.0F, .y = 192.0F, .z = kLow});
+    ASSERT_TRUE(floor.has_value()) << nx::describe(floor.error());
+    EXPECT_NEAR(floor->z, 0.0F, kTolerance);
+    const auto path =
+        query.findPath({.from = {.x = 512.0F, .y = 192.0F, .z = kLow}, .to = {.x = 900.0F, .y = 192.0F}});
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    const auto tooHigh = query.nearestPoint({.x = 512.0F, .y = 832.0F, .z = kHigh});
+    ASSERT_FALSE(tooHigh.has_value());
+    EXPECT_EQ(tooHigh.error().code, NavigationError::OutsideMesh);
+}
+
 TEST(NavigationQueryTest, AStraightWalkStopsAtTheEdgeOfTheMesh) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

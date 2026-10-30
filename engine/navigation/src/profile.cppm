@@ -48,6 +48,9 @@ struct AgentProfile {
     HammerUnits stepHeight{}; ///< The highest step it walks up.
     /// The highest ledge it jumps onto: what its jump links will span (TODO.md), at least stepHeight.
     HammerUnits jumpHeight{};
+    /// The highest ledge it drops from unhurt: how far below a body off the mesh the floor it drops to is
+    /// looked for (NavigationQuery), and what its drop links will span (TODO.md); at least stepHeight.
+    HammerUnits dropHeight{};
     /// The least upward share of a floor's unit normal it stands on: a steeper floor is a wall.
     float minGroundNormalZ = 0.0F;
     /// The kinds of area that do not cost their length, each once and at least 1: A* finds the cheapest
@@ -119,6 +122,7 @@ struct nx::meta::Description<nx::navigation::AgentProfile> {
         nx::meta::field<&nx::navigation::AgentProfile::crouchedHeight>("crouchedHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::stepHeight>("stepHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::jumpHeight>("jumpHeight"),
+        nx::meta::field<&nx::navigation::AgentProfile::dropHeight>("dropHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::minGroundNormalZ>("minGroundNormalZ"),
         nx::meta::field<&nx::navigation::AgentProfile::areaCosts>("areaCosts"),
     };

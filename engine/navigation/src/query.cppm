@@ -56,7 +56,9 @@ struct StraightWalk {
 /// its radius across, its standing height up and down; else, when one is within its edge reach: its
 /// radius and its width across, as far as the middle of a body standing at the end of the floor may be
 /// from the mesh, which keeps its radius from where the floor ends (a ledge, the top of a wall too thin
-/// for the mesh), the body standing while its box is over the floor. Errors name the failure's position.
+/// for the mesh), the body standing while its box is over the floor; its standing height up, and down
+/// its drop height, as far as the floor a body off the mesh drops to unhurt. Errors name the failure's
+/// position.
 class NavigationQuery {
 public:
     /// Query inputs must be finite, sampling radii nonnegative, and costs finite and at least one.

@@ -100,6 +100,11 @@ auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
     if (!isPositive(profile.standingHeight) || !isPositive(profile.jumpHeight)) {
         return invalidProfile(profile, "standing and jump heights must be finite and positive");
     }
+    if (!isPositive(profile.dropHeight) || !(profile.dropHeight >= profile.stepHeight)) {
+        return invalidProfile(profile, std::format("dropping {} and stepping {}: a drop must be finite and "
+                                                   "no less than a step",
+                                                   profile.dropHeight, profile.stepHeight));
+    }
     if (!std::isfinite(profile.wallClearance.value()) || profile.wallClearance < HammerUnits{}) {
         return invalidProfile(profile, "a wall clearance must be finite and none or more");
     }

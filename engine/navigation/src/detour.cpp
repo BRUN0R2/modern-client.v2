@@ -84,6 +84,8 @@ constexpr int kMostSteeringWalls = 8;
 /// How far an agent moves, in shares of how far it looks about it, before it looks for the walls again:
 /// DetourCrowd's.
 constexpr float kWallsFoundAgainShare = 0.25F;
+/// Half: of a box's height, the half extent Detour looks within.
+constexpr float kHalf = 0.5F;
 /// How the avoidance weighs a velocity: dtCrowd::init's defaults (its adaptive sampling's divisions, rings
 /// and depth; its bias toward the desired velocity; the weights of the desired and current velocities, of
 /// a side and of the time of impact; and how far ahead it looks, in seconds).
@@ -494,10 +496,16 @@ auto NavigationMesh::load(std::span<const std::byte> bytes, MeshKey key, const A
 struct NavigationQuery::Detour {
     std::unique_ptr<dtNavMeshQuery, NavMeshQueryFree> query;
     dtQueryFilter filter; ///< Of the profile's costs.
-    /// How far from a point the polygon under it is looked for: the profile's standing box.
-    std::array<float, 3> reach{};
-    /// How far it is looked for next, none being within reach: the profile's edge reach (NavigationQuery).
-    std::array<float, 3> edgeReach{};
+    /// Where about a point the polygon under it is looked for: a box's middle above the point, and the
+    /// box's half extents.
+    struct Reach {
+        float above = 0.0F;
+        std::array<float, 3> extents{};
+    };
+    /// The profile's standing box (NavigationQuery).
+    Reach reach{};
+    /// The profile's edge reach, looked within next, none being within reach (NavigationQuery).
+    Reach edgeReach{};
     std::vector<dtPolyRef> polygons;     ///< Room for a way's polygons, or those a circle reaches.
     std::vector<float> points;           ///< Room for a way's corners.
     std::vector<AvoidedPolygon> avoided; ///< Room for the polygons a way's avoided places reach.
@@ -511,10 +519,10 @@ struct NavigationQuery::Detour {
         if (!isFinite(position)) {
             return fail(NavigationError::InvalidQuery, "navigation coordinates must be finite");
         }
-        const std::array<float, 3> center = detail::detourOf(position);
-        for (const std::array<float, 3>* const extents : {&reach, &edgeReach}) {
+        for (const Reach* const extents : {&reach, &edgeReach}) {
+            const std::array<float, 3> center = detail::detourOf(position + Vec3{.z = extents->above});
             MeshPoint found;
-            const dtStatus status = query->findNearestPoly(center.data(), extents->data(), &filter,
+            const dtStatus status = query->findNearestPoly(center.data(), extents->extents.data(), &filter,
                                                            &found.polygon, found.position.data());
             if (dtStatusSucceed(status) && found.polygon != 0) {
                 return found;
@@ -593,13 +601,17 @@ NavigationQuery::NavigationQuery(const NavigationMesh& mesh)
         "a search");
     const AgentProfile& profile = mesh.profile();
     detourState->filter = filterOf(areaCostsOf(profile));
-    detourState->reach = {profile.radius.value(), profile.standingHeight.value(), profile.radius.value()};
+    detourState->reach = {
+        .extents = {profile.radius.value(), profile.standingHeight.value(), profile.radius.value()}};
     // The radius the mesh keeps from the floor's end, and the body's width: the half of it past the floor's
     // end, and the rest for a cell a ledge may take off (rcFilterLedgeSpans) and the outline's
-    // simplification.
+    // simplification. Up its standing height, down its drop height: the box's middle halfway between.
     const float width = profile.radius.value() + profile.radius.value();
     const float edgeAcross = profile.radius.value() + width;
-    detourState->edgeReach = {edgeAcross, profile.standingHeight.value(), edgeAcross};
+    const float up = profile.standingHeight.value();
+    const float down = std::max(profile.dropHeight.value(), up);
+    detourState->edgeReach = {.above = (up - down) * kHalf,
+                              .extents = {edgeAcross, (up + down) * kHalf, edgeAcross}};
     detourState->polygons.resize(nodes);
     detourState->profileName = profile.name;
 }
