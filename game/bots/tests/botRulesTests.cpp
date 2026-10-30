@@ -44,6 +44,7 @@ TEST(BotRulesTest, TheLevelsOfSkillAreTheZBotsTemplatesEachOfItsDifficulties) {
     EXPECT_EQ(easy.skill, cs::BotSkill{0.0F});
     EXPECT_EQ(easy.reactionTime, nx::Seconds{0.5F});
     EXPECT_EQ(easy.attackDelay, nx::Seconds{1.5F});
+    EXPECT_FLOAT_EQ(easy.aggression, 0.2F) << "the Easy template's Aggression, a hundredth";
     EXPECT_EQ(easy.profiles.front(), "Abner");
     const cs::BotSkillLevel& elite = rules->skillLevels.back();
     EXPECT_EQ(elite.name, "elite");
@@ -51,6 +52,7 @@ TEST(BotRulesTest, TheLevelsOfSkillAreTheZBotsTemplatesEachOfItsDifficulties) {
     EXPECT_EQ(elite.skill, cs::BotSkill{1.0F});
     EXPECT_EQ(elite.reactionTime, nx::Seconds{0.2F});
     EXPECT_EQ(elite.attackDelay, nx::Seconds{});
+    EXPECT_FLOAT_EQ(elite.aggression, 1.0F);
 }
 
 TEST(BotRulesTest, RulesBeyondTheirBoundsAreRefused) {

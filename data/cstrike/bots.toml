@@ -77,7 +77,7 @@ side = 13.0
 # The levels of skill a bot plays with, each with the profiles of the bots that play with it: a bot
 # joining takes a profile of bot_difficulty's difficulty no one in the game plays as, its name the
 # profile's (after bot_prefix). The templates of the BotProfile.db that ReGameDLL_CS's zBot ships (its
-# Skill a hundredth here; the Default template's reaction time 0.3 and attack delay 0 where one sets
+# Skill and its Aggression a hundredth here; the Default template's reaction time 0.3 and attack delay 0 where one sets
 # none); the profiles' names are the project's own.
 [[skillLevels]]
 name = "easy"
@@ -87,6 +87,7 @@ profiles = [
     "Mortimer", "Percival"
 ]
 skill = 0.0
+aggression = 0.2
 reactionTime = 0.5
 attackDelay = 1.5
 
@@ -98,6 +99,7 @@ profiles = [
     "Leopold", "Rupert", "Silas"
 ]
 skill = 0.25
+aggression = 0.3
 reactionTime = 0.4
 attackDelay = 1.0
 
@@ -109,6 +111,7 @@ profiles = [
     "Marco", "Nuno"
 ]
 skill = 0.5
+aggression = 0.5
 reactionTime = 0.4
 attackDelay = 0.7
 
@@ -117,6 +120,7 @@ name = "tough"
 difficulties = ["normal", "hard"]
 profiles = ["Aldo", "Bento", "Ciro", "Diego", "Enzo", "Franco", "Gael", "Heitor", "Igor", "Joel"]
 skill = 0.6
+aggression = 0.6
 reactionTime = 0.3
 attackDelay = 0.35
 
@@ -127,6 +131,7 @@ profiles = [
     "Arthur", "Bernardo", "Cassio", "Davi", "Elton", "Fausto", "Gaspar", "Ismael", "Jonas", "Kleber"
 ]
 skill = 0.75
+aggression = 0.75
 reactionTime = 0.25
 attackDelay = 0.0
 
@@ -135,6 +140,7 @@ name = "veryHard"
 difficulties = ["hard"]
 profiles = ["Leandro", "Matheus", "Nelson", "Otavio", "Pietro", "Rafael", "Saulo", "Tiago"]
 skill = 0.8
+aggression = 0.8
 reactionTime = 0.25
 attackDelay = 0.0
 
@@ -145,6 +151,7 @@ profiles = [
     "Renato", "Silvio", "Tadeu", "Teodoro", "Valter", "Vicente", "Wagner", "Xande", "Yago", "Zeca"
 ]
 skill = 0.9
+aggression = 0.9
 reactionTime = 0.2
 attackDelay = 0.0
 
@@ -153,6 +160,7 @@ name = "elite"
 difficulties = ["expert"]
 profiles = ["Aurelio", "Bastian", "Cosimo", "Dante", "Ezio", "Fiore", "Galeno", "Lauro"]
 skill = 1.0
+aggression = 1.0
 reactionTime = 0.2
 attackDelay = 0.0
 
@@ -231,13 +239,20 @@ farSide = 400.0
 height = 50.0
 lookedWithin = 5.0
 
-# How a bot moves as it fights (AttackState::OnEnter and OnUpdate): it dodges a fight at 80 percent of
-# its skill, twice that with a knife. Dodging, while its enemy within 2000 units faces it
+# How a bot moves as it fights (AttackState::OnEnter and OnUpdate): as a fight begins, but with a knife,
+# it crouches and holds at half a chance with its enemy farther than 750 units, else at 20 percent of how
+# much aggression it lacks, a line from its origin 20 lower clear to its enemy's eye; and holding, it
+# neither dodges nor keeps its range. Else it dodges a fight at 80 percent of its skill, twice that with a
+# knife. Dodging, while its enemy within 2000 units faces it
 # (IsPlayerFacingMe), it holds still or slides left or right, a way other than the last drawn each 0.3 to
 # 1 second; the first of a fight a jump at a third, above half a skill, moving faster than 10 units a
 # second (IsNotMoving). Below 0.66 of skill it keeps its combat range, drawn within 325 to 425 as it
 # spawns (ResetValues), 125 either way (hysterisRange), going ahead or back.
 [combat]
+farCrouchChance = 0.5
+crouchFarFrom = 750.0
+nearCrouchChance = 0.2
+crouchSightDrop = 20.0
 dodgeChance = 0.8
 knifeDodgeFactor = 2.0
 dodgeRange = 2000.0

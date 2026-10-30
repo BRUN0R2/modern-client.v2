@@ -117,7 +117,7 @@ public:
     /// (leadSpot) and off by its aim's error (settleAimError), or at what it looks at, or along its way;
     /// or, hurt, at the spot it panics to (BotRules::panic), until its view is within lookedWithin of it;
     /// moves along its corridor as it steers, wiggling and jumping while it is stuck (BotRules::stuck), or,
-    /// as it attacks, dodges and keeps its range (fightMove, BotRules::combat);
+    /// as it attacks, crouches and holds, or dodges and keeps its range (fightMove, BotRules::combat);
     /// and presses its attack as its trigger lets it (pullTrigger), its level's attack delay after it took
     /// its enemy on. With nothing to pursue, it hunts a place drawn on the mesh within BotRules::huntRadius,
     /// another when it gives the last up, stuck too long. Spawning again, killed or alive at a round's
@@ -150,17 +150,19 @@ private:
     /// (cs::heardBy, BotRules::hearing), feeling those its body touches (cs::touchedBy), and, hurt by one,
     /// looking about (panic).
     [[nodiscard]] auto beginTurn(PlayerIndex player, const Sights& sights) -> Turn;
-    /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `targets`.
-    [[nodiscard]] auto finishTurn(Turn& turn, const nx::agents::Decision& decision,
-                                  std::span<const PerceptionTarget> targets) -> UserCommand;
+    /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `sights`.
+    [[nodiscard]] auto finishTurn(Turn& turn, const nx::agents::Decision& decision, const Sights& sights)
+        -> UserCommand;
     /// What the bot `player`, its agent `agent`, alive as `self`, sees of the targets of `sights` this tick,
     /// within its budget.
     [[nodiscard]] auto perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
                                 const Sights& sights) -> std::vector<nx::agents::Observation>;
-    /// Moves `command` of the bot `player`, with `driver`, alive as `self`, as it attacks `enemy` among
-    /// `targets`: it dodges and keeps its range (fightMove, BotRules::combat).
+    /// Moves `command` of the bot `player`, with `driver`, alive as `self`, as it attacks `enemy` among the
+    /// targets of `sights`: it crouches and holds, or dodges and keeps its range (fightMove,
+    /// BotRules::combat), a line to its enemy's eye from its origin crouched traced through the solids of
+    /// `sights` as the fight begins.
     void fight(UserCommand& command, BotDriver& driver, PlayerIndex player, const PlayerOwnState& self,
-               nx::ecs::Entity enemy, std::span<const PerceptionTarget> targets);
+               nx::ecs::Entity enemy, const Sights& sights);
     /// The spot a bot with `driver`, as `self` knows itself, looks at, hurt by an enemy from
     /// self.hurtFrom (BotRules::panic, Panic), unless it sees an enemy as it attacks, as `agent` last
     /// decided, but at random; none while it looks at one already.

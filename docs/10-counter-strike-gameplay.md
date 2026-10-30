@@ -848,12 +848,15 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   moves less than a quarter of how far it is (`replanShare`), more than `replanDistance`, keeps its way,
   the corridor's end slid to it along the mesh, as DetourCrowd adjusts a target without a search.
 - It fights as Condition Zero's bot does (`AttackState::OnEnter`, `OnUpdate`; `cs.bots:botCombat`, the
-  `combat` table of `bots.toml`): as a fight begins it dodges it at 80 percent of its skill, twice that
-  with a knife. Dodging, while its enemy within 2000 units faces it (`IsPlayerFacingMe`), it holds still
+  `combat` table of `bots.toml`): as a fight begins, but with a knife, it crouches and holds at half a
+  chance with its enemy farther than 750 units, else at 20 percent of how much aggression it lacks (the
+  zBot templates' Aggression, a hundredth: easy 0.2 to elite 1), when a line from its origin 20 lower
+  reaches its enemy's eye clear, and then it neither dodges nor keeps its range; else it dodges the fight
+  at 80 percent of its skill, twice that with a knife. Dodging, while its enemy within 2000 units faces it (`IsPlayerFacingMe`), it holds still
   or slides left or right, a way other than the last drawn each 0.3 to 1 second, the first of a fight a
   jump at a third above half a skill while it moves (`IsNotMoving`'s 10 units a second); below 0.66 of
   skill it keeps its combat range, drawn within 325 to 425 as it spawns, 125 either way, going ahead or
-  back. It crouches and holds, turns coward or retreats once the profiles' aggression comes in.
+  back. It turns coward and retreats once it can find where to (the tactical layer).
 - What it perceives while it fights waits for the fight to be over: its memory's 10 seconds count from
   the last moment it saw an enemy too (`nx::agents::Rules::memoryLifetime`), so that it looks into a step
   it heard mid-fight once the fight is done. Losing sight of the enemy it fought, it keeps after it to
