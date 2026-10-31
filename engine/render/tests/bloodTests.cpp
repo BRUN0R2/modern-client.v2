@@ -162,8 +162,8 @@ TEST(BloodRendererTest, AMistIsAPuffOfSmokeThickThroughItsCoreItsDensityUnevenBy
     const std::array drops{mist};
     const std::vector<std::byte> pixels = drawn(target, *renderer, drops);
     // Through its core, a quarter of its radius out, as thick as its smoke makes it: 0.4 of it to all.
-    for (const auto [x, y] : {std::pair{kMiddle, kMiddle}, std::pair{pixelsRight(0.5F), kMiddle},
-                              std::pair{kMiddle, pixelsAbove(0.5F)}}) {
+    for (const auto& [x, y] : {std::pair{kMiddle, kMiddle}, std::pair{pixelsRight(0.5F), kMiddle},
+                               std::pair{kMiddle, pixelsAbove(0.5F)}}) {
         const int red = pixelAt(pixels, x, y).at(0);
         EXPECT_GE(red, 200 * 2 / 5 - 3) << x << ", " << y;
         EXPECT_LE(red, 200 + 3) << x << ", " << y;
