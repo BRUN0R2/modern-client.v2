@@ -158,6 +158,7 @@ readers expected, and the readers now follow them
 | Client frame extraction, hostage lookup, aim posing, light selection, grouped view-model reads and fog updates | `nxBenchClient` | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
 | Job System throughput | `nxBenchJobs` | 5% |
+| Navigation queries and agent decisions with and without braking | `nxBenchNavigation` | 5% |
 | Light-style payload copy, unchanged snapshot comparison and frame evaluation (12 and 64 animated styles) | `nxBenchLightStyles` | 5% |
 | Map loading (warm cache) | `nxBenchAssets` (planned) | 10% |
 | Rook compile time per 1000 lines | `rookBench` (planned) | 10% |
@@ -179,6 +180,15 @@ not a measurement of the complete frame or a promise about player FPS:
 
 ```powershell
 .\build\release-windows-msvc\bin\nxBenchClient.exe --benchmark_min_time=0.25s --benchmark_repetitions=5
+```
+
+`nxBenchNavigation` measures synthetic paths across a floor with pillars. Its serial decision cases
+include the same 32, 64, 256 and 1024 agents with instantaneous movement and with ground braking;
+mesh construction and initial path planning are outside the measured iterations. Compare the same
+build, inputs and machine over repeated runs: these cases do not measure a complete game tick.
+
+```powershell
+.\build\release-windows-msvc\bin\nxBenchNavigation.exe '--benchmark_filter=^agentDecisions(Braking)?/(256|1024)$' --benchmark_min_time=0.25s --benchmark_repetitions=5
 ```
 
 ## Sanitizers and analysis
