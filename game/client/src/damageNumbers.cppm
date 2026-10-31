@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 /// The damage numbers (docs/12-ui-hud-and-console.md, section 3.2): a number of each hit of the player's
-/// (cs::DamageDealt) over where it met the body, over everything else, as data/cstrike/damageNumbers.toml
-/// makes it look (cs::DamageNumberLook), moving every frame by the time it has shown; apart from the HUD,
-/// the scene and how the hits are dealt, and shown while hud_damagenumbers is 1.
+/// (cs::DamageDealt) over the head of the body it met, over everything else, as
+/// data/cstrike/damageNumbers.toml makes it look (cs::DamageNumberLook), moving every frame by the time it
+/// has shown; apart from the HUD, the scene and how the hits are dealt, and shown while hud_damagenumbers
+/// is 1.
 export module cs.client:damageNumbers;
 
 import std;
@@ -45,6 +46,14 @@ struct DamageNumberPose {
 [[nodiscard]] auto damageNumberPoseAt(const DamageNumberLook& look, nx::Seconds age) noexcept
     -> std::optional<DamageNumberPose>;
 
+/// Where on a screen `screenHeight` pixels tall the middle of a number of `look`'s line is drawn, the top
+/// of the head of the body its hit met drawn at `headTop`, as `pose` shows it, `side` of the look's spread
+/// to a side (from -1, left, to 1): its digits' foot, `footBelowMiddle` pixels below its middle at its whole
+/// size, the look's gap over the head, risen by the pose's share of the look's rise.
+[[nodiscard]] auto damageNumberMiddleOf(const DamageNumberLook& look, const DamageNumberPose& pose,
+                                        float side, nx::render::ScreenPoint headTop, float screenHeight,
+                                        float footBelowMiddle) noexcept -> nx::render::ScreenPoint;
+
 /// What a number says of `damage`: its whole points, to the nearest, 1 at least.
 [[nodiscard]] auto damageText(nx::Damage damage) -> std::string;
 
@@ -71,17 +80,18 @@ public:
     /// How many numbers show.
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return m_numbers.size(); }
 
-    /// Appends to `quads` the numbers showing at `now`, once loaded, each over where its hit met the body
-    /// as `viewProjection` draws the map on a screen of `size`, the newest over the older, its outline
-    /// under its digits; the numbers whose life is over go, loaded or not. One behind the eye is not drawn.
+    /// Appends to `quads` the numbers showing at `now`, once loaded, each over the head of the body its hit
+    /// met (damageNumberMiddleOf) as `viewProjection` draws the map on a screen of `size`, the newest over
+    /// the older, its outline under its digits; the numbers whose life is over go, loaded or not. One over a
+    /// head behind the eye is not drawn.
     void append(std::vector<nx::render::ScreenQuad>& quads, const nx::Mat4& viewProjection,
                 nx::rhi::Extent2d size, nx::Seconds now);
 
 private:
-    /// A number showing: where its hit met the body, what it says, whether of a head, when it was hit,
-    /// and the share of the look's spread it is drawn to a side, from -1 (left) to 1.
+    /// A number showing: over the head of the body its hit met, what it says, whether of a head, when it
+    /// was hit, and the share of the look's spread it is drawn to a side, from -1 (left) to 1.
     struct Number {
-        nx::Vec3 position{};
+        nx::Vec3 headTop{};
         std::string text{};
         bool isHead = false;
         nx::Seconds bornAt{};

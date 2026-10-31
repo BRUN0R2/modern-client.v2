@@ -328,4 +328,30 @@ TEST(StudioHitboxTest, AHitboxIsPlacedByItsBone) {
     EXPECT_EQ(placed[1].bounds, hitboxes[1].bounds);
 }
 
+TEST(StudioHitboxTest, OverTheHeadIsTheMiddleOfItsHitboxesAcrossAtTheirHighestCornerAsTheyArePosed) {
+    // The head's bone 40 up, rolled a quarter turn: its box, flat along Y, stands up along Z.
+    const std::vector bones{nx::affine(nx::Mat3{}, {}),
+                            nx::affine(nx::rotationMatrix(nx::EulerAngles{.roll = nx::Degrees{90.0F}}),
+                                       {.x = 2.0F, .y = 3.0F, .z = 40.0F})};
+    std::vector hitboxes{nx::assets::Hitbox{.bone = BoneIndex{1},
+                                            .group = 1,
+                                            .bounds = {.min = {.x = -2.0F, .y = -5.0F, .z = -1.0F},
+                                                       .max = {.x = 2.0F, .y = 5.0F, .z = 1.0F}}},
+                         // An arm raised past it.
+                         nx::assets::Hitbox{.bone = BoneIndex{0},
+                                            .group = 4,
+                                            .bounds = {.min = {.x = -1.0F, .y = -1.0F},
+                                                       .max = {.x = 1.0F, .y = 1.0F, .z = 60.0F}}}};
+
+    const std::optional<Vec3> head = cs::headTopOf(hitboxes, cs::placedHitboxesOf(hitboxes, bones));
+    ASSERT_TRUE(head.has_value());
+    expectNear(*head, {.x = 2.0F, .y = 3.0F, .z = 45.0F});
+    // A model with none of a head's: over all of its hitboxes.
+    hitboxes[0].group = 2;
+    const std::optional<Vec3> body = cs::headTopOf(hitboxes, cs::placedHitboxesOf(hitboxes, bones));
+    ASSERT_TRUE(body.has_value());
+    expectNear(*body, {.x = 1.5F, .y = 1.5F, .z = 60.0F});
+    EXPECT_FALSE(cs::headTopOf({}, {}).has_value());
+}
+
 } // namespace

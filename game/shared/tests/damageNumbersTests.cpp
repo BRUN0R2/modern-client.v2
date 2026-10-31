@@ -31,6 +31,8 @@ TEST(DamageNumberLookTest, TheRepositorysNumbersAreWhiteARedHeadsInAHeavyItalicF
     EXPECT_LT(look->startScale, 1.0F) << "it starts small";
     EXPECT_GT(look->peakScale, 1.0F) << "and pops up past its size";
     EXPECT_GT(look->rise, 0.0F);
+    EXPECT_GT(look->gap, 0.0F) << "its digits a little over the head";
+    EXPECT_LT(look->gap, look->height) << "never far over it";
 }
 
 TEST(DamageNumberLookTest, ALookThatCannotShowIsRefused) {

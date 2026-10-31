@@ -19,10 +19,11 @@ enum class DamageNumberError : std::uint8_t {
     DataInvalid, ///< The file breaks its schema or its rules (cause: the DataError, when there is one).
 };
 
-/// What a hit of a player's dealt a body, which its client shows as a number: where it met the body, the
-/// damage it dealt, and whether it met it in the head. Each pellet of a shot that hits is a hit of its own.
+/// What a hit of a player's dealt a body, which its client shows as a number: over the head of the body
+/// as the hit met it, standing or ducked, wherever it met it (cs::Game::headTopOf), the damage it dealt,
+/// and whether it met it in the head. Each pellet of a shot that hits is a hit of its own.
 struct DamageDealt {
-    nx::Vec3 position{};
+    nx::Vec3 headTop{};
     nx::Damage damage{};
     bool isHead = false;
 };
@@ -43,16 +44,18 @@ struct DamageNumberFont {
 };
 
 /// How the damage of a player's hits shows, the project's own, as action games show it: a number of each
-/// hit (DamageDealt) over where it met the body, over everything else, walls and all, in `font`, its line
-/// `height` of the screen's at its whole size, in `color`, a head's in `headColor`, outlined in
-/// `outlineColor` `outline` of its line's height about its digits. It starts at `startScale` of its size,
-/// fading in over `fadeIn`; grows to `peakScale` over `growTime`, easing out; settles back to its whole
-/// size over `settleTime`; rises `rise` of the screen's height over its `life`, easing out, from where it
-/// was drawn up to `spread` of the screen's height to a side; and over its last `fadeOut`, fades out and
-/// shrinks to `endScale`. At most `mostNumbers` show at once, the oldest going first.
+/// hit (DamageDealt) over the head of the body it met, its digits at their whole size standing `gap` of
+/// the screen's height over it however near or far the body is, over everything else, walls and all, in
+/// `font`, its line `height` of the screen's at its whole size, in `color`, a head's in `headColor`,
+/// outlined in `outlineColor` `outline` of its line's height about its digits. It starts at `startScale`
+/// of its size, fading in over `fadeIn`; grows to `peakScale` over `growTime`, easing out; settles back to
+/// its whole size over `settleTime`; rises `rise` of the screen's height over its `life`, easing out, from
+/// where it was drawn up to `spread` of the screen's height to a side; and over its last `fadeOut`, fades
+/// out and shrinks to `endScale`. At most `mostNumbers` show at once, the oldest going first.
 struct DamageNumberLook {
     DamageNumberFont font{};
     float height = 0.0F;
+    float gap = 0.0F;
     DamageNumberColor color{};
     DamageNumberColor headColor{};
     DamageNumberColor outlineColor{};
@@ -107,6 +110,7 @@ struct nx::meta::Description<cs::DamageNumberLook> {
         nx::meta::field<&cs::DamageNumberLook::font>("font"),
         nx::meta::field<&cs::DamageNumberLook::height>("height",
                                                        nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
+        nx::meta::field<&cs::DamageNumberLook::gap>("gap", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::DamageNumberLook::color>("color"),
         nx::meta::field<&cs::DamageNumberLook::headColor>("headColor"),
         nx::meta::field<&cs::DamageNumberLook::outlineColor>("outlineColor"),

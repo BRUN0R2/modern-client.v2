@@ -84,27 +84,41 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
                                               transform.origin + type.definition.modelOffset.vector())});
 }
 
-[[nodiscard]] auto clipEntity(nx::ecs::World& world, nx::ecs::Entity entity, const nx::Aabb& traced,
-                              nx::Vec3 start, nx::Vec3 end) -> nx::collision::Trace {
-    const nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
-    if (traced.min != traced.max) {
-        return nx::collision::traceBox(
-            {.min = kStandingBox.min - traced.max, .max = kStandingBox.max - traced.min}, transform.origin,
-            start, end);
-    }
+/// The hitboxes of the model of entity body `entity` of `world`.
+[[nodiscard]] auto hitboxesOf(const nx::ecs::World& world, nx::ecs::Entity entity)
+    -> std::span<const nx::assets::Hitbox> {
     const EntityCatalog& catalog = catalogOf(world);
+    return catalog.model(catalog.type(world.get<EntityBody>(entity)->type).model).files->view->hitboxes();
+}
+
+/// The hitboxes of entity body `entity` of `world` on its posed bones: as a trace last placed them,
+/// placed anew when its pose changed since.
+[[nodiscard]] auto placedHitboxes(nx::ecs::World& world, nx::ecs::Entity entity)
+    -> std::span<const nx::collision::PlacedBox> {
+    const nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
     const EntityBody& body = *world.get<EntityBody>(entity);
-    const auto hitboxes = catalog.model(catalog.type(body.type).model).files->view->hitboxes();
     PlacedEntityHitboxes& placed = *world.get<PlacedEntityHitboxes>(entity);
     const HitboxPose pose{.sequence = body.animation.sequence,
                           .frame = body.animation.frame,
                           .origin = transform.origin,
                           .angles = transform.angles};
     if (placed.pose != pose) {
-        placed.boxes = placedHitboxesOf(hitboxes, bonesOf(world, entity));
+        placed.boxes = placedHitboxesOf(hitboxesOf(world, entity), bonesOf(world, entity));
         placed.pose = pose;
     }
-    const nx::collision::HitboxTrace hit = nx::collision::traceHitboxes(placed.boxes, start, end);
+    return placed.boxes;
+}
+
+[[nodiscard]] auto clipEntity(nx::ecs::World& world, nx::ecs::Entity entity, const nx::Aabb& traced,
+                              nx::Vec3 start, nx::Vec3 end) -> nx::collision::Trace {
+    if (traced.min != traced.max) {
+        return nx::collision::traceBox(
+            {.min = kStandingBox.min - traced.max, .max = kStandingBox.max - traced.min},
+            world.get<nx::game::Transform>(entity)->origin, start, end);
+    }
+    const auto hitboxes = hitboxesOf(world, entity);
+    const nx::collision::HitboxTrace hit =
+        nx::collision::traceHitboxes(placedHitboxes(world, entity), start, end);
     nx::collision::Trace trace = hit.trace;
     if (trace.fraction < 1.0F || trace.startsSolid) {
         trace.hitGroup = hitboxes[hit.hitbox].group;
@@ -308,6 +322,10 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         nx::game::touchBrushEntities(world, hulls, moved.touchedModels, entity);
     }
     return done;
+}
+
+auto entityHeadTopOf(nx::ecs::World& world, nx::ecs::Entity entity) -> std::optional<nx::Vec3> {
+    return headTopOf(hitboxesOf(world, entity), placedHitboxes(world, entity));
 }
 
 auto entityStatesOf(nx::ecs::World& world) -> std::vector<EntityState> {

@@ -96,6 +96,14 @@ auto damageNumberPoseAt(const DamageNumberLook& look, nx::Seconds age) noexcept
     return DamageNumberPose{.scale = scale, .opacity = opacity, .rise = easedOut(shareOf(age, look.life))};
 }
 
+auto damageNumberMiddleOf(const DamageNumberLook& look, const DamageNumberPose& pose, float side,
+                          nx::render::ScreenPoint headTop, float screenHeight, float footBelowMiddle) noexcept
+    -> nx::render::ScreenPoint {
+    return {.x = headTop.x + (side * look.spread * screenHeight),
+            .y = headTop.y - (look.gap * screenHeight) - footBelowMiddle -
+                 (pose.rise * look.rise * screenHeight)};
+}
+
 auto damageText(nx::Damage damage) -> std::string {
     return std::format("{}", std::max(std::lround(damage.value()), 1L));
 }
@@ -141,7 +149,7 @@ auto DamageNumbers::load(nx::render::ScreenRenderer& screen, nx::rhi::CommandLis
 
 void DamageNumbers::show(std::span<const DamageDealt> dealt, nx::Seconds now) {
     for (const DamageDealt& hit : dealt) {
-        m_numbers.push_back({.position = hit.position,
+        m_numbers.push_back({.headTop = hit.headTop,
                              .text = damageText(hit.damage),
                              .isHead = hit.isHead,
                              .bornAt = now,
@@ -161,16 +169,22 @@ void DamageNumbers::append(std::vector<nx::render::ScreenQuad>& quads, const nx:
     }
     const auto width = static_cast<float>(size.width);
     const auto height = static_cast<float>(size.height);
-    const auto line = static_cast<float>(m_atlas.metrics().height());
+    const nx::ui::FontMetrics& metrics = m_atlas.metrics();
+    const auto line = static_cast<float>(metrics.height());
+    // Its digits stand on its baseline, below its line's middle by as much as its ascent passes half the
+    // line.
+    const float footBelowMiddle = (static_cast<float>(metrics.ascent) - (line * 0.5F)) * m_wholeHeight / line;
     for (const Number& number : m_numbers) {
         const std::optional<DamageNumberPose> pose = damageNumberPoseAt(look, now - number.bornAt);
-        const std::optional<nx::render::ScreenPoint> hit =
-            nx::render::screenPointOf(viewProjection, number.position, width, height);
-        if (!pose || !hit) {
+        const std::optional<nx::render::ScreenPoint> head =
+            nx::render::screenPointOf(viewProjection, number.headTop, width, height);
+        if (!pose || !head) {
             continue;
         }
-        const float centerX = hit->x + (number.side * look.spread * height);
-        const float centerY = hit->y - (pose->rise * look.rise * height);
+        const nx::render::ScreenPoint middle =
+            damageNumberMiddleOf(look, *pose, number.side, *head, height, footBelowMiddle);
+        const float centerX = middle.x;
+        const float centerY = middle.y;
         // The atlas's glyphs, drawn at the pose's share of the whole size, about the number's middle.
         const float shrink = pose->scale * m_wholeHeight / line;
         const float textWidth = static_cast<float>(nx::ui::widthOf(m_atlas, number.text));

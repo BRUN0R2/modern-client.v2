@@ -722,7 +722,7 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
         harmPlayer(victim.status, victim.timedHarms, PlayerHarm{.damage = damage, .kind = HarmKind::Bullet},
                    victim.lastHitGroup, armor);
     if (harmed.damage > nx::Damage{}) {
-        attacker.damageDealt.push_back({.position = attack.trace.end,
+        attacker.damageDealt.push_back({.headTop = headTopOf(victim.body),
                                         .damage = harmed.damage,
                                         .isHead = victim.lastHitGroup == HitGroup::Head});
     }
@@ -913,9 +913,12 @@ void Game::attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::
         attackPlayer(player, playerAt(body->player), attack);
         return;
     }
+    // Over its head as the attack met it, before a death poses it anew and takes its solidity.
+    const bool showsDamage = m_world.has<Hostage>(entity) || m_world.has<EntityBody>(entity);
+    const std::optional<nx::Vec3> headTop = showsDamage ? std::optional{headTopOf(entity)} : std::nullopt;
     const nx::game::Harm harm = nx::game::attackEntity(m_world, entity, attack);
-    if (harm.dealt > nx::Damage{} && (m_world.has<Hostage>(entity) || m_world.has<EntityBody>(entity))) {
-        player.damageDealt.push_back({.position = attack.trace.end,
+    if (harm.dealt > nx::Damage{} && headTop) {
+        player.damageDealt.push_back({.headTop = *headTop,
                                       .damage = harm.dealt,
                                       .isHead = hitGroupOf(attack.trace) == HitGroup::Head});
     }
@@ -936,6 +939,25 @@ void Game::attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::
               {.body = entity, .dealt = harm.dealt, .hitGroup = hitGroupOf(attack.trace), .color = *blood},
               random);
     }
+}
+
+auto Game::headTopOf(nx::ecs::Entity entity) -> nx::Vec3 {
+    std::optional<nx::Vec3> head;
+    if (m_world.has<PlayerBody>(entity)) {
+        head = playerHeadTopOf(m_world, entity);
+    } else if (m_world.has<Hostage>(entity)) {
+        head = hostageHeadTopOf(m_world, entity);
+    } else if (m_world.has<EntityBody>(entity)) {
+        head = entityHeadTopOf(m_world, entity);
+    }
+    if (head) {
+        return *head;
+    }
+    const nx::game::BoxSolidity* const solidity = m_world.get<nx::game::BoxSolidity>(entity);
+    nx::expects(solidity != nullptr, "Game::headTopOf: a body of no hitbox is solid as its box");
+    const nx::Vec3 origin = m_world.get<nx::game::Transform>(entity)->origin;
+    const nx::Vec3 middle = solidity->box.center();
+    return {.x = origin.x + middle.x, .y = origin.y + middle.y, .z = origin.z + solidity->box.max.z};
 }
 
 void Game::payForRound(std::uint32_t hostagesHeld) {

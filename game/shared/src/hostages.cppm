@@ -132,6 +132,12 @@ struct ShownHostage {
 void spawnHostages(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                    std::span<const HostageSpawn> spawns);
 
+/// Over the head of hostage `entity` of `world` as the server's traces meet it (headTopOf of its hitboxes
+/// posed where its last think left them); none for a hostage of a model its world does not play or of no
+/// hitbox.
+[[nodiscard]] auto hostageHeadTopOf(const nx::ecs::World& world, nx::ecs::Entity entity)
+    -> std::optional<nx::Vec3>;
+
 /// What an attack does to a hostage, as CHostage takes it (its DamageMethod): nothing once it is dead;
 /// else its hit group is the trace's, and its damage scaled by that group's share of the monsters, as
 /// their TraceAttack scales it, then of the hostages, as their TakeDamage does (GetModifiedDamage;

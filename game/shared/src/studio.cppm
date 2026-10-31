@@ -229,4 +229,10 @@ struct PlayerPoseQuery {
                                     std::span<const nx::Mat3x4> bones, nx::Vec3 grownBy = {})
     -> std::vector<nx::collision::PlacedBox>;
 
+/// Over the head of a body whose `hitboxes` are placed as `placed` (placedHitboxesOf's, in their order),
+/// as it is posed, whatever its stance: the middle across of its head's hitboxes (HitGroup::Head), at the
+/// height of their highest corner; of all its hitboxes for a model with none of a head's; none for none.
+[[nodiscard]] auto headTopOf(std::span<const nx::assets::Hitbox> hitboxes,
+                             std::span<const nx::collision::PlacedBox> placed) -> std::optional<nx::Vec3>;
+
 } // namespace cs

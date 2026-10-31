@@ -59,6 +59,11 @@ struct PlayerBody {
 /// registering a component.
 [[nodiscard]] auto registerPlayerBodies(nx::ecs::World& world) -> nx::Result<void, nx::ecs::ComponentError>;
 
+/// Over the head of the player's body `entity` of `world` as the server's traces meet it (headTopOf of
+/// the hitboxes a line meets, placed as a trace places them, and kept for the next), standing or ducked;
+/// none for a body whose model could not be read or has no hitbox but the shield's.
+[[nodiscard]] auto playerHeadTopOf(nx::ecs::World& world, nx::ecs::Entity entity) -> std::optional<nx::Vec3>;
+
 /// Makes `body` of `world`, a player's, solid as `box` about its origin to the server's traces, a line
 /// meeting its hitboxes (its ClipMethod); not solid at all for none, as a dead player is (SOLID_NOT).
 void setBodySolidity(nx::ecs::World& world, nx::ecs::Entity body, std::optional<nx::Aabb> box);

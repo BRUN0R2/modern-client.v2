@@ -538,4 +538,34 @@ auto placedHitboxesOf(std::span<const nx::assets::Hitbox> hitboxes, std::span<co
            std::ranges::to<std::vector>();
 }
 
+auto headTopOf(std::span<const nx::assets::Hitbox> hitboxes, std::span<const nx::collision::PlacedBox> placed)
+    -> std::optional<nx::Vec3> {
+    nx::expects(hitboxes.size() == placed.size(), "headTopOf: a placed box of each hitbox");
+    const auto isHead = [](const nx::assets::Hitbox& hitbox) {
+        return HitGroup{hitbox.group} == HitGroup::Head;
+    };
+    const bool hasHead = std::ranges::any_of(hitboxes, isHead);
+    std::optional<nx::Aabb> around;
+    for (const auto& [hitbox, box] : std::views::zip(hitboxes, placed)) {
+        if (hasHead && !isHead(hitbox)) {
+            continue;
+        }
+        // Its eight corners as its bone turns them.
+        const nx::Aabb& bounds = box.bounds;
+        for (const float x : {bounds.min.x, bounds.max.x}) {
+            for (const float y : {bounds.min.y, bounds.max.y}) {
+                for (const float z : {bounds.min.z, bounds.max.z}) {
+                    const nx::Vec3 corner = nx::transformPoint(box.placement, {.x = x, .y = y, .z = z});
+                    around = around ? around->including(corner) : nx::Aabb{.min = corner, .max = corner};
+                }
+            }
+        }
+    }
+    if (!around) {
+        return std::nullopt;
+    }
+    const nx::Vec3 middle = around->center();
+    return nx::Vec3{.x = middle.x, .y = middle.y, .z = around->max.z};
+}
+
 } // namespace cs
