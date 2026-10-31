@@ -8,3 +8,7 @@
 # instrumented, and ThreadSanitizer, which sees their pthread calls only, reports races on Mesa's
 # own mutexes (a mutex destroyed by one of its threads while another one leaves it).
 race:libvulkan_lvp.so
+# Its rasterizer threads compile shaders through Mesa's LLVM (llvmpipe's JIT), as uninstrumented: a race
+# reported in LLVM's own string maps, between an llvmpipe thread and a Vulkan call of the main thread
+# (vkCreateImage), shows lavapipe's frames in neither stack, inlined away.
+race:libLLVM.so
