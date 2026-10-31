@@ -51,10 +51,4 @@ auto walkShareOf(const EntityKnockback& rules, const KnockedBack& knocked, nx::G
     return rules.slowShare + ((1.0F - rules.slowShare) * recovered);
 }
 
-auto walkedBy(const EntityKnockback& rules, const KnockedBack& knocked, MoveIntent move, nx::GameTime now,
-              nx::TickRate rate) noexcept -> MoveIntent {
-    const float share = walkShareOf(rules, knocked, now, rate);
-    return {.forward = move.forward * share, .side = move.side * share, .up = move.up * share};
-}
-
 } // namespace cs
