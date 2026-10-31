@@ -36,6 +36,7 @@ struct Settings {
     float replanShare = 0.0F;
     float braking = 0.0F;
     nx::UnitsPerSecond stopSpeed{};
+    float acceleration = 0.0F;
     nx::Seconds shortTermMemory{};
     nx::Seconds threatRecency{};
     nx::HammerUnits threatMargin{};
@@ -121,6 +122,7 @@ struct nx::meta::Description<zombies::Settings> {
         nx::meta::field<&zombies::Settings::replanShare>("replanShare", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::braking>("braking", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::stopSpeed>("stopSpeed", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&zombies::Settings::acceleration>("acceleration", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::shortTermMemory>("shortTermMemory",
                                                              nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::threatRecency>("threatRecency", nx::data::Range{.minimum = 0.0}),

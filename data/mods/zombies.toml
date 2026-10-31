@@ -13,6 +13,10 @@ arrivalDistance = 8.0
 # it for the end of its way and for a corner, rather than overshoot them and circle back.
 braking = 4.0
 stopSpeed = 75.0
+# How fast a walk gains its body speed, a share of the walk a second (sv_accelerate 5): it walks at 120
+# units a second at least, or its whole speed when slower, but to stop where its way ends, as a walk its
+# friction takes all of left it where it was.
+acceleration = 5.0
 replanDistance = 24.0
 # A far goal that moves less than a quarter of how far it is keeps its way, its end slid to it; where a
 # zombie placed a player holds 3 seconds against a vaguer or farther noise of it, as a bot's does.

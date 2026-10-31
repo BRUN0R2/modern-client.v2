@@ -98,7 +98,7 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
         isPositive(rules->replanDistance.value()) && isPositive(rules->huntRadius.value()) &&
         isPositive(rules->quotaInterval.count()) && isNoneOrMore(rules->replanShare) &&
         isNoneOrMore(rules->braking) && isNoneOrMore(rules->stopSpeed.value()) &&
-        isNoneOrMore(rules->shortTermMemory.count());
+        isNoneOrMore(rules->acceleration) && isNoneOrMore(rules->shortTermMemory.count());
     if (!isValidRules) {
         return nx::fail(
             BotError::InvalidData,
@@ -177,7 +177,8 @@ auto brainRulesOf(const BotRules& rules, nx::Seconds reactionTime) noexcept -> n
                              .memoryLimit = rules.memoryLimit,
                              .reactionTime = reactionTime,
                              .braking = rules.braking,
-                             .stopSpeed = rules.stopSpeed};
+                             .stopSpeed = rules.stopSpeed,
+                             .acceleration = rules.acceleration};
 }
 
 } // namespace cs

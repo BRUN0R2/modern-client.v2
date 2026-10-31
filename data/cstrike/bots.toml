@@ -26,6 +26,10 @@ replanShare = 0.25
 # circle back: it cannot turn on the spot.
 braking = 4.0
 stopSpeed = 75.0
+# How fast a walk gains a bot's body speed, a share of the walk a second (sv_accelerate 5): below 75 units
+# a second its friction takes 300 a second, so that a walk under 60 gains it nothing; it walks at 120 at
+# least, which it gains as fast as friction would stop it from, but to stop where its way ends.
+acceleration = 5.0
 # How long where a bot placed an enemy holds against an estimate of it less salient, or as salient and
 # heard no nearer (OnEvent's short-term memory of a noise, 3 seconds): a step heard does not move where
 # it heard a shot, nor a farther step a nearer one, so that its way and its eyes keep still.
