@@ -126,9 +126,7 @@ struct BloodStreamLook {
 /// leastMistRadius to mostMistRadius, flying off as the droplets do but turned by up to mistSpread, wider
 /// to the sides, at leastMistSpeed to mostMistSpeed, from mistStartScale of their radius growing to the
 /// whole of it over their life, faster as they go, as opaque as mistOpacity and gone, faded out, after
-/// mistLife; and after it, as a wound gushes,
-/// `gushPulses` pulses of `gushDroplets` droplets and `gushMists` mists each, one every gushInterval, the
-/// way the hit went, each gushSlowing as fast as the one before. All drawn at random.
+/// mistLife. All drawn at random, all at once, as the hit: none after it.
 struct BloodBurst {
     float dropletsPerSize = 0.0F;
     nx::HammerUnits leastRadius{};
@@ -147,11 +145,6 @@ struct BloodBurst {
     float mistStartScale = 0.0F;
     float mistOpacity = 0.0F;
     nx::Seconds mistLife{};
-    std::uint32_t gushPulses = 0;
-    std::uint32_t gushDroplets = 0;
-    std::uint32_t gushMists = 0;
-    nx::Seconds gushInterval{};
-    float gushSlowing = 0.0F;
 };
 
 /// How the enhanced look shows the blood a hit sprays (cs.client:bloodEffects), where the legacy look
@@ -345,11 +338,6 @@ struct nx::meta::Description<cs::BloodBurst> {
         nx::meta::field<&cs::BloodBurst::mistOpacity>("mistOpacity",
                                                       nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BloodBurst::mistLife>("mistLife"),
-        nx::meta::field<&cs::BloodBurst::gushPulses>("gushPulses"),
-        nx::meta::field<&cs::BloodBurst::gushDroplets>("gushDroplets"),
-        nx::meta::field<&cs::BloodBurst::gushMists>("gushMists"),
-        nx::meta::field<&cs::BloodBurst::gushInterval>("gushInterval"),
-        nx::meta::field<&cs::BloodBurst::gushSlowing>("gushSlowing", nx::data::Range{.minimum = 0.0}),
     };
 };
 

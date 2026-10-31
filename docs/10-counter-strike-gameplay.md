@@ -654,8 +654,8 @@ went at 120 to 420 units a second, two fifths of them back the way it came, each
 up to 0.7 of its speed and up to 30 faster upward, and a splash of 4 mists of 10 to 14 units, flying off
 as the droplets do but wider, turned by up to 1.2 of their speed, at 100 to 150 units a second, gone in
 0.42 seconds; in the head it bursts more, 6 droplets for each of its size, faster and larger, with 6
-larger mists at 120 to 190 units a second gone in 0.5 seconds, then gushes the way the hit went for 0.64
-seconds, 8 pulses of 14 droplets and 2 mists, each 0.85 as fast as the one before. A mist opens out from
+larger mists at 120 to 190 units a second gone in 0.5 seconds; each all at once, as the hit, its wound
+gushing on after it no more. A mist opens out from
 0.15 of its size to the whole of it by the square of the share of its life gone, faster as it goes, and
 holds its opacity until halfway through its life, then fades out, easing in and out: none stays where
 the hit met the body. The air slows droplets and mists alike, their speed falling to e^-5 of itself a second whatever
@@ -667,8 +667,7 @@ mists fly at once, none made past them, and 192 splats lie, a new one taking the
 is of its spray's palette entry's color, lit once, as it is made, by the light where the hit met the
 body, as a flat-shaded model is lit there (`cs::Scene::bloodLightAt`: its ambient light and 0.8 of its
 shade, through the light curve), 0.45 of its color at least so that a hit reads in the dark, a mist
-1.35 times as lit as the droplets, as fine blood scatters the light. A gush stays where the hit met the
-body as the body moves on.
+1.35 times as lit as the droplets, as fine blood scatters the light.
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's

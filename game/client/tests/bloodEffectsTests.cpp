@@ -3,7 +3,7 @@
 
 // The enhanced look's blood on the client (cs::BloodEffects), as data/cstrike/blood.toml's enhancedLook
 // makes it: a burst by the spray's size and its part of the body, droplets and mists flying off it, some
-// back, a head's gushing after it in pulses, the air slowing them alike at any frame rate, droplets
+// back, a head's more, all at once, the air slowing them alike at any frame rate, droplets
 // fading out in the air or falling to the box map's floor (its hulls, floor at z = 0, 64 units each way)
 // and leaving splats flat on it that lie and fade out, mists growing and fading, all within their room.
 
@@ -102,12 +102,11 @@ protected:
     return static_cast<std::size_t>(std::lround(burst.dropletsPerSize * static_cast<float>(size)));
 }
 
-TEST_F(BloodEffectsTest, AHitElsewhereThanTheHeadBurstsByItsSizeBothWaysWithoutAGush) {
+TEST_F(BloodEffectsTest, AHitElsewhereThanTheHeadBurstsByItsSizeBothWays) {
     blood.spray(kSpray, look, kShade, {});
     const std::size_t thrown = dropletsOf(look.body, kSpray.size);
     ASSERT_EQ(blood.droplets().size(), thrown);
     EXPECT_EQ(blood.mists().size(), look.body.mists);
-    EXPECT_TRUE(blood.gushes().empty());
     // Each the way the hit went or back the way it came, turned off it by less than its speed.
     const auto forward = std::ranges::count_if(
         blood.droplets(), [](const cs::BloodDroplet& droplet) { return droplet.velocity.x > 0.0F; });
@@ -124,40 +123,17 @@ TEST_F(BloodEffectsTest, AHitElsewhereThanTheHeadBurstsByItsSizeBothWaysWithoutA
     }
 }
 
-TEST_F(BloodEffectsTest, AHitInTheHeadBurstsMoreThenGushesInPulsesEachSlowerThanTheLast) {
+TEST_F(BloodEffectsTest, AHitInTheHeadBurstsMoreAllAtOnceAndNothingAfterIt) {
     blood.spray(inTheHead(kSpray), look, kShade, {});
     const std::size_t burst = dropletsOf(look.head, kSpray.size);
     EXPECT_GT(burst, dropletsOf(look.body, kSpray.size)) << "more than elsewhere";
     EXPECT_EQ(blood.droplets().size(), burst);
     EXPECT_EQ(blood.mists().size(), look.head.mists);
-    ASSERT_EQ(blood.gushes().size(), 1U);
-    // Without the time to move, the droplets stay where they were thrown, and only the pulses come.
-    blood.update(look.head.gushInterval, {}, *hulls, kGravity, look);
-    EXPECT_EQ(blood.droplets().size(), burst + look.head.gushDroplets) << "its first pulse";
-    EXPECT_EQ(blood.mists().size(), look.head.mists + look.head.gushMists) << "and its mist";
-    EXPECT_FLOAT_EQ(blood.gushes().front().speedShare, look.head.gushSlowing * look.head.gushSlowing)
-        << "the next slower";
-    const nx::Seconds gushed =
-        (look.head.gushInterval * static_cast<float>(look.head.gushPulses)) + (look.head.gushInterval / 2.0F);
-    blood.update(gushed, {}, *hulls, kGravity, look);
-    EXPECT_EQ(blood.droplets().size(), burst + (look.head.gushPulses * look.head.gushDroplets))
-        << "all pulses";
-    // The burst's mists splashed and went before the last pulse; the last pulse's are there.
-    const nx::Seconds lastPulse = gushed - look.head.gushInterval;
-    EXPECT_EQ(std::ranges::count_if(
-                  blood.mists(), [lastPulse](const cs::BloodMist& mist) { return mist.madeAt > lastPulse; }),
-              look.head.gushMists);
-    EXPECT_TRUE(blood.gushes().empty()) << "done";
-    // A pulse's droplets the way the hit went, none back, as fast as gushSlowing of the burst's at most:
-    // turned by up to `spread` of their speed on each axis, and up to `rise` faster upward.
-    const float spread = look.head.spread;
-    const float fastest =
-        (look.head.mostSpeed.value() * look.head.gushSlowing * std::hypot(1.0F + spread, spread, spread)) +
-        look.head.rise.value();
-    for (const cs::BloodDroplet& droplet : blood.droplets() | std::views::drop(burst)) {
-        EXPECT_GT(droplet.velocity.x, 0.0F);
-        EXPECT_LE(nx::length(droplet.velocity), fastest);
-    }
+    // Without the time to move, the droplets stay where they were thrown, and none comes after them while
+    // its mists last: its wound gushes on no more.
+    blood.update(look.head.mistLife / 2.0F, {}, *hulls, kGravity, look);
+    EXPECT_EQ(blood.droplets().size(), burst);
+    EXPECT_EQ(blood.mists().size(), look.head.mists);
 }
 
 TEST_F(BloodEffectsTest, TheAirSlowsADropletAsMuchOverAFrameOfAnyLength) {

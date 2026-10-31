@@ -49,17 +49,8 @@ void BloodEffects::spray(const BloodSpray& spray, const BloodEnhancedLook& look,
     const nx::Vec3 way = wayOf(spray.direction);
     const auto count =
         static_cast<std::uint32_t>(std::lround(burst.dropletsPerSize * static_cast<float>(spray.size)));
-    throwDroplets(spray.position, way, burst, count, burst.backShare, 1.0F, shade, look, now);
-    throwMists(spray.position, way, burst, burst.mists, burst.backShare, 1.0F, shade, look, now);
-    if (burst.gushPulses > 0) {
-        gushing.push_back(BloodGush{.position = spray.position,
-                                    .way = way,
-                                    .shade = shade,
-                                    .burst = burst,
-                                    .pulsesLeft = burst.gushPulses,
-                                    .nextPulseAt = now + burst.gushInterval,
-                                    .speedShare = burst.gushSlowing});
-    }
+    throwDroplets(spray.position, way, burst, count, shade, look, now);
+    throwMists(spray.position, way, burst, shade, look, now);
 }
 
 auto BloodEffects::thrownWayOf(nx::Vec3 way, float spread, float backShare) -> nx::Vec3 {
@@ -71,12 +62,11 @@ auto BloodEffects::thrownWayOf(nx::Vec3 way, float spread, float backShare) -> n
 }
 
 void BloodEffects::throwDroplets(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, std::uint32_t count,
-                                 float backShare, float speedShare, BloodShade shade,
-                                 const BloodEnhancedLook& look, nx::Seconds now) {
+                                 BloodShade shade, const BloodEnhancedLook& look, nx::Seconds now) {
     for (std::uint32_t droplet = 0; droplet < count && flying.size() < look.mostDroplets; ++droplet) {
         // Its draws in their order: its way, its speed, its rise and its radius.
-        const nx::Vec3 thrown = thrownWayOf(way, burst.spread, backShare);
-        const float speed = random.between(burst.leastSpeed.value(), burst.mostSpeed.value()) * speedShare;
+        const nx::Vec3 thrown = thrownWayOf(way, burst.spread, burst.backShare);
+        const float speed = random.between(burst.leastSpeed.value(), burst.mostSpeed.value());
         const float rise = random.between(0.0F, burst.rise.value());
         const float radius = random.between(burst.leastRadius.value(), burst.mostRadius.value());
         flying.push_back(BloodDroplet{.position = from,
@@ -87,15 +77,13 @@ void BloodEffects::throwDroplets(nx::Vec3 from, nx::Vec3 way, const BloodBurst& 
     }
 }
 
-void BloodEffects::throwMists(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, std::uint32_t count,
-                              float backShare, float speedShare, BloodShade shade,
+void BloodEffects::throwMists(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, BloodShade shade,
                               const BloodEnhancedLook& look, nx::Seconds now) {
-    for (std::uint32_t mist = 0; mist < count && drifting.size() < look.mostMists; ++mist) {
+    for (std::uint32_t mist = 0; mist < burst.mists && drifting.size() < look.mostMists; ++mist) {
         // Its draws in their order: its way, its speed, its radius and its smoke. It splashes out wider than
         // the droplets, to the sides, and fast: none stays where the hit met the body.
-        const nx::Vec3 thrown = thrownWayOf(way, burst.mistSpread, backShare);
-        const float speed =
-            random.between(burst.leastMistSpeed.value(), burst.mostMistSpeed.value()) * speedShare;
+        const nx::Vec3 thrown = thrownWayOf(way, burst.mistSpread, burst.backShare);
+        const float speed = random.between(burst.leastMistSpeed.value(), burst.mostMistSpeed.value());
         const float radius = random.between(burst.leastMistRadius.value(), burst.mostMistRadius.value());
         drifting.push_back(BloodMist{.position = from,
                                      .velocity = thrown * speed,
@@ -117,18 +105,6 @@ void BloodEffects::update(nx::Seconds now, nx::Seconds elapsed, const nx::collis
     std::erase_if(flying, isGone);
     std::erase_if(drifting, isGone);
     std::erase_if(lying, isGone);
-    for (BloodGush& gush : gushing) {
-        while (gush.pulsesLeft > 0 && now >= gush.nextPulseAt) {
-            throwDroplets(gush.position, gush.way, gush.burst, gush.burst.gushDroplets, 0.0F, gush.speedShare,
-                          gush.shade, look, gush.nextPulseAt);
-            throwMists(gush.position, gush.way, gush.burst, gush.burst.gushMists, 0.0F, gush.speedShare,
-                       gush.shade, look, gush.nextPulseAt);
-            gush.speedShare *= gush.burst.gushSlowing;
-            gush.nextPulseAt += gush.burst.gushInterval;
-            --gush.pulsesLeft;
-        }
-    }
-    std::erase_if(gushing, [](const BloodGush& gush) { return gush.pulsesLeft == 0; });
     const float seconds = elapsed.count();
     const float fall = gravity.value() * look.gravity.value() * seconds;
     // e^-drag a second: the share of its speed a drop keeps over the frame, whatever its length.
