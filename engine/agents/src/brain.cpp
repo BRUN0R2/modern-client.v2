@@ -70,6 +70,23 @@ constexpr float kTurnSpanRadii = 4.0F;
     return rules.acceleration > 0.0F ? 2.0F * rules.stopSpeed.value() * rules.braking / rules.acceleration
                                      : 0.0F;
 }
+/// How far off its way, as a cosine, a body is in the way of another (IsFriendInTheWay's line of movement):
+/// within an eighth of a turn.
+constexpr float kWayConeCosine = std::numbers::sqrt2_v<float> / 2.0F;
+/// Whether a body among `nearby` in the way of a body of `radius` at `feet` going `way` is nearer than it to
+/// `end`, where its way ends (Condition Zero's IsFriendInTheWay): within half a body's width of touching it,
+/// ahead within kWayConeCosine of its way. Bodies going to one end wait for each other in the order of how
+/// near it they are, so that none waits for one that waits for it.
+[[nodiscard]] auto isWayTaken(Vec3 feet, Vec3 way, Vec3 end, float radius,
+                              std::span<const navigation::SteeringBody> nearby) noexcept -> bool {
+    const float ownDistance = groundDistance(feet, end);
+    return std::ranges::any_of(nearby, [=](const navigation::SteeringBody& body) {
+        const Vec3 toBody = acrossOf(body.feet - feet);
+        const float distance = length(toBody);
+        return distance - radius - body.radius.value() <= radius &&
+               dot(toBody, way) >= kWayConeCosine * distance && groundDistance(body.feet, end) < ownDistance;
+    });
+}
 /// Heads `intent` for `point` from `feet`, across the ground: its way and where it faces; as it is when
 /// its feet are right below or above it.
 void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
@@ -473,16 +490,25 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     if (!stops) {
         wished = std::max(wished, leastWalk);
     }
-    const Vec3 avoiding = acrossOf(corridor->steer(query, {.velocity = velocity,
-                                                           .desired = intent.direction * wished,
-                                                           .maxSpeed = UnitsPerSecond{wished},
-                                                           .bodies = nearby}));
+    // Round the bodies near it, the walls weighed as it goes round them: with none near it, its way along its
+    // corridor keeps it off the walls already, and the avoidance, which weighs a wall its way turns from
+    // before it meets it, held a body at rest in a passage that turns where it was. It waits only behind a
+    // body in its way nearer than it to where its way ends that it finds no way round: of bodies that all
+    // waited when none found a way on worth a tenth of its speed, each in another's way, none went on.
+    const Vec3 avoiding = nearby.empty()
+                              ? intent.direction * wished
+                              : acrossOf(corridor->steer(query, {.velocity = velocity,
+                                                                 .desired = intent.direction * wished,
+                                                                 .maxSpeed = UnitsPerSecond{wished},
+                                                                 .bodies = nearby}));
     const float avoidingSpeed = length(avoiding);
-    if (avoidingSpeed < kLeastSteeredSpeedShare * wished) {
+    if (avoidingSpeed >= kLeastSteeredSpeedShare * wished) {
+        intent.direction = avoiding / avoidingSpeed;
+    } else if (isWayTaken(corridor->position(), intent.direction, corridor->target(),
+                          query.mesh().profile().radius.value(), nearby)) {
         intent.direction = {};
         return;
     }
-    intent.direction = avoiding / avoidingSpeed;
     const float speed = std::clamp(avoidingSpeed, std::min(leastWalk, wished), wished);
     const Vec3 steered = intent.direction * speed;
     intent.speedShare = speed / maxSpeed.value();

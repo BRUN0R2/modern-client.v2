@@ -948,6 +948,57 @@ TEST(AgentBrain, ABodyThatRoundsACornerWideHeadsOnFromItRatherThanBackToIt) {
         << "on to the corner after it, not back to it";
 }
 
+TEST(AgentBrain, InACrowdABodyWaitsForThoseAheadNearerItsEndAndTheyGoOn) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    constexpr float kRadius = 16.0F;
+    const nx::Vec3 end{.x = 400};
+    // How a body at `feet` going to `end` steers among `others`, standing still.
+    const auto steered = [&](nx::Vec3 feet, std::span<const nx::Vec3> others) {
+        nx::agents::Brain brain{brakingRules()};
+        brain.setGoal(end);
+        nx::agents::Decision decision = brain.decide(feet, query);
+        std::vector<nx::navigation::SteeringBody> nearby;
+        for (const nx::Vec3 other : others) {
+            nearby.push_back({.feet = other, .radius = nx::HammerUnits{kRadius}});
+        }
+        brain.steer(decision.intent, {}, nx::UnitsPerSecond{250}, nearby, query);
+        return decision.intent.direction;
+    };
+    // Three bodies stand ahead of it, touching it, nearer its end: no way round them, it waits.
+    const std::array ahead{nx::Vec3{.x = 36}, nx::Vec3{.x = 26, .y = 26}, nx::Vec3{.x = 26, .y = -26}};
+    EXPECT_EQ(steered({}, ahead), nx::Vec3{});
+    // The one straight ahead of it, the one behind it farther from its end, goes on: none waits for one that
+    // waits for it.
+    const std::array behind{nx::Vec3{}, nx::Vec3{.x = 26, .y = 26}, nx::Vec3{.x = 26, .y = -26}};
+    EXPECT_GT(steered({.x = 36}, behind).x, 0.0F);
+}
+
+/// A passage a body wide along the floor's left half that turns up its middle.
+auto turningPassageMesh() -> nx::navigation::NavigationMesh {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 1024}, 0);
+    nx::test::addBox(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 480, .z = 300});
+    nx::test::addBox(geometry, {.x = 0, .y = 544}, {.x = 576, .y = 1024, .z = 300});
+    nx::test::addBox(geometry, {.x = 640, .y = 480}, {.x = 1024, .y = 1024, .z = 300});
+    return nx::test::playerMesh(geometry, 0);
+}
+
+TEST(AgentBrain, TheFirstOfAQueueAtRestWhereItsPassageTurnsGoesOn) {
+    // At rest short of where its passage turns, the avoidance weighs the wall its way turns from before it
+    // meets it and keeps it where it is: the first of a queue, all of whom then waited, none went on.
+    auto mesh = turningPassageMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 608, .y = 900});
+    nx::agents::Decision decision = brain.decide({.x = 520, .y = 512}, query);
+    const std::array behind{
+        nx::navigation::SteeringBody{.feet = {.x = 484, .y = 512}, .radius = nx::HammerUnits{16}}};
+    brain.steer(decision.intent, {}, nx::UnitsPerSecond{250}, behind, query);
+    EXPECT_GT(nx::length(decision.intent.direction), 0.0F);
+    EXPECT_GT(decision.intent.direction.x, 0.0F) << "on toward the turn";
+}
+
 TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproaches) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
