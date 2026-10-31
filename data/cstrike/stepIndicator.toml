@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# How the steps of the entities' bodies (zombies, monsters: a type with a stride) show around the middle
+# of the screen (docs/12-ui-hud-and-console.md, section 3.2), read into cs::StepIndicatorLook and drawn by
+# cs.client:stepIndicator while hud_stepindicator is 1: the project's own, nothing of the original's, as
+# games show the sounds a player hears. The players' steps are not shown.
+
+# Bloody prints of bare feet in a deep red, 0.95 opaque at most, 6% of the screen's height across (65 pixels
+# at 1080), on a ring 17% of it about the middle (184 pixels), their toes toward the body heard.
+color = { red = 205, green = 18, blue = 14 }
+opacity = 0.95
+ringRadius = 0.17
+size = 0.06
+
+# A body within 160 units shows wholly, fading out to none at 1600, farther than a bot hears a step (1100,
+# bots.toml's footstep hearing).
+nearDistance = 160.0
+farDistance = 1600.0
+
+# A step fades the mark in over 0.3 seconds from what it showed; it holds 0.8 and fades out over 1, each
+# step popping it a quarter larger, back over 0.25.
+attack = 0.3
+hold = 0.8
+release = 1.0
+pulseScale = 0.25
+pulseTime = 0.25
+
+# At most 12 marks show, the loudest first, none closer to another than 0.8 of their size; 64 bodies kept.
+separation = 0.8
+mostShown = 12
+mostHeard = 64

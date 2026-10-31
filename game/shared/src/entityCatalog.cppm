@@ -69,6 +69,9 @@ struct EntityDefinition {
     std::optional<std::uint8_t> bloodColor{};
     /// How the attacks that hurt its body and leave it alive knock it back; none for a body they do not.
     std::optional<EntityKnockback> knockback{};
+    /// How far its body walks on the ground between its steps (EntityStep), which the others hear; none
+    /// for a body whose steps are not heard.
+    std::optional<nx::HammerUnits> stride{};
 };
 
 /// The sequences of a type's model its body plays by its EntityMotion, found by their names.
@@ -119,6 +122,13 @@ struct EntityState {
     nx::HitPoints health{};
 };
 
+/// A step an entity's body took in a tick, as it walked a stride on the ground: the body, and where its
+/// feet were.
+struct EntityStep {
+    nx::ecs::Entity entity{};
+    nx::Vec3 position{};
+};
+
 /// An entity as a client draws it: its type, where it is, its model's sequence at a frame, and how
 /// opaque it is drawn, of 255 (a corpse fading out).
 struct ShownEntity {
@@ -161,5 +171,6 @@ struct nx::meta::Description<cs::EntityDefinition> {
         nx::meta::field<&cs::EntityDefinition::hitGroups>("hitGroups"),
         nx::meta::field<&cs::EntityDefinition::bloodColor>("bloodColor"),
         nx::meta::field<&cs::EntityDefinition::knockback>("knockback"),
+        nx::meta::field<&cs::EntityDefinition::stride>("stride"),
     };
 };

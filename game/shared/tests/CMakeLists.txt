@@ -7,6 +7,7 @@ nxAddTest(csSharedTests
         breathTests.cpp
         bulletsTests.cpp
         damageNumbersTests.cpp
+        stepIndicatorTests.cpp
         economyTests.cpp
         entityCatalogTests.cpp
         entityKnockbackTests.cpp

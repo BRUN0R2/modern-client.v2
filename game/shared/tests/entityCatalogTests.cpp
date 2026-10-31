@@ -61,5 +61,10 @@ TEST(EntityCatalog, RejectsInvalidStatsAndDuplicateIdsWithoutChangingLiveDefinit
     const auto knockback = catalog.add(*vfs, definition, cs::ModelTextures::Read);
     ASSERT_FALSE(knockback.has_value()) << "a slow share past the whole speed";
     EXPECT_EQ(knockback.error().code, cs::EntityError::InvalidDefinition);
+    definition.knockback.reset();
+    definition.stride = nx::HammerUnits{};
+    const auto stride = catalog.add(*vfs, definition, cs::ModelTextures::Read);
+    ASSERT_FALSE(stride.has_value()) << "a stride of none";
+    EXPECT_EQ(stride.error().code, cs::EntityError::InvalidDefinition);
     EXPECT_EQ(catalog.size(), 1U);
 }

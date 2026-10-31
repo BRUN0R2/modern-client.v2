@@ -510,6 +510,46 @@ TEST_F(GameTest, AShotSpraysTheBloodOfAnEntitysBodyOfAKindThatBleedsTheWayItWent
     EXPECT_TRUE(shot.bloodStreams.empty()) << "a player's head's alone";
 }
 
+TEST_F(GameTest, AnEntitysBodyOfAStrideStepsEachStrideItWalksOnTheGroundAndOneOfNoneNever) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    constexpr nx::HammerUnits kStride{32};
+    cs::EntityDefinition walker = nx::test::entityDefinition();
+    walker.id = "walker";
+    walker.stride = kStride;
+    const auto walking = entityType(walker);
+    ASSERT_TRUE(walking.has_value()) << (walking ? "" : nx::describe(walking.error()));
+    const auto quiet = entityType();
+    ASSERT_TRUE(quiet.has_value()) << (quiet ? "" : nx::describe(quiet.error()));
+    const auto stepper = game().createEntity(*walking, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(stepper.has_value()) << (stepper ? "" : nx::describe(stepper.error()));
+    const auto silent = game().createEntity(*quiet, {.origin = {.x = 200, .y = -200, .z = 40}});
+    ASSERT_TRUE(silent.has_value()) << (silent ? "" : nx::describe(silent.error()));
+    const auto originOf = [this](nx::ecs::Entity body) {
+        const std::vector<cs::EntityState> bodies = game().entities();
+        return std::ranges::find(bodies, body, &cs::EntityState::entity)->origin;
+    };
+    const cs::UserCommand walk{.duration = nx::Milliseconds{10},
+                               .move = {.forward = nx::UnitsPerSecond{160}}};
+    const std::array commands{cs::EntityCommand{.entity = *stepper, .command = walk},
+                              cs::EntityCommand{.entity = *silent, .command = walk}};
+    const nx::Vec3 from = originOf(*stepper);
+    std::vector<cs::EntityStep> steps;
+    for (std::uint32_t tick = 0; tick < 100; ++tick) {
+        game().tick({}, commands);
+        std::ranges::copy(game().snapshotFor(player).entitySteps, std::back_inserter(steps));
+    }
+    const nx::Vec3 to = originOf(*stepper);
+    const float walked = std::hypot(to.x - from.x, to.y - from.y);
+    ASSERT_GT(walked, kStride.value() * 2.0F) << "it walked";
+    EXPECT_NEAR(static_cast<float>(steps.size()), walked / kStride.value(), 1.0F) << "a step a stride";
+    for (const cs::EntityStep& step : steps) {
+        EXPECT_EQ(step.entity, *stepper) << "a body of no stride steps unheard";
+        EXPECT_FLOAT_EQ(step.position.z, to.z + cs::kStandingBox.min.z) << "its feet";
+        EXPECT_GE(step.position.x, from.x);
+        EXPECT_LE(step.position.x, to.x);
+    }
+}
+
 TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtAndWhere) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const auto other = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Other");

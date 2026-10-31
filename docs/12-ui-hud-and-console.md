@@ -276,6 +276,23 @@ height over its 0.9 seconds, easing out, from up to 2.5% of the screen's height 
 last 0.3 fades out shrinking to 0.65 of its size; 64 show at most, the oldest going first. Its glyphs are
 drawn once at the largest it shows and only ever made smaller, filtered linearly, which keeps it sharp.
 
+**The step indicator** (`cs.client:stepIndicator`), the project's own, nothing of the original's, as games
+show the sounds a player hears: while `hud_stepindicator` is 1 and `hud_draw` draws the HUD, each
+entity's body heard stepping (a type with a stride: zombies, monsters; `cs::EntityStep`, which the server
+tells every client of) shows a mark of bloody footprints on a ring about the middle of the screen, the
+way the body is from where the player looks (ahead at the top, to the right on the right, behind at the
+bottom), its toes toward it; the players' steps are not shown. As `data/cstrike/stepIndicator.toml` makes
+it look (`cs::StepIndicatorLook`): deep red, 0.95 opaque at most, 6% of the screen's height across on a
+ring 17% of it about the middle; a step fades its body's mark in over 0.3 seconds from what it showed,
+pops it a quarter larger and back over 0.25, holds it 0.8 seconds and fades it out over 1; a body within
+160 units shows wholly, fading out to none at 1600, farther than a bot hears a step (1100); at most 12
+marks show, the loudest first, none closer to another than 0.8 of their size, of 64 bodies kept, the
+faintest giving way. The prints are drawn once on the CPU, bare feet with their toes, a heel's smear
+behind each and drops about them, their edges ragged and their blood darker in clots and at their rims,
+thinly outlined in black, in shades that the look's color tints, turned 32 ways
+(`StepIndicator::kStepMarkTurns`), the nearest way showing; the marks move each frame by the time since
+the steps.
+
 ### 3.3 Visual parity of numbers
 
 Values within the original range (health up to 100, armor up to 100, money up to 16000)
@@ -372,7 +389,7 @@ from reference shots; search comes later.
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
 | Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals`, `cl_corpsestay` |
-| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers` |
+| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers`, `hud_stepindicator` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
 | Player | `name`, `_cl_autowepswitch`, `cl_autobuy`, `cl_rebuy`, `cl_minmodels` (respecting the server) |
@@ -428,6 +445,8 @@ archived, which each frame reads. `cs::CorpseCvars` registers `cl_corpsestay` (6
 archived: the seconds a dead body stays, a player's or an entity's, before it fades out over a second
 and is drawn no more ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). `cs::DamageNumberCvars`
 registers `hud_damagenumbers` (1), archived: whether the damage of the player's hits shows (§3.2).
+`cs::StepIndicatorCvars` registers `hud_stepindicator` (1), archived: whether the steps of the entities'
+bodies heard show around the middle of the screen (§3.2).
 `cs::GameCvars` registers the
 cvars of the game's rules a server sets, which the local game plays by until the server comes, not
 archived and told to the players (`Notify`), each a number, any of them, as the original's are,

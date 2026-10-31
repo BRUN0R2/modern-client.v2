@@ -33,6 +33,7 @@ export import :tempEntities;
 export import :particles;
 export import :corpses;
 export import :damageNumbers;
+export import :stepIndicator;
 export import :bloodEffects;
 export import :levelDecals;
 export import :bulletMarks;

@@ -136,6 +136,10 @@ public:
     [[nodiscard]] inline auto takeDamageDealt() -> std::vector<DamageDealt> {
         return std::exchange(m_damageDealt, {});
     }
+    /// The steps the entities' bodies took since the last call, in their order: the marks its client shows.
+    [[nodiscard]] inline auto takeEntitySteps() -> std::vector<EntityStep> {
+        return std::exchange(m_entitySteps, {});
+    }
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye is
@@ -165,6 +169,7 @@ private:
     std::vector<BloodStream> bloodStreams;         ///< Since takeBloodStreams.
     std::vector<StreakSplash> streakSplashes;      ///< Since takeStreakSplashes.
     std::vector<DamageDealt> m_damageDealt;        ///< Since takeDamageDealt.
+    std::vector<EntityStep> m_entitySteps;         ///< Since takeEntitySteps.
 };
 
 } // namespace cs
