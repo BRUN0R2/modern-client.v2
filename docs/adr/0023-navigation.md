@@ -59,7 +59,8 @@ convex polygons, through Recast and Detour.
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it
   moves instead of searching again. Queries run in batches in jobs within a budget per tick, and
-  give the same path for the same inputs, for replays and tests.
+  give the same path for the same inputs, for replays and tests. A corridor reuses its query's scratch
+  for corners and bounds it by the corridor's polygons, even when more corners are requested.
 - **Build failures.** Mesh building propagates `MeshBuildError`; a tile refused by Recast carries
   the tile's coordinates, the failed step and Recast's diagnostic when available, including when
   it marks the floor along walls.

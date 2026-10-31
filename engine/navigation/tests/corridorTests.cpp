@@ -67,6 +67,25 @@ TEST(CorridorTest, AnAgentSteeringToItsCornersReachesItsTarget) {
     EXPECT_LT(corridor->polygonCount(), polygonsAtStart);
 }
 
+TEST(CorridorTest, CornerLimitsAndOtherQueriesKeepTheSameWay) {
+    const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
+    NavigationQuery query{mesh};
+    const PathRequest request{.from = {.x = 100.0F, .y = 100.0F}, .to = {.x = 924.0F, .y = 100.0F}};
+    auto corridor = Corridor::plan(query, request);
+    ASSERT_TRUE(corridor.has_value()) << nx::describe(corridor.error());
+    const auto full = corridor->corners(query, std::numeric_limits<std::size_t>::max());
+    ASSERT_GE(full.size(), 2U);
+    EXPECT_TRUE(corridor->corners(query, 0).empty());
+    for (std::size_t limit = 1; limit <= full.size(); ++limit) {
+        const auto limited = corridor->corners(query, limit);
+        EXPECT_TRUE(std::ranges::equal(limited, std::span{full}.first(limit)));
+    }
+    const auto path = query.findPath(request);
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_EQ(corridor->corners(query, std::numeric_limits<std::size_t>::max()), full)
+        << "the query's scratch can be reused by another search";
+}
+
 TEST(CorridorTest, AMoveIntoTheWallStopsAtItsEdge) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};
