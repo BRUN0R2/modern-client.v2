@@ -65,3 +65,8 @@ deathSequence = "death1"
 hitGroups = { generic = 1.0, head = 4.0, chest = 1.0, stomach = 1.25, arm = 1.0, leg = 0.75, shield = 0.0, other = 1.0 }
 # The palette entry of its blood (BLOOD_COLOR_RED); leave it out for a body that does not bleed.
 bloodColor = 247
+# How the attacks that hurt it and leave it alive knock it back: pushed the way each went at 4 units a
+# second for each point it dealt, to no faster than 300 across, its walk held back a tenth of a second
+# while the push carries it, then at half its speed, back to the whole of it over half a second. Leave
+# it out for a body the attacks do not knock back.
+knockback = { pushPerDamage = 4.0, mostPushSpeed = 300.0, staggerTime = 0.1, slowShare = 0.5, slowRecovery = 0.5 }

@@ -5,6 +5,7 @@
 import std;
 import nx.core;
 import nx.platform;
+import cs.shared;
 import mod.zombies;
 
 TEST(ZombieSettings, ReadsTheExampleAndRejectsAnUnboundedPerceptionBudget) {
@@ -16,6 +17,8 @@ TEST(ZombieSettings, ReadsTheExampleAndRejectsAnUnboundedPerceptionBudget) {
     EXPECT_EQ(read->body.health, nx::HitPoints{500});
     constexpr std::uint8_t kRed = 247; // BLOOD_COLOR_RED
     EXPECT_EQ(read->body.bloodColor, kRed) << "it bleeds red";
+    ASSERT_TRUE(read->body.knockback.has_value()) << "shots knock it back";
+    EXPECT_TRUE(cs::isValid(*read->body.knockback));
     EXPECT_EQ(read->spawnBatchLimit, 64U);
     EXPECT_EQ(read->spawnRadius, nx::HammerUnits{512});
     const auto at = text->find("perceptionBudget = 8");

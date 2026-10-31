@@ -56,5 +56,10 @@ TEST(EntityCatalog, RejectsInvalidStatsAndDuplicateIdsWithoutChangingLiveDefinit
     definition.id = "invalid";
     definition.health = nx::HitPoints{std::numeric_limits<float>::infinity()};
     EXPECT_FALSE(catalog.add(*vfs, definition, cs::ModelTextures::Read).has_value());
+    definition.health = nx::HitPoints{100};
+    definition.knockback = cs::EntityKnockback{.mostPushSpeed = nx::UnitsPerSecond{300}, .slowShare = 1.5F};
+    const auto knockback = catalog.add(*vfs, definition, cs::ModelTextures::Read);
+    ASSERT_FALSE(knockback.has_value()) << "a slow share past the whole speed";
+    EXPECT_EQ(knockback.error().code, cs::EntityError::InvalidDefinition);
     EXPECT_EQ(catalog.size(), 1U);
 }
