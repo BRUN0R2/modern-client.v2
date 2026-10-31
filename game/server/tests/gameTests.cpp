@@ -417,6 +417,39 @@ TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredI
     EXPECT_TRUE(dead.inventory.weapons().empty());
 }
 
+TEST_F(GameTest, EntitiesBodiesStrikeAndWalkThroughEachOtherAndAPlayersStopsThem) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    game().placeEye(player, {.x = 70, .z = cs::kStandingViewHeight.value()});
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    // A strike, another body between it and the player within its reach: past it, it meets the player.
+    const auto striker = game().createEntity(*type, {.origin = {.z = 40}});
+    const auto between = game().createEntity(*type, {.origin = {.x = 36, .z = 40}});
+    ASSERT_TRUE(striker.has_value() && between.has_value());
+    cs::UserCommand attack{.duration = nx::Milliseconds{10}};
+    attack.buttons.set(cs::Button::Attack);
+    const nx::HitPoints whole = game().snapshotFor(player).status.health;
+    game().tick({}, std::array{cs::EntityCommand{.entity = *striker, .command = attack}});
+    EXPECT_LT(game().snapshotFor(player).status.health, whole) << "past the body between";
+    ASSERT_TRUE(game().removeEntity(*striker).has_value());
+    ASSERT_TRUE(game().removeEntity(*between).has_value());
+    // A walk at its speed for a second toward the player, another body in its way: through it, then stopped
+    // by the player.
+    const auto walker = game().createEntity(*type, {.origin = {.x = -120, .z = 40}});
+    const auto standing = game().createEntity(*type, {.origin = {.x = -60, .z = 40}});
+    ASSERT_TRUE(walker.has_value() && standing.has_value());
+    const std::array walk{cs::EntityCommand{
+        .entity = *walker,
+        .command = {.duration = nx::Milliseconds{10}, .move = {.forward = nx::UnitsPerSecond{160}}}}};
+    for (std::uint32_t tick = 0; tick < game().time().rate.value(); ++tick) {
+        game().tick({}, walk);
+    }
+    const std::vector<cs::EntityState> bodies = game().entities();
+    const float walked = std::ranges::find(bodies, *walker, &cs::EntityState::entity)->origin.x;
+    EXPECT_GT(walked, -44.0F) << "through the body in its way";
+    EXPECT_LE(walked, 70.0F - 32.0F) << "stopped by the player";
+}
+
 TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     // The synthetic map's clip hulls put the body's origin at z = 0 on the floor.

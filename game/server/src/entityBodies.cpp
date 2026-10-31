@@ -247,6 +247,10 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         }
         body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
         boxesNear(boxes, body.movement.origin, entity, near);
+        // It passes through the other bodies of createEntity's, as a mod's horde does (its semiclip), so that
+        // a crowd of them flows through a doorway and round what they strike at rather than jam: they jammed,
+        // flailed and struck each other. The players' bodies stop it.
+        std::erase_if(near, [&world](const SolidBox& solid) { return world.has<EntityBody>(solid.entity); });
         const nx::Vec3 before = body.movement.origin;
         const MovementResult moved =
             simulateMovement(body.movement, command, MovementSettings{}, hulls, brushes, near);
@@ -276,8 +280,13 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
             play(body, type, EntityMotion::Attacking, time.now, catalog);
             const nx::Vec3 eye = body.movement.origin + nx::Vec3{.z = body.movement.viewHeight.value()};
             const nx::Vec3 direction = nx::angleVectors(command.viewAngles).forward;
+            // Its strike passes through the bodies it passes through.
+            nx::game::Solids solids = nx::game::solidsOf(world);
+            std::erase_if(solids.boxes, [&world](const nx::game::SolidBoxEntity& solid) {
+                return world.has<EntityBody>(solid.entity);
+            });
             const nx::game::SolidHit hit =
-                nx::game::traceSolidsHit(world, hulls,
+                nx::game::traceSolidsHit(world, hulls, solids,
                                          {.start = eye,
                                           .end = eye + direction * type.definition.meleeReach.value(),
                                           .ignored = entity});
