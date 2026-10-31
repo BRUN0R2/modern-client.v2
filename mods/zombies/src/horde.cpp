@@ -350,13 +350,14 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             agent.behavior = decision.behavior;
         }
         cs::UserCommand command{.duration = nx::tickLengthOf(time.rate), .viewAngles = found->angles};
-        nx::Vec3 aim = decision.intent.drivenWay();
+        // It faces the way it goes, steered or wiggling, as its model walks ahead, and is driven the way its
+        // velocity must change (nx::agents::Intent::drive), ahead and to its side: faced the way it is
+        // driven, it turned its back on its way as it slowed down, and lost sight of what it chased.
+        const bool walks = !decision.intent.attacks && nx::length(decision.intent.direction) > 0.0F;
+        nx::Vec3 aim = decision.intent.direction;
         if (decision.intent.attacks && decision.intent.lookAt) {
             aim = *decision.intent.lookAt - eye;
             command.buttons.set(cs::Button::Attack);
-        } else if (nx::length(decision.intent.direction) > 0.0F) {
-            // It faces the way it is driven, steered or wiggling: its model walks ahead only.
-            command.move.forward = settings.body.speed * decision.intent.speedShare;
         }
         if (decision.intent.jumps) {
             command.buttons.set(cs::Button::Jump);
@@ -366,6 +367,13 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
                 nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
             command.viewAngles.pitch = nx::Degrees{-std::atan2(aim.z, std::hypot(aim.x, aim.y)) *
                                                    kHalfTurnDegrees / std::numbers::pi_v<float>};
+        }
+        if (walks) {
+            const nx::Vec3 driven = decision.intent.drivenWay();
+            const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{.yaw = command.viewAngles.yaw});
+            const nx::UnitsPerSecond speed = settings.body.speed * decision.intent.speedShare;
+            command.move.forward = speed * nx::dot(driven, axes.forward);
+            command.move.side = speed * nx::dot(driven, axes.right);
         }
         commands.push_back({.entity = entity, .command = command});
     }

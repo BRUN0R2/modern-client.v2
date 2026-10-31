@@ -11,6 +11,7 @@ import nx.assets;
 import nx.jobs;
 import nx.game;
 import nx.navigation;
+import nx.agents;
 import cs.shared;
 import cs.server;
 import mod.zombies;
@@ -168,6 +169,46 @@ TEST_F(HordeSpawnTest, AFullSmallBaseDoesNotSpillIntoTheRestOfTheMapOrRemoveExis
     ASSERT_EQ(remaining.size(), 1U);
     EXPECT_EQ(remaining.front().entity, existing);
     EXPECT_EQ(horde->size(), 1U);
+}
+
+TEST_F(HordeSpawnTest, ZombiesMakingWayForEachOtherNeverTurnTheirBacksOnTheWayTheyGo) {
+    // Their bodies slow down by friction, and are driven against the way they go to slow down sooner, as they
+    // make way for each other: each faces the way it goes all the same, rather than turn its back on it.
+    constexpr nx::HammerUnits kWidth{512};
+    constexpr nx::HammerUnits kDepth{2048};
+    constexpr float kWayLength = 1536.0F;
+    constexpr std::uint32_t kPopulation = 12;
+    constexpr nx::Degrees kForwardYaw{90};
+    constexpr std::uint32_t kTicks = 600;
+    constexpr float kWalking = 0.25F; ///< Of its full speed: it walks, at least.
+    settings.spawnRadius = nx::HammerUnits{kWidth.value() * kHalf};
+    ASSERT_NO_FATAL_FAILURE(start(kWidth, kDepth));
+    const nx::Vec3 from = anchor - nx::Vec3{.y = kWayLength * kHalf};
+    ASSERT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = from, .yaw = kForwardYaw}}, kPopulation)
+                    .has_value());
+    const nx::Vec3 goal = from + nx::Vec3{.y = kWayLength, .z = cs::kStandingBox.min.z};
+    for (const cs::EntityState& body : game->entities()) {
+        nx::agents::Agent* const agent = game->entityComponent<nx::agents::Agent>(body.entity);
+        ASSERT_NE(agent, nullptr);
+        agent->brain.setGoal(goal);
+    }
+    std::uint32_t turnedBack = 0;
+    for (std::uint32_t tick = 0; tick < kTicks; ++tick) {
+        const std::vector<cs::EntityCommand> commands = horde->commands();
+        const std::vector<cs::EntityState> bodies = game->entities();
+        for (const cs::EntityCommand& command : commands) {
+            const auto body = std::ranges::find(bodies, command.entity, &cs::EntityState::entity);
+            ASSERT_NE(body, bodies.end());
+            const nx::Vec3 velocity{.x = body->velocity.x, .y = body->velocity.y};
+            const float speed = nx::length(velocity);
+            if (speed > kWalking * settings.body.speed.value() &&
+                nx::dot(nx::angleVectors(command.command.viewAngles).forward, velocity / speed) < 0.0F) {
+                ++turnedBack;
+            }
+        }
+        game->tick({}, commands);
+    }
+    EXPECT_EQ(turnedBack, 0U) << "ticks a zombie walking faced against the way it went";
 }
 
 TEST_F(HordeSpawnTest, AMissingBaseIsRejectedBeforeCreatingABody) {
