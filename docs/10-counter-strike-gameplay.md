@@ -631,8 +631,11 @@ knockback holds its zombies back under fire and as the original's players are sl
 `pushPerDamage` units a second for each point the hit dealt it once its hit group took its share, to no
 faster across than `mostPushSpeed`, nor slower than it went already, so that a burst pushes it no more
 than one hit may; it holds back the walk its command asks for over `staggerTime`, while the push carries
-it and the ground's friction stops it; then it walks at `slowShare` of its speed, back to the whole of it
-over `slowRecovery` (`cs::walkShareOf`), each hit starting it over. A hit that dealt nothing knocks
+it and the ground's friction stops it; then it walks no faster than `slowShare` of its speed, back to the
+whole of it over `slowRecovery` (`cs::walkShareOf`), each hit starting it over: the speed it may walk at,
+as a weapon caps a player's (`pmove->maxspeed`), not a share of the walk its command asks for, which
+would leave one asked to walk slowly where it is, a body at rest losing more to friction each tick than
+a walk under 60 units a second gains it (`PM_Friction`'s sv_stopspeed, `PM_Accelerate`). A hit that dealt nothing knocks
 nothing; a type of none is not knocked back.
 
 An entity's body steps each `stride` units it walks on the ground when its type names one

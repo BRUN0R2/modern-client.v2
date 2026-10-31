@@ -510,6 +510,48 @@ TEST_F(GameTest, AShotSpraysTheBloodOfAnEntitysBodyOfAKindThatBleedsTheWayItWent
     EXPECT_TRUE(shot.bloodStreams.empty()) << "a player's head's alone";
 }
 
+TEST_F(GameTest, AnEntityAskedToWalkSlowerThanItsSpeedWalksOnSlowedOnceHitRatherThanStopping) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    // Of 160 units a second, asked by its agent to walk at 100; hit, it may walk at half its speed, back to
+    // the whole of it over 10 seconds: 80 and more, faster than half of 100, under which friction would
+    // keep it from walking at all.
+    constexpr nx::UnitsPerSecond kAsked{100};
+    constexpr float kSlowShare = 0.5F;
+    constexpr std::uint32_t kWalkingTicks = 150;
+    constexpr std::uint32_t kSlowedTicks = 200;
+    cs::EntityDefinition knocked = nx::test::entityDefinition();
+    knocked.id = "knocked";
+    knocked.knockback = cs::EntityKnockback{.pushPerDamage = nx::UnitsPerSecond{4},
+                                            .mostPushSpeed = nx::UnitsPerSecond{300},
+                                            .staggerTime = nx::Seconds{0.1F},
+                                            .slowShare = kSlowShare,
+                                            .slowRecovery = nx::Seconds{10.0F}};
+    const auto type = entityType(knocked);
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    // Where it walks to about 200 units ahead of the player, where its shot meets it.
+    const auto created = game().createEntity(*type, {.origin = {.x = 80, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    game().give(player, *content().weapons.indexOf("ak47"));
+    std::ignore = play(player, kPastTheFirstFreeze);
+    const std::array walk{cs::EntityCommand{
+        .entity = *created, .command = {.duration = nx::Milliseconds{10}, .move = {.forward = kAsked}}}};
+    const auto bodyOf = [this, &created] {
+        const std::vector<cs::EntityState> bodies = game().entities();
+        return *std::ranges::find(bodies, *created, &cs::EntityState::entity);
+    };
+    for (std::uint32_t tick = 0; tick < kWalkingTicks; ++tick) {
+        game().tick({}, walk);
+    }
+    ASSERT_NEAR(bodyOf().velocity.x, kAsked.value(), 1.0F) << "walking away from the player";
+    const nx::HitPoints whole = bodyOf().health;
+    std::ignore = press(player, {cs::Button::Attack}, {.pitch = nx::Degrees{5.0F}});
+    ASSERT_LT(bodyOf().health, whole) << "hit";
+    for (std::uint32_t tick = 0; tick < kSlowedTicks; ++tick) {
+        game().tick({}, walk);
+    }
+    EXPECT_GT(bodyOf().velocity.x, knocked.speed.value() * kSlowShare) << "walking on, slowed";
+}
+
 TEST_F(GameTest, AnEntitysBodyOfAStrideStepsEachStrideItWalksOnTheGroundAndOneOfNoneNever) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     constexpr nx::HammerUnits kStride{32};

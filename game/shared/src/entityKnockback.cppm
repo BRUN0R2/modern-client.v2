@@ -10,7 +10,6 @@ import nx.core;
 import nx.math;
 import nx.meta;
 import nx.data;
-import :movement;
 
 export namespace cs {
 
@@ -42,14 +41,10 @@ struct KnockedBack {
 [[nodiscard]] auto pushedBy(const EntityKnockback& rules, nx::Vec3 velocity, nx::Vec3 direction,
                             nx::Damage dealt) noexcept -> nx::Vec3;
 
-/// The share of its speed a body `knocked` back walks at `now`, by `rules`: none while staggered, then
-/// from `slowShare` back to 1, and 1 once it recovered or before any hit.
+/// The share of its speed a body `knocked` back may walk at, at `now`, by `rules`: none while staggered,
+/// then from `slowShare` back to 1, and 1 once it recovered or before any hit.
 [[nodiscard]] auto walkShareOf(const EntityKnockback& rules, const KnockedBack& knocked, nx::GameTime now,
                                nx::TickRate rate) noexcept -> float;
-
-/// `move`, the walk a body asks for, as a body `knocked` back walks it at `now` (walkShareOf).
-[[nodiscard]] auto walkedBy(const EntityKnockback& rules, const KnockedBack& knocked, MoveIntent move,
-                            nx::GameTime now, nx::TickRate rate) noexcept -> MoveIntent;
 
 } // namespace cs
 
