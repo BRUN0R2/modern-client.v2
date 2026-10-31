@@ -19,10 +19,12 @@ namespace {
         .value_or(std::string{});
 }
 
-TEST(StepIndicatorLookTest, TheRepositorysMarksAreHeardAsFarAsABotHearsAStep) {
+TEST(StepIndicatorLookTest, TheRepositorysMarksAreHeardFartherThanABotHearsAStepAndFadeInAndOut) {
     const auto look = cs::readStepIndicatorLook(repositoryText(), "stepIndicator.toml");
     ASSERT_TRUE(look.has_value()) << (look ? "" : nx::describe(look.error()));
-    EXPECT_EQ(look->farDistance, nx::HammerUnits{1100}) << "bots.toml's footstep hearing";
+    EXPECT_GT(look->farDistance, nx::HammerUnits{1100}) << "bots.toml's footstep hearing";
+    EXPECT_GE(look->attack, nx::Seconds{0.25F}) << "a fade in that shows";
+    EXPECT_GE(look->release, look->attack) << "and a fade out";
     EXPECT_LT(look->nearDistance, look->farDistance);
     EXPECT_GT(look->ringRadius, look->size) << "the marks about the middle, clear of it";
     EXPECT_EQ(look->mostShown, 12U);
@@ -32,10 +34,10 @@ TEST(StepIndicatorLookTest, TheRepositorysMarksAreHeardAsFarAsABotHearsAStep) {
 TEST(StepIndicatorLookTest, ALookThatCannotShowIsRefused) {
     const std::string text = repositoryText();
     for (const auto& [line, broken] : std::initializer_list<std::pair<std::string_view, std::string_view>>{
-             {"opacity = 0.9", "opacity = 0.0"},
-             {"nearDistance = 128.0", "nearDistance = 2000.0"},
-             {"attack = 0.08", "attack = 0.0"},
-             {"release = 0.6", "release = 0.0"},
+             {"opacity = 0.95", "opacity = 0.0"},
+             {"nearDistance = 160.0", "nearDistance = 2000.0"},
+             {"attack = 0.3", "attack = 0.0"},
+             {"release = 1.0", "release = 0.0"},
              {"mostShown = 12", "mostShown = 0"},
              {"mostHeard = 64", "mostHeard = 4"}}) {
         std::string changed = text;

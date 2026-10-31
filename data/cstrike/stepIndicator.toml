@@ -6,23 +6,23 @@
 # cs.client:stepIndicator while hud_stepindicator is 1: the project's own, nothing of the original's, as
 # games show the sounds a player hears. The players' steps are not shown.
 
-# A red mark of footprints, 0.9 opaque at most, 6% of the screen's height across (65 pixels at 1080), on
-# a ring 17% of it about the middle (184 pixels), its toes toward the body heard.
-color = { red = 255, green = 70, blue = 50 }
-opacity = 0.9
+# Bloody prints of bare feet in a deep red, 0.95 opaque at most, 6% of the screen's height across (65 pixels
+# at 1080), on a ring 17% of it about the middle (184 pixels), their toes toward the body heard.
+color = { red = 205, green = 18, blue = 14 }
+opacity = 0.95
 ringRadius = 0.17
 size = 0.06
 
-# A body within 128 units shows wholly, fading out to none at 1100, as far as a bot hears a step
-# (bots.toml's footstep hearing).
-nearDistance = 128.0
-farDistance = 1100.0
+# A body within 160 units shows wholly, fading out to none at 1600, farther than a bot hears a step (1100,
+# bots.toml's footstep hearing).
+nearDistance = 160.0
+farDistance = 1600.0
 
-# A step lights the mark over 0.08 seconds; it holds 0.9 and fades out over 0.6, each step popping it a
-# quarter larger, back over 0.25.
-attack = 0.08
-hold = 0.9
-release = 0.6
+# A step fades the mark in over 0.3 seconds from what it showed; it holds 0.8 and fades out over 1, each
+# step popping it a quarter larger, back over 0.25.
+attack = 0.3
+hold = 0.8
+release = 1.0
 pulseScale = 0.25
 pulseTime = 0.25
 

@@ -279,16 +279,19 @@ drawn once at the largest it shows and only ever made smaller, filtered linearly
 **The step indicator** (`cs.client:stepIndicator`), the project's own, nothing of the original's, as games
 show the sounds a player hears: while `hud_stepindicator` is 1 and `hud_draw` draws the HUD, each
 entity's body heard stepping (a type with a stride: zombies, monsters; `cs::EntityStep`, which the server
-tells every client of) shows a mark of footprints on a ring about the middle of the screen, the way the
-body is from where the player looks (ahead at the top, to the right on the right, behind at the bottom),
-its toes toward it; the players' steps are not shown. As `data/cstrike/stepIndicator.toml` makes it look
-(`cs::StepIndicatorLook`): red, 0.9 opaque at most, 6% of the screen's height across on a ring 17% of it
-about the middle; a step lights its body's mark over 0.08 seconds from what it showed, pops it a quarter
-larger and back over 0.25, holds it 0.9 seconds and fades it out over 0.6; a body within 128 units shows
-wholly, fading out to none at 1100, as far as a bot hears a step; at most 12 marks show, the loudest
-first, none closer to another than 0.8 of their size, of 64 bodies kept, the faintest giving way. The
-footprints are drawn once, white outlined in black, turned 32 ways (`StepIndicator::kStepMarkTurns`), the
-nearest way showing, tinted by the look's color; the marks move each frame by the time since the steps.
+tells every client of) shows a mark of bloody footprints on a ring about the middle of the screen, the
+way the body is from where the player looks (ahead at the top, to the right on the right, behind at the
+bottom), its toes toward it; the players' steps are not shown. As `data/cstrike/stepIndicator.toml` makes
+it look (`cs::StepIndicatorLook`): deep red, 0.95 opaque at most, 6% of the screen's height across on a
+ring 17% of it about the middle; a step fades its body's mark in over 0.3 seconds from what it showed,
+pops it a quarter larger and back over 0.25, holds it 0.8 seconds and fades it out over 1; a body within
+160 units shows wholly, fading out to none at 1600, farther than a bot hears a step (1100); at most 12
+marks show, the loudest first, none closer to another than 0.8 of their size, of 64 bodies kept, the
+faintest giving way. The prints are drawn once on the CPU, bare feet with their toes, a heel's smear
+behind each and drops about them, their edges ragged and their blood darker in clots and at their rims,
+thinly outlined in black, in shades that the look's color tints, turned 32 ways
+(`StepIndicator::kStepMarkTurns`), the nearest way showing; the marks move each frame by the time since
+the steps.
 
 ### 3.3 Visual parity of numbers
 
