@@ -824,12 +824,13 @@ auto walkInertially(nx::agents::Brain& brain, nx::navigation::NavigationQuery& q
 }
 
 /// The rules of a body that cannot turn on the spot, as a zombie: arriving within 8 units, braking as the
-/// ground's friction stops it.
+/// ground's friction stops it, its walks gaining it speed as fast as the ground's acceleration gives it.
 auto brakingRules() -> nx::agents::Rules {
     nx::agents::Rules braking = rules();
     braking.arrivalDistance = nx::HammerUnits{8.0F};
     braking.braking = InertialBody::kFriction;
     braking.stopSpeed = nx::UnitsPerSecond{InertialBody::kStopSpeed};
+    braking.acceleration = InertialBody::kAcceleration;
     return braking;
 }
 
@@ -972,6 +973,31 @@ TEST(AgentBrain, ABodyAtRestShortOfItsStopWalksThereRatherThanCreep) {
     const InertialWalk walked = walkInertially(brain, query, InertialBody{});
     EXPECT_TRUE(walked.isArrived);
     EXPECT_LT(walked.seconds, 0.5F) << "rather than creep there";
+}
+
+TEST(AgentBrain, ItIsAskedForNoWalkSlowerThanItGainsSpeedAtButToStopWhereItsWayEnds) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 400});
+    constexpr float kRunSpeed = 250.0F;
+    constexpr float kFirstWaveSpeed = 100.0F;
+    // Twice the walk whose gain its friction takes, 75 times 4 over 5.
+    constexpr float kLeastWalk = 120.0F;
+    // How fast it is asked to walk at `maxSpeed` as it comes a unit short of a point it passes at `passShare`
+    // of it, none a stop: the share alone, and how fast it can still stop there from, 24.5 units a second.
+    const auto walkAt = [&](float passShare, float maxSpeed) {
+        nx::agents::Decision decision = brain.decide({}, query);
+        decision.intent.approaches[0] = {.distance = nx::HammerUnits{1.0F}, .passShare = passShare};
+        decision.intent.approachCount = 1;
+        brain.steer(decision.intent, {.x = maxSpeed}, nx::UnitsPerSecond{maxSpeed}, {}, query);
+        return decision.intent.speedShare * maxSpeed;
+    };
+    EXPECT_NEAR(walkAt(0.1F, kRunSpeed), kLeastWalk, 0.5F) << "a sharp turn, as slow as it gains speed at";
+    EXPECT_NEAR(walkAt(0.1F, kFirstWaveSpeed), kFirstWaveSpeed, 0.5F) << "its whole speed, when slower";
+    EXPECT_NEAR(walkAt(0.6F, kRunSpeed), (0.6F * kRunSpeed) + 24.5F, 0.5F)
+        << "faster than it, as braking says";
+    EXPECT_NEAR(walkAt(0.0F, kRunSpeed), 24.5F, 0.5F) << "its stop, as slow as it stops there from";
 }
 
 TEST(AgentBrain, ItArrivesAcrossOnItsFloorAndNotUnderAGoalAboveIt) {

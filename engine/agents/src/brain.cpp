@@ -64,6 +64,12 @@ constexpr float kTurnSpanRadii = 4.0F;
     }
     return stopSpeed + (rules.braking * (distance.value() - slowStretch));
 }
+/// The slowest walk a body gains speed at by `rules` (Rules::acceleration): twice the walk whose gain its
+/// friction takes below its stop speed, stopSpeed times braking over acceleration; none without one.
+[[nodiscard]] auto leastWalkOf(const Rules& rules) noexcept -> float {
+    return rules.acceleration > 0.0F ? 2.0F * rules.stopSpeed.value() * rules.braking / rules.acceleration
+                                     : 0.0F;
+}
 /// Heads `intent` for `point` from `feet`, across the ground: its way and where it faces; as it is when
 /// its feet are right below or above it.
 void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
@@ -91,9 +97,11 @@ Brain::Brain(Rules settings) : rules{settings} {
                 rules.shortTermMemory >= Seconds{} && rules.threatRecency >= Seconds{} &&
                 rules.threatMargin >= HammerUnits{} && std::isfinite(rules.braking) &&
                 rules.braking >= 0.0F && std::isfinite(rules.stopSpeed.value()) &&
-                rules.stopSpeed >= UnitsPerSecond{},
+                rules.stopSpeed >= UnitsPerSecond{} && std::isfinite(rules.acceleration) &&
+                rules.acceleration >= 0.0F,
             "Brain: positive rules, a memory budget, and a reaction time, a replan share, a short-term "
-            "memory, a threat's recency and margin, a braking and a stop speed of none or more");
+            "memory, a threat's recency and margin, a braking, a stop speed and an acceleration of none or "
+            "more");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
@@ -447,23 +455,37 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     if (!corridor || crossing || length(intent.direction) == 0.0F || maxSpeed <= UnitsPerSecond{}) {
         return;
     }
-    // No faster than it can still slow down for what it approaches.
+    // No faster than it can still slow down for what it approaches, and no slower than it gains speed at
+    // but to stop: asked for less, a GoldSrc body slowed for a sharp corner or round a body near it stopped
+    // dead, and at rest gained nothing (PM_Friction takes 3 units a second each tick below sv_stopspeed, and
+    // PM_Accelerate gives a twentieth of the walk), as stuck as a stuck watch finds a body.
+    const float leastWalk = std::min(leastWalkOf(rules), maxSpeed.value());
     float wished = maxSpeed.value();
+    bool stops = false;
     for (const Approach& approached : intent.approached()) {
-        wished = std::min(wished, (approached.passShare * maxSpeed.value()) +
-                                      stoppingSpeedOf(rules, approached.distance));
+        const float passing =
+            (approached.passShare * maxSpeed.value()) + stoppingSpeedOf(rules, approached.distance);
+        if (passing < wished) {
+            wished = passing;
+            stops = approached.passShare <= 0.0F;
+        }
     }
-    const Vec3 steered = acrossOf(corridor->steer(query, {.velocity = velocity,
-                                                          .desired = intent.direction * wished,
-                                                          .maxSpeed = UnitsPerSecond{wished},
-                                                          .bodies = nearby}));
-    const float speed = length(steered);
-    if (speed < kLeastSteeredSpeedShare * wished) {
+    if (!stops) {
+        wished = std::max(wished, leastWalk);
+    }
+    const Vec3 avoiding = acrossOf(corridor->steer(query, {.velocity = velocity,
+                                                           .desired = intent.direction * wished,
+                                                           .maxSpeed = UnitsPerSecond{wished},
+                                                           .bodies = nearby}));
+    const float avoidingSpeed = length(avoiding);
+    if (avoidingSpeed < kLeastSteeredSpeedShare * wished) {
         intent.direction = {};
         return;
     }
-    intent.direction = steered / speed;
-    intent.speedShare = std::min(speed, wished) / maxSpeed.value();
+    intent.direction = avoiding / avoidingSpeed;
+    const float speed = std::clamp(avoidingSpeed, std::min(leastWalk, wished), wished);
+    const Vec3 steered = intent.direction * speed;
+    intent.speedShare = speed / maxSpeed.value();
     // A body that gains speed only along the way it is driven (PM_Accelerate), and loses the rest to friction
     // alone, keeps drifting across its way when driven the way it should go, and circles round what it heads
     // for: it is to be driven the way its velocity must change to become the steered one, as DetourCrowd
