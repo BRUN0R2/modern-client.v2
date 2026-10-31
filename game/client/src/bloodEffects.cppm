@@ -5,8 +5,8 @@
 /// project's own: what a hit's spray (cs::BloodSpray) makes, as data/cstrike/blood.toml's enhancedLook
 /// tells, which nx.render:blood draws. A burst where the hit met the body, of its part of the body: a
 /// cloud of blood smoke and droplets flying off the way the hit went, some back the way it came, which the
-/// air soon stops, so that the spray hangs a moment; a hit in the head bursts more, then gushes for a moment,
-/// in pulses, as a wound does. A droplet fades out in the air unless the world stops it first, where some
+/// air soon stops, so that the spray hangs a moment; a hit in the head bursts more, all at once, as the
+/// hit. A droplet fades out in the air unless the world stops it first, where some
 /// leave a splat flat on what they met, which lies a while and fades out. Their room is bounded: droplets and
 /// mists past their most are not made, and a new splat takes the oldest's place. Each is of its spray's
 /// color, lit by the light where the hit met the body, once, as it is made, at least as much as the look's
@@ -65,18 +65,6 @@ struct BloodSplat {
     float seed = 0.0F;
 };
 
-/// A wound gushing: where, the way it gushes, its shade, the burst it gushes as, how many pulses it has
-/// left and when the next comes, and how fast the next is, of the burst's speeds.
-struct BloodGush {
-    nx::Vec3 position{};
-    nx::Vec3 way{};
-    BloodShade shade{};
-    BloodBurst burst{};
-    std::uint32_t pulsesLeft = 0;
-    nx::Seconds nextPulseAt{};
-    float speedShare = 1.0F;
-};
-
 /// The enhanced look's blood of a map's client.
 class BloodEffects {
 public:
@@ -87,18 +75,16 @@ public:
     /// its part of the body, the
     /// head's if it met the head, else the body's, from where it met it the way the hit went, as many
     /// droplets as its size times the burst's dropletsPerSize, rounded, and its mists splashing out of it,
-    /// each flying off as a droplet does but turned by up to the burst's mistSpread; and the burst's gush
-    /// after it. Droplets past look.mostDroplets, and mists past
+    /// each flying off as a droplet does but turned by up to the burst's mistSpread. Droplets past
+    /// look.mostDroplets, and mists past
     /// look.mostMists, are not made.
     void spray(const BloodSpray& spray, const BloodEnhancedLook& look, BloodShade shade, nx::Seconds now);
-    /// Moves them over `elapsed` up to `now`, the world's gravity `gravity`, as `look` moves them: each gush
-    /// pulses as many times as came due, its droplets and mists the way it gushes, none back, each pulse
-    /// slower;
-    /// each droplet moves by its velocity unless the world of `hulls` stops it where a line from where it
+    /// Moves them over `elapsed` up to `now`, the world's gravity `gravity`, as `look` moves them: each
+    /// droplet moves by its velocity unless the world of `hulls` stops it where a line from where it
     /// was meets it, there going, and leaving a splat flat on what it met, for look.splatShare of them;
     /// else it falls at look.gravity of `gravity`; each mist moves by its velocity, through what is solid;
     /// and the air slows both, their speed falling to e^-look.drag of itself a second, the same over a
-    /// frame of any length. Those gone at `now`, and gushes done, are forgotten first.
+    /// frame of any length. Those gone at `now` are forgotten first.
     void update(nx::Seconds now, nx::Seconds elapsed, const nx::collision::BrushHulls& hulls,
                 nx::UnitsPerSecondSquared gravity, const BloodEnhancedLook& look);
     /// What to draw at `now`: the splats, fully opaque until look.splatFade before they go, then fading
@@ -115,24 +101,19 @@ public:
     [[nodiscard]] inline auto mists() const noexcept -> std::span<const BloodMist> { return drifting; }
     /// The splats lying, the oldest first.
     [[nodiscard]] inline auto splats() const noexcept -> std::span<const BloodSplat> { return lying; }
-    /// The wounds gushing.
-    [[nodiscard]] inline auto gushes() const noexcept -> std::span<const BloodGush> { return gushing; }
 
 private:
     /// A way a burst throws a drop off `way`: back against it for `backShare` of them, turned by up to
     /// `spread` on each axis, drawn in that order.
     [[nodiscard]] auto thrownWayOf(nx::Vec3 way, float spread, float backShare) -> nx::Vec3;
-    /// Throws `count` droplets of `burst` in `shade` from `from`, `backShare` of them back against `way`,
-    /// as fast as `speedShare` of the burst's speeds, gone after look.dropletLife from `now`; none past
-    /// look.mostDroplets.
+    /// Throws `count` droplets of `burst` in `shade` from `from`, the burst's backShare of them back against
+    /// `way`, gone after look.dropletLife from `now`; none past look.mostDroplets.
     void throwDroplets(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, std::uint32_t count,
-                       float backShare, float speedShare, BloodShade shade, const BloodEnhancedLook& look,
-                       nx::Seconds now);
-    /// Throws `count` mists of `burst` in `shade` from `from`, `backShare` of them back against `way`, as
-    /// fast as `speedShare` of the burst's mist speeds, made at `now`; none past look.mostMists.
-    void throwMists(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, std::uint32_t count,
-                    float backShare, float speedShare, BloodShade shade, const BloodEnhancedLook& look,
-                    nx::Seconds now);
+                       BloodShade shade, const BloodEnhancedLook& look, nx::Seconds now);
+    /// Throws the burst's mists in `shade` from `from`, its backShare of them back against `way`, made at
+    /// `now`; none past look.mostMists.
+    void throwMists(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, BloodShade shade,
+                    const BloodEnhancedLook& look, nx::Seconds now);
     /// Lays a splat of `droplet` where `met` stopped it, flat on what it met, its radius grown as `look`
     /// grows it, lying from `now`; the oldest going first when there is no room.
     void laySplat(const BloodDroplet& droplet, const nx::collision::Trace& met, const BloodEnhancedLook& look,
@@ -141,7 +122,6 @@ private:
     std::vector<BloodDroplet> flying;
     std::vector<BloodMist> drifting;
     std::vector<BloodSplat> lying;
-    std::vector<BloodGush> gushing;
     std::vector<nx::render::BloodInstance> instances;
     nx::Random random;
 };
