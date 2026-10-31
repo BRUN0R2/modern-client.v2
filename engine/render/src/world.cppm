@@ -127,8 +127,8 @@ inline constexpr std::string_view kDefaultSkyName = "desert";
 /// What a world is made of (BspWorld::create): the map, its textures' WADs, its sky and its decals,
 /// and what it draws to.
 struct BspWorldDesc {
-    /// Read every frame for its tree and visibility: it must outlive the world.
-    const assets::BspView& map;
+    /// Read every frame for its tree and visibility: it must outlive the world. Temporaries are rejected.
+    std::reference_wrapper<const assets::BspView> map;
     /// The WADs of the map's `wad` key, in its order: a texture without pixels in the map is the
     /// first of them that has its name.
     std::span<const assets::WadView> wads{};

@@ -89,6 +89,50 @@ drawWorld(OffscreenTarget& target, nx::render::BspWorld& world, const nx::render
     return world;
 }
 
+class UnusedVertexWarningSink final : public nx::log::Sink {
+public:
+    void write(const nx::log::Record& record) noexcept override {
+        constexpr std::string_view kVertexAttribute = "Vertex attribute at location";
+        constexpr std::string_view kNotConsumed = "not consumed by vertex shader";
+        if (record.level == nx::log::Level::Warning && record.message.contains(kVertexAttribute) &&
+            record.message.contains(kNotConsumed)) {
+            found.store(true, std::memory_order_relaxed);
+        }
+    }
+
+    [[nodiscard]] auto sawUnusedAttribute() const noexcept -> bool {
+        return found.load(std::memory_order_relaxed);
+    }
+
+private:
+    std::atomic_bool found = false;
+};
+
+TEST(BspWorldTest, SkyPipelineUsesOnlyVertexAttributesConsumedByItsShader) {
+    auto sink = std::make_unique<UnusedVertexWarningSink>();
+    const UnusedVertexWarningSink* const warnings = sink.get();
+    nx::log::Logger logger;
+    logger.addSink(std::make_unique<nx::log::ConsoleSink>());
+    logger.addSink(std::move(sink));
+    const nx::log::DefaultLoggerScope logging{logger};
+
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    const auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    EXPECT_FALSE(warnings->sawUnusedAttribute());
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});

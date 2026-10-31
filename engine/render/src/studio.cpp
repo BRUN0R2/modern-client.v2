@@ -773,8 +773,10 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
 
 auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& desc)
     -> Result<StudioModel, StudioError> {
-    if (auto checked = desc.model.checkTextures(desc.textures); !checked) {
-        return fail(StudioError::BadTextures, std::format("{:?}", desc.model.name()),
+    const assets::MdlView& modelView = desc.model.get();
+    const assets::MdlView& textureView = desc.textures.get();
+    if (auto checked = modelView.checkTextures(textureView); !checked) {
+        return fail(StudioError::BadTextures, std::format("{:?}", modelView.name()),
                     std::move(checked.error()));
     }
     const auto gpuFailure = [](Failure<rhi::RhiError> failure) {
@@ -782,21 +784,27 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     };
     Uploader uploader{*m_device, commands};
     StudioModel model;
-    Geometry geometry = geometryOf(desc.model);
+    Geometry geometry = geometryOf(modelView);
     auto vertices = uploader.buffer("studio.vertices", rhi::BufferUsage::Vertex, rhi::BufferState::Vertex,
                                     std::as_bytes(std::span{geometry.vertices}));
+    if (!vertices) {
+        return gpuFailure(std::move(vertices.error()));
+    }
     auto indices = uploader.buffer("studio.indices", rhi::BufferUsage::Index, rhi::BufferState::Index,
                                    std::as_bytes(std::span{geometry.indices}));
-    if (!vertices || !indices) {
-        return gpuFailure(std::move(!vertices ? vertices.error() : indices.error()));
+    if (!indices) {
+        return gpuFailure(std::move(indices.error()));
     }
     model.m_vertices = std::move(*vertices);
     model.m_indices = std::move(*indices);
     model.m_bodyParts = std::move(geometry.bodyParts);
-    model.m_boneCount = desc.model.bones().size();
-    model.m_middle = (desc.model.bounds().min + desc.model.bounds().max) * (1.0F / 2.0F);
-    model.m_skins.assign(desc.textures.skins().begin(), desc.textures.skins().end());
-    const std::span<const assets::StudioTexture> textures = desc.textures.textures();
+    model.m_boneCount = modelView.bones().size();
+    constexpr float kBoundsCenterScale = 0.5F;
+    const auto& bounds = modelView.bounds();
+    model.m_middle = (bounds.min + bounds.max) * kBoundsCenterScale;
+    const auto skins = textureView.skins();
+    model.m_skins.assign(skins.begin(), skins.end());
+    const std::span<const assets::StudioTexture> textures = textureView.textures();
     for (std::size_t index = 0; index < textures.size(); ++index) {
         const assets::StudioTexture& texture = textures[index];
         const std::optional<StudioMaterial> material =
@@ -810,16 +818,20 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
                                          : rhi::Extent2d{.width = texture.width, .height = texture.height};
         const std::string label = std::format("studio.{}", texture.name);
         auto uploaded = uploadChain(uploader, label, extent, texels, colorFormatOf(m_encoding));
+        if (!uploaded) {
+            return gpuFailure(std::move(uploaded.error()));
+        }
         const SkinUniform skin = skinUniformOf(texture, material);
         auto uniform = uploader.buffer(label, rhi::BufferUsage::Uniform, rhi::BufferState::Uniform,
                                        std::as_bytes(std::span{&skin, 1}));
-        auto images = material ? uploadMaterialImages(uploader, label, *material) : MaterialImages{};
-        if (!uploaded || !uniform || !images) {
-            return gpuFailure(std::move(!uploaded  ? uploaded.error()
-                                        : !uniform ? uniform.error()
-                                                   : images.error()));
+        if (!uniform) {
+            return gpuFailure(std::move(uniform.error()));
         }
-        const auto orWhite = [this](const rhi::OwnedTexture& image) {
+        auto images = material ? uploadMaterialImages(uploader, label, *material) : MaterialImages{};
+        if (!images) {
+            return gpuFailure(std::move(images.error()));
+        }
+        const auto orWhite = [this](const rhi::OwnedTexture& image) -> rhi::TextureHandle {
             return image.get().isNull() ? m_whiteMask.get() : image.get();
         };
         const std::array bindings{
@@ -906,7 +918,7 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
     StudioFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     std::size_t boneCount = 0;
     for (const StudioInstance& instance : frame.instances) {
-        expects(instance.bones.size() == instance.model.boneCount(),
+        expects(instance.bones.size() == instance.model.get().boneCount(),
                 "StudioRenderer::prepare: every bone of a model");
         boneCount += instance.bones.size();
     }
@@ -945,7 +957,7 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
         if (blending != StudioBlending::Solid) {
             m_blendedDraws.push_back(BlendedDraw{
                 .distance =
-                    lengthSquared(frame.camera.position - (instance.origin + instance.model.m_middle)),
+                    lengthSquared(frame.camera.position - (instance.origin + instance.model.get().m_middle)),
                 .mode = instance.mode,
                 .index = narrow<std::uint32_t>(index)});
         }
@@ -979,7 +991,7 @@ void StudioRenderer::drawBlended(rhi::CommandList& commands, std::uint32_t index
 }
 
 auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blending) -> StudioModelCall {
-    const StudioModel& model = instance.model;
+    const StudioModel& model = instance.model.get();
     StudioModelCall call{.vertices = model.m_vertices.get(),
                          .indices = model.m_indices.get(),
                          .blending = blending,

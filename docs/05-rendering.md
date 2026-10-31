@@ -183,6 +183,12 @@ first, then the farthest middle of its bounds first, at one distance by mode (`R
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
 of its own.
 
+The world descriptor borrows its map for the world's lifetime; studio model descriptors borrow their
+model and texture views through loading, and studio and sprite instances borrow their models through
+drawing. These fields accept lvalues and reject temporaries, but their owners must still keep the
+objects and their underlying data alive for those periods. The fields are `std::reference_wrapper`s:
+code that accesses a field's members directly uses `.get()`, and assigning one rebinds its reference.
+
 **Today** (`nx.render:overlay`, `shaders/overlay.slang`): after the particles and before the view's own
 model, `OverlayRenderer` draws what the tools show over the scene, `nav_draw`'s
 ([ADR-0023](adr/0023-navigation.md)), behind what the scene drew in front, whose depth it tests and
@@ -302,7 +308,9 @@ drawn as their files have them, through no gamma curve, as in the original, whic
 sky is gray. The sky named is the game's environment's, in place of every map's, when it names one
 (`data/cstrike/environment.toml`'s `sky`, `cs::skyNameOf`), as a mod sets the original's `sv_skyname`
 over each map's: Counter-Strike's own names none, a zombie match's the night; else the worldspawn's. Drawing the sky's own faces rather than a box behind the world gives the same picture
-for the world and hides what lies behind them, as the sky's brushes seal the map.
+for the world and hides what lies behind them, as the sky's brushes seal the map. The sky pipeline
+declares only the position attribute its vertex shader reads; the other world passes retain their full
+vertex layout.
 
 Each frame gathers what the camera sees, as the original culls it, into the index buffer of its
 frame in flight, in a batch per texture and then the sky's: the leaves the camera's leaf may see
@@ -453,6 +461,7 @@ flowchart LR
    to `StudioInstance`. Their defaults keep skin zero and each body part's first choice. Appearance
    indexes are checked against the actual model and its textures file before GPU upload; alternate
    views cannot override them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   A failed geometry or texture upload returns its typed GPU error before allocating later resources.
    A view model modeled in the other hand than the player's (its
    `viewHand`; the player's is `cl_righthand`'s, the right at its default of 1, the left at 0,
    `SceneView::hand`, read each frame) is drawn
