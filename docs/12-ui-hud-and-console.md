@@ -355,7 +355,7 @@ from reference shots; search comes later.
 | Group | Cvars |
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
-| Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals` |
+| Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals`, `cl_corpsestay` |
 | HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
@@ -408,7 +408,9 @@ given, the picture's (`gamma`, `brightness`,
 crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 `cl_crosshair_translucent` (1), and `cl_righthand` (1, the weapons in the right hand, else in the
 left: the view models mirrored by it, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning)),
-archived, which each frame reads. `cs::GameCvars` registers the
+archived, which each frame reads. `cs::CorpseCvars` registers `cl_corpsestay` (600, from 0 to 600),
+archived: the seconds a dead body stays, a player's or an entity's, before it fades out over a second
+and is drawn no more ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). `cs::GameCvars` registers the
 cvars of the game's rules a server sets, which the local game plays by until the server comes, not
 archived and told to the players (`Notify`), each a number, any of them, as the original's are,
 held where the original's game holds it as it reads it and set back as it sets it:

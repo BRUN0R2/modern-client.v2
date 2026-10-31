@@ -390,7 +390,8 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                               .frame = torso.frame,
                               .advancedAt = torso.advancedAt,
                               .framerate = torso.framerate,
-                              .gaitSequence = shown.animation.gaitSequence});
+                              .gaitSequence = shown.animation.gaitSequence,
+                              .isDead = shown.movement.isDead});
     }
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     return PlayerSnapshot{.time = time.now,

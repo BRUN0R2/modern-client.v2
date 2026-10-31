@@ -539,6 +539,7 @@ private:
     std::optional<cs::HudCvars> m_hudCvars;
     std::optional<cs::FogCvars> m_fogCvars;
     cs::FogControl m_fog; ///< The fog the frames show, as the fog's cvars ask for it.
+    std::optional<cs::CorpseCvars> m_corpseCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
@@ -711,6 +712,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(fogCvars.error()));
     }
     m_fogCvars = std::move(*fogCvars);
+    auto corpseCvars = cs::CorpseCvars::registerIn(m_console);
+    if (!corpseCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(corpseCvars.error()));
+    }
+    m_corpseCvars = std::move(*corpseCvars);
     auto gameCvars = cs::GameCvars::registerIn(m_console);
     if (!gameCvars) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
@@ -1209,7 +1215,7 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_session->game->setAutoSwitch(m_session->player, autoSwitchOf(m_cvars->player));
             playSession(elapsed);
             m_camera.position = m_session->client.eye();
-            m_session->client.updatePlayers(elapsed, m_players);
+            m_session->client.updatePlayers(elapsed, m_corpseCvars->stayTime(), m_players);
             turnAsTheGameDid();
             hearSession(hearing);
             stampMarks();
@@ -1571,7 +1577,7 @@ auto Client::sessionView() -> cs::SceneView {
                                     .roll = m_camera.angles.roll + punch.roll};
     m_session->client.writePlacements(m_placements);
     m_session->client.writeHostages(m_hostages);
-    m_session->client.writeEntities(m_content->entities, shownEntities);
+    m_session->client.writeEntities(m_content->entities, m_corpseCvars->stayTime(), shownEntities);
     const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
             .time = time,

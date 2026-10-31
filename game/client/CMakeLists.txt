@@ -21,6 +21,7 @@ nxAddModuleLibrary(csClient
         src/muzzleFlash.cppm
         src/tempEntities.cppm
         src/particles.cppm
+        src/corpses.cppm
         src/bloodEffects.cppm
         src/levelDecals.cppm
         src/bulletMarks.cppm
@@ -50,6 +51,7 @@ nxAddModuleLibrary(csClient
         src/muzzleFlash.cpp
         src/tempEntities.cpp
         src/particles.cpp
+        src/corpses.cpp
         src/bloodEffects.cpp
         src/levelDecals.cpp
         src/bulletMarks.cpp

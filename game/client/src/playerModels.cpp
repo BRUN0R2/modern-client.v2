@@ -113,6 +113,7 @@ auto PlayerModels::posed(const PlayerGpuModels& models, std::span<const ShownPla
         const nx::render::StudioModel* model = nullptr;
         nx::Vec3 origin{};
         nx::render::ModelLight light{};
+        std::uint8_t amount = 0;
     };
     std::vector<Drawn> drawn;
     for (const ShownPlayer& player : players) {
@@ -139,19 +140,25 @@ auto PlayerModels::posed(const PlayerGpuModels& models, std::span<const ShownPla
             const AnimatedModel& weapon = *m_weapons[player.weapon->value];
             posed.bones.push_back(mergeBones(*weapon.files->view, weapon.animations.front(),
                                              skeletonOf(*view), bones, placement));
-            drawn.push_back(Drawn{
-                .model = &*models.weapons[player.weapon->value], .origin = player.origin, .light = lit});
+            drawn.push_back(Drawn{.model = &*models.weapons[player.weapon->value],
+                                  .origin = player.origin,
+                                  .light = lit,
+                                  .amount = player.amount});
         }
         posed.bones.push_back(std::move(bones));
-        drawn.push_back(Drawn{
-            .model = &*models.characters[player.character.value], .origin = player.origin, .light = lit});
+        drawn.push_back(Drawn{.model = &*models.characters[player.character.value],
+                              .origin = player.origin,
+                              .light = lit,
+                              .amount = player.amount});
     }
     // The instances point into the bones, which no longer move.
     for (std::size_t index = 0; index < drawn.size(); ++index) {
         posed.instances.push_back(nx::render::StudioInstance{.model = *drawn[index].model,
                                                              .bones = posed.bones[index],
                                                              .light = drawn[index].light,
-                                                             .origin = drawn[index].origin});
+                                                             .origin = drawn[index].origin,
+                                                             .mode = renderModeOf(drawn[index].amount),
+                                                             .amount = drawn[index].amount});
     }
     return posed;
 }

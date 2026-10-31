@@ -50,7 +50,9 @@ auto EntityModels::posed(const EntityCatalog& catalog, std::span<const ShownEnti
         posed.instances.push_back({.model = models[type.model.value],
                                    .bones = posed.bones.back(),
                                    .light = light.modelLightAt({.origin = origin, .sky = sky}, styles),
-                                   .origin = origin});
+                                   .origin = origin,
+                                   .mode = renderModeOf(entity.amount),
+                                   .amount = entity.amount});
     }
     return posed;
 }

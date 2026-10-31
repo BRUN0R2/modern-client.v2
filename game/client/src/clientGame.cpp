@@ -128,7 +128,8 @@ auto ClientGame::lightStylesAt(nx::Seconds time) const noexcept -> nx::render::L
     return lightStyles.valuesAt(time);
 }
 
-void ClientGame::updatePlayers(nx::Seconds frameTime, std::vector<ShownPlayer>& players) {
+void ClientGame::updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay,
+                               std::vector<ShownPlayer>& players) {
     const nx::GameTime shown = shownTime();
     const float between = m_pending / kCommandInterval;
     players.clear();
@@ -137,6 +138,11 @@ void ClientGame::updatePlayers(nx::Seconds frameTime, std::vector<ShownPlayer>& 
         const nx::assets::MdlView* const model = m_players->characterModel(state.character);
         if (model == nullptr) {
             continue; // one whose model the client could not read, which it listed
+        }
+        const std::uint8_t amount = corpseAmountOf(
+            playerCorpses.deadFor(state.player.value, state.isDead, shown, m_last.rate), corpseStay);
+        if (amount == 0) {
+            continue; // a corpse gone
         }
         const std::optional<nx::Vec3> before = state.player.value < previousPlayerOrigins.size()
                                                    ? previousPlayerOrigins[state.player.value]
@@ -164,8 +170,10 @@ void ClientGame::updatePlayers(nx::Seconds frameTime, std::vector<ShownPlayer>& 
             .gaitSequence = state.gaitSequence,
             .gaitFrame = SequenceFrame{gait->frame},
             .yawBlend = gait->yawBlend,
-            .pitchBlend = static_cast<float>(gait->pitchBlend)});
+            .pitchBlend = static_cast<float>(gait->pitchBlend),
+            .amount = amount});
     }
+    playerCorpses.forgetUnasked();
 }
 
 void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {
@@ -182,11 +190,18 @@ void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {
     }
 }
 
-void ClientGame::writeEntities(const EntityCatalog& catalog, std::vector<ShownEntity>& entities) const {
+void ClientGame::writeEntities(const EntityCatalog& catalog, nx::Seconds corpseStay,
+                               std::vector<ShownEntity>& entities) {
     const nx::GameTime shown = shownTime();
     entities.clear();
     entities.reserve(m_last.entities.size());
     for (const EntityState& state : m_last.entities) {
+        const bool isDead = state.health <= nx::HitPoints{};
+        const std::uint8_t amount =
+            corpseAmountOf(entityCorpses.deadFor(state.entity, isDead, shown, m_last.rate), corpseStay);
+        if (amount == 0) {
+            continue; // a corpse gone
+        }
         const auto before = previousEntityOrigins.find(state.entity);
         const nx::Vec3 origin = before == previousEntityOrigins.end()
                                     ? state.origin
@@ -200,8 +215,10 @@ void ClientGame::writeEntities(const EntityCatalog& catalog, std::vector<ShownEn
                             .sequence = state.animation.sequence,
                             .frame = estimatedFrameOf(sequence, state.animation.frame,
                                                       shown.since(state.animation.advancedAt, m_last.rate),
-                                                      state.animation.framerate)});
+                                                      state.animation.framerate),
+                            .amount = amount});
     }
+    entityCorpses.forgetUnasked();
 }
 
 } // namespace cs
