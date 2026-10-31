@@ -128,7 +128,8 @@ private:
 
 /// A sprite drawn in a frame: where its entity is, and how the game asks it to be drawn.
 struct SpriteInstance {
-    const SpriteModel& model;
+    /// Borrowed through the draw; the model must outlive the instance. Temporaries are rejected.
+    std::reference_wrapper<const SpriteModel> model;
     Vec3 origin{};
     EulerAngles angles{}; ///< Turn an oriented sprite; the roll turns a parallel one.
     float frame = 0.0F;   ///< The entity's `frame`: its whole part is the frame shown.

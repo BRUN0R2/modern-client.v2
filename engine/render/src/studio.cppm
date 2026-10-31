@@ -212,9 +212,11 @@ struct StudioMaterial {
 /// A studio model to put on the GPU (StudioRenderer::load): its file, the file of its textures, and
 /// the materials of its textures in the enhanced look.
 struct StudioModelDesc {
-    const assets::MdlView& model;
+    /// Borrowed for loading; the view must stay alive through the call. Temporaries are rejected.
+    std::reference_wrapper<const assets::MdlView> model;
     /// Where its textures and skins are: the model itself, or its `*T.mdl` (assets::texturesFilePath).
-    const assets::MdlView& textures;
+    /// The view must stay alive through loading; temporaries are rejected.
+    std::reference_wrapper<const assets::MdlView> textures;
     /// The material of each texture, by its index, in the enhanced look; one it lacks has none.
     std::span<const std::optional<StudioMaterial>> materials{};
 };
@@ -255,7 +257,8 @@ private:
 
 /// A model drawn in a frame.
 struct StudioInstance {
-    const StudioModel& model;
+    /// Borrowed through the draw; the model must outlive the instance. Temporaries are rejected.
+    std::reference_wrapper<const StudioModel> model;
     /// Each of its bones' transform from the bone's space to the world, by its index: cs::poseBones's.
     std::span<const Mat3x4> bones{};
     ModelLight light{};

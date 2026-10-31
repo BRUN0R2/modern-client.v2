@@ -183,6 +183,12 @@ first, then the farthest middle of its bounds first, at one distance by mode (`R
 order of their renderers, then in their own. The view's own model is drawn after them, by a renderer
 of its own.
 
+The world descriptor borrows its map for the world's lifetime; studio model descriptors borrow their
+model and texture views through loading, and studio and sprite instances borrow their models through
+drawing. These fields accept lvalues and reject temporaries, but their owners must still keep the
+objects and their underlying data alive for those periods. The fields are `std::reference_wrapper`s:
+code that accesses a field's members directly uses `.get()`, and assigning one rebinds its reference.
+
 **Today** (`nx.render:overlay`, `shaders/overlay.slang`): after the particles and before the view's own
 model, `OverlayRenderer` draws what the tools show over the scene, `nav_draw`'s
 ([ADR-0023](adr/0023-navigation.md)), behind what the scene drew in front, whose depth it tests and

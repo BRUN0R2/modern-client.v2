@@ -292,13 +292,12 @@ struct MapTextures {
                              .width = static_cast<float>(kCheckerSize),
                              .height = static_cast<float>(kCheckerSize)};
     textures.owned.push_back(std::move(*checker));
-    textures.uses.assign(desc.map.textures().size(), missing);
-    for (std::size_t index = 0; index < desc.map.textures().size(); ++index) {
-        const std::optional<assets::MipTexture>& slot = desc.map.textures()[index];
+    const auto slots = desc.map.get().textures();
+    textures.uses.assign(slots.size(), missing);
+    for (auto&& [slot, use] : std::views::zip(slots, textures.uses)) {
         if (!slot) {
             continue;
         }
-        TextureUse& use = textures.uses[index];
         use.kind = surfaceKindOf(slot->name);
         use.width = static_cast<float>(slot->width);
         use.height = static_cast<float>(slot->height);
@@ -797,7 +796,7 @@ struct SkyLayers {
 
 auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const BspWorldDesc& desc)
     -> Result<BspWorld, WorldError> {
-    const assets::BspView& map = desc.map;
+    const assets::BspView& map = desc.map.get();
     auto skyLayers = skyLayersOf(desc.sky, desc.encoding);
     if (!skyLayers) {
         return std::unexpected{std::move(skyLayers.error())};

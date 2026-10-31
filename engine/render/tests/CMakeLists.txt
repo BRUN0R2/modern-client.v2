@@ -4,6 +4,7 @@
 nxAddTest(nxRenderTests
     SOURCES
         blendedOrderTests.cpp
+        borrowedTests.cpp
         cameraTests.cpp
         decalsTests.cpp
         fogTests.cpp
