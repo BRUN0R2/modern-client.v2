@@ -13,6 +13,12 @@ import nx.render;
 
 export namespace cs {
 
+/// Why the fog cvars cannot make a fog together.
+enum class FogError : std::uint8_t {
+    LinearEndRequired, ///< A linear fog has no finite end.
+    EndNotPastStart,   ///< A finite end is not past the start.
+};
+
 /// The fog's cvars, none of them archived: a map's or a mod's fog, not the player's.
 struct FogCvars {
     nx::console::Cvar<bool> enabled;      ///< `fog_enable`: whether the fog shows.
@@ -28,9 +34,9 @@ struct FogCvars {
     [[nodiscard]] static auto registerIn(nx::console::Console& console)
         -> nx::Result<FogCvars, nx::console::CvarError>;
 
-    /// The fog they ask for: none while fog_enable is 0; why when they make none (an end not past the
-    /// start, a linear fog without an end).
-    [[nodiscard]] auto fog() const -> std::expected<std::optional<nx::render::Fog>, std::string_view>;
+    /// The fog they ask for: none while fog_enable is 0. Errors: LinearEndRequired, EndNotPastStart.
+    /// The handles must have the rules installed by registerIn; an observed violation returns no fog.
+    [[nodiscard]] auto fog() const -> nx::Result<std::optional<nx::render::Fog>, FogError>;
     /// How long the fog takes to come, go or change.
     [[nodiscard]] auto fadeTime() const -> nx::Seconds;
 };
@@ -42,18 +48,39 @@ struct FogCvars {
 class FogControl {
 public:
     /// Moves the fog on by `elapsed`, toward what `cvars` ask for now: a fog they ask for anew comes or
-    /// changes over their fade; one they make none of is refused with a warning, once, the fog shown
-    /// going on as it was.
+    /// changes over their fade; one they make none of is refused with a rate-limited warning, the fog
+    /// shown going on as it was. Unchanged inputs are not parsed or validated again.
     void update(const FogCvars& cvars, nx::Seconds elapsed);
     /// The fog shown now; none when none shows.
     [[nodiscard]] inline auto shown() const noexcept -> std::optional<nx::render::Fog> {
-        return m_transition.shown();
+        return transition.shown();
     }
 
 private:
-    nx::render::FogTransition m_transition;
-    std::optional<nx::render::Fog> m_asked{};
-    std::optional<std::string_view> m_refused{};
+    static constexpr auto kWarningInterval = std::chrono::seconds{1};
+
+    /// The inputs that determine the requested fog; fade is read only when its target changes.
+    class FogValues {
+    public:
+        explicit FogValues(const FogCvars& cvars);
+        [[nodiscard]] auto matches(const FogCvars& cvars) const noexcept -> bool;
+
+    private:
+        bool isEnabled;
+        std::string color;
+        std::string curve;
+        float density;
+        float start;
+        float end;
+        float opacity;
+    };
+
+    nx::render::FogTransition transition;
+    std::optional<nx::render::Fog> requestedFog;
+    std::optional<FogValues> processed;
+    std::optional<nx::Failure<FogError>> pendingFailure;
+    bool hasPendingWarning = false;
+    nx::log::RateLimit warningLimit{kWarningInterval};
 };
 
 } // namespace cs

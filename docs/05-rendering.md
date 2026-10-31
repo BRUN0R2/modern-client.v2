@@ -751,8 +751,10 @@ start and end go to the other's, from what shows, slowly first and last. `next` 
 console asks for (`cs.client:fogCvars`): `fog_enable`, `fog_color` (red, green and blue, from 0 to
 255), `fog_curve` (`linear`, `exp`, `exp2`), `fog_density`, `fog_start`, `fog_end` (0 for no end),
 `fog_opacity` and `fog_fade`, the seconds a change takes; none archived, being a map's or a mod's. A
-fog they make none of (an end not past the start, a linear one without end) is refused with a warning,
-and the one shown stays. A map's `env_fog` and the fog under water are still to come (TODO.md).
+fog they make none of (an end not past the start, a linear one without end) returns a distinct
+`FogError` with its offending settings and is refused with a rate-limited warning; the one shown stays.
+The control parses the cvars again only when their values change, while the transition advances each
+frame. A map's `env_fog` and the fog under water are still to come (TODO.md).
 
 ## 11. Visual fidelity
 
