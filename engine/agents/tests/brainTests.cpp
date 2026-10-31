@@ -924,6 +924,29 @@ TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATa
     EXPECT_TRUE(kinematic.decide({.x = 150, .y = 900}, query).intent.approached().empty());
 }
 
+TEST(AgentBrain, ABodyThatRoundsACornerWideHeadsOnFromItRatherThanBackToIt) {
+    auto mesh = cornerMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    const nx::Vec3 goal{.x = 900, .y = 150};
+    brain.setGoal(goal);
+    std::ignore = brain.decide({.x = 150, .y = 900}, query);
+    std::vector<nx::Vec3> way;
+    brain.appendWay(query, way);
+    ASSERT_GE(way.size(), 3U) << "round the block's corner";
+    const nx::Vec3 corner = way[1];
+    // It reaches the corner, then drifts on past it, wide, where its funnel lists the corner still: measured
+    // anew, the corner was behind it, and it turned back to it.
+    std::ignore = brain.decide(corner + nx::Vec3{.x = -4, .y = 5}, query);
+    const nx::Vec3 drifted = corner + nx::Vec3{.x = -24, .y = -16};
+    const nx::agents::Decision decision = brain.decide(drifted, query);
+    ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
+    EXPECT_GT(nx::length(decision.intent.direction), 0.0F);
+    const nx::Vec3 toCorner = corner - drifted;
+    EXPECT_LT(nx::dot(decision.intent.direction, toCorner / nx::length(toCorner)), 0.7F)
+        << "on to the corner after it, not back to it";
+}
+
 TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproaches) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

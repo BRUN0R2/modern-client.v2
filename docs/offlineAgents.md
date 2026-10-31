@@ -111,7 +111,9 @@ just short of a stop for a walk its friction let it creep at 2 units a second) f
 stops at, and for each corner it sees ahead, to the cosine
 of half the turn there, measured to the way on four of its radii past the corner, so that a corner the
 mesh rounds into short turns counts as the turn it is (`nx::agents::Intent::approaches`); it arrives
-within its arrival distance across and a step of height, as it reaches a corner. A body that waits as
+within its arrival distance across and a step of height, as it reaches a corner, and heads on from a
+corner it reached however wide it rounds it: its funnel lists the corner until it crosses the edge of the
+polygon the corner ends, and measured anew, the corner was behind it, and it turned back to it. A body that waits as
 the others make way is not stuck. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
