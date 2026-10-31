@@ -31,6 +31,11 @@ constexpr nx::Vec3 kUp{.z = 1.0F};
     return span > 0.0F ? std::clamp((now - start).count() / span, 0.0F, 1.0F) : 1.0F;
 }
 
+/// `share`, from 0 to 1, eased in and out (smoothstep).
+[[nodiscard]] auto eased(float share) noexcept -> float {
+    return share * share * (3.0F - (2.0F * share));
+}
+
 } // namespace
 
 BloodEffects::BloodEffects(std::uint64_t seed) : random{seed, kBloodStream} {}
@@ -86,14 +91,16 @@ void BloodEffects::throwMists(nx::Vec3 from, nx::Vec3 way, const BloodBurst& bur
                               float backShare, float speedShare, BloodShade shade,
                               const BloodEnhancedLook& look, nx::Seconds now) {
     for (std::uint32_t mist = 0; mist < count && drifting.size() < look.mostMists; ++mist) {
-        // Its draws in their order: its way, its speed, its radius and its smoke.
-        const nx::Vec3 thrown = thrownWayOf(way, burst.spread, backShare);
-        const float speed = random.between(0.0F, burst.mistSpeed.value()) * speedShare;
+        // Its draws in their order: its way, its speed, its radius and its smoke. It splashes out wider than
+        // the droplets, to the sides, and fast: none stays where the hit met the body.
+        const nx::Vec3 thrown = thrownWayOf(way, burst.mistSpread, backShare);
+        const float speed =
+            random.between(burst.leastMistSpeed.value(), burst.mostMistSpeed.value()) * speedShare;
         const float radius = random.between(burst.leastMistRadius.value(), burst.mostMistRadius.value());
         drifting.push_back(BloodMist{.position = from,
                                      .velocity = thrown * speed,
                                      .radius = nx::HammerUnits{radius},
-                                     .growth = burst.mistGrowth,
+                                     .startScale = burst.mistStartScale,
                                      .shade = shade,
                                      .opacity = burst.mistOpacity,
                                      .madeAt = now,
@@ -192,17 +199,20 @@ auto BloodEffects::shown(nx::Seconds now, const BloodEnhancedLook& look)
             .opacity = 1.0F - shareOf(now, droplet.goesAt - look.dropletFade, droplet.goesAt)});
     }
     for (const BloodMist& mist : drifting) {
-        const float age = std::max(0.0F, (now - mist.madeAt).count());
-        // Holding most of its opacity, then fading out: by the square of the share of its life gone.
+        // From small it grows, faster as it goes, as a splash opens out; wholly opaque, then fading out.
         const float gone = shareOf(now, mist.madeAt, mist.goesAt);
-        instances.push_back(nx::render::BloodInstance{
-            .position = mist.position,
-            .radius = nx::HammerUnits{mist.radius.value() + (mist.growth.value() * age)},
-            .color = mist.shade.color,
-            .light = mist.shade.light * look.mistLight,
-            .opacity = mist.opacity * (1.0F - (gone * gone)),
-            .shape = nx::render::BloodShape::Mist,
-            .seed = mist.seed});
+        const float grown = mist.startScale + ((1.0F - mist.startScale) * gone * gone);
+        const float faded =
+            look.mistFadeFrom < 1.0F
+                ? eased(std::clamp((gone - look.mistFadeFrom) / (1.0F - look.mistFadeFrom), 0.0F, 1.0F))
+                : 0.0F;
+        instances.push_back(nx::render::BloodInstance{.position = mist.position,
+                                                      .radius = nx::HammerUnits{mist.radius.value() * grown},
+                                                      .color = mist.shade.color,
+                                                      .light = mist.shade.light * look.mistLight,
+                                                      .opacity = mist.opacity * (1.0F - faded),
+                                                      .shape = nx::render::BloodShape::Mist,
+                                                      .seed = mist.seed});
     }
     return instances;
 }
