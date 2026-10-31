@@ -240,10 +240,6 @@ public:
     /// What is solid to the sights now (nx::game::solidsOf), for an agent's eyes to trace many while
     /// nothing moves (sees, seesSpot), gathered once instead of once a sight.
     [[nodiscard]] auto sightSolids() -> nx::game::Solids;
-    /// Whether the solid trace from eye reaches this candidate's eye, leaving out the observer, through
-    /// `solids`, gathered since nothing moved (sightSolids).
-    [[nodiscard]] auto sees(const nx::game::Solids& solids, nx::ecs::Entity observer, nx::Vec3 eye,
-                            const PerceptionTarget& target) -> bool;
     /// Whether a line from `eye` reaches `spot` through the world and `solids`' brush entities alone, the
     /// bodies leaving it be, as a bot's IsVisible traces one (UTIL_TraceLine with ignore_monsters).
     [[nodiscard]] auto seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) -> bool;

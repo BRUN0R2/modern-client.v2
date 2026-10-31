@@ -211,6 +211,30 @@ TEST_F(HordeSpawnTest, ZombiesMakingWayForEachOtherNeverTurnTheirBacksOnTheWayTh
     EXPECT_EQ(turnedBack, 0U) << "ticks a zombie walking faced against the way it went";
 }
 
+TEST_F(HordeSpawnTest, ZombiesInAFileSeeThePlayerAheadPastThoseBeforeThem) {
+    // A file of zombies down a strip, the player ahead at its end: each sees it past the bodies before it,
+    // as a bot sees, rather than their bodies across its sight.
+    constexpr nx::HammerUnits kWidth{128};
+    constexpr nx::HammerUnits kDepth{2048};
+    constexpr float kWayLength = 1536.0F;
+    constexpr std::uint32_t kPopulation = 6;
+    constexpr nx::Degrees kForwardYaw{90};
+    settings.spawnRadius = nx::HammerUnits{kWidth.value() * 2.0F};
+    ASSERT_NO_FATAL_FAILURE(start(kWidth, kDepth));
+    const nx::Vec3 from = anchor - nx::Vec3{.y = kWayLength * kHalf};
+    ASSERT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = from, .yaw = kForwardYaw}}, kPopulation)
+                    .has_value());
+    const cs::PlayerIndex player =
+        game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    game->placeEye(player, from + nx::Vec3{.y = kWayLength, .z = cs::kStandingViewHeight.value()});
+    std::ignore = horde->commands();
+    for (const cs::EntityState& body : game->entities()) {
+        const nx::agents::Agent* const agent = game->entityComponent<nx::agents::Agent>(body.entity);
+        ASSERT_NE(agent, nullptr);
+        EXPECT_EQ(agent->behavior, nx::agents::Behavior::Chase) << body.origin.y;
+    }
+}
+
 TEST_F(HordeSpawnTest, AMissingBaseIsRejectedBeforeCreatingABody) {
     constexpr nx::HammerUnits kSide{512};
     ASSERT_NO_FATAL_FAILURE(start(kSide, kSide));
