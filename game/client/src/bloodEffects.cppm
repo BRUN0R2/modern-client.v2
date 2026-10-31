@@ -39,13 +39,13 @@ struct BloodDroplet {
     nx::Seconds goesAt{};
 };
 
-/// A mist: where it is and how it flies, its radius as it was made and how fast it grows, its shade, how
-/// opaque it was made, when it was made and goes, and the seed of its smoke.
+/// A mist: where it is and how it flies, the radius it grows to and the share of it it was made at, its
+/// shade, how opaque it was made, when it was made and goes, and the seed of its smoke.
 struct BloodMist {
     nx::Vec3 position{};
     nx::Vec3 velocity{};
     nx::HammerUnits radius{};
-    nx::UnitsPerSecond growth{};
+    float startScale = 1.0F;
     BloodShade shade{};
     float opacity = 0.0F;
     nx::Seconds madeAt{};
@@ -86,8 +86,9 @@ public:
     /// Shows `spray` from `now` in `shade`, lit look.leastLight at least, as `look` makes it: the burst of
     /// its part of the body, the
     /// head's if it met the head, else the body's, from where it met it the way the hit went, as many
-    /// droplets as its size times the burst's dropletsPerSize, rounded, and its mists, each flying off as
-    /// a droplet does; and the burst's gush after it. Droplets past look.mostDroplets, and mists past
+    /// droplets as its size times the burst's dropletsPerSize, rounded, and its mists splashing out of it,
+    /// each flying off as a droplet does but turned by up to the burst's mistSpread; and the burst's gush
+    /// after it. Droplets past look.mostDroplets, and mists past
     /// look.mostMists, are not made.
     void spray(const BloodSpray& spray, const BloodEnhancedLook& look, BloodShade shade, nx::Seconds now);
     /// Moves them over `elapsed` up to `now`, the world's gravity `gravity`, as `look` moves them: each gush
@@ -102,8 +103,9 @@ public:
                 nx::UnitsPerSecondSquared gravity, const BloodEnhancedLook& look);
     /// What to draw at `now`: the splats, fully opaque until look.splatFade before they go, then fading
     /// out; the droplets, along their flight, fading out over their last look.dropletFade; then the mists,
-    /// look.mistLight times as lit, grown since they were made, holding most of their opacity and fading
-    /// out as they go (by the square of the share of their life gone). Kept until the next call.
+    /// look.mistLight times as lit, grown from their start scale to their whole radius by the square of
+    /// the share of their life gone, faster as they go, wholly opaque until look.mistFadeFrom of their
+    /// life, then fading out, easing in and out. Kept until the next call.
     [[nodiscard]] auto shown(nx::Seconds now, const BloodEnhancedLook& look)
         -> std::span<const nx::render::BloodInstance>;
 
@@ -127,7 +129,7 @@ private:
                        float backShare, float speedShare, BloodShade shade, const BloodEnhancedLook& look,
                        nx::Seconds now);
     /// Throws `count` mists of `burst` in `shade` from `from`, `backShare` of them back against `way`, as
-    /// fast as `speedShare` of the burst's mist speed, made at `now`; none past look.mostMists.
+    /// fast as `speedShare` of the burst's mist speeds, made at `now`; none past look.mostMists.
     void throwMists(nx::Vec3 from, nx::Vec3 way, const BloodBurst& burst, std::uint32_t count,
                     float backShare, float speedShare, BloodShade shade, const BloodEnhancedLook& look,
                     nx::Seconds now);

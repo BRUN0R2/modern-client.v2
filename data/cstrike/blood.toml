@@ -123,6 +123,7 @@ mostMists = 256
 streakTime = 0.04
 leastLight = 0.45
 mistLight = 1.35
+mistFadeFrom = 0.5
 gravity = 0.35
 drag = 5.0
 dropletLife = 0.7
@@ -136,8 +137,9 @@ splatFade = 4.0
 # A hit elsewhere than the head: 4 droplets for each of the spray's size (from 3 to 16), 0.25 to 0.75
 # units across each way, flying off the way the hit went at 120 to 420 units a second, two fifths of
 # them back the way it came, each up to 0.7 of its speed off that way and up to 30 faster upward; and a
-# cloud of 6 mists of 6 to 10 units, flying off as the droplets do at up to 70 a second, growing 25 a
-# second, 0.8 opaque, holding most of it and gone in 0.7 seconds. No gush.
+# splash of 4 mists of 10 to 14 units bursting out of it, wider to the sides (up to 1.2 of their speed
+# off that way) at 100 to 150 units a second, from 0.15 of their size opening out to the whole of it,
+# 0.8 opaque, fading out from halfway and gone in 0.42 seconds. No gush.
 [enhancedLook.body]
 dropletsPerSize = 4.0
 leastRadius = 0.25
@@ -147,13 +149,15 @@ mostSpeed = 420.0
 spread = 0.7
 backShare = 0.4
 rise = 30.0
-mists = 6
-leastMistRadius = 6.0
-mostMistRadius = 10.0
-mistGrowth = 25.0
-mistSpeed = 70.0
+mists = 4
+leastMistRadius = 10.0
+mostMistRadius = 14.0
+mistSpread = 1.2
+leastMistSpeed = 100.0
+mostMistSpeed = 150.0
+mistStartScale = 0.15
 mistOpacity = 0.8
-mistLife = 0.7
+mistLife = 0.42
 gushPulses = 0
 gushDroplets = 0
 gushMists = 0
@@ -162,9 +166,9 @@ gushSlowing = 1.0
 
 # A hit in the head gushes more: 6 droplets for each of the spray's size, 0.3 to 0.9 units, at 160 to
 # 520 units a second, two fifths of them back, up to 0.8 of their speed off their way and 50 faster
-# upward; a cloud of 10 mists of 8 to 13 units at up to 110 a second, growing 35 a second, 0.9 opaque,
-# gone in 0.9 seconds; then 8 pulses of 14 droplets and 2 mists each, one every 0.08 seconds, each 0.85
-# as fast as the one before, as the wound gushes.
+# upward; a splash of 6 mists of 12 to 18 units at 120 to 190 a second, 0.9 opaque, gone in 0.5 seconds;
+# then 8 pulses of 14 droplets and 2 mists each, one every 0.08 seconds, each 0.85 as fast as the one
+# before, as the wound gushes.
 [enhancedLook.head]
 dropletsPerSize = 6.0
 leastRadius = 0.3
@@ -174,13 +178,15 @@ mostSpeed = 520.0
 spread = 0.8
 backShare = 0.4
 rise = 50.0
-mists = 10
-leastMistRadius = 8.0
-mostMistRadius = 13.0
-mistGrowth = 35.0
-mistSpeed = 110.0
+mists = 6
+leastMistRadius = 12.0
+mostMistRadius = 18.0
+mistSpread = 1.2
+leastMistSpeed = 120.0
+mostMistSpeed = 190.0
+mistStartScale = 0.15
 mistOpacity = 0.9
-mistLife = 0.9
+mistLife = 0.5
 gushPulses = 8
 gushDroplets = 14
 gushMists = 2

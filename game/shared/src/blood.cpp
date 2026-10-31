@@ -76,20 +76,23 @@ constexpr std::uint32_t kByteTop = 255;
            look.splashGravity >= nx::Scale{} && look.companionJitter >= nx::HammerUnits{};
 }
 
-/// Whether `burst` makes droplets that fly and mists that last, each least no more than its most, and
-/// gushes, if it does, a pulse after another, none faster than the one before.
+/// Whether `burst` makes droplets that fly and mists that splash out, growing from some of their size,
+/// and last, each least no more than its most, and gushes, if it does, a pulse after another, none faster
+/// than the one before.
 [[nodiscard]] auto isValid(const BloodBurst& burst) noexcept -> bool {
     const bool areMistsValid =
-        burst.mists == 0 || (burst.leastMistRadius > nx::HammerUnits{} &&
-                             burst.leastMistRadius <= burst.mostMistRadius && burst.mistLife > nx::Seconds{});
+        burst.mists == 0 ||
+        (burst.leastMistRadius > nx::HammerUnits{} && burst.leastMistRadius <= burst.mostMistRadius &&
+         burst.mistLife > nx::Seconds{} && burst.leastMistSpeed <= burst.mostMistSpeed &&
+         burst.mistStartScale > 0.0F);
     const bool isGushValid =
         burst.gushPulses == 0 ||
         (burst.gushDroplets > 0 && burst.gushInterval > nx::Seconds{} && burst.gushSlowing <= 1.0F);
     return std::isfinite(burst.dropletsPerSize) && burst.leastRadius > nx::HammerUnits{} &&
            burst.leastRadius <= burst.mostRadius && burst.leastSpeed >= nx::UnitsPerSecond{} &&
            burst.leastSpeed <= burst.mostSpeed && std::isfinite(burst.spread) &&
-           burst.rise >= nx::UnitsPerSecond{} && burst.mistGrowth >= nx::UnitsPerSecond{} &&
-           burst.mistSpeed >= nx::UnitsPerSecond{} && areMistsValid && isGushValid;
+           burst.rise >= nx::UnitsPerSecond{} && std::isfinite(burst.mistSpread) &&
+           burst.leastMistSpeed >= nx::UnitsPerSecond{} && areMistsValid && isGushValid;
 }
 
 /// Whether `look` has room for droplets, mists and splats, lights them, has droplets that fly a while and
@@ -98,8 +101,8 @@ constexpr std::uint32_t kByteTop = 255;
 [[nodiscard]] auto isValid(const BloodEnhancedLook& look) noexcept -> bool {
     return look.mostDroplets > 0 && look.mostSplats > 0 && look.mostMists > 0 &&
            look.streakTime >= nx::Seconds{} && std::isfinite(look.leastLight) &&
-           std::isfinite(look.mistLight) && look.mistLight > 0.0F && look.gravity >= nx::Scale{} &&
-           std::isfinite(look.drag) && look.dropletLife > nx::Seconds{} &&
+           std::isfinite(look.mistLight) && look.mistLight > 0.0F && look.mistFadeFrom < 1.0F &&
+           look.gravity >= nx::Scale{} && std::isfinite(look.drag) && look.dropletLife > nx::Seconds{} &&
            look.dropletFade >= nx::Seconds{} && look.dropletFade <= look.dropletLife &&
            look.leastSplatGrowth > nx::Scale{} && look.leastSplatGrowth <= look.mostSplatGrowth &&
            look.splatLife > nx::Seconds{} && look.splatFade > nx::Seconds{} &&

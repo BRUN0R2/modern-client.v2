@@ -122,9 +122,11 @@ struct BloodStreamLook {
 /// project's own: `dropletsPerSize` droplets for each of the spray's size, their radii leastRadius to
 /// mostRadius, flying off where the hit met the body the way it went, but `backShare` of them back the
 /// way it came, each turned off that way by up to `spread` of its speed on each axis, at leastSpeed to
-/// mostSpeed and up to `rise` faster upward; `mists` mists there, their radii leastMistRadius to
-/// mostMistRadius, flying off as the droplets do at up to mistSpeed, growing by mistGrowth a second, as
-/// opaque as mistOpacity at first and gone, faded out, after mistLife; and after it, as a wound gushes,
+/// mostSpeed and up to `rise` faster upward; `mists` mists there, splashing out of it: their radii
+/// leastMistRadius to mostMistRadius, flying off as the droplets do but turned by up to mistSpread, wider
+/// to the sides, at leastMistSpeed to mostMistSpeed, from mistStartScale of their radius growing to the
+/// whole of it over their life, faster as they go, as opaque as mistOpacity and gone, faded out, after
+/// mistLife; and after it, as a wound gushes,
 /// `gushPulses` pulses of `gushDroplets` droplets and `gushMists` mists each, one every gushInterval, the
 /// way the hit went, each gushSlowing as fast as the one before. All drawn at random.
 struct BloodBurst {
@@ -139,8 +141,10 @@ struct BloodBurst {
     std::uint32_t mists = 0;
     nx::HammerUnits leastMistRadius{};
     nx::HammerUnits mostMistRadius{};
-    nx::UnitsPerSecond mistGrowth{};
-    nx::UnitsPerSecond mistSpeed{};
+    float mistSpread = 0.0F;
+    nx::UnitsPerSecond leastMistSpeed{};
+    nx::UnitsPerSecond mostMistSpeed{};
+    float mistStartScale = 0.0F;
     float mistOpacity = 0.0F;
     nx::Seconds mistLife{};
     std::uint32_t gushPulses = 0;
@@ -154,7 +158,8 @@ struct BloodBurst {
 /// shows the original's (sprayLook, streamLook): at most mostDroplets droplets and mostMists mists at
 /// once, none made past them, and mostSplats splats, the oldest giving way to a new one; each drop lit by
 /// the light where the hit met the body, leastLight at least so that a hit reads in the dark, a mist
-/// mistLight times as much, as fine blood scatters the light; the air slowing droplets and mists
+/// mistLight times as much, as fine blood scatters the light, and fading out from mistFadeFrom of its
+/// life on, easing in and out; the air slowing droplets and mists
 /// alike, their speed falling to e^-drag of itself a second; each droplet drawn along streakTime of its
 /// flight, falling at `gravity` of the world's, gone after dropletLife unless it lands first, fading out
 /// over the last dropletFade of it; of those that land on the world, splatShare leave a splat, flat
@@ -168,6 +173,7 @@ struct BloodEnhancedLook {
     nx::Seconds streakTime{};
     float leastLight = 0.0F;
     float mistLight = 0.0F;
+    float mistFadeFrom = 0.0F;
     nx::Scale gravity{};
     float drag = 0.0F;
     nx::Seconds dropletLife{};
@@ -331,8 +337,11 @@ struct nx::meta::Description<cs::BloodBurst> {
         nx::meta::field<&cs::BloodBurst::mists>("mists"),
         nx::meta::field<&cs::BloodBurst::leastMistRadius>("leastMistRadius"),
         nx::meta::field<&cs::BloodBurst::mostMistRadius>("mostMistRadius"),
-        nx::meta::field<&cs::BloodBurst::mistGrowth>("mistGrowth"),
-        nx::meta::field<&cs::BloodBurst::mistSpeed>("mistSpeed"),
+        nx::meta::field<&cs::BloodBurst::mistSpread>("mistSpread", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BloodBurst::leastMistSpeed>("leastMistSpeed"),
+        nx::meta::field<&cs::BloodBurst::mostMistSpeed>("mostMistSpeed"),
+        nx::meta::field<&cs::BloodBurst::mistStartScale>("mistStartScale",
+                                                         nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BloodBurst::mistOpacity>("mistOpacity",
                                                       nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BloodBurst::mistLife>("mistLife"),
@@ -354,6 +363,8 @@ struct nx::meta::Description<cs::BloodEnhancedLook> {
         nx::meta::field<&cs::BloodEnhancedLook::streakTime>("streakTime"),
         nx::meta::field<&cs::BloodEnhancedLook::leastLight>("leastLight", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BloodEnhancedLook::mistLight>("mistLight", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::BloodEnhancedLook::mistFadeFrom>(
+            "mistFadeFrom", nx::data::Range{.minimum = 0.0, .maximum = 1.0}),
         nx::meta::field<&cs::BloodEnhancedLook::gravity>("gravity"),
         nx::meta::field<&cs::BloodEnhancedLook::drag>("drag", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BloodEnhancedLook::dropletLife>("dropletLife"),
