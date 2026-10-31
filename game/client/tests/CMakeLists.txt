@@ -14,6 +14,7 @@ nxAddTest(csClientTests
         particlesTests.cpp
         corpsesTests.cpp
         damageNumbersTests.cpp
+        stepIndicatorTests.cpp
         bloodEffectsTests.cpp
         modelMaterialsTests.cpp
         viewModelTests.cpp

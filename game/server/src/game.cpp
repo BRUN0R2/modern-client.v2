@@ -409,6 +409,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .bloodStreams = bloodStreams,
                           .streakSplashes = streakSplashes,
                           .damageDealt = player.damageDealt,
+                          .entitySteps = m_entitySteps,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
@@ -432,7 +433,9 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     for (const PlayerCommand& command : commands) {
         runCommand(playerAt(command.player), command.command);
     }
-    for (const EntityAttack& strike : runEntityBodies(m_world, m_map->hulls(), entities)) {
+    EntityBodiesTick bodies = runEntityBodies(m_world, m_map->hulls(), entities);
+    m_entitySteps = std::move(bodies.steps);
+    for (const EntityAttack& strike : bodies.attacks) {
         if (const PlayerBody* const body = m_world.get<PlayerBody>(strike.target)) {
             // A strike met the player where its trace did, as a TraceAttack sets m_LastHitGroup.
             Player& struck = playerAt(body->player);

@@ -189,6 +189,10 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     if (!damageNumbers) {
         return std::unexpected{std::move(damageNumbers.error())};
     }
+    auto stepIndicator = readDataFile(gameDataOf(data) / "stepIndicator.toml", readStepIndicatorLook);
+    if (!stepIndicator) {
+        return std::unexpected{std::move(stepIndicator.error())};
+    }
     TextureMaterials materials = readTextureMaterials(vfs);
     return GameContent{.vfs = std::move(vfs),
                        .entityClasses = std::move(*classes),
@@ -205,7 +209,8 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
                        .materials = std::move(materials),
                        .lightStyles = std::move(*lightStyles),
                        .environment = std::move(*environment),
-                       .damageNumbers = std::move(*damageNumbers)};
+                       .damageNumbers = std::move(*damageNumbers),
+                       .stepIndicator = std::move(*stepIndicator)};
 }
 
 } // namespace cs

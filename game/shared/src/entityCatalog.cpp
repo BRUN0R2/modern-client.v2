@@ -41,6 +41,10 @@ namespace {
             "a knockback must be finite and none of it negative, its most push speed and its slow "
             "share more than none, the slow share at most 1");
     }
+    if (definition.stride &&
+        !(std::isfinite(definition.stride->value()) && *definition.stride > nx::HammerUnits{})) {
+        return nx::fail(EntityError::InvalidDefinition, "a stride must be finite and more than none");
+    }
     return {};
 }
 } // namespace

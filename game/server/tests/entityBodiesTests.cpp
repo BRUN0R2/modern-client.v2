@@ -114,7 +114,7 @@ TEST_F(EntityBodyTest, RetiredGenerationsNeverControlAReplacementBody) {
     ASSERT_TRUE(second.has_value());
     const std::array commands{
         cs::EntityCommand{.entity = retired, .command = {.move = {.forward = nx::UnitsPerSecond{160}}}}};
-    EXPECT_TRUE(cs::runEntityBodies(world, *hulls, commands).empty());
+    EXPECT_TRUE(cs::runEntityBodies(world, *hulls, commands).attacks.empty());
     EXPECT_EQ(world.get<cs::EntityBody>(*second)->movement.origin.x, 0);
     EXPECT_EQ(world.get<nx::game::Transform>(*second)->angles.yaw, restingYaw);
     EXPECT_NE(retired, *second);
@@ -135,13 +135,13 @@ TEST_F(EntityBodyTest, ALoopingAttackReturnsToRestWhenItsIntervalEnds) {
     cs::UserCommand attack;
     attack.buttons.set(cs::Button::Attack);
     const std::array commands{cs::EntityCommand{.entity = *made, .command = attack}};
-    EXPECT_TRUE(cs::runEntityBodies(world, *hulls, commands).empty());
+    EXPECT_TRUE(cs::runEntityBodies(world, *hulls, commands).attacks.empty());
     EXPECT_EQ(world.get<cs::EntityBody>(*made)->motion, cs::EntityMotion::Attacking);
     const nx::GameTime intervalEnd = world.get<cs::EntityBody>(*made)->attacksAgainAt;
     while (nx::game::tickTimeOf(world).now < intervalEnd) {
         nx::game::advanceTick(world);
     }
-    EXPECT_TRUE(cs::runEntityBodies(world, *hulls, {}).empty());
+    EXPECT_TRUE(cs::runEntityBodies(world, *hulls, {}).attacks.empty());
     EXPECT_NE(world.get<cs::EntityBody>(*made)->motion, cs::EntityMotion::Attacking);
 }
 

@@ -24,6 +24,7 @@ nxAddModuleLibrary(csShared
         src/hitGroups.cppm
         src/blood.cppm
         src/damageNumbers.cppm
+        src/stepIndicator.cppm
         src/hostages.cppm
         src/playerHarm.cppm
         src/use.cppm
@@ -53,6 +54,7 @@ nxAddModuleLibrary(csShared
         src/hitGroups.cpp
         src/blood.cpp
         src/damageNumbers.cpp
+        src/stepIndicator.cpp
         src/hostages.cpp
         src/player.cpp
         src/playerHarm.cpp

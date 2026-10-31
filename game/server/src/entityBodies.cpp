@@ -193,7 +193,7 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
 }
 
 auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
-                     std::span<const EntityCommand> commands) -> std::vector<EntityAttack> {
+                     std::span<const EntityCommand> commands) -> EntityBodiesTick {
     std::vector<nx::ecs::Entity> entities;
     nx::ecs::Query<nx::ecs::Entity, const EntityBody&>{world}.forEach(
         [&entities](nx::ecs::Entity entity, const EntityBody&) { entities.push_back(entity); });
@@ -213,7 +213,7 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     std::vector<SolidBox> boxes = solidBoxesOf(world);
     std::ranges::sort(boxes, {}, &SolidBox::entity);
     std::vector<SolidBox> near;
-    std::vector<EntityAttack> attacks;
+    EntityBodiesTick done;
     for (const nx::ecs::Entity entity : entities) {
         EntityBody& body = *world.get<EntityBody>(entity);
         advanceFrame(body.animation, time.now, time.rate);
@@ -236,9 +236,21 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         }
         body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
         boxesNear(boxes, body.movement.origin, entity, near);
+        const nx::Vec3 before = body.movement.origin;
         const MovementResult moved =
             simulateMovement(body.movement, command, MovementSettings{}, hulls, brushes, near);
         body.movement = moved.state;
+        if (type.definition.stride && body.movement.isOnGround) {
+            // A step each stride it walks on the ground, as its feet meet it.
+            body.walked = body.walked + nx::HammerUnits{std::hypot(body.movement.origin.x - before.x,
+                                                                   body.movement.origin.y - before.y)};
+            if (body.walked >= *type.definition.stride) {
+                body.walked =
+                    nx::HammerUnits{std::fmod(body.walked.value(), type.definition.stride->value())};
+                done.steps.push_back(
+                    {.entity = entity, .position = body.movement.origin + nx::Vec3{.z = kStandingBox.min.z}});
+            }
+        }
         nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
         transform.origin = body.movement.origin;
         if (const auto own = std::ranges::lower_bound(boxes, entity, {}, &SolidBox::entity);
@@ -259,11 +271,11 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
                                           .end = eye + direction * type.definition.meleeReach.value(),
                                           .ignored = entity});
             if (hit.entity) {
-                attacks.push_back({.target = *hit.entity,
-                                   .attack = {.attacker = entity,
-                                              .damage = type.definition.meleeDamage,
-                                              .direction = direction,
-                                              .trace = hit.trace}});
+                done.attacks.push_back({.target = *hit.entity,
+                                        .attack = {.attacker = entity,
+                                                   .damage = type.definition.meleeDamage,
+                                                   .direction = direction,
+                                                   .trace = hit.trace}});
             }
         } else if (body.motion != EntityMotion::Attacking || body.animation.isFinished ||
                    time.now >= body.attacksAgainAt) {
@@ -275,7 +287,7 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         // archetype, and the next tick reacquires the body through its generational handle.
         nx::game::touchBrushEntities(world, hulls, moved.touchedModels, entity);
     }
-    return attacks;
+    return done;
 }
 
 auto entityStatesOf(nx::ecs::World& world) -> std::vector<EntityState> {
