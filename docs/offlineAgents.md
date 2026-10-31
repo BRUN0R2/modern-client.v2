@@ -101,7 +101,9 @@ to friction (GoldSrc's PM_Accelerate and PM_Friction). Driven straight at the ne
 kept its drift across the way and swung round the point, by two thirds of a turn and more, before it got
 within its arrival distance: at the end of its way, at a sharp corner, a doorway's jambs. So it is driven
 the way its velocity must change to become the one it steered to (`nx::agents::Intent::drive`), as
-DetourCrowd integrates an agent's velocity toward its desired one, which cancels the drift; and it slows
+DetourCrowd integrates an agent's velocity toward its desired one, which cancels the drift: a bot moves
+so, as it looks elsewhere, and a zombie faces the way it goes, as its model walks ahead, and is driven
+that way ahead and to its side, rather than turn its back on its way as it slows down; and it slows
 down by the ground's friction (`braking`, sv_friction's 4: the speed it can still stop from is four
 times how far it is) for the end of a way it stops at, and for each corner it sees ahead, to the cosine
 of half the turn there, measured to the way on four of its radii past the corner, so that a corner the
