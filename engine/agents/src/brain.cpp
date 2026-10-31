@@ -50,6 +50,20 @@ constexpr float kTurnSpanRadii = 4.0F;
     const float turnCosine = std::clamp(dot(toCorner, beyond) / lengths, -1.0F, 1.0F);
     return std::sqrt((1.0F + turnCosine) * 0.5F);
 }
+/// The speed a body can still stop from by friction alone within `distance`, as PM_Friction slows it by
+/// `rules`: below its stop speed it loses stopSpeed times braking a second, so the root of twice that times
+/// the distance; faster, it loses braking times its speed a second, down to its stop speed within how much
+/// faster it goes over braking. Braking times the distance alone undercut a slow body: 12 units short of a
+/// stop, at rest, it asked for 48 units a second, which its friction takes more off than it gains it, and
+/// it crept there at 2.
+[[nodiscard]] auto stoppingSpeedOf(const Rules& rules, HammerUnits distance) noexcept -> float {
+    const float stopSpeed = rules.stopSpeed.value();
+    const float slowStretch = stopSpeed / (2.0F * rules.braking);
+    if (distance.value() <= slowStretch) {
+        return std::sqrt(2.0F * rules.braking * stopSpeed * distance.value());
+    }
+    return stopSpeed + (rules.braking * (distance.value() - slowStretch));
+}
 /// Heads `intent` for `point` from `feet`, across the ground: its way and where it faces; as it is when
 /// its feet are right below or above it.
 void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
@@ -75,9 +89,11 @@ Brain::Brain(Rules settings) : rules{settings} {
                 rules.replanDistance > HammerUnits{} && rules.reactionTime >= Seconds{} &&
                 std::isfinite(rules.replanShare) && rules.replanShare >= 0.0F &&
                 rules.shortTermMemory >= Seconds{} && rules.threatRecency >= Seconds{} &&
-                rules.threatMargin >= HammerUnits{} && std::isfinite(rules.braking) && rules.braking >= 0.0F,
+                rules.threatMargin >= HammerUnits{} && std::isfinite(rules.braking) &&
+                rules.braking >= 0.0F && std::isfinite(rules.stopSpeed.value()) &&
+                rules.stopSpeed >= UnitsPerSecond{},
             "Brain: positive rules, a memory budget, and a reaction time, a replan share, a short-term "
-            "memory, a threat's recency and margin and a braking of none or more");
+            "memory, a threat's recency and margin, a braking and a stop speed of none or more");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
@@ -423,7 +439,7 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     float wished = maxSpeed.value();
     for (const Approach& approached : intent.approached()) {
         wished = std::min(wished, (approached.passShare * maxSpeed.value()) +
-                                      (rules.braking * approached.distance.value()));
+                                      stoppingSpeedOf(rules, approached.distance));
     }
     const Vec3 steered = acrossOf(corridor->steer(query, {.velocity = velocity,
                                                           .desired = intent.direction * wished,
