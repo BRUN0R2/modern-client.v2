@@ -146,7 +146,10 @@ TEST(BloodTest, TheEnhancedLooksBloodGushesMoreFromAHeadThanFromAnywhereElse) {
     EXPECT_EQ(look.head.gushPulses, 8U);
     EXPECT_EQ(look.head.gushDroplets, 14U);
     EXPECT_GT(look.head.gushMists, 0U) << "a gush of smoke too";
-    EXPECT_GT(look.head.mistSpeed, look.body.mistSpeed) << "its mist flies farther";
+    EXPECT_GT(look.head.mostMistSpeed, look.body.mostMistSpeed) << "its mist flies farther";
+    EXPECT_GT(look.body.leastMistSpeed, nx::UnitsPerSecond{}) << "no mist stays where the hit met";
+    EXPECT_GT(look.body.mistSpread, look.body.spread) << "a mist splashes out wider, to the sides";
+    EXPECT_LT(look.body.mistLife, nx::Seconds{0.5F}) << "and is gone in a breath";
     EXPECT_LT(look.head.gushSlowing, 1.0F) << "each pulse slower";
 }
 
@@ -176,11 +179,14 @@ TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
           std::pair{"splatFade = 4.0", "splatFade = 20.0"},
           std::pair{"leastSplatGrowth = 2.0", "leastSplatGrowth = 4.0"},
           std::pair{"leastRadius = 0.25", "leastRadius = 0.0"},
-          std::pair{"mistLife = 0.7", "mistLife = 0.0"},
+          std::pair{"mistLife = 0.42", "mistLife = 0.0"},
+          std::pair{"mistStartScale = 0.15", "mistStartScale = 0.0"},
+          std::pair{"mistFadeFrom = 0.5", "mistFadeFrom = 1.0"},
+          std::pair{"leastMistSpeed = 100.0", "leastMistSpeed = 200.0"},
           std::pair{"backShare = 0.4", "backShare = 1.5"},
           std::pair{"gushInterval = 0.08", "gushInterval = 0.0"},
           std::pair{"dropletFade = 0.35", "dropletFade = 0.9"},
-          std::pair{"mistSpeed = 70.0", "mistSpeed = -1.0"},
+          std::pair{"leastMistSpeed = 100.0", "leastMistSpeed = -1.0"},
           std::pair{"gushSlowing = 0.85", "gushSlowing = 1.5"}}) {
         std::string broken = text;
         const std::size_t at = broken.find(line);

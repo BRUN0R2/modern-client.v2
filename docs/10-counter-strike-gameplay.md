@@ -643,17 +643,19 @@ indicator shows ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
 
 The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
 `data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
-spray, drops and head's stream, which the legacy look keeps: a cloud of blood smoke bursting from where
-the hit met the body, droplets flying out of it, that hangs in the air a moment, a little more of it
-than a real wound sheds, as action games show a hit. It bursts by its part of the body: elsewhere than
+spray, drops and head's stream, which the legacy look keeps: a splash of blood smoke bursting out of
+where the hit met the body to the sides, gone in a breath, droplets flying out of it, a little more of
+it than a real wound sheds, as action games show a hit. It bursts by its part of the body: elsewhere than
 the head, 4 droplets for each of the spray's size, 0.25 to 0.75 units across, flying off the way the hit
 went at 120 to 420 units a second, two fifths of them back the way it came, each turned off that way by
-up to 0.7 of its speed and up to 30 faster upward, and a cloud of 6 mists of 6 to 10 units flying off as
-the droplets do at up to 70 units a second, growing 25 a second, 0.8 opaque, gone in 0.7 seconds; in the
-head it bursts more, 6 droplets for each of its size, faster and larger, with 10 larger mists, then
-gushes the way the hit went for 0.64 seconds, 8 pulses of 14 droplets and 2 mists, each 0.85 as fast as
-the one before. A mist holds most of its opacity, fading out by the square of the share of its life
-gone. The air slows droplets and mists alike, their speed falling to e^-5 of itself a second whatever
+up to 0.7 of its speed and up to 30 faster upward, and a splash of 4 mists of 10 to 14 units, flying off
+as the droplets do but wider, turned by up to 1.2 of their speed, at 100 to 150 units a second, gone in
+0.42 seconds; in the head it bursts more, 6 droplets for each of its size, faster and larger, with 6
+larger mists at 120 to 190 units a second gone in 0.5 seconds, then gushes the way the hit went for 0.64
+seconds, 8 pulses of 14 droplets and 2 mists, each 0.85 as fast as the one before. A mist opens out from
+0.15 of its size to the whole of it by the square of the share of its life gone, faster as it goes, and
+holds its opacity until halfway through its life, then fades out, easing in and out: none stays where
+the hit met the body. The air slows droplets and mists alike, their speed falling to e^-5 of itself a second whatever
 the frame rate, so that the spray stops a short way off; a droplet falls at 0.35 of the world's gravity,
 is drawn along 0.04 seconds of its flight and goes after 0.7 seconds, fading out over the last 0.35,
 unless the world stops it first, where three tenths of them leave a splat flat on what they met, 2 to

@@ -142,7 +142,11 @@ TEST_F(BloodEffectsTest, AHitInTheHeadBurstsMoreThenGushesInPulsesEachSlowerThan
     blood.update(gushed, {}, *hulls, kGravity, look);
     EXPECT_EQ(blood.droplets().size(), burst + (look.head.gushPulses * look.head.gushDroplets))
         << "all pulses";
-    EXPECT_EQ(blood.mists().size(), look.head.mists + (look.head.gushPulses * look.head.gushMists));
+    // The burst's mists splashed and went before the last pulse; the last pulse's are there.
+    const nx::Seconds lastPulse = gushed - look.head.gushInterval;
+    EXPECT_EQ(std::ranges::count_if(
+                  blood.mists(), [lastPulse](const cs::BloodMist& mist) { return mist.madeAt > lastPulse; }),
+              look.head.gushMists);
     EXPECT_TRUE(blood.gushes().empty()) << "done";
     // A pulse's droplets the way the hit went, none back, as fast as gushSlowing of the burst's at most:
     // turned by up to `spread` of their speed on each axis, and up to `rise` faster upward.
@@ -246,13 +250,15 @@ TEST_F(BloodEffectsTest, ASplatLiesForItsLifeThenFadesOutOverItsLastFade) {
     EXPECT_LT(blood.splats().size(), thrown) << "the first gone";
 }
 
-TEST_F(BloodEffectsTest, AMistFliesOffSlowingGrowsAndFadesOutAsItGoes) {
+TEST_F(BloodEffectsTest, AMistSplashesOutSlowingOpensOutAndFadesOutAsItGoes) {
     blood.spray(kSpray, look, kShade, {});
     ASSERT_EQ(blood.mists().size(), look.body.mists);
     const cs::BloodMist mist = blood.mists().front();
-    EXPECT_LE(nx::length(mist.velocity),
-              look.body.mistSpeed.value() *
-                  std::hypot(1.0F + look.body.spread, look.body.spread, look.body.spread));
+    const float widest = std::hypot(1.0F + look.body.mistSpread, look.body.mistSpread, look.body.mistSpread);
+    EXPECT_LE(nx::length(mist.velocity), look.body.mostMistSpeed.value() * widest);
+    for (const cs::BloodMist& each : blood.mists()) {
+        EXPECT_GT(nx::length(each.velocity), 0.0F) << "none stays where the hit met the body";
+    }
     const auto shownMist = [this](nx::Seconds now) {
         const std::span<const nx::render::BloodInstance> shown = blood.shown(now, look);
         const auto first =
@@ -261,15 +267,20 @@ TEST_F(BloodEffectsTest, AMistFliesOffSlowingGrowsAndFadesOutAsItGoes) {
         return *first;
     };
     const nx::render::BloodInstance made = shownMist({});
-    EXPECT_FLOAT_EQ(made.radius.value(), mist.radius.value());
+    EXPECT_FLOAT_EQ(made.radius.value(), mist.radius.value() * look.body.mistStartScale) << "small at first";
     EXPECT_FLOAT_EQ(made.opacity, look.body.mistOpacity) << "as opaque as it is made";
     EXPECT_FLOAT_EQ(made.light, kShade.light * look.mistLight) << "lit more than the droplets";
     EXPECT_EQ(made.seed, mist.seed) << "its smoke the same each frame";
     const nx::Seconds halfway = look.body.mistLife / 2.0F;
     const nx::render::BloodInstance grown = shownMist(halfway);
-    EXPECT_NEAR(grown.radius.value(), mist.radius.value() + (look.body.mistGrowth.value() * halfway.count()),
-                1e-4F);
-    EXPECT_NEAR(grown.opacity, look.body.mistOpacity * 0.75F, 1e-4F) << "halfway, by the square: 1 - 1/4";
+    // Halfway, a quarter of the way to its whole size, opening out faster as it goes.
+    const float start = look.body.mistStartScale;
+    EXPECT_NEAR(grown.radius.value(), mist.radius.value() * (start + ((1.0F - start) * 0.25F)), 1e-3F);
+    EXPECT_NEAR(grown.opacity, look.body.mistOpacity, 1e-4F)
+        << "wholly opaque until it fades out from halfway";
+    const nx::render::BloodInstance fading = shownMist(look.body.mistLife * 0.75F);
+    EXPECT_NEAR(fading.opacity, look.body.mistOpacity * 0.5F, 1e-3F) << "halfway through its fade";
+    EXPECT_GT(fading.radius.value(), grown.radius.value());
     // A frame on, it moved by its velocity, which the air slowed.
     blood.update(kFrame, kFrame, *hulls, kGravity, look);
     const cs::BloodMist moved = blood.mists().front();
