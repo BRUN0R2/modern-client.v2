@@ -109,7 +109,7 @@ auto FogCvars::registerIn(nx::console::Console& console) -> nx::Result<FogCvars,
                     .fade = *fade};
 }
 
-auto FogCvars::fog() const -> std::expected<std::optional<nx::render::Fog>, std::string_view> {
+auto FogCvars::fog() const -> nx::Result<std::optional<nx::render::Fog>, FogError> {
     if (!enabled.value()) {
         return std::optional<nx::render::Fog>{};
     }
@@ -117,19 +117,34 @@ auto FogCvars::fog() const -> std::expected<std::optional<nx::render::Fog>, std:
     const std::optional<nx::render::FogCurve> shape = fogCurveNamed(curve.value());
     nx::invariant(rgb.has_value() && shape.has_value(), "FogCvars: their rules keep their values valid");
     if (!rgb || !shape) {
-        return std::unexpected{"fog_color or fog_curve"};
+        return std::optional<nx::render::Fog>{};
     }
-    const nx::render::Fog made{
-        .color = nx::render::FogColor{.red = static_cast<float>(rgb->red) / kChannelTop,
-                                      .green = static_cast<float>(rgb->green) / kChannelTop,
-                                      .blue = static_cast<float>(rgb->blue) / kChannelTop},
-        .curve = *shape,
-        .density = density.value(),
-        .start = nx::HammerUnits{start.value()},
-        .end = end.value() > 0.0F ? nx::HammerUnits{end.value()} : nx::render::kEndlessFog,
-        .opacity = opacity.value()};
-    if (!nx::render::isValid(made)) {
-        return std::unexpected{"fog_end must be past fog_start, and a linear fog needs one"};
+    const float endValue = end.value();
+    const bool isValidEnd = endValue >= 0.0F;
+    nx::invariant(isValidEnd, "FogCvars: fog_end's rule keeps it nonnegative");
+    if (!isValidEnd) {
+        return std::optional<nx::render::Fog>{};
+    }
+    if (*shape == nx::render::FogCurve::Linear && endValue == 0.0F) {
+        return nx::fail(FogError::LinearEndRequired, "fog_curve linear requires fog_end > 0, got 0");
+    }
+    if (endValue > 0.0F && endValue <= start.value()) {
+        return nx::fail(FogError::EndNotPastStart,
+                        std::format("fog_end {} must be greater than fog_start {}", endValue, start.value()));
+    }
+    const nx::render::Fog made{.color =
+                                   nx::render::FogColor{.red = static_cast<float>(rgb->red) / kChannelTop,
+                                                        .green = static_cast<float>(rgb->green) / kChannelTop,
+                                                        .blue = static_cast<float>(rgb->blue) / kChannelTop},
+                               .curve = *shape,
+                               .density = density.value(),
+                               .start = nx::HammerUnits{start.value()},
+                               .end = endValue > 0.0F ? nx::HammerUnits{endValue} : nx::render::kEndlessFog,
+                               .opacity = opacity.value()};
+    const bool isValid = nx::render::isValid(made);
+    nx::invariant(isValid, "FogCvars: their rules keep each value valid");
+    if (!isValid) {
+        return std::optional<nx::render::Fog>{};
     }
     return std::optional{made};
 }
@@ -138,21 +153,43 @@ auto FogCvars::fadeTime() const -> nx::Seconds {
     return nx::Seconds{fade.value()};
 }
 
+FogControl::FogValues::FogValues(const FogCvars& cvars)
+    : isEnabled{cvars.enabled.value()}, color{cvars.color.value()}, curve{cvars.curve.value()},
+      density{cvars.density.value()}, start{cvars.start.value()}, end{cvars.end.value()},
+      opacity{cvars.opacity.value()} {}
+
+auto FogControl::FogValues::matches(const FogCvars& cvars) const noexcept -> bool {
+    return isEnabled == cvars.enabled.value() &&
+           (!isEnabled || (color == cvars.color.value() && curve == cvars.curve.value() &&
+                           density == cvars.density.value() && start == cvars.start.value() &&
+                           end == cvars.end.value() && opacity == cvars.opacity.value()));
+}
+
 void FogControl::update(const FogCvars& cvars, nx::Seconds elapsed) {
-    const auto asked = cvars.fog();
-    if (!asked) {
-        if (m_refused != asked.error()) {
-            nx::log::warning(kLog, "the fog stays as it is: {}", asked.error());
-            m_refused = asked.error();
-        }
-    } else {
-        m_refused.reset();
-        if (*asked != m_asked) {
-            m_transition.show(*asked, cvars.fadeTime());
-            m_asked = *asked;
+    if (!processed || !processed->matches(cvars)) {
+        processed.emplace(cvars);
+        auto asked = cvars.fog();
+        if (!asked) {
+            auto& failure = asked.error();
+            if (!pendingFailure || pendingFailure->code != failure.code ||
+                pendingFailure->detail != failure.detail) {
+                hasPendingWarning = true;
+            }
+            pendingFailure = std::move(failure);
+        } else {
+            pendingFailure.reset();
+            hasPendingWarning = false;
+            if (*asked != requestedFog) {
+                transition.show(*asked, cvars.fadeTime());
+                requestedFog = *asked;
+            }
         }
     }
-    m_transition.advance(elapsed);
+    if (pendingFailure && hasPendingWarning && warningLimit.allow()) {
+        nx::log::warning(kLog, "the fog stays as it is: {}", *pendingFailure);
+        hasPendingWarning = false;
+    }
+    transition.advance(elapsed);
 }
 
 } // namespace cs

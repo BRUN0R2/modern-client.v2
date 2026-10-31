@@ -107,7 +107,8 @@ readers expected, and the readers now follow them
   GPU tests skip only `BackendUnavailable` and `NoSuitableAdapter`; every other creation error,
   including missing requested validation, fails the test. A fixture makes that assertion fatal
   in `SetUp`, before any test body can access its device. Shared classification lives in
-  `engine/testSupport/vulkanAvailability.hpp`.
+  `engine/testSupport/vulkanAvailability.hpp`. The sprite fog regression keeps each referenced model
+  alive throughout its draws and verifies visibility before comparing pixels.
 - **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
   `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
 - **Files:** a test that reads the file system writes its input into a
@@ -154,7 +155,7 @@ readers expected, and the readers now follow them
 |--------|-------|----------------------|
 | Server tick time (p50/p99) with 32, 128 and 1024 players | `nxBenchServer` (planned) | 5% |
 | Client frame time in `timedemo` | Planned with demo playback | 5% |
-| Client frame extraction, hostage lookup, aim posing, light selection and grouped view-model reads | `nxBenchClient` | 5% |
+| Client frame extraction, hostage lookup, aim posing, light selection, grouped view-model reads and fog updates | `nxBenchClient` | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
 | Job System throughput | `nxBenchJobs` | 5% |
 | Light-style payload copy, unchanged snapshot comparison and frame evaluation (12 and 64 animated styles) | `nxBenchLightStyles` | 5% |
@@ -169,8 +170,9 @@ are run by hand from a release build: `build/release-windows-msvc/bin/nxBenchEcs
 
 `nxBenchClient` uses only synthetic content. It measures frame extraction with 32, 128 and 1024
 players, brush placements and hostage-model lookups with 32 and 1024 entities, a four-bone player's
-nine-blend aim, selecting zero or four of 4096 reaching lights, and loading a view model whose one
-or 64 sequences share a 1 MiB external group. Fixture creation and initial decoding are outside
+nine-blend aim, selecting zero or four of 4096 reaching lights, loading a view model whose one
+or 64 sequences share a 1 MiB external group, and a per-frame fog update with unchanged disabled,
+valid and refused cvars. Fixture creation and initial decoding are outside
 frame measurements; file reads use the operating system's normal cache. Compare the same Release
 build, inputs and machine, using repeated runs and their medians; these are component measurements,
 not a measurement of the complete frame or a promise about player FPS:
@@ -194,13 +196,14 @@ not a measurement of the complete frame or a promise about player FPS:
   A header is analyzed through a translation unit that includes it after the required module
   imports; headers that depend on their consumer's imports are not standalone translation units.
 
-  With LLVM on `PATH`, set `$reviewBase` to the commit before the changes being reviewed:
+  With LLVM on `PATH`, set `$reviewBase` to the commit before the changes being reviewed. The explicit
+  filter includes `.cppm` module interfaces, which the script's default filter omits:
 
   ```powershell
   $tidyDiff = Join-Path $env:TEMP 'clang-tidy-diff.py'
   Invoke-WebRequest 'https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-23.1.4/clang-tools-extra/clang-tidy/tool/clang-tidy-diff.py' -OutFile $tidyDiff
   git diff --ignore-all-space --unified=0 $reviewBase -- '*.cpp' '*.cppm' '*.hpp' |
-      python $tidyDiff -p1 -path build/dev-windows-clang -clang-tidy-binary clang-tidy -j 4
+      python $tidyDiff -p1 -regex '.*\.(cpp|cppm|hpp)' -path build/dev-windows-clang -clang-tidy-binary clang-tidy -j 4
   ```
 
 - Fuzzing of the parsers of external data (`tests/fuzz`, libFuzzer with AddressSanitizer): every

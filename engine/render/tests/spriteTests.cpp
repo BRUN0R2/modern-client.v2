@@ -304,25 +304,38 @@ TEST(SpriteRendererTest, ASpriteIsSeenThroughTheFogButOneAddedIsNot) {
     const nx::render::Fog blue{.color = {.blue = 1.0F},
                                .curve = nx::render::FogCurve::ExponentialSquared,
                                .density = std::sqrt(std::numbers::ln2_v<float>) / kAhead};
-    const std::array solid{SpriteInstance{.model = scene.load(spriteFile(kParallel, kNormal, images)),
-                                          .origin = {.x = kAhead},
-                                          .mode = RenderMode::Normal}};
+    const nx::render::SpriteModel solidModel = scene.load(spriteFile(kParallel, kNormal, images));
+    const std::array solid{
+        SpriteInstance{
+            .model = solidModel,
+            .origin = {.x = kAhead},
+            .mode = RenderMode::Normal,
+        },
+    };
     const Pixel seen = pixelAt(scene.draw(target, cameraAt({}), solid), kMiddle, kMiddle);
     const Pixel fogged =
         pixelAt(scene.draw(target, cameraAt({}), solid, nx::Seconds{0.0F}, blue), kMiddle, kMiddle);
+    ASSERT_EQ(seen.at(3), 255) << "the sprite is visible without fog";
+    ASSERT_EQ(fogged.at(3), 255) << "the sprite is visible through the fog";
     constexpr std::array kFogColor{0.0, 0.0, 255.0};
     for (std::size_t channel = 0; channel < kFogColor.size(); ++channel) {
         EXPECT_NEAR(fogged[channel], std::lerp(static_cast<double>(seen[channel]), kFogColor[channel], 0.5),
                     2.0)
             << "half hidden, channel " << channel;
     }
-    const std::array added{SpriteInstance{.model = scene.load(spriteFile(kParallel, kAdditive, images)),
-                                          .origin = {.x = kAhead},
-                                          .mode = RenderMode::TransAdd,
-                                          .amount = 255}};
-    EXPECT_EQ(scene.draw(target, cameraAt({}), added, nx::Seconds{0.0F}, blue),
-              scene.draw(target, cameraAt({}), added))
-        << "what is added, through no fog";
+    const nx::render::SpriteModel addedModel = scene.load(spriteFile(kParallel, kAdditive, images));
+    const std::array added{
+        SpriteInstance{
+            .model = addedModel,
+            .origin = {.x = kAhead},
+            .mode = RenderMode::TransAdd,
+            .amount = 255,
+        },
+    };
+    const auto addedClear = scene.draw(target, cameraAt({}), added);
+    const auto addedFogged = scene.draw(target, cameraAt({}), added, nx::Seconds{0.0F}, blue);
+    ASSERT_GT(pixelAt(addedClear, kMiddle, kMiddle).at(0), 0) << "the added sprite is visible";
+    EXPECT_EQ(addedFogged, addedClear) << "what is added, through no fog";
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

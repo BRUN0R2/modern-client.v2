@@ -27,8 +27,10 @@ nxAddBenchmark(nxBenchLightStyles
 nxAddBenchmark(nxBenchClient
     SOURCES
         clientBench.cpp
+        fogBench.cpp
     DEPENDS
         nx::core
+        nx::console
         nx::math
         nx::platform
         nx::assets

@@ -281,7 +281,8 @@ auto crosshairSizeNamed(std::string_view text) noexcept -> std::optional<Crossha
 
 auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::render::ScreenColor> {
     constexpr std::uint32_t kChannelTop = 255;
-    std::array<std::uint8_t, 3> channels{};
+    constexpr std::size_t kColorChannelCount = 3;
+    std::array<std::uint8_t, kColorChannelCount> channels{};
     std::size_t count = 0;
     for (const auto part : std::views::split(text, ' ')) {
         const std::string_view word{part};
@@ -299,7 +300,8 @@ auto crosshairColorOf(std::string_view text) noexcept -> std::optional<nx::rende
     if (count != channels.size()) {
         return std::nullopt;
     }
-    return nx::render::ScreenColor{.red = channels[0], .green = channels[1], .blue = channels[2]};
+    const auto [red, green, blue] = channels;
+    return nx::render::ScreenColor{.red = red, .green = green, .blue = blue};
 }
 
 auto HudCvars::registerIn(nx::console::Console& console) -> nx::Result<HudCvars, nx::console::CvarError> {
