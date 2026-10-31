@@ -125,7 +125,9 @@ its friction takes 300 a second, all a walk under 60 gains it, and twice that, 1
 friction would stop it from), its whole speed when slower, but to stop where its way ends: slowed for a
 sharp corner or round a body near it to less, a zombie of the first waves, at 100 units a second, stopped
 dead and crept on at 2; it arrives within its arrival distance across and a step of height, as it reaches
-a corner. A body that waits as
+a corner, and heads on from a corner it reached however wide it rounds it: its funnel lists the corner
+until it crosses the edge of the polygon the corner ends, and measured anew, the corner was behind it, and
+it turned back to it. A body that waits as
 the others make way is not stuck. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
