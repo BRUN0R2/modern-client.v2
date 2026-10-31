@@ -257,32 +257,8 @@ auto Brain::choose(Vec3 feet) const -> const Memory* {
     return freshest;
 }
 
-auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
-    const Memory* const selected = choose(feet);
-    focus = selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
-    if (selected == nullptr && !givenGoal) {
-        target.reset();
-        plannedGoal.reset();
-        plannedFrom.reset();
-        forgetCorridor();
-        pathError.reset();
-        return {};
-    }
-    // A target remembered first, else the goal given, which no entity is pursued for.
-    const Vec3 goal = selected != nullptr ? selected->observation.position : *givenGoal;
-    const std::optional<ecs::Entity> pursued =
-        selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
-    Decision decision{.behavior = Behavior::MoveTo};
-    if (selected != nullptr) {
-        decision = {.intent = {.lookAt = selected->observation.aimAt.value_or(goal)},
-                    .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate,
-                    .target = pursued};
-        if (selected->isVisible && length(goal - feet) <= rules.attackDistance.value()) {
-            decision.behavior = Behavior::Attack;
-            decision.intent.attacks = true;
-            return decision;
-        }
-    }
+void Brain::planIfNeeded(Vec3 feet, Vec3 goal, std::optional<ecs::Entity> pursued,
+                         navigation::NavigationQuery& query) {
     const navigation::AgentProfile& profile = query.mesh().profile();
     if (crossing && hasCrossed(*crossing, feet, profile.stepHeight.value(), rules.arrivalDistance.value())) {
         crossing.reset(); // it walks along its corridor again, from the link's end
@@ -315,6 +291,49 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
             pathError = planned.error().code;
         }
     }
+}
+
+void Brain::finishArrival(const Memory* selected) {
+    if (selected == nullptr) {
+        givenGoal.reset();
+    } else if (!selected->isVisible) {
+        const ecs::Entity investigated = selected->observation.entity;
+        std::erase_if(memory, [investigated](const Memory& record) -> bool {
+            return record.observation.entity == investigated;
+        });
+    }
+}
+
+auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
+    const Memory* const selected = choose(feet);
+    focus = selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
+    if (selected == nullptr && !givenGoal) {
+        target.reset();
+        plannedGoal.reset();
+        plannedFrom.reset();
+        forgetCorridor();
+        pathError.reset();
+        return {};
+    }
+    // A target remembered first, else the goal given, which no entity is pursued for.
+    const Vec3 goal = selected != nullptr ? selected->observation.position : *givenGoal;
+    const std::optional<ecs::Entity> pursued =
+        selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
+    Decision decision{.behavior = Behavior::MoveTo};
+    if (selected != nullptr) {
+        decision = {
+            .intent = {.lookAt = selected->observation.aimAt.value_or(goal)},
+            .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate,
+            .target = pursued,
+        };
+        if (selected->isVisible && length(goal - feet) <= rules.attackDistance.value()) {
+            decision.behavior = Behavior::Attack;
+            decision.intent.attacks = true;
+            return decision;
+        }
+    }
+    const navigation::AgentProfile& profile = query.mesh().profile();
+    planIfNeeded(feet, goal, pursued, query);
     if (pathError) {
         decision.behavior = Behavior::Blocked;
         decision.navigationError = pathError;
@@ -332,18 +351,12 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     const Vec3 end = corridor->target();
     if (groundDistance(walkablePosition, end) <= rules.arrivalDistance.value() &&
         std::abs(walkablePosition.z - end.z) <= profile.stepHeight.value()) {
-        if (selected == nullptr) {
-            givenGoal.reset();
-        } else if (!selected->isVisible) {
-            const ecs::Entity investigated = selected->observation.entity;
-            std::erase_if(memory, [investigated](const Memory& record) {
-                return record.observation.entity == investigated;
-            });
-        }
+        finishArrival(selected);
         decision.behavior = Behavior::Idle;
         return decision;
     }
-    if (beginCrossing(decision, feet, query)) {
+    std::optional<navigation::MeshLink> nextLink;
+    if (beginCrossing(decision, feet, query, nextLink)) {
         return decision;
     }
     // Toward the first corner on from the last it reached that is farther than arrival, the turn after it
@@ -364,7 +377,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     }
     if (next != corners.end()) {
         approach(decision, feet, std::span{corners}.subspan(static_cast<std::size_t>(next - corners.begin())),
-                 query);
+                 profile, nextLink);
         const Vec3 toNext = acrossOf(*next - feet);
         const Vec3 toAfter = acrossOf(*std::ranges::next(next, 1, corners.end() - 1) - feet);
         const float afterLength = length(toAfter);
@@ -379,11 +392,11 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
 }
 
 void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
-                     navigation::NavigationQuery& query) {
+                     const navigation::AgentProfile& profile,
+                     const std::optional<navigation::MeshLink>& next) {
     if (rules.braking <= 0.0F || ahead.empty()) {
         return;
     }
-    const navigation::AgentProfile& profile = query.mesh().profile();
     const auto isAt = [this, &profile](Vec3 first, Vec3 second) {
         return groundDistance(first, second) <= rules.arrivalDistance.value() &&
                std::abs(first.z - second.z) <= profile.stepHeight.value();
@@ -392,9 +405,8 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
     std::vector<Vec3> way{feet};
     way.insert(way.end(), ahead.begin(), ahead.end());
     const std::size_t lastCorner = way.size() - 1;
-    if (const std::optional<navigation::MeshLink> link = corridor->nextLink(query);
-        link && isAt(link->start, way.back())) {
-        way.push_back(link->end);
+    if (next && isAt(next->start, way.back())) {
+        way.push_back(next->end);
     }
     // Each corner by the turn onto the way on past it, and its way's end, where it stops unless it chases a
     // target.
@@ -417,13 +429,15 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
     }
 }
 
-auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query) -> bool {
-    const std::optional<navigation::MeshLink> next = corridor->nextLink(query);
+auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query,
+                          std::optional<navigation::MeshLink>& next) -> bool {
+    next = corridor->nextLink(query);
     if (!next || groundDistance(feet, next->start) > rules.arrivalDistance.value()) {
         return false;
     }
     crossing = corridor->crossLink(query);
     if (!crossing) {
+        next = corridor->nextLink(query);
         return false;
     }
     // A link up it jumps once, from its start; one down it walks off.

@@ -834,6 +834,48 @@ auto brakingRules() -> nx::agents::Rules {
     return braking;
 }
 
+void expectApproachToLink(const nx::agents::Decision& decision, nx::Vec3 start,
+                          const nx::navigation::MeshLink& next) {
+    constexpr float kDistanceTolerance = 1.0F;
+    ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
+    ASSERT_FALSE(decision.intent.approached().empty());
+    const auto& approach = decision.intent.approached().back();
+    EXPECT_NEAR(approach.distance.value(), nx::test::distanceAcross(start, next.start), kDistanceTolerance);
+    EXPECT_GT(approach.passShare, 0.0F) << "the way continues over the link";
+}
+
+void checkBrakingCrossing(const Platform& platform, nx::Vec3 start, nx::Vec3 goal, int jumps) {
+    constexpr int kMostDecisions = 1000;
+    const auto mesh = nx::test::playerMesh(platformGeometry(platform), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    auto corridor = nx::navigation::Corridor::plan(query, {.from = start, .to = goal});
+    ASSERT_TRUE(corridor.has_value());
+    const auto next = corridor->nextLink(query);
+    ASSERT_TRUE(next.has_value());
+    ASSERT_GT(nx::test::distanceAcross(start, next->start), brakingRules().arrivalDistance.value());
+
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(goal);
+    expectApproachToLink(brain.decide(start, query), start, *next);
+    const Walked walked = walkAbout(platform, brain, query, start, kMostDecisions);
+    EXPECT_TRUE(walked.isArrived);
+    EXPECT_EQ(walked.jumps, jumps);
+}
+
+TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesAJump) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 40}};
+    constexpr nx::Vec3 kStart{.x = 100, .y = 256};
+    constexpr nx::Vec3 kGoal{.x = 512, .y = 256, .z = 40};
+    checkBrakingCrossing(box, kStart, kGoal, 1);
+}
+
+TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesADrop) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 120}};
+    constexpr nx::Vec3 kStart{.x = 512, .y = 256, .z = 120};
+    constexpr nx::Vec3 kGoal{.x = 900, .y = 256};
+    checkBrakingCrossing(box, kStart, kGoal, 0);
+}
+
 /// A floor with a block in its far corner, which the way from the top left to the bottom right turns round.
 auto cornerMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;

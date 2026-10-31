@@ -44,7 +44,9 @@ convex polygons, through Recast and Detour.
   radius and a cell past the ledge; of the kind jump, both ways, within its jump height, else drop,
   down only, both heights the geometry's. A brain crosses one from its start, jumping once for a
   link up, and heads for its end without steering, as DetourCrowd moves an agent over a link; the
-  ledge its next link leaves from is no wall to its steering.
+  ledge its next link leaves from is no wall to its steering. A decision reuses its next-link lookup
+  to anticipate the way over it when braking; after an attempted crossing fails and may have changed
+  the corridor, it looks again.
 - **What changes in a match.** Doors and breakables turn their areas and links on and off as the
   game reports them, without rebuilding; moving agents avoid each other locally (ADR-0024).
 - **Tactical layer.** Hiding spots, sniper spots, encounter spots, choke points and places (named
