@@ -72,9 +72,11 @@ bodies stop them.
 Players attacking each other go through `cs::Game::attackPlayer` instead, with the players' hit
 groups, armor and combat rules ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 
-Sight uses the configured range, field of view, per-agent candidate budget and the server's
-solid traces, through the solids gathered once for the tick's sights (`cs::Game::sightSolids`); a
-body's hitboxes are placed once for its pose and kept ([07 §4.2](07-simulation-and-physics.md#42-entities)). A brain forgets each
+Sight uses the configured range, field of view, per-agent candidate budget and a line from the
+zombie's eye to the player's through the world and the brush entities, the bodies leaving it be
+(`cs::Game::seesSpot`, as a bot sees), through the solids gathered once for the tick's sights
+(`cs::Game::sightSolids`): the zombies behind others of a horde saw the bodies before them and not the
+player, and lost it each time another struck, its arms across their sight. A brain forgets each
 target that is no longer among the living players (`nx::agents::Brain::forgetAbsent`): a dead or
 departed enemy's last position is neither investigated nor planned a way to. A brain pursues a visible target or its last observed position, never an unseen
 current position. The server supplies the target's feet from its active standing/crouched hull,

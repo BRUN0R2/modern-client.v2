@@ -1166,14 +1166,6 @@ auto Game::sightSolids() -> nx::game::Solids {
     return nx::game::solidsOf(m_world);
 }
 
-auto Game::sees(const nx::game::Solids& solids, nx::ecs::Entity observer, nx::Vec3 eye,
-                const PerceptionTarget& target) -> bool {
-    const nx::game::SolidHit hit = nx::game::traceSolidsHit(
-        m_world, m_map->hulls(), solids, {.start = eye, .end = target.eye, .ignored = observer});
-    return hit.entity == target.entity ||
-           (hit.trace.fraction >= 1.0F && !hit.trace.startsSolid && !hit.trace.isAllSolid);
-}
-
 auto Game::seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) -> bool {
     const nx::game::SolidHit hit =
         nx::game::traceSolidsHit(m_world, m_map->hulls(), solids,
