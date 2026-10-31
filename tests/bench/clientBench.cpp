@@ -140,7 +140,7 @@ void extractPlayers(benchmark::State& state) {
     client.receive(std::move(first));
     std::vector<cs::ShownPlayer> shown;
     for ([[maybe_unused]] auto iteration : state) {
-        client.updatePlayers(kFrameTime, shown);
+        client.updatePlayers(kFrameTime, cs::kLongestCorpseStay, shown);
         benchmark::DoNotOptimize(shown);
     }
     state.SetItemsProcessed(state.iterations() * state.range(0));

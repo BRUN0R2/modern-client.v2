@@ -116,13 +116,15 @@ struct EntityState {
     nx::HitPoints health{};
 };
 
-/// An entity as a client draws it: its type, where it is, and its model's sequence at a frame.
+/// An entity as a client draws it: its type, where it is, its model's sequence at a frame, and how
+/// opaque it is drawn, of 255 (a corpse fading out).
 struct ShownEntity {
     EntityTypeIndex type{};
     nx::Vec3 origin{};
     nx::EulerAngles angles{};
     nx::assets::SequenceIndex sequence{};
     SequenceFrame frame{};
+    std::uint8_t amount = std::numeric_limits<std::uint8_t>::max();
 };
 
 } // namespace cs

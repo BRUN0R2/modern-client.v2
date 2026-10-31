@@ -818,6 +818,7 @@ TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
     const cs::PlayerSnapshot headShot = press(attacker, {cs::Button::Attack});
     EXPECT_FALSE(game().snapshotFor(victim).status.isAlive());
     EXPECT_EQ(shown(attacker, victim).sequence, sequence("head"));
+    EXPECT_TRUE(shown(attacker, victim).isDead) << "its body a corpse, as its deadflag tells";
     // Its head streams its blood the way the round went, as fast as a byte holds: over 130 times 5.
     ASSERT_EQ(headShot.bloodStreams.size(), 1U);
     const cs::BloodStream& stream = headShot.bloodStreams.front();

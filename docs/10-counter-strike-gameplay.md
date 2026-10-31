@@ -564,7 +564,11 @@ takes its share: the health takes 0.5 times the attacker's weapon's `harm.armorR
 armor loses half the rest (`ARMOR_BONUS`), and once it is gone the health takes what its points did
 not, the armor none then; its whole points off its health; heard in its pain by where it was met
 (`headshot1` to `3`, `bhit_helmet-1` with a helmet, `bhit_kevlar-1` its armor taking a share but in the
-legs, else its flesh's). Killed by it, it plays its death by where it was met (§2), and its killer gets
+legs, else its flesh's). Killed by it, it plays its death by where it was met (§2), its body a corpse
+the server tells its clients of (`PlayerEntityState::isDead`, the original's `deadflag`), which a client
+draws for `cl_corpsestay` seconds (600 by default, as Counter-Strike's; from 0 to 600), timed from when it
+first saw it dead, then fades out over a second and draws no more (`cs.client:corpses`; the fade the
+project's own, the original's not measured), an entity's body's corpse as well; and its killer gets
 300 for an enemy and loses 3300 for a teammate (`data/cstrike/economy.toml`'s `kills`,
 `CHalfLifeMultiplay::PlayerKilled`). A player wears armor as an item of it gives it (`cs::wearArmor`:
 100, `item_kevlar` a vest, `item_assaultsuit` a vest and a helmet), until it is killed. A hit sheds

@@ -224,7 +224,7 @@ TEST_F(ClientGameTest, AnotherPlayerIsShownBetweenTheLastTwoTicksItsLegsFacingIt
     first.players = {otherAt({.x = 100.0F}, 90.0F)};
     cs::ClientGame client{models(), playerModels(), std::move(first)};
     std::vector<cs::ShownPlayer> seen;
-    client.updatePlayers(kTick, seen);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, seen);
     ASSERT_EQ(seen.size(), 1U);
     EXPECT_EQ(seen[0].character, cs::CharacterIndex{4});
     EXPECT_EQ(seen[0].origin, (nx::Vec3{.x = 100.0F}));
@@ -237,7 +237,7 @@ TEST_F(ClientGameTest, AnotherPlayerIsShownBetweenTheLastTwoTicksItsLegsFacingIt
     ASSERT_EQ(client.ticksDue(kTick * 1.5F, cs::CatchUp::Limited), 1U);
     client.receive(std::move(second));
     std::vector<cs::ShownPlayer> moving;
-    client.updatePlayers(kTick, moving);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, moving);
     ASSERT_EQ(moving.size(), 1U);
     EXPECT_NEAR(moving[0].origin.x, 105.0F, kTolerance) << "halfway, as the eye";
     // Its legs turn the way it moves, its aim to its body's left of them.
@@ -253,12 +253,12 @@ TEST_F(ClientGameTest, FrameExtractionReusesItsStorageAndReplacesWhatItShowedBef
     cs::ClientGame client{models(), playerModels(), first};
     std::vector<cs::ShownPlayer> players;
     std::vector<nx::render::ModelPlacement> placements;
-    client.updatePlayers(kTick, players);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, players);
     client.writePlacements(placements);
     const cs::ShownPlayer* const playerStorage = players.data();
     const nx::render::ModelPlacement* const placementStorage = placements.data();
 
-    client.updatePlayers(kTick, players);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, players);
     client.writePlacements(placements);
     ASSERT_EQ(players.size(), 1U);
     ASSERT_EQ(placements.size(), 1U);
@@ -266,10 +266,46 @@ TEST_F(ClientGameTest, FrameExtractionReusesItsStorageAndReplacesWhatItShowedBef
     EXPECT_EQ(placements.data(), placementStorage);
 
     client.receive(snapshotAt(1, {}));
-    client.updatePlayers(kTick, players);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, players);
     client.writePlacements(placements);
     EXPECT_TRUE(players.empty());
     EXPECT_TRUE(placements.empty());
+}
+
+TEST_F(ClientGameTest, ADeadPlayersCorpseStaysThenFadesOutAndIsGoneUntilItLivesAgain) {
+    // A corpse staying half a second, as cl_corpsestay 0.5 has it.
+    constexpr nx::Seconds kStay{0.5F};
+    cs::PlayerSnapshot first = snapshotAt(0, {});
+    cs::PlayerEntityState dead = otherAt({}, 0.0F);
+    dead.isDead = true;
+    first.players = {dead};
+    cs::ClientGame client{models(), playerModels(), first};
+    std::vector<cs::ShownPlayer> players;
+    client.updatePlayers(kTick, kStay, players);
+    ASSERT_EQ(players.size(), 1U);
+    EXPECT_EQ(players.front().amount, cs::kWholeBody) << "just dead: wholly";
+
+    // A second on, its stay is over and it fades.
+    cs::PlayerSnapshot later = snapshotAt(100, {});
+    later.players = {dead};
+    client.receive(std::move(later));
+    client.updatePlayers(kTick, kStay, players);
+    ASSERT_EQ(players.size(), 1U);
+    EXPECT_GT(players.front().amount, 0U);
+    EXPECT_LT(players.front().amount, cs::kWholeBody) << "fading out";
+
+    // Two seconds on, it is gone; alive again, it shows wholly.
+    cs::PlayerSnapshot gone = snapshotAt(200, {});
+    gone.players = {dead};
+    client.receive(std::move(gone));
+    client.updatePlayers(kTick, kStay, players);
+    EXPECT_TRUE(players.empty()) << "its corpse gone";
+    cs::PlayerSnapshot respawned = snapshotAt(201, {});
+    respawned.players = {otherAt({}, 0.0F)};
+    client.receive(std::move(respawned));
+    client.updatePlayers(kTick, kStay, players);
+    ASSERT_EQ(players.size(), 1U);
+    EXPECT_EQ(players.front().amount, cs::kWholeBody) << "alive again";
 }
 
 TEST_F(ClientGameTest, PlayerInterpolationFollowsSparseIdentitiesAcrossReorderingAndVisibilityChanges) {
@@ -296,7 +332,7 @@ TEST_F(ClientGameTest, PlayerInterpolationFollowsSparseIdentitiesAcrossReorderin
     ASSERT_EQ(client.ticksDue(kTick * 1.5F, cs::CatchUp::Whole), 1U);
     client.receive(std::move(second));
     std::vector<cs::ShownPlayer> shown;
-    client.updatePlayers(kTick, shown);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, shown);
     ASSERT_EQ(shown.size(), 2U);
     EXPECT_NEAR(shown[0].origin.x, 420.0F, kTolerance);
     EXPECT_NEAR(shown[1].origin.x, 110.0F, kTolerance);
@@ -307,7 +343,7 @@ TEST_F(ClientGameTest, PlayerInterpolationFollowsSparseIdentitiesAcrossReorderin
     returned.players = {near};
     client.receive(std::move(returned));
     std::vector<cs::ShownPlayer> seenAgain;
-    client.updatePlayers(kTick, seenAgain);
+    client.updatePlayers(kTick, cs::kLongestCorpseStay, seenAgain);
     ASSERT_EQ(seenAgain.size(), 1U);
     EXPECT_FLOAT_EQ(seenAgain[0].origin.x, 900.0F) << "no interpolation from a snapshot where it was absent";
 }
@@ -330,7 +366,7 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     game.receive(std::move(next));
     EXPECT_EQ(game.ticksDue(kTick / 2.0F, cs::CatchUp::Whole), 0U);
     std::vector<cs::ShownEntity> shown;
-    game.writeEntities(catalog, shown);
+    game.writeEntities(catalog, cs::kLongestCorpseStay, shown);
     ASSERT_EQ(shown.size(), 1U);
     EXPECT_NEAR(shown.front().origin.x, 50, kTolerance);
     world.destroy(firstEntity);
@@ -340,7 +376,7 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     auto replaced = snapshotAt(2, {});
     replaced.entities.push_back({.entity = replacement, .type = *type, .origin = {.x = 1000}});
     game.receive(std::move(replaced));
-    game.writeEntities(catalog, shown);
+    game.writeEntities(catalog, cs::kLongestCorpseStay, shown);
     ASSERT_EQ(shown.size(), 1U);
     EXPECT_EQ(shown.front().origin.x, 1000);
 }
