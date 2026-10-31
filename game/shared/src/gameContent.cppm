@@ -22,6 +22,7 @@ import :playerHarm;
 import :use;
 import :characters;
 import :lightStyles;
+import :environment;
 import :entityCatalog;
 
 export namespace cs {
@@ -40,7 +41,8 @@ enum class GameContentError : std::uint8_t {
 /// (data/cstrike/blood.toml), how a player is hurt
 /// and killed (data/cstrike/playerHarm.toml), what it hears as it uses (data/cstrike/use.toml), the
 /// characters each team plays as (data/cstrike/characters.toml), the world's light styles
-/// (data/cstrike/lightStyles.toml), and what the textures are made of (the
+/// (data/cstrike/lightStyles.toml), what it shows of every map's world over what the map sets
+/// (data/cstrike/environment.toml), and what the textures are made of (the
 /// installation's sound/materials.txt; none tagged without it).
 struct GameContent {
     nx::assets::Vfs vfs;
@@ -57,6 +59,7 @@ struct GameContent {
     Characters characters;
     TextureMaterials materials;
     WorldLightStyles lightStyles;
+    WorldEnvironment environment;
     EntityCatalog entities{}; ///< Append-only definitions loaded explicitly by the host or a mod.
 };
 

@@ -13,6 +13,7 @@ nxAddTest(csSharedTests
         hostagesTests.cpp
         inventoryTests.cpp
         lightStylesTests.cpp
+        environmentTests.cpp
         movementTests.cpp
         navigationProfileTests.cpp
         playerAnimationTests.cpp
