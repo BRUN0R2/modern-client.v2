@@ -60,11 +60,17 @@ struct Rules {
     /// reaction time). None, at once.
     Seconds reactionTime{};
     /// How fast its body loses speed with nothing driving it on, in shares of it a second (the ground's
-    /// friction: sv_friction's 4), so that the speed it can still stop from short of a point is that times
-    /// how far the point is. Its body cannot turn on the spot: it slows down by it for the end of a way it
-    /// stops at and for a corner, the more the sharper the corner turns, rather than overshoot them and
-    /// circle back. None, it never slows (a body that stops and turns at once).
+    /// friction: sv_friction's 4), and below stopSpeed, as fast as it would at stopSpeed (PM_Friction), so
+    /// that the speed it can still stop from short of a point is the root of twice that slowing times how
+    /// far the point is, and farther than it stops from stopSpeed in, stopSpeed and braking times how much
+    /// farther. Its body cannot turn on the spot: it slows down by it for the end of a way it stops at and
+    /// for a corner, the more the sharper the corner turns, rather than overshoot them and circle back.
+    /// None, it never slows (a body that stops and turns at once).
     float braking = 0.0F;
+    /// The speed under which its body loses speed as fast as at it (sv_stopspeed's 75), which slows down a
+    /// slow body, and a body at rest a walk slower than braking times it over its acceleration cannot start
+    /// at. None, its friction takes a share of its speed alone however slow it goes.
+    UnitsPerSecond stopSpeed{};
 };
 
 /// A sensed fact: where a target was seen, touched, or roughly where it was heard (Brain::sense), never a
@@ -202,12 +208,12 @@ public:
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
-    /// approaches (Rules::braking): each approached point's pass share of `maxSpeed`, and braking times how
-    /// far it is. It waits, its direction none, when no way on is worth a tenth of the speed it asked for.
-    /// Else it goes the way it steers to, as fast as that; and a body that gains speed only along the way it
-    /// is driven is to be driven (Intent::drive) the way its velocity must change to become the steered one,
-    /// as DetourCrowd integrates an agent's velocity toward its desired one, unless it goes within a tenth of
-    /// how it steers. Across a link, it heads for the
+    /// approaches (Rules::braking): each approached point's pass share of `maxSpeed`, and the speed it can
+    /// still stop from short of it by friction (Rules::stopSpeed). It waits, its direction none, when no way
+    /// on is worth a tenth of the speed it asked for. Else it goes the way it steers to, as fast as that; and
+    /// a body that gains speed only along the way it is driven is to be driven (Intent::drive) the way its
+    /// velocity must change to become the steered one, as DetourCrowd integrates an agent's velocity toward
+    /// its desired one, unless it goes within a tenth of how it steers. Across a link, it heads for the
     /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
