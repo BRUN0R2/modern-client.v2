@@ -111,11 +111,12 @@ constexpr float kDecisionStep = 32.0F;
                 return a.behavior == b.behavior && a.intent.direction == b.intent.direction &&
                        a.intent.lookAt == b.intent.lookAt && a.intent.attacks == b.intent.attacks &&
                        a.intent.jumps == b.intent.jumps &&
-                       std::ranges::equal(
-                           a.intent.approached(), b.intent.approached(),
-                           [](const nx::agents::Approach& left, const nx::agents::Approach& right) -> bool {
-                               return left.distance == right.distance && left.passShare == right.passShare;
-                           }) &&
+                       std::ranges::equal(a.intent.approached(), b.intent.approached(),
+                                          [](const nx::agents::Approach& firstApproach,
+                                             const nx::agents::Approach& secondApproach) -> bool {
+                                              return firstApproach.distance == secondApproach.distance &&
+                                                     firstApproach.passShare == secondApproach.passShare;
+                                          }) &&
                        a.target == b.target && a.navigationError == b.navigationError;
             });
     });
