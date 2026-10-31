@@ -28,6 +28,7 @@ nxAddModuleLibrary(csShared
         src/use.cppm
         src/modelFiles.cppm
         src/lightStyles.cppm
+        src/environment.cppm
         src/gameContent.cppm
         src/gameMap.cppm
         src/characters.cppm
@@ -56,6 +57,7 @@ nxAddModuleLibrary(csShared
         src/use.cpp
         src/modelFiles.cpp
         src/lightStyles.cpp
+        src/environment.cpp
         src/gameContent.cpp
         src/gameMap.cpp
         src/characters.cpp

@@ -930,7 +930,7 @@ in Rook ([15 §2](15-mod-api.md#2-module-organization)).
 
 The planned layout; today `entities.toml`
 ([03 §11](03-ecs.md#11-prefabs-and-map-entities)), `ammo.toml`, `weapons/` (section 7.2), `loadouts.toml`,
-`lightStyles.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml`,
+`lightStyles.toml` and `environment.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml`,
 `blood.toml` and `playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
 ([11 §3](11-audio.md#3-original-semantics-to-preserve)), `use.toml`
 ([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) and `characters.toml` (section 2)
@@ -951,6 +951,7 @@ data/cstrike/
 ├── ammo.toml           # kinds of ammo: carried, box price and rounds
 ├── loadouts.toml       # what each team spawns with
 ├── lightStyles.toml    # the light styles the game sets as a map starts
+├── environment.toml    # what the game shows of every map's world over what it sets: a mod's sky
 ├── footsteps.toml      # the sounds of a player's feet
 ├── breath.toml         # the sounds of a player's breath in water
 ├── use.toml            # the sounds of a player's use key
