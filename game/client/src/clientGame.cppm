@@ -18,6 +18,7 @@ import :input;
 import :mapModels;
 import :playerModels;
 import :viewModel;
+import :corpses;
 
 export namespace cs {
 
@@ -85,7 +86,11 @@ public:
     /// How the game's hostages show at the moment a frame shows (cs::shownHostageOf), those whose model
     /// the client read, replacing `hostages` and keeping its storage for the next frame.
     void writeHostages(std::vector<ShownHostage>& hostages) const;
-    void writeEntities(const EntityCatalog& catalog, std::vector<ShownEntity>& entities) const;
+    /// How the game's entity bodies show at the moment a frame shows, each between where the last two
+    /// ticks left it, its corpse faded out after `corpseStay` and gone (corpseAmountOf), replacing
+    /// `entities` and keeping its storage for the next frame.
+    void writeEntities(const EntityCatalog& catalog, nx::Seconds corpseStay,
+                       std::vector<ShownEntity>& entities);
 
     /// The brightness of the server's light styles at `time` since the map started, including every
     /// unset style. No pattern is inferred from local content.
@@ -94,9 +99,10 @@ public:
     /// How the other players show in a frame of `frameTime`, at the moment it shows: each between where
     /// the last two ticks left it; its legs and its aim turned by the frame (processGait), from its legs
     /// facing its body as it stands when it is first seen; its torso's frame where the client estimates it
-    /// from what the server told; those whose model the client read. Replaces `players`, keeping its
-    /// storage for the next frame. Previous origins are indexed once per received snapshot.
-    void updatePlayers(nx::Seconds frameTime, std::vector<ShownPlayer>& players);
+    /// from what the server told; those whose model the client read, a dead one's corpse faded out after
+    /// `corpseStay` and gone (corpseAmountOf). Replaces `players`, keeping its storage for the next frame.
+    /// Previous origins are indexed once per received snapshot.
+    void updatePlayers(nx::Seconds frameTime, nx::Seconds corpseStay, std::vector<ShownPlayer>& players);
 
     /// The way the game last turned the player's view since the last call, as the original's fixangle
     /// turns it: the way the spawn point it last spawned at faces; none.
@@ -142,6 +148,8 @@ private:
     std::vector<std::optional<nx::Vec3>> previousPlayerOrigins;
     std::map<nx::ecs::Entity, nx::Vec3> previousEntityOrigins;
     std::vector<std::optional<Gait>> m_gaits;      ///< By PlayerIndex: none for one not seen yet.
+    CorpseClock<std::uint32_t> playerCorpses;      ///< When the dead players died, by PlayerIndex.
+    CorpseClock<nx::ecs::Entity> entityCorpses;    ///< When the dead entity bodies died.
     nx::Vec3 m_previousEye{};                      ///< Before the last tick.
     nx::Seconds m_pending{};                       ///< Of the time given to the game, what no tick took.
     CommandNumber m_lastCommand{};                 ///< The number of the last command the player made.

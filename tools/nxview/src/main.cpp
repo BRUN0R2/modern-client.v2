@@ -411,7 +411,7 @@ constexpr std::size_t kBlue = 2;
     std::vector<cs::ShownPlayer> players;
     client.writePlacements(placements);
     client.writeHostages(hostages);
-    client.updatePlayers(options.time, players);
+    client.updatePlayers(options.time, cs::kLongestCorpseStay, players);
     // The client events of the play the view model is in, from its first frame: the muzzle flashes
     // a shot shows.
     const std::optional<cs::ViewModelPose> viewPose = client.viewModel();

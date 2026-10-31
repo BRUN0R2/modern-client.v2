@@ -21,7 +21,8 @@ export namespace cs {
 
 /// How another player shows in a frame: the character it plays as and the weapon in its hands; where it
 /// is and how its model is turned (its legs' yaw); the sequence its torso plays and where in it, its legs'
-/// gait sequence and where in it; and the aim's yaw and pitch blends.
+/// gait sequence and where in it; the aim's yaw and pitch blends; and how opaque it is drawn, of 255 (a
+/// corpse fading out).
 struct ShownPlayer {
     CharacterIndex character{};
     std::optional<WeaponIndex> weapon{};
@@ -33,6 +34,7 @@ struct ShownPlayer {
     SequenceFrame gaitFrame{};
     float yawBlend = 0.0F;
     float pitchBlend = 0.0F;
+    std::uint8_t amount = std::numeric_limits<std::uint8_t>::max();
 };
 
 /// The models on the GPU the players are drawn with: each character's, and each weapon's player model,

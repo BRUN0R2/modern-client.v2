@@ -108,8 +108,9 @@ struct BloodMark {
 /// What the server tells a client of another player for it to draw, as the original's entity state
 /// carries it: which player it is, the character it plays as, the weapon in its hands (its player model:
 /// models/p_<weapon>.mdl), where it is, how its body is turned (its pitch a third of its view's,
-/// negated), the sequence its torso plays, where in it, when and at what framerate, and the gait sequence
-/// its legs play; the client turns its legs and its aim itself (processGait).
+/// negated), the sequence its torso plays, where in it, when and at what framerate, the gait sequence
+/// its legs play, and whether it is dead, its body a corpse (deadflag); the client turns its legs and its
+/// aim itself (processGait).
 struct PlayerEntityState {
     PlayerIndex player{};
     CharacterIndex character{};
@@ -121,6 +122,7 @@ struct PlayerEntityState {
     nx::GameTime advancedAt{};
     float framerate = 1.0F;
     nx::assets::SequenceIndex gaitSequence{};
+    bool isDead = false;
 
     [[nodiscard]] inline auto operator==(const PlayerEntityState&) const noexcept -> bool = default;
 };
