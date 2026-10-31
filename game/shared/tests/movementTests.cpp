@@ -576,6 +576,24 @@ TEST(MovementTest, AStuckPlayerIsTriedAtANudgeEachSixtyMilliseconds) {
     EXPECT_EQ(freed.stuckNudge, 0U);
 }
 
+TEST(MovementTest, APlayerStuckInAnothersBoxIsForcedOutAsItFlails) {
+    // Another standing player's box 26 units back along x, solid for this one's origin below x = 6, deeper
+    // than any nudge: still, it stays in it; jumping, it is forced out at the first place free of the grid
+    // about it, 8 units each way across: x 8, y -8.
+    const std::array boxes{cs::SolidBox{.origin = {.x = -26.0F}, .box = cs::kStandingBox}};
+    const BrushHulls nothing = emptyWorld();
+    const MovementState stuck{.maxSpeed = kKnifeSpeed};
+    const MovementState still =
+        cs::simulateMovement(stuck, command(), MovementSettings{}, nothing, {}, boxes).state;
+    EXPECT_EQ(still.origin, Vec3{});
+    UserCommand flailing = command();
+    flailing.buttons.set(Button::Jump);
+    const MovementState freed =
+        cs::simulateMovement(stuck, flailing, MovementSettings{}, nothing, {}, boxes).state;
+    EXPECT_FLOAT_EQ(freed.origin.x, 8.0F);
+    EXPECT_FLOAT_EQ(freed.origin.y, -8.0F);
+}
+
 TEST(MovementTest, AStuckPlayerTouchesWhatItIsInAtEachTry) {
     // Model 1, a wall from x = 10 on; model 2, a floor: solid below z = 0, both in their own space.
     const BrushHulls hulls = modelsOf(

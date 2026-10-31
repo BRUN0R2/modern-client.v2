@@ -351,7 +351,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The pushers moving the hostages and the hostages' own movement (`MOVETYPE_STEP`), and a trace that leaves out an entity of no size for one of some ("points never interact"): with the hostages' movement
 - [x] pmove in `cs.shared` as a pure function (`cs::simulateMovement`): walking, the air, jumps with their penalty and the bunny hop limit, ducking (the ducktap included), stairs, sliding, water and ladders, among the world and brush entities at rest (solid, volumes, ladders); `nxview` walks through the maps with it
 - [x] pmove: noclip (`MoveType::Noclip`, pushers pass through it), the `noclip` of `next`
-- [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order)
+- [x] pmove: unsticking, by the server's rules (`PM_CheckStuck`: a nudge tried each 50 ms, the original's 54 in their order; one flailing in another body's box forced out on a grid about it)
 - [ ] pmove: observers; the body of a player killed by another, tossed (`PM_Physics_Toss`, `pmove->dead`'s branches), pushed by pushers without blocking them until its death is played (`SV_PushMove`'s corpses)
 - [x] pmove: a dead player killed by nothing (`MovementState::isDead`): it observes its own body, which no command moves (`PM_SpectatorMove` of `OBS_CHASE_FREE` on itself), its eyes 8 units under its origin (`PM_DEAD_VIEWHEIGHT`), pushers passing through it
 - [x] pmove among entities: hostages as boxes (`cs::SolidBox`, grown by the player's box and traced by `nx::collision::traceBoxMovement`)
