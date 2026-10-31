@@ -624,6 +624,17 @@ limits what it takes), it sprays and leaves its marks behind it as a player does
 without a head's stream, which is a player's (`BloodSplat`); a hit that dealt nothing sheds nothing
 (`TraceBleed`).
 
+An entity's body is knocked back by the attacks that hurt it and leave it alive when its type names a
+`knockback` (`cs::EntityKnockback`, `cs.shared:entityKnockback`), the project's own, as a zombie mod's
+knockback holds its zombies back under fire and as the original's players are slowed down by theirs
+(`m_flVelocityModifier`): a hit pushes it along the way the attack went across, its fall its own, at
+`pushPerDamage` units a second for each point the hit dealt it once its hit group took its share, to no
+faster across than `mostPushSpeed`, nor slower than it went already, so that a burst pushes it no more
+than one hit may; it holds back the walk its command asks for over `staggerTime`, while the push carries
+it and the ground's friction stops it; then it walks at `slowShare` of its speed, back to the whole of it
+over `slowRecovery` (`cs::walkShareOf`), each hit starting it over. A hit that dealt nothing knocks
+nothing; a type of none is not knocked back.
+
 The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
 `data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
 spray, drops and head's stream, which the legacy look keeps: a cloud of blood smoke bursting from where

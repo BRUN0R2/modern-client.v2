@@ -128,6 +128,12 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
     const nx::Damage taken{std::min(dealt.value(), body.health.value())};
     body.health = body.health - taken;
     const bool isKilled = body.health <= nx::HitPoints{};
+    if (!isKilled && dealt > nx::Damage{} && type.definition.knockback) {
+        // Knocked back along the way the attack went, its walking held back, then slowed (walkedBy).
+        body.movement.velocity =
+            pushedBy(*type.definition.knockback, body.movement.velocity, attack.direction, dealt);
+        body.knockedBack.hitAt = nx::game::tickTimeOf(world).now;
+    }
     if (isKilled) {
         play(body, type, EntityMotion::Dead, nx::game::tickTimeOf(world).now, catalog);
         body.movement.isDead = true;
@@ -224,6 +230,10 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         // The server owns the body's time; an agent cannot accelerate it by sending a longer command.
         command.duration = nx::tickLengthOf(time.rate);
         command.buttons.reset(Button::Duck);
+        if (type.definition.knockback) {
+            command.move =
+                walkedBy(*type.definition.knockback, body.knockedBack, command.move, time.now, time.rate);
+        }
         body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
         boxesNear(boxes, body.movement.origin, entity, near);
         const MovementResult moved =

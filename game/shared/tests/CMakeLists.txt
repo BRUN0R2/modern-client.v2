@@ -8,6 +8,7 @@ nxAddTest(csSharedTests
         bulletsTests.cpp
         economyTests.cpp
         entityCatalogTests.cpp
+        entityKnockbackTests.cpp
         footstepsTests.cpp
         gameMapTests.cpp
         hostagesTests.cpp

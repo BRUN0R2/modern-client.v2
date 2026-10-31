@@ -22,7 +22,7 @@ enum class EntityMotion : std::uint8_t {
 };
 
 /// An entity's body of a type of the catalog: how it moves, its health, how its model plays, what it
-/// is doing and when it may strike again.
+/// is doing, when it may strike again, and what it keeps of the hits that knocked it back.
 struct EntityBody {
     EntityTypeIndex type{};
     MovementState movement{};
@@ -30,6 +30,7 @@ struct EntityBody {
     Animation animation{};
     EntityMotion motion = EntityMotion::Idle;
     nx::GameTime attacksAgainAt{};
+    KnockedBack knockedBack{};
 };
 
 /// The command an entity's body is driven by in a tick, as a player's client sends its own.

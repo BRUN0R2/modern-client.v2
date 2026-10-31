@@ -42,4 +42,5 @@ export import :gameMap;
 export import :characters;
 export import :playerAnimation;
 export import :snapshot;
+export import :entityKnockback;
 export import :entityCatalog;
