@@ -161,7 +161,10 @@ code** on the server (authoritative) and on the client (prediction).
   noclip): once more than 50 ms have passed since its last try (PM_CHECKSTUCK_MINTIME), it touches
   what it is in and is tried at the next of the original's 54 nudges, in their order; the first that
   frees it frees the player, and moves it from the 28th on, the server leaving the smaller ones, for
-  the network's precision, to the client's prediction. The time is the commands' own, which the
+  the network's precision, to the client's prediction; one stuck in another body's box that flails
+  (jumps, ducks or attacks), as it never should be, the nudge failing, is forced out at the first place
+  free of a grid about it, 8 units each way across at each rise of 18 to 72, as the original unsticks
+  one in another player. The time is the commands' own, which the
   original's clock keeps as they come in real time. A dead player (`MovementState::isDead`, which the
   game sets as it kills it) killed by nothing, as a fall kills, observes its own body, as the
   original's pmove does once `Killed` sets `OBS_CHASE_FREE` on the player itself (`PM_SpectatorMove`,

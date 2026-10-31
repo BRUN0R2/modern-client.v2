@@ -126,6 +126,11 @@ constexpr nx::Milliseconds kStuckCheckInterval{50.0F};
 /// the server moves it to one that frees it: it leaves the earlier ones, the smaller, to the client.
 constexpr std::uint32_t kStuckNudgeCount = 54;
 constexpr std::uint32_t kFirstServerNudge = kStuckNudgeCount / 2;
+/// A player flailing while stuck in another's box is forced out at the first place free of a grid about
+/// it (PM_CheckStuck): across by this each way, and up by kFlailRise at a time, kFlailRises times.
+constexpr float kFlailStep = 8.0F;
+constexpr float kFlailRise = 18.0F;
+constexpr int kFlailRises = 4;
 /// The nudges of a stuck player, in turn, as PM_CreateStuckTable orders them: an eighth of a unit,
 /// the network's precision, along z, y and x, each less, none and more, then to each corner of that;
 /// then up by none, 1 and 6, along y and x by 2, each less, none and more, then at each of those
@@ -619,10 +624,15 @@ private:
                                        return entity.role == BrushRole::Solid &&
                                               isSolidIn(entity.model, entity.origin, entity.angles);
                                    }) ||
-               std::ranges::any_of(m_boxes, [&](const SolidBox& solid) {
-                   return nx::collision::boxContentsAt(nx::collision::grownByHull(solid.box, m_hull),
-                                                       point - solid.origin) == Contents::Solid;
-               });
+               isInBoxAt(point);
+    }
+
+    /// Whether the player's box at `point` is in one of the bodies' boxes, another player's or an entity's.
+    [[nodiscard]] auto isInBoxAt(Vec3 point) const -> bool {
+        return std::ranges::any_of(m_boxes, [&](const SolidBox& solid) {
+            return nx::collision::boxContentsAt(nx::collision::grownByHull(solid.box, m_hull),
+                                                point - solid.origin) == Contents::Solid;
+        });
     }
 
     /// Whether the player is stuck in the solid, as the server's PM_CheckStuck finds it: once more
@@ -643,12 +653,38 @@ private:
         m_player.stuckNudge = (nudge + 1) % kStuckNudgeCount;
         const Vec3 nudged = m_player.origin + kStuckNudges[nudge];
         if (isInSolidAt(nudged)) {
-            return true;
+            return !isForcedOut(nudged);
         }
         m_player.stuckNudge = 0;
         // Parity: the server leaves the smaller nudges, for the network's precision, to the client
         if (nudge >= kFirstServerNudge) {
             m_player.origin = nudged;
+        }
+        return false;
+    }
+
+    /// Whether the player, stuck in another's box at `nudged` as it never should be and flailing (jumping,
+    /// ducking or attacking), is forced out at the first place free of a grid about it, as PM_CheckStuck
+    /// unsticks one in another player: kFlailStep across each way, at each of kFlailRises rises of
+    /// kFlailRise.
+    [[nodiscard]] auto isForcedOut(Vec3 nudged) -> bool {
+        const bool flails = m_command.buttons.test(Button::Jump) || m_command.buttons.test(Button::Duck) ||
+                            m_command.buttons.test(Button::Attack);
+        if (!flails || !isInBoxAt(nudged)) {
+            return false;
+        }
+        for (int rise = 0; rise <= kFlailRises; ++rise) {
+            for (int x = -1; x <= 1; ++x) {
+                for (int y = -1; y <= 1; ++y) {
+                    const Vec3 place = m_player.origin + Vec3{.x = static_cast<float>(x) * kFlailStep,
+                                                              .y = static_cast<float>(y) * kFlailStep,
+                                                              .z = static_cast<float>(rise) * kFlailRise};
+                    if (!isInSolidAt(place)) {
+                        m_player.origin = place;
+                        return true;
+                    }
+                }
+            }
         }
         return false;
     }
