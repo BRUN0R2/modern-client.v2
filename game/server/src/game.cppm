@@ -363,7 +363,8 @@ private:
     /// it but in the legs and ducked, knocked back while it
     /// moves slow enough, else small, slowed down; its armor takes its share, its attacker's weapon's
     /// times the armor's ratio (WeaponHarm::armorRatio), and it loses its whole points (harmPlayer), heard
-    /// in its pain (painOf), what it lost told to the attacker's client (DamageDealt); killed by it, it
+    /// in its pain (painOf), what it lost told to the attacker's client over its head (DamageDealt,
+    /// headTopOf); killed by it, it
     /// dies, killed by `attacker` (die). The punch's and the blood's draws come from streams of the
     /// attacker's command and the victim.
     void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
@@ -449,8 +450,13 @@ private:
     /// (nx::game::attackEntity), a hostage it hurts costing it its money (hostageHarmCost), and an
     /// entity's body of a type that bleeds (EntityDefinition::bloodColor) shedding the blood of what it
     /// was dealt (bleed), drawn from a stream of the attack's command and the entity; what it dealt a
-    /// hostage or an entity's body told to the player's client (DamageDealt).
+    /// hostage or an entity's body told to the player's client over its head as the attack met it, before
+    /// a death posed it anew (DamageDealt, headTopOf).
     void attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::Attack& attack);
+    /// Over the head of `entity`, a solid player's body, hostage or entity's body, as the server's traces
+    /// meet it, standing or ducked (playerHeadTopOf, hostageHeadTopOf, entityHeadTopOf); over the middle
+    /// of its box's top for one of a model of no hitbox, its box what a trace meets of it then.
+    [[nodiscard]] auto headTopOf(nx::ecs::Entity entity) -> nx::Vec3;
     /// What the texture a trace from `start` to `end` met, `hit`, is made of, as UTIL_TextureHit finds
     /// it: flesh for a body; of the world's or a brush entity's model, as materials.txt tags it; none for
     /// another entity.

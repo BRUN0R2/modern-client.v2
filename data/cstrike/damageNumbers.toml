@@ -4,12 +4,15 @@
 # How the damage of the player's hits shows (docs/12-ui-hud-and-console.md, section 3.2), read into
 # cs::DamageNumberLook and drawn by cs.client:damageNumbers while hud_damagenumbers is 1: the project's
 # own, as action games show it, nothing of the original's. A number of each hit, each pellet of a shot
-# its own, over where it met the body, over everything else, walls and all: white, a head's red, in a
-# heavy italic face outlined in black.
+# its own, over the head of the body it met, wherever it met it, standing or ducked, over everything else,
+# walls and all: white, a head's red, in a heavy italic face outlined in black.
 
 font = { family = "Verdana", weight = 800, isItalic = true }
 # Its line at its whole size: 4.5% of the screen's height (49 pixels at 1080).
 height = 0.045
+# Its digits at their whole size stand 1% of the screen's height over the top of the head (11 pixels at
+# 1080), however near or far the body is.
+gap = 0.01
 color = { red = 255, green = 255, blue = 255 }
 headColor = { red = 255, green = 48, blue = 40 }
 outlineColor = { red = 0, green = 0, blue = 0 }
@@ -19,7 +22,7 @@ outline = 0.06
 # It shows 0.9 seconds: fading in over the first 0.06; from 0.3 of its size it pops up to 1.3 of it over
 # 0.12, easing out, and settles back to its whole size over the next 0.12; over its last 0.3 it fades out
 # shrinking to 0.65 of its size. It rises 6% of the screen's height over its life, easing out, from up to
-# 2.5% of the screen's height to a side of where the hit met the body, so that numbers close together part.
+# 2.5% of the screen's height to a side of the head, so that numbers close together part.
 life = 0.9
 fadeIn = 0.06
 growTime = 0.12

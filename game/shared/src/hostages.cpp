@@ -169,6 +169,15 @@ void thinkHostage(nx::ecs::World& world, const nx::collision::BrushHulls& /*hull
                       .placement = nx::affine(nx::rotationMatrix(turn), transform.origin)});
 }
 
+/// The hitboxes of hostage `entity` of `world`, playing `model`, on its bones as the server poses them for
+/// its traces (serverBonesOf).
+[[nodiscard]] auto placedHitboxes(const nx::ecs::World& world, nx::ecs::Entity entity,
+                                  const PlayedModel& model) -> std::vector<nx::collision::PlacedBox> {
+    return placedHitboxesOf(model.view->hitboxes(),
+                            serverBonesOf(*world.get<Hostage>(entity), *world.get<Animation>(entity), model,
+                                          *world.get<nx::game::Transform>(entity)));
+}
+
 /// A trace of a box `traced` from `start` to `end` through hostage `entity` of `world` (its
 /// ClipMethod), as SV_HullForStudioModel chooses: a line through its hitboxes, its bones posed where its
 /// last think left its frame with its sequence's motion kept, all in solid and not stopped for a model
@@ -187,10 +196,8 @@ void thinkHostage(nx::ecs::World& world, const nx::collision::BrushHulls& /*hull
     if (model.view->hitboxes().empty()) {
         return nx::collision::Trace{.fraction = 1.0F, .end = end, .isAllSolid = true};
     }
-    const std::vector<nx::Mat3x4> bones =
-        serverBonesOf(hostage, *world.get<Animation>(entity), model, transform);
     const nx::collision::HitboxTrace hit =
-        nx::collision::traceHitboxes(placedHitboxesOf(model.view->hitboxes(), bones), start, end);
+        nx::collision::traceHitboxes(placedHitboxes(world, entity, model), start, end);
     nx::collision::Trace met = hit.trace;
     met.hitGroup = model.view->hitboxes()[hit.hitbox].group;
     return met;
@@ -205,6 +212,16 @@ void makeSolid(nx::ecs::World& world, nx::ecs::Entity entity) {
 }
 
 } // namespace
+
+auto hostageHeadTopOf(const nx::ecs::World& world, nx::ecs::Entity entity) -> std::optional<nx::Vec3> {
+    const std::span<const PlayedModel> models = modelsOf(world);
+    const Hostage& hostage = *world.get<Hostage>(entity);
+    if (hostage.model >= models.size()) {
+        return std::nullopt;
+    }
+    const PlayedModel& model = models[hostage.model];
+    return headTopOf(model.view->hitboxes(), placedHitboxes(world, entity, model));
+}
 
 auto harmHostage(nx::ecs::World& world, nx::ecs::Entity entity, const nx::game::Attack& attack)
     -> nx::game::Harm {

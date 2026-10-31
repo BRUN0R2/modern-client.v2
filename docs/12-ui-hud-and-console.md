@@ -264,13 +264,18 @@ console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,
 each hit of the player's on another player, a hostage or an entity's body shows a number of the damage
 it dealt, rounded, 1 at least, each pellet of a shot that hits a number of its own: what the server tells
-the player's client alone of its hits of each tick (`cs::DamageDealt`: where the hit met the body, the
-damage, whether in the head; what a player's health lost, what an entity's body was dealt). The number
-shows over where its hit met the body, the scene's camera projecting it each frame
-(`nx::render::screenPointOf`), over everything else, walls and all, under the HUD; it moves by the time it
-has shown, each frame, whatever the frame rate. As `data/cstrike/damageNumbers.toml` makes it look
-(`cs::DamageNumberLook`): in a heavy italic Verdana among the system's fonts, its line 4.5% of the
-screen's height, white, a head's red, outlined in black; from 0.3 of its size it fades in and pops up to
+the player's client alone of its hits of each tick (`cs::DamageDealt`: over the head of the body the hit
+met, the damage, whether in the head; what a player's health lost, what an entity's body was dealt). The
+number shows over the head of the body, wherever the hit met it, in its stomach as in its head: the server
+measures the head as the hit met it, the middle across of its head's hitboxes at their highest corner as
+its traces pose them (`cs::headTopOf`, of a model with none of a head's all its hitboxes, of one of no
+hitbox the top of its box), so that it stands over a ducked player's head as over a standing one's;
+measured before the hit's harm, as a death poses the body anew. The scene's camera projects it each frame (`nx::render::screenPointOf`), and the number's
+digits, at their whole size, stand a gap of the screen's height over it, however near or far the body is,
+over everything else, walls and all, under the HUD; it moves by the time it has shown, each frame, whatever
+the frame rate. As `data/cstrike/damageNumbers.toml` makes it look (`cs::DamageNumberLook`): in a heavy
+italic Verdana among the system's fonts, its line 4.5% of the screen's height, its digits 1% of it over
+the head, white, a head's red, outlined in black; from 0.3 of its size it fades in and pops up to
 1.3 of it over 0.12 seconds, easing out, settles back to its size over 0.12, rises 6% of the screen's
 height over its 0.9 seconds, easing out, from up to 2.5% of the screen's height to a side, and over its
 last 0.3 fades out shrinking to 0.65 of its size; 64 show at most, the oldest going first. Its glyphs are

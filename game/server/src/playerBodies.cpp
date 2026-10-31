@@ -28,35 +28,48 @@ constexpr std::uint8_t kLastBlending = 255;
 constexpr double kShortestBlendWay = 0.1;
 constexpr float kDegreesPerTurn = 360.0F;
 
+/// The hitboxes of a player's `model` a line's trace meets: all but the last, a shield's, which a player
+/// without one has none of (pev->gamestate 1).
+[[nodiscard]] auto tracedHitboxesOf(const PlayedModel& model) -> std::span<const nx::assets::Hitbox> {
+    const std::span<const nx::assets::Hitbox> hitboxes = model.view->hitboxes();
+    return hitboxes.empty() ? hitboxes : hitboxes.first(hitboxes.size() - 1);
+}
+
+/// The traced hitboxes of `body`, which has a model, at `origin`, grown kClientTraceGrowth on its bones
+/// posed as tracedBonesOf poses them: as a trace last placed them, placed anew when its pose or origin
+/// changed since.
+[[nodiscard]] auto placedHitboxes(PlayerBody& body, nx::Vec3 origin)
+    -> std::span<const nx::collision::PlacedBox> {
+    if (!body.placed || body.placed->pose != body.pose || body.placed->origin != origin) {
+        const nx::Vec3 grownBy{.x = kClientTraceGrowth, .y = kClientTraceGrowth, .z = kClientTraceGrowth};
+        body.placed =
+            PlacedPlayerHitboxes{.pose = body.pose,
+                                 .origin = origin,
+                                 .boxes = placedHitboxesOf(tracedHitboxesOf(*body.pose.model),
+                                                           tracedBonesOf(body.pose, origin), grownBy)};
+    }
+    return body.placed->boxes;
+}
+
 /// The trace of a box `traced` from `start` to `end` through the player's body `entity` of `world` (its
-/// ClipMethod), as SV_HullForStudioModel chooses for a client: a line through its hitboxes but the last
-/// (a shield's), grown kClientTraceGrowth, its bones posed as tracedBonesOf poses them, the trace's hit
-/// group the one's it met, all in solid and not stopped for a model without any other; a box, or a body
-/// whose model could not be read, through its box grown by the one traced.
+/// ClipMethod), as SV_HullForStudioModel chooses for a client: a line through its traced hitboxes
+/// (placedHitboxes), the trace's hit group the one's it met, all in solid and not stopped for a model
+/// without any; a box, or a body whose model could not be read, through its box grown by the one traced.
 [[nodiscard]] auto clipPlayer(nx::ecs::World& world, nx::ecs::Entity entity, const nx::Aabb& traced,
                               nx::Vec3 start, nx::Vec3 end) -> nx::collision::Trace {
     const nx::Vec3 origin = world.get<nx::game::Transform>(entity)->origin;
     const nx::Aabb& solid = world.get<nx::game::BoxSolidity>(entity)->box;
     PlayerBody& body = *world.get<PlayerBody>(entity);
-    const PlayerPose& pose = body.pose;
-    if (traced.max != traced.min || pose.model == nullptr) {
+    if (traced.max != traced.min || body.pose.model == nullptr) {
         return nx::collision::traceBox({.min = solid.min - traced.max, .max = solid.max - traced.min}, origin,
                                        start, end);
     }
-    // A player without a shield has none of the last hitbox, its shield's (pev->gamestate 1).
-    const std::span<const nx::assets::Hitbox> modelHitboxes = pose.model->view->hitboxes();
-    if (modelHitboxes.size() <= 1) {
+    const std::span<const nx::assets::Hitbox> hitboxes = tracedHitboxesOf(*body.pose.model);
+    if (hitboxes.empty()) {
         return nx::collision::Trace{.fraction = 1.0F, .end = end, .isAllSolid = true};
     }
-    const std::span<const nx::assets::Hitbox> hitboxes = modelHitboxes.first(modelHitboxes.size() - 1);
-    if (!body.placed || body.placed->pose != pose || body.placed->origin != origin) {
-        const nx::Vec3 grownBy{.x = kClientTraceGrowth, .y = kClientTraceGrowth, .z = kClientTraceGrowth};
-        body.placed =
-            PlacedPlayerHitboxes{.pose = pose,
-                                 .origin = origin,
-                                 .boxes = placedHitboxesOf(hitboxes, tracedBonesOf(pose, origin), grownBy)};
-    }
-    const nx::collision::HitboxTrace hit = nx::collision::traceHitboxes(body.placed->boxes, start, end);
+    const nx::collision::HitboxTrace hit =
+        nx::collision::traceHitboxes(placedHitboxes(body, origin), start, end);
     nx::collision::Trace met = hit.trace;
     met.hitGroup = hitboxes[hit.hitbox].group;
     return met;
@@ -69,6 +82,15 @@ auto registerPlayerBodies(nx::ecs::World& world) -> nx::Result<void, nx::ecs::Co
         return std::unexpected{registered.error()};
     }
     return {};
+}
+
+auto playerHeadTopOf(nx::ecs::World& world, nx::ecs::Entity entity) -> std::optional<nx::Vec3> {
+    PlayerBody& body = *world.get<PlayerBody>(entity);
+    if (body.pose.model == nullptr) {
+        return std::nullopt;
+    }
+    return headTopOf(tracedHitboxesOf(*body.pose.model),
+                     placedHitboxes(body, world.get<nx::game::Transform>(entity)->origin));
 }
 
 void setBodySolidity(nx::ecs::World& world, nx::ecs::Entity body, std::optional<nx::Aabb> box) {

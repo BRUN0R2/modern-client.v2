@@ -604,7 +604,7 @@ TEST_F(GameTest, AnEntitysBodyOfAStrideStepsEachStrideItWalksOnTheGroundAndOneOf
     }
 }
 
-TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtAndWhere) {
+TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtOverItsHead) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const auto other = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Other");
     cs::EntityDefinition bleeding = nx::test::entityDefinition();
@@ -626,10 +626,50 @@ TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtAndWh
     ASSERT_GT(shot.entities.front().health, nx::HitPoints{});
     EXPECT_NEAR(dealt.damage.value(), (bleeding.health - shot.entities.front().health).value(), 1e-3F);
     ASSERT_EQ(shot.bloodSprays.size(), 1U);
-    EXPECT_EQ(dealt.position, shot.bloodSprays.front().position) << "where the round met it";
+    EXPECT_GT(dealt.headTop.z, shot.bloodSprays.front().position.z) << "over where the round met it";
     EXPECT_TRUE(game().snapshotFor(other).damageDealt.empty()) << "its shooter's alone";
     game().tick({});
     EXPECT_TRUE(game().snapshotFor(player).damageDealt.empty()) << "the tick's alone";
+}
+
+TEST_F(GameTest, AHitShowsItsDamageOverItsVictimsHeadWhereverItMetItStandingOrDucked) {
+    // The test model's head rises this far over its pelvis, at its origin's height; the box map holds a
+    // body's origin on its floor, its legs under it.
+    const float headOverOrigin = nx::test::kPlayerHitboxes.front().bounds.max.z;
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "usp");
+
+    // In its chest.
+    const nx::Vec3 standing = game().snapshotFor(victim).player.origin;
+    const cs::PlayerSnapshot inTheChest =
+        press(attacker, {cs::Button::Attack}, {.pitch = nx::Degrees{14.0F}});
+    ASSERT_EQ(inTheChest.damageDealt.size(), 1U);
+    const cs::DamageDealt& chest = inTheChest.damageDealt.front();
+    EXPECT_FALSE(chest.isHead);
+    EXPECT_NEAR(chest.headTop.z, standing.z + headOverOrigin, kTolerance) << "over the top of its head";
+    EXPECT_NEAR(chest.headTop.y, kDuelY, kTolerance) << "over its middle";
+    EXPECT_NEAR(chest.headTop.x, standing.x, cs::kStandingBox.max.x);
+    std::ignore = press(attacker, {});
+    std::ignore = play(attacker, kReadyTicks);
+
+    // Ducked, low in its head: over its top, as low as its body went. Caught as it ducks, as the box map
+    // holds a ducked body no more than its feet, and a player that sends no command keeps where it is.
+    for (std::uint32_t tick = 0;
+         tick < game().time().rate.value() && !game().snapshotFor(victim).player.isDucked; ++tick) {
+        std::ignore = press(victim, {cs::Button::Duck});
+    }
+    ASSERT_TRUE(game().snapshotFor(victim).player.isDucked);
+    const nx::Vec3 ducked = game().snapshotFor(victim).player.origin;
+    ASSERT_LT(ducked.z, standing.z);
+    const cs::PlayerSnapshot lowInTheHead =
+        press(attacker, {cs::Button::Attack}, {.pitch = nx::Degrees{21.0F}});
+    ASSERT_EQ(lowInTheHead.damageDealt.size(), 1U);
+    const cs::DamageDealt& head = lowInTheHead.damageDealt.front();
+    EXPECT_TRUE(head.isHead);
+    EXPECT_NEAR(head.headTop.z, ducked.z + headOverOrigin, kTolerance) << "over the top of its head, ducked";
 }
 
 TEST_F(GameTest, AnEntitysBodyOfAKindThatDoesNotBleedShedsNoBloodAsItIsHurt) {

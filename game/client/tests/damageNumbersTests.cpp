@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
-// The damage numbers: how a number shows as it ages, what it says, hud_damagenumbers, and the numbers
-// showing, at most so many, gone once their life is over.
+// The damage numbers: how a number shows as it ages, where over the head it is drawn, what it says,
+// hud_damagenumbers, and the numbers showing, at most so many, gone once their life is over.
 
 #include <gtest/gtest.h>
 
@@ -24,10 +24,12 @@ namespace {
 constexpr float kTolerance = 1e-5F;
 
 /// A look of round times: a life of a second, fading in over a tenth, growing from a quarter of its size
-/// to 1.5 over 0.2, settling over the next 0.2, and over its last 0.4 fading out shrinking to half.
+/// to 1.5 over 0.2, settling over the next 0.2, and over its last 0.4 fading out shrinking to half; its
+/// digits a hundredth of the screen over the head, rising a tenth of it, up to 0.02 of it to a side.
 [[nodiscard]] auto roundLook() -> cs::DamageNumberLook {
     return {.font = {.family = "Square", .weight = 400},
             .height = 0.05F,
+            .gap = 0.01F,
             .color = {.red = 255, .green = 255, .blue = 255},
             .headColor = {.red = 255},
             .outline = 0.1F,
@@ -78,6 +80,26 @@ TEST(DamageNumberTest, ANumberRisesEasingOutAndFadesOutShrinkingUntilItsLifeIsOv
     EXPECT_NEAR(fading.scale, 0.75F, kTolerance) << "halfway to half its size";
     EXPECT_LT(poseAt(0.95F).opacity, fading.opacity);
     EXPECT_FALSE(cs::damageNumberPoseAt(roundLook(), nx::Seconds{1.0F}).has_value());
+}
+
+TEST(DamageNumberTest, ANumbersDigitsStandItsGapOverTheHeadItsHitMetAndRiseFromThereToASide) {
+    constexpr float kScreenHeight = 1000.0F;
+    constexpr float kFootBelowMiddle = 12.0F;
+    const cs::DamageNumberLook look = roundLook();
+    // A near head and a far one: the same gap over either.
+    for (const nx::render::ScreenPoint head : {nx::render::ScreenPoint{.x = 960.0F, .y = 300.0F},
+                                               nx::render::ScreenPoint{.x = 400.0F, .y = 520.0F}}) {
+        const nx::render::ScreenPoint born =
+            cs::damageNumberMiddleOf(look, poseAt(0.0F), 0.0F, head, kScreenHeight, kFootBelowMiddle);
+        EXPECT_NEAR(born.x, head.x, kTolerance);
+        EXPECT_NEAR(born.y + kFootBelowMiddle, head.y - 10.0F, kTolerance)
+            << "its digits' foot 10 pixels over";
+        const cs::DamageNumberPose risen = poseAt(0.5F);
+        const nx::render::ScreenPoint later =
+            cs::damageNumberMiddleOf(look, risen, -1.0F, head, kScreenHeight, kFootBelowMiddle);
+        EXPECT_NEAR(later.x, head.x - 20.0F, kTolerance) << "the whole spread to the left";
+        EXPECT_NEAR(born.y - later.y, risen.rise * 100.0F, kTolerance) << "its share of the rise up";
+    }
 }
 
 TEST(DamageNumberTest, ANumberSaysTheWholePointsToTheNearestOneAtLeast) {
