@@ -408,6 +408,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .bloodSprays = bloodSprays,
                           .bloodStreams = bloodStreams,
                           .streakSplashes = streakSplashes,
+                          .damageDealt = player.damageDealt,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
@@ -426,6 +427,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
         player.wasPlaced = false;
         player.sounds.clear();
         player.hurtFrom.reset();
+        player.damageDealt.clear();
     }
     for (const PlayerCommand& command : commands) {
         runCommand(playerAt(command.player), command.command);
@@ -716,6 +718,11 @@ void Game::attackPlayer(Player& attacker, Player& victim, const nx::game::Attack
     const PlayerHarmed harmed =
         harmPlayer(victim.status, victim.timedHarms, PlayerHarm{.damage = damage, .kind = HarmKind::Bullet},
                    victim.lastHitGroup, armor);
+    if (harmed.damage > nx::Damage{}) {
+        attacker.damageDealt.push_back({.position = attack.trace.end,
+                                        .damage = harmed.damage,
+                                        .isHead = victim.lastHitGroup == HitGroup::Head});
+    }
     makeSound(victim, painOf(rules, victim.status, victim.lastHitGroup, harmed.isArmored));
     if (harmed.isKilled) {
         die(victim, &attacker);
@@ -904,6 +911,11 @@ void Game::attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::
         return;
     }
     const nx::game::Harm harm = nx::game::attackEntity(m_world, entity, attack);
+    if (harm.dealt > nx::Damage{} && (m_world.has<Hostage>(entity) || m_world.has<EntityBody>(entity))) {
+        player.damageDealt.push_back({.position = attack.trace.end,
+                                      .damage = harm.dealt,
+                                      .isHead = hitGroupOf(attack.trace) == HitGroup::Head});
+    }
     if (m_world.has<Hostage>(entity)) {
         // The hostage's TakeDamage takes it from its attacker's account.
         player.status.money = addMoney(player.status.money,

@@ -922,7 +922,8 @@ The planned layout; today `entities.toml`
 `lightStyles.toml` and `environment.toml` ([05 §8](05-rendering.md#8-bsp-world)), `economy.toml` (section 6), `hitGroups.toml`,
 `blood.toml` and `playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
 ([11 §3](11-audio.md#3-original-semantics-to-preserve)), `use.toml`
-([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)) and `characters.toml` (section 2)
+([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)), `damageNumbers.toml`
+([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)) and `characters.toml` (section 2)
 exist. The hull sizes are not data:
 `cs.shared` holds them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
@@ -941,6 +942,7 @@ data/cstrike/
 ├── loadouts.toml       # what each team spawns with
 ├── lightStyles.toml    # the light styles the game sets as a map starts
 ├── environment.toml    # what the game shows of every map's world over what it sets: a mod's sky
+├── damageNumbers.toml  # how the damage of the player's hits shows over what they hit
 ├── footsteps.toml      # the sounds of a player's feet
 ├── breath.toml         # the sounds of a player's breath in water
 ├── use.toml            # the sounds of a player's use key

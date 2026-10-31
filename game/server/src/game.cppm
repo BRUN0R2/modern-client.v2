@@ -125,8 +125,8 @@ namespace cs {
 /// and what the tick did to it and made it make, which its client is told of; the character it plays
 /// as, where it looks (pev->v_angle), how its model plays, and the seed of the command it runs, which what
 /// it does draws from (random_seed); the hit group an attack last met it in (m_LastHitGroup), and the
-/// share of its speed a hit slowed it down to (m_flVelocityModifier). It joins dead, and lives once it
-/// spawns.
+/// share of its speed a hit slowed it down to (m_flVelocityModifier); and what its hits dealt the bodies
+/// they met in the tick, which its client shows. It joins dead, and lives once it spawns.
 struct Player {
     Team team;
     std::string name;
@@ -144,6 +144,7 @@ struct Player {
     std::uint32_t spawnsThisRound = 0;  ///< m_iNumSpawns.
     nx::GameTime spawnedAt{};           ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
     std::optional<HurtFrom> hurtFrom{}; ///< In the tick: where the last attack it took came from.
+    std::vector<DamageDealt> damageDealt{}; ///< In the tick: what its hits dealt, in their order.
     RoundTimer roundTimer{};
     std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
     bool wasPlaced = false;                      ///< In the tick.
@@ -366,8 +367,9 @@ private:
     /// it but in the legs and ducked, knocked back while it
     /// moves slow enough, else small, slowed down; its armor takes its share, its attacker's weapon's
     /// times the armor's ratio (WeaponHarm::armorRatio), and it loses its whole points (harmPlayer), heard
-    /// in its pain (painOf); killed by it, it dies, killed by `attacker` (die). The punch's and the
-    /// blood's draws come from streams of the attacker's command and the victim.
+    /// in its pain (painOf), what it lost told to the attacker's client (DamageDealt); killed by it, it
+    /// dies, killed by `attacker` (die). The punch's and the blood's draws come from streams of the
+    /// attacker's command and the victim.
     void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
     /// A body an attack draws blood from, as SpawnBlood and TraceBleed take it: the body, the damage the
     /// attack dealt it once where it met it took its share, where it met it, and the palette entry of its
@@ -450,7 +452,8 @@ private:
     /// another player's body as attackPlayer deals it; to another entity as its kind takes it
     /// (nx::game::attackEntity), a hostage it hurts costing it its money (hostageHarmCost), and an
     /// entity's body of a type that bleeds (EntityDefinition::bloodColor) shedding the blood of what it
-    /// was dealt (bleed), drawn from a stream of the attack's command and the entity.
+    /// was dealt (bleed), drawn from a stream of the attack's command and the entity; what it dealt a
+    /// hostage or an entity's body told to the player's client (DamageDealt).
     void attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::Attack& attack);
     /// What the texture a trace from `start` to `end` met, `hit`, is made of, as UTIL_TextureHit finds
     /// it: flesh for a body; of the world's or a brush entity's model, as materials.txt tags it; none for

@@ -37,6 +37,17 @@ struct Camera {
 /// Map space to clip space.
 [[nodiscard]] auto viewProjectionMatrix(const Camera& camera, float aspect) noexcept -> Mat4;
 
+/// A point of a target, in pixels from its top left: x to the right, y down.
+struct ScreenPoint {
+    float x = 0.0F;
+    float y = 0.0F;
+};
+
+/// Where `point` of the map shows on a target `width` by `height` pixels that `viewProjection` draws, be
+/// it on the target or off it; none for a point not ahead of the eye.
+[[nodiscard]] auto screenPointOf(const Mat4& viewProjection, Vec3 point, float width, float height) noexcept
+    -> std::optional<ScreenPoint>;
+
 /// Where what a renderer draws lies among the depths.
 enum class DepthLayer : std::uint8_t {
     World,     ///< Among the world's.

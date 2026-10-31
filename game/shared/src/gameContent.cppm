@@ -18,6 +18,7 @@ import :footsteps;
 import :breath;
 import :hitGroups;
 import :blood;
+import :damageNumbers;
 import :playerHarm;
 import :use;
 import :characters;
@@ -42,8 +43,9 @@ enum class GameContentError : std::uint8_t {
 /// and killed (data/cstrike/playerHarm.toml), what it hears as it uses (data/cstrike/use.toml), the
 /// characters each team plays as (data/cstrike/characters.toml), the world's light styles
 /// (data/cstrike/lightStyles.toml), what it shows of every map's world over what the map sets
-/// (data/cstrike/environment.toml), and what the textures are made of (the
-/// installation's sound/materials.txt; none tagged without it).
+/// (data/cstrike/environment.toml), how the damage of a player's hits shows
+/// (data/cstrike/damageNumbers.toml), and what the textures are made of (the installation's
+/// sound/materials.txt; none tagged without it).
 struct GameContent {
     nx::assets::Vfs vfs;
     nx::game::EntityClasses entityClasses;
@@ -60,6 +62,7 @@ struct GameContent {
     TextureMaterials materials;
     WorldLightStyles lightStyles;
     WorldEnvironment environment;
+    DamageNumberLook damageNumbers;
     EntityCatalog entities{}; ///< Append-only definitions loaded explicitly by the host or a mod.
 };
 

@@ -58,6 +58,17 @@ auto viewProjectionMatrix(const Camera& camera, float aspect) noexcept -> Mat4 {
     return projectionMatrix(camera.fieldOfView, aspect) * viewMatrix(camera);
 }
 
+auto screenPointOf(const Mat4& viewProjection, Vec3 point, float width, float height) noexcept
+    -> std::optional<ScreenPoint> {
+    const Vec4 clip = viewProjection * extend(point, 1.0F);
+    // w is how far ahead of the eye the point is.
+    if (!(clip.w > 0.0F)) {
+        return std::nullopt;
+    }
+    return ScreenPoint{.x = (1.0F + (clip.x / clip.w)) * 0.5F * width,
+                       .y = (1.0F - (clip.y / clip.w)) * 0.5F * height};
+}
+
 auto depthMappingOf(DepthLayer layer) noexcept -> DepthMapping {
     if (layer == DepthLayer::ViewModel) {
         return DepthMapping{.scale = kViewModelDepthShare, .offset = 1.0F - kViewModelDepthShare};

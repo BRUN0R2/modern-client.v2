@@ -510,6 +510,34 @@ TEST_F(GameTest, AShotSpraysTheBloodOfAnEntitysBodyOfAKindThatBleedsTheWayItWent
     EXPECT_TRUE(shot.bloodStreams.empty()) << "a player's head's alone";
 }
 
+TEST_F(GameTest, EachHitOnAnEntitysBodyTellsItsShooterAloneTheDamageItDealtAndWhere) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const auto other = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Other");
+    cs::EntityDefinition bleeding = nx::test::entityDefinition();
+    bleeding.bloodColor = std::uint8_t{247};
+    const auto type = entityType(bleeding);
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    constexpr float kEntityAhead = 200.0F;
+    const auto created = game().createEntity(*type, {.origin = {.x = kEntityAhead, .y = 32, .z = 40}});
+    ASSERT_TRUE(created.has_value()) << (created ? "" : nx::describe(created.error()));
+    game().give(player, *content().weapons.indexOf("ak47"));
+    std::ignore = play(player, kPastTheFirstFreeze);
+
+    const cs::PlayerSnapshot shot = press(player, {cs::Button::Attack}, {.pitch = nx::Degrees{5.0F}});
+    ASSERT_EQ(shot.damageDealt.size(), 1U);
+    const cs::DamageDealt& dealt = shot.damageDealt.front();
+    EXPECT_TRUE(dealt.isHead) << "its model's one hitbox its head";
+    // As much as its health lost, the hit leaving it alive.
+    ASSERT_EQ(shot.entities.size(), 1U);
+    ASSERT_GT(shot.entities.front().health, nx::HitPoints{});
+    EXPECT_NEAR(dealt.damage.value(), (bleeding.health - shot.entities.front().health).value(), 1e-3F);
+    ASSERT_EQ(shot.bloodSprays.size(), 1U);
+    EXPECT_EQ(dealt.position, shot.bloodSprays.front().position) << "where the round met it";
+    EXPECT_TRUE(game().snapshotFor(other).damageDealt.empty()) << "its shooter's alone";
+    game().tick({});
+    EXPECT_TRUE(game().snapshotFor(player).damageDealt.empty()) << "the tick's alone";
+}
+
 TEST_F(GameTest, AnEntitysBodyOfAKindThatDoesNotBleedShedsNoBloodAsItIsHurt) {
     const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
     const auto type = entityType();

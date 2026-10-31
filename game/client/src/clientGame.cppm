@@ -132,6 +132,10 @@ public:
     [[nodiscard]] inline auto takeStreakSplashes() -> std::vector<StreakSplash> {
         return std::exchange(streakSplashes, {});
     }
+    /// What the player's hits dealt since the last call, in their order: the numbers its client shows.
+    [[nodiscard]] inline auto takeDamageDealt() -> std::vector<DamageDealt> {
+        return std::exchange(m_damageDealt, {});
+    }
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye is
@@ -160,6 +164,7 @@ private:
     std::vector<BloodSpray> bloodSprays;           ///< Since takeBloodSprays.
     std::vector<BloodStream> bloodStreams;         ///< Since takeBloodStreams.
     std::vector<StreakSplash> streakSplashes;      ///< Since takeStreakSplashes.
+    std::vector<DamageDealt> m_damageDealt;        ///< Since takeDamageDealt.
 };
 
 } // namespace cs
