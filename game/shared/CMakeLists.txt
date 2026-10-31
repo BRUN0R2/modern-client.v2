@@ -33,6 +33,7 @@ nxAddModuleLibrary(csShared
         src/characters.cppm
         src/playerAnimation.cppm
         src/snapshot.cppm
+        src/entityKnockback.cppm
         src/entityCatalog.cppm
     SOURCES
         src/movement.cpp
@@ -59,6 +60,7 @@ nxAddModuleLibrary(csShared
         src/gameMap.cpp
         src/characters.cpp
         src/playerAnimation.cpp
+        src/entityKnockback.cpp
         src/entityCatalog.cpp
     DEPENDS
         nx::core

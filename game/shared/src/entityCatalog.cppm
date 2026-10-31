@@ -14,6 +14,7 @@ import nx.ecs;
 import :modelFiles;
 import :studio;
 import :hitGroups;
+import :entityKnockback;
 
 export namespace cs {
 
@@ -66,6 +67,8 @@ struct EntityDefinition {
     /// The palette entry of its blood's color (m_bloodColor: 247, BLOOD_COLOR_RED); none for a body that
     /// does not bleed (DONT_BLEED).
     std::optional<std::uint8_t> bloodColor{};
+    /// How the attacks that hurt its body and leave it alive knock it back; none for a body they do not.
+    std::optional<EntityKnockback> knockback{};
 };
 
 /// The sequences of a type's model its body plays by its EntityMotion, found by their names.
@@ -157,5 +160,6 @@ struct nx::meta::Description<cs::EntityDefinition> {
         nx::meta::field<&cs::EntityDefinition::deathSequence>("deathSequence"),
         nx::meta::field<&cs::EntityDefinition::hitGroups>("hitGroups"),
         nx::meta::field<&cs::EntityDefinition::bloodColor>("bloodColor"),
+        nx::meta::field<&cs::EntityDefinition::knockback>("knockback"),
     };
 };

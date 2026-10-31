@@ -58,6 +58,52 @@ TEST_F(EntityBodyTest, DamageUsesTheHitGroupAndDeathRemovesSolidityOnce) {
     EXPECT_EQ(nx::game::attackEntity(world, *made, {.damage = nx::Damage{100}}).damage, nx::Damage{});
 }
 
+TEST_F(EntityBodyTest, AHitKnocksABodyOfAKnockbackBackHoldingItsWalkThenSlowingIt) {
+    auto files = nx::assets::Vfs::create(std::array{directory.path()});
+    ASSERT_TRUE(files.has_value());
+    cs::EntityDefinition definition = nx::test::entityDefinition();
+    definition.id = "knockedBack";
+    definition.knockback = cs::EntityKnockback{.pushPerDamage = nx::UnitsPerSecond{4},
+                                               .mostPushSpeed = nx::UnitsPerSecond{300},
+                                               .staggerTime = nx::Seconds{0.1F},
+                                               .slowShare = 0.5F,
+                                               .slowRecovery = nx::Seconds{0.5F}};
+    auto knocked = catalog.add(*files, definition, cs::ModelTextures::Skipped);
+    ASSERT_TRUE(knocked.has_value()) << (knocked ? "" : nx::describe(knocked.error()));
+    auto made = cs::spawnEntityBody(world, *hulls, *knocked, {});
+    ASSERT_TRUE(made.has_value());
+    auto still = cs::spawnEntityBody(world, *hulls, type, {.origin = {.y = 200}});
+    ASSERT_TRUE(still.has_value());
+    // Shot along x, 20 points dealt in the generic group: pushed at 80 units a second the way the shot went.
+    const nx::Vec3 away{.x = 1.0F};
+    ASSERT_FALSE(
+        nx::game::attackEntity(world, *made, {.damage = nx::Damage{20}, .direction = away}).isKilled);
+    ASSERT_FALSE(
+        nx::game::attackEntity(world, *still, {.damage = nx::Damage{20}, .direction = away}).isKilled);
+    EXPECT_FLOAT_EQ(world.get<cs::EntityBody>(*made)->movement.velocity.x, 80.0F);
+    EXPECT_EQ(world.get<cs::EntityBody>(*still)->movement.velocity, nx::Vec3{}) << "a type of no knockback";
+    // Walking back at the shooter, it is carried away, held back while it is staggered.
+    const auto walkBack = [&](nx::ecs::Entity entity) {
+        return cs::EntityCommand{.entity = entity,
+                                 .command = {.move = {.forward = nx::UnitsPerSecond{-160}}}};
+    };
+    std::ignore = cs::runEntityBodies(world, *hulls, std::array{walkBack(*made), walkBack(*still)});
+    EXPECT_NEAR(world.get<cs::EntityBody>(*made)->movement.velocity.x, 80.0F, 1e-3F)
+        << "its walk held back, the push carries it";
+    EXPECT_LT(world.get<cs::EntityBody>(*still)->movement.velocity.x, 0.0F) << "walking back";
+    const auto shareAfter = [&](int ticks) {
+        for (int tick = 0; tick < ticks; ++tick) {
+            nx::game::advanceTick(world);
+            std::ignore = cs::runEntityBodies(world, *hulls, std::array{walkBack(*made)});
+        }
+        const nx::game::TickTime time = nx::game::tickTimeOf(world);
+        return cs::walkShareOf(*definition.knockback, world.get<cs::EntityBody>(*made)->knockedBack, time.now,
+                               time.rate);
+    };
+    EXPECT_FLOAT_EQ(shareAfter(10), 0.5F) << "past its stagger, at half its speed";
+    EXPECT_FLOAT_EQ(shareAfter(50), 1.0F) << "back to the whole of it";
+}
+
 TEST_F(EntityBodyTest, RetiredGenerationsNeverControlAReplacementBody) {
     auto first = cs::spawnEntityBody(world, *hulls, type, {});
     ASSERT_TRUE(first.has_value());

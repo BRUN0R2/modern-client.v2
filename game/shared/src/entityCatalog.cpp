@@ -35,6 +35,12 @@ namespace {
                             "hit-group shares must be finite and nonnegative");
         }
     }
+    if (definition.knockback && !isValid(*definition.knockback)) {
+        return nx::fail(
+            EntityError::InvalidDefinition,
+            "a knockback must be finite and none of it negative, its most push speed and its slow "
+            "share more than none, the slow share at most 1");
+    }
     return {};
 }
 } // namespace
