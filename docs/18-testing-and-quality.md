@@ -108,7 +108,10 @@ readers expected, and the readers now follow them
   including missing requested validation, fails the test. A fixture makes that assertion fatal
   in `SetUp`, before any test body can access its device. Shared classification lives in
   `engine/testSupport/vulkanAvailability.hpp`. The sprite fog regression keeps each referenced model
-  alive throughout its draws and verifies visibility before comparing pixels.
+  alive throughout its draws and verifies visibility before comparing pixels. Compile-time checks reject
+  temporary map, studio-model and sprite-model borrows at render descriptors and instances. A world
+  test also checks that Vulkan validation reports no unused vertex attributes when its sky pipeline
+  is created.
 - **Windows:** the window tests run on SDL's offscreen video driver (`ENVIRONMENT` of
   `nxAddTest`): real windows without a display, in CI and on a developer's desktop alike.
 - **Files:** a test that reads the file system writes its input into a

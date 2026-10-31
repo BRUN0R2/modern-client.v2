@@ -451,7 +451,7 @@ auto SpriteRenderer::prepare(const SpriteDraw& draw, const WorldLight& light) ->
     const auto frustum = frustumPlanes(draw.camera, draw.aspect);
     const Mat4 toClip = viewProjectionMatrix(draw.camera, draw.aspect);
     for (const SpriteInstance& instance : draw.instances) {
-        const SpriteModel& model = instance.model;
+        const SpriteModel& model = instance.model.get();
         if (model.m_frames.empty()) {
             continue;
         }

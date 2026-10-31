@@ -70,8 +70,13 @@ constexpr std::uint32_t kAlbedoBinding = 0;
 constexpr std::uint32_t kAlbedoSamplerBinding = 1;
 constexpr std::uint32_t kEntityUniformBinding = 0;
 
+constexpr rhi::VertexAttribute kWorldPositionAttribute{
+    .location = 0,
+    .format = rhi::VertexFormat::Float3,
+    .offset = 0,
+};
 constexpr std::array kWorldVertexAttributes{
-    rhi::VertexAttribute{.location = 0, .format = rhi::VertexFormat::Float3, .offset = 0},
+    kWorldPositionAttribute,
     rhi::VertexAttribute{
         .location = 1, .format = rhi::VertexFormat::Float2, .offset = offsetof(WorldVertex, u)}, // NOLINT
     rhi::VertexAttribute{.location = 2,
@@ -85,6 +90,7 @@ constexpr std::array kWorldVertexAttributes{
     rhi::VertexAttribute{.location = 5,
                          .format = rhi::VertexFormat::Float,
                          .offset = offsetof(WorldVertex, waveBase)}}; // NOLINT
+constexpr std::array kSkyVertexAttributes{kWorldPositionAttribute};
 
 /// A brush model's uniform: its rendercolor, and its renderamt in `color.w`, from 0 to 1; where it is
 /// drawn this frame, and in `origin.w` the height of its waves. The world's is 0.
@@ -286,13 +292,12 @@ struct MapTextures {
                              .width = static_cast<float>(kCheckerSize),
                              .height = static_cast<float>(kCheckerSize)};
     textures.owned.push_back(std::move(*checker));
-    textures.uses.assign(desc.map.textures().size(), missing);
-    for (std::size_t index = 0; index < desc.map.textures().size(); ++index) {
-        const std::optional<assets::MipTexture>& slot = desc.map.textures()[index];
+    const auto slots = desc.map.get().textures();
+    textures.uses.assign(slots.size(), missing);
+    for (auto&& [slot, use] : std::views::zip(slots, textures.uses)) {
         if (!slot) {
             continue;
         }
-        TextureUse& use = textures.uses[index];
         use.kind = surfaceKindOf(slot->name);
         use.width = static_cast<float>(slot->width);
         use.height = static_cast<float>(slot->height);
@@ -791,7 +796,7 @@ struct SkyLayers {
 
 auto BspWorld::create(rhi::Device& device, rhi::CommandList& commands, const BspWorldDesc& desc)
     -> Result<BspWorld, WorldError> {
-    const assets::BspView& map = desc.map;
+    const assets::BspView& map = desc.map.get();
     auto skyLayers = skyLayersOf(desc.sky, desc.encoding);
     if (!skyLayers) {
         return std::unexpected{std::move(skyLayers.error())};
@@ -1405,6 +1410,12 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
     rhi::Device& device = *m_device;
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(WorldVertex), .attributes = kWorldVertexAttributes}};
+    const std::array skyVertexBuffers{
+        rhi::VertexBufferLayout{
+            .stride = sizeof(WorldVertex),
+            .attributes = kSkyVertexAttributes,
+        },
+    };
     const std::array layouts{m_frameLayout.get(), m_textureLayout.get(), m_entityLayout.get()};
     const std::array skyLayouts{m_frameLayout.get()};
     // The world and the sky, opaque; a brush entity drawn blended: its textures (but TransColor)
@@ -1421,30 +1432,31 @@ auto BspWorld::createPipelines(rhi::Format colorFormat) -> Result<void, rhi::Rhi
     enum class Depth : std::uint8_t { Tested, TestedAndWritten };
     const auto pipeline = [&](std::string_view label, std::string_view vertex, std::string_view fragment,
                               std::optional<rhi::BlendState> blend, Depth depth,
-                              std::span<const rhi::BindGroupLayoutHandle> groupLayouts) {
+                              std::span<const rhi::BindGroupLayoutHandle> groupLayouts,
+                              std::span<const rhi::VertexBufferLayout> buffers) {
         const std::array targets{rhi::ColorTarget{.format = colorFormat, .blend = blend}};
         return device.createRenderPipeline(
             {.label = label,
              .vertex = {.shader = m_shader.get(), .entryPoint = vertex},
              .fragment = {.shader = m_shader.get(), .entryPoint = fragment},
-             .vertexBuffers = vertexBuffers,
+             .vertexBuffers = buffers,
              .colorTargets = targets,
              .depth = rhi::DepthState{.isWriteEnabled = depth == Depth::TestedAndWritten,
                                       .compare = rhi::CompareOp::Greater},
              .bindGroupLayouts = groupLayouts});
     };
-    auto opaque =
-        pipeline("world", "vertexMain", "fragmentMain", std::nullopt, Depth::TestedAndWritten, layouts);
+    auto opaque = pipeline("world", "vertexMain", "fragmentMain", std::nullopt, Depth::TestedAndWritten,
+                           layouts, vertexBuffers);
     auto sky = pipeline("world.sky", "skyVertexMain", "skyFragmentMain", std::nullopt,
-                        Depth::TestedAndWritten, skyLayouts);
+                        Depth::TestedAndWritten, skyLayouts, skyVertexBuffers);
     auto solid = pipeline("world.solid", "vertexMain", "solidFragmentMain", std::nullopt,
-                          Depth::TestedAndWritten, layouts);
-    auto texture =
-        pipeline("world.texture", "vertexMain", "textureFragmentMain", alphaBlend, Depth::Tested, layouts);
+                          Depth::TestedAndWritten, layouts, vertexBuffers);
+    auto texture = pipeline("world.texture", "vertexMain", "textureFragmentMain", alphaBlend, Depth::Tested,
+                            layouts, vertexBuffers);
     auto color = pipeline("world.color", "vertexMain", "colorFragmentMain", alphaBlend,
-                          Depth::TestedAndWritten, layouts);
+                          Depth::TestedAndWritten, layouts, vertexBuffers);
     auto additive = pipeline("world.additive", "vertexMain", "additiveFragmentMain", additiveBlend,
-                             Depth::Tested, layouts);
+                             Depth::Tested, layouts, vertexBuffers);
     // Decals over the faces they lie on: blended, their depth tested against the faces' pulled toward
     // the eye; written only on a TransColor entity, whose mode leaves the original's depth writes on
     // around its decals. Drawn as linear light, each blends as the original blends display colors: what
