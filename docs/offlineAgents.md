@@ -65,7 +65,10 @@ through collision and door touches. Bullets and the knife meet posed hitboxes, w
 definition's hit-group multipliers. Death removes solidity once, stops movement and plays
 the death sequence; subsequent attacks take no more health. Melee uses a solid trace and
 a server-clock cooldown, which also bounds looping attack animations. An NPC strike on a
-player enters the existing harm/death pipeline.
+player enters the existing harm/death pipeline. The bodies pass through each other, and their strikes
+through them, as a mod's horde does (its semiclip): a horde flows through a doorway and round the player
+it strikes at, where its bodies jammed against each other, flailed and struck each other; the players'
+bodies stop them.
 Players attacking each other go through `cs::Game::attackPlayer` instead, with the players' hit
 groups, armor and combat rules ([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
 
