@@ -97,7 +97,7 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
         isPositive(rules->attackDistance.value()) && isPositive(rules->arrivalDistance.value()) &&
         isPositive(rules->replanDistance.value()) && isPositive(rules->huntRadius.value()) &&
         isPositive(rules->quotaInterval.count()) && isNoneOrMore(rules->replanShare) &&
-        isNoneOrMore(rules->shortTermMemory.count());
+        isNoneOrMore(rules->braking) && isNoneOrMore(rules->shortTermMemory.count());
     if (!isValidRules) {
         return nx::fail(
             BotError::InvalidData,
@@ -174,7 +174,8 @@ auto brainRulesOf(const BotRules& rules, nx::Seconds reactionTime) noexcept -> n
                              .threatRecency = rules.threatRecency,
                              .threatMargin = rules.threatMargin,
                              .memoryLimit = rules.memoryLimit,
-                             .reactionTime = reactionTime};
+                             .reactionTime = reactionTime,
+                             .braking = rules.braking};
 }
 
 } // namespace cs

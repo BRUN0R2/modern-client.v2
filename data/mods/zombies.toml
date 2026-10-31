@@ -8,6 +8,10 @@ sightRange = 2048.0
 fieldOfView = 180.0
 memoryLifetime = 6.0
 arrivalDistance = 8.0
+# How fast a zombie's body loses speed with nothing driving it on, a share of it a second (the ground's
+# friction, sv_friction 4): it slows down by it for the end of its way and for a corner, rather than
+# overshoot them and circle back.
+braking = 4.0
 replanDistance = 24.0
 # A far goal that moves less than a quarter of how far it is keeps its way, its end slid to it; where a
 # zombie placed a player holds 3 seconds against a vaguer or farther noise of it, as a bot's does.

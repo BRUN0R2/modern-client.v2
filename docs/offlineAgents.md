@@ -96,7 +96,18 @@ again, what the cache keeps left aside, and plays the map again on it, as Condit
 the game once it analyzed a map. A brain's decision that moves is steered along its corridor among the
 six nearest living bodies, players' and zombies', and the walls about it (`nx::agents::Brain::steer`,
 `nx::navigation::Corridor::steer`: Detour's obstacle avoidance), its turns taken wide, waiting when it
-must. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
+must. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
+to friction (GoldSrc's PM_Accelerate and PM_Friction). Driven straight at the next point of its way, it
+kept its drift across the way and swung round the point, by two thirds of a turn and more, before it got
+within its arrival distance: at the end of its way, at a sharp corner, a doorway's jambs. So it is driven
+the way its velocity must change to become the one it steered to (`nx::agents::Intent::drive`), as
+DetourCrowd integrates an agent's velocity toward its desired one, which cancels the drift; and it slows
+down by the ground's friction (`braking`, sv_friction's 4: the speed it can still stop from is four
+times how far it is) for the end of a way it stops at, and for each corner it sees ahead, to the cosine
+of half the turn there, measured to the way on four of its radii past the corner, so that a corner the
+mesh rounds into short turns counts as the turn it is (`nx::agents::Intent::approaches`); it arrives
+within its arrival distance across and a step of height, as it reaches a corner. A body that waits as
+the others make way is not stuck. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)
 while it chases. A body farther across from its corridor than its replan distance, teleported or

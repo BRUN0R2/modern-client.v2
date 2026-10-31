@@ -757,6 +757,201 @@ TEST(AgentBrain, FinishesInvestigationAtTheWalkablePointBelowItsLastObservation)
     EXPECT_TRUE(brain.memories().empty());
 }
 
+/// A body that walks as a GoldSrc player walks on flat ground (PM_Friction, then PM_Accelerate): its speed
+/// falls by four times itself a second, and by no less than a stop speed's 75 four times, and it gains its
+/// wished velocity at five times the wished speed a second; it cannot turn on the spot.
+struct InertialBody {
+    static constexpr float kFriction = 4.0F;
+    static constexpr float kStopSpeed = 75.0F;
+    static constexpr float kAcceleration = 5.0F;
+
+    nx::Vec3 feet{};
+    nx::Vec3 velocity{};
+
+    void walk(const nx::agents::Intent& intent, float maxSpeed, float seconds) {
+        if (const float speed = nx::length(velocity); speed > 0.0F) {
+            const float dropped = std::max(speed, kStopSpeed) * kFriction * seconds;
+            velocity = velocity * (std::max(speed - dropped, 0.0F) / speed);
+        }
+        const nx::Vec3 driven = intent.drivenWay();
+        const float wished = nx::length(driven) > 0.0F ? maxSpeed * intent.speedShare : 0.0F;
+        const float gained = wished - nx::dot(velocity, driven);
+        if (wished > 0.0F && gained > 0.0F) {
+            velocity = velocity + (driven * std::min(kAcceleration * wished * seconds, gained));
+        }
+        feet = feet + (velocity * seconds);
+    }
+};
+
+/// How a walk of an inertial body went: whether it arrived, after how long, and how far its way turned all
+/// told, in radians.
+struct InertialWalk {
+    bool isArrived = false;
+    float seconds = 0.0F;
+    float turned = 0.0F;
+};
+
+/// The walk of `body`, a zombie's at 160 units a second, to the goal of `brain`, decided and steered 100
+/// times a second for at most 10 seconds.
+auto walkInertially(nx::agents::Brain& brain, nx::navigation::NavigationQuery& query, InertialBody body)
+    -> InertialWalk {
+    constexpr float kMaxSpeed = 160.0F;
+    constexpr int kTicks = 1000;
+    constexpr float kTick = 0.01F;
+    constexpr float kTurning = 5.0F; ///< Slower than this, its way turns no way.
+    InertialWalk walked;
+    std::optional<float> heading;
+    for (int tick = 0; tick < kTicks; ++tick) {
+        nx::agents::Decision decision = brain.decide(body.feet, query);
+        if (decision.behavior == nx::agents::Behavior::Idle) {
+            walked.isArrived = true;
+            break;
+        }
+        if (nx::length(decision.intent.direction) > 0.0F) {
+            brain.steer(decision.intent, body.velocity, nx::UnitsPerSecond{kMaxSpeed}, {}, query);
+        }
+        body.walk(decision.intent, kMaxSpeed, kTick);
+        walked.seconds += kTick;
+        if (nx::length(body.velocity) > kTurning) {
+            const float now = std::atan2(body.velocity.y, body.velocity.x);
+            if (heading) {
+                walked.turned += std::abs(std::remainder(now - *heading, 2.0F * std::numbers::pi_v<float>));
+            }
+            heading = now;
+        }
+    }
+    return walked;
+}
+
+/// The rules of a body that cannot turn on the spot, as a zombie: arriving within 8 units, braking as the
+/// ground's friction stops it.
+auto brakingRules() -> nx::agents::Rules {
+    nx::agents::Rules braking = rules();
+    braking.arrivalDistance = nx::HammerUnits{8.0F};
+    braking.braking = InertialBody::kFriction;
+    return braking;
+}
+
+/// A floor with a block in its far corner, which the way from the top left to the bottom right turns round.
+auto cornerMesh() -> nx::navigation::NavigationMesh {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 1024}, 0);
+    nx::test::addBox(geometry, {.x = 300, .y = 300}, {.x = 1024, .y = 1024, .z = 300});
+    return nx::test::playerMesh(geometry, 0);
+}
+
+TEST(AgentBrain, ABodyThatCannotTurnOnTheSpotReachesAGoalAnywhereAboutItWithoutCirclingIt) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    constexpr float kHalfTurn = std::numbers::pi_v<float>;
+    constexpr float kGrid = 20.0F;
+    // Running across at full speed, a goal about it within 80 units: it turns toward it, stopping and coming
+    // back for one behind it at most, never circling it (driven the way it should go, it swung round some by
+    // two thirds of a turn and more).
+    for (float x = -80.0F; x <= 80.0F; x += kGrid) {
+        for (float y = -40.0F; y <= 120.0F; y += kGrid) {
+            if (std::hypot(x, y) <= brakingRules().arrivalDistance.value()) {
+                continue;
+            }
+            nx::agents::Brain brain{brakingRules()};
+            brain.setGoal(nx::Vec3{.x = x, .y = y});
+            const InertialWalk walked = walkInertially(brain, query, {.velocity = {.y = 160}});
+            EXPECT_TRUE(walked.isArrived) << x << ' ' << y;
+            EXPECT_LT(walked.seconds, 4.0F) << x << ' ' << y;
+            EXPECT_LE(walked.turned, kHalfTurn + 0.1F) << x << ' ' << y;
+        }
+    }
+}
+
+TEST(AgentBrain, ABodyThatCannotTurnOnTheSpotSlowsForItsGoalAndArrivesWithoutCirclingIt) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    // Running across at full speed, its goal close by to its side.
+    brain.setGoal(nx::Vec3{.x = 120});
+    const InertialWalk walked = walkInertially(brain, query, {.velocity = {.y = 160}});
+    EXPECT_TRUE(walked.isArrived);
+    EXPECT_LT(walked.seconds, 3.0F);
+    EXPECT_LT(walked.turned, std::numbers::pi_v<float>) << "it turns toward it, never round it";
+}
+
+TEST(AgentBrain, ABodyThatCannotTurnOnTheSpotSlowsForASharpCornerAndTakesItWithoutCirclingIt) {
+    auto mesh = cornerMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 900, .y = 150});
+    const InertialWalk walked = walkInertially(brain, query, {.feet = {.x = 150, .y = 900}});
+    EXPECT_TRUE(walked.isArrived);
+    EXPECT_LT(walked.turned, std::numbers::pi_v<float>) << "a right angle, and the swing into it";
+}
+
+TEST(AgentBrain, ItsIntentTellsTheCornerItTurnsAtAndTheStopItsWayEndsAtButNotATargetItChases) {
+    auto mesh = cornerMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain moving{brakingRules()};
+    moving.setGoal(nx::Vec3{.x = 900, .y = 150});
+    const nx::agents::Intent intent = moving.decide({.x = 150, .y = 900}, query).intent;
+    const std::span<const nx::agents::Approach> approached = intent.approached();
+    ASSERT_GE(approached.size(), 2U) << "the corners it sees ahead";
+    // Its way turns a right angle round the block's corner, which the mesh rounds into short turns: the
+    // turn is measured over the way on past each, so that the corner is slowed for as a whole.
+    const float sharpest =
+        std::ranges::min(approached | std::views::transform(&nx::agents::Approach::passShare));
+    // Down the strip and out along the other, about three quarters of a right angle: slowed for, not stopped.
+    EXPECT_GT(sharpest, 0.5F);
+    EXPECT_LT(sharpest, 0.9F);
+    EXPECT_TRUE(std::ranges::is_sorted(approached, {}, &nx::agents::Approach::distance))
+        << "the nearest first";
+    // Past the corner, its end among the corners it sees ahead: a stop.
+    const nx::agents::Intent past = moving.decide({.x = 450, .y = 150}, query).intent;
+    ASSERT_FALSE(past.approached().empty());
+    EXPECT_EQ(past.approached().back().passShare, 0.0F);
+    // Chasing a target it sees, it runs at it: the attack ends the chase, no stop.
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    nx::agents::Brain chasing{brakingRules()};
+    chasing.perceive(std::array{nx::agents::Observation{.entity = target, .position = {.x = 150, .y = 600}}},
+                     {}, nx::kDefaultTickRate);
+    const nx::agents::Decision chase = chasing.decide({.x = 150, .y = 900}, query);
+    ASSERT_EQ(chase.behavior, nx::agents::Behavior::Chase);
+    EXPECT_TRUE(std::ranges::none_of(chase.intent.approached(), [](const nx::agents::Approach& point) {
+        return point.passShare == 0.0F;
+    }));
+    // A brain that does not brake approaches nothing.
+    nx::agents::Brain kinematic{rules()};
+    kinematic.setGoal(nx::Vec3{.x = 900, .y = 150});
+    EXPECT_TRUE(kinematic.decide({.x = 150, .y = 900}, query).intent.approached().empty());
+}
+
+TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproaches) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 20});
+    nx::agents::Decision decision = brain.decide({}, query);
+    ASSERT_EQ(decision.intent.approached().size(), 1U) << "its stop alone";
+    brain.steer(decision.intent, {}, nx::UnitsPerSecond{160}, {}, query);
+    // Twenty units short of its stop, braking four times its speed a second: 80 units a second, half its
+    // full.
+    EXPECT_NEAR(decision.intent.speedShare, 0.5F, 0.05F);
+    EXPECT_GT(nx::length(decision.intent.direction), 0.0F) << "it goes on, slower";
+}
+
+TEST(AgentBrain, ItArrivesAcrossOnItsFloorAndNotUnderAGoalAboveIt) {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = 400, .y = 100}, {.x = 700, .y = 400, .z = 60});
+    auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain onTheFloor{rules()};
+    onTheFloor.setGoal(nx::Vec3{.x = 200, .y = 250});
+    EXPECT_EQ(onTheFloor.decide({.x = 197, .y = 250}, query).behavior, nx::agents::Behavior::Idle);
+    nx::agents::Brain upThere{rules()};
+    upThere.setGoal(nx::Vec3{.x = 550, .y = 250, .z = 60});
+    EXPECT_NE(upThere.decide({.x = 550, .y = 250}, query).behavior, nx::agents::Behavior::Idle)
+        << "below it, on the floor, it has not arrived";
+}
+
 TEST(AgentBrain, PreservesTheObservedAimPointSeparatelyFromTheGroundGoal) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};

@@ -16,12 +16,39 @@ constexpr float kLeastSteeredSpeedShare = 0.1F;
 /// How far back from the corner after the next an agent aims, in shares of how far the next is: as
 /// DetourCrowd anticipates a turn (calcSmoothSteerDirection), so that it takes a corner wide.
 constexpr float kTurnAnticipation = 0.5F;
+/// How far past a corner, in its body's radii, the way on is measured from to tell how sharply the way
+/// turns there: about how wide the body turns at its full speed, so that a corner rounded into short turns
+/// counts as the one turn it is.
+constexpr float kTurnSpanRadii = 4.0F;
 /// `vector` across the ground, its height left out.
 [[nodiscard]] auto acrossOf(Vec3 vector) noexcept -> Vec3 {
     return Vec3{.x = vector.x, .y = vector.y};
 }
 [[nodiscard]] auto groundDistance(Vec3 first, Vec3 second) noexcept -> float {
     return std::hypot(first.x - second.x, first.y - second.y);
+}
+/// The point `span` along the way through `points` past its point `from`, across; its last point when the
+/// way ends before.
+[[nodiscard]] auto pointAlong(std::span<const Vec3> points, std::size_t from, float span) noexcept -> Vec3 {
+    for (std::size_t point = from + 1; point < points.size(); ++point) {
+        const float step = groundDistance(points[point - 1], points[point]);
+        if (step >= span && step > 0.0F) {
+            return points[point - 1] + ((points[point] - points[point - 1]) * (span / step));
+        }
+        span -= step;
+    }
+    return points.back();
+}
+/// The share of its full speed a body may pass a corner at, turning from `toCorner` onto `beyond`, both
+/// across: the cosine of half the turn, sqrt((1 + cos turn) / 2): 1 straight on, 0.71 at a right angle,
+/// none turning back. Its turning circle shrinks with the square of its speed.
+[[nodiscard]] auto passShareOf(Vec3 toCorner, Vec3 beyond) noexcept -> float {
+    const float lengths = length(toCorner) * length(beyond);
+    if (lengths <= 0.0F) {
+        return 1.0F;
+    }
+    const float turnCosine = std::clamp(dot(toCorner, beyond) / lengths, -1.0F, 1.0F);
+    return std::sqrt((1.0F + turnCosine) * 0.5F);
 }
 /// Heads `intent` for `point` from `feet`, across the ground: its way and where it faces; as it is when
 /// its feet are right below or above it.
@@ -48,9 +75,9 @@ Brain::Brain(Rules settings) : rules{settings} {
                 rules.replanDistance > HammerUnits{} && rules.reactionTime >= Seconds{} &&
                 std::isfinite(rules.replanShare) && rules.replanShare >= 0.0F &&
                 rules.shortTermMemory >= Seconds{} && rules.threatRecency >= Seconds{} &&
-                rules.threatMargin >= HammerUnits{},
+                rules.threatMargin >= HammerUnits{} && std::isfinite(rules.braking) && rules.braking >= 0.0F,
             "Brain: positive rules, a memory budget, and a reaction time, a replan share, a short-term "
-            "memory and a threat's recency and margin of none or more");
+            "memory, a threat's recency and margin and a braking of none or more");
 }
 
 void Brain::perceive(std::span<const Observation> seen, GameTime now, TickRate rate) {
@@ -259,7 +286,11 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         return decision;
     }
     const Vec3 walkablePosition = corridor->moveAgent(query, feet);
-    if (length(walkablePosition - corridor->target()) <= rules.arrivalDistance.value()) {
+    // Arrived as near its end across as a corner counts as reached, and on its floor: a three-dimensional
+    // measure would leave a body on a slope short of it with no corner to steer to.
+    const Vec3 end = corridor->target();
+    if (groundDistance(walkablePosition, end) <= rules.arrivalDistance.value() &&
+        std::abs(walkablePosition.z - end.z) <= profile.stepHeight.value()) {
         if (selected == nullptr) {
             givenGoal.reset();
         } else if (!selected->isVisible) {
@@ -280,6 +311,8 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         return groundDistance(feet, corner) > rules.arrivalDistance.value();
     });
     if (next != corners.end()) {
+        approach(decision, feet, std::span{corners}.subspan(static_cast<std::size_t>(next - corners.begin())),
+                 query);
         const Vec3 toNext = acrossOf(*next - feet);
         const Vec3 toAfter = acrossOf(*std::ranges::next(next, 1, corners.end() - 1) - feet);
         const float afterLength = length(toAfter);
@@ -291,6 +324,45 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         decision.intent.ahead = decision.intent.direction;
     }
     return decision;
+}
+
+void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
+                     navigation::NavigationQuery& query) {
+    if (rules.braking <= 0.0F || ahead.empty()) {
+        return;
+    }
+    const navigation::AgentProfile& profile = query.mesh().profile();
+    const auto isAt = [this, &profile](Vec3 first, Vec3 second) {
+        return groundDistance(first, second) <= rules.arrivalDistance.value() &&
+               std::abs(first.z - second.z) <= profile.stepHeight.value();
+    };
+    // Its way from its feet through the corners ahead, and on over the link whose start the last is.
+    std::vector<Vec3> way{feet};
+    way.insert(way.end(), ahead.begin(), ahead.end());
+    const std::size_t lastCorner = way.size() - 1;
+    if (const std::optional<navigation::MeshLink> link = corridor->nextLink(query);
+        link && isAt(link->start, way.back())) {
+        way.push_back(link->end);
+    }
+    // Each corner by the turn onto the way on past it, and its way's end, where it stops unless it chases a
+    // target.
+    const Vec3 end = corridor->target();
+    const bool stops = decision.behavior == Behavior::MoveTo || decision.behavior == Behavior::Investigate;
+    const float span = kTurnSpanRadii * profile.radius.value();
+    Intent& intent = decision.intent;
+    float along = 0.0F;
+    for (std::size_t corner = 1; corner <= lastCorner && intent.approachCount < kMostApproaches; ++corner) {
+        along += groundDistance(way[corner - 1], way[corner]);
+        if (corner == lastCorner && stops && isAt(way[corner], end)) {
+            intent.approaches[intent.approachCount++] = {.distance = HammerUnits{along}, .passShare = 0.0F};
+        } else if (corner + 1 < way.size()) {
+            const Vec3 onward = pointAlong(way, corner, span);
+            intent.approaches[intent.approachCount++] = {
+                .distance = HammerUnits{along},
+                .passShare =
+                    passShareOf(acrossOf(way[corner] - way[corner - 1]), acrossOf(onward - way[corner]))};
+        }
+    }
 }
 
 auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query) -> bool {
@@ -347,17 +419,32 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     if (!corridor || crossing || length(intent.direction) == 0.0F || maxSpeed <= UnitsPerSecond{}) {
         return;
     }
+    // No faster than it can still slow down for what it approaches.
+    float wished = maxSpeed.value();
+    for (const Approach& approached : intent.approached()) {
+        wished = std::min(wished, (approached.passShare * maxSpeed.value()) +
+                                      (rules.braking * approached.distance.value()));
+    }
     const Vec3 steered = acrossOf(corridor->steer(query, {.velocity = velocity,
-                                                          .desired = intent.direction * maxSpeed.value(),
-                                                          .maxSpeed = maxSpeed,
+                                                          .desired = intent.direction * wished,
+                                                          .maxSpeed = UnitsPerSecond{wished},
                                                           .bodies = nearby}));
     const float speed = length(steered);
-    if (speed < kLeastSteeredSpeedShare * maxSpeed.value()) {
+    if (speed < kLeastSteeredSpeedShare * wished) {
         intent.direction = {};
         return;
     }
     intent.direction = steered / speed;
-    intent.speedShare = std::min(speed / maxSpeed.value(), 1.0F);
+    intent.speedShare = std::min(speed, wished) / maxSpeed.value();
+    // A body that gains speed only along the way it is driven (PM_Accelerate), and loses the rest to friction
+    // alone, keeps drifting across its way when driven the way it should go, and circles round what it heads
+    // for: it is to be driven the way its velocity must change to become the steered one, as DetourCrowd
+    // integrates an agent's velocity toward its desired one.
+    const Vec3 change = steered - acrossOf(velocity);
+    const float changeLength = length(change);
+    if (changeLength > kLeastSteeredSpeedShare * speed) {
+        intent.drive = change / changeLength;
+    }
 }
 
 void Brain::appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const {
