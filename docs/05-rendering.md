@@ -299,7 +299,9 @@ the suffixes `rt`, `bk`, `lf`, `ft`, `up`, `dn` toward +X, +Y, -X, -Y, up and do
 middle of the sky each is seen upright and unmirrored, the top and bottom ones facing +X. They are
 drawn as their files have them, through no gamma curve, as in the original, which falls back to
 `desert` when the worldspawn's `skyname` names a sky the installation lacks; without any, the
-sky is gray. Drawing the sky's own faces rather than a box behind the world gives the same picture
+sky is gray. The sky named is the game's environment's, in place of every map's, when it names one
+(`data/cstrike/environment.toml`'s `sky`, `cs::skyNameOf`), as a mod sets the original's `sv_skyname`
+over each map's: Counter-Strike's own names none, a zombie match's the night; else the worldspawn's. Drawing the sky's own faces rather than a box behind the world gives the same picture
 for the world and hides what lies behind them, as the sky's brushes seal the map.
 
 Each frame gathers what the camera sees, as the original culls it, into the index buffer of its

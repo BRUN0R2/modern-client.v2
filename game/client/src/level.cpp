@@ -80,13 +80,12 @@ struct WadFiles {
     return sides;
 }
 
-/// The sky the worldspawn's `skyname` names, or the default one when the installation lacks it, as
-/// the original falls back; none when neither can be read: the world draws its sky gray.
-[[nodiscard]] auto readSky(const nx::assets::Vfs& vfs, const nx::assets::BspView& map)
-    -> std::vector<nx::assets::RgbaImage> {
-    const std::string_view name =
-        map.entities().empty() ? nx::render::kDefaultSkyName
-                               : map.entities()[0].find("skyname").value_or(nx::render::kDefaultSkyName);
+/// The sky `environment` draws `map` with, the game's or else its worldspawn's `skyname` (cs::skyNameOf),
+/// or the default one when the installation lacks it, as the original falls back; none when neither can
+/// be read: the world draws its sky gray.
+[[nodiscard]] auto readSky(const nx::assets::Vfs& vfs, const nx::assets::BspView& map,
+                           const WorldEnvironment& environment) -> std::vector<nx::assets::RgbaImage> {
+    const std::string_view name = skyNameOf(map, environment).value_or(nx::render::kDefaultSkyName);
     const std::array candidates{name, nx::render::kDefaultSkyName};
     for (const std::string_view candidate : std::span{candidates}.first(name == candidates[1] ? 1 : 2)) {
         if (auto sides = readSkySides(vfs, candidate)) {
@@ -149,7 +148,7 @@ auto Level::load(const GameContent& content, const GameMap& map)
         }
     }
     level.m_bulletMarks = bulletMarksOf(bsp);
-    level.m_sky = readSky(content.vfs, bsp);
+    level.m_sky = readSky(content.vfs, bsp, content.environment);
     level.m_sprites = MapSprites::read(content.vfs, bsp);
     if (!level.m_sprites->missing().empty()) {
         nx::log::warning(kLog, "sprites the map's entities show that the installation does not have: {}",
