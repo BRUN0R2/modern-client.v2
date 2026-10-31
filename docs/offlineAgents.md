@@ -98,8 +98,12 @@ again once a tick in batches in jobs; a dead body's agent, which decides nothing
 again, what the cache keeps left aside, and plays the map again on it, as Condition Zero restarts
 the game once it analyzed a map. A brain's decision that moves is steered along its corridor among the
 six nearest living bodies, players' and zombies', and the walls about it (`nx::agents::Brain::steer`,
-`nx::navigation::Corridor::steer`: Detour's obstacle avoidance), its turns taken wide, waiting when it
-must. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
+`nx::navigation::Corridor::steer`: Detour's obstacle avoidance), its turns taken wide; with no body near
+it, its way along its corridor keeps it off the walls (the avoidance, which weighs a wall its way turns from
+before it meets it, held a body at rest in a passage that turns where it was), and it waits only behind a
+body in its way nearer than it to where its way ends that it finds no way round, as a queue waits (as
+Condition Zero's bot waits for a friend in its way): bodies going to one end wait in the order of how near it
+they are, and none for one that waits for it, where all of them waited in a doorway, each in another's way. Its body cannot turn on the spot: it gains speed only along the way it is driven and loses the rest
 to friction (GoldSrc's PM_Accelerate and PM_Friction). Driven straight at the next point of its way, it
 kept its drift across the way and swung round the point, by two thirds of a turn and more, before it got
 within its arrival distance: at the end of its way, at a sharp corner, a doorway's jambs. So it is driven
