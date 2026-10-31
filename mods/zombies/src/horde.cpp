@@ -300,7 +300,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             const float distance = nx::length(difference);
             if (distance > settings.sightRange.value() ||
                 (distance > 0.0F && nx::dot(forward, difference / distance) < minimumDot) ||
-                !game.sees(solids, entity, eye, candidate)) {
+                !game.seesSpot(solids, eye, candidate.eye)) {
                 continue;
             }
             seen.push_back({.entity = candidate.entity, .position = candidate.feet, .aimAt = candidate.eye});

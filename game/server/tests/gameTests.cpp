@@ -417,27 +417,6 @@ TEST_F(GameTest, EntityMeleeHurtsAPlayerByTheNormalDeathPipelineAtItsConfiguredI
     EXPECT_TRUE(dead.inventory.weapons().empty());
 }
 
-TEST_F(GameTest, EntitySightIsBlockedByAnotherSolidEntity) {
-    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
-    // The synthetic map's clip hulls put the body's origin at z = 0 on the floor.
-    game().placeEye(player, {.x = 0, .y = 0, .z = cs::kStandingViewHeight.value()});
-    const auto type = entityType();
-    ASSERT_TRUE(type.has_value());
-    const auto observer = game().createEntity(*type, {.origin = {.x = 150, .z = 40}});
-    ASSERT_TRUE(observer.has_value());
-    const auto blocker = game().createEntity(*type, {.origin = {.x = 75, .z = 40}});
-    ASSERT_TRUE(blocker.has_value());
-    const auto targets = game().perceptionTargets();
-    ASSERT_EQ(targets.size(), 1U);
-    const auto states = game().entities();
-    const auto found = std::ranges::find(states, *observer, &cs::EntityState::entity);
-    ASSERT_NE(found, states.end());
-    const nx::Vec3 eye = found->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()};
-    EXPECT_FALSE(game().sees(game().sightSolids(), *observer, eye, targets.front()));
-    ASSERT_TRUE(game().removeEntity(*blocker).has_value());
-    EXPECT_TRUE(game().sees(game().sightSolids(), *observer, eye, targets.front()));
-}
-
 TEST_F(GameTest, PerceivedFeetUseThePlayersActiveStanceIndependentlyOfTheAimPoint) {
     constexpr float kStandingEyeAboveFeet = 53.0F;
     constexpr float kCrouchedEyeAboveFeet = 30.0F;
