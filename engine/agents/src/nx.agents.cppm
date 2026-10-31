@@ -258,16 +258,21 @@ private:
     [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
     /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
     [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
+    /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it.
+    void planIfNeeded(Vec3 feet, Vec3 goal, std::optional<ecs::Entity> pursued,
+                      navigation::NavigationQuery& query);
+    /// Forgets a completed goal or an investigated target after arriving.
+    void finishArrival(const Memory* selected);
     /// Tells `decision`'s intent what it approaches from `feet` along `ahead`, the corners from the one it
     /// steers to on (Intent::approaches), when it brakes (Rules::braking): the turn at each measured from the
     /// way into it to the way on kTurnSpanRadii of its body's radius past it, so that a corner the mesh
     /// rounds into short turns is slowed for as a whole.
     void approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
-                  navigation::NavigationQuery& query);
-    /// Crosses the link its corridor reaches next when `feet` are within arrivalDistance of its start
-    /// (decide), `decision` heading for its end and jumping for a link up. Returns whether it crosses one.
-    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query)
-        -> bool;
+                  const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next);
+    /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start. If crossing fails,
+    /// finds `next` again because the corridor may have changed. Returns whether it crosses one.
+    [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query,
+                                     std::optional<navigation::MeshLink>& next) -> bool;
     /// Forgets the corridor it follows, and the link it crosses on it: another is searched.
     void forgetCorridor() noexcept;
     /// Marks which records are threats `now` (Memory::isThreat).

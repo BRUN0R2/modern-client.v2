@@ -41,12 +41,14 @@ struct Agents {
     std::vector<nx::Vec3> feet;
 };
 
-[[nodiscard]] auto agentsOf(std::size_t count) -> Agents {
+constexpr float kDecisionStep = 32.0F;
+
+[[nodiscard]] auto agentsOf(std::size_t count, const nx::agents::Rules& settings = rules()) -> Agents {
     Agents agents;
     agents.brains.reserve(count);
     for (std::size_t index = 0; index < count; ++index) {
         const auto spread = static_cast<float>(index % 24) * 48.0F;
-        agents.brains.emplace_back(rules());
+        agents.brains.emplace_back(settings);
         agents.brains.back().setGoal(nx::Vec3{.x = 640.0F, .y = spread - 552.0F});
         agents.feet.push_back({.x = -640.0F, .y = 552.0F - spread});
     }
@@ -64,17 +66,37 @@ struct Agents {
 /// The decisions of `count` agents over `ticks` ticks, each walking a little along its intent between
 /// them, made by Deciders in jobs of `workers` workers.
 [[nodiscard]] auto decisionsInJobs(const nx::navigation::NavigationMesh& mesh, std::size_t count,
-                                   std::uint32_t workers, std::size_t ticks)
+                                   std::uint32_t workers, std::size_t ticks,
+                                   const nx::agents::Rules& settings = rules())
     -> std::vector<std::vector<nx::agents::Decision>> {
     auto jobs = nx::test::jobSystem(workers);
     nx::agents::Deciders deciders{mesh};
-    Agents agents = agentsOf(count);
+    Agents agents = agentsOf(count, settings);
     std::vector<std::vector<nx::agents::Decision>> made;
     for (std::size_t tick = 0; tick < ticks; ++tick) {
         std::vector<nx::agents::Decision> decisions(count);
         deciders.decide(*jobs, requestsOf(agents), decisions);
         for (std::size_t index = 0; index < count; ++index) {
-            agents.feet[index] += decisions[index].intent.direction * 32.0F;
+            agents.feet.at(index) += decisions.at(index).intent.direction * kDecisionStep;
+        }
+        made.push_back(std::move(decisions));
+    }
+    return made;
+}
+
+/// The same decisions made one by one with one query, each body walking between ticks.
+[[nodiscard]] auto decisionsAlone(const nx::navigation::NavigationMesh& mesh, std::size_t count,
+                                  std::size_t ticks, const nx::agents::Rules& settings)
+    -> std::vector<std::vector<nx::agents::Decision>> {
+    Agents alone = agentsOf(count, settings);
+    nx::navigation::NavigationQuery query{mesh};
+    std::vector<std::vector<nx::agents::Decision>> made;
+    for (std::size_t tick = 0; tick < ticks; ++tick) {
+        std::vector<nx::agents::Decision> decisions;
+        for (std::size_t index = 0; index < count; ++index) {
+            nx::Vec3& feet = alone.feet.at(index);
+            decisions.push_back(alone.brains.at(index).decide(feet, query));
+            feet += decisions.back().intent.direction * kDecisionStep;
         }
         made.push_back(std::move(decisions));
     }
@@ -88,33 +110,53 @@ struct Agents {
             left, right, [](const nx::agents::Decision& a, const nx::agents::Decision& b) {
                 return a.behavior == b.behavior && a.intent.direction == b.intent.direction &&
                        a.intent.lookAt == b.intent.lookAt && a.intent.attacks == b.intent.attacks &&
+                       a.intent.jumps == b.intent.jumps &&
+                       std::ranges::equal(a.intent.approached(), b.intent.approached(),
+                                          [](const nx::agents::Approach& firstApproach,
+                                             const nx::agents::Approach& secondApproach) -> bool {
+                                              return firstApproach.distance == secondApproach.distance &&
+                                                     firstApproach.passShare == secondApproach.passShare;
+                                          }) &&
                        a.target == b.target && a.navigationError == b.navigationError;
             });
     });
 }
 
-TEST(AgentDeciders, DecideAsEachBrainAloneWouldWithAnyNumberOfWorkers) {
-    const auto mesh = boxesMesh();
+void expectDeterministicDecisions(const nx::navigation::NavigationMesh& mesh,
+                                  const nx::agents::Rules& settings) {
     constexpr std::size_t kAgents = 100;
     constexpr std::size_t kTicks = 8;
-    // One by one, with a query of their own: what each brain decides alone.
-    Agents alone = agentsOf(kAgents);
-    nx::navigation::NavigationQuery query{mesh};
-    std::vector<std::vector<nx::agents::Decision>> expected;
-    for (std::size_t tick = 0; tick < kTicks; ++tick) {
-        std::vector<nx::agents::Decision> decisions;
-        for (std::size_t index = 0; index < kAgents; ++index) {
-            decisions.push_back(alone.brains[index].decide(alone.feet[index], query));
-            alone.feet[index] += decisions.back().intent.direction * 32.0F;
-        }
-        expected.push_back(std::move(decisions));
-    }
-    ASSERT_TRUE(std::ranges::any_of(expected.front(), [](const nx::agents::Decision& decision) {
+    const auto expected = decisionsAlone(mesh, kAgents, kTicks, settings);
+    ASSERT_TRUE(std::ranges::any_of(expected.front(), [](const nx::agents::Decision& decision) -> bool {
         return decision.behavior == nx::agents::Behavior::MoveTo;
     }));
+    if (settings.braking > 0.0F) {
+        ASSERT_TRUE(std::ranges::any_of(expected.front(), [](const nx::agents::Decision& decision) -> bool {
+            return !decision.intent.approached().empty();
+        }));
+    }
     for (const std::uint32_t workers : {0U, 1U, 3U, 15U}) {
-        EXPECT_TRUE(sameDecisions(decisionsInJobs(mesh, kAgents, workers, kTicks), expected))
+        EXPECT_TRUE(sameDecisions(decisionsInJobs(mesh, kAgents, workers, kTicks, settings), expected))
             << workers << " workers";
+    }
+}
+
+TEST(AgentDeciders, DecideAsEachBrainAloneWouldWithAnyNumberOfWorkers) {
+    const auto mesh = boxesMesh();
+    constexpr float kGroundBraking = 4.0F;
+    constexpr nx::UnitsPerSecond kGroundStopSpeed{75.0F};
+    constexpr float kGroundAcceleration = 5.0F;
+    nx::agents::Rules braking = rules();
+    braking.braking = kGroundBraking;
+    braking.stopSpeed = kGroundStopSpeed;
+    braking.acceleration = kGroundAcceleration;
+    {
+        SCOPED_TRACE("without braking");
+        expectDeterministicDecisions(mesh, rules());
+    }
+    {
+        SCOPED_TRACE("with braking");
+        expectDeterministicDecisions(mesh, braking);
     }
 }
 

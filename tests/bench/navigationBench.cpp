@@ -162,19 +162,29 @@ namespace {
 /// Where the brains of agentDecisions stand, and the target they chase across the map.
 constexpr nx::Vec3 kStart{.x = 64, .y = 64};
 constexpr nx::Vec3 kGoal{.x = kFloorSide - kPillarSide, .y = kFloorSide - kPillarSide};
+constexpr float kGroundBraking = 4.0F;
+constexpr nx::UnitsPerSecond kGroundStopSpeed{75.0F};
+constexpr float kGroundAcceleration = 5.0F;
+
+enum class Motion : std::uint8_t { Instant, Inertial };
 
 /// `count` brains that chase `target` at kGoal from kStart along their corridors on `mesh`; none when
 /// the target cannot be reached.
-[[nodiscard]] auto chasingBrains(const NavigationMesh& mesh, nx::ecs::Entity target, std::size_t count)
-    -> std::vector<nx::agents::Brain> {
+[[nodiscard]] auto chasingBrains(const NavigationMesh& mesh, nx::ecs::Entity target, std::size_t count,
+                                 Motion motion = Motion::Instant) -> std::vector<nx::agents::Brain> {
     NavigationQuery query{mesh};
     std::vector<nx::agents::Brain> brains;
     brains.reserve(count);
-    const nx::agents::Rules rules{.memoryLifetime = nx::Seconds{6},
-                                  .attackDistance = nx::HammerUnits{64},
-                                  .arrivalDistance = nx::HammerUnits{8},
-                                  .replanDistance = nx::HammerUnits{24},
-                                  .memoryLimit = 32};
+    const nx::agents::Rules rules{
+        .memoryLifetime = nx::Seconds{6},
+        .attackDistance = nx::HammerUnits{64},
+        .arrivalDistance = nx::HammerUnits{8},
+        .replanDistance = nx::HammerUnits{24},
+        .memoryLimit = 32,
+        .braking = motion == Motion::Inertial ? kGroundBraking : 0.0F,
+        .stopSpeed = motion == Motion::Inertial ? kGroundStopSpeed : nx::UnitsPerSecond{},
+        .acceleration = motion == Motion::Inertial ? kGroundAcceleration : 0.0F,
+    };
     const std::array seen{nx::agents::Observation{target, kGoal}};
     for (std::size_t index = 0; index < count; ++index) {
         brains.emplace_back(rules);
@@ -187,13 +197,13 @@ constexpr nx::Vec3 kGoal{.x = kFloorSide - kPillarSide, .y = kFloorSide - kPilla
 }
 
 /// The brains decide one by one on the calling thread, each tick.
-void agentDecisions(benchmark::State& state) {
+void measureAgentDecisions(benchmark::State& state, Motion motion) {
     auto mesh = pillarMesh();
     NavigationQuery query{mesh};
     nx::ecs::World world;
     const auto target = world.spawn();
     const auto count = nx::narrow<std::size_t>(state.range(0));
-    std::vector<nx::agents::Brain> brains = chasingBrains(mesh, target, count);
+    std::vector<nx::agents::Brain> brains = chasingBrains(mesh, target, count, motion);
     if (brains.empty()) {
         state.SkipWithError("the benchmark's target must be reachable");
         return;
@@ -208,7 +218,16 @@ void agentDecisions(benchmark::State& state) {
     }
     state.SetItemsProcessed(state.iterations() * nx::narrow<std::int64_t>(count));
 }
+
+void agentDecisions(benchmark::State& state) {
+    measureAgentDecisions(state, Motion::Instant);
+}
 BENCHMARK(agentDecisions)->Arg(32)->Arg(64)->Arg(256)->Arg(1024);
+
+void agentDecisionsBraking(benchmark::State& state) {
+    measureAgentDecisions(state, Motion::Inertial);
+}
+BENCHMARK(agentDecisionsBraking)->Arg(32)->Arg(64)->Arg(256)->Arg(1024);
 
 /// The same brains perceive one by one, then decide together in batches in jobs (nx::agents::Deciders),
 /// as the bots and the horde do each tick.
