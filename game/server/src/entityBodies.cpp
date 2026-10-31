@@ -230,9 +230,20 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         // The server owns the body's time; an agent cannot accelerate it by sending a longer command.
         command.duration = nx::tickLengthOf(time.rate);
         command.buttons.reset(Button::Duck);
+        // Knocked back, it walks no faster than its share of its speed, held back while staggered: the speed
+        // it may walk at, as a weapon caps a player's (pmove->maxspeed), rather than a share of the walk it
+        // asks for, which left one asked to walk slowly where it was: a body at rest loses sv_stopspeed's
+        // worth to friction each tick, more than a walk under 60 units a second gains it (PM_Friction,
+        // PM_Accelerate).
+        body.movement.maxSpeed = type.definition.speed;
         if (type.definition.knockback) {
-            command.move =
-                walkedBy(*type.definition.knockback, body.knockedBack, command.move, time.now, time.rate);
+            const float share =
+                walkShareOf(*type.definition.knockback, body.knockedBack, time.now, time.rate);
+            if (share > 0.0F) {
+                body.movement.maxSpeed = type.definition.speed * share;
+            } else {
+                command.move = {};
+            }
         }
         body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
         boxesNear(boxes, body.movement.origin, entity, near);
