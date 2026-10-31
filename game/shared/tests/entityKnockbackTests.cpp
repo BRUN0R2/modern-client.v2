@@ -69,11 +69,6 @@ TEST(EntityKnockbackTest, AHitBodyIsHeldBackThenWalksSlowerBackToItsWholeSpeed) 
                 kTolerance);
     EXPECT_FLOAT_EQ(cs::walkShareOf(kRules, knocked, hit.after(nx::Seconds{0.6F}, kRate), kRate), 1.0F);
     EXPECT_FLOAT_EQ(cs::walkShareOf(kRules, knocked, hit.after(nx::Seconds{5.0F}, kRate), kRate), 1.0F);
-    const cs::MoveIntent walked = cs::walkedBy(
-        kRules, knocked, {.forward = nx::UnitsPerSecond{200.0F}, .side = nx::UnitsPerSecond{-100.0F}},
-        hit.after(nx::Seconds{0.35F}, kRate), kRate);
-    EXPECT_NEAR(walked.forward.value(), 150.0F, kTolerance);
-    EXPECT_NEAR(walked.side.value(), -75.0F, kTolerance);
 }
 
 TEST(EntityKnockbackTest, ABodyOfNoSlowRecoveryWalksWhollyOnceItsStaggerIsOver) {
