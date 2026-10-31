@@ -92,11 +92,14 @@ constexpr std::uint32_t kByteTop = 255;
            burst.mistSpeed >= nx::UnitsPerSecond{} && areMistsValid && isGushValid;
 }
 
-/// Whether `look` has room for droplets and splats, droplets that fly a while and splats that lie a while,
-/// each longer than it fades, each least no more than its most, and bursts that are.
+/// Whether `look` has room for droplets, mists and splats, lights them, has droplets that fly a while and
+/// splats that lie a while, each longer than it fades, each least no more than its most, and bursts that
+/// are.
 [[nodiscard]] auto isValid(const BloodEnhancedLook& look) noexcept -> bool {
-    return look.mostDroplets > 0 && look.mostSplats > 0 && look.streakTime >= nx::Seconds{} &&
-           look.gravity >= nx::Scale{} && std::isfinite(look.drag) && look.dropletLife > nx::Seconds{} &&
+    return look.mostDroplets > 0 && look.mostSplats > 0 && look.mostMists > 0 &&
+           look.streakTime >= nx::Seconds{} && std::isfinite(look.leastLight) &&
+           std::isfinite(look.mistLight) && look.mistLight > 0.0F && look.gravity >= nx::Scale{} &&
+           std::isfinite(look.drag) && look.dropletLife > nx::Seconds{} &&
            look.dropletFade >= nx::Seconds{} && look.dropletFade <= look.dropletLife &&
            look.leastSplatGrowth > nx::Scale{} && look.leastSplatGrowth <= look.mostSplatGrowth &&
            look.splatLife > nx::Seconds{} && look.splatFade > nx::Seconds{} &&

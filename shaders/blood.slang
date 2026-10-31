@@ -4,9 +4,10 @@
 // The enhanced look's blood (nx.render:blood): each drop a quad the shader makes of its instance's number,
 // no vertex of the CPU's. A droplet, round, is drawn along the way it flies across the line of sight, as
 // far as it flies in the frame's streak time, its head where it is: of its color times the light where it
-// is, darker toward its rim, a glint near its head, its edge smoothed over a pixel. A mist is a soft round
-// puff, fading from its middle to its edge. A splat lies flat on what it landed on, a little off it, its
-// edge uneven by where it is, darker where it pools at its middle. Drawn as linear light
+// is, darker toward its rim, a glint near its head, its edge smoothed over a pixel. A mist is a puff of
+// smoke, as thick as it is through its core and thinning to its edge, its density uneven by a noise its
+// seed turns. A splat lies flat on what it landed on, a little off it, its edge uneven by its seed,
+// darker where it pools at its middle. Drawn as linear light
 // (colorEncoding.slang), a drop's display color is made light, then lit; all are seen through the frame's
 // fog (fog.slang).
 
@@ -33,14 +34,14 @@ struct Frame
 ConstantBuffer<Frame> frame;
 
 // A drop: where it is and its radius, its velocity and how opaque it is, its display color and the light
-// where it is, its shape (kDroplet, kMist, kSplat), and a splat's normal (its fourth unused).
+// where it is, its shape (kDroplet, kMist, kSplat), and a splat's normal and its seed, from 0 to 1.
 struct Drop
 {
     float4 positionRadius;
     float4 velocityOpacity;
     float4 colorLight;
     uint4 shape;
-    float4 normal;
+    float4 normalSeed;
 };
 
 [[vk::binding(1, 0)]]
@@ -70,6 +71,17 @@ static const float2 kLobeCounts = float2(5.0, 3.0);
 static const float2 kLobeWeights = float2(0.6, 0.4);
 static const float kSplatReach = 1.0 + kLobeShare;
 static const float kPoolShade = 0.7;
+// A mist: as thick as it is out to kMistCore of its radius, thinning to none at its edge; its smoke's
+// density from kMistThinnest of it to all of it, by two waves of noise of kMistGrain cells across its
+// radius, the second twice as fine and half as strong.
+static const float kMistCore = 0.35;
+static const float kMistThinnest = 0.4;
+static const float kMistGrain = 2.5;
+static const float kMistFinerGrain = 2.0;
+static const float kMistFinerShare = 0.35;
+// A turn, in radians, and how far apart, in noise cells, the seeds of two drops set their smoke.
+static const float kFullTurn = 6.2831853;
+static const float kSeedReach = 37.0;
 
 // The corners of a quad, two triangles: across it (x) and along it (y), each from -1 to 1.
 static const float2 kCorners[6] = { float2(-1.0, -1.0), float2(1.0, -1.0), float2(1.0, 1.0),
@@ -88,7 +100,7 @@ struct VertexOutput
     nointerpolation float4 colorLight : COLOR0;
     nointerpolation float opacity : OPACITY;
     nointerpolation uint shape : SHAPE;
-    nointerpolation float lobeTurn : LOBE;
+    nointerpolation float seed : SEED;
 };
 
 float4 clipOf(float3 position)
@@ -133,7 +145,7 @@ Quad facingQuadOf(Drop drop)
 // A splat's quad, flat on what it lies on, a little off it, reaching past its lobes.
 Quad splatQuadOf(Drop drop)
 {
-    const float3 normal = normalize(drop.normal.xyz);
+    const float3 normal = normalize(drop.normalSeed.xyz);
     const float3 aside = abs(normal.z) < 0.9 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
     Quad quad;
     quad.side = normalize(cross(normal, aside));
@@ -141,17 +153,6 @@ Quad splatQuadOf(Drop drop)
     quad.middle = drop.positionRadius.xyz + (normal * kSplatLift);
     quad.halfSize = float2(drop.positionRadius.w * kSplatReach);
     return quad;
-}
-
-// A turn, in radians, and the weights and scale of a hash of a position to a share from 0 to 1.
-static const float kFullTurn = 6.2831853;
-static const float3 kHashWeights = float3(12.9898, 78.233, 37.719);
-static const float kHashScale = 43758.5453;
-
-// Where a splat at `position` turns its lobes, in radians: the same each frame it lies there.
-float lobeTurnOf(float3 position)
-{
-    return frac(sin(dot(position, kHashWeights)) * kHashScale) * kFullTurn;
 }
 
 [shader("vertex")]
@@ -169,7 +170,7 @@ VertexOutput vertexMain(uint vertex : SV_VertexID, uint instance : SV_InstanceID
     output.colorLight = drop.colorLight;
     output.opacity = drop.velocityOpacity.w;
     output.shape = drop.shape.x;
-    output.lobeTurn = lobeTurnOf(drop.positionRadius.xyz);
+    output.seed = drop.normalSeed.w;
     return output;
 }
 
@@ -210,15 +211,41 @@ float4 dropletOf(VertexOutput input)
     return float4(color, coverage * input.opacity);
 }
 
-// A mist: a soft round puff, as opaque as it is at its middle, none at its edge.
+// The weights and scale of a hash of a noise cell to a share from 0 to 1.
+static const float2 kHashWeights = float2(127.1, 311.7);
+static const float kHashScale = 43758.5453;
+
+float hashOf(float2 cell)
+{
+    return frac(sin(dot(cell, kHashWeights)) * kHashScale);
+}
+
+// A value noise at `point`, from 0 to 1: each cell's corner a share, eased between them.
+float noiseOf(float2 point)
+{
+    const float2 cell = floor(point);
+    const float2 within = frac(point);
+    const float2 eased = within * within * (3.0 - (2.0 * within));
+    const float below = lerp(hashOf(cell), hashOf(cell + float2(1.0, 0.0)), eased.x);
+    const float above = lerp(hashOf(cell + float2(0.0, 1.0)), hashOf(cell + float2(1.0, 1.0)), eased.x);
+    return lerp(below, above, eased.y);
+}
+
+// A mist: a puff of smoke, as thick as it is through its core, thinning to none at its edge, its density
+// uneven by two waves of noise its seed sets, the same each frame.
 float4 mistOf(VertexOutput input)
 {
-    const float reach = length(input.local) / input.halfSize.x;
-    const float thickness = 1.0 - smoothstep(0.0, 1.0, reach);
-    if (thickness <= 0.0)
+    const float2 within = input.local / input.halfSize.x;
+    const float shape = 1.0 - smoothstep(kMistCore, 1.0, length(within));
+    if (shape <= 0.0)
     {
         discard;
     }
+    const float turn = input.seed * kFullTurn;
+    const float2 offset = float2(cos(turn), sin(turn)) * kSeedReach;
+    const float2 grain = (within * kMistGrain) + offset;
+    const float smoke = lerp(noiseOf(grain), noiseOf((grain * kMistFinerGrain) + offset), kMistFinerShare);
+    const float thickness = shape * lerp(kMistThinnest, 1.0, smoke);
     return float4(litOf(input.colorLight.rgb, input.colorLight.w), thickness * input.opacity);
 }
 
@@ -228,7 +255,8 @@ float4 splatOf(VertexOutput input)
     const float radius = input.halfSize.x / kSplatReach;
     const float reach = length(input.local) / radius;
     const float angle = atan2(input.local.y, input.local.x);
-    const float2 waves = sin((kLobeCounts * angle) + float2(input.lobeTurn, -input.lobeTurn));
+    const float lobeTurn = input.seed * kFullTurn;
+    const float2 waves = sin((kLobeCounts * angle) + float2(lobeTurn, -lobeTurn));
     const float lobes = dot(waves, kLobeWeights);
     const float coverage = coverageOf((reach - (1.0 + (kLobeShare * lobes))) * radius);
     if (coverage <= 0.0)

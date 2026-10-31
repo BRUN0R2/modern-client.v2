@@ -131,7 +131,10 @@ TEST(BloodTest, AStreamsLookIsRBloodStreams) {
 
 TEST(BloodTest, TheEnhancedLooksBloodGushesMoreFromAHeadThanFromAnywhereElse) {
     const cs::BloodEnhancedLook look = repositoryRules().enhancedLook;
-    EXPECT_EQ(look.mostDroplets, 1024U);
+    EXPECT_EQ(look.mostDroplets, 2048U);
+    EXPECT_EQ(look.mostMists, 256U);
+    EXPECT_LT(look.leastLight, 1.0F) << "a hit reads in the dark";
+    EXPECT_GT(look.mistLight, 1.0F) << "fine blood scatters the light";
     EXPECT_EQ(look.mostSplats, 192U);
     EXPECT_GT(look.dropletLife, look.dropletFade) << "fading out in the air";
     EXPECT_GT(look.drag, 1.0F) << "the air stops the spray a short way off";
@@ -140,8 +143,9 @@ TEST(BloodTest, TheEnhancedLooksBloodGushesMoreFromAHeadThanFromAnywhereElse) {
     EXPECT_GT(look.head.mists, look.body.mists) << "more mist";
     EXPECT_GT(look.head.mostSpeed, look.body.mostSpeed) << "faster";
     EXPECT_EQ(look.body.gushPulses, 0U) << "a hit elsewhere does not gush";
-    EXPECT_EQ(look.head.gushPulses, 6U);
-    EXPECT_EQ(look.head.gushDroplets, 10U);
+    EXPECT_EQ(look.head.gushPulses, 8U);
+    EXPECT_EQ(look.head.gushDroplets, 14U);
+    EXPECT_GT(look.head.gushMists, 0U) << "a gush of smoke too";
     EXPECT_GT(look.head.mistSpeed, look.body.mistSpeed) << "its mist flies farther";
     EXPECT_LT(look.head.gushSlowing, 1.0F) << "each pulse slower";
 }
@@ -166,16 +170,18 @@ TEST(BloodTest, SpreadsOutOfOrderNoDecalsOrNoneForAnyDamageAreRefused) {
           std::pair{"colorRange = 10", "colorRange = 40"},
           std::pair{"streamLife = 2.0", "streamLife = 0.0"},
           std::pair{"splashPerSpeed = 5", "splashPerSpeed = 0"},
-          std::pair{"mostDroplets = 1024", "mostDroplets = 0"},
+          std::pair{"mostDroplets = 2048", "mostDroplets = 0"},
+          std::pair{"mostMists = 256", "mostMists = 0"},
+          std::pair{"mistLight = 1.35", "mistLight = 0.0"},
           std::pair{"splatFade = 4.0", "splatFade = 20.0"},
           std::pair{"leastSplatGrowth = 2.0", "leastSplatGrowth = 4.0"},
           std::pair{"leastRadius = 0.25", "leastRadius = 0.0"},
-          std::pair{"mistLife = 0.45", "mistLife = 0.0"},
+          std::pair{"mistLife = 0.7", "mistLife = 0.0"},
           std::pair{"backShare = 0.4", "backShare = 1.5"},
-          std::pair{"gushInterval = 0.1", "gushInterval = 0.0"},
+          std::pair{"gushInterval = 0.08", "gushInterval = 0.0"},
           std::pair{"dropletFade = 0.35", "dropletFade = 0.9"},
-          std::pair{"mistSpeed = 60.0", "mistSpeed = -1.0"},
-          std::pair{"gushSlowing = 0.8", "gushSlowing = 1.5"}}) {
+          std::pair{"mistSpeed = 70.0", "mistSpeed = -1.0"},
+          std::pair{"gushSlowing = 0.85", "gushSlowing = 1.5"}}) {
         std::string broken = text;
         const std::size_t at = broken.find(line);
         ASSERT_NE(at, std::string::npos) << line;

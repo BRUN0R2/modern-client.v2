@@ -37,13 +37,13 @@ struct FrameUniform {
 };
 
 /// A drop as the shader reads it: where it is and its radius, its velocity and how opaque it is, its
-/// display color from 0 to 1 and the light where it is, its shape, and a splat's normal.
+/// display color from 0 to 1 and the light where it is, its shape, and a splat's normal and its seed.
 struct GpuDrop {
     std::array<float, 4> positionRadius{};
     std::array<float, 4> velocityOpacity{};
     std::array<float, 4> colorLight{};
     std::array<std::uint32_t, 4> shape{}; ///< BloodShape's; the others unused.
-    std::array<float, 4> normal{};        ///< Its fourth unused.
+    std::array<float, 4> normalSeed{};
 };
 
 [[nodiscard]] auto rowOf(Vec3 vector) noexcept -> std::array<float, 4> {
@@ -57,7 +57,7 @@ struct GpuDrop {
                                   static_cast<float>(drop.color.green) / kChannelMost,
                                   static_cast<float>(drop.color.blue) / kChannelMost, drop.light},
                    .shape = {std::to_underlying(drop.shape), 0, 0, 0},
-                   .normal = rowOf(drop.normal)};
+                   .normalSeed = {drop.normal.x, drop.normal.y, drop.normal.z, drop.seed}};
 }
 
 } // namespace

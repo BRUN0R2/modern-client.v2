@@ -713,10 +713,13 @@ along the way it flies across the line of sight as far as it flies in the draw's
 (`BloodDraw::streakTime`), its head where it is and its streak behind it, as the eye blurs a fast drop;
 one flying at the view, or still, is round. It is lit fully along its middle and darker toward its rim
 (to 0.55 of its light), a glint near its head toward its left adding 0.35 of its light, its edge
-smoothed over a pixel. A mist is a soft round puff, as opaque as it is at its middle and none at its
-edge. A splat lies flat on what it landed on (`BloodInstance::normal`), 0.1 unit off it so that the
-surface does not hide it, its edge in and out by up to 0.18 of its radius in two waves of lobes turned
-by where it lies, the same each frame, and 0.7 as light at its middle, where it pools. Each is of its
+smoothed over a pixel. A mist is a puff of smoke, as thick as it is through its core, out to 0.35 of
+its radius, thinning to none at its edge, its density from 0.4 of it to all of it by two waves of value
+noise, 2.5 cells across its radius and twice as fine at a third of the strength, which its seed turns
+(`BloodInstance::seed`), the same each frame. A splat lies flat on what it landed on
+(`BloodInstance::normal`), 0.1 unit off it so that the surface does not hide it, its edge in and out by
+up to 0.18 of its radius in two waves of lobes its seed turns, and 0.7 as light at its middle, where it
+pools. Each is of its
 display color times its light (made linear light first in a target of it), as opaque as it is, blended
 over what is there, its depth tested but not written, seen through the fog; they are not sorted, drops
 of blood overlapping little and alike. The scene draws them after the particles and the streaks, the
