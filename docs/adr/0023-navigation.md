@@ -58,6 +58,9 @@ convex polygons, through Recast and Detour.
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it
   moves instead of searching again. Queries run in batches in jobs within a budget per tick, and
   give the same path for the same inputs, for replays and tests.
+- **Build failures.** Mesh building propagates `MeshBuildError`; a tile refused by Recast carries
+  the tile's coordinates, the failed step and Recast's diagnostic when available, including when
+  it marks the floor along walls.
 - **Tools.** Console commands in Condition Zero's names: `nav_generate`, `nav_draw` (the mesh, its
   links and the agents' paths drawn in `next`), `nav_edit` (marked areas and added links, kept as
   an overlay a rebuild applies again) and `nav_check` (islands, a spawn that cannot reach a

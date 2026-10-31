@@ -215,22 +215,23 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
 /// Marks the floor of `compact`, eroded by the profile's radius already, that lies within `clearanceCells`
 /// of where the profile may not stand as the kind Edge: Recast erodes a copy of the areas that much farther,
 /// and each span of floor the copy loses lies along a wall or a ledge. Crouching and water keep their
-/// kinds. Returns whether Recast eroded the copy.
-[[nodiscard]] auto markEdges(RecastLog& log, rcCompactHeightfield& compact, int clearanceCells) -> bool {
+/// kinds. Errors: TileRefused, with the tile and Recast's diagnostic.
+[[nodiscard]] auto markEdges(RecastLog& log, rcCompactHeightfield& compact, int clearanceCells,
+                             std::int32_t tileX, std::int32_t tileY) -> Result<void, MeshBuildError> {
     if (clearanceCells <= 0) {
-        return true;
+        return {};
     }
     const auto count = narrow<std::size_t>(compact.spanCount);
     const std::span areas{compact.areas, count};
     const std::vector<std::uint8_t> kept(areas.begin(), areas.end());
     if (!rcErodeWalkableArea(&log, clearanceCells, compact)) {
-        return false;
+        return refused(log, tileX, tileY, "its floor along walls");
     }
     for (std::size_t span = 0; span < count; ++span) {
         const bool isAlongWall = areas[span] == RC_NULL_AREA && kept[span] == areaIdOf(AreaKind::Floor);
         areas[span] = isAlongWall ? areaIdOf(AreaKind::Edge) : kept[span];
     }
-    return true;
+    return {};
 }
 
 /// The bounds of tile `tileX`, `tileY` with the cells it reads past its sides, from `input.low` up.
@@ -604,8 +605,8 @@ struct TileLinks {
         return refused(log, tileX, tileY, "its floor kept from walls");
     }
     markCrouching(*compact, voxels.standingVoxels);
-    if (!markEdges(log, *compact, voxels.clearanceCells)) {
-        return refused(log, tileX, tileY, "its floor along walls");
+    if (auto marked = markEdges(log, *compact, voxels.clearanceCells, tileX, tileY); !marked) {
+        return std::unexpected{std::move(marked.error())};
     }
     if (!rcBuildDistanceField(&log, *compact) ||
         !rcBuildRegions(&log, *compact, voxels.borderCells, voxels.islandArea, voxels.regionArea)) {
