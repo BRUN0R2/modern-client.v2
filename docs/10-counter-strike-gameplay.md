@@ -622,24 +622,27 @@ without a head's stream, which is a player's (`BloodSplat`); a hit that dealt no
 
 The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
 `data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
-spray, drops and head's stream, which the legacy look keeps: a spray that bursts from where the hit met
-the body and hangs in the air a moment, a little more of it than a real wound sheds, as action games
-show a hit. It bursts by its part of the body: elsewhere than the head, 2.5 droplets for each of the
-spray's size, 0.25 to 0.7 units across, flying off the way the hit went at 120 to 420 units a second,
-two fifths of them back the way it came, each turned off that way by up to 0.7 of its speed and up to
-30 faster upward, and 3 mists of 3 to 5.5 units flying off as the droplets do at up to 60 units a
-second, growing 30 a second, 0.65 opaque, gone in 0.45 seconds; in the head it bursts more, 4 droplets
-for each of its size, faster and larger, with 5 larger mists, then gushes the way the hit went for 0.6
-seconds, 6 pulses of 10 droplets, each 0.8 as fast as the one before. The air slows droplets and mists
-alike, their speed falling to e^-5 of itself a second whatever the frame rate, so that the spray stops
-a short way off; a droplet falls at 0.35 of the world's gravity, is drawn along 0.04 seconds of its
-flight and goes after 0.7 seconds, fading out over the last 0.35, unless the world stops it first,
-where three tenths of them leave a splat flat on what they met, 2 to 3.5 times their radius, lying 15
-seconds and fading out over the last 4. At most 1024 droplets fly at once, none made past them, and 192
-splats lie, a new one taking the oldest's place. Each is of its spray's palette entry's color, lit
-once, as it is made, by the light where the hit met the body, as a flat-shaded model is lit there
-(`cs::Scene::bloodLightAt`: its ambient light and 0.8 of its shade, through the light curve). A gush
-stays where the hit met the body as the body moves on.
+spray, drops and head's stream, which the legacy look keeps: a cloud of blood smoke bursting from where
+the hit met the body, droplets flying out of it, that hangs in the air a moment, a little more of it
+than a real wound sheds, as action games show a hit. It bursts by its part of the body: elsewhere than
+the head, 4 droplets for each of the spray's size, 0.25 to 0.75 units across, flying off the way the hit
+went at 120 to 420 units a second, two fifths of them back the way it came, each turned off that way by
+up to 0.7 of its speed and up to 30 faster upward, and a cloud of 6 mists of 6 to 10 units flying off as
+the droplets do at up to 70 units a second, growing 25 a second, 0.8 opaque, gone in 0.7 seconds; in the
+head it bursts more, 6 droplets for each of its size, faster and larger, with 10 larger mists, then
+gushes the way the hit went for 0.64 seconds, 8 pulses of 14 droplets and 2 mists, each 0.85 as fast as
+the one before. A mist holds most of its opacity, fading out by the square of the share of its life
+gone. The air slows droplets and mists alike, their speed falling to e^-5 of itself a second whatever
+the frame rate, so that the spray stops a short way off; a droplet falls at 0.35 of the world's gravity,
+is drawn along 0.04 seconds of its flight and goes after 0.7 seconds, fading out over the last 0.35,
+unless the world stops it first, where three tenths of them leave a splat flat on what they met, 2 to
+3.5 times their radius, lying 15 seconds and fading out over the last 4. At most 2048 droplets and 256
+mists fly at once, none made past them, and 192 splats lie, a new one taking the oldest's place. Each
+is of its spray's palette entry's color, lit once, as it is made, by the light where the hit met the
+body, as a flat-shaded model is lit there (`cs::Scene::bloodLightAt`: its ambient light and 0.8 of its
+shade, through the light curve), 0.45 of its color at least so that a hit reads in the dark, a mist
+1.35 times as lit as the droplets, as fine blood scatters the light. A gush stays where the hit met the
+body as the body moves on.
 
 **Today**, the shots' damage (`cs.shared:bullets`, `FireBullets3`): each round deals its weapon's
 `damage` as it leaves (cut to a whole number; the Glock's 25, the USP's 34 and 30 silenced, the AK-47's

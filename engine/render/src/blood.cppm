@@ -5,9 +5,10 @@
 /// client makes of a hit, drawn at once, each an instance the shader makes a quad of, with no vertex of
 /// the CPU's. A droplet is round, as wide as it is, and drawn along the way it flies across the line of
 /// sight as far as it flies in the draw's streak time, its head where it is, as the eye blurs a fast
-/// drop: lit fully along its middle, darker toward its rim, a glint near its head. A mist is a soft round
-/// puff, as opaque as it is at its middle, none at its edge. A splat lies flat on what it landed on, a
-/// little off it, its edge uneven, darker where it pools. Each is of its display color times the light
+/// drop: lit fully along its middle, darker toward its rim, a glint near its head. A mist is a puff of
+/// smoke, as thick as it is through its core, thinning to none at its edge, its density uneven by its
+/// seed. A splat lies flat on what it landed on, a little off it, its edge uneven by its seed, darker
+/// where it pools. Each is of its display color times the light
 /// where it is, as opaque as it is, blended over what is there, its depth tested but not written, seen
 /// through the fog. They are not sorted: drops of blood overlap little, and alike.
 export module nx.render:blood;
@@ -55,13 +56,14 @@ struct BloodRendererDesc {
 /// What a drop of blood is drawn as.
 enum class BloodShape : std::uint8_t {
     Droplet, ///< Round, drawn along its flight.
-    Mist,    ///< A soft round puff.
+    Mist,    ///< A puff of smoke, its density uneven.
     Splat,   ///< Flat on what it landed on, its edge uneven.
 };
 
 /// A drop of blood drawn in a frame: where it is and how fast it flies, its radius, its display color,
 /// the light where it is (1 its color as it is), how opaque it is (from 0 to 1), what it is drawn as,
-/// and for a splat the way what it lies on faces.
+/// for a splat the way what it lies on faces, and a share from 0 to 1 that shapes a mist's smoke and a
+/// splat's lobes, the same each frame for a drop that keeps it.
 struct BloodInstance {
     Vec3 position{};
     Vec3 velocity{};
@@ -71,6 +73,7 @@ struct BloodInstance {
     float opacity = 1.0F;
     BloodShape shape = BloodShape::Droplet;
     Vec3 normal{};
+    float seed = 0.0F;
 };
 
 /// What a draw of blood shows: its drops, seen through `camera` on a target of `aspect`; how long of

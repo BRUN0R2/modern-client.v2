@@ -142,7 +142,7 @@ TEST(BloodRendererTest, AFlyingDropletIsDrawnAlongItsFlightBehindItsHead) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
-TEST(BloodRendererTest, AMistFadesFromItsMiddleToItsEdge) {
+TEST(BloodRendererTest, AMistIsAPuffOfSmokeThickThroughItsCoreItsDensityUnevenByItsSeed) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
     if (!device) {
@@ -152,20 +152,32 @@ TEST(BloodRendererTest, AMistFadesFromItsMiddleToItsEdge) {
     std::optional<nx::render::BloodRenderer> renderer = rendererOf(**device);
     ASSERT_TRUE(renderer.has_value());
     OffscreenTarget target{**device};
-    // Flying across the view: a mist is drawn round all the same.
-    const std::array drops{BloodInstance{.position = kAhead,
-                                         .velocity = {.z = -60.0F},
-                                         .radius = nx::HammerUnits{2.0F},
-                                         .color = kRed,
-                                         .shape = BloodShape::Mist}};
+    // Falling across the view: a mist is drawn round all the same, no streak behind it.
+    const BloodInstance mist{.position = kAhead,
+                             .velocity = {.z = -60.0F},
+                             .radius = nx::HammerUnits{2.0F},
+                             .color = kRed,
+                             .shape = BloodShape::Mist,
+                             .seed = 0.25F};
+    const std::array drops{mist};
     const std::vector<std::byte> pixels = drawn(target, *renderer, drops);
-    const int middle = pixelAt(pixels, kMiddle, kMiddle).at(0);
-    const int halfway = pixelAt(pixels, pixelsRight(1.0F), kMiddle).at(0);
-    EXPECT_NEAR(middle, 200, 6) << "nearly opaque at its middle";
-    EXPECT_GT(halfway, middle / 4) << "halfway to its edge";
-    EXPECT_LT(halfway, (middle * 3) / 4);
-    EXPECT_EQ(halfway, pixelAt(pixels, kMiddle, pixelsAbove(1.0F)).at(0)) << "as much each way";
+    // Through its core, a quarter of its radius out, as thick as its smoke makes it: 0.4 of it to all.
+    for (const auto [x, y] : {std::pair{kMiddle, kMiddle}, std::pair{pixelsRight(0.5F), kMiddle},
+                              std::pair{kMiddle, pixelsAbove(0.5F)}}) {
+        const int red = pixelAt(pixels, x, y).at(0);
+        EXPECT_GE(red, 200 * 2 / 5 - 3) << x << ", " << y;
+        EXPECT_LE(red, 200 + 3) << x << ", " << y;
+    }
+    EXPECT_GT(pixelAt(pixels, kMiddle, pixelsAbove(1.5F)).at(0), 0) << "thinner toward its edge";
     expectNear(pixelAt(pixels, pixelsRight(2.5F), kMiddle), kBlack, 0.0, "past its edge");
+    expectNear(pixelAt(pixels, kMiddle, pixelsAbove(3.0F)), kBlack, 0.0, "no streak behind it");
+
+    // Its seed shapes its smoke, the same each frame.
+    EXPECT_EQ(drawn(target, *renderer, drops), pixels) << "the same seed, the same smoke";
+    BloodInstance otherSeed = mist;
+    otherSeed.seed = 0.75F;
+    const std::array other{otherSeed};
+    EXPECT_NE(drawn(target, *renderer, other), pixels) << "another seed, other smoke";
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
