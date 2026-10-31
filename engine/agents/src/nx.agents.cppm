@@ -203,7 +203,8 @@ public:
     /// become Blocked decisions carrying their NavigationError. Investigations finish at the corridor's
     /// projected destination, including an airborne observation. With no target remembered, it moves to its
     /// goal (MoveTo), which it forgets as it arrives (Idle): within arrivalDistance of its corridor's end
-    /// across, and a step of its height, as it measures how near a corner is. Its feet within
+    /// across, and a step of its height, as it measures how near a corner is; a corner it reached it heads
+    /// on from, however far it drifts from it before its corridor drops it. Its feet within
     /// arrivalDistance of the start of
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
     /// for the link's end, which its corridor goes on from, until it stands within a step of the end's height
@@ -282,6 +283,8 @@ private:
     /// The link of its corridor its body crosses, the corridor gone on from the link's end; none while it
     /// walks along it.
     std::optional<navigation::MeshLink> crossing{};
+    /// The corner of its corridor it last reached, which it heads on from (decide).
+    std::optional<Vec3> reachedCorner{};
     std::optional<navigation::NavigationError> pathError{};
     /// Where its body got stuck on its way to what it pursues, which its ways keep away from (giveUp).
     std::vector<navigation::AvoidedPlace> avoided{};

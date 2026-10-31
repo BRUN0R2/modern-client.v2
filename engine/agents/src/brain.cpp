@@ -346,11 +346,22 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     if (beginCrossing(decision, feet, query)) {
         return decision;
     }
-    // Toward the next corner farther than arrival, the turn after it anticipated (calcSmoothSteerDirection).
+    // Toward the first corner on from the last it reached that is farther than arrival, the turn after it
+    // anticipated (calcSmoothSteerDirection). Its funnel lists a corner it reached until it crosses the edge
+    // of the polygon the corner ends, which a body that cannot turn on the spot, rounding it wide, may not
+    // have yet as it drifts away from it: measured anew, the corner was behind it, and it turned back to it.
     const std::vector<Vec3> corners = corridor->corners(query, kSteeringCorners);
-    const auto next = std::ranges::find_if(corners, [this, feet](Vec3 corner) {
+    auto from = corners.begin();
+    if (const auto reached = reachedCorner ? std::ranges::find(corners, *reachedCorner) : corners.end();
+        reached != corners.end()) {
+        from = std::ranges::next(reached);
+    }
+    const auto next = std::find_if(from, corners.end(), [this, feet](Vec3 corner) {
         return groundDistance(feet, corner) > rules.arrivalDistance.value();
     });
+    if (next != from) {
+        reachedCorner = *std::ranges::prev(next);
+    }
     if (next != corners.end()) {
         approach(decision, feet, std::span{corners}.subspan(static_cast<std::size_t>(next - corners.begin())),
                  query);
@@ -424,6 +435,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQ
 void Brain::forgetCorridor() noexcept {
     corridor.reset();
     crossing.reset();
+    reachedCorner.reset();
 }
 
 void Brain::giveUp(const navigation::AvoidedPlace& stuckAt, std::size_t reroutes) {
