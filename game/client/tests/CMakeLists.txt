@@ -13,6 +13,7 @@ nxAddTest(csClientTests
         tempEntitiesTests.cpp
         particlesTests.cpp
         corpsesTests.cpp
+        damageNumbersTests.cpp
         bloodEffectsTests.cpp
         modelMaterialsTests.cpp
         viewModelTests.cpp

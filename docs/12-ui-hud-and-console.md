@@ -260,6 +260,22 @@ whole number, which is counted over each second and lags the rate. `net_graph` i
 number, so that the two never disagree as the original's do. Its font, like the
 console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 
+**The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
+action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,
+each hit of the player's on another player, a hostage or an entity's body shows a number of the damage
+it dealt, rounded, 1 at least, each pellet of a shot that hits a number of its own: what the server tells
+the player's client alone of its hits of each tick (`cs::DamageDealt`: where the hit met the body, the
+damage, whether in the head; what a player's health lost, what an entity's body was dealt). The number
+shows over where its hit met the body, the scene's camera projecting it each frame
+(`nx::render::screenPointOf`), over everything else, walls and all, under the HUD; it moves by the time it
+has shown, each frame, whatever the frame rate. As `data/cstrike/damageNumbers.toml` makes it look
+(`cs::DamageNumberLook`): in a heavy italic Verdana among the system's fonts, its line 4.5% of the
+screen's height, white, a head's red, outlined in black; from 0.3 of its size it fades in and pops up to
+1.3 of it over 0.12 seconds, easing out, settles back to its size over 0.12, rises 6% of the screen's
+height over its 0.9 seconds, easing out, from up to 2.5% of the screen's height to a side, and over its
+last 0.3 fades out shrinking to 0.65 of its size; 64 show at most, the oldest going first. Its glyphs are
+drawn once at the largest it shows and only ever made smaller, filtered linearly, which keeps it sharp.
+
 ### 3.3 Visual parity of numbers
 
 Values within the original range (health up to 100, armor up to 100, money up to 16000)
@@ -356,7 +372,7 @@ from reference shots; search comes later.
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
 | Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals`, `cl_corpsestay` |
-| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph` |
+| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
 | Player | `name`, `_cl_autowepswitch`, `cl_autobuy`, `cl_rebuy`, `cl_minmodels` (respecting the server) |
@@ -410,7 +426,9 @@ crosshair's `cl_crosshair_color` (`50 250 50`), `cl_crosshair_size` (`auto`) and
 left: the view models mirrored by it, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning)),
 archived, which each frame reads. `cs::CorpseCvars` registers `cl_corpsestay` (600, from 0 to 600),
 archived: the seconds a dead body stays, a player's or an entity's, before it fades out over a second
-and is drawn no more ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). `cs::GameCvars` registers the
+and is drawn no more ([10 §7.4](10-counter-strike-gameplay.md#74-damage)). `cs::DamageNumberCvars`
+registers `hud_damagenumbers` (1), archived: whether the damage of the player's hits shows (§3.2).
+`cs::GameCvars` registers the
 cvars of the game's rules a server sets, which the local game plays by until the server comes, not
 archived and told to the players (`Notify`), each a number, any of them, as the original's are,
 held where the original's game holds it as it reads it and set back as it sets it:

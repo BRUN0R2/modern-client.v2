@@ -23,6 +23,28 @@ using nx::render::Camera;
 constexpr float kFourByThree = 4.0F / 3.0F;
 constexpr float kTolerance = 1.0e-5F;
 
+TEST(CameraTest, APointAheadShowsOnTheTargetUpAndLeftAsItIsAndNoneBehindTheEye) {
+    constexpr float kWidth = 1920.0F;
+    constexpr float kHeight = 1080.0F;
+    const Camera camera{.position = {.x = 100.0F, .y = -50.0F, .z = 20.0F}};
+    const nx::Mat4 viewProjection = nx::render::viewProjectionMatrix(camera, kWidth / kHeight);
+    const auto ahead =
+        nx::render::screenPointOf(viewProjection, {.x = 600.0F, .y = -50.0F, .z = 20.0F}, kWidth, kHeight);
+    ASSERT_TRUE(ahead.has_value());
+    EXPECT_NEAR(ahead->x, kWidth * 0.5F, 1e-3F);
+    EXPECT_NEAR(ahead->y, kHeight * 0.5F, 1e-3F);
+    // Up is up the target, its y less; the map's +y is to the left.
+    const auto upLeft =
+        nx::render::screenPointOf(viewProjection, {.x = 600.0F, .y = 0.0F, .z = 70.0F}, kWidth, kHeight);
+    ASSERT_TRUE(upLeft.has_value());
+    EXPECT_LT(upLeft->x, kWidth * 0.5F);
+    EXPECT_LT(upLeft->y, kHeight * 0.5F);
+    EXPECT_FALSE(
+        nx::render::screenPointOf(viewProjection, {.x = -400.0F, .y = -50.0F, .z = 20.0F}, kWidth, kHeight)
+            .has_value());
+    EXPECT_FALSE(nx::render::screenPointOf(viewProjection, camera.position, kWidth, kHeight).has_value());
+}
+
 TEST(CameraTest, WhatIsAheadIsInTheMiddle) {
     const Camera camera{.position = {.x = 100.0F, .y = -50.0F, .z = 20.0F}};
     const Vec3 ahead = project(camera, kFourByThree, {.x = 600.0F, .y = -50.0F, .z = 20.0F});

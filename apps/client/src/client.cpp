@@ -517,6 +517,8 @@ private:
     /// What the session's scene shows of the frame: the player's view, turned by the kick its weapon
     /// gave it, the brush entities where the game puts them, the weapon in hand, and what nav_draw draws.
     [[nodiscard]] auto sessionView() -> cs::SceneView;
+    /// The camera the session's scene is drawn from: the player's view turned by its weapon's kick.
+    [[nodiscard]] auto kickedCamera() const -> nx::render::Camera;
     /// What nav_draw draws over the session's frame, while it draws: its agents' mesh, which upload put on
     /// the GPU, and the way each of its living agents follows on it, found again as the game ticks.
     [[nodiscard]] auto navigationOverlay() -> cs::SceneOverlay;
@@ -540,6 +542,7 @@ private:
     std::optional<cs::FogCvars> m_fogCvars;
     cs::FogControl m_fog; ///< The fog the frames show, as the fog's cvars ask for it.
     std::optional<cs::CorpseCvars> m_corpseCvars;
+    std::optional<cs::DamageNumberCvars> m_damageNumberCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
@@ -580,6 +583,7 @@ private:
     nx::ui::FontCatalog m_fonts;
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
+    std::optional<cs::DamageNumbers> m_damageNumbers;   ///< None when its font could not be had.
     nx::platform::FrameRateMeter m_frameRate;           ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
@@ -717,6 +721,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(corpseCvars.error()));
     }
     m_corpseCvars = std::move(*corpseCvars);
+    auto damageNumberCvars = cs::DamageNumberCvars::registerIn(m_console);
+    if (!damageNumberCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(damageNumberCvars.error()));
+    }
+    m_damageNumberCvars = std::move(*damageNumberCvars);
     auto gameCvars = cs::GameCvars::registerIn(m_console);
     if (!gameCvars) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
@@ -1132,6 +1141,11 @@ void Client::openWindowText(std::uint32_t screenHeight) {
     } else {
         nx::log::warning(kLog, "cl_showfps shows nothing: {}", nx::describe(label.error()));
     }
+    if (auto numbers = cs::DamageNumbers::open(m_fonts, m_content->damageNumbers, screenHeight); numbers) {
+        m_damageNumbers.emplace(std::move(*numbers));
+    } else {
+        nx::log::warning(kLog, "the damage of the hits shows no numbers: {}", nx::describe(numbers.error()));
+    }
 }
 
 void Client::toggleConsole() {
@@ -1282,7 +1296,10 @@ void Client::startNextSession() {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
     m_viewModelEvents = {}; // a new game's first play is new
-    m_viewPose.reset();     // what the old game showed went with its level
+    if (m_damageNumbers) {
+        m_damageNumbers->clear(); // over the old game's bodies
+    }
+    m_viewPose.reset(); // what the old game showed went with its level
     m_clientEvents.clear();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
@@ -1382,7 +1399,11 @@ void Client::showEffects(nx::Seconds elapsed) {
     const std::vector<cs::BloodSpray> sprays = m_session->client.takeBloodSprays();
     const std::vector<cs::BloodStream> streams = m_session->client.takeBloodStreams();
     const std::vector<cs::StreakSplash> splashes = m_session->client.takeStreakSplashes();
+    const std::vector<cs::DamageDealt> dealt = m_session->client.takeDamageDealt();
     const nx::Seconds now{m_mapClock.elapsed()};
+    if (m_damageNumbers && m_damageNumberCvars->shown.value()) {
+        m_damageNumbers->show(dealt, now);
+    }
     const cs::Level& level = *m_session->level;
     const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
     m_session->effects.update(now, elapsed, level.hulls(), gravity);
@@ -1524,6 +1545,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
             }
         }
+        if (m_damageNumbers) {
+            if (auto loaded = m_damageNumbers->load(m_frames->screen(), list); !loaded) {
+                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+            }
+        }
     }
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
@@ -1567,7 +1593,7 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
     return {};
 }
 
-auto Client::sessionView() -> cs::SceneView {
+auto Client::kickedCamera() const -> nx::render::Camera {
     // The view is drawn turned by the kick the player's weapon gave it, as the original's client adds
     // the punch to it.
     nx::render::Camera kicked = m_camera;
@@ -1575,6 +1601,11 @@ auto Client::sessionView() -> cs::SceneView {
     kicked.angles = nx::EulerAngles{.pitch = m_camera.angles.pitch + punch.pitch,
                                     .yaw = m_camera.angles.yaw + punch.yaw,
                                     .roll = m_camera.angles.roll + punch.roll};
+    return kicked;
+}
+
+auto Client::sessionView() -> cs::SceneView {
+    const nx::render::Camera kicked = kickedCamera();
     m_session->client.writePlacements(m_placements);
     m_session->client.writeHostages(m_hostages);
     m_session->client.writeEntities(m_content->entities, m_corpseCvars->stayTime(), shownEntities);
@@ -1627,6 +1658,12 @@ auto Client::navigationOverlay() -> cs::SceneOverlay {
 
 void Client::appendScreen(nx::rhi::Extent2d size) {
     m_screenQuads.clear();
+    if (m_session && m_damageNumbers && m_cvars->video.hudDraw.value() && size.height > 0) {
+        // Over the scene, walls and all, under the HUD; the view the scene is drawn from.
+        const float aspect = static_cast<float>(size.width) / static_cast<float>(size.height);
+        m_damageNumbers->append(m_screenQuads, nx::render::viewProjectionMatrix(kickedCamera(), aspect), size,
+                                nx::Seconds{m_mapClock.elapsed()});
+    }
     if (m_session && m_hud && m_cvars->video.hudDraw.value()) {
         // The HUD, over the scene, the knife's crosshair in the middle.
         const cs::PlayerStatus& status = m_session->client.status();

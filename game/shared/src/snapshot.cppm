@@ -22,6 +22,7 @@ import :characters;
 import :lightStyles;
 import :entityCatalog;
 import :hitGroups;
+import :damageNumbers;
 
 export namespace cs {
 
@@ -153,6 +154,7 @@ struct PlayerSnapshot {
     std::vector<BloodSpray> bloodSprays{};      ///< Of the tick's hits, in their order.
     std::vector<BloodStream> bloodStreams{};    ///< Of the tick's hits in the head, in their order.
     std::vector<StreakSplash> streakSplashes{}; ///< Of the tick, in their order: the helmets' sparks.
+    std::vector<DamageDealt> damageDealt{};     ///< What its hits dealt in the tick, in their order.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
