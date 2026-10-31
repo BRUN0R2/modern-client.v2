@@ -184,7 +184,7 @@ not a measurement of the complete frame or a promise about player FPS:
 - TSan on the tests of every pull request and every push to `main` (GCC, `tsan-linux-gcc`
   preset). Its suppressions (`tests/tsan.supp`) name only code that is not the project's, each
   with why: today Mesa's lavapipe, whose uninstrumented threads TSan sees through their pthread
-  calls only. Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
+  calls only, and the LLVM its llvmpipe threads compile shaders through. Planned: ASan + UBSan on every pull request and a nightly MSan, when Clang joins CI.
 - `clang-tidy` runs locally against `build/dev-windows-clang/compile_commands.json` and the Clang
   modules produced by a complete build. Use LLVM 23.1.4's `clang-tidy-diff.py` with a zero-context
   Git diff and `-p1 -path build/dev-windows-clang`; the full repository profile applies to changed
