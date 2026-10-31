@@ -829,6 +829,7 @@ auto brakingRules() -> nx::agents::Rules {
     nx::agents::Rules braking = rules();
     braking.arrivalDistance = nx::HammerUnits{8.0F};
     braking.braking = InertialBody::kFriction;
+    braking.stopSpeed = nx::UnitsPerSecond{InertialBody::kStopSpeed};
     return braking;
 }
 
@@ -931,10 +932,23 @@ TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproache
     nx::agents::Decision decision = brain.decide({}, query);
     ASSERT_EQ(decision.intent.approached().size(), 1U) << "its stop alone";
     brain.steer(decision.intent, {}, nx::UnitsPerSecond{160}, {}, query);
-    // Twenty units short of its stop, braking four times its speed a second: 80 units a second, half its
-    // full.
-    EXPECT_NEAR(decision.intent.speedShare, 0.5F, 0.05F);
+    // Twenty units short of its stop, braking four times its speed a second and below 75 as at 75: 75 and
+    // four times the 10.6 units farther than it stops from 75 in, 117.5 units a second, 0.73 of its full.
+    EXPECT_NEAR(decision.intent.speedShare, 117.5F / 160.0F, 0.02F);
     EXPECT_GT(nx::length(decision.intent.direction), 0.0F) << "it goes on, slower";
+}
+
+TEST(AgentBrain, ABodyAtRestShortOfItsStopWalksThereRatherThanCreep) {
+    // 12 units short, just past its arrival distance: braking times the distance alone asked for 48 units a
+    // second, slower than its friction lets it start from rest, and it crept there at 2 units a second, as
+    // stuck as a stuck watch finds a body; stopping from 85 within it by friction, it walks there.
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    brain.setGoal(nx::Vec3{.x = 12});
+    const InertialWalk walked = walkInertially(brain, query, InertialBody{});
+    EXPECT_TRUE(walked.isArrived);
+    EXPECT_LT(walked.seconds, 0.5F) << "rather than creep there";
 }
 
 TEST(AgentBrain, ItArrivesAcrossOnItsFloorAndNotUnderAGoalAboveIt) {

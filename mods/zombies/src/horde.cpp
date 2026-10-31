@@ -95,7 +95,8 @@ struct SpawnAnchor {
             .threatRecency = settings.threatRecency,
             .threatMargin = settings.threatMargin,
             .memoryLimit = settings.memoryLimit,
-            .braking = settings.braking};
+            .braking = settings.braking,
+            .stopSpeed = settings.stopSpeed};
 }
 } // namespace
 
@@ -111,7 +112,8 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
         read->fieldOfView.value() > kFullTurnDegrees || !positive(read->memoryLifetime.count()) ||
         !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
         !std::isfinite(read->replanShare) || read->replanShare < 0.0F || !std::isfinite(read->braking) ||
-        read->braking < 0.0F || !std::isfinite(read->shortTermMemory.count()) ||
+        read->braking < 0.0F || !std::isfinite(read->stopSpeed.value()) ||
+        read->stopSpeed < nx::UnitsPerSecond{} || !std::isfinite(read->shortTermMemory.count()) ||
         read->shortTermMemory < nx::Seconds{} || !std::isfinite(read->threatRecency.count()) ||
         read->threatRecency < nx::Seconds{} || !std::isfinite(read->threatMargin.value()) ||
         read->threatMargin < nx::HammerUnits{} || !positive(read->spawnRadius.value()) ||

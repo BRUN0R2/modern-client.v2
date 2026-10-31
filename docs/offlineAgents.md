@@ -104,8 +104,11 @@ the way its velocity must change to become the one it steered to (`nx::agents::I
 DetourCrowd integrates an agent's velocity toward its desired one, which cancels the drift: a bot moves
 so, as it looks elsewhere, and a zombie faces the way it goes, as its model walks ahead, and is driven
 that way ahead and to its side, rather than turn its back on its way as it slows down; and it slows
-down by the ground's friction (`braking`, sv_friction's 4: the speed it can still stop from is four
-times how far it is) for the end of a way it stops at, and for each corner it sees ahead, to the cosine
+down by the ground's friction (`braking`, sv_friction's 4, and `stopSpeed`, sv_stopspeed's 75: the speed
+it can still stop from is the root of 600 times how far it is, from 75 on four times more for each unit
+farther, as PM_Friction slows a body, rather than four times how far it is, which asked a body at rest
+just short of a stop for a walk its friction let it creep at 2 units a second) for the end of a way it
+stops at, and for each corner it sees ahead, to the cosine
 of half the turn there, measured to the way on four of its radii past the corner, so that a corner the
 mesh rounds into short turns counts as the turn it is (`nx::agents::Intent::approaches`); it arrives
 within its arrival distance across and a step of height, as it reaches a corner. A body that waits as
