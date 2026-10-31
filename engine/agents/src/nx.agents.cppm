@@ -216,8 +216,10 @@ public:
     /// approaches (Rules::braking): each approached point's pass share of `maxSpeed`, and the speed it can
     /// still stop from short of it by friction (Rules::stopSpeed); no slower than the slowest walk its body
     /// gains speed at (Rules::acceleration), at most `maxSpeed`, but as it stops where its way ends: a walk
-    /// slower than its friction lets it start left it where it was. It waits, its direction none, when no way
-    /// on is worth a tenth of the speed it asked for. Else it goes the way it steers to, as fast as that; and
+    /// slower than its friction lets it start left it where it was. With no body near it, it goes its way. It
+    /// waits, its direction none, when no way on round them is worth a tenth of the speed it asked for and a
+    /// body in its way is nearer than it to where its way ends, as a queue waits; with none, it goes its way
+    /// on. Else it goes the way it steers to, as fast as that; and
     /// a body that gains speed only along the way it is driven is to be driven (Intent::drive) the way its
     /// velocity must change to become the steered one, as DetourCrowd integrates an agent's velocity toward
     /// its desired one, unless it goes within a tenth of how it steers. Across a link, it heads for the
