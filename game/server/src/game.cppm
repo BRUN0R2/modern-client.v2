@@ -491,6 +491,7 @@ private:
     nx::ecs::World m_world;
     std::vector<std::optional<Player>> m_players; ///< By slot: none for a slot a player left.
     std::vector<Impact> m_impacts;                ///< Of the tick.
+    std::vector<EntityStep> m_entitySteps;        ///< Of the tick.
     std::vector<BloodMark> bloodMarks;            ///< Of the tick.
     std::vector<BloodSpray> bloodSprays;          ///< Of the tick.
     std::vector<BloodStream> bloodStreams;        ///< Of the tick.

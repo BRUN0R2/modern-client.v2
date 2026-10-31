@@ -74,3 +74,6 @@ bloodColor = 247
 # while the push carries it, then at half its speed, back to the whole of it over half a second. Leave
 # it out for a body the attacks do not knock back.
 knockback = { pushPerDamage = 4.0, mostPushSpeed = 300.0, staggerTime = 0.1, slowShare = 0.5, slowRecovery = 0.5 }
+# A step each 56 units it walks on the ground, which the players' step indicator shows; leave it out for a
+# body whose steps are not heard.
+stride = 56.0

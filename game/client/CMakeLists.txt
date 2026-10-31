@@ -23,6 +23,7 @@ nxAddModuleLibrary(csClient
         src/particles.cppm
         src/corpses.cppm
         src/damageNumbers.cppm
+        src/stepIndicator.cppm
         src/bloodEffects.cppm
         src/levelDecals.cppm
         src/bulletMarks.cppm
@@ -54,6 +55,7 @@ nxAddModuleLibrary(csClient
         src/particles.cpp
         src/corpses.cpp
         src/damageNumbers.cpp
+        src/stepIndicator.cpp
         src/bloodEffects.cpp
         src/levelDecals.cpp
         src/bulletMarks.cpp

@@ -22,7 +22,8 @@ enum class EntityMotion : std::uint8_t {
 };
 
 /// An entity's body of a type of the catalog: how it moves, its health, how its model plays, what it
-/// is doing, when it may strike again, and what it keeps of the hits that knocked it back.
+/// is doing, when it may strike again, what it keeps of the hits that knocked it back, and how far it
+/// walked on the ground since its last step.
 struct EntityBody {
     EntityTypeIndex type{};
     MovementState movement{};
@@ -31,6 +32,7 @@ struct EntityBody {
     EntityMotion motion = EntityMotion::Idle;
     nx::GameTime attacksAgainAt{};
     KnockedBack knockedBack{};
+    nx::HammerUnits walked{};
 };
 
 /// The command an entity's body is driven by in a tick, as a player's client sends its own.
@@ -55,9 +57,18 @@ struct EntityAttack {
 [[nodiscard]] auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                                    EntityTypeIndex type, nx::game::Transform placement)
     -> nx::Result<nx::ecs::Entity, EntityError>;
-/// Each body advances once in the world's tick, whether commanded or resting; corpses animate too.
+/// What the entities' bodies did in a tick: the strikes they made, and the steps they took, in their
+/// order.
+struct EntityBodiesTick {
+    std::vector<EntityAttack> attacks{};
+    std::vector<EntityStep> steps{};
+};
+
+/// Each body advances once in the world's tick, whether commanded or resting; corpses animate too. A living
+/// body of a type with a stride steps each time it walked a stride on the ground (EntityDefinition::stride),
+/// the rest of its way kept toward its next step.
 [[nodiscard]] auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
-                                   std::span<const EntityCommand> commands) -> std::vector<EntityAttack>;
+                                   std::span<const EntityCommand> commands) -> EntityBodiesTick;
 /// States, including corpses, ordered by complete generational handles; requires registered body data.
 [[nodiscard]] auto entityStatesOf(nx::ecs::World& world) -> std::vector<EntityState>;
 

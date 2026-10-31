@@ -543,6 +543,7 @@ private:
     cs::FogControl m_fog; ///< The fog the frames show, as the fog's cvars ask for it.
     std::optional<cs::CorpseCvars> m_corpseCvars;
     std::optional<cs::DamageNumberCvars> m_damageNumberCvars;
+    std::optional<cs::StepIndicatorCvars> m_stepIndicatorCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
@@ -584,6 +585,7 @@ private:
     std::unique_ptr<cs::ConsoleWindow> m_consoleWindow; ///< None when the console has no window.
     std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
     std::optional<cs::DamageNumbers> m_damageNumbers;   ///< None when its font could not be had.
+    std::optional<cs::StepIndicator> m_stepIndicator;   ///< Once the window's text is open.
     nx::platform::FrameRateMeter m_frameRate;           ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
@@ -726,6 +728,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(damageNumberCvars.error()));
     }
     m_damageNumberCvars = std::move(*damageNumberCvars);
+    auto stepIndicatorCvars = cs::StepIndicatorCvars::registerIn(m_console);
+    if (!stepIndicatorCvars) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(stepIndicatorCvars.error()));
+    }
+    m_stepIndicatorCvars = std::move(*stepIndicatorCvars);
     auto gameCvars = cs::GameCvars::registerIn(m_console);
     if (!gameCvars) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
@@ -1146,6 +1153,7 @@ void Client::openWindowText(std::uint32_t screenHeight) {
     } else {
         nx::log::warning(kLog, "the damage of the hits shows no numbers: {}", nx::describe(numbers.error()));
     }
+    m_stepIndicator.emplace(m_content->stepIndicator);
 }
 
 void Client::toggleConsole() {
@@ -1299,6 +1307,9 @@ void Client::startNextSession() {
     if (m_damageNumbers) {
         m_damageNumbers->clear(); // over the old game's bodies
     }
+    if (m_stepIndicator) {
+        m_stepIndicator->clear(); // the old game's bodies
+    }
     m_viewPose.reset(); // what the old game showed went with its level
     m_clientEvents.clear();
     m_changedWeapons.clear(); // the new level read every weapon's view model
@@ -1400,9 +1411,13 @@ void Client::showEffects(nx::Seconds elapsed) {
     const std::vector<cs::BloodStream> streams = m_session->client.takeBloodStreams();
     const std::vector<cs::StreakSplash> splashes = m_session->client.takeStreakSplashes();
     const std::vector<cs::DamageDealt> dealt = m_session->client.takeDamageDealt();
+    const std::vector<cs::EntityStep> steps = m_session->client.takeEntitySteps();
     const nx::Seconds now{m_mapClock.elapsed()};
     if (m_damageNumbers && m_damageNumberCvars->shown.value()) {
         m_damageNumbers->show(dealt, now);
+    }
+    if (m_stepIndicator && m_stepIndicatorCvars->shown.value()) {
+        m_stepIndicator->hear(steps, now);
     }
     const cs::Level& level = *m_session->level;
     const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
@@ -1550,6 +1565,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
             }
         }
+        if (m_stepIndicator) {
+            if (auto loaded = m_stepIndicator->load(m_frames->screen(), list); !loaded) {
+                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+            }
+        }
     }
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
@@ -1662,6 +1682,12 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         // Over the scene, walls and all, under the HUD; the view the scene is drawn from.
         const float aspect = static_cast<float>(size.width) / static_cast<float>(size.height);
         m_damageNumbers->append(m_screenQuads, nx::render::viewProjectionMatrix(kickedCamera(), aspect), size,
+                                nx::Seconds{m_mapClock.elapsed()});
+    }
+    if (m_session && m_stepIndicator && m_cvars->video.hudDraw.value()) {
+        // About the middle of the screen, under the HUD, the way each body heard is from the view.
+        const nx::render::Camera view = kickedCamera();
+        m_stepIndicator->append(m_screenQuads, view.position, view.angles.yaw, size,
                                 nx::Seconds{m_mapClock.elapsed()});
     }
     if (m_session && m_hud && m_cvars->video.hudDraw.value()) {

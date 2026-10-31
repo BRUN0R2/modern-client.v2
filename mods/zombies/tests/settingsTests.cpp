@@ -19,6 +19,7 @@ TEST(ZombieSettings, ReadsTheExampleAndRejectsAnUnboundedPerceptionBudget) {
     EXPECT_EQ(read->body.bloodColor, kRed) << "it bleeds red";
     ASSERT_TRUE(read->body.knockback.has_value()) << "shots knock it back";
     EXPECT_TRUE(cs::isValid(*read->body.knockback));
+    EXPECT_EQ(read->body.stride, nx::HammerUnits{56}) << "its steps are heard";
     EXPECT_EQ(read->spawnBatchLimit, 64U);
     EXPECT_EQ(read->spawnRadius, nx::HammerUnits{512});
     const auto at = text->find("perceptionBudget = 8");

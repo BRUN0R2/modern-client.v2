@@ -635,6 +635,12 @@ it and the ground's friction stops it; then it walks at `slowShare` of its speed
 over `slowRecovery` (`cs::walkShareOf`), each hit starting it over. A hit that dealt nothing knocks
 nothing; a type of none is not knocked back.
 
+An entity's body steps each `stride` units it walks on the ground when its type names one
+(`EntityDefinition::stride`), the rest of its way kept toward its next step, as a monster's feet strike
+the ground by its gait rather than by a player's step timer; a type of none steps unheard. The server
+tells every client of the tick's steps (`cs::EntityStep`: the body, where its feet were), which the step
+indicator shows ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
+
 The enhanced look shows the blood a hit sprays as its own, the project's (`cs.client:bloodEffects`,
 `data/cstrike/blood.toml`'s `enhancedLook`, drawn by `nx.render:blood`), in place of the original's
 spray, drops and head's stream, which the legacy look keeps: a splash of blood smoke bursting out of
@@ -936,7 +942,8 @@ The planned layout; today `entities.toml`
 `blood.toml` and `playerHarm.toml` (section 7.4), `footsteps.toml` and `breath.toml`
 ([11 §3](11-audio.md#3-original-semantics-to-preserve)), `use.toml`
 ([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)), `damageNumbers.toml`
-([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)) and `characters.toml` (section 2)
+([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)), `stepIndicator.toml` (the same) and
+`characters.toml` (section 2)
 exist. The hull sizes are not data:
 `cs.shared` holds them as constants ([07 §3.3](07-simulation-and-physics.md#33-hulls)).
 
@@ -956,6 +963,7 @@ data/cstrike/
 ├── lightStyles.toml    # the light styles the game sets as a map starts
 ├── environment.toml    # what the game shows of every map's world over what it sets: a mod's sky
 ├── damageNumbers.toml  # how the damage of the player's hits shows over what they hit
+├── stepIndicator.toml  # how the steps of the monsters heard show around the middle of the screen
 ├── footsteps.toml      # the sounds of a player's feet
 ├── breath.toml         # the sounds of a player's breath in water
 ├── use.toml            # the sounds of a player's use key
