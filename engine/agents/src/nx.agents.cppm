@@ -71,6 +71,11 @@ struct Rules {
     /// slow body, and a body at rest a walk slower than braking times it over its acceleration cannot start
     /// at. None, its friction takes a share of its speed alone however slow it goes.
     UnitsPerSecond stopSpeed{};
+    /// How fast a walk gains its body speed, in shares of the walk a second (sv_accelerate's 5): below its
+    /// stop speed its friction takes stopSpeed times braking a second, so that a walk slower than that over
+    /// acceleration gains it nothing, and it walks no slower than twice that, the slowest walk it gains as
+    /// fast as its friction would stop it from, but to stop where its way ends. None, at any walk.
+    float acceleration = 0.0F;
 };
 
 /// A sensed fact: where a target was seen, touched, or roughly where it was heard (Brain::sense), never a
@@ -209,7 +214,9 @@ public:
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
     /// approaches (Rules::braking): each approached point's pass share of `maxSpeed`, and the speed it can
-    /// still stop from short of it by friction (Rules::stopSpeed). It waits, its direction none, when no way
+    /// still stop from short of it by friction (Rules::stopSpeed); no slower than the slowest walk its body
+    /// gains speed at (Rules::acceleration), at most `maxSpeed`, but as it stops where its way ends: a walk
+    /// slower than its friction lets it start left it where it was. It waits, its direction none, when no way
     /// on is worth a tenth of the speed it asked for. Else it goes the way it steers to, as fast as that; and
     /// a body that gains speed only along the way it is driven is to be driven (Intent::drive) the way its
     /// velocity must change to become the steered one, as DetourCrowd integrates an agent's velocity toward
