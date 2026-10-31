@@ -59,6 +59,12 @@ struct Rules {
     /// How long after it first sees a target it knows of it: none before then pursues it (a CS bot's
     /// reaction time). None, at once.
     Seconds reactionTime{};
+    /// How fast its body loses speed with nothing driving it on, in shares of it a second (the ground's
+    /// friction: sv_friction's 4), so that the speed it can still stop from short of a point is that times
+    /// how far the point is. Its body cannot turn on the spot: it slows down by it for the end of a way it
+    /// stops at and for a corner, the more the sharper the corner turns, rather than overshoot them and
+    /// circle back. None, it never slows (a body that stops and turns at once).
+    float braking = 0.0F;
 };
 
 /// A sensed fact: where a target was seen, touched, or roughly where it was heard (Brain::sense), never a
@@ -104,17 +110,46 @@ struct Memory {
     bool isThreat = false;
 };
 
+/// A point ahead on an agent's way that it slows down for (Rules::braking): how far along its way it is,
+/// and the share of its full speed it may pass there, none where its way ends at a stop.
+struct Approach {
+    HammerUnits distance{};
+    float passShare = 1.0F;
+};
+
+/// The most points ahead an agent slows down for: as many as the corners it sees ahead.
+inline constexpr std::size_t kMostApproaches = 4;
+
 /// What a decision asks of a body, as a player's command would: where to move, where to look, whether
-/// to attack or to jump.
+/// to attack or to jump; and what ahead on its way it slows down for, which steering heeds.
 struct Intent {
     Vec3 direction{};        ///< A unit direction on the ground plane, or zero.
     float speedShare = 1.0F; ///< How much of its full speed it moves at along direction, more than 0 to 1.
+    /// The way to drive a body that gains speed only along the way it is driven and loses the rest to
+    /// friction (a GoldSrc body: PM_Accelerate, PM_Friction), a unit direction on the ground plane: the way
+    /// its velocity must change to become the one it steered to, so that it cancels its drift across its way
+    /// rather than circle round what it heads for; none to drive it along direction.
+    std::optional<Vec3> drive{};
+
+    /// The way to drive a body that gains speed only along the way it is driven: drive, else direction.
+    [[nodiscard]] inline auto drivenWay() const noexcept -> Vec3 { return drive.value_or(direction); }
     /// The way on along its corridor, a unit direction on the ground plane, or zero: where it faces with
     /// nothing to look at, however it steers or wiggles (SetLookAngles of m_lookAheadAngle).
     Vec3 ahead{};
     std::optional<Vec3> lookAt{};
     bool attacks = false;
     bool jumps = false;
+    /// What ahead on its way it slows down for, the nearest first, approachCount of them: each corner it
+    /// sees ahead with the way on after it, passed at the cosine of half the way's turn there (straight on
+    /// at full speed, a right angle at 0.71 of it, turning back at none); and where its way ends, when it
+    /// stops there (MoveTo, Investigate: not a target it chases), passed at none.
+    std::array<Approach, kMostApproaches> approaches{};
+    std::size_t approachCount = 0;
+
+    /// The points it approaches.
+    [[nodiscard]] inline auto approached() const noexcept -> std::span<const Approach> {
+        return std::span{approaches}.first(approachCount);
+    }
 };
 
 /// A brain's decision of a tick: its intent, its behavior, the target it pursues (none for its goal or
@@ -156,7 +191,9 @@ public:
     /// again, teleported, pushed off the mesh) searches its way anew from where it is. Query/path failures
     /// become Blocked decisions carrying their NavigationError. Investigations finish at the corridor's
     /// projected destination, including an airborne observation. With no target remembered, it moves to its
-    /// goal (MoveTo), which it forgets as it arrives (Idle). Its feet within arrivalDistance of the start of
+    /// goal (MoveTo), which it forgets as it arrives (Idle): within arrivalDistance of its corridor's end
+    /// across, and a step of its height, as it measures how near a corner is. Its feet within
+    /// arrivalDistance of the start of
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
     /// for the link's end, which its corridor goes on from, until it stands within a step of the end's height
     /// as far from the start as the end is; across it, it searches no way, as DetourCrowd plans none for an
@@ -164,8 +201,13 @@ public:
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
-    /// `velocity`, at `maxSpeed` at most. It waits, its direction none, when no way on is worth a tenth of
-    /// its speed; else it goes the way it steers to, as fast as that. Across a link, it heads for the
+    /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
+    /// approaches (Rules::braking): each approached point's pass share of `maxSpeed`, and braking times how
+    /// far it is. It waits, its direction none, when no way on is worth a tenth of the speed it asked for.
+    /// Else it goes the way it steers to, as fast as that; and a body that gains speed only along the way it
+    /// is driven is to be driven (Intent::drive) the way its velocity must change to become the steered one,
+    /// as DetourCrowd integrates an agent's velocity toward its desired one, unless it goes within a tenth of
+    /// how it steers. Across a link, it heads for the
     /// link's end as it decided, off the mesh, as DetourCrowd moves an agent over a link without steering.
     void steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
                std::span<const navigation::SteeringBody> nearby, navigation::NavigationQuery& query);
@@ -200,6 +242,12 @@ private:
     [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
     /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
     [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
+    /// Tells `decision`'s intent what it approaches from `feet` along `ahead`, the corners from the one it
+    /// steers to on (Intent::approaches), when it brakes (Rules::braking): the turn at each measured from the
+    /// way into it to the way on kTurnSpanRadii of its body's radius past it, so that a corner the mesh
+    /// rounds into short turns is slowed for as a whole.
+    void approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
+                  navigation::NavigationQuery& query);
     /// Crosses the link its corridor reaches next when `feet` are within arrivalDistance of its start
     /// (decide), `decision` heading for its end and jumping for a link up. Returns whether it crosses one.
     [[nodiscard]] auto beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQuery& query)

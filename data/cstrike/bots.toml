@@ -20,6 +20,10 @@ attackDistance = 8192.0
 arrivalDistance = 8.0
 replanDistance = 24.0
 replanShare = 0.25
+# How fast a bot's body loses speed with nothing driving it on, a share of it a second: the ground's
+# friction (sv_friction 4). A bot slows down by it for the end of its way and for a corner, the sharper
+# the more, rather than overshoot them and circle back: it cannot turn on the spot.
+braking = 4.0
 # How long where a bot placed an enemy holds against an estimate of it less salient, or as salient and
 # heard no nearer (OnEvent's short-term memory of a noise, 3 seconds): a step heard does not move where
 # it heard a shot, nor a farther step a nearer one, so that its way and its eyes keep still.

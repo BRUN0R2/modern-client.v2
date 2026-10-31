@@ -190,6 +190,7 @@ struct BotRules {
     nx::HammerUnits arrivalDistance{};
     nx::HammerUnits replanDistance{};
     float replanShare = 0.0F;
+    float braking = 0.0F;
     nx::Seconds shortTermMemory{};
     nx::Seconds threatRecency{};
     nx::HammerUnits threatMargin{};
@@ -382,6 +383,7 @@ struct nx::meta::Description<cs::BotRules> {
         nx::meta::field<&cs::BotRules::memoryLimit>("memoryLimit"),
         nx::meta::field<&cs::BotRules::attackDistance>("attackDistance"),
         nx::meta::field<&cs::BotRules::arrivalDistance>("arrivalDistance"),
+        nx::meta::field<&cs::BotRules::braking>("braking", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::replanDistance>("replanDistance"),
         nx::meta::field<&cs::BotRules::replanShare>("replanShare", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::BotRules::shortTermMemory>("shortTermMemory", nx::data::Range{.minimum = 0.0}),

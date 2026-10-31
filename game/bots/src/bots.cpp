@@ -70,7 +70,7 @@ void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::Units
     if (intent.jumps) {
         command.buttons.set(Button::Jump);
     }
-    const nx::Vec3 way = intent.direction;
+    const nx::Vec3 way = intent.drivenWay();
     if (nx::length(way) == 0.0F) {
         return;
     }

@@ -34,6 +34,7 @@ struct Settings {
     nx::HammerUnits arrivalDistance{};
     nx::HammerUnits replanDistance{};
     float replanShare = 0.0F;
+    float braking = 0.0F;
     nx::Seconds shortTermMemory{};
     nx::Seconds threatRecency{};
     nx::HammerUnits threatMargin{};
@@ -115,6 +116,7 @@ struct nx::meta::Description<zombies::Settings> {
         nx::meta::field<&zombies::Settings::fieldOfView>("fieldOfView"),
         nx::meta::field<&zombies::Settings::memoryLifetime>("memoryLifetime"),
         nx::meta::field<&zombies::Settings::arrivalDistance>("arrivalDistance"),
+        nx::meta::field<&zombies::Settings::braking>("braking", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::replanDistance>("replanDistance"),
         nx::meta::field<&zombies::Settings::replanShare>("replanShare", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&zombies::Settings::shortTermMemory>("shortTermMemory",

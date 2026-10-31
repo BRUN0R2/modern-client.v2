@@ -94,7 +94,8 @@ struct SpawnAnchor {
             .shortTermMemory = settings.shortTermMemory,
             .threatRecency = settings.threatRecency,
             .threatMargin = settings.threatMargin,
-            .memoryLimit = settings.memoryLimit};
+            .memoryLimit = settings.memoryLimit,
+            .braking = settings.braking};
 }
 } // namespace
 
@@ -109,12 +110,13 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
     if (!positive(read->sightRange.value()) || !positive(read->fieldOfView.value()) ||
         read->fieldOfView.value() > kFullTurnDegrees || !positive(read->memoryLifetime.count()) ||
         !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
-        !std::isfinite(read->replanShare) || read->replanShare < 0.0F ||
-        !std::isfinite(read->shortTermMemory.count()) || read->shortTermMemory < nx::Seconds{} ||
-        !std::isfinite(read->threatRecency.count()) || read->threatRecency < nx::Seconds{} ||
-        !std::isfinite(read->threatMargin.value()) || read->threatMargin < nx::HammerUnits{} ||
-        !positive(read->spawnRadius.value()) || !positive(read->spawnSpacing.value()) ||
-        read->memoryLimit == 0 || read->perceptionBudget == 0 || read->spawnBatchLimit == 0) {
+        !std::isfinite(read->replanShare) || read->replanShare < 0.0F || !std::isfinite(read->braking) ||
+        read->braking < 0.0F || !std::isfinite(read->shortTermMemory.count()) ||
+        read->shortTermMemory < nx::Seconds{} || !std::isfinite(read->threatRecency.count()) ||
+        read->threatRecency < nx::Seconds{} || !std::isfinite(read->threatMargin.value()) ||
+        read->threatMargin < nx::HammerUnits{} || !positive(read->spawnRadius.value()) ||
+        !positive(read->spawnSpacing.value()) || read->memoryLimit == 0 || read->perceptionBudget == 0 ||
+        read->spawnBatchLimit == 0) {
         return nx::fail(
             ZombieError::InvalidData,
             std::format(
@@ -348,12 +350,12 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             agent.behavior = decision.behavior;
         }
         cs::UserCommand command{.duration = nx::tickLengthOf(time.rate), .viewAngles = found->angles};
-        nx::Vec3 aim = decision.intent.direction;
+        nx::Vec3 aim = decision.intent.drivenWay();
         if (decision.intent.attacks && decision.intent.lookAt) {
             aim = *decision.intent.lookAt - eye;
             command.buttons.set(cs::Button::Attack);
         } else if (nx::length(decision.intent.direction) > 0.0F) {
-            // It faces the way it moves, steered or wiggling: its model walks ahead only.
+            // It faces the way it is driven, steered or wiggling: its model walks ahead only.
             command.move.forward = settings.body.speed * decision.intent.speedShare;
         }
         if (decision.intent.jumps) {
