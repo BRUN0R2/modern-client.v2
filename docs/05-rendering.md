@@ -455,6 +455,7 @@ flowchart LR
    to `StudioInstance`. Their defaults keep skin zero and each body part's first choice. Appearance
    indexes are checked against the actual model and its textures file before GPU upload; alternate
    views cannot override them ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)).
+   A failed geometry or texture upload returns its typed GPU error before allocating later resources.
    A view model modeled in the other hand than the player's (its
    `viewHand`; the player's is `cl_righthand`'s, the right at its default of 1, the left at 0,
    `SceneView::hand`, read each frame) is drawn

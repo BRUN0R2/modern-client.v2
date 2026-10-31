@@ -785,10 +785,13 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
     Geometry geometry = geometryOf(desc.model);
     auto vertices = uploader.buffer("studio.vertices", rhi::BufferUsage::Vertex, rhi::BufferState::Vertex,
                                     std::as_bytes(std::span{geometry.vertices}));
+    if (!vertices) {
+        return gpuFailure(std::move(vertices.error()));
+    }
     auto indices = uploader.buffer("studio.indices", rhi::BufferUsage::Index, rhi::BufferState::Index,
                                    std::as_bytes(std::span{geometry.indices}));
-    if (!vertices || !indices) {
-        return gpuFailure(std::move(!vertices ? vertices.error() : indices.error()));
+    if (!indices) {
+        return gpuFailure(std::move(indices.error()));
     }
     model.m_vertices = std::move(*vertices);
     model.m_indices = std::move(*indices);
@@ -810,16 +813,20 @@ auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& des
                                          : rhi::Extent2d{.width = texture.width, .height = texture.height};
         const std::string label = std::format("studio.{}", texture.name);
         auto uploaded = uploadChain(uploader, label, extent, texels, colorFormatOf(m_encoding));
+        if (!uploaded) {
+            return gpuFailure(std::move(uploaded.error()));
+        }
         const SkinUniform skin = skinUniformOf(texture, material);
         auto uniform = uploader.buffer(label, rhi::BufferUsage::Uniform, rhi::BufferState::Uniform,
                                        std::as_bytes(std::span{&skin, 1}));
-        auto images = material ? uploadMaterialImages(uploader, label, *material) : MaterialImages{};
-        if (!uploaded || !uniform || !images) {
-            return gpuFailure(std::move(!uploaded  ? uploaded.error()
-                                        : !uniform ? uniform.error()
-                                                   : images.error()));
+        if (!uniform) {
+            return gpuFailure(std::move(uniform.error()));
         }
-        const auto orWhite = [this](const rhi::OwnedTexture& image) {
+        auto images = material ? uploadMaterialImages(uploader, label, *material) : MaterialImages{};
+        if (!images) {
+            return gpuFailure(std::move(images.error()));
+        }
+        const auto orWhite = [this](const rhi::OwnedTexture& image) -> rhi::TextureHandle {
             return image.get().isNull() ? m_whiteMask.get() : image.get();
         };
         const std::array bindings{
