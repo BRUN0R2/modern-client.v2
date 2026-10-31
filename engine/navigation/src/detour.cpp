@@ -615,6 +615,11 @@ struct NavigationQuery::Detour {
         }
         return height;
     }
+
+private:
+    friend class Corridor;
+    std::vector<unsigned char> cornerFlags;
+    std::vector<dtPolyRef> cornerPolygons;
 };
 
 NavigationQuery::NavigationQuery(const NavigationMesh& mesh)
@@ -892,18 +897,22 @@ auto Corridor::corners(NavigationQuery& query, std::size_t count) -> std::vector
     if (&query.mesh() != navigationMesh || count == 0) {
         return {};
     }
-    // Detour finds the way's points from the agent's own, which it then drops: one more than the corners.
-    const std::size_t room = count + 1;
-    std::vector<float> points(room * kCoordinates);
-    std::vector<unsigned char> flags(room);
-    std::vector<dtPolyRef> polygons(room);
-    const int found =
-        detourState->corridor.findCorners(points.data(), flags.data(), polygons.data(), narrow<int>(room),
-                                          query.detourState->query.get(), &query.detourState->filter);
+    // The funnel adds at most one corner per polygon, besides the start and end. Detour drops the
+    // agent's own point, so one more slot than requested suffices without allocating for a larger count.
+    const std::size_t maxCorners = narrow<std::size_t>(detourState->corridor.getPathCount()) + 1;
+    const std::size_t room = std::min(count, maxCorners) + 1;
+    auto& scratch = *query.detourState;
+    scratch.points.resize(room * kCoordinates);
+    scratch.cornerFlags.resize(room);
+    scratch.cornerPolygons.resize(room);
+    const int found = detourState->corridor.findCorners(scratch.points.data(), scratch.cornerFlags.data(),
+                                                        scratch.cornerPolygons.data(), narrow<int>(room),
+                                                        scratch.query.get(), &scratch.filter);
     std::vector<Vec3> corners;
-    corners.reserve(count);
-    for (std::size_t corner = 0; corner < std::min(narrow<std::size_t>(found), count); ++corner) {
-        corners.push_back(detail::positionOf(pointAt(points, corner)));
+    const std::size_t returned = std::min(narrow<std::size_t>(found), count);
+    corners.reserve(returned);
+    for (std::size_t corner = 0; corner < returned; ++corner) {
+        corners.push_back(detail::positionOf(pointAt(scratch.points, corner)));
     }
     return corners;
 }
