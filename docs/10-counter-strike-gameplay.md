@@ -839,8 +839,9 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   original says nothing. A bot leaves as a client disconnects (`cs::Game::leave`,
   `ClientDisconnected`): its weapons and body go, and its slot is the next player's.
 - `bot_quota` is looked at every 0.3 seconds (`MonitorBotCVars`): one bot is added when there are
-  fewer, one leaves when there are more, of the team of more players or of one drawn at random,
-  a dead one first, of the other team when that one has none (`MaintainBotQuota`,
+  fewer, one leaves when there are more, of the team of more players, of as many the one of more
+  wins, else of one drawn at random, a dead one first, of the other team when that one has none
+  (`MaintainBotQuota`,
   `UTIL_KickBotFromTeam`). `bot_join_after_player`, `bot_auto_vacate` and the player limit come with
   the dedicated server's `maxplayers`.
 - A bot sees an enemy (`cs.bots:botSight`) when one of its spots, tried in order, is in the cone of
