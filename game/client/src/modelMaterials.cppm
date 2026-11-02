@@ -51,6 +51,7 @@ export namespace cs {
 
 /// Why a model's materials could not be read.
 enum class ModelMaterialError : std::uint8_t {
+    FileUnreadable,   ///< The material file is there and cannot be read (cause: the VfsError).
     FileInvalid,      ///< The material file breaks its schema (cause: the data error, with where).
     TextureUnknown,   ///< It names a texture the model lacks.
     TextureRepeated,  ///< It names a texture twice.
@@ -114,8 +115,9 @@ struct ModelMaterialsData {
 
 /// The materials of the textures of `textures` (the model at `modelPath`, or its `*T.mdl`), by their
 /// index, in `vfs`: Counter-Strike Online's textures' sizes and images, then the model's material
-/// file's; none for a texture neither gives. Errors: FileInvalid, TextureUnknown, TextureRepeated,
-/// SurfaceAmbiguous, ImageUnreadable.
+/// file's; none for a texture neither gives. That such an image or file is not there is no failure;
+/// one that is there and cannot be read is. Errors: FileUnreadable, FileInvalid, TextureUnknown,
+/// TextureRepeated, SurfaceAmbiguous, ImageUnreadable.
 [[nodiscard]] auto readModelMaterials(const nx::assets::Vfs& vfs, std::string_view modelPath,
                                       const nx::assets::MdlView& textures)
     -> nx::Result<std::vector<std::optional<nx::render::StudioMaterial>>, ModelMaterialError>;
