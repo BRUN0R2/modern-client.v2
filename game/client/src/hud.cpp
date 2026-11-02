@@ -19,7 +19,8 @@ namespace {
 constexpr nx::EnumArray<HudPicture, std::string_view> kPictureNames{
     nx::EnumArray<HudPicture, std::string_view>::Storage{
         "number_0", "number_1", "number_2", "number_3", "number_4", "number_5", "number_6", "number_7",
-        "number_8", "number_9", "cross", "suit_empty", "suit_full", "dollar", "stopwatch"}};
+        "number_8", "number_9", "cross", "suit_empty", "suit_full", "suithelmet_empty", "suithelmet_full",
+        "dollar", "stopwatch"}};
 
 /// The HUD's color, as it rests: (255, 160, 0) at an alpha of 100, added.
 constexpr nx::render::ScreenColor kHudColor{.red = 255, .green = 160, .blue = 0, .alpha = 100};
@@ -173,17 +174,19 @@ auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d siz
 
     const std::int32_t suitX = std::max(width / kSuitAcross, healthEnd + kSuitAfterHealth);
     const std::int32_t armorY = height - kArmorAbove;
-    marks.push_back({.picture = HudPicture::SuitEmpty, .x = suitX, .y = armorY});
+    const bool wearsHelmet = view.armorKind == ArmorKind::KevlarAndHelmet;
+    const HudPicture emptySuit = wearsHelmet ? HudPicture::HelmetEmpty : HudPicture::SuitEmpty;
+    const HudPicture fullSuit = wearsHelmet ? HudPicture::HelmetFull : HudPicture::SuitFull;
+    marks.push_back({.picture = emptySuit, .x = suitX, .y = armorY});
     const float armor = view.armor.value() > 0.0F ? std::min(view.armor.value(), kFullArmor) : 0.0F;
-    const std::uint32_t suitHeight = sheet[HudPicture::SuitFull].rect.height;
+    const std::uint32_t suitHeight = sheet[fullSuit].rect.height;
     const auto filled = static_cast<std::uint32_t>(static_cast<float>(suitHeight) * armor / kFullArmor);
     if (filled > 0) {
         const std::uint32_t cut = suitHeight - filled;
-        marks.push_back(
-            {.picture = HudPicture::SuitFull, .x = suitX, .y = armorY + sizeOf(cut), .cutTop = cut});
+        marks.push_back({.picture = fullSuit, .x = suitX, .y = armorY + sizeOf(cut), .cutTop = cut});
     }
-    std::ignore = addNumber(armorDigits(view.armor), suitX + sizeOf(sheet[HudPicture::SuitEmpty].rect.width),
-                            armorY, kArmorRoom);
+    std::ignore =
+        addNumber(armorDigits(view.armor), suitX + sizeOf(sheet[emptySuit].rect.width), armorY, kArmorRoom);
 
     const std::string money = moneyDigits(view.money);
     const std::int32_t moneyY = height - kMoneyAbove;

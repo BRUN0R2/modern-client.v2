@@ -1779,6 +1779,7 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
         m_hud->append(m_screenQuads,
                       {.health = status.health,
                        .armor = status.armor,
+                       .armorKind = status.armorKind,
                        .money = status.money,
                        .ammo = cs::hudAmmoOf(m_session->client.inventory(), m_content->weapons),
                        .crosshairDistance = cs::kKnifeCrosshairDistance,
