@@ -84,6 +84,9 @@ struct TickEvents {
     std::vector<BloodStream> bloodStreams{};
     std::vector<StreakSplash> streakSplashes{};
     std::vector<KillNotice> killNotices{};
+
+    /// As a tick starts: nothing yet.
+    void clear() noexcept;
 };
 
 /// What a map's game is played with, and where it stands: its content and its map, which must outlive it, its
@@ -137,6 +140,9 @@ struct PlayerOfSlot {
 [[nodiscard]] inline auto playersIn(const std::vector<std::optional<Player>>& slots) {
     return slots | std::views::filter(IsPlayerSlot{}) | std::views::transform(PlayerOfSlot{});
 }
+
+/// How many players of each team are in the game, alive and dead.
+[[nodiscard]] auto teamCountsOf(const GameState& game) -> TeamCounts;
 
 /// Where `player`'s eye is.
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3;
