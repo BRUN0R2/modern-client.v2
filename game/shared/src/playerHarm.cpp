@@ -162,6 +162,17 @@ auto TimedHarms::check(nx::HitPoints mostGivenBack, nx::GameTime now, nx::TickRa
     return given;
 }
 
+auto harmKindOf(nx::game::VolumeHarmKind kind) noexcept -> HarmKind {
+    switch (kind) {
+    case nx::game::VolumeHarmKind::Fall:
+        return HarmKind::Fall;
+    case nx::game::VolumeHarmKind::Burn:
+        return HarmKind::Burn;
+    default:
+        return HarmKind::Volume;
+    }
+}
+
 auto isArmored(ArmorKind kind, HitGroup group) noexcept -> bool {
     if (kind == ArmorKind::None) {
         return false;

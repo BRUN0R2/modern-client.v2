@@ -707,8 +707,10 @@ pain's replaced), its weapons go with it (`PackDeadPlayerItems`; the box it drop
 it does nothing more until it spawns again (killed by nothing, it observes its own body, which moves no
 more: [07 §3.1](07-simulation-and-physics.md#31-purity-requirements)), no longer solid, and the round's
 end is weighed (§3): its team eliminated loses it. What a dead player sees and its HUD (the
-original's client follows its body, `OBS_CHASE_FREE`, then spectates) and `trigger_hurt` come with what
-they need ([TODO](TODO.md)).
+original's client follows its body, `OBS_CHASE_FREE`, then spectates) come with what they need
+([TODO](TODO.md)). A map's volume hurts it as well (`trigger_hurt`,
+[07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)): its armor takes its share but of a
+fall's, and it dies killed by nothing.
 
 ### 7.5 Weapons made as the game runs
 

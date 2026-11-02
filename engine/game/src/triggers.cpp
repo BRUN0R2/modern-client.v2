@@ -15,6 +15,9 @@ namespace {
 
 /// A trigger that fired for good goes this long after (CBaseTrigger::ActivateMultiTrigger).
 constexpr Seconds kSpentTriggerLife{0.1F};
+/// How long a hurt volume's clock runs, whose damage is that share of its damage a second (HurtTouch).
+constexpr Seconds kHurtInterval{0.5F};
+constexpr float kHurtShareOfASecond = 0.5F;
 
 /// Whether `body` at `origin` touches the brush entity of `model` at `placement` (SV_TouchLinks):
 /// their linked boxes meet, and the model's hull for the body's size holds its origin, the model not
@@ -28,6 +31,23 @@ constexpr Seconds kSpentTriggerLife{0.1F};
     const collision::BoxHull boxHull = collision::boxHullOf(body.box);
     return hulls.contentsAt(model, boxHull.hull, origin - boxHull.offset, placement.origin, EulerAngles{}) ==
            collision::Contents::Solid;
+}
+
+/// Whether `volume` deals its harm to `toucher` at `now`, as CBaseTrigger::HurtTouch's multiplayer rule
+/// weighs it, keeping count of what it touched; in the tick it last hurt something, it hurts what touches
+/// it without counting it, so that what it did not count is hurt once more in that half second.
+[[nodiscard]] auto hurtsNow(HurtVolume& volume, ecs::Entity toucher, GameTime now) -> bool {
+    if (volume.clockEndsAt && *volume.clockEndsAt > now) {
+        if (volume.lastHurtAt != now) {
+            if (std::ranges::contains(volume.touched, toucher)) {
+                return false;
+            }
+            volume.touched.push_back(toucher);
+        }
+        return true;
+    }
+    volume.touched.assign(1, toucher);
+    return true;
 }
 
 /// `activator` fires `entity`, a trigger, unless it waits still: its targets fire, then it waits its
@@ -75,6 +95,30 @@ void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::E
             activate(world, hulls, entity, toucher);
         }
     }
+}
+
+auto touchHurtVolumes(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity toucher)
+    -> std::vector<VolumeHarm> {
+    const Body* body = world.get<Body>(toucher);
+    const Transform* at = world.get<Transform>(toucher);
+    expects(body != nullptr && at != nullptr, "touchHurtVolumes: a toucher with a Body and a Transform");
+    std::vector<VolumeHarm> harms;
+    if (body == nullptr || at == nullptr) {
+        return harms;
+    }
+    const TickTime clock = tickTimeOf(world);
+    ecs::Query<const BrushModel&, const Transform&, HurtVolume&>{world}.forEach(
+        [&](const BrushModel& model, const Transform& placement, HurtVolume& volume) {
+            if (!volume.isTouchedByPlayers || !touches(hulls, *body, at->origin, model.index, placement) ||
+                !hurtsNow(volume, toucher, clock.now)) {
+                return;
+            }
+            harms.push_back({.damage = Damage{volume.damagePerSecond.value() * kHurtShareOfASecond},
+                             .kind = volume.kind});
+            volume.lastHurtAt = clock.now;
+            volume.clockEndsAt = clock.now.after(kHurtInterval, clock.rate);
+        });
+    return harms;
 }
 
 } // namespace nx::game
