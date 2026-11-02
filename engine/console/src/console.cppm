@@ -203,14 +203,6 @@ public:
     [[nodiscard]] auto completions(std::string_view prefix, std::size_t limit) const
         -> std::vector<Completion>;
 
-    /// Calls `function` with every cvar, sorted by name without regard to case.
-    template <std::invocable<const CvarBase&> Function>
-    void forEachCvar(Function&& function) const {
-        for (const auto& [name, cvar] : m_cvars) {
-            std::invoke(function, std::as_const(*cvar));
-        }
-    }
-
 private:
     struct Command {
         std::string description;

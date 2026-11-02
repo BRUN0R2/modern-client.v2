@@ -79,13 +79,6 @@ public:
         return total;
     }
 
-    [[nodiscard]] constexpr auto containsAll(Flags other) const noexcept -> bool {
-        return (*this & other) == other;
-    }
-    [[nodiscard]] constexpr auto containsAny(Flags other) const noexcept -> bool {
-        return (*this & other).any();
-    }
-
     [[nodiscard]] friend constexpr auto operator|(Flags a, Flags b) noexcept -> Flags {
         return combine(a, b, [](Word x, Word y) { return x | y; });
     }

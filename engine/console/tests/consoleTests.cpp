@@ -321,10 +321,4 @@ TEST_F(ConsoleTest, IncrementVarWrapsAroundTheRange) {
                                             ConsoleError::UnknownCvar}));
 }
 
-TEST_F(ConsoleTest, ForEachCvarIsSortedByName) {
-    std::vector<std::string_view> names;
-    console.forEachCvar([&names](const nx::console::CvarBase& cvar) { names.push_back(cvar.name()); });
-    EXPECT_EQ(names, (std::vector<std::string_view>{"hostname", "mp_roundtime", "sv_gravity"}));
-}
-
 } // namespace

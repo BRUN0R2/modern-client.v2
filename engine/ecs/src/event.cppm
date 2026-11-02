@@ -33,8 +33,6 @@ public:
     [[nodiscard]] auto nextSequence() const noexcept -> std::uint64_t {
         return m_currentFirst + m_current.size();
     }
-    /// Sequence number of the oldest event still stored.
-    [[nodiscard]] auto oldestSequence() const noexcept -> std::uint64_t { return m_previousFirst; }
 
     /// Calls `function` on every stored event with a sequence number from `first` on, oldest first,
     /// and returns the sequence number after the last one.
@@ -87,10 +85,6 @@ public:
         requires std::invocable<Function&, const Type&>
     void forEach(Function&& function) {
         *m_cursor = m_events->forEachFrom(*m_cursor, function);
-    }
-
-    [[nodiscard]] auto hasUnread() const noexcept -> bool {
-        return m_events->nextSequence() > std::max(*m_cursor, m_events->oldestSequence());
     }
 
 private:
