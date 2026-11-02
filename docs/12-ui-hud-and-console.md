@@ -221,7 +221,9 @@ player as it spawns (100, 0 and 800: `cs.shared:player`) where the table puts th
 drawn by `nx::render::spriteQuad`, while `hud_draw` is 1. A number with more digits than its room
 widens the room, health and armor to the right and money to the left, and a longer health pushes the
 suit right, keeping the 32 pixels it has at 640 wide (§3.4). Armor between none and 100 shows as
-much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet. The
+much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet; a helmet worn
+shows `suithelmet_empty` and `suithelmet_full` in their place, the entries hud.txt has for them, of the
+suit's size, in the suit's place: no reference shows a helmet yet. The
 crosshair of the knife in hand is drawn by the table's rule (`crosshairRects`, in whole numbers),
 in the style `cl_crosshair_color`, `cl_crosshair_size` and `cl_crosshair_translucent` set
 (`HudCvars`; `nxview` draws Counter-Strike's default). The ammo of the weapon in hand, one that
@@ -516,7 +518,9 @@ a restart (`cs::restartDelayOf`, CheckRestartRound,
 [10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), `mp_footsteps` (1: any value but
 0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)), and
 `mp_friendlyfire` (0: any value but 0 lets a player's attacks hurt its teammates), read at each attack
-([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
+([10 §7.4](10-counter-strike-gameplay.md#74-damage)), and `mp_buytime` (1.5 minutes), read at each purchase,
+cut to whole seconds and held to 15 at least (`cs::readBuyTime`, CanPlayerBuy,
+[10 §8](10-counter-strike-gameplay.md#8-buying)).
 A number past what `int()` holds is cut as the original's processors cut it, to the least whole
 number (`nx::truncateAsX86`). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.

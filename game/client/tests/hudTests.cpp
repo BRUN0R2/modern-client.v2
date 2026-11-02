@@ -24,7 +24,7 @@ using cs::HudMark;
 using cs::HudPicture;
 
 /// The HUD's entries of Counter-Strike 1.6's hud.txt, one for the small screens first.
-constexpr std::string_view kHudList = R"(16
+constexpr std::string_view kHudList = R"(18
 number_0     320 320hud2 0   0  12 16
 number_0     640 640hud7 0   0  20 25
 number_1     640 640hud7 23  0  20 25
@@ -39,6 +39,8 @@ number_9     640 640hud7 216 0  20 25
 cross        640 640hud7 48  25 24 24
 suit_empty   640 640hud7 24  25 24 24
 suit_full    640 640hud7 0   25 24 24
+suithelmet_empty 640 640hud7 24 124 24 24
+suithelmet_full  640 640hud7 0  124 24 24
 dollar       640 640hud7 192 25 18 25
 stopwatch    640 640hud7 144 72 24 24
 )";
@@ -162,6 +164,29 @@ TEST(HudTest, ArmorFillsTheSuitAsFarUpAsItReaches) {
               (HudMark{.picture = HudPicture::SuitFull, .x = 256, .y = 683 + 12, .cutTop = 12}));
     EXPECT_EQ(find(at(250.0F), HudPicture::SuitFull), find(full, HudPicture::SuitFull)) << "full is full";
     EXPECT_FALSE(find(at(0.5F), HudPicture::SuitFull).has_value()) << "less than a row";
+}
+
+TEST(HudTest, AHelmetWornShowsItsPicturesInTheSuitsPlace) {
+    const cs::HudSheet pictures = sheet();
+    const auto at = [&pictures](float armor, cs::ArmorKind kind) {
+        return cs::layoutHud({.health = cs::kSpawnHealth,
+                              .armor = nx::ArmorPoints{armor},
+                              .armorKind = kind,
+                              .money = cs::kStartMoney},
+                             pictures, {.width = 1280, .height = 720});
+    };
+    const std::vector<HudMark> helmet = at(50.0F, cs::ArmorKind::KevlarAndHelmet);
+    EXPECT_EQ(find(helmet, HudPicture::HelmetEmpty),
+              (HudMark{.picture = HudPicture::HelmetEmpty, .x = 256, .y = 683}));
+    EXPECT_EQ(find(helmet, HudPicture::HelmetFull),
+              (HudMark{.picture = HudPicture::HelmetFull, .x = 256, .y = 683 + 12, .cutTop = 12}));
+    EXPECT_FALSE(find(helmet, HudPicture::SuitEmpty).has_value());
+    EXPECT_FALSE(find(helmet, HudPicture::SuitFull).has_value());
+    EXPECT_EQ(numberAt(helmet, 683), "50");
+
+    const std::vector<HudMark> vest = at(50.0F, cs::ArmorKind::Kevlar);
+    EXPECT_TRUE(find(vest, HudPicture::SuitFull).has_value());
+    EXPECT_FALSE(find(vest, HudPicture::HelmetFull).has_value());
 }
 
 TEST(HudTest, AtEveryResolutionTheHudKeepsToTheEdges) {

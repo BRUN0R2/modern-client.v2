@@ -82,10 +82,12 @@ paths. Their synthetic workloads and comparison procedure are in
 With Counter-Strike 1.6 installed through Steam, `nxcheck` reads every file of the installation
 with the engine's readers and reports any it cannot read
 ([docs/18](docs/18-testing-and-quality.md#real-content)), and `next` plays one of its maps as a
-player with what its team spawns with (a knife and a pistol; `give ak47` gives a rifle): the mouse
+player with what its team spawns with (a knife and a pistol; in its buy zone, `ak47` or `m4a1` buys a
+rifle and `vesthelm` armor, and `give ak47` gives one anywhere): the mouse
 looks, and the keys do what Counter-Strike binds them to (W A S D move, Space jumps, Ctrl ducks,
 Shift walks, E uses, the arrows turn, the left button fires, the right one switches a silencer or
-a burst, R reloads, Q draws the last weapon, the tilde opens the console); V flies through
+a burst, R reloads, Q draws the last weapon, the comma and the period buy ammo, the tilde opens the
+console); V flies through
 everything (`noclip`), and Escape ends it. Its settings and binds are kept in `config.cfg`, in
 `%APPDATA%\Modern-Client.v2`. Keyboard binds follow the layout by default (`in_keymap keycode`);
 `in_keymap scancode` selects physical US positions instead. The mode can also be set on the command

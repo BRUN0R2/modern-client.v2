@@ -10,8 +10,15 @@ import std;
 import nx.core;
 import nx.ecs;
 import nx.collision;
+import :components;
 
 export namespace nx::game {
+
+/// Whether `body` at `origin` touches the brush entity of `model` at `placement` (SV_TouchLinks): their
+/// linked boxes meet, and the model's hull for the body's size holds its origin, the model not turned
+/// (SV_HullForBsp).
+[[nodiscard]] auto touchesVolume(const collision::BrushHulls& hulls, const Body& body, Vec3 origin,
+                                 collision::ModelIndex model, const Transform& placement) -> bool;
 
 /// A volume that fires its Targets when a player touches it (trigger_multiple, trigger_once): again
 /// `wait` after, or never again for a negative `wait`.

@@ -8,7 +8,8 @@
 // Commencing, a team eliminated and its winners paid, a player joining late watching until the next
 // round, and players solid to each other; what a client is told of the other players, and how their models
 // play; the players' shots and knives meeting each other's hitboxes, hurting them by where they meet them
-// and through their armor, flinching them, sparing their teammates or not, and paying for a kill; on the
+// and through their armor, flinching them, sparing their teammates or not, and paying for a kill; what
+// they buy, where and while they may; on the
 // BSP seed of the fuzz corpus (a floor at z = 0 in its hulls) given other entities, by the repository's
 // data, each character's model of the shape of Counter-Strike's.
 
@@ -200,6 +201,7 @@ protected:
 
     [[nodiscard]] auto game() -> cs::Game& { return *m_game; }
     [[nodiscard]] auto content() const -> const cs::GameContent& { return *m_content; }
+    [[nodiscard]] auto mutableWeapons() -> cs::WeaponCatalog& { return m_content->weapons; }
     [[nodiscard]] auto cvars() const -> const cs::GameCvars& { return *m_cvars; }
     [[nodiscard]] auto sequence(std::string_view label) const -> nx::assets::SequenceIndex {
         return nx::assets::SequenceIndex{nx::test::playerSequenceIndex(label)};
@@ -1198,6 +1200,158 @@ TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillC
     EXPECT_TRUE(told.killNotices.front().isTeamKill());
     EXPECT_EQ(told.killNotices.front().weapon, content().weapons.indexOf("knife"));
     EXPECT_EQ(told.scores.front().score.frags, -1) << "a frag less for a teammate";
+}
+
+/// A spawn point of each team in the box with a volume, the same place, in a func_buyzone of `keys`, and
+/// the map's parameters of `parameters`.
+[[nodiscard]] auto buyZoneMap(std::string_view keys, std::string_view parameters = "")
+    -> std::vector<std::byte> {
+    return nx::test::boxWithVolumeMapWith(std::format(R"({{ "classname" "worldspawn" }}
+{{ "classname" "info_player_start" "origin" "32 32 8" "angles" "0 90 0" }}
+{{ "classname" "info_player_deathmatch" "origin" "32 32 8" "angles" "0 270 0" }}
+{{ "classname" "func_buyzone" "model" "*1" {} }}
+{{ "classname" "info_map_parameters" {} }})",
+                                                      keys, parameters));
+}
+
+TEST_F(GameTest, APlayerBuysAWeaponInABuyZoneDroppingThatOfItsSlotAndPayingForIt) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::WeaponIndex glock = *content().weapons.indexOf("glock18");
+    const cs::WeaponIndex usp = *content().weapons.indexOf("usp");
+    const cs::WeaponIndex ak = *content().weapons.indexOf("ak47");
+    std::ignore = play(player, 1);
+    const nx::Money start = game().snapshotFor(player).status.money;
+    ASSERT_EQ(start, nx::Money{800});
+
+    ASSERT_TRUE(game().buyWeapon(player, usp).has_value());
+    cs::PlayerSnapshot told = play(player, 1);
+    EXPECT_EQ(told.status.money, nx::Money{300});
+    EXPECT_FALSE(told.inventory.has(glock)) << "a pistol takes a pistol's place";
+    ASSERT_NE(told.inventory.held(), nullptr);
+    EXPECT_EQ(told.inventory.held()->weapon, usp);
+    EXPECT_EQ(told.inventory.held()->clip, 12U);
+    EXPECT_EQ(told.inventory.reserve("9mm"), 40U) << "the rounds the loadout gave stay the player's";
+    EXPECT_TRUE(std::ranges::contains(told.sounds, &content().buying.sounds.weapon, &cs::SoundMade::sound));
+    EXPECT_FALSE(made(player, content().buying.sounds.armor));
+    EXPECT_FALSE(
+        std::ranges::contains(play(player, 1).sounds, &content().buying.sounds.weapon, &cs::SoundMade::sound))
+        << "heard once";
+
+    EXPECT_EQ(game().buyWeapon(player, usp).error().code, cs::BuyRefusal::AlreadyOwned);
+    EXPECT_EQ(game().buyWeapon(player, ak).error().code, cs::BuyRefusal::NotEnoughMoney);
+    EXPECT_EQ(game().snapshotFor(player).status.money, nx::Money{300}) << "a refusal costs nothing";
+    EXPECT_EQ(game().buyWeapon(player, *content().weapons.indexOf("knife")).error().code,
+              cs::BuyRefusal::NotSold);
+    EXPECT_EQ(game().buyWeapon(player, *content().weapons.indexOf("m4a1")).error().code,
+              cs::BuyRefusal::NotForItsTeam);
+}
+
+TEST_F(GameTest, AWeaponReplacedIsBoughtAsItsReplacement) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, 1);
+    const cs::WeaponIndex usp = *content().weapons.indexOf("usp");
+    const cs::WeaponIndex glock = *content().weapons.indexOf("glock18");
+    ASSERT_TRUE(mutableWeapons().replace(usp, glock).has_value());
+    EXPECT_EQ(game().buyWeapon(player, usp).error().code, cs::BuyRefusal::AlreadyOwned)
+        << "it has what it would be made";
+    ASSERT_TRUE(mutableWeapons().replace(usp, std::nullopt).has_value());
+}
+
+TEST_F(GameTest, APlayerBuysOnlyWhereAndWhileItsRulesLetIt) {
+    playOn(buyZoneMap(R"("team" "2")"));
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "T");
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "CT");
+    const cs::WeaponIndex usp = *content().weapons.indexOf("usp");
+    const cs::WeaponIndex glock = *content().weapons.indexOf("glock18");
+    std::ignore = play(terrorist, 1);
+
+    EXPECT_EQ(game().buyWeapon(terrorist, usp).error().code, cs::BuyRefusal::OutsideBuyZones)
+        << "a zone of the other team's";
+    EXPECT_TRUE(game().buyWeapon(counterTerrorist, glock).has_value());
+
+    game().placeEye(counterTerrorist, {.x = 3000.0F, .y = 3000.0F, .z = kStandingEye});
+    EXPECT_EQ(game().buyArmor(counterTerrorist, cs::ArmorKind::Kevlar).error().code,
+              cs::BuyRefusal::OutsideBuyZones);
+    game().placeEye(counterTerrorist, {.x = 32.0F, .y = 32.0F, .z = kStandingEye});
+
+    // Both teams commence the game, which restarts frozen; its time is counted from the end of the freeze.
+    constexpr std::uint32_t kFreezeTicks = 600;
+    constexpr std::uint32_t kLeastBuyTicks = 1500;
+    constexpr std::uint32_t kMargin = 20;
+    ASSERT_TRUE(cvars().buyTime.set(0.25F).has_value());
+    std::ignore = play(counterTerrorist, kPastTheCommence + kFreezeTicks + kLeastBuyTicks - kMargin);
+    EXPECT_TRUE(game().buyArmor(counterTerrorist, cs::ArmorKind::Kevlar).has_value());
+    std::ignore = play(counterTerrorist, 2 * kMargin);
+    EXPECT_EQ(game().buyArmor(counterTerrorist, cs::ArmorKind::Kevlar).error().code,
+              cs::BuyRefusal::TimeOver);
+}
+
+TEST_F(GameTest, AMapsParametersKeepATeamFromBuying) {
+    playOn(buyZoneMap("", R"("buying" "1")"));
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "T");
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "CT");
+    std::ignore = play(terrorist, 1);
+    EXPECT_EQ(game().buyArmor(terrorist, cs::ArmorKind::Kevlar).error().code, cs::BuyRefusal::TeamMayNotBuy);
+    EXPECT_TRUE(game().buyArmor(counterTerrorist, cs::ArmorKind::Kevlar).has_value());
+}
+
+TEST_F(GameTest, ADeadPlayerBuysNothing) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, kPastTheFirstFreeze);
+    std::ignore = killByFall(player);
+    EXPECT_EQ(game().buyAmmo(player, cs::WeaponSlot::Secondary, cs::AmmoPurchase::OneBox).error().code,
+              cs::BuyRefusal::Dead);
+}
+
+TEST_F(GameTest, APlayerBuysArmorByWhatItLacks) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    ASSERT_TRUE(cvars().startMoney.set(1500.0F).has_value());
+    ASSERT_TRUE(cvars().restart.set(1.0F).has_value());
+    std::ignore = play(player, kPastARestart);
+    ASSERT_EQ(game().snapshotFor(player).status.money, nx::Money{1500});
+
+    ASSERT_TRUE(game().buyArmor(player, cs::ArmorKind::Kevlar).has_value());
+    cs::PlayerSnapshot told = play(player, 1);
+    EXPECT_EQ(told.status.money, nx::Money{850});
+    EXPECT_EQ(told.status.armor, cs::kMostArmor);
+    EXPECT_EQ(told.status.armorKind, cs::ArmorKind::Kevlar);
+    EXPECT_TRUE(std::ranges::contains(told.sounds, &content().buying.sounds.armor, &cs::SoundMade::sound));
+    EXPECT_EQ(game().buyArmor(player, cs::ArmorKind::Kevlar).error().code, cs::BuyRefusal::ArmorWhole);
+
+    ASSERT_TRUE(game().buyArmor(player, cs::ArmorKind::KevlarAndHelmet).has_value());
+    told = play(player, 1);
+    EXPECT_EQ(told.status.money, nx::Money{500}) << "a helmet alone over a whole vest";
+    EXPECT_EQ(told.status.armorKind, cs::ArmorKind::KevlarAndHelmet);
+    EXPECT_EQ(game().buyArmor(player, cs::ArmorKind::KevlarAndHelmet).error().code,
+              cs::BuyRefusal::ArmorWhole);
+}
+
+TEST_F(GameTest, APlayerBuysAmmoForTheWeaponsOfASlotABoxOrAsManyAsItTakes) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, 1);
+    EXPECT_EQ(game().buyAmmo(player, cs::WeaponSlot::Primary, cs::AmmoPurchase::OneBox).error().code,
+              cs::BuyRefusal::NoGun);
+
+    ASSERT_TRUE(game().buyAmmo(player, cs::WeaponSlot::Secondary, cs::AmmoPurchase::OneBox).has_value());
+    cs::PlayerSnapshot told = play(player, 1);
+    EXPECT_EQ(told.inventory.reserve("9mm"), 70U);
+    EXPECT_EQ(told.status.money, nx::Money{780});
+    EXPECT_TRUE(std::ranges::contains(told.sounds, &content().buying.sounds.ammo, &cs::SoundMade::sound));
+
+    // Two more boxes reach its most, the last of them cut short and paid for whole, as the original's.
+    ASSERT_TRUE(game().buyAmmo(player, cs::WeaponSlot::Secondary, cs::AmmoPurchase::AsManyBoxes).has_value());
+    told = play(player, 1);
+    EXPECT_EQ(told.inventory.reserve("9mm"), 120U);
+    EXPECT_EQ(told.status.money, nx::Money{740});
+    EXPECT_EQ(game().buyAmmo(player, cs::WeaponSlot::Secondary, cs::AmmoPurchase::AsManyBoxes).error().code,
+              cs::BuyRefusal::AmmoFull);
 }
 
 /// A spawn point of each team in the box with a volume, the same place, in a trigger_hurt of `keys`.

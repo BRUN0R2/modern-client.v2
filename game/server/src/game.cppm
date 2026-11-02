@@ -9,9 +9,10 @@
 /// team's spawn points in turn as each starts, paid by them (cs::TeamAccounts); their feet sound by what
 /// they walk on (cs::StepVoice); their hard landings, drowning and harmful water hurt them, and kill them
 /// (cs.shared:playerHarm); their shots and knives meet each other's hitboxes (cs.server:playerBodies),
-/// hurt them by where they meet them and through their armor, and pay for a kill; as ReGameDLL_CS's
-/// CBasePlayer and CHalfLifeMultiplay play them (GPL, consulted: docs/20 section 3). After each tick it
-/// tells each player's client what it needs (PlayerSnapshot).
+/// hurt them by where they meet them and through their armor, and pay for a kill; they buy weapons, armor
+/// and ammo (cs.shared:buying); as ReGameDLL_CS's CBasePlayer and CHalfLifeMultiplay play them (GPL,
+/// consulted: docs/20 section 3). After each tick it tells each player's client what it needs
+/// (PlayerSnapshot).
 ///
 /// Today: the players hurt by the world and by each other's shots and knives, and every client told of
 /// their deaths (KillNotice) and the scores (ScoreRow); the grenades and the bomb come with them (TODO.md).
@@ -150,6 +151,8 @@ struct Player {
     std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
     bool wasPlaced = false;                      ///< In the tick.
     std::vector<SoundMade> sounds{};             ///< In the tick, but its weapons', which they keep.
+    /// What its purchases sound like: it buys between ticks, as a client's commands come, heard in the next.
+    std::vector<SoundMade> soundsOfPurchases{};
     nx::EulerAngles view{};
     PlayerAnimation animation{};
     CommandNumber randomSeed{};
@@ -203,6 +206,10 @@ public:
     [[nodiscard]] auto teamCounts() const -> TeamCounts;
     /// How many players are in the game.
     [[nodiscard]] auto playerCount() const -> std::size_t;
+    /// The rounds each team won since the game last restarted (m_iNumTerroristWins, m_iNumCTWins).
+    [[nodiscard]] inline auto wins() const noexcept -> const nx::EnumArray<Team, std::uint32_t>& {
+        return teamWins;
+    }
     /// What `player`, in the game, knows of itself (PlayerOwnState).
     [[nodiscard]] auto ownStateOf(PlayerIndex player) const -> PlayerOwnState;
     /// The name of `player`, in the game.
@@ -318,6 +325,19 @@ public:
     /// Gives `player` armor of `kind`, as an item of it does (wearArmor): item_kevlar's and
     /// item_assaultsuit's, which the original's `give` names.
     void giveArmor(PlayerIndex player, ArmorKind kind);
+    /// `player` buys `weapon` (its replacement, when it is replaced), which must be complete
+    /// (BuyWeaponByWeaponID): it parts with those of its slot (Inventory::drop), is given it as give gives
+    /// one, pays for it (weaponPriceFor) and hears it. Errors: those of weaponPriceFor.
+    [[nodiscard]] auto buyWeapon(PlayerIndex player, WeaponIndex weapon) -> nx::Result<void, BuyRefusal>;
+    /// `player` buys armor of `kind`, which is some (BuyItem): it wears it as an item of it gives it
+    /// (wearArmor), pays for it (armorPriceFor) and hears it. Errors: those of armorPriceFor.
+    [[nodiscard]] auto buyArmor(PlayerIndex player, ArmorKind kind) -> nx::Result<void, BuyRefusal>;
+    /// `player` buys what `purchase` says of ammo for its weapons of `slot` (BuyAmmo): a box for each, as
+    /// many of its rounds as it can carry (Inventory::giveAmmo), paid for (ammoPriceFor) and heard, stopping
+    /// at the first it cannot buy. Errors, of the first box alone for AsManyBoxes: NoGun, those of
+    /// ammoPriceFor.
+    [[nodiscard]] auto buyAmmo(PlayerIndex player, WeaponSlot slot, AmmoPurchase purchase)
+        -> nx::Result<void, BuyRefusal>;
     /// Turns noclip on or off for `player`, as the original's `noclip` cheat does; returns whether it is
     /// on now.
     auto toggleNoclip(PlayerIndex player) -> bool;
@@ -483,6 +503,13 @@ private:
     [[nodiscard]] auto maxSpeed(const Player& player) const -> nx::UnitsPerSecond;
     /// Stands `player` still at `origin`, its body there, and its client told it was placed.
     void standAt(Player& player, nx::Vec3 origin);
+    /// `player` as the rules of buying weigh it now (Buyer).
+    [[nodiscard]] auto buyerOf(const Player& player) const -> Buyer;
+    /// `player` pays `price`, and is heard buying with `sound` in the next tick.
+    void pay(Player& player, nx::Money price, const GameSound& sound);
+    /// `player` buys a box of ammo for each of its weapons of `slot` (BuyAmmo, BuyGunAmmo). Errors: NoGun,
+    /// those of ammoPriceFor.
+    [[nodiscard]] auto buyBoxes(Player& player, WeaponSlot slot) -> nx::Result<void, BuyRefusal>;
     /// The rows of the scoreboard `viewer`'s client is told of (ScoreRow): of every player in the game, by
     /// its slot, the health and the money of `viewer`'s teammates and of itself alone.
     [[nodiscard]] auto scoresFor(const Player& viewer) const -> std::vector<ScoreRow>;

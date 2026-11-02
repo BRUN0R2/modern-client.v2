@@ -19,20 +19,6 @@ constexpr Seconds kSpentTriggerLife{0.1F};
 constexpr Seconds kHurtInterval{0.5F};
 constexpr float kHurtShareOfASecond = 0.5F;
 
-/// Whether `body` at `origin` touches the brush entity of `model` at `placement` (SV_TouchLinks):
-/// their linked boxes meet, and the model's hull for the body's size holds its origin, the model not
-/// turned (SV_HullForBsp).
-[[nodiscard]] auto touches(const collision::BrushHulls& hulls, const Body& body, Vec3 origin,
-                           collision::ModelIndex model, const Transform& placement) -> bool {
-    const Aabb modelBox = linkedBoxOf(hulls.boundsOf(model), placement.origin, placement.angles);
-    if (!linkedBoxOf(body, origin).intersects(modelBox)) {
-        return false;
-    }
-    const collision::BoxHull boxHull = collision::boxHullOf(body.box);
-    return hulls.contentsAt(model, boxHull.hull, origin - boxHull.offset, placement.origin, EulerAngles{}) ==
-           collision::Contents::Solid;
-}
-
 /// Whether `volume` deals its harm to `toucher` at `now`, as CBaseTrigger::HurtTouch's multiplayer rule
 /// weighs it, keeping count of what it touched; in the tick it last hurt something, it hurts what touches
 /// it without counting it, so that what it did not count is hurt once more in that half second.
@@ -73,6 +59,17 @@ void activate(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
 
 } // namespace
 
+auto touchesVolume(const collision::BrushHulls& hulls, const Body& body, Vec3 origin,
+                   collision::ModelIndex model, const Transform& placement) -> bool {
+    const Aabb modelBox = linkedBoxOf(hulls.boundsOf(model), placement.origin, placement.angles);
+    if (!linkedBoxOf(body, origin).intersects(modelBox)) {
+        return false;
+    }
+    const collision::BoxHull boxHull = collision::boxHullOf(body.box);
+    return hulls.contentsAt(model, boxHull.hull, origin - boxHull.offset, placement.origin, EulerAngles{}) ==
+           collision::Contents::Solid;
+}
+
 void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity toucher) {
     const Body* body = world.get<Body>(toucher);
     const Transform* at = world.get<Transform>(toucher);
@@ -86,7 +83,7 @@ void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::E
     ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const Trigger&>{world}.forEach(
         [&](ecs::Entity entity, const BrushModel& model, const Transform& placement, const Trigger& trigger) {
             if (!trigger.isSpent && trigger.isTouchedByPlayers &&
-                touches(hulls, touching, origin, model.index, placement)) {
+                touchesVolume(hulls, touching, origin, model.index, placement)) {
                 touched.push_back(entity);
             }
         });
@@ -109,7 +106,8 @@ auto touchHurtVolumes(ecs::World& world, const collision::BrushHulls& hulls, ecs
     const TickTime clock = tickTimeOf(world);
     ecs::Query<const BrushModel&, const Transform&, HurtVolume&>{world}.forEach(
         [&](const BrushModel& model, const Transform& placement, HurtVolume& volume) {
-            if (!volume.isTouchedByPlayers || !touches(hulls, *body, at->origin, model.index, placement) ||
+            if (!volume.isTouchedByPlayers ||
+                !touchesVolume(hulls, *body, at->origin, model.index, placement) ||
                 !hurtsNow(volume, toucher, clock.now)) {
                 return;
             }

@@ -442,6 +442,7 @@ constexpr std::size_t kBlue = 2;
         hud->append(quads,
                     {.health = status.health,
                      .armor = status.armor,
+                     .armorKind = status.armorKind,
                      .money = status.money,
                      .ammo = cs::hudAmmoOf(client.inventory(), content.weapons),
                      .crosshairDistance = cs::kKnifeCrosshairDistance,

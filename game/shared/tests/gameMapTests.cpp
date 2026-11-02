@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // A map as the game plays it: the spawn points of each team and the team a player first stands with,
-// what its rounds are played for, its hostages as the game reads them, and the map read whole, the BSP
-// seed of the fuzz corpus given other entities.
+// what its rounds are played for, where and whether its players buy, its hostages as the game reads them,
+// and the map read whole, the BSP seed of the fuzz corpus given other entities.
 
 #include <gtest/gtest.h>
 
@@ -12,6 +12,7 @@ import nx.core;
 import nx.math;
 import nx.platform;
 import nx.assets;
+import nx.game;
 import cs.shared;
 
 #include "boxMap.hpp"
@@ -72,6 +73,110 @@ TEST(MapObjectiveTest, AMapIsPlayedForWhatItsEntitiesAre) {
     ASSERT_NE(none, nullptr);
     EXPECT_EQ(none->objectives(), cs::MapObjectives{});
     EXPECT_EQ(none->hostages(), 0U);
+}
+
+TEST(BuyZoneTest, AMapsAreItsFuncBuyzonesWithAModelEachOfItsTeamOrOfBoth) {
+    const std::vector<std::byte> bytes = nx::test::boxMapWith(R"({ "classname" "worldspawn" }
+{ "classname" "func_buyzone" "model" "*1" "team" "1" "origin" "1 2 3" }
+{ "classname" "func_buyzone" "model" "*2" "team" "2" }
+{ "classname" "func_buyzone" "model" "*3" }
+{ "classname" "func_buyzone" "model" "*4" "team" "7" }
+{ "classname" "func_buyzone" })");
+    auto map = nx::assets::BspView::parse(bytes);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<cs::BuyZone> expected{
+        {.model = nx::assets::ModelIndex{1},
+         .origin = {.x = 1.0F, .y = 2.0F, .z = 3.0F},
+         .team = cs::Team::Terrorists},
+        {.model = nx::assets::ModelIndex{2}, .team = cs::Team::CounterTerrorists},
+        {.model = nx::assets::ModelIndex{3}},
+        {.model = nx::assets::ModelIndex{4}},
+    };
+    EXPECT_EQ(cs::buyZonesOf(*map), expected);
+}
+
+TEST(BuyZoneTest, AZoneOfAModelTheMapLacksMakesTheMapUnreadable) {
+    for (const std::string_view model : {"*99", "*0"}) {
+        const auto map = cs::GameMap::read(nx::test::boxWithVolumeMapWith(std::format(
+                                               R"({{ "classname" "worldspawn" }}
+{{ "classname" "func_buyzone" "model" "{}" }})",
+                                               model)),
+                                           "box");
+        ASSERT_FALSE(map.has_value()) << model;
+        EXPECT_EQ(map.error().code, cs::GameMapError::Unreadable) << model;
+    }
+}
+
+/// A map of the seed with a volume, `*1`, about the origin, in func_buyzones of `keys`, and spawn points of
+/// each team far from it.
+[[nodiscard]] auto mapWithBuyZone(std::string_view keys) -> std::unique_ptr<cs::GameMap> {
+    auto map = cs::GameMap::read(nx::test::boxWithVolumeMapWith(std::format(R"({{ "classname" "worldspawn" }}
+{{ "classname" "info_player_deathmatch" "origin" "3000 0 0" }}
+{{ "classname" "info_player_start" "origin" "0 3000 0" }}
+{{ "classname" "func_buyzone" "model" "*1" {} }})",
+                                                                            keys)),
+                                 "box");
+    EXPECT_TRUE(map.has_value()) << (map ? "" : nx::describe(map.error()));
+    return std::move(map).value_or(nullptr);
+}
+
+constexpr nx::Vec3 kInTheVolume{.x = 16.0F, .y = 16.0F, .z = 8.0F};
+constexpr nx::Vec3 kFarFromAll{.x = -3000.0F, .y = -3000.0F, .z = 8.0F};
+constexpr nx::HammerUnits kSpawnReach{200.0F};
+const nx::game::Body kStanding{.box = cs::kStandingBox};
+
+TEST(BuyZoneTest, APlayerBuysInAZoneOfItsTeamOrOfBothAndNowhereElse) {
+    const auto both = mapWithBuyZone("");
+    ASSERT_NE(both, nullptr);
+    for (const cs::Team team : {cs::Team::Terrorists, cs::Team::CounterTerrorists}) {
+        EXPECT_TRUE(both->isBuyingPlace(team, kStanding, kInTheVolume, kSpawnReach));
+        EXPECT_FALSE(both->isBuyingPlace(team, kStanding, kFarFromAll, kSpawnReach));
+    }
+    const nx::Vec3 atASpawnPoint{.x = 3000.0F, .z = 0.0F};
+    EXPECT_FALSE(both->isBuyingPlace(cs::Team::Terrorists, kStanding, atASpawnPoint, kSpawnReach))
+        << "with zones, a spawn point buys nothing";
+
+    const auto terrorists = mapWithBuyZone(R"("team" "1")");
+    ASSERT_NE(terrorists, nullptr);
+    EXPECT_TRUE(terrorists->isBuyingPlace(cs::Team::Terrorists, kStanding, kInTheVolume, kSpawnReach));
+    EXPECT_FALSE(
+        terrorists->isBuyingPlace(cs::Team::CounterTerrorists, kStanding, kInTheVolume, kSpawnReach));
+}
+
+TEST(BuyZoneTest, OnAMapWithoutAnyAPlayerBuysNearASpawnPointOfItsTeam) {
+    const auto map = gameMapWith(R"({ "classname" "worldspawn" }
+{ "classname" "info_player_deathmatch" "origin" "1000 0 0" }
+{ "classname" "info_player_start" "origin" "-1000 0 0" })");
+    ASSERT_NE(map, nullptr);
+    const nx::Vec3 near{.x = 1199.0F};
+    const nx::Vec3 far{.x = 1200.0F};
+    EXPECT_TRUE(map->isBuyingPlace(cs::Team::Terrorists, kStanding, near, kSpawnReach));
+    EXPECT_FALSE(map->isBuyingPlace(cs::Team::Terrorists, kStanding, far, kSpawnReach))
+        << "less than its reach";
+    EXPECT_FALSE(map->isBuyingPlace(cs::Team::CounterTerrorists, kStanding, near, kSpawnReach));
+}
+
+TEST(BuyZoneTest, AMapsParametersSayWhichTeamsBuy) {
+    const auto buying = [](std::string_view value, cs::Team team) {
+        const auto map = gameMapWith(std::format(R"({{ "classname" "worldspawn" }}
+{{ "classname" "info_map_parameters" "buying" "{}" }})",
+                                                 value));
+        return map != nullptr && map->letsBuy(team);
+    };
+    for (const std::string_view everyone : {"0", "9"}) {
+        EXPECT_TRUE(buying(everyone, cs::Team::Terrorists)) << everyone;
+        EXPECT_TRUE(buying(everyone, cs::Team::CounterTerrorists)) << everyone;
+    }
+    EXPECT_FALSE(buying("1", cs::Team::Terrorists));
+    EXPECT_TRUE(buying("1", cs::Team::CounterTerrorists));
+    EXPECT_TRUE(buying("2", cs::Team::Terrorists));
+    EXPECT_FALSE(buying("2", cs::Team::CounterTerrorists));
+    EXPECT_FALSE(buying("3", cs::Team::Terrorists));
+    EXPECT_FALSE(buying("3", cs::Team::CounterTerrorists));
+
+    const auto none = gameMapWith(R"({ "classname" "worldspawn" })");
+    ASSERT_NE(none, nullptr);
+    EXPECT_TRUE(none->letsBuy(cs::Team::Terrorists)) << "without parameters, everyone";
 }
 
 TEST(MapHostageTest, TheGameReadsEachHostageAsItsEntityNamesIt) {

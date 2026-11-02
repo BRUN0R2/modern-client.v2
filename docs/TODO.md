@@ -420,7 +420,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] The kill feed ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)): every client told of each player's death (`cs::KillNotice`, `DeathMsg`), a row of it at the top right where the original draws it, measured on it (`cs.client:killFeed`), the killer's and the victim's names in their teams' colors, the picture of the weapon (`d_<weapon>`, else `d_skull`) and of a head (`d_headshot`), a teammate's kill's green, 4 at most, for `hud_deathnotice_time`, lower while the player is dead; a line of it in the console
 - [ ] The kill feed's rows with a killer, measured on the original (they need a second player, which that build's game has no bots for): the gap before the killer's name, the head's picture, a teammate's kill's color and the console's lines; and at 640x480, which the reference runs could not reach (a dialog of the client)
 - [x] The scores ([10 §7.4](10-counter-strike-gameplay.md#74-damage)): frags, deaths and the teams' wins (`cs::ScoreRow`, `PlayerSnapshot::teamWins`; `ScoreInfo`, `TeamScore`), told to every client, the health and the money of its team's alone; `cs::Game::defaultTeam` weighs the wins
-- [ ] The team-attack messages and `mp_tkpunish`; the HUD's helmet
+- [x] The HUD's helmet ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)): `suithelmet_empty` and `suithelmet_full` in the suit's place while one is worn (`cs::HudView::armorKind`); a reference shot of it on the original remains
+- [ ] The team-attack messages and `mp_tkpunish`
 - [ ] What a dead player sees and its HUD (the original's client follows its body, `OBS_CHASE_FREE`, then spectates; to be measured on the original), its body's death played (with the players' models: the original's `WaterMove` breathes on for a player killed with exactly no health while its death plays); the box of weapons it drops (with dropping)
 - [x] Penetration by material (`materials.txt`): `FireBullets3`'s share of the power and of the damage kept by each material
 
@@ -547,9 +548,13 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Kevlar, helmet, defuse kit, NVG, tactical shield
 
 ### Buying and communication
-- [ ] Buy zones and buy time, `info_map_parameters` restrictions
+- [x] Buy zones and buy time ([10 §8](10-counter-strike-gameplay.md#8-buying)): `func_buyzone` and its `team`, a map without any within 200 units of a spawn point of its team (`cs::GameMap::isBuyingPlace`, `OLD_CheckBuyZone`), `mp_buytime` (`cs::readBuyTime`), `info_map_parameters`' `buying` (`cs::GameMap::letsBuy`)
+- [ ] The weapons a VIP's map keeps from each team (`CanBuyWeaponByMaptype`), with the first it names
 - [ ] Classic and VGUI buy menus
-- [ ] Buy commands, `autobuy` and `rebuy`
+- [x] Buy commands ([10 §8](10-counter-strike-gameplay.md#8-buying)): by the commands a weapon's file names (`ak47`, `cv47`), or `buy_weapon` for any, one made as the game runs too; the weapon of that slot dropped (`cs::Inventory::drop`), the rounds carried kept; `vest`, `vesthelm`; `buyammo1`, `buyammo2`, `primammo`, `secammo`; each weighed by pure rules (`cs.shared:buying`, `data/cstrike/buying.toml`), a refusal printed on the console (`cs::BuyRefusal`), heard
+- [ ] `autobuy` and `rebuy`, `cl_autobuy`, `cl_rebuy`; the commands of the grenades and the equipment, with them; what bots buy
+- [ ] What a refusal says on the screen, the original's center text, its money's blink (`BlinkAccount`) and the buy zone's icon, measured on the original
+- [ ] The box a dropped weapon falls as and its pick-up, `drop`: today a weapon a purchase takes the place of is gone
 - [ ] Radio (menus, commands, icons and sounds)
 - [ ] Chat (`say`, `say_team`, rules for dead players)
 - [ ] Sprays
@@ -691,7 +696,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] `cs.bots`, its first part ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): bots that join the server's game as players and drive it by their commands alone; `bot_add`, `bot_add_t`, `bot_add_ct`, `bot_kick` (all), `bot_quota` (`MaintainBotQuota`); a player leaving its slot (`cs::Game::leave`) and the team auto-select joins (`cs::Game::defaultTeam`); sight by the cone and the spots of `CCSBot::IsVisible` (`cs::Game::seesSpot`); hunting places of the mesh, chasing and firing at the enemies it sees, a brain's goal (`nx::agents::Brain::setGoal`)
 - [x] `cs.bots`, its second part, `bot_difficulty` ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): each bot with a level of skill of its difficulty (the zBot's `BotProfile.db` templates, `skillLevels`); its reaction time (`nx::agents::Rules::reactionTime`), its view turned by a spring (`UpdateLookAngles`), its aim's error and focus (`SetAimOffset`, `UpdateAimOffset`), its lead of a moving enemy (`Upkeep`), and its trigger weighed at each full think by its attack delay, its aim, its weapon, its skill and the range (`FireWeaponAtEnemy`, `StartRapidFire`)
 - [x] `cs.bots`, its third part, names ([10 §11](10-counter-strike-gameplay.md#11-bots-milestone-m7)): the players' names in the server's game as the original engine gives them (`cs.server:playerNames`, the client's `name`); each bot as a profile, a name of its level of skill, that no one in the game has (`GetRandomProfile`, `UTIL_IsNameTaken`), named after `bot_prefix`; `bot_add <profile>`, `bot_kick <name>`
-- [ ] `cs.bots`, what follows: the spot it aims at by its skill and the parts of its enemy it sees (`Upkeep`'s sharpshooter), the knife's, the sniper rifles', the shotguns' and the machine gun's ways of firing, its view drifting as it roams, the teams' wins in the quota, weapon choice and buying, ducking and jumping, the objectives, the radio and `bot_chatter`; sight through glass and smoke; `bot_join_after_player`, `bot_auto_vacate` and the player limit (with `maxplayers`); perception in jobs
+- [ ] `cs.bots`, what follows: the spot it aims at by its skill and the parts of its enemy it sees (`Upkeep`'s sharpshooter), the knife's, the sniper rifles', the shotguns' and the machine gun's ways of firing, its view drifting as it roams, weapon choice and buying, ducking and jumping, the objectives, the radio and `bot_chatter`; sight through glass and smoke; `bot_join_after_player`, `bot_auto_vacate` and the player limit (with `maxplayers`); perception in jobs
 - [ ] Demos (`record`, `playdemo`, `timedemo`)
 - [ ] Spectator relay (HLTV equivalent)
 - [ ] Sandboxed client plugins and `cl_plugins`

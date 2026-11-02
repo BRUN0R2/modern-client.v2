@@ -264,9 +264,13 @@ void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_
     const TeamCounts counts = game->teamCounts();
     const std::uint32_t terrorists = counts[Team::Terrorists].players();
     const std::uint32_t counterTerrorists = counts[Team::CounterTerrorists].players();
+    const std::uint32_t terroristWins = game->wins()[Team::Terrorists];
+    const std::uint32_t counterTerroristWins = game->wins()[Team::CounterTerrorists];
     Team team = terrorists > counterTerrorists ? Team::Terrorists : Team::CounterTerrorists;
-    if (terrorists == counterTerrorists) {
-        // Teams equal: one at random, RANDOM_LONG(0, 1) == 0 picking the counter-terrorists.
+    if (terrorists == counterTerrorists && terroristWins != counterTerroristWins) {
+        team = terroristWins > counterTerroristWins ? Team::Terrorists : Team::CounterTerrorists;
+    } else if (terrorists == counterTerrorists) {
+        // Teams and wins equal: one at random, RANDOM_LONG(0, 1) == 0 picking the counter-terrorists.
         nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kQuotaStream};
         team = random.below(kPlayingTeams) == 0 ? Team::CounterTerrorists : Team::Terrorists;
     }
