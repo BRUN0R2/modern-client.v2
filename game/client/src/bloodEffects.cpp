@@ -31,11 +31,6 @@ constexpr nx::Vec3 kUp{.z = 1.0F};
     return span > 0.0F ? std::clamp((now - start).count() / span, 0.0F, 1.0F) : 1.0F;
 }
 
-/// `share`, from 0 to 1, eased in and out (smoothstep).
-[[nodiscard]] auto eased(float share) noexcept -> float {
-    return share * share * (3.0F - (2.0F * share));
-}
-
 } // namespace
 
 BloodEffects::BloodEffects(std::uint64_t seed) : random{seed, kBloodStream} {}
@@ -178,10 +173,10 @@ auto BloodEffects::shown(nx::Seconds now, const BloodEnhancedLook& look)
         // From small it grows, faster as it goes, as a splash opens out; wholly opaque, then fading out.
         const float gone = shareOf(now, mist.madeAt, mist.goesAt);
         const float grown = mist.startScale + ((1.0F - mist.startScale) * gone * gone);
-        const float faded =
-            look.mistFadeFrom < 1.0F
-                ? eased(std::clamp((gone - look.mistFadeFrom) / (1.0F - look.mistFadeFrom), 0.0F, 1.0F))
-                : 0.0F;
+        const float faded = look.mistFadeFrom < 1.0F
+                                ? nx::smoothstep(std::clamp(
+                                      (gone - look.mistFadeFrom) / (1.0F - look.mistFadeFrom), 0.0F, 1.0F))
+                                : 0.0F;
         instances.push_back(nx::render::BloodInstance{.position = mist.position,
                                                       .radius = nx::HammerUnits{mist.radius.value() * grown},
                                                       .color = mist.shade.color,

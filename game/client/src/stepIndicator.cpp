@@ -83,11 +83,6 @@ constexpr float kFaintest = 0.002F;
     return std::clamp(part / whole, 0.0F, 1.0F);
 }
 
-/// `share`, from 0 to 1, eased in and out (smoothstep).
-[[nodiscard]] auto eased(float share) noexcept -> float {
-    return share * share * (3.0F - (2.0F * share));
-}
-
 /// How far, in a cell's units, (`x`, `y`) is out of `part` placed at `at`, mirrored across when
 /// `isMirrored`; less than none within it. Near enough an ellipse's distance for shapes this round, and
 /// exact on its edge.
@@ -129,8 +124,8 @@ constexpr float kFaintest = 0.002F;
         hash ^= hash >> 15U;
         return static_cast<float>(hash & 0xFFFFU) / static_cast<float>(0xFFFFU);
     };
-    const float acrossShare = eased(latticeX - cornerX);
-    const float alongShare = eased(latticeY - cornerY);
+    const float acrossShare = nx::smoothstep(latticeX - cornerX);
+    const float alongShare = nx::smoothstep(latticeY - cornerY);
     const float top = std::lerp(valueAt(cornerX, cornerY), valueAt(cornerX + 1.0F, cornerY), acrossShare);
     const float bottom =
         std::lerp(valueAt(cornerX, cornerY + 1.0F), valueAt(cornerX + 1.0F, cornerY + 1.0F), acrossShare);
@@ -229,13 +224,13 @@ auto hearingOf(const StepIndicatorLook& look, nx::HammerUnits distance) noexcept
     }
     const float faded =
         (distance - look.nearDistance).value() / (look.farDistance - look.nearDistance).value();
-    return 1.0F - eased(std::clamp(faded, 0.0F, 1.0F));
+    return 1.0F - nx::smoothstep(std::clamp(faded, 0.0F, 1.0F));
 }
 
 auto stepLevelAt(const StepIndicatorLook& look, nx::Seconds since, float from) noexcept -> float {
     since = std::max(since, nx::Seconds{});
-    const float lit = from + ((1.0F - from) * eased(shareOf(since, look.attack)));
-    const float released = eased(shareOf(since - look.attack - look.hold, look.release));
+    const float lit = from + ((1.0F - from) * nx::smoothstep(shareOf(since, look.attack)));
+    const float released = nx::smoothstep(shareOf(since - look.attack - look.hold, look.release));
     return lit * (1.0F - released);
 }
 
@@ -323,8 +318,9 @@ void StepIndicator::append(std::vector<nx::render::ScreenQuad>& quads, nx::Vec3 
         placed.push_back(at);
         // Each step pops it larger, back to its size.
         const nx::Seconds since = now - mark.body->steppedAt;
-        const float popped =
-            since < look.pulseTime ? look.pulseScale * (1.0F - eased(shareOf(since, look.pulseTime))) : 0.0F;
+        const float popped = since < look.pulseTime
+                                 ? look.pulseScale * (1.0F - nx::smoothstep(shareOf(since, look.pulseTime)))
+                                 : 0.0F;
         const float across = wholeSize * (1.0F + popped);
         const float turns = static_cast<float>(kStepMarkTurns);
         const auto turn = static_cast<std::uint32_t>(

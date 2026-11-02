@@ -3,8 +3,8 @@
 
 /// nx.math — geometry of the Next Engine (docs/01-architecture.md, layer 1).
 ///
-/// Vectors, matrices, quaternions, GoldSrc angles, axis-aligned boxes and planes. Every type is a
-/// trivially copyable aggregate, usable as an ECS component and in GPU buffers.
+/// Vectors, matrices, quaternions, GoldSrc angles, axis-aligned boxes, planes and easing. Every type is
+/// a trivially copyable aggregate, usable as an ECS component and in GPU buffers.
 ///
 /// Determinism (docs/07-simulation-and-physics.md, section 6): the arithmetic is plain IEEE float, and
 /// the build forbids contracting `a * b + c` into a fused multiply-add and fast-math, so a result
@@ -19,3 +19,4 @@ export import :angles;
 export import :quaternion;
 export import :bounds;
 export import :plane;
+export import :easing;

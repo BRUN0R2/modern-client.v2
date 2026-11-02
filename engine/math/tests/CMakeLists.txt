@@ -9,6 +9,7 @@ nxAddTest(nxMathTests
         quaternionTests.cpp
         boundsTests.cpp
         planeTests.cpp
+        easingTests.cpp
         floatingPointTests.cpp
     DEPENDS
         nx::math)

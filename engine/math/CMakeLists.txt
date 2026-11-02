@@ -12,6 +12,7 @@ nxAddModuleLibrary(nxMath
         src/quaternion.cppm
         src/bounds.cppm
         src/plane.cppm
+        src/easing.cppm
     SOURCES
         src/angles.cpp
         src/quaternion.cpp
