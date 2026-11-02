@@ -36,6 +36,11 @@ enum class BotJoinError : std::uint8_t {
     ProfileInGame,  ///< A bot plays as it, or a player has its name (UTIL_IsNameTaken).
 };
 
+/// Why a bot asked to leave by its name could not.
+enum class BotKickError : std::uint8_t {
+    NoSuchBot, ///< No bot's player has the name, exactly.
+};
+
 /// What drives a bot's player besides its brain, a component of its body: the number of its last
 /// command, the profile it plays as, its name and its level of skill (of BotRules::skillLevels), when the
 /// life it played its last living command in began (PlayerOwnState::spawnedAt), how its view turns, how
@@ -100,9 +105,9 @@ public:
         -> nx::Result<PlayerIndex, BotJoinError>;
     /// Every bot leaves the game (bot_kick).
     void kickAll();
-    /// The bot whose player is named `name`, exactly, leaves the game (bot_kick with a name); returns
-    /// whether one did.
-    auto kickNamed(std::string_view name) -> bool;
+    /// The bot whose player is named `name`, exactly, leaves the game (bot_kick with a name). Errors:
+    /// NoSuchBot.
+    [[nodiscard]] auto kickNamed(std::string_view name) -> nx::Result<void, BotKickError>;
     /// Adds a bot of `difficulty`, named after `prefix`, when there are fewer than `quota`, or makes one
     /// leave when there are more, once each BotRules::quotaInterval of the game (MaintainBotQuota): of the
     /// team of more players, else of one drawn at random, a dead one first (UTIL_KickBotFromTeam); of the

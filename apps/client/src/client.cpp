@@ -883,8 +883,11 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
             if (session == nullptr) {
                 return nx::fail(cs::BotActionError::NoMap);
             }
-            if (!session->bots || !session->bots->kickNamed(name)) {
+            if (!session->bots) {
                 return nx::fail(cs::BotActionError::NoSuchBot, std::format("no bot is named {}", name));
+            }
+            if (auto kicked = session->bots->kickNamed(name); !kicked) {
+                return nx::fail(cs::BotActionError::NoSuchBot, std::move(kicked.error()));
             }
             return {};
         },
