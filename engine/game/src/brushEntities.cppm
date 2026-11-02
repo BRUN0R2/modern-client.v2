@@ -35,6 +35,7 @@ enum class BrushBehavior : std::uint8_t {
     Trigger,      ///< Fire their targets when a player walks into them, again after their "wait"
                   ///< (CTriggerMultiple).
     TriggerOnce,  ///< The same, once (CTriggerOnce).
+    Hurt,         ///< Hurt what touches them, each half second (CTriggerHurt).
     Count,
 };
 
