@@ -12,9 +12,11 @@ import nx.core;
 
 export namespace nx::assets {
 
+/// The unit of SampleFrames.
 struct SampleFramesTag {
     static constexpr std::string_view kSuffix = " frames";
 };
+/// The unit of ChannelCount.
 struct ChannelsTag {
     static constexpr std::string_view kSuffix = " channels";
 };
