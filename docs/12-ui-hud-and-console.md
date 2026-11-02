@@ -221,7 +221,9 @@ player as it spawns (100, 0 and 800: `cs.shared:player`) where the table puts th
 drawn by `nx::render::spriteQuad`, while `hud_draw` is 1. A number with more digits than its room
 widens the room, health and armor to the right and money to the left, and a longer health pushes the
 suit right, keeping the 32 pixels it has at 640 wide (§3.4). Armor between none and 100 shows as
-much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet. The
+much of `suit_full` from the bottom up, which the references (0 and 100) do not check yet; a helmet worn
+shows `suithelmet_empty` and `suithelmet_full` in their place, the entries hud.txt has for them, of the
+suit's size, in the suit's place: no reference shows a helmet yet. The
 crosshair of the knife in hand is drawn by the table's rule (`crosshairRects`, in whole numbers),
 in the style `cl_crosshair_color`, `cl_crosshair_size` and `cl_crosshair_translucent` set
 (`HudCvars`; `nxview` draws Counter-Strike's default). The ammo of the weapon in hand, one that
