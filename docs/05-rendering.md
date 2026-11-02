@@ -588,11 +588,13 @@ reflection integrated over the directions it gathers (Filament, sections 5.3.4 a
 are blended by `nx::render::probeBlendOf`: each weighs (d3 − d) / d, d its distance and d3 the third
 nearest's, so that a probe counts in full where it stands and for nothing as the third overtakes it,
 and the reflection changes as smoothly as the model moves, never at once. The lights of the map near a model
-give it highlights. A file fails with a typed error (`cs::ModelMaterialError`): `FileInvalid` for its
-schema (an unknown key, a key of the other surface, a `specularColor` that is not three shares from 0
-to 1), `TextureUnknown`, `TextureRepeated`, `SurfaceAmbiguous` for both surfaces, and
-`ImageUnreadable`. Nothing is inferred from the names of textures but Counter-Strike Online's
-`#WWWHHH` sizes.
+give it highlights. A file fails with a typed error (`cs::ModelMaterialError`): `FileUnreadable` for one
+that is there and cannot be read (only no file at all means no materials), `FileInvalid` for its schema
+(an unknown key, a key of the other surface, a `specularColor` that is not three shares from 0 to 1),
+`TextureUnknown`, `TextureRepeated`, `SurfaceAmbiguous` for both surfaces, and `ImageUnreadable`, for an
+image it names as for the image of a `#WWWHHH` texture that is there and cannot be read (without that
+file the texture keeps the model's own image). Nothing is inferred from the names of textures but
+Counter-Strike Online's `#WWWHHH` sizes.
 
 The renderers take how their colors reach the target (`nx::render::ColorEncoding`): `Display`, as the
 original draws them, or `Linear`, which the enhanced look's scene is drawn in. Drawn as linear light,

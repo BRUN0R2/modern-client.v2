@@ -27,6 +27,24 @@ constexpr std::size_t kSideDigits = 3;
         [&vfs](const nx::assets::VfsPath& at) { return vfs.readAll(at); });
 }
 
+/// The image `bytes` hold, of the TGA or BMP file at `path`. Errors: ImageUnreadable.
+[[nodiscard]] auto decodeImage(std::span<const std::byte> bytes, std::string_view path)
+    -> nx::Result<nx::assets::RgbaImage, ModelMaterialError> {
+    const std::string_view extension = path.substr(std::min(path.rfind('.'), path.size()));
+    if (nx::equalsIgnoringCase(extension, ".bmp")) {
+        auto image = nx::assets::readBmp(bytes);
+        if (!image) {
+            return nx::fail(ModelMaterialError::ImageUnreadable, std::string{path}, std::move(image.error()));
+        }
+        return std::move(*image);
+    }
+    auto image = nx::assets::readTga(bytes);
+    if (!image) {
+        return nx::fail(ModelMaterialError::ImageUnreadable, std::string{path}, std::move(image.error()));
+    }
+    return std::move(*image);
+}
+
 /// The image of the TGA or BMP file at `path` in `vfs`. Errors: ImageUnreadable.
 [[nodiscard]] auto readImage(const nx::assets::Vfs& vfs, std::string_view path)
     -> nx::Result<nx::assets::RgbaImage, ModelMaterialError> {
@@ -34,19 +52,23 @@ constexpr std::size_t kSideDigits = 3;
     if (!bytes) {
         return nx::fail(ModelMaterialError::ImageUnreadable, std::string{path}, std::move(bytes.error()));
     }
-    const std::string_view extension = path.substr(std::min(path.rfind('.'), path.size()));
-    if (nx::equalsIgnoringCase(extension, ".bmp")) {
-        auto image = nx::assets::readBmp(*bytes);
-        if (!image) {
-            return nx::fail(ModelMaterialError::ImageUnreadable, std::string{path}, std::move(image.error()));
-        }
-        return std::move(*image);
+    return decodeImage(*bytes, path);
+}
+
+/// The image of the TGA or BMP file at `path` in `vfs`; none when `vfs` has no such file. Errors:
+/// ImageUnreadable.
+[[nodiscard]] auto findImage(const nx::assets::Vfs& vfs, std::string_view path)
+    -> nx::Result<std::optional<nx::assets::RgbaImage>, ModelMaterialError> {
+    auto bytes = readBytes(vfs, path);
+    if (!bytes && bytes.error().code == nx::assets::VfsError::NotFound) {
+        return std::optional<nx::assets::RgbaImage>{};
     }
-    auto image = nx::assets::readTga(*bytes);
-    if (!image) {
-        return nx::fail(ModelMaterialError::ImageUnreadable, std::string{path}, std::move(image.error()));
+    if (!bytes) {
+        return nx::fail(ModelMaterialError::ImageUnreadable, std::string{path}, std::move(bytes.error()));
     }
-    return std::move(*image);
+    return decodeImage(*bytes, path).transform([](nx::assets::RgbaImage&& image) {
+        return std::optional<nx::assets::RgbaImage>{std::move(image)};
+    });
 }
 
 /// The renderer's way of drawing a texture's meshes that a material file's `blend` names.
@@ -159,15 +181,20 @@ auto readModelMaterials(const nx::assets::Vfs& vfs, std::string_view modelPath,
         if (const std::optional<nx::rhi::Extent2d> size = namedSizeOf(name)) {
             nx::render::StudioMaterial& material = materials[index].emplace();
             material.coordinateSize = size;
-            if (auto image = readImage(vfs, std::format("{}{}", kTextureFolder, name)); image) {
-                material.baseColor = std::move(*image);
+            auto image = findImage(vfs, std::format("{}{}", kTextureFolder, name));
+            if (!image) {
+                return std::unexpected{std::move(image.error())};
             }
+            material.baseColor = std::move(*image);
         }
     }
     const std::string file = materialFileOf(modelPath);
     auto bytes = readBytes(vfs, file);
-    if (!bytes) {
+    if (!bytes && bytes.error().code == nx::assets::VfsError::NotFound) {
         return materials; // no file: every texture as the original shades it
+    }
+    if (!bytes) {
+        return nx::fail(ModelMaterialError::FileUnreadable, file, std::move(bytes.error()));
     }
     const std::string text = *bytes |
                              std::views::transform([](std::byte value) { return static_cast<char>(value); }) |
