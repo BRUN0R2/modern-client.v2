@@ -46,11 +46,6 @@ constexpr std::array<std::array<float, 2>, 8> kOutlineWays{{{1.0F, 0.0F},
     return 1.0F - (left * left * left);
 }
 
-/// `share` eased in and out: slow, fast, slow (smoothstep).
-[[nodiscard]] auto eased(float share) noexcept -> float {
-    return share * share * (3.0F - (2.0F * share));
-}
-
 [[nodiscard]] auto colorOf(DamageNumberColor color, float opacity) noexcept -> nx::render::ScreenColor {
     return {.red = color.red,
             .green = color.green,
@@ -84,12 +79,12 @@ auto damageNumberPoseAt(const DamageNumberLook& look, nx::Seconds age) noexcept
         age < look.growTime
             ? look.startScale + ((look.peakScale - look.startScale) * easedOut(shareOf(age, look.growTime)))
             : look.peakScale +
-                  ((1.0F - look.peakScale) * eased(shareOf(age - look.growTime, look.settleTime)));
-    float opacity = eased(shareOf(age, look.fadeIn));
+                  ((1.0F - look.peakScale) * nx::smoothstep(shareOf(age - look.growTime, look.settleTime)));
+    float opacity = nx::smoothstep(shareOf(age, look.fadeIn));
     // Over its last moments, it fades out shrinking.
     const nx::Seconds fadeStart = look.life - look.fadeOut;
     if (age > fadeStart) {
-        const float faded = eased(shareOf(age - fadeStart, look.fadeOut));
+        const float faded = nx::smoothstep(shareOf(age - fadeStart, look.fadeOut));
         opacity *= 1.0F - faded;
         scale *= 1.0F + ((look.endScale - 1.0F) * faded);
     }

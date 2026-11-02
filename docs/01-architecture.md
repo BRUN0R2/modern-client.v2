@@ -58,7 +58,7 @@ flowchart TB
 | C++ module | Layer | Responsibility | Depends on |
 |------------|--------|------------------|------------|
 | `nx.core` | 0 | `nx::Failure<E>`/`nx::Result`, contracts, strong types and units, explicit conversions, `EnumArray`/`Flags`, type and enum names, the text of diagnostics and UTF-8, numbers stored in bytes, allocators, log, time, hashing, IDs | `std` |
-| `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes. SIMD is planned, when a benchmark shows a gain | core |
+| `nx.math` | 1 | Vectors, matrices, quaternions, GoldSrc angles, AABB, planes, easing. SIMD is planned, when a benchmark shows a gain | core |
 | `nx.console` | 1 | Typed cvars, commands, aliases, `+`/`-` buttons, command buffer and `.cfg` parser, shared by client and server ([12 §5.3](12-ui-hud-and-console.md#53-the-nxconsole-module)) | core |
 | `nx.meta` | 1 | Static reflection facade (P2996 + annotations), with a fallback | core (today: `std` only) |
 | `nx.jobs` | 1 | Job System, counters, dependency graphs, and the lock-free queues between long-lived threads (today: SPSC). Planned: a `std::execution` scheduler | core |

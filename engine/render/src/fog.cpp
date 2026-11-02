@@ -66,11 +66,6 @@ constexpr float kFromTheEye = 1.0F;
                .opacity = between(from.opacity, to.opacity, share)};
 }
 
-/// `share` of a transition's time eased in and out: slow first and last (smoothstep).
-[[nodiscard]] auto easedOf(float share) noexcept -> float {
-    return share * share * (3.0F - (2.0F * share));
-}
-
 } // namespace
 
 auto isValid(const Fog& fog) noexcept -> bool {
@@ -161,7 +156,7 @@ auto FogTransition::shown() const noexcept -> std::optional<Fog> {
     if (!m_target && share >= 1.0F) {
         return std::nullopt; // gone back out
     }
-    return fogBetween(*m_from, *m_to, easedOf(share));
+    return fogBetween(*m_from, *m_to, smoothstep(share));
 }
 
 } // namespace nx::render
