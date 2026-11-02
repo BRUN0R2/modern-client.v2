@@ -109,12 +109,6 @@ struct BotPause {
     nx::Seconds longest{};
 };
 
-/// How a bot fires (FireWeaponAtEnemy): it weighs a press at each full think, thinkInterval apart
-/// (g_flBotFullThinkInterval), its press held until the next; only with its view's yaw within the angle
-/// aimHalfWidth spans at the range of where it aims; the next press a pause later, less thinkInterval:
-/// with a pistol, as fast as it may above rapidPistolSkill (StartRapidFire), else after pistolPause;
-/// with a gun, at once below spraySkill or nearer than sprayRange, after distantPause beyond
-/// distantRange, else after burstPause.
 /// A distance drawn at random, from its nearest to its farthest.
 struct BotRange {
     nx::HammerUnits nearest{};
@@ -161,6 +155,12 @@ struct BotPanicRules {
     nx::Degrees lookedWithin{};
 };
 
+/// How a bot fires (FireWeaponAtEnemy): it weighs a press at each full think, thinkInterval apart
+/// (g_flBotFullThinkInterval), its press held until the next; only with its view's yaw within the angle
+/// aimHalfWidth spans at the range of where it aims; the next press a pause later, less thinkInterval:
+/// with a pistol, as fast as it may above rapidPistolSkill (StartRapidFire), else after pistolPause;
+/// with a gun, at once below spraySkill or nearer than sprayRange, after distantPause beyond
+/// distantRange, else after burstPause.
 struct BotFireRules {
     nx::HammerUnits aimHalfWidth{};
     nx::Seconds thinkInterval{};

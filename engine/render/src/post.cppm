@@ -38,6 +38,7 @@ inline constexpr float kBloomStrength = 0.04F;
 /// Below this display-domain peak, the tone curve keeps the light as it is.
 inline constexpr float kToneKnee = 0.8F;
 
+/// What the post passes are made from: their shader and the formats of the pass they end in.
 struct PostRendererDesc {
     /// shaders/post.slang, compiled for the device (bin/shaders/post.spv).
     std::span<const std::byte> shaderCode{};
