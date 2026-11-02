@@ -18,6 +18,16 @@ GameState::GameState(const GameContent& gameContent, const GameMap& gameMap, Gam
       rounds{Rounds::start(gameMap.objectives(), cvars.roundLengths(), nx::GameTime{})},
       accounts{gameContent.economy}, lightStyles{mapLightStyles(gameMap.map(), gameContent.lightStyles)} {}
 
+void TickEvents::clear() noexcept {
+    impacts.clear();
+    entitySteps.clear();
+    bloodMarks.clear();
+    bloodSprays.clear();
+    bloodStreams.clear();
+    streakSplashes.clear();
+    killNotices.clear();
+}
+
 auto playerAt(GameState& game, PlayerIndex index) -> Player& {
     nx::expects(index.value < game.players.size() && game.players[index.value], "Game: a player of the game");
     return *game.players[index.value];
@@ -26,6 +36,19 @@ auto playerAt(GameState& game, PlayerIndex index) -> Player& {
 auto playerAt(const GameState& game, PlayerIndex index) -> const Player& {
     nx::expects(index.value < game.players.size() && game.players[index.value], "Game: a player of the game");
     return *game.players[index.value];
+}
+
+auto teamCountsOf(const GameState& game) -> TeamCounts {
+    TeamCounts counts{};
+    for (const Player& player : playersIn(game.players)) {
+        TeamCount& count = counts[player.team];
+        if (player.status.isAlive()) {
+            ++count.alive;
+        } else {
+            ++count.dead;
+        }
+    }
+    return counts;
 }
 
 auto eyeOf(const MovementState& player) -> nx::Vec3 {

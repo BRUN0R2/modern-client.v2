@@ -238,12 +238,12 @@ public:
     /// the player leaves.
     template <nx::ecs::Component Component>
     void attachPlayerComponent(PlayerIndex player, Component component) {
-        m_state.world.add(cs::playerAt(m_state, player).body, std::move(component));
+        m_state.world.add(playerAt(m_state, player).body, std::move(component));
     }
     /// The component of `player`'s body, in the game, none when it has none.
     template <nx::ecs::Component Component>
     [[nodiscard]] auto playerComponent(PlayerIndex player) -> Component* {
-        return m_state.world.get<Component>(cs::playerAt(m_state, player).body);
+        return m_state.world.get<Component>(playerAt(m_state, player).body);
     }
     /// Calls `visit` with each body that has the component, of a player's or of createEntity's, and its
     /// component, in the world's order: none while no extension registered it. The world's entities may
@@ -296,121 +296,6 @@ public:
     void placeEye(PlayerIndex player, nx::Vec3 eye);
 
 private:
-    /// What `player` does with `command` in the tick: it selects, thinks before it moves (preThink),
-    /// moves and touches what it meets, then thinks after (postThink), alive.
-    void runCommand(Player& player, const UserCommand& command);
-    /// What `player` does before `command` moves it (PreThink): alive, it breathes in the water the last
-    /// command left it in (Breath::breathe), hurt as it drowns and by harmful water; on the ground, slowed
-    /// down by a hit, it is a hundredth of its speed less slow each command, its velocity that share of it
-    /// (m_flVelocityModifier); then the harms it keeps over time are looked at, and what drowning took
-    /// given back to it alive (TimedHarms::check).
-    void preThink(Player& player, const UserCommand& command);
-    /// What a living `player` does once `command` moved it from `before` (PostThink): unless it is held
-    /// back (Inventory::isHeldBack), the use key going down uses what is in front (use), then the weapon
-    /// in hand fires, is reloaded or idles, its attacks dealt to what they meet (ItemPostFrame); then its
-    /// landing hurts it (landingDamageOf).
-    void postThink(Player& player, const UserCommand& command, const MovementState& before);
-    /// `player` uses what is in front of it, looking along `command`'s view from where the move left its
-    /// eye (CBasePlayer::PlayerUse), heard finding something to use or nothing (UseEmpty).
-    void use(Player& player, const UserCommand& command);
-    /// `player`, alive, touches the map's volumes that hurt it (nx::game::touchHurtVolumes): each hurts it
-    /// (hurt), or heals it for a negative damage.
-    void touchHurtVolumes(Player& player);
-    /// `player` lands, hurt by `damage` (PostThink): it splats when the damage is more than its health,
-    /// met in no group, is hurt by its fall (hurt), and loses the pitch of its kick.
-    void land(Player& player, nx::Damage damage);
-    /// `player` is dealt `harm` of the world (CBasePlayer::TakeDamage): alive, its armor takes its share
-    /// and it loses its whole points, keeping a harm kept over time (harmPlayer), and is heard in its pain
-    /// by where it was last met (painOf); killed by it, it dies (die).
-    void hurt(Player& player, const PlayerHarm& harm);
-    /// `attacker`'s `attack` on `victim`, alive, as the victim's TraceAttack and TakeDamage take it: it is
-    /// met in the attack's hit group, its damage that group's share of the players'; a helmet it met
-    /// sparks where it met it, off its face (sparksOffHelmet, HelmetSparks); its view punched
-    /// (punchByHit) and, where its armor lets it (shedsBlood), its blood streamed from a head the way the
-    /// attack went, at its speed (streamSpeedOf, BloodSplat), and shed (bleed) but by a teammate while
-    /// mp_friendlyfire is 0, whose attack then hurts it none (FPlayerCanTakeDamage); a teammate's attack
-    /// deals its share of it (PlayerAttackRules); then it flinches, large as its attacker's weapon makes
-    /// it but in the legs and ducked, knocked back while it
-    /// moves slow enough, else small, slowed down; its armor takes its share, its attacker's weapon's
-    /// times the armor's ratio (WeaponHarm::armorRatio), and it loses its whole points (harmPlayer), heard
-    /// in its pain (painOf), what it lost told to the attacker's client over its head (DamageDealt,
-    /// headTopOf); killed by it, it
-    /// dies, killed by `attacker` (die). The punch's and the blood's draws come from streams of the
-    /// attacker's command and the victim.
-    void attackPlayer(Player& attacker, Player& victim, const nx::game::Attack& attack);
-    /// A body an attack draws blood from, as SpawnBlood and TraceBleed take it: the body, the damage the
-    /// attack dealt it once where it met it took its share, where it met it, and the palette entry of its
-    /// blood's color.
-    struct Bleeding {
-        nx::ecs::Entity body{};
-        nx::Damage dealt{};
-        HitGroup hitGroup = HitGroup::Generic;
-        std::uint8_t color = 0;
-    };
-    /// The blood `bleeding`'s body sheds as `attack` meets it, none for an attack that dealt it nothing:
-    /// a spray of the tick where the attack met it, the way it went, of its color, its size (spraySizeOf,
-    /// SpawnBlood) and where it met it; then on what is solid behind it, through the world and the brush
-    /// entities, the bodies left be, along the ways it traces (bleedingWaysOf), as far as BloodRules::reach,
-    /// a mark of the tick where one of them leaves its decal (bloodDecalOf) on the world or a brush entity
-    /// (TraceBleed, UTIL_BloodDecalTrace); drawn from `random`.
-    void bleed(const nx::game::Attack& attack, const Bleeding& bleeding, nx::Random& random);
-    /// `player` dies (Killed), killed by `killer`, none for the world: every client is told of it
-    /// (KillNotice), it is heard dying, moves no more (MovementState::isDead), plays its death by where it
-    /// was last met, is no longer solid, and its weapons are gone with it; it counts a death and its killer,
-    /// another player, a frag for an enemy, or one less for a teammate or for itself, none for the world, and
-    /// gets the money of an enemy's kill, or loses a teammate's (CHalfLifeMultiplay::PlayerKilled,
-    /// KillMoney); then the round's end is weighed (checkWinConditions).
-    void die(Player& player, Player* killer);
-    /// Weighs the round's end by the players alive and dead of each team (CheckWinConditions,
-    /// Rounds::checkWinConditions), what an end does to the money then played (roundEnded).
-    void checkWinConditions();
-    /// What a move of `mover` meets as boxes: the world's (solidBoxesOf), the other players alive among
-    /// them, each standing or ducked, as the engine lists them for movement (SV_AddLinksToPM's
-    /// SOLID_SLIDEBOX).
-    [[nodiscard]] auto boxesMetBy(const Player& mover) -> std::vector<SolidBox>;
-    /// `victim` feels `attack` of a player of `team`, none for an entity's body: where it came from, back
-    /// along its way (PlayerOwnState::hurtFrom).
-    void feelHurt(Player& victim, const nx::game::Attack& attack, std::optional<Team> team);
-    /// The sounds `sounds`, made by `player`'s movement at the tick of `command` among `entities`, as it
-    /// hears them: each step by what it steps on (GameMap::materialAlong, in the space of the entity it
-    /// stands on), while mp_footsteps lets them sound; each splash.
-    void hearMovement(Player& player, std::span<const MovementSound> sounds,
-                      std::span<const BrushEntity> entities, const UserCommand& command);
-    /// What the ground a player stood on at `ground` is made of: the texture kStepTextureDepth under it,
-    /// on the world or on the entity among `entities` it stood on (PM_CatagorizeTextureType).
-    [[nodiscard]] auto groundMaterial(const StepGround& ground, std::span<const BrushEntity> entities) const
-        -> TextureMaterial;
-    /// The rules of the round at the tick (CHalfLifeMultiplay::Think): once a second the restart the
-    /// cvars ask for (GameCvars::takeRestart); then Rounds::think, a round that starts as long as the
-    /// cvars say. As the freeze ends each player's HUD is told the round's time and the players run
-    /// again; as a round starts the players spawn again (spawn); as the game restarts they spawn as they
-    /// joined: with mp_startmoney, without armor, and with their team's loadout alone.
-    void thinkRules();
-    /// What the end of a round by `reason` does (TerminateRound), logged: its winners count a win
-    /// (TeamScore), what they get goes to their team's account, and a player alive on the losing team is not
-    /// paid as the next round starts when the end does not pay its living losers.
-    void roundEnded(RoundEndReason reason);
-    /// Pays each player what its team gets as a round starts (RestartRound), `hostagesHeld` still held
-    /// (repositionHostages), unless the last end left it unpaid.
-    void payForRound(std::uint32_t hostagesHeld);
-    /// `player`'s `attack` on `entity`, as its weapon's TraceAttack and ApplyMultiDamage deal it: to
-    /// another player's body as attackPlayer deals it; to another entity as its kind takes it
-    /// (nx::game::attackEntity), a hostage it hurts costing it its money (hostageHarmCost), and an
-    /// entity's body of a type that bleeds (EntityDefinition::bloodColor) shedding the blood of what it
-    /// was dealt (bleed), drawn from a stream of the attack's command and the entity; what it dealt a
-    /// hostage or an entity's body told to the player's client over its head as the attack met it, before
-    /// a death posed it anew (DamageDealt, headTopOf).
-    void attackEntity(Player& player, nx::ecs::Entity entity, const nx::game::Attack& attack);
-    /// Over the head of `entity`, a solid player's body, hostage or entity's body, as the server's traces
-    /// meet it, standing or ducked (playerHeadTopOf, hostageHeadTopOf, entityHeadTopOf); over the middle
-    /// of its box's top for one of a model of no hitbox, its box what a trace meets of it then.
-    [[nodiscard]] auto headTopOf(nx::ecs::Entity entity) -> nx::Vec3;
-    /// What the texture a trace from `start` to `end` met, `hit`, is made of, as UTIL_TextureHit finds
-    /// it: flesh for a body; of the world's or a brush entity's model, as materials.txt tags it; none for
-    /// another entity.
-    [[nodiscard]] auto materialOfHit(const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) const
-        -> std::optional<TextureMaterial>;
-
     GameState m_state;
 };
 
