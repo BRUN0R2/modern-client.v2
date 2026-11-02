@@ -30,6 +30,7 @@ auto registerComponents(ecs::World& world) -> Result<void, ecs::ComponentError> 
                                 world.registerComponent<Targets>("nx::game::Targets"),
                                 world.registerComponent<DelayedUse>("nx::game::DelayedUse"),
                                 world.registerComponent<Trigger>("nx::game::Trigger"),
+                                world.registerComponent<HurtVolume>("nx::game::HurtVolume"),
                                 world.registerComponent<Button>("nx::game::Button")};
     for (const auto& component : registered) {
         if (!component) {

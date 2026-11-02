@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // Triggers a body walks into, firing what they name: at once or after a delay, again after their
-// wait or once; doors used by name, firing their own targets when they arrive.
+// wait or once; doors used by name, firing their own targets when they arrive; volumes that hurt it.
 
 #include <gtest/gtest.h>
 
@@ -25,6 +25,8 @@ using nx::game::DoorState;
 using nx::game::Named;
 using nx::game::Transform;
 using nx::game::Trigger;
+using nx::game::VolumeHarm;
+using nx::game::VolumeHarmKind;
 using KeyValues = std::vector<std::pair<std::string, std::string>>;
 
 /// The doors' models, 64 units deep from x = 0, 128 wide and high, empty to every hull.
@@ -76,7 +78,10 @@ public:
                                                   .behavior = BrushBehavior::TriggerOnce},
                              nx::game::BrushClass{.classname = "func_wall",
                                                   .solid = nx::game::Solid::Bsp,
-                                                  .behavior = BrushBehavior::Wall}}};
+                                                  .behavior = BrushBehavior::Wall},
+                             nx::game::BrushClass{.classname = "trigger_hurt",
+                                                  .solid = nx::game::Solid::Not,
+                                                  .behavior = BrushBehavior::Hurt}}};
         EXPECT_TRUE(nx::game::spawnBrushEntities(m_world, made, models, classes).has_value());
         m_body = m_world.spawn(
             Transform{.origin = body},
@@ -87,6 +92,20 @@ public:
     void touchAt(Vec3 at) {
         m_world.get<Transform>(m_body)->origin = at;
         nx::game::touchTriggers(m_world, m_hulls, m_body);
+    }
+
+    /// What the volumes it is in deal the body, moved to `at`.
+    [[nodiscard]] auto hurtAt(Vec3 at) -> std::vector<VolumeHarm> {
+        m_world.get<Transform>(m_body)->origin = at;
+        return nx::game::touchHurtVolumes(m_world, m_hulls, m_body);
+    }
+
+    /// What the volumes it is in deal a second body, in the trigger.
+    [[nodiscard]] auto hurtSecondBody() -> std::vector<VolumeHarm> {
+        if (!m_secondBody) {
+            m_secondBody = m_world.spawn(Transform{.origin = kInside}, *m_world.get<nx::game::Body>(m_body));
+        }
+        return nx::game::touchHurtVolumes(m_world, m_hulls, *m_secondBody);
     }
 
     /// `ticks` ticks of what acts and of the pushers.
@@ -133,6 +152,7 @@ private:
     nx::collision::BrushHulls m_hulls = triggerHulls();
     nx::ecs::World m_world;
     nx::ecs::Entity m_body{};
+    std::optional<nx::ecs::Entity> m_secondBody{};
 };
 
 /// A sliding door, model `model`, named `name`, open 1 second, and `extra`.
@@ -221,6 +241,53 @@ TEST(TriggerTest, ATriggerFlaggedNoClientsIgnoresPlayers) {
 
     game.touchAt(kInside);
     EXPECT_EQ(game.doorState("gate"), DoorState::Closed);
+}
+
+TEST(HurtVolumeTest, ABodyInItIsHurtHalfItsDamageEachHalfSecond) {
+    TriggerWorld game{{trigger("trigger_hurt", {{"dmg", "20"}})}};
+    const std::vector<VolumeHarm> half{{.damage = nx::Damage{10.0F}, .kind = VolumeHarmKind::Generic}};
+
+    EXPECT_TRUE(game.hurtAt(kOutside).empty());
+    EXPECT_EQ(game.hurtAt(kInside), half);
+    game.run(49);
+    EXPECT_TRUE(game.hurtAt(kInside).empty()) << "it counted it, still in the half second";
+    game.run(1);
+    EXPECT_EQ(game.hurtAt(kInside), half) << "half a second later";
+}
+
+TEST(HurtVolumeTest, ItsDamageTypeTellsItsKindAndANegativeDamageHeals) {
+    const auto harmsOf = [](KeyValues keyValues) {
+        TriggerWorld game{{trigger("trigger_hurt", std::move(keyValues))}};
+        return game.hurtAt(kInside);
+    };
+    using Harms = std::vector<VolumeHarm>;
+    EXPECT_EQ(harmsOf({{"dmg", "500"}, {"damagetype", "32"}}),
+              (Harms{{.damage = nx::Damage{250.0F}, .kind = VolumeHarmKind::Fall}}));
+    EXPECT_EQ(harmsOf({{"dmg", "20"}, {"damagetype", "8"}}),
+              (Harms{{.damage = nx::Damage{10.0F}, .kind = VolumeHarmKind::Burn}}));
+    EXPECT_EQ(harmsOf({{"dmg", "10"}, {"damagetype", "16"}}),
+              (Harms{{.damage = nx::Damage{5.0F}, .kind = VolumeHarmKind::Freeze}}));
+    EXPECT_EQ(harmsOf({{"damage", "4"}}), (Harms{{.damage = nx::Damage{2.0F}}})) << "its other key";
+    EXPECT_EQ(harmsOf({{"dmg", "-6"}}), (Harms{{.damage = nx::Damage{-3.0F}}}));
+}
+
+TEST(HurtVolumeTest, FlaggedNoClientsItLeavesPlayersBe) {
+    TriggerWorld game{{trigger("trigger_hurt", {{"dmg", "20"}, {"spawnflags", "8"}})}};
+    EXPECT_TRUE(game.hurtAt(kInside).empty());
+}
+
+TEST(HurtVolumeTest, ABodyHurtInTheTickOfAnotherIsNotCountedAndIsHurtOnceMore) {
+    // As HurtTouch's multiplayer rule keeps count: in the tick that hurt something it counts nothing.
+    TriggerWorld game{{trigger("trigger_hurt", {{"dmg", "20"}})}};
+    const std::vector<VolumeHarm> half{{.damage = nx::Damage{10.0F}, .kind = VolumeHarmKind::Generic}};
+
+    EXPECT_EQ(game.hurtAt(kInside), half);
+    EXPECT_EQ(game.hurtSecondBody(), half);
+    game.run(1);
+    EXPECT_TRUE(game.hurtAt(kInside).empty()) << "the first, counted";
+    EXPECT_EQ(game.hurtSecondBody(), half) << "the second, counted only now";
+    game.run(1);
+    EXPECT_TRUE(game.hurtSecondBody().empty());
 }
 
 TEST(TriggerTest, AKillTargetIsRemovedBeforeTheTargetFires) {

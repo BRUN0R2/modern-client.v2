@@ -41,8 +41,13 @@ enum class HarmKind : std::uint8_t {
     Burn,   ///< In lava (DMG_BURN).
     Acid,   ///< In slime (DMG_ACID), which the player keeps over time.
     Bullet, ///< Another player's weapon: a shot's round or a knife's strike (DMG_BULLET).
+    Volume, ///< A map's volume that hurts, of no kind of those (trigger_hurt).
     Count,
 };
+
+/// The harm of a map's volume of kind `kind` (trigger_hurt's "damagetype"): a fall's and a burn's are
+/// those; a freeze's and a generic one differ in nothing that deals them.
+[[nodiscard]] auto harmKindOf(nx::game::VolumeHarmKind kind) noexcept -> HarmKind;
 
 /// A harm dealt to a player: how much, and of what kind.
 struct PlayerHarm {

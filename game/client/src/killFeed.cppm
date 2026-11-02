@@ -5,8 +5,9 @@
 /// tells (cs::KillNotice) at the top right of the screen, the oldest first, for hud_deathnotice_time
 /// seconds: its killer's name in its team's color, the picture of what killed it, a head's, and its own
 /// name in its team's color; and a line of it in the console. Apart from the HUD and from how the game
-/// plays a death. Where its rows go is as the Half-Life SDK's client places them, to be measured on the
-/// original (TODO.md).
+/// plays a death. Where its rows go and their colors are measured on the original; a killer's, a head's and
+/// the console's lines, which that takes a second player for, come as the Half-Life SDK's client has them
+/// (TODO.md).
 export module cs.client:killFeed;
 
 import std;
@@ -84,10 +85,12 @@ struct KillRowLayout {
     [[nodiscard]] inline auto operator==(const KillRowLayout&) const noexcept -> bool = default;
 };
 
-/// Where the row `row` of the feed, the first the oldest, of parts `widths` is drawn on a screen of `size`:
-/// its victim's name ending at the right edge, the pictures right before it, and 5 pixels before them its
-/// killer's name; from a fifteenth of the screen's height down and 2 pixels more, 20 pixels a row.
-[[nodiscard]] auto layoutKillRow(const KillRowWidths& widths, std::size_t row,
+/// Where the row `row` of the feed, the first the oldest, of parts `widths` is drawn on a screen of `size`,
+/// by shares of its height, H, in whole pixels (docs/12 section 3.2): its victim's name ending H / 40 from
+/// the right edge, H / 96 before it the pictures, the head's after what killed, and H / 96 before them its
+/// killer's name; the first row's top H / 15 down, twice that with the player dead, under the spectator's
+/// panel, and each next one H / 30 under it.
+[[nodiscard]] auto layoutKillRow(const KillRowWidths& widths, std::size_t row, bool isPlayerDead,
                                  nx::rhi::Extent2d size) noexcept -> KillRowLayout;
 
 /// The line the console shows of `notice`, killed by the weapon `weapon`, its id: "<killer> killed <victim>
@@ -120,10 +123,11 @@ public:
     [[nodiscard]] inline auto size() const noexcept -> std::size_t { return rows.size(); }
 
     /// Appends to `quads` the rows showing at `now` on a screen of `size`, once loaded, each in its place
-    /// (layoutKillRow); those that showed for `rowTime` go, loaded or not. The rows are laid out again only
-    /// when they or the size change: the quads of the last call are appended again until then.
+    /// (layoutKillRow), lower with its player dead; those that showed for `rowTime` go, loaded or not. The
+    /// rows are laid out again only when they, the size or whether it is dead change: the quads of the last
+    /// call are appended again until then.
     void append(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size, nx::Seconds now,
-                nx::Seconds rowTime);
+                nx::Seconds rowTime, bool isPlayerDead);
 
 private:
     /// A row: its players, its weapon's id, whether of a head, and when it started to show.
@@ -143,17 +147,19 @@ private:
         KillPictures pictures;
     };
 
-    /// What append shows: which rows, as each change counts, on a screen of a size.
+    /// What append shows: which rows, as each change counts, on a screen of a size, its player dead or not.
     struct Shown {
         std::uint64_t rowChanges = 0;
         nx::rhi::Extent2d size{};
+        bool isPlayerDead = false;
 
         [[nodiscard]] inline auto operator==(const Shown&) const noexcept -> bool = default;
     };
 
-    /// Appends to `quads` the rows as they show now on a screen of `size`, drawn from `onGpu`.
-    void layOut(std::vector<nx::render::ScreenQuad>& quads, const Loaded& onGpu,
-                nx::rhi::Extent2d size) const;
+    /// Appends to `quads` the rows as they show now on a screen of `size`, its player dead or not, drawn from
+    /// `onGpu`.
+    void layOut(std::vector<nx::render::ScreenQuad>& quads, const Loaded& onGpu, nx::rhi::Extent2d size,
+                bool isPlayerDead) const;
 
     nx::ui::GlyphAtlas atlas;
     std::optional<Loaded> loaded; ///< Once loaded.

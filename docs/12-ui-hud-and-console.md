@@ -263,17 +263,24 @@ console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 **The kill feed** (`cs.client:killFeed`): while `hud_draw` draws the HUD, a row of each player's death
 the server tells of (`cs::KillNotice`, [10 §7.4](10-counter-strike-gameplay.md#74-damage)), the oldest
 first, 4 at most, a new one making the oldest go, each for `hud_deathnotice_time` seconds (6, not
-archived): the killer's name, the picture of what killed it, `d_<weapon>` of `sprites/hud.txt` (`d_skull`
-for no weapon or one the list has no picture of, a weapon made as the game runs), `d_headshot` for a kill
-in the head, and the victim's name. A death of no killer shows the picture and the victim's name alone.
-The names are written in `EngineFont`, a terrorist's in (255, 64, 64) and a counter-terrorist's in (153,
-204, 255); the pictures are added in (255, 80, 0), a teammate's kill's in (10, 240, 10). The victim's name
-ends at the right edge, the pictures right before it, and 5 pixels before them the killer's name; the
-first row's top is a fifteenth of the screen's height and 2 pixels down, each next one 20 under it. The
-console shows a line of it as well: `<killer> killed <victim> with <weapon>`, `<killer> killed his teammate
-<victim>`, `<victim> died`. This is how the Half-Life SDK's client draws its feed, Counter-Strike's
-pictures added: its place, its colors, its font and its text are still to be measured on the original
-([TODO](TODO.md)).
+archived). A row is the killer's name, the picture of what killed it, `d_<weapon>` of `sprites/hud.txt`
+(`d_skull` for no weapon or one the list has no picture of, a weapon made as the game runs), `d_headshot`
+for a kill in the head, and the victim's name; a death of no killer shows the picture and the victim's
+name alone. **Observed** (build 8684 through NextClient, `hud_deathnotice_old 1`, its classic look; a
+player killing itself with `kill` at 800x600, 1024x768, 1280x720, 1280x960 and 1600x900; to the pixel in
+every one), with H the screen's height, each share in whole pixels:
+
+| Part | Where |
+|------|-------|
+| The rows' tops | The first at H / 15, each next one H / 30 under it, whatever its font; with the player dead, 2 × H / 15, under the spectator's panel |
+| The victim's name | Its pen ending H / 40 from the right edge, written in `EngineFont` (the same as `cl_showfps`) with its drop shadow |
+| The pictures | Right before H / 96 of gap before that name, added as the HUD's sprites are (`nx::render::spriteQuad`), from the row's top; a skull's 32 wide |
+| Colors | A terrorist's name (255, 63, 63), a counter-terrorist's (153, 204, 255); the pictures added in (255, 80, 0) |
+
+The killer's name, H / 96 before the pictures, the head's picture right after what killed, a teammate's
+kill's pictures in (10, 240, 10) and the console's lines (`<killer> killed <victim> with <weapon>`,
+`<killer> killed his teammate <victim>`, `<victim> died`) are not measured yet, as the Half-Life SDK's
+client has them: they need a second player, and that build's game has no bots ([TODO](TODO.md)).
 
 **The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,

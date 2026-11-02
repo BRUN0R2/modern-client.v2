@@ -375,7 +375,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Platforms, trains, `func_rotating`, `func_rot_button`; `master` (multisource); shot buttons; a blocked door's damage; the player's view turned with a door that carries it
 - [ ] Entity movement types (`TOSS`, `BOUNCE`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`; `PUSH` beyond doors)
 - [x] Deterministic think and targets (`nx.game:thinking`: `NextThink` on the game's clock, by time then entity; `nx.game:targets`: names, `FireTargets`, delays, kill targets) and `trigger_multiple` / `trigger_once` (`nx.game:triggers`, `SV_TouchLinks`)
-- [ ] The other triggers (`trigger_hurt`, `trigger_push`, `trigger_teleport`, `trigger_gravity`, `trigger_relay`, `multi_manager`...) and how a target is used (`USE_TYPE`)
+- [x] `trigger_hurt` ([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)): a player in it hurt half its damage each half second (`nx::game::HurtVolume`, `CBaseTrigger::HurtTouch`), of its `damagetype`'s kind, as the official maps' are (a fall's, a burn's, a freeze's, a generic one)
+- [ ] `trigger_hurt`, what no official map uses: its `target`, its other spawnflags, being turned on and off, the time-based kinds and the bodies that are no players'
+- [ ] The other triggers (`trigger_push`, `trigger_teleport`, `trigger_gravity`, `trigger_relay`, `multi_manager`...) and how a target is used (`USE_TYPE`)
 
 ### Player and weapons
 - [x] The weapons' data: what each is (slot, team, price, ammo, clip, speed, models) for the knife, Glock, USP, AK-47 and M4A1 (`cs.shared:weapons`, `data/cstrike/weapons/`, `data/cstrike/ammo.toml`, [10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)); the knife's speed and view model from it
@@ -415,9 +417,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The step indicator's marks above or below the player, and of the other sounds heard (shots, items)
 - [ ] How the original removes a corpse once `cl_corpsestay` is over (at once, or fading, and over how long), measured on it
 - [ ] The hostages' blood; `violence_hblood`; `kRenderFxClampMinScale` on sprites, measured on the original (no GPL renderer reads it); a shield's sparks (`UTIL_Sparks`) with the shield
-- [x] The kill feed ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)): every client told of each player's death (`cs::KillNotice`, `DeathMsg`), a row of it at the top right (`cs.client:killFeed`), the killer's and the victim's names in their teams' colors, the picture of the weapon (`d_<weapon>`, else `d_skull`) and of a head (`d_headshot`), a teammate's kill's green, 4 at most, for `hud_deathnotice_time`; a line of it in the console
-- [ ] The kill feed measured on the original: where its rows go, its colors, its font and its console's lines, drawn today as the Half-Life SDK's client draws them
-- [ ] The scores (frags, deaths, the teams' wins: `ScoreInfo`, `TeamScore`), the team-attack messages and `mp_tkpunish`; the HUD's helmet; `trigger_hurt`
+- [x] The kill feed ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)): every client told of each player's death (`cs::KillNotice`, `DeathMsg`), a row of it at the top right where the original draws it, measured on it (`cs.client:killFeed`), the killer's and the victim's names in their teams' colors, the picture of the weapon (`d_<weapon>`, else `d_skull`) and of a head (`d_headshot`), a teammate's kill's green, 4 at most, for `hud_deathnotice_time`, lower while the player is dead; a line of it in the console
+- [ ] The kill feed's rows with a killer, measured on the original (they need a second player, which that build's game has no bots for): the gap before the killer's name, the head's picture, a teammate's kill's color and the console's lines; and at 640x480, which the reference runs could not reach (a dialog of the client)
+- [ ] The scores (frags, deaths, the teams' wins: `ScoreInfo`, `TeamScore`), the team-attack messages and `mp_tkpunish`; the HUD's helmet
 - [ ] What a dead player sees and its HUD (the original's client follows its body, `OBS_CHASE_FREE`, then spectates; to be measured on the original), its body's death played (with the players' models: the original's `WaterMove` breathes on for a player killed with exactly no health while its death plays); the box of weapons it drops (with dropping)
 - [x] Penetration by material (`materials.txt`): `FireBullets3`'s share of the power and of the damage kept by each material
 

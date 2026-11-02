@@ -1733,7 +1733,8 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
                       m_hudCvars->crosshair(), size);
     }
     if (m_session && killFeed && m_cvars->video.hudDraw.value()) {
-        killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()}, killFeedCvars->shownFor());
+        killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()}, killFeedCvars->shownFor(),
+                         !m_session->client.status().isAlive());
     }
     // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
     // client's HUD, while a map is played.

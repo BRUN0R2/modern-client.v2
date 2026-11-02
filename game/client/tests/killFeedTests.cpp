@@ -80,31 +80,47 @@ TEST(KillPicturesTest, AListWithoutTheSkullOrTheHeadIsRefused) {
     EXPECT_EQ(noHead.error().code, cs::HudError::PictureMissing);
 }
 
-TEST(KillFeedLayoutTest, ARowEndsAtTheRightEdgeItsKillerBeforeItsPicturesThenItsVictim) {
+/// A row measured on the original, a suicide of a player named "BRUN0" in the classic look: the screen, how
+/// wide the name is drawn in its font, and where the original draws the name, its skull, the first row and
+/// the rows' pitch. The name's pen is a pixel left of its first lit pixel, its skull 4 of its first.
+struct MeasuredRow {
+    nx::rhi::Extent2d size{};
+    std::int32_t nameWidth = 0;
+    std::int32_t victimX = 0;
+    std::int32_t iconX = 0;
+    std::int32_t top = 0;
+    std::int32_t pitch = 0;
+};
+
+TEST(KillFeedLayoutTest, ARowIsWhereTheOriginalDrawsItAtEachResolutionMeasured) {
+    const std::array measured{
+        MeasuredRow{{.width = 800, .height = 600}, 44, 741, 703, 40, 20},
+        MeasuredRow{{.width = 1024, .height = 768}, 47, 958, 918, 51, 25},
+        MeasuredRow{{.width = 1280, .height = 720}, 44, 1218, 1179, 48, 24},
+        MeasuredRow{{.width = 1280, .height = 960}, 47, 1209, 1167, 64, 32},
+        MeasuredRow{{.width = 1600, .height = 900}, 47, 1531, 1490, 60, 30},
+    };
+    for (const MeasuredRow& row : measured) {
+        const cs::KillRowWidths widths{.icon = 32, .victim = row.nameWidth};
+        const cs::KillRowLayout first = cs::layoutKillRow(widths, 0, false, row.size);
+        EXPECT_EQ(first.victimX, row.victimX) << row.size.width << "x" << row.size.height;
+        EXPECT_EQ(first.iconX, row.iconX) << row.size.width << "x" << row.size.height;
+        EXPECT_EQ(first.y, row.top) << row.size.width << "x" << row.size.height;
+        EXPECT_EQ(cs::layoutKillRow(widths, 3, false, row.size).y, row.top + (3 * row.pitch));
+        EXPECT_EQ(cs::layoutKillRow(widths, 0, true, row.size).y, 2 * row.top)
+            << "under the spectator's panel";
+        EXPECT_EQ(first.killerX, std::nullopt);
+        EXPECT_EQ(first.headX, std::nullopt);
+    }
+}
+
+TEST(KillFeedLayoutTest, AKillersNameGoesBeforeThePicturesTheHeadsAfterWhatKilled) {
     const cs::KillRowLayout layout = cs::layoutKillRow({.killer = 60, .icon = 48, .head = 36, .victim = 50},
-                                                       0, {.width = 1280, .height = 720});
-    EXPECT_EQ(layout.victimX, 1230);
-    EXPECT_EQ(layout.headX, 1194);
-    EXPECT_EQ(layout.iconX, 1146);
-    EXPECT_EQ(layout.killerX, 1081) << "5 before the picture";
-    EXPECT_EQ(layout.y, 50) << "a fifteenth of 720 and 2";
-}
-
-TEST(KillFeedLayoutTest, ARowOfNoKillerNorHeadShowsItsPictureAndItsVictim) {
-    const cs::KillRowLayout layout =
-        cs::layoutKillRow({.icon = 32, .victim = 50}, 0, {.width = 640, .height = 480});
-    EXPECT_EQ(layout.killerX, std::nullopt);
-    EXPECT_EQ(layout.headX, std::nullopt);
-    EXPECT_EQ(layout.iconX, 558);
-    EXPECT_EQ(layout.victimX, 590);
-    EXPECT_EQ(layout.y, 34);
-}
-
-TEST(KillFeedLayoutTest, EachRowIs20PixelsUnderTheOneBefore) {
-    const nx::rhi::Extent2d size{.width = 1920, .height = 1080};
-    const cs::KillRowWidths widths{.icon = 32, .victim = 50};
-    EXPECT_EQ(cs::layoutKillRow(widths, 0, size).y, 74);
-    EXPECT_EQ(cs::layoutKillRow(widths, 3, size).y, 134);
+                                                       0, false, {.width = 1280, .height = 720});
+    EXPECT_EQ(layout.victimX, 1212);
+    EXPECT_EQ(layout.headX, 1169) << "a share of the height before the name";
+    EXPECT_EQ(layout.iconX, 1121);
+    EXPECT_EQ(layout.killerX, 1054) << "as much before the pictures";
 }
 
 TEST(KillLineTest, TheConsoleTellsWhoKilledWhomWithWhat) {
@@ -156,7 +172,7 @@ protected:
     /// Lets the rows that showed for `rowTime` go at `now`.
     void appendAt(nx::Seconds now, nx::Seconds rowTime = cs::kKillRowTime) {
         std::vector<nx::render::ScreenQuad> quads;
-        feed->append(quads, {.width = 640, .height = 480}, now, rowTime);
+        feed->append(quads, {.width = 640, .height = 480}, now, rowTime, false);
         EXPECT_TRUE(quads.empty()) << "nothing before it is loaded";
     }
 

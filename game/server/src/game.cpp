@@ -487,7 +487,11 @@ void Game::runCommand(Player& player, const UserCommand& command) {
     placeBody(player);
     if (isAlive) {
         nx::game::touchTriggers(m_world, hulls, player.body);
-        postThink(player, command, before);
+        touchHurtVolumes(player);
+        // SV_RunCmd's PostThink is of a player still alive after what it touched.
+        if (player.status.isAlive()) {
+            postThink(player, command, before);
+        }
     }
     // As the original's PostThink ends, dead or alive (m_afButtonLast, StudioProcessGait).
     player.lastButtons = command.buttons;
@@ -628,11 +632,23 @@ void Game::use(Player& player, const UserCommand& command) {
     makeSound(player, used ? m_content->use.found : m_content->use.nothing);
 }
 
+void Game::touchHurtVolumes(Player& player) {
+    for (const nx::game::VolumeHarm& harm :
+         nx::game::touchHurtVolumes(m_world, m_map->hulls(), player.body)) {
+        if (harm.damage < nx::Damage{}) {
+            healPlayer(player.status, nx::HitPoints{-harm.damage.value()}); // TakeHealth
+        } else {
+            hurt(player, PlayerHarm{.damage = harm.damage, .kind = harmKindOf(harm.kind)});
+        }
+    }
+}
+
 void Game::land(Player& player, nx::Damage damage) {
     // Weighed before the damage is cut to its whole points.
     if (damage.value() > player.status.health.value()) {
         makeSound(player, m_content->playerHarm.splat);
     }
+    player.lastHitGroup = HitGroup::Generic; // PostThink: a fall meets it in no group.
     hurt(player, PlayerHarm{.damage = damage, .kind = HarmKind::Fall});
     player.movement.punch.pitch = nx::Degrees{};
 }
@@ -640,9 +656,6 @@ void Game::land(Player& player, nx::Damage damage) {
 void Game::hurt(Player& player, const PlayerHarm& harm) {
     if (!player.status.isAlive()) {
         return;
-    }
-    if (harm.kind == HarmKind::Fall) {
-        player.lastHitGroup = HitGroup::Generic;
     }
     const PlayerHarmRules& rules = m_content->playerHarm;
     const PlayerHarmed harmed =
