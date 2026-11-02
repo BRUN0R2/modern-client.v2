@@ -16,6 +16,9 @@
 ///
 /// Today: the players hurt by the world and by each other's shots and knives, and every client told of
 /// their deaths (KillNotice) and the scores (ScoreRow); the grenades and the bomb come with them (TODO.md).
+///
+/// This class is what importers see: what the game does is in its parts, functions over GameState
+/// (docs/adr/0030-game-parts.md).
 export module cs.server:game;
 
 import std;
@@ -27,6 +30,7 @@ import nx.navigation;
 import cs.shared;
 import :gameCvars;
 import :gameModels;
+import :gameState;
 import :entityBodies;
 import :playerBodies;
 import :playerNames;
@@ -88,14 +92,6 @@ struct BodyStatus {
     std::optional<Team> team{};
 };
 
-/// Where an attack a player took came from, as its HUD's damage indicator shows it (the Damage message's
-/// origin): the way toward its attacker across, a unit direction, and the team of the player that made it,
-/// none for an entity's body.
-struct HurtFrom {
-    nx::Vec3 toward{};
-    std::optional<Team> team{};
-};
-
 /// What a player knows of itself, as its own client is told it: its team, whether it is alive, when it
 /// last spawned (alive already or not: a round's start spawns the living too), its eye and its feet, how
 /// it moves, where it looks (pev->v_angle, which the game turns as it spawns), how fast it may run
@@ -112,52 +108,6 @@ struct PlayerOwnState {
     nx::UnitsPerSecond maxSpeed{};
     std::optional<WeaponSlot> heldSlot{};
     std::optional<HurtFrom> hurtFrom{};
-};
-
-} // namespace cs
-
-namespace cs {
-
-/// A player of the game, as its server keeps it (CBasePlayer): its team, its name (pev->netname), its score
-/// and _cl_autowepswitch, where it
-/// is and how it moves, what it has, its weapons, its feet's and its breath's voices, the harms it keeps
-/// over time, its body among the world's entities, the buttons of its last command, whether the next
-/// round pays it, how often it spawned in the round, what its HUD was told last of the round's time,
-/// and what the tick did to it and made it make, which its client is told of; the character it plays
-/// as, where it looks (pev->v_angle), how its model plays, and the seed of the command it runs, which what
-/// it does draws from (random_seed); the hit group an attack last met it in (m_LastHitGroup), and the
-/// share of its speed a hit slowed it down to (m_flVelocityModifier); and what its hits dealt the bodies
-/// they met in the tick, which its client shows. It joins dead, and lives once it spawns.
-struct Player {
-    Team team;
-    std::string name;
-    PlayerScore score{};
-    AutoSwitch autoSwitch;
-    CharacterIndex character;
-    MovementState movement{};
-    PlayerStatus status;
-    Inventory inventory;
-    StepVoice stepVoice;
-    Breath breath;
-    TimedHarms timedHarms{};
-    nx::ecs::Entity body{};
-    nx::Flags<Button> lastButtons{}; ///< m_afButtonLast: the use button acts as it goes down.
-    bool isPaidNextRound = true; ///< Not when the last end leaves it unpaid (m_bReceivesNoMoneyNextRound).
-    std::uint32_t spawnsThisRound = 0;  ///< m_iNumSpawns.
-    nx::GameTime spawnedAt{};           ///< When it last spawned, alive already or not (Spawn, RoundRespawn).
-    std::optional<HurtFrom> hurtFrom{}; ///< In the tick: where the last attack it took came from.
-    std::vector<DamageDealt> damageDealt{}; ///< In the tick: what its hits dealt, in their order.
-    RoundTimer roundTimer{};
-    std::optional<nx::EulerAngles> turnedView{}; ///< In the tick.
-    bool wasPlaced = false;                      ///< In the tick.
-    std::vector<SoundMade> sounds{};             ///< In the tick, but its weapons', which they keep.
-    /// What its purchases sound like: it buys between ticks, as a client's commands come, heard in the next.
-    std::vector<SoundMade> soundsOfPurchases{};
-    nx::EulerAngles view{};
-    PlayerAnimation animation{};
-    CommandNumber randomSeed{};
-    HitGroup lastHitGroup = HitGroup::Generic;
-    float speedShare = 1.0F;
 };
 
 } // namespace cs
@@ -185,7 +135,7 @@ public:
     auto operator=(const Game&) -> Game& = delete;
     Game(Game&&) = delete;
     auto operator=(Game&&) -> Game& = delete;
-    ~Game() = default;
+    ~Game();
 
     /// A player asking for `name` joins the game in `team`, by the name the server gives it among the
     /// others' (playerNameOf), with mp_startmoney, its weapons drawn as `autoSwitch` says (its
@@ -208,7 +158,7 @@ public:
     [[nodiscard]] auto playerCount() const -> std::size_t;
     /// The rounds each team won since the game last restarted (m_iNumTerroristWins, m_iNumCTWins).
     [[nodiscard]] inline auto wins() const noexcept -> const nx::EnumArray<Team, std::uint32_t>& {
-        return teamWins;
+        return m_state.wins;
     }
     /// What `player`, in the game, knows of itself (PlayerOwnState).
     [[nodiscard]] auto ownStateOf(PlayerIndex player) const -> PlayerOwnState;
@@ -262,10 +212,10 @@ public:
     template <nx::ecs::Component Component>
     [[nodiscard]] auto registerEntityComponent(std::string_view name)
         -> nx::Result<void, nx::ecs::ComponentError> {
-        if (m_world.components().find<Component>()) {
+        if (m_state.world.components().find<Component>()) {
             return {};
         }
-        auto registered = m_world.registerComponent<Component>(name);
+        auto registered = m_state.world.registerComponent<Component>(name);
         if (!registered) {
             return std::unexpected{std::move(registered.error())};
         }
@@ -274,36 +224,36 @@ public:
     template <nx::ecs::Component Component>
     [[nodiscard]] auto attachEntityComponent(nx::ecs::Entity entity, Component component)
         -> nx::Result<void, EntityError> {
-        if (!m_world.isAlive(entity) || !m_world.has<EntityBody>(entity)) {
+        if (!m_state.world.isAlive(entity) || !m_state.world.has<EntityBody>(entity)) {
             return nx::fail(EntityError::UnknownEntity, "an entity-body handle is required");
         }
-        m_world.add(entity, std::move(component));
+        m_state.world.add(entity, std::move(component));
         return {};
     }
     template <nx::ecs::Component Component>
     [[nodiscard]] auto entityComponent(nx::ecs::Entity entity) -> Component* {
-        return m_world.has<EntityBody>(entity) ? m_world.get<Component>(entity) : nullptr;
+        return m_state.world.has<EntityBody>(entity) ? m_state.world.get<Component>(entity) : nullptr;
     }
     /// Attaches `component`, registered, to the body of `player`, in the game, which the body keeps until
     /// the player leaves.
     template <nx::ecs::Component Component>
     void attachPlayerComponent(PlayerIndex player, Component component) {
-        m_world.add(playerAt(player).body, std::move(component));
+        m_state.world.add(cs::playerAt(m_state, player).body, std::move(component));
     }
     /// The component of `player`'s body, in the game, none when it has none.
     template <nx::ecs::Component Component>
     [[nodiscard]] auto playerComponent(PlayerIndex player) -> Component* {
-        return m_world.get<Component>(playerAt(player).body);
+        return m_state.world.get<Component>(cs::playerAt(m_state, player).body);
     }
     /// Calls `visit` with each body that has the component, of a player's or of createEntity's, and its
     /// component, in the world's order: none while no extension registered it. The world's entities may
     /// not change meanwhile.
     template <nx::ecs::Component Component, std::invocable<nx::ecs::Entity, const Component&> Visit>
     void forEachEntityComponent(Visit&& visit) {
-        if (!m_world.components().find<Component>()) {
+        if (!m_state.world.components().find<Component>()) {
             return;
         }
-        nx::ecs::Query<nx::ecs::Entity, const Component&>{m_world}.forEach(std::forward<Visit>(visit));
+        nx::ecs::Query<nx::ecs::Entity, const Component&>{m_state.world}.forEach(std::forward<Visit>(visit));
     }
     /// What `body` is: a player's, living or dead, of its team; a body createEntity made, living or a
     /// corpse, of no team; anything else, neither alive nor of a team.
@@ -313,7 +263,7 @@ public:
     [[nodiscard]] auto snapshotFor(PlayerIndex player) -> PlayerSnapshot;
 
     /// The rounds of the map.
-    [[nodiscard]] inline auto rounds() const noexcept -> const Rounds& { return m_rounds; }
+    [[nodiscard]] inline auto rounds() const noexcept -> const Rounds& { return m_state.rounds; }
 
     /// Gives `player` `weapon` (its replacement, when it is replaced), which must be complete, as its
     /// loadout gives one, drawn as its _cl_autowepswitch says; the speed it runs at follows the weapon it
@@ -346,9 +296,6 @@ public:
     void placeEye(PlayerIndex player, nx::Vec3 eye);
 
 private:
-    /// The player `index` names, in the game.
-    [[nodiscard]] auto playerAt(PlayerIndex index) -> Player&;
-    [[nodiscard]] auto playerAt(PlayerIndex index) const -> const Player&;
     /// What `player` does with `command` in the tick: it selects, thinks before it moves (preThink),
     /// moves and touches what it meets, then thinks after (postThink), alive.
     void runCommand(Player& player, const UserCommand& command);
@@ -417,36 +364,13 @@ private:
     /// Weighs the round's end by the players alive and dead of each team (CheckWinConditions,
     /// Rounds::checkWinConditions), what an end does to the money then played (roundEnded).
     void checkWinConditions();
-    /// Whether `player`, joining, spawns now (FPlayerCanRespawn): not when it spawned in the round
-    /// already, nor, the game having players of both teams, once the round started kJoinSpawnWindow ago.
-    [[nodiscard]] auto canSpawn(const Player& player) const -> bool;
-    /// `player` watches until the next round, dead, from its team's next spawn point, turned the way it
-    /// faces (StartObserver at GetPlayerSpawnSpot).
-    void observe(Player& player);
     /// What a move of `mover` meets as boxes: the world's (solidBoxesOf), the other players alive among
     /// them, each standing or ducked, as the engine lists them for movement (SV_AddLinksToPM's
     /// SOLID_SLIDEBOX).
     [[nodiscard]] auto boxesMetBy(const Player& mover) -> std::vector<SolidBox>;
-    /// `player`'s body where it is: at its origin, its box among the bodies the pushers move, and, alive,
-    /// solid to the server's traces as its box, standing or ducked (setBodySolidity); dead, not solid.
-    void placeBody(Player& player);
-    /// `player`'s body posed for the server's traces as its model plays (PlayerPose): its torso's sequence
-    /// and frame, its legs' gait sequence and yaw, the aim's blends and its view's body angles.
-    void poseBody(Player& player);
-    /// `player` makes `sound` at the tick, at its own volume.
-    void makeSound(Player& player, const GameSound& sound);
     /// `victim` feels `attack` of a player of `team`, none for an entity's body: where it came from, back
     /// along its way (PlayerOwnState::hurtFrom).
     void feelHurt(Player& victim, const nx::game::Attack& attack, std::optional<Team> team);
-    /// `player`'s model plays `action` (setPlayerAnimation, CBasePlayer::SetAnimation), as the player
-    /// stands and moves, by the weapon it holds, drawing from its command's seed; nothing for a character
-    /// whose model could not be read.
-    void animate(Player& player, PlayerAction action);
-    /// What `player`'s model plays as it ends a command of `frameTime` (PostThink): alive, walking while it
-    /// moves on the ground or in water, else standing (but, as the original compares the gait sequence
-    /// with ACT_FLY's number, while its legs play the sixth), its torso's frame advanced; dead or alive,
-    /// its gait (processGait, StudioProcessGait) turned by its view.
-    void animateAfterCommand(Player& player, nx::Seconds frameTime);
     /// The sounds `sounds`, made by `player`'s movement at the tick of `command` among `entities`, as it
     /// hears them: each step by what it steps on (GameMap::materialAlong, in the space of the entity it
     /// stands on), while mp_footsteps lets them sound; each splash.
@@ -486,55 +410,8 @@ private:
     /// another entity.
     [[nodiscard]] auto materialOfHit(const WeaponHit& hit, nx::Vec3 start, nx::Vec3 end) const
         -> std::optional<TextureMaterial>;
-    /// Spawns `player` at the next spawn point of its team (nextSpawnPoint), as Spawn does: one unit
-    /// above it, standing still and turned the way it faces, its health whole, its speed no longer
-    /// slowed; alive, it keeps its armor, its weapons and its money; dead, it keeps its money alone,
-    /// given what a player of its team spawns with. It is paid as the next round starts, and has spawned
-    /// once more in the round. Its HUD is told the round's time.
-    void spawn(Player& player);
-    /// Gives `player` what a player of its team spawns with, drawn as its _cl_autowepswitch says.
-    void equip(Player& player);
-    /// The spawn point a player of `team` spawns at next, as EntSelectSpawnPoint picks it: the first of
-    /// the team's after the one its last player spawned at, the first after the last; the terrorists'
-    /// first when the team has none; the world's origin without either.
-    [[nodiscard]] auto nextSpawnPoint(Team team) -> SpawnPoint;
-    /// How fast `player` may run: kFreezeSpeed while the round is frozen, else as the weapon it holds
-    /// allows (ResetMaxSpeed).
-    [[nodiscard]] auto maxSpeed(const Player& player) const -> nx::UnitsPerSecond;
-    /// Stands `player` still at `origin`, its body there, and its client told it was placed.
-    void standAt(Player& player, nx::Vec3 origin);
-    /// `player` as the rules of buying weigh it now (Buyer).
-    [[nodiscard]] auto buyerOf(const Player& player) const -> Buyer;
-    /// `player` pays `price`, and is heard buying with `sound` in the next tick.
-    void pay(Player& player, nx::Money price, const GameSound& sound);
-    /// `player` buys a box of ammo for each of its weapons of `slot` (BuyAmmo, BuyGunAmmo). Errors: NoGun,
-    /// those of ammoPriceFor.
-    [[nodiscard]] auto buyBoxes(Player& player, WeaponSlot slot) -> nx::Result<void, BuyRefusal>;
-    /// The rows of the scoreboard `viewer`'s client is told of (ScoreRow): of every player in the game, by
-    /// its slot, the health and the money of `viewer`'s teammates and of itself alone.
-    [[nodiscard]] auto scoresFor(const Player& viewer) const -> std::vector<ScoreRow>;
 
-    const GameContent* m_content;
-    const GameMap* m_map;
-    GameCvars m_cvars;
-    GameModels m_models; ///< What the world's hostages play: they point into it.
-    Rounds m_rounds;
-    TeamAccounts m_accounts;
-    nx::EnumArray<Team, std::uint32_t> teamWins{}; ///< m_iNumTerroristWins, m_iNumCTWins.
-    nx::GameTime m_nextPeriodicThink{};            ///< When the rules look at the restart cvars next.
-    /// Of each team's, the one its last player spawned at (the original's g_pLastTerroristSpawn and
-    /// g_pLastCTSpawn).
-    nx::EnumArray<Team, std::optional<std::size_t>> m_lastSpawnPoints{};
-    nx::ecs::World m_world;
-    std::vector<std::optional<Player>> m_players; ///< By slot: none for a slot a player left.
-    std::vector<Impact> m_impacts;                ///< Of the tick.
-    std::vector<EntityStep> m_entitySteps;        ///< Of the tick.
-    std::vector<BloodMark> bloodMarks;            ///< Of the tick.
-    std::vector<BloodSpray> bloodSprays;          ///< Of the tick.
-    std::vector<BloodStream> bloodStreams;        ///< Of the tick.
-    std::vector<StreakSplash> streakSplashes;     ///< Of the tick.
-    std::vector<KillNotice> killNotices;          ///< Of the tick.
-    MapLightStyles lightStyles;                   ///< Owned by this game; copied into each client's snapshot.
+    GameState m_state;
 };
 
 } // namespace cs
