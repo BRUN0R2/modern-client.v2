@@ -9,8 +9,14 @@ nxAddModuleLibrary(appClient
         src/app.client.cppm
         src/commandLine.cppm
         src/client.cppm
+        src/video.cppm
+        src/agentMeshes.cppm
+        src/session.cppm
     SOURCES
         src/commandLine.cpp
+        src/video.cpp
+        src/agentMeshes.cpp
+        src/session.cpp
         src/client.cpp
     DEPENDS
         nx::core
