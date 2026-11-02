@@ -375,7 +375,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Platforms, trains, `func_rotating`, `func_rot_button`; `master` (multisource); shot buttons; a blocked door's damage; the player's view turned with a door that carries it
 - [ ] Entity movement types (`TOSS`, `BOUNCE`, `FOLLOW`, `FLY`, `STEP`, `NOCLIP`; `PUSH` beyond doors)
 - [x] Deterministic think and targets (`nx.game:thinking`: `NextThink` on the game's clock, by time then entity; `nx.game:targets`: names, `FireTargets`, delays, kill targets) and `trigger_multiple` / `trigger_once` (`nx.game:triggers`, `SV_TouchLinks`)
-- [ ] The other triggers (`trigger_hurt`, `trigger_push`, `trigger_teleport`, `trigger_gravity`, `trigger_relay`, `multi_manager`...) and how a target is used (`USE_TYPE`)
+- [x] `trigger_hurt` ([07 §5.2](07-simulation-and-physics.md#52-think-touch-and-triggers)): a player in it hurt half its damage each half second (`nx::game::HurtVolume`, `CBaseTrigger::HurtTouch`), of its `damagetype`'s kind, as the official maps' are (a fall's, a burn's, a freeze's, a generic one)
+- [ ] `trigger_hurt`, what no official map uses: its `target`, its other spawnflags, being turned on and off, the time-based kinds and the bodies that are no players'
+- [ ] The other triggers (`trigger_push`, `trigger_teleport`, `trigger_gravity`, `trigger_relay`, `multi_manager`...) and how a target is used (`USE_TYPE`)
 
 ### Player and weapons
 - [x] The weapons' data: what each is (slot, team, price, ammo, clip, speed, models) for the knife, Glock, USP, AK-47 and M4A1 (`cs.shared:weapons`, `data/cstrike/weapons/`, `data/cstrike/ammo.toml`, [10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml)); the knife's speed and view model from it
@@ -415,7 +417,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The step indicator's marks above or below the player, and of the other sounds heard (shots, items)
 - [ ] How the original removes a corpse once `cl_corpsestay` is over (at once, or fading, and over how long), measured on it
 - [ ] The hostages' blood; `violence_hblood`; `kRenderFxClampMinScale` on sprites, measured on the original (no GPL renderer reads it); a shield's sparks (`UTIL_Sparks`) with the shield
-- [ ] The scores and the kill feed (`DeathNotice`, frags), the team-attack messages and `mp_tkpunish`; the HUD's helmet; `trigger_hurt`
+- [ ] The scores and the kill feed (`DeathNotice`, frags), the team-attack messages and `mp_tkpunish`; the HUD's helmet
 - [ ] What a dead player sees and its HUD (the original's client follows its body, `OBS_CHASE_FREE`, then spectates; to be measured on the original), its body's death played (with the players' models: the original's `WaterMove` breathes on for a player killed with exactly no health while its death plays); the box of weapons it drops (with dropping)
 - [x] Penetration by material (`materials.txt`): `FireBullets3`'s share of the power and of the damage kept by each material
 

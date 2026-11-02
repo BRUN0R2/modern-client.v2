@@ -4,7 +4,8 @@
 #pragma once
 
 // Test helper: the fuzz corpus's box map (tests/fuzz/corpus/bsp/boxEmbedded.bsp: 64 units, its floor at
-// z = 0, in its hulls too) given other entities, and stretched for a navigation mesh. Include after
+// z = 0, in its hulls too) given other entities, and stretched for a navigation mesh; the one with a
+// brush model besides the world (boxWithEntity.bsp) as a volume, given other entities. Include after
 // <gtest/gtest.h>, `import std;` and `import nx.platform;`, in a test that defines
 // NX_FUZZ_CORPUS_DIRECTORY.
 
@@ -13,11 +14,11 @@ namespace nx::test {
 /// Where the header of a BSP keeps the offset and the length of its entities.
 inline constexpr std::size_t kBspEntitiesLump = 4;
 
-/// The bytes of the box map whose entities are `entities`, the text of its entities lump, at the end of
-/// its file, its terminating zero included.
-[[nodiscard]] inline auto boxMapWith(std::string_view entities) -> std::vector<std::byte> {
-    auto seed =
-        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+/// The bytes of the corpus's map `file` whose entities are `entities`, the text of its entities lump, at
+/// the end of its file, its terminating zero included.
+[[nodiscard]] inline auto corpusMapWith(std::string_view file, std::string_view entities)
+    -> std::vector<std::byte> {
+    auto seed = nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / file);
     EXPECT_TRUE(seed.has_value());
     std::vector<std::byte> bytes = seed.value_or(std::vector<std::byte>{});
     const auto offset = static_cast<std::int32_t>(bytes.size());
@@ -27,6 +28,29 @@ inline constexpr std::size_t kBspEntitiesLump = 4;
     const auto header =
         std::bit_cast<std::array<std::byte, sizeof(std::int32_t) * 2>>(std::array{offset, length});
     std::ranges::copy(header, bytes.begin() + static_cast<std::ptrdiff_t>(kBspEntitiesLump));
+    return bytes;
+}
+
+/// The box map whose entities are `entities`.
+[[nodiscard]] inline auto boxMapWith(std::string_view entities) -> std::vector<std::byte> {
+    return corpusMapWith("boxEmbedded.bsp", entities);
+}
+
+/// The box map with a brush model, `*1`, at x = 16, solid to every hull a body is traced through, as a
+/// trigger's volume is to what touches it; its entities are `entities`.
+[[nodiscard]] inline auto boxWithVolumeMapWith(std::string_view entities) -> std::vector<std::byte> {
+    std::vector<std::byte> bytes = corpusMapWith("boxWithEntity.bsp", entities);
+    // A BSP's models are its fifteenth lump: each's hull roots after its bounds and its origin, the first
+    // that of its faces; a negative root is the contents of the whole hull.
+    constexpr std::size_t kModelLump = 14;
+    constexpr std::size_t kLumpHeaderAt = sizeof(std::int32_t) + (kModelLump * 2 * sizeof(std::int32_t));
+    constexpr std::size_t kModelSize = 64;
+    constexpr std::size_t kBodyHullRootsAt = (9 * sizeof(float)) + sizeof(std::int32_t);
+    constexpr std::array<std::int32_t, 3> kSolidRoots{-2, -2, -2};
+    std::int32_t offset = 0;
+    std::memcpy(&offset, bytes.data() + kLumpHeaderAt, sizeof(offset));
+    std::memcpy(bytes.data() + static_cast<std::size_t>(offset) + kModelSize + kBodyHullRootsAt,
+                kSolidRoots.data(), sizeof(kSolidRoots));
     return bytes;
 }
 
