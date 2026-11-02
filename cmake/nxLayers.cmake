@@ -3,28 +3,38 @@
 
 # The layer rule of docs/01-architecture.md, section 1.1: a module depends only on modules of lower
 # layers, and on the modules of its own layer that the catalog declares (a backend on the interface
-# it implements). Every module declares its layer and dependencies; the check runs once, when the
-# top-level directory finishes configuring, so it sees every module whatever order the directories
-# are added in (a dependency on a higher layer names a module not defined yet when the lower one is).
+# it implements), and those it declares are those its sources import. Every module declares its
+# layer, dependencies and sources; the checks run once, when the top-level directory finishes
+# configuring, so they see every module whatever order the directories are added in (a dependency on
+# a higher layer names a module not defined yet when the lower one is).
 
 include_guard(GLOBAL)
 
-# nxDeclareModuleLayer(<target> <layer> [DEPENDS <targets>...] [LATERAL <targets>...])
+# nxDeclareModuleLayer(<target> <layer> [DEPENDS <targets>...] [LATERAL <targets>...]
+#     [SOURCES <files>...])
 #
 # Records that the project module `target` sits in `layer` and links `DEPENDS`. LATERAL names the
 # dependencies of the same layer that the catalog of docs/01 declares; each must be of that layer.
+# SOURCES are its module units, whose imports are checked against DEPENDS: a module of none is not.
 function(nxDeclareModuleLayer target layer)
-    cmake_parse_arguments(PARSE_ARGV 2 arg "" "" "DEPENDS;LATERAL")
+    cmake_parse_arguments(PARSE_ARGV 2 arg "" "" "DEPENDS;LATERAL;SOURCES")
     if(NOT layer MATCHES "^[0-9]+$")
         message(FATAL_ERROR "nx: ${target}: LAYER must be a layer number, not '${layer}'")
     endif()
     set_property(TARGET ${target} PROPERTY NX_LAYER ${layer})
     set_property(TARGET ${target} PROPERTY NX_DEPENDS ${arg_DEPENDS})
     set_property(TARGET ${target} PROPERTY NX_LATERAL ${arg_LATERAL})
+    set(sources "")
+    foreach(source IN LISTS arg_SOURCES)
+        cmake_path(ABSOLUTE_PATH source NORMALIZE)
+        list(APPEND sources "${source}")
+    endforeach()
+    set_property(TARGET ${target} PROPERTY NX_SOURCES ${sources})
 
     get_property(modules GLOBAL PROPERTY NX_MODULES)
     if(NOT modules)
         cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL nxCheckModuleLayers)
+        cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL nxCheckModuleImports)
     endif()
     set_property(GLOBAL APPEND PROPERTY NX_MODULES ${target})
 endfunction()
@@ -85,6 +95,72 @@ function(nxCheckModuleLayers)
                     "nx: ${module} (layer ${layer}) depends on ${dependency} (layer ${dependencyLayer}); "
                     "a module depends only on lower layers and on the same-layer modules it declares "
                     "LATERAL (docs/01-architecture.md, section 1.1)")
+            endif()
+        endforeach()
+    endforeach()
+endfunction()
+
+# The names of the modules `file` imports, in `out`: neither partitions of its own (`import :name`)
+# nor comments, as a declaration starts its line.
+function(nxImportsOf file out)
+    file(READ "${file}" text)
+    string(REGEX MATCHALL "(^|\n)[ \t]*(export[ \t]+)?import[ \t]+[A-Za-z0-9.]+" declarations "${text}")
+    list(TRANSFORM declarations REPLACE ".*[ \t]" "")
+    set(${out} ${declarations} PARENT_SCOPE)
+endfunction()
+
+# Fails the configuration when a module imports a project module it does not declare in DEPENDS, which
+# builds as long as another of its dependencies links that one, or declares one it imports nowhere: an
+# edge of the graph is one the code has. Imports of what no project module is (std) are not checked.
+function(nxCheckModuleImports)
+    get_property(modules GLOBAL PROPERTY NX_MODULES)
+    foreach(module IN LISTS modules)
+        get_target_property(sources ${module} NX_SOURCES)
+        if(NOT sources)
+            continue()
+        endif()
+        foreach(source IN LISTS sources)
+            file(READ "${source}" text)
+            if(text MATCHES "(^|\n)[ \t]*export[ \t]+module[ \t]+([A-Za-z0-9.]+)[ \t]*;")
+                set(providerOf.${CMAKE_MATCH_2} ${module})
+            endif()
+        endforeach()
+    endforeach()
+    foreach(module IN LISTS modules)
+        get_target_property(sources ${module} NX_SOURCES)
+        if(NOT sources)
+            continue()
+        endif()
+        get_target_property(dependencies ${module} NX_DEPENDS)
+        set(declared "")
+        foreach(dependency IN LISTS dependencies)
+            nxResolveTarget("${dependency}" resolved)
+            list(APPEND declared "${resolved}")
+        endforeach()
+        set(imported "")
+        foreach(source IN LISTS sources)
+            nxImportsOf("${source}" names)
+            foreach(name IN LISTS names)
+                set(provider "${providerOf.${name}}")
+                if(NOT provider OR provider STREQUAL module)
+                    continue()
+                endif()
+                list(APPEND imported "${provider}")
+                if(NOT provider IN_LIST declared)
+                    message(SEND_ERROR
+                        "nx: ${module} imports ${name} (${provider}) in ${source}, not among its DEPENDS "
+                        "(docs/01-architecture.md, section 1.1)")
+                endif()
+            endforeach()
+        endforeach()
+        foreach(dependency IN LISTS declared)
+            if(TARGET "${dependency}")
+                get_target_property(dependencySources "${dependency}" NX_SOURCES)
+                if(dependencySources AND NOT dependency IN_LIST imported)
+                    message(SEND_ERROR
+                        "nx: ${module} declares ${dependency} in DEPENDS, and none of its sources imports it "
+                        "(docs/01-architecture.md, section 1.1)")
+                endif()
             endif()
         endforeach()
     endforeach()

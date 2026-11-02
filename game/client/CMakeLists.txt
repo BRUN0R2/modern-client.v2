@@ -75,6 +75,7 @@ nxAddModuleLibrary(csClient
         nx::core
         nx::math
         nx::meta
+        nx::jobs
         nx::platform
         nx::console
         nx::data
