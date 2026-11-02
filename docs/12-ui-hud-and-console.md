@@ -516,7 +516,9 @@ a restart (`cs::restartDelayOf`, CheckRestartRound,
 [10 §3](10-counter-strike-gameplay.md#3-match-and-round-flow)), `mp_footsteps` (1: any value but
 0 lets the steps sound), read at each step ([11 §3](11-audio.md#3-original-semantics-to-preserve)), and
 `mp_friendlyfire` (0: any value but 0 lets a player's attacks hurt its teammates), read at each attack
-([10 §7.4](10-counter-strike-gameplay.md#74-damage)).
+([10 §7.4](10-counter-strike-gameplay.md#74-damage)), and `mp_buytime` (1.5 minutes), read at each purchase,
+cut to whole seconds and held to 15 at least (`cs::readBuyTime`, CanPlayerBuy,
+[10 §8](10-counter-strike-gameplay.md#8-buying)).
 A number past what `int()` holds is cut as the original's processors cut it, to the least whole
 number (`nx::truncateAsX86`). `vid_vsync` as the name of
 `gl_vsync`, and the other cvars, come with their consumers.

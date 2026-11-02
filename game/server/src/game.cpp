@@ -362,6 +362,92 @@ void Game::giveArmor(PlayerIndex index, ArmorKind kind) {
     wearArmor(playerAt(index).status, kind);
 }
 
+auto Game::buyWeapon(PlayerIndex index, WeaponIndex asked) -> nx::Result<void, BuyRefusal> {
+    Player& player = playerAt(index);
+    const WeaponIndex weapon = m_content->weapons.madeFor(asked);
+    const Weapon& sold = m_content->weapons.weapon(weapon);
+    auto price = weaponPriceFor(sold, buyerOf(player), player.inventory.has(weapon));
+    if (!price) {
+        return std::unexpected{std::move(price.error())};
+    }
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kSpawnStream};
+    for (const WeaponIndex owned : player.inventory.weaponsIn(sold.slot)) {
+        player.inventory.drop(owned, time, random);
+    }
+    give(index, weapon);
+    pay(player, *price, m_content->buying.sounds.weapon);
+    return {};
+}
+
+auto Game::buyArmor(PlayerIndex index, ArmorKind kind) -> nx::Result<void, BuyRefusal> {
+    Player& player = playerAt(index);
+    auto price = armorPriceFor(m_content->buying.armor, buyerOf(player), player.status, kind);
+    if (!price) {
+        return std::unexpected{std::move(price.error())};
+    }
+    wearArmor(player.status, kind);
+    pay(player, *price, m_content->buying.sounds.armor);
+    return {};
+}
+
+auto Game::buyAmmo(PlayerIndex index, WeaponSlot slot, AmmoPurchase purchase)
+    -> nx::Result<void, BuyRefusal> {
+    Player& player = playerAt(index);
+    if (auto bought = buyBoxes(player, slot); !bought) {
+        return bought;
+    }
+    if (purchase == AmmoPurchase::AsManyBoxes) {
+        // Each box adds a round at least, or is refused as the ammo is full.
+        while (buyBoxes(player, slot).has_value()) {
+        }
+    }
+    return {};
+}
+
+auto Game::buyBoxes(Player& player, WeaponSlot slot) -> nx::Result<void, BuyRefusal> {
+    if (auto mayBuy = checkMayBuy(buyerOf(player)); !mayBuy) {
+        return mayBuy;
+    }
+    const std::vector<WeaponIndex> weapons = player.inventory.weaponsIn(slot);
+    if (weapons.empty()) {
+        return nx::fail(BuyRefusal::NoGun);
+    }
+    for (const WeaponIndex weapon : weapons) {
+        const std::optional<WeaponMagazine>& magazine = m_content->weapons.weapon(weapon).magazine;
+        const AmmoType* const ammo = magazine ? m_content->weapons.findAmmo(magazine->ammo) : nullptr;
+        if (ammo == nullptr) {
+            return nx::fail(BuyRefusal::NoGun);
+        }
+        auto price = ammoPriceFor(*ammo, buyerOf(player), player.inventory.reserve(ammo->id));
+        if (!price) {
+            return std::unexpected{std::move(price.error())};
+        }
+        std::ignore = player.inventory.giveAmmo(ammo->id, ammo->boxRounds);
+        pay(player, *price, m_content->buying.sounds.ammo);
+    }
+    return {};
+}
+
+auto Game::buyerOf(const Player& player) const -> Buyer {
+    const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
+    return Buyer{.team = player.team,
+                 .money = player.status.money,
+                 .isAlive = player.status.isAlive(),
+                 .isAtBuyingPlace =
+                     m_map->isBuyingPlace(player.team, bodyOf(player.movement), player.movement.origin,
+                                          m_content->buying.spawnReach),
+                 .mayTeamBuy = m_map->letsBuy(player.team),
+                 .sinceRoundStart = m_rounds.sinceStartAt(time.now, time.rate),
+                 .buyTime = m_cvars.buyingTime()};
+}
+
+void Game::pay(Player& player, nx::Money price, const GameSound& sound) {
+    player.status.money = addMoney(player.status.money, nx::Money{} - price);
+    player.soundsOfPurchases.push_back(
+        SoundMade{.sound = &sound, .at = nx::game::tickTimeOf(m_world).now, .volume = sound.volume});
+}
+
 auto Game::toggleNoclip(PlayerIndex index) -> bool {
     MovementState& movement = playerAt(index).movement;
     const bool isFlying = movement.moveType == MoveType::Walk;
@@ -456,7 +542,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     for (Player& player : playersIn(m_players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
-        player.sounds.clear();
+        player.sounds = std::exchange(player.soundsOfPurchases, {});
         player.hurtFrom.reset();
         player.damageDealt.clear();
     }

@@ -344,6 +344,57 @@ TEST(InventoryTest, LastinvWithoutAWeaponBeforeTakesTheNewestOfTheFirstSlotWithA
     EXPECT_EQ(inventory.lastWeapon(), kGlock);
 }
 
+TEST(InventoryTest, AWeaponDroppedFromTheHandLeavesTheHeaviestLeftDrawnAndItsRounds) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife, kGlock, kAk});
+    EXPECT_EQ(inventory.giveAmmo("762Nato", 30), 30U);
+    ASSERT_EQ(inventory.held()->weapon, kAk);
+    nx::Random random{0, "test"};
+
+    inventory.drop(kAk, at(10), random);
+    EXPECT_FALSE(inventory.has(kAk));
+    ASSERT_NE(inventory.held(), nullptr);
+    EXPECT_EQ(inventory.held()->weapon, kGlock);
+    EXPECT_EQ(inventory.held()->clip, 20U) << "the one held still knows itself, the others moved";
+    EXPECT_EQ(inventory.animation()->weapon, kGlock);
+    EXPECT_EQ(inventory.animation()->start, nx::GameTime::atTick(10));
+    EXPECT_TRUE(inventory.isHeldBack()) << "being drawn";
+    EXPECT_EQ(inventory.reserve("762Nato"), 30U) << "the rounds a player carries are its own";
+    EXPECT_EQ(inventory.lastWeapon(), kKnife) << "the one it held is gone, no weapon to go back to";
+
+    inventory.drop(kGlock, at(11), random);
+    EXPECT_EQ(inventory.held()->weapon, kKnife);
+    inventory.drop(kKnife, at(12), random);
+    EXPECT_EQ(inventory.held(), nullptr);
+    EXPECT_FALSE(inventory.animation().has_value());
+    EXPECT_EQ(inventory.maxSpeed(), cs::kUnarmedSpeed);
+}
+
+TEST(InventoryTest, AWeaponDroppedFromTheBeltLeavesTheOneHeldAndTheOneBeforeWhereTheyAre) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kKnife, kGlock, kAk});
+    ASSERT_EQ(inventory.held()->weapon, kAk);
+    ASSERT_EQ(inventory.lastWeapon(), kGlock);
+    const std::optional<cs::ViewAnimation> animation = inventory.animation();
+    nx::Random random{0, "test"};
+
+    inventory.drop(kKnife, at(10), random);
+    EXPECT_EQ(inventory.held()->weapon, kAk);
+    EXPECT_EQ(inventory.lastWeapon(), kGlock);
+    EXPECT_EQ(inventory.animation()->start, animation->start) << "nothing is drawn";
+
+    inventory.drop(kGlock, at(11), random);
+    EXPECT_EQ(inventory.held()->weapon, kAk);
+    EXPECT_EQ(inventory.lastWeapon(), std::nullopt) << "the one before is gone";
+}
+
+TEST(InventoryTest, TheWeaponsOfASlotAreTheNewestFirst) {
+    const WeaponCatalog weapons = catalog();
+    Inventory inventory = given(weapons, {kGlock, kKnife, kUsp});
+    EXPECT_EQ(inventory.weaponsIn(WeaponSlot::Secondary), (std::vector{kUsp, kGlock}));
+    EXPECT_EQ(inventory.weaponsIn(WeaponSlot::Primary), std::vector<WeaponIndex>{});
+}
+
 TEST(InventoryTest, TheWeaponHeldIdlesAfterItsDrawAndThenAfterEachWait) {
     const WeaponCatalog weapons = catalog();
     Inventory inventory = given(weapons, {kKnife});

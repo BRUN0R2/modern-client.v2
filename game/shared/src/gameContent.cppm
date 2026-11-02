@@ -13,6 +13,7 @@ import nx.game;
 import :weapons;
 import :loadouts;
 import :economy;
+import :buying;
 import :materials;
 import :footsteps;
 import :breath;
@@ -37,7 +38,8 @@ enum class GameContentError : std::uint8_t {
 /// The game's files: the Counter-Strike 1.6 installation through its VFS, the classes the game makes
 /// the map's entities by (data/cstrike/entities.toml), its weapons (data/cstrike/ammo.toml and
 /// data/cstrike/weapons/<id>.toml), what a player of each team spawns with
-/// (data/cstrike/loadouts.toml), the money of its rounds (data/cstrike/economy.toml), the sounds of a
+/// (data/cstrike/loadouts.toml), the money of its rounds (data/cstrike/economy.toml), what buying costs
+/// (data/cstrike/buying.toml), the sounds of a
 /// player's feet (data/cstrike/footsteps.toml) and of its breath in water (data/cstrike/breath.toml),
 /// what the hit groups make of an attack's damage (data/cstrike/hitGroups.toml), the blood a hit sheds
 /// (data/cstrike/blood.toml), how a player is hurt
@@ -54,6 +56,7 @@ struct GameContent {
     WeaponCatalog weapons;
     Loadouts loadouts;
     EconomyRules economy;
+    BuyingRules buying;
     FootstepRules footsteps;
     BreathRules breath;
     HitGroupRules hitGroups;
@@ -85,9 +88,8 @@ struct GameContent {
 
 /// The game's content of `vfs`, the installation's files: from `data`, the project's data/ folder, the
 /// entity classes, the weapons, each in the file named after its id, the loadouts, the money of the
-/// rounds, the footsteps, the breath, the hit groups, the player's harm, its use, the characters and the
-/// world's light styles; what
-/// the textures are made of, from `vfs`. Errors: Unavailable.
+/// rounds, what buying costs, the footsteps, the breath, the hit groups, the player's harm, its use, the
+/// characters and the world's light styles; what the textures are made of, from `vfs`. Errors: Unavailable.
 [[nodiscard]] auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     -> nx::Result<GameContent, GameContentError>;
 

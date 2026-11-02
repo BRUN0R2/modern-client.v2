@@ -12,8 +12,9 @@
 /// delay lasts as many commands as the original's does (0.15 seconds, 16 at 100 a second).
 ///
 /// Today: giving, choosing, drawing, idling, the guns' fire, accuracy, spread, kick and reload, their
-/// alternates, the silencers and the Glock's burst, and the knife's attacks; what the shots and the
-/// blades hit, and dropping, come next (TODO.md).
+/// alternates, the silencers and the Glock's burst, and the knife's attacks, and parting with a weapon as
+/// buying another makes it; what the shots and the blades hit, and the box a weapon dropped falls as, come
+/// next (TODO.md).
 export module cs.shared:inventory;
 
 import std;
@@ -179,6 +180,11 @@ public:
     /// view model shows nothing. The sounds its weapons made stay, to be taken.
     void removeAll();
 
+    /// The player parts with `weapon`, which it has (DropPlayerItem; the box it falls as comes with
+    /// dropping, TODO.md): the rounds it carries stay, as a gun's are the player's in the original's;
+    /// holding it, it draws the heaviest it has left at `time` (GetNextBestWeapon), or holds none.
+    void drop(WeaponIndex weapon, const nx::game::TickTime& time, nx::Random& random);
+
     /// The part of `command` before it moves the player (CmdStart): the player draws the weapon it
     /// selects, or else that weapon's replacement, at `time` when it has it and does not hold it
     /// (SelectItem). The random numbers this draws are the command number's.
@@ -207,6 +213,12 @@ public:
     [[nodiscard]] inline auto weapons() const noexcept -> std::span<const OwnedWeapon> { return m_weapons; }
     /// The weapon the player holds; none.
     [[nodiscard]] auto held() const noexcept -> const OwnedWeapon*;
+    /// Whether the player has `weapon`.
+    [[nodiscard]] inline auto has(WeaponIndex weapon) const noexcept -> bool {
+        return find(weapon).has_value();
+    }
+    /// The player's weapons of `slot`, the newest first, as the original keeps them.
+    [[nodiscard]] auto weaponsIn(WeaponSlot slot) const -> std::vector<WeaponIndex>;
     /// The rounds of `ammo` the player carries besides the clips.
     [[nodiscard]] auto reserve(std::string_view ammo) const noexcept -> std::uint32_t;
     /// What the player's view model plays; none while it holds no weapon.

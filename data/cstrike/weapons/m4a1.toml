@@ -15,6 +15,7 @@ maxSpeed = 230.0
 [purchase]
 buyers = "counterTerrorists"
 price = 3100
+commands = ["m4a1"]
 
 [magazine]
 ammo = "556Nato"
