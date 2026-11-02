@@ -112,6 +112,15 @@ TEST_F(WindowFontsTest, TheFpsLabelWritesInTheEngineFont) {
     EXPECT_TRUE(label.has_value()) << nx::describe(label.error());
 }
 
+TEST_F(WindowFontsTest, TheKillFeedWritesInTheEngineFont) {
+    writeScheme();
+    const nx::assets::Vfs vfs = installation();
+    const auto windowFonts = cs::WindowFonts::open(vfs, catalog);
+    ASSERT_TRUE(windowFonts.has_value()) << nx::describe(windowFonts.error());
+    const auto feed = cs::KillFeed::open(*windowFonts, 768);
+    EXPECT_TRUE(feed.has_value()) << nx::describe(feed.error());
+}
+
 TEST(FpsLabelTest, TellsTheFramesASecondToTheNearestTenth) {
     EXPECT_EQ(cs::fpsText(520.8), "520.8 fps");
     EXPECT_EQ(cs::fpsText(520.0), "520.0 fps");

@@ -13,8 +13,8 @@
 /// CBasePlayer and CHalfLifeMultiplay play them (GPL, consulted: docs/20 section 3). After each tick it
 /// tells each player's client what it needs (PlayerSnapshot).
 ///
-/// Today: the players hurt by the world and by each other's shots and knives; the grenades, the bomb, the
-/// blood and the scores come with them (TODO.md).
+/// Today: the players hurt by the world and by each other's shots and knives, and every client told of
+/// their deaths (KillNotice); the grenades, the bomb and the scores come with them (TODO.md).
 export module cs.server:game;
 
 import std;
@@ -387,11 +387,11 @@ private:
     /// a mark of the tick where one of them leaves its decal (bloodDecalOf) on the world or a brush entity
     /// (TraceBleed, UTIL_BloodDecalTrace); drawn from `random`.
     void bleed(const nx::game::Attack& attack, const Bleeding& bleeding, nx::Random& random);
-    /// `player` dies (Killed), killed by `killer`, none for the world: it is heard dying, moves no more
-    /// (MovementState::isDead), plays its death by where it was last met, is no longer solid, and its
-    /// weapons are gone with it; its killer, another player, gets the money of an enemy's kill, or loses a
-    /// teammate's (CHalfLifeMultiplay::PlayerKilled, KillMoney); then the round's end is weighed
-    /// (checkWinConditions).
+    /// `player` dies (Killed), killed by `killer`, none for the world: every client is told of it
+    /// (KillNotice), it is heard dying, moves no more (MovementState::isDead), plays its death by where it
+    /// was last met, is no longer solid, and its weapons are gone with it; its killer, another player, gets
+    /// the money of an enemy's kill, or loses a teammate's (CHalfLifeMultiplay::PlayerKilled, KillMoney);
+    /// then the round's end is weighed (checkWinConditions).
     void die(Player& player, Player* killer);
     /// Weighs the round's end by the players alive and dead of each team (CheckWinConditions,
     /// Rounds::checkWinConditions), what an end does to the money then played (roundEnded).
@@ -501,6 +501,7 @@ private:
     std::vector<BloodSpray> bloodSprays;          ///< Of the tick.
     std::vector<BloodStream> bloodStreams;        ///< Of the tick.
     std::vector<StreakSplash> streakSplashes;     ///< Of the tick.
+    std::vector<KillNotice> killNotices;          ///< Of the tick.
     MapLightStyles lightStyles;                   ///< Owned by this game; copied into each client's snapshot.
 };
 

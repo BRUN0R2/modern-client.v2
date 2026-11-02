@@ -24,13 +24,13 @@ auto fpsText(double framesPerSecond) -> std::string {
 
 auto FpsLabel::open(const WindowFonts& fonts, std::uint32_t screenHeight)
     -> nx::Result<FpsLabel, WindowFontError> {
-    auto font = fonts.font(kFpsFont, screenHeight);
+    auto font = fonts.font(kEngineFont, screenHeight);
     if (!font) {
         return std::unexpected{std::move(font.error())};
     }
     auto atlas = nx::ui::GlyphAtlas::build(*font, kFpsCharacters);
     if (!atlas) {
-        return nx::fail(WindowFontError::Unusable, std::string{kFpsFont}, std::move(atlas.error()));
+        return nx::fail(WindowFontError::Unusable, std::string{kEngineFont}, std::move(atlas.error()));
     }
     return FpsLabel{std::move(*atlas)};
 }
