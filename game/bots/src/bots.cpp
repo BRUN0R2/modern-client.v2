@@ -216,14 +216,14 @@ void Bots::kickAll() {
     }
 }
 
-auto Bots::kickNamed(std::string_view name) -> bool {
+auto Bots::kickNamed(std::string_view name) -> nx::Result<void, BotKickError> {
     const auto named =
         std::ranges::find_if(bots, [this, name](PlayerIndex bot) { return game->nameOf(bot) == name; });
     if (named == bots.end()) {
-        return false;
+        return nx::fail(BotKickError::NoSuchBot, std::format("no bot is named {}", name));
     }
     kick(named);
-    return true;
+    return {};
 }
 
 void Bots::kick(std::vector<PlayerIndex>::const_iterator bot) {
