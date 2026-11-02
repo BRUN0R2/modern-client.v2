@@ -7,7 +7,8 @@ add_subdirectory(integration)
 
 # The layer check of the build itself (cmake/nxLayers.cmake), configured on a fixture of empty
 # modules: each case must pass, or fail naming the offending dependency.
-set(layerCases lowerLayers higherLayerDefinedLater sameLayer declaredLateral lateralOfAnotherLayer layerZero)
+set(layerCases lowerLayers higherLayerDefinedLater sameLayer declaredLateral lateralOfAnotherLayer layerZero
+    declaredImports undeclaredImport dependencyNotImported)
 foreach(layerCase IN LISTS layerCases)
     add_test(NAME LayerCheck.${layerCase}
         COMMAND "${CMAKE_COMMAND}"
@@ -25,3 +26,7 @@ set_tests_properties(LayerCheck.lateralOfAnotherLayer PROPERTIES
     PASS_REGULAR_EXPRESSION "nx: top \\(layer 1\\) declares base LATERAL, but it is not a module of layer 1")
 set_tests_properties(LayerCheck.layerZero PROPERTIES
     PASS_REGULAR_EXPRESSION "nx: other \\(layer 0\\) depends on base \\(layer 0\\)")
+set_tests_properties(LayerCheck.undeclaredImport PROPERTIES
+    PASS_REGULAR_EXPRESSION "nx: top imports fixture.base \\(base\\)")
+set_tests_properties(LayerCheck.dependencyNotImported PROPERTIES
+    PASS_REGULAR_EXPRESSION "nx: top declares base in DEPENDS, and none of its sources imports it")

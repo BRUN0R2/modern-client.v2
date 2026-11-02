@@ -28,6 +28,7 @@ nxAddModuleLibrary(csServer
         src/agentTouch.cpp
     DEPENDS
         nx::core
+        nx::meta
         nx::math
         nx::console
         nx::assets
