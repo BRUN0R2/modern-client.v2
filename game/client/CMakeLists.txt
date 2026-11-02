@@ -38,6 +38,7 @@ nxAddModuleLibrary(csClient
         src/console.cppm
         src/fpsLabel.cppm
         src/killFeed.cppm
+        src/scoreboard.cppm
         src/audio.cppm
         src/weaponCommands.cppm
         src/navigationDrawing.cppm
@@ -72,6 +73,7 @@ nxAddModuleLibrary(csClient
         src/console.cpp
         src/fpsLabel.cpp
         src/killFeed.cpp
+        src/scoreboard.cpp
         src/audio.cpp
         src/weaponCommands.cpp
         src/navigationDrawing.cpp

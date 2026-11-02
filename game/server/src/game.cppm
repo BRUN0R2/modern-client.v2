@@ -14,7 +14,7 @@
 /// tells each player's client what it needs (PlayerSnapshot).
 ///
 /// Today: the players hurt by the world and by each other's shots and knives, and every client told of
-/// their deaths (KillNotice); the grenades, the bomb and the scores come with them (TODO.md).
+/// their deaths (KillNotice) and the scores (ScoreRow); the grenades and the bomb come with them (TODO.md).
 export module cs.server:game;
 
 import std;
@@ -117,8 +117,8 @@ struct PlayerOwnState {
 
 namespace cs {
 
-/// A player of the game, as its server keeps it (CBasePlayer): its team, its name (pev->netname) and
-/// _cl_autowepswitch, where it
+/// A player of the game, as its server keeps it (CBasePlayer): its team, its name (pev->netname), its score
+/// and _cl_autowepswitch, where it
 /// is and how it moves, what it has, its weapons, its feet's and its breath's voices, the harms it keeps
 /// over time, its body among the world's entities, the buttons of its last command, whether the next
 /// round pays it, how often it spawned in the round, what its HUD was told last of the round's time,
@@ -130,6 +130,7 @@ namespace cs {
 struct Player {
     Team team;
     std::string name;
+    PlayerScore score{};
     AutoSwitch autoSwitch;
     CharacterIndex character;
     MovementState movement{};
@@ -196,8 +197,7 @@ public:
     /// end is weighed (checkWinConditions). `player` is in the game.
     void leave(PlayerIndex player);
     /// The team a player joining by auto-select joins (SelectDefaultTeam): the one of fewer players, else
-    /// one of the two drawn at random, from a stream of the tick. The original then weighs the teams'
-    /// wins, which come with the scores (TODO.md).
+    /// the one of fewer wins, the losing one, else one of the two drawn at random, from a stream of the tick.
     [[nodiscard]] auto defaultTeam() const -> Team;
     /// How many players of each team are in the game, alive and dead.
     [[nodiscard]] auto teamCounts() const -> TeamCounts;
@@ -389,9 +389,10 @@ private:
     void bleed(const nx::game::Attack& attack, const Bleeding& bleeding, nx::Random& random);
     /// `player` dies (Killed), killed by `killer`, none for the world: every client is told of it
     /// (KillNotice), it is heard dying, moves no more (MovementState::isDead), plays its death by where it
-    /// was last met, is no longer solid, and its weapons are gone with it; its killer, another player, gets
-    /// the money of an enemy's kill, or loses a teammate's (CHalfLifeMultiplay::PlayerKilled, KillMoney);
-    /// then the round's end is weighed (checkWinConditions).
+    /// was last met, is no longer solid, and its weapons are gone with it; it counts a death and its killer,
+    /// another player, a frag for an enemy, or one less for a teammate or for itself, none for the world, and
+    /// gets the money of an enemy's kill, or loses a teammate's (CHalfLifeMultiplay::PlayerKilled,
+    /// KillMoney); then the round's end is weighed (checkWinConditions).
     void die(Player& player, Player* killer);
     /// Weighs the round's end by the players alive and dead of each team (CheckWinConditions,
     /// Rounds::checkWinConditions), what an end does to the money then played (roundEnded).
@@ -441,9 +442,9 @@ private:
     /// again; as a round starts the players spawn again (spawn); as the game restarts they spawn as they
     /// joined: with mp_startmoney, without armor, and with their team's loadout alone.
     void thinkRules();
-    /// What the end of a round by `reason` does to the money (TerminateRound), logged: what its winners
-    /// get goes to their team's account, and a player alive on the losing team is not paid as the next
-    /// round starts when the end does not pay its living losers.
+    /// What the end of a round by `reason` does (TerminateRound), logged: its winners count a win
+    /// (TeamScore), what they get goes to their team's account, and a player alive on the losing team is not
+    /// paid as the next round starts when the end does not pay its living losers.
     void roundEnded(RoundEndReason reason);
     /// Pays each player what its team gets as a round starts (RestartRound), `hostagesHeld` still held
     /// (repositionHostages), unless the last end left it unpaid.
@@ -482,6 +483,9 @@ private:
     [[nodiscard]] auto maxSpeed(const Player& player) const -> nx::UnitsPerSecond;
     /// Stands `player` still at `origin`, its body there, and its client told it was placed.
     void standAt(Player& player, nx::Vec3 origin);
+    /// The rows of the scoreboard `viewer`'s client is told of (ScoreRow): of every player in the game, by
+    /// its slot, the health and the money of `viewer`'s teammates and of itself alone.
+    [[nodiscard]] auto scoresFor(const Player& viewer) const -> std::vector<ScoreRow>;
 
     const GameContent* m_content;
     const GameMap* m_map;
@@ -489,7 +493,8 @@ private:
     GameModels m_models; ///< What the world's hostages play: they point into it.
     Rounds m_rounds;
     TeamAccounts m_accounts;
-    nx::GameTime m_nextPeriodicThink{}; ///< When the rules look at the restart cvars next.
+    nx::EnumArray<Team, std::uint32_t> teamWins{}; ///< m_iNumTerroristWins, m_iNumCTWins.
+    nx::GameTime m_nextPeriodicThink{};            ///< When the rules look at the restart cvars next.
     /// Of each team's, the one its last player spawned at (the original's g_pLastTerroristSpawn and
     /// g_pLastCTSpawn).
     nx::EnumArray<Team, std::optional<std::size_t>> m_lastSpawnPoints{};

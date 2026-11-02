@@ -131,6 +131,29 @@ struct KillNotice {
     [[nodiscard]] inline auto operator==(const KillNotice&) const noexcept -> bool = default;
 };
 
+/// A player's score (pev->frags, m_iDeaths): what it killed less what it should not have, and its deaths.
+struct PlayerScore {
+    std::int32_t frags = 0;
+    std::uint32_t deaths = 0;
+
+    [[nodiscard]] inline auto operator==(const PlayerScore&) const noexcept -> bool = default;
+};
+
+/// What a client is told of a player for its scoreboard, as the original's ScoreInfo, ScoreAttrib, TeamInfo,
+/// HealthInfo and Account messages tell it: who it is, of which team, its score, whether it is dead, and, a
+/// teammate of the client's, its health and its money (mp_scoreboard_showhealth's and showmoney's default).
+struct ScoreRow {
+    PlayerIndex player{};
+    std::string name{};
+    Team team{};
+    PlayerScore score{};
+    bool isDead = false;
+    std::optional<nx::HitPoints> health{};
+    std::optional<nx::Money> money{};
+
+    [[nodiscard]] inline auto operator==(const ScoreRow&) const noexcept -> bool = default;
+};
+
 /// What the server tells a client of another player for it to draw, as the original's entity state
 /// carries it: which player it is, the character it plays as, the weapon in its hands (its player model:
 /// models/p_<weapon>.mdl), where it is, how its body is turned (its pitch a third of its view's,
@@ -161,6 +184,7 @@ struct PlayerEntityState {
 struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
     nx::TickRate rate{nx::kDefaultTickRate};
+    PlayerIndex self{}; ///< Whose it is.
     MovementState player{};
     PlayerStatus status{};
     Inventory inventory;
@@ -182,6 +206,8 @@ struct PlayerSnapshot {
     std::vector<DamageDealt> damageDealt{};     ///< What its hits dealt in the tick, in their order.
     std::vector<EntityStep> entitySteps{};      ///< The entities' bodies' steps of the tick, in their order.
     std::vector<KillNotice> killNotices{};      ///< The players' deaths of the tick, in their order.
+    std::vector<ScoreRow> scores{};             ///< Of every player in the game, by its slot.
+    nx::EnumArray<Team, std::uint32_t> teamWins{}; ///< The rounds each team won (TeamScore).
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};

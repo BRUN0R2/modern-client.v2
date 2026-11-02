@@ -621,8 +621,15 @@ As a player dies, the server tells every client of it (`cs::KillNotice`, `CHalfL
 `DeathMsg`): its killer and itself as they are then, by name and team, none for a death by the world or by
 itself; the weapon its killer holds, none without one; and whether it was last met in the head
 (`m_bHeadshotKilled`), so that a death by the world after a head shot is told as one, as the original's
-is. The kill feed shows it ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)). The scores come
-with what they need ([TODO](TODO.md)).
+is. The kill feed shows it ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
+
+A death counts in the scores (`cs::PlayerScore`, `ScoreInfo`; `CHalfLifeMultiplay::PlayerKilled`): one more
+death for its player; for its killer a frag, one less for a teammate; one frag less for a player who kills
+itself, and none for a death by the world. Each round a team wins counts for it (`TeamScore`), and a game's
+restart forgets them all. Every client is told them each tick (`cs::ScoreRow`, `PlayerSnapshot::teamWins`),
+the health and the money of its own team's players alone, as ReGameDLL_CS's `mp_scoreboard_showhealth` and
+`mp_scoreboard_showmoney` tell them by default, and the scoreboard shows them
+([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)).
 
 An entity's body ([ADR-0028](adr/0028-native-agent-test-mod.md)) bleeds as `CBaseMonster::TraceAttack`
 sheds a monster's blood when its type names a `bloodColor` (`m_bloodColor`; none for `DONT_BLEED`):
@@ -823,8 +830,8 @@ navigation meshes ([ADR-0023](adr/0023-navigation.md)):
 Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_util.cpp`):
 
 - `bot_add` joins the team the game's auto-select joins (`cs::Game::defaultTeam`,
-  `SelectDefaultTeam`: the one of fewer players, else one at random; the teams' wins, which it
-  weighs then, come with the scores), `bot_add_t` and `bot_add_ct` their team; each adds one to
+  `SelectDefaultTeam`: the one of fewer players, of as many the one of fewer wins, else one at
+  random), `bot_add_t` and `bot_add_ct` their team; each adds one to
   `bot_quota`. Each takes a profile's name, in any case (`bot_add_t Abner`, `GetProfile`), refused
   when no profile has it or when a bot plays as it or a player has its name (`UTIL_IsNameTaken`).
   `bot_kick` (or `bot_kick all`) makes every bot leave and sets `bot_quota` to 0; `bot_kick <name>`

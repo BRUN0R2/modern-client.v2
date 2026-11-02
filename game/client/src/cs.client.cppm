@@ -48,6 +48,7 @@ export import :windowFonts;
 export import :console;
 export import :fpsLabel;
 export import :killFeed;
+export import :scoreboard;
 export import :audio;
 export import :weaponCommands;
 export import :navigationDrawing;

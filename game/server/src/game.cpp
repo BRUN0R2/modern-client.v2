@@ -211,6 +211,10 @@ auto Game::defaultTeam() const -> Team {
     if (terrorists != counterTerrorists) {
         return terrorists < counterTerrorists ? Team::Terrorists : Team::CounterTerrorists;
     }
+    if (teamWins[Team::Terrorists] != teamWins[Team::CounterTerrorists]) {
+        return teamWins[Team::Terrorists] < teamWins[Team::CounterTerrorists] ? Team::Terrorists
+                                                                              : Team::CounterTerrorists;
+    }
     // Teams equal: one at random, RANDOM_LONG(0, 1) == 0 picking the counter-terrorists.
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     nx::Random random{std::bit_cast<std::uint64_t>(time.now.tick()), kDefaultTeamStream};
@@ -396,6 +400,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
     const nx::game::TickTime& time = nx::game::tickTimeOf(m_world);
     return PlayerSnapshot{.time = time.now,
                           .rate = time.rate,
+                          .self = index,
                           .player = player.movement,
                           .status = player.status,
                           .inventory = player.inventory,
@@ -411,11 +416,34 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .damageDealt = player.damageDealt,
                           .entitySteps = m_entitySteps,
                           .killNotices = killNotices,
+                          .scores = scoresFor(player),
+                          .teamWins = teamWins,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
                           .entities = entityStatesOf(m_world),
                           .lightStyles = lightStyles};
+}
+
+auto Game::scoresFor(const Player& viewer) const -> std::vector<ScoreRow> {
+    std::vector<ScoreRow> rows;
+    rows.reserve(m_players.size());
+    for (const auto& [slot, player] : std::views::enumerate(m_players)) {
+        if (!player) {
+            continue;
+        }
+        const bool isTeammate = player->team == viewer.team;
+        rows.push_back(ScoreRow{
+            .player = PlayerIndex{nx::narrow<std::uint32_t>(slot)},
+            .name = player->name,
+            .team = player->team,
+            .score = player->score,
+            .isDead = !player->status.isAlive(),
+            .health = isTeammate ? std::optional{player->status.health} : std::nullopt,
+            .money = isTeammate ? std::optional{player->status.money} : std::nullopt,
+        });
+    }
+    return rows;
 }
 
 void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
@@ -792,6 +820,12 @@ void Game::die(Player& player, Player* killer) {
         .victim = {.name = player.name, .team = player.team},
         .weapon = held != nullptr ? std::optional{held->weapon} : std::nullopt,
         .isHead = player.lastHitGroup == HitGroup::Head});
+    ++player.score.deaths;
+    if (killer == &player) {
+        --player.score.frags;
+    } else if (isKilledByAnother) {
+        killer->score.frags += killer->team == player.team ? -1 : 1; // IPointsForKill
+    }
     // PlayerKilled pays its killer, or makes it pay for a teammate.
     if (isKilledByAnother) {
         const KillMoney& kills = m_content->economy.kills;
@@ -893,7 +927,9 @@ void Game::thinkRules() {
     if (events.test(RoundEvent::GameRestarted)) {
         nx::log::info(kLog, "the game restarts");
         m_accounts.restartGame();
+        teamWins = {}; // m_bCompleteReset
         for (Player& player : playersIn(m_players)) {
+            player.score = {}; // CBasePlayer::Reset
             player.status = PlayerStatus{.money = m_cvars.startingMoney()};
             player.inventory.removeAll();
             equip(player);
@@ -924,6 +960,9 @@ void Game::roundEnded(RoundEndReason reason) {
     nx::log::info(kLog, "the round is over: {}", nx::enumName(reason));
     m_accounts.roundEnded(reason, m_map->objectives());
     const std::optional<Team> winner = winnerOf(reason);
+    if (winner) {
+        ++teamWins[*winner];
+    }
     const bool paysLivingLosers = m_content->economy.roundEnd(reason).paysLivingLosers;
     for (Player& player : playersIn(m_players)) {
         if (winner && *winner != player.team && player.status.isAlive() && !paysLivingLosers) {

@@ -15,6 +15,7 @@ nxAddTest(csClientTests
         corpsesTests.cpp
         damageNumbersTests.cpp
         killFeedTests.cpp
+        scoreboardTests.cpp
         stepIndicatorTests.cpp
         bloodEffectsTests.cpp
         modelMaterialsTests.cpp
