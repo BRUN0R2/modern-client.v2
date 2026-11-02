@@ -19,7 +19,7 @@ enum class BotActionError : std::uint8_t {
     NoMap,       ///< No map is played.
     Unavailable, ///< The map's bots could not be made (cause: the BotError).
     Refused,     ///< The bot asked for cannot join (cause: the BotJoinError).
-    NoSuchBot,   ///< No bot has the name given.
+    NoSuchBot,   ///< No bot has the name given (cause, on a map with bots: the BotKickError).
 };
 
 /// A bot a command asks for: the profile named `profile`, else one drawn of `difficulty`; in `team`,

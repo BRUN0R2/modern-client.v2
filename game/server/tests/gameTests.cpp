@@ -972,6 +972,41 @@ TEST_F(GameTest, AStabInThePlayersBackKillsItAndPaysItsKiller) {
     EXPECT_TRUE(made(victim, content().playerHarm.death));
 }
 
+TEST_F(GameTest, EveryClientIsToldOfAKillItsPlayersItsWeaponAndWhereItMetIt) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Shooter");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Target");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "usp");
+    const cs::PlayerSnapshot before = game().snapshotFor(attacker);
+    EXPECT_TRUE(before.killNotices.empty());
+    // Straight at it, the round meets its head and kills.
+    const cs::PlayerSnapshot killed = press(attacker, {cs::Button::Attack});
+    ASSERT_EQ(killed.killNotices.size(), 1U);
+    const cs::KillNotice& notice = killed.killNotices.front();
+    EXPECT_EQ(notice.killer, (cs::NoticedPlayer{.name = "Shooter", .team = cs::Team::CounterTerrorists}));
+    EXPECT_EQ(notice.victim, (cs::NoticedPlayer{.name = "Target", .team = cs::Team::Terrorists}));
+    EXPECT_EQ(notice.weapon, content().weapons.indexOf("usp")) << "the one its killer held";
+    EXPECT_TRUE(notice.isHead);
+    EXPECT_FALSE(notice.isTeamKill());
+    EXPECT_EQ(game().snapshotFor(victim).killNotices, killed.killNotices) << "the victim's client too";
+
+    std::ignore = play(attacker, 1);
+    EXPECT_TRUE(game().snapshotFor(attacker).killNotices.empty()) << "told once, of its tick";
+}
+
+TEST_F(GameTest, TheNoticeOfADeathByTheWorldNamesNoKillerNorWeapon) {
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Faller");
+    idle(kPastTheCommence + kPastAFreeze);
+    const cs::PlayerSnapshot fallen = killByFall(player);
+    ASSERT_EQ(fallen.killNotices.size(), 1U);
+    const cs::KillNotice& notice = fallen.killNotices.front();
+    EXPECT_EQ(notice.killer, std::nullopt);
+    EXPECT_EQ(notice.victim.name, "Faller");
+    EXPECT_EQ(notice.weapon, std::nullopt);
+    EXPECT_FALSE(notice.isHead) << "a fall meets it in no group";
+}
+
 TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
     const cs::PlayerIndex attacker =
         game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
@@ -1094,6 +1129,10 @@ TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillC
     }
     EXPECT_FALSE(game().snapshotFor(teammate).status.isAlive());
     EXPECT_EQ(game().snapshotFor(attacker).status.money, nx::Money{}) << "none below none";
+    const cs::PlayerSnapshot told = game().snapshotFor(attacker);
+    ASSERT_EQ(told.killNotices.size(), 1U);
+    EXPECT_TRUE(told.killNotices.front().isTeamKill());
+    EXPECT_EQ(told.killNotices.front().weapon, content().weapons.indexOf("knife"));
 }
 
 /// A spawn point of each team in the box with a volume, the same place, in a trigger_hurt of `keys`.

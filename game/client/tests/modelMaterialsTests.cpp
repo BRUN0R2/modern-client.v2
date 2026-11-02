@@ -25,6 +25,10 @@ using Materials = std::vector<std::optional<StudioMaterial>>;
 
 constexpr std::string_view kModelPath = "models/triangle.mdl";
 constexpr std::string_view kMaterialPath = "models/triangle.material.toml";
+/// A texture Counter-Strike Online's way: the size its coordinates count in, then its image's file.
+constexpr std::string_view kStandInName = "#512256skin.tga";
+constexpr std::string_view kStandInImage = "models/texture/#512256skin.tga";
+constexpr std::size_t kTextureNameBytes = 64;
 /// A texel of four different channels: a conversion of its colors, or a lost alpha, shows.
 constexpr std::array<std::uint8_t, 4> kDataTexel{32, 96, 224, 64};
 constexpr nx::Vec3 kDielectricReflectance{.x = 0.04F, .y = 0.04F, .z = 0.04F};
@@ -37,12 +41,18 @@ protected:
     [[nodiscard]] auto read() const -> nx::Result<Materials, ModelMaterialError> {
         auto vfs = nx::assets::Vfs::create(std::array{files.path()});
         EXPECT_TRUE(vfs.has_value()) << (vfs ? "" : nx::describe(vfs.error()));
-        const auto view = nx::assets::MdlView::parse(model.bytes);
-        EXPECT_TRUE(view.has_value()) << (view ? "" : nx::describe(view.error()));
-        if (!vfs || !view) {
-            return Materials{};
-        }
-        return cs::readModelMaterials(*vfs, kModelPath, *view);
+        return vfs ? readFrom(*vfs) : Materials{};
+    }
+
+    /// What reading gives with the file at `path` gone once it is mounted: the VFS has it and cannot
+    /// read it.
+    [[nodiscard]] auto readWithout(std::string_view path) const -> nx::Result<Materials, ModelMaterialError> {
+        auto vfs = nx::assets::Vfs::create(std::array{files.path()});
+        EXPECT_TRUE(vfs.has_value()) << (vfs ? "" : nx::describe(vfs.error()));
+        std::error_code error;
+        std::filesystem::remove(files.path() / path, error);
+        EXPECT_FALSE(error) << error.message();
+        return vfs ? readFrom(*vfs) : Materials{};
     }
 
     [[nodiscard]] auto read(std::string_view text) const -> nx::Result<Materials, ModelMaterialError> {
@@ -78,6 +88,24 @@ protected:
         auto materials = read(text);
         EXPECT_FALSE(materials.has_value());
         return materials ? nx::Failure<ModelMaterialError>{} : std::move(materials.error());
+    }
+
+    /// Names the model's only texture kStandInName.
+    void nameTheTextureAStandIn() {
+        nx::test::Bytes name;
+        nx::test::appendName(name, kStandInName, kTextureNameBytes);
+        std::ranges::copy(name, model.bytes.begin() + static_cast<std::ptrdiff_t>(model.texture));
+    }
+
+private:
+    [[nodiscard]] auto readFrom(const nx::assets::Vfs& vfs) const
+        -> nx::Result<Materials, ModelMaterialError> {
+        const auto view = nx::assets::MdlView::parse(model.bytes);
+        EXPECT_TRUE(view.has_value()) << (view ? "" : nx::describe(view.error()));
+        if (!view) {
+            return Materials{};
+        }
+        return cs::readModelMaterials(vfs, kModelPath, *view);
     }
 };
 
@@ -341,6 +369,57 @@ painted = { specularMap = "models/missing.tga" }
 )");
     EXPECT_EQ(failure.code, ModelMaterialError::ImageUnreadable);
     EXPECT_NE(nx::describe(failure).find("models/missing.tga"), std::string::npos);
+}
+
+TEST_F(ModelMaterialsTest, AMaterialFileThatCannotBeReadIsAFailureAndNotNoFile) {
+    files.write(kMaterialPath, "");
+    const auto materials = readWithout(kMaterialPath);
+    ASSERT_FALSE(materials.has_value());
+    EXPECT_EQ(materials.error().code, ModelMaterialError::FileUnreadable);
+    EXPECT_NE(nx::describe(materials.error()).find(kMaterialPath), std::string::npos);
+    ASSERT_FALSE(materials.error().cause.records().empty());
+    EXPECT_EQ(materials.error().cause.records()[0].code, "ReadFailed");
+}
+
+TEST_F(ModelMaterialsTest, AStandInTextureTakesItsSizeFromItsNameAndItsImageFromItsFile) {
+    nameTheTextureAStandIn();
+    writeImage(kStandInImage, kDataTexel);
+    const auto materials = read();
+    ASSERT_TRUE(materials.has_value()) << nx::describe(materials.error());
+    const StudioMaterial& material = materials->front().value();
+    ASSERT_TRUE(material.coordinateSize.has_value());
+    EXPECT_EQ(material.coordinateSize->width, 512U);
+    EXPECT_EQ(material.coordinateSize->height, 256U);
+    ASSERT_TRUE(material.baseColor.has_value());
+    EXPECT_EQ(material.baseColor->pixels, pixelsOf(kDataTexel));
+}
+
+TEST_F(ModelMaterialsTest, AStandInTextureWithoutItsFileKeepsItsSizeAndTheModelsOwnImage) {
+    nameTheTextureAStandIn();
+    const auto materials = read();
+    ASSERT_TRUE(materials.has_value()) << nx::describe(materials.error());
+    const StudioMaterial& material = materials->front().value();
+    EXPECT_TRUE(material.coordinateSize.has_value());
+    EXPECT_FALSE(material.baseColor.has_value());
+}
+
+TEST_F(ModelMaterialsTest, AStandInImageThatCannotBeDecodedIsNamedInTheFailure) {
+    nameTheTextureAStandIn();
+    files.write(kStandInImage, "not a picture");
+    const auto materials = read();
+    ASSERT_FALSE(materials.has_value());
+    EXPECT_EQ(materials.error().code, ModelMaterialError::ImageUnreadable);
+    EXPECT_NE(nx::describe(materials.error()).find(kStandInImage), std::string::npos);
+}
+
+TEST_F(ModelMaterialsTest, AStandInImageThatCannotBeReadIsAFailureAndNotNoFile) {
+    nameTheTextureAStandIn();
+    writeImage(kStandInImage, kDataTexel);
+    const auto materials = readWithout(kStandInImage);
+    ASSERT_FALSE(materials.has_value());
+    EXPECT_EQ(materials.error().code, ModelMaterialError::ImageUnreadable);
+    ASSERT_FALSE(materials.error().cause.records().empty());
+    EXPECT_EQ(materials.error().cause.records()[0].code, "ReadFailed");
 }
 
 } // namespace
