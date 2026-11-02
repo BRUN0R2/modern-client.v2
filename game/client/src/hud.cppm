@@ -39,11 +39,13 @@ enum class HudPicture : std::uint8_t {
     Number7,
     Number8,
     Number9,
-    Cross,     ///< `cross`, before the health.
-    SuitEmpty, ///< `suit_empty`, before the armor.
-    SuitFull,  ///< `suit_full`, over suit_empty as far up as the armor reaches.
-    Dollar,    ///< `dollar`, before the money.
-    Stopwatch, ///< `stopwatch`, before the round's time.
+    Cross,       ///< `cross`, before the health.
+    SuitEmpty,   ///< `suit_empty`, before the armor.
+    SuitFull,    ///< `suit_full`, over suit_empty as far up as the armor reaches.
+    HelmetEmpty, ///< `suithelmet_empty`, in suit_empty's place while a helmet is worn.
+    HelmetFull,  ///< `suithelmet_full`, in suit_full's place while a helmet is worn.
+    Dollar,      ///< `dollar`, before the money.
+    Stopwatch,   ///< `stopwatch`, before the round's time.
     Count,
 };
 
@@ -74,6 +76,7 @@ struct HudAmmo {
 struct HudView {
     nx::HitPoints health{};
     nx::ArmorPoints armor{};
+    ArmorKind armorKind = ArmorKind::None;
     nx::Money money{};
     std::optional<HudAmmo> ammo{}; ///< None without a weapon in hand that fires ammo.
     /// How far from the middle the crosshair of the weapon in hand is (cs::kKnifeCrosshairDistance);
@@ -158,8 +161,9 @@ struct HudMark {
 /// - the health's cross 10 pixels from the left and 40 from the bottom, its digits after it from 36,
 ///   aligned to the right of room for three;
 /// - the armor's suit a fifth of the way across, 37 from the bottom, suit_full over suit_empty as far
-///   up as the armor is of 100, its digits right after the suit, aligned to the right of room for
-///   three; a health of more digits pushes the suit right, as far from them as it is at 640 wide;
+///   up as the armor is of 100, the helmet's pictures in their place while one is worn, its digits right
+///   after the suit, aligned to the right of room for three; a health of more digits pushes the suit
+///   right, as far from them as it is at 640 wide;
 /// - the money's digits a row up, 75 from the bottom, aligned to the right of room for five 16 from
 ///   the right edge, its dollar right before that room.
 [[nodiscard]] auto layoutHud(const HudView& view, const HudSheet& sheet, nx::rhi::Extent2d size)
