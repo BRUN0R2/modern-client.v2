@@ -15,6 +15,7 @@ maxSpeed = 250.0
 [purchase]
 buyers = "everyone"
 price = 400
+commands = ["glock", "9x19mm"]
 
 [magazine]
 ammo = "9mm"

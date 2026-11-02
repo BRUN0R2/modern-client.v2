@@ -294,7 +294,7 @@ kinds of ammo are `data/cstrike/ammo.toml`, read into `cs::AmmoTypes`. The value
 ([20 §3](20-legal-and-licensing.md#3-clean-room)), and `csSharedTests` pins them.
 
 ```toml
-id        = "ak47"             # also the file's name, and the buy commands' name
+id        = "ak47"             # also the file's name
 classname = "weapon_ak47"
 name      = "CV-47"            # what the game shows it as: the original's buy menu's
 slot      = "primary"          # primary, secondary, knife, grenade, bomb: the HUD's 1 to 5
@@ -305,6 +305,7 @@ maxSpeed  = 221.0              # its holder's, in units per second
 [purchase]                     # absent: not sold (the knife)
 buyers = "terrorists"          # terrorists, counterTerrorists, everyone
 price  = 2500
+commands = ["ak47", "cv47"]    # the console commands that buy it; absent: only buy_weapon
 
 [magazine]                     # absent: no ammo (the knife)
 ammo     = "762Nato"           # an id of ammo.toml
@@ -747,7 +748,7 @@ among the game's (its plugin API: [15](15-mod-api.md)).
   catalog lacks, no draw sequence), is refused, and the weapon stays as it was. Each value set
   counts a revision: the client reads a weapon's view model again when it changes.
 - **Replaced** (`replace`, `madeFor`): the game makes the replacement wherever it would make the
-  original (a loadout, `give`, and buying and the map's entities when they come), and `weapon_<id>`
+  original (a loadout, `give`, buying, and the map's entities when they come), and `weapon_<id>`
   of the original selects it, while a copy of the original given before is still selected by its
   name. A replacement is complete, not the original, and not replaced in its turn: one step,
   never a chain. Changing the AK-47 itself changes every AK-47; replacing it puts another weapon in
@@ -785,6 +786,28 @@ kinds of ammo made as the game runs, with the HUD's picture of each, come with t
   `flash`, `sgren`, `buyammo1`, `buyammo2`, `primammo`, `secammo`, `nvgs`, `shield` etc.
 - **`autobuy`/`rebuy`** with `cl_autobuy` and `cl_rebuy`.
 - Every purchase goes through the hookable `BuyItem` action.
+
+**Today** (`cs.shared:buying`, `data/cstrike/buying.toml`, `cs::Game::buyWeapon`, `buyArmor` and `buyAmmo`,
+ReGameDLL_CS's rules, the weighing itself pure): a living player buys in a buy zone of its team or of both
+(`func_buyzone` and its `team`, `cs::GameMap::isBuyingPlace`), on a map without any within 200 units of a
+spawn point of its team (`OLD_CheckBuyZone`), as long as its round started no longer ago than `mp_buytime`
+(1.5 minutes, 15 seconds at least), counted as the rounds count it: its freeze while frozen, then from the
+freeze's end; and unless `info_map_parameters`' `buying` keeps its team from buying (0 everyone, 1 the
+counter-terrorists alone, 2 the terrorists alone, 3 no one). A weapon is bought by the commands its file's
+`purchase.commands` names, the original's aliases (`ak47`, `cv47`, `m4a1`, `glock`, `9x19mm`, `usp`, `km45`),
+or by `buy_weapon`, which a weapon made as the game runs is bought with: for its price, by a team it is sold
+to, which is weighed before all else, when it does not have it. The player parts with the weapon of that slot
+(`cs::Inventory::drop`), keeping the rounds it carries, as the original's weapons leave them with the player;
+held, the heaviest it has left is drawn first. `vest` costs 650 and keeps a helmet worn; `vesthelm`
+1000, 350 for a helmet over a whole vest, 650 for the vest under a helmet kept. `buyammo1` and `buyammo2` buy
+a box for the weapons of the primary and the pistol slot, `primammo` and `secammo` as many as the player can
+carry and pay for, each paid whole though its last rounds may not fit. Each is heard (`items/gunpickup2`,
+`items/ammopickup2`, `items/9mmclip1`), in the tick after it, as a client's commands come between ticks.
+
+A refusal (`cs::BuyRefusal`) is printed on the console, where the original centers it on the screen. Still to
+come: the box a dropped weapon falls as, the center text, the money's blink and the buy zone's icon, the
+weapons a VIP's map keeps from each team (`CanBuyWeaponByMaptype`, none of those sold today), the grenades and
+the equipment, the menus, `autobuy` and `rebuy`, and what bots buy.
 
 ## 9. Communication
 
@@ -985,6 +1008,7 @@ data/cstrike/
 ├── footsteps.toml      # the sounds of a player's feet
 ├── breath.toml         # the sounds of a player's breath in water
 ├── use.toml            # the sounds of a player's use key
+├── buying.toml         # what armor costs, a map's buying places without zones, the sounds of buying
 ├── weapons/
 │   ├── ak47.toml
 │   └── ...

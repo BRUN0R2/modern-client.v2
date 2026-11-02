@@ -3,8 +3,8 @@
 
 /// A map as the game plays it (docs/06-assets-and-resources.md, section 5): its BSP, read once, the hulls
 /// its traces go through, the spawn points of each team, what its rounds are played for, its hostages,
-/// and what its textures are made of; shared by the server and the client of one process, which only
-/// read it.
+/// where and whether its players buy, and what its textures are made of; shared by the server and the client
+/// of one process, which only read it.
 export module cs.shared:gameMap;
 
 import std;
@@ -56,6 +56,23 @@ struct TeamSpawn {
 /// What `map` is played for: the objectives the classes of its entities give it (objectiveOfClass).
 [[nodiscard]] auto mapObjectivesOf(const nx::assets::BspView& map) -> MapObjectives;
 
+/// A buy zone of a map (func_buyzone): its brush model, where it is, and the team that buys in it, none for
+/// both (CBuyZone::Spawn, BuyTouch).
+struct BuyZone {
+    nx::assets::ModelIndex model{};
+    nx::Vec3 origin{};
+    std::optional<Team> team{};
+
+    [[nodiscard]] inline auto operator==(const BuyZone&) const noexcept -> bool = default;
+};
+
+/// The buy zones of `map`, in the order of its entities: those with a brush model.
+[[nodiscard]] auto buyZonesOf(const nx::assets::BspView& map) -> std::vector<BuyZone>;
+
+/// Whether `map` lets the players of `team` buy: as its info_map_parameters' "buying" says, all of them
+/// without one (CMapInfo::CheckMapInfo).
+[[nodiscard]] auto mapLetsBuy(const nx::assets::BspView& map, Team team) -> bool;
+
 /// How many hostages `map` holds as it starts: its entities of kHostageClass.
 [[nodiscard]] auto hostagesOf(const nx::assets::BspView& map) -> std::uint32_t;
 
@@ -71,10 +88,11 @@ class GameMap {
     };
 
 public:
-    /// The map `name` of `vfs` (maps/<name>.bsp). Errors: Unreadable, HullsInvalid.
+    /// The map `name` of `vfs` (maps/<name>.bsp). Errors: Unreadable (a buy zone of a brush model it lacks
+    /// too), HullsInvalid.
     [[nodiscard]] static auto load(const nx::assets::Vfs& vfs, std::string_view name)
         -> nx::Result<std::unique_ptr<GameMap>, GameMapError>;
-    /// The map of `bytes`, a BSP file, `name` naming it in errors. Errors: Unreadable, HullsInvalid.
+    /// The map of `bytes`, a BSP file, `name` naming it in errors. Errors: as load's.
     [[nodiscard]] static auto read(std::vector<std::byte> bytes, std::string_view name)
         -> nx::Result<std::unique_ptr<GameMap>, GameMapError>;
 
@@ -101,6 +119,13 @@ public:
     [[nodiscard]] inline auto objectives() const noexcept -> MapObjectives { return m_objectives; }
     /// How many hostages it holds as it starts (hostagesOf).
     [[nodiscard]] inline auto hostages() const noexcept -> std::uint32_t { return m_hostages; }
+    /// Whether it lets the players of `team` buy (mapLetsBuy).
+    [[nodiscard]] inline auto letsBuy(Team team) const noexcept -> bool { return m_letsBuy[team]; }
+    /// Whether a player of `team`, `body` at `origin`, is where its team buys (SIGNAL_BUY): in a buy zone of
+    /// its team or of both (CBuyZone::BuyTouch); on a map without any, within `spawnReach` of a spawn point
+    /// of its team (OLD_CheckBuyZone).
+    [[nodiscard]] auto isBuyingPlace(Team team, const nx::game::Body& body, nx::Vec3 origin,
+                                     nx::HammerUnits spawnReach) const -> bool;
     /// What the texture of the face of brush model `model` the segment from `start` to `end`, in the
     /// model's own space, first meets (nx::assets::surfaceAt) is made of, by `materials`: concrete when
     /// it meets none (PM_TraceTexture).
@@ -115,6 +140,8 @@ private:
     nx::EnumArray<Team, std::vector<SpawnPoint>> m_spawnPoints;
     MapObjectives m_objectives;
     std::uint32_t m_hostages = 0;
+    std::vector<BuyZone> m_buyZones;
+    nx::EnumArray<Team, bool> m_letsBuy{};
     std::vector<std::optional<nx::assets::SurfaceExtent>> m_surfaceExtents; ///< By face.
 };
 

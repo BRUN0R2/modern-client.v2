@@ -1,0 +1,198 @@
+// SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+// SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+// The rules of buying, as the original's CanPlayerBuy, CanBuyThis, BuyItem and BuyGunAmmo weigh them: who
+// may buy, what a weapon, armor and a box of ammo cost a buyer, how long a round's players buy for, and the
+// repository's data/cstrike/buying.toml.
+
+#include <gtest/gtest.h>
+
+import std;
+import nx.core;
+import nx.platform;
+import cs.shared;
+
+namespace {
+
+using cs::ArmorKind;
+using cs::Buyer;
+using cs::BuyRefusal;
+
+constexpr nx::Money kMuchMoney{16000};
+constexpr nx::Seconds kBuyTime{90.0F};
+
+/// A terrorist of much money where it may buy, right as its round starts.
+[[nodiscard]] auto buyer() -> Buyer {
+    return Buyer{.team = cs::Team::Terrorists,
+                 .money = kMuchMoney,
+                 .isAlive = true,
+                 .isAtBuyingPlace = true,
+                 .mayTeamBuy = true,
+                 .buyTime = kBuyTime};
+}
+
+/// The AK-47's purchase: what the rules weigh of it.
+[[nodiscard]] auto rifle() -> cs::Weapon {
+    return cs::Weapon{.id = "ak47",
+                      .purchase =
+                          cs::WeaponPurchase{.buyers = cs::Buyers::Terrorists, .price = nx::Money{2500}}};
+}
+
+constexpr cs::ArmorPrices kArmorPrices{
+    .kevlar = nx::Money{650}, .kevlarAndHelmet = nx::Money{1000}, .helmet = nx::Money{350}};
+
+/// A player that wears `armor` points of armor of `kind`.
+[[nodiscard]] auto wearing(float armor, ArmorKind kind) -> cs::PlayerStatus {
+    return cs::PlayerStatus{.armor = nx::ArmorPoints{armor}, .armorKind = kind};
+}
+
+template <class Value>
+[[nodiscard]] auto refusalOf(const nx::Result<Value, BuyRefusal>& result) -> std::optional<BuyRefusal> {
+    return result ? std::nullopt : std::optional{result.error().code};
+}
+
+TEST(BuyingRulesTest, TheRepositorysAreTheOriginals) {
+    const std::filesystem::path file = std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "buying.toml";
+    auto text = nx::platform::readTextFile(file);
+    ASSERT_TRUE(text.has_value());
+    auto rules = cs::readBuyingRules(*text, "buying.toml");
+    ASSERT_TRUE(rules.has_value()) << nx::describe(rules.error());
+    EXPECT_EQ(rules->spawnReach, nx::HammerUnits{200.0F});
+    EXPECT_EQ(rules->armor.kevlar, nx::Money{650});
+    EXPECT_EQ(rules->armor.kevlarAndHelmet, nx::Money{1000});
+    EXPECT_EQ(rules->armor.helmet, nx::Money{350});
+    EXPECT_EQ(rules->soundFiles(),
+              (std::vector<std::string_view>{"items/gunpickup2.wav", "items/ammopickup2.wav",
+                                             "items/9mmclip1.wav"}));
+    EXPECT_EQ(rules->sounds.weapon.channel, cs::SoundChannel::Item);
+}
+
+TEST(BuyingRulesTest, ASoundWithoutAFileIsRefused) {
+    const auto rules = cs::readBuyingRules(R"(spawnReach = 200.0
+armor = { kevlar = 650, kevlarAndHelmet = 1000, helmet = 350 }
+[sounds]
+weapon = { files = [], channel = "item", volume = 1.0 }
+armor = { files = ["a.wav"], channel = "item", volume = 1.0 }
+ammo = { files = ["a.wav"], channel = "item", volume = 1.0 }
+)",
+                                           "buying.toml");
+    ASSERT_FALSE(rules.has_value());
+    EXPECT_EQ(rules.error().code, cs::BuyingError::DataInvalid);
+}
+
+TEST(BuyTimeTest, ItsMinutesAreCutToWholeSecondsAndHeldToTheLeast) {
+    EXPECT_EQ(cs::readBuyTime(1.5F).length, nx::Seconds{90.0F});
+    EXPECT_EQ(cs::readBuyTime(1.5F).setToMinutes, std::nullopt);
+    EXPECT_EQ(cs::readBuyTime(0.51F).length, nx::Seconds{30.0F}) << "30.6 seconds, cut";
+    EXPECT_EQ(cs::readBuyTime(0.25F).length, cs::kLeastBuyTime);
+    EXPECT_EQ(cs::readBuyTime(0.25F).setToMinutes, std::nullopt) << "at the least, it is not held";
+    EXPECT_EQ(cs::readBuyTime(0.0F).length, cs::kLeastBuyTime);
+    EXPECT_EQ(cs::readBuyTime(0.0F).setToMinutes, 0.25F);
+}
+
+TEST(MayBuyTest, ALivingPlayerWhereItsTeamBuysInTheTimeOfItsRoundMayBuy) {
+    EXPECT_TRUE(cs::checkMayBuy(buyer()).has_value());
+
+    Buyer dead = buyer();
+    dead.isAlive = false;
+    dead.isAtBuyingPlace = false;
+    EXPECT_EQ(refusalOf(cs::checkMayBuy(dead)), BuyRefusal::Dead) << "before all else";
+
+    Buyer outside = buyer();
+    outside.isAtBuyingPlace = false;
+    outside.sinceRoundStart = kBuyTime * 2.0F;
+    EXPECT_EQ(refusalOf(cs::checkMayBuy(outside)), BuyRefusal::OutsideBuyZones) << "before the time";
+
+    Buyer late = buyer();
+    late.sinceRoundStart = kBuyTime;
+    EXPECT_TRUE(cs::checkMayBuy(late).has_value()) << "only past it";
+    late.sinceRoundStart = nx::Seconds{90.5F};
+    late.mayTeamBuy = false;
+    EXPECT_EQ(refusalOf(cs::checkMayBuy(late)), BuyRefusal::TimeOver) << "before the map's rule";
+
+    Buyer forbidden = buyer();
+    forbidden.mayTeamBuy = false;
+    EXPECT_EQ(refusalOf(cs::checkMayBuy(forbidden)), BuyRefusal::TeamMayNotBuy);
+}
+
+TEST(WeaponPriceTest, AWeaponCostsItsPriceToABuyerItIsSoldToThatLacksIt) {
+    EXPECT_EQ(cs::weaponPriceFor(rifle(), buyer(), false).value_or(nx::Money{}), nx::Money{2500});
+
+    Buyer exact = buyer();
+    exact.money = nx::Money{2500};
+    EXPECT_TRUE(cs::weaponPriceFor(rifle(), exact, false).has_value());
+    exact.money = nx::Money{2499};
+    EXPECT_EQ(refusalOf(cs::weaponPriceFor(rifle(), exact, false)), BuyRefusal::NotEnoughMoney);
+
+    EXPECT_EQ(refusalOf(cs::weaponPriceFor(rifle(), buyer(), true)), BuyRefusal::AlreadyOwned);
+    EXPECT_EQ(refusalOf(cs::weaponPriceFor(cs::Weapon{.id = "knife"}, buyer(), false)), BuyRefusal::NotSold);
+}
+
+TEST(WeaponPriceTest, WhetherItsTeamIsSoldItIsWeighedBeforeWhetherItMayBuy) {
+    Buyer other = buyer();
+    other.team = cs::Team::CounterTerrorists;
+    other.isAtBuyingPlace = false;
+    EXPECT_EQ(refusalOf(cs::weaponPriceFor(rifle(), other, false)), BuyRefusal::NotForItsTeam);
+
+    Buyer outside = buyer();
+    outside.isAtBuyingPlace = false;
+    EXPECT_EQ(refusalOf(cs::weaponPriceFor(rifle(), outside, true)), BuyRefusal::OutsideBuyZones);
+
+    cs::Weapon forEveryone = rifle();
+    forEveryone.purchase->buyers = cs::Buyers::Everyone;
+    other.isAtBuyingPlace = true;
+    EXPECT_TRUE(cs::weaponPriceFor(forEveryone, other, false).has_value());
+}
+
+TEST(ArmorPriceTest, EachArmorCostsWhatItLacks) {
+    struct Case {
+        float armor;
+        ArmorKind worn;
+        ArmorKind asked;
+        std::optional<std::int32_t> price;
+        std::string_view what;
+    };
+    for (const Case& each : {
+             Case{0.0F, ArmorKind::None, ArmorKind::Kevlar, 650, "a vest"},
+             Case{40.0F, ArmorKind::Kevlar, ArmorKind::Kevlar, 650, "a vest over one hit"},
+             Case{40.0F, ArmorKind::KevlarAndHelmet, ArmorKind::Kevlar, 650, "a vest under a helmet"},
+             Case{100.0F, ArmorKind::Kevlar, ArmorKind::Kevlar, std::nullopt, "a whole vest"},
+             Case{100.0F, ArmorKind::KevlarAndHelmet, ArmorKind::Kevlar, std::nullopt, "and a helmet"},
+             Case{0.0F, ArmorKind::None, ArmorKind::KevlarAndHelmet, 1000, "both"},
+             Case{40.0F, ArmorKind::Kevlar, ArmorKind::KevlarAndHelmet, 1000, "both over a vest hit"},
+             Case{100.0F, ArmorKind::Kevlar, ArmorKind::KevlarAndHelmet, 350, "a helmet alone"},
+             Case{40.0F, ArmorKind::KevlarAndHelmet, ArmorKind::KevlarAndHelmet, 650, "the vest alone"},
+             Case{100.0F, ArmorKind::KevlarAndHelmet, ArmorKind::KevlarAndHelmet, std::nullopt, "both whole"},
+         }) {
+        const auto price =
+            cs::armorPriceFor(kArmorPrices, buyer(), wearing(each.armor, each.worn), each.asked);
+        if (each.price) {
+            EXPECT_EQ(price.value_or(nx::Money{}), nx::Money{*each.price}) << each.what;
+        } else {
+            EXPECT_EQ(refusalOf(price), BuyRefusal::ArmorWhole) << each.what;
+        }
+    }
+}
+
+TEST(ArmorPriceTest, ABuyerPaysForItAndMayBuyAtAll) {
+    Buyer poor = buyer();
+    poor.money = nx::Money{649};
+    EXPECT_EQ(refusalOf(cs::armorPriceFor(kArmorPrices, poor, {}, ArmorKind::Kevlar)),
+              BuyRefusal::NotEnoughMoney);
+    Buyer dead = buyer();
+    dead.isAlive = false;
+    EXPECT_EQ(refusalOf(cs::armorPriceFor(kArmorPrices, dead, {}, ArmorKind::Kevlar)), BuyRefusal::Dead);
+}
+
+TEST(AmmoPriceTest, ABoxCostsItsPriceUntilTheBuyerCarriesAllItCan) {
+    const cs::AmmoType ammo{.id = "9mm", .maxCarried = 120, .boxPrice = nx::Money{20}, .boxRounds = 30};
+    EXPECT_EQ(cs::ammoPriceFor(ammo, buyer(), 119).value_or(nx::Money{}), nx::Money{20});
+    EXPECT_EQ(refusalOf(cs::ammoPriceFor(ammo, buyer(), 120)), BuyRefusal::AmmoFull);
+    Buyer poor = buyer();
+    poor.money = nx::Money{19};
+    EXPECT_EQ(refusalOf(cs::ammoPriceFor(ammo, poor, 0)), BuyRefusal::NotEnoughMoney);
+    poor.isAtBuyingPlace = false;
+    EXPECT_EQ(refusalOf(cs::ammoPriceFor(ammo, poor, 0)), BuyRefusal::OutsideBuyZones);
+}
+
+} // namespace

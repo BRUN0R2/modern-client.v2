@@ -270,6 +270,12 @@ TEST(WeaponsTest, TheRepositoryHasTheOriginalsWeapons) {
         if (weapon->purchase) {
             EXPECT_EQ(weapon->purchase->buyers, expected.buyers) << expected.id;
             EXPECT_EQ(weapon->purchase->price, nx::Money{expected.price}) << expected.id;
+            const std::vector<std::string> commands =
+                expected.id == "glock18" ? std::vector<std::string>{"glock", "9x19mm"}
+                : expected.id == "usp"   ? std::vector<std::string>{"usp", "km45"}
+                : expected.id == "ak47"  ? std::vector<std::string>{"ak47", "cv47"}
+                                         : std::vector<std::string>{"m4a1"};
+            EXPECT_EQ(weapon->purchase->commands, commands) << "the original's aliases";
         }
         if (weapon->magazine) {
             EXPECT_EQ(weapon->magazine->ammo, expected.ammo) << expected.id;
