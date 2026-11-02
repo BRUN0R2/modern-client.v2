@@ -26,6 +26,7 @@ export import :inventory;
 export import :bullets;
 export import :rounds;
 export import :economy;
+export import :buying;
 export import :materials;
 export import :footsteps;
 export import :breath;

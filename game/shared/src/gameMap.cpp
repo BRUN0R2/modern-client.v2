@@ -19,7 +19,49 @@ namespace {
 constexpr nx::EnumArray<Team, std::string_view> kSpawnClasses{
     nx::EnumArray<Team, std::string_view>::Storage{"info_player_deathmatch", "info_player_start"}};
 
+constexpr std::string_view kBuyZoneClass = "func_buyzone";
+// The numbers a func_buyzone's "team" gives each team (TeamName's TERRORIST and CT); any other, both.
+constexpr std::int32_t kTerroristNumber = 1;
+constexpr std::int32_t kCounterTerroristNumber = 2;
+
+constexpr std::string_view kMapParametersClass = "info_map_parameters";
+// What info_map_parameters' "buying" says (InfoMapBuyParam's BUYING_ONLY_CTS, BUYING_ONLY_TERRORISTS and
+// BUYING_NO_ONE); any other, that everyone buys.
+constexpr std::int32_t kOnlyCounterTerroristsBuy = 1;
+constexpr std::int32_t kOnlyTerroristsBuy = 2;
+constexpr std::int32_t kNoOneBuys = 3;
+
 } // namespace
+
+auto buyZonesOf(const nx::assets::BspView& map) -> std::vector<BuyZone> {
+    std::vector<BuyZone> zones;
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        const std::optional<nx::assets::ModelIndex> model = entity.findBrushModel();
+        if (entity.find("classname") != kBuyZoneClass || !model) {
+            continue;
+        }
+        const std::int32_t team = entity.findInteger("team").value_or(0);
+        zones.push_back(BuyZone{.model = *model,
+                                .origin = entity.findVector("origin").value_or(nx::Vec3{}),
+                                .team = team == kTerroristNumber ? std::optional{Team::Terrorists}
+                                        : team == kCounterTerroristNumber
+                                            ? std::optional{Team::CounterTerrorists}
+                                            : std::nullopt});
+    }
+    return zones;
+}
+
+auto mapLetsBuy(const nx::assets::BspView& map, Team team) -> bool {
+    for (const nx::assets::BspEntity& entity : map.entities()) {
+        if (entity.find("classname") != kMapParametersClass) {
+            continue;
+        }
+        const std::int32_t buying = entity.findInteger("buying").value_or(0);
+        return !(buying == kNoOneBuys || (buying == kOnlyCounterTerroristsBuy && team == Team::Terrorists) ||
+                 (buying == kOnlyTerroristsBuy && team == Team::CounterTerrorists));
+    }
+    return true;
+}
 
 auto spawnPointsOf(const nx::assets::BspView& map, Team team) -> std::vector<SpawnPoint> {
     std::vector<SpawnPoint> points;
@@ -115,8 +157,33 @@ auto GameMap::read(std::vector<std::byte> bytes, std::string_view name)
     }
     gameMap.m_objectives = mapObjectivesOf(bsp);
     gameMap.m_hostages = hostagesOf(bsp);
+    gameMap.m_buyZones = buyZonesOf(bsp);
+    for (const BuyZone& zone : gameMap.m_buyZones) {
+        if (zone.model == nx::assets::kWorldModel || zone.model.value >= bsp.models().size()) {
+            return nx::fail(GameMapError::Unreadable,
+                            std::format("{}: {} \"*{}\" of {} brush models", name, kBuyZoneClass,
+                                        zone.model.value, bsp.models().size()));
+        }
+    }
+    for (const Team team : nx::EnumArray<Team, bool>::keys()) {
+        gameMap.m_letsBuy[team] = mapLetsBuy(bsp, team);
+    }
     gameMap.m_surfaceExtents = nx::assets::surfaceExtentsOf(bsp);
     return made;
+}
+
+auto GameMap::isBuyingPlace(Team team, const nx::game::Body& body, nx::Vec3 origin,
+                            nx::HammerUnits spawnReach) const -> bool {
+    if (m_buyZones.empty()) {
+        return std::ranges::any_of(m_spawnPoints[team], [&](const SpawnPoint& point) {
+            return nx::length(point.origin - origin) < spawnReach.value();
+        });
+    }
+    return std::ranges::any_of(m_buyZones, [&](const BuyZone& zone) {
+        return (!zone.team || zone.team == team) &&
+               nx::game::touchesVolume(*m_hulls, body, origin, zone.model,
+                                       nx::game::Transform{.origin = zone.origin});
+    });
 }
 
 auto GameMap::materialAlong(const TextureMaterials& materials, nx::assets::ModelIndex model, nx::Vec3 start,

@@ -16,6 +16,7 @@ namespace {
 constexpr nx::console::CvarFlags kServerCvar{nx::console::CvarFlag::Notify};
 constexpr float kDefaultFreezeSeconds = 6.0F;
 constexpr float kDefaultRoundMinutes = 5.0F;
+constexpr float kDefaultBuyMinutes = 1.5F;
 
 } // namespace
 
@@ -37,8 +38,10 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
     auto footsteps = server("mp_footsteps", 1.0F, "Whether the players' steps sound: any value but 0.");
     auto friendlyFire =
         server("mp_friendlyfire", 0.0F, "Whether a player's attacks hurt its teammates: any value but 0.");
-    for (auto* const registered :
-         {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps, &friendlyFire}) {
+    auto buyTime = server("mp_buytime", kDefaultBuyMinutes,
+                          "The minutes each round's players buy for after its freeze: at least 0.25.");
+    for (auto* const registered : {&freezeTime, &roundTime, &startMoney, &restartRound, &restart, &footsteps,
+                                   &friendlyFire, &buyTime}) {
         if (!*registered) {
             return std::unexpected{std::move(registered->error())};
         }
@@ -49,7 +52,8 @@ auto GameCvars::registerIn(nx::console::Console& console) -> nx::Result<GameCvar
                      .restartRound = *restartRound,
                      .restart = *restart,
                      .footsteps = *footsteps,
-                     .friendlyFire = *friendlyFire};
+                     .friendlyFire = *friendlyFire,
+                     .buyTime = *buyTime};
 }
 
 // The values set back are finite, and the cvars have no range and are neither read-only nor cheats:
@@ -72,6 +76,14 @@ auto GameCvars::startingMoney() const -> nx::Money {
         std::ignore = startMoney.set(*read.setTo);
     }
     return read.money;
+}
+
+auto GameCvars::buyingTime() const -> nx::Seconds {
+    const BuyTime read = readBuyTime(buyTime.value());
+    if (read.setToMinutes) {
+        std::ignore = buyTime.set(*read.setToMinutes);
+    }
+    return read.length;
 }
 
 auto GameCvars::takeRestart() const -> std::optional<nx::Seconds> {

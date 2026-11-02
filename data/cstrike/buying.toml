@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# What buying costs and sounds like, besides what a weapon's file and ammo.toml say (docs/10, section 8),
+# read into cs::BuyingRules, with ReGameDLL_CS's values (GPL, consulted: docs/20 section 3). `spawnReach`
+# is how far from a spawn point of its team a player buys on a map without a func_buyzone
+# (OLD_CheckBuyZone). `armor` is what armor costs, in dollars (BuyItem): `kevlar` a vest (KEVLAR_PRICE),
+# which a helmet worn keeps, `kevlarAndHelmet` both (ASSAULTSUIT_PRICE), and `helmet` a helmet alone, over
+# a whole vest (HELMET_PRICE). `sounds` is what a player hears as it buys a `weapon` (DefaultTouch), `armor`
+# (MyTouch) and a box of `ammo` (AddAmmo).
+
+spawnReach = 200.0
+
+[armor]
+kevlar = 650
+kevlarAndHelmet = 1000
+helmet = 350
+
+[sounds]
+weapon = { files = ["items/gunpickup2.wav"], channel = "item", volume = 1.0 }
+armor = { files = ["items/ammopickup2.wav"], channel = "item", volume = 1.0 }
+ammo = { files = ["items/9mmclip1.wav"], channel = "item", volume = 1.0 }
