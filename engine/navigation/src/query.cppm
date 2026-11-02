@@ -45,8 +45,6 @@ struct Path {
 struct StraightWalk {
     float fraction = 1.0F;
     Vec3 end{};
-
-    [[nodiscard]] inline auto isClear() const noexcept -> bool { return fraction >= 1.0F; }
 };
 
 /// What queries a mesh: the search Detour keeps between queries. One thread at a time asks each, and

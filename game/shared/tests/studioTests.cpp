@@ -70,6 +70,11 @@ void setValue(AnimationFrames& animation, std::uint32_t blend, std::uint32_t fra
     return nx::translationPart(transform);
 }
 
+/// `direction` as the bone `pose` turns it: its translation does not apply to a direction.
+[[nodiscard]] auto turned(const nx::Mat3x4& pose, Vec3 direction) -> Vec3 {
+    return nx::linearPart(pose) * direction;
+}
+
 void expectNear(Vec3 actual, Vec3 expected, std::string_view what = {}) {
     EXPECT_NEAR(actual.x, expected.x, kTolerance) << what;
     EXPECT_NEAR(actual.y, expected.y, kTolerance) << what;
@@ -215,7 +220,7 @@ TEST(StudioPoseTest, ABoneAtRestIsWhereItsValuesPutIt) {
     const std::vector<Mat3x4> pose = cs::poseBones({.bones = bones}, sequenceOf(animation), animation, {});
     ASSERT_EQ(pose.size(), 1U);
     expectNear(originOf(pose[0]), {.x = 1.0F, .y = 2.0F, .z = 3.0F});
-    expectNear(nx::transformDirection(pose[0], {.x = 1.0F}), {.y = 1.0F}, "a quarter turn about Z");
+    expectNear(turned(pose[0], {.x = 1.0F}), {.y = 1.0F}, "a quarter turn about Z");
 }
 
 TEST(StudioPoseTest, AFractionOfAFrameInterpolatesTowardsTheNext) {
@@ -260,14 +265,13 @@ TEST(StudioPoseTest, ControllersAddTheirSettingsAcrossTheirRanges) {
         cs::poseBones({.bones = bones, .controllers = controllers}, sequenceOf(animation), animation,
                       {.controllers = {.channels = {255, 0, 0, 0}, .mouth = 64}});
     expectNear(originOf(pose[0]), {.x = 10.0F}, "255: the end of the range");
-    expectNear(nx::transformDirection(pose[0], {.x = 1.0F}), {.y = 1.0F}, "the mouth fully open: 90 degrees");
+    expectNear(turned(pose[0], {.x = 1.0F}), {.y = 1.0F}, "the mouth fully open: 90 degrees");
 
     const std::vector<Mat3x4> half =
         cs::poseBones({.bones = bones, .controllers = controllers}, sequenceOf(animation), animation,
                       {.controllers = {.channels = {0, 0, 0, 0}, .mouth = 32}});
     expectNear(originOf(half[0]), {.x = -10.0F});
-    const float angle = std::atan2(nx::transformDirection(half[0], {.x = 1.0F}).y,
-                                   nx::transformDirection(half[0], {.x = 1.0F}).x);
+    const float angle = std::atan2(turned(half[0], {.x = 1.0F}).y, turned(half[0], {.x = 1.0F}).x);
     EXPECT_NEAR(angle, kQuarterTurn / 2.0F, kTolerance) << "half open";
 }
 
@@ -284,7 +288,7 @@ TEST(StudioPoseTest, ACyclicControllerTurnsPastItsStart) {
     const std::vector<Mat3x4> pose =
         cs::poseBones({.bones = bones, .controllers = controllers}, sequenceOf(animation), animation,
                       {.controllers = {.channels = {128, 0, 0, 0}}});
-    expectNear(nx::transformDirection(pose[0], {.x = 1.0F}), {.y = -1.0F}, "90 + 128 * 360 / 256 degrees");
+    expectNear(turned(pose[0], {.x = 1.0F}), {.y = -1.0F}, "90 + 128 * 360 / 256 degrees");
 }
 
 TEST(StudioPoseTest, TheFirstBlendingMixesTheFirstTwoBlends) {

@@ -119,6 +119,8 @@ protected:
         bots = std::move(made).value_or(nullptr);
     }
 
+    void expectTheQuotaKicksFrom(cs::Team winners);
+
     /// Plays `ticks` ticks of the bots' commands alone.
     void play(std::uint32_t ticks) {
         for (std::uint32_t tick = 0; tick < ticks; ++tick) {
@@ -175,6 +177,36 @@ TEST_F(BotsTest, ABotsBodyIsAnAgentWhoseTypeAnotherKindMayRegisterToo) {
     EXPECT_NE(game->playerComponent<cs::BotDriver>(bot), nullptr);
     EXPECT_TRUE(game->registerEntityComponent<nx::agents::Agent>("nx::agents::Agent").has_value())
         << "as the test zombies register it in the same game";
+}
+
+/// A bot of each team, `winners` winning a round in the freeze as the other's falls to its death: a quota of
+/// one makes one of the winners leave.
+void BotsTest::expectTheQuotaKicksFrom(cs::Team winners) {
+    const cs::PlayerIndex terrorist = bots->add(cs::Team::Terrorists, cs::BotDifficulty::Easy, kNoPrefix);
+    const cs::PlayerIndex counterTerrorist =
+        bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy, kNoPrefix);
+    play(kPastTheCommence);
+    const cs::PlayerIndex loser = winners == cs::Team::Terrorists ? counterTerrorist : terrorist;
+    game->placeEye(loser, {.x = 1500.0F, .y = kRowY, .z = kDeadlyHeight});
+    for (std::uint32_t tick = 0; tick < kPastAFreeze && game->ownStateOf(loser).isAlive; ++tick) {
+        play(1);
+    }
+    ASSERT_FALSE(game->ownStateOf(loser).isAlive) << "killed by its landing";
+    ASSERT_EQ(game->wins()[winners], 1U);
+    ASSERT_EQ(game->wins()[cs::opponentOf(winners)], 0U);
+
+    play(kPastAQuotaCheck);
+    bots->keepQuota(1, cs::BotDifficulty::Easy, kNoPrefix);
+    EXPECT_TRUE(std::ranges::equal(bots->players(), std::array{loser}))
+        << "of teams as large, the one that wins loses a bot, the dead one staying";
+}
+
+TEST_F(BotsTest, OfTeamsAsLargeTheQuotaKicksFromTheTerroristsWhenTheyAreWinning) {
+    expectTheQuotaKicksFrom(cs::Team::Terrorists);
+}
+
+TEST_F(BotsTest, OfTeamsAsLargeTheQuotaKicksFromTheCounterTerroristsWhenTheyAreWinning) {
+    expectTheQuotaKicksFrom(cs::Team::CounterTerrorists);
 }
 
 TEST_F(BotsTest, TheQuotaAddsOneBotEachIntervalAndKicksADeadOneFirst) {

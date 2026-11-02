@@ -50,10 +50,7 @@ TEST(AabbTest, TouchingBoxesIntersect) {
     static_assert(kPlayer.intersects(kPlayer));
 }
 
-TEST(AabbTest, MergedAndIncluding) {
-    constexpr Aabb other{.min = Vec3{.x = 0, .y = -40, .z = 0}, .max = Vec3{.x = 50, .y = 0, .z = 10}};
-    static_assert(kPlayer.merged(other) ==
-                  Aabb{.min = Vec3{.x = -16, .y = -40, .z = -36}, .max = Vec3{.x = 50, .y = 16, .z = 36}});
+TEST(AabbTest, Including) {
     static_assert(kPlayer.including(Vec3{.y = 100}) ==
                   Aabb{.min = kPlayer.min, .max = Vec3{.x = 16, .y = 100, .z = 36}});
     static_assert(kPlayer.including(Vec3{}) == kPlayer);

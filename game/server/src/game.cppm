@@ -206,6 +206,10 @@ public:
     [[nodiscard]] auto teamCounts() const -> TeamCounts;
     /// How many players are in the game.
     [[nodiscard]] auto playerCount() const -> std::size_t;
+    /// The rounds each team won since the game last restarted (m_iNumTerroristWins, m_iNumCTWins).
+    [[nodiscard]] inline auto wins() const noexcept -> const nx::EnumArray<Team, std::uint32_t>& {
+        return teamWins;
+    }
     /// What `player`, in the game, knows of itself (PlayerOwnState).
     [[nodiscard]] auto ownStateOf(PlayerIndex player) const -> PlayerOwnState;
     /// The name of `player`, in the game.

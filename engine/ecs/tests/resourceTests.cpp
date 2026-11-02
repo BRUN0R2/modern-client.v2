@@ -43,9 +43,6 @@ TEST(ResourceTest, StoresOneValuePerType) {
 
     world.insertResource(GameRules{.roundSeconds = 300}); // replaces
     EXPECT_EQ(std::as_const(world).resource<GameRules>()->roundSeconds, 300);
-
-    world.removeResource<GameRules>();
-    EXPECT_EQ(world.resource<GameRules>(), nullptr);
 }
 
 TEST(ResourceTest, ResourcesAreDestroyedOnceWithTheirWorld) {

@@ -76,8 +76,6 @@ public:
         return slot < m_slots.size() && m_slots[slot].generation == entity.generation();
     }
 
-    /// Slots ever used, alive or not; slot indices are below this.
-    [[nodiscard]] inline auto slotCount() const noexcept -> std::size_t { return m_slots.size(); }
     [[nodiscard]] inline auto aliveCount() const noexcept -> std::size_t {
         return m_slots.size() - m_freeCount - m_retiredCount;
     }

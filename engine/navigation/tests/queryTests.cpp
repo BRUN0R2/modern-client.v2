@@ -352,11 +352,11 @@ TEST(NavigationQueryTest, AStraightWalkStopsAtTheEdgeOfTheMesh) {
     NavigationQuery query{mesh};
     const auto clear = query.raycast({.x = 100.0F, .y = 100.0F}, {.x = 400.0F, .y = 200.0F});
     ASSERT_TRUE(clear.has_value());
-    EXPECT_TRUE(clear->isClear());
+    EXPECT_GE(clear->fraction, 1.0F);
     EXPECT_LT(nx::test::distanceAcross(clear->end, {.x = 400.0F, .y = 200.0F}), 1.0F);
     const auto blocked = query.raycast({.x = 100.0F, .y = 100.0F}, {.x = 900.0F, .y = 100.0F});
     ASSERT_TRUE(blocked.has_value());
-    EXPECT_FALSE(blocked->isClear());
+    EXPECT_LT(blocked->fraction, 1.0F);
     EXPECT_NEAR(blocked->end.x, 480.0F - kRadius, kTolerance);
     EXPECT_NEAR(blocked->end.z, 0.0F, kTolerance);
 }

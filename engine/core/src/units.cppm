@@ -112,7 +112,7 @@ using Money = Quantity<std::int32_t, MoneyTag>;
 /// Dimensionless multiplier (gravity, damage and speed scales).
 using Scale = Quantity<float, ScaleTag>;
 
-/// Angles. Degrees and radians never convert implicitly: toRadians and toDegrees do it.
+/// Angles. Degrees and radians never convert implicitly: toRadians does it.
 using Degrees = Quantity<float, DegreesTag>;
 using Radians = Quantity<float, RadiansTag>;
 
@@ -179,11 +179,6 @@ inline constexpr Radians kHalfTurnRadians{std::numbers::pi_v<float>};
 /// The same angle in radians.
 [[nodiscard]] constexpr auto toRadians(Degrees angle) noexcept -> Radians {
     return Radians{angle.value() * kHalfTurnRadians.value() / kHalfTurnDegrees.value()};
-}
-
-/// The same angle in degrees.
-[[nodiscard]] constexpr auto toDegrees(Radians angle) noexcept -> Degrees {
-    return Degrees{angle.value() * kHalfTurnDegrees.value() / kHalfTurnRadians.value()};
 }
 
 namespace detail {

@@ -110,9 +110,8 @@ public:
     [[nodiscard]] auto kickNamed(std::string_view name) -> nx::Result<void, BotKickError>;
     /// Adds a bot of `difficulty`, named after `prefix`, when there are fewer than `quota`, or makes one
     /// leave when there are more, once each BotRules::quotaInterval of the game (MaintainBotQuota): of the
-    /// team of more players, else of one drawn at random, a dead one first (UTIL_KickBotFromTeam); of the
-    /// other team when that one has none. The original then weighs the teams' wins, which the quota does
-    /// not yet (TODO.md).
+    /// team of more players, of as many the one of more wins, else of one drawn at random, a dead one first
+    /// (UTIL_KickBotFromTeam); of the other team when that one has none.
     void keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_view prefix);
     /// The commands of the bots for the game's next tick, one for each, in the order they joined: each
     /// alive looks at the enemies its budget lets it look at, in turn, and remembers those it sees, each

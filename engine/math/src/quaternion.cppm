@@ -46,11 +46,6 @@ struct Quat {
                 .w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
 }
 
-/// The inverse rotation of a unit quaternion.
-[[nodiscard]] constexpr auto conjugate(Quat q) noexcept -> Quat {
-    return Quat{.x = -q.x, .y = -q.y, .z = -q.z, .w = q.w};
-}
-
 [[nodiscard]] constexpr auto dot(Quat a, Quat b) noexcept -> float {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
@@ -69,15 +64,6 @@ struct Quat {
                 .y = scaled.y / magnitude,
                 .z = scaled.z / magnitude,
                 .w = scaled.w / magnitude};
-}
-
-/// `v` rotated by the unit quaternion `q`.
-[[nodiscard]] constexpr auto rotate(Quat q, Vec3 v) noexcept -> Vec3 {
-    // q v q* expanded: v + w t + u x t, with u the vector part and t = 2 (u x v).
-    const Vec3 vectorPart{.x = q.x, .y = q.y, .z = q.z};
-    const Vec3 crossProduct = cross(vectorPart, v);
-    const Vec3 twiceCross = crossProduct + crossProduct;
-    return v + twiceCross * q.w + cross(vectorPart, twiceCross);
 }
 
 /// The rotation matrix of the unit quaternion `q`.

@@ -77,8 +77,6 @@ public:
     [[nodiscard]] auto dependenciesOf(SystemId id) const noexcept -> std::span<const SystemId>;
     /// The name `id` was added with.
     [[nodiscard]] auto nameOf(SystemId id) const noexcept -> std::string_view;
-    /// Systems added so far, in every phase.
-    [[nodiscard]] inline auto systemCount() const noexcept -> std::size_t { return m_entries.size(); }
 
 private:
     struct Entry {
