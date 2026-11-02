@@ -280,7 +280,36 @@ every one), with H the screen's height, each share in whole pixels:
 The killer's name, H / 96 before the pictures, the head's picture right after what killed, a teammate's
 kill's pictures in (10, 240, 10) and the console's lines (`<killer> killed <victim> with <weapon>`,
 `<killer> killed his teammate <victim>`, `<victim> died`) are not measured yet, as the Half-Life SDK's
-client has them: they need a second player, and that build's game has no bots ([TODO](TODO.md)).
+client has them: they need a second player, and that build's game has no bots ([TODO](TODO.md)). Valve's
+own client of today (build 10210) draws the same rows at those resolutions, up to a pixel at 1024x768, where
+its `EngineFont` writes its capitals one lower, and prints `<victim> died` in the console.
+
+**The scoreboard** (`cs.client:scoreboard`, a layout of the project's own, [ADR-0020](adr/0020-in-house-ui-toolkit.md)):
+while `+showscores` is held (`TAB`), over the HUD whether `hud_draw` draws it or not, a panel with the
+teams of players, each under its row, of the most wins first (the terrorists of as many) and each of its
+players from the most frags, of as many the fewest deaths, of as many by its slot; what it shows is
+[10 §7.4](10-counter-strike-gameplay.md#74-damage)'s scores. **Observed** (Valve's client of today, build
+10210; a player alone on its team, alive and after `kill`, at 800x600, 1024x768, 1280x720, 1280x960 and
+1600x900), with H the screen's height and Y(n) = n × H / 480 in whole pixels, each place from the panel's
+top left:
+
+| Part | Where |
+|------|-------|
+| The panel | Y(520) wide, Y(340) tall, in the middle across, Y(70) from the top: black at half opacity over the scene; its border and the line under the heads (188, 112, 0) at half opacity over that; its corners cut by 5, 4, 2, 2 and 1 pixels |
+| The heads | The server's name (`hostname`) from Y(5) and a pixel; `HP`, `Money`, `Score`, `Deaths` and `Latency` ending at Y(310), Y(367), Y(412), Y(458) and Y(508); all in (255, 176, 0) |
+| What changes with the fonts | Under 768 lines the line under the heads at 23, the team's line at 51 and the names from 45; from 768 at 24, 53 and 61 |
+| A team's row | `Terrorists   -   1 player` over its line, its wins ending in the score's column, in its color: (255, 64, 64) for the terrorists, (153, 204, 255) for the counter-terrorists; the line opaque, from 6 to 8 before the panel's right |
+| A player's row | Its name, `Dead` from Y(215), its health and `$` and its money while the server tells them, its score and its deaths ending in their columns; its line of text Y(12) under the team's line less half the line's height and a pixel |
+| The player's own row | White at 25 of 255 over the panel, Y(21) tall, from 2 under the team's line, 5 in from each side of the panel |
+
+`hostname` is `Counter-Strike 1.6` until it is set, the game the project plays, a departure the user chose
+(2026-11-02) from the original's `Half-Life`. The rows of more players are not measured, for that build's game
+has no bots: the next row is drawn Y(21)
+under the last, as tall as the band, and a next team's line two of them under its last row ([TODO](TODO.md)),
+as the order of the teams and of their players, which come from the original's rules. The original writes
+all of it in bitmap fonts of its own (`gfx/vgui/fonts/<size>_Scoreboard Text.tga` and its title's), which
+`next` writes in `EngineFont` until it reads them. The room of the avatar of Steam's (at 16 under 768 lines,
+21 from them) stays empty, and `Latency` has no numbers yet.
 
 **The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,

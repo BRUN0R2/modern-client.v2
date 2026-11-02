@@ -140,6 +140,14 @@ public:
     [[nodiscard]] inline auto takeEntitySteps() -> std::vector<EntityStep> {
         return std::exchange(m_entitySteps, {});
     }
+    /// Whose game it is.
+    [[nodiscard]] inline auto self() const noexcept -> PlayerIndex { return m_last.self; }
+    /// Who plays, as the server told last, for the scoreboard.
+    [[nodiscard]] inline auto scores() const noexcept -> std::span<const ScoreRow> { return m_last.scores; }
+    /// The rounds each team won, as the server told last.
+    [[nodiscard]] inline auto teamWins() const noexcept -> const nx::EnumArray<Team, std::uint32_t>& {
+        return m_last.teamWins;
+    }
     /// The players' deaths the server told of since the last call, in their order: the kill feed's. Defined
     /// in the implementation unit: a KillNotice is not trivially destructible, and Clang 23 crashes on the
     /// importers that destroy one without naming it once an inline function instantiates their vector here.

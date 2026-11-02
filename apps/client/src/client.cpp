@@ -545,6 +545,7 @@ private:
     std::optional<cs::DamageNumberCvars> m_damageNumberCvars;
     std::optional<cs::StepIndicatorCvars> m_stepIndicatorCvars;
     std::optional<cs::KillFeedCvars> killFeedCvars;
+    std::optional<cs::ScoreboardControls> scoreboardControls;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
@@ -588,6 +589,7 @@ private:
     std::optional<cs::DamageNumbers> m_damageNumbers;   ///< None when its font could not be had.
     std::optional<cs::StepIndicator> m_stepIndicator;   ///< Once the window's text is open.
     std::optional<cs::KillFeed> killFeed;     ///< None when its font or its pictures could not be had.
+    std::optional<cs::Scoreboard> scoreboard; ///< None when its font could not be had.
     nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
@@ -740,6 +742,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(killFeedRegistered.error()));
     }
     killFeedCvars = std::move(*killFeedRegistered);
+    auto scoreboardRegistered = cs::ScoreboardControls::registerIn(m_console);
+    if (!scoreboardRegistered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(scoreboardRegistered.error()));
+    }
+    scoreboardControls = std::move(*scoreboardRegistered);
     auto gameCvars = cs::GameCvars::registerIn(m_console);
     if (!gameCvars) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
@@ -1168,6 +1175,11 @@ void Client::openWindowText(std::uint32_t screenHeight) {
         killFeed.emplace(std::move(*feed));
     } else {
         nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(feed.error()));
+    }
+    if (auto board = cs::Scoreboard::open(*fonts, screenHeight); board) {
+        scoreboard.emplace(std::move(*board));
+    } else {
+        nx::log::warning(kLog, "the scoreboard shows nothing: {}", nx::describe(board.error()));
     }
 }
 
@@ -1603,6 +1615,11 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 killFeed.reset(); // the game plays on, as without the HUD
             }
         }
+        if (scoreboard) {
+            if (auto loaded = scoreboard->load(m_frames->screen(), list); !loaded) {
+                return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
+            }
+        }
     }
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
@@ -1738,6 +1755,16 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
     if (m_session && killFeed && m_cvars->video.hudDraw.value()) {
         killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()}, killFeedCvars->shownFor(),
                          !m_session->client.status().isAlive());
+    }
+    if (m_session && scoreboard && scoreboardControls->shown.isDown()) {
+        // One of the client's panels, over the HUD whether it is drawn or not.
+        const std::string hostname = scoreboardControls->hostname.value();
+        scoreboard->append(m_screenQuads,
+                           {.hostname = hostname,
+                            .rows = m_session->client.scores(),
+                            .self = m_session->client.self(),
+                            .wins = m_session->client.teamWins()},
+                           size);
     }
     // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
     // client's HUD, while a map is played.

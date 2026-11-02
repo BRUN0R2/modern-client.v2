@@ -112,6 +112,15 @@ TEST_F(WindowFontsTest, TheFpsLabelWritesInTheEngineFont) {
     EXPECT_TRUE(label.has_value()) << nx::describe(label.error());
 }
 
+TEST_F(WindowFontsTest, TheScoreboardWritesInTheEngineFont) {
+    writeScheme();
+    const nx::assets::Vfs vfs = installation();
+    const auto windowFonts = cs::WindowFonts::open(vfs, catalog);
+    ASSERT_TRUE(windowFonts.has_value()) << nx::describe(windowFonts.error());
+    const auto board = cs::Scoreboard::open(*windowFonts, 768);
+    EXPECT_TRUE(board.has_value()) << nx::describe(board.error());
+}
+
 TEST_F(WindowFontsTest, TheKillFeedWritesInTheEngineFont) {
     writeScheme();
     const nx::assets::Vfs vfs = installation();

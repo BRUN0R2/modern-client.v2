@@ -1005,6 +1005,70 @@ TEST_F(GameTest, TheNoticeOfADeathByTheWorldNamesNoKillerNorWeapon) {
     EXPECT_EQ(notice.victim.name, "Faller");
     EXPECT_EQ(notice.weapon, std::nullopt);
     EXPECT_FALSE(notice.isHead) << "a fall meets it in no group";
+    ASSERT_EQ(fallen.scores.size(), 1U);
+    EXPECT_EQ(fallen.scores.front().score, (cs::PlayerScore{.frags = 0, .deaths = 1}))
+        << "the world takes none";
+}
+
+TEST_F(GameTest, AKillCountsAFragForItsKillerAndADeathForItsVictimAndARoundForItsTeam) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Shooter");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Target");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "knife");
+    const cs::PlayerSnapshot before = game().snapshotFor(attacker);
+    ASSERT_EQ(before.scores.size(), 2U);
+    EXPECT_EQ(before.scores[0].score, cs::PlayerScore{});
+    EXPECT_FALSE(before.scores[1].isDead);
+    EXPECT_EQ(before.teamWins[cs::Team::CounterTerrorists], 0U);
+
+    const cs::PlayerSnapshot killed = press(attacker, {cs::Button::Attack2});
+    ASSERT_EQ(killed.scores.size(), 2U);
+    EXPECT_EQ(killed.scores[0].player, attacker);
+    EXPECT_EQ(killed.scores[0].name, "Shooter");
+    EXPECT_EQ(killed.scores[0].team, cs::Team::CounterTerrorists);
+    EXPECT_EQ(killed.scores[0].score, (cs::PlayerScore{.frags = 1, .deaths = 0}));
+    EXPECT_FALSE(killed.scores[0].isDead);
+    EXPECT_EQ(killed.scores[1].player, victim);
+    EXPECT_EQ(killed.scores[1].score, (cs::PlayerScore{.frags = 0, .deaths = 1}));
+    EXPECT_TRUE(killed.scores[1].isDead);
+    EXPECT_EQ(killed.teamWins[cs::Team::CounterTerrorists], 1U) << "the terrorists eliminated";
+    EXPECT_EQ(killed.teamWins[cs::Team::Terrorists], 0U);
+}
+
+TEST_F(GameTest, AClientIsToldTheHealthAndTheMoneyOfItsTeamAlone) {
+    const cs::PlayerIndex first =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "First");
+    const cs::PlayerIndex second =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Second");
+    std::ignore = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Third");
+    idle(1);
+    const cs::PlayerSnapshot told = game().snapshotFor(first);
+    ASSERT_EQ(told.scores.size(), 3U);
+    EXPECT_EQ(told.scores[0].player, first);
+    EXPECT_EQ(told.scores[0].health, cs::kSpawnHealth) << "itself";
+    EXPECT_EQ(told.scores[1].player, second);
+    EXPECT_EQ(told.scores[1].money, told.status.money) << "a teammate";
+    EXPECT_EQ(told.scores[2].health, std::nullopt) << "an enemy";
+    EXPECT_EQ(told.scores[2].money, std::nullopt);
+}
+
+TEST_F(GameTest, TheDefaultTeamOfEqualTeamsIsTheLosingOneAndARestartForgetsTheScores) {
+    const cs::PlayerIndex attacker =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Shooter");
+    const cs::PlayerIndex victim = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Target");
+    idle(kPastTheCommence + kPastAFreeze);
+    standOff(attacker, victim, "knife");
+    std::ignore = press(attacker, {cs::Button::Attack2});
+    ASSERT_EQ(game().snapshotFor(attacker).teamWins[cs::Team::CounterTerrorists], 1U);
+    EXPECT_EQ(game().defaultTeam(), cs::Team::Terrorists) << "as many players each: the team that lost";
+
+    ASSERT_TRUE(cvars().restart.set(1.0F).has_value());
+    idle(kPastARestart);
+    const cs::PlayerSnapshot restarted = game().snapshotFor(attacker);
+    EXPECT_EQ(restarted.teamWins[cs::Team::CounterTerrorists], 0U);
+    EXPECT_EQ(restarted.scores[0].score, cs::PlayerScore{});
+    EXPECT_EQ(restarted.scores[1].score, cs::PlayerScore{});
 }
 
 TEST_F(GameTest, AShotMeetsAPlayersHitboxesNotItsBoxNorAShieldItHasNot) {
@@ -1133,6 +1197,7 @@ TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillC
     ASSERT_EQ(told.killNotices.size(), 1U);
     EXPECT_TRUE(told.killNotices.front().isTeamKill());
     EXPECT_EQ(told.killNotices.front().weapon, content().weapons.indexOf("knife"));
+    EXPECT_EQ(told.scores.front().score.frags, -1) << "a frag less for a teammate";
 }
 
 /// A spawn point of each team in the box with a volume, the same place, in a trigger_hurt of `keys`.
