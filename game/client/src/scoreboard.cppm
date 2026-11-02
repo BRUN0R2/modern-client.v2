@@ -72,8 +72,6 @@ struct ScoreboardMetrics {
     std::int32_t teamTextY = 0;
     std::int32_t teamLineY = 0;
     std::int32_t nameX = 0;
-    std::int32_t dashX = 0;
-    std::int32_t countX = 0;
     std::int32_t rowTextUnderLine = 0;
     std::int32_t statusX = 0;
     std::int32_t rowPitch = 0;
