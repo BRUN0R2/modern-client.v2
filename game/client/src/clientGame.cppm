@@ -140,6 +140,10 @@ public:
     [[nodiscard]] inline auto takeEntitySteps() -> std::vector<EntityStep> {
         return std::exchange(m_entitySteps, {});
     }
+    /// The players' deaths the server told of since the last call, in their order: the kill feed's.
+    [[nodiscard]] inline auto takeKillNotices() -> std::vector<KillNotice> {
+        return std::exchange(killNotices, {});
+    }
 
 private:
     /// The moment of the game a frame shows: a tick behind the game, by the time pending, as the eye is
@@ -170,6 +174,7 @@ private:
     std::vector<StreakSplash> streakSplashes;      ///< Since takeStreakSplashes.
     std::vector<DamageDealt> m_damageDealt;        ///< Since takeDamageDealt.
     std::vector<EntityStep> m_entitySteps;         ///< Since takeEntitySteps.
+    std::vector<KillNotice> killNotices;           ///< Since takeKillNotices.
 };
 
 } // namespace cs

@@ -71,6 +71,7 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
     std::ranges::move(snapshot.streakSplashes, std::back_inserter(streakSplashes));
     std::ranges::move(snapshot.damageDealt, std::back_inserter(m_damageDealt));
     std::ranges::move(snapshot.entitySteps, std::back_inserter(m_entitySteps));
+    std::ranges::move(snapshot.killNotices, std::back_inserter(killNotices));
     if (snapshot.lightStyles != m_last.lightStyles) {
         lightStyles.setPatterns(snapshot.lightStyles.patterns);
     }

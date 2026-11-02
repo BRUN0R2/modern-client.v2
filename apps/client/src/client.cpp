@@ -544,6 +544,7 @@ private:
     std::optional<cs::CorpseCvars> m_corpseCvars;
     std::optional<cs::DamageNumberCvars> m_damageNumberCvars;
     std::optional<cs::StepIndicatorCvars> m_stepIndicatorCvars;
+    std::optional<cs::KillFeedCvars> killFeedCvars;
     std::optional<cs::GameCvars> m_gameCvars;
     std::optional<cs::BotCvars> botCvars;
     bool drawsNavigation = false; ///< nav_draw's: the agents' mesh and their ways over the scene.
@@ -586,7 +587,8 @@ private:
     std::optional<cs::FpsLabel> m_fpsLabel;             ///< None when its font could not be had.
     std::optional<cs::DamageNumbers> m_damageNumbers;   ///< None when its font could not be had.
     std::optional<cs::StepIndicator> m_stepIndicator;   ///< Once the window's text is open.
-    nx::platform::FrameRateMeter m_frameRate;           ///< Of the frames shown, which cl_showfps shows.
+    std::optional<cs::KillFeed> killFeed;     ///< None when its font or its pictures could not be had.
+    nx::platform::FrameRateMeter m_frameRate; ///< Of the frames shown, which cl_showfps shows.
     std::vector<nx::platform::WindowEvent> m_events;
     nx::render::Camera m_camera{};
     nx::platform::Stopwatch m_frameClock;
@@ -733,6 +735,11 @@ auto Client::registerSettings() -> nx::Result<void, ClientError> {
         return nx::fail(ClientError::SettingsUnavailable, std::move(stepIndicatorCvars.error()));
     }
     m_stepIndicatorCvars = std::move(*stepIndicatorCvars);
+    auto killFeedRegistered = cs::KillFeedCvars::registerIn(m_console);
+    if (!killFeedRegistered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(killFeedRegistered.error()));
+    }
+    killFeedCvars = std::move(*killFeedRegistered);
     auto gameCvars = cs::GameCvars::registerIn(m_console);
     if (!gameCvars) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(gameCvars.error()));
@@ -1154,6 +1161,11 @@ void Client::openWindowText(std::uint32_t screenHeight) {
         nx::log::warning(kLog, "the damage of the hits shows no numbers: {}", nx::describe(numbers.error()));
     }
     m_stepIndicator.emplace(m_content->stepIndicator);
+    if (auto feed = cs::KillFeed::open(*fonts, screenHeight); feed) {
+        killFeed.emplace(std::move(*feed));
+    } else {
+        nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(feed.error()));
+    }
 }
 
 void Client::toggleConsole() {
@@ -1310,6 +1322,9 @@ void Client::startNextSession() {
     if (m_stepIndicator) {
         m_stepIndicator->clear(); // the old game's bodies
     }
+    if (killFeed) {
+        killFeed->clear(); // the old game's deaths
+    }
     m_viewPose.reset(); // what the old game showed went with its level
     m_clientEvents.clear();
     m_changedWeapons.clear(); // the new level read every weapon's view model
@@ -1412,7 +1427,16 @@ void Client::showEffects(nx::Seconds elapsed) {
     const std::vector<cs::StreakSplash> splashes = m_session->client.takeStreakSplashes();
     const std::vector<cs::DamageDealt> dealt = m_session->client.takeDamageDealt();
     const std::vector<cs::EntityStep> steps = m_session->client.takeEntitySteps();
+    const std::vector<cs::KillNotice> kills = m_session->client.takeKillNotices();
     const nx::Seconds now{m_mapClock.elapsed()};
+    if (killFeed) {
+        killFeed->show(kills, m_content->weapons, now);
+    }
+    for (const cs::KillNotice& kill : kills) {
+        m_console.print(cs::killLineOf(
+            kill, kill.weapon ? std::optional<std::string_view>{m_content->weapons.weapon(*kill.weapon).id}
+                              : std::nullopt));
+    }
     if (m_damageNumbers && m_damageNumberCvars->shown.value()) {
         m_damageNumbers->show(dealt, now);
     }
@@ -1570,6 +1594,12 @@ auto Client::upload(nx::rhi::CommandList& list, nx::rhi::Format format) -> nx::R
                 return nx::fail(ClientError::GpuFailed, std::move(loaded.error()));
             }
         }
+        if (killFeed) {
+            if (auto loaded = killFeed->load(m_content->vfs, m_frames->screen(), list); !loaded) {
+                nx::log::warning(kLog, "the kill feed shows nothing: {}", nx::describe(loaded.error()));
+                killFeed.reset(); // the game plays on, as without the HUD
+            }
+        }
     }
     if (m_session && !m_scene) {
         // r_fidelity, read as the map's scene is made.
@@ -1701,6 +1731,9 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
                        .crosshairDistance = cs::kKnifeCrosshairDistance,
                        .roundTime = m_session->client.roundTimeShown()},
                       m_hudCvars->crosshair(), size);
+    }
+    if (m_session && killFeed && m_cvars->video.hudDraw.value()) {
+        killFeed->append(m_screenQuads, size, nx::Seconds{m_mapClock.elapsed()}, killFeedCvars->shownFor());
     }
     // cl_showfps, over the HUD whether it is drawn or not, as the original's engine writes it over its
     // client's HUD, while a map is played.

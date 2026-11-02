@@ -31,11 +31,13 @@ nxAddModuleLibrary(csClient
         src/scene.cppm
         src/frame.cppm
         src/clientGame.cppm
+        src/hudSprites.cppm
         src/hud.cppm
         src/fogCvars.cppm
         src/windowFonts.cppm
         src/console.cppm
         src/fpsLabel.cppm
+        src/killFeed.cppm
         src/audio.cppm
         src/weaponCommands.cppm
         src/navigationDrawing.cppm
@@ -63,11 +65,13 @@ nxAddModuleLibrary(csClient
         src/scene.cpp
         src/frame.cpp
         src/clientGame.cpp
+        src/hudSprites.cpp
         src/hud.cpp
         src/fogCvars.cpp
         src/windowFonts.cpp
         src/console.cpp
         src/fpsLabel.cpp
+        src/killFeed.cpp
         src/audio.cpp
         src/weaponCommands.cpp
         src/navigationDrawing.cpp

@@ -615,7 +615,14 @@ helmet, a teammate's that spares it too, strikes sparks off the helmet instead (
 `CL_DrawTracers` do (`cs.client:particles`): each streak gone after a tenth to half a second, moving,
 falling at the world's whole gravity and losing 0.9 of its speed across the ground a second, drawn as
 far as it moves in the time it has left, a tenth of a second of it at most, fading out over its last
-half second. The scores and the kill feed come with what they need ([TODO](TODO.md)).
+half second.
+
+As a player dies, the server tells every client of it (`cs::KillNotice`, `CHalfLifeMultiplay::DeathNotice`'s
+`DeathMsg`): its killer and itself as they are then, by name and team, none for a death by the world or by
+itself; the weapon its killer holds, none without one; and whether it was last met in the head
+(`m_bHeadshotKilled`), so that a death by the world after a head shot is told as one, as the original's
+is. The kill feed shows it ([12 §3.2](12-ui-hud-and-console.md#32-scale-and-resolution)). The scores come
+with what they need ([TODO](TODO.md)).
 
 An entity's body ([ADR-0028](adr/0028-native-agent-test-mod.md)) bleeds as `CBaseMonster::TraceAttack`
 sheds a monster's blood when its type names a `bloodColor` (`m_bloodColor`; none for `DONT_BLEED`):

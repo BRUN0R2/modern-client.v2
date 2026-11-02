@@ -260,6 +260,21 @@ whole number, which is counted over each second and lags the rate. `net_graph` i
 number, so that the two never disagree as the original's do. Its font, like the
 console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 
+**The kill feed** (`cs.client:killFeed`): while `hud_draw` draws the HUD, a row of each player's death
+the server tells of (`cs::KillNotice`, [10 §7.4](10-counter-strike-gameplay.md#74-damage)), the oldest
+first, 4 at most, a new one making the oldest go, each for `hud_deathnotice_time` seconds (6, not
+archived): the killer's name, the picture of what killed it, `d_<weapon>` of `sprites/hud.txt` (`d_skull`
+for no weapon or one the list has no picture of, a weapon made as the game runs), `d_headshot` for a kill
+in the head, and the victim's name. A death of no killer shows the picture and the victim's name alone.
+The names are written in `EngineFont`, a terrorist's in (255, 64, 64) and a counter-terrorist's in (153,
+204, 255); the pictures are added in (255, 80, 0), a teammate's kill's in (10, 240, 10). The victim's name
+ends at the right edge, the pictures right before it, and 5 pixels before them the killer's name; the
+first row's top is a fifteenth of the screen's height and 2 pixels down, each next one 20 under it. The
+console shows a line of it as well: `<killer> killed <victim> with <weapon>`, `<killer> killed his teammate
+<victim>`, `<victim> died`. This is how the Half-Life SDK's client draws its feed, Counter-Strike's
+pictures added: its place, its colors, its font and its text are still to be measured on the original
+([TODO](TODO.md)).
+
 **The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,
 each hit of the player's on another player, a hostage or an entity's body shows a number of the damage
@@ -394,7 +409,7 @@ from reference shots; search comes later.
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
 | Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals`, `cl_corpsestay` |
-| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers`, `hud_stepindicator` |
+| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `hud_deathnotice_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers`, `hud_stepindicator` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
 | Player | `name`, `_cl_autowepswitch`, `cl_autobuy`, `cl_rebuy`, `cl_minmodels` (respecting the server) |

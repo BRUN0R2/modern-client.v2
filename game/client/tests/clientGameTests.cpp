@@ -162,9 +162,11 @@ TEST_F(ClientGameTest, WhatTheTicksMadeIsKeptUntilTheFrameTakesIt) {
     tick1.sounds = {cs::SoundMade{.sound = &first, .at = tick1.time}};
     tick1.impacts = {cs::Impact{.position = {.x = 1.0F}}};
     tick1.turnedView = nx::EulerAngles{.yaw = nx::Degrees{90.0F}};
+    tick1.killNotices = {cs::KillNotice{.victim = {.name = "First"}}};
     cs::PlayerSnapshot tick2 = snapshotAt(2, {});
     tick2.sounds = {cs::SoundMade{.sound = &second, .at = tick2.time}};
     tick2.impacts = {cs::Impact{.position = {.x = 2.0F}}};
+    tick2.killNotices = {cs::KillNotice{.victim = {.name = "Second"}}};
     client.receive(std::move(tick1));
     client.receive(std::move(tick2));
 
@@ -178,6 +180,10 @@ TEST_F(ClientGameTest, WhatTheTicksMadeIsKeptUntilTheFrameTakesIt) {
     EXPECT_FLOAT_EQ(impacts[1].position.x, 2.0F);
     EXPECT_EQ(client.takeTurnedView(), (nx::EulerAngles{.yaw = nx::Degrees{90.0F}}));
     EXPECT_FALSE(client.takeTurnedView().has_value());
+    const std::vector<cs::KillNotice> kills = client.takeKillNotices();
+    ASSERT_EQ(kills.size(), 2U);
+    EXPECT_EQ(kills[1].victim.name, "Second");
+    EXPECT_TRUE(client.takeKillNotices().empty());
 }
 
 TEST_F(ClientGameTest, AFrameShowsTheMomentATickBehindTheGame) {

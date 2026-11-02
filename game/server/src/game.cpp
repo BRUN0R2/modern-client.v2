@@ -410,6 +410,7 @@ auto Game::snapshotFor(PlayerIndex index) -> PlayerSnapshot {
                           .streakSplashes = streakSplashes,
                           .damageDealt = player.damageDealt,
                           .entitySteps = m_entitySteps,
+                          .killNotices = killNotices,
                           .brushEntities = brushEntityStatesOf(m_world),
                           .hostages = hostageStatesOf(m_world),
                           .players = std::move(others),
@@ -423,6 +424,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     bloodSprays.clear();
     bloodStreams.clear();
     streakSplashes.clear();
+    killNotices.clear();
     for (Player& player : playersIn(m_players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
@@ -768,8 +770,17 @@ void Game::bleed(const nx::game::Attack& attack, const Bleeding& bleeding, nx::R
 void Game::die(Player& player, Player* killer) {
     nx::log::info(kLog, "{} dies", player.name);
     makeSound(player, m_content->playerHarm.death);
+    const bool isKilledByAnother = killer != nullptr && killer != &player;
+    // DeathNotice, as PlayerKilled starts, while its killer holds the weapon that killed it.
+    const OwnedWeapon* const held = isKilledByAnother ? killer->inventory.held() : nullptr;
+    killNotices.push_back(KillNotice{
+        .killer = isKilledByAnother ? std::optional{NoticedPlayer{.name = killer->name, .team = killer->team}}
+                                    : std::nullopt,
+        .victim = {.name = player.name, .team = player.team},
+        .weapon = held != nullptr ? std::optional{held->weapon} : std::nullopt,
+        .isHead = player.lastHitGroup == HitGroup::Head});
     // PlayerKilled pays its killer, or makes it pay for a teammate.
-    if (killer != nullptr && killer != &player) {
+    if (isKilledByAnother) {
         const KillMoney& kills = m_content->economy.kills;
         killer->status.money = addMoney(
             killer->status.money, killer->team == player.team ? nx::Money{} - kills.teammate : kills.enemy);

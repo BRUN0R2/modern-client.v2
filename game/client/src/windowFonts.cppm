@@ -14,6 +14,9 @@ export namespace cs {
 
 /// The scheme of the installation's windows: VGUI2's TrackerScheme.res.
 inline constexpr std::string_view kWindowScheme = "resource/TrackerScheme.res";
+/// The font of kWindowScheme the engine writes over the game in: Verdana, bold, casting a drop shadow, its
+/// size the screen's height's.
+inline constexpr std::string_view kEngineFont = "EngineFont";
 
 /// Why a font of kWindowScheme cannot be had.
 enum class WindowFontError : std::uint8_t {

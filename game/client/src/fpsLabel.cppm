@@ -15,9 +15,6 @@ import :windowFonts;
 
 export namespace cs {
 
-/// The font of kWindowScheme the label writes in: Verdana, bold, casting a drop shadow, its size the
-/// screen's height's.
-inline constexpr std::string_view kFpsFont = "EngineFont";
 /// The top left of the label's line, in pixels from the screen's, at every resolution.
 inline constexpr float kFpsLabelX = 2.0F;
 inline constexpr float kFpsLabelY = 2.0F;
@@ -29,11 +26,11 @@ inline constexpr nx::render::ScreenColor kFpsLabelColor{.red = 255, .green = 255
 /// the tenth, which shows the rate as it moves.
 [[nodiscard]] auto fpsText(double framesPerSecond) -> std::string;
 
-/// The label: the glyphs it writes, in kFpsFont made for a screen's height, put on the GPU with the
+/// The label: the glyphs it writes, in kEngineFont made for a screen's height, put on the GPU with the
 /// screen's pictures.
 class FpsLabel {
 public:
-    /// The label for a screen `screenHeight` pixels tall, in kFpsFont of `fonts`. Errors: those of
+    /// The label for a screen `screenHeight` pixels tall, in kEngineFont of `fonts`. Errors: those of
     /// WindowFonts::font, and Unusable (its glyphs cannot be drawn).
     [[nodiscard]] static auto open(const WindowFonts& fonts, std::uint32_t screenHeight)
         -> nx::Result<FpsLabel, WindowFontError>;
