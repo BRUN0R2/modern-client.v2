@@ -123,6 +123,10 @@ struct KillNotice {
     std::optional<WeaponIndex> weapon{};
     bool isHead = false;
 
+    /// Defined in snapshot.cpp: Clang 23 crashes generating it implicitly where a vector of notices is
+    /// destroyed and nothing else names the type (docs/17-build-and-tools.md, section 2.2).
+    ~KillNotice();
+
     /// Whether a teammate killed it.
     [[nodiscard]] inline auto isTeamKill() const noexcept -> bool {
         return killer && killer->team == victim.team;

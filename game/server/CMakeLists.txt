@@ -11,6 +11,11 @@ nxAddModuleLibrary(csServer
         src/gameModels.cppm
         src/playerBodies.cppm
         src/playerNames.cppm
+        src/gameState.cppm
+        src/playerPose.cppm
+        src/playerSpawns.cppm
+        src/purchases.cppm
+        src/playerSnapshots.cppm
         src/game.cppm
         src/entityBodies.cppm
         src/agentNavigation.cppm
@@ -21,6 +26,11 @@ nxAddModuleLibrary(csServer
         src/gameModels.cpp
         src/playerBodies.cpp
         src/playerNames.cpp
+        src/gameState.cpp
+        src/playerPose.cpp
+        src/playerSpawns.cpp
+        src/purchases.cpp
+        src/playerSnapshots.cpp
         src/game.cpp
         src/entityBodies.cpp
         src/agentNavigation.cpp

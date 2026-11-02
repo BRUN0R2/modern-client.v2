@@ -68,6 +68,7 @@ nxAddModuleLibrary(csShared
         src/gameMap.cpp
         src/characters.cpp
         src/playerAnimation.cpp
+        src/snapshot.cpp
         src/entityKnockback.cpp
         src/entityCatalog.cpp
     DEPENDS
