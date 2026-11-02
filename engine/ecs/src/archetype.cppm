@@ -127,8 +127,6 @@ public:
     /// The stored components (tags have no column), in type order.
     [[nodiscard]] inline auto columns() const noexcept -> std::span<const Column> { return m_columns; }
 
-    /// Rows a chunk holds.
-    [[nodiscard]] inline auto chunkCapacity() const noexcept -> std::uint32_t { return m_chunkCapacity; }
     /// Chunks in use; every one is full except the last.
     [[nodiscard]] inline auto chunkCount() const noexcept -> std::size_t { return m_chunks.size(); }
     /// The chunk at `index`, which must be below chunkCount().

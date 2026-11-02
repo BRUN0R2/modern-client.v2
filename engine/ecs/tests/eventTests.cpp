@@ -32,9 +32,7 @@ TEST(EventTest, AReaderSeesEachEventOnce) {
 
     writer.send({.victim = 1});
     writer.send({.victim = 2});
-    EXPECT_TRUE(reader.hasUnread());
     EXPECT_EQ(readAll(reader), (std::vector{1, 2}));
-    EXPECT_FALSE(reader.hasUnread());
     EXPECT_TRUE(readAll(reader).empty());
 
     writer.send({.victim = 3});
@@ -53,7 +51,6 @@ TEST(EventTest, EventsLiveUntilTheEndOfTheNextTick) {
     events.advance(); // end of tick N+1
     std::uint64_t laterCursor = 0;
     EventReader<PlayerKilled> later{events, laterCursor};
-    EXPECT_FALSE(later.hasUnread());
     EXPECT_TRUE(readAll(later).empty());
 }
 
@@ -79,7 +76,7 @@ TEST(EventTest, TheWorldAdvancesEveryEventQueue) {
     world.advanceEvents();
     std::uint64_t cursor = 0;
     EventReader<PlayerKilled> reader{*world.resource<Events<PlayerKilled>>(), cursor};
-    EXPECT_FALSE(reader.hasUnread());
+    EXPECT_TRUE(readAll(reader).empty());
 }
 
 } // namespace

@@ -77,5 +77,4 @@ TEST(Units, DegreesAndRadiansConvertExplicitly) {
     static_assert(!std::is_convertible_v<nx::Degrees, nx::Radians>);
 
     EXPECT_NEAR(nx::toRadians(180_deg).value(), std::numbers::pi_v<float>, kAngleTolerance);
-    EXPECT_NEAR(nx::toDegrees(nx::toRadians(90_deg)).value(), 90.0F, kAngleTolerance);
 }

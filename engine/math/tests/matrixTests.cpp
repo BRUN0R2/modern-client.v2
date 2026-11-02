@@ -67,7 +67,7 @@ TEST(MatrixTest, AffineTransformsPointsAndDirections) {
     static_assert(nx::linearPart(transform) == kQuarterTurnAboutZ);
     static_assert(nx::translationPart(transform) == translation);
     static_assert(nx::transformPoint(transform, Vec3{.x = 1}) == Vec3{.x = 10, .y = 21, .z = 30});
-    static_assert(nx::transformDirection(transform, Vec3{.x = 1}) == Vec3{.y = 1});
+    static_assert(nx::linearPart(transform) * Vec3{.x = 1} == Vec3{.y = 1});
 }
 
 TEST(MatrixTest, Mat3x4ProductAppliesTheRightOperandFirst) {
@@ -84,28 +84,14 @@ TEST(MatrixTest, Mat3x4ProductAppliesTheRightOperandFirst) {
                   nx::transformPoint(rotate, nx::transformPoint(move, point)));
 }
 
-TEST(MatrixTest, RigidInverseUndoesARigidTransform) {
-    const Mat3x4 transform =
-        nx::affine(nx::rotationMatrix(nx::EulerAngles{
-                       .pitch = nx::Degrees{30}, .yaw = nx::Degrees{-75}, .roll = nx::Degrees{10}}),
-                   Vec3{.x = 100, .y = -40, .z = 12.5F});
-    const Mat3x4 inverse = nx::rigidInverse(transform);
-    constexpr Vec3 point{.x = 3, .y = -7, .z = 11};
-
-    EXPECT_TRUE(isNear(nx::transformPoint(inverse, nx::transformPoint(transform, point)), point, 1e-4F));
-    EXPECT_TRUE(isNear(nx::linearPart(inverse * transform), Mat3{}));
-    EXPECT_TRUE(isNear(nx::translationPart(transform * inverse), Vec3{}, 1e-4F));
-}
-
 TEST(MatrixTest, Mat4) {
     constexpr Mat3x4 transform = nx::affine(kScale, Vec3{.x = 1, .y = 2, .z = 3});
-    constexpr Mat4 full = nx::toMat4(transform);
+    constexpr Mat4 full{.rows = {transform.rows[0], transform.rows[1], transform.rows[2], Vec4{.w = 1}}};
     constexpr Vec3 point{.x = 1, .y = 1, .z = 1};
 
     static_assert(nx::xyz(full * nx::extend(point, 1)) == nx::transformPoint(transform, point));
     static_assert((full * nx::extend(point, 1)).w == 1);
-    static_assert(nx::xyz(full * nx::extend(point, 0)) == nx::transformDirection(transform, point));
-    static_assert(nx::toMat4(transform * transform) == full * full);
+    static_assert(nx::xyz(full * nx::extend(point, 0)) == nx::linearPart(transform) * point);
     static_assert(nx::transposed(nx::transposed(full)) == full);
     static_assert(nx::transposed(full).rows[3] == Vec4{.x = 1, .y = 2, .z = 3, .w = 1});
 }

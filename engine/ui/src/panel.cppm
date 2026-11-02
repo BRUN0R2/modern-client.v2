@@ -89,7 +89,6 @@ public:
     /// edge of the panel it follows.
     void setBounds(PanelBounds bounds);
     inline void setVisible(bool isVisible) noexcept { m_isVisible = isVisible; }
-    inline void setEnabled(bool isEnabled) noexcept { m_isEnabled = isEnabled; }
     inline void setAnchors(PinCorner pinCorner, AutoResize autoResize) noexcept {
         m_pinCorner = pinCorner;
         m_autoResize = autoResize;

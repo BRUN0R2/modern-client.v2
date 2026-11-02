@@ -55,9 +55,9 @@ TEST(Flags, BuildsFromAList) {
     const nx::Flags<Button> duckJump{Button::Duck, Button::Jump};
 
     EXPECT_EQ(duckJump.count(), 2U);
-    EXPECT_TRUE(duckJump.containsAll({Button::Jump}));
-    EXPECT_TRUE(duckJump.containsAny({Button::Use, Button::Duck}));
-    EXPECT_FALSE(duckJump.containsAny({Button::Use, Button::Reload}));
+    EXPECT_TRUE(duckJump.test(Button::Duck));
+    EXPECT_TRUE(duckJump.test(Button::Jump));
+    EXPECT_FALSE(duckJump.test(Button::Use));
 }
 
 TEST(Flags, CombinesWithSetOperators) {

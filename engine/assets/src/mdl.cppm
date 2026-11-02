@@ -251,7 +251,6 @@ public:
     [[nodiscard]] static auto parse(std::span<const std::byte> bytes) -> Result<MdlView, MdlError>;
 
     [[nodiscard]] inline auto name() const noexcept -> std::string_view { return m_name; }
-    [[nodiscard]] inline auto eyePosition() const noexcept -> Vec3 { return m_eyePosition; }
     /// The box the model's movement and culling use.
     [[nodiscard]] inline auto bounds() const noexcept -> const Aabb& { return m_bounds; }
     [[nodiscard]] inline auto bones() const noexcept -> std::span<const StudioBone> { return m_bones; }
@@ -301,7 +300,6 @@ private:
     [[nodiscard]] auto decodeSequences(std::span<const std::byte> bytes) -> Result<void, MdlError>;
 
     std::string m_name;
-    Vec3 m_eyePosition{};
     Aabb m_bounds{};
     std::vector<StudioBone> m_bones;
     std::vector<BoneController> m_boneControllers;
