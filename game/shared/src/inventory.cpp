@@ -335,6 +335,48 @@ void Inventory::makeSound(const std::optional<GameSound>& sound, const nx::game:
     }
 }
 
+void Inventory::drop(WeaponIndex weapon, const nx::game::TickTime& time, nx::Random& random) {
+    const std::optional<std::size_t> dropped = find(weapon);
+    nx::expects(dropped.has_value(), "Inventory::drop: a weapon the player has");
+    const bool wasHeld = m_held == dropped;
+    m_weapons.erase(m_weapons.begin() + nx::narrow<std::ptrdiff_t>(*dropped));
+    for (std::optional<std::size_t>* const kept : {&m_held, &m_before}) {
+        if (*kept == dropped) {
+            kept->reset();
+        } else if (*kept > dropped) {
+            --**kept;
+        }
+    }
+    if (!wasHeld) {
+        return;
+    }
+    m_isReloading = false;
+    m_animation.reset();
+    // GetNextBestWeapon: among the slots in their order, each's newest first, the first of the most weight.
+    std::optional<WeaponIndex> heaviest;
+    for (const WeaponSlot slot : {WeaponSlot::Primary, WeaponSlot::Secondary, WeaponSlot::Knife,
+                                  WeaponSlot::Grenade, WeaponSlot::Bomb}) {
+        for (const WeaponIndex candidate : weaponsIn(slot)) {
+            if (!heaviest || m_catalog->weapon(candidate).weight > m_catalog->weapon(*heaviest).weight) {
+                heaviest = candidate;
+            }
+        }
+    }
+    if (heaviest) {
+        draw(*find(*heaviest), time, random);
+    }
+}
+
+auto Inventory::weaponsIn(WeaponSlot slot) const -> std::vector<WeaponIndex> {
+    std::vector<WeaponIndex> weapons;
+    for (const OwnedWeapon& owned : m_weapons | std::views::reverse) {
+        if (m_catalog->weapon(owned.weapon).slot == slot) {
+            weapons.push_back(owned.weapon);
+        }
+    }
+    return weapons;
+}
+
 void Inventory::spawned() noexcept {
     m_nextAttack = nx::Seconds{};
 }

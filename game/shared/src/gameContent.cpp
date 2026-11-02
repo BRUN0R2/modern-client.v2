@@ -149,6 +149,10 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
     if (!economy) {
         return std::unexpected{std::move(economy.error())};
     }
+    auto buying = readDataFile(gameDataOf(data) / "buying.toml", readBuyingRules);
+    if (!buying) {
+        return std::unexpected{std::move(buying.error())};
+    }
     auto footsteps = readDataFile(gameDataOf(data) / "footsteps.toml", readFootstepRules);
     if (!footsteps) {
         return std::unexpected{std::move(footsteps.error())};
@@ -199,6 +203,7 @@ auto readGameContent(const std::filesystem::path& data, nx::assets::Vfs vfs)
                        .weapons = std::move(*weapons),
                        .loadouts = std::move(*loadouts),
                        .economy = std::move(*economy),
+                       .buying = std::move(*buying),
                        .footsteps = std::move(*footsteps),
                        .breath = std::move(*breath),
                        .hitGroups = std::move(*hitGroups),

@@ -15,6 +15,7 @@ maxSpeed = 250.0
 [purchase]
 buyers = "everyone"
 price = 500
+commands = ["usp", "km45"]
 
 [magazine]
 ammo = "45ACP"

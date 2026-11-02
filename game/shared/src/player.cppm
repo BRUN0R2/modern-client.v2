@@ -7,7 +7,7 @@
 /// (ReGameDLL_CS's CBasePlayer::Spawn and mp_startmoney, GPL, consulted: docs/20 section 3).
 ///
 /// Today: what a player has as it spawns, its health and its armor as harm takes them
-/// (cs.shared:playerHarm), and the money of its kills; buying comes with the game's rules (TODO.md).
+/// (cs.shared:playerHarm), and its money as its kills and what it buys (cs.shared:buying) change it.
 export module cs.shared:player;
 
 import std;

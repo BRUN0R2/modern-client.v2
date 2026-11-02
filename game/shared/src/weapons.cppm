@@ -101,6 +101,9 @@ struct AmmoTypes {
 struct WeaponPurchase {
     Buyers buyers{};
     nx::Money price{};
+    /// The console commands that buy it, the original's aliases (g_weaponBuyAliasInfo); none: only
+    /// `buy_weapon`, as a weapon made as the game runs.
+    std::optional<std::vector<std::string>> commands{};
 };
 
 /// The ammo a weapon fires, and how much of it its clip holds.
@@ -516,6 +519,7 @@ struct nx::meta::Description<cs::WeaponPurchase> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponPurchase::buyers>("buyers"),
         nx::meta::field<&cs::WeaponPurchase::price>("price", nx::data::Range{.minimum = 0.0}),
+        nx::meta::field<&cs::WeaponPurchase::commands>("commands"),
     };
 };
 

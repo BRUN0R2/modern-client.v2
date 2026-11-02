@@ -51,4 +51,5 @@ export import :killFeed;
 export import :scoreboard;
 export import :audio;
 export import :weaponCommands;
+export import :buyCommands;
 export import :navigationDrawing;

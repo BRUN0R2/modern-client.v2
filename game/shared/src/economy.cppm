@@ -9,7 +9,7 @@
 /// paid as the next round starts.
 ///
 /// Today: the money of the rounds whose time ran out and of those a team won by eliminating the other;
-/// the kills', the bomb's and the hostages', and buying, come with them (TODO.md).
+/// the bomb's and the hostages' come with them (TODO.md); what a player buys is cs.shared:buying's.
 export module cs.shared:economy;
 
 import std;

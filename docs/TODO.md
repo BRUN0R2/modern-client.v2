@@ -548,9 +548,13 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Kevlar, helmet, defuse kit, NVG, tactical shield
 
 ### Buying and communication
-- [ ] Buy zones and buy time, `info_map_parameters` restrictions
+- [x] Buy zones and buy time ([10 §8](10-counter-strike-gameplay.md#8-buying)): `func_buyzone` and its `team`, a map without any within 200 units of a spawn point of its team (`cs::GameMap::isBuyingPlace`, `OLD_CheckBuyZone`), `mp_buytime` (`cs::readBuyTime`), `info_map_parameters`' `buying` (`cs::GameMap::letsBuy`)
+- [ ] The weapons a VIP's map keeps from each team (`CanBuyWeaponByMaptype`), with the first it names
 - [ ] Classic and VGUI buy menus
-- [ ] Buy commands, `autobuy` and `rebuy`
+- [x] Buy commands ([10 §8](10-counter-strike-gameplay.md#8-buying)): by the commands a weapon's file names (`ak47`, `cv47`), or `buy_weapon` for any, one made as the game runs too; the weapon of that slot dropped (`cs::Inventory::drop`), the rounds carried kept; `vest`, `vesthelm`; `buyammo1`, `buyammo2`, `primammo`, `secammo`; each weighed by pure rules (`cs.shared:buying`, `data/cstrike/buying.toml`), a refusal printed on the console (`cs::BuyRefusal`), heard
+- [ ] `autobuy` and `rebuy`, `cl_autobuy`, `cl_rebuy`; the commands of the grenades and the equipment, with them; what bots buy
+- [ ] What a refusal says on the screen, the original's center text, its money's blink (`BlinkAccount`) and the buy zone's icon, measured on the original
+- [ ] The box a dropped weapon falls as and its pick-up, `drop`: today a weapon a purchase takes the place of is gone
 - [ ] Radio (menus, commands, icons and sounds)
 - [ ] Chat (`say`, `say_team`, rules for dead players)
 - [ ] Sprays

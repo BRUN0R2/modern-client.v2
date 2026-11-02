@@ -424,6 +424,8 @@ private:
     [[nodiscard]] auto registerCommands() -> nx::Result<void, ClientError>;
     /// Registers the weapon commands (cs::registerWeaponCommands) over the game's content.
     [[nodiscard]] auto registerWeaponCommands() -> nx::Result<void, ClientError>;
+    /// Registers the buy commands (cs::registerBuyCommands) over the game's content.
+    [[nodiscard]] auto registerBuyCommands() -> nx::Result<void, ClientError>;
     [[nodiscard]] auto mapCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
     /// Draws over the scene the agents' mesh of the map played and the way each of its agents follows on
     /// it, or stops (nav_draw). Errors: InvalidArguments, CommandFailed (the map has no mesh, the cause
@@ -487,10 +489,10 @@ private:
     /// waits on a file of one it plays: those of every weapon as a session starts, those of a weapon
     /// as it is made or changed. One that cannot be read is logged, and the game plays on.
     void readWeaponSounds(std::span<const cs::WeaponIndex> weapons);
-    /// Reads the sounds of the player's feet, breath, pain, death and use (cs::FootstepRules::soundFiles,
-    /// cs::BreathRules::soundFiles, cs::PlayerHarmRules::soundFiles, cs::UseRules::soundFiles) as a
-    /// session starts, so that none waits on its file. One that cannot be read is logged, and the game
-    /// plays on.
+    /// Reads the sounds of the player's feet, breath, pain, death, use and purchases
+    /// (cs::FootstepRules::soundFiles, cs::BreathRules::soundFiles, cs::PlayerHarmRules::soundFiles,
+    /// cs::UseRules::soundFiles, cs::BuyingRules::soundFiles) as a session starts, so that none waits on its
+    /// file. One that cannot be read is logged, and the game plays on.
     void readPlayerSounds();
     /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
     /// weapons made and its view model's sound events, each as long after the frame as it came after
@@ -667,6 +669,9 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerWeaponCommands(); !registered) {
         return registered;
     }
+    if (auto registered = registerBuyCommands(); !registered) {
+        return registered;
+    }
     auto shaders = cs::readSceneShaders(executable->parent_path() / "shaders");
     if (!shaders) {
         return nx::fail(ClientError::ContentUnavailable, std::move(shaders.error()));
@@ -827,6 +832,33 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
         if (!registered) {
             return nx::fail(ClientError::SettingsUnavailable, registered.error());
         }
+    }
+    return {};
+}
+
+auto Client::registerBuyCommands() -> nx::Result<void, ClientError> {
+    cs::BuyActions actions{
+        .weapon = [this](cs::WeaponIndex weapon) -> nx::Result<void, cs::BuyRefusal> {
+            if (!m_session) {
+                return nx::fail(cs::BuyRefusal::NoMap);
+            }
+            return m_session->game->buyWeapon(m_session->player, weapon);
+        },
+        .armor = [this](cs::ArmorKind kind) -> nx::Result<void, cs::BuyRefusal> {
+            if (!m_session) {
+                return nx::fail(cs::BuyRefusal::NoMap);
+            }
+            return m_session->game->buyArmor(m_session->player, kind);
+        },
+        .ammo = [this](cs::WeaponSlot slot, cs::AmmoPurchase purchase) -> nx::Result<void, cs::BuyRefusal> {
+            if (!m_session) {
+                return nx::fail(cs::BuyRefusal::NoMap);
+            }
+            return m_session->game->buyAmmo(m_session->player, slot, purchase);
+        }};
+    if (auto registered = cs::registerBuyCommands(m_console, m_content->weapons, std::move(actions));
+        !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     return {};
 }
@@ -1407,7 +1439,8 @@ void Client::readPlayerSounds() {
     for (const auto& [what, files] : {std::pair{"footsteps", m_content->footsteps.soundFiles()},
                                       std::pair{"breath", m_content->breath.soundFiles()},
                                       std::pair{"harm", m_content->playerHarm.soundFiles()},
-                                      std::pair{"use", m_content->use.soundFiles()}}) {
+                                      std::pair{"use", m_content->use.soundFiles()},
+                                      std::pair{"purchases", m_content->buying.soundFiles()}}) {
         for (const std::string_view file : files) {
             if (auto read = m_audio->preload(file); !read) {
                 nx::log::warning(kLog, "a sound of the {} cannot be read: {}", what,

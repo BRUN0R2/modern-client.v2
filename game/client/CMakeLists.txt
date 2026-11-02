@@ -41,6 +41,7 @@ nxAddModuleLibrary(csClient
         src/scoreboard.cppm
         src/audio.cppm
         src/weaponCommands.cppm
+        src/buyCommands.cppm
         src/navigationDrawing.cppm
     SOURCES
         src/input.cpp
@@ -76,6 +77,7 @@ nxAddModuleLibrary(csClient
         src/scoreboard.cpp
         src/audio.cpp
         src/weaponCommands.cpp
+        src/buyCommands.cpp
         src/navigationDrawing.cpp
     DEPENDS
         nx::core
