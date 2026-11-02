@@ -58,6 +58,10 @@ auto ClientGame::standingCommand(nx::EulerAngles view) -> UserCommand {
     return numbered(UserCommand{.duration = kCommandInterval, .viewAngles = view});
 }
 
+auto ClientGame::takeKillNotices() -> std::vector<KillNotice> {
+    return std::exchange(killNotices, {});
+}
+
 void ClientGame::receive(PlayerSnapshot snapshot) {
     m_previousEye = snapshot.wasPlaced ? eyeOf(snapshot.player) : eyeOf(m_last.player);
     if (snapshot.turnedView) {
