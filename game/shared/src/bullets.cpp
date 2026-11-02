@@ -31,22 +31,31 @@ struct MaterialEffect {
 };
 
 /// FireBullets3's materials.
+constexpr MaterialEffect kMetalEffect{.powerKept = 0.15, .damageModifier = 0.2F};
+constexpr MaterialEffect kConcreteEffect{.powerKept = 0.25};
+constexpr MaterialEffect kGrateEffect{.powerKept = 0.5, .damageModifier = 0.4F};
+constexpr MaterialEffect kVentEffect{.powerKept = 0.5, .damageModifier = 0.45F};
+constexpr MaterialEffect kTileEffect{.powerKept = 0.65, .damageModifier = 0.3F};
+constexpr MaterialEffect kComputerEffect{.powerKept = 0.4, .damageModifier = 0.45F};
+constexpr MaterialEffect kWoodEffect{.damageModifier = 0.6F};
+
+/// What meeting `material` does to a round: nothing, for one FireBullets3 does not name.
 [[nodiscard]] auto effectOf(TextureMaterial material) noexcept -> MaterialEffect {
     switch (material) {
     case TextureMaterial::Metal:
-        return {.powerKept = 0.15, .damageModifier = 0.2F};
+        return kMetalEffect;
     case TextureMaterial::Concrete:
-        return {.powerKept = 0.25};
+        return kConcreteEffect;
     case TextureMaterial::Grate:
-        return {.powerKept = 0.5, .damageModifier = 0.4F};
+        return kGrateEffect;
     case TextureMaterial::Vent:
-        return {.powerKept = 0.5, .damageModifier = 0.45F};
+        return kVentEffect;
     case TextureMaterial::Tile:
-        return {.powerKept = 0.65, .damageModifier = 0.3F};
+        return kTileEffect;
     case TextureMaterial::Computer:
-        return {.powerKept = 0.4, .damageModifier = 0.45F};
+        return kComputerEffect;
     case TextureMaterial::Wood:
-        return {.damageModifier = 0.6F};
+        return kWoodEffect;
     default:
         return {};
     }

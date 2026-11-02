@@ -10,9 +10,9 @@
 /// muzzle flashes, its decals and the marks bullets leave), and the models the other players are drawn
 /// with; the scene that draws it, and how a frame
 /// of it and the screen over it are drawn (FrameRenderer); the game as its player's client knows it,
-/// from what its server tells after each tick (ClientGame); the HUD of its player; the fonts of the
-/// installation's windows, the console's window's place and cl_showfps's label; the sound output with
-/// the sounds the client plays; the console's weapon commands, which make weapons and set their values
+/// from what its server tells after each tick (ClientGame); the HUD of its player and the kill feed; the
+/// fonts of the installation's windows, the console's window's place and cl_showfps's label; the sound output
+/// with the sounds the client plays; the console's weapon commands, which make weapons and set their values
 /// as the game runs; and what nav_draw draws over the scene, the agents' mesh and their ways
 /// (NavigationDrawing).
 export module cs.client;
@@ -41,11 +41,13 @@ export import :level;
 export import :scene;
 export import :frame;
 export import :clientGame;
+export import :hudSprites;
 export import :hud;
 export import :fogCvars;
 export import :windowFonts;
 export import :console;
 export import :fpsLabel;
+export import :killFeed;
 export import :audio;
 export import :weaponCommands;
 export import :navigationDrawing;

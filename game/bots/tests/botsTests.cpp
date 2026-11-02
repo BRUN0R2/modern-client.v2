@@ -250,9 +250,15 @@ TEST_F(BotsTest, ABotJoinsAsAProfileByItsNameInAnyCaseWhileNoOneHasIt) {
 
 TEST_F(BotsTest, ABotLeavesByItsNameExactly) {
     ASSERT_TRUE(bots->addProfile("Abner", cs::Team::Terrorists, "[NX]").has_value());
-    EXPECT_FALSE(bots->kickNamed("Abner")) << "its name is after bot_prefix";
-    EXPECT_FALSE(bots->kickNamed("[nx] abner"));
-    EXPECT_TRUE(bots->kickNamed("[NX] Abner"));
+    const auto afterItsPrefix = bots->kickNamed("Abner");
+    ASSERT_FALSE(afterItsPrefix.has_value());
+    EXPECT_EQ(afterItsPrefix.error().code, cs::BotKickError::NoSuchBot) << "its name is after bot_prefix";
+    EXPECT_NE(nx::describe(afterItsPrefix.error()).find("Abner"), std::string::npos) << "the name asked for";
+    const auto inAnotherCase = bots->kickNamed("[nx] abner");
+    ASSERT_FALSE(inAnotherCase.has_value());
+    EXPECT_EQ(inAnotherCase.error().code, cs::BotKickError::NoSuchBot);
+    EXPECT_EQ(bots->size(), 1U) << "no bot left for either";
+    EXPECT_TRUE(bots->kickNamed("[NX] Abner").has_value());
     EXPECT_EQ(bots->size(), 0U);
     EXPECT_EQ(game->playerCount(), 0U);
 }

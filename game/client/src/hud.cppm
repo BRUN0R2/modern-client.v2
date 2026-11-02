@@ -23,16 +23,9 @@ import nx.assets;
 import nx.rhi;
 import nx.render;
 import cs.shared;
+import :hudSprites;
 
 export namespace cs {
-
-/// Why the HUD's pictures could not be read or put on the GPU.
-enum class HudError : std::uint8_t {
-    ListUnreadable,   ///< sprites/hud.txt is missing or invalid (cause).
-    PictureMissing,   ///< A list has no entry for screens 640 wide of a picture the HUD draws (detail).
-    SpriteUnreadable, ///< A sprite of the HUD's pictures is missing or invalid (cause).
-    GpuFailed,        ///< The GPU refused a sprite (cause: the ScreenError).
-};
 
 /// The pictures of hud.txt the HUD draws.
 enum class HudPicture : std::uint8_t {
@@ -243,12 +236,7 @@ private:
     void layOut(std::vector<nx::render::ScreenQuad>& quads, const HudView& view,
                 const CrosshairStyle& crosshair, nx::rhi::Extent2d size) const;
 
-    /// A picture of a sprite: its rectangle, and which of the images its sprite is.
-    struct Picture {
-        nx::assets::SpriteRect rect{};
-        std::size_t image = 0;
-    };
-    using AmmoPictures = std::map<std::string, Picture, std::less<>>;
+    using AmmoPictures = std::map<std::string, HudSpritePicture, std::less<>>;
 
     Hud(HudSheet sheet, std::vector<nx::render::ScreenImage> images,
         nx::EnumArray<HudPicture, std::size_t> imageOf, AmmoPictures ammoPictures) noexcept;
