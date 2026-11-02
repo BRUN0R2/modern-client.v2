@@ -51,7 +51,8 @@ endfunction()
 #
 # Creates a static library whose public interface is a set of C++ named modules. Every
 # project module may `import std;` (nx::std is linked publicly). The layer is checked against
-# the layers of the project modules in DEPENDS once every module exists (cmake/nxLayers.cmake).
+# the layers of the project modules in DEPENDS, and DEPENDS against what MODULES and SOURCES
+# import, once every module exists (cmake/nxLayers.cmake).
 function(nxAddModuleLibrary target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "ALIAS;LAYER" "MODULES;SOURCES;DEPENDS;LATERAL")
 
@@ -63,7 +64,8 @@ function(nxAddModuleLibrary target)
     endif()
 
     add_library(${target} STATIC)
-    nxDeclareModuleLayer(${target} "${arg_LAYER}" DEPENDS ${arg_DEPENDS} LATERAL ${arg_LATERAL})
+    nxDeclareModuleLayer(${target} "${arg_LAYER}" DEPENDS ${arg_DEPENDS} LATERAL ${arg_LATERAL}
+        SOURCES ${arg_MODULES} ${arg_SOURCES})
     target_sources(${target}
         PUBLIC
             FILE_SET CXX_MODULES
