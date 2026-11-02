@@ -223,11 +223,6 @@ public:
         return found != m_resources.end() ? static_cast<const Type*>(found->second.get()) : nullptr;
     }
 
-    template <Resource Type>
-    void removeResource() {
-        m_resources.erase(detail::typeKeyOf<Type>());
-    }
-
     /// Creates the Events<Type> resource (if needed) and lets advanceEvents() move it along.
     template <Event Type>
     void addEvents() {

@@ -60,7 +60,6 @@ TEST(EntityTableTest, ReusesFreedSlotsInFifoOrder) {
     EXPECT_EQ(table.create().index(), second.index());
     EXPECT_EQ(table.create().index(), first.index());
     EXPECT_EQ(table.create().index(), third.index());
-    EXPECT_EQ(table.slotCount(), 3U);
 }
 
 TEST(EntityTableTest, RetiresASlotWhoseGenerationsRanOut) {

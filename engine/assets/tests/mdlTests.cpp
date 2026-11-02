@@ -48,7 +48,6 @@ TEST(MdlTest, ReadsTheSkeletonAndWhatHangsOnIt) {
     const auto view = MdlView::parse(model.bytes);
     ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
     EXPECT_EQ(view->name(), "models/triangle.mdl");
-    EXPECT_EQ(view->eyePosition(), (nx::Vec3{.x = 0.0F, .y = 0.0F, .z = 28.0F}));
     EXPECT_EQ(view->bounds().max.z, 72.0F);
 
     ASSERT_EQ(view->bones().size(), 2U);
@@ -255,9 +254,9 @@ TEST(MdlTest, RejectsABrokenHeader) {
     TriangleModel tooManyBones;
     tooManyBones.put(140, std::int32_t{1000});
     EXPECT_EQ(parseError(tooManyBones), MdlError::OutOfBounds);
-    TriangleModel eyes;
-    eyes.put(76, std::numeric_limits<float>::infinity());
-    EXPECT_EQ(parseError(eyes), MdlError::BadValue);
+    TriangleModel bounds;
+    bounds.put(88, std::numeric_limits<float>::infinity());
+    EXPECT_EQ(parseError(bounds), MdlError::BadValue);
 }
 
 TEST(MdlTest, RejectsABrokenRecord) {

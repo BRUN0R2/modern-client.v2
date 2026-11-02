@@ -70,7 +70,7 @@ void steerBodies(std::span<Heading> headings, std::span<Body> bodies) {
         Heading& heading = headings[row];
         heading.angles.yaw = nx::normalizeAngle(heading.angles.yaw + nx::Degrees{kTurnRate});
         heading.rotation = nx::slerp(heading.rotation, Quat::fromEulerAngles(heading.angles), kSteering);
-        const Vec3 forward = nx::rotate(heading.rotation, nx::angleVectors(heading.angles).forward);
+        const Vec3 forward = nx::rotationMatrix(heading.rotation) * nx::angleVectors(heading.angles).forward;
         bodies[row].velocity = nx::lerp(bodies[row].velocity, forward * kCruiseSpeed, kSteering);
     }
 }

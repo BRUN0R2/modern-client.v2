@@ -89,28 +89,9 @@ static_assert(sizeof(Mat3x4) == Mat3x4::kRowCount * sizeof(Vec4),
     return Vec3{.x = dot(r0, homogeneous), .y = dot(r1, homogeneous), .z = dot(r2, homogeneous)};
 }
 
-/// Rotates and scales `direction`; translation does not apply to directions.
-[[nodiscard]] constexpr auto transformDirection(const Mat3x4& m, Vec3 direction) noexcept -> Vec3 {
-    return linearPart(m) * direction;
-}
-
 /// `b` first, then `a`, as if both had the implicit last row (0 0 0 1).
 [[nodiscard]] constexpr auto operator*(const Mat3x4& a, const Mat3x4& b) noexcept -> Mat3x4 {
     return affine(linearPart(a) * linearPart(b), transformPoint(a, translationPart(b)));
-}
-
-/// Inverse of a rigid transform (rotation and translation only), whose linear part is orthonormal:
-/// the transposed rotation, applied to the negated translation. Other transforms need a general
-/// inverse, which no caller needs yet.
-[[nodiscard]] constexpr auto rigidInverse(const Mat3x4& m) noexcept -> Mat3x4 {
-    const Mat3 inverseRotation = transposed(linearPart(m));
-    return affine(inverseRotation, inverseRotation * -translationPart(m));
-}
-
-/// The 4x4 form of an affine transform: last row (0 0 0 1).
-[[nodiscard]] constexpr auto toMat4(const Mat3x4& m) noexcept -> Mat4 {
-    const auto& [r0, r1, r2] = m.rows;
-    return Mat4{.rows = {r0, r1, r2, Vec4{.w = 1.0F}}};
 }
 
 /// Rows become columns.

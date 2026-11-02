@@ -17,7 +17,6 @@ constexpr std::array kStudioMagic{std::byte{'I'}, std::byte{'D'}, std::byte{'S'}
 constexpr std::size_t kStudioVersionOffset = 4;
 constexpr std::size_t kStudioNameOffset = 8;
 constexpr std::size_t kStudioNameBytes = 64;
-constexpr std::size_t kEyePositionOffset = 76;
 constexpr std::size_t kBoundsOffset = 88;
 constexpr std::size_t kStudioHeaderBytes = 244;
 
@@ -673,11 +672,10 @@ auto MdlView::parse(std::span<const std::byte> bytes) -> Result<MdlView, MdlErro
     }
     MdlView view;
     view.m_name = nameOf(bytes.subspan(kStudioNameOffset, kStudioNameBytes));
-    view.m_eyePosition = readVec3(bytes.subspan(kEyePositionOffset));
     view.m_bounds = Aabb{.min = readVec3(bytes.subspan(kBoundsOffset)),
                          .max = readVec3(bytes.subspan(kBoundsOffset + kVectorBytes))};
-    if (!isFinite(view.m_eyePosition) || !isFinite(view.m_bounds.min) || !isFinite(view.m_bounds.max)) {
-        return fail(MdlError::BadValue, "the eye position and the bounds must be finite");
+    if (!isFinite(view.m_bounds.min) || !isFinite(view.m_bounds.max)) {
+        return fail(MdlError::BadValue, "the bounds must be finite");
     }
     const auto bones = tableOf(bytes, kBones);
     const auto controllers = tableOf(bytes, kBoneControllers);

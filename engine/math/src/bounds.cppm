@@ -42,11 +42,6 @@ struct Aabb {
 
     [[nodiscard]] constexpr auto size() const noexcept -> Vec3 { return max - min; }
 
-    /// The smallest box that contains both boxes.
-    [[nodiscard]] constexpr auto merged(const Aabb& other) const noexcept -> Aabb {
-        return Aabb{.min = componentMin(min, other.min), .max = componentMax(max, other.max)};
-    }
-
     /// The smallest box that contains this one and `point`.
     [[nodiscard]] constexpr auto including(Vec3 point) const noexcept -> Aabb {
         return Aabb{.min = componentMin(min, point), .max = componentMax(max, point)};
