@@ -100,6 +100,17 @@ protected:
         m_game = std::move(game).value_or(nullptr);
     }
 
+    /// Starts the game again on the map of `bytes`, with no player.
+    void playOn(std::vector<std::byte> bytes) {
+        m_game.reset();
+        auto map = cs::GameMap::read(std::move(bytes), "box");
+        ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+        m_map = std::move(map).value();
+        auto game = cs::Game::start(*m_content, *m_map, *m_cvars);
+        ASSERT_TRUE(game.has_value()) << nx::describe(game.error());
+        m_game = std::move(game).value();
+    }
+
     /// Plays `ticks` ticks, `player`'s command each looking along `view` and asking `move`; returns the
     /// snapshot of the last.
     auto play(cs::PlayerIndex player, std::uint32_t ticks, cs::MoveIntent move = {},
@@ -1083,6 +1094,46 @@ TEST_F(GameTest, ATeammatesAttackHurtsNoneButWithFriendlyFireItsShareAndItsKillC
     }
     EXPECT_FALSE(game().snapshotFor(teammate).status.isAlive());
     EXPECT_EQ(game().snapshotFor(attacker).status.money, nx::Money{}) << "none below none";
+}
+
+/// A spawn point of each team in the box with a volume, the same place, in a trigger_hurt of `keys`.
+[[nodiscard]] auto hurtVolumeMap(std::string_view keys) -> std::vector<std::byte> {
+    const std::string entities = std::format(R"({{ "classname" "worldspawn" }}
+{{ "classname" "info_player_start" "origin" "32 32 8" "angles" "0 90 0" }}
+{{ "classname" "info_player_deathmatch" "origin" "32 32 8" "angles" "0 270 0" }}
+{{ "classname" "trigger_hurt" "model" "*1" {} }})",
+                                             keys);
+    return nx::test::boxWithVolumeMapWith(entities);
+}
+
+TEST_F(GameTest, AMapsVolumeHurtsAPlayerInItHalfItsDamageEachHalfSecondThroughItsArmor) {
+    playOn(hurtVolumeMap(R"("dmg" "40" "damagetype" "8")"));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    game().giveArmor(player, cs::ArmorKind::Kevlar);
+    // A burn's 20: the vest takes half of it, as a fall's it would not.
+    EXPECT_EQ(play(player, 1).status.health, nx::HitPoints{90.0F});
+    EXPECT_EQ(play(player, 49).status.health, nx::HitPoints{90.0F}) << "still in the half second";
+    EXPECT_EQ(play(player, 1).status.health, nx::HitPoints{80.0F});
+    EXPECT_TRUE(made(player, content().playerHarm.kevlarPain)) << "heard in its pain";
+}
+
+TEST_F(GameTest, AMapsVolumeOfAFallsDamageGoesPastArmorAndKills) {
+    playOn(hurtVolumeMap(R"("dmg" "500" "damagetype" "32")"));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    game().giveArmor(player, cs::ArmorKind::Kevlar);
+    const cs::PlayerSnapshot killed = play(player, 1);
+    EXPECT_FALSE(killed.status.isAlive());
+    EXPECT_EQ(killed.status.armor, cs::kMostArmor) << "untouched";
+    EXPECT_TRUE(made(player, content().playerHarm.death));
+    EXPECT_TRUE(killed.inventory.weapons().empty()) << "and does nothing more in that command";
+}
+
+TEST_F(GameTest, AMapsVolumeOfANegativeDamageHeals) {
+    playOn(hurtVolumeMap(R"("dmg" "-20")"));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    std::ignore = play(player, 1);
+    EXPECT_EQ(game().snapshotFor(player).status.health, cs::kSpawnHealth) << "no more than whole";
+    EXPECT_FALSE(made(player, content().playerHarm.pain));
 }
 
 TEST_F(GameTest, TheConsoleGivesWeaponsAndNoclipAndAToolPlacesTheEye) {

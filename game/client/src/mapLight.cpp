@@ -77,7 +77,7 @@ constexpr double kEngineLevel = 264.0;
 
 auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render::StudioLight> {
     // The compilers' light without a `_light`: white, of 300.
-    constexpr std::array<float, 4> kDefaultLight{255.0F, 255.0F, 255.0F, 300.0F};
+    constexpr std::array<float, kLightNumbers> kDefaultLight{255.0F, 255.0F, 255.0F, 300.0F};
     constexpr float kChannelTop = 255.0F;
     constexpr float kDisplayGamma = 2.2F;
     // How far a light of a brightness reaches, in units a brightness; and how bright its highlight is.
@@ -93,7 +93,7 @@ auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render
         if (!origin) {
             continue;
         }
-        std::array<float, 4> light = kDefaultLight;
+        std::array<float, kLightNumbers> light = kDefaultLight;
         if (const std::optional<std::string_view> value = entity.find("_light")) {
             std::size_t read = 0;
             for (const auto word : std::views::split(*value, ' ')) {
@@ -104,7 +104,7 @@ auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render
                 light.at(read++) = nx::assets::numberOfValue(number).value_or(0.0F);
             }
         }
-        const float brightness = light[3];
+        const auto [red, green, blue, brightness] = light;
         if (brightness <= 0.0F) {
             continue;
         }
@@ -112,10 +112,10 @@ auto highlightLightsOf(const nx::assets::BspView& map) -> std::vector<nx::render
             return std::pow(std::clamp(channel / kChannelTop, 0.0F, 1.0F), kDisplayGamma) * brightness *
                    kHighlightPerBrightness;
         };
-        lights.push_back(nx::render::StudioLight{
-            .position = *origin,
-            .reach = brightness * kReachPerBrightness,
-            .color = {.x = linear(light[0]), .y = linear(light[1]), .z = linear(light[2])}});
+        lights.push_back(
+            nx::render::StudioLight{.position = *origin,
+                                    .reach = brightness * kReachPerBrightness,
+                                    .color = {.x = linear(red), .y = linear(green), .z = linear(blue)}});
     }
     return lights;
 }

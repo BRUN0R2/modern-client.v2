@@ -412,7 +412,14 @@ when it is closed (`DoorHitTop`, `DoorHitBottom`). `trigger_multiple` and `trigg
 a body touches one when their linked boxes meet and the trigger model's hull for the body's size holds
 the body's origin (`SV_TouchLinks`, the model not turned); one not flagged "no clients" and not still
 waiting (its `NextThink` after now) fires its targets for the body, then waits its `wait` (0.2 s when
-it gives none) or, a `trigger_once`, is spent and goes 0.1 s later. `next` touches the triggers the
+it gives none) or, a `trigger_once`, is spent and goes 0.1 s later. `trigger_hurt` is a `HurtVolume`,
+touched as a trigger is: half of its `dmg` (or `damage`) each half second (`CBaseTrigger::HurtTouch`), of
+the kind of its `damagetype` (`DMG_FALL`, `DMG_BURN`, `DMG_FREEZE`), which `touchHurtVolumes` returns for
+the game's rules to deal; a negative one heals. Within a half second it hurts once what it counted, and
+in the tick it last hurt something it counts nothing, so that a second body touching in that tick is
+hurt once more in the next, as the original's multiplayer rule has it (of any number of players, not its
+32). Its `target`, its other spawnflags, being turned on and off and the time-based kinds wait for a map
+that uses them ([TODO](TODO.md)): no official map's does. `next` touches the triggers the
 player is in after each command, then runs what is due before the pushers: cs_747's curtains open as
 the player walks to them. A player's use (`playerUse`, `CBasePlayer::PlayerUse`) uses, of the brush
 entities it reaches (a button that takes no damage, a door flagged "use only"), whose linked box

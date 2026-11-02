@@ -64,7 +64,10 @@ TEST(BrushEntityTest, TheRepositoryDescribesTheBrushClasses) {
     EXPECT_EQ(find("trigger_multiple")->behavior, nx::game::BrushBehavior::Trigger);
     ASSERT_NE(find("trigger_once"), classes.brushClasses.end());
     EXPECT_EQ(find("trigger_once")->behavior, nx::game::BrushBehavior::TriggerOnce);
-    EXPECT_EQ(find("trigger_hurt"), classes.brushClasses.end())
+    ASSERT_NE(find("trigger_hurt"), classes.brushClasses.end());
+    EXPECT_EQ(find("trigger_hurt")->solid, Solid::Not);
+    EXPECT_EQ(find("trigger_hurt")->behavior, nx::game::BrushBehavior::Hurt);
+    EXPECT_EQ(find("trigger_push"), classes.brushClasses.end())
         << "the other triggers make no brush entity yet";
 }
 

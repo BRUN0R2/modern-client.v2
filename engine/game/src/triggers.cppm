@@ -27,4 +27,42 @@ struct Trigger {
 /// or is spent and goes a tenth of a second later.
 void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity toucher);
 
+/// What a map's volume says it hurts by, of its "damagetype" (DMG_BURN, DMG_FREEZE, DMG_FALL), for the
+/// game's rules to tell apart; none of those is generic. Time-based kinds come with their rules (TODO.md).
+enum class VolumeHarmKind : std::uint8_t {
+    Generic,
+    Burn,
+    Freeze,
+    Fall,
+    Count,
+};
+
+/// A volume that hurts what touches it, half a second apart (trigger_hurt): `damagePerSecond` over each
+/// second, a negative one healing it; of `kind`. `clockEndsAt` (pev->dmgtime), `lastHurtAt`
+/// (pev->pain_finished) and `touched` (pev->impulse, of any number of players, not the original's 32) are
+/// what CBaseTrigger::HurtTouch keeps of the half second running.
+struct HurtVolume {
+    Damage damagePerSecond{};
+    VolumeHarmKind kind = VolumeHarmKind::Generic;
+    bool isTouchedByPlayers = true; ///< Not flagged "no clients".
+    std::optional<GameTime> clockEndsAt{};
+    std::optional<GameTime> lastHurtAt{};
+    std::vector<ecs::Entity> touched{};
+};
+
+/// What a volume does to what touches it, for the game's rules to deal: a negative damage heals.
+struct VolumeHarm {
+    Damage damage{};
+    VolumeHarmKind kind = VolumeHarmKind::Generic;
+
+    [[nodiscard]] inline auto operator==(const VolumeHarm&) const noexcept -> bool = default;
+};
+
+/// `toucher`, a player's Body, touches the hurt volumes of `world` it is inside, as touchTriggers finds
+/// them, in the world's order; what each deals it (CBaseTrigger::HurtTouch): half a second's damage, as a
+/// new half second starts, or in the tick the last hurt something, or once more in a half second to one
+/// it did not count yet; those it counted wait for the next.
+[[nodiscard]] auto touchHurtVolumes(ecs::World& world, const collision::BrushHulls& hulls,
+                                    ecs::Entity toucher) -> std::vector<VolumeHarm>;
+
 } // namespace nx::game

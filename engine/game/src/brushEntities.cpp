@@ -177,6 +177,25 @@ struct MadeDoor {
                    .delay = Seconds{entity.findNumber("delay").value_or(0.0F)}};
 }
 
+/// The hurt volume of `entity`: its "damage", else its "dmg", which the original reads into one value; its
+/// "damagetype" by the bits the original gives its kinds (CBaseTrigger::KeyValue).
+[[nodiscard]] auto hurtVolumeOf(const assets::BspEntity& entity, std::int32_t flags) -> HurtVolume {
+    // The original's DMG_BURN, DMG_FREEZE and DMG_FALL, and its SF_TRIGGER_HURT_NO_CLIENTS.
+    constexpr std::int32_t kDamageBurn = 1 << 3;
+    constexpr std::int32_t kDamageFreeze = 1 << 4;
+    constexpr std::int32_t kDamageFall = 1 << 5;
+    constexpr std::int32_t kHurtNotByPlayers = 1 << 3;
+    const std::int32_t damageType = entity.findInteger("damagetype").value_or(0);
+    const VolumeHarmKind kind = (damageType & kDamageFall) != 0     ? VolumeHarmKind::Fall
+                                : (damageType & kDamageBurn) != 0   ? VolumeHarmKind::Burn
+                                : (damageType & kDamageFreeze) != 0 ? VolumeHarmKind::Freeze
+                                                                    : VolumeHarmKind::Generic;
+    const std::optional<float> damage = entity.findNumber("damage");
+    return HurtVolume{.damagePerSecond = Damage{damage.value_or(entity.findNumber("dmg").value_or(0.0F))},
+                      .kind = kind,
+                      .isTouchedByPlayers = (flags & kHurtNotByPlayers) == 0};
+}
+
 /// The trigger of `entity`, of `behavior` (CTriggerMultiple::Spawn, CTriggerOnce::Spawn).
 [[nodiscard]] auto triggerOf(const assets::BspEntity& entity, BrushBehavior behavior, std::int32_t flags)
     -> Trigger {
@@ -253,6 +272,10 @@ auto spawnBrushEntities(ecs::World& world, std::span<const assets::BspEntity> en
         case BrushBehavior::TriggerOnce:
             made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity,
                                triggerOf(entity, *brushClass->behavior, flags), targetsOf(entity));
+            break;
+        case BrushBehavior::Hurt:
+            made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity,
+                               hurtVolumeOf(entity, flags));
             break;
         case BrushBehavior::Count:
             made = world.spawn(BrushModel{.index = *model}, Transform{.origin = origin}, solidity);

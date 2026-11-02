@@ -346,12 +346,15 @@ private:
     /// `player` uses what is in front of it, looking along `command`'s view from where the move left its
     /// eye (CBasePlayer::PlayerUse), heard finding something to use or nothing (UseEmpty).
     void use(Player& player, const UserCommand& command);
+    /// `player`, alive, touches the map's volumes that hurt it (nx::game::touchHurtVolumes): each hurts it
+    /// (hurt), or heals it for a negative damage.
+    void touchHurtVolumes(Player& player);
     /// `player` lands, hurt by `damage` (PostThink): it splats when the damage is more than its health,
-    /// is hurt by its fall (hurt), and loses the pitch of its kick.
+    /// met in no group, is hurt by its fall (hurt), and loses the pitch of its kick.
     void land(Player& player, nx::Damage damage);
     /// `player` is dealt `harm` of the world (CBasePlayer::TakeDamage): alive, its armor takes its share
     /// and it loses its whole points, keeping a harm kept over time (harmPlayer), and is heard in its pain
-    /// by where it was last met (painOf); a fall met it in no group; killed by it, it dies (die).
+    /// by where it was last met (painOf); killed by it, it dies (die).
     void hurt(Player& player, const PlayerHarm& harm);
     /// `attacker`'s `attack` on `victim`, alive, as the victim's TraceAttack and TakeDamage take it: it is
     /// met in the attack's hit group, its damage that group's share of the players'; a helmet it met
