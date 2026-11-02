@@ -260,6 +260,28 @@ whole number, which is counted over each second and lags the rate. `net_graph` i
 number, so that the two never disagree as the original's do. Its font, like the
 console's, comes from `cs::WindowFonts`, which reads the windows' scheme once.
 
+**The kill feed** (`cs.client:killFeed`): while `hud_draw` draws the HUD, a row of each player's death
+the server tells of (`cs::KillNotice`, [10 §7.4](10-counter-strike-gameplay.md#74-damage)), the oldest
+first, 4 at most, a new one making the oldest go, each for `hud_deathnotice_time` seconds (6, not
+archived). A row is the killer's name, the picture of what killed it, `d_<weapon>` of `sprites/hud.txt`
+(`d_skull` for no weapon or one the list has no picture of, a weapon made as the game runs), `d_headshot`
+for a kill in the head, and the victim's name; a death of no killer shows the picture and the victim's
+name alone. **Observed** (build 8684 through NextClient, `hud_deathnotice_old 1`, its classic look; a
+player killing itself with `kill` at 800x600, 1024x768, 1280x720, 1280x960 and 1600x900; to the pixel in
+every one), with H the screen's height, each share in whole pixels:
+
+| Part | Where |
+|------|-------|
+| The rows' tops | The first at H / 15, each next one H / 30 under it, whatever its font; with the player dead, 2 × H / 15, under the spectator's panel |
+| The victim's name | Its pen ending H / 40 from the right edge, written in `EngineFont` (the same as `cl_showfps`) with its drop shadow |
+| The pictures | Right before H / 96 of gap before that name, added as the HUD's sprites are (`nx::render::spriteQuad`), from the row's top; a skull's 32 wide |
+| Colors | A terrorist's name (255, 63, 63), a counter-terrorist's (153, 204, 255); the pictures added in (255, 80, 0) |
+
+The killer's name, H / 96 before the pictures, the head's picture right after what killed, a teammate's
+kill's pictures in (10, 240, 10) and the console's lines (`<killer> killed <victim> with <weapon>`,
+`<killer> killed his teammate <victim>`, `<victim> died`) are not measured yet, as the Half-Life SDK's
+client has them: they need a second player, and that build's game has no bots ([TODO](TODO.md)).
+
 **The damage numbers** (`cs.client:damageNumbers`), the project's own, nothing of the original's, as
 action games show the damage a hit deals: while `hud_damagenumbers` is 1 and `hud_draw` draws the HUD,
 each hit of the player's on another player, a hostage or an entity's body shows a number of the damage
@@ -394,7 +416,7 @@ from reference shots; search comes later.
 |-------|-------|
 | Network | `rate`, `cl_updaterate`, `cl_cmdrate`, `cl_cmdbackup`, `ex_interp`/`cl_interp`, `cl_lw`, `cl_lc` |
 | Video | `fps_max`, `fps_override`, `gamma`, `brightness`, `gl_vsync` (alias of `vid_vsync`), `fov` (with the original rules), `hud_draw`, `r_drawviewmodel`, `r_decals`, `mp_decals`, `cl_corpsestay` |
-| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers`, `hud_stepindicator` |
+| HUD | `hud_fastswitch`, `hud_centerid`, `hud_saytext_time`, `hud_deathnotice_time`, `cl_righthand`, `cl_crosshair_*`, `cl_dynamiccrosshair`, `cl_showfps`, `net_graph`; the project's `hud_damagenumbers`, `hud_stepindicator` |
 | Mouse | `sensitivity`, `m_rawinput`, `m_filter`, `m_pitch`, `m_yaw`, `zoom_sensitivity_ratio`, `m_customaccel` (off) |
 | Audio | `volume`, `bgmvolume`, `voice_enable`, `voice_scale` |
 | Player | `name`, `_cl_autowepswitch`, `cl_autobuy`, `cl_rebuy`, `cl_minmodels` (respecting the server) |

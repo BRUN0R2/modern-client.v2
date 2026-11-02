@@ -106,6 +106,31 @@ struct BloodMark {
     [[nodiscard]] inline auto operator==(const BloodMark&) const noexcept -> bool = default;
 };
 
+/// A player as a kill notice names it: as it was at the kill.
+struct NoticedPlayer {
+    std::string name{};
+    Team team{};
+
+    [[nodiscard]] inline auto operator==(const NoticedPlayer&) const noexcept -> bool = default;
+};
+
+/// A player's death, which the server tells every client of (CHalfLifeMultiplay::DeathNotice's DeathMsg):
+/// who killed it, none for the world or itself; who it was; the weapon its killer held, none without
+/// one; and whether it was last met in the head (m_bHeadshotKilled).
+struct KillNotice {
+    std::optional<NoticedPlayer> killer{};
+    NoticedPlayer victim{};
+    std::optional<WeaponIndex> weapon{};
+    bool isHead = false;
+
+    /// Whether a teammate killed it.
+    [[nodiscard]] inline auto isTeamKill() const noexcept -> bool {
+        return killer && killer->team == victim.team;
+    }
+
+    [[nodiscard]] inline auto operator==(const KillNotice&) const noexcept -> bool = default;
+};
+
 /// What the server tells a client of another player for it to draw, as the original's entity state
 /// carries it: which player it is, the character it plays as, the weapon in its hands (its player model:
 /// models/p_<weapon>.mdl), where it is, how its body is turned (its pitch a third of its view's,
@@ -156,6 +181,7 @@ struct PlayerSnapshot {
     std::vector<StreakSplash> streakSplashes{}; ///< Of the tick, in their order: the helmets' sparks.
     std::vector<DamageDealt> damageDealt{};     ///< What its hits dealt in the tick, in their order.
     std::vector<EntityStep> entitySteps{};      ///< The entities' bodies' steps of the tick, in their order.
+    std::vector<KillNotice> killNotices{};      ///< The players' deaths of the tick, in their order.
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
