@@ -65,6 +65,12 @@ constexpr nx::EnumArray<Team, nx::render::ScreenColor> kTeamColors{
 constexpr nx::EnumArray<Team, std::string_view> kTeamNames{
     nx::EnumArray<Team, std::string_view>::Storage{"Terrorists", "Counter-Terrorists"}};
 constexpr std::string_view kDeadStatus = "Dead";
+// The columns' heads, as the original writes them.
+constexpr std::string_view kHealthHead = "HP";
+constexpr std::string_view kMoneyHead = "Money";
+constexpr std::string_view kScoreHead = "Score";
+constexpr std::string_view kDeathsHead = "Deaths";
+constexpr std::string_view kLatencyHead = "Latency";
 
 /// `units` of the board's on a screen `height` tall, cut to whole pixels (the original's YRES).
 [[nodiscard]] constexpr auto unitsOf(std::int32_t units, std::int32_t height) noexcept -> std::int32_t {
@@ -222,11 +228,11 @@ void Scoreboard::layOut(std::vector<nx::render::ScreenQuad>& quads, const nx::ui
     };
 
     std::ignore = painter.text(face, view.hostname, metrics.titleX, metrics.headsY, kHeadColor);
-    writeEndingAt("HP", metrics.healthEnd, metrics.headsY, kHeadColor);
-    writeEndingAt("Money", metrics.moneyEnd, metrics.headsY, kHeadColor);
-    writeEndingAt("Score", metrics.scoreEnd, metrics.headsY, kHeadColor);
-    writeEndingAt("Deaths", metrics.deathsEnd, metrics.headsY, kHeadColor);
-    writeEndingAt("Latency", metrics.latencyEnd, metrics.headsY, kHeadColor);
+    writeEndingAt(kHealthHead, metrics.healthEnd, metrics.headsY, kHeadColor);
+    writeEndingAt(kMoneyHead, metrics.moneyEnd, metrics.headsY, kHeadColor);
+    writeEndingAt(kScoreHead, metrics.scoreEnd, metrics.headsY, kHeadColor);
+    writeEndingAt(kDeathsHead, metrics.deathsEnd, metrics.headsY, kHeadColor);
+    writeEndingAt(kLatencyHead, metrics.latencyEnd, metrics.headsY, kHeadColor);
     painter.fill(kLinesInset, metrics.separatorY, metrics.panelWide - kLinesInset - kLinesRightInset, 1,
                  kBorderColor);
 
