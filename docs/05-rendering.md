@@ -823,6 +823,9 @@ Xash3D-FWGS project records from the original for its tests.
   (`Device::beginFrame`: the frame before taken to the GPU, then the frame's slot free) right after
   the limiter, before it reads the input, so that no frame waits behind another to be submitted
   ([ADR-0029](adr/0029-submission-thread.md)).
+- A frame's ticks take at most 33 ms of it (`kMostTickingInAFrame`): a game that cannot keep up with its 100
+  ticks a second lets go of the time it is behind and plays slower, rather than each frame taking as long as
+  all the ticks it fell behind by, which falls further behind and ends at a few frames a second.
 - The frame rate shown is one measure (`nx::platform::FrameRateMeter`), the original's `net_graph`'s,
   which changes with every frame: an average of the frames' times, each frame's moving it half way to
   its own (`FRAMERATE_AVG_FRAC`), from none, a frame counting for 0.25 s at most as `Host_FilterTime`
