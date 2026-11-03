@@ -38,6 +38,18 @@ struct BuyRect {
     return nameRows > 1 || nameWide + gap + priceWide > room;
 }
 
+/// How far a bar shows a share of itself: the pixels it covers whole, and how much of the next one, from 0 to
+/// 1, so that it moves by less than a pixel at a time.
+struct BuyBarFill {
+    std::int32_t whole = 0;
+    float nextPixel = 0.0F;
+
+    [[nodiscard]] inline auto operator==(const BuyBarFill&) const noexcept -> bool = default;
+};
+
+/// How far a bar `wide` pixels long shows `share` of itself, from 0 to 1.
+[[nodiscard]] auto barFillOf(std::int32_t wide, float share) noexcept -> BuyBarFill;
+
 /// The buy menu's parts on a screen.
 class BuyMenuLayout {
 public:
@@ -48,6 +60,8 @@ public:
 
     /// What heads the menu: its name, the team, the time left and the money.
     [[nodiscard]] inline auto header() const noexcept -> const BuyRect& { return headerRect; }
+    /// The line that runs down with the time to buy, at the foot of what heads the menu.
+    [[nodiscard]] auto timeBar() const noexcept -> BuyRect;
     /// The tabs and the ammo under them.
     [[nodiscard]] inline auto rail() const noexcept -> const BuyRect& { return railRect; }
     /// The items of the tab shown.

@@ -1433,7 +1433,8 @@ void Client::appendScreen(nx::rhi::Extent2d size) {
                          !m_session->client.status().isAlive());
     }
     if (showsBuyMenu) {
-        buyMenuPanel->append(m_screenQuads, buyMenu->frameOf(buyerView()), size);
+        const cs::BuyerView view = buyerView();
+        buyMenuPanel->append(m_screenQuads, buyMenu->frameOf(view), cs::buyTimeShareOf(view.buying), size);
     }
     if (m_session && scoreboard && scoreboardControls->shown.isDown()) {
         // One of the client's panels, over the HUD whether it is drawn or not.

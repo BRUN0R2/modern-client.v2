@@ -88,7 +88,6 @@ constexpr std::int32_t kInsetLeft = 14;
 constexpr std::int32_t kInsetRight = 10;
 constexpr std::int32_t kCellInset = 16;
 constexpr std::int32_t kTextGap = 12;
-constexpr std::int32_t kTrackTall = 2;
 constexpr std::int32_t kBaselineOverTrack = 14;
 constexpr std::int32_t kHeaderTextGap = 18;
 constexpr std::int32_t kTabPictureWide = 72;
@@ -248,8 +247,8 @@ private:
 
 void paintHeader(Paint& paint, const BuyMenuFrame& frame) {
     const BuyRect& header = paint.layout().header();
-    const std::int32_t trackY = header.y + header.tall - paint.px(kTrackTall);
-    const std::int32_t baseline = trackY - paint.px(kBaselineOverTrack);
+    const BuyRect track = paint.layout().timeBar();
+    const std::int32_t baseline = track.y - paint.px(kBaselineOverTrack);
     const auto topFor = [&](BuyMenuFont font) {
         return baseline - paint.ascentOf(font);
     };
@@ -270,15 +269,7 @@ void paintHeader(Paint& paint, const BuyMenuFrame& frame) {
     paint.writeEnding(BuyMenuFont::Body, moneyAfterText(frame), end,
                       moneyTop - paint.lineOf(BuyMenuFont::Body), isShort ? kDanger : kInkSoft);
 
-    paint.fill({.x = header.x, .y = trackY, .wide = header.wide, .tall = paint.px(kTrackTall)}, kLine);
-    const float share = frame.secondsInAll == 0
-                            ? 0.0F
-                            : static_cast<float>(frame.secondsLeft) / static_cast<float>(frame.secondsInAll);
-    paint.fill({.x = header.x,
-                .y = trackY,
-                .wide = static_cast<std::int32_t>(static_cast<float>(header.wide) * std::min(share, 1.0F)),
-                .tall = paint.px(kTrackTall)},
-               paint.accent());
+    paint.fill(track, kLine);
 }
 
 void paintRail(Paint& paint, const BuyMenuFrame& frame) {
@@ -681,7 +672,7 @@ auto BuyMenuPanel::textFaces() const noexcept -> TextFaces {
 }
 
 void BuyMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const BuyMenuFrame& frame,
-                          nx::rhi::Extent2d size) {
+                          float timeShare, nx::rhi::Extent2d size) {
     if (!isLoaded()) {
         return;
     }
@@ -696,6 +687,13 @@ void BuyMenuPanel::append(std::vector<nx::render::ScreenQuad>& quads, const BuyM
                      paintDetail(paint, frame);
                      paintCarried(paint, frame);
                  });
+    // The line's fill each frame, over its track: nothing else about the menu changes as often.
+    const BuyRect bar = BuyMenuLayout{size}.timeBar();
+    const BuyBarFill fill = barFillOf(bar.wide, timeShare);
+    const ScreenColor accent = kAccents[frame.team];
+    nx::ui::PanelPainter painter{quads, size};
+    painter.fill(bar.x, bar.y, fill.whole, bar.tall, accent);
+    painter.fill(bar.x + fill.whole, bar.y, 1, bar.tall, fadedBy(accent, fill.nextPixel));
 }
 
 void BuyMenuPanel::appendNotice(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size,

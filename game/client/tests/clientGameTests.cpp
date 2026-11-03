@@ -104,6 +104,31 @@ TEST_F(ClientGameTest, AFrameBringsATickDueForEachHundredthOfASecondAQuarterOfAS
     EXPECT_EQ(whole.ticksDue(kTick * 100.5F, cs::CatchUp::Whole), 100U);
 }
 
+TEST_F(ClientGameTest, TheTimeToBuyRunsDownWithTheMomentAFrameShowsFromOneTicksWordToTheNext) {
+    constexpr float kExact = 0.0005F;
+    const auto toldAt = [this](std::int64_t tick, float timeLeft) {
+        cs::PlayerSnapshot told = snapshotAt(tick, {});
+        told.buying = {
+            .timeLeft = nx::Seconds{timeLeft}, .length = nx::Seconds{90.0F}, .isRunningDown = true};
+        return told;
+    };
+    cs::ClientGame client{models(), playerModels(), toldAt(100, 60.0F)};
+    EXPECT_NEAR(client.buying().timeLeft.count(), 60.01F, kExact) << "a frame shows a tick behind the game";
+    std::ignore = client.ticksDue(kTick * 0.5F, cs::CatchUp::Limited);
+    EXPECT_NEAR(client.buying().timeLeft.count(), 60.005F, kExact) << "between two ticks, in frames";
+    EXPECT_EQ(client.ticksDue(kTick * 0.5F, cs::CatchUp::Limited), 1U);
+    client.receive(toldAt(101, 59.99F));
+    EXPECT_NEAR(client.buying().timeLeft.count(), 60.0F, kExact) << "where the frames had brought it";
+}
+
+TEST_F(ClientGameTest, TheTimeToBuyStaysInAFreeze) {
+    cs::PlayerSnapshot told = snapshotAt(100, {});
+    told.buying = {.timeLeft = nx::Seconds{90.0F}, .length = nx::Seconds{90.0F}, .isRunningDown = false};
+    cs::ClientGame client{models(), playerModels(), std::move(told)};
+    std::ignore = client.ticksDue(kTick * 0.5F, cs::CatchUp::Limited);
+    EXPECT_EQ(client.buying().timeLeft, nx::Seconds{90.0F});
+}
+
 TEST_F(ClientGameTest, TheServerSetsTheLightStylesAndAnUpdateClearsRemovedPatterns) {
     constexpr std::size_t kAnimatedStyle = 4;
     constexpr std::size_t kSwitchableStyle = 32;

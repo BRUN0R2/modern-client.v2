@@ -208,6 +208,10 @@ auto buyTabsOf(const BuyMenuContent& content, const BuyerView& view) -> std::vec
     return tabs;
 }
 
+auto buyTimeShareOf(const BuyingState& buying) noexcept -> float {
+    return buying.length > nx::Seconds{} ? std::clamp(buying.timeLeft / buying.length, 0.0F, 1.0F) : 0.0F;
+}
+
 auto buyGunFactsOf(const Weapon& weapon, const BuyMenuContent& content) -> std::optional<BuyGunFacts> {
     const AmmoType* const ammo = ammoOf(weapon, *content.weapons);
     if (ammo == nullptr || !weapon.firing) {
@@ -388,7 +392,6 @@ auto BuyMenu::frameOf(const BuyerView& view) const -> BuyMenuFrame {
     BuyMenuFrame frame{.team = view.team,
                        .money = view.status.money,
                        .secondsLeft = wholeSecondsOf(view.buying.timeLeft),
-                       .secondsInAll = wholeSecondsOf(view.buying.length),
                        .tab = shownTab,
                        .isArmed = isTabArmed,
                        .entries = buyEntriesOf(shownTab, content, view),

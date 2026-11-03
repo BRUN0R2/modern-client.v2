@@ -77,8 +77,9 @@ public:
     [[nodiscard]] inline auto team() const noexcept -> Team { return m_last.team; }
     /// What the player has.
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_last.status; }
-    /// Whether the player may buy now, and for how long.
-    [[nodiscard]] inline auto buying() const noexcept -> const BuyingState& { return m_last.buying; }
+    /// Whether the player may buy now, and for how long: the time left at the moment of the game a frame
+    /// shows, on the same clock as all it shows, however far apart the server tells it.
+    [[nodiscard]] auto buying() const -> BuyingState;
     /// What the player had after its last purchase, which it can buy again.
     [[nodiscard]] inline auto lastPurchase() const noexcept -> const LastPurchase& {
         return m_last.lastPurchase;

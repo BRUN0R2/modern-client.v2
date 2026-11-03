@@ -440,7 +440,6 @@ TEST_F(BuyMenuTest, AFrameTellsWhatTheMenuShows) {
     const cs::BuyMenuFrame frame = menu.frameOf(view());
     EXPECT_EQ(frame.money, nx::Money{16000});
     EXPECT_EQ(frame.secondsLeft, 90U);
-    EXPECT_EQ(frame.secondsInAll, 90U);
     EXPECT_EQ(frame.tab, BuyTab::Rifles);
     ASSERT_EQ(frame.tabs.size(), 3U);
     EXPECT_EQ(frame.tabs[1], (cs::BuyMenuTab{.tab = BuyTab::Rifles, .picture = "gfx/vgui/gun.tga"}));
@@ -464,6 +463,55 @@ TEST_F(BuyMenuTest, AFrameTellsWhatTheMenuShows) {
     EXPECT_NE(menu.frameOf(view()), frame);
 }
 
+TEST_F(BuyMenuTest, ItIsLaidOutAgainAsItsClockChangesAndNotAsItsLineMoves) {
+    const auto withTimeLeft = [this](float seconds) {
+        cs::BuyerView shown = view();
+        shown.buying.timeLeft = nx::Seconds{seconds};
+        return shown;
+    };
+    openOnRifles();
+    EXPECT_EQ(menu.frameOf(withTimeLeft(75.75F)), menu.frameOf(withTimeLeft(75.25F)));
+    EXPECT_NE(menu.frameOf(withTimeLeft(75.25F)), menu.frameOf(withTimeLeft(74.75F)));
+    EXPECT_GT(cs::buyTimeShareOf(withTimeLeft(75.75F).buying),
+              cs::buyTimeShareOf(withTimeLeft(75.25F).buying));
+}
+
+TEST(BuyMenuLayoutTest, TheTimesShareIsWithinNoneAndAllOfIt) {
+    const nx::Seconds length{90.0F};
+    EXPECT_FLOAT_EQ(cs::buyTimeShareOf({.timeLeft = nx::Seconds{45.0F}, .length = length}), 0.5F);
+    EXPECT_EQ(cs::buyTimeShareOf({.timeLeft = nx::Seconds{100.0F}, .length = length}), 1.0F);
+    EXPECT_EQ(cs::buyTimeShareOf({.timeLeft = {}, .length = length}), 0.0F);
+    EXPECT_EQ(cs::buyTimeShareOf({}), 0.0F) << "no length, no line";
+}
+
+TEST(BuyMenuLayoutTest, ABarsFillIsItsWholePixelsAndAShareOfTheNext) {
+    EXPECT_EQ(cs::barFillOf(100, 0.0F), (cs::BuyBarFill{}));
+    EXPECT_EQ(cs::barFillOf(100, 1.0F), (cs::BuyBarFill{.whole = 100}));
+    EXPECT_EQ(cs::barFillOf(100, 0.5F), (cs::BuyBarFill{.whole = 50}));
+    const cs::BuyBarFill between = cs::barFillOf(100, 0.505F);
+    EXPECT_EQ(between.whole, 50);
+    EXPECT_NEAR(between.nextPixel, 0.5F, 0.01F);
+    EXPECT_EQ(cs::barFillOf(100, 7.0F).whole, 100) << "never past its end";
+}
+
+TEST(BuyMenuLayoutTest, TheTimeBarRunsDownTickByTickWithoutAJump) {
+    constexpr std::int32_t kTicks = 9000; // 90 seconds of 100 ticks
+    const cs::BuyRect bar = cs::BuyMenuLayout{kScreen}.timeBar();
+    const auto reached = [&bar](std::int32_t tick) {
+        const float share = 1.0F - (static_cast<float>(tick) / static_cast<float>(kTicks));
+        const cs::BuyBarFill fill = cs::barFillOf(bar.wide, share);
+        return static_cast<float>(fill.whole) + fill.nextPixel;
+    };
+    // A second a time, the line jumped by this many pixels; a tick's is a hundredth of it, within a float's
+    // error.
+    const float aTick = static_cast<float>(bar.wide) / static_cast<float>(kTicks);
+    for (std::int32_t tick = 1; tick <= kTicks; ++tick) {
+        const float step = reached(tick - 1) - reached(tick);
+        ASSERT_LT(step, aTick * 2.0F) << "at tick " << tick;
+        ASSERT_GT(step, -aTick) << "never back, at tick " << tick;
+    }
+}
+
 TEST(BuyMenuLayoutTest, EveryPartIsOnTheScreenWhateverItsSize) {
     for (const nx::rhi::Extent2d size :
          {nx::rhi::Extent2d{.width = 640, .height = 480}, nx::rhi::Extent2d{.width = 1280, .height = 720},
@@ -476,6 +524,7 @@ TEST(BuyMenuLayoutTest, EveryPartIsOnTheScreenWhateverItsSize) {
                    rect.y + rect.tall <= nx::narrow<std::int32_t>(size.height);
         };
         EXPECT_TRUE(isOnScreen(layout.header()));
+        EXPECT_TRUE(isOnScreen(layout.timeBar()));
         EXPECT_TRUE(isOnScreen(layout.rail()));
         EXPECT_TRUE(isOnScreen(layout.grid()));
         EXPECT_TRUE(isOnScreen(layout.detail()));

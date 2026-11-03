@@ -76,6 +76,10 @@ struct BuyEntry {
 /// The tabs that have items for the player of `view`, in their order.
 [[nodiscard]] auto buyTabsOf(const BuyMenuContent& content, const BuyerView& view) -> std::vector<BuyTab>;
 
+/// The share of its time to buy that `buying` has left, from 0 to 1: what the menu's line shows, every frame
+/// its own, which is why it is no part of what the menu lays out (BuyMenuFrame).
+[[nodiscard]] auto buyTimeShareOf(const BuyingState& buying) noexcept -> float;
+
 /// A kind of ammo as a row of the menu tells of it.
 struct BuyAmmoFacts {
     std::string_view name{};
@@ -181,7 +185,6 @@ struct BuyMenuFrame {
     Team team{};
     nx::Money money{};
     std::uint32_t secondsLeft = 0;
-    std::uint32_t secondsInAll = 0;
     std::vector<BuyMenuTab> tabs{};
     BuyTab tab{};
     bool isArmed = false;
