@@ -6,6 +6,7 @@ module cs.client;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.assets;
 import nx.rhi;
 import nx.render;
@@ -21,6 +22,9 @@ namespace {
     const nx::EulerAngles turn{.pitch = -angles.pitch, .yaw = angles.yaw, .roll = angles.roll};
     return nx::affine(nx::rotationMatrix(turn), origin);
 }
+
+/// The most models a player is drawn with: its character's and its weapon's.
+constexpr std::size_t kModelsOfAPlayer = 2;
 
 /// The first blending of a player's sequence of two to eight blends the client draws: the yaw's blend
 /// cut to a whole one, as the server tells it (CalculateYawBlend's pev->blending[0]).
@@ -105,62 +109,93 @@ auto PlayerModels::loadWeapon(nx::render::StudioRenderer& renderer, nx::rhi::Com
     return {};
 }
 
-auto PlayerModels::posed(const PlayerGpuModels& models, std::span<const ShownPlayer> players,
-                         const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
-                         const nx::render::LightStyleValues& styles) const -> PosedModels {
-    PosedModels posed;
-    struct Drawn {
-        const nx::render::StudioModel* model = nullptr;
-        nx::Vec3 origin{};
+void PlayerModels::pose(const PlayerGpuModels& models, std::span<const ShownPlayer> players,
+                        const ModelFrame& frame, PosedModels& posed) const {
+    posed.clear();
+    // A player the frame may show, what it is drawn with, and where its bones are among them all.
+    struct Posing {
+        const ShownPlayer* player = nullptr;
+        const AnimatedModel* character = nullptr;
+        const nx::render::StudioModel* characterDrawn = nullptr;
+        const AnimatedModel* weapon = nullptr; ///< None without one to draw in its hands.
+        const nx::render::StudioModel* weaponDrawn = nullptr;
+        std::size_t firstBone = 0; ///< Those of its character, then those of its weapon.
         nx::render::ModelLight light{};
-        std::uint8_t amount = 0;
     };
-    std::vector<Drawn> drawn;
+    std::vector<Posing> posings;
+    posings.reserve(players.size());
+    std::size_t boneCount = 0;
     for (const ShownPlayer& player : players) {
         const nx::assets::MdlView* const view = characterModel(player.character);
         if (view == nullptr || player.character.value >= models.characters.size() ||
             !models.characters[player.character.value]) {
             continue; // one whose model could not be read, which was listed
         }
-        const AnimatedModel& character = *m_characters[player.character.value];
-        const nx::Mat3x4 placement = placementOf(player.origin, player.angles);
-        std::vector<nx::Mat3x4> bones =
-            posePlayerBones(*view, character.animations, player.sequence,
-                            PlayerPoseQuery{.frame = player.frame,
-                                            .gaitSequence = player.gaitSequence,
-                                            .gaitFrame = player.gaitFrame,
-                                            .yawBlend = player.yawBlend,
-                                            .pitchBlend = player.pitchBlend,
-                                            .blending = blendingOf(player.yawBlend),
-                                            .placement = placement});
-        const nx::render::ModelLight lit = light.modelLightAt({.origin = player.origin, .sky = sky}, styles);
+        const std::span<const nx::assets::StudioSequence> sequences = view->sequences();
+        const std::array bounds{
+            sequences[player.sequence.value].bounds,
+            sequences[player.gaitSequence.value < sequences.size() ? player.gaitSequence.value : 0].bounds};
+        if (!frame.world.mayShow(shownBoxOf(player.origin, bounds))) {
+            continue;
+        }
+        Posing& posing =
+            posings.emplace_back(Posing{.player = &player,
+                                        .character = &*m_characters[player.character.value],
+                                        .characterDrawn = &*models.characters[player.character.value],
+                                        .firstBone = boneCount});
+        boneCount += view->bones().size();
         if (player.weapon && player.weapon->value < m_weapons.size() && m_weapons[player.weapon->value] &&
             !m_weapons[player.weapon->value]->animations.empty() &&
             player.weapon->value < models.weapons.size() && models.weapons[player.weapon->value]) {
-            const AnimatedModel& weapon = *m_weapons[player.weapon->value];
-            posed.bones.push_back(mergeBones(*weapon.files->view, weapon.animations.front(),
-                                             skeletonOf(*view), bones, placement));
-            drawn.push_back(Drawn{.model = &*models.weapons[player.weapon->value],
-                                  .origin = player.origin,
-                                  .light = lit,
-                                  .amount = player.amount});
+            posing.weapon = &*m_weapons[player.weapon->value];
+            posing.weaponDrawn = &*models.weapons[player.weapon->value];
+            boneCount += posing.weapon->files->view->bones().size();
         }
-        posed.bones.push_back(std::move(bones));
-        drawn.push_back(Drawn{.model = &*models.characters[player.character.value],
-                              .origin = player.origin,
-                              .light = lit,
-                              .amount = player.amount});
     }
-    // The instances point into the bones, which no longer move.
-    for (std::size_t index = 0; index < drawn.size(); ++index) {
-        posed.instances.push_back(nx::render::StudioInstance{.model = *drawn[index].model,
-                                                             .bones = posed.bones[index],
-                                                             .light = drawn[index].light,
-                                                             .origin = drawn[index].origin,
-                                                             .mode = renderModeOf(drawn[index].amount),
-                                                             .amount = drawn[index].amount});
+    posed.bones.resize(boneCount);
+    const std::span<nx::Mat3x4> bones = posed.bones;
+    poseAll(frame, {.label = "players.pose", .priority = nx::jobs::Priority::Critical}, posings.size(),
+            [&posings, bones, &frame](std::size_t index) {
+                Posing& posing = posings[index];
+                const ShownPlayer& player = *posing.player;
+                const nx::assets::MdlView& view = *posing.character->files->view;
+                const nx::Mat3x4 placement = placementOf(player.origin, player.angles);
+                const std::span<nx::Mat3x4> own = bones.subspan(posing.firstBone, view.bones().size());
+                posePlayerBones(view, posing.character->animations, player.sequence,
+                                PlayerPoseQuery{.frame = player.frame,
+                                                .gaitSequence = player.gaitSequence,
+                                                .gaitFrame = player.gaitFrame,
+                                                .yawBlend = player.yawBlend,
+                                                .pitchBlend = player.pitchBlend,
+                                                .blending = blendingOf(player.yawBlend),
+                                                .placement = placement},
+                                own);
+                posing.light =
+                    frame.light.modelLightAt({.origin = player.origin, .sky = frame.sky}, frame.styles);
+                if (posing.weapon != nullptr) {
+                    const nx::assets::MdlView& weapon = *posing.weapon->files->view;
+                    mergeBones(weapon, posing.weapon->animations.front(), skeletonOf(view), own, placement,
+                               bones.subspan(posing.firstBone + own.size(), weapon.bones().size()));
+                }
+            });
+    posed.instances.reserve(posings.size() * kModelsOfAPlayer);
+    for (const Posing& posing : posings) {
+        const ShownPlayer& player = *posing.player;
+        const std::size_t own = posing.character->files->view->bones().size();
+        const auto instance = [&](const nx::render::StudioModel& model, std::span<const nx::Mat3x4> of) {
+            posed.instances.push_back(nx::render::StudioInstance{.model = model,
+                                                                 .bones = of,
+                                                                 .light = posing.light,
+                                                                 .origin = player.origin,
+                                                                 .mode = renderModeOf(player.amount),
+                                                                 .amount = player.amount});
+        };
+        if (posing.weapon != nullptr) {
+            instance(*posing.weaponDrawn,
+                     bones.subspan(posing.firstBone + own, posing.weapon->files->view->bones().size()));
+        }
+        instance(*posing.characterDrawn, bones.subspan(posing.firstBone, own));
     }
-    return posed;
 }
 
 } // namespace cs

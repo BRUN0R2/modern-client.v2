@@ -27,10 +27,10 @@ public:
     [[nodiscard]] auto load(const EntityCatalog& catalog, nx::render::StudioRenderer& renderer,
                             const nx::assets::Vfs& vfs, nx::rhi::CommandList& commands)
         -> nx::Result<void, EntityModelError>;
-    /// Requires uploaded models and entity indices/sequences issued by this catalog.
-    [[nodiscard]] auto posed(const EntityCatalog& catalog, std::span<const ShownEntity> entities,
-                             const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
-                             const nx::render::LightStyleValues& styles) const -> PosedModels;
+    /// Writes to `posed` those of `entities` `frame` may show. Requires uploaded models and entity
+    /// indices/sequences issued by this catalog.
+    void pose(const EntityCatalog& catalog, std::span<const ShownEntity> entities, const ModelFrame& frame,
+              PosedModels& posed) const;
 
 private:
     std::vector<nx::render::StudioModel> models;

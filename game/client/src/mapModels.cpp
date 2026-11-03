@@ -6,6 +6,7 @@ module cs.client;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.assets;
 import nx.rhi;
 import nx.render;
@@ -161,38 +162,51 @@ auto MapModels::load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList&
     return models;
 }
 
-auto MapModels::posed(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
-                      std::span<const ShownHostage> hostages, const nx::render::WorldLight& light,
-                      const nx::render::SkyLight& sky, const nx::render::LightStyleValues& styles) const
-    -> PosedModels {
-    nx::expects(models.size() == m_files.size(), "MapModels::posed: a model for each file");
-    PosedModels posed;
+void MapModels::pose(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
+                     std::span<const ShownHostage> hostages, const ModelFrame& frame,
+                     PosedModels& posed) const {
+    nx::expects(models.size() == m_files.size(), "MapModels::pose: a model for each file");
+    posed.clear();
     struct Drawn {
         const Entity* entity = nullptr;
         nx::Vec3 origin{};
+        std::size_t firstBone = 0;
+        std::size_t boneCount = 0;
     };
     std::vector<Drawn> drawn;
-    posed.bones.reserve(m_cyclers.size() + hostages.size());
+    drawn.reserve(m_cyclers.size() + hostages.size());
+    const auto appendShown = [this, &frame, &posed, &drawn](const Entity& entity, nx::Vec3 origin,
+                                                            nx::assets::SequenceIndex sequence,
+                                                            const auto& poseOf) {
+        const nx::assets::MdlView& view = *m_files[entity.file].files->view;
+        if (frame.world.mayShow(shownBoxOf(origin, std::array{view.sequences()[sequence.value].bounds}))) {
+            const std::vector<nx::Mat3x4> bones = poseOf();
+            drawn.push_back(Drawn{.entity = &entity,
+                                  .origin = origin,
+                                  .firstBone = posed.bones.size(),
+                                  .boneCount = bones.size()});
+            posed.bones.insert(posed.bones.end(), bones.begin(), bones.end());
+        }
+    };
     for (const Entity& cycler : m_cyclers) {
-        posed.bones.push_back(cyclerPoseOf(cycler, sinceStart));
-        drawn.push_back(Drawn{.entity = &cycler, .origin = cycler.model.origin});
+        appendShown(cycler, cycler.model.origin, nx::assets::SequenceIndex{cycler.model.sequence},
+                    [this, &cycler, sinceStart] { return cyclerPoseOf(cycler, sinceStart); });
     }
     for (const ShownHostage& shown : hostages) {
-        const Entity* const hostage = hostageOf(shown.spawn);
-        if (hostage == nullptr) {
-            continue; // one whose model it could not read, which it listed
+        if (const Entity* const hostage = hostageOf(shown.spawn)) { // one it could not read it listed
+            appendShown(*hostage, shown.origin, shown.sequence,
+                        [this, hostage, &shown] { return hostagePoseOf(*hostage, shown); });
         }
-        posed.bones.push_back(hostagePoseOf(*hostage, shown));
-        drawn.push_back(Drawn{.entity = hostage, .origin = shown.origin});
     }
     // The instances point into the bones, which no longer move.
-    for (std::size_t index = 0; index < drawn.size(); ++index) {
-        if (std::optional<nx::render::StudioInstance> instance = instanceOf(
-                *drawn[index].entity, drawn[index].origin, posed.bones[index], models, light, sky, styles)) {
+    const std::span<const nx::Mat3x4> bones = posed.bones;
+    for (const Drawn& shown : drawn) {
+        if (std::optional<nx::render::StudioInstance> instance =
+                instanceOf(*shown.entity, shown.origin, bones.subspan(shown.firstBone, shown.boneCount),
+                           models, frame.light, frame.sky, frame.styles)) {
             posed.instances.push_back(*instance);
         }
     }
-    return posed;
 }
 
 auto MapModels::instanceOf(const Entity& entity, nx::Vec3 origin, std::span<const nx::Mat3x4> bones,

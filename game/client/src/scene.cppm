@@ -11,6 +11,7 @@ export module cs.client:scene;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.assets;
 import nx.rhi;
 import nx.render;
@@ -77,6 +78,8 @@ struct SceneView {
     SceneOverlay overlay{};  ///< Drawn after the particles, before the weapon in hand.
     /// The fog everything is seen through, but for what is added; none, clear (nx.render:fog).
     std::optional<nx::render::Fog> fog{};
+    /// The jobs its models are posed in; none, the calling thread alone.
+    nx::jobs::JobSystem* jobs = nullptr;
 };
 
 /// A level on the GPU. A renderer draws once a frame: the view's own model has its own, drawn last.
@@ -190,6 +193,11 @@ private:
     std::vector<std::optional<nx::render::StudioModel>> m_weapons;
     PlayerGpuModels m_playerModels; ///< On m_studio: the characters' and the weapons' player models.
     EntityModels entityModels;
+    // What each frame poses, kept to reuse the memory.
+    PosedModels posedMapModels;
+    PosedModels posedPlayers;
+    PosedModels posedEntities;
+    std::vector<nx::render::StudioInstance> posedInstances;
     /// The sprites of the muzzle flashes, on m_viewSprites, by their place in the level's
     /// muzzle flashes' EffectSprites.
     std::vector<std::optional<nx::render::SpriteModel>> m_flashModels;

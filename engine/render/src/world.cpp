@@ -965,6 +965,10 @@ void BspWorld::addEntity(std::uint32_t model, const Camera& camera, const ModelP
                    .faceCount = count});
 }
 
+auto BspWorld::mayShow(const Aabb& box) const noexcept -> bool {
+    return isInFrustum(m_frustum, box) && m_map->touchesAnyOf(m_visibleSet, box);
+}
+
 void BspWorld::gather(const Camera& camera, float aspect) {
     m_lastFrame = {};
     for (std::vector<std::uint32_t>& faces : m_bucketFaces) {
@@ -978,20 +982,19 @@ void BspWorld::gather(const Camera& camera, float aspect) {
     // The leaves the camera's leaf may see, found again when it moves to another leaf.
     const assets::LeafIndex leaf = m_map->leafAt(camera.position);
     if (leaf != m_visibleFrom) {
-        const assets::LeafSet visible = m_map->potentiallyVisible(leaf);
+        m_visibleSet = m_map->potentiallyVisible(leaf);
         m_visibleLeaves.clear();
         for (std::uint32_t index = 1; index < m_map->leaves().size(); ++index) {
-            if (visible.contains(assets::LeafIndex{index})) {
+            if (m_visibleSet.contains(assets::LeafIndex{index})) {
                 m_visibleLeaves.push_back(assets::LeafIndex{index});
             }
         }
         m_visibleFrom = leaf;
     }
 
-    const auto frustum = frustumPlanes(camera, aspect);
-    const auto isInView = [&frustum](const Aabb& box) {
-        return std::ranges::none_of(
-            frustum, [&box](const Plane& plane) { return plane.sideOf(box) == PlaneSide::Back; });
+    m_frustum = frustumPlanes(camera, aspect);
+    const auto isInView = [this](const Aabb& box) {
+        return isInFrustum(m_frustum, box);
     };
     for (const assets::LeafIndex visible : m_visibleLeaves) {
         const assets::BspLeaf& record = m_map->leaves()[visible.value];

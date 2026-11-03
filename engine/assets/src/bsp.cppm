@@ -298,6 +298,10 @@ public:
     /// compiler gave no set, as the original sees from inside a wall or without visibility.
     [[nodiscard]] auto potentiallyVisible(LeafIndex leaf) const -> LeafSet;
 
+    /// Whether `box` touches a leaf of the world that `leaves` holds, as the original's server finds the
+    /// leaves an entity touches (SV_FindTouchedLeafs) to tell whether a client's set holds it.
+    [[nodiscard]] auto touchesAnyOf(const LeafSet& leaves, const Aabb& box) const noexcept -> bool;
+
 private:
     BspView() = default;
 
