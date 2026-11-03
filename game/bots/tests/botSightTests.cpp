@@ -32,7 +32,7 @@ TEST(BotSightTest, EachBotLooksAroundAtItsOwnTickOfTheInterval) {
         std::uint32_t looks = 0;
         for (std::int64_t tick = 0; tick < 100; ++tick) {
             const nx::GameTime now = nx::GameTime{}.ticksLater(tick);
-            looks += cs::looksAroundAt(cs::PlayerIndex{slot}, now, rate, interval) ? 1 : 0;
+            looks += cs::looksAroundAt(cs::PlayerIndex{slot}, now, rate, interval) ? 1U : 0U;
         }
         EXPECT_EQ(looks, 10U) << "a tenth of a second is ten ticks of a hundred a second";
     }
