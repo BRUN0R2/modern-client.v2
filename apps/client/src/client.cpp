@@ -382,8 +382,8 @@ auto Client::start() -> nx::Result<void, ClientError> {
     if (auto registered = registerBuyCommands(); !registered) {
         return registered;
     }
-    if (auto registered =
-            registerZombieCommands(m_console, *m_content, *m_jobs, [this] { return playedSession(); });
+    if (auto registered = registerZombieCommands(m_console, *m_content, dataFolder, *m_jobs,
+                                                 [this] { return playedSession(); });
         !registered) {
         return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }

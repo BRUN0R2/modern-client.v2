@@ -396,6 +396,66 @@ template <DataTable Type>
     return value;
 }
 
+template <DataTable Type>
+[[nodiscard]] auto readTableOver(TableView table, const Location& at, Type& value) -> Result<void, DataError>;
+
+/// `field` with the value of `node` over it: a table key by key, anything else whole.
+template <DataField Value>
+[[nodiscard]] auto readFieldOver(NodeView node, const Location& at, const std::optional<Range>& range,
+                                 Value& field) -> Result<void, DataError> {
+    if constexpr (kIsOptional<Value>) {
+        if (field.has_value()) {
+            return readFieldOver<typename Value::value_type>(node, at, range, *field);
+        }
+        // Nothing to go over: it is written whole.
+        auto read = readValue<typename Value::value_type>(node, at, range);
+        if (!read) {
+            return std::unexpected(std::move(read.error()));
+        }
+        field = std::move(*read);
+        return {};
+    } else if constexpr (DataTable<Value>) {
+        const auto table = node.asTable();
+        if (!table) {
+            return wrongType(node, at, "a table");
+        }
+        return readTableOver<Value>(*table, at, field);
+    } else {
+        auto read = readValue<Value>(node, at, range);
+        if (!read) {
+            return std::unexpected(std::move(read.error()));
+        }
+        field = std::move(*read);
+        return {};
+    }
+}
+
+template <DataTable Type>
+[[nodiscard]] auto readTableOver(TableView table, const Location& at, Type& value)
+    -> Result<void, DataError> {
+    static constexpr auto kNames = fieldNames<Type>();
+    if (auto known = checkKeys(table, at, kNames); !known) {
+        return std::unexpected(std::move(known.error()));
+    }
+    std::optional<Failure<DataError>> failure;
+    meta::forEachField<Type>([&]<class Field>(Field /*field*/) {
+        using FieldValue = typename Field::ValueType;
+        const auto node = table.find(Field::kName);
+        if (failure || !node) {
+            return;
+        }
+        auto read =
+            readFieldOver<FieldValue>(*node, at.child(Field::kName), rangeOf<Field>(), Field::get(value));
+        if (!read) {
+            failure = std::move(read.error());
+        }
+    });
+    if (failure) {
+        return std::unexpected(std::move(*failure));
+    }
+    return {};
+}
+
 } // namespace detail
 
 /// The enumerator of `Enum` that `text` names as data files write it ("counterTerrorists"); none.
@@ -423,6 +483,26 @@ template <DataTable Type>
     return Document::parse(text, sourceName).and_then([sourceName](const Document& document) {
         return detail::readTable<Type>(document.root(), detail::Location{.source = sourceName, .path = {}});
     });
+}
+
+/// Reads `text`, the TOML file `sourceName` (named in failures), over `base`, as what a user changes of what
+/// the project gives: a key it has replaces its field, a table goes over its table key by key (an optional
+/// one `base` lacks must be whole), and what it leaves out stays as `base` has it, so that a key the project
+/// gains later reaches a file written before it. Every key must still be a field of `Type`, so that a typo,
+/// or a key of another version, is a failure, and every value must have its field's type and Range, as
+/// parseToml says.
+template <DataTable Type>
+[[nodiscard]] auto parseTomlOver(Type base, std::string_view text, std::string_view sourceName)
+    -> Result<Type, DataError> {
+    return Document::parse(text, sourceName)
+        .and_then([&base, sourceName](const Document& document) -> Result<Type, DataError> {
+            if (auto read = detail::readTableOver<Type>(
+                    document.root(), detail::Location{.source = sourceName, .path = {}}, base);
+                !read) {
+                return std::unexpected(std::move(read.error()));
+            }
+            return std::move(base);
+        });
 }
 
 } // namespace nx::data

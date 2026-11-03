@@ -55,6 +55,11 @@ struct Settings {
 /// stats and model are validated separately by EntityCatalog::add before creating a horde.
 [[nodiscard]] auto readSettings(std::string_view text, std::string_view source)
     -> nx::Result<Settings, ZombieError>;
+/// `base` with what `text`, the file `source` of a user, says over it, validated as readSettings does: it
+/// names only what it changes, so that what the project's file gains later reaches it
+/// (nx::data::parseTomlOver). Errors: InvalidData, a key that is no setting among them.
+[[nodiscard]] auto readSettingsOver(const Settings& base, std::string_view text, std::string_view source)
+    -> nx::Result<Settings, ZombieError>;
 
 /// The zombies of one map, their bodies of one type driven by brains along the standing body's mesh.
 class Horde {

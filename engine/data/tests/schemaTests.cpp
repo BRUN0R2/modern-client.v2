@@ -159,6 +159,47 @@ TEST(Schema, ReadsEveryKindOfField) {
     EXPECT_EQ(settings->mounts[1].directory, "valve");
 }
 
+TEST(Schema, AFileOverABaseChangesOnlyWhatItNames) {
+    const auto base = parse(kValid);
+    ASSERT_TRUE(base.has_value()) << nx::describe(base.error());
+    const auto over = nx::data::parseTomlOver<Settings>(*base, R"(volume = 0.5
+comment = "mine"
+tags = ["mine"]
+
+[primary]
+priority = 7
+)",
+                                                        "over.toml");
+    ASSERT_TRUE(over.has_value()) << nx::describe(over.error());
+    EXPECT_EQ(over->volume, 0.5F);
+    EXPECT_EQ(over->comment, "mine") << "an optional the base left out";
+    EXPECT_EQ(over->tags, (std::vector<std::string>{"mine"})) << "an array is replaced whole";
+    EXPECT_EQ(over->primary.priority, 7);
+    EXPECT_EQ(over->primary.directory, base->primary.directory) << "a table goes over its table key by key";
+    EXPECT_EQ(over->name, base->name) << "what it leaves out stays";
+    EXPECT_EQ(over->gravity, base->gravity);
+    EXPECT_EQ(over->mounts.size(), base->mounts.size());
+    const auto empty = nx::data::parseTomlOver<Settings>(*base, "", "empty.toml");
+    ASSERT_TRUE(empty.has_value()) << nx::describe(empty.error());
+    EXPECT_EQ(empty->name, base->name);
+}
+
+TEST(Schema, AFileOverABaseIsReadAsStrictlyAsAWholeOne) {
+    const auto base = parse(kValid);
+    ASSERT_TRUE(base.has_value()) << nx::describe(base.error());
+    const auto failureOf = [&base](std::string_view text) {
+        const auto over = nx::data::parseTomlOver<Settings>(*base, text, "over.toml");
+        EXPECT_FALSE(over.has_value()) << text;
+        return over ? DataError::Syntax : over.error().code;
+    };
+    EXPECT_EQ(failureOf("volumes = 0.5"), DataError::UnknownKey) << "a typo, or a key of another version";
+    EXPECT_EQ(failureOf("[primary]\ndirectorys = \"x\""), DataError::UnknownKey) << "within a table";
+    EXPECT_EQ(failureOf("volume = \"loud\""), DataError::WrongType);
+    EXPECT_EQ(failureOf("primary = 1"), DataError::WrongType) << "a table where a table goes";
+    EXPECT_EQ(failureOf("maxPlayers = 0"), DataError::OutOfRange);
+    EXPECT_EQ(failureOf("volume ="), DataError::Syntax);
+}
+
 TEST(Schema, OptionalFieldsReadTheirKeyWhenPresent) {
     const auto settings = parse(withLine("comment", R"(comment = "no bots")"));
     ASSERT_TRUE(settings.has_value()) << nx::describe(settings.error());

@@ -8,6 +8,37 @@ import nx.platform;
 import cs.shared;
 import mod.zombies;
 
+TEST(ZombieSettings, AUsersFileChangesOnlyWhatItNamesOfTheProjects) {
+    auto text =
+        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "mods" / "zombies.toml");
+    ASSERT_TRUE(text.has_value());
+    const auto base = zombies::readSettings(*text, "zombies.toml");
+    ASSERT_TRUE(base.has_value()) << (base ? "" : nx::describe(base.error()));
+    const auto over = zombies::readSettingsOver(*base, R"(spawnSpacing = 40.0
+
+[body]
+model = "models/player/mine/mine.mdl"
+
+[body.knockback]
+slowShare = 0.25
+)",
+                                                "entities/zombies.toml");
+    ASSERT_TRUE(over.has_value()) << (over ? "" : nx::describe(over.error()));
+    EXPECT_EQ(over->spawnSpacing, nx::HammerUnits{40});
+    EXPECT_EQ(over->body.model, "models/player/mine/mine.mdl");
+    EXPECT_EQ(over->body.health, base->body.health) << "the rest of its table, from the project's";
+    EXPECT_EQ(over->spawnRadius, base->spawnRadius) << "what it does not name, from the project's";
+    ASSERT_TRUE(over->body.knockback.has_value());
+    EXPECT_EQ(over->body.knockback->slowShare, 0.25F);
+    EXPECT_EQ(over->body.knockback->staggerTime, base->body.knockback->staggerTime);
+    const auto typo = zombies::readSettingsOver(*base, "spawnSpacings = 40.0", "entities/zombies.toml");
+    ASSERT_FALSE(typo.has_value()) << "a key that is no setting is reported";
+    EXPECT_EQ(typo.error().code, zombies::ZombieError::InvalidData);
+    const auto broken = zombies::readSettingsOver(*base, "perceptionBudget = 0", "entities/zombies.toml");
+    ASSERT_FALSE(broken.has_value()) << "what comes out is validated as the project's file is";
+    EXPECT_EQ(broken.error().code, zombies::ZombieError::InvalidData);
+}
+
 TEST(ZombieSettings, ReadsTheExampleAndRejectsAnUnboundedPerceptionBudget) {
     auto text =
         nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "mods" / "zombies.toml");
