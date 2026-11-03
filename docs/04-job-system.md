@@ -45,9 +45,12 @@ flowchart LR
   being handed out. A thread inside `wait` helps with whatever it finds, so the main thread
   may run a `Background` job while it waits for a `Critical` one; long jobs belong to the
   workers' lower priorities, not to code that waits on the frame.
-- **Idleness:** a thread without work does a few rounds of searching
-  (`kIdleRoundsBeforeSleep`) and then sleeps in `std::atomic::wait` on a signal that changes
-  with every enqueued job. No fixed-time *sleep* and no endless *busy-wait*.
+- **Idleness:** a thread without work searches once, watches the signal that changes with every
+  enqueued job for a moment (`kWatchBeforeSleep`), searching again only when it changes, and then
+  sleeps in `std::atomic::wait` on that signal. Searching touches every thread's queues: done over
+  and over while waiting, it took half of the workers' time in a crowd. No fixed-time *sleep* and
+  no endless *busy-wait*. A batch is worth waking a thread for when it holds some tens of
+  microseconds of work (`JobSystem::forBatches`'s smallest batch).
 
 ## 3. API
 
@@ -202,6 +205,7 @@ with.
 
 | Step | Parallelism |
 |------|-------------|
+| Agents' perception, decisions and commands | `forBatches` per agent |
 | Apply usercmds | Serial per player (order matters) |
 | Rules and synchronous Rook hooks | Serial (order matters) |
 | Animation and hitboxes for lag compensation | `parallelFor` per animated entity |

@@ -143,16 +143,17 @@ public:
     }
 
     /// Calls `function(batch, first, last)` once for each batch of the elements from 0 up to `count`, from 0
-    /// up to batchCountOf, in jobs of `desc`, and waits for them, the calling thread running them too; a
-    /// batch alone on the calling thread: as few threads woken as the work is worth. Outputs written at the
-    /// element's index make the result independent of the worker count (docs/04, section 8).
+    /// up to batchCountOf (those the elements run out before are empty, never backwards), in jobs of `desc`,
+    /// and waits for them, the calling thread running them too; a batch alone on the calling thread: as few
+    /// threads woken as the work is worth. Outputs written at the element's index make the result independent
+    /// of the worker count (docs/04, section 8).
     template <class Function>
     void forBatches(const JobDesc& desc, std::size_t count, std::size_t smallestBatch,
                     const Function& function) {
         const std::size_t batches = batchCountOf(count, smallestBatch);
         const std::size_t size = divideRoundingUp(std::max(count, std::size_t{1}), batches);
         const auto run = [&function, size, count](std::size_t batch) {
-            function(batch, batch * size, std::min(count, (batch + 1) * size));
+            function(batch, std::min(count, batch * size), std::min(count, (batch + 1) * size));
         };
         if (batches == 1) {
             run(0);

@@ -202,8 +202,9 @@ struct StateAccess {
 
 /// What a buffer state means to a barrier: the stages and accesses that use it.
 [[nodiscard]] auto accessOf(BufferState state) noexcept -> StateAccess {
-    constexpr VkPipelineStageFlags2 kShaders =
-        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    constexpr VkPipelineStageFlags2 kShaders = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+                                               VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                                               VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     switch (state) {
     case BufferState::Undefined:
         return {};
@@ -222,6 +223,12 @@ struct StateAccess {
         return {.stages = kShaders, .access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT};
     case BufferState::HostRead:
         return {.stages = VK_PIPELINE_STAGE_2_HOST_BIT, .access = VK_ACCESS_2_HOST_READ_BIT};
+    case BufferState::ComputeWrite:
+        return {.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .access = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT};
+    case BufferState::Indirect:
+        return {.stages = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                .access = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT};
     }
     return {};
 }
@@ -234,6 +241,7 @@ struct StateAccess {
         std::pair{BufferUsage::Storage, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT},
         std::pair{BufferUsage::CopySource, VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
         std::pair{BufferUsage::CopyDestination, VK_BUFFER_USAGE_TRANSFER_DST_BIT},
+        std::pair{BufferUsage::Indirect, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT},
     };
     VkBufferUsageFlags flags = 0;
     for (const auto& [use, bit] : kBits) {
@@ -299,6 +307,9 @@ struct StateAccess {
     }
     if (stages.test(ShaderStage::Fragment)) {
         flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
+    if (stages.test(ShaderStage::Compute)) {
+        flags |= VK_SHADER_STAGE_COMPUTE_BIT;
     }
     return flags;
 }
@@ -666,9 +677,10 @@ public:
         }
         if (m_features13.dynamicRendering == VK_FALSE || m_features13.synchronization2 == VK_FALSE ||
             m_features12.timelineSemaphore == VK_FALSE || m_features11.shaderDrawParameters == VK_FALSE ||
-            m_features.features.imageCubeArray == VK_FALSE || m_features.features.dualSrcBlend == VK_FALSE) {
+            m_features.features.imageCubeArray == VK_FALSE || m_features.features.dualSrcBlend == VK_FALSE ||
+            m_features.features.drawIndirectFirstInstance == VK_FALSE) {
             return "no dynamic rendering, synchronization2, timeline semaphores, shader draw parameters, "
-                   "cube arrays or dual-source blending";
+                   "cube arrays, dual-source blending or indirect draws from an instance";
         }
         return std::nullopt;
     }
@@ -851,6 +863,10 @@ public:
     void copyTextureToBuffer(const TextureCopy& copy) override;
     void beginRendering(const RenderingDesc& desc) override;
     void endRendering() override;
+    void drawIndexedIndirect(BufferHandle buffer, std::uint64_t offset) override;
+    void setComputePipeline(ComputePipelineHandle pipeline) override;
+    void setComputeBindGroup(std::uint32_t index, BindGroupHandle group) override;
+    void dispatch(std::uint32_t groupCount) override;
     void setPipeline(RenderPipelineHandle pipeline) override;
     void setBindGroup(std::uint32_t index, BindGroupHandle group) override;
     void setVertexBuffer(std::uint32_t slot, BufferHandle buffer, std::uint64_t offset) override;
@@ -882,6 +898,7 @@ private:
     WindowPass m_windowPass;
     std::optional<Failure<RhiError>> m_failure; ///< Why the window's pass was lost.
     BoundState m_bound;
+    VkPipelineLayout m_computeLayout = VK_NULL_HANDLE; ///< Of the compute pipeline set last.
     /// The transitions' barriers, queued until a command needs them: one call records those in a row.
     /// The barriers of a dependency are unordered among themselves, so a second one of the same image
     /// or buffer records those queued first.
@@ -958,6 +975,9 @@ public:
     [[nodiscard]] auto bindGroups() noexcept -> HandlePool<BindGroupTag, VulkanBindGroup>& {
         return m_bindGroups;
     }
+    [[nodiscard]] auto computePipelines() noexcept -> HandlePool<ComputePipelineTag, VulkanPipeline>& {
+        return m_computePipelines;
+    }
     [[nodiscard]] auto pipelines() noexcept -> HandlePool<RenderPipelineTag, VulkanPipeline>& {
         return m_pipelines;
     }
@@ -988,6 +1008,8 @@ protected:
     [[nodiscard]] auto makeBindGroup(const BindGroupDesc& desc) -> Result<BindGroupHandle, RhiError> override;
     [[nodiscard]] auto makeRenderPipeline(const RenderPipelineDesc& desc)
         -> Result<RenderPipelineHandle, RhiError> override;
+    [[nodiscard]] auto makeComputePipeline(const ComputePipelineDesc& desc)
+        -> Result<ComputePipelineHandle, RhiError> override;
     void destroy(BufferHandle buffer) override;
     void destroy(TextureHandle texture) override;
     void destroy(SamplerHandle sampler) override;
@@ -995,6 +1017,7 @@ protected:
     void destroy(BindGroupLayoutHandle layout) override;
     void destroy(BindGroupHandle group) override;
     void destroy(RenderPipelineHandle pipeline) override;
+    void destroy(ComputePipelineHandle pipeline) override;
 
 private:
     [[nodiscard]] auto createInstance(const DeviceDesc& desc) -> Result<void, RhiError>;
@@ -1025,7 +1048,8 @@ private:
     void waitUntilTaken() noexcept;
 
     /// The layout of the bind groups of `desc`.
-    [[nodiscard]] auto createPipelineLayout(const RenderPipelineDesc& desc)
+    [[nodiscard]] auto createPipelineLayout(std::string_view label,
+                                            std::span<const BindGroupLayoutHandle> layouts)
         -> Result<VkPipelineLayout, RhiError>;
 
     /// Names `object` for the debug tools, when the validation layers listen.
@@ -1063,6 +1087,7 @@ private:
     HandlePool<BindGroupLayoutTag, VulkanBindGroupLayout> m_bindGroupLayouts;
     HandlePool<BindGroupTag, VulkanBindGroup> m_bindGroups;
     HandlePool<RenderPipelineTag, VulkanPipeline> m_pipelines;
+    HandlePool<ComputePipelineTag, VulkanPipeline> m_computePipelines;
     std::vector<RetiredResource> m_retired;
     VulkanCommandList m_commandList{*this};
     AdapterInfo m_adapter;
@@ -1779,6 +1804,46 @@ void VulkanCommandList::drawIndexed(std::uint32_t indexCount, std::uint32_t inst
     vkCmdDrawIndexed(recording, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
+void VulkanCommandList::drawIndexedIndirect(BufferHandle buffer, std::uint64_t offset) {
+    recordBarriers();
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    vkCmdDrawIndexedIndirect(recording, m_device->buffers().get(buffer).buffer, offset, 1,
+                             sizeof(IndexedDrawArguments));
+}
+
+void VulkanCommandList::setComputePipeline(ComputePipelineHandle pipeline) {
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    const VulkanPipeline& bound = m_device->computePipelines().get(pipeline);
+    vkCmdBindPipeline(recording, VK_PIPELINE_BIND_POINT_COMPUTE, bound.pipeline);
+    m_computeLayout = bound.layout;
+}
+
+void VulkanCommandList::setComputeBindGroup(std::uint32_t index, BindGroupHandle group) {
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    expects(m_computeLayout != VK_NULL_HANDLE, "CommandList::setComputeBindGroup: after setComputePipeline");
+    const VkDescriptorSet set = m_device->bindGroups().get(group).set;
+    vkCmdBindDescriptorSets(recording, VK_PIPELINE_BIND_POINT_COMPUTE, m_computeLayout, index, 1, &set, 0,
+                            nullptr);
+}
+
+void VulkanCommandList::dispatch(std::uint32_t groupCount) {
+    recordBarriers();
+    const VkCommandBuffer recording = commands();
+    if (recording == VK_NULL_HANDLE) {
+        return; // a lost window's pass
+    }
+    vkCmdDispatch(recording, groupCount, 1, 1);
+}
+
 // --- VulkanDevice --------------------------------------------------------------------------------
 
 auto VulkanDevice::create(const DeviceDesc& desc) -> Result<std::unique_ptr<VulkanDevice>, RhiError> {
@@ -2102,6 +2167,7 @@ auto VulkanDevice::createLogicalDevice() -> Result<void, RhiError> {
     features.pNext = &features13;
     features.features.samplerAnisotropy = m_hasAnisotropy ? VK_TRUE : VK_FALSE;
     features.features.imageCubeArray = VK_TRUE;
+    features.features.drawIndirectFirstInstance = VK_TRUE;
     features.features.dualSrcBlend = VK_TRUE;
     const std::array swapchainExtension{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     const bool hasSurface = m_surface != VK_NULL_HANDLE;
@@ -2222,6 +2288,7 @@ VulkanDevice::~VulkanDevice() {
             }
         };
         destroyAll(m_pipelines);
+        destroyAll(m_computePipelines);
         destroyAll(m_bindGroups);
         destroyAll(m_bindGroupLayouts);
         destroyAll(m_shaders);
@@ -3016,7 +3083,7 @@ auto VulkanDevice::makeRenderPipeline(const RenderPipelineDesc& desc)
     expects(desc.colorTargets.size() <= kMaxColorAttachments,
             "rhi::Device::createRenderPipeline: at most 8 targets");
     VulkanPipeline pipeline;
-    if (auto layout = createPipelineLayout(desc); !layout) {
+    if (auto layout = createPipelineLayout(desc.label, desc.bindGroupLayouts); !layout) {
         return std::unexpected{std::move(layout.error())};
     } else {
         pipeline.layout = *layout;
@@ -3083,10 +3150,38 @@ auto VulkanDevice::makeRenderPipeline(const RenderPipelineDesc& desc)
     return m_pipelines.insert(pipeline);
 }
 
-auto VulkanDevice::createPipelineLayout(const RenderPipelineDesc& desc)
+auto VulkanDevice::makeComputePipeline(const ComputePipelineDesc& desc)
+    -> Result<ComputePipelineHandle, RhiError> {
+    VulkanPipeline pipeline;
+    if (auto layout = createPipelineLayout(desc.label, desc.bindGroupLayouts); !layout) {
+        return std::unexpected{std::move(layout.error())};
+    } else {
+        pipeline.layout = *layout;
+    }
+    const std::string entry{desc.compute.entryPoint};
+    const VkComputePipelineCreateInfo info{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = stageOf(VK_SHADER_STAGE_COMPUTE_BIT, m_shaders.get(desc.compute.shader).module, entry),
+        .layout = pipeline.layout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1};
+    if (const VkResult result =
+            vkCreateComputePipelines(m_device, m_pipelineCache, 1, &info, nullptr, &pipeline.pipeline);
+        result != VK_SUCCESS) {
+        vkDestroyPipelineLayout(m_device, pipeline.layout, nullptr);
+        return vulkanFailure(result, std::format("vkCreateComputePipelines({:?})", desc.label));
+    }
+    name(VK_OBJECT_TYPE_PIPELINE, objectHandleOf(pipeline.pipeline), desc.label);
+    return m_computePipelines.insert(pipeline);
+}
+
+auto VulkanDevice::createPipelineLayout(std::string_view label,
+                                        std::span<const BindGroupLayoutHandle> layouts)
     -> Result<VkPipelineLayout, RhiError> {
     const std::vector<VkDescriptorSetLayout> setLayouts =
-        desc.bindGroupLayouts | std::views::transform([this](BindGroupLayoutHandle layout) {
+        layouts | std::views::transform([this](BindGroupLayoutHandle layout) {
             return m_bindGroupLayouts.get(layout).layout;
         }) |
         std::ranges::to<std::vector>();
@@ -3100,7 +3195,7 @@ auto VulkanDevice::createPipelineLayout(const RenderPipelineDesc& desc)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     if (const VkResult result = vkCreatePipelineLayout(m_device, &layoutInfo, nullptr, &layout);
         result != VK_SUCCESS) {
-        return vulkanFailure(result, std::format("vkCreatePipelineLayout({:?})", desc.label));
+        return vulkanFailure(result, std::format("vkCreatePipelineLayout({:?})", label));
     }
     return layout;
 }
@@ -3145,6 +3240,12 @@ void VulkanDevice::destroy(BindGroupHandle group) {
 
 void VulkanDevice::destroy(RenderPipelineHandle pipeline) {
     if (auto removed = m_pipelines.remove(pipeline)) {
+        retire(std::move(*removed));
+    }
+}
+
+void VulkanDevice::destroy(ComputePipelineHandle pipeline) {
+    if (auto removed = m_computePipelines.remove(pipeline)) {
         retire(std::move(*removed));
     }
 }

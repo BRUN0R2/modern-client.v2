@@ -329,6 +329,28 @@ TEST(JobSystemBatchesTest, BatchesCoverEveryElementOnceAndWakeNoMoreThreadsThanT
     EXPECT_TRUE(std::ranges::all_of(batches, [](const std::atomic_uint32_t& count) { return count == 1U; }));
 }
 
+TEST(JobSystemBatchesTest, BatchesLeftWithoutElementsAreEmptyNotBackwards) {
+    constexpr std::uint32_t kWorkers = 7;
+    // Rounded up to 2 a batch, the elements run out before the last batches do.
+    constexpr std::size_t kElements = 9;
+    auto jobs = makeJobSystem(kWorkers);
+    ASSERT_NE(jobs, nullptr);
+    std::vector<std::atomic_uint32_t> visits(kElements);
+    std::atomic_bool isAnyBackwards{false};
+    jobs->forBatches({.label = "runOut"}, kElements, 1,
+                     [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+                         if (first > last || last > kElements) {
+                             isAnyBackwards = true;
+                             return;
+                         }
+                         for (const std::size_t index : std::views::iota(first, last)) {
+                             visits[index].fetch_add(1, std::memory_order_relaxed);
+                         }
+                     });
+    EXPECT_FALSE(isAnyBackwards);
+    EXPECT_TRUE(std::ranges::all_of(visits, [](const std::atomic_uint32_t& count) { return count == 1U; }));
+}
+
 TEST(JobSystemBatchesTest, ABatchAloneRunsOnTheCallingThread) {
     auto jobs = makeJobSystem(3);
     ASSERT_NE(jobs, nullptr);

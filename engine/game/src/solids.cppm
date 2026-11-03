@@ -95,6 +95,12 @@ struct Solids {
 [[nodiscard]] auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
                                   const ServerTrace& trace) -> SolidHit;
 
+/// Whether traceSolidsHit's trace of a line from `start` to `end`, of the brush entities alone
+/// (TraceType::NoMonsters), through `solids`, goes the whole way, as many threads as ask while nothing moves:
+/// the world stopping it, or a brush entity, ends it at once.
+[[nodiscard]] auto lineReaches(const collision::BrushHulls& hulls, const Solids& solids, Vec3 start,
+                               Vec3 end) noexcept -> bool;
+
 /// traceSolidsHit's trace of `hull` from `start` to `end` (hullTrace).
 [[nodiscard]] auto traceSolids(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull,
                                Vec3 start, Vec3 end) -> collision::Trace;

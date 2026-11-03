@@ -1532,6 +1532,15 @@ TEST_F(GameTest, ASpotIsSeenThroughTheBodiesButNotThroughTheWorld) {
                   nx::Vec3{.z = cs::kStandingViewHeight.value() - cs::kStandingBox.min.z});
 }
 
+TEST_F(GameTest, NoSpotInTheSolidIsInTheLeavesAnEyeMaySee) {
+    const cs::PlayerIndex watcher =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const nx::Vec3 eye = game().ownStateOf(watcher).eye;
+    const nx::assets::LeafSet leaves = game().leavesSeenFrom(eye);
+    EXPECT_TRUE(game().isInLeaves(leaves, eye));
+    EXPECT_FALSE(game().isInLeaves(leaves, eye - nx::Vec3{.z = 2.0F * kStandingEye})) << "under the floor";
+}
+
 TEST_F(GameTest, EveryClientReceivesTheGamesWorldAndSwitchableLightPatterns) {
     constexpr std::size_t kSwitchableStyle = 32;
     const cs::PlayerIndex first =

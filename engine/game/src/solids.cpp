@@ -142,6 +142,31 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
     return found;
 }
 
+auto lineReaches(const collision::BrushHulls& hulls, const Solids& solids, Vec3 start, Vec3 end) noexcept
+    -> bool {
+    if (hulls.trace(collision::HullTraceQuery{.start = start, .end = end}).fraction < 1.0F) {
+        return false;
+    }
+    const Aabb way = wayOf(ServerTrace{.start = start}, end);
+    for (const SolidBrushEntity& solid : solids.brushes) {
+        if (!way.intersects(solid.linked)) {
+            continue;
+        }
+        const collision::Trace met = hulls.trace(collision::HullTraceQuery{.model = solid.model,
+                                                                           .offset = solid.origin,
+                                                                           .angles = solid.angles,
+                                                                           .start = start,
+                                                                           .end = end});
+        if (met.fraction < 1.0F) {
+            return false;
+        }
+        if (met.isAllSolid) {
+            return true; // no later one is looked at: all in solid, the trace goes the whole way
+        }
+    }
+    return true;
+}
+
 auto traceSolids(ecs::World& world, const collision::BrushHulls& hulls, collision::Hull hull, Vec3 start,
                  Vec3 end) -> collision::Trace {
     return traceSolidsHit(world, hulls, hullTrace(hull, start, end)).trace;
