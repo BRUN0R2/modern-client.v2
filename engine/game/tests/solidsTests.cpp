@@ -52,6 +52,19 @@ TEST(SolidsTest, ALineStoppedByTheWorldTellsNoEntity) {
     EXPECT_FALSE(missed.entity.has_value()) << "nothing met";
 }
 
+TEST(SolidsTest, AWayThatMissesABrushEntitysLinkedBoxDoesNotMeetIt) {
+    // The block's hull is solid across all y and z, its bounds 64 each way: only what the engine links it by
+    // tells a way beside it from one through it (SV_ClipToLinks).
+    SolidsWorld solids{{}};
+    constexpr float kBeside = 500.0F;
+    const nx::game::SolidHit hit =
+        nx::game::traceSolidsHit(solids.m_world, solids.m_hulls,
+                                 nx::game::hullTrace(nx::collision::Hull::Point, {.x = -50.0F, .y = kBeside},
+                                                     {.x = 90.0F, .y = kBeside}));
+    EXPECT_EQ(hit.trace.fraction, 1.0F);
+    EXPECT_FALSE(hit.entity.has_value());
+}
+
 /// An entity solid as a box of 16 units about `origin`.
 [[nodiscard]] auto boxAt(nx::ecs::World& world, nx::Vec3 origin) -> nx::ecs::Entity {
     return world.spawn(nx::game::Transform{.origin = origin},

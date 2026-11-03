@@ -9,7 +9,7 @@
 | Unit | GoogleTest | Isolated functions and types (`nx.core`, parsers, ECS, math) | Every PR |
 | Integration | GoogleTest (`nxIntegrationTests`) | Modules together: a world moved by parallel ECS systems, the same with any number of workers ([below](#determinism)) | Every PR |
 | Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
-| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`, `nxBenchNavigation`) | ECS, Job System, light-style snapshots and client hot paths | Built on every PR, run by hand ([below](#performance)) |
+| Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`, `nxBenchNavigation`, `nxBenchServer`) | ECS, Job System, light-style snapshots, client hot paths and the server's tick | Built on every PR, run by hand ([below](#performance)) |
 | Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
 | Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 
@@ -156,7 +156,7 @@ readers expected, and the readers now follow them
 
 | Metric | Where | Regression threshold |
 |--------|-------|----------------------|
-| Server tick time (p50/p99) with 32, 128 and 1024 players | `nxBenchServer` (planned) | 5% |
+| Server tick time (median, 99th percentile, worst) of a match of 32, 64 and 128 bots on real maps | `nxBenchServer` | 5% |
 | Client frame time in `timedemo` | Planned with demo playback | 5% |
 | Client frame extraction, hostage lookup, aim posing, light selection, grouped view-model reads and fog updates | `nxBenchClient` | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
@@ -192,6 +192,16 @@ build, inputs and machine over repeated runs: these cases do not measure a compl
 
 ```powershell
 .\build\release-windows-msvc\bin\nxBenchNavigation.exe '--benchmark_filter=^agentDecisions(Braking)?/(256|1024)$' --benchmark_min_time=0.25s --benchmark_repetitions=5
+```
+
+`nxBenchServer` plays whole matches on maps of the installation Steam installed, with no window and no GPU
+(none skips it): each iteration a tick, its bots' commands, what the game makes of them and what it tells its
+player. A tick has 10 ms: `ticksOverTheirTime` counts those that took longer. Its label is a hash of where the
+players went, the same on any build and with any number of workers while what the bots do does not change: so
+a change meant to leave behavior alone is proved to, a tick count at a time.
+
+```powershell
+.\build\release-windows-msvc\bin\nxBenchServer.exe --benchmark_filter=botMatchTick/cs_assault/32 --benchmark_min_time=6000x
 ```
 
 ## Sanitizers and analysis

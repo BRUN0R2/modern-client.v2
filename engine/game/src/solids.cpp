@@ -13,21 +13,20 @@ namespace nx::game {
 
 namespace {
 
-/// How much an entity's box grows each way as the engine links it (SV_LinkEdict), and the way's box
-/// as it bounds the move (SV_MoveBounds).
-constexpr float kLinkMargin = 1.0F;
-
 /// The solid brush entities of `world`, where they are now.
-[[nodiscard]] auto solidBrushesOf(ecs::World& world) -> std::vector<SolidBrushEntity> {
+[[nodiscard]] auto solidBrushesOf(ecs::World& world, const collision::BrushHulls& hulls)
+    -> std::vector<SolidBrushEntity> {
     std::vector<SolidBrushEntity> solids;
     ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
-        [&solids](ecs::Entity entity, const BrushModel& model, const Transform& transform,
-                  const BrushSolidity& solidity) {
+        [&solids, &hulls](ecs::Entity entity, const BrushModel& model, const Transform& transform,
+                          const BrushSolidity& solidity) {
             if (solidity.solid == Solid::Bsp) {
-                solids.push_back({.entity = entity,
-                                  .model = model.index,
-                                  .origin = transform.origin,
-                                  .angles = transform.angles});
+                solids.push_back(
+                    {.entity = entity,
+                     .model = model.index,
+                     .origin = transform.origin,
+                     .angles = transform.angles,
+                     .linked = linkedBoxOf(hulls.boundsOf(model.index), transform.origin, transform.angles)});
             }
         });
     return solids;
@@ -50,7 +49,7 @@ constexpr float kLinkMargin = 1.0F;
 /// The way's box of `trace` from its start to `end` (SV_MoveBounds): the box traced at both, a unit
 /// more each way.
 [[nodiscard]] auto wayOf(const ServerTrace& trace, Vec3 end) noexcept -> Aabb {
-    const Vec3 margin{.x = kLinkMargin, .y = kLinkMargin, .z = kLinkMargin};
+    const Vec3 margin{.x = kLinkGrowth, .y = kLinkGrowth, .z = kLinkGrowth};
     return Aabb{.min = componentMin(trace.start, end) + trace.box.min - margin,
                 .max = componentMax(trace.start, end) + trace.box.max + margin};
 }
@@ -89,13 +88,13 @@ auto hullTrace(collision::Hull hull, Vec3 start, Vec3 end) noexcept -> ServerTra
     return ServerTrace{.box = collision::hullBoxOf(hull), .start = start, .end = end};
 }
 
-auto solidsOf(ecs::World& world) -> Solids {
-    return Solids{.brushes = solidBrushesOf(world), .boxes = solidBoxesOf(world)};
+auto solidsOf(ecs::World& world, const collision::BrushHulls& hulls) -> Solids {
+    return Solids{.brushes = solidBrushesOf(world, hulls), .boxes = solidBoxesOf(world)};
 }
 
 auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const ServerTrace& trace)
     -> SolidHit {
-    return traceSolidsHit(world, hulls, solidsOf(world), trace);
+    return traceSolidsHit(world, hulls, solidsOf(world, hulls), trace);
 }
 
 auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
@@ -118,7 +117,7 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
         if (kept.isAllSolid) {
             break;
         }
-        if (isLeftOut(solid.entity)) {
+        if (isLeftOut(solid.entity) || !way.intersects(solid.linked)) {
             continue;
         }
         if (collision::keepFirstStop(
@@ -126,7 +125,7 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
             found.entity = solid.entity;
         }
     }
-    const Vec3 margin{.x = kLinkMargin, .y = kLinkMargin, .z = kLinkMargin};
+    const Vec3 margin{.x = kLinkGrowth, .y = kLinkGrowth, .z = kLinkGrowth};
     for (const SolidBoxEntity& solid : solids.boxes) {
         if (kept.isAllSolid) {
             break;

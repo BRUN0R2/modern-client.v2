@@ -295,7 +295,7 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
             const nx::Vec3 eye = body.movement.origin + nx::Vec3{.z = body.movement.viewHeight.value()};
             const nx::Vec3 direction = nx::angleVectors(command.viewAngles).forward;
             // Its strike passes through the bodies it passes through.
-            nx::game::Solids solids = nx::game::solidsOf(world);
+            nx::game::Solids solids = nx::game::solidsOf(world, hulls);
             std::erase_if(solids.boxes, [&world](const nx::game::SolidBoxEntity& solid) {
                 return world.has<EntityBody>(solid.entity);
             });

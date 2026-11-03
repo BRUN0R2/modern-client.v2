@@ -339,7 +339,7 @@ auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
 }
 
 auto Game::sightSolids() -> nx::game::Solids {
-    return nx::game::solidsOf(m_state.world);
+    return nx::game::solidsOf(m_state.world, m_state.map.hulls());
 }
 
 auto Game::seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) -> bool {
