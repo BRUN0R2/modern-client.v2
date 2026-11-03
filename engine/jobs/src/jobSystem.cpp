@@ -36,9 +36,9 @@ constexpr std::array kPrioritiesByUrgency{Priority::Critical, Priority::Normal, 
                                           Priority::Background};
 static_assert(kPrioritiesByUrgency.size() == enumCount<Priority>());
 
-/// Idle rounds (each one a full scan for work followed by a yield) before a thread sleeps. Keeps
-/// short gaps between bursts of jobs from paying for a sleep and a wake-up.
-constexpr int kIdleRoundsBeforeSleep = 32;
+/// How long a thread that found nothing to do watches for more before it sleeps: short gaps between bursts of
+/// jobs pay for no sleep and no wake-up, each of which takes about as long.
+constexpr std::chrono::microseconds kWatchBeforeSleep{50};
 
 /// Whether the counter incarnation `generation` has completed: it was closed, or reused since.
 /// `state` is a Counter::state: the generation as tag, the continuation list as link.
@@ -318,7 +318,6 @@ void JobSystem::finishCounter(PoolIndex counterIndex) {
 template <class Done, class BeforeSleep>
 void JobSystem::helpUntil(Done done, BeforeSleep beforeSleep) {
     detail::Worker* const self = currentWorker();
-    int idleRounds = 0;
     while (true) {
         // Read before looking for work: anything queued after this read changes the signal, so the
         // sleep below returns at once instead of missing it.
@@ -328,13 +327,18 @@ void JobSystem::helpUntil(Done done, BeforeSleep beforeSleep) {
         }
         if (detail::Job* const job = findJob(self)) {
             execute(*job, self);
-            idleRounds = 0;
             continue;
         }
-        // Work that is visible but was not taken (another consumer held the global queue) is
-        // retried; so are the first idle rounds, to absorb short gaps between bursts.
-        if (hasVisibleWork() || ++idleRounds < kIdleRoundsBeforeSleep) {
+        // It looks again only as the signal says there is more: looking touches every thread's queues, which
+        // cost those at work and half of the time of the workers when each kept looking while it waited.
+        const auto until = std::chrono::steady_clock::now() + kWatchBeforeSleep;
+        bool isSignalled = false;
+        while (!isSignalled && std::chrono::steady_clock::now() < until) {
+            isSignalled = m_signal.load(std::memory_order_relaxed) != observedSignal || done();
             std::this_thread::yield();
+        }
+        // Work that is visible but was not taken (another consumer held the global queue) is retried.
+        if (isSignalled || hasVisibleWork()) {
             continue;
         }
         beforeSleep();
@@ -342,7 +346,6 @@ void JobSystem::helpUntil(Done done, BeforeSleep beforeSleep) {
             return;
         }
         sleep(observedSignal, self);
-        idleRounds = 0;
     }
 }
 
