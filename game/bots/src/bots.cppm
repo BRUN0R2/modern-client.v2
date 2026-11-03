@@ -113,10 +113,12 @@ public:
     /// team of more players, of as many the one of more wins, else of one drawn at random, a dead one first
     /// (UTIL_KickBotFromTeam); of the other team when that one has none.
     void keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_view prefix);
-    /// The commands of the bots for the game's next tick, one for each, in the order they joined: each
-    /// alive looks at the enemies its budget lets it look at, in turn, and remembers those it sees, each
-    /// known to it its level's reaction time after it first saw it; thinks (nx::agents::Brain::decide),
-    /// those alive together, in batches in jobs (nx::agents::Deciders); turns its view by its spring
+    /// The commands of the bots for the game's next tick, one for each, in the order they joined, the same
+    /// with any number of workers: each alive, in batches in jobs of the priority Critical as each part
+    /// below reads the game and writes only its own, looks at the enemies it sees and, each
+    /// BotRules::sightInterval at a tick of its own (looksAroundAt), at those its budget lets it, in turn,
+    /// and remembers those it sees, each known to it its level's reaction time after it first saw it; thinks
+    /// (nx::agents::Brain::decide), those alive together (nx::agents::Deciders); turns its view by its spring
     /// (turnView) towards where it aims at what it attacks, ahead of it above BotAimRules::leadingSkill
     /// (leadSpot) and off by its aim's error (settleAimError), or at what it looks at, or along its way;
     /// or, hurt, at the spot it panics to (BotRules::panic), until its view is within lookedWithin of it;
@@ -139,48 +141,64 @@ public:
 private:
     struct Turn; // a bot's command being made, between what it perceives and what it decides
 
-    /// What the bots perceive in a tick, the same for each: the living players, as candidates and, sorted,
-    /// by their entities; what is solid to their sights, gathered once (Game::sightSolids); and the noises
-    /// the players made (Game::noises).
+    /// What the bots perceive in a tick, the same for each: its time; the living players, as candidates in
+    /// the order of their slots and, sorted, by their entities, with those candidates at the same places;
+    /// what is solid to their sights, gathered once (Game::sightSolids); and the noises the players made
+    /// (Game::noises).
     struct Sights {
+        nx::game::TickTime time;
         std::span<const PerceptionTarget> targets;
         std::span<const nx::ecs::Entity> present;
+        std::span<const PerceptionTarget* const> presentTargets;
         const nx::game::Solids& solids;
         std::span<const GameNoise> noises;
     };
+    /// The target of `sights` that is the player `player`; none when it is not alive.
+    [[nodiscard]] static auto targetOfPlayer(const Sights& sights, PlayerIndex player)
+        -> const PerceptionTarget*;
+    /// The target of `sights` that is the body `entity`; none when it is not alive.
+    [[nodiscard]] static auto targetOfEntity(const Sights& sights, nx::ecs::Entity entity)
+        -> const PerceptionTarget*;
 
-    /// The bot `player`'s turn as the next tick's command begins: numbered and, alive, forgetting the
-    /// enemies there no longer are, perceiving the targets of `sights`, hearing its enemies' noises
-    /// (cs::heardBy, BotRules::hearing), feeling those its body touches (cs::touchedBy), and, hurt by one,
-    /// looking about (panic).
-    [[nodiscard]] auto beginTurn(PlayerIndex player, const Sights& sights) -> Turn;
-    /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `sights`.
-    [[nodiscard]] auto finishTurn(Turn& turn, const nx::agents::Decision& decision, const Sights& sights)
-        -> UserCommand;
-    /// What the bot `player`, its agent `agent`, alive as `self`, sees of the targets of `sights` this tick,
-    /// within its budget.
+    /// The bot `player`'s turn as the next tick's command begins, numbered at `time`, on the thread that asks
+    /// for the commands.
+    [[nodiscard]] auto beginTurn(PlayerIndex player, nx::game::TickTime time) -> Turn;
+    /// What the bot of `turn`, alive, knows as it thinks: it forgets the enemies there no longer are,
+    /// perceives the targets of `sights`, hears its enemies' noises (cs::heardBy, BotRules::hearing) on
+    /// `query`, feels those its body touches (cs::touchedBy) and, hurt by one, looks about (panic).
+    void perceiveInTurn(Turn& turn, const Sights& sights, nx::navigation::NavigationQuery& query);
+    /// The command of `turn`, of a bot alive, once its brain made `decision`, knowing `sights`, a place to
+    /// hunt drawn on `query`.
+    void finishTurn(Turn& turn, const nx::agents::Decision& decision, const Sights& sights,
+                    nx::navigation::NavigationQuery& query);
+    /// What the bot `player`, its agent `agent`, alive as `self`, sees of the targets of `sights` this tick:
+    /// of the enemies it saw last, and, as it looks around, of the others within its budget.
     [[nodiscard]] auto perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
                                 const Sights& sights) -> std::vector<nx::agents::Observation>;
+    /// Runs `each(turn index, query)` for each of `count` turns of a tick in batches in jobs of `desc`, each
+    /// batch with a query of its own, which the calling thread runs too while it waits for them.
+    template <typename Each>
+    void inBatches(nx::jobs::JobDesc desc, std::size_t count, const Each& each);
     /// Moves `command` of the bot `player`, with `driver`, alive as `self`, as it attacks `enemy` among the
     /// targets of `sights`: it crouches and holds, or dodges and keeps its range (fightMove,
     /// BotRules::combat), a line to its enemy's eye from its origin crouched traced through the solids of
     /// `sights` as the fight begins.
-    void fight(UserCommand& command, BotDriver& driver, PlayerIndex player, const PlayerOwnState& self,
-               nx::ecs::Entity enemy, const Sights& sights);
+    void fight(UserCommand& command, BotDriver& driver, const PerceptionTarget& body,
+               const PlayerOwnState& self, nx::ecs::Entity enemy, const Sights& sights);
     /// The spot a bot with `driver`, as `self` knows itself, looks at, hurt by an enemy from
     /// self.hurtFrom (BotRules::panic, Panic), unless it sees an enemy as it attacks, as `agent` last
     /// decided, but at random; none while it looks at one already.
     [[nodiscard]] auto panic(const nx::agents::Agent& agent, BotDriver& driver, const PlayerOwnState& self)
         -> std::optional<nx::Vec3>;
-    /// Gives `agent`, with `driver`, a place of the mesh within BotRules::huntRadius of `feet` to hunt when
-    /// `decision` leaves it nothing to do, another when its way to the last is blocked.
+    /// Gives `agent`, with `driver`, a place of the mesh within BotRules::huntRadius of `feet`, drawn on
+    /// `query`, to hunt when `decision` leaves it nothing to do, another when its way to the last is blocked.
     void hunt(nx::agents::Agent& agent, BotDriver& driver, const nx::agents::Decision& decision,
-              nx::Vec3 feet);
-    /// Where a bot with `driver`, alive as `self`, aims at the enemy `decision` attacks, among `targets`,
-    /// as its command of `duration` moves its aim's error.
+              nx::Vec3 feet, nx::navigation::NavigationQuery& query);
+    /// Where a bot with `driver`, alive as `self`, aims at the enemy `decision` attacks, among those of
+    /// `sights`, as its command of `duration` moves its aim's error.
     [[nodiscard]] auto aimSpotOf(BotDriver& driver, const PlayerOwnState& self,
-                                 const nx::agents::Decision& decision,
-                                 std::span<const PerceptionTarget> targets, nx::Seconds duration) -> nx::Vec3;
+                                 const nx::agents::Decision& decision, const Sights& sights,
+                                 nx::Seconds duration) -> nx::Vec3;
     /// A bot joins `team`, or the game's default, as the profile `profile` of the level `level`, named
     /// after `prefix`.
     auto join(std::size_t level, std::string_view profile, std::optional<Team> team, std::string_view prefix)
@@ -196,9 +214,10 @@ private:
     Game* game;
     BotRules rules;
     nx::jobs::JobSystem* jobs;
-    nx::navigation::NavigationQuery query; ///< Of the mesh the bots borrow.
-    nx::agents::Deciders deciders;         ///< Of the mesh the bots borrow.
-    std::vector<PlayerIndex> bots;         ///< Their bodies' corridors borrow the mesh: they leave first.
+    const nx::navigation::NavigationMesh* walked;         ///< What the bots borrow.
+    std::vector<nx::navigation::NavigationQuery> queries; ///< One for each batch, made as batches need them.
+    nx::agents::Deciders deciders;                        ///< Of the mesh the bots borrow.
+    std::vector<PlayerIndex> bots; ///< Their bodies' corridors borrow the mesh: they leave first.
     nx::GameTime nextQuotaCheck{};
 };
 

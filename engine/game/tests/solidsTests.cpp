@@ -65,6 +65,25 @@ TEST(SolidsTest, AWayThatMissesABrushEntitysLinkedBoxDoesNotMeetIt) {
     EXPECT_FALSE(hit.entity.has_value());
 }
 
+TEST(SolidsTest, ALineReachesWhereATraceOfItGoesTheWholeWay) {
+    SolidsWorld solids{{}};
+    const nx::game::Solids gathered = nx::game::solidsOf(solids.m_world, solids.m_hulls);
+    ASSERT_EQ(gathered.brushes.size(), 1U);
+    EXPECT_EQ(gathered.brushes.front().linked,
+              nx::game::linkedBoxOf(solids.m_hulls.boundsOf(gathered.brushes.front().model), {}, {}));
+    const auto expectAsATrace = [&](nx::Vec3 start, nx::Vec3 end, bool reaches) {
+        const nx::game::SolidHit traced =
+            nx::game::traceSolidsHit(solids.m_world, solids.m_hulls, gathered,
+                                     {.start = start, .end = end, .type = nx::game::TraceType::NoMonsters});
+        EXPECT_EQ(traced.trace.fraction >= 1.0F, reaches);
+        EXPECT_EQ(nx::game::lineReaches(solids.m_hulls, gathered, start, end), reaches);
+    };
+    expectAsATrace({.x = -50.0F}, {.x = -10.0F}, true);
+    expectAsATrace({.x = -50.0F}, {.x = 50.0F}, false);                          // the block
+    expectAsATrace({.x = 70.0F}, {.x = 200.0F}, false);                          // the world
+    expectAsATrace({.x = -50.0F, .y = 500.0F}, {.x = 90.0F, .y = 500.0F}, true); // beside the block
+}
+
 /// An entity solid as a box of 16 units about `origin`.
 [[nodiscard]] auto boxAt(nx::ecs::World& world, nx::Vec3 origin) -> nx::ecs::Entity {
     return world.spawn(nx::game::Transform{.origin = origin},

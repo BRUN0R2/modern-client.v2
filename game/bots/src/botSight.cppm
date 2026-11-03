@@ -10,19 +10,35 @@ export module cs.bots:botSight;
 import std;
 import nx.core;
 import nx.math;
+import cs.shared;
 import cs.server;
 import :botRules;
 
 export namespace cs {
 
+/// Whether the bot of the player `player` looks around at the moment `now` of a game of `rate`, each
+/// `interval`, in whole ticks, at least one: each player at its own tick of it, so that the bots of a game
+/// share out their looks over its ticks.
+[[nodiscard]] auto looksAroundAt(PlayerIndex player, nx::GameTime now, nx::TickRate rate,
+                                 nx::Seconds interval) noexcept -> bool;
+
 /// How many spots of a player a bot looks for (sightSpotsOf).
 inline constexpr std::size_t kSightSpotCount = 5;
 
-/// Whether `point` is in the cone of `fieldOfView` about `yaw` seen from `origin`, across the ground, as
-/// FInViewCone weighs it: the cosine of half the cone below the dot of the ground's way to it and the
-/// yaw's way. A point straight above or below `origin` is in it.
-[[nodiscard]] auto isInViewCone(nx::Vec3 origin, nx::Degrees yaw, nx::Degrees fieldOfView,
-                                nx::Vec3 point) noexcept -> bool;
+/// The cone an eye sees, across the ground, as FInViewCone weighs it: from `origin` about the way `facing`,
+/// the cosine of half of it being `least`.
+struct ViewCone {
+    nx::Vec3 origin{};
+    nx::Vec3 facing{};
+    float least = 0.0F;
+
+    /// Whether `point` is in it: `least` below the dot of the ground's way to it and `facing`. A point
+    /// straight above or below `origin` is.
+    [[nodiscard]] auto holds(nx::Vec3 point) const noexcept -> bool;
+};
+
+/// The cone of `fieldOfView` about `yaw` seen from `origin`.
+[[nodiscard]] auto viewConeOf(nx::Vec3 origin, nx::Degrees yaw, nx::Degrees fieldOfView) noexcept -> ViewCone;
 
 /// The spots of `target` a bot at `origin` looks for, in the order IsVisible tries them: the chest, the
 /// head, the feet as it stands or ducks, then its sides across the ground's line from `origin` to it,
