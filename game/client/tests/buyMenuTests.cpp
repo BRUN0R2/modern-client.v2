@@ -12,6 +12,7 @@ import nx.assets;
 import nx.game;
 import nx.platform;
 import nx.rhi;
+import nx.ui;
 import cs.shared;
 import cs.client;
 
@@ -149,7 +150,7 @@ protected:
     cs::WeaponCatalog weapons;
     cs::ArmorPrices prices{
         .kevlar = nx::Money{650}, .kevlarAndHelmet = nx::Money{1000}, .helmet = nx::Money{350}};
-    cs::BuyMenuLook look{.fonts = {"Test"},
+    cs::BuyMenuLook look{.font = {.regular = "Test", .strong = "Test"},
                          .armor = {cs::BuyMenuArmor{.kind = ArmorKind::Kevlar,
                                                     .key = 1,
                                                     .name = "Vest",
@@ -528,6 +529,37 @@ TEST(BuyMenuTextTest, TimeAndSharesAreWrittenWhole) {
     EXPECT_EQ(cs::clockText(0), "0:00");
     EXPECT_EQ(cs::shareText(0.775F), "77.5%");
     EXPECT_EQ(cs::shareText(0.7F), "70%");
+}
+
+/// The fonts the menu writes in are the project's: there with its data on any system, each of its weight and
+/// with every character the menu's own text writes.
+TEST(BuyMenuDataTest, ItsFontsAreTheProjectsOwnAndWriteAllItSays) {
+    auto vfs = nx::assets::Vfs::create(std::span<const std::filesystem::path>{});
+    ASSERT_TRUE(vfs.has_value());
+    auto game = cs::readGameContent(NX_DATA_DIRECTORY, std::move(vfs).value());
+    ASSERT_TRUE(game.has_value()) << (game ? "" : nx::describe(game.error()));
+
+    nx::ui::FontCatalog fonts;
+    const auto added = fonts.addFolder(std::filesystem::path{NX_DATA_DIRECTORY} / "fonts");
+    ASSERT_TRUE(added.has_value());
+    EXPECT_EQ(*added, 2U);
+    constexpr std::array kWritten{U'$', U',', U':', U'/', U'%', U'|',     U'+',
+                                  U'.', U'0', U'9', U'A', U'z', U'\u00B7'};
+    for (const auto& [family, weight] : {std::pair{std::string_view{game->buyMenu.font.regular}, 400},
+                                         std::pair{std::string_view{game->buyMenu.font.strong}, 600}}) {
+        const std::optional<nx::ui::FontChoice> choice = fonts.choose({.family = family, .weight = weight});
+        ASSERT_TRUE(choice.has_value()) << family;
+        EXPECT_EQ(choice->face->weight, weight) << family;
+        EXPECT_FALSE(choice->isEmboldened) << "no bold simulated on " << family;
+        auto font = fonts.open(*choice, {.cellHeight = 21, .smoothing = nx::ui::FontSmoothing::Antialiased});
+        ASSERT_TRUE(font.has_value()) << (font ? "" : nx::describe(font.error()));
+        auto atlas = nx::ui::GlyphAtlas::build(*font, cs::consoleCharacters());
+        ASSERT_TRUE(atlas.has_value()) << (atlas ? "" : nx::describe(atlas.error()));
+        for (const char32_t character : kWritten) {
+            EXPECT_NE(atlas->glyph(character), nullptr)
+                << family << " lacks " << static_cast<std::uint32_t>(character);
+        }
+    }
 }
 
 /// The game's own data: what the menu tells of a gun comes from its file.

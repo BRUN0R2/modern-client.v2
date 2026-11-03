@@ -3,11 +3,12 @@
 
 # What the buy menu shows besides what each weapon's file says of its place on it, `purchase.menu`
 # (docs/12-ui-hud-and-console.md, section 4), read into cs::BuyMenuLook: the project's own.
-# `fonts` are the families it writes in, the first the system has. `armor` is what its equipment tab sells of
-# armor: `kind`, the armor it is; `key`, what buys it once the tab is open, as the original's menu numbers it;
-# `name`; `picture`, a TGA among the game's files; and `about`, what it does.
+# `font` is what it writes in, of the project's own fonts (data/fonts/): `regular` for its text, `strong` for what
+# stands out. `armor` is what its equipment tab sells of armor: `kind`, the armor it is; `key`, what buys it once
+# the tab is open, as the original's menu numbers it; `name`; `picture`, a TGA among the game's files; and `about`,
+# what it does.
 
-fonts = ["Bahnschrift", "Verdana", "DejaVu Sans"]
+font = { regular = "Barlow", strong = "Barlow SemiBold" }
 
 [[armor]]
 kind = "kevlar"

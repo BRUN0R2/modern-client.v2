@@ -112,6 +112,7 @@ drawn ([material file](docs/05-rendering.md#92-mdl-format-features-to-support)).
 |------|---------|
 | Engine, game, server, tools and data | [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt) with the [Rook Plugin Exception](LICENSES/LicenseRef-Rook-Plugin-Exception.txt) |
 | Rook toolchain and plugin SDK (`rook/`) | [MIT](LICENSES/MIT.txt) |
+| The project's font, Barlow (`data/fonts/`) | [OFL-1.1](LICENSES/OFL-1.1.txt), its authors' |
 | Documentation (`docs/`, `README.md`, `docs/TODO.md`, `CONTRIBUTING.md`, `SECURITY.md`) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
 
 **Plugins and mods** that use only the plugin interface may adopt **any license**,

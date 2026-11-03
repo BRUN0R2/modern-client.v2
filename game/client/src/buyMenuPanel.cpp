@@ -39,15 +39,17 @@ constexpr std::uint8_t kWholePicture = 255;
 constexpr std::uint8_t kTooDearPicture = 107;
 constexpr std::uint8_t kTabPicture = 128;
 
-/// A size of text: its line in the design's units, 1080 lines tall, and its weight.
+/// A size of text: its line in the design's units, 1080 lines tall, and whether it stands out.
 struct FontSize {
     float units = 0.0F;
-    std::int32_t weight = 0;
+    bool isStrong = false;
 };
+constexpr std::int32_t kRegularWeight = 400;
+constexpr std::int32_t kStrongWeight = 600;
 constexpr nx::EnumArray<BuyMenuFont, FontSize> kFontSizes{nx::EnumArray<BuyMenuFont, FontSize>::Storage{
-    FontSize{.units = 56.0F, .weight = 600}, FontSize{.units = 32.0F, .weight = 500},
-    FontSize{.units = 25.0F, .weight = 600}, FontSize{.units = 21.0F, .weight = 400},
-    FontSize{.units = 16.0F, .weight = 400}}};
+    FontSize{.units = 56.0F, .isStrong = true}, FontSize{.units = 32.0F, .isStrong = false},
+    FontSize{.units = 25.0F, .isStrong = true}, FontSize{.units = 21.0F, .isStrong = false},
+    FontSize{.units = 16.0F, .isStrong = false}}};
 
 // What it writes.
 constexpr std::string_view kMenuName = "BUY";
@@ -585,35 +587,29 @@ BuyMenuPanel::BuyMenuPanel(const BuyMenuContent& sold) noexcept : content{sold} 
 auto BuyMenuPanel::makeFaces(nx::ui::FontCatalog& fonts, nx::render::ScreenRenderer& screen,
                              nx::rhi::CommandList& commands, std::uint32_t screenHeight)
     -> nx::Result<void, BuyMenuPanelError> {
-    const auto family = std::ranges::find_if(content.look->fonts, [&fonts](const std::string& name) {
-        return fonts.choose({.family = name, .weight = kFontSizes[BuyMenuFont::Body].weight}).has_value();
-    });
-    if (family == content.look->fonts.end()) {
-        return nx::fail(BuyMenuPanelError::NoFont,
-                        std::format("none of {} among the system's fonts", content.look->fonts));
-    }
     const std::u32string characters = consoleCharacters();
     for (const BuyMenuFont font : nx::EnumArray<BuyMenuFont, FontSize>::keys()) {
         const FontSize size = kFontSizes[font];
+        const std::string& family = size.isStrong ? content.look->font.strong : content.look->font.regular;
         const std::optional<nx::ui::FontChoice> choice =
-            fonts.choose({.family = *family, .weight = size.weight});
+            fonts.choose({.family = family, .weight = size.isStrong ? kStrongWeight : kRegularWeight});
         if (!choice) {
-            return nx::fail(BuyMenuPanelError::NoFont, *family);
+            return nx::fail(BuyMenuPanelError::NoFont, family);
         }
         const auto cellHeight = static_cast<std::int32_t>(
             std::lround(size.units * static_cast<float>(screenHeight) / kBuyMenuDesignHeight));
         auto opened = fonts.open(*choice, {.cellHeight = std::max(cellHeight, 1),
                                            .smoothing = nx::ui::FontSmoothing::Antialiased});
         if (!opened) {
-            return nx::fail(BuyMenuPanelError::Unusable, *family, std::move(opened.error()));
+            return nx::fail(BuyMenuPanelError::Unusable, family, std::move(opened.error()));
         }
         auto atlas = nx::ui::GlyphAtlas::build(*opened, characters);
         if (!atlas) {
-            return nx::fail(BuyMenuPanelError::Unusable, *family, std::move(atlas.error()));
+            return nx::fail(BuyMenuPanelError::Unusable, family, std::move(atlas.error()));
         }
         auto image = screen.loadImage(commands, atlas->texels(), atlas->width(), atlas->height(), "buyMenu");
         if (!image) {
-            return nx::fail(BuyMenuPanelError::GpuFailed, *family, std::move(image.error()));
+            return nx::fail(BuyMenuPanelError::GpuFailed, family, std::move(image.error()));
         }
         faces[font].emplace(Face{.atlas = std::move(*atlas), .image = std::move(*image)});
     }

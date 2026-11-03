@@ -28,13 +28,20 @@ struct BuyMenuArmor {
     std::string about{};
 };
 
-/// data/cstrike/buyMenu.toml: the font families the menu writes in, the first the system has, and its armor.
+/// The font families the buy menu writes in, of the project's own fonts (data/fonts/): for its text, and for
+/// what stands out in it.
+struct BuyMenuFontFamilies {
+    std::string regular{};
+    std::string strong{};
+};
+
+/// data/cstrike/buyMenu.toml: the families the menu writes in, and its armor.
 struct BuyMenuLook {
-    std::vector<std::string> fonts{};
+    BuyMenuFontFamilies font{};
     std::vector<BuyMenuArmor> armor{};
 };
 
-/// Reads `text`, the file `sourceName`: a family at least, each item of armor of some kind, named and with a
+/// Reads `text`, the file `sourceName`: both families, each item of armor of some kind, named and with a
 /// picture, no two of one kind or at one key. Errors: DataInvalid.
 [[nodiscard]] auto readBuyMenuLook(std::string_view text, std::string_view sourceName)
     -> nx::Result<BuyMenuLook, BuyMenuLookError>;
@@ -54,10 +61,19 @@ struct nx::meta::Description<cs::BuyMenuArmor> {
 };
 
 template <>
+struct nx::meta::Description<cs::BuyMenuFontFamilies> {
+    static constexpr std::string_view kName = "cs::BuyMenuFontFamilies";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::BuyMenuFontFamilies::regular>("regular"),
+        nx::meta::field<&cs::BuyMenuFontFamilies::strong>("strong"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::BuyMenuLook> {
     static constexpr std::string_view kName = "cs::BuyMenuLook";
     static constexpr std::tuple kFields{
-        nx::meta::field<&cs::BuyMenuLook::fonts>("fonts"),
+        nx::meta::field<&cs::BuyMenuLook::font>("font"),
         nx::meta::field<&cs::BuyMenuLook::armor>("armor"),
     };
 };
