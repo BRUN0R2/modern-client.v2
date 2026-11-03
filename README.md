@@ -65,6 +65,9 @@ Requirements on Windows: Visual Studio 2026 with the "Desktop development with C
 Details and the toolchain matrix are in
 [docs/17-build-and-tools.md](docs/17-build-and-tools.md).
 
+The quickest way is to double-click `buildMenu.cmd`, at the root: it builds and opens the game, in
+Release or as a developer, or cleans the build to start from scratch. By hand:
+
 ```powershell
 . .\scripts\devShell.ps1
 cmake --preset dev-windows-msvc

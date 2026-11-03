@@ -8,6 +8,7 @@ modern-client.v2/
 ├── CMakePresets.json
 ├── vcpkg.json                  # dependency manifest (pinned baseline)
 ├── content.example.toml        # model of the per-user content configuration (ADR-0015)
+├── buildMenu.cmd               # double-click menu: build and open the game, clean the build (Windows)
 ├── .clang-format / .clang-tidy / .editorconfig
 ├── cmake/                      # compiler settings, the std module, target helpers, the layer check, the programs' manifest
 ├── engine/
@@ -161,6 +162,13 @@ cmake --preset dev-windows-msvc
 cmake --build --preset dev-windows-msvc
 ctest --preset dev-windows-msvc
 ```
+
+`buildMenu.cmd`, at the root, does this with a double-click and needs no terminal. Its first two
+options configure and build `release-windows-msvc` or `dev-windows-msvc`, through `devShell.ps1`,
+then open that build's `next` on `de_dust2`, and the menu returns when the game closes; they run no
+tests. *Clean build* lists what is in `build/`, asks, and deletes the whole folder, so the next
+build starts from nothing: keep nothing there that cannot be made again. vcpkg's binary cache,
+outside the repository, stays, and unchanged packages come back from it without being built again.
 
 For Clang on Windows, install LLVM 23.1.4 and use the same developer shell. Put LLVM's `bin`
 directory first on `PATH`, then configure, build and test `dev-windows-clang`. The Microsoft STL
