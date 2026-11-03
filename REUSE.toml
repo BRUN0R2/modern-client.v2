@@ -22,6 +22,13 @@ path = ["docs/**", "README.md", "CONTRIBUTING.md", "SECURITY.md"]
 SPDX-FileCopyrightText = "2026 Modern-Client.v2 contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 
+# The project's own font, Barlow, as its authors publish it (docs/adr/0031-the-project-font.md).
+[[annotations]]
+path = "data/fonts/**"
+precedence = "override"
+SPDX-FileCopyrightText = "2017 The Barlow Project Authors (https://github.com/jpt/barlow)"
+SPDX-License-Identifier = "OFL-1.1"
+
 # The pinned vcpkg GoogleTest recipe and its dependency fixes.
 [[annotations]]
 path = "cmake/ports/gtest/**"

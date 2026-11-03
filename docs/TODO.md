@@ -16,7 +16,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Project license: option A, GPL-3.0-or-later + MIT (Rook and SDK) + CC BY 4.0 (docs) ([ADR-0010](adr/0010-license.md))
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
-- [ ] A font of the project's own for its menus, of an open license and the same on every system: the buy menu writes in the first of `buyMenu.toml`'s families the system has (Windows' Bahnschrift today)
+- [x] A font of the project's own, of an open license and the same on every system: Barlow, in `data/fonts/`, which the buy menu writes in ([ADR-0031](adr/0031-the-project-font.md))
 - [ ] The plugin API as eight generic primitives (handles and `vars`, standalone types with no parent, methods and hooks, actions, queries, messages and effects, commands/cvars/tasks, services) in place of the old modules ([ADR-0022](adr/0022-plugin-api-primitives.md), proposed)
 - [x] Navigation meshes for every kind of agent, `nx.navigation` over Recast/Detour ([ADR-0023](adr/0023-navigation.md))
 - [x] Agents for bots, monsters and bosses: one brain, a player's or an entity's body, perception, memory and behaviors, `nx.agents`, each kind its own module over it: `cs.bots`, a mod's zombies and bosses in Rook ([ADR-0024](adr/0024-agents.md))
