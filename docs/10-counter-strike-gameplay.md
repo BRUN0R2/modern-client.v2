@@ -886,9 +886,15 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   120 degrees about its view's yaw across the ground (`FInViewCone`, `m_flFieldOfView` 0.5) and a
   line from its eye reaches it through the world and the brush entities, the bodies leaving it be
   (`IsVisible`, `UTIL_TraceLine` with `ignore_monsters`, `cs::Game::seesSpot`): the chest, the head
-  25 above, the feet 34 below standing or 14 ducked, and the sides 13 across. It looks at a share of
-  the players each tick (`perceptionBudget`) and remembers what it saw for a while
-  (`data/cstrike/bots.toml`). Lines through glass and smoke are weighed with them.
+  25 above, the feet 34 below standing or 14 ducked, and the sides 13 across. It looks around each
+  tenth of a second, as the original's bot at each full think, each at a tick of its own
+  (`sightInterval`, `cs::looksAroundAt`), at those of the players its budget lets it (`perceptionBudget`);
+  the enemies it sees it looks at each tick, so that its aim follows them; and it remembers what it saw for
+  a while (`data/cstrike/bots.toml`). No line is traced to a spot of a leaf the map's compiler found the eye's
+  leaf cannot see (`cs::Game::leavesSeenFrom`, `isInLeaves`): the bsp's potentially visible sets, which the
+  original's bot leaves to its traces, and a line through a sky between two rooms, which a player cannot see
+  through, is the one thing that changes. Lines through glass and smoke are weighed with them. Each part of
+  a bot's turn runs in jobs, its result the same with any number of workers.
 - Each bot plays as a profile drawn as it joins among those of `bot_difficulty`'s difficulty that
   no bot plays as and no player has the name of (`GetDifficultyLevel`: easy below 0.9, normal below
   1.9, hard below 2.9, else expert; `GetRandomProfile`, `UTIL_IsNameTaken`): a name and its level of

@@ -60,6 +60,7 @@ TEST(BotRulesTest, RulesBeyondTheirBoundsAreRefused) {
     for (const auto& [line, changed] :
          {std::pair{"fieldOfView = 120.0", "fieldOfView = 361.0"},
           std::pair{"perceptionBudget = 32", "perceptionBudget = 0"},
+          std::pair{"sightInterval = 0.1", "sightInterval = 0.0"},
           std::pair{"quotaInterval = 0.3", "quotaInterval = 0.0"},
           std::pair{R"(name = "elite"
 difficulties = ["expert"])",

@@ -183,6 +183,7 @@ struct BotFireRules {
 struct BotRules {
     nx::Degrees fieldOfView{};
     std::uint32_t perceptionBudget = 0;
+    nx::Seconds sightInterval{};
     BotSightSpots spots{};
     nx::Seconds memoryLifetime{};
     std::uint32_t memoryLimit = 0;
@@ -380,6 +381,7 @@ struct nx::meta::Description<cs::BotRules> {
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::BotRules::fieldOfView>("fieldOfView"),
         nx::meta::field<&cs::BotRules::perceptionBudget>("perceptionBudget"),
+        nx::meta::field<&cs::BotRules::sightInterval>("sightInterval"),
         nx::meta::field<&cs::BotRules::spots>("spots"),
         nx::meta::field<&cs::BotRules::memoryLifetime>("memoryLifetime"),
         nx::meta::field<&cs::BotRules::memoryLimit>("memoryLimit"),

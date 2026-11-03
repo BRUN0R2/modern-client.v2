@@ -6,6 +6,7 @@
 import std;
 import nx.core;
 import nx.math;
+import cs.shared;
 import cs.server;
 import cs.bots;
 
@@ -24,6 +25,27 @@ void expectNear(nx::Vec3 actual, nx::Vec3 expected) {
     EXPECT_NEAR(actual.z, expected.z, kTolerance);
 }
 
+TEST(BotSightTest, EachBotLooksAroundAtItsOwnTickOfTheInterval) {
+    const nx::TickRate rate = nx::kDefaultTickRate;
+    const nx::Seconds interval{0.1F};
+    for (std::uint32_t slot = 0; slot < 20; ++slot) {
+        std::uint32_t looks = 0;
+        for (std::int64_t tick = 0; tick < 100; ++tick) {
+            const nx::GameTime now = nx::GameTime{}.ticksLater(tick);
+            looks += cs::looksAroundAt(cs::PlayerIndex{slot}, now, rate, interval) ? 1U : 0U;
+        }
+        EXPECT_EQ(looks, 10U) << "a tenth of a second is ten ticks of a hundred a second";
+    }
+    const auto at = [](std::int64_t tick) {
+        return nx::GameTime{}.ticksLater(tick);
+    };
+    EXPECT_TRUE(cs::looksAroundAt(cs::PlayerIndex{0}, at(10), rate, interval));
+    EXPECT_FALSE(cs::looksAroundAt(cs::PlayerIndex{1}, at(10), rate, interval));
+    EXPECT_TRUE(cs::looksAroundAt(cs::PlayerIndex{1}, at(9), rate, interval));
+    EXPECT_TRUE(cs::looksAroundAt(cs::PlayerIndex{1}, at(10), rate, nx::Seconds{0.001F}))
+        << "an interval shorter than a tick is a look each tick";
+}
+
 TEST(BotSightTest, ThePlayersConeIsSixtyDegreesEitherWayOfItsYawAcrossTheGround) {
     const nx::Vec3 origin{.x = 100.0F, .y = 100.0F};
     constexpr nx::Degrees kFacingY{90.0F};
@@ -31,13 +53,13 @@ TEST(BotSightTest, ThePlayersConeIsSixtyDegreesEitherWayOfItsYawAcrossTheGround)
         const nx::Vec3 way = nx::angleVectors(nx::EulerAngles{.yaw = nx::Degrees{degrees}}).forward;
         return origin + (way * 200.0F) + nx::Vec3{.z = height};
     };
-    EXPECT_TRUE(cs::isInViewCone(origin, kFacingY, kPlayersCone, at(90.0F, 0.0F)));
-    EXPECT_TRUE(cs::isInViewCone(origin, kFacingY, kPlayersCone, at(149.0F, 500.0F)))
-        << "the height is not weighed";
-    EXPECT_FALSE(cs::isInViewCone(origin, kFacingY, kPlayersCone, at(151.0F, 0.0F)));
-    EXPECT_FALSE(cs::isInViewCone(origin, kFacingY, kPlayersCone, at(29.0F, 0.0F)));
-    EXPECT_FALSE(cs::isInViewCone(origin, kFacingY, kPlayersCone, at(270.0F, 0.0F))) << "behind";
-    EXPECT_TRUE(cs::isInViewCone(origin, kFacingY, kPlayersCone, origin + nx::Vec3{.z = 300.0F})) << "above";
+    const cs::ViewCone cone = cs::viewConeOf(origin, kFacingY, kPlayersCone);
+    EXPECT_TRUE(cone.holds(at(90.0F, 0.0F)));
+    EXPECT_TRUE(cone.holds(at(149.0F, 500.0F))) << "the height is not weighed";
+    EXPECT_FALSE(cone.holds(at(151.0F, 0.0F)));
+    EXPECT_FALSE(cone.holds(at(29.0F, 0.0F)));
+    EXPECT_FALSE(cone.holds(at(270.0F, 0.0F))) << "behind";
+    EXPECT_TRUE(cone.holds(origin + nx::Vec3{.z = 300.0F})) << "above";
 }
 
 TEST(BotSightTest, TheSpotsAreTheChestHeadFeetAndSidesAcrossTheLineToIt) {
