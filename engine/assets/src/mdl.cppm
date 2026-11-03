@@ -241,6 +241,9 @@ struct AnimationFrames {
     /// The value of `axis` of `bone` at `frame` of `blend`.
     [[nodiscard]] auto value(std::uint32_t blend, std::uint32_t frame, BoneIndex bone,
                              BoneAxis axis) const noexcept -> std::int16_t;
+    /// The values of every bone at `frame` of `blend`, kBoneAxes of each, by bone and then by BoneAxis.
+    [[nodiscard]] auto valuesOf(std::uint32_t blend, std::uint32_t frame) const noexcept
+        -> std::span<const std::int16_t>;
 };
 
 /// An MDL v10 file, or the textures file (`*T.mdl`) of one: decoded records, and views of the bytes

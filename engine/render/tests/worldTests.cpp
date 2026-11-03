@@ -171,6 +171,37 @@ TEST(BspWorldTest, DrawsTheFacesOfAMapAroundTheCamera) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+TEST(BspWorldTest, MayShowWhatItsViewLooksAtInItsLeavesAlone) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const std::vector<std::byte> file = readSeed();
+    const auto map = nx::assets::BspView::parse(file);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const std::vector<std::byte> shader = worldShader();
+    OffscreenTarget target{**device};
+    auto world =
+        createWorld(**device, {.map = *map, .shaderCode = shader, .colorFormat = Format::Rgba8Unorm});
+    ASSERT_TRUE(world.has_value()) << nx::describe(world.error());
+    // Looking along -X from the middle of the box.
+    std::ignore = drawWorld(target, *world, {.position = kMiddle, .angles = {.yaw = nx::Degrees{180.0F}}});
+    constexpr nx::Vec3 kSmall{.x = 2.0F, .y = 2.0F, .z = 2.0F};
+    const nx::Vec3 ahead = kMiddle - nx::Vec3{.x = 16.0F};
+    const nx::Vec3 behind = kMiddle + nx::Vec3{.x = 16.0F};
+    EXPECT_TRUE(world->mayShow(nx::Aabb::around(ahead, kSmall)));
+    EXPECT_FALSE(world->mayShow(nx::Aabb::around(behind, kSmall))) << "out of its view";
+    // Ahead too, in front of the tree's one node: its solid leaf, which no set holds.
+    const nx::Plane& node = map->planes()[map->nodes().front().plane.value].plane;
+    const nx::Vec3 farAhead = kMiddle - nx::Vec3{.x = 512.0F};
+    const nx::Vec3 inTheSolid = farAhead + (node.normal * (16.0F - node.signedDistance(farAhead)));
+    ASSERT_EQ(map->leafAt(inTheSolid), nx::assets::LeafIndex{0});
+    EXPECT_FALSE(world->mayShow(nx::Aabb::around(inTheSolid, kSmall))) << "in no leaf it may see";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 /// The sum of the red, green and blue of every pixel.
 [[nodiscard]] auto brightnessOf(std::span<const std::byte> pixels) -> std::uint64_t {
     std::uint64_t sum = 0;

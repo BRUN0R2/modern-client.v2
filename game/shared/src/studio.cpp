@@ -59,17 +59,23 @@ struct LocalPose {
     std::vector<Quat> rotations;
 };
 
+/// The most poses a thread works with as it poses a model: the four blends around a player's aim, its legs'.
+constexpr std::size_t kScratchPoses = 5;
+/// What a thread works a model's pose out with, kept for its room, so that no pose allocates once warm (a
+/// scratch buffer, as docs/04 section 7 lets a thread keep): as many threads as there are pose at once.
+thread_local std::array<LocalPose, kScratchPoses> scratchPoses;
+thread_local std::vector<float> scratchAdjustments;
+
 [[nodiscard]] auto isRotation(BoneAxis axis) noexcept -> bool {
     return axis == BoneAxis::RotationX || axis == BoneAxis::RotationY || axis == BoneAxis::RotationZ;
 }
 
-/// What each bone controller adds to its axis, by its index (R_StudioCalcBoneAdj): the controller's
-/// setting mapped from 0-255 onto its range (a cyclic one turning past its end), the mouth's from
-/// 0-64; in radians for a rotation. Each value is rounded to float as the original rounds it.
-[[nodiscard]] auto adjustmentsOf(std::span<const BoneController> controllers,
-                                 const ControllerSettings& settings) -> std::vector<float> {
-    std::vector<float> adjustments;
-    adjustments.reserve(controllers.size());
+/// Writes to `adjustments` what each bone controller adds to its axis, by its index (R_StudioCalcBoneAdj):
+/// the controller's setting mapped from 0-255 onto its range (a cyclic one turning past its end), the mouth's
+/// from 0-64; in radians for a rotation. Each value is rounded to float as the original rounds it.
+void adjustmentsOf(std::span<const BoneController> controllers, const ControllerSettings& settings,
+                   std::vector<float>& adjustments) {
+    adjustments.clear();
     for (const BoneController& controller : controllers) {
         const double start = double{controller.start};
         const double end = double{controller.end};
@@ -88,7 +94,6 @@ struct LocalPose {
         adjustments.push_back(
             isRotation(controller.axis) ? static_cast<float>(double{value} * kRadiansPerDegree) : value);
     }
-    return adjustments;
 }
 
 /// The original's QuaternionSlerp: `q` taken to `p`'s side of the sphere first, by which of p - q and
@@ -132,54 +137,50 @@ struct LocalPose {
 constexpr std::array kPositionAxes{BoneAxis::X, BoneAxis::Y, BoneAxis::Z};
 constexpr std::array kAngleAxes{BoneAxis::RotationX, BoneAxis::RotationY, BoneAxis::RotationZ};
 
-/// The bones posed at `frame` of `blend` of `animation`, `fraction` of the way to the next frame,
-/// each axis's rest value plus its value times its scale, plus what its controller adds: a position
+/// Writes to `pose` the bones posed at `frame` of `blend` of `animation`, `fraction` of the way to the next
+/// frame, each axis's rest value plus its value times its scale, plus what its controller adds: a position
 /// (R_StudioCalcBonePosition) with its two values interpolated first, when they differ; the angles
 /// (R_StudioCalcBoneQuaterion) at both frames, then their rotations interpolated, when they differ.
-[[nodiscard]] auto localPoseOf(const Skeleton& skeleton, const nx::assets::AnimationFrames& animation,
-                               std::uint32_t blend, std::uint32_t frame, float fraction,
-                               std::span<const float> adjustments) -> LocalPose {
+void localPoseOf(const Skeleton& skeleton, const nx::assets::AnimationFrames& animation, std::uint32_t blend,
+                 std::uint32_t frame, float fraction, std::span<const float> adjustments, LocalPose& pose) {
     const std::uint32_t next = std::min(frame + 1, animation.frameCount - 1); // the last frame has no next
-    LocalPose pose;
-    pose.positions.reserve(skeleton.bones.size());
-    pose.rotations.reserve(skeleton.bones.size());
-    for (std::uint32_t index = 0; index < skeleton.bones.size(); ++index) {
+    const std::span<const std::int16_t> values = animation.valuesOf(blend, frame);
+    const std::span<const std::int16_t> nextValues = animation.valuesOf(blend, next);
+    const std::size_t bones = skeleton.bones.size();
+    pose.positions.resize(bones);
+    pose.rotations.resize(bones);
+    for (std::size_t index = 0; index < bones; ++index) {
         const StudioBone& bone = skeleton.bones[index];
-        const nx::assets::BoneIndex boneIndex{index};
+        const std::size_t firstValue = index * nx::assets::kBoneAxes;
         // A value plus what the controller of its axis adds, when it has one.
-        const auto adjusted = [&](float value, BoneAxis axis) {
-            const std::optional<nx::assets::BoneControllerIndex> controller =
-                bone.controllers.at(std::to_underlying(axis));
+        const auto adjusted = [&](float value, std::size_t axis) {
+            const std::optional<nx::assets::BoneControllerIndex>& controller = bone.controllers[axis];
             return controller ? value + adjustments[controller->value] : value;
-        };
-        const auto valueAt = [&](std::uint32_t at, BoneAxis axis) {
-            return static_cast<float>(animation.value(blend, at, boneIndex, axis));
         };
         std::array<float, kPositionAxes.size()> position{};
         for (std::size_t slot = 0; slot < kPositionAxes.size(); ++slot) {
-            const BoneAxis axis = kPositionAxes.at(slot);
-            const float from = valueAt(frame, axis);
-            const float to = valueAt(next, axis);
+            const auto axis = static_cast<std::size_t>(std::to_underlying(kPositionAxes[slot]));
+            const auto from = static_cast<float>(values[firstValue + axis]);
+            const auto to = static_cast<float>(nextValues[firstValue + axis]);
             const float value = from == to ? from : (from * (1.0F - fraction)) + (fraction * to);
-            const auto at = std::to_underlying(axis);
-            position.at(slot) = adjusted(bone.values.at(at) + (value * bone.scales.at(at)), axis);
+            position[slot] = adjusted(bone.values[axis] + (value * bone.scales[axis]), axis);
         }
         std::array<float, kAngleAxes.size()> angles{};
         std::array<float, kAngleAxes.size()> nextAngles{};
         for (std::size_t slot = 0; slot < kAngleAxes.size(); ++slot) {
-            const BoneAxis axis = kAngleAxes.at(slot);
-            const auto at = std::to_underlying(axis);
-            angles.at(slot) =
-                adjusted(bone.values.at(at) + (valueAt(frame, axis) * bone.scales.at(at)), axis);
-            nextAngles.at(slot) =
-                adjusted(bone.values.at(at) + (valueAt(next, axis) * bone.scales.at(at)), axis);
+            const auto axis = static_cast<std::size_t>(std::to_underlying(kAngleAxes[slot]));
+            angles[slot] = adjusted(bone.values[axis] +
+                                        (static_cast<float>(values[firstValue + axis]) * bone.scales[axis]),
+                                    axis);
+            nextAngles[slot] = adjusted(
+                bone.values[axis] + (static_cast<float>(nextValues[firstValue + axis]) * bone.scales[axis]),
+                axis);
         }
-        pose.positions.push_back(Vec3{.x = position[0], .y = position[1], .z = position[2]});
-        pose.rotations.push_back(
+        pose.positions[index] = Vec3{.x = position[0], .y = position[1], .z = position[2]};
+        pose.rotations[index] =
             angles == nextAngles ? rotationOf(angles)
-                                 : slerpAsTheOriginal(rotationOf(angles), rotationOf(nextAngles), fraction));
+                                 : slerpAsTheOriginal(rotationOf(angles), rotationOf(nextAngles), fraction);
     }
-    return pose;
 }
 
 /// `pose` moved `share` of the way to `other` (R_StudioSlerpBones), `share` held to 0-1.
@@ -224,18 +225,15 @@ constexpr double kBlendHalves = 2.0;
                       }};
 }
 
-/// The bones of `skeleton` in `pose`, each after its parent, as the reader checked: placed in it, or the
-/// roots in `placement`.
-[[nodiscard]] auto placedBonesOf(const Skeleton& skeleton, const LocalPose& pose, const nx::Mat3x4& placement)
-    -> std::vector<nx::Mat3x4> {
-    std::vector<nx::Mat3x4> transforms;
-    transforms.reserve(skeleton.bones.size());
+/// Writes to `transforms`, as long, the bones of `skeleton` in `pose`, each after its parent, as the reader
+/// checked: placed in it, or the roots in `placement`.
+void placedBonesOf(const Skeleton& skeleton, const LocalPose& pose, const nx::Mat3x4& placement,
+                   std::span<nx::Mat3x4> transforms) {
     for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
         const std::optional<nx::assets::BoneIndex> parent = skeleton.bones[bone].parent;
         const nx::Mat3x4& placedIn = parent ? transforms[parent->value] : placement;
-        transforms.push_back(placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]));
+        transforms[bone] = placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]);
     }
-    return transforms;
 }
 
 /// The whole frame of `frame` of `animation` and its fraction, as the original splits it; a frame
@@ -374,15 +372,25 @@ void advanceFrame(Animation& animation, nx::GameTime now, nx::TickRate rate) noe
 auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
                const nx::assets::AnimationFrames& animation, const PoseQuery& query)
     -> std::vector<nx::Mat3x4> {
+    std::vector<nx::Mat3x4> bones(skeleton.bones.size());
+    poseBones(skeleton, sequence, animation, query, bones);
+    return bones;
+}
+
+void poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
+               const nx::assets::AnimationFrames& animation, const PoseQuery& query,
+               std::span<nx::Mat3x4> bones) {
     nx::expects(animation.boneCount == skeleton.bones.size() && animation.frameCount == sequence.frameCount &&
-                    animation.blendCount == sequence.blendCount,
+                    animation.blendCount == sequence.blendCount && bones.size() == skeleton.bones.size(),
                 "poseBones: the animation of the sequence, for the skeleton's bones");
     const auto [whole, fraction] = splitFrame(animation, query.frame);
-    const std::vector<float> adjustments = adjustmentsOf(skeleton.controllers, query.controllers);
+    adjustmentsOf(skeleton.controllers, query.controllers, scratchAdjustments);
 
-    LocalPose pose = localPoseOf(skeleton, animation, 0, whole, fraction, adjustments);
+    LocalPose& pose = scratchPoses[0];
+    localPoseOf(skeleton, animation, 0, whole, fraction, scratchAdjustments, pose);
     if (animation.blendCount > 1) {
-        const LocalPose second = localPoseOf(skeleton, animation, 1, whole, fraction, adjustments);
+        LocalPose& second = scratchPoses[1];
+        localPoseOf(skeleton, animation, 1, whole, fraction, scratchAdjustments, second);
         blendPoses(pose, second, static_cast<float>(query.blending[0]) / kBlendingTop);
     }
     if (query.motion == SequenceMotion::Removed && sequence.motionBone.value < pose.positions.size()) {
@@ -392,13 +400,22 @@ auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& seque
         motion.z = (sequence.motionType & kMotionZ) != 0 ? 0.0F : motion.z;
     }
 
-    return placedBonesOf(skeleton, pose, query.placement);
+    placedBonesOf(skeleton, pose, query.placement, bones);
 }
 
 auto posePlayerBones(const nx::assets::MdlView& model,
                      std::span<const nx::assets::AnimationFrames> animations,
                      nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query)
     -> std::vector<nx::Mat3x4> {
+    std::vector<nx::Mat3x4> bones(model.bones().size());
+    posePlayerBones(model, animations, sequence, query, bones);
+    return bones;
+}
+
+void posePlayerBones(const nx::assets::MdlView& model,
+                     std::span<const nx::assets::AnimationFrames> animations,
+                     nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query,
+                     std::span<nx::Mat3x4> bones) {
     const std::span<const nx::assets::StudioSequence> sequences = model.sequences();
     nx::expects(animations.size() == sequences.size(),
                 "posePlayerBones: the animations of the model's sequences");
@@ -410,15 +427,21 @@ auto posePlayerBones(const nx::assets::MdlView& model,
     const nx::assets::AnimationFrames& animation = animations[sequence.value];
     const auto [whole, fraction] = splitFrame(animation, query.frame);
     // A player's controllers are none: their adjustments are each one's at 0.
-    const std::vector<float> adjustments = adjustmentsOf(skeleton.controllers, ControllerSettings{});
-    const auto poseOf = [&](std::uint32_t blend) {
-        return localPoseOf(skeleton, animation, blend, whole, fraction, adjustments);
+    adjustmentsOf(skeleton.controllers, ControllerSettings{}, scratchAdjustments);
+    const std::span<const float> adjustments = scratchAdjustments;
+    const auto poseOf = [&](std::uint32_t blend, LocalPose& into) {
+        localPoseOf(skeleton, animation, blend, whole, fraction, adjustments, into);
     };
-    LocalPose pose;
+    LocalPose& pose = scratchPoses[0];
+    LocalPose& second = scratchPoses[1];
+    LocalPose& third = scratchPoses[2];
+    LocalPose& fourth = scratchPoses[3];
+    LocalPose& legs = scratchPoses[4];
     if (animation.blendCount != kAimBlends) {
-        pose = poseOf(0);
+        poseOf(0, pose);
         if (animation.blendCount > 1) {
-            blendPoses(pose, poseOf(1), static_cast<float>(query.blending) / kBlendingTop);
+            poseOf(1, second);
+            blendPoses(pose, second, static_cast<float>(query.blending) / kBlendingTop);
         }
     } else {
         // The four blends around the aim, three by three, and each blend's share of its half, in double.
@@ -430,10 +453,10 @@ auto posePlayerBones(const nx::assets::MdlView& model,
         pitch = down == 0 ? pitch * kBlendHalves : kBlendHalves * (pitch - kBlendMiddle);
         constexpr std::uint32_t kRow = 3;
         const std::uint32_t first = right + (down * kRow);
-        pose = poseOf(first);
-        const LocalPose second = poseOf(first + 1);
-        LocalPose third = poseOf(first + kRow);
-        const LocalPose fourth = poseOf(first + kRow + 1);
+        poseOf(first, pose);
+        poseOf(first + 1, second);
+        poseOf(first + kRow, third);
+        poseOf(first + kRow + 1, fourth);
         const auto yawShare = static_cast<float>(yaw / double{kBlendingTop});
         const auto pitchShare = static_cast<float>(pitch / double{kBlendingTop});
         blendPoses(pose, second, yawShare);
@@ -450,7 +473,7 @@ auto posePlayerBones(const nx::assets::MdlView& model,
         const auto lastGaitFrame = static_cast<float>(gaitAnimation.frameCount - 1);
         const auto [gaitWhole, gaitFraction] =
             splitFrame(gaitAnimation, SequenceFrame{std::min(query.gaitFrame.value(), lastGaitFrame)});
-        const LocalPose legs = localPoseOf(skeleton, gaitAnimation, 0, gaitWhole, gaitFraction, adjustments);
+        localPoseOf(skeleton, gaitAnimation, 0, gaitWhole, gaitFraction, adjustments, legs);
         bool isCopied = true;
         for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
             const std::optional<nx::assets::BoneIndex> parent = skeleton.bones[bone].parent;
@@ -465,29 +488,35 @@ auto posePlayerBones(const nx::assets::MdlView& model,
             }
         }
     }
-    return placedBonesOf(skeleton, pose, query.placement);
+    placedBonesOf(skeleton, pose, query.placement, bones);
 }
 
 auto mergeBones(const nx::assets::MdlView& model, const nx::assets::AnimationFrames& firstSequence,
                 const Skeleton& ontoSkeleton, std::span<const nx::Mat3x4> onto, const nx::Mat3x4& placement)
     -> std::vector<nx::Mat3x4> {
+    std::vector<nx::Mat3x4> transforms(model.bones().size());
+    mergeBones(model, firstSequence, ontoSkeleton, onto, placement, transforms);
+    return transforms;
+}
+
+void mergeBones(const nx::assets::MdlView& model, const nx::assets::AnimationFrames& firstSequence,
+                const Skeleton& ontoSkeleton, std::span<const nx::Mat3x4> onto, const nx::Mat3x4& placement,
+                std::span<nx::Mat3x4> transforms) {
     nx::expects(onto.size() == ontoSkeleton.bones.size(), "mergeBones: the other model's bones posed");
     const Skeleton skeleton = skeletonOf(model);
-    const std::vector<float> adjustments = adjustmentsOf(skeleton.controllers, ControllerSettings{});
-    const LocalPose pose = localPoseOf(skeleton, firstSequence, 0, 0, 0.0F, adjustments);
-    std::vector<nx::Mat3x4> transforms;
-    transforms.reserve(skeleton.bones.size());
+    adjustmentsOf(skeleton.controllers, ControllerSettings{}, scratchAdjustments);
+    LocalPose& pose = scratchPoses[0];
+    localPoseOf(skeleton, firstSequence, 0, 0, 0.0F, scratchAdjustments, pose);
     for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
         const auto same = std::ranges::find(ontoSkeleton.bones, skeleton.bones[bone].name, &StudioBone::name);
         if (same != ontoSkeleton.bones.end()) {
-            transforms.push_back(onto[static_cast<std::size_t>(same - ontoSkeleton.bones.begin())]);
+            transforms[bone] = onto[static_cast<std::size_t>(same - ontoSkeleton.bones.begin())];
             continue;
         }
         const std::optional<nx::assets::BoneIndex> parent = skeleton.bones[bone].parent;
         const nx::Mat3x4& placedIn = parent ? transforms[parent->value] : placement;
-        transforms.push_back(placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]));
+        transforms[bone] = placedIn * boneTransformOf(pose.rotations[bone], pose.positions[bone]);
     }
-    return transforms;
 }
 
 auto controllerSettingOf(const BoneController& controller, float value) noexcept -> std::uint8_t {

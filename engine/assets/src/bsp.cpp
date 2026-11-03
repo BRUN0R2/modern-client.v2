@@ -887,6 +887,23 @@ auto BspView::potentiallyVisible(LeafIndex leaf) const -> LeafSet {
     return LeafSet{std::move(bits), leafCount};
 }
 
+auto BspView::touchesAnyOf(const LeafSet& leaves, const Aabb& box) const noexcept -> bool {
+    if (m_models.empty()) {
+        return false;
+    }
+    // Each side of a node a part of the box is on, but a tree is no deeper than a map's nodes are many.
+    const auto touches = [this, &leaves, &box](const auto& self, NodeChild child) noexcept -> bool {
+        if (const LeafIndex* const leaf = std::get_if<LeafIndex>(&child)) {
+            return leaves.contains(*leaf);
+        }
+        const BspNode& node = m_nodes[std::get<NodeIndex>(child).value];
+        const PlaneSide side = m_planes[node.plane.value].plane.sideOf(box);
+        return (side != PlaneSide::Back && self(self, node.children[0])) ||
+               (side != PlaneSide::Front && self(self, node.children[1]));
+    };
+    return touches(touches, m_models.front().headNode);
+}
+
 auto LeafSet::contains(LeafIndex leaf) const noexcept -> bool {
     if (leaf.value == 0 || leaf.value > m_leafCount) {
         return false;

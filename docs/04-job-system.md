@@ -195,7 +195,8 @@ from `nx.core`, with a named capacity and a typed error if they fill up
 Work split per agent, per model or per body goes through `JobSystem::forBatches`: at most a batch for each
 thread, none below the size it is worth waking a thread for, and what a batch alone needs on the calling
 thread, so that a tick or a frame wakes as few threads as its work is worth; what each batch works with
-(a navigation query) is made for `batchCountOf` batches first.
+(a navigation query) is made for `batchCountOf` batches first. `thread_local` scratch keeps what a pose works
+with.
 
 ### 6.1 Server (tick)
 
@@ -214,7 +215,7 @@ thread, so that a tick or a frame wakes as few threads as its work is worth; wha
 | Step | Parallelism |
 |------|-------------|
 | Remote entity interpolation | Per chunk |
-| Animation evaluation (bones) | Per visible entity |
+| Animation evaluation (bones) | `forBatches` per visible entity |
 | Culling (BSP PVS, frustum, portal occlusion) | Per region/batch |
 | Command buffer recording | Per render graph pass and per draw batch |
 | Voice mixing (Opus decode) | `Normal` jobs feeding the mixer |

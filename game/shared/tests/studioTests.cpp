@@ -236,6 +236,20 @@ TEST(StudioPoseTest, AFractionOfAFrameInterpolatesTowardsTheNext) {
     expectNear(originOf(last[0]), {.x = 10.0F}, "the last frame has no next");
 }
 
+TEST(StudioPoseTest, APoseAfterOneOfMoreBonesIsItsOwn) {
+    // What a thread works a pose out with is kept for the next: only its bones are read.
+    const std::vector many{boneAt({.x = 1.0F}), boneAt({.y = 2.0F}, BoneIndex{0}),
+                           boneAt({.z = 3.0F}, BoneIndex{1})};
+    const AnimationFrames manyFrames = animationOf(1, 1, 3);
+    const std::vector one{boneAt({.x = 7.0F})};
+    const AnimationFrames oneFrame = animationOf(1, 1, 1);
+    const std::vector<Mat3x4> alone = cs::poseBones({.bones = one}, sequenceOf(oneFrame), oneFrame, {});
+    std::ignore = cs::poseBones({.bones = many}, sequenceOf(manyFrames), manyFrames, {});
+    std::array<Mat3x4, 1> written{};
+    cs::poseBones({.bones = one}, sequenceOf(oneFrame), oneFrame, {}, written);
+    expectNear(originOf(written[0]), originOf(alone[0]));
+}
+
 TEST(StudioPoseTest, ABoneIsPlacedInItsParent) {
     std::vector bones{boneAt({.x = 10.0F}), boneAt({.y = 5.0F}, BoneIndex{0})};
     bones[0].values[std::to_underlying(BoneAxis::RotationZ)] = kQuarterTurn;

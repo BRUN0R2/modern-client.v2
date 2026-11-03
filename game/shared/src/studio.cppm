@@ -174,6 +174,11 @@ struct PlayedModel {
 [[nodiscard]] auto poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
                              const nx::assets::AnimationFrames& animation, const PoseQuery& query)
     -> std::vector<nx::Mat3x4>;
+/// The same written to `bones`, one for each of the skeleton's: of a thread's own room, so that as many
+/// threads pose at once as ask and none allocates once warm.
+void poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
+               const nx::assets::AnimationFrames& animation, const PoseQuery& query,
+               std::span<nx::Mat3x4> bones);
 
 /// The blends of a sequence of a player's model that aims (NUM_BLENDING): three of yaw by three of
 /// pitch.
@@ -212,6 +217,12 @@ struct PlayerPoseQuery {
                                    std::span<const nx::assets::AnimationFrames> animations,
                                    nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query)
     -> std::vector<nx::Mat3x4>;
+/// The same written to `bones`, one for each bone of `model`: of a thread's own room, so that as many
+/// threads pose at once as ask and none allocates once warm.
+void posePlayerBones(const nx::assets::MdlView& model,
+                     std::span<const nx::assets::AnimationFrames> animations,
+                     nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query,
+                     std::span<nx::Mat3x4> bones);
 
 /// The bones of `model` drawn on another model's posed bones, `onto`, of `ontoSkeleton`, as the original's
 /// engine merges the model of a player's weapon onto the player's (StudioMergeBones): a bone named as one
@@ -221,6 +232,10 @@ struct PlayerPoseQuery {
                               const nx::assets::AnimationFrames& firstSequence, const Skeleton& ontoSkeleton,
                               std::span<const nx::Mat3x4> onto, const nx::Mat3x4& placement)
     -> std::vector<nx::Mat3x4>;
+/// The same written to `transforms`, one for each bone of `model`, of a thread's own room.
+void mergeBones(const nx::assets::MdlView& model, const nx::assets::AnimationFrames& firstSequence,
+                const Skeleton& ontoSkeleton, std::span<const nx::Mat3x4> onto, const nx::Mat3x4& placement,
+                std::span<nx::Mat3x4> transforms);
 
 /// The `hitboxes` of a model on its bones posed as `bones` (poseBones's, by index), as the server places
 /// them for its traces (R_StudioHull): each its bounds along its bone's axes, grown by `grownBy`

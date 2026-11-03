@@ -67,13 +67,11 @@ public:
     [[nodiscard]] auto load(nx::render::StudioRenderer& renderer, nx::rhi::CommandList& commands) const
         -> nx::Result<std::vector<nx::render::StudioModel>, nx::render::StudioError>;
 
-    /// The models `sinceStart` after the map started, drawn with `models`, what load gave, each lit
-    /// where its entity is by `light`, the sky's `sky` and the styles' `styles`: the cyclers, then the
-    /// hostages as `hostages` shows them (cs::shownHostageOf), each of the map's hostage it names.
-    [[nodiscard]] auto posed(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
-                             std::span<const ShownHostage> hostages, const nx::render::WorldLight& light,
-                             const nx::render::SkyLight& sky,
-                             const nx::render::LightStyleValues& styles) const -> PosedModels;
+    /// Writes to `posed` the models `frame` may show `sinceStart` after the map started, drawn with `models`,
+    /// what load gave, each lit where its entity is: the cyclers, then the hostages as `hostages` shows them
+    /// (cs::shownHostageOf), each of the map's hostage it names.
+    void pose(std::span<const nx::render::StudioModel> models, nx::Seconds sinceStart,
+              std::span<const ShownHostage> hostages, const ModelFrame& frame, PosedModels& posed) const;
 
 private:
     /// An entity and its file's index.

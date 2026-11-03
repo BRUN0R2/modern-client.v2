@@ -78,11 +78,10 @@ public:
                                   WeaponIndex weapon, PlayerGpuModels& models) const
         -> nx::Result<void, nx::render::StudioError>;
 
-    /// `players` posed, drawn with `models`, what load gave, each lit where it is by `light`, the sky's
-    /// `sky` and the styles' `styles`: each character's model, and the weapon in its hands merged onto it.
-    [[nodiscard]] auto posed(const PlayerGpuModels& models, std::span<const ShownPlayer> players,
-                             const nx::render::WorldLight& light, const nx::render::SkyLight& sky,
-                             const nx::render::LightStyleValues& styles) const -> PosedModels;
+    /// Writes to `posed` those of `players` `frame` may show posed, drawn with `models`, what load gave, each
+    /// lit where it is: each character's model, and the weapon in its hands merged onto it.
+    void pose(const PlayerGpuModels& models, std::span<const ShownPlayer> players, const ModelFrame& frame,
+              PosedModels& posed) const;
 
 private:
     PlayerModels() = default;
