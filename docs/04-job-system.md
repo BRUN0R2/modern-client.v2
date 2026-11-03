@@ -205,6 +205,7 @@ with.
 
 | Step | Parallelism |
 |------|-------------|
+| Agents' perception, decisions and commands | `forBatches` per agent |
 | Apply usercmds | Serial per player (order matters) |
 | Rules and synchronous Rook hooks | Serial (order matters) |
 | Animation and hitboxes for lag compensation | `parallelFor` per animated entity |

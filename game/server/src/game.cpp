@@ -344,11 +344,17 @@ auto Game::sightSolids() -> nx::game::Solids {
     return nx::game::solidsOf(m_state.world, m_state.map.hulls());
 }
 
-auto Game::seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) -> bool {
-    const nx::game::SolidHit hit =
-        nx::game::traceSolidsHit(m_state.world, m_state.map.hulls(), solids,
-                                 {.start = eye, .end = spot, .type = nx::game::TraceType::NoMonsters});
-    return hit.trace.fraction >= 1.0F;
+auto Game::seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) const -> bool {
+    return nx::game::lineReaches(m_state.map.hulls(), solids, eye, spot);
+}
+
+auto Game::leavesSeenFrom(nx::Vec3 eye) const -> nx::assets::LeafSet {
+    const nx::assets::BspView& map = m_state.map.map();
+    return map.potentiallyVisible(map.leafAt(eye));
+}
+
+auto Game::isInLeaves(const nx::assets::LeafSet& leaves, nx::Vec3 spot) const -> bool {
+    return leaves.contains(m_state.map.map().leafAt(spot));
 }
 
 auto Game::navigationGeometry() -> nx::navigation::Geometry {

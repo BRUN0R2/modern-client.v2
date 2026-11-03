@@ -24,6 +24,7 @@ export module cs.server:game;
 import std;
 import nx.core;
 import nx.math;
+import nx.assets;
 import nx.ecs;
 import nx.game;
 import nx.navigation;
@@ -198,8 +199,15 @@ public:
     /// nothing moves (seesSpot), gathered once instead of once a sight.
     [[nodiscard]] auto sightSolids() -> nx::game::Solids;
     /// Whether a line from `eye` reaches `spot` through the world and `solids`' brush entities alone, the
-    /// bodies leaving it be, as a bot's IsVisible traces one (UTIL_TraceLine with ignore_monsters).
-    [[nodiscard]] auto seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) -> bool;
+    /// bodies leaving it be, as a bot's IsVisible traces one (UTIL_TraceLine with ignore_monsters); as many
+    /// threads may ask as want to while nothing moves.
+    [[nodiscard]] auto seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) const -> bool;
+    /// The leaves of the map a line from `eye` may reach, as its compiler found them (the leaves' potentially
+    /// visible sets): no line to a spot of a leaf they do not hold is clear (isInLeaves), so that it need not
+    /// be traced.
+    [[nodiscard]] auto leavesSeenFrom(nx::Vec3 eye) const -> nx::assets::LeafSet;
+    /// Whether the leaf of the map that holds `spot` is one of `leaves` (leavesSeenFrom).
+    [[nodiscard]] auto isInLeaves(const nx::assets::LeafSet& leaves, nx::Vec3 spot) const -> bool;
     /// World and solid brush surfaces where they are now, without moving bodies.
     [[nodiscard]] auto navigationGeometry() -> nx::navigation::Geometry;
     /// The authoritative clock, independent of a command's requested duration.

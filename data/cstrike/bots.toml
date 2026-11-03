@@ -7,8 +7,11 @@
 
 # FInViewCone of a player: m_flFieldOfView 0.5, the cosine of half of a 120 degree cone about its view.
 fieldOfView = 120.0
-# How many players a bot looks at in a tick, in turn: every player of a game of 32 (the project's).
+# How many players a bot looks at as it looks around, in turn: every player of a game of 32 (the project's).
 perceptionBudget = 32
+# How often a bot looks around for enemies, each bot at its own tick of it: at each full think, a tenth of a
+# second (g_flBotFullThinkInterval). The enemies it sees it looks at each tick, so that its aim follows them.
+sightInterval = 0.1
 # How long a bot remembers an enemy it no longer sees, and how many it remembers (the project's).
 memoryLifetime = 10.0
 memoryLimit = 32
