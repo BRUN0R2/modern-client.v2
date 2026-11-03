@@ -209,7 +209,7 @@ with.
 | Apply usercmds | Serial per player (order matters) |
 | Rules and synchronous Rook hooks | Serial (order matters) |
 | Animation and hitboxes for lag compensation | `parallelFor` per animated entity |
-| Non-player entity physics | Per chunk |
+| Non-player entity physics | `forBatches` per body, then their results applied in order |
 | PVS/PAS and per-client relevance | `parallelFor` per client |
 | Snapshot assembly and delta encoding | `parallelFor` per client |
 | Compression and encryption | On the network thread or in `Normal` jobs, depending on the load |

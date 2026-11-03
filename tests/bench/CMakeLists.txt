@@ -59,4 +59,5 @@ nxAddBenchmark(nxBenchServer
         nx::testSupport
         cs::shared
         cs::server
-        cs::bots)
+        cs::bots
+        mod::zombies)

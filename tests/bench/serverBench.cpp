@@ -24,6 +24,7 @@ import nx.navigation;
 import cs.shared;
 import cs.server;
 import cs.bots;
+import mod.zombies;
 
 #include "consoleFixtures.hpp"
 
@@ -55,10 +56,20 @@ using Clock = std::chrono::steady_clock;
     return times[index] * kMillisecondsPerSecond;
 }
 
-/// A match of the map `name`: a player that stands where it spawns, and `bots` bots.
+/// A model of the installation the settings of data/mods/zombies.toml name sequences of.
+constexpr std::string_view kZombieModel = "models/player/leet/leet.mdl";
+/// As many as `zombie_add` adds at once; how far from the terrorists' spawn points and how far apart they
+/// are placed: all over the map.
+constexpr std::uint32_t kZombieBatch = 64;
+constexpr nx::HammerUnits kZombieReach{65536.0F};
+constexpr nx::HammerUnits kZombieSpacing{1.0F};
+/// The bots that play among a horde.
+constexpr std::uint32_t kBotsAmongTheHorde = 8;
+
+/// A match of the map `name`: a player that stands where it spawns, `bots` bots, and `zombies` zombies.
 class BotMatch {
 public:
-    BotMatch(const std::string_view name, std::uint32_t bots) {
+    BotMatch(const std::string_view name, std::uint32_t bots, std::uint32_t zombies = 0) {
         auto executable = nx::platform::executablePath();
         if (!executable) {
             failure = nx::describe(executable.error());
@@ -103,12 +114,17 @@ public:
         for (std::uint32_t bot = 0; bot < bots; ++bot) {
             std::ignore = botPlayers->add(std::nullopt, kBotDifficulty, kNoPrefix);
         }
+        if (zombies > 0) {
+            failure = makeHorde(data, zombies);
+        }
     }
 
     /// One tick of the game, its bots' and its player's commands, each part's time kept.
     void tick() {
         const Clock::time_point start = Clock::now();
         std::vector<cs::PlayerCommand> commands = botPlayers->commands();
+        const std::vector<cs::EntityCommand> entityCommands =
+            horde ? horde->commands() : std::vector<cs::EntityCommand>{};
         const Clock::time_point decided = Clock::now();
         commandNumber = cs::CommandNumber{commandNumber.value + 1};
         commands.push_back(
@@ -116,7 +132,7 @@ public:
                               .command = cs::UserCommand{.number = commandNumber,
                                                          .duration = nx::tickLengthOf(game->time().rate),
                                                          .viewAngles = game->ownStateOf(player).view}});
-        game->tick(commands);
+        game->tick(commands, entityCommands, jobs.get());
         const Clock::time_point ticked = Clock::now();
         cs::PlayerSnapshot snapshot = game->snapshotFor(player);
         benchmark::DoNotOptimize(snapshot);
@@ -184,6 +200,38 @@ private:
         return {};
     }
 
+    /// Makes a horde of `zombies` all over the map, by the settings of `data`; what failed, or nothing.
+    [[nodiscard]] auto makeHorde(const std::filesystem::path& data, std::uint32_t zombies) -> std::string {
+        auto settings = zombies::readSettings(
+            nx::platform::readTextFile(data / "mods" / "zombies.toml").value_or(std::string{}),
+            "zombies.toml");
+        if (!settings) {
+            return nx::describe(settings.error());
+        }
+        settings->body.model = std::string{kZombieModel};
+        settings->spawnBatchLimit = kZombieBatch;
+        settings->spawnRadius = kZombieReach;
+        settings->spawnSpacing = kZombieSpacing;
+        auto type = content->entities.add(content->vfs, settings->body, cs::ModelTextures::Read);
+        if (!type) {
+            return nx::describe(type.error());
+        }
+        auto made = zombies::Horde::create(*game, *mesh, *jobs, *type, *settings);
+        if (!made) {
+            return nx::describe(made.error());
+        }
+        horde = std::move(*made);
+        while (horde->size() < zombies) {
+            const auto batch = std::min<std::size_t>(kZombieBatch, zombies - horde->size());
+            if (auto spawned =
+                    horde->spawn(map->spawnPoints(cs::Team::Terrorists), nx::narrow<std::uint32_t>(batch));
+                !spawned) {
+                return nx::describe(spawned.error());
+            }
+        }
+        return {};
+    }
+
     void hashPlaces(std::span<const cs::PlayerCommand> commands) {
         const auto add = [this](float value) {
             placesHash = (placesHash ^ std::bit_cast<std::uint32_t>(value)) * kHashPrime;
@@ -208,7 +256,8 @@ private:
     std::unique_ptr<cs::Game> game;
     std::unique_ptr<nx::jobs::JobSystem> jobs;
     std::optional<nx::navigation::NavigationMesh> mesh;
-    std::unique_ptr<cs::Bots> botPlayers; ///< Before the game it plays in and its mesh go.
+    std::unique_ptr<cs::Bots> botPlayers;  ///< Before the game it plays in and its mesh go.
+    std::unique_ptr<zombies::Horde> horde; ///< As the bots.
     cs::PlayerIndex player{};
     cs::CommandNumber commandNumber{};
     std::vector<double> decisions;
@@ -231,8 +280,26 @@ void botMatchTick(benchmark::State& state, std::string_view map) {
     match.report(state);
 }
 
+void hordeTick(benchmark::State& state, std::string_view map) {
+    BotMatch match{map, kBotsAmongTheHorde, nx::narrow<std::uint32_t>(state.range(0))};
+    if (!match.failure.empty()) {
+        state.SkipWithError(match.failure);
+        return;
+    }
+    for (auto ignored : state) {
+        match.tick();
+        state.SetIterationTime(match.lastWhole());
+    }
+    match.report(state);
+}
+
 } // namespace
 
+BENCHMARK_CAPTURE(hordeTick, cs_assault, "cs_assault")
+    ->Arg(256)
+    ->Arg(1024)
+    ->UseManualTime()
+    ->Unit(benchmark::kMillisecond);
 BENCHMARK_CAPTURE(botMatchTick, cs_assault, "cs_assault")
     ->Arg(32)
     ->Arg(64)

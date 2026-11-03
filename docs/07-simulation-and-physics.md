@@ -289,8 +289,9 @@ where it starts and the boxes within them, as the original lists a move's physen
 `cs::brushEntitiesNear`, `cs::boxesNear`, `kPhysentReach`), farther than a tick's move goes; a box far from
 the way of a trace of the move is not traced. The players' moves gather the brush entities and the boxes once
 a tick (`cs::MoveLists`), and again after an attack or a use, which may change what is solid, each player's box
-kept where its move left it (`cs::keepBoxOf`). The bodies of entities gather them once a tick, each body's box
-kept where its move left it.
+kept where its move left it (`cs::keepBoxOf`). The bodies of entities gather them once a tick, leaving out each
+other's, as they pass through each other, so that no body's move depends on another's: they move at once in
+jobs, and what they did is applied in their order (`cs::runEntityBodies`).
 
 ### 4.3 API
 

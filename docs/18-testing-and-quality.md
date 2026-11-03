@@ -156,7 +156,7 @@ readers expected, and the readers now follow them
 
 | Metric | Where | Regression threshold |
 |--------|-------|----------------------|
-| Server tick time (median, 99th percentile, worst) of a match of 32, 64 and 128 bots on real maps | `nxBenchServer` | 5% |
+| Server tick time (median, 99th percentile, worst) of a match of 32, 64 and 128 bots, and of 8 among 256 and 1024 zombies, on real maps | `nxBenchServer` | 5% |
 | Client frame time in `timedemo` | Planned with demo playback | 5% |
 | Client frame extraction, hostage lookup, aim posing, light selection, grouped view-model reads and fog updates | `nxBenchClient` | 5% |
 | ECS iteration, scheduler and command buffers | `nxBenchEcs` | 5% |
@@ -195,10 +195,10 @@ build, inputs and machine over repeated runs: these cases do not measure a compl
 ```
 
 `nxBenchServer` plays whole matches on maps of the installation Steam installed, with no window and no GPU
-(none skips it): each iteration a tick, its bots' commands, what the game makes of them and what it tells its
-player. A tick has 10 ms: `ticksOverTheirTime` counts those that took longer. Its label is a hash of where the
-players went, the same on any build and with any number of workers while what the bots do does not change: so
-a change meant to leave behavior alone is proved to, a tick count at a time.
+(none skips it): each iteration a tick, its bots' and its zombies' commands, what the game makes of them and
+what it tells its player. A tick has 10 ms: `ticksOverTheirTime` counts those that took longer. Its label is
+a hash of where the players went, the same on any build and with any number of workers while what the bots do
+does not change: so a change meant to leave behavior alone is proved to, a tick count at a time.
 
 ```powershell
 .\build\release-windows-msvc\bin\nxBenchServer.exe --benchmark_filter=botMatchTick/cs_assault/32 --benchmark_min_time=6000x

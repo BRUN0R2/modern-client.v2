@@ -7,6 +7,7 @@ import nx.core;
 import nx.math;
 import nx.data;
 import nx.ecs;
+import nx.assets;
 import nx.jobs;
 import nx.game;
 import nx.navigation;
@@ -290,32 +291,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         nx::agents::Agent* const component = game.entityComponent<nx::agents::Agent>(entity);
         nx::invariant(component != nullptr, "Horde: an attached brain");
         nx::agents::Agent& agent = *component;
-        std::vector<nx::agents::Observation> seen;
-        const nx::Vec3 forward = nx::angleVectors(found->angles).forward;
         const nx::Vec3 eye = found->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()};
-        const std::size_t budget = std::min(targets.size(), std::size_t{settings.perceptionBudget});
-        for (std::size_t checked = 0; checked < budget; ++checked) {
-            const cs::PerceptionTarget& candidate = targets[(agent.nextCandidate + checked) % targets.size()];
-            const nx::Vec3 difference = candidate.eye - eye;
-            const float distance = nx::length(difference);
-            if (distance > settings.sightRange.value() ||
-                (distance > 0.0F && nx::dot(forward, difference / distance) < minimumDot) ||
-                !game.seesSpot(solids, eye, candidate.eye)) {
-                continue;
-            }
-            seen.push_back({.entity = candidate.entity, .position = candidate.feet, .aimAt = candidate.eye});
-        }
-        agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
-        agent.brain.forgetAbsent(present);
-        agent.brain.perceive(seen, time.now, time.rate);
-        // A zombie plays in no team: it hears every player.
-        nx::Random hearing{seedOf(entity) ^ std::bit_cast<std::uint64_t>(time.now.tick()), kHearingStream};
-        agent.brain.sense(cs::heardBy({.ear = eye}, noises, settings.hearing, query, hearing), time.now,
-                          time.rate);
-        // Felt where they are, last: the players its body touches.
-        agent.brain.sense(
-            cs::touchedBy({.entity = entity, .origin = found->origin, .box = cs::kStandingBox}, targets),
-            time.now, time.rate);
         turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
         requests.push_back({.brain = &agent.brain,
                             .feet = feetOf(found->origin),
@@ -325,6 +301,54 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
                             .stuck = &agent.stuck,
                             .elapsed = nx::tickLengthOf(time.rate)});
     }
+    // What a body perceives does not depend on what another perceives or decides: in batches in jobs, each
+    // with a query of its own.
+    while (queries.size() < jobs->batchCountOf(turns.size(), nx::agents::kSmallestBatch)) {
+        queries.emplace_back(query.mesh());
+    }
+    const auto perceiveBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        std::vector<nx::agents::Observation> seen;
+        for (std::size_t index = first; index < last; ++index) {
+            const auto [entity, found, component, eye] = turns[index];
+            nx::agents::Agent& agent = *component;
+            seen.clear();
+            const nx::Vec3 forward = nx::angleVectors(found->angles).forward;
+            std::optional<nx::assets::LeafSet>
+                leaves; // what its eye may see, found once a candidate needs it
+            const std::size_t budget = std::min(targets.size(), std::size_t{settings.perceptionBudget});
+            for (std::size_t checked = 0; checked < budget; ++checked) {
+                const cs::PerceptionTarget& candidate =
+                    targets[(agent.nextCandidate + checked) % targets.size()];
+                const nx::Vec3 difference = candidate.eye - eye;
+                const float distance = nx::length(difference);
+                if (distance > settings.sightRange.value() ||
+                    (distance > 0.0F && nx::dot(forward, difference / distance) < minimumDot)) {
+                    continue;
+                }
+                if (!leaves) {
+                    leaves = game.leavesSeenFrom(eye);
+                }
+                if (game.isInLeaves(*leaves, candidate.eye) && game.seesSpot(solids, eye, candidate.eye)) {
+                    seen.push_back(
+                        {.entity = candidate.entity, .position = candidate.feet, .aimAt = candidate.eye});
+                }
+            }
+            agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
+            agent.brain.forgetAbsent(present);
+            agent.brain.perceive(seen, time.now, time.rate);
+            // A zombie plays in no team: it hears every player.
+            nx::Random hearing{seedOf(entity) ^ std::bit_cast<std::uint64_t>(time.now.tick()),
+                               kHearingStream};
+            agent.brain.sense(cs::heardBy({.ear = eye}, noises, settings.hearing, queries[batch], hearing),
+                              time.now, time.rate);
+            // Felt where they are, last: the players its body touches.
+            agent.brain.sense(
+                cs::touchedBy({.entity = entity, .origin = found->origin, .box = cs::kStandingBox}, targets),
+                time.now, time.rate);
+        }
+    };
+    jobs->forBatches({.label = "zombies.perceive", .priority = nx::jobs::Priority::Critical}, turns.size(),
+                     nx::agents::kSmallestBatch, perceiveBatch);
     // The bodies the horde steers around, players' and its own.
     const std::vector<nx::agents::Body> steeredAround =
         game.movingBodies() | std::views::transform([](const cs::MovingBody& body) {
@@ -332,7 +356,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
                 .entity = body.entity, .feet = body.feet, .velocity = body.velocity, .radius = body.radius};
         }) |
         std::ranges::to<std::vector>();
-    // What a body perceives does not depend on what another decides, nor a decision on another's.
+    // Nor does a decision depend on another's.
     std::vector<nx::agents::Decision> decisions(requests.size());
     deciders.decide(*jobs, requests, decisions, steeredAround);
     std::vector<cs::EntityCommand> commands;

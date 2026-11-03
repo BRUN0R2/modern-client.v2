@@ -47,6 +47,7 @@ nxAddModuleLibrary(csServer
         nx::meta
         nx::math
         nx::console
+        nx::jobs
         nx::assets
         nx::ecs
         nx::collision

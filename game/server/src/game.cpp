@@ -6,6 +6,7 @@ module cs.server;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.assets;
 import nx.ecs;
 import nx.collision;
@@ -218,7 +219,8 @@ void Game::placeEye(PlayerIndex index, nx::Vec3 eye) {
     standAt(m_state, player, eye - nx::Vec3{.z = player.movement.viewHeight.value()});
 }
 
-void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
+void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities,
+                nx::jobs::JobSystem* jobs) {
     m_state.events.clear();
     m_state.moves->isStale = true;
     for (Player& player : playersIn(m_state.players)) {
@@ -231,7 +233,7 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     for (const PlayerCommand& command : commands) {
         runCommand(m_state, playerAt(m_state, command.player), command.command);
     }
-    EntityBodiesTick bodies = runEntityBodies(m_state.world, m_state.map.hulls(), entities);
+    EntityBodiesTick bodies = runEntityBodies(m_state.world, m_state.map.hulls(), entities, jobs);
     m_state.events.entitySteps = std::move(bodies.steps);
     for (const EntityAttack& strike : bodies.attacks) {
         if (const PlayerBody* const body = m_state.world.get<PlayerBody>(strike.target)) {

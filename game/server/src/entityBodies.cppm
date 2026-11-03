@@ -6,6 +6,7 @@ export module cs.server:entityBodies;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.ecs;
 import nx.collision;
 import nx.game;
@@ -68,7 +69,8 @@ struct EntityBodiesTick {
 /// body of a type with a stride steps each time it walked a stride on the ground (EntityDefinition::stride),
 /// the rest of its way kept toward its next step.
 [[nodiscard]] auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
-                                   std::span<const EntityCommand> commands) -> EntityBodiesTick;
+                                   std::span<const EntityCommand> commands,
+                                   nx::jobs::JobSystem* jobs = nullptr) -> EntityBodiesTick;
 /// Over the head of entity body `entity` of `world` as the server's traces meet it (headTopOf of its
 /// hitboxes, placed as a trace places them, and kept for the next); none for a model of no hitbox.
 [[nodiscard]] auto entityHeadTopOf(nx::ecs::World& world, nx::ecs::Entity entity) -> std::optional<nx::Vec3>;

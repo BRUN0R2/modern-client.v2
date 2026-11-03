@@ -1123,7 +1123,7 @@ void Client::playSession(nx::Seconds elapsed) {
         }
         const std::vector<cs::EntityCommand> entityCommands =
             session.horde ? session.horde->commands() : std::vector<cs::EntityCommand>{};
-        session.game->tick(commands, entityCommands);
+        session.game->tick(commands, entityCommands, m_jobs.get());
         session.client.receive(session.game->snapshotFor(session.player));
     }
 }
