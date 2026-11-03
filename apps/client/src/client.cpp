@@ -44,6 +44,10 @@ constexpr std::string_view kNoclipKey = "v";
 constexpr std::string_view kFontsFolder = "fonts";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
+/// The most of a frame the game's ticks take: a game that cannot keep up with its ticks lets go of the rest
+/// of the time it is behind, and plays slower, rather than its frames each take as long as all the ticks they
+/// fell behind by, which fall further behind and end at a few frames a second.
+constexpr std::chrono::milliseconds kMostTickingInAFrame{33};
 /// A sound that could not be played is reported once in this long, with how many others were not.
 constexpr std::chrono::seconds kSoundFailureInterval{5};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
@@ -1108,7 +1112,9 @@ void Client::startNextSession() {
 
 void Client::playSession(nx::Seconds elapsed) {
     Session& session = *m_session;
-    for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited); due > 0; --due) {
+    const nx::platform::Stopwatch ticking;
+    for (std::uint32_t due = session.client.ticksDue(elapsed, cs::CatchUp::Limited);
+         due > 0 && ticking.elapsed() < kMostTickingInAFrame; --due) {
         keepBotQuota(session);
         std::vector<cs::PlayerCommand> commands{cs::PlayerCommand{
             .player = session.player, .command = session.client.nextCommand(*m_input, m_camera.angles)}};
