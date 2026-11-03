@@ -729,4 +729,72 @@ TEST(WindowDrawTest, FramesThatShowNothingLeaveTheNextImageForOneThatDoes) {
     EXPECT_EQ(device.validationErrors(), 0U);
 }
 
+TEST(ComputeTest, ADispatchWritesAStorageBufferACopyThenReads) {
+    constexpr std::array<std::uint32_t, 9> kValues{1, 2, 3, 4, 5, 6, 7, 8, 9};
+    constexpr std::uint32_t kGroupSize = 4;
+    auto created =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRhiTests", .isValidationEnabled = true});
+    if (!created) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(created.error().code)) << nx::describe(created.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    nx::rhi::Device& device = **created;
+    const std::vector<std::byte> code = shaderCode("double.spv");
+    auto shader = device.createShader({.label = "test.double", .code = code});
+    ASSERT_TRUE(shader.has_value());
+    constexpr nx::Flags<nx::rhi::ShaderStage> kCompute{nx::rhi::ShaderStage::Compute};
+    const std::array bindings{
+        nx::rhi::BindingLayout{.binding = 0, .type = nx::rhi::BindingType::StorageBuffer, .stages = kCompute},
+        nx::rhi::BindingLayout{
+            .binding = 1, .type = nx::rhi::BindingType::StorageBuffer, .stages = kCompute}};
+    auto layout = device.createBindGroupLayout({.label = "test.double", .bindings = bindings});
+    ASSERT_TRUE(layout.has_value());
+    const std::array layouts{layout->get()};
+    auto pipeline =
+        device.createComputePipeline({.label = "test.double",
+                                      .compute = {.shader = shader->get(), .entryPoint = "doubleMain"},
+                                      .bindGroupLayouts = layouts});
+    ASSERT_TRUE(pipeline.has_value()) << (pipeline ? "" : nx::describe(pipeline.error()));
+    const std::uint64_t size = sizeof(kValues);
+    auto values = device.createBuffer({.label = "test.values",
+                                       .size = size,
+                                       .usage = {nx::rhi::BufferUsage::Storage},
+                                       .location = nx::rhi::MemoryLocation::Upload});
+    auto doubled =
+        device.createBuffer({.label = "test.doubled",
+                             .size = size,
+                             .usage = {nx::rhi::BufferUsage::Storage, nx::rhi::BufferUsage::CopySource}});
+    auto readback = device.createBuffer({.label = "test.readback",
+                                         .size = size,
+                                         .usage = {nx::rhi::BufferUsage::CopyDestination},
+                                         .location = nx::rhi::MemoryLocation::Readback});
+    ASSERT_TRUE(values.has_value() && doubled.has_value() && readback.has_value());
+    std::ranges::copy(std::as_bytes(std::span{kValues}), device.mappedBytes(values->get()).begin());
+    const std::array groupBindings{
+        nx::rhi::Binding{.binding = 0, .resource = nx::rhi::BufferBinding{.buffer = values->get()}},
+        nx::rhi::Binding{.binding = 1, .resource = nx::rhi::BufferBinding{.buffer = doubled->get()}}};
+    auto group =
+        device.createBindGroup({.label = "test.double", .layout = layout->get(), .bindings = groupBindings});
+    ASSERT_TRUE(group.has_value());
+    auto commands = device.beginFrame();
+    ASSERT_TRUE(commands.has_value());
+    nx::rhi::CommandList& list = commands->get();
+    list.transition(doubled->get(), nx::rhi::BufferState::Undefined, nx::rhi::BufferState::ComputeWrite);
+    list.setComputePipeline(pipeline->get());
+    list.setComputeBindGroup(0, group->get());
+    list.dispatch(nx::narrow<std::uint32_t>((kValues.size() + kGroupSize - 1) / kGroupSize));
+    list.transition(doubled->get(), nx::rhi::BufferState::ComputeWrite, nx::rhi::BufferState::CopySource);
+    list.transition(readback->get(), nx::rhi::BufferState::Undefined, nx::rhi::BufferState::CopyDestination);
+    list.copyBuffer(doubled->get(), 0, readback->get(), 0, size);
+    list.transition(readback->get(), nx::rhi::BufferState::CopyDestination, nx::rhi::BufferState::HostRead);
+    ASSERT_TRUE(device.submitFrame().has_value());
+    device.waitIdle();
+    std::array<std::uint32_t, kValues.size()> written{};
+    std::memcpy(written.data(), device.mappedBytes(readback->get()).data(), size);
+    for (std::size_t index = 0; index < kValues.size(); ++index) {
+        EXPECT_EQ(written.at(index), kValues.at(index) * 2) << index;
+    }
+    EXPECT_EQ(device.validationErrors(), 0U);
+}
+
 } // namespace

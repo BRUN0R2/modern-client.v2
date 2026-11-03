@@ -95,6 +95,8 @@ enum class BufferState : std::uint8_t {
     Uniform,         ///< Read as a uniform buffer.
     ShaderRead,      ///< Read as a storage buffer.
     HostRead,        ///< Read by the CPU through its mapping, once the frame is done.
+    ComputeWrite,    ///< Written, and read, as a storage buffer by a dispatch.
+    Indirect,        ///< Read as what an indirect draw draws (CommandList::drawIndexedIndirect).
 };
 
 /// What a buffer may be used for, from its creation.
@@ -105,6 +107,7 @@ enum class BufferUsage : std::uint8_t {
     Storage,
     CopySource,
     CopyDestination,
+    Indirect,
     Count,
 };
 
@@ -183,6 +186,7 @@ enum class ShaderFormat : std::uint8_t {
 enum class ShaderStage : std::uint8_t {
     Vertex,
     Fragment,
+    Compute,
     Count,
 };
 
