@@ -17,6 +17,7 @@ import nx.data;
 import :player;
 import :sounds;
 import :weapons;
+import :inventory;
 
 export namespace cs {
 
@@ -130,6 +131,46 @@ struct Buyer {
 /// checkMayBuy, AmmoFull, NotEnoughMoney.
 [[nodiscard]] auto ammoPriceFor(const AmmoType& ammo, const Buyer& buyer, std::uint32_t carried)
     -> nx::Result<nx::Money, BuyRefusal>;
+
+/// What a player had after its last purchase, which it can buy again (m_rebuyStruct, BuildRebuyStruct): the
+/// newest weapons of its primary and pistol slots, the rounds of their ammo it carried, and its armor.
+struct LastPurchase {
+    std::optional<WeaponIndex> primary{};
+    std::uint32_t primaryRounds = 0;
+    std::optional<WeaponIndex> pistol{};
+    std::uint32_t pistolRounds = 0;
+    ArmorKind armor = ArmorKind::None;
+
+    [[nodiscard]] inline auto operator==(const LastPurchase&) const noexcept -> bool = default;
+};
+
+/// What a player of `inventory` and `status`, of `weapons`, is left with after a purchase.
+[[nodiscard]] auto lastPurchaseOf(const Inventory& inventory, const PlayerStatus& status,
+                                  const WeaponCatalog& weapons) -> LastPurchase;
+
+/// A step of buying again for ammo: as much as can be carried and paid for, for `gun`, of `slot`.
+struct AmmoRebuy {
+    WeaponSlot slot{};
+    WeaponIndex gun{};
+
+    [[nodiscard]] inline auto operator==(const AmmoRebuy&) const noexcept -> bool = default;
+};
+
+/// A step of buying again: a weapon, ammo, or armor.
+using RebuyStep = std::variant<WeaponIndex, AmmoRebuy, ArmorKind>;
+
+/// What a player of `inventory` and `status` buys to have `last` again, in the order of `cl_rebuy`'s default
+/// (Rebuy): a primary weapon when it has none (RebuyPrimaryWeapon), the ammo of the one it will have when it
+/// carried more (RebuyPrimaryAmmo), the pistol when it has another (RebuySecondaryWeapon), its ammo likewise,
+/// and armor better than it wears (RebuyArmor).
+[[nodiscard]] auto rebuyStepsOf(const LastPurchase& last, const Inventory& inventory,
+                                const PlayerStatus& status, const WeaponCatalog& weapons)
+    -> std::vector<RebuyStep>;
+
+/// What `steps` cost a player of `inventory` and `status`: the boxes of their ammo up to all it can carry.
+[[nodiscard]] auto rebuyCostOf(std::span<const RebuyStep> steps, const Inventory& inventory,
+                               const PlayerStatus& status, const WeaponCatalog& weapons,
+                               const ArmorPrices& prices) -> nx::Money;
 
 /// Whether a player may buy now and for how long its round's players still do, as its client is told them
 /// (the original's buy zone icon and `BuyTime`).

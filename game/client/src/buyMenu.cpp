@@ -14,6 +14,8 @@ namespace cs {
 namespace {
 
 constexpr float kSecondsAMinute = 60.0F;
+/// The key that buys again, by the layout's character: the menu's, whatever it is bound to.
+constexpr char32_t kBuyAgainKey = U'r';
 /// The ammo's rows, in their order.
 constexpr std::array<std::pair<std::uint32_t, WeaponSlot>, 2> kAmmoRows{
     std::pair{kPrimaryAmmoKey, WeaponSlot::Primary}, std::pair{kPistolAmmoKey, WeaponSlot::Secondary}};
@@ -176,6 +178,9 @@ void appendArmor(std::vector<BuyEntry>& entries, const BuyMenuContent& content, 
     return detail;
 }
 
+/// What a list of what is bought again calls ammo.
+constexpr std::string_view kAmmoItem = "Ammo";
+
 /// The seconds of `time`, whole ones up.
 [[nodiscard]] auto wholeSecondsOf(nx::Seconds time) noexcept -> std::uint32_t {
     return static_cast<std::uint32_t>(std::ceil(std::max(time.count(), 0.0F)));
@@ -220,6 +225,30 @@ auto buyGunFactsOf(const Weapon& weapon, const BuyMenuContent& content) -> std::
                        .ammoName = ammo->name,
                        .boxRounds = ammo->boxRounds,
                        .boxPrice = ammo->boxPrice};
+}
+
+auto buyAgainOf(const BuyMenuContent& content, const BuyerView& view) -> std::optional<BuyAgain> {
+    const std::vector<RebuyStep> steps =
+        rebuyStepsOf(view.lastPurchase, *view.inventory, view.status, *content.weapons);
+    if (steps.empty()) {
+        return std::nullopt;
+    }
+    BuyAgain again{
+        .cost = rebuyCostOf(steps, *view.inventory, view.status, *content.weapons, *content.armorPrices)};
+    for (const RebuyStep& step : steps) {
+        if (const auto* const weapon = std::get_if<WeaponIndex>(&step)) {
+            again.items.emplace_back(content.weapons->weapon(*weapon).name);
+        } else if (const auto* const kind = std::get_if<ArmorKind>(&step)) {
+            const std::span<const BuyMenuArmor> armor = content.look->armor;
+            const auto found = std::ranges::find(armor, *kind, &BuyMenuArmor::kind);
+            if (found != armor.end()) {
+                again.items.emplace_back(found->name);
+            }
+        } else if (!std::ranges::contains(again.items, kAmmoItem)) {
+            again.items.push_back(kAmmoItem);
+        }
+    }
+    return again;
 }
 
 BuyMenu::BuyMenu(const BuyMenuContent& sold, BuyActions buying) noexcept
@@ -346,6 +375,12 @@ auto BuyMenu::handle(const nx::platform::WindowEvent& event, nx::platform::Mouse
         }
         return true;
     }
+    if (key->character == kBuyAgainKey) {
+        if (!key->isRepeat) {
+            buyAgain();
+        }
+        return true;
+    }
     return false;
 }
 
@@ -359,7 +394,8 @@ auto BuyMenu::frameOf(const BuyerView& view) const -> BuyMenuFrame {
                        .entries = buyEntriesOf(shownTab, content, view),
                        .ammo = {ammoRowOf(kPrimaryAmmoKey, WeaponSlot::Primary, content, view),
                                 ammoRowOf(kPistolAmmoKey, WeaponSlot::Secondary, content, view)},
-                       .carried = carriedOf(content, view)};
+                       .carried = carriedOf(content, view),
+                       .again = buyAgainOf(content, view)};
     for (const BuyTab tab : nx::EnumArray<BuyTab, std::uint32_t>::keys()) {
         const std::vector<BuyEntry> entries = buyEntriesOf(tab, content, view);
         if (!entries.empty()) {
@@ -400,6 +436,14 @@ void BuyMenu::buyAmmo(WeaponSlot slot) {
     }
 }
 
+void BuyMenu::buyAgain() {
+    if (const nx::Result<void, BuyRefusal> bought = actions.rebuy(); bought) {
+        isTabArmed = false;
+    } else {
+        actions.refused(bought.error().code);
+    }
+}
+
 void BuyMenu::hover(nx::platform::MousePosition cursor, nx::rhi::Extent2d size, const BuyerView& view) {
     const BuyMenuLayout layout{size};
     const std::vector<BuyEntry> entries = buyEntriesOf(shownTab, content, view);
@@ -436,6 +480,9 @@ void BuyMenu::click(nx::platform::MousePosition cursor, nx::rhi::Extent2d size, 
     }
     if (layout.buyButton().holds(cursor.x, cursor.y)) {
         buySelected(view);
+    }
+    if (layout.againTile().holds(cursor.x, cursor.y) && buyAgainOf(content, view)) {
+        buyAgain();
     }
 }
 

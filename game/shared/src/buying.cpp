@@ -13,6 +13,25 @@ namespace {
 
 constexpr float kSecondsAMinute = 60.0F;
 
+/// The kind of ammo `weapon` fires; none for one that fires none.
+[[nodiscard]] auto ammoOf(WeaponIndex weapon, const WeaponCatalog& weapons) noexcept -> const AmmoType* {
+    const std::optional<WeaponMagazine>& magazine = weapons.weapon(weapon).magazine;
+    return magazine ? weapons.findAmmo(magazine->ammo) : nullptr;
+}
+
+/// The rounds of the ammo `weapon` fires that a player of `inventory` carries.
+[[nodiscard]] auto carriedFor(WeaponIndex weapon, const Inventory& inventory,
+                              const WeaponCatalog& weapons) noexcept -> std::uint32_t {
+    const AmmoType* const ammo = ammoOf(weapon, weapons);
+    return ammo != nullptr ? inventory.reserve(ammo->id) : 0;
+}
+
+/// The newest of a player's weapons of `slot`; none.
+[[nodiscard]] auto newestIn(WeaponSlot slot, const Inventory& inventory) -> std::optional<WeaponIndex> {
+    const std::vector<WeaponIndex> weapons = inventory.weaponsIn(slot);
+    return weapons.empty() ? std::nullopt : std::optional{weapons.front()};
+}
+
 /// Whether `buyers` take in a player of `team`.
 [[nodiscard]] constexpr auto isSoldTo(Buyers buyers, Team team) noexcept -> bool {
     switch (buyers) {
@@ -141,6 +160,66 @@ auto ammoPriceFor(const AmmoType& ammo, const Buyer& buyer, std::uint32_t carrie
         return nx::fail(BuyRefusal::NotEnoughMoney);
     }
     return ammo.boxPrice;
+}
+
+auto lastPurchaseOf(const Inventory& inventory, const PlayerStatus& status, const WeaponCatalog& weapons)
+    -> LastPurchase {
+    const std::optional<WeaponIndex> primary = newestIn(WeaponSlot::Primary, inventory);
+    const std::optional<WeaponIndex> pistol = newestIn(WeaponSlot::Secondary, inventory);
+    return LastPurchase{.primary = primary,
+                        .primaryRounds = primary ? carriedFor(*primary, inventory, weapons) : 0,
+                        .pistol = pistol,
+                        .pistolRounds = pistol ? carriedFor(*pistol, inventory, weapons) : 0,
+                        .armor = status.armorKind};
+}
+
+auto rebuyStepsOf(const LastPurchase& last, const Inventory& inventory, const PlayerStatus& status,
+                  const WeaponCatalog& weapons) -> std::vector<RebuyStep> {
+    std::vector<RebuyStep> steps;
+    const auto appendAmmo = [&](WeaponSlot slot, const std::optional<WeaponIndex>& gun,
+                                std::uint32_t rounds) {
+        if (gun && rounds > carriedFor(*gun, inventory, weapons)) {
+            steps.emplace_back(AmmoRebuy{.slot = slot, .gun = *gun});
+        }
+    };
+    const std::optional<WeaponIndex> heldPrimary = newestIn(WeaponSlot::Primary, inventory);
+    if (!heldPrimary && last.primary) {
+        steps.emplace_back(*last.primary);
+    }
+    appendAmmo(WeaponSlot::Primary, heldPrimary ? heldPrimary : last.primary, last.primaryRounds);
+
+    const std::optional<WeaponIndex> heldPistol = newestIn(WeaponSlot::Secondary, inventory);
+    if (last.pistol && !inventory.has(*last.pistol)) {
+        steps.emplace_back(*last.pistol);
+    }
+    appendAmmo(WeaponSlot::Secondary, last.pistol ? last.pistol : heldPistol, last.pistolRounds);
+
+    if (std::to_underlying(last.armor) > std::to_underlying(status.armorKind)) {
+        steps.emplace_back(last.armor);
+    }
+    return steps;
+}
+
+auto rebuyCostOf(std::span<const RebuyStep> steps, const Inventory& inventory, const PlayerStatus& status,
+                 const WeaponCatalog& weapons, const ArmorPrices& prices) -> nx::Money {
+    nx::Money cost{};
+    for (const RebuyStep& step : steps) {
+        if (const auto* const weapon = std::get_if<WeaponIndex>(&step)) {
+            const std::optional<WeaponPurchase>& purchase = weapons.weapon(weapons.madeFor(*weapon)).purchase;
+            cost = cost + (purchase ? purchase->price : nx::Money{});
+        } else if (const auto* const ammo = std::get_if<AmmoRebuy>(&step)) {
+            const AmmoType* const kind = ammoOf(ammo->gun, weapons);
+            const std::uint32_t carried = carriedFor(ammo->gun, inventory, weapons);
+            if (kind != nullptr && carried < kind->maxCarried) {
+                const std::uint32_t boxes =
+                    ((kind->maxCarried - carried) + kind->boxRounds - 1) / kind->boxRounds;
+                cost = cost + nx::Money{nx::narrow<std::int32_t>(boxes) * kind->boxPrice.value()};
+            }
+        } else if (const auto* const armor = std::get_if<ArmorKind>(&step)) {
+            cost = cost + armorCostOf(prices, status, *armor).value_or(nx::Money{});
+        }
+    }
+    return cost;
 }
 
 auto buyingStateOf(const Buyer& buyer, bool isFrozen) -> BuyingState {

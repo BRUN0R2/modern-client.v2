@@ -111,6 +111,10 @@ protected:
                        boughtAmmo.push_back(slot);
                        return answer();
                    },
+                   .rebuy = [this]() -> nx::Result<void, BuyRefusal> {
+                       ++rebuys;
+                       return answer();
+                   },
                    .refused = [this](BuyRefusal told) { refusals.push_back(told); }}} {}
 
     [[nodiscard]] auto content() const -> cs::BuyMenuContent {
@@ -121,7 +125,8 @@ protected:
         return {.team = team,
                 .status = cs::PlayerStatus{.armor = armor, .armorKind = armorKind, .money = money},
                 .inventory = &inventory,
-                .buying = cs::BuyingState{.refusal = mayNotBuy, .timeLeft = kBuyTime, .length = kBuyTime}};
+                .buying = cs::BuyingState{.refusal = mayNotBuy, .timeLeft = kBuyTime, .length = kBuyTime},
+                .lastPurchase = last};
     }
     void give(WeaponIndex weapon) {
         nx::Random random{0, "test"};
@@ -165,6 +170,8 @@ protected:
     std::vector<WeaponIndex> boughtWeapons;
     std::vector<ArmorKind> boughtArmor;
     std::vector<cs::WeaponSlot> boughtAmmo;
+    std::size_t rebuys = 0;
+    cs::LastPurchase last{};
     std::vector<BuyRefusal> refusals;
     cs::BuyMenu menu;
 
@@ -393,6 +400,38 @@ TEST_F(BuyMenuTest, EscapeGoesBackAndEnterBuysOncePerPress) {
     EXPECT_FALSE(menu.isOpen());
 }
 
+TEST_F(BuyMenuTest, ItsKeyAndItsTileBuyAgainAndWhatTheGameRefusesIsTold) {
+    openOnRifles();
+    last = cs::LastPurchase{.primary = kAk, .armor = ArmorKind::Kevlar};
+    EXPECT_TRUE(handle(KeyChanged{.key = Key::R, .isDown = true, .character = U'r'})) << "it does not reload";
+    EXPECT_EQ(rebuys, 1U);
+    EXPECT_TRUE(handle(KeyChanged{.key = Key::R, .isDown = true, .isRepeat = true, .character = U'r'}));
+    EXPECT_EQ(rebuys, 1U) << "once a press";
+    EXPECT_FALSE(handle(KeyChanged{.key = Key::R, .isDown = false, .character = U'r'}));
+    click(cs::BuyMenuLayout{kScreen}.againTile());
+    EXPECT_EQ(rebuys, 2U);
+
+    refusal = BuyRefusal::NotEnoughMoney;
+    EXPECT_TRUE(handle(KeyChanged{.key = Key::R, .isDown = true, .character = U'r'}));
+    EXPECT_EQ(refusals, (std::vector{BuyRefusal::NotEnoughMoney}));
+}
+
+TEST_F(BuyMenuTest, ItsTileBuysNothingWithNothingToBuyAgain) {
+    openOnRifles();
+    click(cs::BuyMenuLayout{kScreen}.againTile());
+    EXPECT_EQ(rebuys, 0U);
+    EXPECT_FALSE(menu.frameOf(view()).again.has_value());
+}
+
+TEST_F(BuyMenuTest, AFrameTellsWhatItWouldBuyAgainAndItsCost) {
+    give(kGlock);
+    last = cs::LastPurchase{.primary = kAk, .primaryRounds = 90, .armor = ArmorKind::KevlarAndHelmet};
+    const std::optional<cs::BuyAgain> again = cs::buyAgainOf(content(), view());
+    ASSERT_TRUE(again.has_value());
+    EXPECT_EQ(again->items, (std::vector<std::string_view>{"ak", "Ammo", "Vest and helmet"}));
+    EXPECT_EQ(again->cost, nx::Money{2500 + (3 * 80) + 1000});
+}
+
 TEST_F(BuyMenuTest, AFrameTellsWhatTheMenuShows) {
     give(kGlock);
     give(kM4);
@@ -443,6 +482,11 @@ TEST(BuyMenuLayoutTest, EveryPartIsOnTheScreenWhateverItsSize) {
         EXPECT_TRUE(isOnScreen(layout.buyButton()));
         EXPECT_LE(layout.ammoRow(1, 6).y + layout.ammoRow(1, 6).tall, layout.rail().y + layout.rail().tall)
             << "all the tabs and the ammo fit on the rail";
+        EXPECT_TRUE(isOnScreen(layout.carriedTile(0)));
+        EXPECT_TRUE(isOnScreen(layout.againTile()));
+        EXPECT_LE(layout.carriedTile(2).x + layout.carriedTile(2).wide, layout.againTile().x);
+        EXPECT_LT(layout.againTile().x + layout.againTile().wide, layout.carried().x + layout.carried().wide)
+            << "the keys have the rest of the row";
     }
 }
 

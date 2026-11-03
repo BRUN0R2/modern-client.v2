@@ -15,6 +15,23 @@ namespace {
 /// The stream of random numbers a purchase's weapon is drawn by.
 constexpr std::string_view kPurchaseStream = "purchase";
 
+/// What `player` has after a purchase is what `rebuy` buys again (BuildRebuyStruct).
+void remember(const GameState& game, Player& player) {
+    player.lastPurchase = lastPurchaseOf(player.inventory, player.status, game.content.weapons);
+}
+
+/// `player` buys what `step` asks for.
+[[nodiscard]] auto buyStep(GameState& game, Player& player, const RebuyStep& step)
+    -> nx::Result<void, BuyRefusal> {
+    if (const auto* const weapon = std::get_if<WeaponIndex>(&step)) {
+        return buyWeapon(game, player, *weapon);
+    }
+    if (const auto* const ammo = std::get_if<AmmoRebuy>(&step)) {
+        return buyAmmo(game, player, ammo->slot, AmmoPurchase::AsManyBoxes);
+    }
+    return buyArmor(game, player, *std::get_if<ArmorKind>(&step));
+}
+
 } // namespace
 
 auto buyerOf(const GameState& game, const Player& player) -> Buyer {
@@ -74,6 +91,7 @@ auto buyWeapon(GameState& game, Player& player, WeaponIndex asked) -> nx::Result
     }
     giveWeapon(game, player, weapon);
     pay(game, player, *price, game.content.buying.sounds.weapon);
+    remember(game, player);
     return {};
 }
 
@@ -84,6 +102,7 @@ auto buyArmor(GameState& game, Player& player, ArmorKind kind) -> nx::Result<voi
     }
     wearArmor(player.status, kind);
     pay(game, player, *price, game.content.buying.sounds.armor);
+    remember(game, player);
     return {};
 }
 
@@ -96,6 +115,30 @@ auto buyAmmo(GameState& game, Player& player, WeaponSlot slot, AmmoPurchase purc
         // Each box adds a round at least, or is refused as the ammo is full.
         while (buyBoxes(game, player, slot).has_value()) {
         }
+    }
+    remember(game, player);
+    return {};
+}
+
+auto rebuy(GameState& game, Player& player) -> nx::Result<void, BuyRefusal> {
+    if (auto mayBuy = checkMayBuy(buyerOf(game, player)); !mayBuy) {
+        return mayBuy;
+    }
+    // What it cannot pay for it goes without, the next step perhaps cheaper; refused all, it is told why.
+    // What it buys here is no new purchase to buy again (m_bIsInRebuy).
+    const LastPurchase kept = player.lastPurchase;
+    std::optional<BuyRefusal> refusal;
+    bool hasBought = false;
+    for (const RebuyStep& step : rebuyStepsOf(kept, player.inventory, player.status, game.content.weapons)) {
+        const nx::Result<void, BuyRefusal> bought = buyStep(game, player, step);
+        hasBought = hasBought || bought.has_value();
+        if (!bought && !refusal) {
+            refusal = bought.error().code;
+        }
+    }
+    player.lastPurchase = kept;
+    if (!hasBought && refusal) {
+        return nx::fail(*refusal);
     }
     return {};
 }

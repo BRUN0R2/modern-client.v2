@@ -84,6 +84,7 @@ auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
                           .player = player.movement,
                           .status = player.status,
                           .buying = buyingStateOf(buyerOf(game, player), game.rounds.isFrozen()),
+                          .lastPurchase = player.lastPurchase,
                           .inventory = player.inventory,
                           .roundTimer = player.roundTimer,
                           .turnedView = player.turnedView,

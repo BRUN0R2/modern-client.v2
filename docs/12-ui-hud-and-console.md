@@ -416,7 +416,7 @@ original has a key menu and a VGUI one, and the original's keys. `buy` (`b`) ope
 | Tabs, on the left | Pistols `1`, shotguns `2`, SMGs `3`, rifles `4`, machine gun `5` and equipment `8`, those with something for the player's team, each with the picture of its first item; under them, the ammo of the primary weapon `6` and of the pistol `7`, with what is carried and what a box costs |
 | Items, on the right of the tabs | Those of the tab shown, three to a row, more when a mod sells more: each with its picture, its key, its name and its price; dimmed with its price in red when it costs more than the player has, `OWNED` or `WORN` when it has it |
 | What the item selected is | A gun's damage, rate of fire, what armor lets through and move speed, with a bar of each; its clip, what is carried of its ammo at most, its reload and what a box costs; armor's `about`; whether it takes the place of a weapon held, and what buys it |
-| Under them | What the player carries: its primary weapon and its pistol, with their rounds, and its armor; and the keys |
+| Under them | What the player carries: its primary weapon and its pistol, with their rounds, and its armor; what `r`, or a click, buys again of what it last had, with what it costs, when there is anything; and the keys |
 
 A first key opens a tab and the next buys on it, as the original's two menus do, so that `b` `4` `2` still buys
 the CV-47 and `b` `8` `2` a vest and a helmet: the keys are those of the `slot1` to `slot10` commands, whatever

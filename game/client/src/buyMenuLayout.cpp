@@ -35,7 +35,8 @@ constexpr std::int32_t kDetailInsetUnits = 20;
 constexpr std::int32_t kDetailFootUnits = 18;
 constexpr std::int32_t kButtonTallUnits = 56;
 constexpr std::int32_t kTileGapUnits = 12;
-constexpr std::int32_t kTileWideUnits = 330;
+constexpr std::int32_t kKeysWideUnits = 272; ///< What the keys take of the row of what the player carries.
+constexpr std::int32_t kCarriedTiles = 3;
 
 } // namespace
 
@@ -115,11 +116,21 @@ auto BuyMenuLayout::buyButton() const noexcept -> BuyRect {
 }
 
 auto BuyMenuLayout::carriedTile(std::size_t index) const noexcept -> BuyRect {
-    const std::int32_t wide = pixels(kTileWideUnits);
+    // Of what the keys and the gaps leave, the tiles take a share each and the last half as much again.
+    constexpr std::int32_t kSharesOfATile = 2;
+    constexpr std::int32_t kAllShares = (2 * kCarriedTiles) + 3;
+    const std::int32_t room =
+        carriedRect.wide - pixels(kKeysWideUnits) - ((kCarriedTiles + 1) * pixels(kTileGapUnits));
+    const std::int32_t wide = room * kSharesOfATile / kAllShares;
     return {.x = carriedRect.x + (nx::narrow<std::int32_t>(index) * (wide + pixels(kTileGapUnits))),
             .y = carriedRect.y,
             .wide = wide,
             .tall = carriedRect.tall};
+}
+
+auto BuyMenuLayout::againTile() const noexcept -> BuyRect {
+    const BuyRect after = carriedTile(kCarriedTiles);
+    return {.x = after.x, .y = after.y, .wide = after.wide + (after.wide / 2), .tall = after.tall};
 }
 
 } // namespace cs

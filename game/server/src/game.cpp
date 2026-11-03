@@ -188,6 +188,10 @@ auto Game::buyWeapon(PlayerIndex index, WeaponIndex weapon) -> nx::Result<void, 
     return cs::buyWeapon(m_state, playerAt(m_state, index), weapon);
 }
 
+auto Game::rebuy(PlayerIndex index) -> nx::Result<void, BuyRefusal> {
+    return cs::rebuy(m_state, playerAt(m_state, index));
+}
+
 auto Game::buyArmor(PlayerIndex index, ArmorKind kind) -> nx::Result<void, BuyRefusal> {
     return cs::buyArmor(m_state, playerAt(m_state, index), kind);
 }

@@ -33,4 +33,7 @@ void pay(GameState& game, Player& player, nx::Money price, const GameSound& soun
 [[nodiscard]] auto buyAmmo(GameState& game, Player& player, WeaponSlot slot, AmmoPurchase purchase)
     -> nx::Result<void, BuyRefusal>;
 
+/// `player` buys again what it had after its last purchase: as cs::Game::rebuy tells.
+[[nodiscard]] auto rebuy(GameState& game, Player& player) -> nx::Result<void, BuyRefusal>;
+
 } // namespace cs

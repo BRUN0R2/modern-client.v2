@@ -79,6 +79,10 @@ public:
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_last.status; }
     /// Whether the player may buy now, and for how long.
     [[nodiscard]] inline auto buying() const noexcept -> const BuyingState& { return m_last.buying; }
+    /// What the player had after its last purchase, which it can buy again.
+    [[nodiscard]] inline auto lastPurchase() const noexcept -> const LastPurchase& {
+        return m_last.lastPurchase;
+    }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_last.inventory; }
     /// The whole seconds the player's HUD shows of the round's time (RoundTimer::shownAt), at the

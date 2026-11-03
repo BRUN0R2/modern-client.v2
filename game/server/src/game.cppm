@@ -288,6 +288,10 @@ public:
     /// ammoPriceFor.
     [[nodiscard]] auto buyAmmo(PlayerIndex player, WeaponSlot slot, AmmoPurchase purchase)
         -> nx::Result<void, BuyRefusal>;
+    /// `player` buys again what it had after its last purchase (Rebuy, rebuyStepsOf), going without what it
+    /// cannot pay for, none of it a new purchase to buy again. Errors: those of checkMayBuy; the first
+    /// refusal of a step, when it could buy none.
+    [[nodiscard]] auto rebuy(PlayerIndex player) -> nx::Result<void, BuyRefusal>;
     /// Turns noclip on or off for `player`, as the original's `noclip` cheat does; returns whether it is
     /// on now.
     auto toggleNoclip(PlayerIndex player) -> bool;

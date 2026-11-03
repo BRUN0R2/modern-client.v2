@@ -1313,6 +1313,58 @@ TEST_F(GameTest, APlayersClientIsToldItsTeamWhetherItMayBuyAndForHowLong) {
     EXPECT_LT(game().snapshotFor(counterTerrorist).buying.timeLeft, nx::Seconds{81.0F});
 }
 
+TEST_F(GameTest, APlayerBuysAgainWhatItHadAfterItsLastPurchase) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::WeaponIndex ak = *content().weapons.indexOf("ak47");
+    ASSERT_TRUE(cvars().startMoney.set(16000.0F).has_value());
+    ASSERT_TRUE(cvars().restart.set(1.0F).has_value());
+    std::ignore = play(player, kPastARestart);
+    ASSERT_TRUE(game().buyWeapon(player, ak).has_value());
+    ASSERT_TRUE(game().buyAmmo(player, cs::WeaponSlot::Primary, cs::AmmoPurchase::AsManyBoxes).has_value());
+    ASSERT_TRUE(game().buyArmor(player, cs::ArmorKind::KevlarAndHelmet).has_value());
+    const cs::LastPurchase last = game().snapshotFor(player).lastPurchase;
+    EXPECT_EQ(last.primary, ak);
+    EXPECT_EQ(last.primaryRounds, 90U);
+    EXPECT_EQ(last.armor, cs::ArmorKind::KevlarAndHelmet);
+
+    // A round later, its weapons and armor gone as a death takes them: what it had, bought again.
+    std::ignore = killByFall(player);
+    ASSERT_TRUE(cvars().restart.set(1.0F).has_value());
+    std::ignore = play(player, kPastARestart);
+    ASSERT_FALSE(game().snapshotFor(player).inventory.has(ak));
+    const nx::Money before = game().snapshotFor(player).status.money;
+    ASSERT_TRUE(game().rebuy(player).has_value());
+    const cs::PlayerSnapshot told = game().snapshotFor(player);
+    EXPECT_TRUE(told.inventory.has(ak));
+    EXPECT_EQ(told.inventory.reserve("762Nato"), 90U);
+    EXPECT_EQ(told.status.armorKind, cs::ArmorKind::KevlarAndHelmet);
+    EXPECT_EQ(told.status.money, before - nx::Money{2500 + (3 * 80) + 1000});
+    EXPECT_EQ(told.lastPurchase, last) << "buying again is no new purchase to buy again";
+}
+
+TEST_F(GameTest, BuyingAgainGoesWithoutWhatThePlayerCannotPayForAndIsRefusedWhereItMayNotBuy) {
+    playOn(buyZoneMap(""));
+    const cs::PlayerIndex player = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const cs::WeaponIndex ak = *content().weapons.indexOf("ak47");
+    ASSERT_TRUE(cvars().startMoney.set(16000.0F).has_value());
+    ASSERT_TRUE(cvars().restart.set(1.0F).has_value());
+    std::ignore = play(player, kPastARestart);
+    ASSERT_TRUE(game().buyWeapon(player, ak).has_value());
+    ASSERT_TRUE(game().buyArmor(player, cs::ArmorKind::Kevlar).has_value());
+
+    ASSERT_TRUE(cvars().startMoney.set(800.0F).has_value());
+    std::ignore = killByFall(player);
+    ASSERT_TRUE(cvars().restart.set(1.0F).has_value());
+    std::ignore = play(player, kPastARestart);
+    ASSERT_TRUE(game().rebuy(player).has_value()) << "the rifle is too dear, the vest is not";
+    EXPECT_FALSE(game().snapshotFor(player).inventory.has(ak));
+    EXPECT_EQ(game().snapshotFor(player).status.armorKind, cs::ArmorKind::Kevlar);
+
+    game().placeEye(player, {.x = 3000.0F, .y = 3000.0F, .z = kStandingEye});
+    EXPECT_EQ(game().rebuy(player).error().code, cs::BuyRefusal::OutsideBuyZones);
+}
+
 TEST_F(GameTest, AMapsParametersKeepATeamFromBuying) {
     playOn(buyZoneMap("", R"("buying" "1")"));
     const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "T");

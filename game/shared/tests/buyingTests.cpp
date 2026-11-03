@@ -9,6 +9,7 @@
 
 import std;
 import nx.core;
+import nx.game;
 import nx.platform;
 import cs.shared;
 
@@ -198,6 +199,109 @@ TEST(ArmorCostTest, WhatIsWornWholeHasNoCost) {
     EXPECT_EQ(costOf(nx::ArmorPoints{50.0F}, ArmorKind::KevlarAndHelmet, ArmorKind::KevlarAndHelmet),
               nx::Money{650})
         << "the vest under a helmet kept";
+}
+
+/// A catalog of a pistol and a rifle, with what a player given them has.
+class RebuyTest : public ::testing::Test {
+protected:
+    RebuyTest() : weapons{catalog()}, inventory{weapons} {}
+
+    [[nodiscard]] static auto gun(std::string id, cs::WeaponSlot slot, std::string ammo, std::int32_t price)
+        -> cs::Weapon {
+        return cs::Weapon{
+            .id = id,
+            .classname = "weapon_" + id,
+            .name = id,
+            .slot = slot,
+            .position = 1,
+            .purchase = cs::WeaponPurchase{.buyers = cs::Buyers::Everyone, .price = nx::Money{price}},
+            .magazine = cs::WeaponMagazine{.ammo = std::move(ammo), .clipSize = 30},
+            .models = cs::WeaponModels{.view = "models/v_gun.mdl",
+                                       .player = "models/p_gun.mdl",
+                                       .playerAnimation = "gun"},
+            .view = cs::WeaponView{
+                .drawSequences = {1},
+                .idles = {cs::WeaponIdle{.sequence = 0, .wait = nx::Seconds{20.0F}, .share = 1.0F}},
+                .idlesWhenEmpty = true}};
+    }
+    [[nodiscard]] static auto catalog() -> cs::WeaponCatalog {
+        cs::AmmoTypes ammo{
+            .ammo = {
+                cs::AmmoType{.id = "9mm", .maxCarried = 120, .boxPrice = nx::Money{20}, .boxRounds = 30},
+                cs::AmmoType{.id = "762Nato", .maxCarried = 90, .boxPrice = nx::Money{80}, .boxRounds = 30}}};
+        auto made =
+            cs::WeaponCatalog::make(std::move(ammo), {gun("glock", cs::WeaponSlot::Secondary, "9mm", 400),
+                                                      gun("ak", cs::WeaponSlot::Primary, "762Nato", 2500)});
+        EXPECT_TRUE(made.has_value()) << (made ? "" : nx::describe(made.error()));
+        return std::move(made).value();
+    }
+    void give(cs::WeaponIndex weapon) {
+        nx::Random random{0, "test"};
+        std::ignore = inventory.give(weapon, cs::AutoSwitch::Off, nx::game::TickTime{}, random);
+    }
+
+    static constexpr cs::WeaponIndex kGlock{0};
+    static constexpr cs::WeaponIndex kAk{1};
+    cs::WeaponCatalog weapons;
+    cs::Inventory inventory;
+    cs::PlayerStatus status{};
+    cs::ArmorPrices prices{
+        .kevlar = nx::Money{650}, .kevlarAndHelmet = nx::Money{1000}, .helmet = nx::Money{350}};
+};
+
+TEST_F(RebuyTest, APurchaseLeavesWhatThePlayerHasToBuyAgain) {
+    give(kGlock);
+    give(kAk);
+    std::ignore = inventory.giveAmmo("762Nato", 60);
+    std::ignore = inventory.giveAmmo("9mm", 40);
+    status.armorKind = ArmorKind::KevlarAndHelmet;
+    EXPECT_EQ(cs::lastPurchaseOf(inventory, status, weapons),
+              (cs::LastPurchase{.primary = kAk,
+                                .primaryRounds = 60,
+                                .pistol = kGlock,
+                                .pistolRounds = 40,
+                                .armor = ArmorKind::KevlarAndHelmet}));
+}
+
+TEST_F(RebuyTest, ItBuysInTheOrderOfClRebuysDefaultWhatThePlayerLacksAndItsCostAddsUp) {
+    const cs::LastPurchase last{.primary = kAk,
+                                .primaryRounds = 90,
+                                .pistol = kGlock,
+                                .pistolRounds = 0,
+                                .armor = ArmorKind::KevlarAndHelmet};
+    give(kGlock); // as it spawns
+    const std::vector<cs::RebuyStep> steps = cs::rebuyStepsOf(last, inventory, status, weapons);
+    EXPECT_EQ(steps,
+              (std::vector<cs::RebuyStep>{kAk, cs::AmmoRebuy{.slot = cs::WeaponSlot::Primary, .gun = kAk},
+                                          ArmorKind::KevlarAndHelmet}));
+    EXPECT_EQ(cs::rebuyCostOf(steps, inventory, status, weapons, prices), nx::Money{2500 + (3 * 80) + 1000});
+}
+
+TEST_F(RebuyTest, ItBuysNothingOfWhatThePlayerStillHas) {
+    give(kGlock);
+    give(kAk);
+    std::ignore = inventory.giveAmmo("762Nato", 90);
+    status.armorKind = ArmorKind::Kevlar;
+    const cs::LastPurchase last{
+        .primary = kAk, .primaryRounds = 60, .pistol = kGlock, .armor = ArmorKind::Kevlar};
+    EXPECT_TRUE(cs::rebuyStepsOf(last, inventory, status, weapons).empty());
+}
+
+TEST_F(RebuyTest, APrimaryWeaponItHasStaysButThePistolIsBoughtInItsPlace) {
+    give(kAk);
+    const cs::LastPurchase noPrimary{.pistol = kGlock};
+    EXPECT_EQ(cs::rebuyStepsOf(noPrimary, inventory, status, weapons), (std::vector<cs::RebuyStep>{kGlock}));
+    EXPECT_TRUE(cs::rebuyStepsOf(cs::LastPurchase{}, inventory, status, weapons).empty());
+}
+
+TEST_F(RebuyTest, ArmorIsBoughtWhenThePlayerWearsLessOfIt) {
+    status.armorKind = ArmorKind::KevlarAndHelmet;
+    EXPECT_TRUE(
+        cs::rebuyStepsOf(cs::LastPurchase{.armor = ArmorKind::Kevlar}, inventory, status, weapons).empty());
+    status.armorKind = ArmorKind::Kevlar;
+    EXPECT_EQ(
+        cs::rebuyStepsOf(cs::LastPurchase{.armor = ArmorKind::KevlarAndHelmet}, inventory, status, weapons),
+        (std::vector<cs::RebuyStep>{ArmorKind::KevlarAndHelmet}));
 }
 
 TEST(BuyingStateTest, APlayerIsToldWhetherItMayBuyAndForHowLong) {

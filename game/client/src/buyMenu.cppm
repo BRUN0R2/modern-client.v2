@@ -43,6 +43,7 @@ struct BuyerView {
     PlayerStatus status{};
     const Inventory* inventory = nullptr;
     BuyingState buying{};
+    LastPurchase lastPurchase{};
 };
 
 /// What the menu sells: a weapon of the catalog, or armor.
@@ -153,6 +154,18 @@ struct BuyCarried {
     [[nodiscard]] inline auto operator==(const BuyCarried&) const noexcept -> bool = default;
 };
 
+/// What buying again buys: what it is called, in its order, and what it costs.
+struct BuyAgain {
+    std::vector<std::string_view> items{};
+    nx::Money cost{};
+
+    [[nodiscard]] inline auto operator==(const BuyAgain&) const noexcept -> bool = default;
+};
+
+/// What the player of `view` buys if it buys again; none when it would buy nothing.
+[[nodiscard]] auto buyAgainOf(const BuyMenuContent& content, const BuyerView& view)
+    -> std::optional<BuyAgain>;
+
 /// A tab the menu lists, its picture its first item's.
 struct BuyMenuTab {
     BuyTab tab{};
@@ -162,8 +175,8 @@ struct BuyMenuTab {
 };
 
 /// All the menu shows: its player's team, money and time left, in whole seconds; its tabs, the one shown and
-/// whether the next key buys on it; its items, what the one selected is, the ammo and what the player
-/// carries.
+/// whether the next key buys on it; its items, what the one selected is, the ammo, what the player carries,
+/// and what it would buy again.
 struct BuyMenuFrame {
     Team team{};
     nx::Money money{};
@@ -176,6 +189,7 @@ struct BuyMenuFrame {
     std::optional<BuyDetail> detail{};
     std::array<BuyAmmoRow, 2> ammo{};
     BuyCarried carried{};
+    std::optional<BuyAgain> again{};
 
     [[nodiscard]] inline auto operator==(const BuyMenuFrame&) const noexcept -> bool = default;
 };
@@ -212,8 +226,8 @@ public:
 
     /// What `event` does to the menu, open, on a screen of `size` with the mouse's cursor at `cursor`: the
     /// mouse moved selects what it is over, its left button buys it or opens a tab, Escape goes back, Enter
-    /// buys. Returns whether it took the event: not what has to reach the binds, as a key or a button coming
-    /// up, nor the keys it has no use for.
+    /// buys, `r` buys again what the player last had. Returns whether it took the event: not what has to
+    /// reach the binds, as a key or a button coming up, nor the keys it has no use for.
     auto handle(const nx::platform::WindowEvent& event, nx::platform::MousePosition cursor,
                 nx::rhi::Extent2d size, const BuyerView& view) -> bool;
 
@@ -227,6 +241,7 @@ private:
     [[nodiscard]] auto open(const BuyerView& view) -> nx::Result<void, BuyRefusal>;
     void buy(const BuyItem& item);
     void buyAmmo(WeaponSlot slot);
+    void buyAgain();
     /// The item under `cursor` selected, when one is.
     void hover(nx::platform::MousePosition cursor, nx::rhi::Extent2d size, const BuyerView& view);
     /// What is under `cursor` opened or bought.

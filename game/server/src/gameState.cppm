@@ -68,6 +68,8 @@ struct Player {
     std::vector<SoundMade> sounds{};             ///< In the tick, but its weapons', which they keep.
     /// What its purchases sound like: it buys between ticks, as a client's commands come, heard in the next.
     std::vector<SoundMade> soundsOfPurchases{};
+    LastPurchase
+        lastPurchase{}; ///< Which `rebuy` buys again; through deaths and rounds, as the original keeps it.
     nx::EulerAngles view{};
     PlayerAnimation animation{};
     CommandNumber randomSeed{};
