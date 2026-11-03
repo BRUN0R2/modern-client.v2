@@ -269,7 +269,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] `nx.platform`: SDL3 window, events and input (vcpkg `sdl3` port), keys by physical position, raw mouse, and the native handles the swapchain is made from ([decision](#pending-decisions))
 - [x] `nx.rhi` interface: device and frames, command list, swapchain, generational texture handles, transitions, render passes
 - [x] `nx.rhi`: buffers, textures (and texture arrays), samplers, shaders, bind groups, render pipelines, copies and draws, with deferred destruction
-- [ ] `nx.rhi`: queries, compute pipelines, dynamic uniform offsets
+- [x] `nx.rhi`: compute pipelines, dispatches, indirect draws
+- [ ] `nx.rhi`: queries, dynamic uniform offsets
 - [x] Vulkan 1.3 backend with volk: instance and adapter choice, device, frames in flight on a timeline semaphore, validation counted
 - [x] VMA in the Vulkan backend (with buffers and textures)
 - [x] Swapchain, present modes and recreation (resize, minimized, out of date)

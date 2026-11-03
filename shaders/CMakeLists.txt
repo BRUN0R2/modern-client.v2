@@ -13,6 +13,7 @@ nxAddShaders(nxShaders
         screen.slang
         post.slang
         probe.slang
+        test/double.slang
         test/fill.slang
         test/sample.slang
         test/sampleLayer.slang)
