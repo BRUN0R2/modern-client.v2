@@ -51,12 +51,14 @@ struct SolidHit {
     std::optional<ecs::Entity> entity{};
 };
 
-/// A solid brush entity (Solid::Bsp), where it was when gathered.
+/// A solid brush entity (Solid::Bsp), where it was when gathered, and the box it is linked by there, which
+/// a way that does not meet it does not meet.
 struct SolidBrushEntity {
     ecs::Entity entity{};
     collision::ModelIndex model{};
     Vec3 origin{};
     EulerAngles angles{};
+    Aabb linked{};
 };
 
 /// An entity solid as a box (BoxSolidity), where it was when gathered, and how a trace meets it.
@@ -75,8 +77,8 @@ struct Solids {
     std::vector<SolidBoxEntity> boxes{};
 };
 
-/// The entities solid in `world`, where they are now, in the world's order.
-[[nodiscard]] auto solidsOf(ecs::World& world) -> Solids;
+/// The entities solid in `world`, whose map's hulls are `hulls`, where they are now, in the world's order.
+[[nodiscard]] auto solidsOf(ecs::World& world, const collision::BrushHulls& hulls) -> Solids;
 
 /// The server's way of `trace` through what is solid in `world`, whose map's hulls are `hulls`, as the
 /// original's game traces a line or a hull (UTIL_TraceLine, UTIL_TraceHull: SV_Move): the world's
