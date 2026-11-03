@@ -23,6 +23,7 @@ nxAddTest(csClientTests
         decalsTests.cpp
         weaponCommandsTests.cpp
         buyCommandsTests.cpp
+        buyMenuTests.cpp
         hearingTests.cpp
         audioTests.cpp
         windowFontsTests.cpp

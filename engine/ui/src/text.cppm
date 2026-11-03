@@ -93,4 +93,10 @@ auto appendText(std::vector<render::ScreenQuad>& quads, const GlyphAtlas& atlas,
 /// How far the pen moves over the UTF-8 `text` with `atlas`'s glyphs.
 [[nodiscard]] auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> std::int32_t;
 
+/// The rows the UTF-8 `text` makes `width` pixels wide with `atlas`'s glyphs: broken at the last space
+/// that fits, the space left out, or before the character that does not fit when no space does; one empty
+/// row for an empty text. Without room, the text is one row.
+[[nodiscard]] auto wrapText(const GlyphAtlas& atlas, std::string_view text, std::int32_t width)
+    -> std::vector<std::string>;
+
 } // namespace nx::ui

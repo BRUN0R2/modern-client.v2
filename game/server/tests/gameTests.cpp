@@ -1289,6 +1289,30 @@ TEST_F(GameTest, APlayerBuysOnlyWhereAndWhileItsRulesLetIt) {
               cs::BuyRefusal::TimeOver);
 }
 
+TEST_F(GameTest, APlayersClientIsToldItsTeamWhetherItMayBuyAndForHowLong) {
+    playOn(buyZoneMap(R"("team" "2")"));
+    const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "T");
+    const cs::PlayerIndex counterTerrorist =
+        game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "CT");
+    std::ignore = play(terrorist, 1);
+
+    EXPECT_EQ(game().snapshotFor(terrorist).team, cs::Team::Terrorists);
+    EXPECT_EQ(game().snapshotFor(terrorist).buying.refusal, cs::BuyRefusal::OutsideBuyZones)
+        << "a zone of the other team's";
+    const cs::BuyingState told = game().snapshotFor(counterTerrorist).buying;
+    EXPECT_EQ(game().snapshotFor(counterTerrorist).team, cs::Team::CounterTerrorists);
+    EXPECT_FALSE(told.refusal.has_value());
+    EXPECT_EQ(told.length, nx::Seconds{90.0F}) << "mp_buytime's default";
+
+    // Both teams commence the game, which restarts frozen: its time does not run down until the freeze ends.
+    constexpr std::uint32_t kFreezeTicks = 600;
+    constexpr std::uint32_t kTenSeconds = 1000;
+    std::ignore = play(counterTerrorist, kPastTheCommence + (kFreezeTicks / 2));
+    EXPECT_EQ(game().snapshotFor(counterTerrorist).buying.timeLeft, nx::Seconds{90.0F});
+    std::ignore = play(counterTerrorist, (kFreezeTicks / 2) + kTenSeconds);
+    EXPECT_LT(game().snapshotFor(counterTerrorist).buying.timeLeft, nx::Seconds{81.0F});
+}
+
 TEST_F(GameTest, AMapsParametersKeepATeamFromBuying) {
     playOn(buyZoneMap("", R"("buying" "1")"));
     const cs::PlayerIndex terrorist = game().join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "T");

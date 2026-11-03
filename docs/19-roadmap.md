@@ -108,7 +108,7 @@ and a feel assessment by veteran players.
 
 - Rounds, economy, every end reason.
 - Every weapon, grenade and piece of equipment. C4, hostages, VIP, escape.
-- Buying (classic and VGUI menus, autobuy/rebuy), radio, chat, voice, sprays.
+- Buying (the buy menu, autobuy/rebuy), radio, chat, voice, sprays.
 - Full HUD, scoreboard, team and character menus, spectator.
 - Every map entity.
 

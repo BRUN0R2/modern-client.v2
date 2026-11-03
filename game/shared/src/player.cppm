@@ -47,6 +47,7 @@ enum class ArmorKind : std::uint8_t {
     None,
     Kevlar,
     KevlarAndHelmet,
+    Count,
 };
 
 /// The armor a player takes from an item of armor (CItemKevlar, CItemAssaultSuit's MyTouch).

@@ -11,49 +11,17 @@ namespace nx::ui {
 
 namespace {
 
-/// The UTF-8 of `characters`.
-[[nodiscard]] auto utf8Text(std::u32string_view characters) -> std::string {
-    std::string text;
-    for (const char32_t character : characters) {
-        appendUtf8(text, character);
-    }
-    return text;
-}
-
-/// The rows `line` makes `width` pixels wide with `atlas`'s glyphs: broken at the last space that
-/// fits, the space left out, or before the character that does not fit when no space does; one
-/// empty row for an empty line. Without room, the line is one row.
+/// The rows `line` makes `width` pixels wide with `atlas`'s glyphs (wrapText); without an atlas, the
+/// line is one row.
 [[nodiscard]] auto wrapped(const RichTextLine& line, const GlyphAtlas* atlas, std::int32_t width)
     -> std::vector<RichTextLine> {
-    if (atlas == nullptr || width <= 0) {
+    if (atlas == nullptr) {
         return {line};
     }
-    const std::u32string characters = decodeUtf8(line.text);
     std::vector<RichTextLine> rows;
-    std::size_t start = 0;
-    std::optional<std::size_t> space; // the last space of the row
-    std::int32_t pen = 0;
-    for (std::size_t index = 0; index < characters.size(); ++index) {
-        const AtlasGlyph* glyph = atlas->glyph(characters[index]);
-        const std::int32_t advance = glyph != nullptr ? glyph->advance : 0;
-        if (pen + advance > width && index > start) {
-            const std::size_t end = space.value_or(index);
-            rows.push_back({.text = utf8Text(std::u32string_view{characters}.substr(start, end - start)),
-                            .color = line.color});
-            start = space ? end + 1 : end;
-            space.reset();
-            pen = 0;
-            for (std::size_t carried = start; carried < index; ++carried) {
-                const AtlasGlyph* earlier = atlas->glyph(characters[carried]);
-                pen += earlier != nullptr ? earlier->advance : 0;
-            }
-        }
-        if (characters[index] == U' ') {
-            space = index;
-        }
-        pen += advance;
+    for (std::string& row : wrapText(*atlas, line.text, width)) {
+        rows.push_back({.text = std::move(row), .color = line.color});
     }
-    rows.push_back({.text = utf8Text(std::u32string_view{characters}.substr(start)), .color = line.color});
     return rows;
 }
 

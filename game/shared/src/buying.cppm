@@ -28,6 +28,7 @@ enum class BuyingError : std::uint8_t {
 /// Why a player could not buy what it asked for, in the order the rules weigh it.
 enum class BuyRefusal : std::uint8_t {
     NoMap,           ///< No map is played: a client's own, which the game never says.
+    NoMenu,          ///< The client cannot show the buy menu: its own too.
     NotSold,         ///< What it asked for is not sold at all (the knife).
     NotForItsTeam,   ///< Its team is not sold it (#Alias_Not_Avail, #Cannot_Buy_This).
     Dead,            ///< It is dead (CanPlayerBuy's deadflag).
@@ -115,9 +116,13 @@ struct Buyer {
 [[nodiscard]] auto weaponPriceFor(const Weapon& weapon, const Buyer& buyer, bool isOwned)
     -> nx::Result<nx::Money, BuyRefusal>;
 
-/// What armor of `asked`, which is some, costs `buyer`, who wears what `status` says (BuyItem): a vest, of
-/// armor not whole; a vest and a helmet, by what of them it wears. Errors: those of checkMayBuy, ArmorWhole,
-/// NotEnoughMoney.
+/// What armor of `asked`, which is some, costs a player who wears what `status` says (BuyItem): a vest, of
+/// armor not whole; a vest and a helmet, by what of them it wears; none when it wears all of that, whole.
+[[nodiscard]] auto armorCostOf(const ArmorPrices& prices, const PlayerStatus& status,
+                               ArmorKind asked) noexcept -> std::optional<nx::Money>;
+
+/// What armor of `asked`, which is some, costs `buyer`, who wears what `status` says (armorCostOf). Errors:
+/// those of checkMayBuy, ArmorWhole, NotEnoughMoney.
 [[nodiscard]] auto armorPriceFor(const ArmorPrices& prices, const Buyer& buyer, const PlayerStatus& status,
                                  ArmorKind asked) -> nx::Result<nx::Money, BuyRefusal>;
 
@@ -125,6 +130,17 @@ struct Buyer {
 /// checkMayBuy, AmmoFull, NotEnoughMoney.
 [[nodiscard]] auto ammoPriceFor(const AmmoType& ammo, const Buyer& buyer, std::uint32_t carried)
     -> nx::Result<nx::Money, BuyRefusal>;
+
+/// Whether a player may buy now and for how long its round's players still do, as its client is told them
+/// (the original's buy zone icon and `BuyTime`).
+struct BuyingState {
+    std::optional<BuyRefusal> refusal{}; ///< Why it may not, as checkMayBuy weighs it; none: it may.
+    nx::Seconds timeLeft{};
+    nx::Seconds length{}; ///< How long a round's players buy for (mp_buytime).
+};
+
+/// What `buyer` is told: its buy time does not run down while its round `isFrozen`, which starts it again.
+[[nodiscard]] auto buyingStateOf(const Buyer& buyer, bool isFrozen) -> BuyingState;
 
 } // namespace cs
 

@@ -42,6 +42,9 @@ nxAddModuleLibrary(csClient
         src/audio.cppm
         src/weaponCommands.cppm
         src/buyCommands.cppm
+        src/buyMenuLayout.cppm
+        src/buyMenu.cppm
+        src/buyMenuPanel.cppm
         src/navigationDrawing.cppm
     SOURCES
         src/input.cpp
@@ -78,6 +81,9 @@ nxAddModuleLibrary(csClient
         src/audio.cpp
         src/weaponCommands.cpp
         src/buyCommands.cpp
+        src/buyMenuLayout.cpp
+        src/buyMenu.cpp
+        src/buyMenuPanel.cpp
         src/navigationDrawing.cpp
     DEPENDS
         nx::core

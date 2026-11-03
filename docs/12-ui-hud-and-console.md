@@ -14,8 +14,8 @@
 | Layer | Technology | Use |
 |-------|------------|-----|
 | Classic HUD | In-house sprite (SPR) and bitmap font renderer | Health, armor, money, ammo, timer, radar, status icons, crosshair, kill feed |
-| Menus and screens | In-house retained UI toolkit on top of `nx.render`, with declarative layout and skins | Main menu, options, server browser, team and character selection, VGUI buy menu, scoreboard, MOTD |
-| Text menus | HUD renderer | Classic key menus (radio, old buy menu, plugin `showMenu`) |
+| Menus and screens | In-house retained UI toolkit on top of `nx.render`, with declarative layout and skins | Main menu, options, server browser, team and character selection, buy menu, scoreboard, MOTD |
+| Text menus | HUD renderer | Classic key menus (radio, plugin `showMenu`) |
 | Console | In-house toolkit | Game console and listen server console |
 | Dev tools | Dear ImGui | Inspectors, profiler, navigation editor (development builds only) |
 
@@ -402,9 +402,42 @@ Without the historical limits on text channels and message size:
 | Server browser | Internet (master servers), favorites, history, LAN. Filters by map, players, ping, password and plugins |
 | Options | Keyboard (binds), mouse, audio, video, voice, multiplayer (name, spray, crosshair) |
 | Team and character selection | Original keys and layout |
-| Buying (VGUI and by keys) | [10 §8](10-counter-strike-gameplay.md#8-buying) |
+| Buying | The buy menu, below, over [10 §8](10-counter-strike-gameplay.md#8-buying)'s rules |
 | Scoreboard | Name, frags, deaths, ping, status (dead, bomb, VIP), *mute* |
 | MOTD | **Restricted and safe** text or HTML (a subset rendered by the UI, no scripts). External links open in the system browser after confirmation |
+
+**The buy menu** (`cs.client:buyMenu`, `:buyMenuLayout`, `:buyMenuPanel`): the project's own look, where the
+original has a key menu and a VGUI one, and the original's keys. `buy` (`b`) opens it, or closes it; `buyequip`
+(`o`) opens it on its equipment. Over the scene darkened, under the HUD's numbers, it shows:
+
+| Part | What it shows |
+|------|---------------|
+| What heads it | Its name, the player's team, the time left to buy, on a line that runs down with it; the money, and what would be left after the item selected, or how much it falls short, in red |
+| Tabs, on the left | Pistols `1`, shotguns `2`, SMGs `3`, rifles `4`, machine gun `5` and equipment `8`, those with something for the player's team, each with the picture of its first item; under them, the ammo of the primary weapon `6` and of the pistol `7`, with what is carried and what a box costs |
+| Items, on the right of the tabs | Those of the tab shown, three to a row, more when a mod sells more: each with its picture, its key, its name and its price; dimmed with its price in red when it costs more than the player has, `OWNED` or `WORN` when it has it |
+| What the item selected is | A gun's damage, rate of fire, what armor lets through and move speed, with a bar of each; its clip, what is carried of its ammo at most, its reload and what a box costs; armor's `about`; whether it takes the place of a weapon held, and what buys it |
+| Under them | What the player carries: its primary weapon and its pistol, with their rounds, and its armor; and the keys |
+
+A first key opens a tab and the next buys on it, as the original's two menus do, so that `b` `4` `2` still buys
+the CV-47 and `b` `8` `2` a vest and a helmet: the keys are those of the `slot1` to `slot10` commands, whatever
+they are bound to; `slot10` (`0`) and Escape go back a level, then close; `cancelselect` too. `6` and `7` buy a
+box at once. The mouse shows while it is open: over an item it selects it, and a click buys it or opens a tab;
+Enter buys what is selected. Unlike the original's, it stays open as the player buys, and the player goes on
+walking: the keys it has no use for go to their binds, and what comes up always reaches them. Its look is in
+pixels of a design 1080 lines tall, so that it takes the same share of any screen, in the middle of a wider one.
+
+It is not a screen of its own: where the player may not buy (outside a buy zone, its time over, dead), the menu
+does not open, and closes as it comes to that. `cs::PlayerSnapshot::buying` tells the client so, and how long is
+left, and the client weighs what the player can afford by the rules the game buys by (`cs.shared:buying`). A
+refusal, of the menu or of a buy command, is told for two seconds over the game, or over the menu while it is
+open, as well as printed on the console.
+
+What it sells is data: a weapon shows by its file's `purchase.menu`, a weapon made as the game runs too once it is
+complete, and the armor and the families it writes in by `data/cstrike/buyMenu.toml`. Its pictures are TGA files
+among the game's: the original's `gfx/vgui/` today, read as a map's content is, and an item shows without one
+that cannot be read. It writes in the first of its families the system has; a font of the project's own, the same
+on every system, is [to be decided](TODO.md#pending-decisions). `Bahnschrift`'s simulated weights and the look on
+other systems' fonts are not measured.
 
 ## 5. Console
 
@@ -661,7 +694,8 @@ always looks, so `+mlook` and `+klook` are not there. `selectWeapon` makes the n
 a weapon: `next` registers `weapon_<id>` for each weapon (`weapon_knife`, `weapon_usp`, and those
 made as the game runs: [10 §7.5](10-counter-strike-gameplay.md#75-weapons-made-as-the-game-runs)),
 as the original's game takes them, and `lastinv`, which selects the weapon held before; `slot1` to
-`slot5`, `invnext` and `invprev` come with the weapon menu. `next` plays with them:
+`slot10` are the keys of the buy menu ([§4](#4-game-menus-and-screens)), and select nothing yet with it closed:
+that, `invnext` and `invprev` come with the weapon menu. `next` plays with them:
 Counter-Strike's binds, and `noclip` on `v`. `play <sound>` and `playvol <sound> <volume>` play
 a sound heard everywhere, as the original's do ([11 §2](11-audio.md#2-architecture)).
 

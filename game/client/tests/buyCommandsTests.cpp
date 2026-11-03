@@ -91,8 +91,22 @@ public:
                            cs::AmmoPurchase purchase) -> nx::Result<void, cs::BuyRefusal> {
                 ammo.emplace_back(slot, purchase);
                 return answer();
-            }};
+            },
+            .refused = [this](cs::BuyRefusal told) { refusals.push_back(told); }};
         nx::invariant(cs::registerBuyCommands(console, weapons, actions).has_value(), "the buy commands");
+        const cs::BuyMenuCommands commands{
+            .toggle = [this]() -> nx::Result<void, cs::BuyRefusal> {
+                ++toggles;
+                return answer();
+            },
+            .openEquipment = [this]() -> nx::Result<void, cs::BuyRefusal> {
+                ++equipmentOpenings;
+                return answer();
+            },
+            .pressSlot = [this](std::uint32_t slot) { slots.push_back(slot); },
+            .cancel = [this] { ++cancels; },
+            .refused = [this](cs::BuyRefusal told) { refusals.push_back(told); }};
+        nx::invariant(cs::registerBuyMenuCommands(console, commands).has_value(), "the buy menu's commands");
     }
 
     /// Runs `script` now.
@@ -109,6 +123,11 @@ public:
     std::vector<WeaponIndex> bought;
     std::vector<cs::ArmorKind> armor;
     std::vector<std::pair<cs::WeaponSlot, cs::AmmoPurchase>> ammo;
+    std::vector<cs::BuyRefusal> refusals;
+    std::size_t toggles = 0;
+    std::size_t equipmentOpenings = 0;
+    std::size_t cancels = 0;
+    std::vector<std::uint32_t> slots;
 
 private:
     [[nodiscard]] auto answer() const -> nx::Result<void, cs::BuyRefusal> {
@@ -118,6 +137,37 @@ private:
         return {};
     }
 };
+
+TEST(BuyMenuCommandsTest, BuyAndBuyequipAskForTheMenuAndWhyTheyCannotIsPrintedAndTold) {
+    BuyConsole game;
+    game.run("buy; buyequip");
+    EXPECT_EQ(game.toggles, 1U);
+    EXPECT_EQ(game.equipmentOpenings, 1U);
+    EXPECT_TRUE(game.refusals.empty());
+
+    game.refusal = cs::BuyRefusal::OutsideBuyZones;
+    game.run("buy");
+    EXPECT_EQ(game.refusals, (std::vector{cs::BuyRefusal::OutsideBuyZones}));
+    EXPECT_EQ(game.output.lines,
+              (std::vector<std::string>{std::string{cs::buyRefusalText(cs::BuyRefusal::OutsideBuyZones)}}));
+    EXPECT_TRUE(game.output.failures.empty()) << "a refusal is no failure of the command";
+}
+
+TEST(BuyMenuCommandsTest, TheSlotsAreTheKeysOfTheirNumbersAndCancelselectGoesBack) {
+    BuyConsole game;
+    game.run("slot1; slot4; slot10; cancelselect");
+    EXPECT_EQ(game.slots, (std::vector<std::uint32_t>{1, 4, 10}));
+    EXPECT_EQ(game.cancels, 1U);
+    EXPECT_TRUE(game.output.failures.empty());
+}
+
+TEST(BuyCommandsTest, ARefusalIsToldOnTheScreenToo) {
+    BuyConsole game;
+    game.refusal = cs::BuyRefusal::NotEnoughMoney;
+    game.run("ak47; vest; buyammo1");
+    EXPECT_EQ(game.refusals, (std::vector{cs::BuyRefusal::NotEnoughMoney, cs::BuyRefusal::NotEnoughMoney,
+                                          cs::BuyRefusal::NotEnoughMoney}));
+}
 
 TEST(BuyCommandsTest, AWeaponIsBoughtByTheCommandsItsFileGivesItInAnyCase) {
     BuyConsole game;

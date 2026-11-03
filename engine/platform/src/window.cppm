@@ -198,6 +198,14 @@ struct MouseMoved {
     float dy = 0.0F; ///< Positive toward the user.
 };
 
+/// Where the mouse's cursor is, in pixels of the drawable area from its top left.
+struct MousePosition {
+    float x = 0.0F;
+    float y = 0.0F;
+
+    [[nodiscard]] inline auto operator==(const MousePosition&) const noexcept -> bool = default;
+};
+
 /// A mouse button was pressed or released.
 struct MouseButtonChanged {
     MouseButton button{};
@@ -286,6 +294,8 @@ public:
 
     /// Puts the mouse in `mode`. Errors: RelativeMouseUnavailable.
     [[nodiscard]] auto setMouseMode(MouseMode mode) -> Result<void, WindowError>;
+    /// Where the mouse's cursor is now, as a menu asks what is under it.
+    [[nodiscard]] auto mousePosition() const noexcept -> MousePosition;
 
     /// Turns text input on, for typing in the console and the menus' text entries, or off; it starts
     /// off. While it is on, pollEvents reports TextEntered, and the system may show its input method.

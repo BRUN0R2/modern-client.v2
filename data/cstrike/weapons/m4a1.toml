@@ -16,6 +16,7 @@ maxSpeed = 230.0
 buyers = "counterTerrorists"
 price = 3100
 commands = ["m4a1"]
+menu = { tab = "rifles", key = 3, picture = "gfx/vgui/m4a1.tga" }
 
 [magazine]
 ammo = "556Nato"

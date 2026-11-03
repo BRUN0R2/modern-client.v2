@@ -16,6 +16,7 @@ maxSpeed = 250.0
 buyers = "everyone"
 price = 400
 commands = ["glock", "9x19mm"]
+menu = { tab = "pistols", key = 1, picture = "gfx/vgui/glock18.tga" }
 
 [magazine]
 ammo = "9mm"

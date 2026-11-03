@@ -14,6 +14,15 @@ namespace {
 
 /// The texels between two glyphs, and between a glyph and the atlas's edge.
 constexpr std::uint32_t kGap = 1;
+
+/// The UTF-8 of `characters`.
+[[nodiscard]] auto utf8Text(std::u32string_view characters) -> std::string {
+    std::string text;
+    for (const char32_t character : characters) {
+        appendUtf8(text, character);
+    }
+    return text;
+}
 /// The alpha of a texel: its last byte.
 constexpr std::size_t kAlphaByte = 3;
 
@@ -190,6 +199,39 @@ auto widthOf(const GlyphAtlas& atlas, std::string_view text) -> std::int32_t {
         }
     }
     return width;
+}
+
+auto wrapText(const GlyphAtlas& atlas, std::string_view text, std::int32_t width)
+    -> std::vector<std::string> {
+    if (width <= 0) {
+        return {std::string{text}};
+    }
+    const std::u32string characters = decodeUtf8(text);
+    std::vector<std::string> rows;
+    std::size_t start = 0;
+    std::optional<std::size_t> space; // the last space of the row
+    std::int32_t pen = 0;
+    for (std::size_t index = 0; index < characters.size(); ++index) {
+        const AtlasGlyph* glyph = atlas.glyph(characters[index]);
+        const std::int32_t advance = glyph != nullptr ? glyph->advance : 0;
+        if (pen + advance > width && index > start) {
+            const std::size_t end = space.value_or(index);
+            rows.push_back(utf8Text(std::u32string_view{characters}.substr(start, end - start)));
+            start = space ? end + 1 : end;
+            space.reset();
+            pen = 0;
+            for (std::size_t carried = start; carried < index; ++carried) {
+                const AtlasGlyph* earlier = atlas.glyph(characters[carried]);
+                pen += earlier != nullptr ? earlier->advance : 0;
+            }
+        }
+        if (characters[index] == U' ') {
+            space = index;
+        }
+        pen += advance;
+    }
+    rows.push_back(utf8Text(std::u32string_view{characters}.substr(start)));
+    return rows;
 }
 
 } // namespace nx::ui

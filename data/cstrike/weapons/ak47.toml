@@ -16,6 +16,7 @@ maxSpeed = 221.0
 buyers = "terrorists"
 price = 2500
 commands = ["ak47", "cv47"]
+menu = { tab = "rifles", key = 2, picture = "gfx/vgui/ak47.tga" }
 
 [magazine]
 ammo = "762Nato"
