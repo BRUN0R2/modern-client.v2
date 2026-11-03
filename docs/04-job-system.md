@@ -192,6 +192,11 @@ from `nx.core`, with a named capacity and a typed error if they fill up
 
 ## 6. How the frame uses the Job System
 
+Work split per agent, per model or per body goes through `JobSystem::forBatches`: at most a batch for each
+thread, none below the size it is worth waking a thread for, and what a batch alone needs on the calling
+thread, so that a tick or a frame wakes as few threads as its work is worth; what each batch works with
+(a navigation query) is made for `batchCountOf` batches first.
+
 ### 6.1 Server (tick)
 
 | Step | Parallelism |
