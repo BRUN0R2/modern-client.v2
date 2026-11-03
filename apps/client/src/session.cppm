@@ -22,8 +22,9 @@ namespace app {
 
 /// A map being played, as a listen server plays it (docs/01-architecture.md, section 3): the map as the
 /// game plays it; the level the client draws of it; the game its server plays of it, and the player the
-/// client plays in it; the game as the client knows it, its temporary entities and particles; and the test
-/// zombies and the bots in the game, once asked for. Each goes before what it points into.
+/// client plays in it; the game as the client knows it, its temporary entities and particles, and what its
+/// view model shows of the frame played; and the test zombies and the bots in the game, once asked for. Each
+/// goes before what it points into.
 struct Session {
     std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Level> level;
@@ -33,6 +34,9 @@ struct Session {
     cs::TempEntities effects;
     cs::Particles particles;
     cs::BloodEffects blood; ///< The enhanced look's.
+    cs::ViewModelEvents viewModelEvents{};
+    std::optional<cs::ViewModelPose> viewPose{}; ///< Of the frame played.
+    std::vector<cs::PassedEvent> clientEvents{}; ///< Its view model passed in the frame.
     /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, nx::console::ConsoleError> agentMesh;

@@ -12,11 +12,15 @@ nxAddModuleLibrary(appClient
         src/video.cppm
         src/agentMeshes.cppm
         src/session.cppm
+        src/zombieCommands.cppm
+        src/sessionFrame.cppm
     SOURCES
         src/commandLine.cpp
         src/video.cpp
         src/agentMeshes.cpp
         src/session.cpp
+        src/zombieCommands.cpp
+        src/sessionFrame.cpp
         src/client.cpp
     DEPENDS
         nx::core

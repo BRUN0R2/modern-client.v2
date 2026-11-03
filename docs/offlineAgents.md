@@ -52,7 +52,7 @@ and models are loaded once per process; restart after editing the definition.
 | `cs.server` | Generic entity bodies, movement, melee timing, animated hitboxes, damage and death; no zombie rules |
 | `cs.client` | Entity snapshot presentation and GPU models, including the existing material-file path |
 | `mod.zombies` | Zombie settings, sight budgets, target observations, brains and their commands |
-| `app.client` | Composes the mod with the local server and console |
+| `app.client` | Composes the mod with the local server, and gives the console `zombie_add` and `zombie_kick` (`app.client:zombieCommands`) |
 
 An entity has a generational ECS handle. Client interpolation keys positions by the full
 handle, so a recycled slot never inherits a previous entity's motion. It consumes no player slot and changes no team's

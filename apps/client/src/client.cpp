@@ -42,8 +42,6 @@ constexpr nx::log::Category kLog{"client"};
 constexpr std::string_view kNoclipKey = "v";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
-/// The volume `play` plays a sound at, and the view model's sound events: as it is.
-constexpr float kFullVolume = 1.0F;
 /// A sound that could not be played is reported once in this long, with how many others were not.
 constexpr std::chrono::seconds kSoundFailureInterval{5};
 /// The stream of random numbers that chooses which decal a bullet leaves when its mark has several, as
@@ -151,8 +149,8 @@ private:
     /// analyzed a map. Errors: InvalidArguments, CommandFailed.
     [[nodiscard]] auto generateNavigationCommand(const nx::console::CommandLine& line)
         -> nx::Result<void, ConsoleError>;
-    [[nodiscard]] auto zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError>;
-    [[nodiscard]] auto removeZombies() -> nx::Result<void, ConsoleError>;
+    /// The map loaded last, as the commands that follow `map` on a line act on it; none before the first.
+    [[nodiscard]] auto playedSession() const noexcept -> Session*;
     /// Registers the bot commands (cs::registerBotCommands), acting on the map loaded last.
     [[nodiscard]] auto registerBotCommands() -> nx::Result<void, ClientError>;
     /// The navigation profiles of data/cstrike/navigation.toml. Errors: CommandFailed.
@@ -208,24 +206,8 @@ private:
     /// cs::UseRules::soundFiles, cs::BuyingRules::soundFiles) as a session starts, so that none waits on its
     /// file. One that cannot be read is logged, and the game plays on.
     void readPlayerSounds();
-    /// What the player hears of the frame the session played, as `hearing` says when: the sounds its
-    /// weapons made and its view model's sound events, each as long after the frame as it came after
-    /// what the last frame showed; and the client events its view model passed, which the frame shows.
-    void hearSession(const cs::Hearing& hearing);
-    /// Reports `played` when it failed, once in kSoundFailureInterval.
-    void reportSound(const nx::Result<void, cs::PlayError>& played);
-    /// Moves the session's temporary entities, particles and blood over `elapsed`, then shows the splashes
-    /// of streaks since the last frame, the helmets' sparks (cs::Particles::splashStreaks), and the blood
-    /// the hits sprayed: in the enhanced look as its own (cs::BloodEffects::spray), of its palette entry's
-    /// color and lit where it met the body (cs::Scene::bloodLightAt), its sprays and their heads' gushes
-    /// in place of the original's streams; else as the original's (cs::TempEntities::sprayBlood), and the
-    /// streams the hits in the head made (cs::Particles::streamBlood); the blood but without the engine's
-    /// palette, as the level logged.
-    void showEffects(nx::Seconds elapsed);
-    /// Leaves the marks of the session's frame where they met the world or a brush entity, once the scene
-    /// is drawn: a bullet's where each shot met it, the decal the mark of what it met leaves
-    /// (cs::bulletDecalOf); then blood's where the blood a hit shed met it, the decal the server chose.
-    void stampMarks();
+    /// What tells the player what happened in the frame played.
+    [[nodiscard]] auto frameNotices() noexcept -> FrameNotices;
     /// Records the frame begun in `list`, and hands it to the GPU to show.
     [[nodiscard]] auto drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError>;
     [[nodiscard]] auto upload(nx::rhi::CommandList& list, nx::rhi::Format format)
@@ -276,8 +258,6 @@ private:
     std::filesystem::path dataFolder;
     /// The maps' meshes are built in it as they load, and their agents decide in it each tick.
     std::unique_ptr<nx::jobs::JobSystem> m_jobs;
-    std::optional<cs::EntityTypeIndex> zombieType{};
-    std::optional<zombies::Settings> zombieSettings{};
     std::vector<cs::ShownEntity> shownEntities;
     std::unique_ptr<cs::ClientAudio> m_audio; ///< None without a sound output: the game plays on, silent.
     std::optional<cs::SceneShaders> m_shaders;
@@ -286,9 +266,6 @@ private:
     std::unique_ptr<Session> m_nextSession;         ///< The map `map` loaded, played from the next frame.
     /// Made or changed since the scene put their view models on the GPU.
     std::vector<cs::WeaponIndex> m_changedWeapons;
-    cs::ViewModelEvents m_viewModelEvents;
-    std::optional<cs::ViewModelPose> m_viewPose; ///< Of the frame played.
-    std::vector<cs::PassedEvent> m_clientEvents; ///< Its view model passed in the frame.
     nx::log::RateLimit m_soundFailures{kSoundFailureInterval};
     nx::Random m_bulletHoles{0, kBulletHoleStream};
     std::optional<Video> m_video;
@@ -385,6 +362,11 @@ auto Client::start() -> nx::Result<void, ClientError> {
     }
     if (auto registered = registerBuyCommands(); !registered) {
         return registered;
+    }
+    if (auto registered =
+            registerZombieCommands(m_console, *m_content, *m_jobs, [this] { return playedSession(); });
+        !registered) {
+        return nx::fail(ClientError::SettingsUnavailable, std::move(registered.error()));
     }
     auto shaders = cs::readSceneShaders(executable->parent_path() / "shaders");
     if (!shaders) {
@@ -503,18 +485,6 @@ auto Client::registerCommands() -> nx::Result<void, ClientError> {
                .description = "Builds the agents' navigation mesh of the map again, the cache's left "
                               "aside, and plays the map again on it."},
               [this](Console&, const CommandLine& line) { return generateNavigationCommand(line); }),
-          add({.name = "zombie_add",
-               .description = "Spawns entity agents at the terrorist base: zombie_add [count]."},
-              [this](Console&, const CommandLine& line) { return zombieCommand(line); }),
-          add({.name = "zombie_kick",
-               .description = "Removes this session's test zombies and their corpses."},
-              [this](Console&, const CommandLine& line) {
-                  if (!line.arguments().empty()) {
-                      return nx::Result<void, ConsoleError>{
-                          nx::fail(ConsoleError::InvalidArguments, "usage: zombie_kick")};
-                  }
-                  return removeZombies();
-              }),
           add({.name = "play", .description = "Plays a sound heard everywhere: play <sound>."},
               [this](Console&, const CommandLine& line) { return playCommand(line); }),
           add({.name = "playvol",
@@ -607,14 +577,14 @@ auto Client::registerWeaponCommands() -> nx::Result<void, ClientError> {
     return {};
 }
 
+auto Client::playedSession() const noexcept -> Session* {
+    return m_nextSession ? m_nextSession.get() : m_session.get();
+}
+
 auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
-    // The map loaded last, as the commands that follow `map` on a line act on it.
-    const auto played = [this]() -> Session* {
-        return m_nextSession ? m_nextSession.get() : m_session.get();
-    };
     cs::BotActions actions{
-        .add = [this, played](const cs::BotRequest& request) -> nx::Result<void, cs::BotActionError> {
-            Session* const session = played();
+        .add = [this](const cs::BotRequest& request) -> nx::Result<void, cs::BotActionError> {
+            Session* const session = playedSession();
             if (session == nullptr) {
                 return nx::fail(cs::BotActionError::NoMap);
             }
@@ -631,8 +601,8 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
             }
             return {};
         },
-        .kick = [played](std::string_view name) -> nx::Result<void, cs::BotActionError> {
-            Session* const session = played();
+        .kick = [this](std::string_view name) -> nx::Result<void, cs::BotActionError> {
+            Session* const session = playedSession();
             if (session == nullptr) {
                 return nx::fail(cs::BotActionError::NoMap);
             }
@@ -644,8 +614,8 @@ auto Client::registerBotCommands() -> nx::Result<void, ClientError> {
             }
             return {};
         },
-        .kickAll = [played]() -> nx::Result<void, cs::BotActionError> {
-            Session* const session = played();
+        .kickAll = [this]() -> nx::Result<void, cs::BotActionError> {
+            Session* const session = playedSession();
             if (session == nullptr) {
                 return nx::fail(cs::BotActionError::NoMap);
             }
@@ -759,76 +729,6 @@ auto Client::generateNavigationCommand(const nx::console::CommandLine& line)
         return std::unexpected{std::move(session.error())};
     }
     m_nextSession = std::move(*session);
-    return {};
-}
-
-auto Client::zombieCommand(const nx::console::CommandLine& line) -> nx::Result<void, ConsoleError> {
-    std::uint32_t count = 1;
-    if (line.arguments().size() > 1) {
-        return nx::fail(ConsoleError::InvalidArguments, "usage: zombie_add [count]");
-    }
-    if (!line.arguments().empty()) {
-        const std::string& text = line.arguments().front();
-        const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), count);
-        if (error != std::errc{} || end != text.data() + text.size() || count == 0) {
-            return nx::fail(ConsoleError::InvalidArguments, "usage: zombie_add [positive count]");
-        }
-    }
-    Session* session = m_nextSession ? &*m_nextSession : (m_session ? &*m_session : nullptr);
-    if (session == nullptr) {
-        return nx::fail(ConsoleError::CommandFailed, "zombie_add: load a map first");
-    }
-    if (!zombieSettings) {
-        constexpr std::string_view kSettingsFile = "entities/zombies.toml";
-        auto path = nx::assets::VfsPath::parse(kSettingsFile);
-        nx::invariant(path.has_value(), "Client: the zombie settings file is a valid VFS path");
-        auto bytes = m_content->vfs.readAll(*path);
-        if (!bytes) {
-            return nx::fail(ConsoleError::CommandFailed, std::string{kSettingsFile},
-                            std::move(bytes.error()));
-        }
-        const std::string text = *bytes | std::views::transform([](std::byte value) {
-            return static_cast<char>(value);
-        }) | std::ranges::to<std::string>();
-        auto settings = zombies::readSettings(text, kSettingsFile);
-        if (!settings) {
-            return nx::fail(ConsoleError::CommandFailed, std::move(settings.error()));
-        }
-        auto type = m_content->entities.add(m_content->vfs, settings->body, cs::ModelTextures::Read);
-        if (!type) {
-            return nx::fail(ConsoleError::CommandFailed, std::move(type.error()));
-        }
-        zombieType = *type;
-        zombieSettings.emplace(std::move(*settings));
-    }
-    if (!session->horde) {
-        if (!session->agentMesh) {
-            return std::unexpected{session->agentMesh.error()};
-        }
-        auto horde = zombies::Horde::create(*session->game, *session->agentMesh, *m_jobs, *zombieType,
-                                            *zombieSettings);
-        if (!horde) {
-            return nx::fail(ConsoleError::CommandFailed, std::move(horde.error()));
-        }
-        session->horde = std::move(*horde);
-    }
-    if (auto spawned = session->horde->spawn(session->map->spawnPoints(cs::Team::Terrorists), count);
-        !spawned) {
-        return nx::fail(ConsoleError::CommandFailed, std::move(spawned.error()));
-    }
-    m_console.print(std::format("{} zombie entities added", count));
-    return {};
-}
-
-auto Client::removeZombies() -> nx::Result<void, ConsoleError> {
-    Session* session = m_nextSession ? &*m_nextSession : (m_session ? &*m_session : nullptr);
-    if (session == nullptr || !session->horde) {
-        return nx::fail(ConsoleError::CommandFailed, "zombie_kick: no horde in this map");
-    }
-    if (auto cleared = session->horde->clear(); !cleared) {
-        return nx::fail(ConsoleError::CommandFailed, std::move(cleared.error()));
-    }
-    m_console.print("zombie entities removed");
     return {};
 }
 
@@ -1012,9 +912,13 @@ auto Client::run() -> nx::Result<void, ClientError> {
             m_camera.position = m_session->client.eye();
             m_session->client.updatePlayers(elapsed, m_corpseCvars->stayTime(), m_players);
             turnAsTheGameDid();
-            hearSession(hearing);
-            stampMarks();
-            showEffects(elapsed);
+            hearSession(*m_session, m_audio.get(), hearing, m_soundFailures);
+            // r_decals as it is now, as the original reads it at each decal.
+            m_scene->setDecalLimit(decalLimitOf(m_cvars->video));
+            stampMarks(*m_session, *m_scene, *m_content, m_bulletHoles);
+            const nx::Seconds now{m_mapClock.elapsed()};
+            showNotices(*m_session, frameNotices(), m_content->weapons, now);
+            showEffects(*m_session, *m_scene, *m_content, now, elapsed);
         }
         if (auto drawn = drawFrame(commands->get()); !drawn) {
             return drawn;
@@ -1076,7 +980,6 @@ void Client::startNextSession() {
     if (auto held = nx::settings::enterMultiplayerGame(m_cvars->video); !held) {
         nx::log::warning(kLog, "r_decals not held to mp_decals: {}", nx::describe(held.error()));
     }
-    m_viewModelEvents = {}; // a new game's first play is new
     if (m_damageNumbers) {
         m_damageNumbers->clear(); // over the old game's bodies
     }
@@ -1086,8 +989,6 @@ void Client::startNextSession() {
     if (killFeed) {
         killFeed->clear(); // the old game's deaths
     }
-    m_viewPose.reset(); // what the old game showed went with its level
-    m_clientEvents.clear();
     m_changedWeapons.clear(); // the new level read every weapon's view model
     readWeaponSounds(m_session->level->weapons());
     readPlayerSounds();
@@ -1164,114 +1065,13 @@ void Client::readPlayerSounds() {
     }
 }
 
-void Client::hearSession(const cs::Hearing& hearing) {
-    m_viewPose = m_session->client.viewModel();
-    m_clientEvents = m_viewModelEvents.passed(
-        m_viewPose ? m_session->level->viewModel(m_viewPose->weapon) : nullptr, m_viewPose);
-    const std::vector<cs::SoundMade> sounds = m_session->client.takeSounds();
-    if (m_audio == nullptr) {
-        return;
-    }
-    for (const cs::SoundMade& made : sounds) {
-        reportSound(m_audio->play(*made.sound, made.volume, hearing.delayOf(made.at)));
-    }
-    for (const cs::PassedEvent& passed : m_clientEvents) {
-        if (passed.event->event == cs::kSoundEvent) {
-            const nx::GameTime at = m_viewPose->start.after(passed.intoPlay, hearing.rate);
-            reportSound(m_audio->playLocal(passed.event->options, kFullVolume, hearing.delayOf(at)));
-        }
-    }
-}
-
-void Client::showEffects(nx::Seconds elapsed) {
-    const std::vector<cs::BloodSpray> sprays = m_session->client.takeBloodSprays();
-    const std::vector<cs::BloodStream> streams = m_session->client.takeBloodStreams();
-    const std::vector<cs::StreakSplash> splashes = m_session->client.takeStreakSplashes();
-    const std::vector<cs::DamageDealt> dealt = m_session->client.takeDamageDealt();
-    const std::vector<cs::EntityStep> steps = m_session->client.takeEntitySteps();
-    const std::vector<cs::KillNotice> kills = m_session->client.takeKillNotices();
-    const nx::Seconds now{m_mapClock.elapsed()};
-    if (killFeed) {
-        killFeed->show(kills, m_content->weapons, now);
-    }
-    for (const cs::KillNotice& kill : kills) {
-        m_console.print(cs::killLineOf(
-            kill, kill.weapon ? std::optional<std::string_view>{m_content->weapons.weapon(*kill.weapon).id}
-                              : std::nullopt));
-    }
-    if (m_damageNumbers && m_damageNumberCvars->shown.value()) {
-        m_damageNumbers->show(dealt, now);
-    }
-    if (m_stepIndicator && m_stepIndicatorCvars->shown.value()) {
-        m_stepIndicator->hear(steps, now);
-    }
-    const cs::Level& level = *m_session->level;
-    const nx::UnitsPerSecondSquared gravity = cs::MovementSettings{}.gravity;
-    m_session->effects.update(now, elapsed, level.hulls(), gravity);
-    m_session->particles.update(now, elapsed, gravity);
-    const cs::BloodEnhancedLook& enhancedLook = m_content->blood.enhancedLook;
-    m_session->blood.update(now, elapsed, level.hulls(), gravity, enhancedLook);
-    for (const cs::StreakSplash& splash : splashes) {
-        m_session->particles.splashStreaks(splash, now);
-    }
-    const std::optional<nx::assets::Palette>& palette = level.palette();
-    if (!palette) {
-        return;
-    }
-    if (m_scene && m_scene->look() == nx::render::StudioLook::Enhanced) {
-        const nx::render::LightStyleValues styles = m_session->client.lightStylesAt(now);
-        for (const cs::BloodSpray& spray : sprays) {
-            const nx::assets::PaletteColor color = palette->color(spray.color);
-            m_session->blood.spray(spray, enhancedLook,
-                                   {.color = {.red = color.red, .green = color.green, .blue = color.blue},
-                                    .light = m_scene->bloodLightAt(level, spray.position, styles)},
-                                   now);
-        }
-        return;
-    }
-    const cs::BloodSprayLook& look = m_content->blood.sprayLook;
-    const cs::BloodSpriteFrames frames = cs::bloodSpriteFramesOf(level.bloodSprites(), look);
-    for (const cs::BloodSpray& spray : sprays) {
-        m_session->effects.sprayBlood(spray, look, *palette, frames, now);
-    }
-    for (const cs::BloodStream& stream : streams) {
-        m_session->particles.streamBlood(stream, m_content->blood.streamLook, now);
-    }
-}
-
-void Client::stampMarks() {
-    const std::vector<cs::Impact> impacts = m_session->client.takeImpacts();
-    const std::vector<cs::BloodMark> bloodMarks = m_session->client.takeBloodMarks();
-    if (!m_scene) {
-        return;
-    }
-    // r_decals as it is now, as the original reads it at each decal.
-    m_scene->setDecalLimit(decalLimitOf(m_cvars->video));
-    const cs::Level& level = *m_session->level;
-    const auto stamp = [this, &level](std::string_view name, nx::Vec3 position, const cs::StampTarget& on) {
-        // One the installation lacks was reported as the level was read.
-        if (const std::optional<nx::render::DecalImageIndex> decal = level.decals().indexOf(name)) {
-            std::ignore = m_scene->shootDecal(*decal, position, cs::decalTargetOf(on));
-        }
-    };
-    for (const cs::Impact& impact : impacts) {
-        if (const std::optional<std::string_view> name =
-                cs::bulletDecalOf(level.bulletMarkOn(impact.on.model), m_bulletHoles)) {
-            stamp(*name, impact.position, impact.on);
-        }
-    }
-    const std::vector<std::string>& bloodDecals = m_content->blood.decals;
-    for (const cs::BloodMark& mark : bloodMarks) {
-        nx::expects(mark.decal < bloodDecals.size(), "Client: a blood decal of the game's content");
-        stamp(bloodDecals[mark.decal], mark.position, mark.on);
-    }
-}
-
-void Client::reportSound(const nx::Result<void, cs::PlayError>& played) {
-    if (!played && m_soundFailures.allow()) {
-        nx::log::warning(kLog, "a sound not played: {} ({} others not played since the last report)",
-                         nx::describe(played.error()), m_soundFailures.takeSuppressed());
-    }
+auto Client::frameNotices() noexcept -> FrameNotices {
+    return {.console = m_console,
+            .killFeed = killFeed,
+            .damageNumbers = m_damageNumbers,
+            .damageNumberCvars = *m_damageNumberCvars,
+            .stepIndicator = m_stepIndicator,
+            .stepIndicatorCvars = *m_stepIndicatorCvars};
 }
 
 auto Client::drawFrame(nx::rhi::CommandList& list) -> nx::Result<void, ClientError> {
@@ -1434,12 +1234,12 @@ auto Client::sessionView() -> cs::SceneView {
             .hostages = m_hostages,
             .players = m_players,
             .entities = shownEntities,
-            .viewModel = m_viewPose,
+            .viewModel = m_session->viewPose,
             .tempEntities = m_session->effects.shown(),
             .particles = m_session->particles.shown(),
             .streaks = m_session->particles.shownStreaks(),
             .blood = m_session->blood.shown(time, m_content->blood.enhancedLook),
-            .clientEvents = m_clientEvents,
+            .clientEvents = m_session->clientEvents,
             .hand = m_hudCvars->hand(),
             .overlay = navigationOverlay(),
             .fog = m_fog.shown()};
