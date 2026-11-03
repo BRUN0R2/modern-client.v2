@@ -19,11 +19,12 @@ using nx::console::ConsoleError;
 /// What each refusal tells the player, in BuyRefusal's order: the project's own words.
 constexpr nx::EnumArray<BuyRefusal, std::string_view> kRefusalTexts{
     nx::EnumArray<BuyRefusal, std::string_view>::Storage{
-        "No map is being played.", "That is not for sale.", "Your team cannot buy that.", "You are dead.",
-        "You are not in a buy zone.", "The time to buy is over.",
-        "Your team cannot buy anything on this map.", "You already own that weapon.",
-        "You already wear that armor, whole.", "You have no weapon of that kind that takes ammo.",
-        "You cannot carry more of that ammo.", "You do not have enough money."}};
+        "No map is being played.", "The buy menu cannot be shown: its font could not be found.",
+        "That is not for sale.", "Your team cannot buy that.", "You are dead.", "You are not in a buy zone.",
+        "The time to buy is over.", "Your team cannot buy anything on this map.",
+        "You already own that weapon.", "You already wear that armor, whole.",
+        "You have no weapon of that kind that takes ammo.", "You cannot carry more of that ammo.",
+        "You do not have enough money."}};
 
 /// A command that buys armor.
 struct ArmorCommand {
@@ -62,11 +63,16 @@ constexpr std::array kAmmoCommands{
                 .slot = WeaponSlot::Secondary,
                 .purchase = AmmoPurchase::AsManyBoxes}};
 
-/// Prints what `bought` was refused for, when it was: a refusal is the game's answer, no failure of the
-/// command.
-void report(Console& console, const nx::Result<void, BuyRefusal>& bought) {
+/// How many of the keys of `slot1`, `slot2` and on the original's HUD takes.
+constexpr std::uint32_t kSlotCommands = 10;
+
+/// Prints what `bought` was refused for, when it was, and tells the player through `refused`: a refusal is
+/// the game's answer, no failure of the command.
+void report(Console& console, const std::function<void(BuyRefusal)>& refused,
+            const nx::Result<void, BuyRefusal>& bought) {
     if (!bought) {
         console.print(buyRefusalText(bought.error().code));
+        refused(bought.error().code);
     }
 }
 
@@ -86,9 +92,9 @@ auto registerBuyCommands(Console& console, const WeaponCatalog& weapons, BuyActi
         for (const std::string& command : weapon.purchase->commands.value_or(std::vector<std::string>{})) {
             if (auto registered = console.registerCommand(
                     {.name = std::string_view{command}, .description = "Buys the weapon."},
-                    [buy = actions.weapon, index](Console& on,
-                                                  const CommandLine&) -> nx::Result<void, ConsoleError> {
-                        report(on, buy(WeaponIndex{index}));
+                    [buy = actions.weapon, told = actions.refused,
+                     index](Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                        report(on, told, buy(WeaponIndex{index}));
                         return {};
                     });
                 !registered) {
@@ -99,9 +105,9 @@ auto registerBuyCommands(Console& console, const WeaponCatalog& weapons, BuyActi
     for (const ArmorCommand& command : kArmorCommands) {
         if (auto registered = console.registerCommand(
                 {.name = command.name, .description = command.description},
-                [buy = actions.armor,
+                [buy = actions.armor, told = actions.refused,
                  kind = command.kind](Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
-                    report(on, buy(kind));
+                    report(on, told, buy(kind));
                     return {};
                 });
             !registered) {
@@ -111,9 +117,10 @@ auto registerBuyCommands(Console& console, const WeaponCatalog& weapons, BuyActi
     for (const AmmoCommand& command : kAmmoCommands) {
         if (auto registered = console.registerCommand(
                 {.name = command.name, .description = command.description},
-                [buy = actions.ammo, slot = command.slot, purchase = command.purchase](
-                    Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
-                    report(on, buy(slot, purchase));
+                [buy = actions.ammo, told = actions.refused, slot = command.slot,
+                 purchase = command.purchase](Console& on,
+                                              const CommandLine&) -> nx::Result<void, ConsoleError> {
+                    report(on, told, buy(slot, purchase));
                     return {};
                 });
             !registered) {
@@ -123,7 +130,7 @@ auto registerBuyCommands(Console& console, const WeaponCatalog& weapons, BuyActi
     return console.registerCommand(
         {.name = "buy_weapon",
          .description = "Buys a weapon, one made as the game runs too: buy_weapon <weapon>."},
-        [buy = std::move(actions.weapon),
+        [buy = std::move(actions.weapon), told = std::move(actions.refused),
          catalog = &weapons](Console& on, const CommandLine& line) -> nx::Result<void, ConsoleError> {
             const std::span<const std::string> words = line.arguments();
             if (words.size() != 1) {
@@ -136,7 +143,50 @@ auto registerBuyCommands(Console& console, const WeaponCatalog& weapons, BuyActi
             if (auto complete = catalog->checkComplete(catalog->madeFor(*weapon)); !complete) {
                 return nx::fail(ConsoleError::CommandFailed, "buy_weapon", std::move(complete.error()));
             }
-            report(on, buy(*weapon));
+            report(on, told, buy(*weapon));
+            return {};
+        });
+}
+
+auto registerBuyMenuCommands(Console& console, BuyMenuCommands commands) -> nx::Result<void, ConsoleError> {
+    for (std::uint32_t slot = 1; slot <= kSlotCommands; ++slot) {
+        const std::string name = std::format("slot{}", slot);
+        if (auto registered = console.registerCommand(
+                {.name = std::string_view{name}, .description = "The key of that number on an open menu."},
+                [press = commands.pressSlot, slot](Console&,
+                                                   const CommandLine&) -> nx::Result<void, ConsoleError> {
+                    press(slot);
+                    return {};
+                });
+            !registered) {
+            return registered;
+        }
+    }
+    if (auto registered =
+            console.registerCommand({.name = "buy", .description = "Opens the buy menu, or closes it."},
+                                    [open = std::move(commands.toggle), told = commands.refused](
+                                        Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                                        report(on, told, open());
+                                        return {};
+                                    });
+        !registered) {
+        return registered;
+    }
+    if (auto registered = console.registerCommand(
+            {.name = "buyequip", .description = "Opens the buy menu on its equipment."},
+            [open = std::move(commands.openEquipment),
+             told = commands.refused](Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                report(on, told, open());
+                return {};
+            });
+        !registered) {
+        return registered;
+    }
+    return console.registerCommand(
+        {.name = "cancelselect", .description = "Goes back a level on an open menu."},
+        [cancel = std::move(commands.cancel)](Console&,
+                                              const CommandLine&) -> nx::Result<void, ConsoleError> {
+            cancel();
             return {};
         });
 }

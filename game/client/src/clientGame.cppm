@@ -73,8 +73,12 @@ public:
     [[nodiscard]] auto hearing() const -> Hearing;
     /// The kick the player's weapon gave its view (punchangle), which the view is drawn turned by.
     [[nodiscard]] inline auto punch() const noexcept -> nx::EulerAngles { return m_last.player.punch; }
+    /// The player's team.
+    [[nodiscard]] inline auto team() const noexcept -> Team { return m_last.team; }
     /// What the player has.
     [[nodiscard]] inline auto status() const noexcept -> const PlayerStatus& { return m_last.status; }
+    /// Whether the player may buy now, and for how long.
+    [[nodiscard]] inline auto buying() const noexcept -> const BuyingState& { return m_last.buying; }
     /// The player's weapons.
     [[nodiscard]] inline auto inventory() const noexcept -> const Inventory& { return m_last.inventory; }
     /// The whole seconds the player's HUD shows of the round's time (RoundTimer::shownAt), at the

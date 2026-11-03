@@ -101,24 +101,32 @@ auto weaponPriceFor(const Weapon& weapon, const Buyer& buyer, bool isOwned)
     return weapon.purchase->price;
 }
 
+auto armorCostOf(const ArmorPrices& prices, const PlayerStatus& status, ArmorKind asked) noexcept
+    -> std::optional<nx::Money> {
+    const bool isWhole = status.armor >= kMostArmor;
+    const bool hasHelmet = status.armorKind == ArmorKind::KevlarAndHelmet;
+    if (isWhole && (asked == ArmorKind::Kevlar || hasHelmet)) {
+        return std::nullopt;
+    }
+    return isWhole                                   ? prices.helmet
+           : asked == ArmorKind::Kevlar || hasHelmet ? prices.kevlar
+                                                     : prices.kevlarAndHelmet;
+}
+
 auto armorPriceFor(const ArmorPrices& prices, const Buyer& buyer, const PlayerStatus& status, ArmorKind asked)
     -> nx::Result<nx::Money, BuyRefusal> {
     nx::expects(asked != ArmorKind::None, "armorPriceFor: armor of some kind");
     if (auto mayBuy = checkMayBuy(buyer); !mayBuy) {
         return std::unexpected{std::move(mayBuy.error())};
     }
-    const bool isWhole = status.armor >= kMostArmor;
-    const bool hasHelmet = status.armorKind == ArmorKind::KevlarAndHelmet;
-    if (isWhole && (asked == ArmorKind::Kevlar || hasHelmet)) {
+    const std::optional<nx::Money> price = armorCostOf(prices, status, asked);
+    if (!price) {
         return nx::fail(BuyRefusal::ArmorWhole);
     }
-    const nx::Money price = isWhole                                   ? prices.helmet
-                            : asked == ArmorKind::Kevlar || hasHelmet ? prices.kevlar
-                                                                      : prices.kevlarAndHelmet;
-    if (buyer.money < price) {
+    if (buyer.money < *price) {
         return nx::fail(BuyRefusal::NotEnoughMoney);
     }
-    return price;
+    return *price;
 }
 
 auto ammoPriceFor(const AmmoType& ammo, const Buyer& buyer, std::uint32_t carried)
@@ -133,6 +141,14 @@ auto ammoPriceFor(const AmmoType& ammo, const Buyer& buyer, std::uint32_t carrie
         return nx::fail(BuyRefusal::NotEnoughMoney);
     }
     return ammo.boxPrice;
+}
+
+auto buyingStateOf(const Buyer& buyer, bool isFrozen) -> BuyingState {
+    const auto mayBuy = checkMayBuy(buyer);
+    return BuyingState{.refusal = mayBuy ? std::nullopt : std::optional{mayBuy.error().code},
+                       .timeLeft = isFrozen ? buyer.buyTime
+                                            : std::max(buyer.buyTime - buyer.sinceRoundStart, nx::Seconds{}),
+                       .length = buyer.buyTime};
 }
 
 } // namespace cs

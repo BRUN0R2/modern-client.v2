@@ -79,6 +79,7 @@ struct SpritePicture {
 /// buying sells it, and the picture the HUD shows of it.
 struct AmmoType {
     std::string id{};           ///< The original's name for it: "9mm", "762Nato".
+    std::string name{};         ///< What the buy menu shows it as: "9 mm", "7.62 NATO".
     std::uint32_t maxCarried{}; ///< A player carries this many rounds of it at most.
     nx::Money boxPrice{};       ///< A box of it costs this much,
     std::uint32_t boxRounds{};  ///< and holds this many rounds.
@@ -97,6 +98,25 @@ struct AmmoTypes {
     std::vector<AmmoType> ammo{};
 };
 
+/// The tabs of the buy menu: the kinds of what is sold, in the order of the original's first menu.
+enum class BuyTab : std::uint8_t {
+    Pistols,
+    Shotguns,
+    SubmachineGuns,
+    Rifles,
+    MachineGuns,
+    Equipment,
+    Count,
+};
+
+/// Where a weapon shows on the buy menu (docs/12-ui-hud-and-console.md, section 4).
+struct WeaponMenuPlace {
+    BuyTab tab{};
+    /// The key that buys it once its tab is open, as the original's submenu numbers it, from 1 to 9.
+    std::uint32_t key{};
+    std::string picture{}; ///< Its picture, a TGA among the game's files.
+};
+
 /// How a weapon is sold.
 struct WeaponPurchase {
     Buyers buyers{};
@@ -104,6 +124,7 @@ struct WeaponPurchase {
     /// The console commands that buy it, the original's aliases (g_weaponBuyAliasInfo); none: only
     /// `buy_weapon`, as a weapon made as the game runs.
     std::optional<std::vector<std::string>> commands{};
+    std::optional<WeaponMenuPlace> menu{}; ///< None: the buy menu does not show it.
 };
 
 /// The ammo a weapon fires, and how much of it its clip holds.
@@ -483,6 +504,7 @@ struct nx::meta::Description<cs::AmmoType> {
     static constexpr std::string_view kName = "cs::AmmoType";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::AmmoType::id>("id"),
+        nx::meta::field<&cs::AmmoType::name>("name"),
         nx::meta::field<&cs::AmmoType::maxCarried>("maxCarried"),
         nx::meta::field<&cs::AmmoType::boxPrice>("boxPrice"),
         nx::meta::field<&cs::AmmoType::boxRounds>("boxRounds", nx::data::Range{.minimum = 1.0}),
@@ -514,12 +536,23 @@ struct nx::meta::Description<cs::AmmoTypes> {
 };
 
 template <>
+struct nx::meta::Description<cs::WeaponMenuPlace> {
+    static constexpr std::string_view kName = "cs::WeaponMenuPlace";
+    static constexpr std::tuple kFields{
+        nx::meta::field<&cs::WeaponMenuPlace::tab>("tab"),
+        nx::meta::field<&cs::WeaponMenuPlace::key>("key", nx::data::Range{.minimum = 1.0, .maximum = 9.0}),
+        nx::meta::field<&cs::WeaponMenuPlace::picture>("picture"),
+    };
+};
+
+template <>
 struct nx::meta::Description<cs::WeaponPurchase> {
     static constexpr std::string_view kName = "cs::WeaponPurchase";
     static constexpr std::tuple kFields{
         nx::meta::field<&cs::WeaponPurchase::buyers>("buyers"),
         nx::meta::field<&cs::WeaponPurchase::price>("price", nx::data::Range{.minimum = 0.0}),
         nx::meta::field<&cs::WeaponPurchase::commands>("commands"),
+        nx::meta::field<&cs::WeaponPurchase::menu>("menu"),
     };
 };
 

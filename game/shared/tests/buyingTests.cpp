@@ -184,6 +184,85 @@ TEST(ArmorPriceTest, ABuyerPaysForItAndMayBuyAtAll) {
     EXPECT_EQ(refusalOf(cs::armorPriceFor(kArmorPrices, dead, {}, ArmorKind::Kevlar)), BuyRefusal::Dead);
 }
 
+TEST(ArmorCostTest, WhatIsWornWholeHasNoCost) {
+    const cs::ArmorPrices prices{
+        .kevlar = nx::Money{650}, .kevlarAndHelmet = nx::Money{1000}, .helmet = nx::Money{350}};
+    const auto costOf = [&prices](nx::ArmorPoints armor, ArmorKind worn, ArmorKind asked) {
+        return cs::armorCostOf(prices, cs::PlayerStatus{.armor = armor, .armorKind = worn}, asked);
+    };
+    EXPECT_EQ(costOf({}, ArmorKind::None, ArmorKind::Kevlar), nx::Money{650});
+    EXPECT_EQ(costOf({}, ArmorKind::None, ArmorKind::KevlarAndHelmet), nx::Money{1000});
+    EXPECT_EQ(costOf(cs::kMostArmor, ArmorKind::Kevlar, ArmorKind::Kevlar), std::nullopt);
+    EXPECT_EQ(costOf(cs::kMostArmor, ArmorKind::Kevlar, ArmorKind::KevlarAndHelmet), nx::Money{350});
+    EXPECT_EQ(costOf(cs::kMostArmor, ArmorKind::KevlarAndHelmet, ArmorKind::KevlarAndHelmet), std::nullopt);
+    EXPECT_EQ(costOf(nx::ArmorPoints{50.0F}, ArmorKind::KevlarAndHelmet, ArmorKind::KevlarAndHelmet),
+              nx::Money{650})
+        << "the vest under a helmet kept";
+}
+
+TEST(BuyingStateTest, APlayerIsToldWhetherItMayBuyAndForHowLong) {
+    Buyer asked = buyer();
+    asked.sinceRoundStart = nx::Seconds{30.0F};
+    const cs::BuyingState running = cs::buyingStateOf(asked, false);
+    EXPECT_FALSE(running.refusal.has_value());
+    EXPECT_EQ(running.timeLeft, nx::Seconds{60.0F});
+    EXPECT_EQ(running.length, kBuyTime);
+
+    asked.isAtBuyingPlace = false;
+    EXPECT_EQ(cs::buyingStateOf(asked, false).refusal, BuyRefusal::OutsideBuyZones);
+}
+
+TEST(BuyingStateTest, ItsTimeDoesNotRunDownInAFreezeWhichStartsItAgain) {
+    Buyer asked = buyer();
+    asked.sinceRoundStart = nx::Seconds{3.0F};
+    EXPECT_EQ(cs::buyingStateOf(asked, true).timeLeft, kBuyTime);
+}
+
+TEST(BuyingStateTest, ItsTimeOverIsNoneLeftAndARefusal) {
+    Buyer asked = buyer();
+    asked.sinceRoundStart = kBuyTime + nx::Seconds{5.0F};
+    const cs::BuyingState over = cs::buyingStateOf(asked, false);
+    EXPECT_EQ(over.refusal, BuyRefusal::TimeOver);
+    EXPECT_EQ(over.timeLeft, nx::Seconds{});
+}
+
+TEST(BuyMenuLookTest, TheRepositorysReads) {
+    const auto text =
+        nx::platform::readTextFile(std::filesystem::path{NX_DATA_DIRECTORY} / "cstrike" / "buyMenu.toml");
+    ASSERT_TRUE(text.has_value());
+    const auto look = cs::readBuyMenuLook(*text, "buyMenu.toml");
+    ASSERT_TRUE(look.has_value()) << (look ? "" : nx::describe(look.error()));
+    EXPECT_FALSE(look->fonts.empty());
+    ASSERT_EQ(look->armor.size(), 2U);
+    EXPECT_EQ(look->armor[0].kind, ArmorKind::Kevlar);
+    EXPECT_EQ(look->armor[0].key, 1U) << "as the original's menu numbers it";
+    EXPECT_EQ(look->armor[1].kind, ArmorKind::KevlarAndHelmet);
+    EXPECT_EQ(look->armor[1].key, 2U);
+}
+
+TEST(BuyMenuLookTest, WhatTheMenuCouldNotShowIsRefused) {
+    const auto refused = [](std::string_view text) {
+        const auto look = cs::readBuyMenuLook(text, "test");
+        return !look.has_value() && look.error().code == cs::BuyMenuLookError::DataInvalid;
+    };
+    constexpr std::string_view kVest =
+        "[[armor]]\nkind = \"kevlar\"\nkey = 1\nname = \"Vest\"\npicture = \"a.tga\"\nabout = \"\"\n";
+    const std::string fonts = "fonts = [\"Verdana\"]\n";
+    EXPECT_FALSE(refused(fonts + std::string{kVest}));
+    EXPECT_TRUE(refused(std::string{"fonts = []\n"} + std::string{kVest})) << "no font";
+    EXPECT_TRUE(refused(fonts + std::string{kVest} + std::string{kVest})) << "one kind twice";
+    EXPECT_TRUE(refused(
+        fonts + "[[armor]]\nkind = \"none\"\nkey = 1\nname = \"Vest\"\npicture = \"a.tga\"\nabout = \"\"\n"))
+        << "armor of no kind";
+    EXPECT_TRUE(refused(
+        fonts +
+        "[[armor]]\nkind = \"kevlar\"\nkey = 10\nname = \"Vest\"\npicture = \"a.tga\"\nabout = \"\"\n"))
+        << "a key beyond the keys";
+    EXPECT_TRUE(refused(
+        fonts + "[[armor]]\nkind = \"kevlar\"\nkey = 1\nname = \"\"\npicture = \"a.tga\"\nabout = \"\"\n"))
+        << "no name";
+}
+
 TEST(AmmoPriceTest, ABoxCostsItsPriceUntilTheBuyerCarriesAllItCan) {
     const cs::AmmoType ammo{.id = "9mm", .maxCarried = 120, .boxPrice = nx::Money{20}, .boxRounds = 30};
     EXPECT_EQ(cs::ammoPriceFor(ammo, buyer(), 119).value_or(nx::Money{}), nx::Money{20});

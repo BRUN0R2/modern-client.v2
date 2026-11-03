@@ -13,6 +13,7 @@ import nx.math;
 import nx.assets;
 import :movement;
 import :player;
+import :buying;
 import :inventory;
 import :rounds;
 import :sounds;
@@ -189,8 +190,10 @@ struct PlayerSnapshot {
     nx::GameTime time{}; ///< After the tick.
     nx::TickRate rate{nx::kDefaultTickRate};
     PlayerIndex self{}; ///< Whose it is.
+    Team team{};
     MovementState player{};
     PlayerStatus status{};
+    BuyingState buying{};
     Inventory inventory;
     RoundTimer roundTimer{};
     /// The way the game turned its view in the tick, as the original's fixangle turns it (the way the

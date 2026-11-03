@@ -3,7 +3,8 @@
 
 # The kinds of ammo of Counter-Strike 1.6 (docs/10, section 7.2), read into cs::AmmoTypes, with
 # ReGameDLL_CS's values (GPL, consulted: docs/20 section 3). `id` is the original's name for it,
-# which a weapon's `magazine.ammo` names; a player carries `maxCarried` rounds of it at most besides
+# which a weapon's `magazine.ammo` names, and `name` what the buy menu shows it as; a player carries
+# `maxCarried` rounds of it at most besides
 # what its clips hold; buying sells it in boxes of `boxRounds` rounds for `boxPrice` each; the HUD
 # shows `picture` beside its rounds, the `ammo` picture of the lists of the original's weapons that
 # fire it (sprites/weapon_<name>.txt), read once, here. A round of it goes `penetrationPower` units
@@ -14,6 +15,7 @@
 
 [[ammo]]
 id = "9mm"
+name = "9 mm"
 maxCarried = 120
 boxPrice = 20
 boxRounds = 30
@@ -23,6 +25,7 @@ penetrationDistance = 800.0
 
 [[ammo]]
 id = "45ACP"
+name = ".45 ACP"
 maxCarried = 100
 boxPrice = 25
 boxRounds = 12
@@ -32,6 +35,7 @@ penetrationDistance = 500.0
 
 [[ammo]]
 id = "556Nato"
+name = "5.56 NATO"
 maxCarried = 90
 boxPrice = 60
 boxRounds = 30
@@ -41,6 +45,7 @@ penetrationDistance = 4000.0
 
 [[ammo]]
 id = "762Nato"
+name = "7.62 NATO"
 maxCarried = 90
 boxPrice = 80
 boxRounds = 30

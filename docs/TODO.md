@@ -16,6 +16,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Project license: option A, GPL-3.0-or-later + MIT (Rook and SDK) + CC BY 4.0 (docs) ([ADR-0010](adr/0010-license.md))
 - [x] Public repository: https://github.com/BRUN0R2/modern-client.v2
 - [ ] Final name of the plugin language (provisional: **Rook**)
+- [ ] A font of the project's own for its menus, of an open license and the same on every system: the buy menu writes in the first of `buyMenu.toml`'s families the system has (Windows' Bahnschrift today)
 - [ ] The plugin API as eight generic primitives (handles and `vars`, standalone types with no parent, methods and hooks, actions, queries, messages and effects, commands/cvars/tasks, services) in place of the old modules ([ADR-0022](adr/0022-plugin-api-primitives.md), proposed)
 - [x] Navigation meshes for every kind of agent, `nx.navigation` over Recast/Detour ([ADR-0023](adr/0023-navigation.md))
 - [x] Agents for bots, monsters and bosses: one brain, a player's or an entity's body, perception, memory and behaviors, `nx.agents`, each kind its own module over it: `cs.bots`, a mod's zombies and bosses in Rook ([ADR-0024](adr/0024-agents.md))
@@ -551,10 +552,12 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ### Buying and communication
 - [x] Buy zones and buy time ([10 §8](10-counter-strike-gameplay.md#8-buying)): `func_buyzone` and its `team`, a map without any within 200 units of a spawn point of its team (`cs::GameMap::isBuyingPlace`, `OLD_CheckBuyZone`), `mp_buytime` (`cs::readBuyTime`), `info_map_parameters`' `buying` (`cs::GameMap::letsBuy`)
 - [ ] The weapons a VIP's map keeps from each team (`CanBuyWeaponByMaptype`), with the first it names
-- [ ] Classic and VGUI buy menus
+- [x] The buy menu ([12 §4](12-ui-hud-and-console.md#4-game-menus-and-screens)), the project's own look in place of the original's two: tabs on the left, the items of the tab shown on the right, what the item selected is, the money and the time left, what the player carries; by the original's keys (`slot1` to `slot10`, `b` `4` `2`) and the mouse (`cs.client:buyMenu`, `:buyMenuLayout`, `:buyMenuPanel`), `buy`, `buyequip`, `cancelselect`; what it sells from the weapons' files (`purchase.menu`), one made as the game runs too, and `data/cstrike/buyMenu.toml`, weighed by the game's rules; told by the server whether its player may buy and for how long (`cs::BuyingState`), closing as it no longer may
+- [ ] The buy menu's rows of grenades and equipment, with them; the key of a weapon that differs by team (the Schmidt Scout's, the AWP's), with them
 - [x] Buy commands ([10 §8](10-counter-strike-gameplay.md#8-buying)): by the commands a weapon's file names (`ak47`, `cv47`), or `buy_weapon` for any, one made as the game runs too; the weapon of that slot dropped (`cs::Inventory::drop`), the rounds carried kept; `vest`, `vesthelm`; `buyammo1`, `buyammo2`, `primammo`, `secammo`; each weighed by pure rules (`cs.shared:buying`, `data/cstrike/buying.toml`), a refusal printed on the console (`cs::BuyRefusal`), heard
 - [ ] `autobuy` and `rebuy`, `cl_autobuy`, `cl_rebuy`; the commands of the grenades and the equipment, with them; what bots buy
-- [ ] What a refusal says on the screen, the original's center text, its money's blink (`BlinkAccount`) and the buy zone's icon, measured on the original
+- [x] What a refusal says on the screen: told for two seconds over the game or over the buy menu, in the project's own look, and printed on the console
+- [ ] A refusal's money blink (`BlinkAccount`) and the buy zone's icon; the original's other center texts
 - [ ] The box a dropped weapon falls as and its pick-up, `drop`: today a weapon a purchase takes the place of is gone
 - [ ] Radio (menus, commands, icons and sounds)
 - [ ] Chat (`say`, `say_team`, rules for dead players)

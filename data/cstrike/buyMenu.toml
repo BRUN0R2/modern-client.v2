@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors
+# SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
+
+# What the buy menu shows besides what each weapon's file says of its place on it, `purchase.menu`
+# (docs/12-ui-hud-and-console.md, section 4), read into cs::BuyMenuLook: the project's own.
+# `fonts` are the families it writes in, the first the system has. `armor` is what its equipment tab sells of
+# armor: `kind`, the armor it is; `key`, what buys it once the tab is open, as the original's menu numbers it;
+# `name`; `picture`, a TGA among the game's files; and `about`, what it does.
+
+fonts = ["Bahnschrift", "Verdana", "DejaVu Sans"]
+
+[[armor]]
+kind = "kevlar"
+key = 1
+name = "Kevlar Vest"
+picture = "gfx/vgui/kevlar.tga"
+about = "Armor 100, which takes a share of what hits your body. A helmet you wear stays."
+
+[[armor]]
+kind = "kevlarAndHelmet"
+key = 2
+name = "Kevlar + Helmet"
+picture = "gfx/vgui/kevlar_helmet.tga"
+about = "Armor 100 and a helmet, which covers your head too. What you wear already is not paid for twice."

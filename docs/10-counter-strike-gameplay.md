@@ -306,6 +306,10 @@ maxSpeed  = 221.0              # its holder's, in units per second
 buyers = "terrorists"          # terrorists, counterTerrorists, everyone
 price  = 2500
 commands = ["ak47", "cv47"]    # the console commands that buy it; absent: only buy_weapon
+# Where the buy menu shows it: its tab (pistols, shotguns, submachineGuns, rifles, machineGuns, equipment), the
+# key that buys it once the tab is open, as the original's menu numbers it, and its picture, a TGA of the game's
+# files; absent: it does not show it.
+menu = { tab = "rifles", key = 2, picture = "gfx/vgui/ak47.tga" }
 
 [magazine]                     # absent: no ammo (the knife)
 ammo     = "762Nato"           # an id of ammo.toml
@@ -407,6 +411,7 @@ own sounds (reloads, draws, silencers) are its sequences' events and need no dat
 ```toml
 [[ammo]]
 id         = "762Nato"         # the original's name
+name       = "7.62 NATO"       # what the buy menu shows it as
 maxCarried = 90                # rounds a player carries besides the clips'
 boxPrice   = 80
 boxRounds  = 30
@@ -781,7 +786,8 @@ kinds of ammo made as the game runs, with the HUD's picture of each, come with t
 
 - Buy zones (`func_buyzone`, or automatic ones at the spawn when the map does not define
   any), buy time and `info_map_parameters` restrictions.
-- **Classic menu** by keys (1 to 8, with submenus) and a **VGUI menu** with the same options.
+- **The buy menu** of the project's own look, by the original's keys (1 to 8, then the item's), and the mouse
+  ([12 §4](12-ui-hud-and-console.md#4-game-menus-and-screens)).
 - The original's **buy commands**: `ak47`, `m4a1`, `vesthelm`, `defuser`, `hegren`,
   `flash`, `sgren`, `buyammo1`, `buyammo2`, `primammo`, `secammo`, `nvgs`, `shield` etc.
 - **`autobuy`/`rebuy`** with `cl_autobuy` and `cl_rebuy`.
@@ -804,10 +810,12 @@ a box for the weapons of the primary and the pistol slot, `primammo` and `secamm
 carry and pay for, each paid whole though its last rounds may not fit. Each is heard (`items/gunpickup2`,
 `items/ammopickup2`, `items/9mmclip1`), in the tick after it, as a client's commands come between ticks.
 
-A refusal (`cs::BuyRefusal`) is printed on the console, where the original centers it on the screen. Still to
-come: the box a dropped weapon falls as, the center text, the money's blink and the buy zone's icon, the
-weapons a VIP's map keeps from each team (`CanBuyWeaponByMaptype`, none of those sold today), the grenades and
-the equipment, the menus, `autobuy` and `rebuy`, and what bots buy.
+A refusal (`cs::BuyRefusal`) is printed on the console and told on the screen. The client is told after each
+tick whether its player may buy and for how long (`cs::BuyingState`, `buyingStateOf`, the original's buy zone
+icon and `BuyTime`), its time not running down in a freeze, which starts it again. Still to come: the box a
+dropped weapon falls as, the money's blink and the buy zone's icon, the weapons a VIP's map keeps from each team
+(`CanBuyWeaponByMaptype`, none of those sold today), the grenades and the equipment, `autobuy` and `rebuy`, and
+what bots buy.
 
 ## 9. Communication
 

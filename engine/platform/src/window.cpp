@@ -173,6 +173,14 @@ auto Window::isShown() const noexcept -> bool {
     return (SDL_GetWindowFlags(windowOf(m_window)) & SDL_WINDOW_HIDDEN) == 0;
 }
 
+auto Window::mousePosition() const noexcept -> MousePosition {
+    MousePosition position;
+    // SDL tells it in the window's own units, which a desktop's scaling makes fewer than its pixels.
+    std::ignore = SDL_GetMouseState(&position.x, &position.y);
+    const float density = SDL_GetWindowPixelDensity(windowOf(m_window));
+    return {.x = position.x * density, .y = position.y * density};
+}
+
 auto Window::setMouseMode(MouseMode mode) -> Result<void, WindowError> {
     if (!SDL_SetWindowRelativeMouseMode(windowOf(m_window), mode == MouseMode::Relative)) {
         return fail(WindowError::RelativeMouseUnavailable,

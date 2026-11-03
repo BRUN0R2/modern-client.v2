@@ -123,6 +123,24 @@ TEST(WindowTest, KeyboardEventsKeepThePositionAndTheLayoutsBaseCharacter) {
     EXPECT_FALSE(keys[1].character.has_value());
 }
 
+TEST(WindowTest, TheCursorIsWhereTheMouseWentInTheWindow) {
+    auto opened = openWindow();
+    if (!opened.has_value()) {
+        FAIL() << "the cursor test needs an open window";
+    }
+    Window window = std::move(*opened);
+    SDL_Window** const windows = SDL_GetWindows(nullptr);
+    ASSERT_NE(windows, nullptr);
+    SDL_Window* const native = windows[0];
+    SDL_free(windows);
+    SDL_WarpMouseInWindow(native, 40.0F, 30.0F);
+    std::vector<WindowEvent> events;
+    window.pollEvents(events);
+    const float density = SDL_GetWindowPixelDensity(native);
+    EXPECT_EQ(window.mousePosition(),
+              (nx::platform::MousePosition{.x = 40.0F * density, .y = 30.0F * density}));
+}
+
 TEST(WindowTest, AMovedWindowStaysOpenUntilItsLastOwnerCloses) {
     auto window = openWindow();
     ASSERT_TRUE(window.has_value());

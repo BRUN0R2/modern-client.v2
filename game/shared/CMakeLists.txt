@@ -19,6 +19,7 @@ nxAddModuleLibrary(csShared
         src/rounds.cppm
         src/economy.cppm
         src/buying.cppm
+        src/buyMenuLook.cppm
         src/materials.cppm
         src/footsteps.cppm
         src/breath.cppm
@@ -50,6 +51,7 @@ nxAddModuleLibrary(csShared
         src/rounds.cpp
         src/economy.cpp
         src/buying.cpp
+        src/buyMenuLook.cpp
         src/materials.cpp
         src/footsteps.cpp
         src/breath.cpp
