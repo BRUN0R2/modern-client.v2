@@ -222,12 +222,17 @@ auto rebuyCostOf(std::span<const RebuyStep> steps, const Inventory& inventory, c
     return cost;
 }
 
+auto BuyingState::timeLeftAfter(nx::Seconds elapsed) const noexcept -> nx::Seconds {
+    return isRunningDown ? std::clamp(timeLeft - elapsed, nx::Seconds{}, length) : timeLeft;
+}
+
 auto buyingStateOf(const Buyer& buyer, bool isFrozen) -> BuyingState {
     const auto mayBuy = checkMayBuy(buyer);
     return BuyingState{.refusal = mayBuy ? std::nullopt : std::optional{mayBuy.error().code},
                        .timeLeft = isFrozen ? buyer.buyTime
                                             : std::max(buyer.buyTime - buyer.sinceRoundStart, nx::Seconds{}),
-                       .length = buyer.buyTime};
+                       .length = buyer.buyTime,
+                       .isRunningDown = !isFrozen};
 }
 
 } // namespace cs

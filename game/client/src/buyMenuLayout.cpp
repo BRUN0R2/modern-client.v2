@@ -16,6 +16,7 @@ constexpr std::int32_t kMarginUnits = 64;
 constexpr std::int32_t kMostContentUnits = 1792;
 constexpr std::int32_t kTopUnits = 44;
 constexpr std::int32_t kHeaderTallUnits = 96;
+constexpr std::int32_t kTimeBarTallUnits = 2;
 constexpr std::int32_t kUnderHeaderUnits = 20;
 constexpr std::int32_t kMainTallUnits = 680;
 constexpr std::int32_t kUnderMainUnits = 18;
@@ -39,6 +40,12 @@ constexpr std::int32_t kKeysWideUnits = 272; ///< What the keys take of the row 
 constexpr std::int32_t kCarriedTiles = 3;
 
 } // namespace
+
+auto barFillOf(std::int32_t wide, float share) noexcept -> BuyBarFill {
+    const float reached = static_cast<float>(wide) * std::clamp(share, 0.0F, 1.0F);
+    const float whole = std::floor(reached);
+    return {.whole = static_cast<std::int32_t>(whole), .nextPixel = reached - whole};
+}
 
 BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept
     : scale{static_cast<float>(size.height) / kBuyMenuDesignHeight} {
@@ -68,6 +75,12 @@ BuyMenuLayout::BuyMenuLayout(nx::rhi::Extent2d size) noexcept
 auto BuyMenuLayout::pixels(std::int32_t units) const noexcept -> std::int32_t {
     return units > 0 ? std::max(nx::narrow<std::int32_t>(std::lround(static_cast<float>(units) * scale)), 1)
                      : 0;
+}
+
+auto BuyMenuLayout::timeBar() const noexcept -> BuyRect {
+    const std::int32_t tall = pixels(kTimeBarTallUnits);
+    return {
+        .x = headerRect.x, .y = headerRect.y + headerRect.tall - tall, .wide = headerRect.wide, .tall = tall};
 }
 
 auto BuyMenuLayout::tab(std::size_t index) const noexcept -> BuyRect {

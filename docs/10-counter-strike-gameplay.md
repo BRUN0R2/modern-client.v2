@@ -817,8 +817,9 @@ better than it wears, in the order of `cl_rebuy`'s default, going without what i
 it can buy none of it.
 
 A refusal (`cs::BuyRefusal`) is printed on the console and told on the screen. The client is told after each
-tick whether its player may buy and for how long (`cs::BuyingState`, `buyingStateOf`, the original's buy zone
-icon and `BuyTime`), its time not running down in a freeze, which starts it again. Still to come: the box a
+tick whether its player may buy and for how long (`cs::BuyingState`, `buyingStateOf`, `timeLeftAfter` for the
+moment a frame shows, the original's buy zone icon and `BuyTime`), its time not running down in a freeze, which
+starts it again. Still to come: the box a
 dropped weapon falls as, the money's blink and the buy zone's icon, the weapons a VIP's map keeps from each team
 (`CanBuyWeaponByMaptype`, none of those sold today), the grenades and the equipment, `autobuy`, `cl_autobuy` and
 `cl_rebuy`'s orders, and what bots buy.

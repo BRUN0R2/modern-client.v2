@@ -68,8 +68,9 @@ public:
     /// Appends to `quads` what darkens the scene under the menu and the HUD, on a screen of `size`.
     static void appendBackdrop(std::vector<nx::render::ScreenQuad>& quads, nx::rhi::Extent2d size);
     /// Appends to `quads` the menu showing `frame` on a screen of `size`, once loaded: laid out again only
-    /// when what it shows changes.
-    void append(std::vector<nx::render::ScreenQuad>& quads, const BuyMenuFrame& frame,
+    /// when what it shows changes, but for its line of the time to buy, which shows `timeShare`
+    /// (buyTimeShareOf).
+    void append(std::vector<nx::render::ScreenQuad>& quads, const BuyMenuFrame& frame, float timeShare,
                 nx::rhi::Extent2d size);
     /// Appends to `quads` what it tells at `now`, over the menu while `isMenuOpen`, else over the game; the
     /// moment over, it tells nothing more.

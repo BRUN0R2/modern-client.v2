@@ -116,6 +116,12 @@ auto ClientGame::hearing() const -> Hearing {
     return Hearing{.from = shownTime(), .rate = m_last.rate};
 }
 
+auto ClientGame::buying() const -> BuyingState {
+    BuyingState shown = m_last.buying;
+    shown.timeLeft = shown.timeLeftAfter(shownTime().since(m_last.time, m_last.rate));
+    return shown;
+}
+
 auto ClientGame::roundTimeShown() const -> std::uint32_t {
     return m_last.roundTimer.shownAt(shownTime(), m_last.rate);
 }

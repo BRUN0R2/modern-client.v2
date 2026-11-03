@@ -176,8 +176,13 @@ using RebuyStep = std::variant<WeaponIndex, AmmoRebuy, ArmorKind>;
 /// (the original's buy zone icon and `BuyTime`).
 struct BuyingState {
     std::optional<BuyRefusal> refusal{}; ///< Why it may not, as checkMayBuy weighs it; none: it may.
-    nx::Seconds timeLeft{};
-    nx::Seconds length{}; ///< How long a round's players buy for (mp_buytime).
+    nx::Seconds timeLeft{};              ///< As it is told (timeLeftAfter for any other moment).
+    nx::Seconds length{};                ///< How long a round's players buy for (mp_buytime).
+    bool isRunningDown = false;          ///< Its round runs: its time does not run down in a freeze.
+
+    /// The time left `elapsed` after it was told, before it when negative, within none and all of it: every
+    /// moment's own, so that what shows it moves as smoothly as the moments it is shown at.
+    [[nodiscard]] auto timeLeftAfter(nx::Seconds elapsed) const noexcept -> nx::Seconds;
 };
 
 /// What `buyer` is told: its buy time does not run down while its round `isFrozen`, which starts it again.

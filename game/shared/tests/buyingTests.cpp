@@ -319,7 +319,19 @@ TEST(BuyingStateTest, APlayerIsToldWhetherItMayBuyAndForHowLong) {
 TEST(BuyingStateTest, ItsTimeDoesNotRunDownInAFreezeWhichStartsItAgain) {
     Buyer asked = buyer();
     asked.sinceRoundStart = nx::Seconds{3.0F};
-    EXPECT_EQ(cs::buyingStateOf(asked, true).timeLeft, kBuyTime);
+    const cs::BuyingState frozen = cs::buyingStateOf(asked, true);
+    EXPECT_EQ(frozen.timeLeft, kBuyTime);
+    EXPECT_EQ(frozen.timeLeftAfter(nx::Seconds{1.0F}), kBuyTime);
+}
+
+TEST(BuyingStateTest, ItsTimeAtAnyMomentIsThatToldLessWhatWentBy) {
+    Buyer asked = buyer();
+    asked.sinceRoundStart = nx::Seconds{30.0F};
+    const cs::BuyingState told = cs::buyingStateOf(asked, false);
+    EXPECT_FLOAT_EQ(told.timeLeftAfter(nx::Seconds{0.25F}).count(), 59.75F);
+    EXPECT_FLOAT_EQ(told.timeLeftAfter(nx::Seconds{-0.01F}).count(), 60.01F) << "a frame shows a tick behind";
+    EXPECT_EQ(told.timeLeftAfter(nx::Seconds{100.0F}), nx::Seconds{}) << "never below none";
+    EXPECT_EQ(told.timeLeftAfter(nx::Seconds{-100.0F}), kBuyTime) << "never above all of it";
 }
 
 TEST(BuyingStateTest, ItsTimeOverIsNoneLeftAndARefusal) {

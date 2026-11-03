@@ -412,7 +412,7 @@ original has a key menu and a VGUI one, and the original's keys. `buy` (`b`) ope
 
 | Part | What it shows |
 |------|---------------|
-| What heads it | Its name, the player's team, the time left to buy, on a line that runs down with it; the money, and what would be left after the item selected, or how much it falls short, in red |
+| What heads it | Its name, the player's team, the time left to buy, on a line that runs down with it, smoothly: its fill drawn each frame from the time left at the moment that frame shows, by less than a pixel at a time, while the clock beside it reads the same time in whole seconds; the money, and what would be left after the item selected, or how much it falls short, in red |
 | Tabs, on the left | Pistols `1`, shotguns `2`, SMGs `3`, rifles `4`, machine gun `5` and equipment `8`, those with something for the player's team, each with the picture of its first item; under them, the ammo of the primary weapon `6` and of the pistol `7`, with what is carried and what a box costs |
 | Items, on the right of the tabs | Those of the tab shown, three to a row, more when a mod sells more: each with its picture, its key, its name and its price; dimmed with its price in red when it costs more than the player has, `OWNED` or `WORN` when it has it |
 | What the item selected is | A gun's damage, rate of fire, what armor lets through and move speed, with a bar of each; its clip, what is carried of its ammo at most, its reload and what a box costs; armor's `about`; whether it takes the place of a weapon held, and what buys it |
