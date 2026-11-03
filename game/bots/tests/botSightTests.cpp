@@ -6,6 +6,7 @@
 import std;
 import nx.core;
 import nx.math;
+import cs.shared;
 import cs.server;
 import cs.bots;
 
