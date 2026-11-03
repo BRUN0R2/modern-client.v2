@@ -13,10 +13,10 @@ import :gameState;
 
 namespace cs {
 
-/// What a move of `mover` meets as boxes: the world's (solidBoxesOf), the other players alive among
-/// them, each standing or ducked, as the engine lists them for movement (SV_AddLinksToPM's
-/// SOLID_SLIDEBOX).
-[[nodiscard]] auto boxesMetBy(GameState& game, const Player& mover) -> std::vector<SolidBox>;
+/// Lists in game.moves what a move of `mover` meets, as the engine lists it for movement (SV_AddLinksToPM):
+/// the brush entities near it, and of the world's boxes (solidBoxesOf) those near it, the other players
+/// alive among them, each standing or ducked (its SOLID_SLIDEBOX).
+void listMoveLinks(GameState& game, const Player& mover);
 
 /// `player` uses what is in front of it, looking along `command`'s view from where the move left its
 /// eye (CBasePlayer::PlayerUse), heard finding something to use or nothing (UseEmpty).

@@ -29,13 +29,19 @@ constexpr double kSpeedShareRecovery = 0.01;
 
 } // namespace
 
-auto boxesMetBy(GameState& game, const Player& mover) -> std::vector<SolidBox> {
-    std::vector<SolidBox> near;
-    boxesNear(solidBoxesOf(game.world, mover.body), mover.movement.origin, mover.body, near);
-    return near;
+void listMoveLinks(GameState& game, const Player& mover) {
+    MoveLists& moves = *game.moves;
+    if (moves.isStale) {
+        linkedBrushEntitiesOf(moves.brushQuery, game.map.hulls(), moves.brushes);
+        solidBoxesOf(moves.boxQuery, moves.boxes);
+        moves.isStale = false;
+    }
+    brushEntitiesNear(moves.brushes, mover.movement.origin, moves.nearBrushes);
+    boxesNear(moves.boxes, mover.movement.origin, mover.body, moves.nearBoxes);
 }
 
 void use(GameState& game, Player& player, const UserCommand& command) {
+    game.moves->isStale = true; // what it uses may turn solid or not
     const std::optional<nx::ecs::Entity> used = nx::game::playerUse(
         game.world, game.map.hulls(), player.body,
         {.eye = eyeOf(player.movement), .forward = nx::angleVectors(command.viewAngles).forward});
@@ -203,6 +209,8 @@ void postThink(GameState& game, Player& player, const UserCommand& command, cons
     if (attacks.motions.test(HolderMotion::Reloaded)) {
         animate(game, player, PlayerAction::Reload);
     }
+    // What it attacks may be solid no more when it dies or breaks (SOLID_NOT).
+    game.moves->isStale = game.moves->isStale || !attacks.blows.empty() || !attacks.shots.empty();
     for (const Blow& blow : attacks.blows) {
         attackEntity(game, player, blow.entity,
                      nx::game::Attack{.attacker = player.body,
@@ -250,18 +258,20 @@ void runCommand(GameState& game, Player& player, const UserCommand& command) {
     // After PreThink, which may kill it, as the original's returns then, and its PostThink skips the dead.
     const bool isAlive = player.status.isAlive();
     const MovementState before = player.movement;
-    const std::vector<BrushEntity> entities = brushEntitiesOf(game.world);
+    listMoveLinks(game, player);
+    MoveLists& moves = *game.moves;
     const MovementResult moved = simulateMovement(player.movement, command, MovementSettings{}, hulls,
-                                                  entities, boxesMetBy(game, player));
+                                                  moves.nearBrushes, moves.nearBoxes);
     player.movement = moved.state;
     // A dead player's body is not solid (SOLID_NOT): it touches nothing.
     if (isAlive) {
-        hearMovement(game, player, moved.sounds, entities, command);
+        hearMovement(game, player, moved.sounds, moves.nearBrushes, command);
         nx::game::touchBrushEntities(game.world, hulls, moved.touchedModels, player.body);
     }
     placeBody(game, player);
+    keepBoxOf(player.body, player.movement.origin, bodyBoxOf(player), moves.boxes);
     if (isAlive) {
-        nx::game::touchTriggers(game.world, hulls, player.body);
+        nx::game::touchTriggers(moves.volumes, game.world, hulls, player.body);
         touchHurtVolumes(game, player);
         // SV_RunCmd's PostThink is of a player still alive after what it touched.
         if (player.status.isAlive()) {

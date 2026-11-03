@@ -91,9 +91,26 @@ struct TickEvents {
     void clear() noexcept;
 };
 
+/// What the players' moves of a tick meet, as the original keeps its entities linked and lists for each move
+/// those near it (SV_AddLinksToPM): what finds them, kept so that it looks for their archetypes once; the
+/// brush entities, and the boxes, by entity, kept where each move leaves its own, gathered once a tick and
+/// again as what a move did may have changed what is solid; and what a move is given, kept for its room.
+struct MoveLists {
+    explicit MoveLists(nx::ecs::World& world) : brushQuery{world}, boxQuery{world}, volumes{world} {}
+
+    BrushEntityQuery brushQuery;
+    SolidBoxQuery boxQuery;
+    nx::game::TouchedVolumes volumes;
+    std::vector<LinkedBrushEntity> brushes{};
+    std::vector<SolidBox> boxes{};
+    bool isStale = true; ///< As a tick starts, and when an attack or a use may have changed what is solid.
+    std::vector<BrushEntity> nearBrushes{};
+    std::vector<SolidBox> nearBoxes{};
+};
+
 /// What a map's game is played with, and where it stands: its content and its map, which must outlive it, its
 /// cvars, the models it plays, its rounds and their money, the world of its entities, its players by their
-/// slots, what the tick made, and its light styles.
+/// slots, what the tick made, its light styles, and what its moves meet once its components are registered.
 struct GameState {
     /// The game of `map` of `content` as it starts: the first round frozen, no player yet.
     GameState(const GameContent& gameContent, const GameMap& gameMap, GameCvars gameCvars,
@@ -114,6 +131,7 @@ struct GameState {
     std::vector<std::optional<Player>> players{}; ///< By slot: none for a slot a player left.
     TickEvents events{};
     MapLightStyles lightStyles; ///< Owned by this game; copied into each client's snapshot.
+    std::optional<MoveLists> moves{};
 };
 
 /// The player `index` names, in the game.
