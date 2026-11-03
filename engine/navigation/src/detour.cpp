@@ -267,6 +267,158 @@ private:
     std::span<const std::byte> rest;
 };
 
+/// Which polygons of a mesh a way leads from to which others, known without searching: a search for a way
+/// that is not there goes through every polygon its start reaches before it can tell, the most any search
+/// costs, however often it is asked, as bodies are of a player on a roof no way leads to. Links go one way
+/// where a body only drops: the polygons each joined to the others both ways are a component (Tarjan's), and
+/// each component knows those its links lead to, its own among them. It reads Detour's links, which every
+/// filter of a query leaves as they are: a query's costs make a way dearer, never closed.
+class PolygonReach {
+public:
+    explicit PolygonReach(const dtNavMesh& mesh) {
+        firstOfTile.reserve(narrow<std::size_t>(mesh.getMaxTiles()));
+        std::vector<Polygon> polygons;
+        for (int index = 0; index < mesh.getMaxTiles(); ++index) {
+            const dtMeshTile* const tile = mesh.getTile(index);
+            firstOfTile.push_back(narrow<std::uint32_t>(polygons.size()));
+            if (tile == nullptr || tile->header == nullptr) {
+                continue;
+            }
+            for (const dtPoly& polygon :
+                 std::span{tile->polys, narrow<std::size_t>(tile->header->polyCount)}) {
+                polygons.push_back({.tile = tile, .firstLink = polygon.firstLink});
+            }
+        }
+        const std::size_t componentCount = findComponents(mesh, polygons);
+        wordsOfComponent = (componentCount + kBitsOfWord - 1) / kBitsOfWord;
+        reached.assign(componentCount * wordsOfComponent, 0);
+        leadOn(mesh, polygons, componentCount);
+    }
+
+    /// Whether a way leads from the polygon `from` to the polygon `to`, both of `mesh`.
+    [[nodiscard]] auto leads(const dtNavMesh& mesh, dtPolyRef from, dtPolyRef to) const noexcept -> bool {
+        const std::size_t target = componentOfPolygon[numberOf(mesh, to)];
+        const std::uint64_t word =
+            reached[(std::size_t{componentOfPolygon[numberOf(mesh, from)]} * wordsOfComponent) +
+                    (target / kBitsOfWord)];
+        return ((word >> (target % kBitsOfWord)) & 1U) != 0;
+    }
+
+private:
+    static constexpr std::size_t kBitsOfWord = 64;
+    static constexpr std::uint32_t kNone = std::numeric_limits<std::uint32_t>::max();
+
+    /// A polygon as the search of its components walks it.
+    struct Polygon {
+        const dtMeshTile* tile = nullptr;
+        unsigned int firstLink = DT_NULL_LINK;
+    };
+
+    /// The polygon `reference`, of `mesh`, as numbered through its tiles.
+    [[nodiscard]] auto numberOf(const dtNavMesh& mesh, dtPolyRef reference) const noexcept -> std::size_t {
+        unsigned int salt = 0;
+        unsigned int tile = 0;
+        unsigned int polygon = 0;
+        mesh.decodePolyId(reference, salt, tile, polygon);
+        return std::size_t{firstOfTile[tile]} + polygon;
+    }
+
+    /// Writes each polygon's component to componentOfPolygon, those its links lead to numbered before it:
+    /// how many they are.
+    [[nodiscard]] auto findComponents(const dtNavMesh& mesh, std::span<const Polygon> polygons)
+        -> std::size_t {
+        // Tarjan's, its recursion held in a list: a mesh's ways are as deep as it has polygons.
+        struct Visit {
+            std::uint32_t polygon = 0;
+            unsigned int nextLink = DT_NULL_LINK;
+        };
+        componentOfPolygon.assign(polygons.size(), kNone);
+        std::vector<std::uint32_t> foundAt(polygons.size(), kNone);
+        std::vector<std::uint32_t> lowest(polygons.size(), kNone);
+        std::vector<std::uint32_t> open;
+        std::vector<Visit> visits;
+        std::uint32_t found = 0;
+        std::uint32_t components = 0;
+        const auto enter = [&](std::uint32_t polygon) {
+            foundAt[polygon] = found;
+            lowest[polygon] = found;
+            ++found;
+            open.push_back(polygon);
+            visits.push_back({.polygon = polygon, .nextLink = polygons[polygon].firstLink});
+        };
+        for (std::uint32_t root = 0; root < polygons.size(); ++root) {
+            if (foundAt[root] != kNone) {
+                continue;
+            }
+            enter(root);
+            while (!visits.empty()) {
+                Visit& visit = visits.back();
+                const std::uint32_t polygon = visit.polygon;
+                if (visit.nextLink != DT_NULL_LINK) {
+                    const dtLink& link = polygons[polygon].tile->links[visit.nextLink];
+                    visit.nextLink = link.next;
+                    const auto neighbor = narrow<std::uint32_t>(numberOf(mesh, link.ref));
+                    if (foundAt[neighbor] == kNone) {
+                        enter(neighbor);
+                    } else if (componentOfPolygon[neighbor] == kNone) {
+                        lowest[polygon] = std::min(lowest[polygon], foundAt[neighbor]);
+                    }
+                    continue;
+                }
+                visits.pop_back();
+                if (!visits.empty()) {
+                    lowest[visits.back().polygon] = std::min(lowest[visits.back().polygon], lowest[polygon]);
+                }
+                if (lowest[polygon] == foundAt[polygon]) {
+                    std::uint32_t member = kNone;
+                    do {
+                        member = open.back();
+                        open.pop_back();
+                        componentOfPolygon[member] = components;
+                    } while (member != polygon);
+                    ++components;
+                }
+            }
+        }
+        return components;
+    }
+
+    /// Writes what each component leads to: itself, and what those its links lead to lead to, numbered before
+    /// it.
+    void leadOn(const dtNavMesh& mesh, std::span<const Polygon> polygons, std::size_t componentCount) {
+        std::vector<std::vector<std::uint32_t>> nextOfComponent(componentCount);
+        for (std::size_t polygon = 0; polygon < polygons.size(); ++polygon) {
+            const std::uint32_t component = componentOfPolygon[polygon];
+            for (unsigned int index = polygons[polygon].firstLink; index != DT_NULL_LINK;
+                 index = polygons[polygon].tile->links[index].next) {
+                const std::uint32_t next =
+                    componentOfPolygon[numberOf(mesh, polygons[polygon].tile->links[index].ref)];
+                if (next != component) {
+                    nextOfComponent[component].push_back(next);
+                }
+            }
+        }
+        const std::span<std::uint64_t> words{reached};
+        for (std::size_t component = 0; component < componentCount; ++component) {
+            const std::span<std::uint64_t> own =
+                words.subspan(component * wordsOfComponent, wordsOfComponent);
+            own[component / kBitsOfWord] |= std::uint64_t{1} << (component % kBitsOfWord);
+            for (const std::uint32_t next : nextOfComponent[component]) {
+                const std::span<const std::uint64_t> onward =
+                    words.subspan(std::size_t{next} * wordsOfComponent, wordsOfComponent);
+                for (std::size_t word = 0; word < wordsOfComponent; ++word) {
+                    own[word] |= onward[word];
+                }
+            }
+        }
+    }
+
+    std::vector<std::uint32_t> firstOfTile; ///< Of each tile of the mesh, how many polygons come before.
+    std::vector<std::uint32_t> componentOfPolygon; ///< By polygon, numbered through the tiles.
+    std::vector<std::uint64_t> reached;            ///< A row of bits for each component, by component.
+    std::size_t wordsOfComponent = 0;
+};
+
 /// Whether `data`, the bytes of the tile at `x`, `y` of `polygonCount` polygons, are a tile of the
 /// Detour this unit is built with, of that place and count: what Detour takes without asking.
 [[nodiscard]] auto isTileOf(std::span<const std::byte> data, std::int32_t x, std::int32_t y,
@@ -287,6 +439,7 @@ struct NavigationMesh::Detour {
     std::vector<std::vector<std::byte>> tiles;
     std::unique_ptr<dtNavMesh, NavMeshFree> mesh;
     std::size_t polygonCount = 0;
+    std::optional<PolygonReach> reach{}; ///< Once it has its tiles.
 };
 
 NavigationMesh::NavigationMesh(std::unique_ptr<Detour> detour, AgentProfile profile) noexcept
@@ -388,6 +541,7 @@ auto NavigationMesh::assemble(detail::BuiltTiles built, const AgentProfile& prof
             detour->polygonCount += tile.polygonCount;
         }
     }
+    detour->reach.emplace(*detour->mesh);
     return NavigationMesh{std::move(detour), profile};
 }
 
@@ -534,9 +688,10 @@ struct NavigationQuery::Detour {
     Reach reach{};
     /// The profile's edge reach, looked within next, none being within reach (NavigationQuery).
     Reach edgeReach{};
-    std::vector<dtPolyRef> polygons;     ///< Room for a way's polygons, or those a circle reaches.
-    std::vector<float> points;           ///< Room for a way's corners.
-    std::vector<AvoidedPolygon> avoided; ///< Room for the polygons a way's avoided places reach.
+    const PolygonReach* polygonReach = nullptr; ///< Of its mesh.
+    std::vector<dtPolyRef> polygons;            ///< Room for a way's polygons, or those a circle reaches.
+    std::vector<float> points;                  ///< Room for a way's corners.
+    std::vector<AvoidedPolygon> avoided;        ///< Room for the polygons a way's avoided places reach.
     std::string profileName;
     /// The avoidance Corridor::steer samples velocities with, made as it is first asked for.
     std::unique_ptr<dtObstacleAvoidanceQuery, ObstacleAvoidanceFree> avoidance;
@@ -590,6 +745,11 @@ struct NavigationQuery::Detour {
     /// The polygons of the cheapest way from `from` to `to` by `wayFilter`. Errors: Unreachable.
     [[nodiscard]] auto polygonPath(const MeshPoint& from, const MeshPoint& to, const dtQueryFilter& wayFilter)
         -> Result<std::span<const dtPolyRef>, NavigationError> {
+        if (!polygonReach->leads(*query->getAttachedNavMesh(), from.polygon, to.polygon)) {
+            return fail(NavigationError::Unreachable,
+                        std::format("from {} to {} on {:?}'s mesh", detail::positionOf(from.position),
+                                    detail::positionOf(to.position), profileName));
+        }
         int count = 0;
         const dtStatus status =
             query->findPath(from.polygon, to.polygon, from.position.data(), to.position.data(), &wayFilter,
@@ -634,6 +794,7 @@ NavigationQuery::NavigationQuery(const NavigationMesh& mesh)
         "a search");
     const AgentProfile& profile = mesh.profile();
     detourState->filter = filterOf(areaCostsOf(profile));
+    detourState->polygonReach = &*mesh.detourState->reach;
     detourState->reach = {
         .extents = {profile.radius.value(), profile.standingHeight.value(), profile.radius.value()}};
     // The radius the mesh keeps from the floor's end, and the body's width: the half of it past the floor's

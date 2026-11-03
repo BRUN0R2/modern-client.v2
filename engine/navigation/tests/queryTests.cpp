@@ -201,6 +201,32 @@ TEST(NavigationQueryTest, AWayGoesUpALedgeItJumpsOntoAndDownOneItDropsFromButNot
     EXPECT_EQ(up.error().code, NavigationError::Unreachable);
 }
 
+TEST(NavigationQueryTest, AWayIsKnownToLeadOverEveryLinkItTakesAndNeverAgainstOne) {
+    // A floor with a box it jumps onto and one it only drops from, and apart from them a floor no way joins.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1536.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 256.0F, .y = 128.0F, .z = -16.0F},
+                     {.x = 512.0F, .y = 384.0F, .z = 40.0F});
+    nx::test::addBox(geometry, {.x = 1024.0F, .y = 128.0F, .z = -16.0F},
+                     {.x = 1280.0F, .y = 384.0F, .z = 120.0F});
+    nx::test::addFloor(geometry, {.x = 3072.0F, .y = 0.0F}, {.x = 3584.0F, .y = 512.0F}, 0.0F);
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const Vec3 lowTop{.x = 384.0F, .y = 256.0F, .z = 40.0F};
+    const Vec3 highTop{.x = 1152.0F, .y = 256.0F, .z = 120.0F};
+    const Vec3 island{.x = 3328.0F, .y = 256.0F};
+    const auto reaches = [&query](Vec3 from, Vec3 to) {
+        const auto reachable = query.isReachable(from, to);
+        EXPECT_TRUE(reachable.has_value());
+        return reachable.value_or(false);
+    };
+    EXPECT_TRUE(reaches(highTop, lowTop)) << "down one link and up another";
+    EXPECT_FALSE(reaches(lowTop, highTop));
+    EXPECT_TRUE(reaches(island, island));
+    EXPECT_FALSE(reaches(lowTop, island));
+    EXPECT_FALSE(reaches(island, highTop));
+}
+
 TEST(NavigationQueryTest, APointFarFromTheMeshIsOutsideIt) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};
