@@ -6,6 +6,7 @@ module cs.bots;
 import std;
 import nx.core;
 import nx.math;
+import nx.assets;
 import nx.jobs;
 import nx.ecs;
 import nx.game;
@@ -137,11 +138,12 @@ struct Bots::Turn {
     BotDriver* driver = nullptr;
     PlayerOwnState self{};
     UserCommand command{};
+    std::size_t decision = 0; ///< Its index among those of the tick's living bots.
 };
 
 Bots::Bots(CreateToken /*token*/, Game& owner, BotRules botRules, const nx::navigation::NavigationMesh& mesh,
            nx::jobs::JobSystem& jobSystem)
-    : game{&owner}, rules{std::move(botRules)}, jobs{&jobSystem}, query{mesh}, deciders{mesh} {}
+    : game{&owner}, rules{std::move(botRules)}, jobs{&jobSystem}, walked{&mesh}, deciders{mesh} {}
 
 Bots::~Bots() {
     kickAll();
@@ -279,44 +281,96 @@ void Bots::keepQuota(std::uint32_t quota, BotDifficulty difficulty, std::string_
     }
 }
 
+template <typename Each>
+void Bots::inBatches(nx::jobs::JobDesc desc, std::size_t count, const Each& each) {
+    const std::size_t batchCount = jobs->batchCountOf(count, nx::agents::kSmallestBatch);
+    while (queries.size() < batchCount) {
+        queries.emplace_back(*walked);
+    }
+    jobs->forBatches(desc, count, nx::agents::kSmallestBatch,
+                     [this, &each](std::size_t batch, std::size_t first, std::size_t last) {
+                         for (std::size_t index = first; index < last; ++index) {
+                             each(index, queries[batch]);
+                         }
+                     });
+}
+
+auto Bots::targetOfPlayer(const Sights& sights, PlayerIndex player) -> const PerceptionTarget* {
+    // In the order of their slots.
+    const auto found = std::ranges::lower_bound(
+        sights.targets, player.value, {}, [](const PerceptionTarget& target) { return target.player.value; });
+    return found != sights.targets.end() && found->player == player ? &*found : nullptr;
+}
+
+auto Bots::targetOfEntity(const Sights& sights, nx::ecs::Entity entity) -> const PerceptionTarget* {
+    const auto found = std::ranges::lower_bound(sights.present, entity);
+    return found != sights.present.end() && *found == entity
+               ? sights.presentTargets[static_cast<std::size_t>(found - sights.present.begin())]
+               : nullptr;
+}
+
 auto Bots::commands() -> std::vector<PlayerCommand> {
+    const nx::game::TickTime time = game->time();
     const std::vector<PerceptionTarget> targets = game->perceptionTargets();
     // The enemies there still are, living: a bot forgets the others (nx::agents::Brain::forgetAbsent).
-    std::vector<nx::ecs::Entity> present =
-        targets | std::views::transform(&PerceptionTarget::entity) | std::ranges::to<std::vector>();
-    std::ranges::sort(present);
+    std::vector<const PerceptionTarget*> presentTargets =
+        targets | std::views::transform([](const PerceptionTarget& target) { return &target; }) |
+        std::ranges::to<std::vector>();
+    std::ranges::sort(presentTargets, {}, &PerceptionTarget::entity);
+    const std::vector<nx::ecs::Entity> present =
+        presentTargets | std::views::transform(&PerceptionTarget::entity) | std::ranges::to<std::vector>();
     // Nothing moves while the bots perceive: what is solid to their sights is gathered once.
     const nx::game::Solids solids = game->sightSolids();
     const std::vector<GameNoise> noises = game->noises();
-    const Sights sights{.targets = targets, .present = present, .solids = solids, .noises = noises};
+    const Sights sights{.time = time,
+                        .targets = targets,
+                        .present = present,
+                        .presentTargets = presentTargets,
+                        .solids = solids,
+                        .noises = noises};
     // The bodies the bots steer around, players' and others'.
     const std::vector<nx::agents::Body> bodies = bodiesOf(game->movingBodies());
     std::vector<Turn> turns;
     turns.reserve(bots.size());
-    std::vector<nx::agents::DecisionRequest> requests;
     for (const PlayerIndex bot : bots) {
-        Turn& turn = turns.emplace_back(beginTurn(bot, sights));
+        turns.push_back(beginTurn(bot, time));
+    }
+    // What a bot perceives does not depend on what another perceives or decides, nor its decision on
+    // another's.
+    inBatches({.label = "bots.perceive", .priority = nx::jobs::Priority::Critical}, turns.size(),
+              [this, &turns, &sights](std::size_t index, nx::navigation::NavigationQuery& query) {
+                  if (turns[index].self.isAlive) {
+                      perceiveInTurn(turns[index], sights, query);
+                  }
+              });
+    std::vector<nx::agents::DecisionRequest> requests;
+    requests.reserve(turns.size());
+    for (Turn& turn : turns) {
         if (turn.self.isAlive) {
-            const auto self = std::ranges::find(targets, bot, &PerceptionTarget::player);
+            const PerceptionTarget* const self = targetOfPlayer(sights, turn.player);
+            turn.decision = requests.size();
             requests.push_back({.brain = &turn.agent->brain,
                                 .feet = turn.self.feet,
                                 .velocity = turn.self.velocity,
                                 .maxSpeed = turn.self.maxSpeed,
-                                .body = self != targets.end() ? std::optional{self->entity} : std::nullopt,
+                                .body = self != nullptr ? std::optional{self->entity} : std::nullopt,
                                 .stuck = &turn.agent->stuck,
                                 .elapsed = turn.command.duration});
         }
     }
-    // What a bot perceives does not depend on what another decides, nor a decision on another's.
     std::vector<nx::agents::Decision> decisions(requests.size());
     deciders.decide(*jobs, requests, decisions, bodies);
+    inBatches({.label = "bots.commands", .priority = nx::jobs::Priority::Critical}, turns.size(),
+              [this, &turns, &decisions, &sights](std::size_t index, nx::navigation::NavigationQuery& query) {
+                  Turn& turn = turns[index];
+                  if (turn.self.isAlive) {
+                      finishTurn(turn, decisions[turn.decision], sights, query);
+                  }
+              });
     std::vector<PlayerCommand> made;
     made.reserve(turns.size());
-    auto decision = decisions.begin();
-    for (Turn& turn : turns) {
-        made.push_back(PlayerCommand{.player = turn.player,
-                                     .command = turn.self.isAlive ? finishTurn(turn, *decision++, sights)
-                                                                  : turn.command});
+    for (const Turn& turn : turns) {
+        made.push_back(PlayerCommand{.player = turn.player, .command = turn.command});
     }
     return made;
 }
@@ -324,28 +378,55 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
 auto Bots::perceive(PlayerIndex player, nx::agents::Agent& agent, const PlayerOwnState& self,
                     const Sights& sights) -> std::vector<nx::agents::Observation> {
     const std::span<const PerceptionTarget> targets = sights.targets;
+    const std::span<const nx::agents::Memory> memories = agent.brain.memories();
+    const bool looksAround =
+        looksAroundAt(player, sights.time.now, sights.time.rate, rules.sightInterval) && !targets.empty();
+    const auto isSeen = [](const nx::agents::Memory& memory) {
+        return memory.isVisible;
+    };
     std::vector<nx::agents::Observation> seen;
-    const std::size_t budget = std::min<std::size_t>(targets.size(), rules.perceptionBudget);
-    for (std::size_t looked = 0; looked < budget; ++looked) {
-        const PerceptionTarget& target = targets[(agent.nextCandidate + looked) % targets.size()];
-        if (target.player == player || target.team == self.team) {
-            continue;
-        }
-        // The first spot of it in its cone that a line reaches is the one it aims at.
+    if (!looksAround && std::ranges::none_of(memories, isSeen)) {
+        return seen;
+    }
+    const ViewCone cone = viewConeOf(self.eye, self.view.yaw, rules.fieldOfView);
+    const nx::assets::LeafSet leaves = game->leavesSeenFrom(self.eye);
+    // The first spot of it in its cone that a line reaches is the one it aims at.
+    const auto lookAt = [&](const PerceptionTarget& target) {
         for (const nx::Vec3 spot : sightSpotsOf(target, self.eye, rules.spots)) {
-            if (isInViewCone(self.eye, self.view.yaw, rules.fieldOfView, spot) &&
+            if (cone.holds(spot) && game->isInLeaves(leaves, spot) &&
                 game->seesSpot(sights.solids, self.eye, spot)) {
                 seen.push_back({.entity = target.entity, .position = target.feet, .aimAt = spot});
-                break;
+                return;
+            }
+        }
+    };
+    for (const nx::agents::Memory& memory : memories) {
+        if (memory.isVisible) {
+            if (const PerceptionTarget* const target = targetOfEntity(sights, memory.observation.entity)) {
+                lookAt(*target);
             }
         }
     }
-    agent.nextCandidate = targets.empty() ? 0 : (agent.nextCandidate + budget) % targets.size();
+    if (!looksAround) {
+        return seen;
+    }
+    const std::size_t budget = std::min<std::size_t>(targets.size(), rules.perceptionBudget);
+    for (std::size_t looked = 0; looked < budget; ++looked) {
+        const PerceptionTarget& target = targets[(agent.nextCandidate + looked) % targets.size()];
+        const auto isLookedAt = [&target](const nx::agents::Memory& memory) {
+            return memory.isVisible && memory.observation.entity == target.entity;
+        };
+        if (target.player != player && target.team != self.team &&
+            std::ranges::none_of(memories, isLookedAt)) {
+            lookAt(target);
+        }
+    }
+    agent.nextCandidate = (agent.nextCandidate + budget) % targets.size();
     return seen;
 }
 
 void Bots::hunt(nx::agents::Agent& agent, BotDriver& driver, const nx::agents::Decision& decision,
-                nx::Vec3 feet) {
+                nx::Vec3 feet, nx::navigation::NavigationQuery& query) {
     if (decision.behavior == nx::agents::Behavior::Blocked && !decision.intent.lookAt) {
         agent.brain.setGoal(std::nullopt); // no way to its hunt's place: it draws another
     }
@@ -360,14 +441,14 @@ void Bots::hunt(nx::agents::Agent& agent, BotDriver& driver, const nx::agents::D
 }
 
 auto Bots::aimSpotOf(BotDriver& driver, const PlayerOwnState& self, const nx::agents::Decision& decision,
-                     std::span<const PerceptionTarget> targets, nx::Seconds duration) -> nx::Vec3 {
-    const nx::game::TickTime time = game->time();
+                     const Sights& sights, nx::Seconds duration) -> nx::Vec3 {
+    const nx::game::TickTime time = sights.time;
     const BotSkill skill = rules.skillLevels[driver.skillLevel].skill;
     nx::invariant(decision.intent.lookAt.has_value() && decision.target.has_value(),
                   "Bots: an attack looks at the target it pursues");
     // The enemy it attacks it sees: it is among the targets of the tick.
-    const auto enemy = std::ranges::find(targets, *decision.target, &PerceptionTarget::entity);
-    nx::invariant(enemy != targets.end(), "Bots: the enemy a bot attacks is alive");
+    const PerceptionTarget* const enemy = targetOfEntity(sights, *decision.target);
+    nx::invariant(enemy != nullptr, "Bots: the enemy a bot attacks is alive");
     const nx::Vec3 spot = leadSpot(*decision.intent.lookAt, enemy->velocity, self.velocity, skill, rules.aim);
     settleAimError(driver.aimError,
                    {.skill = skill,
@@ -380,22 +461,25 @@ auto Bots::aimSpotOf(BotDriver& driver, const PlayerOwnState& self, const nx::ag
     return spot + driver.aimError.offset;
 }
 
-auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
-    const nx::game::TickTime time = game->time();
+auto Bots::beginTurn(PlayerIndex player, nx::game::TickTime time) -> Turn {
     Turn turn{.player = player,
               .agent = game->playerComponent<nx::agents::Agent>(player),
               .driver = game->playerComponent<BotDriver>(player),
               .self = game->ownStateOf(player)};
     nx::invariant(turn.agent != nullptr && turn.driver != nullptr,
                   "Bots: a bot's body is an agent with its driver");
-    nx::agents::Agent* const agent = turn.agent;
     BotDriver* const driver = turn.driver;
     driver->lastCommand = CommandNumber{driver->lastCommand.value + 1};
     turn.command = UserCommand{
         .number = driver->lastCommand, .duration = nx::tickLengthOf(time.rate), .viewAngles = turn.self.view};
-    if (!turn.self.isAlive) {
-        return turn;
-    }
+    return turn;
+}
+
+void Bots::perceiveInTurn(Turn& turn, const Sights& sights, nx::navigation::NavigationQuery& query) {
+    const nx::game::TickTime time = sights.time;
+    const PlayerIndex player = turn.player;
+    nx::agents::Agent* const agent = turn.agent;
+    BotDriver* const driver = turn.driver;
     if (driver->lifeSpawnedAt != turn.self.spawnedAt) {
         // Spawned again, killed or alive at a round's start (SpawnBot's ResetValues): what it knew, where it
         // went, how it turned, aimed and fired are of its last life.
@@ -415,8 +499,7 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
                                query, driver->hearing),
                        time.now, time.rate);
     // Felt where it is, last: what it touches it knows better than what it hears.
-    if (const auto self = std::ranges::find(sights.targets, player, &PerceptionTarget::player);
-        self != sights.targets.end()) {
+    if (const PerceptionTarget* const self = targetOfPlayer(sights, player)) {
         const Toucher toucher{.entity = self->entity,
                               .team = self->team,
                               .origin = self->origin,
@@ -426,26 +509,23 @@ auto Bots::beginTurn(PlayerIndex player, const Sights& sights) -> Turn {
     if (const std::optional<nx::Vec3> spot = panic(*agent, *driver, turn.self)) {
         driver->panicSpot = spot;
     }
-    return turn;
 }
 
-void Bots::fight(UserCommand& command, BotDriver& driver, PlayerIndex player, const PlayerOwnState& self,
-                 nx::ecs::Entity enemy, const Sights& sights) {
-    const std::span<const PerceptionTarget> targets = sights.targets;
-    const nx::game::TickTime time = game->time();
-    const auto body = std::ranges::find(targets, player, &PerceptionTarget::player);
-    const auto foe = std::ranges::find(targets, enemy, &PerceptionTarget::entity);
-    nx::invariant(body != targets.end() && foe != targets.end(), "Bots: a bot attacks alive an enemy alive");
+void Bots::fight(UserCommand& command, BotDriver& driver, const PerceptionTarget& body,
+                 const PlayerOwnState& self, nx::ecs::Entity enemy, const Sights& sights) {
+    const nx::game::TickTime time = sights.time;
+    const PerceptionTarget* const foe = targetOfEntity(sights, enemy);
+    nx::invariant(foe != nullptr, "Bots: a bot attacks an enemy alive");
     const BotSkillLevel& level = rules.skillLevels[driver.skillLevel];
     // OnEnter's line from its origin crouched, lower by as much standing, to its enemy's eye.
     const bool seesCrouched =
         !driver.combat.isFighting &&
         game->seesSpot(sights.solids,
-                       body->origin -
-                           nx::Vec3{.z = body->isDucked ? 0.0F : rules.combat.crouchSightDrop.value()},
+                       body.origin -
+                           nx::Vec3{.z = body.isDucked ? 0.0F : rules.combat.crouchSightDrop.value()},
                        foe->eye);
     const BotFightMove move = fightMove(driver.combat,
-                                        {.origin = body->origin,
+                                        {.origin = body.origin,
                                          .velocity = self.velocity,
                                          .enemyOrigin = foe->origin,
                                          .enemyView = foe->view,
@@ -509,19 +589,19 @@ auto Bots::panic(const nx::agents::Agent& agent, BotDriver& driver, const Player
     return self.eye + nx::Vec3{.x = offset.x, .y = offset.y, .z = height};
 }
 
-auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Sights& sights) -> UserCommand {
-    const std::span<const PerceptionTarget> targets = sights.targets;
-    const nx::game::TickTime time = game->time();
+void Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Sights& sights,
+                      nx::navigation::NavigationQuery& query) {
+    const nx::game::TickTime time = sights.time;
     const PlayerOwnState& self = turn.self;
     nx::agents::Agent* const agent = turn.agent;
     BotDriver* const driver = turn.driver;
     UserCommand& command = turn.command;
     const BotSkillLevel& level = rules.skillLevels[driver->skillLevel];
     agent->behavior = decision.behavior;
-    hunt(*agent, *driver, decision, self.feet);
+    hunt(*agent, *driver, decision, self.feet, query);
     const bool attacks = decision.behavior == nx::agents::Behavior::Attack;
     const std::optional<nx::Vec3> aimSpot =
-        attacks ? std::optional{aimSpotOf(*driver, self, decision, targets, command.duration)} : std::nullopt;
+        attacks ? std::optional{aimSpotOf(*driver, self, decision, sights, command.duration)} : std::nullopt;
     // Hurt, it looks where it panics to, above all but an enemy it attacks (SetLookAt's PRIORITY_HIGH).
     if (attacks) {
         driver->panicSpot.reset();
@@ -537,7 +617,9 @@ auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Si
     }
     moveAlong(command, decision.intent, self.maxSpeed);
     if (attacks) {
-        fight(command, *driver, turn.player, self, *decision.target, sights);
+        const PerceptionTarget* const body = targetOfPlayer(sights, turn.player);
+        nx::invariant(body != nullptr, "Bots: a bot attacks alive");
+        fight(command, *driver, *body, self, *decision.target, sights);
     } else {
         endFight(driver->combat);
     }
@@ -555,7 +637,6 @@ auto Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Si
     if (presses) {
         command.buttons.set(Button::Attack);
     }
-    return command;
 }
 
 } // namespace cs

@@ -93,7 +93,8 @@ auto readBotRules(std::string_view text, std::string_view sourceName) -> nx::Res
     }
     const bool isValidRules =
         isPositive(rules->fieldOfView.value()) && rules->fieldOfView.value() <= kWholeTurnDegrees &&
-        rules->perceptionBudget > 0 && isPositive(rules->memoryLifetime.count()) && rules->memoryLimit > 0 &&
+        rules->perceptionBudget > 0 && isPositive(rules->sightInterval.count()) &&
+        isPositive(rules->memoryLifetime.count()) && rules->memoryLimit > 0 &&
         isPositive(rules->attackDistance.value()) && isPositive(rules->arrivalDistance.value()) &&
         isPositive(rules->replanDistance.value()) && isPositive(rules->huntRadius.value()) &&
         isPositive(rules->quotaInterval.count()) && isNoneOrMore(rules->replanShare) &&

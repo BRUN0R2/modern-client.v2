@@ -201,6 +201,7 @@ thread, so that a tick or a frame wakes as few threads as its work is worth; wha
 
 | Step | Parallelism |
 |------|-------------|
+| Agents' perception, decisions and commands | `forBatches` per agent |
 | Apply usercmds | Serial per player (order matters) |
 | Rules and synchronous Rook hooks | Serial (order matters) |
 | Animation and hitboxes for lag compensation | `parallelFor` per animated entity |

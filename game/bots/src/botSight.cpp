@@ -6,6 +6,7 @@ module cs.bots;
 import std;
 import nx.core;
 import nx.math;
+import cs.shared;
 import cs.server;
 
 namespace cs {
@@ -24,15 +25,23 @@ namespace {
 
 } // namespace
 
-auto isInViewCone(nx::Vec3 origin, nx::Degrees yaw, nx::Degrees fieldOfView, nx::Vec3 point) noexcept
+auto looksAroundAt(PlayerIndex player, nx::GameTime now, nx::TickRate rate, nx::Seconds interval) noexcept
     -> bool {
+    const auto ticks = std::max<std::int64_t>(
+        std::llround(static_cast<double>(interval.count()) * static_cast<double>(rate.value())), 1);
+    return (now.tick() + std::int64_t{player.value}) % ticks == 0;
+}
+
+auto ViewCone::holds(nx::Vec3 point) const noexcept -> bool {
     const std::optional<nx::Vec3> way = groundWayOf(origin, point);
-    if (!way) {
-        return true;
-    }
-    const nx::Vec3 facing = nx::angleVectors(nx::EulerAngles{.yaw = yaw}).forward;
+    return !way || nx::dot(*way, facing) > least;
+}
+
+auto viewConeOf(nx::Vec3 origin, nx::Degrees yaw, nx::Degrees fieldOfView) noexcept -> ViewCone {
     constexpr float kHalf = 0.5F;
-    return nx::dot(*way, facing) > std::cos(nx::toRadians(fieldOfView * kHalf).value());
+    return ViewCone{.origin = origin,
+                    .facing = nx::angleVectors(nx::EulerAngles{.yaw = yaw}).forward,
+                    .least = std::cos(nx::toRadians(fieldOfView * kHalf).value())};
 }
 
 auto sightSpotsOf(const PerceptionTarget& target, nx::Vec3 origin, const BotSightSpots& spots) noexcept

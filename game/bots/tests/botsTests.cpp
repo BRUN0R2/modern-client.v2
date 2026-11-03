@@ -49,7 +49,8 @@ constexpr std::uint32_t kPastTheCommence = 301;
 constexpr std::uint32_t kPastAFreeze = 610;
 /// Ticks past a restart sv_restart asks for one second on, read once a second.
 constexpr std::uint32_t kPastARestart = 250;
-/// Ticks a bot looking at an enemy in its cone is given to remember it: it looks each tick.
+/// Ticks a bot looking at an enemy in its cone is given to remember it: it looks around each tenth of a
+/// second.
 constexpr std::uint32_t kSightTicks = 10;
 /// Ticks well within a round's freeze, far longer than a stuck bot's watch takes to find it stuck.
 constexpr std::uint32_t kWithinAFreeze = 300;
@@ -71,7 +72,7 @@ constexpr float kDeadlyHeight = 2000.0F;
 /// alone, and its bots on the box's mesh.
 class BotsTest : public ::testing::Test {
 protected:
-    BotsTest() {
+    explicit BotsTest(std::uint32_t workers = 0) {
         const std::filesystem::path data{NX_DATA_DIRECTORY};
         auto characters = cs::readCharacters(
             nx::platform::readTextFile(data / "cstrike" / "characters.toml").value_or(std::string{}),
@@ -98,7 +99,7 @@ protected:
         auto started = cs::Game::start(*content, *map, *cvars);
         EXPECT_TRUE(started.has_value());
         game = std::move(started).value_or(nullptr);
-        auto created = nx::jobs::JobSystem::create({.workerCount = 0});
+        auto created = nx::jobs::JobSystem::create({.workerCount = workers});
         EXPECT_TRUE(created.has_value());
         jobs = std::move(created).value_or(nullptr);
         auto navigation = nx::game::readNavigationData(
@@ -153,6 +154,41 @@ protected:
     std::optional<nx::navigation::NavigationMesh> mesh; ///< The map's, which the bots walk.
     std::unique_ptr<cs::Bots> bots;                     ///< Before the game it plays in and its mesh go.
 };
+
+/// A match of BotsTest whose bots' turns `workers` workers share out.
+class BotsAtWork final : public BotsTest {
+public:
+    explicit BotsAtWork(std::uint32_t workers) : BotsTest{workers} {}
+
+    /// Where each of `count` bots stands and looks after `ticks` of their commands.
+    [[nodiscard]] auto placesAfter(std::uint32_t count, std::uint32_t ticks) -> std::vector<nx::Vec3> {
+        std::vector<cs::PlayerIndex> players;
+        for (std::uint32_t bot = 0; bot < count; ++bot) {
+            players.push_back(bots->add(std::nullopt, cs::BotDifficulty::Normal, kNoPrefix));
+        }
+        play(ticks);
+        std::vector<nx::Vec3> places;
+        for (const cs::PlayerIndex player : players) {
+            const cs::PlayerOwnState self = game->ownStateOf(player);
+            places.push_back(self.feet);
+            places.push_back(nx::Vec3{.x = self.view.pitch.value(), .y = self.view.yaw.value()});
+        }
+        return places;
+    }
+
+private:
+    void TestBody() override {}
+};
+
+TEST(BotsWorkersTest, BotsPlayTheSameWithAnyNumberOfWorkers) {
+    // Three batches of turns, past the first freeze and into the fight.
+    constexpr std::uint32_t kBots = 24;
+    constexpr std::uint32_t kTicks = kPastTheFirstFreeze + 500;
+    const std::vector<nx::Vec3> played = BotsAtWork{0}.placesAfter(kBots, kTicks);
+    for (const std::uint32_t workers : {1U, 3U}) {
+        EXPECT_EQ(BotsAtWork{workers}.placesAfter(kBots, kTicks), played) << workers << " workers";
+    }
+}
 
 TEST_F(BotsTest, ABotJoinsTheTeamOfFewerPlayersAndLeavesItsSlotWhenKicked) {
     const cs::PlayerIndex human = game->join(cs::Team::Terrorists, cs::AutoSwitch::ToHeavier, "Player");

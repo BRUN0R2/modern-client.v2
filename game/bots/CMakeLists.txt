@@ -28,6 +28,7 @@ nxAddModuleLibrary(csBots
         nx::meta
         nx::data
         nx::console
+        nx::assets
         nx::jobs
         nx::ecs
         nx::game
