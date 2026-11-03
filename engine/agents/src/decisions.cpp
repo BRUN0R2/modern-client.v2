@@ -47,42 +47,24 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
     if (count == 0) {
         return;
     }
-    const std::size_t threads = std::size_t{jobs.workerCount()} + 1;
-    const std::size_t batchCount = std::clamp(count / kSmallestBatch, std::size_t{1}, threads);
-    const std::size_t batchSize = divideRoundingUp(count, batchCount);
+    const std::size_t batchCount = jobs.batchCountOf(count, kSmallestBatch);
     while (queries.size() < batchCount) {
         queries.emplace_back(*decidedOn);
     }
     const navigation::AgentProfile& profile = decidedOn->profile();
-    // What every batch reads, which outlives them: decide waits for them all.
-    const struct {
-        std::span<const DecisionRequest> requests;
-        std::span<Decision> decisions;
-        std::span<const Body> bodies;
-        std::span<navigation::NavigationQuery> queries;
-        std::size_t batchSize;
-        std::size_t count;
-        float range;
-        float height;
-    } work{.requests = requests,
-           .decisions = decisions,
-           .bodies = bodies,
-           .queries = queries,
-           .batchSize = batchSize,
-           .count = count,
-           .range = profile.radius.value() * navigation::kSteeringRangeRadii,
-           .height = profile.standingHeight.value()};
-    // Batch `batch` decides with a query of its own, so that batches never share one.
-    const auto decideBatch = [&work](std::size_t batch) {
-        navigation::NavigationQuery& query = work.queries[batch];
+    const float range = profile.radius.value() * navigation::kSteeringRangeRadii;
+    const float height = profile.standingHeight.value();
+    const std::span<navigation::NavigationQuery> batchQueries = queries;
+    // A batch decides with a query of its own, so that batches never share one.
+    const auto decideBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        navigation::NavigationQuery& query = batchQueries[batch];
         std::vector<std::pair<float, const Body*>> sorted;
         std::vector<navigation::SteeringBody> nearby;
-        for (std::size_t index = batch * work.batchSize;
-             index < std::min(work.count, (batch + 1) * work.batchSize); ++index) {
-            const DecisionRequest& request = work.requests[index];
+        for (std::size_t index = first; index < last; ++index) {
+            const DecisionRequest& request = requests[index];
             Decision decision = request.brain->decide(request.feet, query);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
-                bodiesNear(request, work.bodies, work.range, work.height, sorted, nearby);
+                bodiesNear(request, bodies, range, height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
             }
             // Last, so that what gets a stuck body out overrides how it steers (UpdatePathMovement). A body
@@ -93,16 +75,11 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
                                      request.elapsed) == Progress::GivesUp) {
                 request.brain->giveUp(request.stuck->stuckPlace(), request.stuck->reroutes());
             }
-            work.decisions[index] = decision;
+            decisions[index] = decision;
         }
     };
-    if (batchCount == 1) {
-        decideBatch(0);
-        return;
-    }
-    jobs.wait(jobs.parallelFor({.label = "agents.decide", .priority = jobs::Priority::Critical},
-                               std::views::iota(std::size_t{0}, batchCount), jobs::Grain::fixed(1),
-                               decideBatch));
+    jobs.forBatches({.label = "agents.decide", .priority = jobs::Priority::Critical}, count, kSmallestBatch,
+                    decideBatch);
 }
 
 } // namespace nx::agents

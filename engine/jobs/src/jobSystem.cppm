@@ -134,6 +134,33 @@ public:
         return handle;
     }
 
+    /// How many batches forBatches shares `count` elements out in: at most one for each thread that runs
+    /// jobs, each of at least `smallestBatch` elements, but for a batch alone; what a batch works with may be
+    /// made for each first.
+    [[nodiscard]] inline auto batchCountOf(std::size_t count, std::size_t smallestBatch) const noexcept
+        -> std::size_t {
+        return std::clamp(count / smallestBatch, std::size_t{1}, threadCount());
+    }
+
+    /// Calls `function(batch, first, last)` once for each batch of the elements from 0 up to `count`, from 0
+    /// up to batchCountOf, in jobs of `desc`, and waits for them, the calling thread running them too; a
+    /// batch alone on the calling thread: as few threads woken as the work is worth. Outputs written at the
+    /// element's index make the result independent of the worker count (docs/04, section 8).
+    template <class Function>
+    void forBatches(const JobDesc& desc, std::size_t count, std::size_t smallestBatch,
+                    const Function& function) {
+        const std::size_t batches = batchCountOf(count, smallestBatch);
+        const std::size_t size = divideRoundingUp(std::max(count, std::size_t{1}), batches);
+        const auto run = [&function, size, count](std::size_t batch) {
+            function(batch, batch * size, std::min(count, (batch + 1) * size));
+        };
+        if (batches == 1) {
+            run(0);
+            return;
+        }
+        wait(parallelFor(desc, std::views::iota(std::size_t{0}, batches), Grain::fixed(1), run));
+    }
+
     /// Returns once `handle` has completed. Meanwhile the calling thread runs other jobs, and it
     /// sleeps only while no job is visible to it.
     void wait(JobHandle handle);

@@ -306,6 +306,43 @@ TEST(JobSystemSerialTest, MoreUrgentJobsRunFirst) {
               (std::vector{Priority::Critical, Priority::Normal, Priority::Low, Priority::Background}));
 }
 
+TEST(JobSystemBatchesTest, BatchesCoverEveryElementOnceAndWakeNoMoreThreadsThanTheWorkIsWorth) {
+    constexpr std::size_t kElements = 1000;
+    constexpr std::size_t kSmallest = 8;
+    auto jobs = makeJobSystem(3);
+    ASSERT_NE(jobs, nullptr);
+    EXPECT_EQ(jobs->batchCountOf(kElements, kSmallest), 4U) << "one for each thread that runs jobs";
+    EXPECT_EQ(jobs->batchCountOf(16, kSmallest), 2U);
+    EXPECT_EQ(jobs->batchCountOf(15, kSmallest), 1U) << "no batch below the smallest, but one alone";
+    EXPECT_EQ(jobs->batchCountOf(0, kSmallest), 1U);
+
+    std::vector<std::atomic_uint32_t> visits(kElements);
+    std::array<std::atomic_uint32_t, 4> batches{};
+    jobs->forBatches({.label = "batches"}, kElements, kSmallest,
+                     [&](std::size_t batch, std::size_t first, std::size_t last) {
+                         batches.at(batch).fetch_add(1, std::memory_order_relaxed);
+                         for (std::size_t index = first; index < last; ++index) {
+                             visits[index].fetch_add(1, std::memory_order_relaxed);
+                         }
+                     });
+    EXPECT_TRUE(std::ranges::all_of(visits, [](const std::atomic_uint32_t& count) { return count == 1U; }));
+    EXPECT_TRUE(std::ranges::all_of(batches, [](const std::atomic_uint32_t& count) { return count == 1U; }));
+}
+
+TEST(JobSystemBatchesTest, ABatchAloneRunsOnTheCallingThread) {
+    auto jobs = makeJobSystem(3);
+    ASSERT_NE(jobs, nullptr);
+    std::thread::id ranOn{};
+    std::size_t covered = 0;
+    jobs->forBatches({.label = "alone"}, 5, 8,
+                     [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+                         ranOn = std::this_thread::get_id();
+                         covered = last - first;
+                     });
+    EXPECT_EQ(ranOn, std::this_thread::get_id());
+    EXPECT_EQ(covered, 5U);
+}
+
 TEST(JobSystemDeterminismTest, ResultsDoNotDependOnTheWorkerCount) {
     constexpr std::size_t kElementCount = 4096;
     constexpr std::size_t kBatchSize = 64;
