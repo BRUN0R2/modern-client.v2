@@ -331,7 +331,18 @@ void paintGrid(Paint& paint, const BuyMenuFrame& frame) {
         paint.cell(rect, isSelected ? kCellLit : kCell, isSelected);
 
         const std::int32_t inset = paint.px(kCellInset);
-        const std::int32_t rowY = rect.y + rect.tall - inset - paint.lineOf(BuyMenuFont::Body);
+        const std::int32_t room = rect.wide - (2 * inset);
+        const bool isOwned = entry.state == BuyItemState::Owned;
+        const BuyMenuFont priceFont = isOwned ? BuyMenuFont::Caption : BuyMenuFont::Body;
+        const std::string price = !isOwned                                        ? dollarsText(entry.price)
+                                  : std::holds_alternative<ArmorKind>(entry.item) ? std::string{kWorn}
+                                                                                  : std::string{kOwned};
+        const std::vector<std::string> nameRows = paint.wrapped(BuyMenuFont::Body, entry.name, room);
+        const bool isApart = isPriceApart(nameRows.size(), paint.widthOf(BuyMenuFont::Body, entry.name),
+                                          paint.widthOf(priceFont, price), paint.px(kTextGap), room);
+        const std::int32_t line = paint.lineOf(BuyMenuFont::Body);
+        const auto rows = nx::narrow<std::int32_t>(nameRows.size()) + (isApart ? 1 : 0);
+        const std::int32_t rowY = rect.y + rect.tall - inset - (rows * line);
         const bool isTooDear = entry.state == BuyItemState::TooDear;
         paint.picture(entry.picture,
                       {.x = rect.x + inset,
@@ -344,18 +355,18 @@ void paintGrid(Paint& paint, const BuyMenuFrame& frame) {
         std::ignore = paint.write(digitFont, std::to_string(entry.key), rect.x + inset, rect.y + (inset / 2),
                                   frame.isArmed ? paint.accent() : kInkFaint);
 
-        std::ignore =
-            paint.write(BuyMenuFont::Body, entry.name, rect.x + inset, rowY, isTooDear ? kInkFaint : kInk);
-        const std::int32_t end = rect.x + rect.wide - inset;
-        if (entry.state == BuyItemState::Owned) {
-            paint.writeEnding(BuyMenuFont::Caption,
-                              std::holds_alternative<ArmorKind>(entry.item) ? kWorn : kOwned, end,
-                              rowY + (paint.lineOf(BuyMenuFont::Body) - paint.lineOf(BuyMenuFont::Caption)),
-                              paint.accent());
-        } else {
-            paint.writeEnding(BuyMenuFont::Body, dollarsText(entry.price), end, rowY,
-                              isTooDear ? kDanger : kInkSoft);
+        std::int32_t y = rowY;
+        for (const std::string& row : nameRows) {
+            std::ignore =
+                paint.write(BuyMenuFont::Body, row, rect.x + inset, y, isTooDear ? kInkFaint : kInk);
+            y += line;
         }
+        // On the name's last row, or a row of its own: at the foot of the cell either way.
+        const std::int32_t priceY = rect.y + rect.tall - inset - paint.lineOf(priceFont);
+        paint.writeEnding(priceFont, price, rect.x + rect.wide - inset, priceY,
+                          isOwned     ? paint.accent()
+                          : isTooDear ? kDanger
+                                      : kInkSoft);
     }
 }
 

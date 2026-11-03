@@ -31,6 +31,13 @@ struct BuyRect {
     }
 };
 
+/// Whether an item's price takes a row of its own under its name, `nameRows` rows of which `nameWide` is the
+/// widest: when its name wrapped, or when `priceWide` more and `gap` between them do not fit in `room`.
+[[nodiscard]] constexpr auto isPriceApart(std::size_t nameRows, std::int32_t nameWide, std::int32_t priceWide,
+                                          std::int32_t gap, std::int32_t room) noexcept -> bool {
+    return nameRows > 1 || nameWide + gap + priceWide > room;
+}
+
 /// The buy menu's parts on a screen.
 class BuyMenuLayout {
 public:

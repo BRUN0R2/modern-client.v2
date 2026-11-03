@@ -464,6 +464,12 @@ TEST(BuyMenuLayoutTest, HoweverManyItemsATabHasTheyAllFitApart) {
     }
 }
 
+TEST(BuyMenuLayoutTest, AnItemsPriceTakesARowOfItsOwnWhenItDoesNotFitBesideItsName) {
+    EXPECT_FALSE(cs::isPriceApart(1, 100, 40, 10, 150));
+    EXPECT_TRUE(cs::isPriceApart(1, 100, 40, 10, 149)) << "a narrow screen's cell";
+    EXPECT_TRUE(cs::isPriceApart(2, 50, 40, 10, 150)) << "its name wrapped";
+}
+
 TEST(BuyMenuTextTest, MoneyIsWrittenWithItsThousands) {
     EXPECT_EQ(cs::dollarsText(nx::Money{0}), "$0");
     EXPECT_EQ(cs::dollarsText(nx::Money{800}), "$800");
