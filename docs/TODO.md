@@ -102,6 +102,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Warnings as errors, deterministic floating point, no exceptions and no RTTI
 - [x] Functions defined in module interfaces are `inline`, so importers can inline them ([02 §2](02-coding-standards.md#2-file-and-module-organization))
 - [x] `scripts/devShell.ps1` for command-line builds on Windows
+- [x] `buildMenu.cmd`: a double-click builds and opens the game, in Release or as a developer, or cleans the build
 - [x] Changed-line `clang-tidy` validation with Clang 23.1.4 and `dev-windows-clang`'s module interfaces, with headers analyzed through their consumers
 - [ ] The game rules' remaining raw shares and ratios as typed quantities, as hit groups and damage shares are (`cs::HitGroup`, `cs::DamageShare`): the armor's ratio and bonus, the fall damage's scale and the flinches' speed shares (`cs.shared:playerHarm`), a weapon's armor ratio (`cs.shared:weapons`)
 - [ ] Migrate existing private `m_` declarations when their owning APIs change, under [ADR-0027](adr/0027-private-member-camelcase.md); known in engine modules, `ClientGame`, `MapModels`, server state and test fixtures. Keep unrelated renames out of other changes
