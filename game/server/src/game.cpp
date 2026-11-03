@@ -56,6 +56,7 @@ auto Game::start(const GameContent& content, const GameMap& map, GameCvars cvars
     if (auto registered = registerEntityBodies(game->m_state.world, content.entities); !registered) {
         return nx::fail(GameError::Unspawnable, std::move(registered.error()));
     }
+    game->m_state.moves.emplace(game->m_state.world);
     return game;
 }
 
@@ -219,6 +220,7 @@ void Game::placeEye(PlayerIndex index, nx::Vec3 eye) {
 
 void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities) {
     m_state.events.clear();
+    m_state.moves->isStale = true;
     for (Player& player : playersIn(m_state.players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
