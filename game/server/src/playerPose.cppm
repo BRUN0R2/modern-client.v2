@@ -16,6 +16,9 @@ namespace cs {
 /// solid to the server's traces as its box, standing or ducked (setBodySolidity); dead, not solid.
 void placeBody(GameState& game, Player& player);
 
+/// The box `player`'s body is solid as, standing or ducked; none while it is dead.
+[[nodiscard]] auto bodyBoxOf(const Player& player) noexcept -> std::optional<nx::Aabb>;
+
 /// `player`'s body posed for the server's traces as its model plays (PlayerPose): its torso's sequence
 /// and frame, its legs' gait sequence and yaw, the aim's blends and its view's body angles.
 void poseBody(GameState& game, Player& player);

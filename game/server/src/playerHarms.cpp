@@ -154,7 +154,7 @@ void land(GameState& game, Player& player, nx::Damage damage) {
 
 void touchHurtVolumes(GameState& game, Player& player) {
     for (const nx::game::VolumeHarm& harm :
-         nx::game::touchHurtVolumes(game.world, game.map.hulls(), player.body)) {
+         nx::game::touchHurtVolumes(game.moves->volumes, game.world, game.map.hulls(), player.body)) {
         if (harm.damage < nx::Damage{}) {
             healPlayer(player.status, nx::HitPoints{-harm.damage.value()}); // TakeHealth
         } else {

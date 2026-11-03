@@ -223,10 +223,13 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     // What the moves meet, gathered once for the tick, as the original links its entities once and keeps
     // them linked where they move: the brush entities, which no body moves; and the boxes, by entity, each
     // body's kept where its move left it, each move given those near it (SV_AddLinksToPM).
-    const std::vector<BrushEntity> brushes = brushEntitiesOf(world);
+    BrushEntityQuery brushQuery{world};
+    std::vector<LinkedBrushEntity> brushes;
+    linkedBrushEntitiesOf(brushQuery, hulls, brushes);
     std::vector<SolidBox> boxes = solidBoxesOf(world);
     std::ranges::sort(boxes, {}, &SolidBox::entity);
     std::vector<SolidBox> near;
+    std::vector<BrushEntity> nearBrushes;
     EntityBodiesTick done;
     for (const nx::ecs::Entity entity : entities) {
         EntityBody& body = *world.get<EntityBody>(entity);
@@ -265,9 +268,10 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         // a crowd of them flows through a doorway and round what they strike at rather than jam: they jammed,
         // flailed and struck each other. The players' bodies stop it.
         std::erase_if(near, [&world](const SolidBox& solid) { return world.has<EntityBody>(solid.entity); });
+        brushEntitiesNear(brushes, body.movement.origin, nearBrushes);
         const nx::Vec3 before = body.movement.origin;
         const MovementResult moved =
-            simulateMovement(body.movement, command, MovementSettings{}, hulls, brushes, near);
+            simulateMovement(body.movement, command, MovementSettings{}, hulls, nearBrushes, near);
         body.movement = moved.state;
         if (type.definition.stride && body.movement.isOnGround) {
             // A step each stride it walks on the ground, as its feet meet it.

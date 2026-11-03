@@ -256,11 +256,43 @@ inline constexpr nx::HammerUnits kPhysentReach{256.0F};
 /// or a volume.
 [[nodiscard]] auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity>;
 
+/// What finds a world's brush entities: kept from tick to tick, so that it looks for their archetypes once.
+using BrushEntityQuery =
+    nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&, const nx::game::BrushSolidity&>;
+
+/// A brush entity movement meets, and the box the engine links it by.
+struct LinkedBrushEntity {
+    BrushEntity entity{};
+    nx::Aabb linked{};
+};
+
+/// Writes to `entities` the brush entities `query` finds that movement meets, as brushEntitiesOf lists them,
+/// linked as they are now (nx::game::linkedBoxOf), whose map's hulls are `hulls`.
+void linkedBrushEntitiesOf(BrushEntityQuery& query, const nx::collision::BrushHulls& hulls,
+                           std::vector<LinkedBrushEntity>& entities);
+
+/// Writes to `near` those of `entities` a move from `origin` may meet, in their order: whose linked box is
+/// within kPhysentReach of `origin` each way (SV_AddLinksToPM).
+void brushEntitiesNear(std::span<const LinkedBrushEntity> entities, nx::Vec3 origin,
+                       std::vector<BrushEntity>& near);
+
 /// The entities of `world` solid as boxes (nx::game::BoxSolidity) that stop a player, in the world's
 /// order, as the original's engine lists them for it (SOLID_SLIDEBOX, SOLID_BBOX): a hostage, another
 /// player alive, an entity's body; all but `ignored`, the body of the one that moves, when there is one.
 [[nodiscard]] auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored = std::nullopt)
     -> std::vector<SolidBox>;
+
+/// What finds a world's entities solid as boxes: kept from move to move, so that it looks for their
+/// archetypes once.
+using SolidBoxQuery =
+    nx::ecs::Query<nx::ecs::Entity, const nx::game::Transform&, const nx::game::BoxSolidity&>;
+
+/// Writes to `boxes` the entities `query` finds solid as boxes, by entity.
+void solidBoxesOf(SolidBoxQuery& query, std::vector<SolidBox>& boxes);
+
+/// Keeps `boxes`, by entity, as `entity`'s box is now: `box` about `origin`, none when it is solid no more.
+void keepBoxOf(nx::ecs::Entity entity, nx::Vec3 origin, const std::optional<nx::Aabb>& box,
+               std::vector<SolidBox>& boxes);
 
 /// Writes to `near` those of `boxes` a move from `origin` may meet, in their order: within kPhysentReach of
 /// `origin` each way, all but `ignored`'s, the entity that moves (SV_AddLinksToPM).

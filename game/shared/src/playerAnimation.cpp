@@ -80,12 +80,25 @@ enum class Posture : std::uint8_t {
 
 /// The sequence the player's torso plays for `animation` ("aim", "shoot", "reload", "run") of the weapon
 /// it holds (GetAnimDesired); none the model lacks.
+/// The longest label a sequence of an MDL file has: its 32 bytes.
+constexpr std::size_t kLongestSequenceLabel = 32;
+
 [[nodiscard]] auto desiredSequence(std::string_view animation, Posture posture,
                                    const PlayerAnimationContext& context)
     -> std::optional<nx::assets::SequenceIndex> {
     const std::string_view prefix = posture == Posture::AsItIs && context.isDucked ? "crouch_" : "ref_";
-    return lookupSequence(context.model->sequences(),
-                          std::format("{}{}_{}", prefix, animation, context.weaponAnimation));
+    // A sequence's label is no longer than the file's field for it: what would not fit names none.
+    std::array<char, kLongestSequenceLabel> label{};
+    const std::array parts{prefix, animation, std::string_view{"_"}, context.weaponAnimation};
+    std::size_t length = 0;
+    for (const std::string_view part : parts) {
+        if (part.size() > label.size() - length) {
+            return std::nullopt;
+        }
+        std::ranges::copy(part, label.begin() + static_cast<std::ptrdiff_t>(length));
+        length += part.size();
+    }
+    return lookupSequence(context.model->sequences(), std::string_view{label.data(), length});
 }
 
 /// The sequence of `activity`, drawn from `random` (LookupActivity); the first for none, as the original

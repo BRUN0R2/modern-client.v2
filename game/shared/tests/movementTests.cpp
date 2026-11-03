@@ -864,6 +864,40 @@ TEST(FootstepTest, GoingIntoWaterSplashes) {
     EXPECT_TRUE(std::holds_alternative<cs::Splash>(moved.sounds.front()));
 }
 
+TEST(MovementTest, AMoveMeetsTheBrushEntitiesLinkedWithinThePhysentReach) {
+    const float reach = cs::kPhysentReach.value();
+    const auto linkedAt = [](float x, std::uint32_t model) {
+        return cs::LinkedBrushEntity{.entity = {.model = {model}},
+                                     .linked = {.min = {.x = x}, .max = {.x = x + 8.0F}}};
+    };
+    const std::array entities{linkedAt(100.0F, 1), linkedAt(reach + 1.0F, 2), linkedAt(reach - 1.0F, 3)};
+    std::vector<cs::BrushEntity> near{cs::BrushEntity{}};
+    cs::brushEntitiesNear(entities, {}, near);
+    ASSERT_EQ(near.size(), 2U) << "what was there replaced";
+    EXPECT_EQ(near[0].model, ModelIndex{1});
+    EXPECT_EQ(near[1].model, ModelIndex{3});
+}
+
+TEST(MovementTest, ABoxIsKeptWhereItsMoveLeftItUntilItIsSolidNoMore) {
+    nx::ecs::World world;
+    const nx::ecs::Entity first = world.spawn();
+    const nx::ecs::Entity second = world.spawn();
+    constexpr nx::Aabb kBox{.min = {.x = -16.0F}, .max = {.x = 16.0F}};
+    std::vector<cs::SolidBox> boxes;
+    cs::keepBoxOf(second, {.x = 1.0F}, kBox, boxes);
+    cs::keepBoxOf(first, {.x = 2.0F}, kBox, boxes);
+    ASSERT_EQ(boxes.size(), 2U);
+    EXPECT_EQ(boxes[0].entity, first) << "by entity";
+    cs::keepBoxOf(second, {.x = 3.0F}, kBox, boxes);
+    ASSERT_EQ(boxes.size(), 2U);
+    EXPECT_EQ(boxes[1].origin, (Vec3{.x = 3.0F}));
+    cs::keepBoxOf(first, {}, std::nullopt, boxes);
+    ASSERT_EQ(boxes.size(), 1U);
+    EXPECT_EQ(boxes[0].entity, second);
+    cs::keepBoxOf(first, {}, std::nullopt, boxes);
+    EXPECT_EQ(boxes.size(), 1U) << "none to forget";
+}
+
 TEST(MovementTest, AMoveMeetsTheBoxesWithinThePhysentReachButItsOwn) {
     nx::ecs::World world;
     const nx::ecs::Entity mover = world.spawn();
