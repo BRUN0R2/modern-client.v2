@@ -44,3 +44,19 @@ target_compile_definitions(nxBenchClient PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PRO
 nxAddBenchmark(nxBenchNavigation
     SOURCES navigationBench.cpp
     DEPENDS nx::navigation nx::agents nx::ecs)
+
+nxAddBenchmark(nxBenchServer
+    SOURCES serverBench.cpp
+    DEPENDS
+        nx::core
+        nx::math
+        nx::platform
+        nx::console
+        nx::assets
+        nx::jobs
+        nx::game
+        nx::navigation
+        nx::testSupport
+        cs::shared
+        cs::server
+        cs::bots)

@@ -398,6 +398,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Weapon state machine: holster, drop; which shoot sequence the client plays, measured on the original; the Glock's switch message (center text)
 - [x] `cl_righthand`: the player's hand (`cs::HudCvars`, archived, 1 the right), the view models mirrored by it each frame (`ViewModel::isMirroredIn`, `SceneView::hand`)
 - [x] A seed per command: `nx::Random`'s streams, seeded by the command's number ([07 §2.3](07-simulation-and-physics.md#23-shared-seed)); the spread's comes with the spread
+- [x] A trace meets only the brush entities whose linked box its way's box meets (`SV_ClipToLinks`, `nx::game::SolidBrushEntity::linked`), as [07 §4.2](07-simulation-and-physics.md#42-entities) said: each line went through all of them, 65 on cs_assault (release, 32 bots: a tick's median 9.6 ms to 2.7, what the bots decide 8.3 to 1.6); `nxBenchServer` measures a match, and proves by a hash that what the bots do does not change
 - [x] The shots' traces (`FireBullets3`'s 8192 units, `nx::game::traceSolidsHit` telling what stopped them) and their bullet holes on the world (`{shot1` to `{shot5`)
 - [x] The marks the shots leave on brush entities (`cs::bulletMarkOf`: `DamageDecal` by render mode, a breakable's by its material: `{bproof1`, `{break1` to `{break3`)
 - [x] The knife's damage (`cs::Blow`, `nx::game::attackEntity`, [07 §5.3](07-simulation-and-physics.md#53-damage)): 15 for the slash, 65 for the stab, dealt to what it meets as its kind takes it
