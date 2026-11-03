@@ -520,6 +520,32 @@ void paintCarried(Paint& paint, const BuyMenuFrame& frame) {
     paintTile(paint, layout.carriedTile(2), "ARMOR", armor,
               wearsArmor ? carried.armorPicture : std::string_view{}, wearsArmor);
 
+    if (frame.again) {
+        const BuyRect tile = layout.againTile();
+        paint.fill(tile, kGlass);
+        paint.outline(tile, kLine);
+        const std::int32_t pen =
+            paint.keyBadge("R", tile.x + paint.px(kInsetLeft), tile, false) + paint.px(kTextGap);
+        const std::string cost = dollarsText(frame.again->cost);
+        const std::int32_t end = tile.x + tile.wide - paint.px(kInsetLeft);
+        const std::int32_t room = end - paint.widthOf(BuyMenuFont::Strong, cost) - paint.px(kTextGap) - pen;
+        std::string names;
+        for (const std::string_view item : frame.again->items) {
+            names += names.empty() ? std::string{item} : std::format(" {} {}", kMiddleDot, item);
+        }
+        const std::vector<std::string> rows = paint.wrapped(BuyMenuFont::Caption, names, room);
+        const std::int32_t line = paint.lineOf(BuyMenuFont::Caption);
+        std::int32_t y = tile.y + ((tile.tall - ((nx::narrow<std::int32_t>(rows.size()) + 1) * line)) / 2);
+        std::ignore = paint.write(BuyMenuFont::Caption, "BUY AGAIN", pen, y, kInkFaint);
+        for (const std::string& row : rows) {
+            y += line;
+            std::ignore = paint.write(BuyMenuFont::Caption, row, pen, y, kInk);
+        }
+        paint.writeEnding(BuyMenuFont::Strong, cost, end,
+                          tile.y + ((tile.tall - paint.lineOf(BuyMenuFont::Strong)) / 2),
+                          frame.money < frame.again->cost ? kDanger : paint.accent());
+    }
+
     // The keys, from the right.
     const BuyRect& row = layout.carried();
     std::int32_t end = row.x + row.wide;

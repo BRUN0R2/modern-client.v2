@@ -810,12 +810,18 @@ a box for the weapons of the primary and the pistol slot, `primammo` and `secamm
 carry and pay for, each paid whole though its last rounds may not fit. Each is heard (`items/gunpickup2`,
 `items/ammopickup2`, `items/9mmclip1`), in the tick after it, as a client's commands come between ticks.
 
+`rebuy` buys again what the player had after its last purchase (`cs::LastPurchase`, `cs::rebuyStepsOf`,
+`m_rebuyStruct`, `Rebuy`), which it keeps through deaths and rounds and buying again does not change: a primary
+weapon when it has none, its ammo when it carried more, the pistol when it has another, its ammo likewise, and armor
+better than it wears, in the order of `cl_rebuy`'s default, going without what it cannot pay for; refused only when
+it can buy none of it.
+
 A refusal (`cs::BuyRefusal`) is printed on the console and told on the screen. The client is told after each
 tick whether its player may buy and for how long (`cs::BuyingState`, `buyingStateOf`, the original's buy zone
 icon and `BuyTime`), its time not running down in a freeze, which starts it again. Still to come: the box a
 dropped weapon falls as, the money's blink and the buy zone's icon, the weapons a VIP's map keeps from each team
-(`CanBuyWeaponByMaptype`, none of those sold today), the grenades and the equipment, `autobuy` and `rebuy`, and
-what bots buy.
+(`CanBuyWeaponByMaptype`, none of those sold today), the grenades and the equipment, `autobuy`, `cl_autobuy` and
+`cl_rebuy`'s orders, and what bots buy.
 
 ## 9. Communication
 

@@ -68,6 +68,8 @@ public:
     [[nodiscard]] auto buyButton() const noexcept -> BuyRect;
     /// What the player carries at `index`: its primary weapon, its pistol and its armor.
     [[nodiscard]] auto carriedTile(std::size_t index) const noexcept -> BuyRect;
+    /// What buys again what the player last had, half as wide again as one of those, after them.
+    [[nodiscard]] auto againTile() const noexcept -> BuyRect;
 
 private:
     float scale = 1.0F; ///< Pixels of the screen for each unit of the design.

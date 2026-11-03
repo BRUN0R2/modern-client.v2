@@ -127,6 +127,16 @@ auto registerBuyCommands(Console& console, const WeaponCatalog& weapons, BuyActi
             return registered;
         }
     }
+    if (auto registered = console.registerCommand(
+            {.name = "rebuy", .description = "Buys again what you had after your last purchase."},
+            [buy = std::move(actions.rebuy),
+             told = actions.refused](Console& on, const CommandLine&) -> nx::Result<void, ConsoleError> {
+                report(on, told, buy());
+                return {};
+            });
+        !registered) {
+        return registered;
+    }
     return console.registerCommand(
         {.name = "buy_weapon",
          .description = "Buys a weapon, one made as the game runs too: buy_weapon <weapon>."},

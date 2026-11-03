@@ -553,6 +553,12 @@ auto Client::registerBuyCommands() -> nx::Result<void, ClientError> {
             }
             return m_session->game->buyAmmo(m_session->player, slot, purchase);
         },
+        .rebuy = [this]() -> nx::Result<void, cs::BuyRefusal> {
+            if (!m_session) {
+                return nx::fail(cs::BuyRefusal::NoMap);
+            }
+            return m_session->game->rebuy(m_session->player);
+        },
         .refused = [this](cs::BuyRefusal refusal) { tellRefusal(refusal); }};
     const cs::BuyMenuContent menuContent{.weapons = &m_content->weapons,
                                          .armorPrices = &m_content->buying.armor,
@@ -595,7 +601,8 @@ auto Client::buyerView() const -> cs::BuyerView {
     return {.team = client.team(),
             .status = client.status(),
             .inventory = &client.inventory(),
-            .buying = client.buying()};
+            .buying = client.buying(),
+            .lastPurchase = client.lastPurchase()};
 }
 
 auto Client::checkBuyMenu() const -> nx::Result<void, cs::BuyRefusal> {

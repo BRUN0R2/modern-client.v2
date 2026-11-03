@@ -3,10 +3,11 @@
 
 /// The console's buy commands (docs/10-counter-strike-gameplay.md, section 8), by the original's names
 /// (HandleBuyAliasCommands, ClientCommand): those a weapon's file gives it (`ak47`, `cv47`), `vest`,
-/// `vesthelm`, `buyammo1`, `buyammo2`, `primammo` and `secammo`; and `buy_weapon`, named as a plugin's
-/// functions are (docs/15), which buys any weapon, one made as the game runs too. The game weighs each
-/// (cs::Game), and a refusal is printed and told on the screen. The buy menu's commands (`buy`, `buyequip`,
-/// `slot1` to `slot10`, `cancelselect`) are here too, its state and what it shows in cs.client:buyMenu.
+/// `vesthelm`, `buyammo1`, `buyammo2`, `primammo`, `secammo` and `rebuy`; and `buy_weapon`, named as a
+/// plugin's functions are (docs/15), which buys any weapon, one made as the game runs too. The game weighs
+/// each (cs::Game), and a refusal is printed and told on the screen. The buy menu's commands (`buy`,
+/// `buyequip`, `slot1` to `slot10`, `cancelselect`) are here too, its state and what it shows in
+/// cs.client:buyMenu.
 export module cs.client:buyCommands;
 
 import std;
@@ -24,6 +25,8 @@ struct BuyActions {
     std::function<nx::Result<void, BuyRefusal>(ArmorKind kind)> armor;
     /// The player buys ammo for its weapons of `slot`.
     std::function<nx::Result<void, BuyRefusal>(WeaponSlot slot, AmmoPurchase purchase)> ammo;
+    /// The player buys again what it had after its last purchase.
+    std::function<nx::Result<void, BuyRefusal>()> rebuy;
     /// Tells the player on the screen of what was refused.
     std::function<void(BuyRefusal refusal)> refused;
 };

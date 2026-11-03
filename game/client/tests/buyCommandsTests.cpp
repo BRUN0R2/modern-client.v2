@@ -92,6 +92,10 @@ public:
                 ammo.emplace_back(slot, purchase);
                 return answer();
             },
+            .rebuy = [this]() -> nx::Result<void, cs::BuyRefusal> {
+                ++rebuys;
+                return answer();
+            },
             .refused = [this](cs::BuyRefusal told) { refusals.push_back(told); }};
         nx::invariant(cs::registerBuyCommands(console, weapons, actions).has_value(), "the buy commands");
         const cs::BuyMenuCommands commands{
@@ -124,6 +128,7 @@ public:
     std::vector<cs::ArmorKind> armor;
     std::vector<std::pair<cs::WeaponSlot, cs::AmmoPurchase>> ammo;
     std::vector<cs::BuyRefusal> refusals;
+    std::size_t rebuys = 0;
     std::size_t toggles = 0;
     std::size_t equipmentOpenings = 0;
     std::size_t cancels = 0;
@@ -159,6 +164,16 @@ TEST(BuyMenuCommandsTest, TheSlotsAreTheKeysOfTheirNumbersAndCancelselectGoesBac
     EXPECT_EQ(game.slots, (std::vector<std::uint32_t>{1, 4, 10}));
     EXPECT_EQ(game.cancels, 1U);
     EXPECT_TRUE(game.output.failures.empty());
+}
+
+TEST(BuyCommandsTest, RebuyBuysAgainAndWhyItCannotIsPrintedAndTold) {
+    BuyConsole game;
+    game.run("rebuy");
+    EXPECT_EQ(game.rebuys, 1U);
+    game.refusal = cs::BuyRefusal::TimeOver;
+    game.run("rebuy");
+    EXPECT_EQ(game.refusals, (std::vector{cs::BuyRefusal::TimeOver}));
+    EXPECT_EQ(game.output.lines.size(), 1U);
 }
 
 TEST(BuyCommandsTest, ARefusalIsToldOnTheScreenToo) {

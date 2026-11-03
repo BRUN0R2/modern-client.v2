@@ -194,6 +194,7 @@ struct PlayerSnapshot {
     MovementState player{};
     PlayerStatus status{};
     BuyingState buying{};
+    LastPurchase lastPurchase{};
     Inventory inventory;
     RoundTimer roundTimer{};
     /// The way the game turned its view in the tick, as the original's fixangle turns it (the way the
