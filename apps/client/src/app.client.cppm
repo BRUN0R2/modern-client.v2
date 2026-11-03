@@ -13,3 +13,5 @@ export import :client;
 export import :video;
 export import :agentMeshes;
 export import :session;
+export import :zombieCommands;
+export import :sessionFrame;
