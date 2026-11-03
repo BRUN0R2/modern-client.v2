@@ -39,6 +39,7 @@ says where.
 | [0028](0028-native-agent-test-mod.md) | Exercise generic entities and agents with an isolated native zombie test mod before Rook | Accepted |
 | [0029](0029-submission-thread.md) | The device submits and presents its frames on a thread of its own | Accepted |
 | [0030](0030-game-parts.md) | The server's game is parts over one state, behind one class | Accepted |
+| [0031](0031-the-project-font.md) | The project has a font of its own: Barlow | Accepted |
 
 ## Template
 

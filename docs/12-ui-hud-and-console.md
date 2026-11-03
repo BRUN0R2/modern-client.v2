@@ -435,9 +435,8 @@ open, as well as printed on the console.
 What it sells is data: a weapon shows by its file's `purchase.menu`, a weapon made as the game runs too once it is
 complete, and the armor and the families it writes in by `data/cstrike/buyMenu.toml`. Its pictures are TGA files
 among the game's: the original's `gfx/vgui/` today, read as a map's content is, and an item shows without one
-that cannot be read. It writes in the first of its families the system has; a font of the project's own, the same
-on every system, is [to be decided](TODO.md#pending-decisions). `Bahnschrift`'s simulated weights and the look on
-other systems' fonts are not measured.
+that cannot be read. It writes in the project's own font, Barlow, regular and semi-bold (`data/fonts/`,
+[ADR-0031](adr/0031-the-project-font.md)), the same on every system.
 
 ## 5. Console
 

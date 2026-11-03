@@ -40,6 +40,8 @@ constexpr nx::log::Category kLog{"client"};
 
 /// The key `next` binds `noclip` to, which Counter-Strike leaves free.
 constexpr std::string_view kNoclipKey = "v";
+/// The folder of the data that holds the project's own fonts.
+constexpr std::string_view kFontsFolder = "fonts";
 /// How long a minimized window waits before it looks for events again.
 constexpr std::chrono::milliseconds kMinimizedWait{50};
 /// A sound that could not be played is reported once in this long, with how many others were not.
@@ -877,6 +879,9 @@ void Client::lastWeaponCommand() {
 }
 
 void Client::openWindowText(std::uint32_t screenHeight) {
+    if (auto added = m_fonts.addFolder(dataFolder / kFontsFolder); !added) {
+        nx::log::warning(kLog, "the project's fonts cannot be read: {}", nx::describe(added.error()));
+    }
     auto fonts = cs::WindowFonts::open(m_content->vfs, m_fonts);
     if (!fonts) {
         nx::log::warning(kLog, "the console has no window, and cl_showfps shows nothing: {}",

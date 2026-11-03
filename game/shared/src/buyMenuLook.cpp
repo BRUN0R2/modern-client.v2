@@ -23,11 +23,12 @@ auto readBuyMenuLook(std::string_view text, std::string_view sourceName)
     const auto isValid = [&isShared](const BuyMenuArmor& item) {
         return item.kind != ArmorKind::None && !item.name.empty() && !item.picture.empty() && !isShared(item);
     };
-    if (look->fonts.empty() || !std::ranges::all_of(armor, isValid)) {
-        return nx::fail(BuyMenuLookError::DataInvalid,
-                        std::format("{}: a font family, and armor of some kind, named and with a picture, no "
-                                    "two of one kind or at one key, are required",
-                                    sourceName));
+    if (look->font.regular.empty() || look->font.strong.empty() || !std::ranges::all_of(armor, isValid)) {
+        return nx::fail(
+            BuyMenuLookError::DataInvalid,
+            std::format("{}: both font families, and armor of some kind, named and with a picture, "
+                        "no two of one kind or at one key, are required",
+                        sourceName));
     }
     return std::move(*look);
 }

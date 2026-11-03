@@ -56,6 +56,7 @@ contribution ([ADR-0026](adr/0026-clean-room-source-policy.md)):
 | Rook toolchain (`rookc`, VM, LSP) and plugin SDK (`.rookd`, `std`) | **MIT** | Allow plugins and mods under **any license**, including closed ones |
 | Documentation (`docs/`, `README.md`, `TODO.md`, `CONTRIBUTING.md`, `SECURITY.md`) | **CC BY 4.0** | Reuse with attribution |
 | Game data (`data/`) | GPL-3.0-or-later, like the engine | The numeric behavior values are measured facts |
+| The project's font (`data/fonts/`, Barlow) | **OFL-1.1**, its authors' | A font of an open license, bundled with the program as it allows, its text beside it ([ADR-0031](adr/0031-the-project-font.md)) |
 
 Every code file starts with the SPDX header of its license
 ([02 §2](02-coding-standards.md#2-file-and-module-organization)).

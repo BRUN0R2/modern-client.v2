@@ -19,7 +19,7 @@ export namespace cs {
 
 /// Why the buy menu cannot be drawn.
 enum class BuyMenuPanelError : std::uint8_t {
-    NoFont,    ///< No family of the look's is among the system's fonts; the detail names them.
+    NoFont,    ///< A family of the look's is among no fonts; the detail names it.
     Unusable,  ///< A face does not open at its size, or its glyphs cannot be drawn (cause).
     GpuFailed, ///< The GPU refused a picture or an atlas (cause).
 };
@@ -52,8 +52,8 @@ public:
     [[nodiscard]] inline auto isLoaded() const noexcept -> bool { return facesHeight != 0; }
 
     /// Puts on the GPU with `screen`, its uploads recorded in `commands`, what is not there yet: the fonts
-    /// for a screen `screenHeight` pixels tall, in the first of the look's families among `fonts`, made again
-    /// as that height changes; and the pictures of what is sold, read from `vfs`, a weapon made as the game
+    /// for a screen `screenHeight` pixels tall, of the look's families among `fonts`, made again as that
+    /// height changes; and the pictures of what is sold, read from `vfs`, a weapon made as the game
     /// runs too. A picture that cannot be read is logged, and what it shows drawn without it. Errors: every
     /// BuyMenuPanelError.
     [[nodiscard]] auto load(nx::ui::FontCatalog& fonts, const nx::assets::Vfs& vfs,

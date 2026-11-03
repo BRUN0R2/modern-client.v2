@@ -51,6 +51,7 @@ modern-client.v2/
 ├── shaders/                    # Slang sources
 ├── data/
 │   ├── cstrike/                # gameplay data (TOML)
+│   ├── fonts/                  # the project's own font (ADR-0031)
 │   └── content/                # content source descriptions (essential files of each)
 ├── mods/                       # built-in mods written in Rook (admin, votes, maps, ...)
 ├── tools/

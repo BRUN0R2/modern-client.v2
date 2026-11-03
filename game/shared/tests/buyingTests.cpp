@@ -348,7 +348,8 @@ TEST(BuyMenuLookTest, TheRepositorysReads) {
     ASSERT_TRUE(text.has_value());
     const auto look = cs::readBuyMenuLook(*text, "buyMenu.toml");
     ASSERT_TRUE(look.has_value()) << (look ? "" : nx::describe(look.error()));
-    EXPECT_FALSE(look->fonts.empty());
+    EXPECT_EQ(look->font.regular, "Barlow");
+    EXPECT_EQ(look->font.strong, "Barlow SemiBold");
     ASSERT_EQ(look->armor.size(), 2U);
     EXPECT_EQ(look->armor[0].kind, ArmorKind::Kevlar);
     EXPECT_EQ(look->armor[0].key, 1U) << "as the original's menu numbers it";
@@ -363,9 +364,10 @@ TEST(BuyMenuLookTest, WhatTheMenuCouldNotShowIsRefused) {
     };
     constexpr std::string_view kVest =
         "[[armor]]\nkind = \"kevlar\"\nkey = 1\nname = \"Vest\"\npicture = \"a.tga\"\nabout = \"\"\n";
-    const std::string fonts = "fonts = [\"Verdana\"]\n";
+    const std::string fonts = "font = { regular = \"Barlow\", strong = \"Barlow SemiBold\" }\n";
     EXPECT_FALSE(refused(fonts + std::string{kVest}));
-    EXPECT_TRUE(refused(std::string{"fonts = []\n"} + std::string{kVest})) << "no font";
+    EXPECT_TRUE(refused("font = { regular = \"\", strong = \"Barlow SemiBold\" }\n" + std::string{kVest}))
+        << "no font";
     EXPECT_TRUE(refused(fonts + std::string{kVest} + std::string{kVest})) << "one kind twice";
     EXPECT_TRUE(refused(
         fonts + "[[armor]]\nkind = \"none\"\nkey = 1\nname = \"Vest\"\npicture = \"a.tga\"\nabout = \"\"\n"))
