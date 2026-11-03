@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH LicenseRef-Rook-Plugin-Exception
 
 // The navigation's queries, which agents ask every tick (docs/adr/0023-navigation.md): a way across a
-// map-sized floor among pillars, the nearest point, and a corridor's corners; the brains' decisions, one by
-// one and in batches in jobs; and the build of its mesh.
+// map-sized floor among pillars, and one to a floor no way joins it to, the nearest point, and a corridor's
+// corners; the brains' decisions, one by one and in batches in jobs; and the build of its mesh.
 // The data/cstrike/navigation.toml settings and the player's profile.
 
 #include <benchmark/benchmark.h>
@@ -36,6 +36,10 @@ constexpr float kPillarSide = 64.0F;
 constexpr float kPillarHeight = 128.0F;
 /// The ways asked, from one corner's side to the other's, in turn.
 constexpr std::size_t kWays = 64;
+/// Where the floor no way leads to is, past the pillars' floor, and how high.
+constexpr float kRoofFirst = kFloorSide + 512.0F;
+constexpr float kRoofLast = kRoofFirst + 1024.0F;
+constexpr float kRoofHeight = 512.0F;
 
 [[nodiscard]] auto playerProfile() -> AgentProfile {
     return AgentProfile{.name = "player",
@@ -105,6 +109,19 @@ void addQuad(Geometry& geometry, std::array<Vec3, 4> corners) {
     return std::move(mesh).value();
 }
 
+/// The mesh of the pillars and, past their floor, a floor no way joins it to.
+[[nodiscard]] auto pillarsAndRoofMesh() -> NavigationMesh {
+    Geometry geometry = pillars();
+    addQuad(geometry, {Vec3{.x = kRoofFirst, .z = kRoofHeight}, Vec3{.x = kRoofLast, .z = kRoofHeight},
+                       Vec3{.x = kRoofLast, .y = kFloorSide, .z = kRoofHeight},
+                       Vec3{.x = kRoofFirst, .y = kFloorSide, .z = kRoofHeight}});
+    auto jobs = nx::jobs::JobSystem::create();
+    nx::invariant(jobs.has_value(), "navigationBench: a job system starts");
+    auto mesh = NavigationMesh::build(**jobs, geometry, playerProfile(), settings());
+    nx::invariant(mesh.has_value(), "navigationBench: the pillars' mesh is built");
+    return std::move(mesh).value();
+}
+
 /// Way `index`: from the near side's edge to the far side's, each at its own place along it.
 [[nodiscard]] auto wayOf(std::size_t index) -> nx::navigation::PathRequest {
     const float along = (kFloorSide / static_cast<float>(kWays)) * (static_cast<float>(index) + 0.5F);
@@ -118,6 +135,21 @@ void findPath(benchmark::State& state) {
     std::size_t way = 0;
     for ([[maybe_unused]] auto iteration : state) {
         auto path = query.findPath(wayOf(way++ % kWays));
+        benchmark::DoNotOptimize(path);
+    }
+}
+
+/// A way to a floor no way leads to, as an agent's to a player on a roof: what the search of a way that is
+/// not there costs.
+void findPathToNoWay(benchmark::State& state) {
+    const NavigationMesh mesh = pillarsAndRoofMesh();
+    NavigationQuery query{mesh};
+    const Vec3 roof{.x = (kRoofFirst + kRoofLast) * 0.5F, .y = kFloorSide * 0.5F, .z = kRoofHeight};
+    std::size_t way = 0;
+    for ([[maybe_unused]] auto iteration : state) {
+        auto path = query.findPath({.from = wayOf(way++ % kWays).from, .to = roof});
+        nx::invariant(!path.has_value() && path.error().code == nx::navigation::NavigationError::Unreachable,
+                      "navigationBench: no way leads to the roof");
         benchmark::DoNotOptimize(path);
     }
 }
@@ -264,6 +296,7 @@ BENCHMARK(agentDecisionsInJobs)->Arg(32)->Arg(64)->Arg(256)->Arg(1024)->UseRealT
 } // namespace
 
 BENCHMARK(findPath);
+BENCHMARK(findPathToNoWay);
 BENCHMARK(nearestPoint);
 BENCHMARK(corridorCorners);
 BENCHMARK(buildMesh)->Unit(benchmark::kMillisecond);

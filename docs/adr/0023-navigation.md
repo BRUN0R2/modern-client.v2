@@ -60,7 +60,9 @@ convex polygons, through Recast and Detour.
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it
   moves instead of searching again. Queries run in batches in jobs within a budget per tick, and
   give the same path for the same inputs, for replays and tests. A corridor reuses its query's scratch
-  for corners and bounds it by the corridor's polygons, even when more corners are requested.
+  for corners and bounds it by the corridor's polygons, even when more corners are requested. A way
+  that is not there is known without a search, the most a search can cost: a mesh keeps which polygons
+  lead to which, links one only drops down going one way, as it takes its tiles.
 - **Build failures.** Mesh building propagates `MeshBuildError`; a tile refused by Recast carries
   the tile's coordinates, the failed step and Recast's diagnostic when available, including when
   it marks the floor along walls.

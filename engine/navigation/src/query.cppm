@@ -93,7 +93,9 @@ public:
     [[nodiscard]] auto randomPoint(Vec3 center, HammerUnits radius, Random& random)
         -> Result<Vec3, NavigationError>;
 
-    /// Whether a way on the mesh joins `from` to `to`. Errors: OutsideMesh (either).
+    /// Whether a way on the mesh joins `from` to `to`. A way that is not there, here and in findPath and
+    /// Corridor::plan, is known without searching: the mesh knows which polygons lead to which. Errors:
+    /// OutsideMesh (either).
     [[nodiscard]] auto isReachable(Vec3 from, Vec3 to) -> Result<bool, NavigationError>;
 
 private:
