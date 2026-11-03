@@ -101,8 +101,10 @@ struct SpawnAnchor {
 }
 } // namespace
 
-auto readSettings(std::string_view text, std::string_view source) -> nx::Result<Settings, ZombieError> {
-    auto read = nx::data::parseToml<Settings>(text, source);
+namespace {
+/// `read`, the settings of the file `source`, if they break no budget. Errors: InvalidData.
+[[nodiscard]] auto validated(nx::Result<Settings, nx::data::DataError> read, std::string_view source)
+    -> nx::Result<Settings, ZombieError> {
     if (!read) {
         return nx::fail(ZombieError::InvalidData, std::move(read.error()));
     }
@@ -142,6 +144,16 @@ auto readSettings(std::string_view text, std::string_view source) -> nx::Result<
                         source));
     }
     return std::move(*read);
+}
+} // namespace
+
+auto readSettings(std::string_view text, std::string_view source) -> nx::Result<Settings, ZombieError> {
+    return validated(nx::data::parseToml<Settings>(text, source), source);
+}
+
+auto readSettingsOver(const Settings& base, std::string_view text, std::string_view source)
+    -> nx::Result<Settings, ZombieError> {
+    return validated(nx::data::parseTomlOver<Settings>(base, text, source), source);
 }
 
 Horde::Horde(CreateToken /*token*/, cs::EntityTypeIndex entityType, Settings rules,

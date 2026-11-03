@@ -9,11 +9,21 @@ It does not implement Counter-Strike's player bots or claim CSO gameplay parity.
 
 1. Put a model you own in the user's `%APPDATA%/Modern-Client.v2/addons/cstrike/`, keeping its
    model, texture and sequence-group paths. No proprietary asset belongs in the repository.
-2. Copy [`data/mods/zombies.toml`](../data/mods/zombies.toml) to that folder's
-   `entities/zombies.toml`. Set its model path and the exact sequence labels that model has.
-   Death must be non-looping; attacks may loop and are paced by the server's cooldown. Missing
-   files, hitboxes, sequences and invalid numeric values are reported before a body is created.
-   Copy it again when the example gains a table, as it gained `stuck`: a missing key is reported.
+2. Write in that folder's `entities/zombies.toml` only what you change of
+   [`data/mods/zombies.toml`](../data/mods/zombies.toml), usually the model path and the exact
+   sequence labels that model has:
+
+   ```toml
+   [body]
+   model = "models/player/mine/mine.mdl"
+   walkSequence = "run"
+   ```
+
+   It goes over the project's file key by key (`nx::data::parseTomlOver`), so what that file gains
+   later reaches it; without one, the project's file is all there is. A key that is no setting, a
+   typo or one of another version, is reported, with where it is. Death must be non-looping;
+   attacks may loop and are paced by the server's cooldown. Missing files, hitboxes, sequences and
+   invalid numeric values are reported before a body is created.
 3. Build `next` as [17](17-build-and-tools.md) describes, then run:
 
    ```powershell
@@ -27,8 +37,7 @@ corners/centers, nearest the base first and within `spawnRadius` of a projected 
 base point's map yaw. A map without terrorist spawn points reports an error.
 Occupied or disconnected candidates are excluded. If there are too few valid positions,
 the whole batch is rolled back. `spawnBatchLimit` limits one command, not the world population;
-the example allows 64 per command within a radius of 512 units. Existing local configurations
-must replace `spawnDistance` with `spawnRadius` and raise `spawnBatchLimit` to use 64.
+the project's file allows 64 per command within a radius of 512 units.
 `zombie_kick` removes the mod's bodies and corpses. Changing maps destroys them too.
 `give ak47`, `give m4a1`, or the id of a local weapon gives a weapon to test against them.
 For an isolated offline weapon test, `next --data <folder> --user-folder <folder>` selects
@@ -37,7 +46,7 @@ on every spawn, with `weapon_<id>` binds in that folder's configuration. Proprie
 sounds and private study profiles stay outside the repository; unsupported special-mode data
 is rejected, not silently ignored.
 
-The example names the CSO model `models/player/zombi/zombi.mdl` and its `idle1`, `walk`,
+The project's file names the CSO model `models/player/zombi/zombi.mdl` and its `idle1`, `walk`,
 `ref_shoot_knife` and `death1` sequences. It distributes none of its files. The configuration
 and models are loaded once per process; restart after editing the definition.
 
