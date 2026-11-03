@@ -17,11 +17,12 @@ namespace app {
 using PlayedSession = std::function<Session*()>;
 
 /// Registers in `console` the commands that add test zombies to the session `played` says, and remove them:
-/// what they are is read from `content` as the first is asked for, their type added to its entities, and
-/// each session's horde decides in jobs of `jobs`. `content` and `jobs` must outlive the commands. Errors:
-/// those of nx::console::Console::registerCommand.
+/// what they are is read, as the first is asked for, from the project's file in `dataFolder` and a user's in
+/// `content` over it, their type added to its entities, and each session's horde decides in jobs of `jobs`.
+/// `content` and `jobs` must outlive the commands. Errors: those of nx::console::Console::registerCommand.
 [[nodiscard]] auto registerZombieCommands(nx::console::Console& console, cs::GameContent& content,
-                                          nx::jobs::JobSystem& jobs, PlayedSession played)
+                                          std::filesystem::path dataFolder, nx::jobs::JobSystem& jobs,
+                                          PlayedSession played)
     -> nx::Result<void, nx::console::ConsoleError>;
 
 } // namespace app
