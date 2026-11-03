@@ -185,6 +185,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Lock-free pools for descriptors, counters and continuations
 - [x] `wait` with *help-while-waiting*
 - [x] `parallelFor` with automatic and fixed granularity
+- [x] `forBatches`: at most a batch for each thread, none below the size it is worth waking a thread for, a batch alone on the calling thread (`nx::agents::Deciders`)
 - [x] `JobSystem::stats()` and serial mode (`workerCount = 0`)
 - [ ] `jobs_workers` cvar, `jobs_stats` and `jobs_serial` commands (with the console)
 - [ ] Tracy zones (with the Tracy dependency)
