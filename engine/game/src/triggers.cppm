@@ -65,6 +65,24 @@ struct VolumeHarm {
     [[nodiscard]] inline auto operator==(const VolumeHarm&) const noexcept -> bool = default;
 };
 
+/// What finds the volumes of a world a body may touch: kept for what touches them each tick, so that it looks
+/// for their archetypes once.
+struct TouchedVolumes {
+    explicit TouchedVolumes(ecs::World& world) : triggers{world}, hurtVolumes{world} {}
+
+    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const Trigger&> triggers;
+    ecs::Query<const BrushModel&, const Transform&, HurtVolume&> hurtVolumes;
+};
+
+/// touchTriggers with `volumes`, of `world`.
+void touchTriggers(TouchedVolumes& volumes, ecs::World& world, const collision::BrushHulls& hulls,
+                   ecs::Entity toucher);
+
+/// touchHurtVolumes with `volumes`, of `world`.
+[[nodiscard]] auto touchHurtVolumes(TouchedVolumes& volumes, ecs::World& world,
+                                    const collision::BrushHulls& hulls, ecs::Entity toucher)
+    -> std::vector<VolumeHarm>;
+
 /// `toucher`, a player's Body, touches the hurt volumes of `world` it is inside, as touchTriggers finds
 /// them, in the world's order; what each deals it (CBaseTrigger::HurtTouch): half a second's damage, as a
 /// new half second starts, or in the tick the last hurt something, or once more in a half second to one

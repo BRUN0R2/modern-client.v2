@@ -71,6 +71,18 @@ auto touchesVolume(const collision::BrushHulls& hulls, const Body& body, Vec3 or
 }
 
 void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity toucher) {
+    TouchedVolumes volumes{world};
+    touchTriggers(volumes, world, hulls, toucher);
+}
+
+auto touchHurtVolumes(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity toucher)
+    -> std::vector<VolumeHarm> {
+    TouchedVolumes volumes{world};
+    return touchHurtVolumes(volumes, world, hulls, toucher);
+}
+
+void touchTriggers(TouchedVolumes& volumes, ecs::World& world, const collision::BrushHulls& hulls,
+                   ecs::Entity toucher) {
     const Body* body = world.get<Body>(toucher);
     const Transform* at = world.get<Transform>(toucher);
     expects(body != nullptr && at != nullptr, "touchTriggers: a toucher with a Body and a Transform");
@@ -80,7 +92,7 @@ void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::E
     const Body touching = *body;
     const Vec3 origin = at->origin;
     std::vector<ecs::Entity> touched;
-    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const Trigger&>{world}.forEach(
+    volumes.triggers.forEach(
         [&](ecs::Entity entity, const BrushModel& model, const Transform& placement, const Trigger& trigger) {
             if (!trigger.isSpent && trigger.isTouchedByPlayers &&
                 touchesVolume(hulls, touching, origin, model.index, placement)) {
@@ -94,8 +106,8 @@ void touchTriggers(ecs::World& world, const collision::BrushHulls& hulls, ecs::E
     }
 }
 
-auto touchHurtVolumes(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity toucher)
-    -> std::vector<VolumeHarm> {
+auto touchHurtVolumes(TouchedVolumes& volumes, ecs::World& world, const collision::BrushHulls& hulls,
+                      ecs::Entity toucher) -> std::vector<VolumeHarm> {
     const Body* body = world.get<Body>(toucher);
     const Transform* at = world.get<Transform>(toucher);
     expects(body != nullptr && at != nullptr, "touchHurtVolumes: a toucher with a Body and a Transform");
@@ -104,18 +116,16 @@ auto touchHurtVolumes(ecs::World& world, const collision::BrushHulls& hulls, ecs
         return harms;
     }
     const TickTime clock = tickTimeOf(world);
-    ecs::Query<const BrushModel&, const Transform&, HurtVolume&>{world}.forEach(
-        [&](const BrushModel& model, const Transform& placement, HurtVolume& volume) {
-            if (!volume.isTouchedByPlayers ||
-                !touchesVolume(hulls, *body, at->origin, model.index, placement) ||
-                !hurtsNow(volume, toucher, clock.now)) {
-                return;
-            }
-            harms.push_back({.damage = Damage{volume.damagePerSecond.value() * kHurtShareOfASecond},
-                             .kind = volume.kind});
-            volume.lastHurtAt = clock.now;
-            volume.clockEndsAt = clock.now.after(kHurtInterval, clock.rate);
-        });
+    volumes.hurtVolumes.forEach([&](const BrushModel& model, const Transform& placement, HurtVolume& volume) {
+        if (!volume.isTouchedByPlayers || !touchesVolume(hulls, *body, at->origin, model.index, placement) ||
+            !hurtsNow(volume, toucher, clock.now)) {
+            return;
+        }
+        harms.push_back(
+            {.damage = Damage{volume.damagePerSecond.value() * kHurtShareOfASecond}, .kind = volume.kind});
+        volume.lastHurtAt = clock.now;
+        volume.clockEndsAt = clock.now.after(kHurtInterval, clock.rate);
+    });
     return harms;
 }
 

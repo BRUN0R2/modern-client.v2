@@ -19,13 +19,15 @@ constexpr std::uint32_t kFlyActivityNumber = 5;
 
 } // namespace
 
+auto bodyBoxOf(const Player& player) noexcept -> std::optional<nx::Aabb> {
+    return player.status.isAlive() ? std::optional{player.movement.isDucked ? kDuckedBox : kStandingBox}
+                                   : std::nullopt;
+}
+
 void placeBody(GameState& game, Player& player) {
     game.world.get<nx::game::Transform>(player.body)->origin = player.movement.origin;
     *game.world.get<nx::game::Body>(player.body) = bodyOf(player.movement);
-    setBodySolidity(game.world, player.body,
-                    player.status.isAlive()
-                        ? std::optional{player.movement.isDucked ? kDuckedBox : kStandingBox}
-                        : std::nullopt);
+    setBodySolidity(game.world, player.body, bodyBoxOf(player));
 }
 
 void poseBody(GameState& game, Player& player) {

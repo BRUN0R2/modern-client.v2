@@ -562,6 +562,10 @@ private:
 
     [[nodiscard]] auto isSwimming() const -> bool { return m_player.waterLevel > WaterLevel::Feet; }
 
+    /// How much wider each way than a move's way it looks for the boxes that may stop it: past the most a
+    /// trace stops short of a plane (kStopDistance).
+    static constexpr float kWayMargin = 1.0F;
+
     /// From the origin to the feet, or to the top of the head, of the box the player is in.
     [[nodiscard]] auto halfHeight() const -> float {
         return m_hull == Hull::Ducked ? kDuckedHalfHeight : kStandingHalfHeight;
@@ -597,9 +601,15 @@ private:
                 meet(entity.model, entity.origin, entity.angles, entity.model);
             }
         }
+        const nx::Aabb way =
+            nx::Aabb{.min = nx::componentMin(start, end), .max = nx::componentMax(start, end)}.expanded(
+                {.x = kWayMargin, .y = kWayMargin, .z = kWayMargin});
         for (const SolidBox& solid : m_boxes) {
-            const nx::collision::Trace hit = nx::collision::traceBoxMovement(
-                nx::collision::grownByHull(solid.box, hull), solid.origin, start, end);
+            const nx::Aabb grown = nx::collision::grownByHull(solid.box, hull);
+            if (!way.intersects(grown.translated(solid.origin))) {
+                continue; // a way that goes nowhere near it goes all the way through the empty about it
+            }
+            const nx::collision::Trace hit = nx::collision::traceBoxMovement(grown, solid.origin, start, end);
             if (hit.fraction < nearest.fraction) {
                 nearest = PlayerTrace{.fraction = hit.fraction,
                                       .end = hit.end,
@@ -1332,6 +1342,16 @@ private:
 
 } // namespace
 
+namespace {
+
+/// The box a move from `origin` lists what it may meet within (SV_AddLinksToPM's pmove_mins and pmove_maxs).
+[[nodiscard]] auto moveReachOf(nx::Vec3 origin) noexcept -> nx::Aabb {
+    const float reach = kPhysentReach.value();
+    return nx::Aabb::around(origin, {.x = reach, .y = reach, .z = reach});
+}
+
+} // namespace
+
 auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored) -> std::vector<SolidBox> {
     std::vector<SolidBox> boxes;
     nx::ecs::Query<nx::ecs::Entity, const nx::game::Transform&, const nx::game::BoxSolidity&>{world}.forEach(
@@ -1345,11 +1365,32 @@ auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored)
     return boxes;
 }
 
+void solidBoxesOf(SolidBoxQuery& query, std::vector<SolidBox>& boxes) {
+    boxes.clear();
+    query.forEach([&boxes](nx::ecs::Entity entity, const nx::game::Transform& transform,
+                           const nx::game::BoxSolidity& solidity) {
+        boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box, .entity = entity});
+    });
+    std::ranges::sort(boxes, {}, &SolidBox::entity);
+}
+
+void keepBoxOf(nx::ecs::Entity entity, nx::Vec3 origin, const std::optional<nx::Aabb>& box,
+               std::vector<SolidBox>& boxes) {
+    const auto own = std::ranges::lower_bound(boxes, entity, {}, &SolidBox::entity);
+    const bool isListed = own != boxes.end() && own->entity == entity;
+    if (box && isListed) {
+        own->origin = origin;
+        own->box = *box;
+    } else if (box) {
+        boxes.insert(own, SolidBox{.origin = origin, .box = *box, .entity = entity});
+    } else if (isListed) {
+        boxes.erase(own);
+    }
+}
+
 void boxesNear(std::span<const SolidBox> boxes, nx::Vec3 origin, nx::ecs::Entity ignored,
                std::vector<SolidBox>& near) {
-    const float reach = kPhysentReach.value();
-    const nx::Aabb around{.min = origin - nx::Vec3{.x = reach, .y = reach, .z = reach},
-                          .max = origin + nx::Vec3{.x = reach, .y = reach, .z = reach}};
+    const nx::Aabb around = moveReachOf(origin);
     near.clear();
     for (const SolidBox& solid : boxes) {
         if (solid.entity != ignored && around.intersects(solid.box.translated(solid.origin))) {
@@ -1358,25 +1399,64 @@ void boxesNear(std::span<const SolidBox> boxes, nx::Vec3 origin, nx::ecs::Entity
     }
 }
 
+namespace {
+
+/// The brush entity movement meets of a model where `transform` has it, as `solidity` makes it; none for one
+/// it does not.
+[[nodiscard]] auto brushEntityOf(const nx::game::BrushModel& model, const nx::game::Transform& transform,
+                                 const nx::game::BrushSolidity& solidity) noexcept
+    -> std::optional<BrushEntity> {
+    if (solidity.solid == nx::game::Solid::Bsp) {
+        return BrushEntity{.model = model.index, .origin = transform.origin, .angles = transform.angles};
+    }
+    if (solidity.contents == Contents::Ladder) {
+        return BrushEntity{.model = model.index, .origin = transform.origin, .role = BrushRole::Ladder};
+    }
+    if (solidity.contents) {
+        return BrushEntity{.model = model.index,
+                           .origin = transform.origin,
+                           .role = BrushRole::Volume,
+                           .contents = *solidity.contents};
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 auto brushEntitiesOf(nx::ecs::World& world) -> std::vector<BrushEntity> {
     std::vector<BrushEntity> entities;
-    nx::ecs::Query<const nx::game::BrushModel&, const nx::game::Transform&, const nx::game::BrushSolidity&>
-        brushes{world};
-    brushes.forEach([&](const nx::game::BrushModel& model, const nx::game::Transform& transform,
-                        const nx::game::BrushSolidity& solidity) {
-        if (solidity.solid == nx::game::Solid::Bsp) {
-            entities.push_back(
-                {.model = model.index, .origin = transform.origin, .angles = transform.angles});
-        } else if (solidity.contents == Contents::Ladder) {
-            entities.push_back({.model = model.index, .origin = transform.origin, .role = BrushRole::Ladder});
-        } else if (solidity.contents) {
-            entities.push_back({.model = model.index,
-                                .origin = transform.origin,
-                                .role = BrushRole::Volume,
-                                .contents = *solidity.contents});
+    BrushEntityQuery{world}.forEach([&entities](const nx::game::BrushModel& model,
+                                                const nx::game::Transform& transform,
+                                                const nx::game::BrushSolidity& solidity) {
+        if (const std::optional<BrushEntity> entity = brushEntityOf(model, transform, solidity)) {
+            entities.push_back(*entity);
         }
     });
     return entities;
+}
+
+void linkedBrushEntitiesOf(BrushEntityQuery& query, const nx::collision::BrushHulls& hulls,
+                           std::vector<LinkedBrushEntity>& entities) {
+    entities.clear();
+    query.forEach([&entities, &hulls](const nx::game::BrushModel& model, const nx::game::Transform& transform,
+                                      const nx::game::BrushSolidity& solidity) {
+        if (const std::optional<BrushEntity> entity = brushEntityOf(model, transform, solidity)) {
+            entities.push_back({.entity = *entity,
+                                .linked = nx::game::linkedBoxOf(hulls.boundsOf(entity->model), entity->origin,
+                                                                entity->angles)});
+        }
+    });
+}
+
+void brushEntitiesNear(std::span<const LinkedBrushEntity> entities, nx::Vec3 origin,
+                       std::vector<BrushEntity>& near) {
+    const nx::Aabb around = moveReachOf(origin);
+    near.clear();
+    for (const LinkedBrushEntity& linked : entities) {
+        if (around.intersects(linked.linked)) {
+            near.push_back(linked.entity);
+        }
+    }
 }
 
 auto modelOf(const MovementSolid& solid) noexcept -> std::optional<ModelIndex> {
