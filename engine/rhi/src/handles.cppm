@@ -40,6 +40,7 @@ struct ShaderTag;
 struct BindGroupLayoutTag;
 struct BindGroupTag;
 struct RenderPipelineTag;
+struct ComputePipelineTag;
 using BufferHandle = Handle<BufferTag>;
 using TextureHandle = Handle<TextureTag>;
 using SamplerHandle = Handle<SamplerTag>;
@@ -47,6 +48,7 @@ using ShaderHandle = Handle<ShaderTag>;
 using BindGroupLayoutHandle = Handle<BindGroupLayoutTag>;
 using BindGroupHandle = Handle<BindGroupTag>;
 using RenderPipelineHandle = Handle<RenderPipelineTag>;
+using ComputePipelineHandle = Handle<ComputePipelineTag>;
 
 /// The resources of one kind a backend issues handles for. Freed slots are reused with a new
 /// generation; a slot whose generation reaches its limit is retired, so a stale handle never names

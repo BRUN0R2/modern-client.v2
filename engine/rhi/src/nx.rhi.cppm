@@ -7,7 +7,7 @@
 ///
 /// Today: the device, its frames and swapchain, generational handles of buffers, textures,
 /// samplers, shaders, bind groups and render pipelines, transitions, copies, render passes and
-/// draws. Queries, compute pipelines and dynamic uniform offsets come next (TODO.md).
+/// draws, dispatches and indirect draws. Queries and dynamic uniform offsets come next (TODO.md).
 export module nx.rhi;
 
 export import :types;

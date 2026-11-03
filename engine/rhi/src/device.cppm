@@ -59,6 +59,22 @@ struct RenderPipelineDesc {
     std::span<const BindGroupLayoutHandle> bindGroupLayouts{}; ///< Bind group 0, 1...
 };
 
+/// A compute pipeline to create (Device::createComputePipeline): its shader and its bind groups.
+struct ComputePipelineDesc {
+    std::string_view label{}; ///< Names the pipeline to the debug tools.
+    ShaderEntry compute{};
+    std::span<const BindGroupLayoutHandle> bindGroupLayouts{}; ///< Bind group 0, 1...
+};
+
+/// One draw of an indirect buffer (CommandList::drawIndexedIndirect), as a dispatch writes it.
+struct IndexedDrawArguments {
+    std::uint32_t indexCount = 0;
+    std::uint32_t instanceCount = 0;
+    std::uint32_t firstIndex = 0;
+    std::int32_t vertexOffset = 0;
+    std::uint32_t firstInstance = 0;
+};
+
 /// A color attachment of a render pass: its texture, the mip level of the layer of it the pass draws
 /// to, and what the pass does with its content.
 struct ColorAttachment {
@@ -151,6 +167,17 @@ public:
     /// The same with `indexCount` indices from `firstIndex`, each added to `vertexOffset`.
     virtual void drawIndexed(std::uint32_t indexCount, std::uint32_t instanceCount, std::uint32_t firstIndex,
                              std::int32_t vertexOffset, std::uint32_t firstInstance) = 0;
+    /// drawIndexed of the IndexedDrawArguments at `offset` bytes of `buffer`, which must be in
+    /// BufferState::Indirect: a dispatch decides what is drawn.
+    virtual void drawIndexedIndirect(BufferHandle buffer, std::uint64_t offset) = 0;
+
+    /// Dispatches run `pipeline` from now on, outside any render pass.
+    virtual void setComputePipeline(ComputePipelineHandle pipeline) = 0;
+    /// Binds `group` as bind group `index` of the compute pipeline set last.
+    virtual void setComputeBindGroup(std::uint32_t index, BindGroupHandle group) = 0;
+    /// Runs the compute pipeline in `groupCount` work groups, outside any render pass; what it writes must be
+    /// in BufferState::ComputeWrite.
+    virtual void dispatch(std::uint32_t groupCount) = 0;
 };
 
 /// A swapchain to create (Device::createSwapchain).
@@ -233,6 +260,7 @@ using OwnedShader = Owned<ShaderTag>;
 using OwnedBindGroupLayout = Owned<BindGroupLayoutTag>;
 using OwnedBindGroup = Owned<BindGroupTag>;
 using OwnedRenderPipeline = Owned<RenderPipelineTag>;
+using OwnedComputePipeline = Owned<ComputePipelineTag>;
 
 /// A GPU, its resources and the frames it runs: up to a backend's frames in flight are recorded
 /// while the GPU runs the ones before. Use it from one thread: the render thread. The device takes
@@ -268,6 +296,9 @@ public:
     /// Errors: also InvalidShader (an entry point the shader does not have).
     [[nodiscard]] auto createRenderPipeline(const RenderPipelineDesc& desc)
         -> Result<OwnedRenderPipeline, RhiError>;
+    /// A pipeline dispatches run. Errors: those of the shader's entry point and of memory.
+    [[nodiscard]] auto createComputePipeline(const ComputePipelineDesc& desc)
+        -> Result<OwnedComputePipeline, RhiError>;
 
     /// The memory of an Upload or Readback buffer, mapped for as long as the buffer lives. Read a
     /// Readback buffer once the frame that wrote it has finished (waitIdle, or frames in flight
@@ -319,6 +350,8 @@ protected:
         -> Result<BindGroupHandle, RhiError> = 0;
     [[nodiscard]] virtual auto makeRenderPipeline(const RenderPipelineDesc& desc)
         -> Result<RenderPipelineHandle, RhiError> = 0;
+    [[nodiscard]] virtual auto makeComputePipeline(const ComputePipelineDesc& desc)
+        -> Result<ComputePipelineHandle, RhiError> = 0;
 
     /// Destroys a resource once the GPU has finished every frame that may use it; the handle names
     /// nothing from now on. The null handle and a handle already destroyed are left alone.
@@ -329,6 +362,7 @@ protected:
     virtual void destroy(BindGroupLayoutHandle layout) = 0;
     virtual void destroy(BindGroupHandle group) = 0;
     virtual void destroy(RenderPipelineHandle pipeline) = 0;
+    virtual void destroy(ComputePipelineHandle pipeline) = 0;
 
 private:
     template <class>
@@ -373,6 +407,10 @@ inline auto Device::createBindGroup(const BindGroupDesc& desc) -> Result<OwnedBi
 inline auto Device::createRenderPipeline(const RenderPipelineDesc& desc)
     -> Result<OwnedRenderPipeline, RhiError> {
     return owned(makeRenderPipeline(desc));
+}
+inline auto Device::createComputePipeline(const ComputePipelineDesc& desc)
+    -> Result<OwnedComputePipeline, RhiError> {
+    return owned(makeComputePipeline(desc));
 }
 
 } // namespace nx::rhi
