@@ -425,8 +425,14 @@ flowchart LR
    ([10 §2](10-counter-strike-gameplay.md#2-teams-and-characters)). The model of the weapon in its hands
    (`models/p_<weapon>.mdl`) takes the bones of the player's of the same names (`cs::mergeBones`, the
    engine's `StudioMergeBones`), its others posed at its first sequence's first frame. The transitions
-   between sequences and the jobs come later.
+   between sequences come later.
    Only the four aim blends needed by the query are evaluated; there is no discarded first pose.
+   A frame poses and draws only the models it may show (`nx::render::BspWorld::mayShow`): the box of what
+   their sequences' bounds reach, however they turn (`cs::shownBoxOf`), in the view's frustum and touching a
+   leaf of the view's potentially visible set, as the original's server sends a client only the entities its
+   set holds. They are posed in jobs (`cs::poseAll`), into one buffer the frames reuse, each thread working
+   the pose out in room it keeps (`posePlayerBones` and `poseBones` written to a span), so that a pose
+   allocates nothing once warm.
    View models decode their sequences through `cs::animationsOf`, the same reader as the map's and
    players' models: each external sequence group is read once per model load, however many sequences
    use it, with the same typed failures for a missing or invalid animation.

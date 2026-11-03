@@ -863,4 +863,12 @@ auto AnimationFrames::value(std::uint32_t blend, std::uint32_t frame, BoneIndex 
     return index < values.size() ? values[index] : std::int16_t{0}; // 0 after a violation ("observe")
 }
 
+auto AnimationFrames::valuesOf(std::uint32_t blend, std::uint32_t frame) const noexcept
+    -> std::span<const std::int16_t> {
+    const std::size_t bones = std::size_t{boneCount} * kBoneAxes;
+    expects(blend < blendCount && frame < frameCount,
+            "AnimationFrames::valuesOf: the blend or frame is past it");
+    return std::span{values}.subspan(((std::size_t{blend} * frameCount) + frame) * bones, bones);
+}
+
 } // namespace nx::assets

@@ -223,17 +223,18 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                      .lightStyles = styles,
                      .placements = view.placements,
                      .fog = view.fog});
-    const PosedModels models =
-        level.models().posed(m_models, view.time, view.hostages, m_light, level.skyLight(), styles);
-    const PosedModels players =
-        level.players().posed(m_playerModels, view.players, m_light, level.skyLight(), styles);
-    const PosedModels entities =
-        entityModels.posed(level.entityCatalog(), view.entities, m_light, level.skyLight(), styles);
-    std::vector<nx::render::StudioInstance> instances = models.instances;
-    std::ranges::copy(players.instances, std::back_inserter(instances));
-    std::ranges::copy(entities.instances, std::back_inserter(instances));
+    // Prepared above: what the world's view may show is what the frame poses and draws.
+    const ModelFrame modelFrame{
+        .world = m_world, .light = m_light, .sky = level.skyLight(), .styles = styles, .jobs = view.jobs};
+    level.models().pose(m_models, view.time, view.hostages, modelFrame, posedMapModels);
+    level.players().pose(m_playerModels, view.players, modelFrame, posedPlayers);
+    entityModels.pose(level.entityCatalog(), view.entities, modelFrame, posedEntities);
+    posedInstances.clear();
+    std::ranges::copy(posedMapModels.instances, std::back_inserter(posedInstances));
+    std::ranges::copy(posedPlayers.instances, std::back_inserter(posedInstances));
+    std::ranges::copy(posedEntities.instances, std::back_inserter(posedInstances));
     if (auto prepared = m_studio.prepare(
-            {.camera = view.camera, .aspect = view.aspect, .instances = instances, .fog = view.fog});
+            {.camera = view.camera, .aspect = view.aspect, .instances = posedInstances, .fog = view.fog});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }

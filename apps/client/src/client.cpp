@@ -1371,7 +1371,8 @@ auto Client::sessionView() -> cs::SceneView {
             .clientEvents = m_session->clientEvents,
             .hand = m_hudCvars->hand(),
             .overlay = navigationOverlay(),
-            .fog = m_fog.shown()};
+            .fog = m_fog.shown(),
+            .jobs = m_jobs.get()};
 }
 
 auto Client::navigationOverlay() -> cs::SceneOverlay {

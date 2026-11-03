@@ -68,9 +68,20 @@ struct DepthMapping {
 /// `viewProjection`, map space to clip space, its depths mapped as `layer` maps them.
 [[nodiscard]] auto inLayer(const Mat4& viewProjection, DepthLayer layer) noexcept -> Mat4;
 
+/// How many planes bound what a camera sees (frustumPlanes).
+inline constexpr std::size_t kFrustumPlanes = 4;
+
 /// The left, right, bottom and top planes of what `camera` sees on a target of `aspect`, their fronts
 /// inward: what lies wholly behind one of them is out of view. The near plane, a few units from the
 /// eye, and the far one, at infinity, cull nothing worth a test.
-[[nodiscard]] auto frustumPlanes(const Camera& camera, float aspect) noexcept -> std::array<Plane, 4>;
+[[nodiscard]] auto frustumPlanes(const Camera& camera, float aspect) noexcept
+    -> std::array<Plane, kFrustumPlanes>;
+
+/// Whether `box` is not wholly behind one of `planes` (frustumPlanes).
+[[nodiscard]] inline auto isInFrustum(const std::array<Plane, kFrustumPlanes>& planes,
+                                      const Aabb& box) noexcept -> bool {
+    return std::ranges::none_of(planes,
+                                [&box](const Plane& plane) { return plane.sideOf(box) == PlaneSide::Back; });
+}
 
 } // namespace nx::render

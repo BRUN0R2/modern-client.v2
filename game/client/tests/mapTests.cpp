@@ -57,6 +57,28 @@ void expectNear(nx::Vec3 actual, nx::Vec3 expected, std::string_view what = {}) 
     EXPECT_NEAR(actual.z, expected.z, kTolerance) << what;
 }
 
+TEST(ShownBoxTest, AModelShowsInItsSequencesBoundsHoweverItTurnsAndAMarginMore) {
+    const nx::Vec3 origin{.x = 100.0F, .y = 200.0F, .z = 300.0F};
+    const std::array bounds{
+        nx::Aabb{.min = {.x = -8.0F, .y = -16.0F, .z = -36.0F}, .max = {.x = 8.0F, .y = 4.0F, .z = 20.0F}},
+        nx::Aabb{.min = {.x = -40.0F, .y = -2.0F, .z = -2.0F}, .max = {.x = 2.0F, .y = 2.0F, .z = 36.0F}}};
+    const nx::Aabb box = cs::shownBoxOf(origin, bounds);
+    constexpr float kAcross = 40.0F + cs::kShownMargin; // the farthest across any of them goes, either way
+    EXPECT_EQ(
+        box.min,
+        (nx::Vec3{.x = 100.0F - kAcross, .y = 200.0F - kAcross, .z = 300.0F - 36.0F - cs::kShownMargin}));
+    EXPECT_EQ(
+        box.max,
+        (nx::Vec3{.x = 100.0F + kAcross, .y = 200.0F + kAcross, .z = 300.0F + 36.0F + cs::kShownMargin}));
+}
+
+TEST(ShownBoxTest, AModelWhoseSequenceNamesNoBoundsShowsWithinAReach) {
+    const nx::Aabb box = cs::shownBoxOf({}, std::array{nx::Aabb{}});
+    constexpr float kReach = cs::kBoundlessReach + cs::kShownMargin;
+    EXPECT_EQ(box.max, (nx::Vec3{.x = kReach, .y = kReach, .z = kReach}));
+    EXPECT_EQ(box.min, (nx::Vec3{.x = -kReach, .y = -kReach, .z = -kReach}));
+}
+
 TEST(SpawnViewTest, ThePlayersEyeIsAtTheFirstCounterTerroristSpawnPoint) {
     const MapOf map{R"({ "classname" "worldspawn" }
 { "classname" "info_player_deathmatch" "origin" "1 2 3" "angles" "0 90 0" }

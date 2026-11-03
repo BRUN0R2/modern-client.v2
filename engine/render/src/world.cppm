@@ -225,6 +225,9 @@ public:
     void prepare(const WorldFrame& view);
     /// Draws `view` alone: prepares it, then records it (drawInOrder).
     void draw(rhi::CommandList& commands, const WorldFrame& view);
+    /// Whether the view prepared last may show what fits in `box`: it is in the view's frustum, and touches a
+    /// leaf the map's compiler found the view's leaf may see (the set a client is sent the entities of).
+    [[nodiscard]] auto mayShow(const Aabb& box) const noexcept -> bool;
 
     /// The brush entities the last prepare found that are drawn blended, the index of each its own.
     [[nodiscard]] inline auto blendedDraws() const noexcept -> std::span<const BlendedDraw> {
@@ -378,7 +381,9 @@ private:
     std::vector<std::uint64_t> m_faceGathered; ///< The draw each face was last looked at in.
     std::vector<ModelPlacement> m_placements;  ///< Of each of m_models, this frame.
     std::optional<assets::LeafIndex> m_visibleFrom;
+    assets::LeafSet m_visibleSet;                   ///< What m_visibleFrom may see.
     std::vector<assets::LeafIndex> m_visibleLeaves; ///< Those of m_visibleFrom.
+    std::array<Plane, kFrustumPlanes> m_frustum{};  ///< Of the view prepared last.
     /// The faces of the world seen this frame, of each bucket and of the sky: prepare copies their
     /// triangles once, from m_faceIndices to the slot's indices.
     std::vector<std::vector<std::uint32_t>> m_bucketFaces;

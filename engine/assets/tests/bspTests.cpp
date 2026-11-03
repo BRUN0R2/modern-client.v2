@@ -377,6 +377,22 @@ TEST(BspTest, DecompressesThePotentiallyVisibleSetOfALeaf) {
     EXPECT_FALSE(fromAWall.contains(LeafIndex{0}));
 }
 
+TEST(BspTest, ABoxTouchesTheLeavesOfASetItIsIn) {
+    // The tree's node is the plane z = 0: in front the empty leaf 1, behind it the solid leaf 0.
+    const QuadMap map;
+    const Bytes file = map.file();
+    const auto view = BspView::parse(file);
+    ASSERT_TRUE(view.has_value()) << nx::describe(view.error());
+    const nx::assets::LeafSet everything = view->potentiallyVisible(LeafIndex{0});
+    const nx::Aabb above{.min = {.z = 8.0F}, .max = {.x = 8.0F, .y = 8.0F, .z = 16.0F}};
+    const nx::Aabb below{.min = {.z = -16.0F}, .max = {.x = 8.0F, .y = 8.0F, .z = -8.0F}};
+    const nx::Aabb across{.min = {.z = -8.0F}, .max = {.x = 8.0F, .y = 8.0F, .z = 8.0F}};
+    EXPECT_TRUE(view->touchesAnyOf(everything, above));
+    EXPECT_TRUE(view->touchesAnyOf(everything, across));
+    EXPECT_FALSE(view->touchesAnyOf(everything, below)) << "the solid leaf is in no set";
+    EXPECT_FALSE(view->touchesAnyOf(nx::assets::LeafSet{}, above)) << "a set of no leaf";
+}
+
 TEST(BspTest, RejectsAVisibleSetPastItsLump) {
     EXPECT_EQ(parseError(mapOfNineteenLeaves(Bytes{std::byte{0x05}, std::byte{0}})), BspError::BadVisibility)
         << "a run without its length";
