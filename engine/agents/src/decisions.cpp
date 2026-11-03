@@ -15,19 +15,88 @@ Deciders::Deciders(const navigation::NavigationMesh& mesh) noexcept : decidedOn{
 
 namespace {
 
-/// Writes to `nearby` the bodies of `bodies` within `range` across and `height` up or down of `request`'s
-/// feet, but its own, the nearest first, ties by entity, at most kMostSteeringBodies.
-void bodiesNear(const DecisionRequest& request, std::span<const Body> bodies, float range, float height,
+/// The most cells of a BodyGrid along a side: enough for a map's ground at any steering range, and bounding
+/// its room however far apart its bodies are.
+constexpr std::size_t kMostGridCellsAcross = 256;
+
+/// The bodies of a tick by the square of the ground each stands in, each as wide as how far bodies are looked
+/// for: those near a point are in its square and those around it, however many the others are.
+class BodyGrid {
+public:
+    /// The grid of `bodies`, which must outlive it, of squares `width` wide.
+    BodyGrid(std::span<const Body> bodies, float width) : cellSize{width} {
+        for (const Body& body : bodies) {
+            lowest = componentMin(lowest, body.feet);
+            highest = componentMax(highest, body.feet);
+        }
+        columns = cellsAcross(highest.x - lowest.x);
+        rows = cellsAcross(highest.y - lowest.y);
+        firstOfCell.assign((columns * rows) + 1, 0);
+        for (const Body& body : bodies) {
+            ++firstOfCell[cellOf(body.feet) + 1];
+        }
+        std::partial_sum(firstOfCell.begin(), firstOfCell.end(), firstOfCell.begin());
+        cellBodies.resize(bodies.size());
+        std::vector<std::uint32_t> next{firstOfCell.begin(), firstOfCell.end() - 1};
+        for (const Body& body : bodies) {
+            cellBodies[next[cellOf(body.feet)]++] = &body;
+        }
+    }
+
+    /// Calls `visit` with each body in the square of `point` and those around it.
+    template <class Visit>
+    void forEachAround(Vec3 point, const Visit& visit) const {
+        const std::size_t column = indexAlong(point.x - lowest.x, columns);
+        const std::size_t row = indexAlong(point.y - lowest.y, rows);
+        for (std::size_t y = row > 0 ? row - 1 : 0; y <= std::min(row + 1, rows - 1); ++y) {
+            for (std::size_t x = column > 0 ? column - 1 : 0; x <= std::min(column + 1, columns - 1); ++x) {
+                const std::size_t cell = (y * columns) + x;
+                for (std::uint32_t body = firstOfCell[cell]; body < firstOfCell[cell + 1]; ++body) {
+                    visit(*cellBodies[body]);
+                }
+            }
+        }
+    }
+
+private:
+    [[nodiscard]] auto cellsAcross(float span) const noexcept -> std::size_t {
+        return span > 0.0F ? std::min(static_cast<std::size_t>(std::min(
+                                          span / cellSize, static_cast<float>(kMostGridCellsAcross))) +
+                                          1,
+                                      kMostGridCellsAcross)
+                           : 1;
+    }
+    [[nodiscard]] auto indexAlong(float offset, std::size_t cells) const noexcept -> std::size_t {
+        const float index = offset / cellSize;
+        return index > 0.0F ? static_cast<std::size_t>(std::min(index, static_cast<float>(cells - 1))) : 0;
+    }
+    [[nodiscard]] auto cellOf(Vec3 point) const noexcept -> std::size_t {
+        return (indexAlong(point.y - lowest.y, rows) * columns) + indexAlong(point.x - lowest.x, columns);
+    }
+
+    float cellSize;
+    Vec3 lowest{.x = std::numeric_limits<float>::max(), .y = std::numeric_limits<float>::max()};
+    Vec3 highest{.x = std::numeric_limits<float>::lowest(), .y = std::numeric_limits<float>::lowest()};
+    std::size_t columns = 1;
+    std::size_t rows = 1;
+    std::vector<std::uint32_t> firstOfCell; ///< Of each square, and past the last.
+    std::vector<const Body*> cellBodies;    ///< Square after square.
+};
+
+/// Writes to `nearby` the bodies of `bodies`, in squares as wide as `range`, within `range` across and
+/// `height` up or down of `request`'s feet, but its own, the nearest first, ties by entity, at most
+/// kMostSteeringBodies.
+void bodiesNear(const DecisionRequest& request, const BodyGrid& bodies, float range, float height,
                 std::vector<std::pair<float, const Body*>>& sorted,
                 std::vector<navigation::SteeringBody>& nearby) {
     sorted.clear();
-    for (const Body& body : bodies) {
+    bodies.forEachAround(request.feet, [&](const Body& body) {
         const float across = std::hypot(body.feet.x - request.feet.x, body.feet.y - request.feet.y);
         if (request.body != body.entity && across <= range &&
             std::abs(body.feet.z - request.feet.z) <= height) {
             sorted.emplace_back(across, &body);
         }
-    }
+    });
     std::ranges::sort(sorted, [](const auto& first, const auto& second) {
         return first.first != second.first ? first.first < second.first
                                            : first.second->entity < second.second->entity;
@@ -54,6 +123,7 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
     const navigation::AgentProfile& profile = decidedOn->profile();
     const float range = profile.radius.value() * navigation::kSteeringRangeRadii;
     const float height = profile.standingHeight.value();
+    const BodyGrid grid{bodies, range};
     const std::span<navigation::NavigationQuery> batchQueries = queries;
     // A batch decides with a query of its own, so that batches never share one.
     const auto decideBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
@@ -64,7 +134,7 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
             const DecisionRequest& request = requests[index];
             Decision decision = request.brain->decide(request.feet, query);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
-                bodiesNear(request, bodies, range, height, sorted, nearby);
+                bodiesNear(request, grid, range, height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);
             }
             // Last, so that what gets a stuck body out overrides how it steers (UpdatePathMovement). A body

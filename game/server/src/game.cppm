@@ -24,6 +24,7 @@ export module cs.server:game;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.assets;
 import nx.ecs;
 import nx.game;
@@ -177,7 +178,8 @@ public:
     /// (thinkRules), what is due acts, and the pushers move, pushing the players' bodies. While the
     /// round is frozen a player moves at kFreezeSpeed at most, and its attack is held back; dead, it
     /// does nothing until it spawns again.
-    void tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities = {});
+    void tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities = {},
+              nx::jobs::JobSystem* jobs = nullptr);
 
     /// A body of a type issued by this game's content catalog. Its origin/yaw must be finite and
     /// its pitch/roll zero. Errors: InvalidPlacement. No player slot is allocated.

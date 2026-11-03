@@ -5,6 +5,7 @@ module cs.server;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.ecs;
 import nx.collision;
 import nx.game;
@@ -13,6 +14,8 @@ import cs.shared;
 namespace cs {
 namespace {
 constexpr nx::log::Category kLog{"entities"};
+/// The fewest bodies it is worth handing to a worker to move: a move costs some microseconds.
+constexpr std::size_t kSmallestMoveBatch = 32;
 struct EntityBodyData {
     const EntityCatalog* catalog = nullptr;
 };
@@ -207,7 +210,7 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
 }
 
 auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
-                     std::span<const EntityCommand> commands) -> EntityBodiesTick {
+                     std::span<const EntityCommand> commands, nx::jobs::JobSystem* jobs) -> EntityBodiesTick {
     std::vector<nx::ecs::Entity> entities;
     nx::ecs::Query<nx::ecs::Entity, const EntityBody&>{world}.forEach(
         [&entities](nx::ecs::Entity entity, const EntityBody&) { entities.push_back(entity); });
@@ -221,16 +224,28 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     }
     std::ranges::stable_sort(requests, {}, &EntityCommand::entity);
     // What the moves meet, gathered once for the tick, as the original links its entities once and keeps
-    // them linked where they move: the brush entities, which no body moves; and the boxes, by entity, each
-    // body's kept where its move left it, each move given those near it (SV_AddLinksToPM).
+    // them linked where they move, each move given those near it (SV_AddLinksToPM): the brush entities, which
+    // no body moves; and the boxes of all but these bodies, which pass through each other, as a mod's horde
+    // does (its semiclip), so that a crowd of them flows through a doorway and round what they strike at
+    // rather than jam: they jammed, flailed and struck each other. The players' bodies stop them. So no
+    // body's move depends on another's.
     BrushEntityQuery brushQuery{world};
     std::vector<LinkedBrushEntity> brushes;
     linkedBrushEntitiesOf(brushQuery, hulls, brushes);
     std::vector<SolidBox> boxes = solidBoxesOf(world);
-    std::ranges::sort(boxes, {}, &SolidBox::entity);
-    std::vector<SolidBox> near;
-    std::vector<BrushEntity> nearBrushes;
-    EntityBodiesTick done;
+    std::erase_if(boxes, [&world](const SolidBox& solid) { return world.has<EntityBody>(solid.entity); });
+    // A body's move, once what it asks for is known, and what it made of it.
+    struct Move {
+        nx::ecs::Entity entity{};
+        const EntityType* type = nullptr;
+        /// Until they all moved: nothing is added or removed meanwhile.
+        const MovementState* state = nullptr;
+        UserCommand command{};
+        nx::Vec3 before{};
+        MovementResult moved{};
+    };
+    std::vector<Move> moves;
+    moves.reserve(entities.size());
     for (const nx::ecs::Entity entity : entities) {
         EntityBody& body = *world.get<EntityBody>(entity);
         advanceFrame(body.animation, time.now, time.rate);
@@ -263,15 +278,37 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
             }
         }
         body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
-        boxesNear(boxes, body.movement.origin, entity, near);
-        // It passes through the other bodies of createEntity's, as a mod's horde does (its semiclip), so that
-        // a crowd of them flows through a doorway and round what they strike at rather than jam: they jammed,
-        // flailed and struck each other. The players' bodies stop it.
-        std::erase_if(near, [&world](const SolidBox& solid) { return world.has<EntityBody>(solid.entity); });
-        brushEntitiesNear(brushes, body.movement.origin, nearBrushes);
-        const nx::Vec3 before = body.movement.origin;
-        const MovementResult moved =
-            simulateMovement(body.movement, command, MovementSettings{}, hulls, nearBrushes, near);
+        moves.push_back({.entity = entity,
+                         .type = &type,
+                         .state = &body.movement,
+                         .command = command,
+                         .before = body.movement.origin});
+    }
+    const auto moveBatch = [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+        std::vector<SolidBox> near;
+        std::vector<BrushEntity> nearBrushes;
+        for (std::size_t index = first; index < last; ++index) {
+            Move& move = moves[index];
+            boxesNear(boxes, move.before, move.entity, near);
+            brushEntitiesNear(brushes, move.before, nearBrushes);
+            move.moved =
+                simulateMovement(*move.state, move.command, MovementSettings{}, hulls, nearBrushes, near);
+        }
+    };
+    if (jobs != nullptr) {
+        jobs->forBatches({.label = "entities.move", .priority = nx::jobs::Priority::Critical}, moves.size(),
+                         kSmallestMoveBatch, moveBatch);
+    } else {
+        moveBatch(0, 0, moves.size());
+    }
+    EntityBodiesTick done;
+    for (const Move& move : moves) {
+        const nx::ecs::Entity entity = move.entity;
+        const EntityType& type = *move.type;
+        const UserCommand& command = move.command;
+        const MovementResult& moved = move.moved;
+        const nx::Vec3 before = move.before;
+        EntityBody& body = *world.get<EntityBody>(entity);
         body.movement = moved.state;
         if (type.definition.stride && body.movement.isOnGround) {
             // A step each stride it walks on the ground, as its feet meet it.
@@ -286,10 +323,6 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         }
         nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
         transform.origin = body.movement.origin;
-        if (const auto own = std::ranges::lower_bound(boxes, entity, {}, &SolidBox::entity);
-            own != boxes.end() && own->entity == entity) {
-            own->origin = body.movement.origin;
-        }
         transform.angles = {.yaw = command.viewAngles.yaw};
         *world.get<nx::game::Body>(entity) = bodyOf(body.movement);
         const bool strikes = command.buttons.test(Button::Attack) && time.now >= body.attacksAgainAt;

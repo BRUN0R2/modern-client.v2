@@ -212,6 +212,43 @@ TEST(AgentDeciders, TwoAgentsMeetingHeadOnInAPassageSteerPastEachOther) {
     }
 }
 
+TEST(AgentDeciders, ABodyNearIsSteeredAroundHoweverFarTheOthersAre) {
+    // A body in the way, and others as far as could be, which squeeze every body near into one square of
+    // those it is looked for in: the same decision as with it alone.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = -512, .y = -256}, {.x = 512, .y = 256}, 0);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::test::jobSystem(0);
+    nx::agents::Deciders deciders{mesh};
+    nx::ecs::World world;
+    constexpr nx::UnitsPerSecond kSpeed{250.0F};
+    constexpr nx::HammerUnits kRadius{16.0F};
+    constexpr float kFar = 1.0e6F;
+    const nx::ecs::Entity self = world.spawn();
+    const nx::agents::Body inTheWay{
+        .entity = world.spawn(), .feet = {.x = 40.0F}, .velocity = {}, .radius = kRadius};
+    const auto decisionAmong = [&](std::span<const nx::agents::Body> bodies) {
+        nx::agents::Brain brain{rules()};
+        brain.setGoal(nx::Vec3{.x = 400});
+        const std::array requests{nx::agents::DecisionRequest{
+            .brain = &brain, .feet = {}, .velocity = {.x = 100.0F}, .maxSpeed = kSpeed, .body = self}};
+        std::array<nx::agents::Decision, 1> decisions{};
+        deciders.decide(*jobs, requests, decisions, bodies);
+        return decisions.front().intent;
+    };
+    const nx::agents::Intent alone = decisionAmong(std::array{inTheWay});
+    for (const float far : {kFar, -kFar}) {
+        const std::array bodies{
+            inTheWay,
+            nx::agents::Body{.entity = world.spawn(), .feet = {.x = far, .y = far}, .radius = kRadius}};
+        const nx::agents::Intent among = decisionAmong(bodies);
+        EXPECT_EQ(among.direction, alone.direction);
+        EXPECT_EQ(among.speedShare, alone.speedShare);
+    }
+    const nx::agents::Intent freeWay = decisionAmong({});
+    EXPECT_NE(alone.direction, freeWay.direction) << "the body near is steered around";
+}
+
 TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutSearchesAnotherWayAndThenGivesUpItsGoal) {
     nx::navigation::Geometry geometry;
     nx::test::addFloor(geometry, {.x = -512, .y = -512}, {.x = 512, .y = 512}, 0);

@@ -106,7 +106,9 @@ private:
     Settings settings;
     nx::jobs::JobSystem* jobs;
     nx::navigation::NavigationQuery query; ///< Of the mesh the horde borrows.
-    nx::agents::Deciders deciders;         ///< Of the mesh the horde borrows.
+    std::vector<nx::navigation::NavigationQuery>
+        queries;                   ///< One for each batch that perceives, as they need them.
+    nx::agents::Deciders deciders; ///< Of the mesh the horde borrows.
     std::vector<nx::ecs::Entity> agents;
     cs::Game* const owner;
     static constexpr auto kTransitionLogInterval = std::chrono::seconds{1};

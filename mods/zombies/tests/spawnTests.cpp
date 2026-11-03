@@ -60,7 +60,7 @@ protected:
         auto registered = cs::GameCvars::registerIn(console);
         ASSERT_TRUE(registered.has_value());
         cvars.emplace(std::move(*registered));
-        auto createdJobs = nx::jobs::JobSystem::create({.workerCount = 0});
+        auto createdJobs = nx::jobs::JobSystem::create({.workerCount = workers});
         ASSERT_TRUE(createdJobs.has_value());
         jobs = std::move(*createdJobs);
     }
@@ -102,6 +102,7 @@ protected:
     std::optional<cs::GameCvars> cvars;
     std::unique_ptr<cs::GameMap> map;
     std::unique_ptr<cs::Game> game;
+    std::uint32_t workers = 0;
     std::unique_ptr<nx::jobs::JobSystem> jobs;
     zombies::Settings settings{};
     cs::EntityTypeIndex type{};
@@ -233,6 +234,44 @@ TEST_F(HordeSpawnTest, ZombiesInAFileSeeThePlayerAheadPastThoseBeforeThem) {
         ASSERT_NE(agent, nullptr);
         EXPECT_EQ(agent->behavior, nx::agents::Behavior::Chase) << body.origin.y;
     }
+}
+
+/// A horde of HordeSpawnTest whose bodies `workerCount` workers share out.
+class HordeAtWork final : public HordeSpawnTest {
+public:
+    explicit HordeAtWork(std::uint32_t workerCount) {
+        workers = workerCount;
+        SetUp();
+    }
+
+    /// Where `count` bodies chasing a player stand after `ticks`.
+    [[nodiscard]] auto placesAfter(std::uint32_t count, std::uint32_t ticks) -> std::vector<nx::Vec3> {
+        constexpr nx::HammerUnits kSide{2048};
+        constexpr float kPlayerAway = 800.0F;
+        settings.spawnRadius = kSide;
+        start(kSide, kSide);
+        EXPECT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = anchor}}, count).has_value());
+        const cs::PlayerIndex player =
+            game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+        game->placeEye(player, anchor + nx::Vec3{.y = kPlayerAway, .z = cs::kStandingViewHeight.value()});
+        for (std::uint32_t tick = 0; tick < ticks; ++tick) {
+            game->tick({}, horde->commands(), jobs.get());
+        }
+        return game->entities() | std::views::transform(&cs::EntityState::origin) |
+               std::ranges::to<std::vector>();
+    }
+
+private:
+    void TestBody() override {}
+};
+
+TEST(HordeWorkersTest, AHordeMovesTheSameWithAnyNumberOfWorkers) {
+    // Batches of what it perceives, decides and moves.
+    constexpr std::uint32_t kBodies = 64;
+    constexpr std::uint32_t kTicks = 300;
+    const std::vector<nx::Vec3> played = HordeAtWork{0}.placesAfter(kBodies, kTicks);
+    EXPECT_EQ(played.size(), kBodies);
+    EXPECT_EQ(HordeAtWork{3}.placesAfter(kBodies, kTicks), played);
 }
 
 TEST_F(HordeSpawnTest, AMissingBaseIsRejectedBeforeCreatingABody) {
