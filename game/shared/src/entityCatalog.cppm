@@ -143,6 +143,7 @@ struct EntityState {
     nx::GameTime movedAt{};         ///< When its last move ended, as a snapshot tells the time.
     std::uint32_t ticksPerMove = 1; ///< How many ticks it shows going for: its next move comes then.
     bool isDucked = false;          ///< Its box is the ducked one, its origin lower over the same feet.
+    bool isOnGround = false;        ///< Its body stands on the ground.
 };
 
 /// A step an entity's body took in a tick, as it walked a stride on the ground: the body, and where its

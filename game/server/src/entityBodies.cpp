@@ -552,7 +552,8 @@ void writeEntityStates(nx::ecs::World& world, std::vector<EntityState>& states, 
                                             .movedFrom = body.movedFrom,
                                             .movedAt = body.movedAt,
                                             .ticksPerMove = body.ticksPerMove,
-                                            .isDucked = body.movement.isDucked};
+                                            .isDucked = body.movement.isDucked,
+                                            .isOnGround = body.movement.isOnGround};
             }
         }
     };

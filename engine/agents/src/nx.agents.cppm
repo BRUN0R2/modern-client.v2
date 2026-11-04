@@ -223,15 +223,17 @@ public:
     /// on from, however far it drifts from it before its corridor drops it. Its feet within
     /// arrivalDistance of the start of
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
-    /// for the link's end, which its corridor goes on from, until it stands within a step of the end's height
-    /// as far from the start as the end is; across it, it searches no way, as DetourCrowd plans none for an
-    /// agent over a link, the corridor's end following its goal along the mesh. A ladder it climbs
-    /// (Intent::climb): up, facing it level until its feet come within a step of the end's height, then on to
-    /// the end; down, walking off toward the end and looking well below level, or straight down where the
-    /// floors lie on one side of it, as a body climbs down one no faster (PM_LadderMove). A body off the mesh
-    /// is Blocked as it stays there, each decision searching anew, and jumps, letting go of a ladder it
-    /// holds.
-    [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
+    /// for the link's end, which its corridor goes on from, until it stands on the ground, `isOnGround`,
+    /// within a step of the end's height as far from the start as the end is; back on it below that height,
+    /// as it fell off a ledge it jumped at, it searches its way anew from there; at that height, it walks on
+    /// to the end. Across it, it searches no way, as DetourCrowd plans none for an agent over a link, the
+    /// corridor's end following its goal along the mesh. A ladder it climbs (Intent::climb): up, facing it
+    /// level until its feet come within a step of the end's height, then on to the end; down, walking off
+    /// toward the end and looking well below level, or straight down where the floors lie on one side of it,
+    /// as a body climbs down one no faster (PM_LadderMove). A body off the mesh is Blocked as it stays there,
+    /// each decision searching anew, and jumps, letting go of a ladder it holds.
+    [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround = true)
+        -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
     /// `velocity`, at `maxSpeed` at most, and no faster than it can still slow down for what the intent
@@ -279,15 +281,17 @@ private:
     [[nodiscard]] auto movedFarEnough(Vec3 feet, Vec3 goal) const noexcept -> bool;
     /// The target it pursues from `feet`, as decide chooses it; none when it recognizes none.
     [[nodiscard]] auto choose(Vec3 feet) const -> const Memory*;
-    /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it.
-    void planIfNeeded(Vec3 feet, Vec3 goal, std::optional<ecs::Entity> pursued,
+    /// Keeps the corridor from `feet` toward `goal`, searching anew when the pursuit or position asks it, or
+    /// as its body comes back to the ground below the link it crossed.
+    void planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
                       navigation::NavigationQuery& query);
     /// Forgets a completed goal or an investigated target after arriving.
     void finishArrival(const Memory* selected);
     /// Tells `decision`'s intent what it approaches from `feet` along `ahead`, the corners from the one it
     /// steers to on (Intent::approaches), when it brakes (Rules::braking): the turn at each measured from the
     /// way into it to the way on kTurnSpanRadii of its body's radius past it, so that a corner the mesh
-    /// rounds into short turns is slowed for as a whole.
+    /// rounds into short turns is slowed for as a whole; the start of a link it jumps up, for all the turn
+    /// takes across its way, since in the air it flies on.
     void approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
                   const navigation::AgentProfile& profile, const std::optional<navigation::MeshLink>& next);
     /// Finds `next` and crosses it when `feet` are within arrivalDistance of its start. If crossing fails,
@@ -309,6 +313,8 @@ private:
     /// The link of its corridor its body crosses, the corridor gone on from the link's end; none while it
     /// walks along it.
     std::optional<navigation::MeshLink> crossing{};
+    /// Its body left the ground since it began crossing it, as it jumped, dropped or took to a ladder.
+    bool leftGround = false;
     /// The corner of its corridor it last reached, which it heads on from (decide).
     std::optional<Vec3> reachedCorner{};
     std::optional<navigation::NavigationError> pathError{};
@@ -418,12 +424,14 @@ struct Body {
     HammerUnits radius{};
 };
 
-/// A brain to decide with, and its body this tick (Deciders::decide): where its feet are, how it moves,
-/// how fast it may run, the entity it is, none for a body it steers no other body around, and the watch of
-/// its progress, none for a body nothing gets out, `elapsed` after its last request.
+/// A brain to decide with, and its body this tick (Deciders::decide): where its feet are, whether it stands
+/// on the ground, how it moves, how fast it may run, the entity it is, none for a body it steers no other
+/// body around, and the watch of its progress, none for a body nothing gets out, `elapsed` after its last
+/// request.
 struct DecisionRequest {
     Brain* brain = nullptr;
     Vec3 feet{};
+    bool isOnGround = true;
     Vec3 velocity{};
     UnitsPerSecond maxSpeed{};
     std::optional<ecs::Entity> body{};

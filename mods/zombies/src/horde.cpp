@@ -454,6 +454,7 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::span<const cs::Percep
             turns[first + count] = {.member = &member, .body = &*body, .agent = agent, .eye = eyeOf(*body)};
             requests[first + count] = {.brain = &agent->brain,
                                        .feet = feetOf(*body),
+                                       .isOnGround = body->isOnGround,
                                        .velocity = body->velocity,
                                        .maxSpeed = settings.body.speed,
                                        .body = member.entity,

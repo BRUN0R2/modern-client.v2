@@ -933,7 +933,10 @@ Today, as ReGameDLL_CS's reconstruction plays (`CCSBotManager`, `CCSBot`, `bot_u
   steers among the other players and the walls as it goes, its next turn taken wide, the velocity it
   runs at one that meets no body nor wall in the time ahead, slower or waiting when it must
   ([ADR-0024](adr/0024-agents.md)'s local avoidance, `nx::navigation::Corridor::steer`), so that two
-  bots meeting in a passage pass each other. When it gets stuck on its way anyway, it gets out as
+  bots meeting in a passage pass each other. It takes a ledge the way a player does: slowing down for
+  what the way up turns across its own, as in the air it flies on, and having crossed only once it
+  stands on the ground up there; fallen short, it searches its way anew from where it landed and
+  jumps again (`nx::agents::Brain::decide`). When it gets stuck on its way anyway, it gets out as
   Condition Zero's bot does (`StuckCheck`, `Wiggle`, `nx::agents::StuckWatch`, the `stuck` table of
   `bots.toml`): sampled each tenth of a second, it is stuck when across the last five samples it went
   slower than 20 units a second, back and forth included, as long as it means to move along its way and

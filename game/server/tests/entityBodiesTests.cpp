@@ -120,6 +120,7 @@ TEST_F(EntityBodyTest, ABodyDucksAsItsCommandHoldsItsKeyAndStandsUpWhenItLetsGo)
     EXPECT_EQ(solidity.box.max.z, cs::kDuckedBox.max.z);
     EXPECT_EQ(world.get<nx::game::Body>(*made)->box.max.z, cs::kDuckedBox.max.z);
     EXPECT_TRUE(cs::entityStatesOf(world).front().isDucked);
+    EXPECT_TRUE(cs::entityStatesOf(world).front().isOnGround);
     EXPECT_EQ(body.animation.sequence, sequences.crouchIdle);
     EXPECT_FALSE(meetsItsTop());
     run({});

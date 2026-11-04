@@ -67,6 +67,8 @@ constexpr float kMostTurnPerCommand = 10.0F;
 constexpr float kAimedWithin = 5.0F;
 /// Above the floor: a fall from there kills.
 constexpr float kDeadlyHeight = 2000.0F;
+/// Above the floor: well off it, a fall from there hurts nothing.
+constexpr float kAboveTheFloor = 200.0F;
 
 /// A game of the stretched box with the repository's data, an installation of the characters' models
 /// alone, and its bots on the box's mesh.
@@ -392,6 +394,15 @@ TEST_F(BotsTest, ABotFrozenByTheRoundIsNotStuckAndNeitherWigglesNorJumps) {
         EXPECT_FALSE(made.front().command.buttons.test(cs::Button::Jump)) << "at " << tick;
         EXPECT_FALSE(agent->stuck.isStuck()) << "at " << tick;
     }
+}
+
+TEST_F(BotsTest, ABotsStateTellsWhetherItsBodyStandsOnTheGround) {
+    const cs::PlayerIndex bot = bots->add(cs::Team::CounterTerrorists, cs::BotDifficulty::Easy, kNoPrefix);
+    play(kPastTheFirstFreeze);
+    EXPECT_TRUE(game->ownStateOf(bot).isOnGround);
+    game->placeEye(bot, {.x = 1000.0F, .y = kRowY, .z = kAboveTheFloor});
+    play(1);
+    EXPECT_FALSE(game->ownStateOf(bot).isOnGround);
 }
 
 TEST_F(BotsTest, ABotAliveAsTheGameRestartsBeginsItsNewLifeAnew) {

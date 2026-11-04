@@ -285,6 +285,35 @@ TEST(AgentDeciders, ABodyThatCannotMoveWigglesOutSearchesAnotherWayAndThenGivesU
     EXPECT_FALSE(agent.stuck.isStuck());
 }
 
+TEST(AgentDeciders, ABodyInTheAirHasNotLandedAcrossALink) {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = 384, .y = 128, .z = -16}, {.x = 640, .y = 384, .z = 40});
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    auto jobs = nx::jobs::JobSystem::create({.workerCount = 0});
+    ASSERT_TRUE(jobs.has_value());
+    nx::agents::Deciders deciders{mesh};
+    nx::navigation::NavigationQuery query{mesh};
+    const nx::Vec3 goal{.x = 512, .y = 360, .z = 40};
+    auto corridor = nx::navigation::Corridor::plan(query, {.from = {.x = 100, .y = 256}, .to = goal});
+    ASSERT_TRUE(corridor.has_value());
+    const auto link = corridor->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(goal);
+    std::array<nx::agents::Decision, 1> decisions{};
+    const auto decided = [&](nx::Vec3 feet, bool isOnGround) {
+        const std::array requests{
+            nx::agents::DecisionRequest{.brain = &brain, .feet = feet, .isOnGround = isOnGround}};
+        deciders.decide(**jobs, requests, decisions);
+        return decisions.front();
+    };
+    ASSERT_TRUE(decided(link->start - nx::Vec3{.x = 1}, true).intent.jumps);
+    const nx::Vec3 over = link->end + nx::Vec3{.x = 10};
+    EXPECT_LT(decided(over, false).intent.direction.x, 0.0F) << "still for the link's end";
+    EXPECT_GT(decided(over, true).intent.direction.y, 0.0F) << "landed, on to its goal";
+}
+
 TEST(AgentDeciders, FewerBrainsThanABatchAndNoneDecideToo) {
     const auto mesh = boxesMesh();
     const std::size_t few = nx::agents::kSmallestBatch - 1;
