@@ -10,6 +10,7 @@ module nx.render;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.rhi;
 import nx.assets;
 
@@ -21,7 +22,6 @@ namespace {
 // shaders/studio.slang declares them.
 constexpr std::uint32_t kFrameGroup = 0;
 constexpr std::uint32_t kSkinGroup = 1;
-constexpr std::uint32_t kInstanceGroup = 2;
 constexpr std::uint32_t kFrameUniformBinding = 0;
 constexpr std::uint32_t kLightGammaBinding = 1;
 constexpr std::uint32_t kBonesBinding = 2;
@@ -29,13 +29,13 @@ constexpr std::uint32_t kEnvironmentBinding = 3;
 constexpr std::uint32_t kEnvironmentSamplerBinding = 4;
 constexpr std::uint32_t kProbesBinding = 5;
 constexpr std::uint32_t kSpecularIntegralBinding = 6;
+constexpr std::uint32_t kInstancesBinding = 7;
 constexpr std::uint32_t kAlbedoBinding = 0;
 constexpr std::uint32_t kAlbedoSamplerBinding = 1;
 constexpr std::uint32_t kSkinUniformBinding = 2;
 constexpr std::uint32_t kEmissiveMaskBinding = 3;
 constexpr std::uint32_t kSpecularMapBinding = 4;
 constexpr std::uint32_t kPaintedLightBinding = 5;
-constexpr std::uint32_t kInstanceUniformBinding = 0;
 
 /// The most texels the enhanced look's sampler takes along a texture seen aslant, so that a painting's
 /// detail stays on faces seen edge on; the device holds it to its own most.
@@ -211,8 +211,9 @@ struct SkinUniform {
     float paintedLightGain = 1.0F;
 };
 
-/// A model's uniform: its light, how its depths are mapped, and where its bones start.
-struct InstanceUniform {
+/// A model's place in a frame's buffer of them, as a structured buffer lays it out: its light, how its depths
+/// are mapped, and where its bones start.
+struct alignas(16) InstanceUniform {
     Vec4 lightDirection{};
     Vec4 lightColor{};
     float ambient = 0.0F;
@@ -230,10 +231,8 @@ struct InstanceUniform {
     float secondProbeShare = 0.0F;
 };
 
-/// Each model's uniform is this far from the last in a frame's buffer of them: the largest offset
-/// alignment of uniform buffers a GPU asks for.
-constexpr std::uint64_t kInstanceUniformStride = 256;
-static_assert(sizeof(InstanceUniform) <= kInstanceUniformStride);
+/// The fewest models it is worth handing to a worker to write for the GPU: some dozens of bones each.
+constexpr std::size_t kSmallestWrittenBatch = 32;
 
 /// The triangles of every mesh of a model, and the meshes of each choice of each body part.
 struct Geometry {
@@ -581,7 +580,9 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
             .binding = kProbesBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
         rhi::BindingLayout{.binding = kSpecularIntegralBinding,
                            .type = rhi::BindingType::SampledTexture,
-                           .stages = kFragment}};
+                           .stages = kFragment},
+        rhi::BindingLayout{
+            .binding = kInstancesBinding, .type = rhi::BindingType::StorageBuffer, .stages = kBothStages}};
     const std::array skinBindings{
         rhi::BindingLayout{
             .binding = kAlbedoBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
@@ -595,30 +596,24 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
             .binding = kSpecularMapBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment},
         rhi::BindingLayout{
             .binding = kPaintedLightBinding, .type = rhi::BindingType::SampledTexture, .stages = kFragment}};
-    const std::array instanceBindings{rhi::BindingLayout{
-        .binding = kInstanceUniformBinding, .type = rhi::BindingType::UniformBuffer, .stages = kBothStages}};
     auto shader = device.createShader({.label = "studio", .code = shaderCode});
     auto frameLayout = device.createBindGroupLayout({.label = "studio.frame", .bindings = frameBindings});
     auto skinLayout = device.createBindGroupLayout({.label = "studio.skin", .bindings = skinBindings});
-    auto instanceLayout =
-        device.createBindGroupLayout({.label = "studio.instance", .bindings = instanceBindings});
     auto sampler = device.createSampler(
         {.label = "studio.skin", .maxAnisotropy = look == StudioLook::Enhanced ? kEnhancedAnisotropy : 1.0F});
     auto environmentSampler =
         device.createSampler({.label = "studio.environment", .address = rhi::AddressMode::ClampToEdge});
-    if (!shader || !frameLayout || !skinLayout || !instanceLayout || !sampler || !environmentSampler) {
-        return std::unexpected(!shader           ? std::move(shader.error())
-                               : !frameLayout    ? std::move(frameLayout.error())
-                               : !skinLayout     ? std::move(skinLayout.error())
-                               : !instanceLayout ? std::move(instanceLayout.error())
-                               : !sampler        ? std::move(sampler.error())
-                                                 : std::move(environmentSampler.error()));
+    if (!shader || !frameLayout || !skinLayout || !sampler || !environmentSampler) {
+        return std::unexpected(!shader        ? std::move(shader.error())
+                               : !frameLayout ? std::move(frameLayout.error())
+                               : !skinLayout  ? std::move(skinLayout.error())
+                               : !sampler     ? std::move(sampler.error())
+                                              : std::move(environmentSampler.error()));
     }
     m_environmentSampler = std::move(*environmentSampler);
     m_shader = std::move(*shader);
     m_frameLayout = std::move(*frameLayout);
     m_skinLayout = std::move(*skinLayout);
-    m_instanceLayout = std::move(*instanceLayout);
     m_sampler = std::move(*sampler);
 
     // The original culls the triangles that face the viewer in GL's sense (GL_FRONT): a model's
@@ -630,7 +625,7 @@ auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi:
     // its blend once its colors are light.
     const std::array vertexBuffers{
         rhi::VertexBufferLayout{.stride = sizeof(StudioVertex), .attributes = kStudioVertexAttributes}};
-    const std::array layouts{m_frameLayout.get(), m_skinLayout.get(), m_instanceLayout.get()};
+    const std::array layouts{m_frameLayout.get(), m_skinLayout.get()};
     const auto blendOf = [](rhi::BlendFactor source, rhi::BlendFactor destination) {
         return rhi::BlendState{.sourceColor = source,
                                .destinationColor = destination,
@@ -710,7 +705,11 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
         }
         slot.frame = std::move(*frame);
     }
-    if (bones > slot.boneCapacity || slot.group.get().isNull()) {
+    const bool hasRoom = bones <= slot.boneCapacity && instances <= slot.instanceCapacity;
+    if (hasRoom && !slot.group.get().isNull()) {
+        return {};
+    }
+    if (bones > slot.boneCapacity) {
         const std::size_t capacity = std::max({bones, slot.boneCapacity * 2, kFirstBoneCapacity});
         auto buffer = device.createBuffer({.label = "studio.bones",
                                            .size = capacity * sizeof(Mat3x4),
@@ -719,55 +718,41 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
         if (!buffer) {
             return std::unexpected{std::move(buffer.error())};
         }
-        const std::array bindings{
-            rhi::Binding{.binding = kFrameUniformBinding,
-                         .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
-            rhi::Binding{.binding = kLightGammaBinding,
-                         .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
-            rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = buffer->get()}},
-            rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
-            rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()},
-            rhi::Binding{.binding = kProbesBinding,
-                         .resource = m_probes.isNull() ? m_noProbes.get() : m_probes},
-            rhi::Binding{.binding = kSpecularIntegralBinding,
-                         .resource = m_specularIntegral.get().isNull() ? m_whiteMask.get()
-                                                                       : m_specularIntegral.get()}};
-        auto group = device.createBindGroup(
-            {.label = "studio.frame", .layout = m_frameLayout.get(), .bindings = bindings});
-        if (!group) {
-            return std::unexpected{std::move(group.error())};
-        }
         slot.bones = std::move(*buffer);
         slot.boneCapacity = capacity;
-        slot.group = std::move(*group);
     }
-    if (instances > slot.instanceGroups.size()) {
-        const std::size_t capacity =
-            std::max({instances, slot.instanceGroups.size() * 2, kFirstInstanceCapacity});
+    if (instances > slot.instanceCapacity) {
+        const std::size_t capacity = std::max({instances, slot.instanceCapacity * 2, kFirstInstanceCapacity});
         auto buffer = device.createBuffer({.label = "studio.instances",
-                                           .size = capacity * kInstanceUniformStride,
-                                           .usage = {rhi::BufferUsage::Uniform},
+                                           .size = capacity * sizeof(InstanceUniform),
+                                           .usage = {rhi::BufferUsage::Storage},
                                            .location = rhi::MemoryLocation::Upload});
         if (!buffer) {
             return std::unexpected{std::move(buffer.error())};
         }
-        std::vector<rhi::OwnedBindGroup> groups;
-        for (std::size_t instance = 0; instance < capacity; ++instance) {
-            const std::array bindings{
-                rhi::Binding{.binding = kInstanceUniformBinding,
-                             .resource = rhi::BufferBinding{.buffer = buffer->get(),
-                                                            .offset = kInstanceUniformStride * instance,
-                                                            .size = sizeof(InstanceUniform)}}};
-            auto group = device.createBindGroup(
-                {.label = "studio.instance", .layout = m_instanceLayout.get(), .bindings = bindings});
-            if (!group) {
-                return std::unexpected{std::move(group.error())};
-            }
-            groups.push_back(std::move(*group));
-        }
         slot.instances = std::move(*buffer);
-        slot.instanceGroups = std::move(groups);
+        slot.instanceCapacity = capacity;
     }
+    const std::array bindings{
+        rhi::Binding{.binding = kFrameUniformBinding,
+                     .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
+        rhi::Binding{.binding = kLightGammaBinding,
+                     .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
+        rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = slot.bones.get()}},
+        rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
+        rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()},
+        rhi::Binding{.binding = kProbesBinding, .resource = m_probes.isNull() ? m_noProbes.get() : m_probes},
+        rhi::Binding{.binding = kSpecularIntegralBinding,
+                     .resource =
+                         m_specularIntegral.get().isNull() ? m_whiteMask.get() : m_specularIntegral.get()},
+        rhi::Binding{.binding = kInstancesBinding,
+                     .resource = rhi::BufferBinding{.buffer = slot.instances.get()}}};
+    auto group = device.createBindGroup(
+        {.label = "studio.frame", .layout = m_frameLayout.get(), .bindings = bindings});
+    if (!group) {
+        return std::unexpected{std::move(group.error())};
+    }
+    slot.group = std::move(*group);
     return {};
 }
 
@@ -911,9 +896,6 @@ void StudioRenderer::setProbes(rhi::TextureHandle probes, std::uint32_t mipLevel
 }
 
 auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioError> {
-    m_modelCalls.clear();
-    m_meshCalls.clear();
-    m_blendedDraws.clear();
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     StudioFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
     std::size_t boneCount = 0;
@@ -935,35 +917,104 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
                                .colorEncoding = std::to_underlying(m_encoding),
                                .look = std::to_underlying(m_look)};
     std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
-
-    // Every model but the invisible ones (R_AddEntity): the solid ones drawn with the solid things of
-    // the frame, the others among everything drawn blended, by the middle of their bounds
-    // (R_TransEntityCompare).
+    placeInstances(frame);
     const std::span<std::byte> boneBytes = m_device->mappedBytes(slot.bones.get());
     const std::span<std::byte> instanceBytes = m_device->mappedBytes(slot.instances.get());
-    std::size_t firstBone = 0;
-    for (const StudioInstance& instance : frame.instances) {
+    const auto writeBatch = [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+        for (std::size_t index = first; index < last; ++index) {
+            const StudioPlace& place = m_places[index];
+            if (!place.isDrawn) {
+                continue;
+            }
+            const StudioInstance& instance = frame.instances[index];
+            std::ranges::copy(std::as_bytes(instance.bones),
+                              boneBytes.subspan(place.firstBone * sizeof(Mat3x4)).begin());
+            const InstanceUniform instanceUniform = instanceUniformOf(instance, place.firstBone);
+            std::ranges::copy(std::as_bytes(std::span{&instanceUniform, 1}),
+                              instanceBytes.subspan(place.instance * sizeof(InstanceUniform)).begin());
+        }
+    };
+    if (frame.jobs != nullptr) {
+        frame.jobs->forBatches({.label = "studio.write", .priority = jobs::Priority::Critical},
+                               frame.instances.size(), kSmallestWrittenBatch, writeBatch);
+    } else {
+        writeBatch(0, 0, frame.instances.size());
+    }
+    return {};
+}
+
+void StudioRenderer::placeInstances(const StudioFrame& frame) {
+    m_modelCalls.clear();
+    m_meshCalls.clear();
+    m_blendedDraws.clear();
+    m_solidCalls.clear();
+    m_places.resize(frame.instances.size());
+    // Every model but the invisible ones (R_AddEntity): the solid ones drawn with the solid things of
+    // the frame, those alike in one call of their instances, the others among everything drawn blended, by
+    // the middle of their bounds (R_TransEntityCompare).
+    for (std::size_t index = 0; index < frame.instances.size(); ++index) {
+        const StudioInstance& instance = frame.instances[index];
         const StudioBlending blending = blendingOf(instance.mode);
-        if (blending != StudioBlending::Solid && instance.amount == 0) {
+        StudioPlace& place = m_places[index];
+        place.isDrawn = blending == StudioBlending::Solid || instance.amount != 0;
+        if (!place.isDrawn) {
             continue;
         }
-        const std::size_t index = m_modelCalls.size();
-        std::ranges::copy(std::as_bytes(instance.bones),
-                          boneBytes.subspan(firstBone * sizeof(Mat3x4)).begin());
-        const InstanceUniform instanceUniform = instanceUniformOf(instance, firstBone);
-        std::ranges::copy(std::as_bytes(std::span{&instanceUniform, 1}),
-                          instanceBytes.subspan(index * kInstanceUniformStride).begin());
-        firstBone += instance.bones.size();
-        if (blending != StudioBlending::Solid) {
+        if (blending == StudioBlending::Solid) {
+            place.call = solidCallOf(instance);
+        } else {
+            place.call = narrow<std::uint32_t>(m_modelCalls.size());
             m_blendedDraws.push_back(BlendedDraw{
                 .distance =
                     lengthSquared(frame.camera.position - (instance.origin + instance.model.get().m_middle)),
                 .mode = instance.mode,
-                .index = narrow<std::uint32_t>(index)});
+                .index = place.call});
+            m_modelCalls.push_back(callOf(instance, blending));
         }
-        m_modelCalls.push_back(callOf(instance, blending));
+        ++m_modelCalls[place.call].instanceCount;
     }
-    return {};
+    // Each call's instances one after another, in the order of the frame's among them.
+    std::uint32_t nextInstance = 0;
+    for (StudioModelCall& call : m_modelCalls) {
+        call.firstInstance = nextInstance;
+        nextInstance += call.instanceCount;
+        call.instanceCount = 0;
+    }
+    std::size_t nextBone = 0;
+    for (std::size_t index = 0; index < frame.instances.size(); ++index) {
+        StudioPlace& place = m_places[index];
+        if (place.isDrawn) {
+            StudioModelCall& call = m_modelCalls[place.call];
+            place.instance = call.firstInstance + call.instanceCount++;
+            place.firstBone = narrow<std::uint32_t>(nextBone);
+            nextBone += frame.instances[index].bones.size();
+        }
+    }
+}
+
+auto StudioRenderer::solidCallOf(const StudioInstance& instance) -> std::uint32_t {
+    const StudioModel& model = instance.model.get();
+    // A skin the model does not have is its first, as callOf takes it.
+    const auto skinOf = [](const StudioInstance& of) {
+        return of.skin < of.model.get().m_skins.size() ? of.skin : 0;
+    };
+    const auto isAlike = [&](const std::pair<std::uint32_t, const StudioInstance*>& solid) {
+        const StudioInstance& other = *solid.second;
+        return &other.model.get() == &model && other.isMirrored == instance.isMirrored &&
+               skinOf(other) == skinOf(instance) &&
+               std::ranges::equal(other.bodyChoices, instance.bodyChoices);
+    };
+    // Most often of the model of the one before it.
+    if (!m_solidCalls.empty() && isAlike(m_solidCalls.back())) {
+        return m_solidCalls.back().first;
+    }
+    if (const auto found = std::ranges::find_if(m_solidCalls, isAlike); found != m_solidCalls.end()) {
+        return found->first;
+    }
+    const auto call = narrow<std::uint32_t>(m_modelCalls.size());
+    m_solidCalls.emplace_back(call, &instance);
+    m_modelCalls.push_back(callOf(instance, StudioBlending::Solid));
+    return call;
 }
 
 auto StudioRenderer::draw(rhi::CommandList& commands, const StudioFrame& frame) -> Result<void, StudioError> {
@@ -1039,7 +1090,6 @@ void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) co
     MeshKind bound = meshes.front().kind;
     commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());
     commands.setBindGroup(kFrameGroup, slot.group.get());
-    commands.setBindGroup(kInstanceGroup, slot.instanceGroups[index].get());
     commands.setVertexBuffer(0, call.vertices, 0);
     commands.setIndexBuffer(call.indices, 0, rhi::IndexFormat::Uint32);
     for (const StudioMeshCall& mesh : meshes) {
@@ -1048,7 +1098,7 @@ void StudioRenderer::drawModel(rhi::CommandList& commands, std::size_t index) co
             commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());
         }
         commands.setBindGroup(kSkinGroup, mesh.texture);
-        commands.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
+        commands.drawIndexed(mesh.indexCount, call.instanceCount, mesh.firstIndex, 0, call.firstInstance);
     }
 }
 

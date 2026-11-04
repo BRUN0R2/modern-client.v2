@@ -34,40 +34,51 @@ auto EntityModels::load(const EntityCatalog& catalog, nx::render::StudioRenderer
 }
 
 void EntityModels::pose(const EntityCatalog& catalog, std::span<const ShownEntity> entities,
-                        const ModelFrame& frame, PosedModels& posed) const {
+                        const ModelFrame& frame, PosedModels& posed) {
     posed.clear();
-    // A body the frame may show, what it is drawn with, and where its bones are among them all.
-    struct Posing {
-        const ShownEntity* entity = nullptr;
-        const nx::render::StudioModel* drawn = nullptr;
-        const AnimatedModel* file = nullptr;
-        nx::Vec3 origin{};
-        std::size_t firstBone = 0;
-        nx::render::ModelLight light{};
+    posings.resize(entities.size());
+    // Each batch writes those it may show at the start of its own part, and the parts close up after.
+    struct Written {
+        std::size_t first = 0;
+        std::size_t count = 0;
     };
-    std::vector<Posing> posings;
-    posings.reserve(entities.size());
+    std::vector<Written> written(
+        frame.jobs != nullptr ? frame.jobs->batchCountOf(entities.size(), kSmallestPosedBatch) : 1);
+    const auto findBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        std::size_t count = 0;
+        for (const ShownEntity& entity : entities.subspan(first, last - first)) {
+            const EntityType& type = catalog.type(entity.type);
+            nx::expects(type.model.value < models.size(), "EntityModels: upload before drawing");
+            const AnimatedModel& file = catalog.model(type.model);
+            const nx::Vec3 origin = entity.origin + type.definition.modelOffset.vector();
+            const nx::assets::MdlView& view = *file.files->view;
+            if (frame.world.mayShow(
+                    shownBoxOf(origin, std::array{view.sequences()[entity.sequence.value].bounds}))) {
+                posings[first + count++] = Posing{
+                    .entity = &entity, .drawn = &models[type.model.value], .file = &file, .origin = origin};
+            }
+        }
+        written[batch] = {.first = first, .count = count};
+    };
+    if (frame.jobs != nullptr) {
+        frame.jobs->forBatches({.label = "entities.find", .priority = nx::jobs::Priority::Critical},
+                               entities.size(), kSmallestPosedBatch, findBatch);
+    } else {
+        findBatch(0, 0, entities.size());
+    }
+    std::size_t kept = 0;
     std::size_t boneCount = 0;
-    for (const ShownEntity& entity : entities) {
-        const EntityType& type = catalog.type(entity.type);
-        nx::expects(type.model.value < models.size(), "EntityModels: upload before drawing");
-        const AnimatedModel& file = catalog.model(type.model);
-        const nx::Vec3 origin = entity.origin + type.definition.modelOffset.vector();
-        const nx::assets::MdlView& view = *file.files->view;
-        if (frame.world.mayShow(
-                shownBoxOf(origin, std::array{view.sequences()[entity.sequence.value].bounds}))) {
-            posings.push_back(Posing{.entity = &entity,
-                                     .drawn = &models[type.model.value],
-                                     .file = &file,
-                                     .origin = origin,
-                                     .firstBone = boneCount});
-            boneCount += view.bones().size();
+    for (const Written& part : written) {
+        for (std::size_t index = part.first; index < part.first + part.count; ++index) {
+            Posing& posing = posings[kept++] = posings[index];
+            posing.firstBone = boneCount;
+            boneCount += posing.file->files->view->bones().size();
         }
     }
-    posed.bones.resize(boneCount);
-    const std::span<nx::Mat3x4> bones = posed.bones;
+    posings.resize(kept);
+    const std::span<nx::Mat3x4> bones = posed.roomForBones(boneCount);
     poseAll(frame, {.label = "entities.pose", .priority = nx::jobs::Priority::Critical}, posings.size(),
-            [&posings, bones, &frame](std::size_t index) {
+            [this, bones, &frame](std::size_t index) {
                 Posing& posing = posings[index];
                 const ShownEntity& entity = *posing.entity;
                 const nx::assets::MdlView& view = *posing.file->files->view;

@@ -398,7 +398,7 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     game.receive(std::move(next));
     EXPECT_EQ(game.ticksDue(kTick / 2.0F, cs::CatchUp::Whole), 0U);
     std::vector<cs::ShownEntity> shown;
-    game.writeEntities(catalog, cs::kLongestCorpseStay, shown);
+    game.writeEntities(catalog, cs::kLongestCorpseStay, nullptr, shown);
     ASSERT_EQ(shown.size(), 1U);
     EXPECT_NEAR(shown.front().origin.x, 50, kTolerance);
     world.destroy(firstEntity);
@@ -409,7 +409,7 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     replaced.entities = cs::EntityStates{
         std::vector<cs::EntityState>{{.entity = replacement, .type = *type, .origin = {.x = 1000}}}};
     game.receive(std::move(replaced));
-    game.writeEntities(catalog, cs::kLongestCorpseStay, shown);
+    game.writeEntities(catalog, cs::kLongestCorpseStay, nullptr, shown);
     ASSERT_EQ(shown.size(), 1U);
     EXPECT_EQ(shown.front().origin.x, 1000);
 }

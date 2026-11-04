@@ -233,8 +233,11 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
     std::ranges::copy(posedMapModels.instances, std::back_inserter(posedInstances));
     std::ranges::copy(posedPlayers.instances, std::back_inserter(posedInstances));
     std::ranges::copy(posedEntities.instances, std::back_inserter(posedInstances));
-    if (auto prepared = m_studio.prepare(
-            {.camera = view.camera, .aspect = view.aspect, .instances = posedInstances, .fog = view.fog});
+    if (auto prepared = m_studio.prepare({.camera = view.camera,
+                                          .aspect = view.aspect,
+                                          .instances = posedInstances,
+                                          .fog = view.fog,
+                                          .jobs = view.jobs});
         !prepared) {
         return nx::fail(SceneError::DrawFailed, "the map's models", std::move(prepared.error()));
     }

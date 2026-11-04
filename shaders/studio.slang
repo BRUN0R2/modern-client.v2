@@ -149,8 +149,9 @@ struct Instance
     float secondProbeShare;
 };
 
-[[vk::binding(0, 2)]]
-ConstantBuffer<Instance> instance;
+// Every model drawn this frame: a draw of those drawn alike takes a range of them, as its instances.
+[[vk::binding(7, 0)]]
+StructuredBuffer<Instance> instances;
 
 // Skin::flags, as nx.render:studio sets them.
 static const uint kFlatShade = 1;
@@ -200,34 +201,37 @@ struct VertexOutput
     // In the world, for the enhanced look.
     float3 worldPosition : TEXCOORD1;
     float3 worldNormal : TEXCOORD2;
+    // Its model's place in `instances`.
+    nointerpolation uint model : TEXCOORD3;
 };
 
-float4 boneRow(uint bone, uint row)
+float4 boneRow(uint firstBone, uint bone, uint row)
 {
-    return bones[((instance.firstBone + bone) * kBoneRows) + row];
+    return bones[((firstBone + bone) * kBoneRows) + row];
 }
 
-float3 placedPoint(uint bone, float3 point)
+float3 placedPoint(uint firstBone, uint bone, float3 point)
 {
     const float4 p = float4(point, 1.0);
-    return float3(dot(boneRow(bone, 0), p), dot(boneRow(bone, 1), p), dot(boneRow(bone, 2), p));
+    return float3(dot(boneRow(firstBone, bone, 0), p), dot(boneRow(firstBone, bone, 1), p),
+                  dot(boneRow(firstBone, bone, 2), p));
 }
 
-float3 turnedDirection(uint bone, float3 direction)
+float3 turnedDirection(uint firstBone, uint bone, float3 direction)
 {
-    return float3(dot(boneRow(bone, 0).xyz, direction), dot(boneRow(bone, 1).xyz, direction),
-                  dot(boneRow(bone, 2).xyz, direction));
+    return float3(dot(boneRow(firstBone, bone, 0).xyz, direction), dot(boneRow(firstBone, bone, 1).xyz, direction),
+                  dot(boneRow(firstBone, bone, 2).xyz, direction));
 }
 
-float3 boneOrigin(uint bone)
+float3 boneOrigin(uint firstBone, uint bone)
 {
-    return float3(boneRow(bone, 0).w, boneRow(bone, 1).w, boneRow(bone, 2).w);
+    return float3(boneRow(firstBone, bone, 0).w, boneRow(firstBone, bone, 1).w, boneRow(firstBone, bone, 2).w);
 }
 
 /// The light of a vertex whose normal is `normal`, from 0 to 1, as R_StudioLighting finds it: fully
 /// bright, or the ambient light, and the shade the more the normal faces against the light's way
 /// (its modified hemispherical lighting), through the light curve.
-float lightOf(float3 normal, uint flags)
+float lightOf(Instance instance, float3 normal, uint flags)
 {
     if ((flags & kFullbright) != 0)
     {
@@ -256,30 +260,33 @@ float lightOf(float3 normal, uint flags)
 
 /// The texture coordinates of chrome at a vertex whose normal, turned by `bone`, is `normal`: from
 /// the viewer towards the bone, its up and right (R_StudioSetupChrome).
-float2 chromeOf(uint bone, float3 normal)
+float2 chromeOf(uint firstBone, uint bone, float3 normal)
 {
-    const float3 toBone = normalize(boneOrigin(bone) - frame.eye.xyz);
+    const float3 toBone = normalize(boneOrigin(firstBone, bone) - frame.eye.xyz);
     const float3 up = normalize(cross(toBone, frame.right.xyz));
     const float3 right = normalize(cross(up, toBone));
     return float2(dot(normal, right) + 1.0, dot(normal, up) + 1.0) * kChromeHalfSpan;
 }
 
 [shader("vertex")]
-VertexOutput vertexMain(VertexInput input)
+VertexOutput vertexMain(VertexInput input, uint model : SV_VulkanInstanceID)
 {
-    const float4 position = float4(placedPoint(input.positionBone, input.position), 1.0);
-    const float3 normal = turnedDirection(input.normalBone, input.normal);
+    const Instance instance = instances[model];
+    const float4 position = float4(placedPoint(instance.firstBone, input.positionBone, input.position), 1.0);
+    const float3 normal = turnedDirection(instance.firstBone, input.normalBone, input.normal);
     VertexOutput output;
+    output.model = model;
     const float4 clip = float4(dot(frame.rows[0], position), dot(frame.rows[1], position),
                                dot(frame.rows[2], position), dot(frame.rows[3], position));
     output.position = float4(clip.xy, (clip.z * instance.depthScale) + (clip.w * instance.depthOffset), clip.w);
-    const float2 texel = (skin.flags & kChrome) != 0 ? chromeOf(input.normalBone, normal) : input.texel;
+    const float2 texel =
+        (skin.flags & kChrome) != 0 ? chromeOf(instance.firstBone, input.normalBone, normal) : input.texel;
     output.uv = texel * skin.texelSize;
     // The enhanced look lights a fullbright texture wholly, the light's color left out. An added model
     // is unlit: its light is its blend (R_StudioDrawPoints); drawn as linear light, the blend scales the
     // light it adds instead (shadeLegacy, outputOf).
     const bool isWhollyLit = frame.look == kEnhancedLook && (skin.flags & kFullbright) != 0;
-    const float3 lit = isWhollyLit ? float3(1.0) : instance.lightColor.xyz * lightOf(normal, skin.flags);
+    const float3 lit = isWhollyLit ? float3(1.0) : instance.lightColor.xyz * lightOf(instance, normal, skin.flags);
     const float unlit = frame.colorEncoding == kLinearEncoding ? 1.0 : instance.blend;
     const float3 light = instance.isUnlit != 0 ? float3(unlit) : lit;
     output.light = floor(float4(light, instance.blend) * kChannelTop) / kChannelTop;
@@ -295,7 +302,7 @@ float4 shadeLegacy(VertexOutput input)
     const float4 texel = albedo.Sample(albedoSampler, input.uv);
     if (frame.colorEncoding == kLinearEncoding)
     {
-        const float amount = instance.isUnlit != 0 ? input.light.a : 1.0;
+        const float amount = instances[input.model].isUnlit != 0 ? input.light.a : 1.0;
         return float4(texel.rgb * linearOf(input.light.rgb) * amount, texel.a * input.light.a);
     }
     return texel * input.light;
@@ -381,7 +388,7 @@ float3 probeOf(uint probe, float3 direction, float roughness)
 
 // What the model's two probes show toward `direction`, blurred as a surface of `roughness` reflects them,
 // blended as they are shared.
-float3 probesOf(float3 direction, float roughness)
+float3 probesOf(Instance instance, float3 direction, float roughness)
 {
     const float3 first = probeOf(uint(instance.probe), direction, roughness);
     if (instance.secondProbeShare <= 0.0)
@@ -395,14 +402,14 @@ float3 probesOf(float3 direction, float roughness)
 // map from its two nearest probes, or the sky, toward `reflected`, blurred as it is rough, times GGX's
 // reflection integrated (specularIntegral), as Filament's sections 5.3.4 and 9.5 put them together;
 // nothing without either.
-float3 reflectionOf(float3 reflected, float roughness, float nDotV, float3 reflectance)
+float3 reflectionOf(Instance instance, float3 reflected, float roughness, float nDotV, float3 reflectance)
 {
     const bool hasProbe = instance.probe >= 0;
     if (!hasProbe && frame.environment.y <= 0.0)
     {
         return float3(0.0);
     }
-    const float3 seen = hasProbe ? probesOf(reflected, roughness) : environmentOf(reflected, roughness);
+    const float3 seen = hasProbe ? probesOf(instance, reflected, roughness) : environmentOf(reflected, roughness);
     const float2 integrated = specularIntegral.SampleLevel(environmentSampler, float2(nDotV, roughness), 0.0).rg;
     return seen * ((reflectance * integrated.x) + integrated.y);
 }
@@ -439,8 +446,8 @@ float filteredAlphaSquaredOf(float3 normal, float roughness)
 }
 
 // The highlight of light `index` on a surface.
-float3 highlightOf(uint index, float3 position, float3 normal, float3 toViewer, float3 reflectance,
-                   float alphaSquared)
+float3 highlightOf(Instance instance, uint index, float3 position, float3 normal, float3 toViewer,
+                   float3 reflectance, float alphaSquared)
 {
     const float4 light = instance.lightPositions[index];
     const float3 toLight = light.xyz - position;
@@ -468,7 +475,7 @@ float3 highlightOf(uint index, float3 position, float3 normal, float3 toViewer, 
 
 // `light` toward the viewer as the target takes it, as opaque as `opacity`: linear light, an added
 // model's blend scaling what it adds, as its pipeline adds it whole; or a display color.
-float4 outputOf(float3 light, float opacity)
+float4 outputOf(Instance instance, float3 light, float opacity)
 {
     if (frame.colorEncoding == kLinearEncoding)
     {
@@ -537,6 +544,7 @@ SurfaceShading paintedOf(VertexOutput input, float3 base, float3 light, float3 r
 // colors are drawn as linear light, sampled from sRGB.
 float4 shadeEnhanced(VertexOutput input, float4 texel)
 {
+    const Instance instance = instances[input.model];
     const float3 base = frame.colorEncoding == kLinearEncoding ? texel.rgb : linearOf(texel.rgb);
     const float3 emitted = base * skin.emissive * emissiveMask.Sample(albedoSampler, input.uv).rgb;
     const float opacity = texel.a * input.light.a;
@@ -548,7 +556,7 @@ float4 shadeEnhanced(VertexOutput input, float4 texel)
         {
             return texel * input.light;
         }
-        return outputOf((base * linearOf(input.light.rgb)) + emitted, opacity);
+        return outputOf(instance, (base * linearOf(input.light.rgb)) + emitted, opacity);
     }
     const float3 light = linearOf(input.light.rgb);
     const float3 normal = normalize(input.worldNormal);
@@ -570,15 +578,16 @@ float4 shadeEnhanced(VertexOutput input, float4 texel)
     if (shading.reflectionWeight > 0.0)
     {
         const float nDotV = max(dot(normal, toViewer), kLeastCosine);
-        color += shading.reflectionWeight * reflectionOf(reflected, roughness, nDotV, shading.reflectance);
+        color += shading.reflectionWeight * reflectionOf(instance, reflected, roughness, nDotV, shading.reflectance);
         for (uint index = 0; index < min(instance.lightCount, kMostLights); ++index)
         {
             color += shading.reflectionWeight *
-                     highlightOf(index, input.worldPosition, normal, toViewer, shading.reflectance, alphaSquared);
+                     highlightOf(instance, index, input.worldPosition, normal, toViewer, shading.reflectance,
+                                 alphaSquared);
         }
     }
     color += emitted;
-    return outputOf(color, opacity);
+    return outputOf(instance, color, opacity);
 }
 
 float4 maskedEnhanced(VertexOutput input)

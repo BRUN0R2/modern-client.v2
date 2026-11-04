@@ -152,8 +152,7 @@ void PlayerModels::pose(const PlayerGpuModels& models, std::span<const ShownPlay
             boneCount += posing.weapon->files->view->bones().size();
         }
     }
-    posed.bones.resize(boneCount);
-    const std::span<nx::Mat3x4> bones = posed.bones;
+    const std::span<nx::Mat3x4> bones = posed.roomForBones(boneCount);
     poseAll(frame, {.label = "players.pose", .priority = nx::jobs::Priority::Critical}, posings.size(),
             [&posings, bones, &frame](std::size_t index) {
                 Posing& posing = posings[index];
