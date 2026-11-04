@@ -38,10 +38,10 @@ struct BodyHullNode {
     std::array<BodyHullChild, 2> children{};
 };
 
-/// Where the middle of a standing body of a mesh's profile cannot be, as the game's movement has it: a tree
-/// of planes grown by the body's box. It knows what no surface shows, such as an invisible wall of a map,
-/// which stops a body and has no face: a floor no body fits on is no floor of the mesh, and no link crosses
-/// such a place. None stops nothing but the surfaces.
+/// Where the middle of a body of a mesh's profile, of one height, cannot be, as the game's movement has it: a
+/// tree of planes grown by the body's box. It knows what no surface shows, such as an invisible wall of a
+/// map, which stops a body and has no face: a floor no body fits on is no floor of the mesh, and no link
+/// crosses such a place. None stops nothing but the surfaces.
 struct BodyHull {
     BodyHullChild root = BodyHullLeaf::Open;
     std::vector<BodyHullNode> nodes{}; ///< Each before those it names, so that none is under itself.
@@ -52,12 +52,13 @@ struct BodyHull {
 
 /// What a mesh is built from: the surfaces of what is solid, the ladders that join its floors, each the box
 /// of its volume, upright, which a body climbs where it touches it (AreaKind::Ladder), and what stops a body
-/// besides the surfaces.
+/// besides the surfaces, standing and crouched.
 struct Geometry {
     std::vector<Vec3> vertices{};
     std::vector<GeometryTriangle> triangles{};
     std::vector<Aabb> ladders{};
     BodyHull bodyHull{};
+    BodyHull crouchedBodyHull{};
 };
 
 /// Adds to `geometry` the convex polygon `corners`, in the order of GeometryTriangle::corners, as a fan

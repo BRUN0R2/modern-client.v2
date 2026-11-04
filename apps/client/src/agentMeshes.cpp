@@ -78,7 +78,7 @@ void keepMesh(const std::filesystem::path& file, const nx::navigation::Navigatio
 
 } // namespace
 
-/// The mesh of `game`'s map, the map `map`, that the agents walk: cs::standingPlayerProfile of `navigation`,
+/// The mesh of `game`'s map, the map `map`, that the agents walk: cs::agentProfile of `navigation`,
 /// by its settings; read from the cache when it keeps it and `kept` reads it, else started in `jobs`.
 /// Errors: CommandFailed, with the cause (also `navigation`'s).
 auto startAgentMesh(nx::jobs::JobSystem& jobs, cs::Game& game, std::string_view map,
@@ -87,7 +87,7 @@ auto startAgentMesh(nx::jobs::JobSystem& jobs, cs::Game& game, std::string_view 
     if (!navigation) {
         return std::unexpected{navigation.error()};
     }
-    auto profile = cs::standingPlayerProfile(*navigation);
+    auto profile = cs::agentProfile(*navigation);
     if (!profile) {
         return nx::fail(nx::console::ConsoleError::CommandFailed, std::move(profile.error()));
     }

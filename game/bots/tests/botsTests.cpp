@@ -109,7 +109,7 @@ protected:
         auto rules = cs::readBotRules(
             nx::platform::readTextFile(data / "cstrike" / "bots.toml").value_or(std::string{}), "bots.toml");
         EXPECT_TRUE(rules.has_value());
-        auto profile = cs::standingPlayerProfile(navigation.value());
+        auto profile = cs::agentProfile(navigation.value());
         EXPECT_TRUE(profile.has_value()) << (profile ? "" : nx::describe(profile.error()));
         auto built = nx::navigation::NavigationMesh::build(*jobs, game->navigationGeometry(), profile.value(),
                                                            navigation.value().build);

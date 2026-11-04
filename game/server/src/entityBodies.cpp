@@ -31,11 +31,12 @@ constexpr std::uint32_t kFarthestTicksPerMove = 8;
 /// of 180 units a second or less crawled at 3.
 constexpr float kLeastDuckedWalk = 80.0F;
 
-/// `move` and `maxSpeed` of a body of `speed` going ducked, its keys asking as much more as keeps them at
-/// kLeastDuckedWalk.
-void keepDuckedWalk(MoveIntent& move, nx::UnitsPerSecond& maxSpeed, nx::UnitsPerSecond speed) noexcept {
-    const auto ducked = static_cast<float>(double{speed.value()} * kDuckSpeedShare);
-    if (ducked >= kLeastDuckedWalk) {
+/// `move` and `maxSpeed` of a body going ducked, its keys, when they ask a walk at all, asking as much more
+/// as keeps it at kLeastDuckedWalk.
+void keepDuckedWalk(MoveIntent& move, nx::UnitsPerSecond& maxSpeed) noexcept {
+    const float asked = std::hypot(move.forward.value(), move.side.value(), move.up.value());
+    const auto ducked = static_cast<float>(double{std::min(asked, maxSpeed.value())} * kDuckSpeedShare);
+    if (ducked <= 0.0F || ducked >= kLeastDuckedWalk) {
         return;
     }
     const float raised = kLeastDuckedWalk / ducked;
@@ -289,7 +290,7 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
         }
     }
     if (command.buttons.test(Button::Duck) || body.movement.isDucked || body.movement.isDucking) {
-        keepDuckedWalk(command.move, body.movement.maxSpeed, type.definition.speed);
+        keepDuckedWalk(command.move, body.movement.maxSpeed);
     }
     const nx::Vec3 before = transform.origin;
     const bool wasDucked = body.movement.isDucked;

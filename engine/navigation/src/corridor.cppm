@@ -75,6 +75,9 @@ public:
     /// Crosses the link nextLink gives: the corridor goes on from its end, the agent there. Returns that
     /// link; none when none is next.
     auto crossLink(NavigationQuery& query) -> std::optional<MeshLink>;
+    /// Whether the agent stands on floor of the kind Crouch, or its way comes to some within `distance`
+    /// across of where it is with no link between.
+    [[nodiscard]] auto crouchesWithin(NavigationQuery& query, HammerUnits distance) const -> bool;
 
     /// The velocity the agent takes, near request.desired, that meets neither request.bodies, the first
     /// kMostSteeringBodies of them, nor the walls and ledges of the mesh about it within the time ahead it

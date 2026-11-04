@@ -69,10 +69,13 @@ constexpr std::uint32_t kPlayingTeams = 2;
 }
 
 /// Moves `command`, its view turned, the way `intent` moves at its share of `maxSpeed`, its full speed
-/// (GetMoveSpeed of a running bot: pev->maxspeed), and jumps as it does.
+/// (GetMoveSpeed of a running bot: pev->maxspeed), and jumps and crouches as it does.
 void moveAlong(UserCommand& command, const nx::agents::Intent& intent, nx::UnitsPerSecond maxSpeed) noexcept {
     if (intent.jumps) {
         command.buttons.set(Button::Jump);
+    }
+    if (intent.crouches) {
+        command.buttons.set(Button::Duck);
     }
     const nx::Vec3 way = intent.drivenWay();
     if (nx::length(way) == 0.0F) {

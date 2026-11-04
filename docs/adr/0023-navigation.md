@@ -67,9 +67,16 @@ convex polygons, through Recast and Detour.
   the world's standing hull (`BodyHull`), a copy of the planes of the tree the map's compiler grew by the player's
   box, and a tile's floor keeps only where a standing body's middle is out of its solid, within a step, or what
   the steepest floor lifts its box by, of where it stands; a link's way, a ladder's landing the same. The floor
-  is tested after its erosion from walls: the hull already keeps its radius from what it stops. Where only
-  crouching fits the standing hull is solid and says nothing: an agent that ducks will need the ducked hull
-  there. Another profile's size will need its own hull.
+  is tested after its erosion from walls: the hull already keeps its radius from what it stops. Another
+  profile's size will need its own hull.
+- **Crouching.** Floor where a standing body does not fit and a ducked one does, by the world's ducked hull as
+  much as by a low ceiling, is of the kind `Crouch`. An agent holds its duck key from six of its radii ahead of
+  such floor along its way, as far as a body at full speed goes while it ducks and a decision holds, until it is
+  past it (`Intent::crouches`); its keys ask a third of their speed then, so that it asks all of it however it
+  steers. Off the ground a duck is at once: across a link onto such floor it ducks only as it gets there, as a
+  body ducked at the top of a ladder walks to it at a third of its speed. It gains speed slowly ducked, 83 units
+  a second each second, and a jump's cost for a second takes all of it: its stuck watch holds it to a third of
+  the stuck speed, and draws no jump.
 - **Queries.** `findPath` (A* over the polygons, then the funnel that straightens the path),
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it

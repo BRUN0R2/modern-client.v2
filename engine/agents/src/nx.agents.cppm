@@ -158,6 +158,9 @@ struct Intent {
     /// speeds it asks, turning what goes into the ladder's face into going up it and what looks down into
     /// coming down (PM_LadderMove); none off one.
     std::optional<Vec3> climb{};
+    /// It holds its duck key: on or coming to floor of the kind Crouch. A body's keys ask a third of their
+    /// speed then, of all it asks however it steers.
+    bool crouches = false;
     /// What ahead on its way it slows down for, the nearest first, approachCount of them: each corner it
     /// sees ahead with the way on after it, passed at the cosine of half the way's turn there (straight on
     /// at full speed, a right angle at 0.71 of it, turning back at none); and where its way ends, when it
@@ -385,8 +388,8 @@ private:
     /// Samples `feet` when its interval went by, `elapsed` after the last watch.
     void sample(Vec3 feet, Seconds elapsed);
     /// Whether the samples span the whole of `samples` intervals, and its body went slower across them than
-    /// stuckSpeed.
-    [[nodiscard]] auto isTooSlow(bool climbs) const noexcept -> bool;
+    /// stuckSpeed, or up a ladder that `intent` climbs as well, or a third of it crouching.
+    [[nodiscard]] auto isTooSlow(const Intent& intent) const noexcept -> bool;
     /// Makes `intent` wiggle, `elapsed` after the last watch.
     void wiggle(Intent& intent, Seconds elapsed);
     /// `ahead` turned to `way`: itself, back, or a quarter turn to either side.

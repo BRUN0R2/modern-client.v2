@@ -101,6 +101,12 @@ inline void addBox(nx::navigation::Geometry& geometry, nx::Vec3 low, nx::Vec3 hi
     return hull;
 }
 
+/// Makes `box` stop a body's middle in `geometry`, standing and crouched.
+inline void stopBodies(nx::navigation::Geometry& geometry, const nx::Aabb& box) {
+    geometry.bodyHull = bodyHullOfBox(box);
+    geometry.crouchedBodyHull = geometry.bodyHull;
+}
+
 /// A job system of `workerCount` workers.
 [[nodiscard]] inline auto jobSystem(std::uint32_t workerCount = 3) -> std::unique_ptr<nx::jobs::JobSystem> {
     auto created = nx::jobs::JobSystem::create({.workerCount = workerCount});

@@ -292,8 +292,8 @@ TEST(NavigationQueryTest, ALadderLeadsToNoFloorPastWhatStopsABody) {
                      {.x = 1024.0F, .y = 544.0F, .z = 256.0F});
     geometry.ladders.push_back(
         {.min = {.x = 500.0F, .y = 240.0F}, .max = {.x = 512.0F, .y = 272.0F, .z = 256.0F}});
-    geometry.bodyHull = nx::test::bodyHullOfBox(
-        {.min = {.x = 532.0F, .y = -64.0F, .z = 256.0F}, .max = {.x = 640.0F, .y = 576.0F, .z = 512.0F}});
+    nx::test::stopBodies(geometry, {.min = {.x = 532.0F, .y = -64.0F, .z = 256.0F},
+                                    .max = {.x = 640.0F, .y = 576.0F, .z = 512.0F}});
     const NavigationMesh mesh = nx::test::playerMesh(geometry);
     NavigationQuery query{mesh};
     const auto reachable =
@@ -308,8 +308,8 @@ TEST(NavigationQueryTest, AWayGoesAroundWhatStopsABodyThoughNoSurfaceShowsIt) {
     const Vec3 from{.x = 100.0F, .y = 100.0F};
     const Vec3 to{.x = 924.0F, .y = 100.0F};
     constexpr float kBarrierEnd = 384.0F;
-    geometry.bodyHull = nx::test::bodyHullOfBox({.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
-                                                 .max = {.x = 560.0F, .y = kBarrierEnd, .z = 256.0F}});
+    nx::test::stopBodies(geometry, {.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
+                                    .max = {.x = 560.0F, .y = kBarrierEnd, .z = 256.0F}});
     {
         const NavigationMesh mesh = nx::test::playerMesh(geometry);
         NavigationQuery query{mesh};
@@ -319,8 +319,8 @@ TEST(NavigationQueryTest, AWayGoesAroundWhatStopsABodyThoughNoSurfaceShowsIt) {
         EXPECT_GT(nx::test::lengthOf(path->points), 1000.0F); // 824 straight through it
     }
     // Across the whole floor it leaves no way at all.
-    geometry.bodyHull = nx::test::bodyHullOfBox(
-        {.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F}, .max = {.x = 560.0F, .y = 576.0F, .z = 256.0F}});
+    nx::test::stopBodies(geometry, {.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
+                                    .max = {.x = 560.0F, .y = 576.0F, .z = 256.0F}});
     const NavigationMesh mesh = nx::test::playerMesh(geometry);
     NavigationQuery query{mesh};
     const auto reachable = query.isReachable(from, to);
@@ -334,9 +334,8 @@ TEST(NavigationQueryTest, WhatABodyStepsOntoStopsNoWay) {
     const auto isReachableOver = [](float height) {
         Geometry geometry;
         nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
-        geometry.bodyHull =
-            nx::test::bodyHullOfBox({.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
-                                     .max = {.x = 560.0F, .y = 576.0F, .z = kMiddle + height}});
+        nx::test::stopBodies(geometry, {.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
+                                        .max = {.x = 560.0F, .y = 576.0F, .z = kMiddle + height}});
         const NavigationMesh mesh = nx::test::playerMesh(geometry);
         NavigationQuery query{mesh};
         const auto reachable = query.isReachable({.x = 100.0F, .y = 100.0F}, {.x = 924.0F, .y = 100.0F});
@@ -366,6 +365,9 @@ TEST(NavigationQueryTest, ASteepFloorKeepsABodyAboveItsOwnSolid) {
         .nodes = {{.plane = {.normal = normal, .distance = normal.z * lifted},
                    .children = {nx::navigation::BodyHullLeaf::Open, nx::navigation::BodyHullLeaf::Solid}}}};
     const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const auto outline = mesh.outline();
+    EXPECT_EQ(std::ranges::count(outline.polygons, AreaKind::Crouch, &nx::navigation::MeshPolygon::kind), 0)
+        << "a standing body fits on it";
     NavigationQuery query{mesh};
     const auto path = query.findPath(
         {.from = {.x = 48.0F, .y = 48.0F, .z = 67.0F}, .to = {.x = 208.0F, .y = 208.0F, .z = 291.0F}});
@@ -394,8 +396,8 @@ TEST(NavigationQueryTest, NoLinkCrossesWhatStopsABody) {
         return reachable.value_or(false);
     };
     EXPECT_TRUE(dropsDown(geometry));
-    geometry.bodyHull = nx::test::bodyHullOfBox(
-        {.min = {.x = 500.0F, .y = -64.0F, .z = 64.0F}, .max = {.x = 548.0F, .y = 576.0F, .z = 256.0F}});
+    nx::test::stopBodies(geometry, {.min = {.x = 500.0F, .y = -64.0F, .z = 64.0F},
+                                    .max = {.x = 548.0F, .y = 576.0F, .z = 256.0F}});
     EXPECT_FALSE(dropsDown(geometry));
 }
 

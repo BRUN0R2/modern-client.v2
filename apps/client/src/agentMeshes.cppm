@@ -31,7 +31,7 @@ enum class KeptMesh : std::uint8_t {
     Ignored,
 };
 
-/// The mesh of `game`'s map, the map `map`, that the agents walk: cs::standingPlayerProfile of `navigation`,
+/// The mesh of `game`'s map, the map `map`, that the agents walk: cs::agentProfile of `navigation`,
 /// by its settings; read from the cache when it keeps it and `kept` reads it, else started in `jobs`.
 /// Errors: CommandFailed, with the cause (also `navigation`'s).
 [[nodiscard]] auto

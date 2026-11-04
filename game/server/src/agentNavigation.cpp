@@ -11,7 +11,7 @@ import cs.shared;
 
 namespace cs {
 
-auto standingPlayerProfile(const nx::game::NavigationData& navigation)
+auto agentProfile(const nx::game::NavigationData& navigation)
     -> nx::Result<nx::navigation::AgentProfile, nx::navigation::MeshBuildError> {
     const auto profile =
         std::ranges::find(navigation.profiles, kPlayerProfileName, &nx::navigation::AgentProfile::name);
@@ -21,15 +21,13 @@ auto standingPlayerProfile(const nx::game::NavigationData& navigation)
     }
     if (profile->radius.value() != kStandingBox.max.x ||
         profile->standingHeight.value() != kStandingBox.max.z - kStandingBox.min.z ||
+        profile->crouchedHeight.value() != kDuckedBox.max.z - kDuckedBox.min.z ||
         profile->stepHeight != MovementSettings{}.stepSize ||
         profile->minGroundNormalZ != kMinGroundNormalZ) {
-        return nx::fail(
-            nx::navigation::MeshBuildError::InvalidProfile,
-            std::format("the navigation profile {:?} must match a standing player", profile->name));
+        return nx::fail(nx::navigation::MeshBuildError::InvalidProfile,
+                        std::format("the navigation profile {:?} must match a player", profile->name));
     }
-    nx::navigation::AgentProfile standing = *profile;
-    standing.crouchedHeight = standing.standingHeight;
-    return standing;
+    return *profile;
 }
 
 } // namespace cs

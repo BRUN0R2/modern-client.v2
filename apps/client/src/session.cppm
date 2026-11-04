@@ -37,7 +37,7 @@ struct Session {
     cs::ViewModelEvents viewModelEvents{};
     std::optional<cs::ViewModelPose> viewPose{}; ///< Of the frame played.
     std::vector<cs::PassedEvent> clientEvents{}; ///< Its view model passed in the frame.
-    /// The map's mesh of cs::standingPlayerProfile, built as it loaded, which the horde and the bots walk:
+    /// The map's mesh of cs::agentProfile, built as it loaded, which the horde and the bots walk:
     /// they go before it. Else why it could not be built.
     nx::Result<nx::navigation::NavigationMesh, nx::console::ConsoleError> agentMesh;
     /// What nav_draw draws of agentMesh, made as it is first drawn, its mesh then kept by the scene: it

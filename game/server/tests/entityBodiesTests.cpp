@@ -158,6 +158,7 @@ TEST_F(EntityBodyTest, ABodyWalksDuckedAtAThirdOfItsSpeedButNeverTooSlowToGoAtAl
     EXPECT_NEAR(speedDucked(type, nx::test::entityDefinition().speed.value()), kLeastDuckedWalk, kTolerance)
         << "a third of 160 gained it 2.7 units a second";
     EXPECT_NEAR(speedDucked(*fast, kFastSpeed), kFastSpeed * 0.333F, kTolerance);
+    EXPECT_NEAR(speedDucked(*fast, 100.0F), kLeastDuckedWalk, kTolerance) << "by the walk it asks";
 }
 
 TEST_F(EntityBodyTest, ABodyFarFromEveryPlayerMovesLessOftenAndAsFarInLongerSteps) {
