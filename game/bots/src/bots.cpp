@@ -320,7 +320,7 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
     const std::vector<nx::ecs::Entity> present =
         presentTargets | std::views::transform(&PerceptionTarget::entity) | std::ranges::to<std::vector>();
     // Nothing moves while the bots perceive: what is solid to their sights is gathered once.
-    const nx::game::Solids solids = game->sightSolids();
+    const std::vector<nx::game::SolidBrushEntity> solids = game->sightSolids();
     const std::vector<GameNoise> noises = game->noises();
     const Sights sights{.time = time,
                         .targets = targets,

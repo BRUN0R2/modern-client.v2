@@ -94,6 +94,7 @@ auto Game::join(Team team, AutoSwitch autoSwitch, std::string_view name) -> Play
     } else {
         observe(m_state, player);
     }
+    m_state.moves->areBoxesStale = true;
     checkWinConditions(m_state);
     return index;
 }
@@ -103,6 +104,7 @@ void Game::leave(PlayerIndex index) {
     nx::log::info(kGameLog, "{} of the {} leaves", player.name, nx::enumName(player.team));
     // ClientDisconnected: its weapons destroyed with it, its body gone, no longer counted.
     m_state.world.destroy(player.body);
+    m_state.moves->areBoxesStale = true;
     m_state.players[index.value].reset();
     checkWinConditions(m_state);
 }
@@ -217,12 +219,15 @@ auto Game::toggleNoclip(PlayerIndex index) -> bool {
 void Game::placeEye(PlayerIndex index, nx::Vec3 eye) {
     Player& player = playerAt(m_state, index);
     standAt(m_state, player, eye - nx::Vec3{.z = player.movement.viewHeight.value()});
+    m_state.moves->areBoxesStale = true;
 }
 
 void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityCommand> entities,
                 nx::jobs::JobSystem* jobs) {
     m_state.events.clear();
-    m_state.moves->isStale = true;
+    m_state.moves->jobs = jobs;
+    m_state.moves->areBrushesStale = true;
+    m_state.moves->areBoxesStale = true;
     for (Player& player : playersIn(m_state.players)) {
         player.turnedView.reset();
         player.wasPlaced = false;
@@ -234,6 +239,9 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
         runCommand(m_state, playerAt(m_state, command.player), command.command);
     }
     EntityBodiesTick bodies = runEntityBodies(m_state.world, m_state.map.hulls(), entities, jobs);
+    // They moved, and what they touched may have opened.
+    m_state.moves->areBrushesStale = true;
+    m_state.moves->areBoxesStale = true;
     m_state.events.entitySteps = std::move(bodies.steps);
     for (const EntityAttack& strike : bodies.attacks) {
         if (const PlayerBody* const body = m_state.world.get<PlayerBody>(strike.target)) {
@@ -258,11 +266,25 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
         player.sounds = std::move(sounds);
     }
     nx::game::advanceTick(m_state.world);
+    // Its rounds may have placed its bodies anew.
+    m_state.moves->areBrushesStale = true;
+    m_state.moves->areBoxesStale = true;
+    m_state.moves->jobs = nullptr;
+    refreshEntityStates(m_state, jobs);
 }
 
 auto Game::createEntity(EntityTypeIndex type, nx::game::Transform placement)
     -> nx::Result<nx::ecs::Entity, EntityError> {
-    return spawnEntityBody(m_state.world, m_state.map.hulls(), type, placement);
+    nx::game::Solids& solids = solidsNow(m_state);
+    auto made = spawnEntityBody(m_state.world, m_state.map.hulls(), solids, type, placement);
+    if (made) {
+        m_state.entityStates.isStale = true;
+        solids.boxes.add({.entity = *made,
+                          .origin = m_state.world.get<nx::game::Transform>(*made)->origin,
+                          .box = m_state.world.get<nx::game::BoxSolidity>(*made)->box,
+                          .clip = *m_state.world.get<nx::game::ClipMethod>(*made)});
+    }
+    return made;
 }
 
 auto Game::removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError> {
@@ -270,14 +292,16 @@ auto Game::removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError>
         return nx::fail(EntityError::UnknownEntity, "a live entity-body handle is required");
     }
     m_state.world.destroy(entity);
+    m_state.moves->solids.boxes.forget(entity);
+    m_state.entityStates.isStale = true;
     return {};
 }
 
-auto Game::entities() -> std::vector<EntityState> {
-    return entityStatesOf(m_state.world);
+auto Game::entities() -> EntityStates {
+    return entityStatesNow(m_state);
 }
 
-auto Game::movingBodies() -> std::vector<MovingBody> {
+auto Game::movingPlayers() const -> std::vector<MovingBody> {
     std::vector<MovingBody> bodies;
     for (const std::optional<Player>& player : m_state.players) {
         if (player && player->status.isAlive()) {
@@ -288,6 +312,11 @@ auto Game::movingBodies() -> std::vector<MovingBody> {
                               .radius = nx::HammerUnits{box.max.x}});
         }
     }
+    return bodies;
+}
+
+auto Game::movingBodies() -> std::vector<MovingBody> {
+    std::vector<MovingBody> bodies = movingPlayers();
     nx::ecs::Query<nx::ecs::Entity, const EntityBody&, const nx::game::Transform&,
                    const nx::game::BoxSolidity&>{m_state.world}
         .forEach([&bodies](nx::ecs::Entity entity, const EntityBody& body,
@@ -342,11 +371,12 @@ auto Game::perceptionTargets() const -> std::vector<PerceptionTarget> {
     return targets;
 }
 
-auto Game::sightSolids() -> nx::game::Solids {
-    return nx::game::solidsOf(m_state.world, m_state.map.hulls());
+auto Game::sightSolids() -> std::vector<nx::game::SolidBrushEntity> {
+    return nx::game::solidBrushesOf(m_state.world, m_state.map.hulls());
 }
 
-auto Game::seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) const -> bool {
+auto Game::seesSpot(std::span<const nx::game::SolidBrushEntity> solids, nx::Vec3 eye, nx::Vec3 spot) const
+    -> bool {
     return nx::game::lineReaches(m_state.map.hulls(), solids, eye, spot);
 }
 

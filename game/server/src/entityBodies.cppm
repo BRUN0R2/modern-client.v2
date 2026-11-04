@@ -71,10 +71,16 @@ struct EntityBodiesTick {
 [[nodiscard]] auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                                    std::span<const EntityCommand> commands,
                                    nx::jobs::JobSystem* jobs = nullptr) -> EntityBodiesTick;
+/// spawnEntityBody through `solids`, what is solid in `world` now, which it does not add to.
+[[nodiscard]] auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
+                                   const nx::game::Solids& solids, EntityTypeIndex type,
+                                   nx::game::Transform placement) -> nx::Result<nx::ecs::Entity, EntityError>;
 /// Over the head of entity body `entity` of `world` as the server's traces meet it (headTopOf of its
 /// hitboxes, placed as a trace places them, and kept for the next); none for a model of no hitbox.
 [[nodiscard]] auto entityHeadTopOf(nx::ecs::World& world, nx::ecs::Entity entity) -> std::optional<nx::Vec3>;
 /// States, including corpses, ordered by complete generational handles; requires registered body data.
 [[nodiscard]] auto entityStatesOf(nx::ecs::World& world) -> std::vector<EntityState>;
+/// entityStatesOf written to `states`, whose room it keeps, in jobs if given.
+void writeEntityStates(nx::ecs::World& world, std::vector<EntityState>& states, nx::jobs::JobSystem* jobs);
 
 } // namespace cs

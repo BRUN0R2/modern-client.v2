@@ -31,6 +31,10 @@ constexpr nx::log::Category kLog{"navigation"};
 /// (DT_NULL_IDX).
 constexpr std::size_t kMostSearchNodes = 65535;
 
+/// How many more polygons than its way a corridor has room for, as its ends move between one search and the
+/// next: as many as DetourCrowd's agents hold in all (dtCrowd's m_maxPathResult).
+constexpr std::size_t kCorridorRoom = 256;
+
 /// A point of Detour's space has three coordinates.
 constexpr std::size_t kCoordinates = 3;
 
@@ -996,7 +1000,7 @@ auto Corridor::plan(NavigationQuery& query, const PathRequest& request) -> Resul
         return std::unexpected{polygons.error()};
     }
     auto detour = std::make_unique<Detour>();
-    endUnlessAllocated(detour->corridor.init(narrow<int>(search.polygons.size())), "a corridor");
+    endUnlessAllocated(detour->corridor.init(narrow<int>(polygons->size() + kCorridorRoom)), "a corridor");
     detour->corridor.reset(from->polygon, from->position.data());
     detour->corridor.setCorridor(to->position.data(), polygons->data(), narrow<int>(polygons->size()));
     return Corridor{std::move(detour), query.mesh()};

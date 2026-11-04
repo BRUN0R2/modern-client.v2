@@ -28,6 +28,7 @@ enum class ZombieError : std::uint8_t {
 /// navigation, how one finds itself stuck and gets out, and spawning budgets.
 struct Settings {
     cs::EntityDefinition body{};
+    nx::Seconds thinkInterval{};
     nx::HammerUnits sightRange{};
     nx::Degrees fieldOfView{};
     nx::Seconds memoryLifetime{};
@@ -92,16 +93,54 @@ public:
     /// an invalid query or insufficient clear reachable positions. Occupied candidates are excluded.
     [[nodiscard]] auto spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
         -> nx::Result<void, ZombieError>;
-    /// Samples sight and advances brains once, immediately before the owner's next tick: each body
-    /// alive perceives in turn, then their brains decide together, in batches in jobs
-    /// (nx::agents::Deciders).
-    [[nodiscard]] auto commands() -> std::vector<cs::EntityCommand>;
+    /// Tracks `bodies`, made already and alive, as the bodies spawn makes are.
+    void adopt(std::span<const nx::ecs::Entity> bodies);
+    /// What the horde asks of its bodies, immediately before the owner's next tick, valid until it is asked
+    /// again. The bodies whose turn it is, one Settings::thinkInterval after their last, perceive, then their
+    /// brains decide together, in batches in jobs (nx::agents::Deciders); what each decided holds until its
+    /// next turn, the way it is driven worked out from how it moves now, so that it does not drift off its
+    /// way meanwhile.
+    [[nodiscard]] auto commands() -> std::span<const cs::EntityCommand>;
     /// Removes tracked bodies and their corridors. Errors: SpawnFailed, retaining a removal's cause.
     [[nodiscard]] auto clear() -> nx::Result<void, ZombieError>;
     /// How many bodies the horde tracks.
-    [[nodiscard]] inline auto size() const noexcept -> std::size_t { return agents.size(); }
+    [[nodiscard]] inline auto size() const noexcept -> std::size_t { return members.size(); }
 
 private:
+    /// A body the horde tracks, and what it decided at its last turn: its view and buttons; and its walk, the
+    /// velocity it steered to if it did, the way it goes, the axes of its view, across, and its speed.
+    struct Member {
+        nx::ecs::Entity entity{};
+        cs::UserCommand command{};
+        bool walks = false;
+        std::optional<nx::Vec3> steered{};
+        nx::Vec3 way{};
+        nx::Vec3 forward{};
+        nx::Vec3 right{};
+        nx::UnitsPerSecond speed{};
+    };
+
+    /// A body whose turn it is, its agent and its eye, between what it perceives and what it decides.
+    struct Turn {
+        Member* member = nullptr;
+        const cs::EntityState* body = nullptr;
+        nx::agents::Agent* agent = nullptr;
+        nx::Vec3 eye{};
+    };
+
+    /// Writes to `turns` and `requests` those of `bodies` whose turn it is at `tick`, alive, in jobs.
+    void findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Seconds elapsed);
+    /// `turns` perceive, in jobs.
+    void perceive(std::span<const cs::PerceptionTarget> targets,
+                  std::span<const nx::game::SolidBrushEntity> solids);
+    /// What the brains of `turns` decided becomes what their bodies hold to, in jobs.
+    void holdDecisions();
+    /// Writes to `steeredAround` the bodies the horde steers around, players' and those alive of `bodies`, in
+    /// jobs.
+    void writeSteeredAround(const cs::EntityStates& bodies);
+    /// Writes to `asked` what the members ask this tick, at their velocities in `bodies`, in jobs.
+    void writeAsked(const cs::EntityStates& bodies);
+
     cs::EntityTypeIndex type;
     Settings settings;
     nx::jobs::JobSystem* jobs;
@@ -109,7 +148,16 @@ private:
     std::vector<nx::navigation::NavigationQuery>
         queries;                   ///< One for each batch that perceives, as they need them.
     nx::agents::Deciders deciders; ///< Of the mesh the horde borrows.
-    std::vector<nx::ecs::Entity> agents;
+    std::vector<Member> members;   ///< By entity.
+    std::vector<std::vector<std::uint32_t>> membersOfTurn; ///< In `members`, by the tick of each one's turn.
+    std::vector<cs::EntityCommand> asked;        ///< Of the members, what commands gives; kept for its room.
+    std::vector<nx::agents::Body> steeredAround; ///< Kept for its room.
+    std::vector<nx::agents::Agent*> agentOfSlot; ///< By the index of an entity; kept for its room.
+    std::vector<Turn> turns;                     ///< Those of a tick; kept for its room.
+    std::vector<nx::agents::DecisionRequest> requests; ///< Of `turns`; kept for its room.
+    std::vector<nx::agents::Decision> decisions;       ///< Of `turns`; kept for its room.
+    std::vector<cs::GameNoise> noisesHeard; ///< The noises of the last think interval, which each hears once.
+    std::vector<std::uint32_t> noisesOfTick; ///< How many of them each of its ticks made, the oldest first.
     cs::Game* const owner;
     static constexpr auto kTransitionLogInterval = std::chrono::seconds{1};
     nx::log::RateLimit transitionLogs{kTransitionLogInterval};
@@ -121,6 +169,7 @@ struct nx::meta::Description<zombies::Settings> {
     static constexpr std::string_view kName = "zombies::Settings";
     static constexpr std::tuple kFields{
         nx::meta::field<&zombies::Settings::body>("body"),
+        nx::meta::field<&zombies::Settings::thinkInterval>("thinkInterval"),
         nx::meta::field<&zombies::Settings::sightRange>("sightRange"),
         nx::meta::field<&zombies::Settings::fieldOfView>("fieldOfView"),
         nx::meta::field<&zombies::Settings::memoryLifetime>("memoryLifetime"),

@@ -19,28 +19,58 @@ namespace {
 /// its room however far apart its bodies are.
 constexpr std::size_t kMostGridCellsAcross = 256;
 
+/// The fewest bodies it is worth handing to a worker to find their squares: little work each.
+constexpr std::size_t kSmallestGridBatch = 1024;
+
 /// The bodies of a tick by the square of the ground each stands in, each as wide as how far bodies are looked
 /// for: those near a point are in its square and those around it, however many the others are.
 class BodyGrid {
 public:
-    /// The grid of `bodies`, which must outlive it, of squares `width` wide.
-    BodyGrid(std::span<const Body> bodies, float width) : cellSize{width} {
-        for (const Body& body : bodies) {
-            lowest = componentMin(lowest, body.feet);
-            highest = componentMax(highest, body.feet);
+    /// The grid of `bodies`, which must outlive it, of squares `width` wide, in jobs of `jobs` and on the
+    /// memory of `room`, which it writes.
+    template <class Room>
+    BodyGrid(jobs::JobSystem& jobs, std::span<const Body> bodies, float width, Room& room) : cellSize{width} {
+        const jobs::JobDesc desc{.label = "agents.grid", .priority = jobs::Priority::Critical};
+        // Where they stand, and then which square each is in, in jobs; the squares fill up in order.
+        struct Span {
+            Vec3 lowest{.x = std::numeric_limits<float>::max(), .y = std::numeric_limits<float>::max()};
+            Vec3 highest{.x = std::numeric_limits<float>::lowest(),
+                         .y = std::numeric_limits<float>::lowest()};
+        };
+        std::vector<Span> spans(jobs.batchCountOf(bodies.size(), kSmallestGridBatch));
+        jobs.forBatches(desc, bodies.size(), kSmallestGridBatch,
+                        [&spans, bodies](std::size_t batch, std::size_t first, std::size_t last) {
+                            Span& span = spans[batch];
+                            for (const Body& body : bodies.subspan(first, last - first)) {
+                                span.lowest = componentMin(span.lowest, body.feet);
+                                span.highest = componentMax(span.highest, body.feet);
+                            }
+                        });
+        for (const Span& span : spans) {
+            lowest = componentMin(lowest, span.lowest);
+            highest = componentMax(highest, span.highest);
         }
         columns = cellsAcross(highest.x - lowest.x);
         rows = cellsAcross(highest.y - lowest.y);
-        firstOfCell.assign((columns * rows) + 1, 0);
-        for (const Body& body : bodies) {
-            ++firstOfCell[cellOf(body.feet) + 1];
+        room.cellOfBody.resize(bodies.size());
+        jobs.forBatches(desc, bodies.size(), kSmallestGridBatch,
+                        [this, &room, bodies](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+                            for (std::size_t body = first; body < last; ++body) {
+                                room.cellOfBody[body] = narrow<std::uint32_t>(cellOf(bodies[body].feet));
+                            }
+                        });
+        room.firstOfCell.assign((columns * rows) + 1, 0);
+        for (const std::uint32_t cell : room.cellOfBody) {
+            ++room.firstOfCell[std::size_t{cell} + 1];
         }
-        std::partial_sum(firstOfCell.begin(), firstOfCell.end(), firstOfCell.begin());
-        cellBodies.resize(bodies.size());
-        std::vector<std::uint32_t> next{firstOfCell.begin(), firstOfCell.end() - 1};
-        for (const Body& body : bodies) {
-            cellBodies[next[cellOf(body.feet)]++] = &body;
+        std::partial_sum(room.firstOfCell.begin(), room.firstOfCell.end(), room.firstOfCell.begin());
+        room.cellBodies.resize(bodies.size());
+        room.nextOfCell.assign(room.firstOfCell.begin(), room.firstOfCell.end() - 1);
+        for (std::size_t body = 0; body < bodies.size(); ++body) {
+            room.cellBodies[room.nextOfCell[room.cellOfBody[body]]++] = &bodies[body];
         }
+        firstOfCell = room.firstOfCell;
+        cellBodies = room.cellBodies;
     }
 
     /// Calls `visit` with each body in the square of `point` and those around it.
@@ -79,8 +109,8 @@ private:
     Vec3 highest{.x = std::numeric_limits<float>::lowest(), .y = std::numeric_limits<float>::lowest()};
     std::size_t columns = 1;
     std::size_t rows = 1;
-    std::vector<std::uint32_t> firstOfCell; ///< Of each square, and past the last.
-    std::vector<const Body*> cellBodies;    ///< Square after square.
+    std::span<const std::uint32_t> firstOfCell; ///< Of each square, and past the last.
+    std::span<const Body* const> cellBodies;    ///< Square after square.
 };
 
 /// Writes to `nearby` the bodies of `bodies`, in squares as wide as `range`, within `range` across and
@@ -123,7 +153,7 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
     const navigation::AgentProfile& profile = decidedOn->profile();
     const float range = profile.radius.value() * navigation::kSteeringRangeRadii;
     const float height = profile.standingHeight.value();
-    const BodyGrid grid{bodies, range};
+    const BodyGrid grid{jobs, bodies, range, gridRoom};
     const std::span<navigation::NavigationQuery> batchQueries = queries;
     // A batch decides with a query of its own, so that batches never share one.
     const auto decideBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {

@@ -65,6 +65,12 @@ protected:
         jobs = std::move(*createdJobs);
     }
 
+    /// How many ticks each zombie's turns are apart.
+    [[nodiscard]] auto ticksPerThink() const -> std::uint32_t {
+        return static_cast<std::uint32_t>(
+            std::lround(settings.thinkInterval / nx::tickLengthOf(nx::kDefaultTickRate)));
+    }
+
     void start(nx::HammerUnits width, nx::HammerUnits depth) {
         auto readMap = cs::GameMap::read(floorMap(width, depth), "spawnTest");
         ASSERT_TRUE(readMap.has_value()) << (readMap ? "" : nx::describe(readMap.error()));
@@ -195,8 +201,8 @@ TEST_F(HordeSpawnTest, ZombiesMakingWayForEachOtherNeverTurnTheirBacksOnTheWayTh
     }
     std::uint32_t turnedBack = 0;
     for (std::uint32_t tick = 0; tick < kTicks; ++tick) {
-        const std::vector<cs::EntityCommand> commands = horde->commands();
-        const std::vector<cs::EntityState> bodies = game->entities();
+        const std::span<const cs::EntityCommand> commands = horde->commands();
+        const cs::EntityStates bodies = game->entities();
         for (const cs::EntityCommand& command : commands) {
             const auto body = std::ranges::find(bodies, command.entity, &cs::EntityState::entity);
             ASSERT_NE(body, bodies.end());
@@ -227,12 +233,98 @@ TEST_F(HordeSpawnTest, ZombiesInAFileSeeThePlayerAheadPastThoseBeforeThem) {
                     .has_value());
     const cs::PlayerIndex player =
         game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
-    game->placeEye(player, from + nx::Vec3{.y = kWayLength, .z = cs::kStandingViewHeight.value()});
-    std::ignore = horde->commands();
+    for (std::uint32_t tick = 0; tick < ticksPerThink(); ++tick) {
+        game->placeEye(player, from + nx::Vec3{.y = kWayLength, .z = cs::kStandingViewHeight.value()});
+        game->tick({}, horde->commands());
+    }
     for (const cs::EntityState& body : game->entities()) {
         const nx::agents::Agent* const agent = game->entityComponent<nx::agents::Agent>(body.entity);
         ASSERT_NE(agent, nullptr);
         EXPECT_EQ(agent->behavior, nx::agents::Behavior::Chase) << body.origin.y;
+    }
+}
+
+TEST_F(HordeSpawnTest, EachZombieThinksAtATickOfItsOwnOnceAThinkInterval) {
+    constexpr nx::HammerUnits kSide{2048};
+    constexpr float kPlayerAway = 800.0F;
+    constexpr std::uint32_t kPopulation = 40;
+    settings.spawnRadius = kSide;
+    settings.fieldOfView = nx::Degrees{360.0F}; // the player seen whichever way each faces
+    ASSERT_NO_FATAL_FAILURE(start(kSide, kSide));
+    ASSERT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = anchor}}, kPopulation).has_value());
+    const cs::PlayerIndex player =
+        game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const auto chasing = [this] {
+        std::uint32_t count = 0;
+        for (const cs::EntityState& body : game->entities()) {
+            const nx::agents::Agent* const agent = game->entityComponent<nx::agents::Agent>(body.entity);
+            count += agent->behavior == nx::agents::Behavior::Chase ? 1U : 0U;
+        }
+        return count;
+    };
+    std::uint32_t before = 0;
+    for (std::uint32_t tick = 0; tick < ticksPerThink(); ++tick) {
+        game->placeEye(player, anchor + nx::Vec3{.y = kPlayerAway, .z = cs::kStandingViewHeight.value()});
+        game->tick({}, horde->commands());
+        const std::uint32_t now = chasing();
+        EXPECT_LT(now - before, kPopulation) << "not all at one tick";
+        before = now;
+    }
+    EXPECT_EQ(before, kPopulation) << "all within the interval";
+}
+
+TEST_F(HordeSpawnTest, AZombieWhoseTurnItIsNotKeepsWalkingAsItDecided) {
+    constexpr nx::HammerUnits kSide{2048};
+    constexpr float kPlayerAway = 800.0F;
+    constexpr std::uint32_t kPopulation = 8;
+    settings.spawnRadius = kSide;
+    settings.fieldOfView = nx::Degrees{360.0F}; // the player seen whichever way each faces
+    ASSERT_NO_FATAL_FAILURE(start(kSide, kSide));
+    ASSERT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = anchor}}, kPopulation).has_value());
+    const cs::PlayerIndex player =
+        game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    for (std::uint32_t tick = 0; tick < 2 * ticksPerThink(); ++tick) {
+        game->placeEye(player, anchor + nx::Vec3{.y = kPlayerAway, .z = cs::kStandingViewHeight.value()});
+        game->tick({}, horde->commands());
+    }
+    for (std::uint32_t tick = 0; tick < ticksPerThink(); ++tick) {
+        game->placeEye(player, anchor + nx::Vec3{.y = kPlayerAway, .z = cs::kStandingViewHeight.value()});
+        const std::span<const cs::EntityCommand> asked = horde->commands();
+        ASSERT_EQ(asked.size(), kPopulation) << "at every tick, each";
+        for (const cs::EntityCommand& command : asked) {
+            EXPECT_GT(std::hypot(command.command.move.forward.value(), command.command.move.side.value()),
+                      0.0F);
+        }
+        game->tick({}, asked);
+    }
+}
+
+TEST_F(HordeSpawnTest, ANoiseOfOneTickIsHeardByEachZombieAtItsTurn) {
+    // Zombies that cannot see it: only hearing tells them of the player, and a noise lasts one tick.
+    constexpr nx::HammerUnits kSide{2048};
+    constexpr std::uint32_t kPopulation = 16;
+    constexpr std::uint32_t kMostTicksToAShot = 4096;
+    settings.spawnRadius = kSide;
+    settings.sightRange = nx::HammerUnits{1.0F};
+    ASSERT_NO_FATAL_FAILURE(start(kSide, kSide));
+    ASSERT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = anchor}}, kPopulation).has_value());
+    const cs::PlayerIndex player =
+        game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    cs::CommandNumber number{};
+    for (std::uint32_t tick = 0; tick < kMostTicksToAShot && game->noises().empty(); ++tick) {
+        number = cs::CommandNumber{number.value + 1};
+        cs::UserCommand command{.number = number, .duration = nx::tickLengthOf(game->time().rate)};
+        command.buttons.set(cs::Button::Attack);
+        game->tick(std::array{cs::PlayerCommand{.player = player, .command = command}});
+    }
+    ASSERT_FALSE(game->noises().empty()) << "the shot's";
+    for (std::uint32_t tick = 0; tick < ticksPerThink(); ++tick) {
+        game->tick({}, horde->commands());
+    }
+    for (const cs::EntityState& body : game->entities()) {
+        const nx::agents::Agent* const agent = game->entityComponent<nx::agents::Agent>(body.entity);
+        ASSERT_NE(agent, nullptr);
+        EXPECT_EQ(agent->behavior, nx::agents::Behavior::Investigate) << "it went by the noise, at its turn";
     }
 }
 

@@ -11,6 +11,7 @@ import nx.core;
 import nx.math;
 import nx.ecs;
 import nx.collision;
+import :solids;
 
 export namespace nx::game {
 
@@ -18,6 +19,9 @@ export namespace nx::game {
 /// engine drops entity `dropped` (DROP_TO_FLOOR): traced 256 units down through what is solid in
 /// `world`, whose map's hulls are `hulls`, but itself (traceSolidsHit). Where it starts when it starts
 /// all in solid or meets nothing.
+[[nodiscard]] auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
+                                  const Aabb& box, Vec3 origin, std::optional<ecs::Entity> dropped) -> Vec3;
+/// droppedToFloor through what is solid in `world` now.
 [[nodiscard]] auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Aabb& box,
                                   Vec3 origin, std::optional<ecs::Entity> dropped) -> Vec3;
 

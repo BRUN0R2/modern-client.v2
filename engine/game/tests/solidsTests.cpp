@@ -9,6 +9,7 @@
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.ecs;
 import nx.assets;
 import nx.collision;
@@ -76,7 +77,7 @@ TEST(SolidsTest, ALineReachesWhereATraceOfItGoesTheWholeWay) {
             nx::game::traceSolidsHit(solids.m_world, solids.m_hulls, gathered,
                                      {.start = start, .end = end, .type = nx::game::TraceType::NoMonsters});
         EXPECT_EQ(traced.trace.fraction >= 1.0F, reaches);
-        EXPECT_EQ(nx::game::lineReaches(solids.m_hulls, gathered, start, end), reaches);
+        EXPECT_EQ(nx::game::lineReaches(solids.m_hulls, gathered.brushes, start, end), reaches);
     };
     expectAsATrace({.x = -50.0F}, {.x = -10.0F}, true);
     expectAsATrace({.x = -50.0F}, {.x = 50.0F}, false);                          // the block
@@ -124,6 +125,113 @@ TEST(SolidsTest, ABoxGrowsByTheBoxTraced) {
                                                        .start = {.x = -50.0F},
                                                        .end = {.x = 60.0F}});
     EXPECT_NEAR(hit.trace.end.x, 18.0F - kBackOff, kTolerance);
+}
+
+/// The entities of `boxes` that forEachAbout gives for `area` that meet it, by entity, each must be given
+/// once.
+[[nodiscard]] auto boxesMeeting(const nx::game::SolidBoxes& boxes, const nx::Aabb& area)
+    -> std::vector<nx::ecs::Entity> {
+    std::vector<nx::ecs::Entity> met;
+    boxes.forEachAbout(area, [&met, &area](const nx::game::SolidBoxEntity& solid) {
+        if (area.intersects(solid.box.translated(solid.origin))) {
+            met.push_back(solid.entity);
+        }
+    });
+    std::ranges::sort(met);
+    return met;
+}
+
+TEST(SolidBoxesTest, GivesWhatMeetsAnAreaAsLookingAtThemAllDoesWhereverTheyMove) {
+    constexpr std::size_t kBoxes = 4096;
+    constexpr std::size_t kLooks = 512;
+    constexpr float kWorld = 32768.0F;
+    constexpr float kWidestBox = 64.0F;
+    constexpr float kFarthestLook = 2048.0F;
+    nx::Random random{1, "solid boxes"};
+    const auto drawn = [&random](float reach) {
+        return random.between(-reach, reach);
+    };
+    nx::ecs::World world;
+    nx::game::SolidBoxes boxes;
+    std::vector<nx::game::SolidBoxEntity> all;
+    for (std::size_t index = 0; index < kBoxes; ++index) {
+        const float half = random.between(1.0F, kWidestBox);
+        const nx::game::SolidBoxEntity solid{
+            .entity = world.spawn(),
+            .origin = {.x = drawn(kWorld), .y = drawn(kWorld), .z = drawn(kWorld)},
+            .box = {.min = {.x = -half, .y = -half, .z = -half}, .max = {.x = half, .y = half, .z = half}}};
+        boxes.add(solid);
+        all.push_back(solid);
+    }
+    for (std::size_t look = 0; look < kLooks; ++look) {
+        // One moves, one goes and comes back elsewhere, as bodies do between looks.
+        nx::game::SolidBoxEntity& moved = all[look % all.size()];
+        moved.origin = {.x = drawn(kWorld), .y = drawn(kWorld), .z = drawn(kWorld)};
+        ASSERT_TRUE(boxes.place(moved.entity, moved.origin, moved.box));
+        nx::game::SolidBoxEntity& gone = all[(look * 3) % all.size()];
+        boxes.forget(gone.entity);
+        EXPECT_FALSE(boxes.place(gone.entity, gone.origin, gone.box)) << "it holds it no more";
+        gone.origin = {.x = drawn(kWorld), .y = drawn(kWorld), .z = drawn(kWorld)};
+        boxes.add(gone);
+        const nx::Vec3 at{.x = drawn(kWorld), .y = drawn(kWorld), .z = drawn(kWorld)};
+        const float reach = random.between(1.0F, kFarthestLook);
+        const nx::Aabb area{.min = at - nx::Vec3{.x = reach, .y = reach, .z = reach},
+                            .max = at + nx::Vec3{.x = reach, .y = reach, .z = reach}};
+        std::vector<nx::ecs::Entity> expected;
+        for (const nx::game::SolidBoxEntity& solid : all) {
+            if (area.intersects(solid.box.translated(solid.origin))) {
+                expected.push_back(solid.entity);
+            }
+        }
+        std::ranges::sort(expected);
+        ASSERT_EQ(boxesMeeting(boxes, area), expected) << "look " << look;
+    }
+    EXPECT_EQ(boxes.size(), kBoxes);
+}
+
+TEST(SolidBoxesTest, FindsABoxPastTheEdgeOfWhatItsSquaresCover) {
+    // Farther out than the coordinates of a map go: all those squares hold it, as the edge's.
+    constexpr std::size_t kMany = 512;
+    constexpr float kFarOut = 100000.0F;
+    nx::ecs::World world;
+    nx::game::SolidBoxes boxes;
+    const nx::Aabb box{.min = {.x = -16.0F, .y = -16.0F, .z = -16.0F},
+                       .max = {.x = 16.0F, .y = 16.0F, .z = 16.0F}};
+    const nx::ecs::Entity far = world.spawn();
+    boxes.add({.entity = far, .origin = {.x = kFarOut, .y = kFarOut}, .box = box});
+    for (std::size_t index = 0; index < kMany; ++index) {
+        boxes.add({.entity = world.spawn(), .origin = {.x = static_cast<float>(index)}, .box = box});
+    }
+    const nx::Aabb area{.min = {.x = kFarOut - 1.0F, .y = kFarOut - 1.0F, .z = -1.0F},
+                        .max = {.x = kFarOut + 1.0F, .y = kFarOut + 1.0F, .z = 1.0F}};
+    EXPECT_EQ(boxesMeeting(boxes, area), std::vector{far});
+}
+
+TEST(SolidBoxesTest, GatheringTwiceGivesTheSameAsGatheringOnceInJobsOrNot) {
+    constexpr std::size_t kMany = 2048;
+    constexpr float kSpacing = 37.0F;
+    nx::ecs::World world;
+    ASSERT_TRUE(nx::game::registerComponents(world).has_value());
+    const nx::Aabb box{.min = {.x = -16.0F, .y = -16.0F, .z = -16.0F},
+                       .max = {.x = 16.0F, .y = 16.0F, .z = 16.0F}};
+    std::vector<nx::ecs::Entity> made;
+    for (std::size_t index = 0; index < kMany; ++index) {
+        made.push_back(world.spawn(nx::game::Transform{.origin = {.x = static_cast<float>(index) * kSpacing}},
+                                   nx::game::BoxSolidity{.box = box}));
+    }
+    auto jobs = nx::jobs::JobSystem::create({.workerCount = 3});
+    ASSERT_TRUE(jobs.has_value());
+    nx::game::SolidBoxes alone;
+    alone.gather(world);
+    nx::game::SolidBoxes shared;
+    shared.gather(world, jobs->get());
+    shared.gather(world, jobs->get());
+    EXPECT_EQ(shared.size(), kMany);
+    const nx::Aabb area{.min = {.x = 1000.0F, .y = -1.0F, .z = -1.0F},
+                        .max = {.x = 2000.0F, .y = 1.0F, .z = 1.0F}};
+    const std::vector<nx::ecs::Entity> met = boxesMeeting(alone, area);
+    EXPECT_FALSE(met.empty());
+    EXPECT_EQ(boxesMeeting(shared, area), met);
 }
 
 TEST(SolidsTest, AWayTheWorldStopsAtOnceMeetsNoEntity) {

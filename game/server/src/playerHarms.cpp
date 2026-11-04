@@ -79,7 +79,7 @@ void bleed(GameState& game, const nx::game::Attack& attack, const Bleeding& blee
                                                      .hitGroup = bleeding.hitGroup});
     }
     for (const nx::Vec3 way : bleedingWaysOf(rules, bleeding.dealt, attack.direction, random)) {
-        const nx::game::SolidHit hit = nx::game::traceSolidsHit(game.world, game.map.hulls(),
+        const nx::game::SolidHit hit = nx::game::traceSolidsHit(game.world, game.map.hulls(), solidsNow(game),
                                                                 {.start = from,
                                                                  .end = from + (way * rules.reach.value()),
                                                                  .type = nx::game::TraceType::NoMonsters,
@@ -274,6 +274,12 @@ void attackEntity(GameState& game, Player& player, nx::ecs::Entity entity, const
     const std::optional<nx::Vec3> headTop =
         showsDamage ? std::optional{headTopOf(game, entity)} : std::nullopt;
     const nx::game::Harm harm = nx::game::attackEntity(game.world, entity, attack);
+    // What it attacked may be solid no more as it dies or breaks (SOLID_NOT).
+    if (game.world.has<nx::game::BrushModel>(entity)) {
+        game.moves->areBrushesStale = true;
+    } else if (!game.world.has<nx::game::BoxSolidity>(entity)) {
+        game.moves->solids.boxes.forget(entity);
+    }
     if (harm.dealt > nx::Damage{} && headTop) {
         player.damageDealt.push_back({.headTop = *headTop,
                                       .damage = harm.dealt,

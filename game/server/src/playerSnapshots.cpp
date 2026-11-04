@@ -103,7 +103,7 @@ auto snapshotFor(GameState& game, PlayerIndex index) -> PlayerSnapshot {
                           .brushEntities = brushEntityStatesOf(game.world),
                           .hostages = hostageStatesOf(game.world),
                           .players = std::move(others),
-                          .entities = entityStatesOf(game.world),
+                          .entities = entityStatesNow(game),
                           .lightStyles = game.lightStyles};
 }
 

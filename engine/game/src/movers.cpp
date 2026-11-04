@@ -16,13 +16,41 @@ namespace {
 /// The engine keeps a pusher's angles within ten turns.
 constexpr float kAngleWrap = 3600.0F;
 
+/// The boxes solid in a world to what pushers push: gathered once in a tick, as a pusher first runs into a
+/// body, and kept where the pushes leave their bodies, however many bodies the world holds.
+class PushedBoxes {
+public:
+    explicit PushedBoxes(ecs::World& pushedIn) : world{&pushedIn} {}
+
+    [[nodiscard]] auto all() -> const SolidBoxes& {
+        if (!isGathered) {
+            boxes.gather(*world);
+            isGathered = true;
+        }
+        return boxes;
+    }
+
+    /// The box of `entity`, if it has one, goes where its body is now.
+    void follow(ecs::Entity entity) {
+        const BoxSolidity* const solidity = world->get<BoxSolidity>(entity);
+        if (isGathered && solidity != nullptr) {
+            std::ignore = boxes.place(entity, world->get<Transform>(entity)->origin, solidity->box);
+        }
+    }
+
+private:
+    ecs::World* world;
+    SolidBoxes boxes;
+    bool isGathered = false;
+};
+
 /// Whether the box of `body`, of `entity`, at `origin` is in solid in `world` but itself
 /// (SV_TestEntityPosition).
-[[nodiscard]] auto isStuck(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
-                           const Body& body, Vec3 origin) -> bool {
+[[nodiscard]] auto isStuck(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes,
+                           ecs::Entity entity, const Body& body, Vec3 origin) -> bool {
     ServerTrace stay = hullTrace(body.hull, origin, origin);
     stay.ignored = entity;
-    return traceSolidsHit(world, hulls, stay).trace.startsSolid;
+    return traceSolidsHit(world, hulls, solidBrushesOf(world, hulls), boxes.all(), stay).trace.startsSolid;
 }
 
 /// Whether a body's linked box, at `origin`, overlaps `box`, more than touching it (SV_PushMove).
@@ -46,42 +74,48 @@ struct Moved {
     Vec3 from{};
 };
 
-/// The bodies of `world` that pushers push.
-[[nodiscard]] auto bodiesOf(ecs::World& world) -> std::vector<ecs::Entity> {
-    std::vector<ecs::Entity> bodies;
-    ecs::Query<ecs::Entity, const Body&>{world}.forEach([&bodies](ecs::Entity entity, const Body& body) {
-        if (body.isPushed) {
-            bodies.push_back(entity);
-        }
-    });
+/// The bodies of `world` that pushers push that stand on `model` or overlap `box`, in the world's order, and
+/// where they are.
+[[nodiscard]] auto bodiesAbout(ecs::World& world, collision::ModelIndex model, const Aabb& box)
+    -> std::vector<Moved> {
+    std::vector<Moved> bodies;
+    ecs::Query<ecs::Entity, const Body&, const Transform&>{world}.forEach(
+        [&bodies, model, &box](ecs::Entity entity, const Body& body, const Transform& transform) {
+            if (body.isPushed && (body.groundModel == model || overlaps(body, transform.origin, box))) {
+                bodies.push_back({.entity = entity, .from = transform.origin});
+            }
+        });
     return bodies;
 }
 
 /// Pushes `body` by `push` through all else but itself (SV_PushEntity), the pusher not solid meanwhile
 /// (SOLID_NOT, as SV_PushMove makes it); returns whether it is still in solid after, the pusher solid
 /// again.
-[[nodiscard]] auto pushBody(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity pusher,
-                            ecs::Entity bodyEntity, Vec3 push) -> bool {
+[[nodiscard]] auto pushBody(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes,
+                            ecs::Entity pusher, ecs::Entity bodyEntity, Vec3 push) -> bool {
     const Body& body = *world.get<Body>(bodyEntity);
     Vec3& origin = world.get<Transform>(bodyEntity)->origin;
     ServerTrace way = hullTrace(body.hull, origin, origin + push);
     way.ignored = bodyEntity;
     Solid& pusherSolid = world.get<BrushSolidity>(pusher)->solid;
     const Solid solid = std::exchange(pusherSolid, Solid::Not);
-    const collision::Trace pushed = traceSolidsHit(world, hulls, way).trace;
+    const collision::Trace pushed =
+        traceSolidsHit(world, hulls, solidBrushesOf(world, hulls), boxes.all(), way).trace;
     pusherSolid = solid;
     if (pushed.fraction != 0.0F) {
         origin = pushed.end;
+        boxes.follow(bodyEntity);
     }
-    return isStuck(world, hulls, bodyEntity, body, origin);
+    return isStuck(world, hulls, boxes, bodyEntity, body, origin);
 }
 
 /// Puts back everything a blocked pusher moved, its clock too, and blocks it.
-void giveWay(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+void giveWay(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes, ecs::Entity entity,
              std::span<const Moved> moved, const PushStep& step, const TickTime& clock) {
     world.get<Pusher>(entity)->localTime = step.from;
     for (const Moved& back : moved) {
         world.get<Transform>(back.entity)->origin = back.from;
+        boxes.follow(back.entity);
     }
     if (world.has<Door>(entity)) {
         blockDoor(world, hulls, entity, clock);
@@ -90,8 +124,8 @@ void giveWay(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity 
 
 /// The pusher moves by its velocity over `step` (SV_PushMove), moving the bodies it runs into, or
 /// that stand on it, along with it; when one cannot go, everything goes back and it gives way.
-void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity, const PushStep& step,
-              const TickTime& clock) {
+void pushMove(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes, ecs::Entity entity,
+              const PushStep& step, const TickTime& clock) {
     Pusher& pusher = *world.get<Pusher>(entity);
     if (pusher.velocity == Vec3{}) {
         pusher.localTime = step.until;
@@ -109,17 +143,15 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
         return;
     }
     std::vector<Moved> moved;
-    for (const ecs::Entity bodyEntity : bodiesOf(world)) {
-        const Body& body = *world.get<Body>(bodyEntity);
-        const Vec3 origin = world.get<Transform>(bodyEntity)->origin;
-        if (body.groundModel != model &&
-            (!overlaps(body, origin, swept) || !isStuck(world, hulls, bodyEntity, body, origin))) {
+    for (const Moved& about : bodiesAbout(world, model, swept)) {
+        const Body& body = *world.get<Body>(about.entity);
+        if (body.groundModel != model && !isStuck(world, hulls, boxes, about.entity, body, about.from)) {
             continue; // not in its way
         }
-        moved.push_back({.entity = bodyEntity, .from = origin});
-        if (pushBody(world, hulls, entity, bodyEntity, move)) {
+        moved.push_back(about);
+        if (pushBody(world, hulls, boxes, entity, about.entity, move)) {
             world.get<Transform>(entity)->origin = pushedFrom;
-            giveWay(world, hulls, entity, moved, step, clock);
+            giveWay(world, hulls, boxes, entity, moved, step, clock);
             return;
         }
     }
@@ -128,8 +160,8 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
 /// The pusher turns by its angular velocity over `step` (SV_PushRotate), carrying the bodies it runs
 /// into, or that stand on it, around its origin; when one cannot go, everything goes back and it gives
 /// way. Returns whether it turned.
-[[nodiscard]] auto pushRotate(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
-                              const PushStep& step, const TickTime& clock) -> bool {
+[[nodiscard]] auto pushRotate(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes,
+                              ecs::Entity entity, const PushStep& step, const TickTime& clock) -> bool {
     Pusher& pusher = *world.get<Pusher>(entity);
     if (pusher.angularVelocity == Vec3{}) {
         pusher.localTime = step.until;
@@ -148,20 +180,18 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
     const collision::ModelIndex model = world.get<BrushModel>(entity)->index;
     const Aabb linked = linkedBoxOf(hulls.boundsOf(model), transform.origin, transform.angles);
     std::vector<Moved> moved;
-    for (const ecs::Entity bodyEntity : bodiesOf(world)) {
-        const Body& body = *world.get<Body>(bodyEntity);
-        const Vec3 origin = world.get<Transform>(bodyEntity)->origin;
-        if (body.groundModel != model &&
-            (!overlaps(body, origin, linked) || !isStuck(world, hulls, bodyEntity, body, origin))) {
+    for (const Moved& about : bodiesAbout(world, model, linked)) {
+        const Body& body = *world.get<Body>(about.entity);
+        if (body.groundModel != model && !isStuck(world, hulls, boxes, about.entity, body, about.from)) {
             continue; // not in its way
         }
-        moved.push_back({.entity = bodyEntity, .from = origin});
+        moved.push_back(about);
         // Where the body's place about the pusher's origin goes as the pusher turns.
-        const Vec3 start = origin - transform.origin;
+        const Vec3 start = about.from - transform.origin;
         const Vec3 end = outOfAxes(after, intoAxes(before, start));
-        if (pushBody(world, hulls, entity, bodyEntity, end - start)) {
+        if (pushBody(world, hulls, boxes, entity, about.entity, end - start)) {
             world.get<Transform>(entity)->angles = turnedFrom;
-            giveWay(world, hulls, entity, moved, step, clock);
+            giveWay(world, hulls, boxes, entity, moved, step, clock);
             return false;
         }
     }
@@ -169,7 +199,7 @@ void pushMove(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity
 }
 
 /// The original's SV_Physics_Pusher for one pusher, a tick of `clock`.
-void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entity entity,
+void runPusher(ecs::World& world, const collision::BrushHulls& hulls, PushedBoxes& boxes, ecs::Entity entity,
                const TickTime& clock) {
     const Pusher& pusher = *world.get<Pusher>(entity);
     const GameTime startTime = pusher.localTime;
@@ -188,20 +218,20 @@ void runPusher(ecs::World& world, const collision::BrushHulls& hulls, ecs::Entit
     if (step.time != Seconds{}) {
         if (pusher.angularVelocity != Vec3{}) {
             if (pusher.velocity != Vec3{}) {
-                if (pushRotate(world, hulls, entity, step, clock)) {
+                if (pushRotate(world, hulls, boxes, entity, step, clock)) {
                     // Both: the move runs on the clock the turn started from, which keeps the later.
                     Pusher& turned = *world.get<Pusher>(entity);
                     const GameTime afterTurn = turned.localTime;
                     turned.localTime = startTime;
-                    pushMove(world, hulls, entity, step, clock);
+                    pushMove(world, hulls, boxes, entity, step, clock);
                     turned.localTime = std::max(turned.localTime, afterTurn);
                 }
             } else {
                 // Whether it turned matters only to a move that would follow the turn.
-                std::ignore = pushRotate(world, hulls, entity, step, clock);
+                std::ignore = pushRotate(world, hulls, boxes, entity, step, clock);
             }
         } else {
-            pushMove(world, hulls, entity, step, clock);
+            pushMove(world, hulls, boxes, entity, step, clock);
         }
     }
     Transform& transform = *world.get<Transform>(entity);
@@ -249,9 +279,10 @@ void runPushers(ecs::World& world, const collision::BrushHulls& hulls) {
     std::vector<ecs::Entity> pushers;
     ecs::Query<ecs::Entity, const Pusher&>{world}.forEach(
         [&pushers](ecs::Entity entity, const Pusher&) { pushers.push_back(entity); });
+    PushedBoxes boxes{world};
     for (const ecs::Entity entity : pushers) {
         if (world.isAlive(entity)) { // what another's targets removed is gone
-            runPusher(world, hulls, entity, clock);
+            runPusher(world, hulls, boxes, entity, clock);
         }
     }
 }

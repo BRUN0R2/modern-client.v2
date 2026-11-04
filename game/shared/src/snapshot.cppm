@@ -181,6 +181,31 @@ struct PlayerEntityState {
     [[nodiscard]] inline auto operator==(const PlayerEntityState&) const noexcept -> bool = default;
 };
 
+/// The entities' bodies as a tick left them, by entity, however many hold them: a tick's snapshots share one
+/// list, and it stays as it is. Empty unless given one.
+class EntityStates {
+public:
+    EntityStates() = default;
+    explicit EntityStates(std::vector<EntityState> states)
+        : list{std::make_shared<const std::vector<EntityState>>(std::move(states))} {}
+    explicit EntityStates(std::shared_ptr<const std::vector<EntityState>> shared) : list{std::move(shared)} {}
+
+    [[nodiscard]] inline auto all() const noexcept -> std::span<const EntityState> {
+        return list != nullptr ? std::span<const EntityState>{*list} : std::span<const EntityState>{};
+    }
+    [[nodiscard]] inline auto begin() const noexcept { return all().begin(); }
+    [[nodiscard]] inline auto end() const noexcept { return all().end(); }
+    [[nodiscard]] inline auto size() const noexcept -> std::size_t { return all().size(); }
+    [[nodiscard]] inline auto empty() const noexcept -> bool { return all().empty(); }
+    [[nodiscard]] inline auto front() const noexcept -> const EntityState& { return all().front(); }
+    [[nodiscard]] inline auto operator[](std::size_t index) const noexcept -> const EntityState& {
+        return all()[index];
+    }
+
+private:
+    std::shared_ptr<const std::vector<EntityState>> list;
+};
+
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
 /// what the tick did to it and made it make; where the tick's shots and the blood they shed met what is
@@ -219,7 +244,7 @@ struct PlayerSnapshot {
     std::vector<BrushEntityState> brushEntities{};
     std::vector<HostageState> hostages{};
     std::vector<PlayerEntityState> players{};
-    std::vector<EntityState> entities{};
+    EntityStates entities{};
     MapLightStyles lightStyles{}; ///< The server's current patterns, evaluated by the client.
 };
 

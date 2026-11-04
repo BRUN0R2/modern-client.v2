@@ -282,17 +282,9 @@ void brushEntitiesNear(std::span<const LinkedBrushEntity> entities, nx::Vec3 ori
 [[nodiscard]] auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored = std::nullopt)
     -> std::vector<SolidBox>;
 
-/// What finds a world's entities solid as boxes: kept from move to move, so that it looks for their
-/// archetypes once.
-using SolidBoxQuery =
-    nx::ecs::Query<nx::ecs::Entity, const nx::game::Transform&, const nx::game::BoxSolidity&>;
-
-/// Writes to `boxes` the entities `query` finds solid as boxes, by entity.
-void solidBoxesOf(SolidBoxQuery& query, std::vector<SolidBox>& boxes);
-
-/// Keeps `boxes`, by entity, as `entity`'s box is now: `box` about `origin`, none when it is solid no more.
-void keepBoxOf(nx::ecs::Entity entity, nx::Vec3 origin, const std::optional<nx::Aabb>& box,
-               std::vector<SolidBox>& boxes);
+/// Writes to `near` those of `boxes` a move from `origin` may meet, as boxesNear lists them.
+void boxesNear(const nx::game::SolidBoxes& boxes, nx::Vec3 origin, nx::ecs::Entity ignored,
+               std::vector<SolidBox>& near);
 
 /// Writes to `near` those of `boxes` a move from `origin` may meet, in their order: within kPhysentReach of
 /// `origin` each way, all but `ignored`'s, the entity that moves (SV_AddLinksToPM).

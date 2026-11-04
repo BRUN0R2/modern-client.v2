@@ -53,11 +53,15 @@ nxAddBenchmark(nxBenchServer
         nx::platform
         nx::console
         nx::assets
+        nx::ecs
         nx::jobs
         nx::game
         nx::navigation
         nx::testSupport
         cs::shared
         cs::server
+        nx::agents
         cs::bots
         mod::zombies)
+
+target_compile_definitions(nxBenchServer PRIVATE NX_FUZZ_CORPUS_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/fuzz/corpus")
