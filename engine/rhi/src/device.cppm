@@ -20,6 +20,8 @@ struct BufferBinding {
     BufferHandle buffer{};
     std::uint64_t offset = 0;
     std::uint64_t size = 0; ///< 0: from the offset to the end of the buffer.
+
+    [[nodiscard]] auto operator==(const BufferBinding&) const noexcept -> bool = default;
 };
 
 /// What a binding of a bind group holds: as its BindingType says.
@@ -29,6 +31,8 @@ using BindingResource = std::variant<BufferBinding, TextureHandle, SamplerHandle
 struct Binding {
     std::uint32_t binding = 0;
     BindingResource resource{};
+
+    [[nodiscard]] auto operator==(const Binding&) const -> bool = default;
 };
 
 /// A bind group to create (Device::createBindGroup): the resources of a layout's bindings.
@@ -376,6 +380,36 @@ private:
         }
         return Owned<Tag>{*this, *created};
     }
+};
+
+/// A bind group that goes by what it names: told each frame what that is, it is made again only when any of
+/// it differs. Whoever replaces a resource, to grow a buffer say, has no group to tell: a group left naming
+/// the old resource reads what that held, with no error.
+class TrackedBindGroup {
+public:
+    /// From now on it names `desc`'s bindings. Errors: Device::createBindGroup's, it then naming what it did.
+    [[nodiscard]] auto update(Device& device, const BindGroupDesc& desc) -> Result<void, RhiError> {
+        if (!m_group.get().isNull() && m_layout == desc.layout &&
+            std::ranges::equal(m_bindings, desc.bindings)) {
+            return {};
+        }
+        auto group = device.createBindGroup(desc);
+        if (!group) {
+            return std::unexpected{std::move(group.error())};
+        }
+        m_group = std::move(*group);
+        m_layout = desc.layout;
+        m_bindings.assign(desc.bindings.begin(), desc.bindings.end());
+        return {};
+    }
+
+    /// The group's handle, for the commands that bind it; null before the first update.
+    [[nodiscard]] auto get() const noexcept -> BindGroupHandle { return m_group.get(); }
+
+private:
+    OwnedBindGroup m_group{};
+    BindGroupLayoutHandle m_layout{};
+    std::vector<Binding> m_bindings{};
 };
 
 template <class Tag>
