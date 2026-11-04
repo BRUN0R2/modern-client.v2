@@ -729,6 +729,46 @@ TEST(WindowDrawTest, FramesThatShowNothingLeaveTheNextImageForOneThatDoes) {
     EXPECT_EQ(device.validationErrors(), 0U);
 }
 
+TEST(BindGroupTest, ATrackedGroupIsMadeAgainOnlyAsWhatItNamesDiffers) {
+    auto created =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRhiTests", .isValidationEnabled = true});
+    if (!created) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(created.error().code)) << nx::describe(created.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    nx::rhi::Device& device = **created;
+    const std::array layoutBindings{nx::rhi::BindingLayout{.binding = 0,
+                                                           .type = nx::rhi::BindingType::StorageBuffer,
+                                                           .stages = {nx::rhi::ShaderStage::Compute}}};
+    auto layout = device.createBindGroupLayout({.label = "test.tracked", .bindings = layoutBindings});
+    ASSERT_TRUE(layout.has_value());
+    const auto newBuffer = [&device] {
+        return device.createBuffer({.label = "test.tracked",
+                                    .size = sizeof(std::uint32_t),
+                                    .usage = {nx::rhi::BufferUsage::Storage},
+                                    .location = nx::rhi::MemoryLocation::Upload});
+    };
+    auto first = newBuffer();
+    auto second = newBuffer();
+    ASSERT_TRUE(first.has_value() && second.has_value());
+    nx::rhi::TrackedBindGroup group;
+    EXPECT_TRUE(group.get().isNull()) << "made by its first update";
+    const auto naming = [&device, &layout, &group](nx::rhi::BufferHandle buffer) {
+        const std::array bindings{
+            nx::rhi::Binding{.binding = 0, .resource = nx::rhi::BufferBinding{.buffer = buffer}}};
+        return group.update(device, {.label = "test.tracked", .layout = layout->get(), .bindings = bindings});
+    };
+    ASSERT_TRUE(naming(first->get()).has_value());
+    const nx::rhi::BindGroupHandle made = group.get();
+    EXPECT_FALSE(made.isNull());
+    ASSERT_TRUE(naming(first->get()).has_value());
+    EXPECT_TRUE(group.get() == made) << "it already names that";
+    ASSERT_TRUE(naming(second->get()).has_value());
+    EXPECT_FALSE(group.get() == made) << "another buffer, another group";
+    device.waitIdle();
+    EXPECT_EQ(device.validationErrors(), 0U);
+}
+
 TEST(ComputeTest, ADispatchWritesAStorageBufferACopyThenReads) {
     constexpr std::array<std::uint32_t, 9> kValues{1, 2, 3, 4, 5, 6, 7, 8, 9};
     constexpr std::uint32_t kGroupSize = 4;

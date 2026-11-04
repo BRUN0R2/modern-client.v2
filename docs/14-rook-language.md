@@ -67,7 +67,9 @@ fn cmdHello(player: Player) -> PluginResult {
 
 ## 4. Lexical structure
 
-- Source in **UTF-8**. Semicolons are **mandatory**.
+- Source in **UTF-8**. Semicolons are **mandatory**. Names are ASCII; strings and comments hold any
+  character but those that hide what a source does: control characters and those that change the
+  direction of text.
 - Comments: `//`, `/* ... */` and `///` documentation (feeds `rook document` and shows up in the LSP).
 - Naming (checked by the linter, always as an error), following the project's camelCase rule
   ([02 §3.1](02-coding-standards.md#31-project-rule-camelcase)):
@@ -95,7 +97,10 @@ fn cmdHello(player: Player) -> PluginResult {
   `continue`, `return`, `struct`, `enum`, `error`, `class`, `open`, `abstract`, `override`,
   `super`, `self`, `interface`, `impl`, `newtype`, `suffix`, `dimension`, `range`, `handle`, `vars`,
   `readonly`, `narrows`, `component`, `forward`, `type`, `inout`, `is`, `true`, `false`, `none`,
-  `some`, `ok`, `err`, `void`.
+  `some`, `ok`, `err`, `void`. A field, an argument's label or a member may still be named with one
+  (`notice.class`).
+- `extends`, `from` and `derive` mean something only where the grammar writes them, and stay usable as
+  names (`teamChanged(player: Player, from: Team, to: Team)`).
 
 ## 5. Primitive types and conversions
 
@@ -403,10 +408,14 @@ match (source) {
 }
 ```
 
-- `break`, `continue` and labels (`'outer: for (...)`).
+- `break`, `continue` and labels (`'outer: for (...)`, `break 'outer;`).
+- An assignment is a statement and not a value, and it has one form: `count = count + 1;`, with no
+  `+=` and no `++`.
+- Comparisons do not chain: `a < b < c` is an error.
 - `match` is **exhaustive**. `_` is only allowed when there are remaining variants, and it is an
   error when it hides new variants of an enum from the plugin itself.
-- `if` and `match` are expressions.
+- `if` and `match` are expressions. Where a value is expected, a block's value is its last expression
+  without a semicolon; as statements they take none after their closing brace.
 - Conditions only accept `bool`: `if (count)` is an error and must be `if (count > 0)`.
 
 ## 12. Strings, formatting and translation
@@ -880,32 +889,39 @@ error[R0201]: expected `Speed`, found `Health`
 ## 25. Grammar (summary)
 
 ```ebnf
-file          = { import } [ plugin_decl ] { item } ;
-import        = "import" path [ "." ( "{" ident { "," ident } "}" | "*" ) ] ";" ;
-plugin_decl   = "plugin" struct_body ;
-item          = [ attributes ] [ "pub" ] ( fn_decl | forward_decl | struct_decl | enum_decl
-              | class_decl | interface_decl | newtype_decl | handle_decl | vars_decl
-              | component_decl | const_decl | var_decl | type_alias ) ;
-fn_decl       = [ "pure" ] [ "async" ] "fn" ident [ generics ] "(" [ params ] ")" [ "->" type ] block ;
-forward_decl  = "forward" ident "(" [ params ] ")" [ "->" type ] ( block | ";" ) ;
-params        = param { "," param } ;
-param         = [ "inout" ] ident ":" type [ "=" expr ] ;
-newtype_decl  = "newtype" ident "(" type ")" [ "suffix" ident { "," ident } ]
-                [ "dimension" "(" type ( "/" | "*" ) type ")" ] [ "range" "(" expr ")" ]
-                [ "derive" "(" ident { "," ident } ")" ] ";" ;
-handle_decl   = "handle" ident ";" ;
-vars_decl     = "vars" ident "{" var_entry { "," var_entry } [ "," ] "}" ;
-var_entry     = [ "readonly" ] ident ":" type [ "narrows" type ] [ "=" expr ] ;
-type          = path [ "<" type { "," type } ">" ] [ "?" ] | "(" type { "," type } ")" | "[" type ";" expr "]" ;
-statement     = let_stmt | var_stmt | expr ";" | if_stmt | match_expr | while_stmt
-              | for_stmt | loop_stmt | defer_stmt | "return" [ expr ] ";" | "break" ";" | "continue" ";" ;
-if_stmt       = "if" "(" ( expr | "let" pattern "=" expr ) ")" block [ "else" ( if_stmt | block ) ] ;
-while_stmt    = "while" "(" expr ")" block ;
-for_stmt      = "for" "(" pattern "in" expr ")" block ;
-match_expr    = "match" "(" expr ")" "{" match_arm { match_arm } "}" ;
-defer_stmt    = "defer" block ;
-attributes    = { "@" ident [ "(" args ")" ] } ;
+sourceFile          = { importDeclaration } [ pluginDeclaration ] { item } ;
+importDeclaration   = "import" modulePath [ "." ( importList | "*" ) ] ";" ;
+pluginDeclaration   = "plugin" fieldInitializers ;
+item                = { attribute } [ "pub" ] declaration ;
+declaration         = functionDeclaration | forwardDeclaration | structDeclaration | enumDeclaration
+                    | classDeclaration | interfaceDeclaration | implementationDeclaration
+                    | newtypeDeclaration | handleDeclaration | varsDeclaration | componentDeclaration
+                    | constantDeclaration | globalDeclaration | typeAlias ;
+functionDeclaration = [ "const" | "pure" ] [ "async" ] "fn" identifier [ genericParameters ]
+                      parameterList [ "->" type ] ( block | ";" ) ;
+forwardDeclaration  = "forward" identifier parameterList [ "->" type ] ( block | ";" ) ;
+parameter           = "self" | [ "inout" ] identifier ":" type [ "=" expression ] ;
+newtypeDeclaration  = "newtype" identifier "(" type ")" [ suffixClause ] [ dimensionClause ]
+                      [ rangeClause ] [ deriveClause ] ";" ;
+handleDeclaration   = "handle" identifier [ "extends" pathType ] ";" ;
+varsField           = { attribute } [ "readonly" ] fieldName ":" type [ "narrows" type ]
+                      [ "=" expression ] ;
+type                = ( pathType | tupleType | arrayType | functionType ) [ "?" ] ;
+statement           = letStatement | varStatement | assignmentStatement | expressionStatement
+                    | ifExpression | matchExpression | whileStatement | forStatement | loopStatement
+                    | deferStatement | returnStatement | breakStatement | continueStatement ;
+ifExpression        = "if" "(" condition ")" ifBody [ "else" ( ifExpression | ifBody ) ] ;
+condition           = expression | "let" pattern "=" expression ;
+whileStatement      = [ label ":" ] "while" "(" expression ")" block ;
+forStatement        = [ label ":" ] "for" "(" pattern "in" expression ")" block ;
+matchExpression     = "match" "(" expression ")" "{" matchArm { "," matchArm } [ "," ] "}" ;
+deferStatement      = "defer" block ;
+attribute           = "@" identifier [ argumentList ] ;
 ```
 
-The full grammar, with operator precedence, lives in `rook/spec/grammar.ebnf`, and the
-compiler's conformance test suite is the executable reference.
+Operators, loosest first: `..` and `..=`; `||`; `&&`; `==` and `!=`; `<`, `<=`, `>`, `>=` and `is`; `??`;
+`+` and `-`; `*`, `/` and `%`; the prefixes `!`, `-` and `await`; the postfixes `.`, `()`, `[]` and `?`.
+
+The full grammar, with what only prose can say, lives in
+[`rook/spec/grammar.ebnf`](../rook/spec/grammar.ebnf), and the conformance suite beside it is the
+executable reference.
