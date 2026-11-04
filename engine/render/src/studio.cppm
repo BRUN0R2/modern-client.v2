@@ -127,23 +127,24 @@ struct StudioCrowdSlot {
     std::size_t templateCapacity = 0;
     rhi::OwnedBuffer visible{};
     std::size_t visibleCapacity = 0;
-    rhi::OwnedBindGroup group{};
-    std::uint64_t groupGeneration = 0; ///< Of the tables and the crowd's buffers its group names.
-    std::uint64_t tick = 0;            ///< Whose bodies it holds.
+    rhi::TrackedBindGroup group{}; ///< The tables, the crowd's buffers and these.
+    std::uint64_t tick = 0;        ///< Whose bodies it holds.
     bool hasBodies = false;
     std::vector<std::uint32_t> bodiesOfModel{};
 };
 
+/// What a frame's models are drawn by: the bindings of the frame's bind group layout.
+inline constexpr std::size_t kStudioFrameBindings = 8;
+
 /// What one frame in flight writes the view, its models' bones and their lights to.
 struct StudioFrameSlot {
     rhi::OwnedBuffer frame{};
-    rhi::OwnedBuffer bones{};          ///< Every model's, one after another.
-    std::size_t boneCapacity = 0;      ///< The bones it holds.
-    rhi::OwnedBindGroup group{};       ///< The frame's uniform, the light curve, the bones and the models.
-    rhi::OwnedBuffer instances{};      ///< Every model's light, and where its bones start.
-    std::size_t instanceCapacity = 0;  ///< The models it holds.
-    rhi::OwnedBindGroup crowdGroup{};  ///< As `group`, the bones and the models the crowd's.
-    std::uint64_t crowdGeneration = 0; ///< Of the crowd's buffers crowdGroup names.
+    rhi::OwnedBuffer bones{};           ///< Every model's, one after another.
+    std::size_t boneCapacity = 0;       ///< The bones it holds.
+    rhi::TrackedBindGroup group{};      ///< The frame's uniform, the light curve, the bones and the models.
+    rhi::OwnedBuffer instances{};       ///< Every model's light, and where its bones start.
+    std::size_t instanceCapacity = 0;   ///< The models it holds.
+    rhi::TrackedBindGroup crowdGroup{}; ///< As `group`, the bones and the models the crowd's.
 };
 
 } // namespace nx::render
@@ -475,20 +476,27 @@ private:
     /// The shader, the bind group layouts, the samplers and the pipelines.
     [[nodiscard]] auto createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat,
                                        StudioLook look) -> Result<void, rhi::RhiError>;
-    /// Makes room in `slot` for `bones` bones and `instances` models, at least.
+    /// Makes room in `slot` for `bones` bones and `instances` models, at least, and its group names all it
+    /// has.
     [[nodiscard]] auto reserve(StudioFrameSlot& slot, std::size_t bones, std::size_t instances)
         -> Result<void, rhi::RhiError>;
+    /// What models are drawn by this frame: `bones` and `instances`, and the rest as they are now.
+    [[nodiscard]] auto frameBindingsOf(const StudioFrameSlot& slot, rhi::BufferHandle bones,
+                                       rhi::BufferHandle instances) const
+        -> std::array<rhi::Binding, kStudioFrameBindings>;
     /// What `instance` draws, blended as `blending` says: its meshes put in `meshes`.
     [[nodiscard]] static auto callOf(const StudioInstance& instance, StudioBlending blending,
                                      std::vector<StudioMeshCall>& meshes) -> StudioModelCall;
     /// The crowd's compute pipelines.
     [[nodiscard]] auto createCrowdPipelines(std::span<const std::byte> shaderCode)
         -> Result<void, rhi::RhiError>;
-    /// Makes room in the crowd's buffers and slot for this frame, the bindings of its group and of `slot`'s
-    /// made anew as they changed.
+    /// Makes room in the crowd's buffers and slot for this frame.
     [[nodiscard]] auto reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, std::size_t bones,
                                     std::size_t draws) -> Result<void, rhi::RhiError>;
-    /// `slot`'s group for drawing the crowd, made anew if the crowd's buffers changed.
+    /// `slot`'s group for working the crowd out names the tables, the crowd's buffers and `slot`'s as they
+    /// are.
+    [[nodiscard]] auto bindCrowd(StudioCrowdSlot& slot) -> Result<void, rhi::RhiError>;
+    /// `slot`'s group for drawing the crowd names the crowd's buffers as they are.
     [[nodiscard]] auto reserveCrowdGroup(StudioFrameSlot& slot) -> Result<void, rhi::RhiError>;
     /// The crowd's draws of the last recordCrowd, inside a render pass.
     void drawCrowd(rhi::CommandList& commands) const;
@@ -559,7 +567,6 @@ private:
     rhi::OwnedBuffer m_crowdDrawArguments;
     std::size_t m_crowdDrawCapacity = 0;
     bool areCrowdBuffersNew = true;
-    std::uint64_t m_crowdGeneration = 1; ///< Moves on as the tables or the crowd's buffers change.
     std::vector<StudioCrowdSlot> m_crowdSlots;
     std::uint64_t m_crowdFrames = 0;
     std::vector<StudioModelCall> m_crowdCalls;
