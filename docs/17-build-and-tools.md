@@ -50,7 +50,7 @@ modern-client.v2/
 │   ├── vm/                     # interpreter, GC, isolates, budgets
 │   ├── stdlib/                 # std.* in Rook + native parts
 │   ├── lsp/                    # rookLsp
-│   ├── cli/                    # rook (build, test, format, lint, document, pack)
+│   ├── cli/                    # rookc, rook (check, build, test, format, lint, document, pack)
 │   └── vscode/                 # VS Code extension (syntax, LSP client, DAP)
 ├── shaders/                    # Slang sources
 ├── data/
@@ -275,7 +275,8 @@ Rules:
 | `next` | Client (the listen server comes with `cs.server`). Today (`app.client`): the original's command line (`-basedir <folder>`, and the `+` commands it runs after the player's config files: `next +map de_dust2`), the player's settings and binds, and a map the `map` command loads, played alone in a window, the player walking with what its team spawns with, firing and reloading as the binds ask; the console's window (`toggleconsole`), the weapons' commands and sounds; `noclip` flies, `quit` or Escape ends it; `--data` names the project's `data/` folder, `--user-folder` selects a separate player settings/addons folder for local tests, `--validation` |
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |
-| `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
+| `rookc`, `rook` | Rook toolchain (M6). Today `rookc <file or directory>...` and `rook check [<file or directory>...]` parse sources and print their diagnostics with a code, a snippet and a fix ([rook/README.md](../rook/README.md#using-it)) |
+| `rookLsp` | Language server. Planned (M6) |
 | `rookCompilerTests`, `rookConformance` | Tests of the Rook compiler (`rook/compiler/tests`), where GoogleTest is found, and the runner of the conformance suite (`rook/spec`), which CTest runs as `Rook.Conformance` and which needs nothing but the compiler |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |

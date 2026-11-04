@@ -1,0 +1,9 @@
+// What rookc and rook check refuse, and how they say it.
+
+fn isPositive(count: i32) -> bool {
+    // The tests of cli/CMakeLists.txt read this line by its number.
+    if count > 0 {
+        return true;
+    }
+    return false;
+}
