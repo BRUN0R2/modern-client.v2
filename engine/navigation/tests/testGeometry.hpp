@@ -82,6 +82,25 @@ inline void addBox(nx::navigation::Geometry& geometry, nx::Vec3 low, nx::Vec3 hi
     side(corner01, corner00, low.z, high.z);
 }
 
+/// What stops a body's middle within `box` alone, which no surface shows: a node on each of its faces.
+[[nodiscard]] inline auto bodyHullOfBox(const nx::Aabb& box) -> nx::navigation::BodyHull {
+    using nx::navigation::BodyHullChild;
+    using nx::navigation::BodyHullLeaf;
+    const std::array planes{nx::Plane{.normal = {.x = 1.0F}, .distance = box.max.x},
+                            nx::Plane{.normal = {.x = -1.0F}, .distance = -box.min.x},
+                            nx::Plane{.normal = {.y = 1.0F}, .distance = box.max.y},
+                            nx::Plane{.normal = {.y = -1.0F}, .distance = -box.min.y},
+                            nx::Plane{.normal = {.z = 1.0F}, .distance = box.max.z},
+                            nx::Plane{.normal = {.z = -1.0F}, .distance = -box.min.z}};
+    nx::navigation::BodyHull hull{.root = std::uint32_t{0}};
+    for (std::uint32_t node = 0; node < planes.size(); ++node) {
+        const bool isLast = node + 1 == planes.size();
+        const BodyHullChild inside = isLast ? BodyHullChild{BodyHullLeaf::Solid} : BodyHullChild{node + 1};
+        hull.nodes.push_back({.plane = planes[node], .children = {BodyHullLeaf::Open, inside}});
+    }
+    return hull;
+}
+
 /// A job system of `workerCount` workers.
 [[nodiscard]] inline auto jobSystem(std::uint32_t workerCount = 3) -> std::unique_ptr<nx::jobs::JobSystem> {
     auto created = nx::jobs::JobSystem::create({.workerCount = workerCount});

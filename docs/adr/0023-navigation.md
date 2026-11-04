@@ -62,6 +62,14 @@ convex polygons, through Recast and Detour.
   it looking 60 degrees below level, which brings a body from behind it round to its front. What an
   agent asks of a body holds the keys of its speeds (`cs::holdKeysOf`), as a client's do: on a ladder a body
   moves by its keys alone, none held holding it there. A body off the mesh jumps, which lets go of one.
+- **What no surface shows.** A map's clip brushes stop bodies and have no face: cs_assault's gates are
+  `func_illusionary` fences, drawn and not solid, each with a clip brush of the same shape. The geometry carries
+  the world's standing hull (`BodyHull`), a copy of the planes of the tree the map's compiler grew by the player's
+  box, and a tile's floor keeps only where a standing body's middle is out of its solid, within a step, or what
+  the steepest floor lifts its box by, of where it stands; a link's way, a ladder's landing the same. The floor
+  is tested after its erosion from walls: the hull already keeps its radius from what it stops. Where only
+  crouching fits the standing hull is solid and says nothing: an agent that ducks will need the ducked hull
+  there. Another profile's size will need its own hull.
 - **Queries.** `findPath` (A* over the polygons, then the funnel that straightens the path),
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it
@@ -93,6 +101,7 @@ convex polygons, through Recast and Detour.
 | A mesh generator of our own | Voxelization, region partition and contour tracing are a large, subtle body of code that Recast has done for years for Unreal, Unity and Godot; the rules prefer a dependency when the complexity is high |
 | Waypoints placed by hand (PODBot, YaPB) | Work for every map, breaks with every change, nothing for a new agent size |
 | A* over a voxel grid | Memory and time grow with the map's volume, paths along cells |
+| Surfaces made from a clip hull's tree, given to Recast with the faces | The tree is grown by the player's box: its floors stand 36 units above the map's and its walls 16 out, with no way back to the brushes |
 
 ## Consequences
 

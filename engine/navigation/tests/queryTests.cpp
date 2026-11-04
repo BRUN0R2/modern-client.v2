@@ -284,6 +284,121 @@ TEST(NavigationQueryTest, ALadderLeadsToNoFloorBehindAWall) {
     EXPECT_FALSE(*reachable);
 }
 
+TEST(NavigationQueryTest, ALadderLeadsToNoFloorPastWhatStopsABody) {
+    // The building of ALadderJoinsTheFloorsItLeadsTo..., a rail no surface shows along the roof's edge.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 512.0F, .y = -32.0F, .z = -16.0F},
+                     {.x = 1024.0F, .y = 544.0F, .z = 256.0F});
+    geometry.ladders.push_back(
+        {.min = {.x = 500.0F, .y = 240.0F}, .max = {.x = 512.0F, .y = 272.0F, .z = 256.0F}});
+    geometry.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = 532.0F, .y = -64.0F, .z = 256.0F}, .max = {.x = 640.0F, .y = 576.0F, .z = 512.0F}});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const auto reachable =
+        query.isReachable({.x = 200.0F, .y = 256.0F}, {.x = 800.0F, .y = 256.0F, .z = 256.0F});
+    ASSERT_TRUE(reachable.has_value());
+    EXPECT_FALSE(*reachable);
+}
+
+TEST(NavigationQueryTest, AWayGoesAroundWhatStopsABodyThoughNoSurfaceShowsIt) {
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    const Vec3 from{.x = 100.0F, .y = 100.0F};
+    const Vec3 to{.x = 924.0F, .y = 100.0F};
+    constexpr float kBarrierEnd = 384.0F;
+    geometry.bodyHull = nx::test::bodyHullOfBox({.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
+                                                 .max = {.x = 560.0F, .y = kBarrierEnd, .z = 256.0F}});
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(geometry);
+        NavigationQuery query{mesh};
+        const auto path = query.findPath({.from = from, .to = to});
+        ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+        EXPECT_TRUE(std::ranges::any_of(path->points, [](Vec3 point) { return point.y >= kBarrierEnd; }));
+        EXPECT_GT(nx::test::lengthOf(path->points), 1000.0F); // 824 straight through it
+    }
+    // Across the whole floor it leaves no way at all.
+    geometry.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F}, .max = {.x = 560.0F, .y = 576.0F, .z = 256.0F}});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const auto reachable = query.isReachable(from, to);
+    ASSERT_TRUE(reachable.has_value());
+    EXPECT_FALSE(*reachable);
+}
+
+TEST(NavigationQueryTest, WhatABodyStepsOntoStopsNoWay) {
+    // Across the whole floor, as high above where a standing body's middle is as `height`.
+    constexpr float kMiddle = 36.0F;
+    const auto isReachableOver = [](float height) {
+        Geometry geometry;
+        nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+        geometry.bodyHull =
+            nx::test::bodyHullOfBox({.min = {.x = 464.0F, .y = -64.0F, .z = -64.0F},
+                                     .max = {.x = 560.0F, .y = 576.0F, .z = kMiddle + height}});
+        const NavigationMesh mesh = nx::test::playerMesh(geometry);
+        NavigationQuery query{mesh};
+        const auto reachable = query.isReachable({.x = 100.0F, .y = 100.0F}, {.x = 924.0F, .y = 100.0F});
+        EXPECT_TRUE(reachable.has_value());
+        return reachable.value_or(false);
+    };
+    EXPECT_TRUE(isReachableOver(10.0F)) << "a step";
+    EXPECT_FALSE(isReachableOver(30.0F)) << "higher than the step and than a steep floor lifts a body";
+}
+
+TEST(NavigationQueryTest, ASteepFloorKeepsABodyAboveItsOwnSolid) {
+    // A ramp rising along the diagonal, its normal 0.71 up, and its solid grown by a standing body's box: on
+    // a corner, the body's middle is 22.4 units above where it is on a flat floor, higher than a step.
+    constexpr float kRise = 0.7F;
+    constexpr float kSide = 256.0F;
+    Geometry geometry;
+    const std::array corners{Vec3{}, Vec3{.x = kSide, .z = kSide * kRise},
+                             Vec3{.x = kSide, .y = kSide, .z = 2.0F * kSide * kRise},
+                             Vec3{.y = kSide, .z = kSide * kRise}};
+    nx::navigation::addConvexPolygon(geometry, corners, AreaKind::Floor);
+    const Vec3 normal = nx::normalized(Vec3{.x = -kRise, .y = -kRise, .z = 1.0F});
+    constexpr float kMiddleOnFlat = 36.0F;
+    constexpr float kRadiusOfBox = 16.0F;
+    const float lifted = kMiddleOnFlat + (kRadiusOfBox * 2.0F * kRise);
+    geometry.bodyHull = {
+        .root = std::uint32_t{0},
+        .nodes = {{.plane = {.normal = normal, .distance = normal.z * lifted},
+                   .children = {nx::navigation::BodyHullLeaf::Open, nx::navigation::BodyHullLeaf::Solid}}}};
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const auto path = query.findPath(
+        {.from = {.x = 48.0F, .y = 48.0F, .z = 67.0F}, .to = {.x = 208.0F, .y = 208.0F, .z = 291.0F}});
+    ASSERT_TRUE(path.has_value()) << nx::describe(path.error());
+    EXPECT_LT(nx::test::distanceAcross(path->points.back(), {.x = 208.0F, .y = 208.0F}), kTolerance);
+}
+
+TEST(NavigationQueryTest, NoLinkCrossesWhatStopsABody) {
+    // A ledge 64 up, higher than a body jumps, and a rail no surface shows along it.
+    constexpr float kLedge = 64.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = -32.0F, .y = -32.0F, .z = -16.0F},
+                     {.x = 512.0F, .y = 544.0F, .z = kLedge});
+    const Vec3 top{.x = 200.0F, .y = 256.0F, .z = kLedge};
+    const Vec3 low{.x = 800.0F, .y = 256.0F};
+    const auto dropsDown = [&](const Geometry& asked) {
+        const NavigationMesh mesh = nx::test::playerMesh(asked);
+        NavigationQuery query{mesh};
+        const auto reachable = query.isReachable(top, low);
+        EXPECT_TRUE(reachable.has_value());
+        const auto outline = mesh.outline();
+        const bool hasLink =
+            std::ranges::contains(outline.links, AreaKind::Drop, &nx::navigation::MeshLink::kind);
+        EXPECT_EQ(hasLink, reachable.value_or(false));
+        return reachable.value_or(false);
+    };
+    EXPECT_TRUE(dropsDown(geometry));
+    geometry.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = 500.0F, .y = -64.0F, .z = 64.0F}, .max = {.x = 548.0F, .y = 576.0F, .z = 256.0F}});
+    EXPECT_FALSE(dropsDown(geometry));
+}
+
 TEST(NavigationQueryTest, APointFarFromTheMeshIsOutsideIt) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

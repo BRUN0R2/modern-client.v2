@@ -149,6 +149,16 @@ TEST(MeshFileTest, AKeyChangesWithWhatShapesTheTilesAlone) {
     finer.cellSize = nx::HammerUnits{finer.cellSize.value() / 2.0F};
     nx::navigation::BuildSettings largerTiles = nx::test::testSettings();
     largerTiles.tileCells *= 2;
+    Geometry stopped = geometry;
+    stopped.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = 64.0F, .y = 64.0F}, .max = {.x = 128.0F, .y = 128.0F, .z = 64.0F}});
+    Geometry stoppedElsewhere = stopped;
+    stoppedElsewhere.bodyHull.nodes.front().plane.distance += 1.0F;
+    Geometry stoppedOtherwise = stopped;
+    stoppedOtherwise.bodyHull.nodes.back().children[1] = nx::navigation::BodyHullLeaf::Open;
+    EXPECT_NE(keyOf(stopped), key);
+    EXPECT_NE(keyOf(stoppedElsewhere), keyOf(stopped));
+    EXPECT_NE(keyOf(stoppedOtherwise), keyOf(stopped));
     EXPECT_NE(keyOf(moved), key);
     EXPECT_NE(keyOf(otherKind), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, wider, nx::test::testSettings()), key);

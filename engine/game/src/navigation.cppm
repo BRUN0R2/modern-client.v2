@@ -33,7 +33,8 @@ struct NavigationData {
 /// the faces of the world, and those of its solid brush entities (Solid::Bsp) where `world` has them,
 /// at rest as the map starts; each a polygon facing where its face does. A face under a liquid (water,
 /// slime, lava) is of the kind Water, the others Floor. The faces of the sky and of liquids' surfaces
-/// are left out: agents walk under the one, and wade through the other.
+/// are left out: agents walk under the one, and wade through the other. Its body hull is the world's
+/// standing hull, which alone shows the map's clip brushes; a profile must be a standing player's size.
 [[nodiscard]] auto navigationGeometryOf(const assets::BspView& map, ecs::World& world)
     -> navigation::Geometry;
 

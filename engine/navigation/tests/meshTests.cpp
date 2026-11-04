@@ -169,6 +169,65 @@ TEST(NavigationMeshTest, LowRoomIsCrouchedAndLowerIsNone) {
     }
 }
 
+TEST(NavigationMeshTest, WhereOnlyCrouchingFitsABodyHullSaysNothing) {
+    // A floor under a ceiling 50 units up, its standing hull solid under it as any such hull is.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 256.0F}, 0.0F);
+    nx::test::addCeiling(geometry, {.x = 256.0F, .y = -64.0F}, {.x = 512.0F, .y = 320.0F}, 50.0F);
+    geometry.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = 240.0F, .y = -128.0F, .z = -64.0F}, .max = {.x = 528.0F, .y = 384.0F, .z = 128.0F}});
+    const MeshOutline outline = nx::test::playerMesh(geometry).outline();
+    EXPECT_TRUE(hasKind(outline, AreaKind::Crouch));
+}
+
+TEST(NavigationMeshTest, TheFloorAlongWhatStopsABodyIsOfTheKindEdge) {
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 256.0F}, 0.0F);
+    geometry.bodyHull = nx::test::bodyHullOfBox(
+        {.min = {.x = 352.0F, .y = -64.0F, .z = -64.0F}, .max = {.x = 416.0F, .y = 320.0F, .z = 256.0F}});
+    const MeshOutline outline = nx::test::playerMesh(geometry, 3, nx::test::clearedPlayerProfile()).outline();
+    const auto touchesBarrier = [&outline](const nx::navigation::MeshPolygon& polygon, float x) {
+        return std::ranges::any_of(
+            std::span{outline.corners}.subspan(polygon.firstCorner, polygon.cornerCount),
+            [x](Vec3 corner) { return std::abs(corner.x - x) <= kCell; });
+    };
+    for (const nx::navigation::MeshPolygon& polygon : outline.polygons) {
+        for (const Vec3 corner :
+             std::span{outline.corners}.subspan(polygon.firstCorner, polygon.cornerCount)) {
+            EXPECT_FALSE(corner.x > 352.0F + kCell && corner.x < 416.0F - kCell) << std::format("{}", corner);
+        }
+        if (touchesBarrier(polygon, 352.0F) || touchesBarrier(polygon, 416.0F)) {
+            EXPECT_EQ(polygon.kind, AreaKind::Edge);
+        }
+    }
+}
+
+TEST(NavigationMeshTest, ABodyHullOutOfOrderOrNotFiniteIsRefused) {
+    using nx::navigation::BodyHull;
+    using nx::navigation::BodyHullLeaf;
+    const nx::Plane plane{.normal = {.z = 1.0F}};
+    const nx::Plane notFinite{.normal = {.z = std::numeric_limits<float>::quiet_NaN()}};
+    const std::array refused{
+        BodyHull{.root = std::uint32_t{0}},
+        BodyHull{.root = std::uint32_t{0},
+                 .nodes = {{.plane = plane, .children = {std::uint32_t{0}, BodyHullLeaf::Open}}}},
+        BodyHull{.root = std::uint32_t{0},
+                 .nodes = {{.plane = plane, .children = {BodyHullLeaf::Open, std::uint32_t{7}}}}},
+        BodyHull{.root = std::uint32_t{0},
+                 .nodes = {{.plane = notFinite, .children = {BodyHullLeaf::Open, BodyHullLeaf::Solid}}}},
+    };
+    auto jobs = nx::test::jobSystem();
+    for (const BodyHull& hull : refused) {
+        Geometry geometry;
+        nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 256.0F, .y = 256.0F}, 0.0F);
+        geometry.bodyHull = hull;
+        const auto mesh =
+            NavigationMesh::build(*jobs, geometry, nx::test::playerProfile(), nx::test::testSettings());
+        ASSERT_FALSE(mesh.has_value());
+        EXPECT_EQ(mesh.error().code, MeshBuildError::InvalidGeometry);
+    }
+}
+
 TEST(NavigationMeshTest, TheFloorWithinTheWallClearanceOfItsEdgesIsOfTheKindEdge) {
     constexpr float kClearance = 16.0F;
     Geometry geometry;
