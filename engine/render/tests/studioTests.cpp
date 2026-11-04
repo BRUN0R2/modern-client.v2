@@ -246,13 +246,14 @@ void loadCrowdOf(nx::rhi::Device& device, Scene& scene) {
     ASSERT_TRUE(loaded.has_value()) << (loaded ? "" : nx::describe(loaded.error()));
 }
 
-/// Works `body` out on the GPU, the only one of the crowd, as `camera` sees it.
+/// Works `body` out on the GPU, the only one of the crowd to show, as `camera` sees it, with room for `room`
+/// bodies: a frame's room counts the dead too, whom the GPU does not show.
 void recordCrowdOf(nx::rhi::Device& device, Scene& scene, const nx::render::Camera& camera,
-                   const nx::render::CrowdBody& body, std::uint64_t tick) {
+                   const nx::render::CrowdBody& body, std::uint64_t tick, std::size_t bodiesRoom = 1) {
     const std::array frustum = nx::render::frustumPlanes(camera, 1.0F);
     const auto recorded = nx::test::inFrameOfItsOwn(
         device, [&](nx::rhi::CommandList& commands) -> nx::Result<void, nx::render::StudioError> {
-            auto room = scene.renderer.crowdRoom(1, tick);
+            auto room = scene.renderer.crowdRoom(bodiesRoom, tick);
             if (!room) {
                 return std::unexpected{std::move(room.error())};
             }
@@ -321,6 +322,43 @@ TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
     ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, behind, 3));
     const std::vector<std::byte> hidden = drawStudio(target, *scene, camera, {});
     EXPECT_EQ(pixelAt(hidden, kMiddle, kMiddle)[3], 0) << "hidden by the view's planes";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+// The dead take room among a frame's bodies and none among the crowd's instances and bones, so a wave's
+// corpses grow the bodies' buffer alone: the GPU has to read the new one, or it goes on drawing the bodies of
+// the old, where they were, and none of those there now.
+TEST(StudioRendererTest, ACrowdReadsTheBodiesOfThisFrameOnceOnlyTheirRoomGrew) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const auto scene = sceneOn(**device);
+    ASSERT_NE(scene, nullptr);
+    OffscreenTarget target{**device};
+    const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
+    ASSERT_NO_FATAL_FAILURE(loadCrowdOf(**device, *scene));
+    const nx::render::CrowdBody shown{.ambient = 100.0F, .moveShare = 1.0F};
+    nx::render::CrowdBody behind = shown;
+    const Vec3 away = nx::normalized(-kWoundSide) * (kViewDistance * 4.0F);
+    behind.previousOrigin = away;
+    behind.origin = away;
+
+    // Each frame in flight has its own bodies: both keep the small buffer, with the body in view.
+    constexpr std::uint64_t kFramesInFlight = nx::rhi::kMaxFramesInFlight;
+    constexpr std::size_t kRoomWithTheDead = 64;
+    std::uint64_t tick = 1;
+    for (std::uint64_t frame = 0; frame < kFramesInFlight; ++frame) {
+        ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, shown, tick++));
+        ASSERT_GT(pixelAt(drawStudio(target, *scene, camera, {}), kMiddle, kMiddle)[3], 0) << "it shows";
+    }
+    for (std::uint64_t frame = 0; frame < kFramesInFlight; ++frame) {
+        ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, behind, tick++, kRoomWithTheDead));
+        EXPECT_EQ(pixelAt(drawStudio(target, *scene, camera, {}), kMiddle, kMiddle)[3], 0)
+            << "the body of this frame, out of view, and not the old buffer's";
+    }
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

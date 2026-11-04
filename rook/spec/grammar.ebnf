@@ -1,0 +1,272 @@
+(* SPDX-FileCopyrightText: 2026 Modern-Client.v2 contributors *)
+(* SPDX-License-Identifier: MIT *)
+
+(*
+   The grammar of Rook, complete: docs/14-rook-language.md explains the language and summarizes this
+   file in its section 25, and the conformance suite beside it is the executable reference.
+
+   Notation: `a = b ;` defines a rule, `|` separates alternatives, `[ x ]` is optional, `{ x }` repeats
+   zero or more times, `( x )` groups and `"x"` is written as it stands. A rule that only prose can say
+   is in a comment.
+
+   Rook has one spelling of each thing. Parentheses and braces are mandatory in control flow,
+   semicolons end statements, and a list may end with a comma.
+*)
+
+
+(* ---- 1. Lexical structure ------------------------------------------------------------------- *)
+
+(*
+   A source is UTF-8, of at most 16 MiB, and may start with a byte order mark. Between any two tokens
+   stand any number of spaces, tabs, line ends and comments. The longest token wins, with two
+   exceptions:
+     - `>` is always one token, so that `List<List<T>>` closes two lists and `List<T>= x` closes one.
+       Two adjacent tokens `>` and `=` read as `>=` where an operator is expected.
+     - In an interpolation, at no depth of brackets, `:` starts a format specifier and `}` ends it.
+
+   A control character other than a tab and a line end, and a character that changes the direction of
+   text (U+202A to U+202E, U+2066 to U+2069), is refused everywhere: neither can be seen in an editor,
+   and either can make a source read differently from what it does.
+*)
+
+identifier          = identifierStart { identifierPart } ;   (* other than a reserved word *)
+identifierStart     = letter | "_" ;
+identifierPart      = letter | decimalDigit | "_" ;
+letter              = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m"
+                    | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z"
+                    | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M"
+                    | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" ;
+decimalDigit        = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+binaryDigit         = "0" | "1" ;
+hexadecimalDigit    = decimalDigit | "a" | "b" | "c" | "d" | "e" | "f"
+                                   | "A" | "B" | "C" | "D" | "E" | "F" ;
+
+(* Not identifiers. `Self`, the primitive types and `new` are identifiers the checker knows. *)
+reservedWord        = "plugin" | "import" | "pub" | "fn" | "pure" | "async" | "await" | "defer" | "let"
+                    | "var" | "const" | "persist" | "if" | "else" | "match" | "while" | "for" | "in"
+                    | "loop" | "break" | "continue" | "return" | "struct" | "enum" | "error" | "class"
+                    | "open" | "abstract" | "override" | "super" | "self" | "interface" | "impl"
+                    | "newtype" | "suffix" | "dimension" | "range" | "handle" | "vars" | "readonly"
+                    | "narrows" | "component" | "forward" | "type" | "inout" | "is" | "true" | "false"
+                    | "none" | "some" | "ok" | "err" | "void" ;
+
+(* Identifiers that mean something only where this grammar writes them: `from` stays a fine name. *)
+contextualWord      = "extends" | "from" | "derive" ;
+
+(* A field, an argument's label or a member may be named with a reserved word: `notice.class`. *)
+fieldName           = identifier | reservedWord ;
+
+(* `_` between digits only. The suffix is a unit (`250ms`, `90deg`), which the checker looks up. *)
+integerLiteral      = ( decimalNumber | "0x" hexadecimalNumber | "0b" binaryNumber ) [ identifier ] ;
+floatLiteral        = decimalNumber ( "." decimalNumber [ exponent ] | exponent ) [ identifier ] ;
+decimalNumber       = decimalDigit { [ "_" ] decimalDigit } ;
+hexadecimalNumber   = hexadecimalDigit { [ "_" ] hexadecimalDigit } ;
+binaryNumber        = binaryDigit { [ "_" ] binaryDigit } ;
+exponent            = ( "e" | "E" ) [ "+" | "-" ] decimalNumber ;
+
+characterLiteral    = "'" ( characterOtherThanQuoteOrLineEnd | escape ) "'" ;
+label               = "'" identifier ;   (* a quote that does not close after the name *)
+
+(* `\{` writes an opening brace, which would start an interpolation; `}` needs no escape. *)
+escape              = "\n" | "\r" | "\t" | "\0" | "\\" | "\'" | "\" "\"" | "\{" | unicodeEscape ;
+unicodeEscape       = "\u{" hexadecimalDigit { hexadecimalDigit } "}" ;   (* up to 6 digits, no surrogate *)
+
+(* A string stays on one line. A raw string has neither escapes nor interpolations. *)
+rawString           = "r" "\"" { characterOtherThanQuoteOrLineEnd } "\"" ;
+string              = "\"" { stringText | escape | interpolation } "\"" ;
+interpolation       = "{" expression [ ":" formatSpecifier ] "}" ;
+(* stringText: any characters but `"`, `\`, `{` and a line end. *)
+(* formatSpecifier: any characters but `"`, `}` and a line end, such as `<16`. *)
+
+(* Comments: `//` to the line's end, `/* ... */` that do not nest, and `///` documentation. *)
+
+
+(* ---- 2. Files ------------------------------------------------------------------------------- *)
+
+sourceFile          = { importDeclaration } [ pluginDeclaration ] { item } ;
+
+importDeclaration   = "import" modulePath [ "." ( importList | "*" ) ] ";" ;
+modulePath          = identifier { "." identifier } ;
+importList          = "{" identifier { "," identifier } [ "," ] "}" ;
+
+pluginDeclaration   = "plugin" fieldInitializers ;
+
+
+(* ---- 3. Declarations ------------------------------------------------------------------------ *)
+
+item                = { attribute } [ "pub" ] declaration ;
+declaration         = functionDeclaration | forwardDeclaration | structDeclaration | enumDeclaration
+                    | classDeclaration | interfaceDeclaration | implementationDeclaration
+                    | newtypeDeclaration | handleDeclaration | varsDeclaration | componentDeclaration
+                    | constantDeclaration | globalDeclaration | typeAlias ;
+
+attribute           = "@" identifier [ argumentList ] ;
+
+(* Without a body: an interface's or an abstract function, and every function of a `.rookd`. *)
+functionDeclaration = [ "const" | "pure" ] [ "async" ] "fn" identifier [ genericParameters ]
+                      parameterList [ "->" type ] ( block | ";" ) ;
+forwardDeclaration  = "forward" identifier parameterList [ "->" type ] ( block | ";" ) ;
+parameterList       = "(" [ parameter { "," parameter } [ "," ] ] ")" ;
+parameter           = "self" | [ "inout" ] identifier ":" type [ "=" expression ] ;
+genericParameters   = "<" genericParameter { "," genericParameter } [ "," ] ">" ;
+genericParameter    = identifier [ ":" pathType ] ;
+
+structDeclaration   = "struct" identifier [ genericParameters ] fieldList ;
+componentDeclaration = "component" identifier fieldList ;
+fieldList           = "{" [ field { "," field } [ "," ] ] "}" ;
+field               = { attribute } fieldName ":" type [ "=" expression ] ;
+
+enumDeclaration     = [ "error" ] "enum" identifier [ genericParameters ]
+                      "{" [ variant { "," variant } [ "," ] ] "}" ;
+variant             = { attribute } [ "from" ] identifier
+                      [ "(" variantField { "," variantField } [ "," ] ")" ] ;
+variantField        = [ fieldName ":" ] type ;
+
+classDeclaration    = [ "open" | "abstract" ] "class" identifier [ genericParameters ]
+                      [ "extends" pathType ] memberList ;
+interfaceDeclaration = "interface" identifier [ genericParameters ] memberList ;
+implementationDeclaration = "impl" pathType "for" pathType memberList ;
+memberList          = "{" { member } "}" ;
+member              = { attribute } [ "pub" ] ( method | memberVariable ) ;
+method              = [ "open" | "abstract" | "override" ] functionDeclaration ;
+memberVariable      = ( "let" | "var" ) identifier ":" type [ "=" expression ] ";" ;
+
+newtypeDeclaration  = "newtype" identifier "(" type ")" [ suffixClause ] [ dimensionClause ]
+                      [ rangeClause ] [ deriveClause ] ";" ;
+suffixClause        = "suffix" identifier { "," identifier } ;
+dimensionClause     = "dimension" "(" type ( "/" | "*" ) type ")" ;
+rangeClause         = "range" "(" expression ")" ;
+deriveClause        = "derive" "(" identifier { "," identifier } [ "," ] ")" ;
+
+handleDeclaration   = "handle" identifier [ "extends" pathType ] ";" ;
+varsDeclaration     = "vars" identifier "{" [ varsField { "," varsField } [ "," ] ] "}" ;
+varsField           = { attribute } [ "readonly" ] fieldName ":" type [ "narrows" type ]
+                      [ "=" expression ] ;
+
+(* Outside a function a value names its type: only function bodies infer. *)
+constantDeclaration = "const" identifier ":" type "=" expression ";" ;
+globalDeclaration   = [ "persist" ] "var" identifier ":" type "=" expression ";" ;
+typeAlias           = "type" identifier [ genericParameters ] "=" type ";" ;
+
+
+(* ---- 4. Types ------------------------------------------------------------------------------- *)
+
+type                = ( pathType | tupleType | arrayType | functionType ) [ "?" ] ;
+pathType            = identifier { "." identifier } [ genericArguments ] | "void" ;
+genericArguments    = "<" type { "," type } [ "," ] ">" ;
+tupleType           = "(" type { "," type } [ "," ] ")" ;
+arrayType           = "[" type ";" expression "]" ;
+functionType        = "fn" "(" [ type { "," type } [ "," ] ] ")" [ "->" type ] ;
+
+
+(* ---- 5. Statements -------------------------------------------------------------------------- *)
+
+(*
+   A block's value is its last expression without a semicolon, and only a block used as a value has
+   one: the branches of an `if` and the arms of a `match` written where a value is expected, and of one
+   inside such a block. Anywhere else every statement ends in its semicolon.
+*)
+block               = "{" { statement } "}" ;
+valueBlock          = "{" { statement } [ expression ] "}" ;
+
+statement           = letStatement | varStatement | assignmentStatement | expressionStatement
+                    | ifExpression | matchExpression | whileStatement | forStatement | loopStatement
+                    | deferStatement | returnStatement | breakStatement | continueStatement ;
+
+letStatement        = "let" pattern [ ":" type ] "=" expression ";" ;
+varStatement        = "var" identifier [ ":" type ] "=" expression ";" ;
+assignmentStatement = assignmentTarget "=" expression ";" ;   (* an assignment is not a value *)
+assignmentTarget    = postfixExpression ;                     (* a name, a member or an element *)
+expressionStatement = expression ";" ;
+
+whileStatement      = [ label ":" ] "while" "(" expression ")" block ;
+forStatement        = [ label ":" ] "for" "(" pattern "in" expression ")" block ;
+loopStatement       = [ label ":" ] "loop" block ;
+deferStatement      = "defer" block ;
+returnStatement     = "return" [ expression ] ";" ;
+breakStatement      = "break" [ label ] ";" ;
+continueStatement   = "continue" [ label ] ";" ;
+
+
+(* ---- 6. Expressions, loosest first ---------------------------------------------------------- *)
+
+(*
+   Level  Operators                       Associativity
+     1    ..  ..=                         none: `a..b..c` is an error
+     2    ||                              left
+     3    &&                              left
+     4    ==  !=                          none: `a == b == c` is an error
+     5    <  <=  >  >=  is                none: `a < b < c` is an error
+     6    ??                              right
+     7    +  -                            left
+     8    *  /  %                         left
+     9    !  -  await                     prefix
+    10    .  ()  []  ?                    postfix
+
+   `await` takes the whole postfix expression after it, `?` included: `(await task())?` tries what
+   came back.
+*)
+expression          = rangeExpression ;
+rangeExpression     = orExpression [ ( ".." | "..=" ) orExpression ] ;
+orExpression        = andExpression { "||" andExpression } ;
+andExpression       = equalityExpression { "&&" equalityExpression } ;
+equalityExpression  = relationalExpression [ ( "==" | "!=" ) relationalExpression ] ;
+relationalExpression = coalesceExpression
+                      [ ( "<" | "<=" | ">" | ">" "=" ) coalesceExpression | "is" pattern ] ;
+coalesceExpression  = additiveExpression [ "??" coalesceExpression ] ;
+additiveExpression  = multiplicativeExpression { ( "+" | "-" ) multiplicativeExpression } ;
+multiplicativeExpression = prefixExpression { ( "*" | "/" | "%" ) prefixExpression } ;
+prefixExpression    = ( "!" | "-" | "await" ) prefixExpression | postfixExpression ;
+postfixExpression   = primaryExpression { memberAccess | argumentList | index | "?" } ;
+memberAccess        = "." fieldName [ genericArguments ] ;
+index               = "[" expression "]" ;
+
+(*
+   After a name, `<` opens generic arguments only when what follows reads as types, and `(` or `{`
+   comes after the closing `>`. Comparisons do not chain, so `a < b > (c)` could not mean them anyway;
+   `f(a < b, c > (d))` is a call with generic arguments, and `f(a < b, (c > d))` is written with the
+   comparison in parentheses.
+*)
+primaryExpression   = literal | string | rawString | nameExpression | implicitMember | structLiteral
+                    | parenthesizedExpression | tupleExpression | arrayExpression | closureExpression
+                    | ifExpression | matchExpression ;
+
+literal             = integerLiteral | floatLiteral | characterLiteral | "true" | "false" | "none" ;
+nameExpression      = identifier [ genericArguments ] | "self" | "super" | "some" | "ok" | "err" ;
+implicitMember      = "." identifier ;
+
+structLiteral       = identifier { "." identifier } [ genericArguments ] fieldInitializers ;
+fieldInitializers   = "{" [ fieldInitializer { "," fieldInitializer } [ "," ] ] "}" ;
+fieldInitializer    = fieldName ":" expression ;
+
+argumentList        = "(" [ argument { "," argument } [ "," ] ] ")" ;
+argument            = [ fieldName ":" ] [ "&" ] expression ;   (* `&` passes an `inout` argument *)
+
+parenthesizedExpression = "(" expression ")" ;
+tupleExpression     = "(" expression "," expression { "," expression } [ "," ] ")" ;
+arrayExpression     = "[" [ expression { "," expression } [ "," ] ] "]" ;
+closureExpression   = "(" [ identifier { "," identifier } [ "," ] ] ")" "=>" ( expression | block ) ;
+
+(* Written where a value is expected, their bodies are value blocks; as statements, plain blocks. *)
+ifExpression        = "if" "(" condition ")" ifBody [ "else" ( ifExpression | ifBody ) ] ;
+ifBody              = block | valueBlock ;
+condition           = expression | "let" pattern "=" expression ;
+
+(* The expression of a guard is no closure at its top level: `=>` there starts the arm's body. *)
+matchExpression     = "match" "(" expression ")" "{" matchArm { "," matchArm } [ "," ] "}" ;
+matchArm            = pattern [ "if" expression ] "=>" ( expression | block | valueBlock ) ;
+
+
+(* ---- 7. Patterns ---------------------------------------------------------------------------- *)
+
+pattern             = primaryPattern { "|" primaryPattern } ;
+primaryPattern      = "_" | literalPattern | wrapperPattern | namePattern | memberPattern
+                    | tuplePattern ;
+literalPattern      = [ "-" ] ( integerLiteral | floatLiteral ) | characterLiteral | string | rawString
+                    | "true" | "false" | "none" ;
+wrapperPattern      = ( "some" | "ok" | "err" ) "(" [ pattern ] ")" ;
+namePattern         = identifier { "." identifier } [ patternFields ] ;
+memberPattern       = "." identifier { "." identifier } [ patternFields ] ;
+patternFields       = "(" [ patternField { "," patternField } [ "," ] ] ")" ;
+patternField        = [ fieldName ":" ] pattern ;
+tuplePattern        = "(" pattern "," pattern { "," pattern } [ "," ] ")" ;

@@ -848,11 +848,7 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
         }
         slot.frame = std::move(*frame);
     }
-    const bool hasRoom = bones <= slot.boneCapacity && instances <= slot.instanceCapacity;
-    if (hasRoom && !slot.group.get().isNull()) {
-        return {};
-    }
-    if (bones > slot.boneCapacity) {
+    if (bones > slot.boneCapacity || slot.bones.get().isNull()) {
         const std::size_t capacity = std::max({bones, slot.boneCapacity * 2, kFirstBoneCapacity});
         auto buffer = device.createBuffer({.label = "studio.bones",
                                            .size = capacity * sizeof(Mat3x4),
@@ -864,7 +860,7 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
         slot.bones = std::move(*buffer);
         slot.boneCapacity = capacity;
     }
-    if (instances > slot.instanceCapacity) {
+    if (instances > slot.instanceCapacity || slot.instances.get().isNull()) {
         const std::size_t capacity = std::max({instances, slot.instanceCapacity * 2, kFirstInstanceCapacity});
         auto buffer = device.createBuffer({.label = "studio.instances",
                                            .size = capacity * sizeof(InstanceUniform),
@@ -876,27 +872,27 @@ auto StudioRenderer::reserve(StudioFrameSlot& slot, std::size_t bones, std::size
         slot.instances = std::move(*buffer);
         slot.instanceCapacity = capacity;
     }
-    const std::array bindings{
+    const auto bindings = frameBindingsOf(slot, slot.bones.get(), slot.instances.get());
+    return slot.group.update(device,
+                             {.label = "studio.frame", .layout = m_frameLayout.get(), .bindings = bindings});
+}
+
+auto StudioRenderer::frameBindingsOf(const StudioFrameSlot& slot, rhi::BufferHandle bones,
+                                     rhi::BufferHandle instances) const
+    -> std::array<rhi::Binding, kStudioFrameBindings> {
+    return {
         rhi::Binding{.binding = kFrameUniformBinding,
                      .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
         rhi::Binding{.binding = kLightGammaBinding,
                      .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
-        rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = slot.bones.get()}},
+        rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = bones}},
         rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
         rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()},
         rhi::Binding{.binding = kProbesBinding, .resource = m_probes.isNull() ? m_noProbes.get() : m_probes},
         rhi::Binding{.binding = kSpecularIntegralBinding,
                      .resource =
                          m_specularIntegral.get().isNull() ? m_whiteMask.get() : m_specularIntegral.get()},
-        rhi::Binding{.binding = kInstancesBinding,
-                     .resource = rhi::BufferBinding{.buffer = slot.instances.get()}}};
-    auto group = device.createBindGroup(
-        {.label = "studio.frame", .layout = m_frameLayout.get(), .bindings = bindings});
-    if (!group) {
-        return std::unexpected{std::move(group.error())};
-    }
-    slot.group = std::move(*group);
-    return {};
+        rhi::Binding{.binding = kInstancesBinding, .resource = rhi::BufferBinding{.buffer = instances}}};
 }
 
 auto StudioRenderer::load(rhi::CommandList& commands, const StudioModelDesc& desc)
@@ -1022,20 +1018,12 @@ auto StudioRenderer::setEnvironment(rhi::CommandList& commands, std::span<const 
     m_environment = std::move(*environment);
     m_environmentLevels = levels;
     m_hasEnvironment = true;
-    // Each frame's group names the environment: made again as each slot is next written.
-    for (StudioFrameSlot& slot : m_frameSlots) {
-        slot.group = {};
-    }
     return {};
 }
 
 void StudioRenderer::setProbes(rhi::TextureHandle probes, std::uint32_t mipLevels) {
     m_probes = probes;
     m_probeLevels = std::max(mipLevels, 1U);
-    // Each frame's group names the probes: made again as each slot is next written.
-    for (StudioFrameSlot& slot : m_frameSlots) {
-        slot.group = {};
-    }
 }
 
 auto StudioRenderer::loadCrowdModel(rhi::CommandList& commands, const CrowdModelDesc& desc)
@@ -1078,7 +1066,6 @@ auto StudioRenderer::loadCrowdModel(rhi::CommandList& commands, const CrowdModel
     m_crowdPoses = std::move(*poses);
     m_crowdSequences = std::move(*sequences);
     m_crowdParents = std::move(*parents);
-    ++m_crowdGeneration;
     return {};
 }
 
@@ -1105,7 +1092,6 @@ auto StudioRenderer::setCrowdWorld(rhi::CommandList& commands, const assets::Bsp
     m_crowdNodes = std::move(*buffer);
     m_crowdRootNode = map.models().front().headNode.value;
     m_hasCrowdTree = true;
-    ++m_crowdGeneration;
     return {};
 }
 
@@ -1150,7 +1136,6 @@ auto StudioRenderer::reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, 
         buffer = std::move(*made);
         capacity = room;
         areCrowdBuffersNew = true;
-        ++m_crowdGeneration;
         return {};
     };
     const Flags<rhi::BufferUsage> kStorage{rhi::BufferUsage::Storage};
@@ -1176,16 +1161,13 @@ auto StudioRenderer::reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, 
         return grown;
     }
     // What a frame tells it.
-    bool isGroupStale = slot.groupGeneration != m_crowdGeneration || slot.group.get().isNull();
-    const auto growSlot = [&device, &isGroupStale](std::string_view label, rhi::BufferUsage usage,
-                                                   rhi::OwnedBuffer& buffer, std::size_t& capacity,
-                                                   std::size_t count,
-                                                   std::size_t size) -> Result<void, rhi::RhiError> {
+    const auto growSlot = [&device](std::string_view label, rhi::BufferUsage usage, rhi::OwnedBuffer& buffer,
+                                    std::size_t& capacity, std::size_t count,
+                                    std::size_t size) -> Result<void, rhi::RhiError> {
         auto grown = growUploadBuffer(device, label, usage, buffer, capacity, count, size);
         if (!grown) {
             return std::unexpected{std::move(grown.error())};
         }
-        isGroupStale = isGroupStale || *grown;
         return {};
     };
     std::size_t noCapacity = 0;
@@ -1208,14 +1190,10 @@ auto StudioRenderer::reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, 
         !grown) {
         return grown;
     }
-    if (auto grown = growSlot("studio.crowdVisible", rhi::BufferUsage::Storage, slot.visible,
-                              slot.visibleCapacity, kFirstVisibleBytes, 1);
-        !grown) {
-        return grown;
-    }
-    if (!isGroupStale) {
-        return {};
-    }
+    return {};
+}
+
+auto StudioRenderer::bindCrowd(StudioCrowdSlot& slot) -> Result<void, rhi::RhiError> {
     const auto bufferBinding = [](std::uint32_t binding, rhi::BufferHandle buffer) {
         return rhi::Binding{.binding = binding, .resource = rhi::BufferBinding{.buffer = buffer}};
     };
@@ -1232,14 +1210,8 @@ auto StudioRenderer::reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, 
                               bufferBinding(kCrowdInstancesBinding, m_crowdInstances.get()),
                               bufferBinding(kCrowdCountsBinding, m_crowdCounts.get()),
                               bufferBinding(kCrowdDrawsBinding, m_crowdDrawArguments.get())};
-    auto group =
-        device.createBindGroup({.label = "crowd", .layout = m_crowdLayout.get(), .bindings = bindings});
-    if (!group) {
-        return std::unexpected{std::move(group.error())};
-    }
-    slot.group = std::move(*group);
-    slot.groupGeneration = m_crowdGeneration;
-    return {};
+    return slot.group.update(*m_device,
+                             {.label = "crowd", .layout = m_crowdLayout.get(), .bindings = bindings});
 }
 
 auto StudioRenderer::recordCrowd(rhi::CommandList& commands, const CrowdFrame& frame)
@@ -1291,17 +1263,14 @@ auto StudioRenderer::recordCrowd(rhi::CommandList& commands, const CrowdFrame& f
         leafCount = frame.visibleLeaves->leafCount();
     }
     // A whole number of the shader's words, the bits past the map's none.
-    auto grownVisible =
-        growUploadBuffer(*m_device, "studio.crowdVisible", rhi::BufferUsage::Storage, slot.visible,
-                         slot.visibleCapacity, visibleBits.size() + sizeof(std::uint32_t), 1);
+    auto grownVisible = growUploadBuffer(
+        *m_device, "studio.crowdVisible", rhi::BufferUsage::Storage, slot.visible, slot.visibleCapacity,
+        std::max(visibleBits.size() + sizeof(std::uint32_t), kFirstVisibleBytes), 1);
     if (!grownVisible) {
         return fail(StudioError::GpuFailed, std::move(grownVisible.error()));
     }
-    if (*grownVisible) {
-        slot.groupGeneration = 0;
-        if (auto reserved = reserveCrowd(slot, instanceCount, boneCount, templates.size()); !reserved) {
-            return fail(StudioError::GpuFailed, std::move(reserved.error()));
-        }
+    if (auto bound = bindCrowd(slot); !bound) {
+        return fail(StudioError::GpuFailed, std::move(bound.error()));
     }
     const std::span<std::byte> visibleBytes = m_device->mappedBytes(slot.visible.get());
     std::ranges::fill(visibleBytes.first(visibleBits.size() + sizeof(std::uint32_t)), std::byte{});
@@ -1357,32 +1326,12 @@ auto StudioRenderer::recordCrowd(rhi::CommandList& commands, const CrowdFrame& f
 }
 
 auto StudioRenderer::reserveCrowdGroup(StudioFrameSlot& slot) -> Result<void, rhi::RhiError> {
-    if (m_crowdBones.get().isNull() ||
-        (slot.crowdGeneration == m_crowdGeneration && !slot.crowdGroup.get().isNull())) {
+    if (m_crowdBones.get().isNull()) {
         return {};
     }
-    const std::array bindings{
-        rhi::Binding{.binding = kFrameUniformBinding,
-                     .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
-        rhi::Binding{.binding = kLightGammaBinding,
-                     .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
-        rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = m_crowdBones.get()}},
-        rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
-        rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()},
-        rhi::Binding{.binding = kProbesBinding, .resource = m_probes.isNull() ? m_noProbes.get() : m_probes},
-        rhi::Binding{.binding = kSpecularIntegralBinding,
-                     .resource =
-                         m_specularIntegral.get().isNull() ? m_whiteMask.get() : m_specularIntegral.get()},
-        rhi::Binding{.binding = kInstancesBinding,
-                     .resource = rhi::BufferBinding{.buffer = m_crowdInstances.get()}}};
-    auto group = m_device->createBindGroup(
-        {.label = "studio.crowdFrame", .layout = m_frameLayout.get(), .bindings = bindings});
-    if (!group) {
-        return std::unexpected{std::move(group.error())};
-    }
-    slot.crowdGroup = std::move(*group);
-    slot.crowdGeneration = m_crowdGeneration;
-    return {};
+    const auto bindings = frameBindingsOf(slot, m_crowdBones.get(), m_crowdInstances.get());
+    return slot.crowdGroup.update(
+        *m_device, {.label = "studio.crowdFrame", .layout = m_frameLayout.get(), .bindings = bindings});
 }
 
 void StudioRenderer::drawCrowd(rhi::CommandList& commands) const {
