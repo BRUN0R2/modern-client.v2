@@ -7,12 +7,18 @@ with its first code:
 | Directory | Contents |
 |-----------|----------|
 | `spec/` | Grammar and conformance suite of the language |
+| `format/` | The layout of `.rbc` and `.rookd`, their versions, readers and writers |
 | `compiler/` | `rookc`: parser, type checking, RIR and bytecode generation |
-| `vm/` | Interpreter, bytecode verifier and per-isolate GC |
+| `verifier/` | The load-time check of `.rbc`, sharing only `format/` with the compiler |
+| `vm/` | Interpreter, per-isolate GC, budgets |
 | `stdlib/` | `std` standard library |
 | `lsp/` | `rookLsp`: language server |
-| `cli/` | `rook`: build, test, fmt, lint, doc, pack, migrate |
+| `cli/` | `rook`: build, test, format, lint, document, pack |
 | `vscode/` | VS Code extension |
+
+This directory imports nothing of `engine/` or `game/`, and it builds on its own. The compiler and the
+engine meet only in `.rookd` and `.rbc`, and servers and clients carry no compiler
+([ADR-0033](../docs/adr/0033-rook-compiler-and-types.md)).
 
 ## License
 

@@ -1,6 +1,6 @@
 # ADR-0006 — Own plugin language (Rook) with its own compiler
 
-- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md)
+- **Status:** Accepted, amended by [ADR-0033](0033-rook-compiler-and-types.md) and [ADR-0034](0034-rook-modern-only.md)
 - **Date:** 2026-10-20
 
 ## Context
@@ -16,15 +16,14 @@ modern compiler.
 Create the **Rook** language (working name) and the **`rookc`** compiler
 ([14](../14-rook-language.md)):
 
-- Familiar C-like syntax, with the AMXX lifecycle names written in camelCase
+- A C-like syntax that looks like AMX Pawn, with the lifecycle names written in camelCase
   (`pluginPrecache`, `pluginInit`, `forward`), like the whole project ([ADR-0013](0013-camelcase-convention.md)).
-  AMX Mod X's own spelling (`#include <amxmodx>`, `new`, `register_clcmd`) is accepted too, through
-  the `amxx` compatibility layer over that API ([ADR-0021](0021-rook-amxx-names.md)).
+  Everything inside is new, and nothing of AMX Mod X is ported ([ADR-0034](0034-rook-modern-only.md)).
 - Nominal types, no `any` and no null, `Result` with `error enum`, exhaustive `match`, units
-  of measure, ephemeral handles checked at compile time and `vars` catalogs with checked
-  literal keys.
+  of measure, ephemeral handles checked at compile time and `vars` catalogs of typed fields.
 - Plugins as the loadable unit and mods as the package ([13](../13-mod-system.md)).
-- Incremental, query-driven compiler, shared by the CLI and the LSP.
+- Incremental, query-driven compiler, shared by the CLI and the LSP, a program of its own
+  ([ADR-0033](0033-rook-compiler-and-types.md)).
 
 ## Alternatives considered
 
@@ -39,7 +38,7 @@ Create the **Rook** language (working name) and the **`rookc`** compiler
 
 ## Consequences
 
-- ✅ Natural migration for the community and errors caught at compile time.
+- ✅ A look the community recognizes, and errors caught at compile time.
 - ✅ Full control over diagnostics, tools and evolution.
 - ⚠️ Large project (compiler, VM, LSP, debugger). Mitigation: a parallel track (M6) from
   early on, a specification and a conformance suite.

@@ -1,6 +1,6 @@
 # ADR-0013 — camelCase convention across the project (C++ and Rook)
 
-- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md) and [ADR-0027](0027-private-member-camelcase.md)
+- **Status:** Accepted, amended by [ADR-0027](0027-private-member-camelcase.md) and [ADR-0034](0034-rook-modern-only.md)
 - **Date:** 2026-10-20
 
 ## Context
@@ -13,8 +13,8 @@ documentation harder. The maintainer decided to use camelCase across the whole p
 ## Decision
 
 - Functions, methods, variables, parameters and fields use **camelCase** in C++ and in Rook,
-  including the plugin API and the keys of the `vars` catalogs: `getWeaponVar`,
-  `setEntityVar`, `precacheModel`, `pluginPrecache`, `"maxClip"`.
+  including the plugin API and the fields of the `vars` catalogs: `precacheModel`,
+  `pluginPrecache`, `maxClip`.
 - **Files and directories** too: `contractsTests.cpp`, `enumArray.cppm`, `rhiVulkan/`,
   `devShell.ps1`, `infectionTests.rook`. The same goes for the project's build targets,
   executables and CMake functions (`nxCoreTests`, `rookLsp`, `nxAddTest`).
@@ -24,10 +24,9 @@ documentation harder. The maintainer decided to use camelCase across the whole p
   (`func_buyzone`), names required by tools (`CMakeLists.txt`, vcpkg triplets), conventional
   repository files, the documents in `docs/`, files of the original game, translation keys
   and names imposed by third parties
-  ([02 §3.1](../02-coding-standards.md#31-project-rule-camelcase)); in Rook, the names of AMX Mod X's
-  API in the `amxx` compatibility layer and the underscored accessors the compiler generates beside
-  the canonical ones (`get_player_var`), and the plugins that use them ([ADR-0021](0021-rook-amxx-names.md)). The
-  project's own code stays canonical.
+  ([02 §3.1](../02-coding-standards.md#31-project-rule-camelcase)). The exception
+  [ADR-0021](0021-rook-amxx-names.md) made for AMX Mod X's names in Rook ended with
+  [ADR-0034](0034-rook-modern-only.md).
 
 ## Alternatives considered
 
@@ -40,6 +39,3 @@ documentation harder. The maintainer decided to use camelCase across the whole p
 ## Consequences
 
 - ✅ A single convention, checked by `clang-tidy` and by the `naming` lint of `rookc`.
-- ✅ The migration stays mechanical: `set_props_var` → `setPropsVar`, done by `rook migrate`.
-- ⚠️ Migrated plugins change spelling relative to AMXX. The equivalence table in
-  [16](../16-amxx-migration.md) covers the names.

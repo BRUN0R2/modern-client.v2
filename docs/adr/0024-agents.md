@@ -37,8 +37,8 @@ and its steering).
   perception, memory, behaviors, steering. Each kind of agent is its own module above it, which
   brings the kind's body, behaviors and rules and depends on no other kind's: removing one changes
   nothing in the others. Counter-Strike's bot is `cs.bots`; the kinds a mod makes, such as zombies
-  and bosses, are modules of the mod, in Rook (M6, with the port of ReZombie,
-  [16](../16-amxx-migration.md)), on the same API, since the repository plays Counter-Strike 1.6
+  and bosses, are modules of the mod, in Rook (M6, with ReZombie, written from scratch,
+  [ADR-0034](0034-rook-modern-only.md)), on the same API, since the repository plays Counter-Strike 1.6
   alone ([ADR-0017](0017-counter-strike-only.md)). Until then, the hostages, Counter-Strike's own
   characters, are the first kind with an entity's body, following the original's rules.
 - **Roles are classes and tags, not a flag.** Boss, zombie, hostage, ally, escort are classes
@@ -84,10 +84,9 @@ and its steering).
   smarter by its memory, never by cheating: where each enemy was last seen or heard and where it
   may have gone since along the mesh, what its team reported, where players died on the map.
 - **Rook API** (M6, in full words): a class with an agent part; `setGoal(agent, Goal.MoveTo(position))`,
-  `chase(agent, target)`, `remember`, `recall`, `forget`, `knownThreats(agent)`,
-  `getAgentMemory`/`setAgentMemory` (and `get_agent_memory`/`set_agent_memory`,
-  [ADR-0021](0021-rook-amxx-names.md)); hooks on the agent's methods (`Agent.perceived`,
-  `Agent.decide`); a behavior as a Rook class implementing `Behavior`.
+  `chase(agent, target)`, `remember`, `recall`, `forget`, `knownThreats(agent)`, the working memory
+  as typed fields (`agent.memory.target`, [ADR-0034](0034-rook-modern-only.md)); hooks on the agent's
+  methods (`Agent.perceived`, `Agent.decide`); a behavior as a Rook class implementing `Behavior`.
 
 ## Alternatives considered
 

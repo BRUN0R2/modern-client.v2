@@ -37,7 +37,6 @@ only within them.
 | 13 | [Mod system](13-mod-system.md) | Runtime, isolation, packages, permissions, hot reload, client-side mods |
 | 14 | [Rook language](14-rook-language.md) | Specification of the mod language |
 | 15 | [Mod API](15-mod-api.md) | `std`, `nx` and `cs` modules, events, hooks, error catalog |
-| 16 | [AMXX → Rook migration](16-amxx-migration.md) | Pawn/AMXX equivalences and converted examples |
 | 17 | [Build and tools](17-build-and-tools.md) | Toolchain, CMake, dependencies, repository layout, CI |
 | 18 | [Testing and quality](18-testing-and-quality.md) | Testing strategy, parity, determinism, performance |
 | 19 | [Roadmap](19-roadmap.md) | Milestones M0–M8 and exit criteria |

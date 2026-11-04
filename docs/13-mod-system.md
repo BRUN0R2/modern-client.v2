@@ -1,7 +1,8 @@
 # 13 — Plugin and mod system
 
-> Decisions recorded in [ADR-0006](adr/0006-own-plugin-language-rook.md) and
-> [ADR-0007](adr/0007-own-vm-typed-bytecode.md).
+> Decisions recorded in [ADR-0006](adr/0006-own-plugin-language-rook.md),
+> [ADR-0007](adr/0007-own-vm-typed-bytecode.md), [ADR-0033](adr/0033-rook-compiler-and-types.md) and
+> [ADR-0034](adr/0034-rook-modern-only.md).
 
 ## 1. Principle
 
@@ -22,17 +23,21 @@ are not covered by the exception.
 
 ## 2. Vocabulary and equivalents
 
+A reading guide for people who know AMX Mod X. Nothing here is ported, and no old plugin runs or is
+converted: the language looks like Pawn and everything inside is new
+([ADR-0034](adr/0034-rook-modern-only.md)).
+
 | AMX Mod X | Modern-Client.v2 | Notes |
 |-----------|------------------|-------|
 | `.sma` (Pawn source) | `.rook` (Rook source) | [14](14-rook-language.md) |
-| `amxxpc` | `rookc` | Own compiler, incremental, with LSP |
+| `amxxpc` | `rookc` | Own compiler, a program of its own, incremental, with LSP |
 | `.amxx` (compiled plugin) | `.rbc` (Rook bytecode) | Verified at load |
 | `plugins.ini` | `server/plugins.toml` | Enables mods and standalone plugins |
 | `configs/*.ini`/`.cfg` | The mod's `configs/` + cvars | Same role |
 | Modules (fakemeta, hamsandwich, ReAPI, engine) | Native engine API | Typed and stable ([15](15-mod-api.md)) |
 | `register_native` / plugin natives | `pub` functions exported by plugins | Typed calls between plugins |
 | `forward` / `CreateMultiForward` | `forward` declared with `pub forward` | Signature checked at compile time |
-| `set_task` | `setTask` + coroutines (`await wait(1s)`) | Deterministic game time |
+| `set_task` | `startTask` on an `async fn` (`await wait(1s)`) | A required owner, deterministic game time ([14 §16](14-rook-language.md#16-tasks-and-coroutines)) |
 | nVault / SQLx | `nx.storage` (KV and SQLite) | Per capability |
 | "API" plugin (e.g. ReZombie's `ApiClasses.sma`) | **API plugin** | Exports handles, `vars`, functions and forwards |
 | Mod (e.g. ReZombie) | **Mod** (`mod.toml`) | Package with plugins, assets, locale and configs |
@@ -81,6 +86,9 @@ api      = "^1.0"                 # Modern-Client.v2 plugin API range
 
 [capabilities]                    # requested; the server admin grants them
 storage = true
+
+[resources]
+external = ["models/player/leet/leet.mdl"]   # the game's content this mod expects: `rookc` never reads it
 
 [[plugin]]
 id     = "api.classes"
@@ -138,7 +146,7 @@ debug = true                      # same idea as "plugin.amxx debug"
 |---------|------|-------------|
 | `pluginPrecache` | Before the map starts, **in every plugin** before any `pluginInit` | Register content (classes, weapons, entities) and mandatory resources |
 | `pluginInit` | After every `pluginPrecache` | Register commands, cvars, dynamic hooks and menus. Look up other plugins' content by name |
-| `pluginCfg` | After `server.cfg` and the mod's configs | Read cvars that are already configured |
+| `pluginConfiguration` | After `server.cfg` and the mod's configs | Read cvars that are already configured |
 | `pluginPause` / `pluginUnpause` | `plugins pause/unpause` | Suspend effects |
 | `pluginEnd` | End of the map or unload | Save state and release external resources |
 
@@ -203,6 +211,8 @@ When a limit is exceeded, or on `panic`, the callback is **aborted** with a type
 | `client` | Client | Custom HUD, menus, local effects |
 | `shared` | Both | **Custom weapons with prediction**, custom movement |
 
+- Server plugins come first: bytecode from the network runs on a client only after the audit
+  [ADR-0007](adr/0007-own-vm-typed-bytecode.md) requires.
 - `client`/`shared` plugins are sent by the server as a resource (hash verified,
   [06 §7](06-assets-and-resources.md#7-resource-downloads)). They **end the "lag"
   of custom weapons**, which in AMXX ran only on the server.
@@ -216,22 +226,27 @@ When a limit is exceeded, or on `panic`, the callback is **aborted** with a type
 
 ## 8. Hot reload
 
+Servers and clients carry no compiler ([ADR-0033](adr/0033-rook-compiler-and-types.md)): they load
+the bytecode `rook build` wrote.
+
 ```text
 ] plugins reload rezombie/class.assassin
-[rook] compiling rezombie/class.assassin ... ok (12 ms)
+[rook] rezombie/class.assassin: new bytecode verified
+[rook] cancelled 2 tasks
 [rook] migrated 3 persistent globals, reset 0
 [rook] rezombie/class.assassin reloaded
 ```
 
-1. Compiles (if the source changed) and verifies the new bytecode.
-2. Calls `pluginEnd` on the old version.
+1. Verifies the plugin's new `.rbc`.
+2. Calls `pluginEnd` on the old version and cancels its tasks.
 3. Migrates the `persist var` globals whose name and type match. Incompatible ones are
    reset, with a warning listing each one.
 4. Re-registers hooks, commands, forwards and cvars. Registered content (classes, weapons)
    is **updated** under the same ID.
-5. Calls `pluginInit` and `pluginCfg`.
+5. Calls `pluginInit` and `pluginConfiguration`.
 
-In development, `rook_watch 1` reloads automatically when the file is saved.
+In development, `rook build --watch` writes the bytecode when a file is saved, and `rook_watch 1`
+reloads what it writes.
 
 ## 9. Native extensions (future)
 
@@ -250,7 +265,7 @@ algorithms), there will be a **versioned C ABI** (`mcv2_ext_v1`):
 | `storage` | `nx.storage` (KV and SQLite per mod) |
 | `http` | `nx.http` (outbound to hosts allowed in `plugins.toml`) |
 | `files` | Reading and writing in `data/<mod>/` |
-| `serverCommand` | `serverCmd` (run server console commands) |
+| `serverCommand` | `serverCommand` (run server console commands) |
 | `clientPlugins` | Send `client`/`shared` plugins |
 | `nativeExtensions` | Call native extensions |
 
@@ -262,14 +277,13 @@ A plugin that imports a module without the capability being granted **does not l
 | Command | Purpose |
 |---------|---------|
 | `rook new <type>` | Generates a plugin, mod or API plugin from a template |
-| `rook build` | Compiles the mod (incremental) |
+| `rook build` | Compiles the mod (incremental); `--watch` compiles again when a file is saved |
 | `rook check` | Type checking only, fast (for the editor) |
-| `rook test` | Runs `@test` tests with a simulated *headless* server |
-| `rook fmt` / `rook lint` | Canonical formatting and lints |
-| `rook doc` | HTML documentation from `///` |
+| `rook test` | Runs `@test` tests against the dedicated server, started as another program, *headless* |
+| `rook format` / `rook lint` | Canonical formatting and lints |
+| `rook document` | HTML documentation from `///` |
 | `rook pack` | Generates a reproducible `.nxpak` of the mod |
-| `rook migrate <file.sma>` | Assisted conversion from Pawn to Rook ([16](16-amxx-migration.md)) |
-| `rookLsp` | Language server: autocompletion (including `vars` keys), go to definition, rename, diagnostics as you type |
+| `rookLsp` | Language server: autocompletion (including fields), go to definition, rename, diagnostics as you type |
 | Debugger (DAP) | Breakpoints, stepping and inspection in VS Code, connected to a local server |
 
 ## 12. Built-in mods (replacements for the default AMXX plugins)
@@ -294,8 +308,8 @@ of `users.ini`.
 
 | Enum | Examples |
 |------|----------|
-| `PluginLoadError` | `CompileFailed`, `VerifyFailed`, `DependencyMissing{plugin}`, `DependencyFailed`, `ApiVersionMismatch{required, available}` |
-| `PluginFault` | `BudgetExceeded`, `HeapLimit`, `Panic{message}`, `StackOverflow`, `StaleHandle` |
+| `PluginLoadError` | `VerifyFailed`, `DependencyMissing{plugin}`, `DependencyFailed`, `ApiVersionMismatch{required, available}` |
+| `PluginFault` | `BudgetExceeded`, `HeapLimit`, `Panic{message}`, `StackOverflow`, `StaleHandle`, `StateEnded` |
 | `CapabilityError` | `NotGranted{capability, mod}`, `NotAllowedOnClient` |
 | `ManifestError` | `InvalidField{path, line}`, `DuplicatePluginId`, `UnknownTarget` |
 | `ReloadError` | `IncompatibleContent{id}`, `ReloadLoopDetected` |

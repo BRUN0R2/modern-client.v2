@@ -1,6 +1,6 @@
 # ADR-0007 — Own VM with typed, verified bytecode
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [ADR-0033](0033-rook-compiler-and-types.md)
 - **Date:** 2026-10-20
 
 ## Context
@@ -13,12 +13,12 @@ performance good enough for gameplay.
 ## Decision
 
 - **Own VM** with **typed register bytecode** (`.rbc`).
-- **Verifier at load time** (types, registers and jumps), which makes it safe to run bytecode
-  coming from the network.
+- **Verifier at load time** (nominal types, registers and jumps), which makes it safe to run
+  bytecode coming from the network.
 - **One isolate per plugin**, with its own precise, incremental GC, without a global pause.
 - **Instruction fuel** for the CPU budget, heap and stack limits, and typed failures.
-- Interpreter with *computed goto*. An optional JIT remains future work, without changing
-  the format.
+- Interpreter dispatching by *computed goto* on GCC and Clang and by `switch` on MSVC. An optional
+  JIT remains future work, without changing the format.
 
 ## Alternatives considered
 

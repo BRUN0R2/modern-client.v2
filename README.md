@@ -14,8 +14,8 @@ today is under [Status](#status)):
   skinning (done); DirectX 11 later.
 - **No limits:** entities, precache, players (up to 1024), messages, attachments,
   body groups, sprites and HUD values.
-- **Native plugins and mods:** the **Rook** language, strongly typed and familiar to anyone
-  coming from AMX Mod X, with its own compiler, hot reload and LSP (M6).
+- **Native plugins and mods:** the **Rook** language, typed to the maximum, that looks like AMX Pawn
+  and is new inside, with its own compiler, hot reload and LSP (M6).
 - **Servers as always:** the same cvars, configs, commands, RCON and A2S queries.
 
 > Will work without any Valve asset. Anyone who owns a legitimate copy of Counter-Strike 1.6

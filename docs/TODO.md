@@ -20,10 +20,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] The plugin API as eight generic primitives (handles and `vars`, standalone types with no parent, methods and hooks, actions, queries, messages and effects, commands/cvars/tasks, services) in place of the old modules ([ADR-0022](adr/0022-plugin-api-primitives.md), proposed)
 - [x] Navigation meshes for every kind of agent, `nx.navigation` over Recast/Detour ([ADR-0023](adr/0023-navigation.md))
 - [x] Agents for bots, monsters and bosses: one brain, a player's or an entity's body, perception, memory and behaviors, `nx.agents`, each kind its own module over it: `cs.bots`, a mod's zombies and bosses in Rook ([ADR-0024](adr/0024-agents.md))
-- [x] Rook accepting AMX Mod X's literal names (`#include`, `new`, `register_clcmd`, `client_print`; a property's native such as `get_user_health` being its accessor, `get_player_var(player, "health")`) and the accessors with underscores (`get_player_var`, `set_weapon_var`, `get_entity_var`) through an `amxx` compatibility layer, an exception to ADR-0013 ([ADR-0021](adr/0021-rook-amxx-names.md))
 - [ ] The enhanced look: physically based materials, the map's reflection probes, HDR and bloom, the same on every card ([ADR-0025](adr/0025-enhanced-rendering.md), proposed)
-- [ ] A separate Rook compiler (`.rookd` in, `.rbc` out, none in the server or the client), bytecode that keeps the types for the verifier, and types for lifecycle stages, checked states, untrusted text, resource paths and dimensions ([ADR-0033](adr/0033-rook-compiler-and-types.md), proposed)
-- [ ] Rook that looks like AMX Pawn and is new inside, with nothing ported: no `amxx` layer and no `rook migrate`, fields in place of `get*Var`/`set*Var`, literals that take the type of their place, tasks with a required owner in place of `setTask`, mandatory parentheses in control flow, full names, ReZombie written from scratch ([ADR-0034](adr/0034-rook-modern-only.md), proposed)
+- [x] A separate Rook compiler (`.rookd` in, `.rbc` out, none in the server or the client), bytecode that keeps the types for the verifier, and types for lifecycle stages, checked states, untrusted text, resource paths and dimensions ([ADR-0033](adr/0033-rook-compiler-and-types.md))
+- [x] Rook that looks like AMX Pawn and is new inside, with nothing ported: no `amxx` layer and no `rook migrate`, fields in place of `get*Var`/`set*Var`, literals that take the type of their place, tasks with a required owner in place of `setTask`, mandatory parentheses in control flow, full names, ReZombie written from scratch ([ADR-0034](adr/0034-rook-modern-only.md))
 - [x] Menu toolkit: in-house, in VGUI2's model ([ADR-0020](adr/0020-in-house-ui-toolkit.md))
 - [x] `nx.ui` panels, placed by VGUI2's layouts and following their parent as it changes size
 - [x] `nx.ui` fonts: TrueType faces sized for a scheme's `tall` as Windows' GDI sizes them and drawn by FreeType, with and without antialiasing, fuzzed (`fuzzFont`; a device height whose line is less than half its em left out, so that a broken VDMX table cannot size a face beyond its cell; [12 §2.1](12-ui-hud-and-console.md#21-fonts))
@@ -68,7 +67,6 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] 13 — Plugin and mod system
 - [x] 14 — Rook language
 - [x] 15 — Plugin API
-- [x] 16 — AMXX → Rook migration (ReZombie examples)
 - [x] 17 — Build, dependencies and tools
 - [x] 18 — Testing and quality
 - [x] 19 — Roadmap
@@ -601,32 +599,35 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] Error-tolerant lexer and parser with a lossless CST
 - [ ] Name, module and import resolution (including `prelude`)
 - [ ] Type checking with local bidirectional inference
-- [ ] Newtypes, units and literal suffixes
+- [ ] Newtypes, units with derived operations (`dimension`) and ranges, suffixes on `Duration` and `Angle`
+- [ ] Literals that take the type of their place
 - [ ] `Option`/`Result`, `error enum` with `from` and `?`
 - [ ] Exhaustive `match` with patterns, guards and tuples
 - [ ] Ephemeral handle analysis (no escaping and no `await`)
 - [ ] `pure fn` verification
-- [ ] `vars` catalogs with typed literal keys and `get*Var`/`set*Var` generation, and their underscored spelling (`get_player_var`)
-- [ ] AMX Mod X's spelling: `new` as a contextual keyword, `#include` of the `amxx` headers ([ADR-0021](adr/0021-rook-amxx-names.md))
+- [ ] `vars` catalogs as typed fields of a handle
+- [ ] Lifecycle stages in signatures (`@onlyIn`), states proved by a check (`narrows`, `@ends`), `UntrustedText` and resource paths checked against the mod ([ADR-0033](adr/0033-rook-compiler-and-types.md))
+- [ ] Mandatory parentheses and braces in control flow ([ADR-0034](adr/0034-rook-modern-only.md))
 - [ ] Known forwards with name and signature checking
 - [ ] Interpolated strings and checked translation keys
-- [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming, `compatibilityName`…)
+- [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming…)
 - [ ] RIR (typed SSA) and optimizations
-- [ ] `.rbc` bytecode generation with metadata and debug info
+- [ ] `rook/format`: the layout of `.rbc` and `.rookd`, with their versions
+- [ ] `.rbc` bytecode generation with its types, metadata and debug info
 - [ ] Query-driven incremental compilation
 - [ ] Diagnostics with a code, a suggestion and `--explain`, in English and Portuguese
 - [ ] Conformance suite
 
 ### VM and host
-- [ ] Bytecode verifier
-- [ ] Register-based interpreter
+- [ ] Bytecode verifier in a target of its own, enforcing the nominal types and fuzzed from its first commit
+- [ ] Register-based interpreter, dispatching by computed goto on GCC and Clang and by `switch` on MSVC
 - [ ] Precise, incremental GC per isolate
 - [ ] Instruction fuel, heap and stack limits, typed failures
 - [ ] Cross-plugin calls with value copying and a signature hash
 - [ ] Bindings and `.rookd` generation from C++ annotations
 - [ ] Forwards, pre and post hooks, `registerHook`/`disableHook`
 - [ ] Commands with typed arguments and typed cvars
-- [ ] `setTask`, coroutines (`wait`, `nextTick`, `until`) and owned tasks
+- [ ] Tasks with a required owner (`startTask`, `restartTask`, `cancelTask`, `wait`, `nextTick`, `until`, `defer`) ([14 §16](14-rook-language.md#16-tasks-and-coroutines))
 - [ ] ECS components and systems in Rook
 - [ ] `PlayerMap` and `EntityMap` with automatic cleanup
 - [ ] `runJob` for `pure fn`
@@ -635,9 +636,9 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `mod.toml` and `plugins.toml` with validation
 - [ ] Load order from the dependency graph, and cycle detection
 - [ ] Capabilities granted by the admin
-- [ ] Lifecycle (`pluginPrecache`, `pluginInit`, `pluginCfg`, `pluginEnd`, pause)
+- [ ] Lifecycle (`pluginPrecache`, `pluginInit`, `pluginConfiguration`, `pluginEnd`, pause)
 - [ ] Failure policy (`rook_fault_policy`)
-- [ ] Hot reload with `persist var` migration
+- [ ] Hot reload of the bytecode `rook build --watch` writes, with `persist var` migration
 - [ ] `plugins list|load|unload|reload|info|pause` and `mods list|info` commands
 
 ### API
@@ -649,14 +650,12 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `nx.storage` (KV and SQLite) and `nx.http`
 - [ ] Plugin network messages
 - [ ] API compatibility check in CI
-- [ ] The `amxx.*` modules: AMX Mod X's natives that no catalog covers, over the canonical API ([ADR-0021](adr/0021-rook-amxx-names.md))
 
 ### Tools
-- [ ] `rook new`, `build`, `check`, `test`, `fmt`, `lint`, `doc`, `pack`
+- [ ] `rook new`, `build`, `check`, `test`, `format`, `lint`, `document`, `pack`
 - [ ] `rookLsp` (`vars` key autocompletion, diagnostics, rename, go to definition)
 - [ ] DAP debugger
 - [ ] VS Code extension
-- [ ] `rook migrate` (Pawn → Rook) with a report, and `--keep-amxx-names`
 
 ### Built-in mods
 - [ ] `admin` (with `admins.toml`, typed permissions and `users.ini` import)
@@ -668,11 +667,12 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `pausecfg`
 
 ### Reference mod
-- [ ] Port ReZombie: API plugins (classes, subclasses, props, models, modes, game vars, players, weapons)
-- [ ] Port the classes (Human, Zombie, Assassin, Nemesis, Survivor, Sniper, Fleshpound, Banshee)
-- [ ] Port the modes (Infection, Nemesis, Survivor, Assassin, Sniper)
-- [ ] Port the weapons (Cold Steel, Drakar III, USP, AK-47) with prediction (`shared`)
-- [ ] Port the HUD, menus and core
+- [ ] The native `mod.zombies` rewritten in Rook and measured against itself, before anything else is built on tasks ([ADR-0033](adr/0033-rook-compiler-and-types.md))
+- [ ] Write ReZombie from scratch ([ADR-0034](adr/0034-rook-modern-only.md)): API plugins (classes, subclasses, props, models, modes, game vars, players, weapons)
+- [ ] Write the classes (Human, Zombie, Assassin, Nemesis, Survivor, Sniper, Fleshpound, Banshee)
+- [ ] Write the modes (Infection, Nemesis, Survivor, Assassin, Sniper)
+- [ ] Write the weapons (Cold Steel, Drakar III, USP, AK-47) with prediction (`shared`)
+- [ ] Write the HUD, menus and core
 - [ ] Zombies and bosses as kinds of agents of the mod, each its own module over `nx.agents` ([ADR-0024](adr/0024-agents.md))
 - [ ] Freeze the 1.0 API
 
