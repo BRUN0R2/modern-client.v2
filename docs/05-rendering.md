@@ -81,8 +81,10 @@ memory to upload and read back, through VMA), textures (with mip levels, and arr
 shaders sample as `Texture2DArray`), samplers, shaders, bind group layouts and
 bind groups (descriptor pools added as they fill, so their number has no ceiling) and render
 pipelines (dynamic rendering, dynamic viewport and scissor). A destroyed resource lives until the
-GPU has finished every frame that may use it. The command list transitions textures and buffers,
-copies between them, and draws. The validation layers, when installed and asked for, log their
+GPU has finished every frame that may use it. A `TrackedBindGroup` is told each frame what it names and
+is made again only when that differs, so whoever grows or replaces a resource has no group to tell: a
+group left naming the old one would read what it held, with no error. The command list transitions
+textures and buffers, copies between them, and draws. The validation layers, when installed and asked for, log their
 warnings and errors and count every error (`Device::validationErrors`), which the tests require to
 be zero; the tests draw offscreen and read the pixels back, on lavapipe in CI.
 
