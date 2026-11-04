@@ -227,6 +227,63 @@ TEST(NavigationQueryTest, AWayIsKnownToLeadOverEveryLinkItTakesAndNeverAgainstOn
     EXPECT_FALSE(reaches(island, highTop));
 }
 
+TEST(NavigationQueryTest, ALadderJoinsTheFloorsItLeadsToBothWaysAndOneTooShortJoinsNone) {
+    // A floor at 0 and a building on it, 256 tall, higher than a body drops or jumps, a ladder up its wall.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 512.0F, .y = -32.0F, .z = -16.0F},
+                     {.x = 1024.0F, .y = 544.0F, .z = 256.0F});
+    const Vec3 floor{.x = 200.0F, .y = 256.0F};
+    const Vec3 roof{.x = 800.0F, .y = 256.0F, .z = 256.0F};
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(geometry);
+        NavigationQuery query{mesh};
+        const auto none = query.isReachable(floor, roof);
+        ASSERT_TRUE(none.has_value());
+        EXPECT_FALSE(*none) << "no way up without a ladder";
+    }
+    Geometry shortOne = geometry;
+    shortOne.ladders.push_back(
+        {.min = {.x = 500.0F, .y = 240.0F}, .max = {.x = 512.0F, .y = 272.0F, .z = 100.0F}});
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(shortOne);
+        NavigationQuery query{mesh};
+        const auto none = query.isReachable(floor, roof);
+        ASSERT_TRUE(none.has_value());
+        EXPECT_FALSE(*none) << "a ladder that ends short of the roof";
+    }
+    geometry.ladders.push_back(
+        {.min = {.x = 500.0F, .y = 240.0F}, .max = {.x = 512.0F, .y = 272.0F, .z = 256.0F}});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    const auto outline = mesh.outline();
+    const auto link = std::ranges::find(outline.links, AreaKind::Ladder, &nx::navigation::MeshLink::kind);
+    ASSERT_NE(link, outline.links.end());
+    EXPECT_NEAR(link->start.z, 0.0F, kTolerance);
+    EXPECT_NEAR(link->end.z, 256.0F, kTolerance);
+    EXPECT_NEAR(link->ladder.x, 506.0F, 1.0F);
+    EXPECT_NEAR(link->ladder.y, 256.0F, 1.0F);
+    NavigationQuery query{mesh};
+    for (const auto& [from, to] : {std::pair{floor, roof}, std::pair{roof, floor}}) {
+        const auto path = query.findPath({.from = from, .to = to});
+        ASSERT_TRUE(path.has_value()) << std::format("{} to {}: {}", from, to, nx::describe(path.error()));
+        EXPECT_NEAR(path->points.back().z, to.z, kTolerance);
+    }
+}
+
+TEST(NavigationQueryTest, ALadderLeadsToNoFloorBehindAWall) {
+    // A wall 256 tall with a floor on either side, a ladder up one side, too low to get over the wall.
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 1024.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, {.x = 512.0F, .y = -32.0F}, {.x = 544.0F, .y = 544.0F, .z = 256.0F});
+    geometry.ladders.push_back(
+        {.min = {.x = 500.0F, .y = 240.0F}, .max = {.x = 512.0F, .y = 272.0F, .z = 100.0F}});
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    NavigationQuery query{mesh};
+    const auto reachable = query.isReachable({.x = 200.0F, .y = 256.0F}, {.x = 800.0F, .y = 256.0F});
+    ASSERT_TRUE(reachable.has_value());
+    EXPECT_FALSE(*reachable);
+}
+
 TEST(NavigationQueryTest, APointFarFromTheMeshIsOutsideIt) {
     const NavigationMesh mesh = nx::test::playerMesh(wallAcrossAFloor());
     NavigationQuery query{mesh};

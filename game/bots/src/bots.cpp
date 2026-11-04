@@ -51,11 +51,14 @@ constexpr std::uint32_t kPlayingTeams = 2;
     return nx::length(way) == 0.0F ? view : nx::vectorAngles(way);
 }
 
-/// Where a player that knows itself as `self` wants to look: at `aimSpot`, else where `intent` looks,
-/// else ahead along its way, level, however it steers or wiggles (SetLookAngles of m_lookAheadAngle),
-/// else where it looks.
+/// Where a player that knows itself as `self` wants to look: the way it climbs, as a ladder takes its view
+/// for its way; else at `aimSpot`, else where `intent` looks, else ahead along its way, level, however it
+/// steers or wiggles (SetLookAngles of m_lookAheadAngle), else where it looks.
 [[nodiscard]] auto viewWanted(const nx::agents::Intent& intent, std::optional<nx::Vec3> aimSpot,
                               const PlayerOwnState& self) noexcept -> nx::EulerAngles {
+    if (intent.climb) {
+        return nx::vectorAngles(*intent.climb);
+    }
     if (const std::optional<nx::Vec3> looked = aimSpot ? aimSpot : intent.lookAt) {
         return viewFacing(self.eye, *looked, self.view);
     }
@@ -623,6 +626,7 @@ void Bots::finishTurn(Turn& turn, const nx::agents::Decision& decision, const Si
     } else {
         endFight(driver->combat);
     }
+    holdKeysOf(command);
     const bool presses = pullTrigger(driver->trigger,
                                      {.pursued = decision.target,
                                       .eye = self.eye,

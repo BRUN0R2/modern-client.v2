@@ -701,6 +701,20 @@ TEST(MovementTest, AVolumeEntityHoldsWhatItSays) {
 
 constexpr std::array kLadder{cs::BrushEntity{.model = {1}, .role = cs::BrushRole::Ladder}};
 
+TEST(MovementTest, TheKeysOfACommandAreThoseOfTheSpeedsItAsks) {
+    cs::UserCommand going{
+        .move = {.forward = nx::UnitsPerSecond{250.0F}, .side = nx::UnitsPerSecond{-100.0F}}};
+    cs::holdKeysOf(going);
+    EXPECT_TRUE(going.buttons.test(Button::Forward));
+    EXPECT_TRUE(going.buttons.test(Button::MoveLeft));
+    EXPECT_FALSE(going.buttons.test(Button::Back));
+    EXPECT_FALSE(going.buttons.test(Button::MoveRight));
+    cs::UserCommand staying{};
+    cs::holdKeysOf(staying);
+    EXPECT_FALSE(staying.buttons.test(Button::Forward))
+        << "none asked, none held, and a ladder holds it still";
+}
+
 TEST(MovementTest, OnALadderForwardClimbsAndBackOnTheFloorStepsOff) {
     const BrushHulls hulls = ladderWorld();
     MovementState atTheLadder = standingOnTheFloor();

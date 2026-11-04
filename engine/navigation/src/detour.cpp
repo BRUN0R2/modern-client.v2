@@ -182,6 +182,17 @@ constexpr unsigned char kLinkEndEdge = 1;
     return isStartJoined && isEndJoined;
 }
 
+/// The link from `start` to `end` of the polygon `polygon` of `connection`: a ladder's knows the ladder.
+[[nodiscard]] auto linkOf(Vec3 start, Vec3 end, const dtPoly& polygon, const dtOffMeshConnection& connection)
+    -> MeshLink {
+    const AreaKind kind = detail::kindOfArea(polygon.getArea());
+    return MeshLink{.start = start,
+                    .end = end,
+                    .kind = kind,
+                    .ladder =
+                        kind == AreaKind::Ladder ? detail::ladderOfId(connection.userId, start.z) : Vec3{}};
+}
+
 /// The corners of `polygon` of `tile`, in Detour's space, one point after another.
 [[nodiscard]] auto cornersOf(const dtMeshTile& tile, const dtPoly& polygon) -> std::vector<float> {
     const std::span vertices{tile.verts, narrow<std::size_t>(tile.header->vertCount) * kCoordinates};
@@ -562,14 +573,18 @@ auto NavigationMesh::outline() const -> MeshOutline {
         if (tile == nullptr || tile->header == nullptr) {
             continue;
         }
-        for (const dtPoly& polygon : std::span{tile->polys, narrow<std::size_t>(tile->header->polyCount)}) {
+        const std::span polygons{tile->polys, narrow<std::size_t>(tile->header->polyCount)};
+        for (std::size_t number = 0; number < polygons.size(); ++number) {
+            const dtPoly& polygon = polygons[number];
             const std::vector<float> corners = cornersOf(*tile, polygon);
             if (polygon.getType() == DT_POLYTYPE_OFFMESH_CONNECTION) {
                 // Its ends where Detour put them, on the polygons it joins.
                 if (isJoined(*tile, polygon)) {
-                    outline.links.push_back(MeshLink{.start = detail::positionOf(pointAt(corners, 0)),
-                                                     .end = detail::positionOf(pointAt(corners, 1)),
-                                                     .kind = detail::kindOfArea(polygon.getArea())});
+                    const dtOffMeshConnection& connection =
+                        tile->offMeshCons[number - narrow<std::size_t>(tile->header->offMeshBase)];
+                    outline.links.push_back(linkOf(detail::positionOf(pointAt(corners, 0)),
+                                                   detail::positionOf(pointAt(corners, 1)), polygon,
+                                                   connection));
                 }
                 continue;
             }
@@ -1115,10 +1130,13 @@ struct NextLink {
         dtStatusFailed(mesh.getTileAndPolyByRef(*link, &tile, &polygon))) {
         return std::nullopt;
     }
+    const dtOffMeshConnection* const connection = mesh.getOffMeshConnectionByRef(*link);
+    if (connection == nullptr) {
+        return std::nullopt;
+    }
     return NextLink{.polygon = *link,
-                    .link = MeshLink{.start = detail::positionOf(start),
-                                     .end = detail::positionOf(end),
-                                     .kind = detail::kindOfArea(polygon->getArea())}};
+                    .link =
+                        linkOf(detail::positionOf(start), detail::positionOf(end), *polygon, *connection)};
 }
 
 } // namespace

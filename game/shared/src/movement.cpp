@@ -1475,6 +1475,18 @@ auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds {
     return nx::Seconds{static_cast<float>(double{command.duration.count()} * kSecondsPerMillisecond)};
 }
 
+void holdKeysOf(UserCommand& command) noexcept {
+    const auto hold = [&command](nx::UnitsPerSecond speed, Button positive, Button negative) {
+        if (speed > nx::UnitsPerSecond{}) {
+            command.buttons.set(positive);
+        } else if (speed < nx::UnitsPerSecond{}) {
+            command.buttons.set(negative);
+        }
+    };
+    hold(command.move.forward, Button::Forward, Button::Back);
+    hold(command.move.side, Button::MoveRight, Button::MoveLeft);
+}
+
 auto simulateMovement(const MovementState& state, const UserCommand& command,
                       const MovementSettings& settings, const BrushHulls& hulls,
                       std::span<const BrushEntity> entities, std::span<const SolidBox> boxes)

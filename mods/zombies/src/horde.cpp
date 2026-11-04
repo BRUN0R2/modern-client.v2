@@ -402,6 +402,9 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
         if (decision.intent.jumps) {
             command.buttons.set(cs::Button::Jump);
         }
+        if (decision.intent.climb) {
+            aim = *decision.intent.climb;
+        }
         if (nx::length(aim) > 0.0F) {
             command.viewAngles.yaw =
                 nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
@@ -414,6 +417,7 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             const nx::UnitsPerSecond speed = settings.body.speed * decision.intent.speedShare;
             command.move.forward = speed * nx::dot(driven, axes.forward);
             command.move.side = speed * nx::dot(driven, axes.right);
+            cs::holdKeysOf(command);
         }
         commands.push_back({.entity = entity, .command = command});
     }

@@ -539,6 +539,95 @@ TEST(AgentBrain, ABodyAcrossALinkSearchesNoWayUntilItLands) {
     EXPECT_LE(nx::length(walked.feet - aside), rules().arrivalDistance.value() + 3.0F);
 }
 
+/// A floor and a building on it, 256 tall, with a ladder up its wall at y = 256.
+auto ladderMesh() -> nx::navigation::NavigationMesh {
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = 512, .y = -32, .z = -16}, {.x = 1024, .y = 544, .z = 256});
+    geometry.ladders.push_back({.min = {.x = 500, .y = 240}, .max = {.x = 512, .y = 272, .z = 256}});
+    return nx::test::playerMesh(geometry, 0);
+}
+
+TEST(AgentBrain, ABodyClimbsALadderFacingItLevelAndStepsOffAtTheTop) {
+    const auto mesh = ladderMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 800, .y = 256, .z = 256});
+    // To the ladder's foot along its way.
+    nx::Vec3 feet{.x = 300, .y = 256};
+    nx::agents::Decision decision = brain.decide(feet, query);
+    EXPECT_FALSE(decision.intent.climb.has_value()) << "far from it";
+    for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
+        feet = feet + (decision.intent.direction * 2.0F);
+        decision = brain.decide(feet, query);
+    }
+    ASSERT_TRUE(decision.intent.climb.has_value()) << "at its foot";
+    EXPECT_LT(feet.x, 500.0F);
+    EXPECT_GT(decision.intent.direction.x, 0.9F) << "toward the ladder";
+    EXPECT_FLOAT_EQ(decision.intent.climb->z, 0.0F) << "level: what goes into its face goes up it";
+    EXPECT_FALSE(decision.intent.jumps) << "a jump would push it off";
+    // Up it, facing it.
+    feet = {.x = 490, .y = 256, .z = 150};
+    decision = brain.decide(feet, query);
+    ASSERT_TRUE(decision.intent.climb.has_value());
+    EXPECT_GT(decision.intent.direction.x, 0.9F);
+    // At the top, on to where its way goes on, its key still held for as long as the ladder holds it.
+    feet = {.x = 490, .y = 256, .z = 250};
+    decision = brain.decide(feet, query);
+    ASSERT_TRUE(decision.intent.climb.has_value());
+    EXPECT_GT(decision.intent.direction.x, 0.9F);
+    // Off it, on the roof, it walks on.
+    feet = {.x = 560, .y = 256, .z = 256};
+    decision = brain.decide(feet, query);
+    EXPECT_FALSE(decision.intent.climb.has_value());
+    EXPECT_GT(nx::length(decision.intent.direction), 0.0F);
+}
+
+TEST(AgentBrain, ABodyComesDownALadderWalkingOverToItLookingBelowLevel) {
+    const auto mesh = ladderMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 200, .y = 256});
+    nx::Vec3 feet{.x = 800, .y = 256, .z = 256};
+    nx::agents::Decision decision = brain.decide(feet, query);
+    for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
+        feet = feet + (decision.intent.direction * 2.0F);
+        decision = brain.decide(feet, query);
+    }
+    ASSERT_TRUE(decision.intent.climb.has_value()) << "at the roof's edge";
+    EXPECT_GT(feet.x, 512.0F);
+    EXPECT_LT(decision.intent.direction.x, -0.9F) << "over toward the ladder and the floor past it";
+    EXPECT_LT(decision.intent.climb->z, -0.8F) << "well below level";
+    EXPECT_LT(decision.intent.climb->x, 0.0F);
+    // Past its face, still coming down the same way.
+    feet = {.x = 490, .y = 256, .z = 120};
+    decision = brain.decide(feet, query);
+    ASSERT_TRUE(decision.intent.climb.has_value());
+    EXPECT_LT(decision.intent.direction.x, -0.9F);
+    // On the floor, past where the link lands, it walks on.
+    feet = {.x = 450, .y = 256};
+    decision = brain.decide(feet, query);
+    EXPECT_FALSE(decision.intent.climb.has_value());
+}
+
+TEST(AgentBrain, ABodyOffTheMeshJumpsAndSearchesAnewAsSoonAsItIsBackOnIt) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 goal{.x = 200, .y = 0};
+    brain.setGoal(goal);
+    const nx::Vec3 inTheAir{.x = 0, .y = 0, .z = 400};
+    const nx::agents::Decision off = brain.decide(inTheAir, query);
+    EXPECT_EQ(off.behavior, nx::agents::Behavior::Blocked);
+    EXPECT_EQ(off.navigationError, nx::navigation::NavigationError::OutsideMesh);
+    EXPECT_TRUE(off.intent.jumps) << "a jump lets go of a ladder";
+    // Within the replan distance across of where it failed: nothing but its being there changed.
+    const nx::agents::Decision back = brain.decide({.x = 0, .y = 0, .z = 0}, query);
+    EXPECT_EQ(back.behavior, nx::agents::Behavior::MoveTo);
+    EXPECT_GT(nx::length(back.intent.direction), 0.0F);
+    EXPECT_FALSE(back.intent.jumps);
+}
+
 TEST(AgentBrain, ABodyBelowABoxItJumpsOntoJumpsOnceAndWalksOnOnItsTop) {
     const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 40}};
     const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);

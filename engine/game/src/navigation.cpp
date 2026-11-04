@@ -100,6 +100,11 @@ auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navi
                     geometry, map, model.index,
                     BrushPlacement{.axes = angleVectors(transform.angles), .origin = transform.origin});
             }
+            if (solidity.contents == assets::Contents::Ladder) {
+                const Aabb& bounds = map.models()[model.index.value].bounds;
+                geometry.ladders.push_back(
+                    Aabb{.min = bounds.min + transform.origin, .max = bounds.max + transform.origin});
+            }
         });
     return geometry;
 }

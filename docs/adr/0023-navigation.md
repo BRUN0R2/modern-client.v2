@@ -55,6 +55,13 @@ convex polygons, through Recast and Detour.
   and kept as tiles in a cache file, read back without parsing; any change of the three rebuilds
   it. The first build runs in jobs while the map loads; `nxbake` can build them ahead for a
   server.
+- **Ladders.** A `func_ladder` joins the floors it leads to by links of the kind `Ladder`, both ways:
+  each floor past a side of it with no wall in the way, from one a body's top reaches its bottom from up
+  to one a step above its top, a body over a wall on top of it as much as in front of it. An agent climbs
+  by its keys and its view, as a player does (`PM_LadderMove`): up facing it level; down walking off toward
+  it looking 60 degrees below level, which brings a body from behind it round to its front. What an
+  agent asks of a body holds the keys of its speeds (`cs::holdKeysOf`), as a client's do: on a ladder a body
+  moves by its keys alone, none held holding it there. A body off the mesh jumps, which lets go of one.
 - **Queries.** `findPath` (A* over the polygons, then the funnel that straightens the path),
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it
