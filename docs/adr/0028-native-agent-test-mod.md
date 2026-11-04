@@ -39,7 +39,7 @@ crash mangling an imported type's description attached to another named module.
 
 Models from the maintainer's local CSO installation stay in the user's addon folder.
 Only synthetic fixtures and configuration examples enter the repository. This is a
-development scenario, not a claim of CSO gameplay parity or the completed ReZombie port.
+development scenario, not a claim of CSO gameplay parity or a finished ReZombie.
 
 ## Alternatives considered
 

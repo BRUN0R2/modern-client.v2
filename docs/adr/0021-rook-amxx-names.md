@@ -1,6 +1,6 @@
 # ADR-0021 — Rook accepts AMX Mod X's names and `get_*_var` through a compatibility layer
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0034](0034-rook-modern-only.md), which also removed document 16
 - **Date:** 2026-10-23
 
 ## Context
@@ -49,7 +49,7 @@ The literal names contradicted, as they were written before this ADR:
   [§22](../14-rook-language.md#22-lints-and-magic-numbers): the reserved words do not include `new`
   and the `naming` lint is an error; [§19](../14-rook-language.md#19-modules-imports-and-visibility):
   imports, no preprocessor.
-- [16](../16-amxx-migration.md): migration renames every AMXX name to its camelCase form.
+- 16: migration renames every AMXX name to its camelCase form.
 
 A contradiction between documents is a defect that an ADR resolves before any implementation
 ([RULES §1](../RULES.md#1-supreme-rule)). This ADR states it, and the decision below amends those
@@ -80,7 +80,7 @@ camelCase API, with every Rook guarantee kept.
    `setTask`. They take and return Rook's types: a `Player` handle and not an index, units, a
    function reference and not a callback's name, a `Result` where the canonical function returns
    one. There is no second implementation, and the layer's names are listed in
-   [16 §3](../16-amxx-migration.md#3-api) beside their canonical forms.
+   16 §3 beside their canonical forms.
 
    A native that only reads or writes a property a `vars` catalog has is **not** in the layer: the
    property is reached through its handle's accessor, so that the API keeps one way to each
@@ -102,7 +102,7 @@ camelCase API, with every Rook guarantee kept.
    `RegisterHookChain` by a callback's name, `message_begin` and `write_byte`. The typed API
    replaces each: an entity is created whole through `nx.entity`, a model is a `Model` from
    `precacheModel`, a property is reached through its accessor, hooks are bound by reference
-   ([16 §3](../16-amxx-migration.md#3-api)). Including one of those headers is an error whose fix
+   (16 §3). Including one of those headers is an error whose fix
    names the typed API; `rook migrate` converts their calls.
 4. **The `vars` pattern with underscores.** For each handle with a `vars` catalog, the engine's
    (`Entity`, `Player`, `Weapon`, `WeaponClass`, the game rules) and those plugins declare
@@ -138,7 +138,7 @@ variable names (`var_health`, `m_iAccount`) are outside this ADR.
 
 | Alternative | Why not |
 |-------------|---------|
-| Keep ADR-0013 as it is: camelCase only, `rook migrate` and the table of [16](../16-amxx-migration.md) | One convention, nothing more to maintain; but the familiarity the maintainer asks for stops at the migration report, and a plugin written from memory does not compile |
+| Keep ADR-0013 as it is: camelCase only, `rook migrate` and the table of 16 | One convention, nothing more to maintain; but the familiarity the maintainer asks for stops at the migration report, and a plugin written from memory does not compile |
 | AMXX's spelling as Rook's only spelling (supersede ADR-0013 for Rook) | Two conventions in the project again, the case ADR-0013 was written against; `new` and `#include` with Pawn's meanings would bring the preprocessor and untyped declarations back |
 | A Pawn front end: `rookc` compiles `.sma` sources | Pawn's untyped cells give the compiler nothing to check: most plugins would be refused, or run in a mode without Rook's guarantees, against ADR-0006 and [ADR-0007](0007-own-vm-typed-bytecode.md) |
 | Tools only: the LSP completes `register_clcmd` as `registerClcmd`, and "did you mean" diagnostics | No change to the language and the most predictable; but the code is still written in the canonical spelling, which is not what is asked |
@@ -161,7 +161,7 @@ variable names (`var_health`, `m_iAccount`) are outside this ADR.
 - ⚠️ False familiarity: the names are AMXX's, the types are not (`register_clcmd` takes the
   handler and not its name, `client_print` a `Player` and not an index). Mitigation: diagnostics in
   AMXX's terms (decision 7), the fix that turns a property's native into its accessor, and the
-  differences of [16 §5](../16-amxx-migration.md#5-important-behavior-differences).
+  differences of 16 §5.
 - ⚠️ ADR-0013's single convention gets a scoped exception, and `naming` a softer default in
   files that include AMXX headers. Mitigation: the exception is the layer alone, and
   `compatibilityName` points at every use.
@@ -174,4 +174,4 @@ variable names (`var_health`, `m_iAccount`) are outside this ADR.
 The same change amended ADR-0013 (the exception), ADR-0006, ADR-0012,
 [02 §3.1](../02-coding-standards.md#31-project-rule-camelcase),
 [14 §1, §4, §13.2, §19 and §22](../14-rook-language.md), [15 §1, §2, §4 and §10](../15-mod-api.md),
-[16 §1, §2, §3, §6 and §7](../16-amxx-migration.md) and the M6 items of `TODO.md`.
+16 §1, §2, §3, §6 and §7 and the M6 items of `TODO.md`.

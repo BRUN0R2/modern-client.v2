@@ -24,7 +24,7 @@
 | Render | Reference images | Renderer passes with tolerance | Every PR |
 | Parity | Fixtures from the original | Movement, weapons, economy, rules | Nightly |
 | Performance | Benchmarks on a dedicated machine | Hot paths and the full frame | Nightly |
-| Fuzzing (more targets) | libFuzzer | Network decoder, `rookc` | Nightly |
+| Fuzzing (more targets) | libFuzzer | Network decoder, `rookc`, the Rook verifier | Nightly |
 | Stress | Simulated clients | 1024 players, mass entities | Weekly |
 | *Soak* | Long-running server | 24 h+ with bots: stable memory, no timing degradation | Per release |
 

@@ -43,18 +43,20 @@ modern-client.v2/
 │   └── master/                 # nextmaster
 ├── rook/
 │   ├── spec/                   # grammar, conformance tests
+│   ├── format/                 # layout of .rbc and .rookd, shared by the compiler, the verifier and the VM
 │   ├── compiler/               # rookc (frontend, checker, RIR, codegen)
-│   ├── vm/                     # interpreter, GC, verifier
+│   ├── verifier/               # load-time check of .rbc
+│   ├── vm/                     # interpreter, GC, isolates, budgets
 │   ├── stdlib/                 # std.* in Rook + native parts
 │   ├── lsp/                    # rookLsp
-│   ├── cli/                    # rook (build, test, fmt, lint, doc, pack, migrate)
+│   ├── cli/                    # rook (build, test, format, lint, document, pack)
 │   └── vscode/                 # VS Code extension (syntax, LSP client, DAP)
 ├── shaders/                    # Slang sources
 ├── data/
 │   ├── cstrike/                # gameplay data (TOML)
 │   ├── fonts/                  # the project's own font (ADR-0031)
 │   └── content/                # content source descriptions (essential files of each)
-├── mods/                       # built-in mods written in Rook (admin, votes, maps, ...)
+├── mods/                       # built-in mods written in Rook (admin, votes, maps, ...), built with rookc as a host tool
 ├── tools/
 │   ├── nxbake/                 # asset import/cook/pack
 │   ├── nxcheck/                # reads the CS 1.6 installation with every reader (tool.nxcheck)
@@ -319,7 +321,7 @@ depend on what comes preinstalled on the runner image, nor on a download server 
 | Job | Trigger | Contents |
 |-----|---------|----------|
 | `linux-clang` | Every PR | Clang on Linux, in addition to GCC |
-| `lint` | Every PR | `clang-tidy` (with modules), `rook fmt --check`, `rook lint` |
+| `lint` | Every PR | `clang-tidy` (with modules), `rook format --check`, `rook lint` |
 | `sanitizers` | Every PR | ASan + UBSan on the tests, with Clang (TSan already runs with GCC) |
 | `api-compat` | Every PR | Diff of the `.rookd` files against the last release ([15 §10](15-mod-api.md#10-versioning-and-stability)) |
 | `determinism` | Every PR | The same demo with 0, 1, 3 and 15 workers and an identical hash |

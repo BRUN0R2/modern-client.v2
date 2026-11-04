@@ -15,7 +15,7 @@ strings, and failed silently or with a generic run-time error.
 
 The maintainer asks to take everything that worked and make one generic thing of it: smaller,
 functional, fast, typed and modern, with typed errors and no exceptions, its systems fully
-decoupled, clean and lean ([ADR-0021](0021-rook-amxx-names.md) keeps only AMX Mod X's look; none
+decoupled, clean and lean ([ADR-0034](0034-rook-modern-only.md) keeps only AMX Mod X's look; none
 of the old modules is carried over).
 
 The planned API ([15](../15-mod-api.md)) is already typed, but it still keeps three ways where
@@ -24,7 +24,7 @@ one would do:
 - **Forwards and post hooks** do the same thing: `playerKilled` is `PlayerKilled`'s `Post`,
   `playerSpawned` is `PlayerSpawn`'s ([15 §3 and §5](../15-mod-api.md#3-forwards)).
 - **A weapon's virtuals and the entity hooks** are the same idea with two APIs:
-  `bindWeaponVirtual` ([15 §4.4](../15-mod-api.md#44-weaponclass--getweaponclassvar--setweaponclassvar))
+  `bindWeaponVirtual` ([15 §4.4](../15-mod-api.md#44-weaponclass))
   and `EntityThink`, `EntityTouch`, `EntityTakeDamage` ([15 §5](../15-mod-api.md#5-hookable-actions)).
 - **Two class systems**: the map's prefabs ([03 §11](../03-ecs.md#11-prefabs-and-map-entities))
   and `createWeaponClass`, with nothing for the classes a mod adds (a rocket, a boss, a pickup);
@@ -39,13 +39,13 @@ of the old modules is one of them.
 
 | Primitive | What it is | Replaces |
 |-----------|------------|----------|
-| **1. Handles and `vars`** | Every piece of state is a typed property of a typed handle, read and written by its accessor, its key checked at compile time ([ADR-0012](0012-typed-get-set-vars-pattern.md)) | `pev`/`set_pev`, `get_entvar`/`set_entvar`, `get_member`/`set_member`, private-data offsets, `cs_get_*`/`cs_set_*`, `get_user_*`/`set_user_*` |
+| **1. Handles and `vars`** | Every piece of state is a typed field of a typed handle, checked at compile time ([ADR-0034](0034-rook-modern-only.md)) | `pev`/`set_pev`, `get_entvar`/`set_entvar`, `get_member`/`set_member`, private-data offsets, `cs_get_*`/`cs_set_*`, `get_user_*`/`set_user_*` |
 | **2. Types** | One mechanism for every new thing: a type of a kind the engine provides (entity, weapon, item…), standalone, with no parent: its values, components, own `vars`, methods and resources | `create_entity`, `rg_create_entity`, the map's prefabs, `createWeaponClass`, Orpheu's class tricks |
 | **3. Methods and hooks** | Every action the game takes is a typed method of a kind; a type overrides it, any plugin hooks it | Ham Sandwich, ReAPI's hook chains, `register_forward`, `register_touch`/`register_think`, Orpheu |
 | **4. Actions** | Typed functions for what is not a property: give, change team, create, remove, precache, emit a sound | Most of `amxmodx`, `fun` and `cstrike`, `engfunc`/`dllfunc` |
 | **5. Queries** | Finding things with typed filters: players, entities in a radius or of a type, traces, navigation | `get_players` with string flags, `find_ent_*`, `engfunc(EngFunc_TraceLine)`, `fm_*` stocks |
 | **6. Messages, effects and the HUD** | Typed structs sent to clients: the engine's effects, messages plugins declare, and HUD elements, retained: made once, their values bound, redrawn by the client when one changes | `message_begin`/`write_*`, `register_message`, `set_msg_arg_*`; `set_hudmessage`/`show_hudmessage`, `set_dhudmessage` and the tasks that resend them every second |
-| **7. Commands, cvars and tasks** | Commands with typed arguments, typed cvars, tasks and coroutines on game time | `register_clcmd`/`read_argv`, `register_cvar`/`bind_pcvar_*`, `set_task` |
+| **7. Commands, cvars and tasks** | Commands with typed arguments, typed cvars, tasks with an owner on game time | `register_clcmd`/`read_argv`, `register_cvar`/`bind_pcvar_*`, `set_task` |
 | **8. Services** | Storage (KV, SQLite), HTTP, logging, localization, behind capabilities | nVault, SQLx, sockets, `log_amx`, dictionaries |
 
 The language's standard library covers the rest: collections (`List`, `Map`, `Set`), JSON, regular
@@ -67,14 +67,14 @@ expressions, math and vectors with units (cell arrays, tries, `xs`, `json`, `reg
   after: changing the AK-47 later does not change a weapon that started from it. Without it, a
   type starts from none, incomplete until its values make one, and nothing gives an incomplete
   type.
-- **Its `vars` are the key paths of its data** (`"magazine.clipSize"`, `"firing.cycle"`): one
+- **Its fields are the key paths of its data** (`magazine.clipSize`, `firing.cycle`): one
   schema for its file, the console and plugins, with no second catalog of names to keep in step.
 
 ```rook
-new Weapon:drakar = createWeapon("DrakarIII", WeaponType.Primary, from: WEAPON_AK47)?;
-set_weapon_var(drakar, "name", "Drakar III");
-set_weapon_var(drakar, "models.view", "models/rezombie/weapons/drakar/v.mdl");
-set_weapon_var(drakar, "magazine.clipSize", 45);
+let drakar: Weapon = createWeapon("DrakarIII", WeaponType.Primary, from: WEAPON_AK47)?;
+drakar.name = "Drakar III";
+drakar.models.view = "models/rezombie/weapons/drakar/v.mdl";
+drakar.magazine.clipSize = 45;
 overrideMethod(drakar, Weapon.primaryAttack, onDrakarAttack);
 replaceWeapon(WEAPON_AK47, drakar)?;   // the Drakar wherever the game would make an AK-47
 ```
@@ -87,7 +87,7 @@ replaceWeapon(WEAPON_AK47, drakar)?;   // the Drakar wherever the game would mak
   weapon.
 - Each copy of a type in the world or in an inventory is an entity of it, with the `vars` of a
   copy: an item of a weapon (`WeaponItem`: its clip, its owner, its reload), a rocket.
-  `spawnEntity(ROCKET, at: origin, angles: view, vars: { speed: 1500ups })?` creates one whole, in
+  `spawnEntity(ROCKET, at: origin, angles: view, vars: { speed: 1500 })?` creates one whole, in
   its final archetype at once, its defaults copied from the type's template, through the tick's
   command buffer, so that no entity is ever seen half made; `giveWeapon(player, drakar)?` gives one.
 - Map entities take the same path: a `classname` names a type, its keyvalues become `vars` through
@@ -116,7 +116,7 @@ fn onDrakarAttack(item: WeaponItem, owner: Player) -> WeaponReturn {
   (`@hook(Player.takeDamage, HookPhase.Pre)`, `@hook(Entity.touch, HookPhase.Pre, type: ROCKET)`).
 - **Forwards are post hooks**: `forward playerKilled(...)` is a shorter spelling of a `Post` hook
   on `Player.killed`, so that every event has one source. The plugin's own lifecycle
-  (`pluginPrecache`, `pluginInit`, `pluginCfg`, `pluginEnd`) and the forwards API plugins declare
+  (`pluginPrecache`, `pluginInit`, `pluginConfiguration`, `pluginEnd`) and the forwards API plugins declare
   for each other stay forwards.
 - Dispatch is resolved when a method is overridden or hooked, never by a string at the call: a
   type's table points at the method's chain of hooks and its body.
@@ -130,11 +130,11 @@ element is a handle with `vars`, as anything else (§1): made once for a player 
 values bound by name, drawn by the client until it is removed or its player leaves.
 
 ```rook
-new Hud:infected = createHud(allPlayers(), HudText {
+let infected: Hud = createHud(allPlayers(), HudText {
     text: "Infected: {count}",
     position: HudPosition.TopCenter,
 })?;
-set_hud_var(infected, "count", 12);   // the clients draw the new value; nothing is sent until it changes
+infected.count = 12;   // the clients draw the new value; nothing is sent until it changes
 ```
 
 - A change sends the value that changed, once and reliably; nothing is sent while nothing
@@ -174,7 +174,7 @@ Nothing throws, in Rook or in the engine ([ADR-0005](0005-typed-errors-without-e
 
 | Alternative | Why not |
 |-------------|---------|
-| Rebuild each old module as its own Rook module (`fun`, `cstrike`, `fakemeta`, `hamsandwich`, `reapi`) | Thousands of overlapping functions, the same property reached five ways, and the offsets and strings they were made of; what ADR-0021 rules out |
+| Rebuild each old module as its own Rook module (`fun`, `cstrike`, `fakemeta`, `hamsandwich`, `reapi`) | Thousands of overlapping functions, the same property reached five ways, and the offsets and strings they were made of; what ADR-0034 rules out |
 | The API of [15](../15-mod-api.md) as it is | Typed, but forwards beside post hooks, weapon virtuals beside entity hooks, and two class systems: three things to learn, document and keep where one does |
 | A parent, required or optional, that a type inherits from as the game runs (`parent: WEAPON_AK47`) | A change to the parent changes every child unseen, values are looked up along a chain, and the outcome depends on the order plugins change them; the rules want composition, inheritance only for interfaces ([RULES §5.1](../RULES.md#51-structure)). `from:` gives the same start without the link |
 | Hooks only, no overriding (a type's behavior as a hook filtered by type) | A type's own behavior would hang on registration order, and `callDefault` would have no place |

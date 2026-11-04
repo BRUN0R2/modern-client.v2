@@ -1,6 +1,6 @@
 # ADR-0012 — `get*Var`/`set*Var` pattern with compile-time checked keys
 
-- **Status:** Accepted, amended by [ADR-0021](0021-rook-amxx-names.md)
+- **Status:** Superseded by [ADR-0034](0034-rook-modern-only.md)
 - **Date:** 2026-10-20
 
 ## Context

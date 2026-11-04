@@ -1,6 +1,6 @@
 # ADR-0033 — A separate Rook compiler, and types that rule out what Pawn left to run time
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-04
 
 ## Context
@@ -34,7 +34,7 @@ The documents leave four things open:
 
 ## Decision
 
-Proposed: the compiler is a program of its own, tied to the engine by two versioned formats; the
+The compiler is a program of its own, tied to the engine by two versioned formats; the
 bytecode keeps the types, so the verifier enforces them too; and new kinds of type turn those bugs
 into compile errors.
 
@@ -258,7 +258,7 @@ kinds of type do not come at once: each enters with the API that first needs it.
   bosses in Rook. Mitigation: per-frame work stays in C++, and step 5 of the order measures it before
   anything is built on it.
 
-If accepted, the same change amends ADR-0006, ADR-0007,
+The change that accepted this ADR amended ADR-0006, ADR-0007,
 [13 §7, §8, §11 and §13](../13-mod-system.md), [14 §1, §2, §6, §8.2, §13, §15.3, §21, §23, §24 and
 §25](../14-rook-language.md), [15 §1, §4.2 and §6.2](../15-mod-api.md),
 [17 §1](../17-build-and-tools.md#1-repository-layout), [19](../19-roadmap.md), `rook/README.md` and

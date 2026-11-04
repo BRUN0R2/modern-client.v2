@@ -63,8 +63,9 @@ The project has three pillars:
 - **Binary compatibility with GoldSrc:** protocol 48 and the original clients/servers
   are not compatible with Modern-Client.v2. The limits of the original are built into that
   protocol (see [ADR-0008](adr/0008-own-network-protocol.md)).
-- **Loading `.amxx`, `mp.dll`, `client.dll` or Metamod plugins:** mods are migrated to
-  Rook ([16](16-amxx-migration.md)). Assisted conversion tools may exist.
+- **Loading `.amxx`, `mp.dll`, `client.dll` or Metamod plugins:** nothing of AMX Mod X is ported or
+  converted. Mods are written in Rook, which only looks like it
+  ([ADR-0034](adr/0034-rook-modern-only.md)).
 - **Distributing Valve assets:** the game works with free content and, if the user owns
   CS 1.6, uses their local installation, configured almost automatically
   ([ADR-0015](adr/0015-free-content-and-optional-original-assets.md)).
@@ -124,6 +125,6 @@ The project has three pillars:
   server.
 - A stress test with 1024 simulated players runs without a crash, with degradation
   controlled by the network budget.
-- ReZombie (the reference mod), ported to Rook, ends up smaller, more readable and free of
-  casts.
+- ReZombie (the reference mod), written from scratch in Rook, ends up smaller, more readable and
+  free of casts.
 - Zero leaks and zero data races in the tests with sanitizers.

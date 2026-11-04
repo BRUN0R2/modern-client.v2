@@ -1,6 +1,6 @@
 # ADR-0034 — Rook looks like AMX Pawn and is new inside: one spelling, nothing ported, typed to the maximum
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-04
 
 ## Context
@@ -16,7 +16,7 @@ longer holds:
 - [ADR-0012](0012-typed-get-set-vars-pattern.md) chose `getPlayerVar(player, "health")` over fields
   because fields are "further from what the community knows", and recorded that "the type checking
   would be equivalent".
-- [16](../16-amxx-migration.md) and `rook migrate` exist to carry plugins over.
+- Document 16, a migration guide, and `rook migrate` exist to carry plugins over.
 - `setTask` is a port of `set_task`: its owner is optional, nothing stops arming it twice, and an
   error inside it has nowhere to go ([14 §16](../14-rook-language.md#16-tasks-and-coroutines)).
 - The API inherited names that are cut (`registerClcmd`, `pluginCfg`), run together
@@ -28,10 +28,8 @@ type already says it, parentheses around conditions, and no port of `setTask`.
 
 ## Decision
 
-Proposed: Rook has one spelling that looks like AMX Pawn, and owes it nothing else. Looking like it
-is a goal; carrying a behavior or an API because AMX Mod X has one is not. Decisions 1 to 3 and 7 are
-the maintainer's, as is ruling out `setTask` in 6; the rest follow from them and are proposed for
-review.
+Rook has one spelling that looks like AMX Pawn, and owes it nothing else. Looking like it is a goal;
+carrying a behavior or an API because AMX Mod X has one is not.
 
 ```rook
 import cs.prelude.*;
@@ -57,7 +55,7 @@ fn cmdHello(player: Player) -> PluginResult {
 
 This supersedes ADR-0021. These go away: the `amxx.*` modules, `#include`, `new`, the underscored
 accessors, the `compatibilityName` lint, the softer `naming` in some files, `rook fmt --canonical`,
-`rook migrate` with `--keep-amxx-names`, and [16](../16-amxx-migration.md). Declarations are `let`
+`rook migrate` with `--keep-amxx-names`, and document 16. Declarations are `let`
 and `var`, and ADR-0013 holds without an exception.
 
 The look stays: a C-like syntax, semicolons, `plugin`, `forward`, and actions as function calls.
@@ -206,7 +204,7 @@ async fn burnDamage(player: AlivePlayer) -> Result<void, PluginError> {
 ### 7. ReZombie is written from scratch
 
 ReZombie is the reference mod, written in Rook on this API and designed anew. The items that port it
-become items that write it, and the converted examples of 16 go with that document. The proof of
+become items that write it, and the converted examples of document 16 go with it. The proof of
 ADR-0033's order is unchanged: the native `mod.zombies` rewritten in Rook and measured first.
 
 ## Alternatives considered
@@ -251,11 +249,10 @@ ADR-0033's order is unchanged: the native `mod.zombies` rewritten in Rook and me
 - ⚠️ A plain field of a task's owner can look safe where it is not, in `defer`. Mitigation: the owner
   is optional there, so the compiler asks for the check.
 
-If accepted, the same change marks ADR-0012 and ADR-0021 as superseded by this ADR; amends
+The change that accepted this ADR marked ADR-0012 and ADR-0021 as superseded by it; amended
 [ADR-0006](0006-own-plugin-language-rook.md), ADR-0013, [ADR-0022](0022-plugin-api-primitives.md),
-[ADR-0024](0024-agents.md), [ADR-0028](0028-native-agent-test-mod.md) and ADR-0033; removes
-[16](../16-amxx-migration.md); and amends [00](../00-overview.md),
-[02 §3.1](../02-coding-standards.md#31-project-rule-camelcase), [13](../13-mod-system.md),
-[14](../14-rook-language.md), [15](../15-mod-api.md), [17](../17-build-and-tools.md),
-[19](../19-roadmap.md), [20](../20-legal-and-licensing.md), [docs/README](../README.md) and the M6
-items of `TODO.md`.
+[ADR-0024](0024-agents.md) and [ADR-0028](0028-native-agent-test-mod.md); removed document 16; and
+amended [00](../00-overview.md), [02 §3.1](../02-coding-standards.md#31-project-rule-camelcase),
+[13](../13-mod-system.md), [14](../14-rook-language.md), [15](../15-mod-api.md),
+[17](../17-build-and-tools.md), [19](../19-roadmap.md), [docs/README](../README.md) and the M6 items
+of `TODO.md`.

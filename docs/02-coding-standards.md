@@ -125,14 +125,13 @@ import nx.rhi;
 ### 3.1 Project rule: camelCase
 
 **The whole project uses camelCase** for functions, methods, variables, parameters and
-fields, in C++ as well as in Rook. This includes the plugin API (`getWeaponVar`,
-`setEntityVar`, `precacheModel`, `pluginPrecache`) and the keys of the `vars` catalogs
-(`"maxClip"`, `"viewModel"`). The `snake_case` of AMXX natives (`get_weapon_var`) is not used
-in new code ([ADR-0013](adr/0013-camelcase-convention.md)).
+fields, in C++ as well as in Rook. This includes the plugin API (`precacheModel`,
+`pluginPrecache`) and the fields of the `vars` catalogs (`maxClip`, `viewModel`). The `snake_case` of
+AMXX natives is not used ([ADR-0013](adr/0013-camelcase-convention.md)).
 
 | Element | C++ | Rook |
 |----------|-----|------|
-| Functions, methods, variables, parameters | `camelCase` (`parseBsp`) | `camelCase` (`setWeaponVar`) |
+| Functions, methods, variables, parameters | `camelCase` (`parseBsp`) | `camelCase` (`precacheModel`) |
 | Fields and data keys | `camelCase` (`clipSize`) | `camelCase` (`maxClip`) |
 | Private members | `camelCase` (`chunks`) | `camelCase` |
 | Types, concepts, enums and enum values | `PascalCase` | `PascalCase` |
@@ -167,17 +166,12 @@ Exceptions, because the name comes from outside the code or is required by a too
 - **Language tags** in translation files (`pt-BR.toml`).
 - **Translation keys** (`RZ_INFECTED_BY`).
 - **Names imposed by third parties** (standard library, Vulkan, file formats).
-- **AMX Mod X's spelling in Rook**: the names of its API in the `amxx` compatibility layer
-  (`register_clcmd`, `client_print`), `#include <amxmodx>` and `new`, and the underscored accessors
-  the compiler generates beside the canonical ones (`get_player_var`, `set_weapon_var`), in the
-  plugins that use them ([ADR-0021](adr/0021-rook-amxx-names.md)). The project's own Rook code (built-in mods, examples,
-  documentation, the API's tests) uses the canonical names.
 
 `.clang-tidy` encodes the rule for C++ (`readability-identifier-naming`, as an error). Local
 analysis uses a complete Clang build and its module interfaces ([18](18-testing-and-quality.md#sanitizers-and-analysis));
 an automated analysis gate is planned ([17 §7](17-build-and-tools.md#7-continuous-integration)).
-In Rook, the `naming` lint of `rookc` will check it, and the `compatibilityName` lint will point
-each AMX Mod X name at its canonical form ([14 §22](14-rook-language.md#22-lints-and-magic-numbers)).
+In Rook, the `naming` lint of `rookc` will check it
+([14 §22](14-rook-language.md#22-lints-and-magic-numbers)).
 
 ### 3.2 Other naming rules
 

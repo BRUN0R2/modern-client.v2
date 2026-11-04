@@ -119,17 +119,24 @@ complete competitive match played and assessed.
 
 **Goal:** a complete plugin ecosystem, starting in parallel after M2.
 
-- `rookc`: parser, checker (types, units, ephemerals, exhaustiveness), RIR and bytecode.
-- VM: interpreter, verifier, per-isolate GC, budgets.
-- Generation of bindings and `.rookd` from C++.
-- `mod.toml`, `plugins.toml`, dependency ordering, capabilities.
-- Forwards, hooks, `vars`, typed commands, cvars, tasks and coroutines.
-- Hot reload, `rookLsp`, DAP debugger, `rook test`, `rook fmt`/`lint`/`doc`/`pack`.
-- Built-in mods (admin, votes, maps, chat, stats) and `rook migrate`.
-- **Port of ReZombie** as the reference mod; zombies and bosses as kinds of agents of a mod
-  ([ADR-0024](adr/0024-agents.md)).
+In this order ([ADR-0033](adr/0033-rook-compiler-and-types.md)):
 
-**Exit:** ReZombie ported and working, built-in mods replacing the default AMXX plugins and
+1. `rook/format`, the parser, the conformance suite and the checker's core, with `rook check` and
+   `rookLsp`: useful before anything runs.
+2. The verifier, then the interpreter and a precise collector per isolate, made incremental once its
+   pauses can be measured.
+3. Generation of bindings and `.rookd` from C++, `mod.toml` and `plugins.toml`, and the first plugin
+   on a server.
+4. The rest of the language and of the API: fields, ephemeral handles, lifecycle stages, checked
+   states, forwards, hooks, typed commands, cvars, tasks with owners, capabilities, hot reload, the
+   DAP debugger and `rook test`, `format`, `lint`, `document` and `pack`.
+5. The proof: the native `mod.zombies` ([ADR-0028](adr/0028-native-agent-test-mod.md)) rewritten in
+   Rook and measured against itself.
+6. Built-in mods (admin, votes, maps, chat, stats) and **ReZombie written from scratch** as the
+   reference mod; zombies and bosses as kinds of agents of a mod
+   ([ADR-0024](adr/0024-agents.md)).
+
+**Exit:** ReZombie written and working, built-in mods replacing the default AMXX plugins and
 API 1.0 frozen.
 
 ## M7 — Fine parity and ecosystem
