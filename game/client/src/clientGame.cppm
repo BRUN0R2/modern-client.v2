@@ -11,6 +11,7 @@ export module cs.client:clientGame;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.ecs;
 import nx.render;
 import cs.shared;
@@ -98,7 +99,7 @@ public:
     /// How the game's entity bodies show at the moment a frame shows, each between where the last two
     /// ticks left it, its corpse faded out after `corpseStay` and gone (corpseAmountOf), replacing
     /// `entities` and keeping its storage for the next frame.
-    void writeEntities(const EntityCatalog& catalog, nx::Seconds corpseStay,
+    void writeEntities(const EntityCatalog& catalog, nx::Seconds corpseStay, nx::jobs::JobSystem* jobs,
                        std::vector<ShownEntity>& entities);
 
     /// The brightness of the server's light styles at `time` since the map started, including every

@@ -661,6 +661,10 @@ counter-terrorist one indoors 15 to 37. The *elights* and *dlights* come with th
 Instances are grouped by (model, submesh, skin, render mode). Twenty players with the
 same model become one draw call per submesh.
 
+**Today:** `StudioRenderer` writes every model of a frame to one storage buffer the shader reads by instance
+(`SV_VulkanInstanceID`), its solid models of one model, skin, body and facing in one call, each blended one in a call of
+its own, sorted among all that is blended.
+
 ## 10. Effects
 
 | Effect | Note |

@@ -30,9 +30,20 @@ public:
     /// Writes to `posed` those of `entities` `frame` may show. Requires uploaded models and entity
     /// indices/sequences issued by this catalog.
     void pose(const EntityCatalog& catalog, std::span<const ShownEntity> entities, const ModelFrame& frame,
-              PosedModels& posed) const;
+              PosedModels& posed);
 
 private:
+    /// A body the frame may show, what it is drawn with, and where its bones are among them all.
+    struct Posing {
+        const ShownEntity* entity = nullptr;
+        const nx::render::StudioModel* drawn = nullptr;
+        const AnimatedModel* file = nullptr;
+        nx::Vec3 origin{};
+        std::size_t firstBone = 0;
+        nx::render::ModelLight light{};
+    };
+
     std::vector<nx::render::StudioModel> models;
+    std::vector<Posing> posings; ///< Of a frame; kept for its room.
 };
 } // namespace cs
