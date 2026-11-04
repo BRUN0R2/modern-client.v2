@@ -89,8 +89,8 @@ This amends ADR-0007.
   marks (`pure` and those of §3).
 - The verifier checks every instruction against them at load: a `Health` is not used as an `Armor`;
   an ephemeral handle does not reach a global, a field, a component, a closure or the far side of an
-  `await` ([14 §13.1](../14-rook-language.md#131-handles)); a `pure` function calls only `pure` ones;
-  a function bound to a lifecycle stage is called only from it. A failure is
+  `await` ([14 §13.1](../14-rook-language.md#131-handles)), a task's owner aside; a `pure` function
+  calls only `pure` ones; a function bound to a lifecycle stage is called only from it. A failure is
   `PluginLoadError.VerifyFailed`. Nothing of this runs per instruction: the interpreter still makes
   no dynamic type check.
 - Some rules stay the compiler's alone, because their source is gone by then: exhaustive `match`
@@ -115,17 +115,17 @@ unit and `getVarDynamic` for admin tools.
 `ClassError.RegistrationClosed` and `isPrecachePhase()` go away.
 
 ```rook
-@onlyIn(Lifecycle.Load)
+@onlyIn(Lifecycle.Precache)
 pub fn createClass(id: ClassId, team: Team) -> Result<Class, ClassError> { ... }
 
-on pluginInit() -> Result<void, PluginError> {
-    createClass(ASSASSIN, Team.Zombie)?;   // error R0701: `createClass` runs only in `pluginLoad`
+forward pluginInit() -> Result<void, PluginError> {
+    createClass(ASSASSIN, Team.Zombie)?;   // error R0701: `createClass` runs only in `pluginPrecache`
     return ok();
 }
 ```
 
 The mark is inferred inside a plugin and declared on a `pub` function. A function reference carries
-it, so `setTask(2s, createLater)` does not compile either.
+it, so `startTask(player, createLater)` does not compile either.
 
 **A state proved by an ordinary check.** `AlivePlayer` is a handle under `Player`, accepted wherever
 a `Player` is. The catalog declares what narrows to it
@@ -137,7 +137,7 @@ fn onMenuChoice(player: Player) {
 }
 
 fn onBuy(player: Player) -> PluginResult {
-    if !player.isAlive {
+    if (!player.isAlive) {
         return PluginResult.Handled;
     }
     giveItem(player, ItemId.Ak47);     // ok: from here on `player` is an `AlivePlayer`
@@ -146,8 +146,8 @@ fn onBuy(player: Player) -> PluginResult {
 ```
 
 - A parameter or a `let` narrows; a `var` does not. Like any ephemeral handle it ends with the
-  callback and at an `await`, and it is never stored: `refOf` gives a `PlayerRef`. Only the
-  instruction that asks the engine makes one, which the verifier checks.
+  callback and at an `await`, unless it owns the task, and it is never stored: `refOf` gives a
+  `PlayerRef`. Only the instruction that asks the engine makes one, which the verifier checks.
 - It proves that the check was made and that nothing the plugin did since could undo it. A call that
   can end the state says so, `@ends(AlivePlayer)`, inferred inside a plugin and declared on a `pub`
   function; after it the variable is a `Player` again.
@@ -163,12 +163,12 @@ untrusted.
 
 ```rook
 let name = player.name;                             // UntrustedText
-printToPlayer(player, .Chat, "Hello, {name}!");     // ok: the engine draws it as text
-runServerCommand("kick {name}");                    // error R0703: text from a player cannot reach a command
-runServerCommand(consoleCommand("kick", name)?);    // ok: quoted as one argument, or an error
+clientPrint(player, .Chat, "Hello, {name}!");       // ok: the engine draws it as text
+serverCommand("kick {name}");                       // error R0703: text from a player cannot reach a command
+serverCommand(consoleCommand("kick", name)?);       // ok: quoted as one argument, or an error
 ```
 
-Printing, comparing and parsing accept it. `runServerCommand` takes a `ConsoleCommand`, and a SQLite
+Printing, comparing and parsing accept it. `serverCommand` takes a `ConsoleCommand`, and a SQLite
 statement is a literal with parameters. It becomes a `string` only through a check that returns a
 `Result` (`validateText(name, PATTERN)?`). Command arguments typed as `Player` or `Health` are parsed
 values, not untrusted text.
@@ -178,8 +178,8 @@ a number literal does, and `rookc` looks for it in the mod's `assets/` and those
 with the kind its extension says. The warning of 15 §6.2 becomes an error.
 
 ```rook
-let model = loadModel("models/rezombie/zombie.mdl")?;   // ok
-let other = loadModel("models/rezombie/zombi.mdl")?;    // error R0704: no such file; did you mean "zombie.mdl"?
+let model = precacheModel("models/rezombie/zombie.mdl")?;   // ok
+let other = precacheModel("models/rezombie/zombi.mdl")?;    // error R0704: no such file; did you mean "zombie.mdl"?
 ```
 
 The compiler never reads the game's content ([ADR-0015](0015-free-content-and-optional-original-assets.md)),
@@ -211,8 +211,8 @@ kinds of type do not come at once: each enters with the API that first needs it.
    anything runs.
 2. The verifier, then the interpreter and a precise collector per isolate, made incremental as
    ADR-0007 asks once its pauses can be measured.
-3. The first plugin on a server: `registerClientCommand` and `printToPlayer`.
-4. The rest of the language and of §3: fields, ephemeral handles, hooks, tasks, coroutines, hot
+3. The first plugin on a server: `registerClientCommand` and `clientPrint`.
+4. The rest of the language and of §3: fields, ephemeral handles, hooks, tasks with owners, hot
    reload.
 5. The proof: the native `mod.zombies` ([ADR-0028](0028-native-agent-test-mod.md)) rewritten in Rook
    and measured against itself before ReZombie is written.
@@ -226,8 +226,8 @@ kinds of type do not come at once: each enters with the API that first needs it.
 | The compiler inside the server, as 13 §8 writes it | A parser and a checker in every server, a compile failure as a run-time state, and a blurred line between MIT and GPL code |
 | A repository of its own for the toolchain | `.rookd` changes with the API, so one change would span two pull requests and two versions. The build's layer check gives the same boundary |
 | Types erased from the bytecode, the verifier checking only primitives and bounds | A simpler verifier, and still memory safe; but a hand-made `.rbc` could mix units or store an ephemeral handle, and the rules would hold only for honest compilers |
-| The lifecycle stage as a token parameter (`loadModel(stage, path)`) | No new rule, since an ephemeral handle does it; but every call carries an argument that tells it nothing |
-| Explicit narrowing only (`if let alive = asAlive(player)`) | Simpler for the checker; but `if player.isAlive`, the check anyone writes first, would prove nothing |
+| The lifecycle stage as a token parameter (`precacheModel(stage, path)`) | No new rule, since an ephemeral handle does it; but every call carries an argument that tells it nothing |
+| Explicit narrowing only (`if (let alive = asAlive(player))`) | Simpler for the checker; but `if (player.isAlive)`, the check anyone writes first, would prove nothing |
 | These rules as lints | A lint can be turned off, and the request is for types |
 | Linear types, teams in a handle's type | Each is heavier for authors and for diagnostics, and none answers a bug named here. A concrete bug can bring one through its own ADR |
 | Dynamic typing, for the word "dynamic" | Contradicts ADR-0006. What was asked of the compiler is served by incremental builds and hot reload |
