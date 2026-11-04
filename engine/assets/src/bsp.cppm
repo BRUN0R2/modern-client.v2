@@ -214,6 +214,10 @@ public:
 
     /// Never the solid leaf 0, nor a leaf of a brush entity's model.
     [[nodiscard]] auto contains(LeafIndex leaf) const noexcept -> bool;
+    /// Its leaves, bit n of byte n / 8 being leaf n + 1.
+    [[nodiscard]] inline auto bits() const noexcept -> std::span<const std::uint8_t> { return m_bits; }
+    /// How many leaves its bits count, after leaf 0.
+    [[nodiscard]] inline auto leafCount() const noexcept -> std::uint32_t { return m_leafCount; }
 
 private:
     std::vector<std::uint8_t> m_bits;

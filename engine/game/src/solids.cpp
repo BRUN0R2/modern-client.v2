@@ -111,7 +111,7 @@ void SolidBoxes::gather(ecs::World& world, jobs::JobSystem* jobs) {
     nextInCell.resize(count);
     const bool isIndexed = !cells.empty() || count >= kLeastIndexed;
     cellOfBox.resize(isIndexed ? count : 0);
-    constexpr std::size_t kSmallestGatheredBatch = 8; // chunks
+    constexpr std::size_t kSmallestGatheredBatch = 128; // chunks: some dozen boxes each, little work a box
     std::vector<float> widestOfBatch(
         jobs != nullptr ? jobs->batchCountOf(parts.size(), kSmallestGatheredBatch) : 1);
     const auto gatherBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {

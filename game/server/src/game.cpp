@@ -238,7 +238,13 @@ void Game::tick(std::span<const PlayerCommand> commands, std::span<const EntityC
     for (const PlayerCommand& command : commands) {
         runCommand(m_state, playerAt(m_state, command.player), command.command);
     }
-    EntityBodiesTick bodies = runEntityBodies(m_state.world, m_state.map.hulls(), entities, jobs);
+    std::vector<nx::Vec3> watchers;
+    for (const Player& player : playersIn(m_state.players)) {
+        if (player.status.isAlive()) {
+            watchers.push_back(player.movement.origin);
+        }
+    }
+    EntityBodiesTick bodies = runEntityBodies(m_state.world, m_state.map.hulls(), entities, jobs, watchers);
     // They moved, and what they touched may have opened.
     m_state.moves->areBrushesStale = true;
     m_state.moves->areBoxesStale = true;

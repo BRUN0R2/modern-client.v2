@@ -14,13 +14,43 @@ import cs.shared;
 namespace cs {
 namespace {
 constexpr nx::log::Category kLog{"entities"};
+/// How far from the nearest player a body moves how often: near one, each tick; away from them all, in longer
+/// steps that take it as far, as the original's monsters move at their thinks, a tenth of a second apart,
+/// which its clients interpolate. It is what a crowd of a hundred thousand fits a tick by.
+struct MoveBand {
+    float reach = 0.0F;
+    std::uint32_t ticksPerMove = 1;
+};
+constexpr std::array kMoveBands{MoveBand{.reach = 1024.0F, .ticksPerMove = 1},
+                                MoveBand{.reach = 2048.0F, .ticksPerMove = 2},
+                                MoveBand{.reach = 4096.0F, .ticksPerMove = 4}};
+constexpr std::uint32_t kFarthestTicksPerMove = 8;
+
+/// How many ticks go by between the moves of a body at `origin`, the players at `watchers`; none, each tick.
+[[nodiscard]] auto ticksPerMoveAt(nx::Vec3 origin, std::span<const nx::Vec3> watchers) noexcept
+    -> std::uint32_t {
+    if (watchers.empty()) {
+        return 1;
+    }
+    float nearest = std::numeric_limits<float>::max();
+    for (const nx::Vec3 watcher : watchers) {
+        nearest = std::min(nearest, nx::lengthSquared(watcher - origin));
+    }
+    for (const MoveBand& band : kMoveBands) {
+        if (nearest <= band.reach * band.reach) {
+            return band.ticksPerMove;
+        }
+    }
+    return kFarthestTicksPerMove;
+}
+
 /// The fewest chunks of bodies, some dozen each, it is worth handing to a worker: a move costs some
 /// microseconds.
 constexpr std::size_t kSmallestChunkBatch = 2;
+/// The same to write what they are to a snapshot, little work each.
+constexpr std::size_t kSmallestStatesBatch = 128;
 struct EntityBodyData {
     const EntityCatalog* catalog = nullptr;
-    std::vector<const EntityCommand*>
-        asked{}; ///< By the index of an entity, none between ticks; kept for its room.
 };
 
 /// What an entity body's hitboxes were placed for: its sequence and frame, and where it stood, turned.
@@ -186,6 +216,7 @@ struct BodyMoveWorld {
     const nx::collision::BrushHulls& hulls;
     const nx::game::SolidBoxes& stoppers;
     std::span<const LinkedBrushEntity> brushes;
+    std::span<const nx::Vec3> watchers;
 };
 
 /// What a body's tick made that is not its own to write, for after all of them have moved.
@@ -196,23 +227,33 @@ struct BodyMade {
     std::vector<nx::collision::ModelIndex> touched{};
 };
 
-/// A tick of `body` of `entity`: asked for `asked`, or at rest; `near` and `nearBrushes` are kept for their
-/// room; adds to `made` what it made.
-void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, const EntityCommand* asked,
+/// A tick of `body` of `entity`: asked what `commands`, by entity, ask of it, or at rest; `near` and
+/// `nearBrushes` are kept for their room; adds to `made` what it made.
+void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<const EntityCommand> commands,
               EntityBody& body, nx::game::Transform& transform, nx::game::Body& solid,
               std::vector<SolidBox>& near, std::vector<BrushEntity>& nearBrushes,
               std::vector<BodyMade>& made) {
     const nx::game::TickTime& time = moving.time;
-    advanceFrame(body.animation, time.now, time.rate);
     if (body.health <= nx::HitPoints{}) {
+        advanceFrame(body.animation, time.now, time.rate);
         return;
     }
+    // At a tick of its own by its slot, so that as many move each tick.
+    const auto slot = std::uint64_t{std::to_underlying(entity.index())};
+    if ((slot + static_cast<std::uint64_t>(time.now.tick())) % body.ticksPerMove != 0) {
+        return;
+    }
+    advanceFrame(body.animation, time.now, time.rate);
     const EntityType& type = moving.catalog.type(body.type);
-    UserCommand command = asked != nullptr ? asked->command
-                                           : UserCommand{.duration = nx::tickLengthOf(time.rate),
-                                                         .viewAngles = transform.angles};
-    // The server owns the body's time; an agent cannot accelerate it by sending a longer command.
-    command.duration = nx::tickLengthOf(time.rate);
+    const auto asked = std::ranges::lower_bound(commands, entity, {}, &EntityCommand::entity);
+    UserCommand command =
+        asked != commands.end() && asked->entity == entity
+            ? asked->command
+            : UserCommand{.duration = nx::tickLengthOf(time.rate), .viewAngles = transform.angles};
+    // The server owns the body's time; an agent cannot accelerate it by sending a longer command. It goes as
+    // far as all the ticks since its last move take it.
+    const std::int64_t ticks = std::max<std::int64_t>(time.now.tick() - body.movedAt.tick() + 1, 1);
+    command.duration = nx::tickLengthOf(time.rate) * static_cast<float>(ticks);
     command.buttons.reset(Button::Duck);
     // Knocked back, it walks no faster than its share of its speed, held back while staggered: the
     // speed it may walk at, as a weapon caps a player's (pmove->maxspeed), rather than a share of the
@@ -249,6 +290,9 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, const EntityC
     transform.origin = body.movement.origin;
     transform.angles = {.yaw = command.viewAngles.yaw};
     solid = bodyOf(body.movement);
+    body.movedFrom = before;
+    body.movedAt = time.now.ticksLater(1);
+    body.ticksPerMove = ticksPerMoveAt(transform.origin, moving.watchers);
     std::optional<nx::Vec3> strikesAlong;
     if (command.buttons.test(Button::Attack) && time.now >= body.attacksAgainAt) {
         body.attacksAgainAt = time.now.after(type.definition.meleeInterval, time.rate);
@@ -294,7 +338,9 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     }
     EntityBody body{.type = typeIndex,
                     .movement = {.origin = placement.origin, .maxSpeed = type.definition.speed},
-                    .health = type.definition.health};
+                    .health = type.definition.health,
+                    .movedFrom = placement.origin,
+                    .movedAt = nx::game::tickTimeOf(world).now};
     body.animation.sequence = type.sequences.idle;
     resetSequence(body.animation,
                   catalog.model(type.model).files->view->sequences()[type.sequences.idle.value],
@@ -311,19 +357,19 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
 }
 
 auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
-                     std::span<const EntityCommand> commands, nx::jobs::JobSystem* jobs) -> EntityBodiesTick {
+                     std::span<const EntityCommand> commands, nx::jobs::JobSystem* jobs,
+                     std::span<const nx::Vec3> watchers) -> EntityBodiesTick {
     const nx::game::TickTime time = nx::game::tickTimeOf(world);
-    EntityBodyData& data = *world.resource<EntityBodyData>();
-    const EntityCatalog& catalog = *data.catalog;
-    // What each is asked by the index of its entity, the first asked of it if asked twice.
-    std::vector<const EntityCommand*>& asked = data.asked;
-    asked.resize(std::max(asked.size(), world.entitySlotCount()));
-    for (const EntityCommand& command : std::views::reverse(commands)) {
-        const auto index = std::size_t{std::to_underlying(command.entity.index())};
-        if (index < asked.size()) {
-            asked[index] = &command;
-        }
+    const EntityCatalog& catalog = catalogOf(world);
+    // What each is asked, by entity as a horde asks, the first asked of it if asked twice: looked for only by
+    // those that move this tick.
+    std::vector<EntityCommand> inOrder;
+    if (!std::ranges::is_sorted(commands, {}, &EntityCommand::entity)) {
+        inOrder.assign(commands.begin(), commands.end());
+        std::ranges::stable_sort(inOrder, {}, &EntityCommand::entity);
     }
+    const std::span<const EntityCommand> asked =
+        inOrder.empty() ? commands : std::span<const EntityCommand>{inOrder};
     // What the moves meet, gathered once for the tick, as the original links its entities once and keeps
     // them linked where they move, each move given those near it (SV_AddLinksToPM): the brush entities, which
     // no body moves; and the boxes of all but these bodies, which pass through each other, as a mod's horde
@@ -357,8 +403,12 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
             parts.push_back(
                 {.entities = entities, .bodies = bodies, .transforms = transforms, .solids = solids});
         });
-    const BodyMoveWorld moving{
-        .time = time, .catalog = catalog, .hulls = hulls, .stoppers = stoppers, .brushes = brushes};
+    const BodyMoveWorld moving{.time = time,
+                               .catalog = catalog,
+                               .hulls = hulls,
+                               .stoppers = stoppers,
+                               .brushes = brushes,
+                               .watchers = watchers};
     std::vector<std::vector<BodyMade>> madeOfBatch(
         jobs != nullptr ? jobs->batchCountOf(parts.size(), kSmallestChunkBatch) : 1);
     const auto moveBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
@@ -367,10 +417,8 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
         std::vector<BodyMade>& made = madeOfBatch[batch];
         for (const Part& part : std::span{parts}.subspan(first, last - first)) {
             for (std::size_t row = 0; row < part.entities.size(); ++row) {
-                const nx::ecs::Entity entity = part.entities[row];
-                const EntityCommand* const command = asked[std::to_underlying(entity.index())];
-                moveBody(moving, entity, command != nullptr && command->entity == entity ? command : nullptr,
-                         part.bodies[row], part.transforms[row], part.solids[row], near, nearBrushes, made);
+                moveBody(moving, part.entities[row], asked, part.bodies[row], part.transforms[row],
+                         part.solids[row], near, nearBrushes, made);
             }
         }
     };
@@ -379,12 +427,6 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
                          kSmallestChunkBatch, moveBatch);
     } else {
         moveBatch(0, 0, parts.size());
-    }
-    for (const EntityCommand& command : commands) {
-        const auto index = std::size_t{std::to_underlying(command.entity.index())};
-        if (index < asked.size()) {
-            asked[index] = nullptr;
-        }
     }
     // What they made that is the world's, in the order of their entities.
     std::vector<BodyMade> made;
@@ -474,13 +516,16 @@ void writeEntityStates(nx::ecs::World& world, std::vector<EntityState>& states, 
                                             .velocity = body.movement.velocity,
                                             .angles = part.transforms[row].angles,
                                             .animation = body.animation,
-                                            .health = body.health};
+                                            .health = body.health,
+                                            .movedFrom = body.movedFrom,
+                                            .movedAt = body.movedAt,
+                                            .ticksPerMove = body.ticksPerMove};
             }
         }
     };
     if (jobs != nullptr) {
         jobs->forBatches({.label = "entities.states", .priority = nx::jobs::Priority::Critical}, parts.size(),
-                         kSmallestChunkBatch, writeBatch);
+                         kSmallestStatesBatch, writeBatch);
     } else {
         writeBatch(0, 0, parts.size());
     }

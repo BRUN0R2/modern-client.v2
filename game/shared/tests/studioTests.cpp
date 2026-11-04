@@ -223,6 +223,27 @@ TEST(StudioPoseTest, ABoneAtRestIsWhereItsValuesPutIt) {
     expectNear(turned(pose[0], {.x = 1.0F}), {.y = 1.0F}, "a quarter turn about Z");
 }
 
+TEST(StudioPoseTest, TheFramesOfASequenceAreWhatItsPosesWorkOut) {
+    constexpr std::uint32_t kFrames = 3;
+    std::vector bones{boneAt({.x = 1.0F, .y = 2.0F, .z = 3.0F})};
+    bones[0].values[std::to_underlying(BoneAxis::RotationZ)] = kQuarterTurn;
+    const AnimationFrames animation = animationOf(1, kFrames, 1);
+    StudioSequence sequence = sequenceOf(animation);
+    sequence.motionType = 0x2; // STUDIO_Y: what the entity's motion takes, which the bone leaves out
+    const std::vector<cs::BoneFramePose> poses = cs::framePosesOf({.bones = bones}, sequence, animation);
+    ASSERT_EQ(poses.size(), kFrames);
+    for (std::uint32_t frame = 0; frame < kFrames; ++frame) {
+        const std::vector<Mat3x4> pose = cs::poseBones(
+            {.bones = bones}, sequence, animation, {.frame = cs::SequenceFrame{static_cast<float>(frame)}});
+        expectNear(poses[frame].position, originOf(pose[0]), "the bone's place");
+        EXPECT_FLOAT_EQ(poses[frame].position.y, 0.0F) << "its motion left out";
+        const nx::Quat quarter = poses[frame].rotation;
+        expectNear(turned(pose[0], {.x = 1.0F}),
+                   {.x = 1.0F - (2.0F * quarter.z * quarter.z), .y = 2.0F * quarter.w * quarter.z},
+                   "the bone's turn");
+    }
+}
+
 TEST(StudioPoseTest, AFractionOfAFrameInterpolatesTowardsTheNext) {
     const std::vector bones{boneAt({})};
     const AnimationFrames animation =

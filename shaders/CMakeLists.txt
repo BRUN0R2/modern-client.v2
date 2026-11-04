@@ -6,6 +6,7 @@ nxAddShaders(nxShaders
     SOURCES
         world.slang
         studio.slang
+        crowd.slang
         sprite.slang
         particle.slang
         blood.slang

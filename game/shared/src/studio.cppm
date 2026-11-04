@@ -64,6 +64,13 @@ struct Skeleton {
     std::span<const nx::assets::BoneController> controllers{};
 };
 
+/// A bone in a frame of a sequence, in its parent's space: what poseBones goes between and places in its
+/// parent.
+struct BoneFramePose {
+    nx::Vec3 position{};
+    nx::Quat rotation{};
+};
+
 /// The skeleton of `model`, a view of it.
 [[nodiscard]] auto skeletonOf(const nx::assets::MdlView& model) noexcept -> Skeleton;
 
@@ -179,6 +186,10 @@ struct PlayedModel {
 void poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
                const nx::assets::AnimationFrames& animation, const PoseQuery& query,
                std::span<nx::Mat3x4> bones);
+/// Each frame of `sequence`, each of its bones after the other, as poseBones works them out by a query of no
+/// more than a frame and a placement: for the GPU to pose a crowd by (shaders/crowd.slang).
+[[nodiscard]] auto framePosesOf(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
+                                const nx::assets::AnimationFrames& animation) -> std::vector<BoneFramePose>;
 
 /// The blends of a sequence of a player's model that aims (NUM_BLENDING): three of yaw by three of
 /// pitch.

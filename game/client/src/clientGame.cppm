@@ -96,11 +96,13 @@ public:
     /// How the game's hostages show at the moment a frame shows (cs::shownHostageOf), those whose model
     /// the client read, replacing `hostages` and keeping its storage for the next frame.
     void writeHostages(std::vector<ShownHostage>& hostages) const;
-    /// How the game's entity bodies show at the moment a frame shows, each between where the last two
-    /// ticks left it, its corpse faded out after `corpseStay` and gone (corpseAmountOf), replacing
-    /// `entities` and keeping its storage for the next frame.
-    void writeEntities(const EntityCatalog& catalog, nx::Seconds corpseStay, nx::jobs::JobSystem* jobs,
-                       std::vector<ShownEntity>& entities);
+    /// How the corpses of the game's entity bodies show at the moment a frame shows, each between where the
+    /// last two ticks left it, faded out after `corpseStay` and gone (corpseAmountOf), replacing `entities`
+    /// and keeping its storage for the next frame. The living the GPU shows (crowd).
+    void writeCorpses(const EntityCatalog& catalog, nx::Seconds corpseStay, nx::jobs::JobSystem* jobs,
+                      std::vector<ShownEntity>& entities);
+    /// The game's entity bodies at the moment a frame shows, valid until the next tick is received.
+    [[nodiscard]] auto crowd() const -> ShownCrowd;
 
     /// The brightness of the server's light styles at `time` since the map started, including every
     /// unset style. No pattern is inferred from local content.
@@ -176,7 +178,10 @@ private:
     PlayerSnapshot m_last;               ///< What the server told last.
     /// Previous snapshot's origins by PlayerIndex; none where that snapshot had no player.
     std::vector<std::optional<nx::Vec3>> previousPlayerOrigins;
-    EntityStates previousEntities{};               ///< The tick before the last, by entity as the last's are.
+    EntityStates previousEntities{}; ///< The tick before the last, by entity as the last's are.
+    std::vector<std::uint32_t>
+        deadEntities{}; ///< Of the last tick's, by their place, once writeCorpses found them.
+    bool areDeadFound = false;
     std::vector<std::optional<Gait>> m_gaits;      ///< By PlayerIndex: none for one not seen yet.
     CorpseClock<std::uint32_t> playerCorpses;      ///< When the dead players died, by PlayerIndex.
     CorpseClock<nx::ecs::Entity> entityCorpses;    ///< When the dead entity bodies died.

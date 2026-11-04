@@ -34,6 +34,10 @@ struct EntityBody {
     nx::GameTime attacksAgainAt{};
     KnockedBack knockedBack{};
     nx::HammerUnits walked{};
+    nx::Vec3 movedFrom{};   ///< Where its last move started.
+    nx::GameTime movedAt{}; ///< When its last move ended, as a snapshot tells the time.
+    std::uint32_t ticksPerMove =
+        1; ///< How many ticks go by between its moves: more, the farther from a player.
 };
 
 /// The command an entity's body is driven by in a tick, as a player's client sends its own.
@@ -65,12 +69,14 @@ struct EntityBodiesTick {
     std::vector<EntityStep> steps{};
 };
 
-/// Each body advances once in the world's tick, whether commanded or resting; corpses animate too. A living
-/// body of a type with a stride steps each time it walked a stride on the ground (EntityDefinition::stride),
-/// the rest of its way kept toward its next step.
+/// `watchers`, the living players, make a body far from them all move less often and as far (ticksPerMove);
+/// none, each moves each tick. Each body advances once in the world's tick, whether commanded or resting;
+/// corpses animate too. A living body of a type with a stride steps each time it walked a stride on the
+/// ground (EntityDefinition::stride), the rest of its way kept toward its next step.
 [[nodiscard]] auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                                    std::span<const EntityCommand> commands,
-                                   nx::jobs::JobSystem* jobs = nullptr) -> EntityBodiesTick;
+                                   nx::jobs::JobSystem* jobs = nullptr,
+                                   std::span<const nx::Vec3> watchers = {}) -> EntityBodiesTick;
 /// spawnEntityBody through `solids`, what is solid in `world` now, which it does not add to.
 [[nodiscard]] auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                                    const nx::game::Solids& solids, EntityTypeIndex type,

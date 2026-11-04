@@ -397,8 +397,13 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
         std::vector<cs::EntityState>{{.entity = firstEntity, .type = *type, .origin = {.x = 100}}}};
     game.receive(std::move(next));
     EXPECT_EQ(game.ticksDue(kTick / 2.0F, cs::CatchUp::Whole), 0U);
+    const cs::ShownCrowd crowd = game.crowd();
+    ASSERT_EQ(crowd.states.size(), 1U);
+    EXPECT_EQ(crowd.states.front().entity, firstEntity);
+    EXPECT_NEAR(crowd.between, 0.5F, kTolerance) << "halfway from a tick to the next";
+    EXPECT_NEAR(crowd.sinceLastTick.count(), -kTick.count() / 2.0F, kTolerance);
     std::vector<cs::ShownEntity> shown;
-    game.writeEntities(catalog, cs::kLongestCorpseStay, nullptr, shown);
+    game.writeCorpses(catalog, cs::kLongestCorpseStay, nullptr, shown);
     ASSERT_EQ(shown.size(), 1U);
     EXPECT_NEAR(shown.front().origin.x, 50, kTolerance);
     world.destroy(firstEntity);
@@ -409,7 +414,7 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     replaced.entities = cs::EntityStates{
         std::vector<cs::EntityState>{{.entity = replacement, .type = *type, .origin = {.x = 1000}}}};
     game.receive(std::move(replaced));
-    game.writeEntities(catalog, cs::kLongestCorpseStay, nullptr, shown);
+    game.writeCorpses(catalog, cs::kLongestCorpseStay, nullptr, shown);
     ASSERT_EQ(shown.size(), 1U);
     EXPECT_EQ(shown.front().origin.x, 1000);
 }

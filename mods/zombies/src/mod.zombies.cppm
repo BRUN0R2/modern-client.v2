@@ -96,10 +96,10 @@ public:
     /// Tracks `bodies`, made already and alive, as the bodies spawn makes are.
     void adopt(std::span<const nx::ecs::Entity> bodies);
     /// What the horde asks of its bodies, immediately before the owner's next tick, valid until it is asked
-    /// again. The bodies whose turn it is, one Settings::thinkInterval after their last, perceive, then their
-    /// brains decide together, in batches in jobs (nx::agents::Deciders); what each decided holds until its
-    /// next turn, the way it is driven worked out from how it moves now, so that it does not drift off its
-    /// way meanwhile.
+    /// again. The bodies whose turn it is, one Settings::thinkInterval after their last, or a few away from
+    /// every player, perceive, then their brains decide together, in batches in jobs (nx::agents::Deciders);
+    /// what each decided holds until its next turn, the way it is driven worked out from how it moves now, so
+    /// that it does not drift off its way meanwhile.
     [[nodiscard]] auto commands() -> std::span<const cs::EntityCommand>;
     /// Removes tracked bodies and their corridors. Errors: SpawnFailed, retaining a removal's cause.
     [[nodiscard]] auto clear() -> nx::Result<void, ZombieError>;
@@ -112,6 +112,7 @@ private:
     struct Member {
         nx::ecs::Entity entity{};
         cs::UserCommand command{};
+        std::uint32_t turnsWaited = 0; ///< Since it last thought: more of them away from every player.
         bool walks = false;
         std::optional<nx::Vec3> steered{};
         nx::Vec3 way{};
@@ -128,8 +129,10 @@ private:
         nx::Vec3 eye{};
     };
 
-    /// Writes to `turns` and `requests` those of `bodies` whose turn it is at `tick`, alive, in jobs.
-    void findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Seconds elapsed);
+    /// Writes to `turns` and `requests` those of `bodies` whose turn it is at `tick`, alive, in jobs: the
+    /// farther from `targets`, at fewer of their turns.
+    void findTurns(const cs::EntityStates& bodies, std::span<const cs::PerceptionTarget> targets,
+                   std::uint64_t tick, nx::Seconds elapsed);
     /// `turns` perceive, in jobs.
     void perceive(std::span<const cs::PerceptionTarget> targets,
                   std::span<const nx::game::SolidBrushEntity> solids);

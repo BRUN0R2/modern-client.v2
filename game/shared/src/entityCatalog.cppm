@@ -120,6 +120,9 @@ struct EntityState {
     nx::EulerAngles angles{};
     Animation animation{};
     nx::HitPoints health{};
+    nx::Vec3 movedFrom{};           ///< Where its last move started: it shows going from there to `origin`.
+    nx::GameTime movedAt{};         ///< When its last move ended, as a snapshot tells the time.
+    std::uint32_t ticksPerMove = 1; ///< How many ticks it shows going for: its next move comes then.
 };
 
 /// A step an entity's body took in a tick, as it walked a stride on the ground: the body, and where its
