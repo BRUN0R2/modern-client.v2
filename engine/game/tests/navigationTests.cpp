@@ -71,6 +71,7 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     const nx::navigation::AgentProfile& player = read->profiles.front();
     EXPECT_EQ(player.name, "player");
     EXPECT_EQ(player.jumpHeight, nx::HammerUnits{41.8F});
+    EXPECT_EQ(player.crouchedJumpHeight, nx::HammerUnits{58.0F});
     EXPECT_EQ(player.dropHeight, nx::HammerUnits{156.25F});
     const nx::navigation::AreaCosts costs = nx::navigation::areaCostsOf(player);
     EXPECT_EQ(costs[AreaKind::Floor], 1.0F);
@@ -78,6 +79,7 @@ TEST(NavigationDataTest, TheRepositorysPlayerProfileIsRead) {
     EXPECT_EQ(costs[AreaKind::Water], 1.25F);
     EXPECT_EQ(costs[AreaKind::Edge], 2.0F);
     EXPECT_EQ(costs[AreaKind::Jump], 2.0F);
+    EXPECT_EQ(costs[AreaKind::CrouchedJump], 2.0F);
     EXPECT_EQ(costs[AreaKind::Drop], 1.0F);
     EXPECT_EQ(player.wallClearance, nx::HammerUnits{16.0F});
     EXPECT_EQ(read->build.cellSize, nx::HammerUnits{4.0F});

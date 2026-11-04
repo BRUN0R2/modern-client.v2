@@ -76,7 +76,10 @@ convex polygons, through Recast and Detour.
   steers. Off the ground a duck is at once: across a link onto such floor it ducks only as it gets there, as a
   body ducked at the top of a ladder walks to it at a third of its speed. It gains speed slowly ducked, 83 units
   a second each second, and a jump's cost for a second takes all of it: its stuck watch holds it to a third of
-  the stuck speed, and draws no jump.
+  the stuck speed, and draws no jump. A ledge higher than its jump and within its crouched one is linked both
+  ways by the kind `CrouchedJump`, 58 units as a Condition Zero bot has it: the movement reaches 45 units
+  jumping and 63 ducking in the air, its feet lifted by as much as its box is shorter, whenever from the jump to
+  its top it presses the key, so that a brain holds the key from the jump until it lands.
 - **Queries.** `findPath` (A* over the polygons, then the funnel that straightens the path),
   `nearestPoint`, `raycast` (whether a straight walk is possible), `randomPoint` within a radius,
   `isReachable`, `pathCost`, `placeAt`, `hidingSpots`, and a corridor that follows an agent as it

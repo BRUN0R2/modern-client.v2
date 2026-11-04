@@ -539,6 +539,74 @@ TEST(AgentBrain, ABodyAcrossALinkSearchesNoWayUntilItLands) {
     EXPECT_LE(nx::length(walked.feet - aside), rules().arrivalDistance.value() + 3.0F);
 }
 
+TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksOffItUpright) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 50}};
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{58.0F};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0, jumping);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
+    nx::Vec3 feet{.x = 100, .y = 256};
+    int jumps = 0;
+    bool wasCrouchedAtTheJump = false;
+    nx::agents::Decision decision = brain.decide(feet, query);
+    for (int step = 0; step < 1000 && feet.z < box.high.z; ++step) {
+        if (decision.intent.jumps) {
+            ++jumps;
+            wasCrouchedAtTheJump = decision.intent.crouches;
+        } else if (jumps == 0) {
+            EXPECT_FALSE(decision.intent.crouches) << "walking up to it";
+        } else {
+            EXPECT_TRUE(decision.intent.crouches) << "in the air";
+        }
+        feet = box.stepped(feet, decision.intent.direction, jumps > 0);
+        decision = brain.decide(feet, query);
+    }
+    EXPECT_EQ(jumps, 1);
+    EXPECT_TRUE(wasCrouchedAtTheJump);
+    EXPECT_EQ(feet.z, box.high.z);
+    const Walked arrived = walkAbout(box, brain, query, feet, 1000);
+    ASSERT_TRUE(arrived.isArrived);
+    feet = arrived.feet;
+    // Back down off it, none of that.
+    brain.setGoal(nx::Vec3{.x = 100, .y = 256});
+    for (int step = 0; step < 1000 && feet.z > 0.0F; ++step) {
+        decision = brain.decide(feet, query);
+        EXPECT_FALSE(decision.intent.jumps);
+        EXPECT_FALSE(decision.intent.crouches);
+        feet = box.stepped(feet, decision.intent.direction, false);
+    }
+    EXPECT_EQ(feet.z, 0.0F);
+}
+
+TEST(AgentBrain, ABodyComesUpToACrouchedJumpStandingThoughLowRoomLiesBeforeIt) {
+    // The box of a crouched jump at x = 384, and a ceiling 50 up over the floor short of its start.
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 50}};
+    nx::navigation::Geometry geometry = platformGeometry(box);
+    nx::test::addCeiling(geometry, {.x = 0, .y = -32}, {.x = 330, .y = 544}, 50);
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{58.0F};
+    const auto mesh = nx::test::playerMesh(geometry, 0, jumping);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 512, .y = 256, .z = box.high.z});
+    nx::Vec3 feet{.x = 100, .y = 256};
+    nx::agents::Decision decision = brain.decide(feet, query);
+    EXPECT_TRUE(decision.intent.crouches) << "under the ceiling, far from the jump";
+    while (feet.x < 300.0F) {
+        feet = feet + (decision.intent.direction * 2.0F);
+        decision = brain.decide(feet, query);
+    }
+    EXPECT_FALSE(decision.intent.crouches) << "still under it, near the jump";
+    for (int step = 0; step < 100 && !decision.intent.jumps; ++step) {
+        feet = feet + (decision.intent.direction * 2.0F);
+        decision = brain.decide(feet, query);
+    }
+    ASSERT_TRUE(decision.intent.jumps);
+    EXPECT_TRUE(decision.intent.crouches) << "from the jump on";
+}
+
 TEST(AgentBrain, ABodyHoldsItsDuckKeyFromAheadOfLowRoomUntilItIsPastIt) {
     // A floor with a ceiling 50 units up from x = 512 to 768, all of it the way.
     constexpr float kFrom = 512.0F;

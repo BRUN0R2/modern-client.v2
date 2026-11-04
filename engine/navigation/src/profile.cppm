@@ -28,6 +28,9 @@ enum class AreaKind : std::uint8_t {
     Drop,
     /// A link between two floors a ladder joins: climbed, up and down.
     Ladder,
+    /// A link between a ledge and the floor below, higher than the profile jumps and within what it jumps
+    /// ducking in the air: dropped down, and jumped up crouched.
+    CrouchedJump,
     Count,
 };
 
@@ -56,6 +59,9 @@ struct AgentProfile {
     HammerUnits stepHeight{}; ///< The highest step it walks up.
     /// The highest ledge it jumps onto: what its links of the kind Jump span, at least stepHeight.
     HammerUnits jumpHeight{};
+    /// The highest ledge it jumps onto ducking in the air, which lifts its feet: what its links of the kind
+    /// CrouchedJump span, from jumpHeight up to dropHeight; none for a profile that does not.
+    std::optional<HammerUnits> crouchedJumpHeight{};
     /// The highest ledge it drops from unhurt: how far below a body off the mesh the floor it drops to is
     /// looked for (NavigationQuery), and what its links of the kind Drop span; at least stepHeight.
     HammerUnits dropHeight{};
@@ -132,6 +138,7 @@ struct nx::meta::Description<nx::navigation::AgentProfile> {
         nx::meta::field<&nx::navigation::AgentProfile::crouchedHeight>("crouchedHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::stepHeight>("stepHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::jumpHeight>("jumpHeight"),
+        nx::meta::field<&nx::navigation::AgentProfile::crouchedJumpHeight>("crouchedJumpHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::dropHeight>("dropHeight"),
         nx::meta::field<&nx::navigation::AgentProfile::minGroundNormalZ>("minGroundNormalZ"),
         nx::meta::field<&nx::navigation::AgentProfile::areaCosts>("areaCosts"),
