@@ -13,6 +13,7 @@ import nx.math;
 import nx.platform;
 import nx.ecs;
 import nx.assets;
+import nx.collision;
 import nx.navigation;
 import nx.game;
 
@@ -180,6 +181,41 @@ TEST(NavigationGeometryTest, AFloorUnderWaterIsWater) {
     const Geometry geometry = nx::game::navigationGeometryOf(*map, empty);
     EXPECT_EQ(countFacing(geometry, {.z = 1.0F}, AreaKind::Water), 2);
     EXPECT_EQ(countFacing(geometry, {.z = 1.0F}, AreaKind::Floor), 0);
+}
+
+TEST(NavigationGeometryTest, ItsBodyHullIsTheWorldsStandingHull) {
+    const std::vector<std::byte> bytes = readSeed("boxWithEntity.bsp");
+    const auto map = nx::assets::BspView::parse(bytes);
+    ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
+    const auto hulls = nx::collision::BrushHulls::create(*map);
+    ASSERT_TRUE(hulls.has_value());
+    nx::ecs::World empty;
+    ASSERT_TRUE(nx::game::registerComponents(empty).has_value());
+    const Geometry geometry = nx::game::navigationGeometryOf(*map, empty);
+    constexpr int kSamples = 16;
+    constexpr float kSpan = 256.0F;
+    constexpr float kLeast = -96.0F;
+    std::ptrdiff_t solid = 0;
+    std::ptrdiff_t open = 0;
+    for (int x = 0; x < kSamples; ++x) {
+        for (int y = 0; y < kSamples; ++y) {
+            for (int z = 0; z < kSamples; ++z) {
+                const Vec3 point =
+                    Vec3{.x = kLeast, .y = kLeast, .z = kLeast} + (Vec3{.x = static_cast<float>(x),
+                                                                        .y = static_cast<float>(y),
+                                                                        .z = static_cast<float>(z)} *
+                                                                   (kSpan / static_cast<float>(kSamples)));
+                const bool isSolid =
+                    hulls->contentsAt(nx::collision::kWorldModel, nx::collision::Hull::Standing, point) ==
+                    nx::collision::Contents::Solid;
+                EXPECT_EQ(nx::navigation::isSolidAt(geometry.bodyHull, point), isSolid)
+                    << std::format("{}", point);
+                ++(isSolid ? solid : open);
+            }
+        }
+    }
+    EXPECT_GT(solid, 0);
+    EXPECT_GT(open, 0);
 }
 
 } // namespace

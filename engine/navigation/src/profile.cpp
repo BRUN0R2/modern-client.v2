@@ -161,4 +161,13 @@ void addConvexPolygon(Geometry& geometry, std::span<const Vec3> corners, AreaKin
     }
 }
 
+auto isSolidAt(const BodyHull& hull, Vec3 middle) noexcept -> bool {
+    BodyHullChild child = hull.root;
+    while (const auto* index = std::get_if<std::uint32_t>(&child)) {
+        const BodyHullNode& node = hull.nodes[*index];
+        child = node.children[node.plane.signedDistance(middle) < 0.0F ? 1 : 0];
+    }
+    return std::get<BodyHullLeaf>(child) == BodyHullLeaf::Solid;
+}
+
 } // namespace nx::navigation

@@ -17,6 +17,7 @@ nxAddTest(nxGameTests
     DEPENDS
         nx::game
         nx::navigation
+        nx::collision
         nx::assets
         nx::platform)
 
