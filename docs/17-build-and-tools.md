@@ -42,9 +42,10 @@ modern-client.v2/
 │   ├── server/                 # nextds
 │   └── master/                 # nextmaster
 ├── rook/
+│   ├── cmake/                  # the build of the toolchain, which needs nothing of the repository
 │   ├── spec/                   # grammar, conformance tests
 │   ├── format/                 # layout of .rbc and .rookd, shared by the compiler, the verifier and the VM
-│   ├── compiler/               # rookc (frontend, checker, RIR, codegen)
+│   ├── compiler/               # rook.compiler: the library of rookc (frontend, checker, RIR, codegen)
 │   ├── verifier/               # load-time check of .rbc
 │   ├── vm/                     # interpreter, GC, isolates, budgets
 │   ├── stdlib/                 # std.* in Rook + native parts
@@ -111,11 +112,11 @@ dialect is `/std:c++latest`.
 
 | Problem | Resolution in the project |
 |---------|---------------------------|
-| CMake's `import std` support is still experimental (a *gate* with a UUID that changes with every version) and, on MSVC, generates `@cmake_cxx_std.lib`, which `link.exe` reads as a response file | **Fixed at the cause:** the project does not use that support. `cmake/nxStdModule.cmake` reads the standard library's `modules.json` manifest and compiles the `std` module as the regular target `nx::std` ([ADR-0014](adr/0014-std-module-built-by-the-project.md)) |
+| CMake's `import std` support is still experimental (a *gate* with a UUID that changes with every version) and, on MSVC, generates `@cmake_cxx_std.lib`, which `link.exe` reads as a response file | **Fixed at the cause:** the project does not use that support. `rook/cmake/rookStdModule.cmake`, which `cmake/nxStdModule.cmake` calls, reads the standard library's `modules.json` manifest and compiles the `std` module as a regular target, `nx::std` here and `rook::std` where the toolchain builds on its own ([ADR-0014](adr/0014-std-module-built-by-the-project.md)) |
 | Out-of-tree sources get object directories with a long *hash* and could exceed 260 characters | **Fixed at the cause:** the `std` module source is copied to `build/<preset>/nxStd/` and compiled from there, with short paths |
 | Flags that change the ABI (exceptions, RTTI) must be the same in every unit, including the `std` module | They live in the global `CMAKE_CXX_FLAGS`. Warnings are per target and do not apply to `nx::std` |
 | A runtime comparison of reflection values made the P2996 capability probe reject GCC 16 | The probe compares reflections in `static_assert` and includes `<meta>`. Linux GCC and TSan CI require `NX_REFLECTION_BACKEND=native`, so a broken probe fails configuration instead of silently validating the fallback |
-| Clang's GNU frontend on Windows still uses the Microsoft ABI and STL | `nxStdModule.cmake` selects the manifest by `CMAKE_CXX_SIMULATE_ID`, not by the frontend's command-line syntax. `dev-windows-clang` builds its own Clang module interfaces |
+| Clang's GNU frontend on Windows still uses the Microsoft ABI and STL | `rookStdModule.cmake` selects the manifest by `CMAKE_CXX_SIMULATE_ID`, not by the frontend's command-line syntax. `dev-windows-clang` builds its own Clang module interfaces |
 | GoogleTest 1.18.0 declares its `std::any` printer even when the STL does not provide `std::any` without RTTI | The pinned `cmake/ports/gtest` overlay guards that specialization with `__cpp_lib_any`. Its version, upstream patches and license notices are retained; no test or compiler check is disabled |
 | Detour's `dtQueryFilter` is not virtual as vcpkg builds it, so a query cannot weigh polygons of its own (the places an agent keeps away from) | The pinned `cmake/ports/recastnavigation` overlay, vcpkg's 1.6.0 recipe at the baseline with its upstream fix, turns on upstream's `RECASTNAVIGATION_DT_VIRTUAL_QUERYFILTER`; Detour exports `DT_VIRTUAL_QUERYFILTER` to every target that links it, so the library and the project agree on the filter's layout |
 | Clang 23.1.4 crashes when an importer instantiates the implicit lifetime operations of `DecalPool`'s private slot type | `DecalPool` defines its copy, move and destruction operations in its owning implementation unit; its value semantics stay explicit and unchanged |
@@ -146,7 +147,7 @@ dialect is `/std:c++latest`.
 | `tsan-linux-gcc` | Every test under ThreadSanitizer, with GCC | In CI (`linux-gcc` job) |
 | `asan-linux-clang`, `tsan-linux-clang` | Sanitizers with Clang (ASan + UBSan, TSan) | To be validated |
 | `fuzz-windows-msvc` | The fuzz targets and the libraries, with libFuzzer and AddressSanitizer, without the tests, benchmarks, tools and client: `ctest` fuzzes each one for `NX_FUZZ_SECONDS` (60 by default) from its corpus; an input that runs past `NX_FUZZ_INPUT_SECONDS` (30) is reported as a hang and kept | Validated; nightly in CI (`fuzz`) |
-| `tools-windows-msvc` / `tools-linux-gcc` | Only the tools, `nxcheck` and `nxview`, and the libraries they link, in Release: no tests, benchmarks nor client | `tools-windows-msvc` validated; `tools-linux-gcc` to be validated |
+| `tools-windows-msvc` / `tools-linux-gcc` | Only the tools, `nxcheck` and `nxview`, and the libraries they link, in Release: no tests, benchmarks, client nor Rook toolchain | `tools-windows-msvc` validated; `tools-linux-gcc` to be validated |
 | `server-headless` | Only `nextds` | Planned, with `nextds` |
 
 Each configure preset has a build preset with the same name, and a test preset but for the tools
@@ -205,6 +206,7 @@ ctest --preset dev-linux-gcc
 | `NX_BUILD_CLIENT` | `ON` | Builds `next` |
 | `NX_BUILD_SERVER` | `ON` | Builds `nextds` |
 | `NX_BUILD_TOOLS` | `ON` | Builds the tools |
+| `NX_BUILD_ROOK` | `ON` | Builds the Rook toolchain (`rook/`, whose own options its [README](../rook/README.md#building) lists) |
 | `NX_RHI_VULKAN` | `ON` | Vulkan backend (planned: today `nx.rhi.vulkan` is always built) |
 | `NX_RHI_D3D11` | `OFF` | DirectX 11 backend (future) |
 | `NX_ENABLE_TRACY` | `ON` in dev | Profiler |
@@ -213,7 +215,7 @@ ctest --preset dev-linux-gcc
 
 The options from `NX_BUILD_SERVER` on, but `NX_REFLECTION_BACKEND`, arrive together with their
 modules. Today `NX_BUILD_TESTS`, `NX_WARNINGS_AS_ERRORS`, `NX_BUILD_BENCHMARKS`, `NX_BUILD_CLIENT`,
-`NX_BUILD_TOOLS` and `NX_REFLECTION_BACKEND` exist, with `NX_FUZZ`, `NX_FUZZ_SECONDS` and
+`NX_BUILD_TOOLS`, `NX_BUILD_ROOK` and `NX_REFLECTION_BACKEND` exist, with `NX_FUZZ`, `NX_FUZZ_SECONDS` and
 `NX_FUZZ_INPUT_SECONDS`, which the fuzz preset uses.
 
 ## 5. Dependencies
@@ -274,12 +276,14 @@ Rules:
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
+| `rookCompilerTests` | Tests of the Rook compiler (`rook/compiler/tests`), where GoogleTest is found |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
 | `nxview` | A frame of a map into a file, as the client draws it (`cs.client`): `--screenshot <file.bmp>` renders one frame (`--size <width>x<height>`, 1280x720 by default) of `--map <name>` (default: de_dust2) of the Counter-Strike 1.6 installation without a window, with the original's default settings, `--time <seconds>` after the map starts; `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--look legacy|enhanced` the look, `--user-folder` the folder whose `addons/cstrike/` it reads, `--weapon <id>` the only weapon the player spawns with; `--hud` draws the HUD over the frame, `--fps <frames a second>` cl_showfps's label telling that many, and `--console <line>` (once for each line, sent in it) and `--typing <text>` (left typed in it) the console's window; `--validation`. Playing a map is `next`'s |
 | `<module>Tests` (e.g. `nxCoreTests`) | Per-module tests, registered in CTest one by one (`gtest_discover_tests`) |
 | `nxIntegrationTests` | Tests that span modules (`tests/integration`), such as the determinism test with 0, 1, 3 and 15 workers |
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
+| `Rook.BuildsOnItsOwn` (CTest only) | `rook/` configured, built and tested alone, with the compiler of the preset and nothing else |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`, `nxBenchLightStyles`, `nxBenchClient`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`); workloads and comparison procedure in [18](18-testing-and-quality.md#performance) |
 | `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzKeyValues`, `fuzzTga`, `fuzzFont`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 

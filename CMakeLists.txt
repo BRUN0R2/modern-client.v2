@@ -9,6 +9,7 @@ option(NX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(NX_BUILD_BENCHMARKS "Build the benchmarks (installs the vcpkg 'benchmarks' feature)" ON)
 option(NX_BUILD_CLIENT "Build the client, next (apps/client/)" ON)
 option(NX_BUILD_TOOLS "Build the tools (tools/)" ON)
+option(NX_BUILD_ROOK "Build the Rook toolchain (rook/)" ON)
 option(NX_FUZZ "Link the fuzz targets with libFuzzer (the fuzz presets); off, they replay their corpus" OFF)
 set(NX_FUZZ_SECONDS 60 CACHE STRING "How long each fuzz target runs with NX_FUZZ (the nightly job runs longer)")
 set(NX_FUZZ_INPUT_SECONDS 30 CACHE STRING "How long one input may run before libFuzzer reports it as a hang, keeping it")
@@ -60,6 +61,16 @@ endif()
 
 if(NX_FUZZ)
     enable_testing()
+endif()
+
+# The Rook toolchain builds on its own, and here with the settings and the std module of this build. It
+# comes first because what uses it, later nx.script, stands above it; the check refuses the reverse.
+if(NX_BUILD_ROOK)
+    set(ROOK_BUILD_TESTS ${NX_BUILD_TESTS})
+    set(ROOK_WARNINGS_AS_ERRORS ${NX_WARNINGS_AS_ERRORS})
+    add_library(rook::std ALIAS nxStd)
+    add_subdirectory(rook)
+    nxDeclareIndependentTree(rook ALLOW nx::std)
 endif()
 
 add_subdirectory(shaders)

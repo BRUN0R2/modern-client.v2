@@ -98,7 +98,11 @@ the configuration, locally and in every CI build. So does a module whose sources
 project module its `DEPENDS` does not declare, which would build as long as another dependency
 links that one, and a `DEPENDS` on a project module none of its sources imports: the edges of the
 graph are those the code has. A source's new import is met the next time CMake configures, in
-every CI build. The `LayerCheck.*` tests run those checks on a
+every CI build. `rook/` stands apart from the layers: it imports nothing of the project, the dependency
+running one way, as `nx.script` importing the VM ([ADR-0033](adr/0033-rook-compiler-and-types.md)), and it
+owes the check nothing to be held to it, because `nxDeclareIndependentTree` walks that directory's targets:
+one that links a target of the project defined outside it, or whose sources import a module of the project,
+fails the configuration. The `LayerCheck.*` tests run those checks on a
 fixture of empty modules. A strict layer order also rules out cycles. The same-layer
 dependencies this table declares (`nx.rhi.vulkan` on `nx.rhi` and `nx.platform`, `nx.render` and
 `nx.collision` on `nx.assets`, …) are declared `LATERAL` where the module is built (`nxAddModuleLibrary`): the check

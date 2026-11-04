@@ -24,7 +24,9 @@ version of the build used CMake's own support, which brought three problems:
   publishes (`modules.json` of the Microsoft STL, `libstdc++.modules.json`,
   `libc++.modules.json`), reads the source of the `std` module and the required options, and
   builds the module as the ordinary target **`nx::std`** (`FILE_SET CXX_MODULES`), a stable
-  CMake feature.
+  CMake feature. Since the Rook toolchain builds on its own
+  ([ADR-0033](0033-rook-compiler-and-types.md)), this code lives in
+  `rook/cmake/rookStdModule.cmake`, which `cmake/nxStdModule.cmake` calls.
 - The source is **copied** to `build/<preset>/nxStd/` (`configure_file`, copied again when
   the toolchain changes), which keeps the object paths short.
 - Only `std` is built. `std.compat` is left out because it re-exports the C library in the

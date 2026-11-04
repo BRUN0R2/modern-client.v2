@@ -81,6 +81,41 @@ elseif(NX_LAYER_CASE MATCHES "^(declaredImports|undeclaredImport|dependencyNotIm
     fixtureUnit(top.cpp "${topImplementation}" topImplementationUnit)
     add_library(top INTERFACE)
     nxDeclareModuleLayer(top 2 DEPENDS ${topDepends} SOURCES "${topInterfaceUnit}" "${topImplementationUnit}")
+elseif(NX_LAYER_CASE MATCHES "^independentTree")
+    # A directory like rook/, whose CMakeLists.txt this fixture writes, beside a module of the project.
+    add_library(importedLibrary INTERFACE IMPORTED GLOBAL)
+    add_library(allowedStd INTERFACE)
+    add_library(fixture::std ALIAS allowedStd)
+    fixtureUnit(engine.cppm "export module fixture.engine;\n" engineUnit)
+    add_library(engine INTERFACE)
+    add_library(fixture::engine ALIAS engine)
+    nxDeclareModuleLayer(engine 0 SOURCES "${engineUnit}")
+    # Not declared to anything, as a target of rook/ is not: the check finds it by walking its directory.
+    add_library(helper INTERFACE)
+
+    set(treeUnit "export module fixture.tree;\nimport std;\n// import fixture.engine;\n")
+    set(treeLinks "fixture::std importedLibrary inner")
+    if(NX_LAYER_CASE STREQUAL "independentTreeLinksOutside")
+        set(treeLinks "fixture::std helper")
+    elseif(NX_LAYER_CASE STREQUAL "independentTreeLinksModule")
+        set(treeLinks "fixture::engine")
+    elseif(NX_LAYER_CASE STREQUAL "independentTreeLinksInExpression")
+        set(treeLinks "$<$<BOOL:ON>:fixture::engine>")
+    elseif(NX_LAYER_CASE STREQUAL "independentTreeImportsModule")
+        set(treeUnit "export module fixture.tree;\nimport fixture.engine;\n")
+    endif()
+    set(treeDirectory "${CMAKE_CURRENT_BINARY_DIR}/tree/source")
+    file(WRITE "${treeDirectory}/tree.cppm" "${treeUnit}")
+    file(WRITE "${treeDirectory}/CMakeLists.txt"
+        "add_library(inner INTERFACE)\n"
+        "add_library(tree INTERFACE tree.cppm)\n"
+        "target_link_libraries(tree INTERFACE ${treeLinks})\n")
+    add_subdirectory("${treeDirectory}" tree/binary)
+    nxDeclareIndependentTree("${treeDirectory}" ALLOW fixture::std)
+
+    # The other way round is free: a module of the project may depend on what stands apart.
+    add_library(user INTERFACE)
+    nxDeclareModuleLayer(user 1 DEPENDS tree)
 else()
     message(FATAL_ERROR "layerCheck: unknown case '${NX_LAYER_CASE}'")
 endif()
