@@ -42,7 +42,7 @@ says where.
 | [0031](0031-the-project-font.md) | The project has a font of its own: Barlow | Accepted |
 | [0032](0032-gpu-crowds.md) | The GPU animates, culls and draws the crowds | Accepted |
 | [0033](0033-rook-compiler-and-types.md) | A separate Rook compiler, and types that rule out what Pawn left to run time | Proposed |
-| [0034](0034-rook-modern-only.md) | Rook keeps nothing for old plugins: one modern spelling, typed to the maximum | Proposed |
+| [0034](0034-rook-modern-only.md) | Rook looks like AMX Pawn and is new inside: one spelling, nothing ported, typed to the maximum | Proposed |
 
 ## Template
 
