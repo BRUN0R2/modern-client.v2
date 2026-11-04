@@ -809,6 +809,116 @@ TEST(AgentBrain, ABodyBelowABoxItJumpsOntoJumpsOnceAndWalksOnOnItsTop) {
     EXPECT_EQ(walked.jumps, 1);
 }
 
+/// A box 40 high on a floor, a body's way onto its top from far off, and the link of that way, which leaves
+/// the floor along +x.
+struct JumpUp {
+    Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 40}};
+    nx::Vec3 from{.x = 100, .y = 256};
+    nx::Vec3 goal{.x = 512, .y = 360, .z = 40};
+    nx::navigation::NavigationMesh mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    nx::navigation::MeshLink link = wayUp();
+
+    JumpUp() { brain.setGoal(goal); }
+
+    /// A body's feet at the link's start, a unit short of it as a body comes to it.
+    [[nodiscard]] auto atStart() const -> nx::Vec3 { return link.start - nx::Vec3{.x = 1}; }
+
+private:
+    [[nodiscard]] auto wayUp() -> nx::navigation::MeshLink {
+        auto corridor = nx::navigation::Corridor::plan(query, {.from = from, .to = goal});
+        EXPECT_TRUE(corridor.has_value());
+        const auto next = corridor->nextLink(query);
+        EXPECT_TRUE(next.has_value());
+        EXPECT_GT(next->end.x, next->start.x);
+        return *next;
+    }
+};
+
+TEST(AgentBrain, ABodyHasCrossedALinkOnlyOnTheGround) {
+    JumpUp up;
+    ASSERT_TRUE(up.brain.decide(up.atStart(), up.query, true).intent.jumps);
+    // Along the box's face, as high as its top and as far from the link's start as its end.
+    const float span = nx::test::distanceAcross(up.link.start, up.link.end);
+    const nx::Vec3 alongTheFace = up.link.start + nx::Vec3{.y = span, .z = up.link.end.z - up.link.start.z};
+    const nx::agents::Decision flying = up.brain.decide(alongTheFace, up.query, false);
+    EXPECT_GT(flying.intent.direction.x, 0.0F);
+    EXPECT_LT(flying.intent.direction.y, 0.0F) << "still for the link's end, not on along its way";
+    const nx::Vec3 over = up.link.end + nx::Vec3{.x = 10};
+    EXPECT_LT(up.brain.decide(over, up.query, false).intent.direction.x, 0.0F) << "still for the link's end";
+    EXPECT_GT(up.brain.decide(over, up.query, true).intent.direction.y, 0.0F) << "landed, on to its goal";
+}
+
+TEST(AgentBrain, ABodyBackOnTheGroundBelowALinksEndSearchesItsWayAnewAndJumpsAgain) {
+    JumpUp up;
+    ASSERT_TRUE(up.brain.decide(up.atStart(), up.query, true).intent.jumps);
+    EXPECT_FALSE(up.brain.decide(up.atStart(), up.query, true).intent.jumps) << "jumping still";
+    EXPECT_FALSE(up.brain.decide(up.atStart() + nx::Vec3{.z = 30}, up.query, false).intent.jumps);
+    EXPECT_TRUE(up.brain.decide(up.atStart(), up.query, true).intent.jumps) << "fallen short, once more";
+}
+
+TEST(AgentBrain, ABodyBackOnTheGroundAtTheHeightOfALinksEndShortOfItWalksOnToItUpright) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 50}};
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{58.0F};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0, jumping);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    const nx::Vec3 goal{.x = 512, .y = 360, .z = box.high.z};
+    brain.setGoal(goal);
+    auto corridor = nx::navigation::Corridor::plan(query, {.from = {.x = 100, .y = 256}, .to = goal});
+    ASSERT_TRUE(corridor.has_value());
+    const auto link = corridor->nextLink(query);
+    ASSERT_TRUE(link.has_value());
+    ASSERT_EQ(link->kind, nx::navigation::AreaKind::CrouchedJump);
+    const nx::agents::Decision jump = brain.decide(link->start - nx::Vec3{.x = 1}, query, true);
+    ASSERT_TRUE(jump.intent.jumps);
+    EXPECT_TRUE(jump.intent.crouches);
+    const nx::Vec3 over{.x = link->start.x, .y = link->start.y, .z = link->end.z};
+    EXPECT_TRUE(brain.decide(over, query, false).intent.crouches) << "in the air";
+    const nx::agents::Decision landed = brain.decide(over, query, true);
+    EXPECT_FALSE(landed.intent.jumps) << "up there already";
+    EXPECT_FALSE(landed.intent.crouches);
+    EXPECT_GT(landed.intent.direction.x, 0.99F) << "on to the link's end, no way searched from the edge";
+}
+
+TEST(AgentBrain, ABodyBackPastACornerItReachedHeadsForTheCornersItSeesAgain) {
+    // A passage whose walls each turn its way, more corners than a body sees ahead.
+    constexpr float kWallEvery = 200.0F;
+    constexpr int kWalls = 6;
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = kWallEvery * (kWalls + 1), .y = 256}, 0);
+    for (int wall = 1; wall <= kWalls; ++wall) {
+        const float x = kWallEvery * static_cast<float>(wall);
+        const bool isLow = wall % 2 == 0;
+        nx::test::addBox(geometry, {.x = x, .y = isLow ? -32.0F : 96.0F, .z = -16},
+                         {.x = x + 32, .y = isLow ? 160.0F : 288.0F, .z = 200});
+    }
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = kWallEvery * (kWalls + 0.5F), .y = 128});
+    constexpr float kStep = 2.0F;
+    constexpr float kPastTheLastWall = 40.0F;
+    nx::Vec3 feet{.x = 100, .y = 128};
+    std::vector<nx::Vec3> walked{feet};
+    for (int step = 0; step < 5000 && feet.x < (kWallEvery * kWalls) + kPastTheLastWall; ++step) {
+        const nx::agents::Decision decision = brain.decide(feet, query);
+        ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
+        feet = feet + (decision.intent.direction * kStep);
+        walked.push_back(feet);
+    }
+    ASSERT_GE(feet.x, (kWallEvery * kWalls) + kPastTheLastWall);
+    // Back the way it came, as what gets a stuck body out may take it: it never stands with nothing to head
+    // for.
+    for (const nx::Vec3 back : walked | std::views::reverse) {
+        const nx::agents::Decision decision = brain.decide(back, query);
+        ASSERT_EQ(decision.behavior, nx::agents::Behavior::MoveTo);
+        EXPECT_GT(nx::length(decision.intent.direction), 0.0F) << std::format("{}", back);
+    }
+}
+
 /// Where a body got stuck, as its watch tells it: the polygons within 75 units cost twenty times their own.
 auto stuckAt(nx::Vec3 position) -> nx::navigation::AvoidedPlace {
     return {.position = position, .radius = nx::HammerUnits{75.0F}, .cost = 20.0F};
@@ -1123,6 +1233,31 @@ TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesAJump) {
     constexpr nx::Vec3 kStart{.x = 100, .y = 256};
     constexpr nx::Vec3 kGoal{.x = 512, .y = 256, .z = 40};
     checkBrakingCrossing(box, kStart, kGoal, 1);
+}
+
+TEST(AgentBrain, ABrakingBodyComesToALinkItJumpsUpWithLittleSpeedAcrossIt) {
+    const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 40}};
+    const auto mesh = nx::test::playerMesh(platformGeometry(box), 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{brakingRules()};
+    // Along the box's face, to a top whose link leaves the floor across its way.
+    const nx::Vec3 from{.x = 360, .y = 400};
+    const nx::Vec3 goal{.x = 420, .y = 150, .z = 40};
+    brain.setGoal(goal);
+    auto corridor = nx::navigation::Corridor::plan(query, {.from = from, .to = goal});
+    ASSERT_TRUE(corridor.has_value());
+    const auto next = corridor->nextLink(query);
+    ASSERT_TRUE(next.has_value());
+    const nx::agents::Decision decision = brain.decide(from, query);
+    ASSERT_FALSE(decision.intent.approached().empty());
+    const nx::Vec3 into = next->start - from;
+    const nx::Vec3 beyond = next->end - next->start;
+    const float turnCosine =
+        ((into.x * beyond.x) + (into.y * beyond.y)) /
+        (nx::test::distanceAcross(next->start, from) * nx::test::distanceAcross(next->end, next->start));
+    ASSERT_LT(turnCosine, 0.5F) << "a sharp turn";
+    EXPECT_NEAR(decision.intent.approached().back().passShare, std::max(turnCosine, 0.0F), 0.01F)
+        << "not a corner's cosine of half the turn: in the air it flies on";
 }
 
 TEST(AgentBrain, ABrakingBodyAnticipatesAndCrossesADrop) {

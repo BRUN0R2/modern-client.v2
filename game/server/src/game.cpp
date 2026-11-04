@@ -167,6 +167,7 @@ auto Game::ownStateOf(PlayerIndex index) const -> PlayerOwnState {
                           .spawnedAt = player.spawnedAt,
                           .eye = eyeOf(player.movement),
                           .feet = feetOf(player.movement),
+                          .isOnGround = player.movement.isOnGround,
                           .velocity = player.movement.velocity,
                           .view = player.view,
                           .maxSpeed = player.movement.maxSpeed,

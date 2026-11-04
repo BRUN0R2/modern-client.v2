@@ -357,6 +357,7 @@ auto Bots::commands() -> std::vector<PlayerCommand> {
             turn.decision = requests.size();
             requests.push_back({.brain = &turn.agent->brain,
                                 .feet = turn.self.feet,
+                                .isOnGround = turn.self.isOnGround,
                                 .velocity = turn.self.velocity,
                                 .maxSpeed = turn.self.maxSpeed,
                                 .body = self != nullptr ? std::optional{self->entity} : std::nullopt,

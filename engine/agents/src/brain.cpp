@@ -54,6 +54,14 @@ constexpr float kCrouchLeadRadii = 6.0F;
     const float turnCosine = std::clamp(dot(toCorner, beyond) / lengths, -1.0F, 1.0F);
     return std::sqrt((1.0F + turnCosine) * 0.5F);
 }
+/// The share of its full speed a body may jump at from a corner, turning from `toCorner` onto `beyond`, both
+/// across: the cosine of the turn, none turning a right angle or more, so that it leaves the ground with
+/// little speed across its way, on which it flies on in the air. At the share of a corner it walks round, a
+/// body flew past the door of a train it jumped at.
+[[nodiscard]] auto jumpShareOf(Vec3 toCorner, Vec3 beyond) noexcept -> float {
+    const float lengths = length(toCorner) * length(beyond);
+    return lengths > 0.0F ? std::clamp(dot(toCorner, beyond) / lengths, 0.0F, 1.0F) : 1.0F;
+}
 /// The speed a body can still stop from by friction alone within `distance`, as PM_Friction slows it by
 /// `rules`: below its stop speed it loses stopSpeed times braking a second, so the root of twice that times
 /// the distance; faster, it loses braking times its speed a second, down to its stop speed within how much
@@ -316,11 +324,23 @@ auto Brain::choose(Vec3 feet) const -> const Memory* {
     return freshest;
 }
 
-void Brain::planIfNeeded(Vec3 feet, Vec3 goal, std::optional<ecs::Entity> pursued,
+void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ecs::Entity> pursued,
                          navigation::NavigationQuery& query) {
     const navigation::AgentProfile& profile = query.mesh().profile();
-    if (crossing && hasCrossed(*crossing, feet, profile.stepHeight.value(), rules.arrivalDistance.value())) {
-        crossing.reset(); // it walks along its corridor again, from the link's end
+    if (crossing) {
+        leftGround = leftGround || !isOnGround;
+        const float stepHeight = profile.stepHeight.value();
+        // Only on the ground: flying along the face of a ledge it jumped at, a body was as high as its top
+        // and as far from the start as the end, with all its way still to go.
+        if (isOnGround && hasCrossed(*crossing, feet, stepHeight, rules.arrivalDistance.value())) {
+            crossing.reset(); // it walks along its corridor again, from the link's end
+        } else if (isOnGround && leftGround && std::abs(feet.z - crossing->end.z) > stepHeight) {
+            // Back on the ground below the link's end, as it fell off a ledge it jumped at. Its corridor goes
+            // on from up there, and its one jump is spent: pushing on at the ledge's face, it stayed until
+            // its watch gave its way up, and then its goal.
+            forgetCorridor();
+            plannedGoal.reset();
+        }
     }
     // A body away from its corridor (spawned again, teleported, pushed off the mesh) searches its way anew
     // from where it is, rather than walking straight at a corridor left behind: away from where it stands
@@ -367,7 +387,7 @@ void Brain::finishArrival(const Memory* selected) {
     }
 }
 
-auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
+auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGround) -> Decision {
     const Memory* const selected = choose(feet);
     focus = selected != nullptr ? std::optional{selected->observation.entity} : std::nullopt;
     if (selected == nullptr && !givenGoal) {
@@ -396,7 +416,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         }
     }
     const navigation::AgentProfile& profile = query.mesh().profile();
-    planIfNeeded(feet, goal, pursued, query);
+    planIfNeeded(feet, isOnGround, goal, pursued, query);
     if (pathError) {
         decision.behavior = Behavior::Blocked;
         decision.navigationError = pathError;
@@ -412,8 +432,12 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     // head meets what is over that floor; going down, within a step, since ducked at the top of a ladder a
     // body walks to it at a third of its speed.
     const auto crouchesAcross = [&] {
-        if (crossing->kind == navigation::AreaKind::CrouchedJump && crossing->end.z > crossing->start.z) {
-            return true; // from the jump on: measured, from when it leaves the ground to its top alike
+        // From the jump on, measured, from when it leaves the ground to its top alike, until it is back on
+        // the ground: ducked on the very edge of a ledge, on the friction of an edge (PM_Friction's
+        // edgefriction), a body gains no speed at all.
+        if (crossing->kind == navigation::AreaKind::CrouchedJump && crossing->end.z > crossing->start.z &&
+            (!isOnGround || !leftGround)) {
+            return true;
         }
         const float heightLeft = crossing->end.z - feet.z;
         const bool isThere = crossing->end.z > crossing->start.z
@@ -462,9 +486,16 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         reached != corners.end()) {
         from = std::ranges::next(reached);
     }
-    const auto next = std::find_if(from, corners.end(), [this, feet](Vec3 corner) {
+    const auto isAhead = [this, feet](Vec3 corner) {
         return groundDistance(feet, corner) > rules.arrivalDistance.value();
-    });
+    };
+    auto next = std::find_if(from, corners.end(), isAhead);
+    if (next == corners.end() && from != corners.begin()) {
+        // Back past the corner it reached, as it wiggled out of where it got stuck, the corners it sees ahead
+        // end there: heading on from it, it stood with nothing to head for, so moving nowhere and not stuck.
+        from = corners.begin();
+        next = std::find_if(from, corners.end(), isAhead);
+    }
     if (next != from) {
         reachedCorner = *std::ranges::prev(next);
     }
@@ -513,11 +544,13 @@ void Brain::approach(Decision& decision, Vec3 feet, std::span<const Vec3> ahead,
         if (corner == lastCorner && stops && isAt(way[corner], end)) {
             intent.approaches[intent.approachCount++] = {.distance = HammerUnits{along}, .passShare = 0.0F};
         } else if (corner + 1 < way.size()) {
-            const Vec3 onward = pointAlong(way, corner, span);
-            intent.approaches[intent.approachCount++] = {
-                .distance = HammerUnits{along},
-                .passShare =
-                    passShareOf(acrossOf(way[corner] - way[corner - 1]), acrossOf(onward - way[corner]))};
+            const Vec3 into = acrossOf(way[corner] - way[corner - 1]);
+            const Vec3 beyond = acrossOf(pointAlong(way, corner, span) - way[corner]);
+            const bool jumpsThere = corner == lastCorner && next &&
+                                    next->kind != navigation::AreaKind::Ladder && next->end.z > next->start.z;
+            intent.approaches[intent.approachCount++] = {.distance = HammerUnits{along},
+                                                         .passShare = jumpsThere ? jumpShareOf(into, beyond)
+                                                                                 : passShareOf(into, beyond)};
         }
     }
 }
@@ -533,6 +566,7 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQ
         next = corridor->nextLink(query);
         return false;
     }
+    leftGround = false;
     if (crossing->kind == navigation::AreaKind::Ladder) {
         const navigation::AgentProfile& profile = query.mesh().profile();
         climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());

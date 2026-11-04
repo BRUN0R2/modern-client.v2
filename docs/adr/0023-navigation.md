@@ -43,7 +43,10 @@ convex polygons, through Recast and Detour.
   widths of the profile, where a body walking off lands on floor within its drop height below, its
   radius and a cell past the ledge; of the kind jump, both ways, within its jump height, else drop,
   down only, both heights the geometry's. A brain crosses one from its start, jumping once for a
-  link up, and heads for its end without steering, as DetourCrowd moves an agent over a link; the
+  link up, having slowed down for what the link's way turns across its own, since in the air a body
+  flies on, and heads for its end without steering, as DetourCrowd moves an agent over a link. It has
+  crossed only on the ground, at the height of the end and as far from the start; back on the ground
+  below that height it fell short, and searches its way anew from where it stands. The
   ledge its next link leaves from is no wall to its steering. A decision reuses its next-link lookup
   to anticipate the way over it when braking; after an attempted crossing fails and may have changed
   the corridor, it looks again.

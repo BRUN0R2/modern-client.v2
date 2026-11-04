@@ -136,7 +136,8 @@ sharp corner or round a body near it to less, a zombie of the first waves, at 10
 dead and crept on at 2; it arrives within its arrival distance across and a step of height, as it reaches
 a corner, and heads on from a corner it reached however wide it rounds it: its funnel lists the corner
 until it crosses the edge of the polygon the corner ends, and measured anew, the corner was behind it, and
-it turned back to it. A body that waits as
+it turned back to it. A link up it comes to with little speed across its way, has crossed it only on the
+ground, and fallen short it searches its way anew from where it landed. A body that waits as
 the others make way is not stuck. A body stuck on its way all the same gets out as a bot does (`nx::agents::StuckWatch`, the
 `stuck` table): it moves ahead, back or to a side, jumping now and then, and when it stays stuck it
 searches another way, which keeps away from where it got stuck (`nx::navigation::PathRequest::avoided`)

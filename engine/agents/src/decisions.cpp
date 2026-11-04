@@ -167,7 +167,7 @@ void Deciders::decide(jobs::JobSystem& jobs, std::span<const DecisionRequest> re
         std::vector<navigation::SteeringBody> nearby;
         for (std::size_t index = first; index < last; ++index) {
             const DecisionRequest& request = requests[index];
-            Decision decision = request.brain->decide(request.feet, query);
+            Decision decision = request.brain->decide(request.feet, query, request.isOnGround);
             if (length(decision.intent.direction) > 0.0F && request.maxSpeed > UnitsPerSecond{}) {
                 bodiesNear(request, grid, range, height, sorted, nearby);
                 request.brain->steer(decision.intent, request.velocity, request.maxSpeed, nearby, query);

@@ -105,6 +105,7 @@ struct PlayerOwnState {
     nx::GameTime spawnedAt{};
     nx::Vec3 eye{};
     nx::Vec3 feet{};
+    bool isOnGround = false;
     nx::Vec3 velocity{};
     nx::EulerAngles view{};
     nx::UnitsPerSecond maxSpeed{};
