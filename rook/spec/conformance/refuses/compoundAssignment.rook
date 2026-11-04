@@ -1,0 +1,9 @@
+fn body() {
+    count += 1; //~ error[R0035]
+    count -= 1; //~ error[R0035]
+    count *= 2; //~ error[R0035]
+    count /= 2; //~ error[R0035]
+    count %= 2; //~ error[R0035]
+    count++; //~ error[R0035]
+    count--; //~ error[R0035]
+}

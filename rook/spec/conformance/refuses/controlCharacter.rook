@@ -1,0 +1,4 @@
+//~v error[R0002]
+// bell  in a comment
+//~v error[R0002]
+const A: string = "";

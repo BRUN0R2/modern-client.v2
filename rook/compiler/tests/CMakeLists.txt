@@ -4,6 +4,7 @@
 rookAddTest(rookCompilerTests
     SOURCES
         lexerTests.cpp
+        parserTests.cpp
         diagnosticTests.cpp
     DEPENDS
         rook::compiler)

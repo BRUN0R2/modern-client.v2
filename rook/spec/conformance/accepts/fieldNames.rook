@@ -1,0 +1,26 @@
+// A field, an argument's label and a member may be named with a reserved word: docs/15-mod-api.md has
+// `class: ClassId`. A contextual word is an identifier wherever the grammar does not write it.
+
+pub struct InfectionNotice {
+    class: ClassId,
+    type:  string,
+}
+
+vars Named {
+    readonly readonly: bool,
+    readonly: bool,
+    range: Distance,
+}
+
+enum Named2 { Labeled(class: ClassId) }
+
+fn contextual(from: Team, extends: bool, derive: i32) {
+    let notice = InfectionNotice { class: ZOMBIE, type: "x" };
+    let class2 = notice.class;
+    send(class: ZOMBIE, from: from);
+    match (value) {
+        .Labeled(class: id) => id,
+    }
+    let new = 1;
+    let result = new + 1;
+}

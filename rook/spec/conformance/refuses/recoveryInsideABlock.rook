@@ -1,0 +1,10 @@
+fn body() {
+    let a = ; //~ error[R0023]
+    let b = 1;
+    call(; //~ error[R0023]
+    let c = 2;
+    ) ] ; //~ error[R0023]
+    let d = 3;
+    { nested: braces } ; //~ error[R0023]
+    return d;
+}

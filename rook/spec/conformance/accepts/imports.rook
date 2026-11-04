@@ -1,0 +1,8 @@
+// Every form of an import. A file holds its imports first, then its plugin, then its declarations.
+
+import cs.weapons;
+import cs.weapons.{createWeaponClass, WeaponType};
+import rezombie.api.classes.{createClass, Class,};
+import rezombie.prelude.*;
+
+fn nothing() {}

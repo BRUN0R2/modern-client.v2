@@ -1,0 +1,8 @@
+fn broken( { } //~ error[R0026]
+struct Fine { field: i32 }
+fn alsoBroken -> i32 { return 1; } //~ error[R0020]
+fn fine() {}
+enum Bad { A(, B } //~ error[R0024] error[R0020]
+fn stillFine() {}
+garbage here; //~ error[R0021]
+fn lastFine() {}

@@ -1,0 +1,27 @@
+// The table of rook/spec/grammar.ebnf, section 6: its tree is written beside this file.
+
+fn precedence() {
+    a * b + c;
+    a + b * c;
+    a - b - c;
+    a * b / c % d;
+    a + b ?? c + d;
+    a ?? b ?? c;
+    a ?? b > c;
+    a + b < c * d;
+    a < b == c < d;
+    a == b && c == d;
+    a && b || c && d;
+    a || b .. c || d;
+    !a && -b;
+    !a.b();
+    -a.b;
+    await a.b()?;
+    (await a())?;
+    a.b.c;
+    a.b(c).d[e]?;
+    a is .B && c;
+    a is .B | .C;
+    (a) => b + c;
+    x >= y;
+}

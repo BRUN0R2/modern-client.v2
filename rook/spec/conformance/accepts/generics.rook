@@ -1,0 +1,19 @@
+// After a name, `<` opens generic arguments only when what follows reads as types and `(` or `{` comes
+// after the closing `>`.
+
+fn generics() {
+    commands.removeComponent<Frozen>(entity);
+    let list = List<Player>();
+    let map = Map<string, List<List<i32>>>();
+    let nested = Query<(Entity, Frozen)>();
+    let optional = List<Player?>();
+    let menu = Menu<ModeChoice> { title: "x" };
+    let dottedType = make<cs.weapons.Weapon>();
+    let functionType = make<fn(Player) -> i32>();
+    let arrayType = make<[i32; 4]>();
+    let comparison = a < b;
+    let other = a > b;
+    let arithmetic = a < b + c;
+    let inCall = f(a < b, (c > d));
+    let parenthesized = (a < b) == (c > d);
+}

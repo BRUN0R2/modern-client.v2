@@ -1,0 +1,12 @@
+class Holder {
+    if (a) {} //~ error[R0022]
+    fn after() {}
+}
+interface Other {
+    pub override //~v error[R0022]
+    struct Inner {}
+}
+impl Other for Holder {
+    @attribute //~v error[R0022]
+    return;
+}

@@ -1,0 +1,12 @@
+fn missing() -> i32 //~v error[R0031]
+return;
+fn body() {
+    if (a) call(); //~ error[R0031]
+    if (a) return; //~ error[R0031]
+    if (a) { call(); } else call(); //~ error[R0031]
+    while (a) call(); //~ error[R0031]
+    for (a in b) call(); //~ error[R0031]
+    loop call(); //~ error[R0031]
+    defer call(); //~ error[R0031]
+    match (a) .B => 1; //~ error[R0031] error[R0032]
+}

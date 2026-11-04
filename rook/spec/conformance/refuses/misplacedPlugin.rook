@@ -1,0 +1,4 @@
+plugin { name: "One" }
+plugin { name: "Two" } //~ error[R0040]
+fn first() {}
+plugin { name: "Three" } //~ error[R0040]

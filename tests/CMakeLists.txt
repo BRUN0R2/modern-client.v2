@@ -39,8 +39,8 @@ set_tests_properties(LayerCheck.independentTreeLinksModule LayerCheck.independen
 set_tests_properties(LayerCheck.independentTreeImportsModule PROPERTIES
     PASS_REGULAR_EXPRESSION "nx: tree imports fixture.engine \\(engine\\)")
 
-# rook/ configures and builds on its own, with a compiler and nothing else (docs/adr/0033). The build of
-# its own proves what the check above cannot: that nothing
+# rook/ configures and builds on its own, with a compiler and nothing else (docs/adr/0033), and its
+# conformance suite passes there. The build of its own proves what the check above cannot: that nothing
 # outside rook/ is needed, the CMake files included.
 if(NX_BUILD_ROOK)
     add_test(NAME Rook.BuildsOnItsOwn

@@ -597,7 +597,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 
 ### `rookc` compiler
 - [x] `rook/` as a subtree that builds on its own, and the check that refuses an edge from it into the project ([ADR-0033](adr/0033-rook-compiler-and-types.md))
-- [ ] Error-tolerant lexer and parser with a lossless CST
+- [x] Error-tolerant lexer and parser with a lossless CST
 - [ ] Name, module and import resolution (including `prelude`)
 - [ ] Type checking with local bidirectional inference
 - [ ] Newtypes, units with derived operations (`dimension`) and ranges, suffixes on `Duration` and `Angle`
@@ -608,7 +608,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `pure fn` verification
 - [ ] `vars` catalogs as typed fields of a handle
 - [ ] Lifecycle stages in signatures (`@onlyIn`), states proved by a check (`narrows`, `@ends`), `UntrustedText` and resource paths checked against the mod ([ADR-0033](adr/0033-rook-compiler-and-types.md))
-- [ ] Mandatory parentheses and braces in control flow ([ADR-0034](adr/0034-rook-modern-only.md))
+- [x] Mandatory parentheses and braces in control flow ([ADR-0034](adr/0034-rook-modern-only.md))
 - [ ] Known forwards with name and signature checking
 - [ ] Interpolated strings and checked translation keys
 - [ ] Lints (`magicNumber`, `stringLookupInPrecache`, `expectInGameplay`, naming…)
@@ -616,8 +616,10 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `rook/format`: the layout of `.rbc` and `.rookd`, with their versions
 - [ ] `.rbc` bytecode generation with its types, metadata and debug info
 - [ ] Query-driven incremental compilation
-- [ ] Diagnostics with a code, a suggestion and `--explain`, in English and Portuguese
-- [ ] Conformance suite
+- [x] Syntax diagnostics with a code, a snippet and a fix
+- [ ] `--explain`, and diagnostics in Portuguese
+- [x] Conformance suite of the syntax, with source that must not parse
+- [ ] Conformance suite of the rest of the language, with the checker
 
 ### VM and host
 - [ ] Bytecode verifier in a target of its own, enforcing the nominal types and fuzzed from its first commit

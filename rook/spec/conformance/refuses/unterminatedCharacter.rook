@@ -1,0 +1,3 @@
+//~v error[R0010]
+const A: char = '1
+;

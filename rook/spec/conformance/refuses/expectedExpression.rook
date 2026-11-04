@@ -1,0 +1,10 @@
+fn body() {
+    let a = ; //~ error[R0023]
+    let b = 1 + ; //~ error[R0023]
+    call(,); //~ error[R0023]
+    let c = (); //~ error[R0023]
+    ) //~ error[R0023]
+    let d = &e; //~ error[R0023]
+    let f = fn; //~ error[R0023]
+}
+const G: i32 = ; //~ error[R0023]

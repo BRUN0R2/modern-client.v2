@@ -1,0 +1,15 @@
+//~v error[R0006]
+const A: string = "never closed
+;
+//~v error[R0006]
+const B: string = "{value
+;
+//~v error[R0006]
+const C: string = r"raw
+;
+//~v error[R0006]
+const D: string = "ends at a backslash\
+;
+//~v error[R0006]
+const E: string = "{"inner
+;

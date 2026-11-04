@@ -1,0 +1,2 @@
+const A: string = "{a b}"; //~ error[R0020]
+const B: string = "{a "{c}" d}"; //~ error[R0020]

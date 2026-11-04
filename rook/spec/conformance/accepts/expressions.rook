@@ -1,0 +1,52 @@
+// Every expression of rook/spec/grammar.ebnf, section 6.
+
+fn expressions() {
+    let names = player.name;
+    let call = f();
+    let arguments = f(a, b, c,);
+    let named = giveHealth(player, amount: 50, limit: 200);
+    let inout2 = clampSpeed(&velocity, MAX_ZOMBIE_SPEED);
+    let namedInout = clampSpeed(target: &velocity);
+    let element = slots[index + 1];
+    let tried = find(player)?;
+    let triedTwice = a()?.b()?;
+    let notValue = !ready;
+    let negative = -amount;
+    let negativeLiteral = -1;
+    let awaited = await runJob(findPath, start, goal);
+    let awaitTried = (await task())?;
+    let keywords = ok();
+    let wrapped = some(player);
+    let failed = err(ClassError.AlreadyRegistered(id: id));
+    let parent = super.activate(player);
+    let mine = self.cooldown;
+    let primitive = i64(x);
+    let conversion = i32.tryFrom(x)?;
+    let implicit = .Terrorist;
+    let implicitCall = .Weapon(weapon);
+    let parenthesized = (a + b) * c;
+    let tuple = (a, b);
+    let tupleWithComma = (a, b, );
+    let array = [1, 2, 3];
+    let empty = [];
+    let arrayOfStructs = [MenuItem { label: "Infection", value: ModeChoice.Infection },];
+    let structure = HudText { message: "Infection!", hold: 5s };
+    let dotted = cs.hud.HudText { message: "x" };
+    let noFields = Empty {};
+    let selfStructure = Self { cooldown: cooldown };
+    let closure = (player) => isAlive(player);
+    let closureBlock = (player, other) => { call(); return player; };
+    let noParameters = () => call();
+    let coalesced = customDelay ?? DEFAULT_RESPAWN_DELAY;
+    let exclusive = 0..count;
+    let inclusive = 0..=count;
+    let isPattern = args.source is .Fall;
+    let isSome = target is some(_);
+    let chained = a.b.c(d).e[f]?.g;
+    let comparison = player.health + 50 > limit && !done || other;
+    let notEqual = a != b;
+    let lessEqual = a <= b;
+    let greaterEqual = a >= b;
+    let remainder = a % b;
+    player.health + 50;
+}

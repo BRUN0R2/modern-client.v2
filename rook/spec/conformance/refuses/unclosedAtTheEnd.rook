@@ -1,0 +1,3 @@
+fn body() {
+    if (a) {
+        call(b, [c, (d //~ error[R0020]

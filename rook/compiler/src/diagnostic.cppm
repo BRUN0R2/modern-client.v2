@@ -8,11 +8,12 @@ import :source;
 
 export namespace rook::compiler {
 
-/// How many diagnostics the lexer keeps of one source: past these one says the
+/// How many diagnostics the lexer, and then the parser, keep of one source: past these one says the
 /// rest are left out, so that a source of nothing but errors does not fill the memory with their words.
 inline constexpr std::size_t kMaximumDiagnostics = 1000;
 
-/// The codes of syntax, R0001 to R0099 (docs/14-rook-language.md, section 23), by their number.
+/// The codes of syntax, R0001 to R0099 (docs/14-rook-language.md, section 23), by their number. Each
+/// has a case in rook/spec/conformance that proves it is reached.
 enum class DiagnosticCode : std::uint16_t {
     // The characters of a source.
     InvalidUtf8 = 1,
@@ -28,7 +29,34 @@ enum class DiagnosticCode : std::uint16_t {
     MissingDigits = 11,
     InvalidDigit = 12,
     MisplacedDigitSeparator = 13,
+    SourceTooLarge = 14,
     TooManyDiagnostics = 15,
+
+    // The grammar.
+    ExpectedToken = 20,
+    ExpectedDeclaration = 21,
+    ExpectedMember = 22,
+    ExpectedExpression = 23,
+    ExpectedType = 24,
+    ExpectedPattern = 25,
+    ExpectedName = 26,
+    ReservedWordAsName = 27,
+    ExpectedLoopAfterLabel = 28,
+    EmptyInterpolation = 29,
+    ConditionWithoutParentheses = 30,
+    BodyWithoutBraces = 31,
+    MissingSemicolon = 32,
+    AssignmentAsValue = 33,
+    ChainedComparison = 34,
+    CompoundAssignment = 35,
+    PawnDeclaration = 36,
+    VariableWithoutValue = 37,
+    DeclarationWithoutType = 38,
+    ImportAfterDeclaration = 39,
+    MisplacedPlugin = 40,
+    StraySemicolon = 41,
+    NestedTooDeeply = 42,
+    InvalidAssignmentTarget = 43,
 };
 
 /// Every code, for what must cover them all.
@@ -46,7 +74,32 @@ inline constexpr std::array kDiagnosticCodes{
     DiagnosticCode::MissingDigits,
     DiagnosticCode::InvalidDigit,
     DiagnosticCode::MisplacedDigitSeparator,
+    DiagnosticCode::SourceTooLarge,
     DiagnosticCode::TooManyDiagnostics,
+    DiagnosticCode::ExpectedToken,
+    DiagnosticCode::ExpectedDeclaration,
+    DiagnosticCode::ExpectedMember,
+    DiagnosticCode::ExpectedExpression,
+    DiagnosticCode::ExpectedType,
+    DiagnosticCode::ExpectedPattern,
+    DiagnosticCode::ExpectedName,
+    DiagnosticCode::ReservedWordAsName,
+    DiagnosticCode::ExpectedLoopAfterLabel,
+    DiagnosticCode::EmptyInterpolation,
+    DiagnosticCode::ConditionWithoutParentheses,
+    DiagnosticCode::BodyWithoutBraces,
+    DiagnosticCode::MissingSemicolon,
+    DiagnosticCode::AssignmentAsValue,
+    DiagnosticCode::ChainedComparison,
+    DiagnosticCode::CompoundAssignment,
+    DiagnosticCode::PawnDeclaration,
+    DiagnosticCode::VariableWithoutValue,
+    DiagnosticCode::DeclarationWithoutType,
+    DiagnosticCode::ImportAfterDeclaration,
+    DiagnosticCode::MisplacedPlugin,
+    DiagnosticCode::StraySemicolon,
+    DiagnosticCode::NestedTooDeeply,
+    DiagnosticCode::InvalidAssignmentTarget,
 };
 
 /// An error in a source. Every diagnostic carries its fix, and nothing of the source's own text goes

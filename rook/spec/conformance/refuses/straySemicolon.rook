@@ -1,0 +1,8 @@
+struct Holder {}; //~ error[R0041]
+fn body() {
+    ; //~ error[R0041]
+    if (a) {}; //~ error[R0041]
+}
+class Other {
+    ; //~ error[R0041]
+}

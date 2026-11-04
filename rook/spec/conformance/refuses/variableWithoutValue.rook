@@ -1,0 +1,8 @@
+fn body() {
+    let a; //~ error[R0037]
+    let b: i32; //~ error[R0037]
+    var c; //~ error[R0037]
+    var d: i32; //~ error[R0037]
+}
+const E: i32; //~ error[R0037]
+var f: i32; //~ error[R0037]

@@ -1,0 +1,2 @@
+const A: string = "\q"; //~ error[R0007]
+const B: char = '\q'; //~ error[R0007]

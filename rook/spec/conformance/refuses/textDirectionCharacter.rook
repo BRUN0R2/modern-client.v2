@@ -1,0 +1,6 @@
+//~v error[R0005]
+// In a comment: ‮ reversed
+//~v error[R0005]
+const A: string = "⁦";
+//~v error[R0005]
+‮

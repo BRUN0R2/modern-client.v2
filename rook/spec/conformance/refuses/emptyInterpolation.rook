@@ -1,0 +1,3 @@
+const A: string = "{}"; //~ error[R0029]
+const B: string = "text {} text"; //~ error[R0029]
+const C: string = "{:<16}"; //~ error[R0029]

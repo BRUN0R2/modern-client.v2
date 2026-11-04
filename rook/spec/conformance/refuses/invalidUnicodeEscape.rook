@@ -1,0 +1,6 @@
+const A: string = "\u{110000}"; //~ error[R0008]
+const B: string = "\u{D800}"; //~ error[R0008]
+const C: string = "\u{}"; //~ error[R0008]
+const D: string = "\u{1234567}"; //~ error[R0008]
+const E: string = "\u41"; //~ error[R0008]
+const F: string = "\u{41"; //~ error[R0008]
