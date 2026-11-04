@@ -167,6 +167,7 @@ void MapModels::pose(std::span<const nx::render::StudioModel> models, nx::Second
                      PosedModels& posed) const {
     nx::expects(models.size() == m_files.size(), "MapModels::pose: a model for each file");
     posed.clear();
+    posed.bones.clear();
     struct Drawn {
         const Entity* entity = nullptr;
         nx::Vec3 origin{};

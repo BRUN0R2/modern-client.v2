@@ -49,6 +49,7 @@ nxAddModuleLibrary(nxRender
     DEPENDS
         nx::core
         nx::math
+        nx::jobs
         nx::rhi
         nx::assets
     LATERAL

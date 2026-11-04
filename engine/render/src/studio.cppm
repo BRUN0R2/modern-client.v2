@@ -27,6 +27,7 @@ export module nx.render:studio;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.rhi;
 import nx.assets;
 import :camera;
@@ -92,8 +93,8 @@ struct StudioMeshCall {
     rhi::BindGroupHandle texture{};
 };
 
-/// A model a frame draws: its buffers, how it blends, and its meshes, a range of the frame's
-/// StudioMeshCalls.
+/// The models a frame draws alike: their buffers, how they blend, their meshes, a range of the frame's
+/// StudioMeshCalls, and the instances they are, a range of those of the frame.
 struct StudioModelCall {
     rhi::BufferHandle vertices{};
     rhi::BufferHandle indices{};
@@ -101,16 +102,26 @@ struct StudioModelCall {
     StudioFacing facing = StudioFacing::AsModeled;
     std::uint32_t firstMesh = 0;
     std::uint32_t meshCount = 0;
+    std::uint32_t firstInstance = 0;
+    std::uint32_t instanceCount = 0;
+};
+
+/// Where an instance of a frame's goes among those of the frame: its call, its place, and its bones'.
+struct StudioPlace {
+    std::uint32_t call = 0;
+    std::uint32_t instance = 0;
+    std::uint32_t firstBone = 0;
+    bool isDrawn = false;
 };
 
 /// What one frame in flight writes the view, its models' bones and their lights to.
 struct StudioFrameSlot {
     rhi::OwnedBuffer frame{};
-    rhi::OwnedBuffer bones{};     ///< Every model's, one after another.
-    std::size_t boneCapacity = 0; ///< The bones it holds.
-    rhi::OwnedBindGroup group{};  ///< The frame's uniform, the light curve and the bones.
-    rhi::OwnedBuffer instances{}; ///< Each model's uniform.
-    std::vector<rhi::OwnedBindGroup> instanceGroups{}; ///< Each model's uniform, by its place.
+    rhi::OwnedBuffer bones{};         ///< Every model's, one after another.
+    std::size_t boneCapacity = 0;     ///< The bones it holds.
+    rhi::OwnedBindGroup group{};      ///< The frame's uniform, the light curve, the bones and the models.
+    rhi::OwnedBuffer instances{};     ///< Every model's light, and where its bones start.
+    std::size_t instanceCapacity = 0; ///< The models it holds.
 };
 
 } // namespace nx::render
@@ -288,6 +299,8 @@ struct StudioFrame {
     std::span<const StudioInstance> instances{};
     /// The fog the models are seen through, but for what they add; none, clear (nx.render:fog).
     std::optional<Fog> fog{};
+    /// Who writes the models for the GPU along with the calling thread; none, that thread alone.
+    jobs::JobSystem* jobs = nullptr;
 };
 
 /// What draws studio models: their shader, pipelines and samplers, the original's light curve, and
@@ -328,6 +341,9 @@ public:
     [[nodiscard]] auto draw(rhi::CommandList& commands, const StudioFrame& frame)
         -> Result<void, StudioError>;
 
+    /// How many calls the last prepare's models take: those drawn alike, solid, of one model, skin, body and
+    /// facing, take one, however many they are (docs/05, section 9.3).
+    [[nodiscard]] inline auto modelCallCount() const noexcept -> std::size_t { return m_modelCalls.size(); }
     /// The models the last prepare found that are drawn blended, the index of each its own.
     [[nodiscard]] inline auto blendedDraws() const noexcept -> std::span<const BlendedDraw> {
         return m_blendedDraws;
@@ -348,6 +364,10 @@ private:
         -> Result<void, rhi::RhiError>;
     /// What `instance` draws, blended as `blending` says: its meshes put in m_meshCalls.
     [[nodiscard]] auto callOf(const StudioInstance& instance, StudioBlending blending) -> StudioModelCall;
+    /// Of m_modelCalls, the one `instance`, solid, is drawn in, made if none draws one alike.
+    [[nodiscard]] auto solidCallOf(const StudioInstance& instance) -> std::uint32_t;
+    /// Finds where each of `instances` goes (m_places), and the calls they take.
+    void placeInstances(const StudioFrame& frame);
     /// The frame slot the last prepare wrote.
     [[nodiscard]] auto preparedSlot() const noexcept -> const StudioFrameSlot&;
     /// Records the model of m_modelCalls' `index`.
@@ -358,7 +378,6 @@ private:
     rhi::OwnedShader m_shader;
     rhi::OwnedBindGroupLayout m_frameLayout;
     rhi::OwnedBindGroupLayout m_skinLayout;
-    rhi::OwnedBindGroupLayout m_instanceLayout;
     rhi::OwnedSampler m_sampler;
     rhi::OwnedSampler m_environmentSampler;
     EnumArray<StudioFacing, EnumArray<StudioBlending, EnumArray<MeshKind, rhi::OwnedRenderPipeline>>>
@@ -379,9 +398,12 @@ private:
     std::uint64_t m_drawCount = 0;
 
     // What the last prepare found, kept to reuse the memory.
-    std::vector<StudioModelCall> m_modelCalls; ///< By the place of their uniform.
+    std::vector<StudioModelCall> m_modelCalls;
     std::vector<StudioMeshCall> m_meshCalls;
     std::vector<BlendedDraw> m_blendedDraws; ///< Of m_modelCalls, by their index.
+    std::vector<StudioPlace> m_places;       ///< Of the frame's instances, by their index.
+    /// The solid ones of m_modelCalls, by their index, and the first instance each draws.
+    std::vector<std::pair<std::uint32_t, const StudioInstance*>> m_solidCalls;
 };
 
 } // namespace nx::render

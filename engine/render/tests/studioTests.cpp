@@ -188,6 +188,38 @@ TEST(StudioRendererTest, DrawsAModelLitAsTheOriginalLightsIt) {
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 
+TEST(StudioRendererTest, ModelsDrawnAlikeTakeOneCallEachWithItsOwnLight) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const auto scene = sceneOn(**device);
+    ASSERT_NE(scene, nullptr);
+    OffscreenTarget target{**device};
+    const std::vector bones(scene->model.boneCount(), Mat3x4{});
+    const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
+    // The later is the nearer, and shows: only if each has its own light does the light show its.
+    constexpr float kNearer = 0.25F;
+    Mat3x4 nearer = Mat3x4{};
+    nearer.rows[0].w = kNearer;
+    const std::vector nearerBones(scene->model.boneCount(), nearer);
+    const std::array alike{
+        StudioInstance{.model = scene->model, .bones = bones, .light = ambientLight(200.0F)},
+        StudioInstance{.model = scene->model, .bones = nearerBones, .light = ambientLight(100.0F)}};
+    const std::vector<std::byte> pixels = drawStudio(target, *scene, camera, alike);
+    EXPECT_EQ(scene->renderer.modelCallCount(), 1U) << "of one model, skin, body and facing";
+    expectNear(pixelAt(pixels, kMiddle, kMiddle), litPixel(100.0F), "the nearer's light");
+    const std::array otherFacing{
+        StudioInstance{.model = scene->model, .bones = bones, .light = ambientLight(100.0F)},
+        StudioInstance{
+            .model = scene->model, .bones = bones, .light = ambientLight(100.0F), .isMirrored = true}};
+    std::ignore = drawStudio(target, *scene, camera, otherFacing);
+    EXPECT_EQ(scene->renderer.modelCallCount(), 2U) << "they face other ways";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
 TEST(StudioRendererTest, TheTrianglesWoundCounterclockwiseAreCulledAsTheOriginalCullsThem) {
     auto device =
         nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});

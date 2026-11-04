@@ -19,9 +19,15 @@ struct PosedModels {
     std::vector<nx::Mat3x4> bones{};
     std::vector<nx::render::StudioInstance> instances{};
 
-    inline void clear() noexcept {
-        bones.clear();
-        instances.clear();
+    /// Ready for the next frame's instances; the bones stay for the room they take.
+    inline void clear() noexcept { instances.clear(); }
+    /// Room for `count` bones for a pose to write over, as they were: clearing them each frame took as long
+    /// as the poses of thousands of models.
+    [[nodiscard]] inline auto roomForBones(std::size_t count) -> std::span<nx::Mat3x4> {
+        if (bones.size() < count) {
+            bones.resize(count);
+        }
+        return std::span{bones}.first(count);
     }
 };
 
