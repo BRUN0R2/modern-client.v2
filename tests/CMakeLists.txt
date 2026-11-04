@@ -8,7 +8,9 @@ add_subdirectory(integration)
 # The layer check of the build itself (cmake/nxLayers.cmake), configured on a fixture of empty
 # modules: each case must pass, or fail naming the offending dependency.
 set(layerCases lowerLayers higherLayerDefinedLater sameLayer declaredLateral lateralOfAnotherLayer layerZero
-    declaredImports undeclaredImport dependencyNotImported)
+    declaredImports undeclaredImport dependencyNotImported
+    independentTree independentTreeLinksOutside independentTreeLinksModule independentTreeLinksInExpression
+    independentTreeImportsModule)
 foreach(layerCase IN LISTS layerCases)
     add_test(NAME LayerCheck.${layerCase}
         COMMAND "${CMAKE_COMMAND}"
@@ -30,3 +32,21 @@ set_tests_properties(LayerCheck.undeclaredImport PROPERTIES
     PASS_REGULAR_EXPRESSION "nx: top imports fixture.base \\(base\\)")
 set_tests_properties(LayerCheck.dependencyNotImported PROPERTIES
     PASS_REGULAR_EXPRESSION "nx: top declares base in DEPENDS, and none of its sources imports it")
+set_tests_properties(LayerCheck.independentTreeLinksOutside PROPERTIES
+    PASS_REGULAR_EXPRESSION "nx: tree depends on helper, outside")
+set_tests_properties(LayerCheck.independentTreeLinksModule LayerCheck.independentTreeLinksInExpression PROPERTIES
+    PASS_REGULAR_EXPRESSION "nx: tree depends on engine, outside")
+set_tests_properties(LayerCheck.independentTreeImportsModule PROPERTIES
+    PASS_REGULAR_EXPRESSION "nx: tree imports fixture.engine \\(engine\\)")
+
+# rook/ configures and builds on its own, with a compiler and nothing else (docs/adr/0033). The build of
+# its own proves what the check above cannot: that nothing
+# outside rook/ is needed, the CMake files included.
+if(NX_BUILD_ROOK)
+    add_test(NAME Rook.BuildsOnItsOwn
+        COMMAND "${CMAKE_CTEST_COMMAND}"
+            --build-and-test "${PROJECT_SOURCE_DIR}/rook" "${CMAKE_CURRENT_BINARY_DIR}/rookOnItsOwn"
+            --build-generator "${CMAKE_GENERATOR}"
+            --build-options "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}" "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+            --test-command "${CMAKE_CTEST_COMMAND}" --output-on-failure)
+endif()

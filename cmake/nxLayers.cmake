@@ -39,6 +39,112 @@ function(nxDeclareModuleLayer target layer)
     set_property(GLOBAL APPEND PROPERTY NX_MODULES ${target})
 endfunction()
 
+# nxDeclareIndependentTree(<directory> [ALLOW <targets>...])
+#
+# Records that the targets under `directory`, a subdirectory already added, stand apart from the rest of
+# the project: they depend on nothing it defines but ALLOW, and their sources import no module of it. The
+# other way round is free: a module of the project may depend on them. So rook/, which is MIT and must stay
+# so (docs/adr/0033-rook-compiler-and-types.md), can never link what is GPL, whatever it declares about
+# itself: the check walks its directories for its targets.
+function(nxDeclareIndependentTree directory)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "ALLOW")
+    cmake_path(ABSOLUTE_PATH directory NORMALIZE)
+    set(allowed "")
+    foreach(target IN LISTS arg_ALLOW)
+        nxResolveTarget("${target}" resolved)
+        list(APPEND allowed "${resolved}")
+    endforeach()
+    # Through EVAL because a deferred call reads its arguments when it runs, where these names are gone.
+    cmake_language(EVAL CODE
+        "cmake_language(DEFER DIRECTORY [[${CMAKE_SOURCE_DIR}]] CALL nxCheckIndependentTree [[${directory}]] [[${allowed}]])")
+endfunction()
+
+# The targets defined in `directory` and in the directories under it, in `out`.
+function(nxTargetsUnder directory out)
+    get_property(targets DIRECTORY "${directory}" PROPERTY BUILDSYSTEM_TARGETS)
+    get_property(subdirectories DIRECTORY "${directory}" PROPERTY SUBDIRECTORIES)
+    foreach(subdirectory IN LISTS subdirectories)
+        nxTargetsUnder("${subdirectory}" under)
+        list(APPEND targets ${under})
+    endforeach()
+    set(${out} ${targets} PARENT_SCOPE)
+endfunction()
+
+# Fails the configuration when a target under `directory` links a target of the project defined outside
+# it, other than `allowed`, or when one of its sources imports a module of the project. Imported targets
+# are third parties, and names that are no target are system libraries.
+function(nxCheckIndependentTree directory allowed)
+    get_property(modules GLOBAL PROPERTY NX_MODULES)
+    foreach(module IN LISTS modules)
+        get_target_property(sources ${module} NX_SOURCES)
+        foreach(source IN LISTS sources)
+            if(EXISTS "${source}")
+                file(READ "${source}" text)
+                if(text MATCHES "(^|\n)[ \t]*export[ \t]+module[ \t]+([A-Za-z0-9.]+)[ \t]*;")
+                    set(providerOf.${CMAKE_MATCH_2} ${module})
+                endif()
+            endif()
+        endforeach()
+    endforeach()
+
+    nxTargetsUnder("${directory}" targets)
+    foreach(target IN LISTS targets)
+        foreach(property IN ITEMS LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+            get_target_property(items ${target} ${property})
+            if(NOT items)
+                continue()
+            endif()
+            foreach(item IN LISTS items)
+                # Generator expressions hold names too: `$<LINK_ONLY:nx::core>`.
+                string(REGEX MATCHALL "[A-Za-z0-9_.+-]+(::[A-Za-z0-9_.+-]+)*" names "${item}")
+                foreach(name IN LISTS names)
+                    if(NOT TARGET "${name}")
+                        continue()
+                    endif()
+                    nxResolveTarget("${name}" resolved)
+                    get_target_property(isImported "${resolved}" IMPORTED)
+                    if(isImported OR resolved IN_LIST allowed)
+                        continue()
+                    endif()
+                    get_target_property(definedIn "${resolved}" SOURCE_DIR)
+                    cmake_path(IS_PREFIX directory "${definedIn}" NORMALIZE isInside)
+                    if(NOT isInside)
+                        message(FATAL_ERROR
+                            "nx: ${target} depends on ${resolved}, outside ${directory}: that directory imports "
+                            "nothing of the rest of the project (docs/adr/0033-rook-compiler-and-types.md)")
+                    endif()
+                endforeach()
+            endforeach()
+        endforeach()
+
+        get_target_property(targetDirectory ${target} SOURCE_DIR)
+        set(sources "")
+        foreach(property IN ITEMS SOURCES INTERFACE_SOURCES CXX_MODULE_SET)
+            get_target_property(items ${target} ${property})
+            if(items)
+                list(APPEND sources ${items})
+            endif()
+        endforeach()
+        foreach(source IN LISTS sources)
+            if(source MATCHES "^\\$<")
+                continue()
+            endif()
+            cmake_path(ABSOLUTE_PATH source BASE_DIRECTORY "${targetDirectory}" NORMALIZE)
+            if(NOT source MATCHES "\\.(cppm|cpp|hpp)$" OR NOT EXISTS "${source}")
+                continue()
+            endif()
+            nxImportsOf("${source}" names)
+            foreach(name IN LISTS names)
+                if(providerOf.${name})
+                    message(FATAL_ERROR
+                        "nx: ${target} imports ${name} (${providerOf.${name}}), outside ${directory}: that directory "
+                        "imports nothing of the rest of the project (docs/adr/0033-rook-compiler-and-types.md)")
+                endif()
+            endforeach()
+        endforeach()
+    endforeach()
+endfunction()
+
 # The target `name` names, through an alias; `name` itself when it is no target.
 function(nxResolveTarget name out)
     set(resolved "${name}")

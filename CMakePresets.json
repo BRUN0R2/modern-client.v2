@@ -74,7 +74,8 @@
         "NX_BUILD_TESTS": "OFF",
         "NX_BUILD_BENCHMARKS": "OFF",
         "NX_BUILD_CLIENT": "OFF",
-        "NX_BUILD_TOOLS": "ON"
+        "NX_BUILD_TOOLS": "ON",
+        "NX_BUILD_ROOK": "OFF"
       }
     },
     {
@@ -106,7 +107,8 @@
         "NX_BUILD_TESTS": "OFF",
         "NX_BUILD_BENCHMARKS": "OFF",
         "NX_BUILD_CLIENT": "OFF",
-        "NX_BUILD_TOOLS": "ON"
+        "NX_BUILD_TOOLS": "ON",
+        "NX_BUILD_ROOK": "OFF"
       }
     },
     {

@@ -596,6 +596,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 ## M6 — Rook and plugins
 
 ### `rookc` compiler
+- [x] `rook/` as a subtree that builds on its own, and the check that refuses an edge from it into the project ([ADR-0033](adr/0033-rook-compiler-and-types.md))
 - [ ] Error-tolerant lexer and parser with a lossless CST
 - [ ] Name, module and import resolution (including `prelude`)
 - [ ] Type checking with local bidirectional inference
