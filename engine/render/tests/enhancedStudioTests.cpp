@@ -79,12 +79,13 @@ struct SurfaceScene {
     nx::render::StudioModel model;
 };
 
-/// How a scene's renderer draws, and whether its model has a second texture, without a material,
-/// that its second skin family puts on the triangle.
+/// How a scene's renderer draws, whether its model has a second texture, without a material, that its second
+/// skin family puts on the triangle, and whether it draws crowds.
 struct SceneOptions {
     StudioLook look = StudioLook::Enhanced;
     ColorEncoding encoding = ColorEncoding::Display;
     bool hasSecondTexture = false;
+    bool drawsCrowds = false;
 };
 
 [[nodiscard]] auto sceneOn(nx::rhi::Device& device, const std::optional<StudioMaterial>& material,
@@ -120,9 +121,19 @@ struct SceneOptions {
     if (!shader) {
         return nullptr;
     }
+    std::vector<std::byte> crowdShader;
+    if (options.drawsCrowds) {
+        auto read = nx::platform::readFile(executable->parent_path() / "shaders" / "crowd.spv");
+        EXPECT_TRUE(read.has_value());
+        if (!read) {
+            return nullptr;
+        }
+        crowdShader = std::move(*read);
+    }
     auto renderer = nx::test::inFrameOfItsOwn(device, [&](nx::rhi::CommandList& commands) {
         return nx::render::StudioRenderer::create(device, commands,
                                                   {.shaderCode = *shader,
+                                                   .crowdShaderCode = crowdShader,
                                                    .colorFormat = nx::rhi::Format::Rgba8Unorm,
                                                    .look = options.look,
                                                    .encoding = options.encoding});
@@ -307,6 +318,58 @@ TEST(EnhancedStudioTest, AMetalReflectsAProbeWithoutASkyOrDiffuseLight) {
     EXPECT_EQ(without[0], 0);
     EXPECT_GT(reflected[0], 100);
     EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+// The crowd's draws name what any model's do: the probes given after they were first drawn, and none of those
+// before, destroyed by then.
+TEST(EnhancedStudioTest, ACrowdIsDrawnByTheProbesOfThisFrame) {
+    auto device = deviceForTests();
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const auto scene = sceneOn(**device, metalOf(0.35F), {.drawsCrowds = true});
+    ASSERT_NE(scene, nullptr);
+    const std::size_t boneCount = scene->model.boneCount();
+    const std::vector<nx::render::CrowdBonePose> poses(boneCount, {.rotation = {.w = 1.0F}});
+    const std::vector<std::int32_t> parents(boneCount, -1);
+    const std::array sequences{nx::render::CrowdSequence{
+        .poses = poses, .frameCount = 1, .reach = 64.0F, .lowest = -64.0F, .highest = 64.0F}};
+    const auto loaded = nx::test::inFrameOfItsOwn(**device, [&](nx::rhi::CommandList& commands) {
+        return scene->renderer.loadCrowdModel(
+            commands, {.model = scene->model, .parents = parents, .sequences = sequences});
+    });
+    ASSERT_TRUE(loaded.has_value()) << (loaded ? "" : nx::describe(loaded.error()));
+    OffscreenTarget target{**device};
+    const std::array frustum = nx::render::frustumPlanes(cameraFrom(kNormalDirection), 1.0F);
+    std::uint64_t tick = 1;
+    // Each frame in flight has a group of its own.
+    const auto drawnThroughEveryFrame = [&] {
+        for (std::uint32_t frame = 0; frame < nx::rhi::kMaxFramesInFlight; ++frame) {
+            const auto recorded = nx::test::inFrameOfItsOwn(
+                **device, [&](nx::rhi::CommandList& commands) -> nx::Result<void, nx::render::StudioError> {
+                    auto room = scene->renderer.crowdRoom(1, tick++);
+                    if (!room) {
+                        return std::unexpected{std::move(room.error())};
+                    }
+                    room->bodies[0] = {.ambient = 100.0F, .moveShare = 1.0F};
+                    room->bodiesOfModel[0] = 1;
+                    return scene->renderer.recordCrowd(commands, {.frustum = frustum});
+                });
+            EXPECT_TRUE(recorded.has_value()) << (recorded ? "" : nx::describe(recorded.error()));
+            std::ignore = drawSurface(target, *scene);
+        }
+    };
+    auto before = constantProbes(**device, {1.0F});
+    auto after = constantProbes(**device, {0.0F});
+    ASSERT_TRUE(before.has_value() && after.has_value());
+    scene->renderer.setProbes(before->get(), 1);
+    drawnThroughEveryFrame();
+    ASSERT_GT(scene->renderer.crowdDrawCount(), 0U);
+    scene->renderer.setProbes(after->get(), 1);
+    before->reset();
+    drawnThroughEveryFrame();
+    EXPECT_EQ((*device)->validationErrors(), 0U) << "no draw names the probes destroyed";
 }
 
 TEST(EnhancedStudioTest, AMetalReflectsItsTwoProbesAsTheyAreShared) {
