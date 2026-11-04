@@ -21,3 +21,6 @@
 
 # VGUI2's localized strings are UTF-16 with CRLF: the fuzz seed keeps them byte for byte.
 tests/fuzz/corpus/keyValues/*.txt binary
+
+# What a fuzzer of a text format is fed: stray line ends and bytes that are no text, kept as they are.
+rook/compiler/fuzz/corpus/** binary
