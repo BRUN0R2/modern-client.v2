@@ -1,0 +1,6 @@
+fn body() {
+    a + b = 3; //~ error[R0043]
+    f() = 3; //~ error[R0043]
+    1 = 3; //~ error[R0043]
+    (a) = 3; //~ error[R0043]
+}

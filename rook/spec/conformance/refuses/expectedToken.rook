@@ -1,0 +1,12 @@
+import a.b.{c d}; //~ error[R0020]
+fn missingComma(first: i32 second: i32) {} //~ error[R0020]
+fn missingClose(first: i32 { } //~ error[R0020]
+struct Holder { field i32 } //~ error[R0020]
+fn body() {
+    call(first second); //~ error[R0020]
+    let array = [a b]; //~ error[R0020]
+    let element = a[b; //~ error[R0020]
+    let closed = (a; //~ error[R0020]
+    if (a b) {} //~ error[R0020]
+}
+newtype Bad(i32 i32); //~ error[R0020]

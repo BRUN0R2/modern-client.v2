@@ -1,0 +1,23 @@
+// Every form of a type of rook/spec/grammar.ebnf, section 4.
+
+fn types(
+    plain: i32,
+    dotted: cs.weapons.Weapon,
+    optional: Player?,
+    generic: List<Player>,
+    nested: Map<string, List<List<Player>>>,
+    optionalInside: List<Player?>,
+    result: Result<void, PluginError>,
+    tuple: (Entity, Frozen),
+    optionalTuple: (Entity, Frozen)?,
+    array: [i32; 4],
+    arrayOfConstant: [Slot; MAX_SLOTS],
+    query: Query<(Entity, Frozen)>,
+    callback: fn(Player, ModeChoice),
+    function: fn(Weapon, Player) -> WeaponReturn,
+    noArguments: fn(),
+    optionalFunction: (fn() -> i32)?,
+    selfType: Self,
+) {
+    let closesList: List<Player>= players;
+}

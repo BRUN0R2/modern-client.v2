@@ -1,0 +1,9 @@
+fn body() {
+    let = 1; //~ error[R0025]
+    for (in a) {} //~ error[R0025]
+    match (a) {
+        => 1, //~ error[R0025]
+        - => 2, //~ error[R0025]
+    }
+    if (let = b) {} //~ error[R0025]
+}

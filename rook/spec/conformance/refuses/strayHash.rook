@@ -1,0 +1,2 @@
+# //~ error[R0002]
+fn after() {}

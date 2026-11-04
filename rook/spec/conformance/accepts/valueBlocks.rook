@@ -1,0 +1,17 @@
+// `if` and `match` are expressions: where a value is expected their blocks end in that value, and
+// nowhere else may a statement leave out its semicolon.
+
+fn values() -> i32 {
+    let chosen = if (a) { 1 } else { 2 };
+    let nested = if (a) { let b = 1; b + 1 } else if (c) { 2 } else { if (d) { 3 } else { 4 } };
+    let reward = match (reason) {
+        RoundEndReason.TargetBombed        => economy.bombWin,
+        RoundEndReason.CTsWin
+        | RoundEndReason.TerroristsWin     => economy.eliminationWin,
+        .Block                             => { call(); 5 },
+        _                                  => economy.defaultWin,
+    };
+    let inExpression = 1 + if (a) { 1 } else { 2 };
+    let closure = (player) => { call(); return player; };
+    return chosen;
+}

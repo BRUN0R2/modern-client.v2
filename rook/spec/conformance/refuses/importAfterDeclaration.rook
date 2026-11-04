@@ -1,0 +1,2 @@
+fn first() {}
+import after.it; //~ error[R0039]

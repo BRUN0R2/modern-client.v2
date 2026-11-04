@@ -1,0 +1,11 @@
+fn body() {
+    if count > 0 { //~ error[R0030]
+        call();
+    } else if count < 0 { //~ error[R0030]
+        call();
+    }
+    if ready { call(); } //~ error[R0030]
+    while count > 0 { call(); } //~ error[R0030]
+    for item in items { call(); } //~ error[R0030]
+    match team { .Terrorist => 1, } //~ error[R0030]
+}

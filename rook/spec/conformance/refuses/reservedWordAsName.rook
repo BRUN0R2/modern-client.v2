@@ -1,0 +1,6 @@
+fn fn() {} //~ error[R0027]
+struct match {} //~ error[R0027]
+fn parameter(type: i32) {} //~ error[R0027]
+fn body() {
+    var if = 1; //~ error[R0027]
+}

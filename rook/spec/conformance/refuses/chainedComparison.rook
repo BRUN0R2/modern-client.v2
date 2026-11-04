@@ -1,0 +1,8 @@
+fn body() {
+    let a = b < c < d; //~ error[R0034]
+    let e = f == g == h; //~ error[R0034]
+    let i = j..k..l; //~ error[R0034]
+    let m = n > o >= p; //~ error[R0034]
+    let q = r < s > t; //~ error[R0034]
+    let u = v is .W is .X; //~ error[R0034]
+}

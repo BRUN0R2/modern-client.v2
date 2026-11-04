@@ -1,0 +1,157 @@
+SourceFile
+  FunctionDeclaration `fn` `precedence`
+    ParameterList `(` `)`
+    Block `{` `}`
+      ExpressionStatement `;`
+        BinaryExpression `+`
+          BinaryExpression `*`
+            NameExpression `a`
+            NameExpression `b`
+          NameExpression `c`
+      ExpressionStatement `;`
+        BinaryExpression `+`
+          NameExpression `a`
+          BinaryExpression `*`
+            NameExpression `b`
+            NameExpression `c`
+      ExpressionStatement `;`
+        BinaryExpression `-`
+          BinaryExpression `-`
+            NameExpression `a`
+            NameExpression `b`
+          NameExpression `c`
+      ExpressionStatement `;`
+        BinaryExpression `%`
+          BinaryExpression `/`
+            BinaryExpression `*`
+              NameExpression `a`
+              NameExpression `b`
+            NameExpression `c`
+          NameExpression `d`
+      ExpressionStatement `;`
+        BinaryExpression `??`
+          BinaryExpression `+`
+            NameExpression `a`
+            NameExpression `b`
+          BinaryExpression `+`
+            NameExpression `c`
+            NameExpression `d`
+      ExpressionStatement `;`
+        BinaryExpression `??`
+          NameExpression `a`
+          BinaryExpression `??`
+            NameExpression `b`
+            NameExpression `c`
+      ExpressionStatement `;`
+        BinaryExpression `>`
+          BinaryExpression `??`
+            NameExpression `a`
+            NameExpression `b`
+          NameExpression `c`
+      ExpressionStatement `;`
+        BinaryExpression `<`
+          BinaryExpression `+`
+            NameExpression `a`
+            NameExpression `b`
+          BinaryExpression `*`
+            NameExpression `c`
+            NameExpression `d`
+      ExpressionStatement `;`
+        BinaryExpression `==`
+          BinaryExpression `<`
+            NameExpression `a`
+            NameExpression `b`
+          BinaryExpression `<`
+            NameExpression `c`
+            NameExpression `d`
+      ExpressionStatement `;`
+        BinaryExpression `&&`
+          BinaryExpression `==`
+            NameExpression `a`
+            NameExpression `b`
+          BinaryExpression `==`
+            NameExpression `c`
+            NameExpression `d`
+      ExpressionStatement `;`
+        BinaryExpression `||`
+          BinaryExpression `&&`
+            NameExpression `a`
+            NameExpression `b`
+          BinaryExpression `&&`
+            NameExpression `c`
+            NameExpression `d`
+      ExpressionStatement `;`
+        RangeExpression `..`
+          BinaryExpression `||`
+            NameExpression `a`
+            NameExpression `b`
+          BinaryExpression `||`
+            NameExpression `c`
+            NameExpression `d`
+      ExpressionStatement `;`
+        BinaryExpression `&&`
+          PrefixExpression `!`
+            NameExpression `a`
+          PrefixExpression `-`
+            NameExpression `b`
+      ExpressionStatement `;`
+        PrefixExpression `!`
+          CallExpression
+            MemberExpression `.` `b`
+              NameExpression `a`
+            ArgumentList `(` `)`
+      ExpressionStatement `;`
+        PrefixExpression `-`
+          MemberExpression `.` `b`
+            NameExpression `a`
+      ExpressionStatement `;`
+        AwaitExpression `await`
+          TryExpression `?`
+            CallExpression
+              MemberExpression `.` `b`
+                NameExpression `a`
+              ArgumentList `(` `)`
+      ExpressionStatement `;`
+        TryExpression `?`
+          ParenthesizedExpression `(` `)`
+            AwaitExpression `await`
+              CallExpression
+                NameExpression `a`
+                ArgumentList `(` `)`
+      ExpressionStatement `;`
+        MemberExpression `.` `c`
+          MemberExpression `.` `b`
+            NameExpression `a`
+      ExpressionStatement `;`
+        TryExpression `?`
+          IndexExpression `[` `]`
+            MemberExpression `.` `d`
+              CallExpression
+                MemberExpression `.` `b`
+                  NameExpression `a`
+                ArgumentList `(` `)`
+                  Argument
+                    NameExpression `c`
+            NameExpression `e`
+      ExpressionStatement `;`
+        BinaryExpression `&&`
+          IsExpression `is`
+            NameExpression `a`
+            MemberPattern `.` `B`
+          NameExpression `c`
+      ExpressionStatement `;`
+        IsExpression `is`
+          NameExpression `a`
+          OrPattern `|`
+            MemberPattern `.` `B`
+            MemberPattern `.` `C`
+      ExpressionStatement `;`
+        ClosureExpression `=>`
+          ClosureParameterList `(` `a` `)`
+          BinaryExpression `+`
+            NameExpression `b`
+            NameExpression `c`
+      ExpressionStatement `;`
+        BinaryExpression `>=`
+          NameExpression `x`
+          NameExpression `y`

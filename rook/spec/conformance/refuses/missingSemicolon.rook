@@ -1,0 +1,21 @@
+fn body() {
+    let a = 1 //~ error[R0032]
+    var b = 2 //~ error[R0032]
+    a = 3 //~ error[R0032]
+    call() //~ error[R0032]
+    return //~ error[R0032]
+}
+fn other() {
+    if (a) { call() } //~ error[R0032]
+    match (a) {
+        .B => { call() }, //~ error[R0032]
+    }
+    break //~ error[R0032]
+}
+const A: i32 = 1 //~ error[R0032]
+fn tail() -> i32 {
+    1 //~ error[R0032]
+}
+newtype B(i32) //~ error[R0032]
+handle C //~ error[R0032]
+import a.b //~ error[R0032]

@@ -276,7 +276,7 @@ Rules:
 | `nextds` | *Headless* dedicated server. Planned (M4) |
 | `nextmaster` | Master server. Planned (M4) |
 | `rookc`, `rook`, `rookLsp` | Rook toolchain. Planned (M6) |
-| `rookCompilerTests` | Tests of the Rook compiler (`rook/compiler/tests`), where GoogleTest is found |
+| `rookCompilerTests`, `rookConformance` | Tests of the Rook compiler (`rook/compiler/tests`), where GoogleTest is found, and the runner of the conformance suite (`rook/spec`), which CTest runs as `Rook.Conformance` and which needs nothing but the compiler |
 | `nxbake` | Asset tool. Planned (M2) |
 | `nxcheck` | Reads every file of the Counter-Strike 1.6 installation with the readers of `nx.assets` and reports each failure ([18](18-testing-and-quality.md#real-content)) |
 | `nxview` | A frame of a map into a file, as the client draws it (`cs.client`): `--screenshot <file.bmp>` renders one frame (`--size <width>x<height>`, 1280x720 by default) of `--map <name>` (default: de_dust2) of the Counter-Strike 1.6 installation without a window, with the original's default settings, `--time <seconds>` after the map starts; `--position` and `--angles` place the camera, the player's eye (default: the first spawn); `--install` and `--data` name the installation and the project's `data/` folder (default: the one Steam installed, the one next to `nxview`); `--look legacy|enhanced` the look, `--user-folder` the folder whose `addons/cstrike/` it reads, `--weapon <id>` the only weapon the player spawns with; `--hud` draws the HUD over the frame, `--fps <frames a second>` cl_showfps's label telling that many, and `--console <line>` (once for each line, sent in it) and `--typing <text>` (left typed in it) the console's window; `--validation`. Playing a map is `next`'s |

@@ -1,0 +1,2 @@
+const A: i32 = 0x; //~ error[R0011]
+const B: i32 = 0b; //~ error[R0011]

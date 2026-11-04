@@ -213,4 +213,7 @@ inline constexpr std::array kReservedWords{
     return kind >= TokenKind::KeywordAbstract && kind <= TokenKind::KeywordWhile;
 }
 
+/// How a diagnostic names a kind of token, as "`fn`" or "a string".
+[[nodiscard]] auto describeToken(TokenKind kind) noexcept -> std::string_view;
+
 } // namespace rook::compiler

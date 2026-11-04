@@ -1,0 +1,13 @@
+SourceFile
+  FunctionDeclaration `/// Says what `documented` does.` `/// In two lines.` `pub` `fn` `documented`
+    ParameterList `(` `)`
+    Block `{` `}`
+  StructDeclaration `/// Says what `field` is.` `struct` `Holder`
+    FieldList `{` `,` `}`
+      Field `/// In a field too.` `field` `:`
+        PathType `i32`
+  ClassDeclaration `class` `WithMembers`
+    MemberList `{` `}`
+      FunctionDeclaration `/// And in a member.` `fn` `member`
+        ParameterList `(` `)`
+        Block `{` `}`

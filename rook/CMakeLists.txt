@@ -12,9 +12,10 @@ project(Rook
     DESCRIPTION "Toolchain of the Rook plugin language"
     LANGUAGES CXX)
 
-option(ROOK_BUILD_TESTS "Build the unit tests, where GoogleTest is found" ON)
+option(ROOK_BUILD_TESTS "Build the conformance suite and, where GoogleTest is found, the unit tests" ON)
 option(ROOK_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 
+set(ROOK_SOURCE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(rookTargets)
@@ -37,3 +38,6 @@ if(ROOK_BUILD_TESTS)
 endif()
 
 add_subdirectory(compiler)
+if(ROOK_BUILD_TESTS)
+    add_subdirectory(spec)
+endif()

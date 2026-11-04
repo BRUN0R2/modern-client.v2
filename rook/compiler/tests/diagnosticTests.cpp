@@ -15,11 +15,11 @@ using rook::compiler::Diagnostic;
 using rook::compiler::DiagnosticCode;
 using rook::compiler::diagnosticCodeText;
 using rook::compiler::LineMap;
+using rook::compiler::parse;
 using rook::compiler::renderDiagnostic;
 using rook::compiler::textForTerminal;
 using rook::compiler::TextPosition;
 using rook::compiler::TextRange;
-using rook::compiler::tokenize;
 
 [[nodiscard]] auto render(std::string_view source, TextRange range) -> std::string {
     const LineMap lines{source};
@@ -108,7 +108,7 @@ TEST(DiagnosticTest, NoControlCharacterOfAPathReachesATerminal) {
 
 TEST(DiagnosticTest, NoDiagnosticRepeatsTheSourcesText) {
     // Whatever a source holds, the words of a diagnostic are the compiler's; only the snippet shows it.
-    const auto result = tokenize("\x1B[2J $ fn fn() { \"\\\x1B\" }");
+    const auto result = parse("\x1B[2J $ fn fn() { \"\\\x1B\" }");
     ASSERT_FALSE(result.diagnostics.empty());
     for (const Diagnostic& diagnostic : result.diagnostics) {
         EXPECT_FALSE(diagnostic.message.contains('\x1B'));
@@ -156,7 +156,7 @@ TEST(DiagnosticTest, ACaretIsNeverLongerThanTheSnippet) {
 
 TEST(DiagnosticTest, WritesItsCodeWithFourDigits) {
     EXPECT_EQ(diagnosticCodeText(DiagnosticCode::InvalidUtf8), "R0001");
-    EXPECT_EQ(diagnosticCodeText(DiagnosticCode::MisplacedDigitSeparator), "R0013");
+    EXPECT_EQ(diagnosticCodeText(DiagnosticCode::ConditionWithoutParentheses), "R0030");
 }
 
 TEST(DiagnosticTest, EveryCodeIsListedOnce) {

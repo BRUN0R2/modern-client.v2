@@ -1,0 +1,4 @@
+fn wrong(a: 5) {} //~ error[R0024]
+fn other() -> {} //~ error[R0024]
+const A: = 1; //~ error[R0024]
+type B = ; //~ error[R0024]

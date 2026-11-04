@@ -1,0 +1,3 @@
+const A: char = ''; //~ error[R0009]
+const B: char = 'ab'; //~ error[R0009]
+const C: char = '12'; //~ error[R0009]

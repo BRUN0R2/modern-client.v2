@@ -11,6 +11,7 @@
 | Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
 | Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`, `nxBenchNavigation`, `nxBenchServer`) | ECS, Job System, light-style snapshots, client hot paths and the server's tick | Built on every PR, run by hand ([below](#performance)) |
 | Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
+| Rook conformance | Suite in `rook/spec/` | Every syntax rule and every syntax diagnostic (`R0001` to `R0099`): source that must parse, source that must not, and trees | Every PR |
 | Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 
 **Planned:**
@@ -19,7 +20,7 @@
 |-------|------|-------|--------------|
 | Integration | GoogleTest + *headless* server | Subsystems together (load a map, connect a client, a full round with test bots) | Every PR |
 | Rook plugins | `rook test` | Built-in plugins and examples | Every PR |
-| Rook conformance | Suite in `rook/spec/` | Every language rule and every diagnostic (`R0xxx`) | Every PR |
+| Rook conformance | Suite in `rook/spec/` | The rest of the language's rules and diagnostics (`R0100` on), with the checker | Every PR |
 | Determinism | Replays | State hash per tick | Every PR |
 | Render | Reference images | Renderer passes with tolerance | Every PR |
 | Parity | Fixtures from the original | Movement, weapons, economy, rules | Nightly |

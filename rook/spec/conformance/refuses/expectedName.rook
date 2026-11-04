@@ -1,0 +1,9 @@
+import ; //~ error[R0026]
+fn () {} //~ error[R0026]
+struct {} //~ error[R0026]
+fn body() {
+    let a = b.; //~ error[R0026]
+    let c = .; //~ error[R0026]
+    var = 1; //~ error[R0026]
+}
+struct Holder { : i32 } //~ error[R0026]

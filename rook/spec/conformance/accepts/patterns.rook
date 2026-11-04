@@ -1,0 +1,38 @@
+// Every pattern of rook/spec/grammar.ebnf, section 7.
+
+fn patterns() {
+    match (value) {
+        _ => 0,
+        name => 0,
+        1 => 0,
+        -1 => 0,
+        1.5 => 0,
+        -1.5 => 0,
+        'a' => 0,
+        "text" => 0,
+        r"raw" => 0,
+        true => 0,
+        false => 0,
+        none => 0,
+        some(player) => 0,
+        some(_) => 0,
+        ok(value2) => 0,
+        ok() => 0,
+        err(ClassError.AlreadyRegistered(id: id)) => 0,
+        Team.Terrorist => 0,
+        cs.Team.Terrorist => 0,
+        .Terrorist => 0,
+        .Weapon(weapon) => 0,
+        .Labeled(first: a, second: b) => 0,
+        .Nested.Variant(a, _,) => 0,
+        Constructor(a, b) => 0,
+        (a, b) => 0,
+        (a, (b, c)) => 0,
+        .First | .Second | .Third => 0,
+        .Guarded(a) if a > 0 => 0,
+        .Parenthesized(a) if (a) => 0,
+    }
+    if (let some(player) = target) {}
+    if (let (a, b) = pair) {}
+    for (.Weapon(weapon) in weapons) {}
+}

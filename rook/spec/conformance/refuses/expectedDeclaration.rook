@@ -1,0 +1,9 @@
+let value = 1; //~ error[R0021]
+player.health = 100; //~ error[R0021]
+} //~ error[R0021]
+pub //~v error[R0021]
+return;
+@attribute //~v error[R0021]
+return;
+error other; //~ error[R0021]
+fn after() {}

@@ -1,0 +1,19 @@
+// The first plugin of docs/14-rook-language.md, section 3.
+
+import cs.prelude.*;
+
+plugin {
+    name:    "Hello",
+    version: "1.0.0",
+    author:  "Modern-Client.v2",
+}
+
+forward pluginInit() -> Result<void, PluginError> {
+    registerClientCommand("say /hello", cmdHello)?;
+    return ok();
+}
+
+fn cmdHello(player: Player) -> PluginResult {
+    clientPrint(player, PrintTarget.Chat, "Hello, {player.name}!");
+    return PluginResult.Handled;
+}

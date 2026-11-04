@@ -1,0 +1,5 @@
+fn body() {
+    if (a = b) {} //~ error[R0033]
+    while (a = b) {} //~ error[R0033]
+    let c = (a = b); //~ error[R0033]
+}

@@ -1,0 +1,31 @@
+// Every form of a literal of docs/14-rook-language.md, section 4.
+
+const DECIMAL: i32 = 42;
+const SEPARATED: i32 = 1_000_000;
+const HEXADECIMAL: i32 = 0xFF;
+const HEXADECIMAL_SEPARATED: u32 = 0xDEAD_BEEF;
+const BINARY: i32 = 0b1010;
+const FRACTION: f32 = 0.75;
+const EXPONENT: f32 = 1.5e3;
+const SIGNED_EXPONENT: f32 = 2e-3;
+const SECONDS: Duration = 1.5s;
+const MILLISECONDS: Duration = 250ms;
+const MINUTES: Duration = 2min;
+const DEGREES: Angle = 90deg;
+const YES: bool = true;
+const NO: bool = false;
+const NOTHING: Player? = none;
+const LETTER: char = 'a';
+const LINE_END: char = '\n';
+const QUOTE: char = '\'';
+const CODE_POINT: char = '\u{1F600}';
+const ACCENT: char = 'é';
+const PLAIN: string = "text";
+const ACCENTS: string = "ação";
+const ESCAPES: string = "\n\r\t\0\\\'\"\{}";
+const UNICODE: string = "\u{41}\u{10FFFF}";
+const RAW: string = r"no \escapes {here}";
+const INTERPOLATED: string = "{DECIMAL} and {SECONDS:>8}, {call("nested {DECIMAL}")}";
+const SPECIFIED: string = "{name:<16} {frags:>4} {deaths:>4}";
+const STRUCT_INSIDE: string = "{Point { x: 1, y: 2 }}";
+const EMPTY: string = "";

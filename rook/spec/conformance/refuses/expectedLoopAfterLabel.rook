@@ -1,0 +1,4 @@
+fn body() {
+    'outer: if (a) {} //~ error[R0028]
+    'other: call(); //~ error[R0028]
+}

@@ -1,0 +1,18 @@
+// A documentation comment belongs to the declaration after it; its tree is written beside this file.
+
+// A plain comment stays outside.
+
+/// Says what `documented` does.
+/// In two lines.
+pub fn documented() {}
+
+/// Says what `field` is.
+struct Holder {
+    /// In a field too.
+    field: i32,
+}
+
+class WithMembers {
+    /// And in a member.
+    fn member() {}
+}

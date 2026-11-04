@@ -9,11 +9,19 @@ rookAddModuleLibrary(rookCompiler
         src/token.cppm
         src/diagnostic.cppm
         src/lexer.cppm
+        src/syntaxTree.cppm
+        src/parser.cppm
     SOURCES
         src/source.cpp
         src/token.cpp
         src/diagnostic.cpp
-        src/lexer.cpp)
+        src/lexer.cpp
+        src/syntaxTree.cpp
+        src/parser.cpp
+        src/parserItems.cpp
+        src/parserTypes.cpp
+        src/parserStatements.cpp
+        src/parserExpressions.cpp)
 
 if(ROOK_BUILD_TESTS)
     add_subdirectory(tests)

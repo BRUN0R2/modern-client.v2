@@ -1,0 +1,4 @@
+const A: i32 = 1__000; //~ error[R0013]
+const B: i32 = 1_; //~ error[R0013]
+const C: i32 = 0x_FF; //~ error[R0013]
+const D: Duration = 1_s; //~ error[R0013]

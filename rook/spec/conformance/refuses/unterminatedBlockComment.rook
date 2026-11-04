@@ -1,0 +1,4 @@
+fn before() {}
+//~v error[R0004]
+/* this never ends
+fn inTheComment() {}

@@ -1,0 +1,101 @@
+// Every declaration of rook/spec/grammar.ebnf, section 3.
+
+fn empty() {}
+pub fn exported() {}
+pure fn pureFunction(amount: i32) -> i32 { return amount; }
+const fn constantFunction(text: string) -> ClassId { return classId(text); }
+async fn asynchronous(owner: Player) {}
+pure async fn pureAsynchronous() {}
+fn declaredOnly(amount: i32) -> i32;
+fn parameters(first: i32, inout second: Vector3, third: Health = 100, ) -> Health { return third; }
+fn generic<T: HasHealth, U>(items: List<T>, other: U) -> T? { return none; }
+
+forward pluginInit() -> Result<void, PluginError> { return ok(); }
+pub forward roundStart(mode: Mode, duration: Duration);
+
+pub struct HudText {
+    message:  string,
+    position: HudPosition = HudPosition.CENTER,
+    hold:     Duration = 3s,
+}
+struct Pair<A, B> { first: A, second: B }
+struct Nothing {}
+
+@replicated
+pub component Frozen {
+    until: GameTime,
+}
+
+pub enum Team { Terrorist, CounterTerrorist, Spectator }
+pub enum DamageSource {
+    Weapon(weapon: Weapon),
+    Fall(speed: Speed),
+    Explosion(radius: Distance),
+    Positional(Weapon, Speed),
+    World,
+}
+pub error enum ClassError {
+    @message("class \"{id}\" is already registered")
+    AlreadyRegistered(id: ClassId),
+}
+pub error enum PrecacheError {
+    from Class(ClassError),
+    from Resource(ResourceError),
+}
+enum Option2<T> { Some2(T), None2 }
+
+pub interface Damageable {
+    fn takeDamage(self, amount: Health, source: DamageSource) -> Health;
+}
+pub abstract class Ability {
+    var cooldown: Duration;
+    let name: string = "ability";
+
+    pub fn new(cooldown: Duration) -> Self { return Self { cooldown: cooldown }; }
+    pub abstract fn activate(self, player: Player) -> Result<void, AbilityError>;
+}
+pub class Leap extends Ability {
+    override fn activate(self, player: Player) -> Result<void, AbilityError> {
+        player.velocity = forwardVector(player) * LEAP_FORCE;
+        return ok();
+    }
+}
+open class Base<T> {
+    open fn hook(self) {}
+    @test
+    pub async fn later(self) {}
+}
+impl Damageable for Leap {
+    fn takeDamage(self, amount: Health, source: DamageSource) -> Health { return amount; }
+}
+
+newtype Health(f32) derive(Ord, Add, Sub, Scale);
+newtype Speed(f32) dimension(Distance / Duration);
+newtype Area(f32) dimension(Distance * Distance);
+newtype Volume(f32) range(0..=1);
+newtype Duration(i64) suffix ms, s, min;
+newtype Everything(f32) suffix a, b dimension(A / B) range(0..=1) derive(Ord,);
+
+pub handle Class;
+pub handle AlivePlayer extends Player;
+
+pub vars Props {
+    health:             Health = 100,
+    weaponsInteraction: bool = true,
+    readonly id:        string,
+    readonly isAlive:   bool narrows AlivePlayer,
+}
+vars Empty {}
+
+const MAX_ZOMBIE_SPEED: Speed = 320;
+pub const ASSASSIN: ClassId = classId("assassin");
+var roundCounter: i32 = 0;
+persist var totalInfections: i64 = 0;
+var lastAttacker: PlayerRef? = none;
+pub type Names = List<string>;
+type Pairs<T> = List<(T, T)>;
+
+@onlyIn(Lifecycle.Precache)
+@hook(Hook.PlayerTakeDamage, HookPhase.Pre)
+@system(phase: Phase.Simulation)
+pub fn attributed() {}

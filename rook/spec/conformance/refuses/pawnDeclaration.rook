@@ -1,0 +1,5 @@
+fn body() {
+    new count = 1; //~ error[R0036]
+    new Float:speed = 1.0; //~ error[R0036]
+    new name[32]; //~ error[R0036]
+}

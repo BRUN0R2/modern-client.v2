@@ -67,11 +67,30 @@ function(rookAddModuleLibrary target)
     add_library(${arg_ALIAS} ALIAS ${target})
 endfunction()
 
+# rookAddProgram(<target> SOURCES <files>... [DEPENDS <targets>...])
+#
+# Creates a program of the toolchain. With MSVC its manifest makes UTF-8 the code page of its command
+# line and of the Windows narrow-character functions.
+function(rookAddProgram target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
+
+    if(NOT arg_SOURCES)
+        message(FATAL_ERROR "rookAddProgram(${target}): SOURCES is required")
+    endif()
+
+    add_executable(${target} ${arg_SOURCES})
+    if(MSVC)
+        target_sources(${target} PRIVATE "${ROOK_SOURCE_DIRECTORY}/cmake/rookProgram.manifest")
+    endif()
+    target_link_libraries(${target} PRIVATE rook::std ${arg_DEPENDS})
+    rookTargetDefaults(${target})
+endfunction()
+
 # rookAddTest(<target> SOURCES <files>... [DEPENDS <targets>...])
 #
 # Creates a GoogleTest executable and registers each test case with CTest. Where GoogleTest is not
 # found, which is the toolchain built on its own with nothing installed, the configuration says so and
-# leaves it out.
+# leaves it out: the conformance suite needs nothing and runs there still.
 function(rookAddTest target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS")
 

@@ -1,0 +1,11 @@
+// A line comment.
+/* A block comment. */
+/* A block comment
+   over several lines /* that does not nest. */
+
+/// Documentation of what follows.
+/// Over two lines.
+pub fn documented() {}
+
+//// Not documentation: four slashes.
+fn plain(/* inside */ first: i32 /* too */) {} // after

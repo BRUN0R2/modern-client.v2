@@ -1,0 +1,51 @@
+// Every statement of rook/spec/grammar.ebnf, section 5.
+
+fn statements() {
+    let immutable = 1;
+    let typed: Health = 5000;
+    let (first, second) = pair;
+    let _ = ignored();
+    var mutable = 0;
+    var typedVariable: i32 = 0;
+
+    mutable = 1;
+    player.health = 100;
+    slots[0] = player;
+    args.damage = args.damage * ZOMBIE_DAMAGE_SCALE;
+    call();
+
+    if (ready) { call(); }
+    if (!player.isAlive) { return; }
+    if (let target = findTarget(player)) { call(); }
+    if (a) { call(); } else { other(); }
+    if (a) { call(); } else if (b) { other(); } else { third(); }
+
+    while (count > 0) { count = count - 1; }
+    for (player in players) { call(); }
+    for (index in 0..count) { call(); }
+    for (_ in 0..=BURN_TICKS) { await wait(1s); }
+    for ((entity, frozen) in query) { call(); }
+    loop { break; }
+    'outer: for (row in rows) {
+        'inner: while (true) {
+            loop {
+                continue 'outer;
+            }
+            break 'inner;
+        }
+    }
+    'named: loop { break 'named; }
+
+    defer { cleanUp(); }
+
+    match (source) {
+        .Weapon(weapon) if isKnife(weapon) => applyKnifeBonus(weapon),
+        .Fall(speed)                        => applyFall(speed),
+        .World                              => {},
+    }
+    return;
+}
+
+fn returning() -> i32 {
+    return 1;
+}

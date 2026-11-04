@@ -1,0 +1,4 @@
+//~v error[R0003]
+#include <amxmodx>
+
+fn after() {}
