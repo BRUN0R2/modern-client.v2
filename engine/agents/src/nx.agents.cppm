@@ -153,6 +153,11 @@ struct Intent {
     std::optional<Vec3> lookAt{};
     bool attacks = false;
     bool jumps = false;
+    /// Across a ladder (navigation::AreaKind::Ladder): the way it looks, a unit direction, its key forward
+    /// held as it moves along direction. On a ladder a body climbs by its keys and its view, not by the
+    /// speeds it asks, turning what goes into the ladder's face into going up it and what looks down into
+    /// coming down (PM_LadderMove); none off one.
+    std::optional<Vec3> climb{};
     /// What ahead on its way it slows down for, the nearest first, approachCount of them: each corner it
     /// sees ahead with the way on after it, passed at the cosine of half the way's turn there (straight on
     /// at full speed, a right angle at 0.71 of it, turning back at none); and where its way ends, when it
@@ -216,7 +221,12 @@ public:
     /// a link of its corridor (navigation::MeshLink), it crosses it: it jumps once for a link up, and heads
     /// for the link's end, which its corridor goes on from, until it stands within a step of the end's height
     /// as far from the start as the end is; across it, it searches no way, as DetourCrowd plans none for an
-    /// agent over a link, the corridor's end following its goal along the mesh.
+    /// agent over a link, the corridor's end following its goal along the mesh. A ladder it climbs
+    /// (Intent::climb): up, facing it level until its feet come within a step of the end's height, then on to
+    /// the end; down, walking off toward the end and looking well below level, or straight down where the
+    /// floors lie on one side of it, as a body climbs down one no faster (PM_LadderMove). A body off the mesh
+    /// is Blocked as it stays there, each decision searching anew, and jumps, letting go of a ladder it
+    /// holds.
     [[nodiscard]] auto decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision;
     /// Steers `intent`, a decision's that moves, along its corridor among `nearby`, the bodies about it,
     /// the nearest first, and the walls of the mesh (navigation::Corridor::steer): its body moving at
@@ -376,7 +386,7 @@ private:
     void sample(Vec3 feet, Seconds elapsed);
     /// Whether the samples span the whole of `samples` intervals, and its body went slower across them than
     /// stuckSpeed.
-    [[nodiscard]] auto isTooSlow() const noexcept -> bool;
+    [[nodiscard]] auto isTooSlow(bool climbs) const noexcept -> bool;
     /// Makes `intent` wiggle, `elapsed` after the last watch.
     void wiggle(Intent& intent, Seconds elapsed);
     /// `ahead` turned to `way`: itself, back, or a quarter turn to either side.

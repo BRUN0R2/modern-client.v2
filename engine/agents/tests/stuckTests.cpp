@@ -80,6 +80,28 @@ TEST(StuckWatch, ABodyThatStaysIsStuckOnceItsSamplesSpanTheirTime) {
     EXPECT_TRUE(watched.isStuck());
 }
 
+TEST(StuckWatch, ABodyClimbingALadderIsNotStuckAndOneThatStaysOnItComesOffIt) {
+    auto watched = watch();
+    nx::Vec3 feet{};
+    for (int tick = 0; tick < 200; ++tick) {
+        nx::agents::Intent intent = alongX();
+        intent.climb = nx::Vec3{.x = 1.0F};
+        ASSERT_EQ(watched.watch(intent, feet, kSpeed, true, kTick), nx::agents::Progress::Moving)
+            << "up it, none of it across: tick " << tick;
+        EXPECT_TRUE(intent.climb.has_value());
+        feet.z += 2.0F; // 200 units a second
+    }
+    nx::agents::Progress progress = nx::agents::Progress::Moving;
+    nx::agents::Intent intent = alongX();
+    for (int tick = 0; tick < 100 && progress == nx::agents::Progress::Moving; ++tick) {
+        intent = alongX();
+        intent.climb = nx::Vec3{.x = 1.0F};
+        progress = watched.watch(intent, feet, kSpeed, true, kTick);
+    }
+    EXPECT_EQ(progress, nx::agents::Progress::Stuck) << "held where it was";
+    EXPECT_FALSE(intent.climb.has_value()) << "it no longer holds the ladder's way, but gets off it";
+}
+
 TEST(StuckWatch, ABodyGoingBackAndForthAtFullSpeedIsStuckToo) {
     // At 250 units a second, four units either way of where it is, as a body bouncing in a doorway: fast,
     // and no way made.

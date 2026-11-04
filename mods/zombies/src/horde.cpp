@@ -517,6 +517,9 @@ void Horde::holdDecisions() {
             if (decision.intent.jumps) {
                 command.buttons.set(cs::Button::Jump);
             }
+            if (decision.intent.climb) {
+                aim = *decision.intent.climb;
+            }
             if (nx::length(aim) > 0.0F) {
                 command.viewAngles.yaw =
                     nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
@@ -599,6 +602,7 @@ void Horde::writeAsked(const cs::EntityStates& bodies) {
                         : member.way;
                 command.move.forward = member.speed * nx::dot(driven, member.forward);
                 command.move.side = member.speed * nx::dot(driven, member.right);
+                cs::holdKeysOf(command);
             }
             asked[index] = {.entity = member.entity, .command = command};
         }

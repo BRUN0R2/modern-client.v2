@@ -115,6 +115,7 @@ struct TileInput {
     std::vector<Footprint> footprints{};
     std::array<float, 3> low{};
     std::array<float, 3> high{};
+    std::vector<Aabb> ladders{};
     AgentProfile profile{};
     BuildSettings settings{};
     VoxelProfile voxels{};
@@ -135,7 +136,18 @@ struct TileInput {
 /// What the tiles of `geometry` are built from. Errors: InvalidGeometry, TooLarge.
 [[nodiscard]] auto tileInputOf(const Geometry& geometry, const AgentProfile& profile,
                                const BuildSettings& settings) -> Result<TileInput, MeshBuildError> {
-    TileInput input{.profile = profile, .settings = settings, .voxels = voxelProfileOf(profile, settings)};
+    TileInput input{.ladders = geometry.ladders,
+                    .profile = profile,
+                    .settings = settings,
+                    .voxels = voxelProfileOf(profile, settings)};
+    for (const Aabb& ladder : geometry.ladders) {
+        const auto isFiniteAt = [](Vec3 point) {
+            return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
+        };
+        if (!isFiniteAt(ladder.min) || !isFiniteAt(ladder.max)) {
+            return fail(MeshBuildError::InvalidGeometry, std::format("a ladder at {}", ladder.min));
+        }
+    }
     input.vertices.reserve(geometry.vertices.size() * 3);
     for (const Vec3 vertex : geometry.vertices) {
         if (!std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z)) {
@@ -403,13 +415,24 @@ struct TileLinks {
     std::vector<std::uint32_t> ids{};
 
     void add(Vec3 start, Vec3 end, float radius, AreaKind kind) {
+        addWay(start, end, radius, kind, narrow<std::uint32_t>(ids.size()));
+    }
+
+    /// A link of the ladder whose middle is `ladder`.
+    void addLadder(Vec3 start, Vec3 end, float radius, Vec3 ladder) {
+        addWay(start, end, radius, AreaKind::Ladder, ladderIdOf(ladder));
+    }
+
+private:
+    void addWay(Vec3 start, Vec3 end, float radius, AreaKind kind, std::uint32_t id) {
         std::ranges::copy(detourOf(start), std::back_inserter(points));
         std::ranges::copy(detourOf(end), std::back_inserter(points));
         radii.push_back(radius);
         flags.push_back(kWalkablePolygon);
         areas.push_back(areaIdOf(kind));
-        ways.push_back(kind == AreaKind::Jump ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
-        ids.push_back(narrow<std::uint32_t>(ids.size()));
+        const bool goesBothWays = kind == AreaKind::Jump || kind == AreaKind::Ladder;
+        ways.push_back(goesBothWays ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
+        ids.push_back(id);
     }
 };
 
@@ -464,6 +487,108 @@ struct TileLinks {
     }
     const AreaKind kind = *ledge - *landing <= profile.jumpHeight.value() ? AreaKind::Jump : AreaKind::Drop;
     return std::pair{Vec3{.x = beyond.x, .y = beyond.y, .z = *landing}, kind};
+}
+
+/// The heights of the floors over `point`, from `lowest` to `highest`, that the profile stands on.
+[[nodiscard]] auto floorsAt(Vec3 point, std::span<const NearTriangle> near, float lowest, float highest)
+    -> std::vector<float> {
+    std::vector<float> floors;
+    for (const NearTriangle& triangle : near) {
+        if (triangle.area == RC_NULL_AREA) {
+            continue;
+        }
+        const std::optional<float> height = heightAbove(point, triangle);
+        if (height && *height >= lowest && *height <= highest) {
+            floors.push_back(*height);
+        }
+    }
+    return floors;
+}
+
+/// A floor a ladder leads to: where a body lands on it, and how far from the ladder's middle across its edge
+/// is.
+struct LadderLanding {
+    Vec3 at{};
+    float distance = 0.0F;
+};
+
+/// How far past a ladder's side the floor it leads to is looked for, in the profile's radii: over a wall as
+/// thick as a body's two widths.
+constexpr float kLadderReachRadii = 4.0F;
+
+/// The floors `ladder` leads to, the lowest first, within the profile's step of each other one of them,
+/// the nearest: past each side of it, as far as kLadderReachRadii, those a body's top reaches its bottom
+/// from, and no higher than a step above its top, with no wall in the way above a step of them. A body lands
+/// its radius and a cell past where the floor starts, the mesh starting its radius from its edge.
+[[nodiscard]] auto landingsOf(const Aabb& ladder, const TileInput& input, std::span<const NearTriangle> near)
+    -> std::vector<LadderLanding> {
+    const AgentProfile& profile = input.profile;
+    const float step = profile.stepHeight.value();
+    const float cell = input.settings.cellSize.value();
+    const float radius = profile.radius.value();
+    const float lowest = ladder.min.z - profile.standingHeight.value();
+    const float highest = ladder.max.z + step;
+    const Vec3 middle = (ladder.min + ladder.max) * 0.5F;
+    const Vec3 half = (ladder.max - ladder.min) * 0.5F;
+    const float reach = radius * kLadderReachRadii;
+    const Vec3 aboveStep{.z = step + input.settings.cellHeight.value()};
+    std::vector<LadderLanding> landings;
+    for (const Vec3 way : {Vec3{.x = 1.0F}, Vec3{.x = -1.0F}, Vec3{.y = 1.0F}, Vec3{.y = -1.0F}}) {
+        const float side = (std::abs(way.x) * half.x) + (std::abs(way.y) * half.y);
+        std::vector<float> met;
+        const auto cells = static_cast<std::uint32_t>(reach / cell);
+        for (std::uint32_t reached = 1; reached <= cells; ++reached) {
+            const float distance = side + (cell * static_cast<float>(reached));
+            const Vec3 point = middle + (way * distance);
+            for (const float floor : floorsAt(point, near, lowest, highest)) {
+                if (std::ranges::any_of(met, [=](float other) { return std::abs(other - floor) <= step; })) {
+                    continue;
+                }
+                met.push_back(floor);
+                Vec3 landing = middle + (way * (distance + radius + cell));
+                landing.z = floor;
+                const Vec3 from{.x = middle.x, .y = middle.y, .z = floor};
+                if (!floorsAt(landing, near, floor - step, floor + step).empty() &&
+                    std::ranges::none_of(near, [&](const NearTriangle& triangle) {
+                        return meets(from + aboveStep, landing + aboveStep, triangle);
+                    })) {
+                    landings.push_back({.at = landing, .distance = distance});
+                }
+            }
+        }
+    }
+    std::ranges::sort(landings, {}, [](const LadderLanding& landing) { return landing.at.z; });
+    std::vector<LadderLanding> levels;
+    for (const LadderLanding& landing : landings) {
+        if (levels.empty() || landing.at.z - levels.back().at.z > step) {
+            levels.push_back(landing);
+        } else if (landing.distance < levels.back().distance) {
+            levels.back() = landing;
+        }
+    }
+    return levels;
+}
+
+/// Adds to `links` the links of the ladders of `input` about the tile `bounds` holds, from each floor one
+/// leads to to the next up: Detour keeps those that start in the tile.
+void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks& links) {
+    const float radius = input.profile.radius.value();
+    const float reach = input.settings.cellSize.value() + (radius * (kLadderReachRadii + 1.0F));
+    for (const Aabb& ladder : input.ladders) {
+        // Across, Detour's z is the game's y turned about.
+        const TileBounds about{.low = {ladder.min.x - reach, 0.0F, -ladder.max.y - reach},
+                               .high = {ladder.max.x + reach, 0.0F, -ladder.min.y + reach}};
+        if (about.high[0] < bounds.low[0] || about.low[0] > bounds.high[0] || about.high[2] < bounds.low[2] ||
+            about.low[2] > bounds.high[2]) {
+            continue;
+        }
+        const std::vector<NearTriangle> near = trianglesAbout(input, about, 0.0F);
+        const std::vector<LadderLanding> levels = landingsOf(ladder, input, near);
+        const Vec3 middle = (ladder.min + ladder.max) * 0.5F;
+        for (std::size_t level = 1; level < levels.size(); ++level) {
+            links.addLadder(levels[level - 1].at, levels[level].at, radius, middle);
+        }
+    }
 }
 
 /// The links of the polygons of `polygons`, tile `tileX`, `tileY` of `input`: along each edge of a polygon
@@ -521,6 +646,7 @@ struct TileLinks {
             }
         }
     }
+    addLadderLinks(input, boundsOf(input, tileX, tileY), links);
     return links;
 }
 
@@ -726,7 +852,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 3;
+constexpr std::uint32_t kTilesVersion = 4;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -767,6 +893,13 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
             appendLittleEndian(bytes, corner);
         }
         appendLittleEndian(bytes, std::to_underlying(triangle.kind));
+    }
+    appendLittleEndian(bytes, std::uint64_t{geometry.ladders.size()});
+    for (const Aabb& ladder : geometry.ladders) {
+        for (const float value :
+             {ladder.min.x, ladder.min.y, ladder.min.z, ladder.max.x, ladder.max.y, ladder.max.z}) {
+            appendLittleEndian(bytes, value);
+        }
     }
     return MeshKey{hash64(bytes)};
 }

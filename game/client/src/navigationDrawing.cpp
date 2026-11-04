@@ -24,12 +24,13 @@ using nx::render::OverlayColor;
 /// The color of each kind of area: its edges as they are, its polygons see-through enough that the floor's
 /// texture shows, even blended as linear light in the enhanced look.
 constexpr nx::EnumArray<AreaKind, OverlayColor> kAreaColors{nx::EnumArray<AreaKind, OverlayColor>::Storage{
-    OverlayColor{.red = 64, .green = 208, .blue = 64},   // Floor: green
-    OverlayColor{.red = 240, .green = 200, .blue = 32},  // Crouch: yellow
-    OverlayColor{.red = 48, .green = 128, .blue = 255},  // Water: blue
-    OverlayColor{.red = 32, .green = 136, .blue = 96},   // Edge: a deeper green
-    OverlayColor{.red = 255, .green = 136, .blue = 0},   // Jump: orange
-    OverlayColor{.red = 208, .green = 32, .blue = 72}}}; // Drop: crimson
+    OverlayColor{.red = 64, .green = 208, .blue = 64},    // Floor: green
+    OverlayColor{.red = 240, .green = 200, .blue = 32},   // Crouch: yellow
+    OverlayColor{.red = 48, .green = 128, .blue = 255},   // Water: blue
+    OverlayColor{.red = 32, .green = 136, .blue = 96},    // Edge: a deeper green
+    OverlayColor{.red = 255, .green = 136, .blue = 0},    // Jump: orange
+    OverlayColor{.red = 208, .green = 32, .blue = 72},    // Drop: crimson
+    OverlayColor{.red = 184, .green = 96, .blue = 255}}}; // Ladder: violet
 constexpr std::uint8_t kPolygonAlpha = 32;
 
 /// The colors of the arrows' shafts, one for each team, and for an agent of no team.

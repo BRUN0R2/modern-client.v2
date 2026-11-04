@@ -68,6 +68,11 @@ struct UserCommand {
     std::optional<WeaponIndex> weaponSelect{}; ///< The weapon the player asks to draw.
 };
 
+/// Holds the keys of the speeds `command` asks along its view, as a player's client holds them: what an agent
+/// asks for has no keys of its own, and a body on a ladder climbs by its keys alone, none held holding it
+/// still.
+void holdKeysOf(UserCommand& command) noexcept;
+
 /// The seconds `command` lasts, as the original makes its frame time of it: its milliseconds times a
 /// thousandth in double precision, then in float (pmove's frametime, the game's gpGlobals->frametime).
 [[nodiscard]] auto frameTimeOf(const UserCommand& command) noexcept -> nx::Seconds;

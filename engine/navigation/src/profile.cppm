@@ -26,6 +26,8 @@ enum class AreaKind : std::uint8_t {
     /// A link from a ledge to the floor below, higher than the profile jumps and within its drop height:
     /// dropped down only.
     Drop,
+    /// A link between two floors a ladder joins: climbed, up and down.
+    Ladder,
     Count,
 };
 

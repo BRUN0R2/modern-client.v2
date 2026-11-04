@@ -42,7 +42,7 @@ auto StuckWatch::watch(Intent& intent, Vec3 feet, UnitsPerSecond maxSpeed, bool 
     }
     if (!stuckAt) {
         sample(feet, elapsed);
-        if (!isTooSlow()) {
+        if (!isTooSlow(intent.climb.has_value())) {
             return Progress::Moving;
         }
         // Stuck: where, and its first jump soon (StuckCheck's m_stuckJumpTimestamp).
@@ -88,12 +88,14 @@ void StuckWatch::sample(Vec3 feet, Seconds elapsed) {
     sampled.push_back(feet);
 }
 
-auto StuckWatch::isTooSlow() const noexcept -> bool {
+auto StuckWatch::isTooSlow(bool climbs) const noexcept -> bool {
     if (sampled.size() <= rules.samples) {
         return false;
     }
     const float span = rules.sampleInterval.count() * static_cast<float>(rules.samples);
-    return distanceAcross(sampled.front(), sampled.back()) < rules.stuckSpeed.value() * span;
+    const float gone =
+        climbs ? length(sampled.back() - sampled.front()) : distanceAcross(sampled.front(), sampled.back());
+    return gone < rules.stuckSpeed.value() * span;
 }
 
 void StuckWatch::wiggle(Intent& intent, Seconds elapsed) {
@@ -106,6 +108,7 @@ void StuckWatch::wiggle(Intent& intent, Seconds elapsed) {
     intent.direction = turnedTo(way, intent.ahead);
     intent.drive.reset();
     intent.steered.reset();
+    intent.climb.reset(); // off what it climbs, the way a jump pushes it
     intent.speedShare = 1.0F;
     jumpIn -= elapsed;
     if (jumpIn <= Seconds{}) {

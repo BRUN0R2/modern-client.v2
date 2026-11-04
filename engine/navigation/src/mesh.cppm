@@ -90,12 +90,15 @@ struct MeshPolygon {
     [[nodiscard]] inline auto operator==(const MeshPolygon&) const noexcept -> bool = default;
 };
 
-/// A link of a mesh between a ledge and the floor below (AreaKind::Jump, AreaKind::Drop): where a body
-/// leaves the ledge, where it lands, and its kind, of which Jump goes both ways.
+/// A link of a mesh between a ledge and the floor below (AreaKind::Jump, AreaKind::Drop), or two floors a
+/// ladder joins (AreaKind::Ladder): where a body leaves the one, where it lands on the other, and its kind,
+/// of which Jump and Ladder go both ways; of a Ladder, the middle of the ladder across, to whole units, at
+/// the height of the start.
 struct MeshLink {
     Vec3 start{};
     Vec3 end{};
     AreaKind kind = AreaKind::Drop;
+    Vec3 ladder{};
 
     [[nodiscard]] inline auto operator==(const MeshLink&) const noexcept -> bool = default;
 };
@@ -238,6 +241,26 @@ inline constexpr int borderPadCells = 3;
 /// The kind of area id `areaId`, one areaIdOf gave.
 [[nodiscard]] inline auto kindOfArea(std::uint8_t areaId) noexcept -> AreaKind {
     return static_cast<AreaKind>(areaId - 1);
+}
+
+/// How many bits each of a ladder's coordinates across takes of the id of its link, the rest of the other.
+inline constexpr std::uint32_t kLadderIdCoordinateBits = 16;
+inline constexpr std::uint32_t kLadderIdCoordinateMask = (std::uint32_t{1} << kLadderIdCoordinateBits) - 1U;
+
+/// The id of a link of the ladder whose middle across is `middle`, to whole units: a map's reach within 16
+/// bits. Detour keeps it with the link, and nothing else of a ladder need be kept with a mesh.
+[[nodiscard]] inline auto ladderIdOf(Vec3 middle) noexcept -> std::uint32_t {
+    const auto coordinate = [](float value) {
+        return static_cast<std::uint16_t>(static_cast<std::int16_t>(std::lround(value)));
+    };
+    return (std::uint32_t{coordinate(middle.x)} << kLadderIdCoordinateBits) | coordinate(middle.y);
+}
+
+/// The middle across of the ladder of the link of `id` (ladderIdOf), at height `height`.
+[[nodiscard]] inline auto ladderOfId(std::uint32_t id, float height) noexcept -> Vec3 {
+    return Vec3{.x = static_cast<float>(static_cast<std::int16_t>(id >> kLadderIdCoordinateBits)),
+                .y = static_cast<float>(static_cast<std::int16_t>(id & kLadderIdCoordinateMask)),
+                .z = height};
 }
 
 /// The flag of the polygons agents may cross: every one today; a door will close its own (TODO.md).
