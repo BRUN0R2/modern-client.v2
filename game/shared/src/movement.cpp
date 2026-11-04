@@ -1365,27 +1365,16 @@ auto solidBoxesOf(nx::ecs::World& world, std::optional<nx::ecs::Entity> ignored)
     return boxes;
 }
 
-void solidBoxesOf(SolidBoxQuery& query, std::vector<SolidBox>& boxes) {
-    boxes.clear();
-    query.forEach([&boxes](nx::ecs::Entity entity, const nx::game::Transform& transform,
-                           const nx::game::BoxSolidity& solidity) {
-        boxes.push_back(SolidBox{.origin = transform.origin, .box = solidity.box, .entity = entity});
+void boxesNear(const nx::game::SolidBoxes& boxes, nx::Vec3 origin, nx::ecs::Entity ignored,
+               std::vector<SolidBox>& near) {
+    const nx::Aabb around = moveReachOf(origin);
+    near.clear();
+    boxes.forEachAbout(around, [&near, &around, ignored](const nx::game::SolidBoxEntity& solid) {
+        if (solid.entity != ignored && around.intersects(solid.box.translated(solid.origin))) {
+            near.push_back(SolidBox{.origin = solid.origin, .box = solid.box, .entity = solid.entity});
+        }
     });
-    std::ranges::sort(boxes, {}, &SolidBox::entity);
-}
-
-void keepBoxOf(nx::ecs::Entity entity, nx::Vec3 origin, const std::optional<nx::Aabb>& box,
-               std::vector<SolidBox>& boxes) {
-    const auto own = std::ranges::lower_bound(boxes, entity, {}, &SolidBox::entity);
-    const bool isListed = own != boxes.end() && own->entity == entity;
-    if (box && isListed) {
-        own->origin = origin;
-        own->box = *box;
-    } else if (box) {
-        boxes.insert(own, SolidBox{.origin = origin, .box = *box, .entity = entity});
-    } else if (isListed) {
-        boxes.erase(own);
-    }
+    std::ranges::sort(near, {}, &SolidBox::entity);
 }
 
 void boxesNear(std::span<const SolidBox> boxes, nx::Vec3 origin, nx::ecs::Entity ignored,

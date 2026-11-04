@@ -148,6 +148,19 @@ void climbAcross(Intent& intent, Vec3 feet, const navigation::MeshLink& link, fl
 }
 } // namespace
 
+auto driveToward(Vec3 steered, Vec3 velocity) noexcept -> std::optional<Vec3> {
+    // A body that gains speed only along the way it is driven (PM_Accelerate), and loses the rest to friction
+    // alone, keeps drifting across its way when driven the way it should go, and circles round what it heads
+    // for: it is to be driven the way its velocity must change to become the steered one, as DetourCrowd
+    // integrates an agent's velocity toward its desired one.
+    const Vec3 change = steered - acrossOf(velocity);
+    const float changeLength = length(change);
+    if (changeLength > kLeastSteeredSpeedShare * length(steered)) {
+        return change / changeLength;
+    }
+    return std::nullopt;
+}
+
 Brain::Brain(Rules settings) : rules{settings} {
     expects(rules.memoryLimit > 0 && rules.memoryLifetime > Seconds{} &&
                 rules.attackDistance > HammerUnits{} && rules.arrivalDistance > HammerUnits{} &&
@@ -583,15 +596,8 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     const float speed = std::clamp(avoidingSpeed, std::min(leastWalk, wished), wished);
     const Vec3 steered = intent.direction * speed;
     intent.speedShare = speed / maxSpeed.value();
-    // A body that gains speed only along the way it is driven (PM_Accelerate), and loses the rest to friction
-    // alone, keeps drifting across its way when driven the way it should go, and circles round what it heads
-    // for: it is to be driven the way its velocity must change to become the steered one, as DetourCrowd
-    // integrates an agent's velocity toward its desired one.
-    const Vec3 change = steered - acrossOf(velocity);
-    const float changeLength = length(change);
-    if (changeLength > kLeastSteeredSpeedShare * speed) {
-        intent.drive = change / changeLength;
-    }
+    intent.steered = steered;
+    intent.drive = driveToward(steered, velocity);
 }
 
 void Brain::appendWay(navigation::NavigationQuery& query, std::vector<Vec3>& points) const {

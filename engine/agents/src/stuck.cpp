@@ -107,6 +107,7 @@ void StuckWatch::wiggle(Intent& intent, Seconds elapsed) {
     }
     intent.direction = turnedTo(way, intent.ahead);
     intent.drive.reset();
+    intent.steered.reset();
     intent.climb.reset(); // off what it climbs, the way a jump pushes it
     intent.speedShare = 1.0F;
     jumpIn -= elapsed;

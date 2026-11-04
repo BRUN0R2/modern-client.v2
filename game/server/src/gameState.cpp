@@ -28,6 +28,51 @@ void TickEvents::clear() noexcept {
     killNotices.clear();
 }
 
+auto nextEntityStates(EntityStateLists& lists) -> std::vector<EntityState>& {
+    for (std::size_t step = 1; step <= EntityStateLists::kKept; ++step) {
+        const std::size_t at = (lists.newest + step) % EntityStateLists::kKept;
+        std::shared_ptr<std::vector<EntityState>>& list = lists.lists[at];
+        if (list == nullptr || list.use_count() == 1) {
+            if (list == nullptr) {
+                list = std::make_shared<std::vector<EntityState>>();
+            }
+            lists.newest = at;
+            return *list;
+        }
+    }
+    // All held, by more than a client that holds two: it goes on to the next, which they keep.
+    lists.newest = (lists.newest + 1) % EntityStateLists::kKept;
+    lists.lists[lists.newest] = std::make_shared<std::vector<EntityState>>();
+    return *lists.lists[lists.newest];
+}
+
+void refreshEntityStates(GameState& game, nx::jobs::JobSystem* jobs) {
+    writeEntityStates(game.world, nextEntityStates(game.entityStates), jobs);
+    game.entityStates.isStale = false;
+}
+
+auto entityStatesNow(GameState& game) -> EntityStates {
+    if (game.entityStates.isStale) {
+        refreshEntityStates(game, nullptr);
+    }
+    return EntityStates{
+        std::shared_ptr<const std::vector<EntityState>>{game.entityStates.lists[game.entityStates.newest]}};
+}
+
+auto solidsNow(GameState& game) -> nx::game::Solids& {
+    MoveLists& moves = *game.moves;
+    if (moves.areBrushesStale) {
+        linkedBrushEntitiesOf(moves.brushQuery, game.map.hulls(), moves.brushes);
+        moves.solids.brushes = nx::game::solidBrushesOf(game.world, game.map.hulls());
+        moves.areBrushesStale = false;
+    }
+    if (moves.areBoxesStale) {
+        moves.solids.boxes.gather(game.world, moves.jobs);
+        moves.areBoxesStale = false;
+    }
+    return moves.solids;
+}
+
 auto playerAt(GameState& game, PlayerIndex index) -> Player& {
     nx::expects(index.value < game.players.size() && game.players[index.value], "Game: a player of the game");
     return *game.players[index.value];

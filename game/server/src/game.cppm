@@ -188,22 +188,25 @@ public:
     /// Removes only a body issued by createEntity. Errors: UnknownEntity for a stale/non-body handle.
     [[nodiscard]] auto removeEntity(nx::ecs::Entity entity) -> nx::Result<void, EntityError>;
     /// Body states, including corpses, ordered by their complete generational handles.
-    [[nodiscard]] auto entities() -> std::vector<EntityState>;
+    [[nodiscard]] auto entities() -> EntityStates;
     /// The noises the living players made in the last tick that agents heed, in the players' order and,
     /// each player's, as it made them (cs::heardBy).
     [[nodiscard]] auto noises() const -> std::vector<GameNoise>;
     /// The living bodies, players' and createEntity's, solid as boxes: what agents steer around.
     [[nodiscard]] auto movingBodies() -> std::vector<MovingBody>;
+    /// Those of movingBodies that are players, for who has the entities' at hand.
+    [[nodiscard]] auto movingPlayers() const -> std::vector<MovingBody>;
     /// Living player bodies a mod may consider; these are candidates, not already perceived facts.
     /// Feet come from each active collision hull, independently of its current eye height.
     [[nodiscard]] auto perceptionTargets() const -> std::vector<PerceptionTarget>;
-    /// What is solid to the sights now (nx::game::solidsOf), for an agent's eyes to trace many while
-    /// nothing moves (seesSpot), gathered once instead of once a sight.
-    [[nodiscard]] auto sightSolids() -> nx::game::Solids;
+    /// What is solid to the sights now, the brush entities, for an agent's eyes to trace many while nothing
+    /// moves (seesSpot), gathered once instead of once a sight.
+    [[nodiscard]] auto sightSolids() -> std::vector<nx::game::SolidBrushEntity>;
     /// Whether a line from `eye` reaches `spot` through the world and `solids`' brush entities alone, the
     /// bodies leaving it be, as a bot's IsVisible traces one (UTIL_TraceLine with ignore_monsters); as many
     /// threads may ask as want to while nothing moves.
-    [[nodiscard]] auto seesSpot(const nx::game::Solids& solids, nx::Vec3 eye, nx::Vec3 spot) const -> bool;
+    [[nodiscard]] auto seesSpot(std::span<const nx::game::SolidBrushEntity> solids, nx::Vec3 eye,
+                                nx::Vec3 spot) const -> bool;
     /// The leaves of the map a line from `eye` may reach, as its compiler found them (the leaves' potentially
     /// visible sets): no line to a spot of a leaf they do not hold is clear (isInLeaves), so that it need not
     /// be traced.
@@ -243,6 +246,13 @@ public:
     template <nx::ecs::Component Component>
     [[nodiscard]] auto entityComponent(nx::ecs::Entity entity) -> Component* {
         return m_state.world.has<EntityBody>(entity) ? m_state.world.get<Component>(entity) : nullptr;
+    }
+    /// Calls `visit` with the bodies of createEntity that have the component, a chunk at a time: their
+    /// entities and their components, as they stay until something is attached, removed or dies.
+    template <nx::ecs::Component Component, class Visit>
+    void forEachEntityComponentChunk(Visit&& visit) {
+        nx::ecs::Query<nx::ecs::Entity, Component&, nx::ecs::With<EntityBody>>{m_state.world}.forEachChunk(
+            std::forward<Visit>(visit));
     }
     /// Attaches `component`, registered, to the body of `player`, in the game, which the body keeps until
     /// the player leaves.

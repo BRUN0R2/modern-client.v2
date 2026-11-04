@@ -141,6 +141,9 @@ struct Intent {
     /// its velocity must change to become the one it steered to, so that it cancels its drift across its way
     /// rather than circle round what it heads for; none to drive it along direction.
     std::optional<Vec3> drive{};
+    /// The velocity it steered to, across, what drive is worked out from (driveToward): for who holds its
+    /// intent over ticks, its velocity changing meanwhile; none when it did not steer, or wiggles.
+    std::optional<Vec3> steered{};
 
     /// The way to drive a body that gains speed only along the way it is driven: drive, else direction.
     [[nodiscard]] inline auto drivenWay() const noexcept -> Vec3 { return drive.value_or(direction); }
@@ -167,6 +170,10 @@ struct Intent {
         return std::span{approaches}.first(approachCount);
     }
 };
+
+/// The way to drive a body at `velocity` so that it becomes `steered`, across (Intent::drive): none when they
+/// differ too little for it to matter, which drives it along its way.
+[[nodiscard]] auto driveToward(Vec3 steered, Vec3 velocity) noexcept -> std::optional<Vec3>;
 
 /// A brain's decision of a tick: its intent, its behavior, the target it pursues (none for its goal or
 /// for nothing) and, Blocked, why no path was found.
@@ -448,6 +455,14 @@ public:
 private:
     const navigation::NavigationMesh* decidedOn;
     std::vector<navigation::NavigationQuery> queries; ///< One for each batch, made as batches need them.
+    /// The bodies by the square of the ground each stands in, kept from tick to tick for its room.
+    struct GridRoom {
+        std::vector<std::uint32_t> cellOfBody{};  ///< By body.
+        std::vector<std::uint32_t> firstOfCell{}; ///< Of each square, and past the last.
+        std::vector<std::uint32_t> nextOfCell{};  ///< Where the next body of each square goes.
+        std::vector<const Body*> cellBodies{};    ///< Square after square.
+    };
+    GridRoom gridRoom{};
 };
 
 /// The brain component attached to the same generational entity as its body, with the watch that gets its

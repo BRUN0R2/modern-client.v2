@@ -20,7 +20,12 @@ constexpr float kDropReach = 256.0F;
 
 auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Aabb& box, Vec3 origin,
                     std::optional<ecs::Entity> dropped) -> Vec3 {
-    const collision::Trace trace = traceSolidsHit(world, hulls,
+    return droppedToFloor(world, hulls, solidsOf(world, hulls), box, origin, dropped);
+}
+
+auto droppedToFloor(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
+                    const Aabb& box, Vec3 origin, std::optional<ecs::Entity> dropped) -> Vec3 {
+    const collision::Trace trace = traceSolidsHit(world, hulls, solids,
                                                   ServerTrace{.box = box,
                                                               .start = origin,
                                                               .end = origin - Vec3{.z = kDropReach},

@@ -30,18 +30,14 @@ constexpr double kSpeedShareRecovery = 0.01;
 } // namespace
 
 void listMoveLinks(GameState& game, const Player& mover) {
+    const nx::game::Solids& solids = solidsNow(game);
     MoveLists& moves = *game.moves;
-    if (moves.isStale) {
-        linkedBrushEntitiesOf(moves.brushQuery, game.map.hulls(), moves.brushes);
-        solidBoxesOf(moves.boxQuery, moves.boxes);
-        moves.isStale = false;
-    }
     brushEntitiesNear(moves.brushes, mover.movement.origin, moves.nearBrushes);
-    boxesNear(moves.boxes, mover.movement.origin, mover.body, moves.nearBoxes);
+    boxesNear(solids.boxes, mover.movement.origin, mover.body, moves.nearBoxes);
 }
 
 void use(GameState& game, Player& player, const UserCommand& command) {
-    game.moves->isStale = true; // what it uses may turn solid or not
+    game.moves->areBrushesStale = true; // what it uses may turn solid or not
     const std::optional<nx::ecs::Entity> used = nx::game::playerUse(
         game.world, game.map.hulls(), player.body,
         {.eye = eyeOf(player.movement), .forward = nx::angleVectors(command.viewAngles).forward});
@@ -184,7 +180,7 @@ void postThink(GameState& game, Player& player, const UserCommand& command, cons
                                                          nx::Vec3 end) {
         nx::game::ServerTrace way = nx::game::hullTrace(hull, start, end);
         way.ignored = player.body;
-        const nx::game::SolidHit solid = nx::game::traceSolidsHit(game.world, hulls, way);
+        const nx::game::SolidHit solid = nx::game::traceSolidsHit(game.world, hulls, solidsNow(game), way);
         const nx::game::Classified* const classified =
             solid.entity ? game.world.get<nx::game::Classified>(*solid.entity) : nullptr;
         const PlayerBody* const body = solid.entity ? game.world.get<PlayerBody>(*solid.entity) : nullptr;
@@ -209,8 +205,6 @@ void postThink(GameState& game, Player& player, const UserCommand& command, cons
     if (attacks.motions.test(HolderMotion::Reloaded)) {
         animate(game, player, PlayerAction::Reload);
     }
-    // What it attacks may be solid no more when it dies or breaks (SOLID_NOT).
-    game.moves->isStale = game.moves->isStale || !attacks.blows.empty() || !attacks.shots.empty();
     for (const Blow& blow : attacks.blows) {
         attackEntity(game, player, blow.entity,
                      nx::game::Attack{.attacker = player.body,
@@ -269,7 +263,13 @@ void runCommand(GameState& game, Player& player, const UserCommand& command) {
         nx::game::touchBrushEntities(game.world, hulls, moved.touchedModels, player.body);
     }
     placeBody(game, player);
-    keepBoxOf(player.body, player.movement.origin, bodyBoxOf(player), moves.boxes);
+    // A body solid again, which a player's only is as it spawns, between commands, is gathered with the rest.
+    if (const std::optional<nx::Aabb> box = bodyBoxOf(player)) {
+        moves.areBoxesStale =
+            moves.areBoxesStale || !moves.solids.boxes.place(player.body, player.movement.origin, *box);
+    } else {
+        moves.solids.boxes.forget(player.body);
+    }
     if (isAlive) {
         nx::game::touchTriggers(moves.volumes, game.world, hulls, player.body);
         touchHurtVolumes(game, player);

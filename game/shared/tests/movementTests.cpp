@@ -892,26 +892,6 @@ TEST(MovementTest, AMoveMeetsTheBrushEntitiesLinkedWithinThePhysentReach) {
     EXPECT_EQ(near[1].model, ModelIndex{3});
 }
 
-TEST(MovementTest, ABoxIsKeptWhereItsMoveLeftItUntilItIsSolidNoMore) {
-    nx::ecs::World world;
-    const nx::ecs::Entity first = world.spawn();
-    const nx::ecs::Entity second = world.spawn();
-    constexpr nx::Aabb kBox{.min = {.x = -16.0F}, .max = {.x = 16.0F}};
-    std::vector<cs::SolidBox> boxes;
-    cs::keepBoxOf(second, {.x = 1.0F}, kBox, boxes);
-    cs::keepBoxOf(first, {.x = 2.0F}, kBox, boxes);
-    ASSERT_EQ(boxes.size(), 2U);
-    EXPECT_EQ(boxes[0].entity, first) << "by entity";
-    cs::keepBoxOf(second, {.x = 3.0F}, kBox, boxes);
-    ASSERT_EQ(boxes.size(), 2U);
-    EXPECT_EQ(boxes[1].origin, (Vec3{.x = 3.0F}));
-    cs::keepBoxOf(first, {}, std::nullopt, boxes);
-    ASSERT_EQ(boxes.size(), 1U);
-    EXPECT_EQ(boxes[0].entity, second);
-    cs::keepBoxOf(first, {}, std::nullopt, boxes);
-    EXPECT_EQ(boxes.size(), 1U) << "none to forget";
-}
-
 TEST(MovementTest, AMoveMeetsTheBoxesWithinThePhysentReachButItsOwn) {
     nx::ecs::World world;
     const nx::ecs::Entity mover = world.spawn();

@@ -116,6 +116,10 @@ public:
         return m_entities.isAlive(entity);
     }
     [[nodiscard]] inline auto entityCount() const noexcept -> std::size_t { return m_entities.aliveCount(); }
+    /// One past the highest index an entity has had: how long a table by entity index need be.
+    [[nodiscard]] inline auto entitySlotCount() const noexcept -> std::size_t {
+        return m_entities.slotCount();
+    }
 
     // --- Components of one entity -----------------------------------------------------------
 

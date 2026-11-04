@@ -1130,6 +1130,18 @@ TEST(AgentBrain, TheFirstOfAQueueAtRestWhereItsPassageTurnsGoesOn) {
     EXPECT_GT(decision.intent.direction.x, 0.0F) << "on toward the turn";
 }
 
+TEST(AgentBrain, ABodyIsDrivenTheWayItsVelocityMustChangeAndAlongItsWayWhenItHardlyMust) {
+    constexpr nx::Vec3 kSteered{.x = 100.0F};
+    const std::optional<nx::Vec3> across = nx::agents::driveToward(kSteered, {.x = 100.0F, .y = 100.0F});
+    ASSERT_TRUE(across.has_value());
+    EXPECT_NEAR(across->x, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(across->y, -1.0F, 1.0e-5F) << "against its drift";
+    EXPECT_FALSE(nx::agents::driveToward(kSteered, {.x = 95.0F, .y = 5.0F}).has_value())
+        << "within a tenth of it";
+    EXPECT_FALSE(nx::agents::driveToward(kSteered, {.x = 100.0F, .z = 300.0F}).has_value())
+        << "how it falls is not across";
+}
+
 TEST(AgentBrain, SteeringNeverGoesFasterThanItCanStillSlowDownForWhatItApproaches) {
     auto mesh = floorMesh();
     nx::navigation::NavigationQuery query{mesh};
