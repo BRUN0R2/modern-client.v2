@@ -320,7 +320,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] The render modes of studio models (`rendermode`, `renderamt`: solid, blended and added, the blended ones from the farthest)
 - [ ] The render effects of studio models (`renderfx`), the players' colors, the bob of the view's model
 - [ ] Optional compute skinning
-- [x] Model instancing
+- [x] Model instancing, and crowds the GPU animates, culls and draws ([ADR-0032](adr/0032-gpu-crowds.md))
+- [ ] The game's simulation on a thread of its own, so that a crowd of 100,000 keeps its speed
 - [x] The light of studio models (`nx.render:light`: the light under them or the sky's, its way and its share of ambient and shade, as the original finds them)
 - [x] The view model's client events, and the muzzle flashes they show (`cs.client:muzzleFlash`, [05 §9](05-rendering.md#9-studio-models-and-gpu-skinning))
 - [x] Muzzle flashes styled by their events and their weapon's data: the original's numbers, Counter-Strike Online's keys (animated sprites of v3), a weapon's `view.muzzleFlash` over them, its brightness, added as the original adds them (the enhanced look's layer of effects), and its light on the weapon in hand in the enhanced look ([10 §7.2](10-counter-strike-gameplay.md#72-weapon-data-datacstrikeweaponsweapontoml-datacstrikeammotoml))

@@ -1354,8 +1354,8 @@ auto Client::sessionView() -> cs::SceneView {
     const nx::render::Camera kicked = kickedCamera();
     m_session->client.writePlacements(m_placements);
     m_session->client.writeHostages(m_hostages);
-    m_session->client.writeEntities(m_content->entities, m_corpseCvars->stayTime(), m_jobs.get(),
-                                    shownEntities);
+    m_session->client.writeCorpses(m_content->entities, m_corpseCvars->stayTime(), m_jobs.get(),
+                                   shownEntities);
     const nx::Seconds time{m_mapClock.elapsed()};
     return {.camera = kicked,
             .time = time,
@@ -1364,6 +1364,7 @@ auto Client::sessionView() -> cs::SceneView {
             .hostages = m_hostages,
             .players = m_players,
             .entities = shownEntities,
+            .crowd = m_session->client.crowd(),
             .viewModel = m_session->viewPose,
             .tempEntities = m_session->effects.shown(),
             .particles = m_session->particles.shown(),

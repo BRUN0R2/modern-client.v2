@@ -36,6 +36,7 @@ enum class SceneError : std::uint8_t {
 struct SceneShaders {
     std::vector<std::byte> world;
     std::vector<std::byte> studio;
+    std::vector<std::byte> crowd; ///< What the GPU works a crowd of models out with.
     std::vector<std::byte> sprite;
     std::vector<std::byte> particle;
     std::vector<std::byte> blood;   ///< The enhanced look's blood's.
@@ -43,8 +44,8 @@ struct SceneShaders {
     std::vector<std::byte> overlay; ///< What the tools draw over the scene.
 };
 
-/// The shaders of the scene in `folder`: world.spv, studio.spv, sprite.spv, particle.spv, blood.spv,
-/// probe.spv and overlay.spv. Errors: ShadersUnreadable.
+/// The shaders of the scene in `folder`: world.spv, studio.spv, crowd.spv, sprite.spv, particle.spv,
+/// blood.spv, probe.spv and overlay.spv. Errors: ShadersUnreadable.
 [[nodiscard]] auto readSceneShaders(const std::filesystem::path& folder)
     -> nx::Result<SceneShaders, SceneError>;
 
@@ -63,9 +64,10 @@ struct SceneView {
     nx::Seconds time{};                         ///< Since the map started.
     nx::render::LightStyleValues lightStyles{}; ///< The server's styles at time (ClientGame::lightStylesAt).
     std::span<const nx::render::ModelPlacement> placements{};
-    std::span<const ShownHostage> hostages{}; ///< How the game's hostages show (ClientGame::writeHostages).
-    std::span<const ShownPlayer> players{};   ///< How the other players show (ClientGame::updatePlayers).
-    std::span<const ShownEntity> entities{};
+    std::span<const ShownHostage> hostages{};   ///< How the game's hostages show (ClientGame::writeHostages).
+    std::span<const ShownPlayer> players{};     ///< How the other players show (ClientGame::updatePlayers).
+    std::span<const ShownEntity> entities{};    ///< The entity bodies' corpses.
+    ShownCrowd crowd{};                         ///< The entity bodies, those alive for the GPU to show.
     std::optional<ViewModelPose> viewModel{};   ///< None without a weapon in hand.
     std::span<const TempEntity> tempEntities{}; ///< The client's (TempEntities::shown).
     std::span<const Particle> particles{};      ///< The client's (Particles::shown).
@@ -140,6 +142,10 @@ public:
     /// light styles and brush placements (nx::render::ReflectionProbes::bakeNext); nothing once they
     /// are baked, or in the legacy look.
     void bakeReflections(nx::rhi::CommandList& list, const SceneView& view);
+    /// Readies a frame of `view` for draw, after any bakeReflections and before its passes: what the world's
+    /// view may show, and the GPU's work on the crowd. Errors: DrawFailed.
+    [[nodiscard]] auto prepare(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
+        -> nx::Result<void, SceneError>;
 
     /// Stamps decal `decal`, of the level's decals, near `position` on the faces of `on`, the world's or
     /// a brush entity's where the game has it, as nx::render::BspWorld::shootDecal does; returns the

@@ -228,6 +228,14 @@ public:
     /// Whether the view prepared last may show what fits in `box`: it is in the view's frustum, and touches a
     /// leaf the map's compiler found the view's leaf may see (the set a client is sent the entities of).
     [[nodiscard]] auto mayShow(const Aabb& box) const noexcept -> bool;
+    /// The planes of the view last prepared, what mayShow weighs a box by.
+    [[nodiscard]] inline auto frustum() const noexcept -> std::span<const Plane, kFrustumPlanes> {
+        return m_frustum;
+    }
+    /// The leaves the view last prepared may see, what mayShow weighs a box by.
+    [[nodiscard]] inline auto visibleLeaves() const noexcept -> const assets::LeafSet& {
+        return m_visibleSet;
+    }
 
     /// The brush entities the last prepare found that are drawn blended, the index of each its own.
     [[nodiscard]] inline auto blendedDraws() const noexcept -> std::span<const BlendedDraw> {

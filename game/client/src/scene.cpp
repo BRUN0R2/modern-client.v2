@@ -53,9 +53,9 @@ auto readSceneShaders(const std::filesystem::path& folder) -> nx::Result<SceneSh
     SceneShaders shaders;
     for (const auto& [file, code] :
          {std::pair{"world.spv", &shaders.world}, std::pair{"studio.spv", &shaders.studio},
-          std::pair{"sprite.spv", &shaders.sprite}, std::pair{"particle.spv", &shaders.particle},
-          std::pair{"blood.spv", &shaders.blood}, std::pair{"probe.spv", &shaders.probe},
-          std::pair{"overlay.spv", &shaders.overlay}}) {
+          std::pair{"crowd.spv", &shaders.crowd}, std::pair{"sprite.spv", &shaders.sprite},
+          std::pair{"particle.spv", &shaders.particle}, std::pair{"blood.spv", &shaders.blood},
+          std::pair{"probe.spv", &shaders.probe}, std::pair{"overlay.spv", &shaders.overlay}}) {
         auto read = nx::platform::readFile(folder / file);
         if (!read) {
             return nx::fail(SceneError::ShadersUnreadable, std::move(read.error()));
@@ -149,6 +149,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
         return nx::fail(SceneError::CreateFailed, "the sprites", std::move(spriteModels.error()));
     }
     const nx::render::StudioRendererDesc studioDesc{.shaderCode = shaders.studio,
+                                                    .crowdShaderCode = shaders.crowd,
                                                     .colorFormat = format,
                                                     .gamma = gamma,
                                                     .look = look,
@@ -156,6 +157,9 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     auto studio = nx::render::StudioRenderer::create(device, commands, studioDesc);
     if (!studio) {
         return nx::fail(SceneError::CreateFailed, "the map's models", std::move(studio.error()));
+    }
+    if (auto crowdWorld = studio->setCrowdWorld(commands, level.map()); !crowdWorld) {
+        return nx::fail(SceneError::CreateFailed, "the crowd's map", std::move(crowdWorld.error()));
     }
     auto viewModels = nx::render::StudioRenderer::create(device, commands, studioDesc);
     if (!viewModels) {
@@ -214,7 +218,7 @@ auto Scene::create(nx::rhi::Device& device, nx::rhi::CommandList& commands, cons
     return scene;
 }
 
-auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
+auto Scene::prepare(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
     -> nx::Result<void, SceneError> {
     const nx::render::LightStyleValues& styles = view.lightStyles;
     m_world.prepare({.camera = view.camera,
@@ -223,7 +227,34 @@ auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView
                      .lightStyles = styles,
                      .placements = view.placements,
                      .fog = view.fog});
-    // Prepared above: what the world's view may show is what the frame poses and draws.
+    const ShownCrowd& crowd = view.crowd;
+    auto room = m_studio.crowdRoom(crowd.states.size(), static_cast<std::uint64_t>(crowd.lastTick.tick()));
+    if (!room) {
+        return nx::fail(SceneError::DrawFailed, "the crowd's bodies", std::move(room.error()));
+    }
+    if (!room->isWritten) {
+        entityModels.writeBodies(level.entityCatalog(), crowd,
+                                 {.world = m_world,
+                                  .light = m_light,
+                                  .sky = level.skyLight(),
+                                  .styles = styles,
+                                  .jobs = view.jobs},
+                                 *room);
+    }
+    if (auto recorded = m_studio.recordCrowd(list, {.frustum = m_world.frustum(),
+                                                    .visibleLeaves = &m_world.visibleLeaves(),
+                                                    .between = crowd.between,
+                                                    .sinceLastTick = crowd.sinceLastTick.count()});
+        !recorded) {
+        return nx::fail(SceneError::DrawFailed, "the crowd", std::move(recorded.error()));
+    }
+    return {};
+}
+
+auto Scene::draw(nx::rhi::CommandList& list, const Level& level, const SceneView& view)
+    -> nx::Result<void, SceneError> {
+    const nx::render::LightStyleValues& styles = view.lightStyles;
+    // Prepared: what the world's view may show is what the frame poses and draws.
     const ModelFrame modelFrame{
         .world = m_world, .light = m_light, .sky = level.skyLight(), .styles = styles, .jobs = view.jobs};
     level.models().pose(m_models, view.time, view.hostages, modelFrame, posedMapModels);

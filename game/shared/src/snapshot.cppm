@@ -206,6 +206,16 @@ private:
     std::shared_ptr<const std::vector<EntityState>> list;
 };
 
+/// The entities' bodies a frame shows, for the GPU to work out how: as the last tick left them, how far the
+/// moment shown is from a tick to the next, how long past the last, and when that was.
+struct ShownCrowd {
+    std::span<const EntityState> states{};
+    float between = 1.0F;
+    nx::Seconds sinceLastTick{};
+    nx::GameTime lastTick{};
+    nx::TickRate rate{nx::kDefaultTickRate};
+};
+
 /// What the server tells a player's client after a tick: the moment of the game; the player, where it
 /// is and how it moves, what it has and its weapons, and what its HUD was told of the round's time;
 /// what the tick did to it and made it make; where the tick's shots and the blood they shed met what is

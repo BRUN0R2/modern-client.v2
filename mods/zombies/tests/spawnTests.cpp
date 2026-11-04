@@ -299,6 +299,40 @@ TEST_F(HordeSpawnTest, AZombieWhoseTurnItIsNotKeepsWalkingAsItDecided) {
     }
 }
 
+TEST_F(HordeSpawnTest, AZombieFarFromEveryPlayerThinksAtFewerOfItsTurns) {
+    constexpr nx::HammerUnits kSide{2048};
+    constexpr float kPlayerAway = 20000.0F;
+    constexpr std::uint32_t kPopulation = 8;
+    constexpr std::uint32_t kFarthestTurnsPerThink = 8;
+    settings.spawnRadius = kSide;
+    settings.fieldOfView = nx::Degrees{360.0F};
+    settings.sightRange = nx::HammerUnits{2.0F * kPlayerAway};
+    ASSERT_NO_FATAL_FAILURE(start(kSide, kSide));
+    ASSERT_TRUE(horde->spawn(std::array{cs::SpawnPoint{.origin = anchor}}, kPopulation).has_value());
+    const cs::PlayerIndex player =
+        game->join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const auto idle = [this] {
+        std::uint32_t count = 0;
+        for (const cs::EntityState& body : game->entities()) {
+            count +=
+                game->entityComponent<nx::agents::Agent>(body.entity)->behavior == nx::agents::Behavior::Idle
+                    ? 1U
+                    : 0U;
+        }
+        return count;
+    };
+    const auto after = [&](std::uint32_t ticks) {
+        for (std::uint32_t tick = 0; tick < ticks; ++tick) {
+            game->placeEye(player, anchor + nx::Vec3{.y = kPlayerAway, .z = cs::kStandingViewHeight.value()});
+            game->tick({}, horde->commands());
+        }
+    };
+    after(ticksPerThink());
+    EXPECT_EQ(idle(), kPopulation) << "none has thought yet, at one of its turns";
+    after((kFarthestTurnsPerThink - 1) * ticksPerThink());
+    EXPECT_LT(idle(), kPopulation) << "it has by its eighth";
+}
+
 TEST_F(HordeSpawnTest, ANoiseOfOneTickIsHeardByEachZombieAtItsTurn) {
     // Zombies that cannot see it: only hearing tells them of the player, and a noise lasts one tick.
     constexpr nx::HammerUnits kSide{2048};

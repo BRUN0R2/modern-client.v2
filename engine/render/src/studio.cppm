@@ -19,9 +19,10 @@
 /// texture emits goes beyond white, where the bloom spreads it; a texture without a surface draws as in
 /// the original.
 ///
-/// Today: the skins and body parts of models, a draw call for each mesh, the render modes, the view's
-/// own model kept out of walls, and models drawn mirrored. The render effects (renderfx), the players'
-/// colors, the dynamic lights and instancing come with their consumers.
+/// Today: the skins and body parts of models, a draw call for each mesh of those drawn alike, the render
+/// modes, the view's own model kept out of walls, models drawn mirrored, and crowds the GPU animates, culls
+/// and draws (docs/adr/0032-gpu-crowds.md). The render effects (renderfx), the players' colors and the
+/// dynamic lights come with their consumers.
 export module nx.render:studio;
 
 import std;
@@ -114,14 +115,35 @@ struct StudioPlace {
     bool isDrawn = false;
 };
 
+/// What one frame in flight tells the GPU of the crowd: the bodies, written once a tick, and what they are
+/// drawn by, each buffer as long as it has had to be.
+struct StudioCrowdSlot {
+    rhi::OwnedBuffer frame{};
+    rhi::OwnedBuffer bodies{};
+    std::size_t bodyCapacity = 0;
+    rhi::OwnedBuffer models{};
+    std::size_t modelCapacity = 0;
+    rhi::OwnedBuffer templates{};
+    std::size_t templateCapacity = 0;
+    rhi::OwnedBuffer visible{};
+    std::size_t visibleCapacity = 0;
+    rhi::OwnedBindGroup group{};
+    std::uint64_t groupGeneration = 0; ///< Of the tables and the crowd's buffers its group names.
+    std::uint64_t tick = 0;            ///< Whose bodies it holds.
+    bool hasBodies = false;
+    std::vector<std::uint32_t> bodiesOfModel{};
+};
+
 /// What one frame in flight writes the view, its models' bones and their lights to.
 struct StudioFrameSlot {
     rhi::OwnedBuffer frame{};
-    rhi::OwnedBuffer bones{};         ///< Every model's, one after another.
-    std::size_t boneCapacity = 0;     ///< The bones it holds.
-    rhi::OwnedBindGroup group{};      ///< The frame's uniform, the light curve, the bones and the models.
-    rhi::OwnedBuffer instances{};     ///< Every model's light, and where its bones start.
-    std::size_t instanceCapacity = 0; ///< The models it holds.
+    rhi::OwnedBuffer bones{};          ///< Every model's, one after another.
+    std::size_t boneCapacity = 0;      ///< The bones it holds.
+    rhi::OwnedBindGroup group{};       ///< The frame's uniform, the light curve, the bones and the models.
+    rhi::OwnedBuffer instances{};      ///< Every model's light, and where its bones start.
+    std::size_t instanceCapacity = 0;  ///< The models it holds.
+    rhi::OwnedBindGroup crowdGroup{};  ///< As `group`, the bones and the models the crowd's.
+    std::uint64_t crowdGeneration = 0; ///< Of the crowd's buffers crowdGroup names.
 };
 
 } // namespace nx::render
@@ -149,6 +171,8 @@ inline constexpr std::size_t kMostStudioLights = 4;
 struct StudioRendererDesc {
     /// shaders/studio.slang, compiled for the device (bin/shaders/studio.spv).
     std::span<const std::byte> shaderCode{};
+    /// What a crowd's GPU work runs (shaders/crowd.slang); none, it draws no crowd.
+    std::span<const std::byte> crowdShaderCode{};
     rhi::Format colorFormat = rhi::Format::Undefined;
     GammaSettings gamma{};
     StudioLook look = StudioLook::Legacy;
@@ -266,6 +290,14 @@ private:
     Vec3 m_middle{}; ///< Of the bounds its header gives, in its entity's space.
 };
 
+/// A model of the crowd: what it is drawn with, and where what it plays is in the crowd's tables.
+struct StudioCrowdModel {
+    const StudioModel* model = nullptr;
+    std::uint32_t boneCount = 0;
+    std::uint32_t firstSequence = 0;
+    std::uint32_t firstParent = 0;
+};
+
 /// A model drawn in a frame.
 struct StudioInstance {
     /// Borrowed through the draw; the model must outlive the instance. Temporaries are rejected.
@@ -290,6 +322,67 @@ struct StudioInstance {
     /// The reflection probes it reflects in the enhanced look, of those setProbes gave (ReflectionProbes::
     /// blendAt); none: the sky.
     std::optional<ProbeBlend> probes{};
+};
+
+/// A bone in a frame of a sequence, in its parent's space, as shaders/crowd.slang reads it.
+struct CrowdBonePose {
+    Vec4 position{};
+    Vec4 rotation{}; ///< A quaternion: x, y, z, w.
+};
+
+/// A sequence of a model of a crowd, as cs::poseBones would play it: its frames' poses, each frame's bones
+/// one after another, how it plays, and what it may show in about a body.
+struct CrowdSequence {
+    std::span<const CrowdBonePose> poses{};
+    std::uint32_t frameCount = 1;
+    float fps = 0.0F;
+    bool isLooping = false;
+    float reach = 0.0F;  ///< Across, each way.
+    float lowest = 0.0F; ///< Up from the body's origin, less than none below it.
+    float highest = 0.0F;
+};
+
+/// A model for a crowd to be of, and what it plays (StudioRenderer::loadCrowdModel). Its parents go before
+/// their children, as a studio model's do.
+struct CrowdModelDesc {
+    /// Borrowed for as long as the renderer draws it. Temporaries are rejected.
+    std::reference_wrapper<const StudioModel> model;
+    std::span<const std::int32_t> parents{}; ///< Of each bone; less than none, it has none.
+    std::span<const CrowdSequence> sequences{};
+};
+
+/// A body of a crowd as its last move left it, as shaders/crowd.slang reads it.
+struct alignas(16) CrowdBody {
+    Vec3 previousOrigin{}; ///< Where its last move started.
+    float yaw = 0.0F;      ///< About its height, in radians.
+    Vec3 origin{};
+    std::uint32_t model = 0; ///< As loadCrowdModel numbers them.
+    std::uint32_t sequence = 0;
+    float frame = 0.0F;       ///< Where its server left it, in 256ths of the sequence (pev->frame).
+    float advancedAgo = 0.0F; ///< How long before the last tick its server left it there, in seconds.
+    float framerate = 1.0F;
+    Vec3 lightDirection{.z = -1.0F};
+    float ambient = 0.0F;
+    Vec3 lightColor{.x = 1.0F, .y = 1.0F, .z = 1.0F};
+    float shade = 0.0F;
+    float moveShare = 0.0F;        ///< How far from where it started it shows at the last tick, 0 to 1.
+    float moveSharePerTick = 1.0F; ///< How much farther it shows a tick later.
+};
+
+/// Where a frame's bodies of a crowd go: mapped memory, to write in order and not to read; and how many of
+/// them are of each model. Already holding them when `isWritten`.
+struct CrowdRoom {
+    std::span<CrowdBody> bodies{};
+    std::span<std::uint32_t> bodiesOfModel{};
+    bool isWritten = false;
+};
+
+/// What the GPU works a frame's crowd out for: the view it may show in, and the moment.
+struct CrowdFrame {
+    std::span<const Plane, kFrustumPlanes> frustum;
+    const assets::LeafSet* visibleLeaves = nullptr; ///< None: only the frustum hides a body.
+    float between = 1.0F;       ///< How far the moment shown is from a tick to the next, 0 to 1.
+    float sinceLastTick = 0.0F; ///< How long the moment shown is past the last tick, in seconds.
 };
 
 /// What a draw shows.
@@ -332,6 +425,29 @@ public:
     /// must outlive the renderer, of `mipLevels` levels, sampled in ShaderRead. RGB is linear radiance.
     void setProbes(rhi::TextureHandle probes, std::uint32_t mipLevels);
 
+    /// Whether it was made with the crowd's shader.
+    [[nodiscard]] inline auto drawsCrowds() const noexcept -> bool { return !m_crowdSlots.empty(); }
+    /// Makes `model` one a crowd may be of, the next of the numbers CrowdBody::model counts, its tables'
+    /// uploads recorded in `commands`. Errors: GpuFailed.
+    [[nodiscard]] auto loadCrowdModel(rhi::CommandList& commands, const CrowdModelDesc& desc)
+        -> Result<void, StudioError>;
+    /// The tree of `map`, which hides what its visible leaves do not touch, its upload recorded in
+    /// `commands`. Errors: GpuFailed.
+    [[nodiscard]] auto setCrowdWorld(rhi::CommandList& commands, const assets::BspView& map)
+        -> Result<void, StudioError>;
+    /// The room of this frame's crowd, of `bodies` at most, the bodies of tick `tick`. Call once a frame,
+    /// before recordCrowd. Errors: GpuFailed.
+    [[nodiscard]] auto crowdRoom(std::size_t bodies, std::uint64_t tick) -> Result<CrowdRoom, StudioError>;
+    /// Records the GPU's work on this frame's crowd, as many as the room's bodiesOfModel count, outside a
+    /// render pass and before the frame's drawSolid, which draws them. Errors: GpuFailed.
+    [[nodiscard]] auto recordCrowd(rhi::CommandList& commands, const CrowdFrame& frame)
+        -> Result<void, StudioError>;
+    /// How many draws the crowd of the last recordCrowd takes: each mesh of each of its models, one, however
+    /// many bodies they are.
+    [[nodiscard]] inline auto crowdDrawCount() const noexcept -> std::size_t {
+        return m_crowdMeshCalls.size();
+    }
+
     /// Writes `frame`'s models for the frame in flight, for drawInOrder to record with the other
     /// renderers of the frame before the next prepare; the models must last until then. Each instance
     /// gives its model's every bone. Errors: GpuFailed (room for more bones or models).
@@ -362,8 +478,20 @@ private:
     /// Makes room in `slot` for `bones` bones and `instances` models, at least.
     [[nodiscard]] auto reserve(StudioFrameSlot& slot, std::size_t bones, std::size_t instances)
         -> Result<void, rhi::RhiError>;
-    /// What `instance` draws, blended as `blending` says: its meshes put in m_meshCalls.
-    [[nodiscard]] auto callOf(const StudioInstance& instance, StudioBlending blending) -> StudioModelCall;
+    /// What `instance` draws, blended as `blending` says: its meshes put in `meshes`.
+    [[nodiscard]] static auto callOf(const StudioInstance& instance, StudioBlending blending,
+                                     std::vector<StudioMeshCall>& meshes) -> StudioModelCall;
+    /// The crowd's compute pipelines.
+    [[nodiscard]] auto createCrowdPipelines(std::span<const std::byte> shaderCode)
+        -> Result<void, rhi::RhiError>;
+    /// Makes room in the crowd's buffers and slot for this frame, the bindings of its group and of `slot`'s
+    /// made anew as they changed.
+    [[nodiscard]] auto reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, std::size_t bones,
+                                    std::size_t draws) -> Result<void, rhi::RhiError>;
+    /// `slot`'s group for drawing the crowd, made anew if the crowd's buffers changed.
+    [[nodiscard]] auto reserveCrowdGroup(StudioFrameSlot& slot) -> Result<void, rhi::RhiError>;
+    /// The crowd's draws of the last recordCrowd, inside a render pass.
+    void drawCrowd(rhi::CommandList& commands) const;
     /// Of m_modelCalls, the one `instance`, solid, is drawn in, made if none draws one alike.
     [[nodiscard]] auto solidCallOf(const StudioInstance& instance) -> std::uint32_t;
     /// Finds where each of `instances` goes (m_places), and the calls they take.
@@ -404,6 +532,38 @@ private:
     std::vector<StudioPlace> m_places;       ///< Of the frame's instances, by their index.
     /// The solid ones of m_modelCalls, by their index, and the first instance each draws.
     std::vector<std::pair<std::uint32_t, const StudioInstance*>> m_solidCalls;
+
+    // The crowd the GPU animates (docs/adr/0032-gpu-crowds.md): what runs, what it plays, once on the GPU,
+    // and what a frame's work writes there, which only the GPU reads.
+    rhi::OwnedShader m_crowdShader;
+    rhi::OwnedBindGroupLayout m_crowdLayout;
+    rhi::OwnedComputePipeline m_crowdReset;
+    rhi::OwnedComputePipeline m_crowdPose;
+    rhi::OwnedComputePipeline m_crowdDraws;
+    std::vector<StudioCrowdModel> m_crowdModels;
+    std::vector<CrowdBonePose> m_crowdPoseTable;
+    std::vector<std::byte> m_crowdSequenceTable;
+    std::vector<std::int32_t> m_crowdParentTable;
+    rhi::OwnedBuffer m_crowdPoses;
+    rhi::OwnedBuffer m_crowdSequences;
+    rhi::OwnedBuffer m_crowdParents;
+    rhi::OwnedBuffer m_crowdNodes;
+    std::uint32_t m_crowdRootNode = 0;
+    bool m_hasCrowdTree = false;
+    rhi::OwnedBuffer m_crowdBones;
+    std::size_t m_crowdBoneCapacity = 0;
+    rhi::OwnedBuffer m_crowdInstances;
+    std::size_t m_crowdInstanceCapacity = 0;
+    rhi::OwnedBuffer m_crowdCounts;
+    std::size_t m_crowdCountCapacity = 0;
+    rhi::OwnedBuffer m_crowdDrawArguments;
+    std::size_t m_crowdDrawCapacity = 0;
+    bool areCrowdBuffersNew = true;
+    std::uint64_t m_crowdGeneration = 1; ///< Moves on as the tables or the crowd's buffers change.
+    std::vector<StudioCrowdSlot> m_crowdSlots;
+    std::uint64_t m_crowdFrames = 0;
+    std::vector<StudioModelCall> m_crowdCalls;
+    std::vector<StudioMeshCall> m_crowdMeshCalls;
 };
 
 } // namespace nx::render

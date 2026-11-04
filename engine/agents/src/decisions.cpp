@@ -20,7 +20,7 @@ namespace {
 constexpr std::size_t kMostGridCellsAcross = 256;
 
 /// The fewest bodies it is worth handing to a worker to find their squares: little work each.
-constexpr std::size_t kSmallestGridBatch = 1024;
+constexpr std::size_t kSmallestGridBatch = 8192;
 
 /// The bodies of a tick by the square of the ground each stands in, each as wide as how far bodies are looked
 /// for: those near a point are in its square and those around it, however many the others are.
@@ -127,12 +127,17 @@ void bodiesNear(const DecisionRequest& request, const BodyGrid& bodies, float ra
             sorted.emplace_back(across, &body);
         }
     });
-    std::ranges::sort(sorted, [](const auto& first, const auto& second) {
+    // The nearest few of however many a crowd puts about it, in order: sorting them all took as long as
+    // steering.
+    const auto isNearer = [](const auto& first, const auto& second) {
         return first.first != second.first ? first.first < second.first
                                            : first.second->entity < second.second->entity;
-    });
+    };
+    const auto kept = std::ranges::next(sorted.begin(), navigation::kMostSteeringBodies, sorted.end());
+    std::ranges::nth_element(sorted, kept, isNearer);
+    std::sort(sorted.begin(), kept, isNearer);
     nearby.clear();
-    for (const auto& [across, body] : sorted | std::views::take(navigation::kMostSteeringBodies)) {
+    for (const auto& [across, body] : std::ranges::subrange(sorted.begin(), kept)) {
         nearby.push_back({.feet = body->feet, .velocity = body->velocity, .radius = body->radius});
     }
 }

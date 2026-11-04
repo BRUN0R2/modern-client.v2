@@ -27,8 +27,45 @@ constexpr int kGenerationBits = 32;
 /// The stream of random numbers how far off a zombie places what it hears draws from, of its body and the
 /// tick.
 constexpr std::string_view kHearingStream = "zombie hearing";
-/// The fewest bodies it is worth handing to a worker to write what they ask: little work each.
-constexpr std::size_t kSmallestAskedBatch = 512;
+/// The fewest bodies it is worth handing to a worker, each batch some tens of microseconds of work: to write
+/// what they ask, to copy them, to find whose turn it is, to hold what they decided, and to perceive.
+constexpr std::size_t kSmallestAskedBatch = 4096;
+constexpr std::size_t kSmallestCopiedBatch = 8192;
+constexpr std::size_t kSmallestAgentChunks = 128;
+constexpr std::size_t kSmallestTurnBatch = 512;
+constexpr std::size_t kSmallestHeldBatch = 128;
+constexpr std::size_t kSmallestPerceivedBatch = 64;
+/// How far from the nearest player a zombie thinks at each of its turns, past that at each second, fourth and
+/// eighth: what it does there it can do later, and the first reach is past the longest it hears
+/// (hearing.shot).
+struct ThinkBand {
+    float reach = 0.0F;
+    std::uint32_t turnsPerThink = 1;
+};
+constexpr std::array kThinkBands{ThinkBand{.reach = 2048.0F, .turnsPerThink = 1},
+                                 ThinkBand{.reach = 4096.0F, .turnsPerThink = 2},
+                                 ThinkBand{.reach = 8192.0F, .turnsPerThink = 4}};
+constexpr std::uint32_t kFarthestTurnsPerThink = 8;
+
+/// How many of its turns go by between the thoughts of a zombie at `origin`, the players at `targets`; none,
+/// each.
+[[nodiscard]] auto turnsPerThinkAt(nx::Vec3 origin, std::span<const cs::PerceptionTarget> targets) noexcept
+    -> std::uint32_t {
+    if (targets.empty()) {
+        return 1;
+    }
+    float nearest = std::numeric_limits<float>::max();
+    for (const cs::PerceptionTarget& target : targets) {
+        nearest = std::min(nearest, nx::lengthSquared(target.origin - origin));
+    }
+    for (const ThinkBand& band : kThinkBands) {
+        if (nearest <= band.reach * band.reach) {
+            return band.turnsPerThink;
+        }
+    }
+    return kFarthestTurnsPerThink;
+}
+
 /// What a batch wrote at the start of its own part of a list.
 struct WrittenPart {
     std::size_t first = 0;
@@ -308,6 +345,10 @@ void Horde::adopt(std::span<const nx::ecs::Entity> bodies) {
              .command = {.duration = nx::tickLengthOf(time.rate), .viewAngles = state->angles}});
     }
     std::ranges::sort(members, {}, &Member::entity);
+    for (const Member& member : members) {
+        agentOfSlot.resize(
+            std::max(agentOfSlot.size(), std::size_t{std::to_underlying(member.entity.index())} + 1));
+    }
     // At a tick of its own by its slot, so that as many think each tick.
     const std::uint64_t ticksPerThink = ticksPerThinkOf(settings.thinkInterval, time.rate);
     membersOfTurn.assign(ticksPerThink, {});
@@ -335,7 +376,7 @@ auto Horde::commands() -> std::span<const cs::EntityCommand> {
     }
     noisesHeard.insert(noisesHeard.end(), noisesNow.begin(), noisesNow.end());
     noisesOfTick.push_back(nx::narrow<std::uint32_t>(noisesNow.size()));
-    findTurns(bodies, static_cast<std::uint64_t>(time.now.tick()),
+    findTurns(bodies, targets, static_cast<std::uint64_t>(time.now.tick()),
               nx::tickLengthOf(time.rate) * static_cast<float>(ticksPerThink));
     if (!turns.empty()) {
         // Nothing moves while the horde perceives: what is solid to its sights is gathered once.
@@ -351,7 +392,8 @@ auto Horde::commands() -> std::span<const cs::EntityCommand> {
     return asked;
 }
 
-void Horde::findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Seconds elapsed) {
+void Horde::findTurns(const cs::EntityStates& bodies, std::span<const cs::PerceptionTarget> targets,
+                      std::uint64_t tick, nx::Seconds elapsed) {
     cs::Game& game = *owner;
     const std::span<const std::uint32_t> due = membersOfTurn[tick % membersOfTurn.size()];
     // A body's agent by its slot: found once for all of them, as they stay where they are while the horde
@@ -365,13 +407,8 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Se
         [&parts](std::span<const nx::ecs::Entity> entities, std::span<nx::agents::Agent> agents) {
             parts.push_back({.entities = entities, .agents = agents});
         });
-    std::size_t slots = agentOfSlot.size();
-    for (const Member& member : members) {
-        slots = std::max(slots, std::size_t{std::to_underlying(member.entity.index())} + 1);
-    }
-    agentOfSlot.resize(slots);
-    jobs->forBatches({.label = "zombies.agents", .priority = nx::jobs::Priority::Critical}, parts.size(), 4,
-                     [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+    jobs->forBatches({.label = "zombies.agents", .priority = nx::jobs::Priority::Critical}, parts.size(),
+                     kSmallestAgentChunks, [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
                          for (const Part& part : std::span{parts}.subspan(first, last - first)) {
                              for (std::size_t row = 0; row < part.entities.size(); ++row) {
                                  const auto slot =
@@ -385,7 +422,7 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Se
     // Each batch writes those alive at the start of its own part, and the parts close up after.
     turns.resize(due.size());
     requests.resize(due.size());
-    std::vector<WrittenPart> written(jobs->batchCountOf(due.size(), nx::agents::kSmallestBatch));
+    std::vector<WrittenPart> written(jobs->batchCountOf(due.size(), kSmallestTurnBatch));
     const auto findBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
         std::size_t count = 0;
         for (const std::uint32_t index : due.subspan(first, last - first)) {
@@ -394,6 +431,11 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Se
             if (body == bodies.end() || body->entity != member.entity || body->health <= nx::HitPoints{}) {
                 continue;
             }
+            const std::uint32_t turnsPerThink = turnsPerThinkAt(body->origin, targets);
+            if (++member.turnsWaited < turnsPerThink) {
+                continue;
+            }
+            member.turnsWaited = 0;
             nx::agents::Agent* const agent = agentOfSlot[std::to_underlying(member.entity.index())];
             nx::invariant(agent != nullptr, "Horde: an attached brain");
             turns[first + count] = {.member = &member,
@@ -406,13 +448,13 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Se
                                        .maxSpeed = settings.body.speed,
                                        .body = member.entity,
                                        .stuck = &agent->stuck,
-                                       .elapsed = elapsed};
+                                       .elapsed = elapsed * static_cast<float>(turnsPerThink)};
             ++count;
         }
         written[batch] = {.first = first, .count = count};
     };
     jobs->forBatches({.label = "zombies.turns", .priority = nx::jobs::Priority::Critical}, due.size(),
-                     nx::agents::kSmallestBatch, findBatch);
+                     kSmallestTurnBatch, findBatch);
     turns.resize(closedUp(std::span{turns}, written));
     requests.resize(closedUp(std::span{requests}, written));
 }
@@ -429,7 +471,7 @@ void Horde::perceive(std::span<const cs::PerceptionTarget> targets,
     std::ranges::sort(present);
     // What a body perceives does not depend on what another perceives or decides: in batches in jobs, each
     // with a query of its own.
-    while (queries.size() < jobs->batchCountOf(turns.size(), nx::agents::kSmallestBatch)) {
+    while (queries.size() < jobs->batchCountOf(turns.size(), kSmallestPerceivedBatch)) {
         queries.emplace_back(query.mesh());
     }
     const auto perceiveBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
@@ -478,7 +520,7 @@ void Horde::perceive(std::span<const cs::PerceptionTarget> targets,
         }
     };
     jobs->forBatches({.label = "zombies.perceive", .priority = nx::jobs::Priority::Critical}, turns.size(),
-                     nx::agents::kSmallestBatch, perceiveBatch);
+                     kSmallestPerceivedBatch, perceiveBatch);
 }
 
 void Horde::holdDecisions() {
@@ -489,8 +531,7 @@ void Horde::holdDecisions() {
         nx::agents::Behavior to{};
         std::optional<nx::navigation::NavigationError> failure{};
     };
-    std::vector<std::vector<Transition>> transitions(
-        jobs->batchCountOf(turns.size(), nx::agents::kSmallestBatch));
+    std::vector<std::vector<Transition>> transitions(jobs->batchCountOf(turns.size(), kSmallestHeldBatch));
     const auto holdBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
         for (std::size_t index = first; index < last; ++index) {
             const Turn& turn = turns[index];
@@ -539,7 +580,7 @@ void Horde::holdDecisions() {
         }
     };
     jobs->forBatches({.label = "zombies.hold", .priority = nx::jobs::Priority::Critical}, turns.size(),
-                     nx::agents::kSmallestBatch, holdBatch);
+                     kSmallestHeldBatch, holdBatch);
     for (const Transition& transition : transitions | std::views::join) {
         if (transitionLogs.allow()) {
             const std::string failure =
@@ -563,7 +604,7 @@ void Horde::writeSteeredAround(const cs::EntityStates& bodies) {
     });
     // Each batch writes those alive at the start of its own part, and the parts close up after.
     const std::span<nx::agents::Body> parts = std::span{steeredAround}.subspan(players.size());
-    std::vector<WrittenPart> written(jobs->batchCountOf(bodies.size(), kSmallestAskedBatch));
+    std::vector<WrittenPart> written(jobs->batchCountOf(bodies.size(), kSmallestCopiedBatch));
     const auto writeBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
         std::size_t count = 0;
         for (const cs::EntityState& body : bodies.all().subspan(first, last - first)) {
@@ -577,7 +618,7 @@ void Horde::writeSteeredAround(const cs::EntityStates& bodies) {
         written[batch] = {.first = first, .count = count};
     };
     jobs->forBatches({.label = "zombies.steeredAround", .priority = nx::jobs::Priority::Critical},
-                     bodies.size(), kSmallestAskedBatch, writeBatch);
+                     bodies.size(), kSmallestCopiedBatch, writeBatch);
     steeredAround.resize(players.size() + closedUp(parts, written));
 }
 

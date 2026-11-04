@@ -5,7 +5,8 @@
 # goes over this file, naming only what it changes. The model comes from the user's own files;
 # no CSO content is distributed. Sequence names must exist in the selected model.
 # How often a zombie looks, listens, finds its way and steers again, each at a tick of its own, a tenth of a
-# second, as a bot's full think (g_flBotFullThinkInterval); what it decided holds until then.
+# second, as a bot's full think (g_flBotFullThinkInterval); what it decided holds until then. Away from every
+# player, past what it can hear, it does so at fewer of these turns (docs/adr/0032-gpu-crowds.md).
 thinkInterval = 0.1
 sightRange = 2048.0
 fieldOfView = 180.0

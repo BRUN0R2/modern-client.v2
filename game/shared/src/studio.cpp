@@ -403,6 +403,29 @@ void poseBones(const Skeleton& skeleton, const nx::assets::StudioSequence& seque
     placedBonesOf(skeleton, pose, query.placement, bones);
 }
 
+auto framePosesOf(const Skeleton& skeleton, const nx::assets::StudioSequence& sequence,
+                  const nx::assets::AnimationFrames& animation) -> std::vector<BoneFramePose> {
+    nx::expects(animation.boneCount == skeleton.bones.size() && animation.frameCount == sequence.frameCount,
+                "framePosesOf: the animation of the sequence, for the skeleton's bones");
+    adjustmentsOf(skeleton.controllers, ControllerSettings{}, scratchAdjustments);
+    std::vector<BoneFramePose> poses;
+    poses.reserve(std::size_t{sequence.frameCount} * skeleton.bones.size());
+    LocalPose& pose = scratchPoses[0];
+    for (std::uint32_t frame = 0; frame < sequence.frameCount; ++frame) {
+        localPoseOf(skeleton, animation, 0, frame, 0.0F, scratchAdjustments, pose);
+        if (sequence.motionBone.value < pose.positions.size()) {
+            Vec3& motion = pose.positions[sequence.motionBone.value];
+            motion.x = (sequence.motionType & kMotionX) != 0 ? 0.0F : motion.x;
+            motion.y = (sequence.motionType & kMotionY) != 0 ? 0.0F : motion.y;
+            motion.z = (sequence.motionType & kMotionZ) != 0 ? 0.0F : motion.z;
+        }
+        for (std::size_t bone = 0; bone < skeleton.bones.size(); ++bone) {
+            poses.push_back({.position = pose.positions[bone], .rotation = pose.rotations[bone]});
+        }
+    }
+    return poses;
+}
+
 auto posePlayerBones(const nx::assets::MdlView& model,
                      std::span<const nx::assets::AnimationFrames> animations,
                      nx::assets::SequenceIndex sequence, const PlayerPoseQuery& query)
