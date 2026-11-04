@@ -13,6 +13,7 @@ project(Rook
     LANGUAGES CXX)
 
 option(ROOK_BUILD_TESTS "Build the conformance suite and, where GoogleTest is found, the unit tests" ON)
+option(ROOK_BUILD_PROGRAMS "Build rookc and rook" ON)
 option(ROOK_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(ROOK_FUZZ "Link the fuzz targets with libFuzzer; off, they replay their corpus" OFF)
 set(ROOK_FUZZ_SECONDS 60 CACHE STRING "How long each fuzz target runs with ROOK_FUZZ")
@@ -43,6 +44,7 @@ if(ROOK_BUILD_TESTS)
 endif()
 
 add_subdirectory(compiler)
+add_subdirectory(cli)
 if(ROOK_BUILD_TESTS)
     add_subdirectory(spec)
 endif()

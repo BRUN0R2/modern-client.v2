@@ -656,7 +656,8 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] API compatibility check in CI
 
 ### Tools
-- [ ] `rook new`, `build`, `check`, `test`, `format`, `lint`, `document`, `pack`
+- [x] `rookc` and `rook check`, parsing sources and printing their diagnostics
+- [ ] `rook new`, `build`, `test`, `format`, `lint`, `document`, `pack`, and a `check` that type-checks
 - [ ] `rookLsp` (`vars` key autocompletion, diagnostics, rename, go to definition)
 - [ ] DAP debugger
 - [ ] VS Code extension

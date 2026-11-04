@@ -842,7 +842,8 @@ flowchart LR
   and `const fn` runs under a budget.
 - **Reproducible:** the same inputs and compiler version give the same bytes.
 - Diagnostics with a code, a snippet, an explanation and a fix suggestion, in English and
-  Portuguese (`--lang pt-BR`), with `rookc --explain R0201`:
+  Portuguese (`--lang pt-BR`), with `rookc --explain R0201`. Today, of those: the code, the snippet and
+  the fix, in English, of the syntax codes `R0001` to `R0099`, the only ones `rookc` reaches yet.
 
 ```text
 error[R0201]: expected `Speed`, found `Health`
