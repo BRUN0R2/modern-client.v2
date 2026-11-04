@@ -231,8 +231,100 @@ struct alignas(16) InstanceUniform {
     float secondProbeShare = 0.0F;
 };
 
+/// The bindings of the crowd's bind group, as shaders/crowd.slang declares them.
+constexpr std::uint32_t kCrowdFrameBinding = 0;
+constexpr std::uint32_t kCrowdBodiesBinding = 1;
+constexpr std::uint32_t kCrowdModelsBinding = 2;
+constexpr std::uint32_t kCrowdSequencesBinding = 3;
+constexpr std::uint32_t kCrowdPosesBinding = 4;
+constexpr std::uint32_t kCrowdParentsBinding = 5;
+constexpr std::uint32_t kCrowdNodesBinding = 6;
+constexpr std::uint32_t kCrowdVisibleBinding = 7;
+constexpr std::uint32_t kCrowdTemplatesBinding = 8;
+constexpr std::uint32_t kCrowdBonesBinding = 9;
+constexpr std::uint32_t kCrowdInstancesBinding = 10;
+constexpr std::uint32_t kCrowdCountsBinding = 11;
+constexpr std::uint32_t kCrowdDrawsBinding = 12;
+/// The work groups of its entry points, as it declares them.
+constexpr std::uint32_t kCrowdBodiesPerGroup = 64;
+constexpr std::uint32_t kCrowdItemsPerGroup = 16;
+/// The rows a bone takes in the bones' buffer.
+constexpr std::size_t kBoneRows = 3;
+/// The most models of a crowd the first buffers hold, before they grow.
+constexpr std::size_t kFirstCrowdModels = 4;
+constexpr std::size_t kFirstCrowdTemplates = 16;
+constexpr std::size_t kFirstVisibleBytes = 256;
+
+/// What a frame's crowd is worked out in, as shaders/crowd.slang's Frame.
+struct CrowdFrameUniform {
+    std::array<Vec4, kFrustumPlanes> planes{};
+    float between = 1.0F;
+    float sinceLastTick = 0.0F;
+    std::uint32_t bodyCount = 0;
+    std::uint32_t modelCount = 0;
+    std::uint32_t drawCount = 0;
+    std::uint32_t leafCount = 0;
+    std::uint32_t rootNode = 0;
+    std::uint32_t hasTree = 0;
+};
+
+/// shaders/crowd.slang's Model, Sequence, Node and DrawTemplate.
+struct CrowdModelEntry {
+    std::uint32_t firstInstance = 0;
+    std::uint32_t firstBone = 0;
+    std::uint32_t boneCount = 0;
+    std::uint32_t firstSequence = 0;
+    std::uint32_t firstParent = 0;
+};
+struct CrowdSequenceEntry {
+    std::uint32_t firstPose = 0;
+    std::uint32_t frameCount = 0;
+    float fps = 0.0F;
+    std::uint32_t isLooping = 0;
+    float reach = 0.0F;
+    float lowest = 0.0F;
+    float highest = 0.0F;
+};
+struct alignas(16) CrowdNodeEntry {
+    Vec4 plane{};
+    std::int32_t front = 0;
+    std::int32_t back = 0;
+};
+struct CrowdDrawTemplate {
+    std::uint32_t indexCount = 0;
+    std::uint32_t firstIndex = 0;
+    std::uint32_t model = 0;
+};
+
+/// A child of a node of a map's tree as shaders/crowd.slang reads it.
+[[nodiscard]] auto crowdChildOf(const assets::NodeChild& child) noexcept -> std::int32_t {
+    if (const assets::LeafIndex* const leaf = std::get_if<assets::LeafIndex>(&child)) {
+        return -1 - narrow<std::int32_t>(leaf->value);
+    }
+    return narrow<std::int32_t>(std::get<assets::NodeIndex>(child).value);
+}
+
+/// Makes `buffer`, an Upload buffer of `usage`, room for `count` of `size` bytes, growing by half again at
+/// least; whether it made a new one, its bind groups then to be made anew.
+[[nodiscard]] auto growUploadBuffer(rhi::Device& device, std::string_view label, rhi::BufferUsage usage,
+                                    rhi::OwnedBuffer& buffer, std::size_t& capacity, std::size_t count,
+                                    std::size_t size) -> Result<bool, rhi::RhiError> {
+    if (count <= capacity && !buffer.get().isNull()) {
+        return false;
+    }
+    const std::size_t room = std::max(count, capacity + (capacity / 2));
+    auto made = device.createBuffer(
+        {.label = label, .size = room * size, .usage = {usage}, .location = rhi::MemoryLocation::Upload});
+    if (!made) {
+        return std::unexpected{std::move(made.error())};
+    }
+    buffer = std::move(*made);
+    capacity = room;
+    return true;
+}
+
 /// The fewest models it is worth handing to a worker to write for the GPU: some dozens of bones each.
-constexpr std::size_t kSmallestWrittenBatch = 32;
+constexpr std::size_t kSmallestWrittenBatch = 128;
 
 /// The triangles of every mesh of a model, and the meshes of each choice of each body part.
 struct Geometry {
@@ -511,6 +603,20 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
     if (auto made = renderer.createPipelines(desc.shaderCode, desc.colorFormat, desc.look); !made) {
         return fail(StudioError::GpuFailed, std::move(made.error()));
     }
+    if (!desc.crowdShaderCode.empty()) {
+        if (auto made = renderer.createCrowdPipelines(desc.crowdShaderCode); !made) {
+            return fail(StudioError::GpuFailed, std::move(made.error()));
+        }
+        // A tree of no node until a map gives it one, for the group to name.
+        const std::array noNode{CrowdNodeEntry{}};
+        auto nodes = uploader.buffer("studio.crowdNodes", rhi::BufferUsage::Storage,
+                                     rhi::BufferState::ShaderRead, std::as_bytes(std::span{noNode}));
+        if (!nodes) {
+            return fail(StudioError::GpuFailed, std::move(nodes.error()));
+        }
+        renderer.m_crowdNodes = std::move(*nodes);
+        renderer.m_crowdSlots.resize(rhi::kMaxFramesInFlight);
+    }
     // A material without an image is white; a renderer without a sky or probes reflects none.
     constexpr std::array kWhite{assets::kFullChannel, assets::kFullChannel, assets::kFullChannel,
                                 assets::kFullChannel};
@@ -557,6 +663,43 @@ auto StudioRenderer::create(rhi::Device& device, rhi::CommandList& commands, con
         }
     }
     return renderer;
+}
+
+auto StudioRenderer::createCrowdPipelines(std::span<const std::byte> shaderCode)
+    -> Result<void, rhi::RhiError> {
+    rhi::Device& device = *m_device;
+    constexpr Flags<rhi::ShaderStage> kCompute{rhi::ShaderStage::Compute};
+    std::array<rhi::BindingLayout, kCrowdDrawsBinding + 1> bindings{};
+    for (std::uint32_t binding = 0; binding < bindings.size(); ++binding) {
+        bindings.at(binding) = {.binding = binding,
+                                .type = binding == kCrowdFrameBinding ? rhi::BindingType::UniformBuffer
+                                                                      : rhi::BindingType::StorageBuffer,
+                                .stages = kCompute};
+    }
+    auto shader = device.createShader({.label = "crowd", .code = shaderCode});
+    if (!shader) {
+        return std::unexpected{std::move(shader.error())};
+    }
+    auto layout = device.createBindGroupLayout({.label = "crowd", .bindings = bindings});
+    if (!layout) {
+        return std::unexpected{std::move(layout.error())};
+    }
+    m_crowdShader = std::move(*shader);
+    m_crowdLayout = std::move(*layout);
+    const std::array layouts{m_crowdLayout.get()};
+    for (const auto& [entry, pipeline] :
+         {std::pair{"resetMain", &m_crowdReset}, std::pair{"poseMain", &m_crowdPose},
+          std::pair{"drawsMain", &m_crowdDraws}}) {
+        auto made =
+            device.createComputePipeline({.label = entry,
+                                          .compute = {.shader = m_crowdShader.get(), .entryPoint = entry},
+                                          .bindGroupLayouts = layouts});
+        if (!made) {
+            return std::unexpected{std::move(made.error())};
+        }
+        *pipeline = std::move(*made);
+    }
+    return {};
 }
 
 auto StudioRenderer::createPipelines(std::span<const std::byte> shaderCode, rhi::Format colorFormat,
@@ -895,6 +1038,378 @@ void StudioRenderer::setProbes(rhi::TextureHandle probes, std::uint32_t mipLevel
     }
 }
 
+auto StudioRenderer::loadCrowdModel(rhi::CommandList& commands, const CrowdModelDesc& desc)
+    -> Result<void, StudioError> {
+    expects(!m_crowdSlots.empty(), "StudioRenderer::loadCrowdModel: a renderer with the crowd's shader");
+    const StudioModel& model = desc.model.get();
+    expects(desc.parents.size() == model.boneCount(), "StudioRenderer::loadCrowdModel: each bone's parent");
+    m_crowdModels.push_back(
+        {.model = &model,
+         .boneCount = narrow<std::uint32_t>(model.boneCount()),
+         .firstSequence = narrow<std::uint32_t>(m_crowdSequenceTable.size() / sizeof(CrowdSequenceEntry)),
+         .firstParent = narrow<std::uint32_t>(m_crowdParentTable.size())});
+    std::ranges::copy(desc.parents, std::back_inserter(m_crowdParentTable));
+    for (const CrowdSequence& sequence : desc.sequences) {
+        expects(sequence.poses.size() == sequence.frameCount * model.boneCount(),
+                "StudioRenderer::loadCrowdModel: each bone of each frame");
+        const CrowdSequenceEntry entry{.firstPose = narrow<std::uint32_t>(m_crowdPoseTable.size()),
+                                       .frameCount = sequence.frameCount,
+                                       .fps = sequence.fps,
+                                       .isLooping = sequence.isLooping ? 1U : 0U,
+                                       .reach = sequence.reach,
+                                       .lowest = sequence.lowest,
+                                       .highest = sequence.highest};
+        std::ranges::copy(std::as_bytes(std::span{&entry, 1}), std::back_inserter(m_crowdSequenceTable));
+        std::ranges::copy(sequence.poses, std::back_inserter(m_crowdPoseTable));
+    }
+    Uploader uploader{*m_device, commands};
+    auto poses = uploader.buffer("studio.crowdPoses", rhi::BufferUsage::Storage, rhi::BufferState::ShaderRead,
+                                 std::as_bytes(std::span{m_crowdPoseTable}));
+    auto sequences = uploader.buffer("studio.crowdSequences", rhi::BufferUsage::Storage,
+                                     rhi::BufferState::ShaderRead, m_crowdSequenceTable);
+    auto parents =
+        uploader.buffer("studio.crowdParents", rhi::BufferUsage::Storage, rhi::BufferState::ShaderRead,
+                        std::as_bytes(std::span{m_crowdParentTable}));
+    if (!poses || !sequences || !parents) {
+        return fail(StudioError::GpuFailed, std::move(!poses       ? poses.error()
+                                                      : !sequences ? sequences.error()
+                                                                   : parents.error()));
+    }
+    m_crowdPoses = std::move(*poses);
+    m_crowdSequences = std::move(*sequences);
+    m_crowdParents = std::move(*parents);
+    ++m_crowdGeneration;
+    return {};
+}
+
+auto StudioRenderer::setCrowdWorld(rhi::CommandList& commands, const assets::BspView& map)
+    -> Result<void, StudioError> {
+    expects(!m_crowdSlots.empty(), "StudioRenderer::setCrowdWorld: a renderer with the crowd's shader");
+    if (map.models().empty() || map.nodes().empty()) {
+        return {};
+    }
+    std::vector<CrowdNodeEntry> nodes;
+    nodes.reserve(map.nodes().size());
+    for (const assets::BspNode& node : map.nodes()) {
+        const Plane& plane = map.planes()[node.plane.value].plane;
+        nodes.push_back({.plane = extend(plane.normal, plane.distance),
+                         .front = crowdChildOf(node.children[0]),
+                         .back = crowdChildOf(node.children[1])});
+    }
+    Uploader uploader{*m_device, commands};
+    auto buffer = uploader.buffer("studio.crowdNodes", rhi::BufferUsage::Storage,
+                                  rhi::BufferState::ShaderRead, std::as_bytes(std::span{nodes}));
+    if (!buffer) {
+        return fail(StudioError::GpuFailed, std::move(buffer.error()));
+    }
+    m_crowdNodes = std::move(*buffer);
+    m_crowdRootNode = map.models().front().headNode.value;
+    m_hasCrowdTree = true;
+    ++m_crowdGeneration;
+    return {};
+}
+
+auto StudioRenderer::crowdRoom(std::size_t bodies, std::uint64_t tick) -> Result<CrowdRoom, StudioError> {
+    expects(!m_crowdSlots.empty(), "StudioRenderer::crowdRoom: a renderer with the crowd's shader");
+    // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
+    StudioCrowdSlot& slot = m_crowdSlots[m_crowdFrames++ % m_crowdSlots.size()];
+    auto grown = growUploadBuffer(*m_device, "studio.crowdBodies", rhi::BufferUsage::Storage, slot.bodies,
+                                  slot.bodyCapacity, std::max<std::size_t>(bodies, 1), sizeof(CrowdBody));
+    if (!grown) {
+        return fail(StudioError::GpuFailed, std::move(grown.error()));
+    }
+    slot.bodiesOfModel.resize(m_crowdModels.size());
+    const bool isWritten = slot.hasBodies && slot.tick == tick && !*grown;
+    if (!isWritten) {
+        std::ranges::fill(slot.bodiesOfModel, 0);
+    }
+    slot.tick = tick;
+    slot.hasBodies = true;
+    const std::span<std::byte> mapped = m_device->mappedBytes(slot.bodies.get());
+    return CrowdRoom{.bodies = std::span{reinterpret_cast<CrowdBody*>(mapped.data()), bodies},
+                     .bodiesOfModel = slot.bodiesOfModel,
+                     .isWritten = isWritten};
+}
+
+auto StudioRenderer::reserveCrowd(StudioCrowdSlot& slot, std::size_t instances, std::size_t bones,
+                                  std::size_t draws) -> Result<void, rhi::RhiError> {
+    rhi::Device& device = *m_device;
+    // What only the GPU reads and writes, in its own memory.
+    const auto growShared = [&device, this](std::string_view label, Flags<rhi::BufferUsage> usage,
+                                            rhi::OwnedBuffer& buffer, std::size_t& capacity,
+                                            std::size_t count,
+                                            std::size_t size) -> Result<void, rhi::RhiError> {
+        if (count <= capacity && !buffer.get().isNull()) {
+            return {};
+        }
+        const std::size_t room = std::max({count, capacity + (capacity / 2), std::size_t{1}});
+        auto made = device.createBuffer({.label = label, .size = room * size, .usage = usage});
+        if (!made) {
+            return std::unexpected{std::move(made.error())};
+        }
+        buffer = std::move(*made);
+        capacity = room;
+        areCrowdBuffersNew = true;
+        ++m_crowdGeneration;
+        return {};
+    };
+    const Flags<rhi::BufferUsage> kStorage{rhi::BufferUsage::Storage};
+    if (auto grown = growShared("studio.crowdBones", kStorage, m_crowdBones, m_crowdBoneCapacity,
+                                bones * kBoneRows, sizeof(Vec4));
+        !grown) {
+        return grown;
+    }
+    if (auto grown = growShared("studio.crowdInstances", kStorage, m_crowdInstances, m_crowdInstanceCapacity,
+                                instances, sizeof(InstanceUniform));
+        !grown) {
+        return grown;
+    }
+    if (auto grown = growShared("studio.crowdCounts", kStorage, m_crowdCounts, m_crowdCountCapacity,
+                                m_crowdModels.size(), sizeof(std::uint32_t));
+        !grown) {
+        return grown;
+    }
+    if (auto grown =
+            growShared("studio.crowdDraws", {rhi::BufferUsage::Storage, rhi::BufferUsage::Indirect},
+                       m_crowdDrawArguments, m_crowdDrawCapacity, draws, sizeof(rhi::IndexedDrawArguments));
+        !grown) {
+        return grown;
+    }
+    // What a frame tells it.
+    bool isGroupStale = slot.groupGeneration != m_crowdGeneration || slot.group.get().isNull();
+    const auto growSlot = [&device, &isGroupStale](std::string_view label, rhi::BufferUsage usage,
+                                                   rhi::OwnedBuffer& buffer, std::size_t& capacity,
+                                                   std::size_t count,
+                                                   std::size_t size) -> Result<void, rhi::RhiError> {
+        auto grown = growUploadBuffer(device, label, usage, buffer, capacity, count, size);
+        if (!grown) {
+            return std::unexpected{std::move(grown.error())};
+        }
+        isGroupStale = isGroupStale || *grown;
+        return {};
+    };
+    std::size_t noCapacity = 0;
+    if (slot.frame.get().isNull()) {
+        if (auto grown = growSlot("studio.crowdFrame", rhi::BufferUsage::Uniform, slot.frame, noCapacity, 1,
+                                  sizeof(CrowdFrameUniform));
+            !grown) {
+            return grown;
+        }
+    }
+    if (auto grown =
+            growSlot("studio.crowdModels", rhi::BufferUsage::Storage, slot.models, slot.modelCapacity,
+                     std::max(m_crowdModels.size(), kFirstCrowdModels), sizeof(CrowdModelEntry));
+        !grown) {
+        return grown;
+    }
+    if (auto grown =
+            growSlot("studio.crowdTemplates", rhi::BufferUsage::Storage, slot.templates,
+                     slot.templateCapacity, std::max(draws, kFirstCrowdTemplates), sizeof(CrowdDrawTemplate));
+        !grown) {
+        return grown;
+    }
+    if (auto grown = growSlot("studio.crowdVisible", rhi::BufferUsage::Storage, slot.visible,
+                              slot.visibleCapacity, kFirstVisibleBytes, 1);
+        !grown) {
+        return grown;
+    }
+    if (!isGroupStale) {
+        return {};
+    }
+    const auto bufferBinding = [](std::uint32_t binding, rhi::BufferHandle buffer) {
+        return rhi::Binding{.binding = binding, .resource = rhi::BufferBinding{.buffer = buffer}};
+    };
+    const std::array bindings{bufferBinding(kCrowdFrameBinding, slot.frame.get()),
+                              bufferBinding(kCrowdBodiesBinding, slot.bodies.get()),
+                              bufferBinding(kCrowdModelsBinding, slot.models.get()),
+                              bufferBinding(kCrowdSequencesBinding, m_crowdSequences.get()),
+                              bufferBinding(kCrowdPosesBinding, m_crowdPoses.get()),
+                              bufferBinding(kCrowdParentsBinding, m_crowdParents.get()),
+                              bufferBinding(kCrowdNodesBinding, m_crowdNodes.get()),
+                              bufferBinding(kCrowdVisibleBinding, slot.visible.get()),
+                              bufferBinding(kCrowdTemplatesBinding, slot.templates.get()),
+                              bufferBinding(kCrowdBonesBinding, m_crowdBones.get()),
+                              bufferBinding(kCrowdInstancesBinding, m_crowdInstances.get()),
+                              bufferBinding(kCrowdCountsBinding, m_crowdCounts.get()),
+                              bufferBinding(kCrowdDrawsBinding, m_crowdDrawArguments.get())};
+    auto group =
+        device.createBindGroup({.label = "crowd", .layout = m_crowdLayout.get(), .bindings = bindings});
+    if (!group) {
+        return std::unexpected{std::move(group.error())};
+    }
+    slot.group = std::move(*group);
+    slot.groupGeneration = m_crowdGeneration;
+    return {};
+}
+
+auto StudioRenderer::recordCrowd(rhi::CommandList& commands, const CrowdFrame& frame)
+    -> Result<void, StudioError> {
+    m_crowdCalls.clear();
+    m_crowdMeshCalls.clear();
+    StudioCrowdSlot& slot = m_crowdSlots[(m_crowdFrames - 1) % m_crowdSlots.size()];
+    // Each model's bodies have room for all of them to show, one after another.
+    std::vector<CrowdModelEntry> entries(m_crowdModels.size());
+    std::vector<CrowdDrawTemplate> templates;
+    std::size_t instanceCount = 0;
+    std::size_t boneCount = 0;
+    std::size_t bodyCount = 0;
+    for (std::size_t index = 0; index < m_crowdModels.size(); ++index) {
+        const StudioCrowdModel& model = m_crowdModels[index];
+        const std::uint32_t bodies = slot.bodiesOfModel[index];
+        entries[index] = {.firstInstance = narrow<std::uint32_t>(instanceCount),
+                          .firstBone = narrow<std::uint32_t>(boneCount),
+                          .boneCount = model.boneCount,
+                          .firstSequence = model.firstSequence,
+                          .firstParent = model.firstParent};
+        instanceCount += bodies;
+        boneCount += std::size_t{bodies} * model.boneCount;
+        bodyCount += bodies;
+        if (bodies == 0) {
+            continue;
+        }
+        const std::size_t firstMesh = m_crowdMeshCalls.size();
+        m_crowdCalls.push_back(
+            callOf(StudioInstance{.model = *model.model}, StudioBlending::Solid, m_crowdMeshCalls));
+        for (const StudioMeshCall& mesh : std::span{m_crowdMeshCalls}.subspan(firstMesh)) {
+            templates.push_back({.indexCount = mesh.indexCount,
+                                 .firstIndex = mesh.firstIndex,
+                                 .model = narrow<std::uint32_t>(index)});
+        }
+    }
+    if (bodyCount == 0) {
+        m_crowdCalls.clear();
+        m_crowdMeshCalls.clear();
+        return {};
+    }
+    if (auto reserved = reserveCrowd(slot, instanceCount, boneCount, templates.size()); !reserved) {
+        return fail(StudioError::GpuFailed, std::move(reserved.error()));
+    }
+    std::span<const std::uint8_t> visibleBits{};
+    std::uint32_t leafCount = 0;
+    if (frame.visibleLeaves != nullptr) {
+        visibleBits = frame.visibleLeaves->bits();
+        leafCount = frame.visibleLeaves->leafCount();
+    }
+    // A whole number of the shader's words, the bits past the map's none.
+    auto grownVisible =
+        growUploadBuffer(*m_device, "studio.crowdVisible", rhi::BufferUsage::Storage, slot.visible,
+                         slot.visibleCapacity, visibleBits.size() + sizeof(std::uint32_t), 1);
+    if (!grownVisible) {
+        return fail(StudioError::GpuFailed, std::move(grownVisible.error()));
+    }
+    if (*grownVisible) {
+        slot.groupGeneration = 0;
+        if (auto reserved = reserveCrowd(slot, instanceCount, boneCount, templates.size()); !reserved) {
+            return fail(StudioError::GpuFailed, std::move(reserved.error()));
+        }
+    }
+    const std::span<std::byte> visibleBytes = m_device->mappedBytes(slot.visible.get());
+    std::ranges::fill(visibleBytes.first(visibleBits.size() + sizeof(std::uint32_t)), std::byte{});
+    std::ranges::copy(std::as_bytes(visibleBits), visibleBytes.begin());
+    std::ranges::copy(std::as_bytes(std::span{entries}), m_device->mappedBytes(slot.models.get()).begin());
+    std::ranges::copy(std::as_bytes(std::span{templates}),
+                      m_device->mappedBytes(slot.templates.get()).begin());
+    CrowdFrameUniform uniform{.between = frame.between,
+                              .sinceLastTick = frame.sinceLastTick,
+                              .bodyCount = narrow<std::uint32_t>(bodyCount),
+                              .modelCount = narrow<std::uint32_t>(m_crowdModels.size()),
+                              .drawCount = narrow<std::uint32_t>(templates.size()),
+                              .leafCount = leafCount,
+                              .rootNode = m_crowdRootNode,
+                              .hasTree = m_hasCrowdTree && frame.visibleLeaves != nullptr ? 1U : 0U};
+    for (std::size_t plane = 0; plane < kFrustumPlanes; ++plane) {
+        uniform.planes.at(plane) = extend(frame.frustum[plane].normal, frame.frustum[plane].distance);
+    }
+    std::ranges::copy(std::as_bytes(std::span{&uniform, 1}), m_device->mappedBytes(slot.frame.get()).begin());
+
+    const auto groupsOf = [](std::size_t items, std::uint32_t perGroup) {
+        return narrow<std::uint32_t>((items + perGroup - 1) / perGroup);
+    };
+    const rhi::BufferState wasRead =
+        areCrowdBuffersNew ? rhi::BufferState::Undefined : rhi::BufferState::ShaderRead;
+    const rhi::BufferHandle bones = m_crowdBones.get();
+    const rhi::BufferHandle instances = m_crowdInstances.get();
+    const rhi::BufferHandle counts = m_crowdCounts.get();
+    const rhi::BufferHandle draws = m_crowdDrawArguments.get();
+    commands.transition(bones, wasRead, rhi::BufferState::ComputeWrite);
+    commands.transition(instances, wasRead, rhi::BufferState::ComputeWrite);
+    commands.transition(counts,
+                        areCrowdBuffersNew ? rhi::BufferState::Undefined : rhi::BufferState::ComputeWrite,
+                        rhi::BufferState::ComputeWrite);
+    commands.transition(draws, areCrowdBuffersNew ? rhi::BufferState::Undefined : rhi::BufferState::Indirect,
+                        rhi::BufferState::ComputeWrite);
+    areCrowdBuffersNew = false;
+    commands.setComputePipeline(m_crowdReset.get());
+    commands.setComputeBindGroup(0, slot.group.get());
+    commands.dispatch(groupsOf(m_crowdModels.size(), kCrowdItemsPerGroup));
+    commands.transition(counts, rhi::BufferState::ComputeWrite, rhi::BufferState::ComputeWrite);
+    commands.setComputePipeline(m_crowdPose.get());
+    commands.setComputeBindGroup(0, slot.group.get());
+    commands.dispatch(groupsOf(bodyCount, kCrowdBodiesPerGroup));
+    commands.transition(counts, rhi::BufferState::ComputeWrite, rhi::BufferState::ComputeWrite);
+    commands.setComputePipeline(m_crowdDraws.get());
+    commands.setComputeBindGroup(0, slot.group.get());
+    commands.dispatch(groupsOf(templates.size(), kCrowdItemsPerGroup));
+    commands.transition(bones, rhi::BufferState::ComputeWrite, rhi::BufferState::ShaderRead);
+    commands.transition(instances, rhi::BufferState::ComputeWrite, rhi::BufferState::ShaderRead);
+    commands.transition(draws, rhi::BufferState::ComputeWrite, rhi::BufferState::Indirect);
+    return {};
+}
+
+auto StudioRenderer::reserveCrowdGroup(StudioFrameSlot& slot) -> Result<void, rhi::RhiError> {
+    if (m_crowdBones.get().isNull() ||
+        (slot.crowdGeneration == m_crowdGeneration && !slot.crowdGroup.get().isNull())) {
+        return {};
+    }
+    const std::array bindings{
+        rhi::Binding{.binding = kFrameUniformBinding,
+                     .resource = rhi::BufferBinding{.buffer = slot.frame.get()}},
+        rhi::Binding{.binding = kLightGammaBinding,
+                     .resource = rhi::BufferBinding{.buffer = m_lightGamma.get()}},
+        rhi::Binding{.binding = kBonesBinding, .resource = rhi::BufferBinding{.buffer = m_crowdBones.get()}},
+        rhi::Binding{.binding = kEnvironmentBinding, .resource = m_environment.get()},
+        rhi::Binding{.binding = kEnvironmentSamplerBinding, .resource = m_environmentSampler.get()},
+        rhi::Binding{.binding = kProbesBinding, .resource = m_probes.isNull() ? m_noProbes.get() : m_probes},
+        rhi::Binding{.binding = kSpecularIntegralBinding,
+                     .resource =
+                         m_specularIntegral.get().isNull() ? m_whiteMask.get() : m_specularIntegral.get()},
+        rhi::Binding{.binding = kInstancesBinding,
+                     .resource = rhi::BufferBinding{.buffer = m_crowdInstances.get()}}};
+    auto group = m_device->createBindGroup(
+        {.label = "studio.crowdFrame", .layout = m_frameLayout.get(), .bindings = bindings});
+    if (!group) {
+        return std::unexpected{std::move(group.error())};
+    }
+    slot.crowdGroup = std::move(*group);
+    slot.crowdGeneration = m_crowdGeneration;
+    return {};
+}
+
+void StudioRenderer::drawCrowd(rhi::CommandList& commands) const {
+    const StudioFrameSlot& slot = preparedSlot();
+    for (const StudioModelCall& call : m_crowdCalls) {
+        const std::span<const StudioMeshCall> meshes =
+            std::span{m_crowdMeshCalls}.subspan(call.firstMesh, call.meshCount);
+        if (meshes.empty()) {
+            continue;
+        }
+        MeshKind bound = meshes.front().kind;
+        commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());
+        commands.setBindGroup(kFrameGroup, slot.crowdGroup.get());
+        commands.setVertexBuffer(0, call.vertices, 0);
+        commands.setIndexBuffer(call.indices, 0, rhi::IndexFormat::Uint32);
+        for (std::size_t mesh = 0; mesh < meshes.size(); ++mesh) {
+            if (meshes[mesh].kind != bound) {
+                bound = meshes[mesh].kind;
+                commands.setPipeline(m_pipelines[call.facing][call.blending][bound].get());
+            }
+            commands.setBindGroup(kSkinGroup, meshes[mesh].texture);
+            commands.drawIndexedIndirect(m_crowdDrawArguments.get(), (std::size_t{call.firstMesh} + mesh) *
+                                                                         sizeof(rhi::IndexedDrawArguments));
+        }
+    }
+}
+
 auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioError> {
     // A ring of kMaxFramesInFlight: the slot written now was last read frames in flight ago.
     StudioFrameSlot& slot = m_frameSlots[m_drawCount++ % m_frameSlots.size()];
@@ -905,6 +1420,9 @@ auto StudioRenderer::prepare(const StudioFrame& frame) -> Result<void, StudioErr
         boneCount += instance.bones.size();
     }
     if (auto reserved = reserve(slot, boneCount, frame.instances.size()); !reserved) {
+        return fail(StudioError::GpuFailed, std::move(reserved.error()));
+    }
+    if (auto reserved = reserveCrowdGroup(slot); !reserved) {
         return fail(StudioError::GpuFailed, std::move(reserved.error()));
     }
     const FrameUniform uniform{.viewProjection = viewProjectionMatrix(frame.camera, frame.aspect),
@@ -969,7 +1487,7 @@ void StudioRenderer::placeInstances(const StudioFrame& frame) {
                     lengthSquared(frame.camera.position - (instance.origin + instance.model.get().m_middle)),
                 .mode = instance.mode,
                 .index = place.call});
-            m_modelCalls.push_back(callOf(instance, blending));
+            m_modelCalls.push_back(callOf(instance, blending, m_meshCalls));
         }
         ++m_modelCalls[place.call].instanceCount;
     }
@@ -1013,7 +1531,7 @@ auto StudioRenderer::solidCallOf(const StudioInstance& instance) -> std::uint32_
     }
     const auto call = narrow<std::uint32_t>(m_modelCalls.size());
     m_solidCalls.emplace_back(call, &instance);
-    m_modelCalls.push_back(callOf(instance, StudioBlending::Solid));
+    m_modelCalls.push_back(callOf(instance, StudioBlending::Solid, m_meshCalls));
     return call;
 }
 
@@ -1031,6 +1549,7 @@ void StudioRenderer::drawSolid(rhi::CommandList& commands) const {
             drawModel(commands, index);
         }
     }
+    drawCrowd(commands);
 }
 
 void StudioRenderer::drawBlended(rhi::CommandList& commands, std::uint32_t index) const {
@@ -1041,13 +1560,14 @@ void StudioRenderer::drawBlended(rhi::CommandList& commands, std::uint32_t index
     drawModel(commands, index);
 }
 
-auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blending) -> StudioModelCall {
+auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blending,
+                            std::vector<StudioMeshCall>& meshes) -> StudioModelCall {
     const StudioModel& model = instance.model.get();
     StudioModelCall call{.vertices = model.m_vertices.get(),
                          .indices = model.m_indices.get(),
                          .blending = blending,
                          .facing = instance.isMirrored ? StudioFacing::Mirrored : StudioFacing::AsModeled,
-                         .firstMesh = narrow<std::uint32_t>(m_meshCalls.size())};
+                         .firstMesh = narrow<std::uint32_t>(meshes.size())};
     if (model.m_skins.empty()) {
         return call; // no mesh: the reader checked that every mesh has its skin
     }
@@ -1063,13 +1583,13 @@ auto StudioRenderer::callOf(const StudioInstance& instance, StudioBlending blend
         }
         for (const StudioMeshDraw& mesh : choices[choice]) {
             const StudioSkinDraw& texture = model.m_textures[skin[mesh.skinReference].value];
-            m_meshCalls.push_back(StudioMeshCall{.firstIndex = mesh.firstIndex,
-                                                 .indexCount = mesh.indexCount,
-                                                 .kind = texture.kind,
-                                                 .texture = texture.group.get()});
+            meshes.push_back(StudioMeshCall{.firstIndex = mesh.firstIndex,
+                                            .indexCount = mesh.indexCount,
+                                            .kind = texture.kind,
+                                            .texture = texture.group.get()});
         }
     }
-    call.meshCount = narrow<std::uint32_t>(m_meshCalls.size()) - call.firstMesh;
+    call.meshCount = narrow<std::uint32_t>(meshes.size()) - call.firstMesh;
     return call;
 }
 

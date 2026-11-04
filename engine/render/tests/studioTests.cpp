@@ -49,10 +49,13 @@ constexpr float kViewDistance = 6.0F;
     return bytes.value_or(std::vector<std::byte>{});
 }
 
-[[nodiscard]] auto studioShader() -> std::vector<std::byte> {
+[[nodiscard]] auto shaderOf(std::string_view file) -> std::vector<std::byte> {
     const auto executable = nx::platform::executablePath();
-    return executable ? readFileOf(executable->parent_path() / "shaders" / "studio.spv")
-                      : std::vector<std::byte>{};
+    return executable ? readFileOf(executable->parent_path() / "shaders" / file) : std::vector<std::byte>{};
+}
+
+[[nodiscard]] auto studioShader() -> std::vector<std::byte> {
+    return shaderOf("studio.spv");
 }
 
 /// A camera `distance` from the triangle's middle on the side `side` points to, looking at it.
@@ -74,12 +77,15 @@ struct Scene {
     auto view = nx::assets::MdlView::parse(file.bytes);
     EXPECT_TRUE(view.has_value()) << (view ? "" : nx::describe(view.error()));
     const std::vector<std::byte> shader = studioShader();
+    const std::vector<std::byte> crowdShader = shaderOf("crowd.spv");
     if (!view) {
         return nullptr;
     }
     auto renderer = nx::test::inFrameOfItsOwn(device, [&](nx::rhi::CommandList& commands) {
-        return nx::render::StudioRenderer::create(
-            device, commands, {.shaderCode = shader, .colorFormat = nx::rhi::Format::Rgba8Unorm});
+        return nx::render::StudioRenderer::create(device, commands,
+                                                  {.shaderCode = shader,
+                                                   .crowdShaderCode = crowdShader,
+                                                   .colorFormat = nx::rhi::Format::Rgba8Unorm});
     });
     EXPECT_TRUE(renderer.has_value()) << (renderer ? "" : nx::describe(renderer.error()));
     if (!renderer) {
@@ -217,6 +223,174 @@ TEST(StudioRendererTest, ModelsDrawnAlikeTakeOneCallEachWithItsOwnLight) {
             .model = scene->model, .bones = bones, .light = ambientLight(100.0F), .isMirrored = true}};
     std::ignore = drawStudio(target, *scene, camera, otherFacing);
     EXPECT_EQ(scene->renderer.modelCallCount(), 2U) << "they face other ways";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+/// A crowd of `scene`'s model that plays one sequence of two frames, its bones moved `kPoseMove` along x by
+/// the second, on `scene`'s renderer.
+constexpr float kPoseMove = 0.5F;
+
+void loadCrowdOf(nx::rhi::Device& device, Scene& scene) {
+    const std::size_t bones = scene.model.boneCount();
+    std::vector<nx::render::CrowdBonePose> poses(bones * 2, {.rotation = {.w = 1.0F}});
+    for (std::size_t bone = bones; bone < poses.size(); ++bone) {
+        poses[bone].position.x = kPoseMove;
+    }
+    const std::vector<std::int32_t> parents(bones, -1);
+    const std::array sequences{nx::render::CrowdSequence{
+        .poses = poses, .frameCount = 2, .reach = 64.0F, .lowest = -64.0F, .highest = 64.0F}};
+    const auto loaded = nx::test::inFrameOfItsOwn(device, [&](nx::rhi::CommandList& commands) {
+        return scene.renderer.loadCrowdModel(
+            commands, {.model = scene.model, .parents = parents, .sequences = sequences});
+    });
+    ASSERT_TRUE(loaded.has_value()) << (loaded ? "" : nx::describe(loaded.error()));
+}
+
+/// Works `body` out on the GPU, the only one of the crowd, as `camera` sees it.
+void recordCrowdOf(nx::rhi::Device& device, Scene& scene, const nx::render::Camera& camera,
+                   const nx::render::CrowdBody& body, std::uint64_t tick) {
+    const std::array frustum = nx::render::frustumPlanes(camera, 1.0F);
+    const auto recorded = nx::test::inFrameOfItsOwn(
+        device, [&](nx::rhi::CommandList& commands) -> nx::Result<void, nx::render::StudioError> {
+            auto room = scene.renderer.crowdRoom(1, tick);
+            if (!room) {
+                return std::unexpected{std::move(room.error())};
+            }
+            room->bodies[0] = body;
+            room->bodiesOfModel[0] = 1;
+            return scene.renderer.recordCrowd(commands, {.frustum = frustum});
+        });
+    ASSERT_TRUE(recorded.has_value()) << (recorded ? "" : nx::describe(recorded.error()));
+}
+
+TEST(StudioRendererTest, ACrowdIsDrawnAsTheCpuDrawsTheModelsPosedTheSameWay) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const auto scene = sceneOn(**device);
+    ASSERT_NE(scene, nullptr);
+    OffscreenTarget target{**device};
+    const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
+    // Where a body at `origin`, halfway through its two frames, puts its bones.
+    constexpr Vec3 kOrigin{.x = 0.25F, .y = -0.25F};
+    constexpr float kHalfway = kPoseMove / 2.0F;
+    Mat3x4 posed{};
+    posed.rows[0].w = kOrigin.x + kHalfway;
+    posed.rows[1].w = kOrigin.y;
+    const std::vector bones(scene->model.boneCount(), posed);
+    const std::array byTheCpu{
+        StudioInstance{.model = scene->model, .bones = bones, .light = ambientLight(100.0F)}};
+    const std::vector<std::byte> expected = drawStudio(target, *scene, camera, byTheCpu);
+    ASSERT_GT(pixelAt(expected, kMiddle, kMiddle)[3], 0) << "the model shows";
+    ASSERT_NO_FATAL_FAILURE(loadCrowdOf(**device, *scene));
+    // Half of a sequence's frames, in 256ths; its move ended where the second half of it started.
+    constexpr float kHalfOfTheFrames = 128.0F;
+    const nx::render::CrowdBody body{.previousOrigin = kOrigin,
+                                     .origin = kOrigin,
+                                     .frame = kHalfOfTheFrames,
+                                     .framerate = 0.0F,
+                                     .ambient = 100.0F,
+                                     .moveShare = 1.0F,
+                                     .moveSharePerTick = 0.0F};
+    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, body, 1));
+    EXPECT_GT(scene->renderer.crowdDrawCount(), 0U);
+    const std::vector<std::byte> byTheGpu = drawStudio(target, *scene, camera, {});
+    expectNear(pixelAt(byTheGpu, kMiddle, kMiddle), pixelAt(expected, kMiddle, kMiddle),
+               "as the CPU draws it");
+    EXPECT_EQ(byTheGpu, expected) << "every pixel";
+
+    // Along its move: a body a quarter of the way at the last tick, and as much again by the moment shown, a
+    // whole tick on, is halfway from where it started to where it ends: at the same place.
+    constexpr Vec3 kMovedBy{.x = 1.0F};
+    nx::render::CrowdBody moving = body;
+    moving.previousOrigin = kOrigin - kMovedBy;
+    moving.origin = kOrigin + kMovedBy;
+    moving.moveShare = 0.25F;
+    moving.moveSharePerTick = 0.25F;
+    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, moving, 2));
+    EXPECT_EQ(drawStudio(target, *scene, camera, {}), expected) << "along its move";
+
+    // Behind the view, none of it: its draws draw no instance.
+    nx::render::CrowdBody behind = body;
+    const Vec3 away = nx::normalized(-kWoundSide) * (kViewDistance * 4.0F);
+    behind.previousOrigin = away;
+    behind.origin = away;
+    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, behind, 3));
+    const std::vector<std::byte> hidden = drawStudio(target, *scene, camera, {});
+    EXPECT_EQ(pixelAt(hidden, kMiddle, kMiddle)[3], 0) << "hidden by the view's planes";
+    EXPECT_EQ((*device)->validationErrors(), 0U);
+}
+
+TEST(StudioRendererTest, ACrowdPlacesEachBoneInItsParentAsTheCpuDoes) {
+    auto device =
+        nx::rhi::vulkan::createDevice({.applicationName = "nxRenderTests", .isValidationEnabled = true});
+    if (!device) {
+        ASSERT_TRUE(nx::test::isVulkanUnavailable(device.error().code)) << nx::describe(device.error());
+        GTEST_SKIP() << nx::test::kNoVulkan;
+    }
+    const auto scene = sceneOn(**device);
+    ASSERT_NE(scene, nullptr);
+    ASSERT_EQ(scene->model.boneCount(), 2U) << "a root and its child";
+    OffscreenTarget target{**device};
+    const nx::render::Camera camera = cameraFrom(-kWoundSide, kViewDistance);
+    // A body turned a little about its height, its root turned a little more and moved, its child moved from
+    // it.
+    constexpr float kYaw = 0.1F;
+    constexpr float kRootTurn = 0.1F;
+    constexpr Vec3 kOrigin{.x = 0.1F};
+    constexpr Vec3 kRootMoved{.y = 0.1F};
+    constexpr Vec3 kChildMoved{.x = 0.1F, .y = 0.1F};
+    const float halfSine = std::sin(kRootTurn / 2.0F);
+    const float halfCosine = std::cos(kRootTurn / 2.0F);
+    const auto turnedAboutHeight = [](float cosine, float sine, Vec3 moved) {
+        return Mat3x4{.rows = {nx::Vec4{.x = cosine, .y = -sine, .w = moved.x},
+                               nx::Vec4{.x = sine, .y = cosine, .w = moved.y},
+                               nx::Vec4{.z = 1.0F, .w = moved.z}}};
+    };
+    const Mat3x4 placement = turnedAboutHeight(std::cos(kYaw), std::sin(kYaw), kOrigin);
+    const Mat3x4 root = placement * turnedAboutHeight(1.0F - (2.0F * halfSine * halfSine),
+                                                      2.0F * halfCosine * halfSine, kRootMoved);
+    const Mat3x4 child = root * turnedAboutHeight(1.0F, 0.0F, kChildMoved);
+    const std::array bones{root, child};
+    const std::array byTheCpu{
+        StudioInstance{.model = scene->model, .bones = bones, .light = ambientLight(100.0F)}};
+    const std::vector<std::byte> expected = drawStudio(target, *scene, camera, byTheCpu);
+    ASSERT_GT(pixelAt(expected, kMiddle, kMiddle)[3], 0) << "the model shows";
+
+    const std::array poses{
+        nx::render::CrowdBonePose{.position = nx::extend(kRootMoved, 0.0F),
+                                  .rotation = {.z = halfSine, .w = halfCosine}},
+        nx::render::CrowdBonePose{.position = nx::extend(kChildMoved, 0.0F), .rotation = {.w = 1.0F}}};
+    const std::array<std::int32_t, 2> parents{-1, 0};
+    const std::array sequences{nx::render::CrowdSequence{
+        .poses = poses, .frameCount = 1, .reach = 64.0F, .lowest = -64.0F, .highest = 64.0F}};
+    const auto loaded = nx::test::inFrameOfItsOwn(**device, [&](nx::rhi::CommandList& commands) {
+        return scene->renderer.loadCrowdModel(
+            commands, {.model = scene->model, .parents = parents, .sequences = sequences});
+    });
+    ASSERT_TRUE(loaded.has_value()) << (loaded ? "" : nx::describe(loaded.error()));
+    const nx::render::CrowdBody body{.previousOrigin = kOrigin,
+                                     .yaw = kYaw,
+                                     .origin = kOrigin,
+                                     .ambient = 100.0F,
+                                     .moveShare = 1.0F,
+                                     .moveSharePerTick = 0.0F};
+    ASSERT_NO_FATAL_FAILURE(recordCrowdOf(**device, *scene, camera, body, 1));
+    const std::vector<std::byte> byTheGpu = drawStudio(target, *scene, camera, {});
+    expectNear(pixelAt(byTheGpu, kMiddle, kMiddle), pixelAt(expected, kMiddle, kMiddle),
+               "as the CPU draws it");
+    // Sines of two processors: a pixel on an edge may fall the other way, and no more than that.
+    constexpr std::ptrdiff_t kMostPixelsOnAnEdge = 16;
+    ASSERT_EQ(byTheGpu.size(), expected.size());
+    constexpr std::size_t kPixelBytes = 4;
+    std::ptrdiff_t different = 0;
+    for (std::size_t at = 0; at + kPixelBytes <= expected.size(); at += kPixelBytes) {
+        different += std::memcmp(byTheGpu.data() + at, expected.data() + at, kPixelBytes) != 0 ? 1 : 0;
+    }
+    EXPECT_LE(different, kMostPixelsOnAnEdge);
     EXPECT_EQ((*device)->validationErrors(), 0U);
 }
 

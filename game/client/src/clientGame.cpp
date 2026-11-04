@@ -19,8 +19,8 @@ namespace {
 /// does not run away.
 constexpr nx::Milliseconds kCommandInterval = nx::tickLengthOf(nx::kDefaultTickRate);
 constexpr nx::Seconds kMaxCatchUp{0.25F};
-/// The fewest bodies it is worth handing to a worker to work out how a frame shows them: little work each.
-constexpr std::size_t kSmallestShownBatch = 256;
+/// The fewest bodies it is worth handing to a worker to find those dead: next to no work each.
+constexpr std::size_t kSmallestShownBatch = 16384;
 
 [[nodiscard]] auto eyeOf(const MovementState& player) -> nx::Vec3 {
     return player.origin + nx::Vec3{.z = player.viewHeight.value()};
@@ -84,6 +84,7 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
     }
     previousPlayerOrigins.clear();
     previousEntities = m_last.entities;
+    areDeadFound = false;
     for (const PlayerEntityState& player : m_last.players) {
         if (player.player.value >= previousPlayerOrigins.size()) {
             previousPlayerOrigins.resize(std::size_t{player.player.value} + 1);
@@ -203,64 +204,67 @@ void ClientGame::writeHostages(std::vector<ShownHostage>& hostages) const {
     }
 }
 
-void ClientGame::writeEntities(const EntityCatalog& catalog, nx::Seconds corpseStay,
-                               nx::jobs::JobSystem* jobs, std::vector<ShownEntity>& entities) {
+void ClientGame::writeCorpses(const EntityCatalog& catalog, nx::Seconds corpseStay, nx::jobs::JobSystem* jobs,
+                              std::vector<ShownEntity>& entities) {
     const nx::GameTime shown = shownTime();
     const std::span<const EntityState> states = m_last.entities.all();
     const std::span<const EntityState> previous = previousEntities.all();
-    const float between = m_pending / kCommandInterval;
-    const std::uint8_t whole = corpseAmountOf(std::nullopt, corpseStay);
-    entities.resize(states.size());
-    // Who stays how long is the clock's, a thread's at a time: the dead wait for it, the living do not ask.
-    std::vector<std::vector<std::uint32_t>> deadOfBatch(
-        jobs != nullptr ? jobs->batchCountOf(states.size(), kSmallestShownBatch) : 1);
-    const auto writeBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
-        if (first == last) {
-            return;
-        }
-        auto before = std::ranges::lower_bound(previous, states[first].entity, {}, &EntityState::entity);
-        for (std::size_t index = first; index < last; ++index) {
-            const EntityState& state = states[index];
-            while (before != previous.end() && before->entity < state.entity) {
-                ++before;
+    // Few, among however many live, and the same until the next tick.
+    if (!areDeadFound) {
+        std::vector<std::vector<std::uint32_t>> deadOfBatch(
+            jobs != nullptr ? jobs->batchCountOf(states.size(), kSmallestShownBatch) : 1);
+        const auto findBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+            for (std::size_t index = first; index < last; ++index) {
+                if (states[index].health <= nx::HitPoints{}) {
+                    deadOfBatch[batch].push_back(nx::narrow<std::uint32_t>(index));
+                }
             }
-            const nx::Vec3 origin = before == previous.end() || before->entity != state.entity
-                                        ? state.origin
-                                        : nx::lerp(before->origin, state.origin, between);
-            const EntityType& type = catalog.type(state.type);
-            const auto& sequence =
-                catalog.model(type.model).files->view->sequences()[state.animation.sequence.value];
-            const bool isDead = state.health <= nx::HitPoints{};
-            if (isDead) {
-                deadOfBatch[batch].push_back(nx::narrow<std::uint32_t>(index));
-            }
-            entities[index] = {.type = state.type,
-                               .origin = origin,
-                               .angles = state.angles,
-                               .sequence = state.animation.sequence,
-                               .frame = estimatedFrameOf(sequence, state.animation.frame,
-                                                         shown.since(state.animation.advancedAt, m_last.rate),
-                                                         state.animation.framerate),
-                               .amount = whole};
+        };
+        if (jobs != nullptr) {
+            jobs->forBatches({.label = "entities.corpses", .priority = nx::jobs::Priority::Critical},
+                             states.size(), kSmallestShownBatch, findBatch);
+        } else {
+            findBatch(0, 0, states.size());
         }
-    };
-    if (jobs != nullptr) {
-        jobs->forBatches({.label = "entities.show", .priority = nx::jobs::Priority::Critical}, states.size(),
-                         kSmallestShownBatch, writeBatch);
-    } else {
-        writeBatch(0, 0, states.size());
+        deadEntities.clear();
+        for (const std::vector<std::uint32_t>& dead : deadOfBatch) {
+            deadEntities.insert(deadEntities.end(), dead.begin(), dead.end());
+        }
+        areDeadFound = true;
     }
-    bool isAnyGone = false;
-    for (const std::uint32_t index : deadOfBatch | std::views::join) {
+    entities.clear();
+    for (const std::uint32_t index : deadEntities) {
+        const EntityState& state = states[index];
         const std::uint8_t amount =
-            corpseAmountOf(entityCorpses.deadFor(states[index].entity, true, shown, m_last.rate), corpseStay);
-        entities[index].amount = amount;
-        isAnyGone = isAnyGone || amount == 0;
+            corpseAmountOf(entityCorpses.deadFor(state.entity, true, shown, m_last.rate), corpseStay);
+        if (amount == 0) {
+            continue; // a corpse gone
+        }
+        const auto before = std::ranges::lower_bound(previous, state.entity, {}, &EntityState::entity);
+        const nx::Vec3 origin = before == previous.end() || before->entity != state.entity
+                                    ? state.origin
+                                    : nx::lerp(before->origin, state.origin, m_pending / kCommandInterval);
+        const EntityType& type = catalog.type(state.type);
+        const auto& sequence =
+            catalog.model(type.model).files->view->sequences()[state.animation.sequence.value];
+        entities.push_back({.type = state.type,
+                            .origin = origin,
+                            .angles = state.angles,
+                            .sequence = state.animation.sequence,
+                            .frame = estimatedFrameOf(sequence, state.animation.frame,
+                                                      shown.since(state.animation.advancedAt, m_last.rate),
+                                                      state.animation.framerate),
+                            .amount = amount});
     }
     entityCorpses.forgetUnasked();
-    if (isAnyGone) {
-        std::erase_if(entities, [](const ShownEntity& entity) { return entity.amount == 0; }); // corpses gone
-    }
+}
+
+auto ClientGame::crowd() const -> ShownCrowd {
+    return ShownCrowd{.states = m_last.entities.all(),
+                      .between = m_pending / kCommandInterval,
+                      .sinceLastTick = m_pending - kCommandInterval,
+                      .lastTick = m_last.time,
+                      .rate = m_last.rate};
 }
 
 } // namespace cs

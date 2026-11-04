@@ -58,6 +58,39 @@ TEST_F(EntityBodyTest, DamageUsesTheHitGroupAndDeathRemovesSolidityOnce) {
     EXPECT_EQ(nx::game::attackEntity(world, *made, {.damage = nx::Damage{100}}).damage, nx::Damage{});
 }
 
+TEST_F(EntityBodyTest, ABodyFarFromEveryPlayerMovesLessOftenAndAsFarInLongerSteps) {
+    constexpr std::uint32_t kTicks = 160;
+    constexpr float kFar = 8000.0F;
+    constexpr std::uint32_t kFarthestTicksPerMove = 8;
+    constexpr float kShare = 0.03F;
+    auto near = cs::spawnEntityBody(world, *hulls, type, {});
+    auto far = cs::spawnEntityBody(world, *hulls, type, {.origin = {.y = kFar}});
+    ASSERT_TRUE(near.has_value() && far.has_value());
+    const nx::Vec3 nearStart = world.get<nx::game::Transform>(*near)->origin;
+    const nx::Vec3 farStart = world.get<nx::game::Transform>(*far)->origin;
+    const std::array walks{
+        cs::EntityCommand{.entity = *near, .command = {.move = {.forward = nx::UnitsPerSecond{100}}}},
+        cs::EntityCommand{.entity = *far, .command = {.move = {.forward = nx::UnitsPerSecond{100}}}}};
+    std::uint32_t farMoves = 0;
+    nx::GameTime lastMovedAt = world.get<cs::EntityBody>(*far)->movedAt;
+    for (std::uint32_t tick = 0; tick < kTicks; ++tick) {
+        // A player beside the one, so that it stays near as it walks.
+        const std::array watchers{world.get<nx::game::Transform>(*near)->origin};
+        std::ignore = cs::runEntityBodies(world, *hulls, walks, nullptr, watchers);
+        const nx::GameTime movedAt = world.get<cs::EntityBody>(*far)->movedAt;
+        farMoves += movedAt != lastMovedAt ? 1U : 0U;
+        lastMovedAt = movedAt;
+        nx::game::advanceTick(world);
+    }
+    EXPECT_EQ(world.get<cs::EntityBody>(*near)->ticksPerMove, 1U);
+    EXPECT_EQ(world.get<cs::EntityBody>(*far)->ticksPerMove, kFarthestTicksPerMove);
+    EXPECT_LE(farMoves, (kTicks / kFarthestTicksPerMove) + 1) << "at a tick of its own, every so many";
+    const float nearWent = nx::length(world.get<nx::game::Transform>(*near)->origin - nearStart);
+    const float farWent = nx::length(world.get<nx::game::Transform>(*far)->origin - farStart);
+    EXPECT_GT(nearWent, 0.0F);
+    EXPECT_NEAR(farWent, nearWent, nearWent * kShare) << "as far in the same time";
+}
+
 TEST_F(EntityBodyTest, AHitKnocksABodyOfAKnockbackBackHoldingItsWalkThenSlowingIt) {
     auto files = nx::assets::Vfs::create(std::array{directory.path()});
     ASSERT_TRUE(files.has_value());

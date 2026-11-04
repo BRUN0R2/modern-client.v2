@@ -160,7 +160,7 @@ if (!lightmapAtlas) {
 | # | Pass | Content |
 |---|------|---------|
 | 1 | `Upload` | Bone palettes, instances, light styles, particles (staging ring) |
-| 2 | `SkinningCompute` | Optional (`r_skinning compute`) |
+| 2 | `CrowdCompute` | What the crowd's bodies show as ([ADR-0032](adr/0032-gpu-crowds.md)) |
 | 3 | `WorldOpaque` | Opaque and masked (`{`) BSP surfaces, solid brush entities |
 | 4 | `Sky` | 6-face skybox |
 | 5 | `StudioOpaque` | Opaque studio models (players, weapons in the world, hostages) |
@@ -664,6 +664,12 @@ same model become one draw call per submesh.
 **Today:** `StudioRenderer` writes every model of a frame to one storage buffer the shader reads by instance
 (`SV_VulkanInstanceID`), its solid models of one model, skin, body and facing in one call, each blended one in a call of
 its own, sorted among all that is blended.
+
+**Crowds** ([ADR-0032](adr/0032-gpu-crowds.md)): the living entity bodies are the GPU's. `loadCrowdModel` uploads each
+frame of each sequence once (`cs::framePosesOf`); the client writes each body once a tick, in jobs (`CrowdBody`);
+`recordCrowd`, outside the render passes, runs `shaders/crowd.slang`, which moves each along its last move, keeps those
+the view's planes and the map's tree against the visible leaves let show (`BspWorld::mayShow`), poses their bones as
+`cs::poseBones` does, and writes the instance counts of indirect draws, which `drawSolid` then draws.
 
 ## 10. Effects
 

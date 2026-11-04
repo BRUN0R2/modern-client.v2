@@ -257,6 +257,9 @@ from the original, to test these rules against, are pending
   original's area nodes keep them (`SV_LinkEdict`, `SV_ClipToLinks`): gathered in jobs once a tick and again as something
   else may have changed them, kept where each player's move leaves its body, so that a trace or a move looks only at
   those about it.
+- A body far from every player moves less often, in a step that takes it as far, as the original's monsters
+  move at their thinks ([ADR-0032](adr/0032-gpu-crowds.md)): each tick within 1024 units of one, then every second, fourth and
+  eighth (`EntityBody::ticksPerMove`).
 - Players collide with each other using the hull box.
 - Bullet traces test the studio model's **hitboxes** (animated bones) to get the
   *hitgroup*.

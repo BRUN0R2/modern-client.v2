@@ -137,6 +137,11 @@ auto FrameRenderer::record(nx::rhi::CommandList& list, nx::rhi::TextureHandle ta
              .area = extent});
         m_post->drawToneMapped(list);
     } else {
+        if (scene) {
+            if (auto prepared = scene->scene.prepare(list, scene->level, viewIn(*scene, extent)); !prepared) {
+                return nx::fail(FrameError::DrawFailed, std::move(prepared.error()));
+            }
+        }
         list.transition(target, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);
         const std::array colors{nx::rhi::ColorAttachment{.texture = target, .clear = kVoidColor}};
         list.beginRendering({.colors = colors,
@@ -162,6 +167,9 @@ auto FrameRenderer::recordEnhancedScene(nx::rhi::CommandList& list, nx::rhi::Ext
                                         const FrameScene& scene) -> nx::Result<void, FrameError> {
     // A reflection probe baked a frame, before the scene draws: the world prepares its views first.
     scene.scene.bakeReflections(list, scene.view);
+    if (auto prepared = scene.scene.prepare(list, scene.level, viewIn(scene, extent)); !prepared) {
+        return nx::fail(FrameError::DrawFailed, std::move(prepared.error()));
+    }
     const nx::rhi::TextureHandle sceneTarget = m_post->sceneTarget();
     const nx::rhi::TextureHandle depth = m_depth->get();
     list.transition(sceneTarget, nx::rhi::TextureState::Undefined, nx::rhi::TextureState::RenderTarget);

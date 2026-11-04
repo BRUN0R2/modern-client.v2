@@ -6,6 +6,7 @@ export module cs.client:entityModels;
 import std;
 import nx.core;
 import nx.math;
+import nx.ecs;
 import nx.assets;
 import nx.rhi;
 import nx.render;
@@ -31,6 +32,11 @@ public:
     /// indices/sequences issued by this catalog.
     void pose(const EntityCatalog& catalog, std::span<const ShownEntity> entities, const ModelFrame& frame,
               PosedModels& posed);
+    /// Writes to `room` the bodies of `crowd` alive, for the GPU to pose and draw
+    /// (nx::render::StudioRenderer:: recordCrowd), in the jobs of `frame`: where each is, and its light,
+    /// found anew at a tick of its own a tenth of a second apart, as often as the light styles change.
+    void writeBodies(const EntityCatalog& catalog, const ShownCrowd& crowd, const ModelFrame& frame,
+                     nx::render::CrowdRoom room);
 
 private:
     /// A body the frame may show, what it is drawn with, and where its bones are among them all.
@@ -43,7 +49,14 @@ private:
         nx::render::ModelLight light{};
     };
 
-    std::vector<nx::render::StudioModel> models;
-    std::vector<Posing> posings; ///< Of a frame; kept for its room.
+    /// The light a body was last found in, by the index of its entity.
+    struct LitBody {
+        nx::ecs::Entity entity{};
+        nx::render::ModelLight light{};
+    };
+
+    std::deque<nx::render::StudioModel> models; ///< Which stay where they are: a renderer's crowd names them.
+    std::vector<Posing> posings;                ///< Of a frame; kept for its room.
+    std::vector<LitBody> litBodies;
 };
 } // namespace cs
