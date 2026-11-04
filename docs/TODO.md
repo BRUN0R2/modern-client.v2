@@ -78,7 +78,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [x] Licenses in the REUSE format: `LICENSES/`, `LICENSE`, `REUSE.toml` and SPDX headers
 - [x] `CONTRIBUTING.md` (PR flow, DCO, standards, license of contributions, how to run the tests)
 - [x] `SECURITY.md` (how to report vulnerabilities)
-- [ ] Complete specification of the Rook grammar (`rook/spec/grammar.ebnf`)
+- [x] Complete specification of the Rook grammar (`rook/spec/grammar.ebnf`)
 - [ ] Complete cvar catalog in `data/cstrike/cvars.toml`
 - [ ] Survey of the original's economy and weapon values for the official data
 
