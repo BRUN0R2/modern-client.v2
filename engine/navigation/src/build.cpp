@@ -310,7 +310,8 @@ void removeWhereNoBodyFits(rcCompactHeightfield& compact, const TileInput& input
     for (int row = 0; row < compact.height; ++row) {
         for (int column = 0; column < compact.width; ++column) {
             const rcCompactCell& cell = cells[narrow<std::size_t>(column + (row * compact.width))];
-            for (std::size_t span = cell.index; span < cell.index + cell.count; ++span) {
+            const std::size_t firstSpan = cell.index;
+            for (std::size_t span = firstSpan; span < firstSpan + cell.count; ++span) {
                 if (areas[span] == RC_NULL_AREA || areas[span] == areaIdOf(AreaKind::Crouch)) {
                     continue;
                 }
