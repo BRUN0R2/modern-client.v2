@@ -19,6 +19,10 @@ namespace {
 [[nodiscard]] auto distanceAcross(Vec3 first, Vec3 second) noexcept -> float {
     return std::hypot(first.x - second.x, first.y - second.y);
 }
+/// How much of its stuck speed a body crouching is held to: it goes at a third of its speed, and gains it far
+/// slower, at 83 units a second each second, so that one turning back there went 5 units in the half a second
+/// the stuck speed of 20 asks 10 of.
+constexpr float kCrouchedStuckShare = 1.0F / 3.0F;
 } // namespace
 
 auto isValid(const StuckRules& rules) noexcept -> bool {
@@ -42,7 +46,7 @@ auto StuckWatch::watch(Intent& intent, Vec3 feet, UnitsPerSecond maxSpeed, bool 
     }
     if (!stuckAt) {
         sample(feet, elapsed);
-        if (!isTooSlow(intent.climb.has_value())) {
+        if (!isTooSlow(intent)) {
             return Progress::Moving;
         }
         // Stuck: where, and its first jump soon (StuckCheck's m_stuckJumpTimestamp).
@@ -88,14 +92,15 @@ void StuckWatch::sample(Vec3 feet, Seconds elapsed) {
     sampled.push_back(feet);
 }
 
-auto StuckWatch::isTooSlow(bool climbs) const noexcept -> bool {
+auto StuckWatch::isTooSlow(const Intent& intent) const noexcept -> bool {
     if (sampled.size() <= rules.samples) {
         return false;
     }
     const float span = rules.sampleInterval.count() * static_cast<float>(rules.samples);
-    const float gone =
-        climbs ? length(sampled.back() - sampled.front()) : distanceAcross(sampled.front(), sampled.back());
-    return gone < rules.stuckSpeed.value() * span;
+    const float gone = intent.climb ? length(sampled.back() - sampled.front())
+                                    : distanceAcross(sampled.front(), sampled.back());
+    const float speed = rules.stuckSpeed.value() * (intent.crouches ? kCrouchedStuckShare : 1.0F);
+    return gone < speed * span;
 }
 
 void StuckWatch::wiggle(Intent& intent, Seconds elapsed) {
@@ -111,7 +116,9 @@ void StuckWatch::wiggle(Intent& intent, Seconds elapsed) {
     intent.climb.reset(); // off what it climbs, the way a jump pushes it
     intent.speedShare = 1.0F;
     jumpIn -= elapsed;
-    if (jumpIn <= Seconds{}) {
+    // No jump crouching: there is no room over it, and what a jump costs for a second a body's third of its
+    // speed cannot make up: it crawled at 10 units a second, stuck all the more.
+    if (jumpIn <= Seconds{} && !intent.crouches) {
         intent.jumps = true;
         jumpIn = drawn(rules.jumpInterval);
     }

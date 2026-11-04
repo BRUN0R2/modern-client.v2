@@ -539,6 +539,105 @@ TEST(AgentBrain, ABodyAcrossALinkSearchesNoWayUntilItLands) {
     EXPECT_LE(nx::length(walked.feet - aside), rules().arrivalDistance.value() + 3.0F);
 }
 
+TEST(AgentBrain, ABodyHoldsItsDuckKeyFromAheadOfLowRoomUntilItIsPastIt) {
+    // A floor with a ceiling 50 units up from x = 512 to 768, all of it the way.
+    constexpr float kFrom = 512.0F;
+    constexpr float kTo = 768.0F;
+    constexpr float kLead = 96.0F; // kCrouchLeadRadii
+    constexpr float kStep = 2.0F;
+    constexpr float kCorner = 8.0F;
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1280, .y = 256}, 0);
+    nx::test::addCeiling(geometry, {.x = kFrom, .y = -64}, {.x = kTo, .y = 320}, 50);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 1200, .y = 128});
+    std::optional<float> firstDucked;
+    std::optional<float> lastDucked;
+    nx::Vec3 feet{.x = 100, .y = 128};
+    for (int step = 0; step < 1000 && feet.x < 1190.0F; ++step) {
+        const nx::agents::Decision decision = brain.decide(feet, query);
+        if (decision.intent.crouches) {
+            firstDucked = firstDucked.value_or(feet.x);
+            lastDucked = feet.x;
+        }
+        feet = feet + (decision.intent.direction * kStep);
+    }
+    ASSERT_TRUE(firstDucked.has_value());
+    EXPECT_NEAR(*firstDucked, kFrom - kLead, kCorner);
+    EXPECT_NEAR(*lastDucked, kTo, kCorner);
+}
+
+TEST(AgentBrain, ACrouchingBodyAsksAllItsSpeedHoweverItSlowsForWhatItApproaches) {
+    constexpr float kFullSpeed = 250.0F;
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 512, .y = 256}, 0);
+    nx::test::addCeiling(geometry, {.x = 128, .y = -64}, {.x = 576, .y = 320}, 50);
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Rules braking = rules();
+    braking.arrivalDistance = nx::HammerUnits{8.0F};
+    braking.braking = 4.0F;
+    braking.stopSpeed = nx::UnitsPerSecond{75.0F};
+    braking.acceleration = 5.0F;
+    nx::agents::Brain brain{braking};
+    // Its way ends 16 units on: standing, it would ask a crawl of that.
+    brain.setGoal(nx::Vec3{.x = 316, .y = 128});
+    const nx::Vec3 feet{.x = 300, .y = 128};
+    nx::agents::Decision decision = brain.decide(feet, query);
+    ASSERT_TRUE(decision.intent.crouches);
+    brain.steer(decision.intent, {}, nx::UnitsPerSecond{kFullSpeed}, {}, query);
+    EXPECT_FLOAT_EQ(decision.intent.speedShare, 1.0F);
+}
+
+TEST(AgentBrain, ABodyHoldsItsDuckKeyNearALinksEndOnLowRoom) {
+    // The building of ladderMesh, with no more than a crouched body's room on its roof.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = 512, .y = -32, .z = -16}, {.x = 1024, .y = 544, .z = 256});
+    nx::test::addCeiling(geometry, {.x = 512, .y = -32}, {.x = 1024, .y = 544}, 306);
+    geometry.ladders.push_back({.min = {.x = 500, .y = 240}, .max = {.x = 512, .y = 272, .z = 256}});
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 800, .y = 256, .z = 256});
+    nx::Vec3 feet{.x = 300, .y = 256};
+    nx::agents::Decision decision = brain.decide(feet, query);
+    for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
+        EXPECT_FALSE(decision.intent.crouches) << "on the floor at its foot";
+        feet = feet + (decision.intent.direction * 2.0F);
+        decision = brain.decide(feet, query);
+    }
+    ASSERT_TRUE(decision.intent.climb.has_value());
+    EXPECT_FALSE(brain.decide({.x = 490, .y = 256, .z = 100}, query).intent.crouches) << "far below its end";
+    EXPECT_TRUE(brain.decide({.x = 490, .y = 256, .z = 220}, query).intent.crouches) << "near its end";
+}
+
+TEST(AgentBrain, ABodyHoldsItsDuckKeyAtTheFootOfALadderIntoLowRoomNotAtItsTop) {
+    // The building of ladderMesh, with no more than a crouched body's room on the floor at its foot.
+    nx::navigation::Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0, .y = 0}, {.x = 1024, .y = 512}, 0);
+    nx::test::addBox(geometry, {.x = 512, .y = -32, .z = -16}, {.x = 1024, .y = 544, .z = 256});
+    nx::test::addCeiling(geometry, {.x = 0, .y = -32}, {.x = 512, .y = 544}, 50);
+    geometry.ladders.push_back({.min = {.x = 500, .y = 240}, .max = {.x = 512, .y = 272, .z = 256}});
+    const auto mesh = nx::test::playerMesh(geometry, 0);
+    nx::navigation::NavigationQuery query{mesh};
+    nx::agents::Brain brain{rules()};
+    brain.setGoal(nx::Vec3{.x = 200, .y = 256});
+    nx::Vec3 feet{.x = 800, .y = 256, .z = 256};
+    nx::agents::Decision decision = brain.decide(feet, query);
+    for (int step = 0; step < 1000 && !decision.intent.climb; ++step) {
+        EXPECT_FALSE(decision.intent.crouches) << "on the roof";
+        feet = feet + (decision.intent.direction * 2.0F);
+        decision = brain.decide(feet, query);
+    }
+    ASSERT_TRUE(decision.intent.climb.has_value());
+    EXPECT_FALSE(decision.intent.crouches) << "at its top";
+    EXPECT_FALSE(brain.decide({.x = 490, .y = 256, .z = 100}, query).intent.crouches) << "on its way down";
+    EXPECT_TRUE(brain.decide({.x = 490, .y = 256, .z = 10}, query).intent.crouches) << "at its foot";
+}
+
 /// A floor and a building on it, 256 tall, with a ladder up its wall at y = 256.
 auto ladderMesh() -> nx::navigation::NavigationMesh {
     nx::navigation::Geometry geometry;

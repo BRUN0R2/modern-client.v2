@@ -125,6 +125,39 @@ TEST(StuckWatch, ABodyGoingBackAndForthAtFullSpeedIsStuckToo) {
     EXPECT_LE(ticks, 51) << "as soon as a body that stays";
 }
 
+TEST(StuckWatch, ABodyCrouchingIsHeldToAThirdOfItsStuckSpeedAndNeverJumps) {
+    constexpr float kCrawl = 10.0F; // units a second: half the stuck speed, more than a third of it
+    auto rules = nx::test::stuckRules();
+    rules.giveUpTime = nx::Seconds{60.0F};
+    auto watched = watch(rules);
+    nx::Vec3 feet{};
+    for (int tick = 0; tick < 300; ++tick) {
+        nx::agents::Intent intent = alongX();
+        intent.crouches = true;
+        ASSERT_EQ(watched.watch(intent, feet, kSpeed, true, kTick), nx::agents::Progress::Moving)
+            << "tick " << tick;
+        feet.x += kCrawl * kTick.count();
+    }
+    nx::agents::Progress progress = nx::agents::Progress::Moving;
+    for (int tick = 0; tick < 3000; ++tick) {
+        nx::agents::Intent intent = alongX();
+        intent.crouches = true;
+        progress = watched.watch(intent, feet, kSpeed, true, kTick);
+        EXPECT_FALSE(intent.jumps) << "tick " << tick;
+    }
+    EXPECT_EQ(progress, nx::agents::Progress::Stuck) << "where it stays";
+    // Standing, that crawl is stuck.
+    auto standing = watch(rules);
+    nx::Vec3 crawled{};
+    bool isStuck = false;
+    for (int tick = 0; tick < 300 && !isStuck; ++tick) {
+        nx::agents::Intent intent = alongX();
+        isStuck = standing.watch(intent, crawled, kSpeed, true, kTick) == nx::agents::Progress::Stuck;
+        crawled.x += kCrawl * kTick.count();
+    }
+    EXPECT_TRUE(isStuck);
+}
+
 TEST(StuckWatch, StuckItWigglesAheadBackOrAsideAtFullSpeedAndJumps) {
     auto rules = nx::test::stuckRules();
     rules.giveUpTime = nx::Seconds{60.0F};

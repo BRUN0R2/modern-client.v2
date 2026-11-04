@@ -568,6 +568,9 @@ void Horde::holdDecisions() {
             if (decision.intent.jumps) {
                 command.buttons.set(cs::Button::Jump);
             }
+            if (decision.intent.crouches) {
+                command.buttons.set(cs::Button::Duck);
+            }
             if (decision.intent.climb) {
                 aim = *decision.intent.climb;
             }

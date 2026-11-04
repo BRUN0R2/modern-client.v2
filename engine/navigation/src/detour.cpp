@@ -1155,6 +1155,42 @@ auto Corridor::nextLink(NavigationQuery& query) -> std::optional<MeshLink> {
         .transform([](const NextLink& next) { return next.link; });
 }
 
+auto Corridor::crouchesWithin(NavigationQuery& query, HammerUnits distance) const -> bool {
+    expects(&query.mesh() == navigationMesh, "Corridor::crouchesWithin: a query of the corridor's mesh");
+    const dtNavMesh& mesh = *query.detourState->query->getAttachedNavMesh();
+    const float* const position = detourState->corridor.getPos();
+    const float reachSquared = distance.value() * distance.value();
+    const std::span<const dtPolyRef> path{detourState->corridor.getPath(),
+                                          narrow<std::size_t>(detourState->corridor.getPathCount())};
+    for (std::size_t step = 0; step < path.size(); ++step) {
+        const dtMeshTile* tile = nullptr;
+        const dtPoly* polygon = nullptr;
+        mesh.getTileAndPolyByRefUnsafe(path[step], &tile, &polygon);
+        if (polygon->getType() == DT_POLYTYPE_OFFMESH_CONNECTION) {
+            return false;
+        }
+        if (step > 0) {
+            float nearestSquared = std::numeric_limits<float>::max();
+            const std::span<const unsigned short> corners{polygon->verts, polygon->vertCount};
+            for (std::size_t corner = 0; corner < corners.size(); ++corner) {
+                const float* const first = &tile->verts[std::size_t{corners[corner]} * kCoordinates];
+                const float* const second =
+                    &tile->verts[std::size_t{corners[(corner + 1) % corners.size()]} * kCoordinates];
+                float along = 0.0F;
+                nearestSquared =
+                    std::min(nearestSquared, dtDistancePtSegSqr2D(position, first, second, along));
+            }
+            if (nearestSquared > reachSquared) {
+                return false;
+            }
+        }
+        if (detail::kindOfArea(polygon->getArea()) == AreaKind::Crouch) {
+            return true;
+        }
+    }
+    return false;
+}
+
 auto Corridor::crossLink(NavigationQuery& query) -> std::optional<MeshLink> {
     expects(&query.mesh() == navigationMesh, "Corridor::crossLink: a query of the corridor's mesh");
     if (&query.mesh() != navigationMesh) {

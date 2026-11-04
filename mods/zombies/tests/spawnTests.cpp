@@ -86,7 +86,7 @@ protected:
         ASSERT_TRUE(text.has_value());
         auto navigation = nx::game::readNavigationData(*text, "navigation.toml");
         ASSERT_TRUE(navigation.has_value());
-        auto profile = cs::standingPlayerProfile(*navigation);
+        auto profile = cs::agentProfile(*navigation);
         ASSERT_TRUE(profile.has_value()) << (profile ? "" : nx::describe(profile.error()));
         auto built = nx::navigation::NavigationMesh::build(*jobs, game->navigationGeometry(), *profile,
                                                            navigation->build);

@@ -73,7 +73,7 @@ class Bots {
     };
 
 public:
-    /// The bots of `game`, none yet, on `mesh`, the mesh of the game's map for standingPlayerProfile: a
+    /// The bots of `game`, none yet, on `mesh`, the mesh of the game's map for agentProfile: a
     /// bot does not duck through what is only passed ducked; they decide together in jobs of `jobs`. All
     /// three must outlive them. The bodies' components are registered in the game. Errors: Unregistered
     /// (a component: its cause).

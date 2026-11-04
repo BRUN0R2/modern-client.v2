@@ -156,9 +156,13 @@ TEST(MeshFileTest, AKeyChangesWithWhatShapesTheTilesAlone) {
     stoppedElsewhere.bodyHull.nodes.front().plane.distance += 1.0F;
     Geometry stoppedOtherwise = stopped;
     stoppedOtherwise.bodyHull.nodes.back().children[1] = nx::navigation::BodyHullLeaf::Open;
+    Geometry stoppedCrouched = geometry;
+    stoppedCrouched.crouchedBodyHull = stopped.bodyHull;
     EXPECT_NE(keyOf(stopped), key);
     EXPECT_NE(keyOf(stoppedElsewhere), keyOf(stopped));
     EXPECT_NE(keyOf(stoppedOtherwise), keyOf(stopped));
+    EXPECT_NE(keyOf(stoppedCrouched), key);
+    EXPECT_NE(keyOf(stoppedCrouched), keyOf(stopped));
     EXPECT_NE(keyOf(moved), key);
     EXPECT_NE(keyOf(otherKind), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, wider, nx::test::testSettings()), key);

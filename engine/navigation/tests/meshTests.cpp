@@ -169,22 +169,57 @@ TEST(NavigationMeshTest, LowRoomIsCrouchedAndLowerIsNone) {
     }
 }
 
-TEST(NavigationMeshTest, WhereOnlyCrouchingFitsABodyHullSaysNothing) {
-    // A floor under a ceiling 50 units up, its standing hull solid under it as any such hull is.
+TEST(NavigationMeshTest, FloorIsSortedByTheBodiesThatFitOnItThoughNoSurfaceShowsWhy) {
+    // No ceiling at all: from x = 256 to 512 a standing body's hull alone is solid, and past that a crouched
+    // one's too.
+    constexpr float kStandingMiddle = 36.0F;
+    constexpr float kCrouchedMiddle = 18.0F;
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 256.0F}, 0.0F);
+    geometry.bodyHull =
+        nx::test::bodyHullOfBox({.min = {.x = 256.0F, .y = -64.0F, .z = kStandingMiddle - 1.0F},
+                                 .max = {.x = 832.0F, .y = 320.0F, .z = 128.0F}});
+    geometry.crouchedBodyHull =
+        nx::test::bodyHullOfBox({.min = {.x = 512.0F, .y = -64.0F, .z = kCrouchedMiddle - 1.0F},
+                                 .max = {.x = 832.0F, .y = 320.0F, .z = 128.0F}});
+    const MeshOutline outline = nx::test::playerMesh(geometry).outline();
+    EXPECT_TRUE(hasKind(outline, AreaKind::Floor));
+    EXPECT_TRUE(hasKind(outline, AreaKind::Crouch));
+    for (const nx::navigation::MeshPolygon& polygon : outline.polygons) {
+        for (const Vec3 corner :
+             std::span{outline.corners}.subspan(polygon.firstCorner, polygon.cornerCount)) {
+            EXPECT_LE(corner.x, 512.0F + kCell) << "where no body fits is no floor";
+            if (polygon.kind == AreaKind::Crouch) {
+                EXPECT_GE(corner.x, 256.0F - kCell);
+            } else {
+                EXPECT_LE(corner.x, 256.0F + kCell);
+            }
+        }
+    }
+    // A profile that does not crouch has none of it.
+    nx::navigation::AgentProfile standing = nx::test::playerProfile();
+    standing.crouchedHeight = standing.standingHeight;
+    const MeshOutline upright = nx::test::playerMesh(geometry, 3, standing).outline();
+    EXPECT_FALSE(hasKind(upright, AreaKind::Crouch));
+}
+
+TEST(NavigationMeshTest, UnderALowCeilingACrouchedBodysHullDecides) {
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 256.0F}, 0.0F);
     nx::test::addCeiling(geometry, {.x = 256.0F, .y = -64.0F}, {.x = 512.0F, .y = 320.0F}, 50.0F);
+    // Its standing hull is solid under any such ceiling, and says nothing there.
     geometry.bodyHull = nx::test::bodyHullOfBox(
         {.min = {.x = 240.0F, .y = -128.0F, .z = -64.0F}, .max = {.x = 528.0F, .y = 384.0F, .z = 128.0F}});
-    const MeshOutline outline = nx::test::playerMesh(geometry).outline();
-    EXPECT_TRUE(hasKind(outline, AreaKind::Crouch));
+    EXPECT_TRUE(hasKind(nx::test::playerMesh(geometry).outline(), AreaKind::Crouch));
+    geometry.crouchedBodyHull = geometry.bodyHull;
+    EXPECT_FALSE(hasKind(nx::test::playerMesh(geometry).outline(), AreaKind::Crouch));
 }
 
 TEST(NavigationMeshTest, TheFloorAlongWhatStopsABodyIsOfTheKindEdge) {
     Geometry geometry;
     nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 256.0F}, 0.0F);
-    geometry.bodyHull = nx::test::bodyHullOfBox(
-        {.min = {.x = 352.0F, .y = -64.0F, .z = -64.0F}, .max = {.x = 416.0F, .y = 320.0F, .z = 256.0F}});
+    nx::test::stopBodies(geometry, {.min = {.x = 352.0F, .y = -64.0F, .z = -64.0F},
+                                    .max = {.x = 416.0F, .y = 320.0F, .z = 256.0F}});
     const MeshOutline outline = nx::test::playerMesh(geometry, 3, nx::test::clearedPlayerProfile()).outline();
     const auto touchesBarrier = [&outline](const nx::navigation::MeshPolygon& polygon, float x) {
         return std::ranges::any_of(

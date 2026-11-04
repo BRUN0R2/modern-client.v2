@@ -189,7 +189,7 @@ private:
         if (!rules) {
             return nx::describe(rules.error());
         }
-        auto profile = cs::standingPlayerProfile(*navigation);
+        auto profile = cs::agentProfile(*navigation);
         if (!profile) {
             return nx::describe(profile.error());
         }
@@ -463,7 +463,7 @@ private:
         if (!navigation) {
             return nx::describe(navigation.error());
         }
-        auto profile = cs::standingPlayerProfile(*navigation);
+        auto profile = cs::agentProfile(*navigation);
         if (!profile) {
             return nx::describe(profile.error());
         }

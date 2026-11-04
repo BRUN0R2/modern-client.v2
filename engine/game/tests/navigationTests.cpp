@@ -183,7 +183,7 @@ TEST(NavigationGeometryTest, AFloorUnderWaterIsWater) {
     EXPECT_EQ(countFacing(geometry, {.z = 1.0F}, AreaKind::Floor), 0);
 }
 
-TEST(NavigationGeometryTest, ItsBodyHullIsTheWorldsStandingHull) {
+TEST(NavigationGeometryTest, ItsBodyHullsAreTheWorldsStandingAndDuckedOnes) {
     const std::vector<std::byte> bytes = readSeed("boxWithEntity.bsp");
     const auto map = nx::assets::BspView::parse(bytes);
     ASSERT_TRUE(map.has_value()) << nx::describe(map.error());
@@ -195,27 +195,30 @@ TEST(NavigationGeometryTest, ItsBodyHullIsTheWorldsStandingHull) {
     constexpr int kSamples = 16;
     constexpr float kSpan = 256.0F;
     constexpr float kLeast = -96.0F;
-    std::ptrdiff_t solid = 0;
-    std::ptrdiff_t open = 0;
-    for (int x = 0; x < kSamples; ++x) {
-        for (int y = 0; y < kSamples; ++y) {
-            for (int z = 0; z < kSamples; ++z) {
-                const Vec3 point =
-                    Vec3{.x = kLeast, .y = kLeast, .z = kLeast} + (Vec3{.x = static_cast<float>(x),
-                                                                        .y = static_cast<float>(y),
-                                                                        .z = static_cast<float>(z)} *
-                                                                   (kSpan / static_cast<float>(kSamples)));
-                const bool isSolid =
-                    hulls->contentsAt(nx::collision::kWorldModel, nx::collision::Hull::Standing, point) ==
-                    nx::collision::Contents::Solid;
-                EXPECT_EQ(nx::navigation::isSolidAt(geometry.bodyHull, point), isSolid)
-                    << std::format("{}", point);
-                ++(isSolid ? solid : open);
+    const auto solidOfSameAs = [&](nx::collision::Hull hull, const nx::navigation::BodyHull& made) {
+        std::ptrdiff_t solid = 0;
+        std::ptrdiff_t open = 0;
+        for (int x = 0; x < kSamples; ++x) {
+            for (int y = 0; y < kSamples; ++y) {
+                for (int z = 0; z < kSamples; ++z) {
+                    const Vec3 point = Vec3{.x = kLeast, .y = kLeast, .z = kLeast} +
+                                       (Vec3{.x = static_cast<float>(x),
+                                             .y = static_cast<float>(y),
+                                             .z = static_cast<float>(z)} *
+                                        (kSpan / static_cast<float>(kSamples)));
+                    const bool isSolid = hulls->contentsAt(nx::collision::kWorldModel, hull, point) ==
+                                         nx::collision::Contents::Solid;
+                    EXPECT_EQ(nx::navigation::isSolidAt(made, point), isSolid) << std::format("{}", point);
+                    ++(isSolid ? solid : open);
+                }
             }
         }
-    }
-    EXPECT_GT(solid, 0);
-    EXPECT_GT(open, 0);
+        EXPECT_GT(open, 0);
+        return solid;
+    };
+    // This map's ducked hull has no solid, which tells the two apart.
+    EXPECT_GT(solidOfSameAs(nx::collision::Hull::Standing, geometry.bodyHull), 0);
+    EXPECT_EQ(solidOfSameAs(nx::collision::Hull::Ducked, geometry.crouchedBodyHull), 0);
 }
 
 } // namespace

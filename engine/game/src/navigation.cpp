@@ -75,9 +75,10 @@ void addModelFaces(navigation::Geometry& geometry, const assets::BspView& map, a
     }
 }
 
-/// The first of a model's clip hulls: that of a standing player (docs/07-simulation-and-physics.md, section
-/// 3.3).
+/// Which of a model's clip hulls is a standing player's and a ducked one's, after the large entities' between
+/// them (docs/07-simulation-and-physics.md, section 3.3).
 constexpr std::size_t kStandingClipHull = 0;
+constexpr std::size_t kDuckedClipHull = 2;
 
 /// The clip nodes of `nodes` under `root`, each before those it names: a compiler writes a subtree that
 /// several nodes share once, which may come before them.
@@ -112,11 +113,11 @@ constexpr std::size_t kStandingClipHull = 0;
     return childrenFirst;
 }
 
-/// What stops a standing player in the world of `map`, as its compiler grew it: its clip brushes stop bodies
-/// in this hull alone, with no face to show them.
-[[nodiscard]] auto standingHullOf(const assets::BspView& map) -> navigation::BodyHull {
+/// What stops a body in the world of `map`, by the clip hull `clipHull` its compiler grew by the body's box:
+/// its clip brushes stop bodies in these hulls alone, with no face to show them.
+[[nodiscard]] auto worldHullOf(const assets::BspView& map, std::size_t clipHull) -> navigation::BodyHull {
     const std::span<const assets::ClipNode> nodes = map.clipNodes();
-    const assets::ClipNodeChild& root = map.models()[assets::kWorldModel.value].hulls[kStandingClipHull];
+    const assets::ClipNodeChild& root = map.models()[assets::kWorldModel.value].hulls[clipHull];
     const std::vector<std::uint32_t> order = parentsFirst(nodes, root);
     std::vector<std::uint32_t> places(nodes.size());
     for (std::uint32_t place = 0; place < order.size(); ++place) {
@@ -155,7 +156,8 @@ auto readNavigationData(std::string_view text, std::string_view sourceName)
 
 auto navigationGeometryOf(const assets::BspView& map, ecs::World& world) -> navigation::Geometry {
     navigation::Geometry geometry;
-    geometry.bodyHull = standingHullOf(map);
+    geometry.bodyHull = worldHullOf(map, kStandingClipHull);
+    geometry.crouchedBodyHull = worldHullOf(map, kDuckedClipHull);
     addModelFaces(geometry, map, assets::kWorldModel, BrushPlacement{.axes = angleVectors(EulerAngles{})});
     ecs::Query<const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
         [&geometry, &map](const BrushModel& model, const Transform& transform,

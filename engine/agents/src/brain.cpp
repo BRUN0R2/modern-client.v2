@@ -20,6 +20,10 @@ constexpr float kTurnAnticipation = 0.5F;
 /// turns there: about how wide the body turns at its full speed, so that a corner rounded into short turns
 /// counts as the one turn it is.
 constexpr float kTurnSpanRadii = 4.0F;
+/// How far ahead of floor it only fits on crouched, in its body's radii, it holds its duck key: at 250 units
+/// a second, measured, its box is ducked 52 units on, and a decision may hold for a tenth of a second before
+/// the next one.
+constexpr float kCrouchLeadRadii = 6.0F;
 /// `vector` across the ground, its height left out.
 [[nodiscard]] auto acrossOf(Vec3 vector) noexcept -> Vec3 {
     return Vec3{.x = vector.x, .y = vector.y};
@@ -402,12 +406,26 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     }
     invariant(corridor.has_value(), "Brain: a planned corridor or a reported path error");
     std::ignore = corridor->moveTarget(query, goal);
+    const HammerUnits crouchLead{kCrouchLeadRadii * profile.radius.value()};
+    // At the end of a link onto floor it only fits on crouched: down a ladder into a vent, standing, its head
+    // kept it in the shaft. Off the ground a duck is at once, so as it gets there: going up, as near as its
+    // head meets what is over that floor; going down, within a step, since ducked at the top of a ladder a
+    // body walks to it at a third of its speed.
+    const auto crouchesLanding = [&] {
+        const float heightLeft = crossing->end.z - feet.z;
+        const bool isThere = crossing->end.z > crossing->start.z
+                                 ? heightLeft <= profile.standingHeight.value()
+                                 : -heightLeft <= profile.stepHeight.value();
+        return isThere && groundDistance(crossing->end, feet) <= crouchLead.value() &&
+               corridor->crouchesWithin(query, crouchLead);
+    };
     if (crossing) {
         if (crossing->kind == navigation::AreaKind::Ladder) {
             climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
         } else {
             headFor(decision.intent, feet, crossing->end);
         }
+        decision.intent.crouches = crouchesLanding();
         return decision;
     }
     const Vec3 walkablePosition = corridor->moveAgent(query, feet);
@@ -422,8 +440,10 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     }
     std::optional<navigation::MeshLink> nextLink;
     if (beginCrossing(decision, feet, query, nextLink)) {
+        decision.intent.crouches = crouchesLanding();
         return decision;
     }
+    decision.intent.crouches = corridor->crouchesWithin(query, crouchLead);
     // Toward the first corner on from the last it reached that is farther than arrival, the turn after it
     // anticipated (calcSmoothSteerDirection). Its funnel lists a corner it reached until it crosses the edge
     // of the polygon the corner ends, which a body that cannot turn on the spot, rounding it wide, may not
@@ -563,7 +583,9 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
     const float leastWalk = std::min(leastWalkOf(rules), maxSpeed.value());
     float wished = maxSpeed.value();
     bool stops = false;
-    for (const Approach& approached : intent.approached()) {
+    // Crouched, it goes at a third of what it asks, which it may stop from anywhere, and any less is too
+    // little to gain it speed.
+    for (const Approach& approached : intent.crouches ? std::span<const Approach>{} : intent.approached()) {
         const float passing =
             (approached.passShare * maxSpeed.value()) + stoppingSpeedOf(rules, approached.distance);
         if (passing < wished) {
@@ -593,7 +615,8 @@ void Brain::steer(Intent& intent, Vec3 velocity, UnitsPerSecond maxSpeed,
         intent.direction = {};
         return;
     }
-    const float speed = std::clamp(avoidingSpeed, std::min(leastWalk, wished), wished);
+    const float speed =
+        intent.crouches ? wished : std::clamp(avoidingSpeed, std::min(leastWalk, wished), wished);
     const Vec3 steered = intent.direction * speed;
     intent.speedShare = speed / maxSpeed.value();
     intent.steered = steered;

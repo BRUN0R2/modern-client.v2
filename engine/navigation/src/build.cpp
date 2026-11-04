@@ -128,6 +128,7 @@ struct TileInput {
     std::array<float, 3> high{};
     std::vector<Aabb> ladders{};
     BodyHull bodyHull{};
+    BodyHull crouchedBodyHull{};
     AgentProfile profile{};
     BuildSettings settings{};
     VoxelProfile voxels{};
@@ -175,11 +176,14 @@ struct TileInput {
 /// What the tiles of `geometry` are built from. Errors: InvalidGeometry, TooLarge.
 [[nodiscard]] auto tileInputOf(const Geometry& geometry, const AgentProfile& profile,
                                const BuildSettings& settings) -> Result<TileInput, MeshBuildError> {
-    if (auto checked = checkBodyHull(geometry.bodyHull); !checked) {
-        return std::unexpected{std::move(checked.error())};
+    for (const BodyHull* const hull : {&geometry.bodyHull, &geometry.crouchedBodyHull}) {
+        if (auto checked = checkBodyHull(*hull); !checked) {
+            return std::unexpected{std::move(checked.error())};
+        }
     }
     TileInput input{.ladders = geometry.ladders,
                     .bodyHull = geometry.bodyHull,
+                    .crouchedBodyHull = geometry.crouchedBodyHull,
                     .profile = profile,
                     .settings = settings,
                     .voxels = voxelProfileOf(profile, settings)};
@@ -267,17 +271,24 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
     }
 }
 
-/// Whether a standing body of the profile of `input` fits on a floor at `feet`, by the body hull: its middle
-/// out of the solid within its lift, the floor's own solid, grown by its box, reaching above that on a slope.
-[[nodiscard]] auto bodyFitsAt(const TileInput& input, Vec3 feet) noexcept -> bool {
-    const Vec3 middle = feet + Vec3{.z = input.profile.standingHeight.value() * 0.5F};
+/// Whether a body of `height` fits on a floor at `feet`, by `hull`, the hull of a body of that height: its
+/// middle out of the solid within its lift, the floor's own solid, grown by its box, reaching above that on a
+/// slope.
+[[nodiscard]] auto bodyFitsAt(const TileInput& input, const BodyHull& hull, HammerUnits height,
+                              Vec3 feet) noexcept -> bool {
+    const Vec3 middle = feet + Vec3{.z = height.value() * 0.5F};
     const float voxelHeight = input.settings.cellHeight.value();
     for (int voxel = 0; voxel <= input.voxels.liftVoxels; ++voxel) {
-        if (!isSolidAt(input.bodyHull, middle + Vec3{.z = static_cast<float>(voxel) * voxelHeight})) {
+        if (!isSolidAt(hull, middle + Vec3{.z = static_cast<float>(voxel) * voxelHeight})) {
             return true;
         }
     }
     return false;
+}
+
+/// Whether a standing body of the profile of `input` fits on a floor at `feet`.
+[[nodiscard]] auto standingBodyFitsAt(const TileInput& input, Vec3 feet) noexcept -> bool {
+    return bodyFitsAt(input, input.bodyHull, input.profile.standingHeight, feet);
 }
 
 /// Whether a standing body of the profile of `input` fits all along the way from `from` to `to`, a cell at a
@@ -292,18 +303,20 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
     for (int cell = 0; cell <= cells; ++cell) {
         const float share = cells > 0 ? static_cast<float>(cell) / static_cast<float>(cells) : 0.0F;
         const Vec3 feet = from + (way * share);
-        if (!bodyFitsAt(input, feet) && !bodyFitsAt(input, feet + aside) &&
-            !bodyFitsAt(input, feet - aside)) {
+        if (!standingBodyFitsAt(input, feet) && !standingBodyFitsAt(input, feet + aside) &&
+            !standingBodyFitsAt(input, feet - aside)) {
             return false;
         }
     }
     return true;
 }
 
-/// Takes from the floor of `compact`, eroded by the profile's radius already, where no standing body fits,
-/// which no surface may show (BodyHull). Where only crouching fits the hull is solid over any such floor:
-/// it says nothing there.
-void removeWhereNoBodyFits(rcCompactHeightfield& compact, const TileInput& input) {
+/// Sorts the floor of `compact`, eroded by the profile's radius already, by the bodies that fit on it, which
+/// no surface may show (BodyHull): where no standing one does, it is of the kind Crouch where a crouched one
+/// of a profile that crouches does, else no floor.
+void sortFloorByBodies(rcCompactHeightfield& compact, const TileInput& input) {
+    const AgentProfile& profile = input.profile;
+    const bool crouches = profile.crouchedHeight < profile.standingHeight;
     const std::span cells{compact.cells, narrow<std::size_t>(compact.width * compact.height)};
     const std::span spans{compact.spans, narrow<std::size_t>(compact.spanCount)};
     const std::span areas{compact.areas, spans.size()};
@@ -312,16 +325,21 @@ void removeWhereNoBodyFits(rcCompactHeightfield& compact, const TileInput& input
             const rcCompactCell& cell = cells[narrow<std::size_t>(column + (row * compact.width))];
             const std::size_t firstSpan = cell.index;
             for (std::size_t span = firstSpan; span < firstSpan + cell.count; ++span) {
-                if (areas[span] == RC_NULL_AREA || areas[span] == areaIdOf(AreaKind::Crouch)) {
+                if (areas[span] == RC_NULL_AREA) {
                     continue;
                 }
                 const std::array<float, 3> floor{
                     compact.bmin[0] + ((static_cast<float>(column) + 0.5F) * compact.cs),
                     compact.bmin[1] + (static_cast<float>(spans[span].y) * compact.ch),
                     compact.bmin[2] + ((static_cast<float>(row) + 0.5F) * compact.cs)};
-                if (!bodyFitsAt(input, positionOf(floor))) {
-                    areas[span] = RC_NULL_AREA;
+                const Vec3 feet = positionOf(floor);
+                if (areas[span] != areaIdOf(AreaKind::Crouch) && standingBodyFitsAt(input, feet)) {
+                    continue;
                 }
+                areas[span] =
+                    crouches && bodyFitsAt(input, input.crouchedBodyHull, profile.crouchedHeight, feet)
+                        ? areaIdOf(AreaKind::Crouch)
+                        : std::uint8_t{RC_NULL_AREA};
             }
         }
     }
@@ -819,9 +837,9 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
 }
 
 /// Tile `tileX`, `tileY` of `input`, as Recast builds it: its voxels, the floor the profile's radius
-/// keeps away from walls and ledges, less where no body fits (removeWhereNoBodyFits), that floor along them
-/// within its wall clearance (markEdges), its regions, their outlines, the polygons of those and their
-/// details. None when it holds no floor. Errors: TileRefused.
+/// keeps away from walls and ledges, sorted by the bodies that fit on it (sortFloorByBodies), that floor
+/// along them within its wall clearance (markEdges), its regions, their outlines, the polygons of those and
+/// their details. None when it holds no floor. Errors: TileRefused.
 [[nodiscard]] auto buildTile(const TileInput& input, std::int32_t tileX, std::int32_t tileY)
     -> Result<std::optional<BuiltTile>, MeshBuildError> {
     RecastLog log;
@@ -844,7 +862,7 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
         return refused(log, tileX, tileY, "its floor kept from walls");
     }
     markCrouching(*compact, voxels.standingVoxels);
-    removeWhereNoBodyFits(*compact, input);
+    sortFloorByBodies(*compact, input);
     if (auto marked = markEdges(log, *compact, voxels.clearanceCells, tileX, tileY); !marked) {
         return std::unexpected{std::move(marked.error())};
     }
@@ -966,7 +984,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 5;
+constexpr std::uint32_t kTilesVersion = 6;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -980,6 +998,20 @@ void appendChild(std::vector<std::byte>& bytes, const BodyHullChild& child) {
         appendLittleEndian(bytes, *index);
     } else {
         appendLittleEndian(bytes, std::to_underlying(std::get<BodyHullLeaf>(child)));
+    }
+}
+
+/// Adds to `bytes` all of `hull`.
+void appendHull(std::vector<std::byte>& bytes, const BodyHull& hull) {
+    appendChild(bytes, hull.root);
+    appendLittleEndian(bytes, std::uint64_t{hull.nodes.size()});
+    for (const BodyHullNode& node : hull.nodes) {
+        for (const float value :
+             {node.plane.normal.x, node.plane.normal.y, node.plane.normal.z, node.plane.distance}) {
+            appendLittleEndian(bytes, value);
+        }
+        appendChild(bytes, node.children[0]);
+        appendChild(bytes, node.children[1]);
     }
 }
 
@@ -1025,16 +1057,8 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
             appendLittleEndian(bytes, value);
         }
     }
-    appendChild(bytes, geometry.bodyHull.root);
-    appendLittleEndian(bytes, std::uint64_t{geometry.bodyHull.nodes.size()});
-    for (const BodyHullNode& node : geometry.bodyHull.nodes) {
-        for (const float value :
-             {node.plane.normal.x, node.plane.normal.y, node.plane.normal.z, node.plane.distance}) {
-            appendLittleEndian(bytes, value);
-        }
-        appendChild(bytes, node.children[0]);
-        appendChild(bytes, node.children[1]);
-    }
+    appendHull(bytes, geometry.bodyHull);
+    appendHull(bytes, geometry.crouchedBodyHull);
     return MeshKey{hash64(bytes)};
 }
 

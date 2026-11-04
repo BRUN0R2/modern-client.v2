@@ -69,12 +69,10 @@ class Horde {
     };
 
 public:
-    /// The horde walks `mesh`, the mesh of the game's map for cs::standingPlayerProfile: this adapter
-    /// cannot crouch, so it leaves out crouch-only passages. Its brains decide together in jobs of
-    /// `jobs`. The game, its content, the mesh and the jobs must outlive the horde; destroying the horde
-    /// removes its bodies while their mesh is there.
-    /// Requires validated settings and a matching type issued by the game's catalog.
-    /// Errors: SpawnFailed (component registration).
+    /// The horde walks `mesh`, the mesh of the game's map for cs::agentProfile. Its brains decide together in
+    /// jobs of `jobs`. The game, its content, the mesh and the jobs must outlive the horde; destroying the
+    /// horde removes its bodies while their mesh is there. Requires validated settings and a matching type
+    /// issued by the game's catalog. Errors: SpawnFailed (component registration).
     [[nodiscard]] static auto create(cs::Game& game, const nx::navigation::NavigationMesh& mesh,
                                      nx::jobs::JobSystem& jobs, cs::EntityTypeIndex type, Settings settings)
         -> nx::Result<std::unique_ptr<Horde>, ZombieError>;
