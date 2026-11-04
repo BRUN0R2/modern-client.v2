@@ -390,10 +390,11 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     nx::ecs::World world;
     const auto firstEntity = world.spawn();
     auto first = snapshotAt(0, {});
-    first.entities.push_back({.entity = firstEntity, .type = *type});
+    first.entities = cs::EntityStates{std::vector<cs::EntityState>{{.entity = firstEntity, .type = *type}}};
     cs::ClientGame game{models(), playerModels(), std::move(first)};
     auto next = snapshotAt(1, {});
-    next.entities.push_back({.entity = firstEntity, .type = *type, .origin = {.x = 100}});
+    next.entities = cs::EntityStates{
+        std::vector<cs::EntityState>{{.entity = firstEntity, .type = *type, .origin = {.x = 100}}}};
     game.receive(std::move(next));
     EXPECT_EQ(game.ticksDue(kTick / 2.0F, cs::CatchUp::Whole), 0U);
     std::vector<cs::ShownEntity> shown;
@@ -405,7 +406,8 @@ TEST_F(ClientGameTest, EntityInterpolationUsesTheGenerationAndNeverARecycledSlot
     EXPECT_EQ(replacement.index(), firstEntity.index());
     EXPECT_NE(replacement, firstEntity);
     auto replaced = snapshotAt(2, {});
-    replaced.entities.push_back({.entity = replacement, .type = *type, .origin = {.x = 1000}});
+    replaced.entities = cs::EntityStates{
+        std::vector<cs::EntityState>{{.entity = replacement, .type = *type, .origin = {.x = 1000}}}};
     game.receive(std::move(replaced));
     game.writeEntities(catalog, cs::kLongestCorpseStay, shown);
     ASSERT_EQ(shown.size(), 1U);

@@ -9,8 +9,13 @@
 //
 // Its label is a hash of where the players went: the same on any build and any number of workers while what
 // the bots do does not change.
+//
+// A crowd on a floor as wide as it takes, far past any real match, to find what does not scale:
+//
+//     nxBenchServer --benchmark_filter=crowdTick/100000 --benchmark_min_time=200x
 
 #include <benchmark/benchmark.h>
+#include <cstring>
 
 import std;
 import nx.core;
@@ -18,9 +23,11 @@ import nx.math;
 import nx.platform;
 import nx.console;
 import nx.assets;
+import nx.ecs;
 import nx.jobs;
 import nx.game;
 import nx.navigation;
+import nx.agents;
 import cs.shared;
 import cs.server;
 import cs.bots;
@@ -123,8 +130,8 @@ public:
     void tick() {
         const Clock::time_point start = Clock::now();
         std::vector<cs::PlayerCommand> commands = botPlayers->commands();
-        const std::vector<cs::EntityCommand> entityCommands =
-            horde ? horde->commands() : std::vector<cs::EntityCommand>{};
+        const std::span<const cs::EntityCommand> entityCommands =
+            horde ? horde->commands() : std::span<const cs::EntityCommand>{};
         const Clock::time_point decided = Clock::now();
         commandNumber = cs::CommandNumber{commandNumber.value + 1};
         commands.push_back(
@@ -267,6 +274,271 @@ private:
     std::uint64_t placesHash = kHashStart;
 };
 
+/// How far apart a crowd's bodies stand, wider than their boxes, and how wide its floor is.
+constexpr float kCrowdSpacing = 40.0F;
+constexpr float kCrowdFloor = 16384.0F;
+/// How high above the floor of the corpus's box map a body's origin is placed; it drops to the floor.
+constexpr float kCrowdHeight = 100.0F;
+/// The side of the corpus's box map, and where a BSP's vertices and entities lumps are in its header.
+constexpr float kCorpusBoxSide = 64.0F;
+constexpr std::size_t kEntitiesLumpAt = sizeof(std::int32_t);
+constexpr std::size_t kVerticesLumpAt = sizeof(std::int32_t) + (3 * 2 * sizeof(std::int32_t));
+/// How far a body of a crowd without brains turns each tick, each its own way, so that it walks a circle.
+constexpr float kCrowdTurnPerTick = 0.2F;
+constexpr float kFullTurnDegrees = 360.0F;
+/// Far enough apart that the yaws of a crowd's bodies do not line up.
+constexpr float kYawPerBody = 137.5F;
+
+/// The corpus's box map, the floor of its hulls across all of x and y, its faces stretched to kCrowdFloor
+/// each way so that a mesh may be built on them, and a player's spawn point in their middle.
+[[nodiscard]] auto crowdFloorMap() -> std::vector<std::byte> {
+    auto read =
+        nx::platform::readFile(std::filesystem::path{NX_FUZZ_CORPUS_DIRECTORY} / "bsp" / "boxEmbedded.bsp");
+    std::vector<std::byte> bytes = std::move(read).value_or(std::vector<std::byte>{});
+    if (bytes.size() < kVerticesLumpAt + (2 * sizeof(std::int32_t))) {
+        return bytes;
+    }
+    const std::string entities = std::format(R"({{ "classname" "worldspawn" }}
+{{ "classname" "info_player_start" "origin" "{0} {0} {1}" }})",
+                                             kCrowdFloor / 2.0F, kCrowdHeight);
+    const auto entitiesAt = nx::narrow<std::int32_t>(bytes.size());
+    std::ranges::copy(std::as_bytes(std::span{entities}), std::back_inserter(bytes));
+    bytes.push_back(std::byte{0});
+    const std::array entitiesLump{entitiesAt, nx::narrow<std::int32_t>(entities.size() + 1)};
+    std::memcpy(bytes.data() + kEntitiesLumpAt, entitiesLump.data(), sizeof(entitiesLump));
+    std::array<std::int32_t, 2> vertices{};
+    std::memcpy(vertices.data(), bytes.data() + kVerticesLumpAt, sizeof(vertices));
+    using Vertex = std::array<float, 3>;
+    const auto first = static_cast<std::size_t>(vertices[0]);
+    for (std::size_t at = first; at + sizeof(Vertex) <= first + static_cast<std::size_t>(vertices[1]);
+         at += sizeof(Vertex)) {
+        Vertex point{};
+        std::memcpy(point.data(), bytes.data() + at, sizeof(point));
+        point[0] *= kCrowdFloor / kCorpusBoxSide;
+        point[1] *= kCrowdFloor / kCorpusBoxSide;
+        std::memcpy(bytes.data() + at, point.data(), sizeof(point));
+    }
+    return bytes;
+}
+
+/// What a crowd's bodies do: walk a circle each, or go across the floor by brains, each to the far side of
+/// its middle, on a mesh, steering around each other.
+enum class CrowdKind : std::uint8_t {
+    Walking,
+    Thinking,
+};
+
+/// `bodies` bodies of a player's model on a floor, in rows from its middle, and a player that stands among
+/// them.
+class Crowd {
+public:
+    Crowd(std::uint32_t bodies, CrowdKind crowdKind) : kind{crowdKind} {
+        auto executable = nx::platform::executablePath();
+        if (!executable) {
+            failure = nx::describe(executable.error());
+            return;
+        }
+        const std::filesystem::path data = executable->parent_path() / "data";
+        auto opened = cs::openGameContent(data, std::nullopt, std::nullopt);
+        if (!opened) {
+            failure = nx::describe(opened.error());
+            return;
+        }
+        content.emplace(std::move(*opened));
+        auto settings = zombies::readSettings(
+            nx::platform::readTextFile(data / "mods" / "zombies.toml").value_or(std::string{}),
+            "zombies.toml");
+        if (!settings) {
+            failure = nx::describe(settings.error());
+            return;
+        }
+        settings->body.model = std::string{kZombieModel};
+        auto type = content->entities.add(content->vfs, settings->body, cs::ModelTextures::Read);
+        if (!type) {
+            failure = nx::describe(type.error());
+            return;
+        }
+        auto loaded = cs::GameMap::read(crowdFloorMap(), "crowd");
+        if (!loaded) {
+            failure = nx::describe(loaded.error());
+            return;
+        }
+        map = std::move(*loaded);
+        auto registered = cs::GameCvars::registerIn(console);
+        if (!registered) {
+            failure = nx::describe(registered.error());
+            return;
+        }
+        cvars.emplace(std::move(*registered));
+        auto started = cs::Game::start(*content, *map, *cvars);
+        if (!started) {
+            failure = nx::describe(started.error());
+            return;
+        }
+        game = std::move(*started);
+        player = game->join(cs::spawnTeam(map->map()), cs::AutoSwitch::ToHeavier, "Player");
+        auto workers = nx::jobs::JobSystem::create();
+        if (!workers) {
+            failure = "no Job System";
+            return;
+        }
+        jobs = std::move(*workers);
+        const Clock::time_point spawning = Clock::now();
+        const auto rows = static_cast<std::uint32_t>(std::ceil(std::sqrt(static_cast<float>(bodies))));
+        const float fromMiddle = (kCrowdFloor - (static_cast<float>(rows) * kCrowdSpacing)) / 2.0F;
+        entities.reserve(bodies);
+        spawned.reserve(bodies);
+        for (std::uint32_t body = 0; body < bodies; ++body) {
+            const nx::Vec3 origin{.x = fromMiddle + (static_cast<float>(body % rows) * kCrowdSpacing),
+                                  .y = fromMiddle + (static_cast<float>(body / rows) * kCrowdSpacing),
+                                  .z = kCrowdHeight};
+            auto made = game->createEntity(*type, {.origin = origin});
+            if (!made) {
+                failure = nx::describe(made.error());
+                return;
+            }
+            entities.push_back(*made);
+            spawned.push_back(origin);
+        }
+        spawnSeconds = secondsBetween(spawning, Clock::now());
+        speed = settings->body.speed;
+        if (kind == CrowdKind::Thinking) {
+            failure = makeHorde(data, std::move(*settings), *type);
+        }
+    }
+
+    /// One tick of the game, what its bodies ask for and its player's command, each part's time kept.
+    void tick() {
+        const Clock::time_point start = Clock::now();
+        std::vector<cs::EntityCommand> walking;
+        if (kind == CrowdKind::Walking) {
+            walking = walked();
+        }
+        const std::span<const cs::EntityCommand> commands =
+            kind == CrowdKind::Thinking ? horde->commands() : std::span<const cs::EntityCommand>{walking};
+        const Clock::time_point decided = Clock::now();
+        commandNumber = cs::CommandNumber{commandNumber.value + 1};
+        const std::array playerCommands{
+            cs::PlayerCommand{.player = player,
+                              .command = cs::UserCommand{.number = commandNumber,
+                                                         .duration = nx::tickLengthOf(game->time().rate),
+                                                         .viewAngles = game->ownStateOf(player).view}}};
+        game->tick(playerCommands, commands, jobs.get());
+        const Clock::time_point ticked = Clock::now();
+        cs::PlayerSnapshot snapshot = game->snapshotFor(player);
+        benchmark::DoNotOptimize(snapshot);
+        const Clock::time_point told = Clock::now();
+        decisions.push_back(secondsBetween(start, decided));
+        ticks.push_back(secondsBetween(decided, ticked));
+        snapshots.push_back(secondsBetween(ticked, told));
+        wholes.push_back(secondsBetween(start, told));
+    }
+
+    [[nodiscard]] auto lastWhole() const -> double { return wholes.back(); }
+
+    /// Reports each part's median, 99th percentile and worst tick on `state`.
+    void report(benchmark::State& state) {
+        const auto add = [&state](const std::string& name, std::vector<double>& times) {
+            state.counters[name + "Median"] = millisecondsAt(times, 0.5);
+            state.counters[name + "P99"] = millisecondsAt(times, 0.99);
+            state.counters[name + "Worst"] = millisecondsAt(times, 1.0);
+        };
+        add("asked", decisions);
+        add("tick", ticks);
+        add("snapshot", snapshots);
+        add("whole", wholes);
+        state.counters["spawnSeconds"] = spawnSeconds;
+    }
+
+    std::string failure;
+
+private:
+    /// The bodies made a horde, on the floor's mesh, that sees the player in the middle from anywhere; what
+    /// failed, or nothing.
+    [[nodiscard]] auto makeHorde(const std::filesystem::path& data, zombies::Settings settings,
+                                 cs::EntityTypeIndex type) -> std::string {
+        auto navigation = nx::game::readNavigationData(
+            nx::platform::readTextFile(data / "cstrike" / "navigation.toml").value_or(std::string{}),
+            "navigation.toml");
+        if (!navigation) {
+            return nx::describe(navigation.error());
+        }
+        auto profile = cs::standingPlayerProfile(*navigation);
+        if (!profile) {
+            return nx::describe(profile.error());
+        }
+        auto built = nx::navigation::NavigationMesh::build(*jobs, game->navigationGeometry(), *profile,
+                                                           navigation->build);
+        if (!built) {
+            return nx::describe(built.error());
+        }
+        mesh.emplace(std::move(*built));
+        settings.sightRange = nx::HammerUnits{2.0F * kCrowdFloor};
+        settings.fieldOfView = nx::Degrees{kFullTurnDegrees};
+        auto made = zombies::Horde::create(*game, *mesh, *jobs, type, std::move(settings));
+        if (!made) {
+            return nx::describe(made.error());
+        }
+        horde = std::move(*made);
+        horde->adopt(entities);
+        return {};
+    }
+
+    /// Each body walks a circle of its own, of the game's clock.
+    [[nodiscard]] auto walked() const -> std::vector<cs::EntityCommand> {
+        std::vector<cs::EntityCommand> commands;
+        commands.reserve(entities.size());
+        const nx::game::TickTime time = game->time();
+        for (std::size_t body = 0; body < entities.size(); ++body) {
+            const float yaw = std::fmod((static_cast<float>(body) * kYawPerBody) +
+                                            (static_cast<float>(time.now.tick()) * kCrowdTurnPerTick),
+                                        kFullTurnDegrees);
+            commands.push_back({.entity = entities[body],
+                                .command = {.duration = nx::tickLengthOf(time.rate),
+                                            .viewAngles = {.yaw = nx::Degrees{yaw}},
+                                            .move = {.forward = speed}}});
+        }
+        return commands;
+    }
+
+    nx::log::Logger logger; ///< Of no sinks: what the game logs is no part of its tick here.
+    nx::log::DefaultLoggerScope loggerScope{logger};
+    nx::test::RecordingOutput output;
+    nx::test::MemoryFiles files;
+    nx::console::Console console{output, files};
+    CrowdKind kind;
+    std::optional<cs::GameContent> content;
+    std::optional<cs::GameCvars> cvars;
+    std::unique_ptr<cs::GameMap> map;
+    std::unique_ptr<cs::Game> game;
+    std::unique_ptr<nx::jobs::JobSystem> jobs;
+    std::optional<nx::navigation::NavigationMesh> mesh;
+    std::unique_ptr<zombies::Horde> horde; ///< Of `entities`, on `mesh`, when they think.
+    std::vector<nx::ecs::Entity> entities;
+    std::vector<nx::Vec3> spawned;
+    nx::UnitsPerSecond speed{};
+    cs::PlayerIndex player{};
+    cs::CommandNumber commandNumber{};
+    double spawnSeconds = 0.0;
+    std::vector<double> decisions;
+    std::vector<double> ticks;
+    std::vector<double> snapshots;
+    std::vector<double> wholes;
+};
+
+void crowdTick(benchmark::State& state, CrowdKind kind) {
+    Crowd crowd{nx::narrow<std::uint32_t>(state.range(0)), kind};
+    if (!crowd.failure.empty()) {
+        state.SkipWithError(crowd.failure);
+        return;
+    }
+    for (auto ignored : state) {
+        crowd.tick();
+        state.SetIterationTime(crowd.lastWhole());
+    }
+    crowd.report(state);
+}
+
 void botMatchTick(benchmark::State& state, std::string_view map) {
     BotMatch match{map, nx::narrow<std::uint32_t>(state.range(0))};
     if (!match.failure.empty()) {
@@ -295,6 +567,18 @@ void hordeTick(benchmark::State& state, std::string_view map) {
 
 } // namespace
 
+BENCHMARK_CAPTURE(crowdTick, walking, CrowdKind::Walking)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->UseManualTime()
+    ->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(crowdTick, thinking, CrowdKind::Thinking)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->UseManualTime()
+    ->Unit(benchmark::kMillisecond);
 BENCHMARK_CAPTURE(hordeTick, cs_assault, "cs_assault")
     ->Arg(256)
     ->Arg(1024)

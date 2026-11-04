@@ -175,7 +175,7 @@ private:
     PlayerSnapshot m_last;               ///< What the server told last.
     /// Previous snapshot's origins by PlayerIndex; none where that snapshot had no player.
     std::vector<std::optional<nx::Vec3>> previousPlayerOrigins;
-    std::map<nx::ecs::Entity, nx::Vec3> previousEntityOrigins;
+    EntityStates previousEntities{};               ///< The tick before the last, by entity as the last's are.
     std::vector<std::optional<Gait>> m_gaits;      ///< By PlayerIndex: none for one not seen yet.
     CorpseClock<std::uint32_t> playerCorpses;      ///< When the dead players died, by PlayerIndex.
     CorpseClock<nx::ecs::Entity> entityCorpses;    ///< When the dead entity bodies died.

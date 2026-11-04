@@ -253,6 +253,10 @@ from the original, to test these rules against, are pending
 
 - Dynamic spatial partitioning (AABB tree) for moving entities, plus links to BSP leafs
   for PVS/PAS.
+  **Today** (`nx::game::SolidBoxes`): the entities solid as boxes by the square of the ground each stands in, as the
+  original's area nodes keep them (`SV_LinkEdict`, `SV_ClipToLinks`): gathered in jobs once a tick and again as something
+  else may have changed them, kept where each player's move leaves its body, so that a trace or a move looks only at
+  those about it.
 - Players collide with each other using the hull box.
 - Bullet traces test the studio model's **hitboxes** (animated bones) to get the
   *hitgroup*.

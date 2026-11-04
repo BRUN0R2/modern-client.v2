@@ -10,6 +10,7 @@ export module cs.server:gameState;
 import std;
 import nx.core;
 import nx.math;
+import nx.jobs;
 import nx.ecs;
 import nx.game;
 import cs.shared;
@@ -91,19 +92,33 @@ struct TickEvents {
     void clear() noexcept;
 };
 
-/// What the players' moves of a tick meet, as the original keeps its entities linked and lists for each move
-/// those near it (SV_AddLinksToPM): what finds them, kept so that it looks for their archetypes once; the
-/// brush entities, and the boxes, by entity, kept where each move leaves its own, gathered once a tick and
-/// again as what a move did may have changed what is solid; and what a move is given, kept for its room.
+/// The entities' bodies as they are now, written once however many ask: the lists written last, kept for
+/// their room until no snapshot holds them, and whether the newest is out of date.
+struct EntityStateLists {
+    static constexpr std::size_t kKept =
+        3; ///< The newest, and what clients hold to go from one tick to the next.
+
+    std::array<std::shared_ptr<std::vector<EntityState>>, kKept> lists{};
+    std::size_t newest = 0;
+    bool isStale = true;
+};
+
+/// What the moves, the traces and the spawns of a tick meet, as the original keeps its entities linked and
+/// lists for each move those near it (SV_AddLinksToPM): what finds them, kept so that it looks for their
+/// archetypes once; the brush entities, and what is solid to a trace, its boxes kept where each move leaves
+/// its own, gathered once a tick and again as something else may have changed what is solid; and what a move
+/// is given, kept for its room.
 struct MoveLists {
-    explicit MoveLists(nx::ecs::World& world) : brushQuery{world}, boxQuery{world}, volumes{world} {}
+    explicit MoveLists(nx::ecs::World& world) : brushQuery{world}, volumes{world} {}
 
     BrushEntityQuery brushQuery;
-    SolidBoxQuery boxQuery;
     nx::game::TouchedVolumes volumes;
     std::vector<LinkedBrushEntity> brushes{};
-    std::vector<SolidBox> boxes{};
-    bool isStale = true; ///< As a tick starts, and when an attack or a use may have changed what is solid.
+    nx::game::Solids solids{};
+    nx::jobs::JobSystem* jobs = nullptr; ///< Who gathers for a tick, while it runs; none between them.
+    bool areBrushesStale =
+        true; ///< As a tick starts and ends, and when a use or an attack may have changed them.
+    bool areBoxesStale = true; ///< As a tick starts and ends, and when a player joins, leaves or is placed.
     std::vector<BrushEntity> nearBrushes{};
     std::vector<SolidBox> nearBoxes{};
 };
@@ -132,7 +147,20 @@ struct GameState {
     TickEvents events{};
     MapLightStyles lightStyles; ///< Owned by this game; copied into each client's snapshot.
     std::optional<MoveLists> moves{};
+    EntityStateLists entityStates{};
 };
+
+/// The entities' bodies of `game` as they are now, written if stale, in jobs if given.
+void refreshEntityStates(GameState& game, nx::jobs::JobSystem* jobs);
+
+/// The entities' bodies of `game` as they are now, for snapshots to share.
+[[nodiscard]] auto entityStatesNow(GameState& game) -> EntityStates;
+
+/// The list `lists` holds next, on the room of one no snapshot holds any more.
+[[nodiscard]] auto nextEntityStates(EntityStateLists& lists) -> std::vector<EntityState>&;
+
+/// What is solid in `game` now (GameState::moves), gathered anew only as far as it is stale.
+auto solidsNow(GameState& game) -> nx::game::Solids&;
 
 /// The player `index` names, in the game.
 [[nodiscard]] auto playerAt(GameState& game, PlayerIndex index) -> Player&;

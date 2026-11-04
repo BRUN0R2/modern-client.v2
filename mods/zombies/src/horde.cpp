@@ -27,6 +27,31 @@ constexpr int kGenerationBits = 32;
 /// The stream of random numbers how far off a zombie places what it hears draws from, of its body and the
 /// tick.
 constexpr std::string_view kHearingStream = "zombie hearing";
+/// The fewest bodies it is worth handing to a worker to write what they ask: little work each.
+constexpr std::size_t kSmallestAskedBatch = 512;
+/// What a batch wrote at the start of its own part of a list.
+struct WrittenPart {
+    std::size_t first = 0;
+    std::size_t count = 0;
+};
+/// Closes up the `parts` written of `list`, in order; how many they are.
+template <class Element>
+[[nodiscard]] auto closedUp(std::span<Element> list, std::span<const WrittenPart> parts) -> std::size_t {
+    auto end = list.begin();
+    for (const WrittenPart& part : parts) {
+        const auto from = list.begin() + static_cast<std::ptrdiff_t>(part.first);
+        if (from != end) {
+            std::ranges::move(from, from + static_cast<std::ptrdiff_t>(part.count), end);
+        }
+        end += static_cast<std::ptrdiff_t>(part.count);
+    }
+    return static_cast<std::size_t>(end - list.begin());
+}
+/// How many ticks of `rate` go by between a body's turns of `interval`: at least one.
+[[nodiscard]] auto ticksPerThinkOf(nx::Seconds interval, nx::TickRate rate) noexcept -> std::uint64_t {
+    return std::max<std::uint64_t>(
+        static_cast<std::uint64_t>(std::llround(interval / nx::tickLengthOf(rate))), 1);
+}
 /// The seed of the draws of `entity`'s body: its slot above its generation.
 [[nodiscard]] auto seedOf(nx::ecs::Entity entity) noexcept -> std::uint64_t {
     return (std::uint64_t{std::to_underlying(entity.index())} << kGenerationBits) |
@@ -112,18 +137,18 @@ namespace {
     const auto positive = [](float value) {
         return std::isfinite(value) && value > 0.0F;
     };
-    if (!positive(read->sightRange.value()) || !positive(read->fieldOfView.value()) ||
-        read->fieldOfView.value() > kFullTurnDegrees || !positive(read->memoryLifetime.count()) ||
-        !positive(read->arrivalDistance.value()) || !positive(read->replanDistance.value()) ||
-        !std::isfinite(read->replanShare) || read->replanShare < 0.0F || !std::isfinite(read->braking) ||
-        read->braking < 0.0F || !std::isfinite(read->stopSpeed.value()) ||
-        read->stopSpeed < nx::UnitsPerSecond{} || !std::isfinite(read->acceleration) ||
-        read->acceleration < 0.0F || !std::isfinite(read->shortTermMemory.count()) ||
-        read->shortTermMemory < nx::Seconds{} || !std::isfinite(read->threatRecency.count()) ||
-        read->threatRecency < nx::Seconds{} || !std::isfinite(read->threatMargin.value()) ||
-        read->threatMargin < nx::HammerUnits{} || !positive(read->spawnRadius.value()) ||
-        !positive(read->spawnSpacing.value()) || read->memoryLimit == 0 || read->perceptionBudget == 0 ||
-        read->spawnBatchLimit == 0) {
+    if (!positive(read->thinkInterval.count()) || !positive(read->sightRange.value()) ||
+        !positive(read->fieldOfView.value()) || read->fieldOfView.value() > kFullTurnDegrees ||
+        !positive(read->memoryLifetime.count()) || !positive(read->arrivalDistance.value()) ||
+        !positive(read->replanDistance.value()) || !std::isfinite(read->replanShare) ||
+        read->replanShare < 0.0F || !std::isfinite(read->braking) || read->braking < 0.0F ||
+        !std::isfinite(read->stopSpeed.value()) || read->stopSpeed < nx::UnitsPerSecond{} ||
+        !std::isfinite(read->acceleration) || read->acceleration < 0.0F ||
+        !std::isfinite(read->shortTermMemory.count()) || read->shortTermMemory < nx::Seconds{} ||
+        !std::isfinite(read->threatRecency.count()) || read->threatRecency < nx::Seconds{} ||
+        !std::isfinite(read->threatMargin.value()) || read->threatMargin < nx::HammerUnits{} ||
+        !positive(read->spawnRadius.value()) || !positive(read->spawnSpacing.value()) ||
+        read->memoryLimit == 0 || read->perceptionBudget == 0 || read->spawnBatchLimit == 0) {
         return nx::fail(
             ZombieError::InvalidData,
             std::format(
@@ -260,59 +285,148 @@ auto Horde::spawn(std::span<const cs::SpawnPoint> base, std::uint32_t count)
             std::format("only {} of {} clear reachable positions were found; the batch was rolled back",
                         born.size(), count));
     }
-    for (const nx::ecs::Entity entity : born) {
+    adopt(born);
+    return {};
+}
+
+void Horde::adopt(std::span<const nx::ecs::Entity> bodies) {
+    cs::Game& game = *owner;
+    const nx::game::TickTime time = game.time();
+    const cs::EntityStates states = game.entities();
+    for (const nx::ecs::Entity entity : bodies) {
         const std::uint64_t seed = seedOf(entity);
         auto attached = game.attachEntityComponent(
             entity, nx::agents::Agent{
                         .brain = nx::agents::Brain{rulesOf(settings)},
                         .stuck = nx::agents::StuckWatch{settings.stuck, nx::Random{seed, kStuckStream}}});
         nx::invariant(attached.has_value(), "Horde: a newly created body accepts its brain");
-        agents.push_back(entity);
+        // Until its first turn it stands as it was made.
+        const auto state = std::ranges::lower_bound(states, entity, {}, &cs::EntityState::entity);
+        nx::invariant(state != states.end() && state->entity == entity, "Horde: a body made already");
+        members.push_back(
+            {.entity = entity,
+             .command = {.duration = nx::tickLengthOf(time.rate), .viewAngles = state->angles}});
     }
-    return {};
+    std::ranges::sort(members, {}, &Member::entity);
+    // At a tick of its own by its slot, so that as many think each tick.
+    const std::uint64_t ticksPerThink = ticksPerThinkOf(settings.thinkInterval, time.rate);
+    membersOfTurn.assign(ticksPerThink, {});
+    for (std::size_t index = 0; index < members.size(); ++index) {
+        const std::uint64_t slot = std::to_underlying(members[index].entity.index());
+        membersOfTurn[(ticksPerThink - (slot % ticksPerThink)) % ticksPerThink].push_back(
+            nx::narrow<std::uint32_t>(index));
+    }
 }
 
-auto Horde::commands() -> std::vector<cs::EntityCommand> {
+auto Horde::commands() -> std::span<const cs::EntityCommand> {
+    if (members.empty()) {
+        return {};
+    }
     cs::Game& game = *owner;
-    const std::vector<cs::EntityState> bodies = game.entities();
+    const cs::EntityStates bodies = game.entities();
     const std::vector<cs::PerceptionTarget> targets = game.perceptionTargets();
-    const std::vector<cs::GameNoise> noises = game.noises();
+    const nx::game::TickTime time = game.time();
+    const std::uint64_t ticksPerThink = ticksPerThinkOf(settings.thinkInterval, time.rate);
+    // The noises of the think interval it ends: each body's turn comes once in it, and hears each once.
+    const std::vector<cs::GameNoise> noisesNow = game.noises();
+    if (noisesOfTick.size() >= ticksPerThink) {
+        noisesHeard.erase(noisesHeard.begin(), noisesHeard.begin() + noisesOfTick.front());
+        noisesOfTick.erase(noisesOfTick.begin());
+    }
+    noisesHeard.insert(noisesHeard.end(), noisesNow.begin(), noisesNow.end());
+    noisesOfTick.push_back(nx::narrow<std::uint32_t>(noisesNow.size()));
+    findTurns(bodies, static_cast<std::uint64_t>(time.now.tick()),
+              nx::tickLengthOf(time.rate) * static_cast<float>(ticksPerThink));
+    if (!turns.empty()) {
+        // Nothing moves while the horde perceives: what is solid to its sights is gathered once.
+        const std::vector<nx::game::SolidBrushEntity> solids = game.sightSolids();
+        perceive(targets, solids);
+        writeSteeredAround(bodies);
+        // Nor does a decision depend on another's.
+        decisions.resize(requests.size());
+        deciders.decide(*jobs, requests, decisions, steeredAround);
+        holdDecisions();
+    }
+    writeAsked(bodies);
+    return asked;
+}
+
+void Horde::findTurns(const cs::EntityStates& bodies, std::uint64_t tick, nx::Seconds elapsed) {
+    cs::Game& game = *owner;
+    const std::span<const std::uint32_t> due = membersOfTurn[tick % membersOfTurn.size()];
+    // A body's agent by its slot: found once for all of them, as they stay where they are while the horde
+    // thinks.
+    struct Part {
+        std::span<const nx::ecs::Entity> entities;
+        std::span<nx::agents::Agent> agents;
+    };
+    std::vector<Part> parts;
+    game.forEachEntityComponentChunk<nx::agents::Agent>(
+        [&parts](std::span<const nx::ecs::Entity> entities, std::span<nx::agents::Agent> agents) {
+            parts.push_back({.entities = entities, .agents = agents});
+        });
+    std::size_t slots = agentOfSlot.size();
+    for (const Member& member : members) {
+        slots = std::max(slots, std::size_t{std::to_underlying(member.entity.index())} + 1);
+    }
+    agentOfSlot.resize(slots);
+    jobs->forBatches({.label = "zombies.agents", .priority = nx::jobs::Priority::Critical}, parts.size(), 4,
+                     [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+                         for (const Part& part : std::span{parts}.subspan(first, last - first)) {
+                             for (std::size_t row = 0; row < part.entities.size(); ++row) {
+                                 const auto slot =
+                                     std::size_t{std::to_underlying(part.entities[row].index())};
+                                 if (slot < agentOfSlot.size()) {
+                                     agentOfSlot[slot] = &part.agents[row];
+                                 }
+                             }
+                         }
+                     });
+    // Each batch writes those alive at the start of its own part, and the parts close up after.
+    turns.resize(due.size());
+    requests.resize(due.size());
+    std::vector<WrittenPart> written(jobs->batchCountOf(due.size(), nx::agents::kSmallestBatch));
+    const auto findBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        std::size_t count = 0;
+        for (const std::uint32_t index : due.subspan(first, last - first)) {
+            Member& member = members[index];
+            const auto body = std::ranges::lower_bound(bodies, member.entity, {}, &cs::EntityState::entity);
+            if (body == bodies.end() || body->entity != member.entity || body->health <= nx::HitPoints{}) {
+                continue;
+            }
+            nx::agents::Agent* const agent = agentOfSlot[std::to_underlying(member.entity.index())];
+            nx::invariant(agent != nullptr, "Horde: an attached brain");
+            turns[first + count] = {.member = &member,
+                                    .body = &*body,
+                                    .agent = agent,
+                                    .eye = body->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()}};
+            requests[first + count] = {.brain = &agent->brain,
+                                       .feet = feetOf(body->origin),
+                                       .velocity = body->velocity,
+                                       .maxSpeed = settings.body.speed,
+                                       .body = member.entity,
+                                       .stuck = &agent->stuck,
+                                       .elapsed = elapsed};
+            ++count;
+        }
+        written[batch] = {.first = first, .count = count};
+    };
+    jobs->forBatches({.label = "zombies.turns", .priority = nx::jobs::Priority::Critical}, due.size(),
+                     nx::agents::kSmallestBatch, findBatch);
+    turns.resize(closedUp(std::span{turns}, written));
+    requests.resize(closedUp(std::span{requests}, written));
+}
+
+void Horde::perceive(std::span<const cs::PerceptionTarget> targets,
+                     std::span<const nx::game::SolidBrushEntity> solids) {
+    cs::Game& game = *owner;
+    const nx::game::TickTime time = game.time();
+    const float minimumDot =
+        std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / kFullTurnDegrees);
     // The players there still are, living: a zombie forgets the others (nx::agents::Brain::forgetAbsent).
     std::vector<nx::ecs::Entity> present =
         targets | std::views::transform(&cs::PerceptionTarget::entity) | std::ranges::to<std::vector>();
     std::ranges::sort(present);
-    // Nothing moves while the horde perceives: what is solid to its sights is gathered once.
-    const nx::game::Solids solids = game.sightSolids();
-    const nx::game::TickTime time = game.time();
-    const float minimumDot =
-        std::cos(settings.fieldOfView.value() * std::numbers::pi_v<float> / kFullTurnDegrees);
-    // A body alive this tick, its agent and its eye, between what it perceives and what it decides.
-    struct Turn {
-        nx::ecs::Entity entity{};
-        const cs::EntityState* body = nullptr;
-        nx::agents::Agent* agent = nullptr;
-        nx::Vec3 eye{};
-    };
-    std::vector<Turn> turns;
-    std::vector<nx::agents::DecisionRequest> requests;
-    for (const nx::ecs::Entity entity : agents) {
-        const auto found = std::ranges::lower_bound(bodies, entity, {}, &cs::EntityState::entity);
-        if (found == bodies.end() || found->entity != entity || found->health <= nx::HitPoints{}) {
-            continue;
-        }
-        nx::agents::Agent* const component = game.entityComponent<nx::agents::Agent>(entity);
-        nx::invariant(component != nullptr, "Horde: an attached brain");
-        nx::agents::Agent& agent = *component;
-        const nx::Vec3 eye = found->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()};
-        turns.push_back({.entity = entity, .body = &*found, .agent = &agent, .eye = eye});
-        requests.push_back({.brain = &agent.brain,
-                            .feet = feetOf(found->origin),
-                            .velocity = found->velocity,
-                            .maxSpeed = settings.body.speed,
-                            .body = entity,
-                            .stuck = &agent.stuck,
-                            .elapsed = nx::tickLengthOf(time.rate)});
-    }
     // What a body perceives does not depend on what another perceives or decides: in batches in jobs, each
     // with a query of its own.
     while (queries.size() < jobs->batchCountOf(turns.size(), nx::agents::kSmallestBatch)) {
@@ -321,10 +435,12 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
     const auto perceiveBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
         std::vector<nx::agents::Observation> seen;
         for (std::size_t index = first; index < last; ++index) {
-            const auto [entity, found, component, eye] = turns[index];
-            nx::agents::Agent& agent = *component;
+            const Turn& turn = turns[index];
+            const nx::ecs::Entity entity = turn.member->entity;
+            const nx::Vec3 eye = turn.eye;
+            nx::agents::Agent& agent = *turn.agent;
             seen.clear();
-            const nx::Vec3 forward = nx::angleVectors(found->angles).forward;
+            const nx::Vec3 forward = nx::angleVectors(turn.body->angles).forward;
             std::optional<nx::assets::LeafSet>
                 leaves; // what its eye may see, found once a candidate needs it
             const std::size_t budget = std::min(targets.size(), std::size_t{settings.perceptionBudget});
@@ -351,86 +467,159 @@ auto Horde::commands() -> std::vector<cs::EntityCommand> {
             // A zombie plays in no team: it hears every player.
             nx::Random hearing{seedOf(entity) ^ std::bit_cast<std::uint64_t>(time.now.tick()),
                                kHearingStream};
-            agent.brain.sense(cs::heardBy({.ear = eye}, noises, settings.hearing, queries[batch], hearing),
-                              time.now, time.rate);
+            agent.brain.sense(
+                cs::heardBy({.ear = eye}, noisesHeard, settings.hearing, queries[batch], hearing), time.now,
+                time.rate);
             // Felt where they are, last: the players its body touches.
             agent.brain.sense(
-                cs::touchedBy({.entity = entity, .origin = found->origin, .box = cs::kStandingBox}, targets),
+                cs::touchedBy({.entity = entity, .origin = turn.body->origin, .box = cs::kStandingBox},
+                              targets),
                 time.now, time.rate);
         }
     };
     jobs->forBatches({.label = "zombies.perceive", .priority = nx::jobs::Priority::Critical}, turns.size(),
                      nx::agents::kSmallestBatch, perceiveBatch);
-    // The bodies the horde steers around, players' and its own.
-    const std::vector<nx::agents::Body> steeredAround =
-        game.movingBodies() | std::views::transform([](const cs::MovingBody& body) {
-            return nx::agents::Body{
-                .entity = body.entity, .feet = body.feet, .velocity = body.velocity, .radius = body.radius};
-        }) |
-        std::ranges::to<std::vector>();
-    // Nor does a decision depend on another's.
-    std::vector<nx::agents::Decision> decisions(requests.size());
-    deciders.decide(*jobs, requests, decisions, steeredAround);
-    std::vector<cs::EntityCommand> commands;
-    commands.reserve(turns.size());
-    for (std::size_t index = 0; index < turns.size(); ++index) {
-        const auto [entity, found, component, eye] = turns[index];
-        nx::agents::Agent& agent = *component;
-        const nx::agents::Decision& decision = decisions[index];
-        if (agent.behavior != decision.behavior) {
-            if (transitionLogs.allow()) {
-                const std::string failure = decision.navigationError
-                                                ? std::format(", {}", nx::enumName(*decision.navigationError))
-                                                : std::string{};
-                nx::log::info(kLog, "agent {}:{}: {} -> {}{} ({} transitions suppressed)",
-                              std::to_underlying(entity.index()), std::to_underlying(entity.generation()),
-                              nx::enumName(agent.behavior), nx::enumName(decision.behavior), failure,
-                              transitionLogs.takeSuppressed());
+}
+
+void Horde::holdDecisions() {
+    // A body whose behavior changed, and from what, for the log after them.
+    struct Transition {
+        nx::ecs::Entity entity{};
+        nx::agents::Behavior from{};
+        nx::agents::Behavior to{};
+        std::optional<nx::navigation::NavigationError> failure{};
+    };
+    std::vector<std::vector<Transition>> transitions(
+        jobs->batchCountOf(turns.size(), nx::agents::kSmallestBatch));
+    const auto holdBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        for (std::size_t index = first; index < last; ++index) {
+            const Turn& turn = turns[index];
+            const nx::agents::Decision& decision = decisions[index];
+            Member& member = *turn.member;
+            nx::agents::Agent& agent = *turn.agent;
+            if (agent.behavior != decision.behavior) {
+                transitions[batch].push_back({.entity = member.entity,
+                                              .from = agent.behavior,
+                                              .to = decision.behavior,
+                                              .failure = decision.navigationError});
+                agent.behavior = decision.behavior;
             }
-            agent.behavior = decision.behavior;
+            cs::UserCommand command{.duration = member.command.duration, .viewAngles = turn.body->angles};
+            // It faces the way it goes, steered or wiggling, as its model walks ahead, and is driven the way
+            // its velocity must change (nx::agents::Intent::drive), ahead and to its side: faced the way it
+            // is driven, it turned its back on its way as it slowed down, and lost sight of what it chased.
+            member.walks = !decision.intent.attacks && nx::length(decision.intent.direction) > 0.0F;
+            nx::Vec3 aim = decision.intent.direction;
+            if (decision.intent.attacks && decision.intent.lookAt) {
+                aim = *decision.intent.lookAt - turn.eye;
+                command.buttons.set(cs::Button::Attack);
+            }
+            if (decision.intent.jumps) {
+                command.buttons.set(cs::Button::Jump);
+            }
+            if (nx::length(aim) > 0.0F) {
+                command.viewAngles.yaw =
+                    nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
+                command.viewAngles.pitch = nx::Degrees{-std::atan2(aim.z, std::hypot(aim.x, aim.y)) *
+                                                       kHalfTurnDegrees / std::numbers::pi_v<float>};
+            }
+            member.command = command;
+            if (member.walks) {
+                const nx::AngleVectors axes =
+                    nx::angleVectors(nx::EulerAngles{.yaw = command.viewAngles.yaw});
+                member.steered = decision.intent.steered;
+                member.way = decision.intent.direction;
+                member.forward = axes.forward;
+                member.right = axes.right;
+                member.speed = settings.body.speed * decision.intent.speedShare;
+            }
         }
-        cs::UserCommand command{.duration = nx::tickLengthOf(time.rate), .viewAngles = found->angles};
-        // It faces the way it goes, steered or wiggling, as its model walks ahead, and is driven the way its
-        // velocity must change (nx::agents::Intent::drive), ahead and to its side: faced the way it is
-        // driven, it turned its back on its way as it slowed down, and lost sight of what it chased.
-        const bool walks = !decision.intent.attacks && nx::length(decision.intent.direction) > 0.0F;
-        nx::Vec3 aim = decision.intent.direction;
-        if (decision.intent.attacks && decision.intent.lookAt) {
-            aim = *decision.intent.lookAt - eye;
-            command.buttons.set(cs::Button::Attack);
+    };
+    jobs->forBatches({.label = "zombies.hold", .priority = nx::jobs::Priority::Critical}, turns.size(),
+                     nx::agents::kSmallestBatch, holdBatch);
+    for (const Transition& transition : transitions | std::views::join) {
+        if (transitionLogs.allow()) {
+            const std::string failure =
+                transition.failure ? std::format(", {}", nx::enumName(*transition.failure)) : std::string{};
+            nx::log::info(kLog, "agent {}:{}: {} -> {}{} ({} transitions suppressed)",
+                          std::to_underlying(transition.entity.index()),
+                          std::to_underlying(transition.entity.generation()), nx::enumName(transition.from),
+                          nx::enumName(transition.to), failure, transitionLogs.takeSuppressed());
         }
-        if (decision.intent.jumps) {
-            command.buttons.set(cs::Button::Jump);
-        }
-        if (nx::length(aim) > 0.0F) {
-            command.viewAngles.yaw =
-                nx::Degrees{std::atan2(aim.y, aim.x) * kHalfTurnDegrees / std::numbers::pi_v<float>};
-            command.viewAngles.pitch = nx::Degrees{-std::atan2(aim.z, std::hypot(aim.x, aim.y)) *
-                                                   kHalfTurnDegrees / std::numbers::pi_v<float>};
-        }
-        if (walks) {
-            const nx::Vec3 driven = decision.intent.drivenWay();
-            const nx::AngleVectors axes = nx::angleVectors(nx::EulerAngles{.yaw = command.viewAngles.yaw});
-            const nx::UnitsPerSecond speed = settings.body.speed * decision.intent.speedShare;
-            command.move.forward = speed * nx::dot(driven, axes.forward);
-            command.move.side = speed * nx::dot(driven, axes.right);
-        }
-        commands.push_back({.entity = entity, .command = command});
     }
-    return commands;
+}
+
+void Horde::writeSteeredAround(const cs::EntityStates& bodies) {
+    const std::vector<cs::MovingBody> players = owner->movingPlayers();
+    steeredAround.resize(players.size() + bodies.size());
+    std::ranges::transform(players, steeredAround.begin(), [](const cs::MovingBody& moving) {
+        return nx::agents::Body{.entity = moving.entity,
+                                .feet = moving.feet,
+                                .velocity = moving.velocity,
+                                .radius = moving.radius};
+    });
+    // Each batch writes those alive at the start of its own part, and the parts close up after.
+    const std::span<nx::agents::Body> parts = std::span{steeredAround}.subspan(players.size());
+    std::vector<WrittenPart> written(jobs->batchCountOf(bodies.size(), kSmallestAskedBatch));
+    const auto writeBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        std::size_t count = 0;
+        for (const cs::EntityState& body : bodies.all().subspan(first, last - first)) {
+            if (body.health > nx::HitPoints{}) {
+                parts[first + count++] = {.entity = body.entity,
+                                          .feet = feetOf(body.origin),
+                                          .velocity = body.velocity,
+                                          .radius = nx::HammerUnits{cs::kStandingBox.max.x}};
+            }
+        }
+        written[batch] = {.first = first, .count = count};
+    };
+    jobs->forBatches({.label = "zombies.steeredAround", .priority = nx::jobs::Priority::Critical},
+                     bodies.size(), kSmallestAskedBatch, writeBatch);
+    steeredAround.resize(players.size() + closedUp(parts, written));
+}
+
+void Horde::writeAsked(const cs::EntityStates& bodies) {
+    asked.resize(members.size());
+    const auto writeBatch = [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+        if (first == last) {
+            return;
+        }
+        auto body = std::ranges::lower_bound(bodies, members[first].entity, {}, &cs::EntityState::entity);
+        for (std::size_t index = first; index < last; ++index) {
+            const Member& member = members[index];
+            cs::UserCommand command = member.command;
+            if (member.walks) {
+                while (body != bodies.end() && body->entity < member.entity) {
+                    ++body;
+                }
+                const bool isThere = body != bodies.end() && body->entity == member.entity;
+                const nx::Vec3 driven =
+                    member.steered && isThere
+                        ? nx::agents::driveToward(*member.steered, body->velocity).value_or(member.way)
+                        : member.way;
+                command.move.forward = member.speed * nx::dot(driven, member.forward);
+                command.move.side = member.speed * nx::dot(driven, member.right);
+            }
+            asked[index] = {.entity = member.entity, .command = command};
+        }
+    };
+    jobs->forBatches({.label = "zombies.asked", .priority = nx::jobs::Priority::Critical}, members.size(),
+                     kSmallestAskedBatch, writeBatch);
 }
 
 auto Horde::clear() -> nx::Result<void, ZombieError> {
     cs::Game& game = *owner;
-    for (const nx::ecs::Entity entity : agents) {
-        if (auto removed = game.removeEntity(entity); !removed) {
+    for (const Member& member : members) {
+        if (auto removed = game.removeEntity(member.entity); !removed) {
             // A body removed by another native consumer already satisfies clear's postcondition.
             if (removed.error().code != cs::EntityError::UnknownEntity) {
                 return nx::fail(ZombieError::SpawnFailed, std::move(removed.error()));
             }
         }
     }
-    agents.clear();
+    members.clear();
+    membersOfTurn.clear();
+    asked.clear();
     return {};
 }
 } // namespace zombies

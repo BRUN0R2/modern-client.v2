@@ -14,10 +14,13 @@ import cs.shared;
 namespace cs {
 namespace {
 constexpr nx::log::Category kLog{"entities"};
-/// The fewest bodies it is worth handing to a worker to move: a move costs some microseconds.
-constexpr std::size_t kSmallestMoveBatch = 32;
+/// The fewest chunks of bodies, some dozen each, it is worth handing to a worker: a move costs some
+/// microseconds.
+constexpr std::size_t kSmallestChunkBatch = 2;
 struct EntityBodyData {
     const EntityCatalog* catalog = nullptr;
+    std::vector<const EntityCommand*>
+        asked{}; ///< By the index of an entity, none between ticks; kept for its room.
 };
 
 /// What an entity body's hitboxes were placed for: its sequence and frame, and where it stood, turned.
@@ -156,8 +159,8 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
         body.movement.isDead = true;
         world.get<nx::game::Body>(entity)->isPushed = false;
         world.remove<nx::game::BoxSolidity>(entity);
-        nx::log::info(kLog, "entity {:?} {}:{} dies", type.definition.id, std::to_underlying(entity.index()),
-                      std::to_underlying(entity.generation()));
+        nx::log::debug(kLog, "entity {:?} {}:{} dies", type.definition.id, std::to_underlying(entity.index()),
+                       std::to_underlying(entity.generation()));
     }
     return {.damage = taken, .dealt = dealt, .isKilled = isKilled};
 }
@@ -175,8 +178,105 @@ auto registerEntityBodies(nx::ecs::World& world, const EntityCatalog& catalog)
     return {};
 }
 
+namespace {
+/// What every body's move of a tick is given, as many threads as move them reading it.
+struct BodyMoveWorld {
+    nx::game::TickTime time;
+    const EntityCatalog& catalog;
+    const nx::collision::BrushHulls& hulls;
+    const nx::game::SolidBoxes& stoppers;
+    std::span<const LinkedBrushEntity> brushes;
+};
+
+/// What a body's tick made that is not its own to write, for after all of them have moved.
+struct BodyMade {
+    nx::ecs::Entity entity{};
+    std::optional<EntityStep> step{};
+    std::optional<nx::Vec3> strikesAlong{};
+    std::vector<nx::collision::ModelIndex> touched{};
+};
+
+/// A tick of `body` of `entity`: asked for `asked`, or at rest; `near` and `nearBrushes` are kept for their
+/// room; adds to `made` what it made.
+void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, const EntityCommand* asked,
+              EntityBody& body, nx::game::Transform& transform, nx::game::Body& solid,
+              std::vector<SolidBox>& near, std::vector<BrushEntity>& nearBrushes,
+              std::vector<BodyMade>& made) {
+    const nx::game::TickTime& time = moving.time;
+    advanceFrame(body.animation, time.now, time.rate);
+    if (body.health <= nx::HitPoints{}) {
+        return;
+    }
+    const EntityType& type = moving.catalog.type(body.type);
+    UserCommand command = asked != nullptr ? asked->command
+                                           : UserCommand{.duration = nx::tickLengthOf(time.rate),
+                                                         .viewAngles = transform.angles};
+    // The server owns the body's time; an agent cannot accelerate it by sending a longer command.
+    command.duration = nx::tickLengthOf(time.rate);
+    command.buttons.reset(Button::Duck);
+    // Knocked back, it walks no faster than its share of its speed, held back while staggered: the
+    // speed it may walk at, as a weapon caps a player's (pmove->maxspeed), rather than a share of the
+    // walk it asks for, which left one asked to walk slowly where it was: a body at rest loses
+    // sv_stopspeed's worth to friction each tick, more than a walk under 60 units a second gains it
+    // (PM_Friction, PM_Accelerate).
+    body.movement.maxSpeed = type.definition.speed;
+    if (type.definition.knockback) {
+        const float share = walkShareOf(*type.definition.knockback, body.knockedBack, time.now, time.rate);
+        if (share > 0.0F) {
+            body.movement.maxSpeed = type.definition.speed * share;
+        } else {
+            command.move = {};
+        }
+    }
+    const nx::Vec3 before = transform.origin;
+    body.movement.origin = before;
+    boxesNear(moving.stoppers, before, entity, near);
+    brushEntitiesNear(moving.brushes, before, nearBrushes);
+    MovementResult moved =
+        simulateMovement(body.movement, command, MovementSettings{}, moving.hulls, nearBrushes, near);
+    body.movement = moved.state;
+    std::optional<EntityStep> step;
+    if (type.definition.stride && body.movement.isOnGround) {
+        // A step each stride it walks on the ground, as its feet meet it.
+        body.walked = body.walked + nx::HammerUnits{std::hypot(body.movement.origin.x - before.x,
+                                                               body.movement.origin.y - before.y)};
+        if (body.walked >= *type.definition.stride) {
+            body.walked = nx::HammerUnits{std::fmod(body.walked.value(), type.definition.stride->value())};
+            step = EntityStep{.entity = entity,
+                              .position = body.movement.origin + nx::Vec3{.z = kStandingBox.min.z}};
+        }
+    }
+    transform.origin = body.movement.origin;
+    transform.angles = {.yaw = command.viewAngles.yaw};
+    solid = bodyOf(body.movement);
+    std::optional<nx::Vec3> strikesAlong;
+    if (command.buttons.test(Button::Attack) && time.now >= body.attacksAgainAt) {
+        body.attacksAgainAt = time.now.after(type.definition.meleeInterval, time.rate);
+        play(body, type, EntityMotion::Attacking, time.now, moving.catalog);
+        strikesAlong = nx::angleVectors(command.viewAngles).forward;
+    } else if (body.motion != EntityMotion::Attacking || body.animation.isFinished ||
+               time.now >= body.attacksAgainAt) {
+        play(body, type,
+             nx::length(body.movement.velocity) > 0.0F ? EntityMotion::Walking : EntityMotion::Idle, time.now,
+             moving.catalog);
+    }
+    if (step || strikesAlong || !moved.touchedModels.empty()) {
+        made.push_back({.entity = entity,
+                        .step = step,
+                        .strikesAlong = strikesAlong,
+                        .touched = std::move(moved.touchedModels)});
+    }
+}
+} // namespace
+
 auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hulls, EntityTypeIndex typeIndex,
                      nx::game::Transform placement) -> nx::Result<nx::ecs::Entity, EntityError> {
+    return spawnEntityBody(world, hulls, nx::game::solidsOf(world, hulls), typeIndex, placement);
+}
+
+auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
+                     const nx::game::Solids& solids, EntityTypeIndex typeIndex, nx::game::Transform placement)
+    -> nx::Result<nx::ecs::Entity, EntityError> {
     if (!std::isfinite(placement.origin.x) || !std::isfinite(placement.origin.y) ||
         !std::isfinite(placement.origin.z) || !std::isfinite(placement.angles.yaw.value()) ||
         placement.angles.pitch != nx::Degrees{} || placement.angles.roll != nx::Degrees{}) {
@@ -185,9 +285,10 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     }
     const EntityCatalog& catalog = catalogOf(world);
     const EntityType& type = catalog.type(typeIndex);
-    placement.origin = nx::game::droppedToFloor(world, hulls, kStandingBox, placement.origin, std::nullopt);
+    placement.origin =
+        nx::game::droppedToFloor(world, hulls, solids, kStandingBox, placement.origin, std::nullopt);
     const nx::game::SolidHit met = nx::game::traceSolidsHit(
-        world, hulls, {.box = kStandingBox, .start = placement.origin, .end = placement.origin});
+        world, hulls, solids, {.box = kStandingBox, .start = placement.origin, .end = placement.origin});
     if (met.trace.startsSolid || met.trace.isAllSolid) {
         return nx::fail(EntityError::InvalidPlacement, "the standing body overlaps something solid");
     }
@@ -203,26 +304,26 @@ auto spawnEntityBody(nx::ecs::World& world, const nx::collision::BrushHulls& hul
                     nx::game::ClipMethod{.clip = &clipEntity}, PlacedEntityHitboxes{},
                     nx::game::DamageMethod{.takeAttack = &harmEntity},
                     nx::game::Classified{.classification = nx::game::Classification::Organic});
-    nx::log::info(kLog, "entity {:?} {}:{} spawns at {}", type.definition.id,
-                  std::to_underlying(entity.index()), std::to_underlying(entity.generation()),
-                  placement.origin);
+    nx::log::debug(kLog, "entity {:?} {}:{} spawns at {}", type.definition.id,
+                   std::to_underlying(entity.index()), std::to_underlying(entity.generation()),
+                   placement.origin);
     return entity;
 }
 
 auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hulls,
                      std::span<const EntityCommand> commands, nx::jobs::JobSystem* jobs) -> EntityBodiesTick {
-    std::vector<nx::ecs::Entity> entities;
-    nx::ecs::Query<nx::ecs::Entity, const EntityBody&>{world}.forEach(
-        [&entities](nx::ecs::Entity entity, const EntityBody&) { entities.push_back(entity); });
-    std::ranges::sort(entities);
     const nx::game::TickTime time = nx::game::tickTimeOf(world);
-    const EntityCatalog& catalog = catalogOf(world);
-    std::vector<const EntityCommand*> requests;
-    requests.reserve(commands.size());
-    for (const EntityCommand& command : commands) {
-        requests.push_back(&command);
+    EntityBodyData& data = *world.resource<EntityBodyData>();
+    const EntityCatalog& catalog = *data.catalog;
+    // What each is asked by the index of its entity, the first asked of it if asked twice.
+    std::vector<const EntityCommand*>& asked = data.asked;
+    asked.resize(std::max(asked.size(), world.entitySlotCount()));
+    for (const EntityCommand& command : std::views::reverse(commands)) {
+        const auto index = std::size_t{std::to_underlying(command.entity.index())};
+        if (index < asked.size()) {
+            asked[index] = &command;
+        }
     }
-    std::ranges::stable_sort(requests, {}, &EntityCommand::entity);
     // What the moves meet, gathered once for the tick, as the original links its entities once and keeps
     // them linked where they move, each move given those near it (SV_AddLinksToPM): the brush entities, which
     // no body moves; and the boxes of all but these bodies, which pass through each other, as a mod's horde
@@ -232,131 +333,97 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     BrushEntityQuery brushQuery{world};
     std::vector<LinkedBrushEntity> brushes;
     linkedBrushEntitiesOf(brushQuery, hulls, brushes);
-    std::vector<SolidBox> boxes = solidBoxesOf(world);
-    std::erase_if(boxes, [&world](const SolidBox& solid) { return world.has<EntityBody>(solid.entity); });
-    // A body's move, once what it asks for is known, and what it made of it.
-    struct Move {
-        nx::ecs::Entity entity{};
-        const EntityType* type = nullptr;
-        /// Until they all moved: nothing is added or removed meanwhile.
-        const MovementState* state = nullptr;
-        UserCommand command{};
-        nx::Vec3 before{};
-        MovementResult moved{};
+    nx::game::SolidBoxes stoppers;
+    nx::ecs::Query<nx::ecs::Entity, const nx::game::Transform&, const nx::game::BoxSolidity&,
+                   nx::ecs::Optional<const nx::game::ClipMethod>, nx::ecs::Without<EntityBody>>{world}
+        .forEach([&stoppers](nx::ecs::Entity entity, const nx::game::Transform& transform,
+                             const nx::game::BoxSolidity& solidity, const nx::game::ClipMethod* clip) {
+            stoppers.add({.entity = entity,
+                          .origin = transform.origin,
+                          .box = solidity.box,
+                          .clip = clip != nullptr ? *clip : nx::game::ClipMethod{}});
+        });
+    // The rows of a chunk of them.
+    struct Part {
+        std::span<const nx::ecs::Entity> entities;
+        std::span<EntityBody> bodies;
+        std::span<nx::game::Transform> transforms;
+        std::span<nx::game::Body> solids;
     };
-    std::vector<Move> moves;
-    moves.reserve(entities.size());
-    for (const nx::ecs::Entity entity : entities) {
-        EntityBody& body = *world.get<EntityBody>(entity);
-        advanceFrame(body.animation, time.now, time.rate);
-        if (body.health <= nx::HitPoints{}) {
-            continue;
-        }
-        const EntityType& type = catalog.type(body.type);
-        UserCommand command{.duration = nx::tickLengthOf(time.rate),
-                            .viewAngles = world.get<nx::game::Transform>(entity)->angles};
-        const auto requested = std::ranges::lower_bound(requests, entity, {}, &EntityCommand::entity);
-        if (requested != requests.end() && (*requested)->entity == entity) {
-            command = (*requested)->command;
-        }
-        // The server owns the body's time; an agent cannot accelerate it by sending a longer command.
-        command.duration = nx::tickLengthOf(time.rate);
-        command.buttons.reset(Button::Duck);
-        // Knocked back, it walks no faster than its share of its speed, held back while staggered: the speed
-        // it may walk at, as a weapon caps a player's (pmove->maxspeed), rather than a share of the walk it
-        // asks for, which left one asked to walk slowly where it was: a body at rest loses sv_stopspeed's
-        // worth to friction each tick, more than a walk under 60 units a second gains it (PM_Friction,
-        // PM_Accelerate).
-        body.movement.maxSpeed = type.definition.speed;
-        if (type.definition.knockback) {
-            const float share =
-                walkShareOf(*type.definition.knockback, body.knockedBack, time.now, time.rate);
-            if (share > 0.0F) {
-                body.movement.maxSpeed = type.definition.speed * share;
-            } else {
-                command.move = {};
-            }
-        }
-        body.movement.origin = world.get<nx::game::Transform>(entity)->origin;
-        moves.push_back({.entity = entity,
-                         .type = &type,
-                         .state = &body.movement,
-                         .command = command,
-                         .before = body.movement.origin});
-    }
-    const auto moveBatch = [&](std::size_t /*batch*/, std::size_t first, std::size_t last) {
+    std::vector<Part> parts;
+    nx::ecs::Query<nx::ecs::Entity, EntityBody&, nx::game::Transform&, nx::game::Body&>{world}.forEachChunk(
+        [&parts](std::span<const nx::ecs::Entity> entities, std::span<EntityBody> bodies,
+                 std::span<nx::game::Transform> transforms, std::span<nx::game::Body> solids) {
+            parts.push_back(
+                {.entities = entities, .bodies = bodies, .transforms = transforms, .solids = solids});
+        });
+    const BodyMoveWorld moving{
+        .time = time, .catalog = catalog, .hulls = hulls, .stoppers = stoppers, .brushes = brushes};
+    std::vector<std::vector<BodyMade>> madeOfBatch(
+        jobs != nullptr ? jobs->batchCountOf(parts.size(), kSmallestChunkBatch) : 1);
+    const auto moveBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
         std::vector<SolidBox> near;
         std::vector<BrushEntity> nearBrushes;
-        for (std::size_t index = first; index < last; ++index) {
-            Move& move = moves[index];
-            boxesNear(boxes, move.before, move.entity, near);
-            brushEntitiesNear(brushes, move.before, nearBrushes);
-            move.moved =
-                simulateMovement(*move.state, move.command, MovementSettings{}, hulls, nearBrushes, near);
+        std::vector<BodyMade>& made = madeOfBatch[batch];
+        for (const Part& part : std::span{parts}.subspan(first, last - first)) {
+            for (std::size_t row = 0; row < part.entities.size(); ++row) {
+                const nx::ecs::Entity entity = part.entities[row];
+                const EntityCommand* const command = asked[std::to_underlying(entity.index())];
+                moveBody(moving, entity, command != nullptr && command->entity == entity ? command : nullptr,
+                         part.bodies[row], part.transforms[row], part.solids[row], near, nearBrushes, made);
+            }
         }
     };
     if (jobs != nullptr) {
-        jobs->forBatches({.label = "entities.move", .priority = nx::jobs::Priority::Critical}, moves.size(),
-                         kSmallestMoveBatch, moveBatch);
+        jobs->forBatches({.label = "entities.move", .priority = nx::jobs::Priority::Critical}, parts.size(),
+                         kSmallestChunkBatch, moveBatch);
     } else {
-        moveBatch(0, 0, moves.size());
+        moveBatch(0, 0, parts.size());
     }
-    EntityBodiesTick done;
-    for (const Move& move : moves) {
-        const nx::ecs::Entity entity = move.entity;
-        const EntityType& type = *move.type;
-        const UserCommand& command = move.command;
-        const MovementResult& moved = move.moved;
-        const nx::Vec3 before = move.before;
-        EntityBody& body = *world.get<EntityBody>(entity);
-        body.movement = moved.state;
-        if (type.definition.stride && body.movement.isOnGround) {
-            // A step each stride it walks on the ground, as its feet meet it.
-            body.walked = body.walked + nx::HammerUnits{std::hypot(body.movement.origin.x - before.x,
-                                                                   body.movement.origin.y - before.y)};
-            if (body.walked >= *type.definition.stride) {
-                body.walked =
-                    nx::HammerUnits{std::fmod(body.walked.value(), type.definition.stride->value())};
-                done.steps.push_back(
-                    {.entity = entity, .position = body.movement.origin + nx::Vec3{.z = kStandingBox.min.z}});
-            }
+    for (const EntityCommand& command : commands) {
+        const auto index = std::size_t{std::to_underlying(command.entity.index())};
+        if (index < asked.size()) {
+            asked[index] = nullptr;
         }
-        nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
-        transform.origin = body.movement.origin;
-        transform.angles = {.yaw = command.viewAngles.yaw};
-        *world.get<nx::game::Body>(entity) = bodyOf(body.movement);
-        const bool strikes = command.buttons.test(Button::Attack) && time.now >= body.attacksAgainAt;
-        if (strikes) {
-            body.attacksAgainAt = time.now.after(type.definition.meleeInterval, time.rate);
-            play(body, type, EntityMotion::Attacking, time.now, catalog);
+    }
+    // What they made that is the world's, in the order of their entities.
+    std::vector<BodyMade> made;
+    for (std::vector<BodyMade>& ofBatch : madeOfBatch) {
+        std::ranges::move(ofBatch, std::back_inserter(made));
+    }
+    std::ranges::sort(made, {}, &BodyMade::entity);
+    EntityBodiesTick done;
+    // Strikes pass through the bodies they pass through; gathered for the first, and again once a touch may
+    // have changed what is solid.
+    std::optional<std::vector<nx::game::SolidBrushEntity>> strikesMeet;
+    for (const BodyMade& move : made) {
+        if (move.step) {
+            done.steps.push_back(*move.step);
+        }
+        if (move.strikesAlong) {
+            if (!strikesMeet) {
+                strikesMeet = nx::game::solidBrushesOf(world, hulls);
+            }
+            const EntityBody& body = *world.get<EntityBody>(move.entity);
+            const EntityType& type = catalog.type(body.type);
             const nx::Vec3 eye = body.movement.origin + nx::Vec3{.z = body.movement.viewHeight.value()};
-            const nx::Vec3 direction = nx::angleVectors(command.viewAngles).forward;
-            // Its strike passes through the bodies it passes through.
-            nx::game::Solids solids = nx::game::solidsOf(world, hulls);
-            std::erase_if(solids.boxes, [&world](const nx::game::SolidBoxEntity& solid) {
-                return world.has<EntityBody>(solid.entity);
-            });
-            const nx::game::SolidHit hit =
-                nx::game::traceSolidsHit(world, hulls, solids,
-                                         {.start = eye,
-                                          .end = eye + direction * type.definition.meleeReach.value(),
-                                          .ignored = entity});
+            const nx::game::SolidHit hit = nx::game::traceSolidsHit(
+                world, hulls, *strikesMeet, stoppers,
+                {.start = eye,
+                 .end = eye + (*move.strikesAlong * type.definition.meleeReach.value()),
+                 .ignored = move.entity});
             if (hit.entity) {
                 done.attacks.push_back({.target = *hit.entity,
-                                        .attack = {.attacker = entity,
+                                        .attack = {.attacker = move.entity,
                                                    .damage = type.definition.meleeDamage,
-                                                   .direction = direction,
+                                                   .direction = *move.strikesAlong,
                                                    .trace = hit.trace}});
             }
-        } else if (body.motion != EntityMotion::Attacking || body.animation.isFinished ||
-                   time.now >= body.attacksAgainAt) {
-            play(body, type,
-                 nx::length(body.movement.velocity) > 0.0F ? EntityMotion::Walking : EntityMotion::Idle,
-                 time.now, catalog);
         }
-        // Touch after releasing every borrowed component reference: opening a door may change an
-        // archetype, and the next tick reacquires the body through its generational handle.
-        nx::game::touchBrushEntities(world, hulls, moved.touchedModels, entity);
+        if (!move.touched.empty()) {
+            nx::game::touchBrushEntities(world, hulls, move.touched, move.entity);
+            strikesMeet.reset();
+        }
     }
     return done;
 }
@@ -367,17 +434,61 @@ auto entityHeadTopOf(nx::ecs::World& world, nx::ecs::Entity entity) -> std::opti
 
 auto entityStatesOf(nx::ecs::World& world) -> std::vector<EntityState> {
     std::vector<EntityState> states;
-    nx::ecs::Query<nx::ecs::Entity, const EntityBody&, const nx::game::Transform&>{world}.forEach(
-        [&states](nx::ecs::Entity entity, const EntityBody& body, const nx::game::Transform& transform) {
-            states.push_back({.entity = entity,
-                              .type = body.type,
-                              .origin = transform.origin,
-                              .velocity = body.movement.velocity,
-                              .angles = transform.angles,
-                              .animation = body.animation,
-                              .health = body.health});
-        });
-    std::ranges::sort(states, {}, &EntityState::entity);
+    writeEntityStates(world, states, nullptr);
     return states;
+}
+
+void writeEntityStates(nx::ecs::World& world, std::vector<EntityState>& states, nx::jobs::JobSystem* jobs) {
+    // The rows of a chunk of them, and where they go among all of them.
+    struct Part {
+        std::span<const nx::ecs::Entity> entities;
+        std::span<const EntityBody> bodies;
+        std::span<const nx::game::Transform> transforms;
+        std::size_t first = 0;
+    };
+    std::vector<Part> parts;
+    std::size_t count = 0;
+    nx::ecs::Query<nx::ecs::Entity, const EntityBody&, const nx::game::Transform&>{world}.forEachChunk(
+        [&parts, &count](std::span<const nx::ecs::Entity> entities, std::span<const EntityBody> bodies,
+                         std::span<const nx::game::Transform> transforms) {
+            if (!entities.empty()) {
+                parts.push_back(
+                    {.entities = entities, .bodies = bodies, .transforms = transforms, .first = count});
+                count += entities.size();
+            }
+        });
+    states.resize(count);
+    // Rows keep the order of their spawning but for what took a dead one's place, which is seldom.
+    std::atomic_bool isInOrder{true};
+    const auto writeBatch = [&parts, &states, &isInOrder](std::size_t /*batch*/, std::size_t first,
+                                                          std::size_t last) {
+        for (const Part& part : std::span{parts}.subspan(first, last - first)) {
+            if (!std::ranges::is_sorted(part.entities)) {
+                isInOrder.store(false, std::memory_order_relaxed);
+            }
+            for (std::size_t row = 0; row < part.entities.size(); ++row) {
+                const EntityBody& body = part.bodies[row];
+                states[part.first + row] = {.entity = part.entities[row],
+                                            .type = body.type,
+                                            .origin = part.transforms[row].origin,
+                                            .velocity = body.movement.velocity,
+                                            .angles = part.transforms[row].angles,
+                                            .animation = body.animation,
+                                            .health = body.health};
+            }
+        }
+    };
+    if (jobs != nullptr) {
+        jobs->forBatches({.label = "entities.states", .priority = nx::jobs::Priority::Critical}, parts.size(),
+                         kSmallestChunkBatch, writeBatch);
+    } else {
+        writeBatch(0, 0, parts.size());
+    }
+    if (!isInOrder.load(std::memory_order_relaxed) ||
+        !std::ranges::all_of(parts | std::views::pairwise, [](const auto& neighbours) {
+            return std::get<0>(neighbours).entities.back() < std::get<1>(neighbours).entities.front();
+        })) {
+        std::ranges::sort(states, {}, &EntityState::entity);
+    }
 }
 } // namespace cs

@@ -80,10 +80,7 @@ void ClientGame::receive(PlayerSnapshot snapshot) {
         lightStyles.setPatterns(snapshot.lightStyles.patterns);
     }
     previousPlayerOrigins.clear();
-    previousEntityOrigins.clear();
-    for (const EntityState& entity : m_last.entities) {
-        previousEntityOrigins.emplace(entity.entity, entity.origin);
-    }
+    previousEntities = m_last.entities;
     for (const PlayerEntityState& player : m_last.players) {
         if (player.player.value >= previousPlayerOrigins.size()) {
             previousPlayerOrigins.resize(std::size_t{player.player.value} + 1);
@@ -208,17 +205,21 @@ void ClientGame::writeEntities(const EntityCatalog& catalog, nx::Seconds corpseS
     const nx::GameTime shown = shownTime();
     entities.clear();
     entities.reserve(m_last.entities.size());
-    for (const EntityState& state : m_last.entities) {
+    const std::span<const EntityState> previous = previousEntities.all();
+    auto before = previous.begin();
+    for (const EntityState& state : m_last.entities.all()) {
         const bool isDead = state.health <= nx::HitPoints{};
         const std::uint8_t amount =
             corpseAmountOf(entityCorpses.deadFor(state.entity, isDead, shown, m_last.rate), corpseStay);
         if (amount == 0) {
             continue; // a corpse gone
         }
-        const auto before = previousEntityOrigins.find(state.entity);
-        const nx::Vec3 origin = before == previousEntityOrigins.end()
+        while (before != previous.end() && before->entity < state.entity) {
+            ++before;
+        }
+        const nx::Vec3 origin = before == previous.end() || before->entity != state.entity
                                     ? state.origin
-                                    : nx::lerp(before->second, state.origin, m_pending / kCommandInterval);
+                                    : nx::lerp(before->origin, state.origin, m_pending / kCommandInterval);
         const EntityType& type = catalog.type(state.type);
         const auto& sequence =
             catalog.model(type.model).files->view->sequences()[state.animation.sequence.value];

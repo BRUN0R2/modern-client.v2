@@ -150,7 +150,7 @@ private:
         std::span<const PerceptionTarget> targets;
         std::span<const nx::ecs::Entity> present;
         std::span<const PerceptionTarget* const> presentTargets;
-        const nx::game::Solids& solids;
+        std::span<const nx::game::SolidBrushEntity> solids;
         std::span<const GameNoise> noises;
     };
     /// The target of `sights` that is the player `player`; none when it is not alive.

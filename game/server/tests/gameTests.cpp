@@ -279,6 +279,33 @@ TEST_F(GameTest, GenericEntitiesConsumeNoPlayerSlotAndCanBeRemovedOnlyByTheirCur
     EXPECT_TRUE(game().snapshotFor(player).entities.empty());
 }
 
+TEST_F(GameTest, ATicksSnapshotsShareOneListOfEntitiesWrittenAnewWhenTheyChange) {
+    const auto player = game().join(cs::Team::CounterTerrorists, cs::AutoSwitch::ToHeavier, "Player");
+    const auto type = entityType();
+    ASSERT_TRUE(type.has_value()) << (type ? "" : nx::describe(type.error()));
+    const auto first = game().createEntity(*type, {.origin = {.x = 200, .y = 32, .z = 40}});
+    ASSERT_TRUE(first.has_value()) << (first ? "" : nx::describe(first.error()));
+    const auto held = game().snapshotFor(player);
+    EXPECT_EQ(game().snapshotFor(player).entities.all().data(), held.entities.all().data()) << "written once";
+    const auto second = game().createEntity(*type, {.origin = {.x = -200, .y = 32, .z = 40}});
+    ASSERT_TRUE(second.has_value()) << (second ? "" : nx::describe(second.error()));
+    EXPECT_EQ(game().snapshotFor(player).entities.size(), 2U);
+    EXPECT_EQ(held.entities.size(), 1U) << "what a client holds stays as it is";
+    game().tick({});
+    const auto after = game().snapshotFor(player);
+    EXPECT_EQ(after.entities.size(), 2U);
+    EXPECT_EQ(held.entities.size(), 1U);
+    EXPECT_EQ(held.entities.front().entity, *first);
+    for (std::uint32_t tick = 0; tick < 8; ++tick) {
+        const auto before = game().snapshotFor(player);
+        game().tick({});
+        EXPECT_EQ(before.entities.size(), 2U);
+        EXPECT_EQ(game().snapshotFor(player).entities.size(), 2U);
+        EXPECT_NE(game().snapshotFor(player).entities.all().data(), before.entities.all().data())
+            << "what a client still holds is not written over";
+    }
+}
+
 /// A component an extension attaches to bodies, as the bots and the zombies attach their brains.
 struct ExtensionMark {
     int value = 0;
@@ -457,7 +484,7 @@ TEST_F(GameTest, EntitiesBodiesStrikeAndWalkThroughEachOtherAndAPlayersStopsThem
     for (std::uint32_t tick = 0; tick < game().time().rate.value(); ++tick) {
         game().tick({}, walk);
     }
-    const std::vector<cs::EntityState> bodies = game().entities();
+    const cs::EntityStates bodies = game().entities();
     const float walked = std::ranges::find(bodies, *walker, &cs::EntityState::entity)->origin.x;
     EXPECT_GT(walked, -44.0F) << "through the body in its way";
     EXPECT_LE(walked, 70.0F - 32.0F) << "stopped by the player";
@@ -561,7 +588,7 @@ TEST_F(GameTest, AnEntityAskedToWalkSlowerThanItsSpeedWalksOnSlowedOnceHitRather
     const std::array walk{cs::EntityCommand{
         .entity = *created, .command = {.duration = nx::Milliseconds{10}, .move = {.forward = kAsked}}}};
     const auto bodyOf = [this, &created] {
-        const std::vector<cs::EntityState> bodies = game().entities();
+        const cs::EntityStates bodies = game().entities();
         return *std::ranges::find(bodies, *created, &cs::EntityState::entity);
     };
     for (std::uint32_t tick = 0; tick < kWalkingTicks; ++tick) {
@@ -592,7 +619,7 @@ TEST_F(GameTest, AnEntitysBodyOfAStrideStepsEachStrideItWalksOnTheGroundAndOneOf
     const auto silent = game().createEntity(*quiet, {.origin = {.x = 200, .y = -200, .z = 40}});
     ASSERT_TRUE(silent.has_value()) << (silent ? "" : nx::describe(silent.error()));
     const auto originOf = [this](nx::ecs::Entity body) {
-        const std::vector<cs::EntityState> bodies = game().entities();
+        const cs::EntityStates bodies = game().entities();
         return std::ranges::find(bodies, body, &cs::EntityState::entity)->origin;
     };
     const cs::UserCommand walk{.duration = nx::Milliseconds{10},
@@ -1522,7 +1549,7 @@ TEST_F(GameTest, ASpotIsSeenThroughTheBodiesButNotThroughTheWorld) {
     const nx::Vec3 beyond = eye + nx::Vec3{.x = 2.0F * kVictimAhead};
     const cs::PerceptionTarget body = game().perceptionTargets()[1];
     ASSERT_EQ(body.player, between);
-    const nx::game::Solids solids = game().sightSolids();
+    const std::vector<nx::game::SolidBrushEntity> solids = game().sightSolids();
     EXPECT_TRUE(game().seesSpot(solids, eye, beyond)) << "the body in between leaves the line be";
     EXPECT_FALSE(game().seesSpot(solids, eye, beyond - nx::Vec3{.z = 2.0F * kStandingEye}))
         << "under the floor";

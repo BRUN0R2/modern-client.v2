@@ -49,6 +49,7 @@ nxAddModuleLibrary(nxGame
         nx::meta
         nx::data
         nx::ecs
+        nx::jobs
         nx::assets
         nx::collision
         nx::navigation)

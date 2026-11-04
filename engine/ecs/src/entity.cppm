@@ -79,6 +79,8 @@ public:
     [[nodiscard]] inline auto aliveCount() const noexcept -> std::size_t {
         return m_slots.size() - m_freeCount - m_retiredCount;
     }
+    /// One past the highest index an entity has had.
+    [[nodiscard]] inline auto slotCount() const noexcept -> std::size_t { return m_slots.size(); }
     /// Slots whose generations ran out (for ecs_stats, planned in TODO.md).
     [[nodiscard]] inline auto retiredCount() const noexcept -> std::size_t { return m_retiredCount; }
 

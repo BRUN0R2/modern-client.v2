@@ -105,6 +105,7 @@ void StuckWatch::wiggle(Intent& intent, Seconds elapsed) {
     }
     intent.direction = turnedTo(way, intent.ahead);
     intent.drive.reset();
+    intent.steered.reset();
     intent.speedShare = 1.0F;
     jumpIn -= elapsed;
     if (jumpIn <= Seconds{}) {

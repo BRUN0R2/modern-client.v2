@@ -13,39 +13,6 @@ namespace nx::game {
 
 namespace {
 
-/// The solid brush entities of `world`, where they are now.
-[[nodiscard]] auto solidBrushesOf(ecs::World& world, const collision::BrushHulls& hulls)
-    -> std::vector<SolidBrushEntity> {
-    std::vector<SolidBrushEntity> solids;
-    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
-        [&solids, &hulls](ecs::Entity entity, const BrushModel& model, const Transform& transform,
-                          const BrushSolidity& solidity) {
-            if (solidity.solid == Solid::Bsp) {
-                solids.push_back(
-                    {.entity = entity,
-                     .model = model.index,
-                     .origin = transform.origin,
-                     .angles = transform.angles,
-                     .linked = linkedBoxOf(hulls.boundsOf(model.index), transform.origin, transform.angles)});
-            }
-        });
-    return solids;
-}
-
-/// The entities of `world` solid as boxes, where they are now.
-[[nodiscard]] auto solidBoxesOf(ecs::World& world) -> std::vector<SolidBoxEntity> {
-    std::vector<SolidBoxEntity> solids;
-    ecs::Query<ecs::Entity, const Transform&, const BoxSolidity&, ecs::Optional<const ClipMethod>>{world}
-        .forEach([&solids](ecs::Entity entity, const Transform& transform, const BoxSolidity& solidity,
-                           const ClipMethod* clip) {
-            solids.push_back({.entity = entity,
-                              .origin = transform.origin,
-                              .box = solidity.box,
-                              .clip = clip != nullptr ? *clip : ClipMethod{}});
-        });
-    return solids;
-}
-
 /// The way's box of `trace` from its start to `end` (SV_MoveBounds): the box traced at both, a unit
 /// more each way.
 [[nodiscard]] auto wayOf(const ServerTrace& trace, Vec3 end) noexcept -> Aabb {
@@ -88,8 +55,220 @@ auto hullTrace(collision::Hull hull, Vec3 start, Vec3 end) noexcept -> ServerTra
     return ServerTrace{.box = collision::hullBoxOf(hull), .start = start, .end = end};
 }
 
+void SolidBoxes::clear() noexcept {
+    std::ranges::fill(placeOfEntity, 0);
+    boxes.clear();
+    nextInCell.clear();
+    if (!cells.empty()) {
+        std::ranges::fill(cells, kNoPlace);
+    }
+    widest = 0.0F;
+}
+
+void SolidBoxes::add(const SolidBoxEntity& solid) {
+    const auto entity = std::size_t{std::to_underlying(solid.entity.index())};
+    if (entity >= placeOfEntity.size()) {
+        placeOfEntity.resize(std::max(entity + 1, placeOfEntity.size() * 2));
+    }
+    const auto place = narrow<std::uint32_t>(boxes.size());
+    boxes.push_back(solid);
+    placeOfEntity[entity] = place + 1;
+    nextInCell.push_back(kNoPlace);
+    widest = std::max({widest, std::abs(solid.box.min.x), std::abs(solid.box.min.y),
+                       std::abs(solid.box.max.x), std::abs(solid.box.max.y)});
+    if (!cells.empty()) {
+        link(place, cellOf(solid));
+    } else if (boxes.size() >= kLeastIndexed) {
+        buildCells();
+    }
+}
+
+void SolidBoxes::gather(ecs::World& world, jobs::JobSystem* jobs) {
+    // The rows of a chunk of them, and where they go among all of them.
+    struct Part {
+        std::span<const ecs::Entity> entities;
+        std::span<const Transform> transforms;
+        std::span<const BoxSolidity> solidities;
+        std::span<const ClipMethod> clips;
+        std::size_t first = 0;
+    };
+    std::vector<Part> parts;
+    std::size_t count = 0;
+    ecs::Query<ecs::Entity, const Transform&, const BoxSolidity&, ecs::Optional<const ClipMethod>>{world}
+        .forEachChunk(
+            [&parts, &count](std::span<const ecs::Entity> entities, std::span<const Transform> transforms,
+                             std::span<const BoxSolidity> solidities, std::span<const ClipMethod> clips) {
+                parts.push_back({.entities = entities,
+                                 .transforms = transforms,
+                                 .solidities = solidities,
+                                 .clips = clips,
+                                 .first = count});
+                count += entities.size();
+            });
+    std::ranges::fill(placeOfEntity, 0);
+    placeOfEntity.resize(std::max(placeOfEntity.size(), world.entitySlotCount()));
+    boxes.resize(count);
+    nextInCell.resize(count);
+    const bool isIndexed = !cells.empty() || count >= kLeastIndexed;
+    cellOfBox.resize(isIndexed ? count : 0);
+    constexpr std::size_t kSmallestGatheredBatch = 8; // chunks
+    std::vector<float> widestOfBatch(
+        jobs != nullptr ? jobs->batchCountOf(parts.size(), kSmallestGatheredBatch) : 1);
+    const auto gatherBatch = [&](std::size_t batch, std::size_t first, std::size_t last) {
+        float widestHere = 0.0F;
+        for (const Part& part : std::span{parts}.subspan(first, last - first)) {
+            for (std::size_t row = 0; row < part.entities.size(); ++row) {
+                const Aabb& box = part.solidities[row].box;
+                const std::size_t place = part.first + row;
+                boxes[place] = {.entity = part.entities[row],
+                                .origin = part.transforms[row].origin,
+                                .box = box,
+                                .clip = part.clips.empty() ? ClipMethod{} : part.clips[row]};
+                placeOfEntity[std::to_underlying(part.entities[row].index())] =
+                    narrow<std::uint32_t>(place + 1);
+                if (isIndexed) {
+                    cellOfBox[place] = narrow<std::uint32_t>(cellOf(boxes[place]));
+                }
+                widestHere = std::max({widestHere, std::abs(box.min.x), std::abs(box.min.y),
+                                       std::abs(box.max.x), std::abs(box.max.y)});
+            }
+        }
+        widestOfBatch[batch] = widestHere;
+    };
+    if (jobs != nullptr) {
+        jobs->forBatches({.label = "solids.gather", .priority = jobs::Priority::Critical}, parts.size(),
+                         kSmallestGatheredBatch, gatherBatch);
+    } else {
+        gatherBatch(0, 0, parts.size());
+    }
+    widest = std::ranges::max(widestOfBatch);
+    if (isIndexed) {
+        cells.assign(kCellsAcross * kCellsAcross, kNoPlace);
+        const auto boxCount = narrow<std::uint32_t>(count);
+        for (std::uint32_t place = 0; place < boxCount; ++place) {
+            link(place, cellOfBox[place]);
+        }
+    }
+}
+
+auto SolidBoxes::place(ecs::Entity entity, Vec3 origin, const Aabb& box) -> bool {
+    const auto index = std::size_t{std::to_underlying(entity.index())};
+    if (index >= placeOfEntity.size() || placeOfEntity[index] == 0) {
+        return false;
+    }
+    const std::uint32_t place = placeOfEntity[index] - 1;
+    SolidBoxEntity& solid = boxes[place];
+    const std::size_t from = cells.empty() ? 0 : cellOf(solid);
+    solid.origin = origin;
+    solid.box = box;
+    widest = std::max(
+        {widest, std::abs(box.min.x), std::abs(box.min.y), std::abs(box.max.x), std::abs(box.max.y)});
+    if (!cells.empty()) {
+        const std::size_t to = cellOf(solid);
+        if (to != from) {
+            unlink(place, from);
+            link(place, to);
+        }
+    }
+    return true;
+}
+
+void SolidBoxes::forget(ecs::Entity entity) {
+    const auto index = std::size_t{std::to_underlying(entity.index())};
+    if (index >= placeOfEntity.size() || placeOfEntity[index] == 0) {
+        return;
+    }
+    const std::uint32_t place = placeOfEntity[index] - 1;
+    const auto last = narrow<std::uint32_t>(boxes.size() - 1);
+    if (!cells.empty()) {
+        unlink(place, cellOf(boxes[place]));
+        if (place != last) {
+            unlink(last, cellOf(boxes[last]));
+        }
+    }
+    placeOfEntity[index] = 0;
+    if (place != last) {
+        boxes[place] = boxes[last];
+        placeOfEntity[std::to_underlying(boxes[place].entity.index())] = place + 1;
+        if (!cells.empty()) {
+            link(place, cellOf(boxes[place]));
+        }
+    }
+    boxes.pop_back();
+    nextInCell.pop_back();
+}
+
+auto SolidBoxes::indexedSpanOf(const Aabb& area) const noexcept -> std::optional<CellSpan> {
+    if (cells.empty()) {
+        return std::nullopt;
+    }
+    constexpr float kMiddleOfTheWorld = static_cast<float>(kCellsAcross) / 2.0F;
+    const auto cellAlong = [](float at) {
+        const float cell = (at / kCellSize) + kMiddleOfTheWorld;
+        return cell > 0.0F ? static_cast<std::size_t>(std::min(cell, static_cast<float>(kCellsAcross - 1)))
+                           : 0;
+    };
+    const float reach = widest + kCellSize;
+    const CellSpan span{.firstColumn = cellAlong(area.min.x - reach),
+                        .lastColumn = cellAlong(area.max.x + reach),
+                        .firstRow = cellAlong(area.min.y - reach),
+                        .lastRow = cellAlong(area.max.y + reach)};
+    const std::size_t covered = (span.lastColumn - span.firstColumn + 1) * (span.lastRow - span.firstRow + 1);
+    return covered < boxes.size() ? std::optional{span} : std::nullopt;
+}
+
+auto SolidBoxes::cellOf(const SolidBoxEntity& solid) noexcept -> std::size_t {
+    constexpr float kMiddleOfTheWorld = static_cast<float>(kCellsAcross) / 2.0F;
+    const auto cellAlong = [](float at) {
+        const float cell = (at / kCellSize) + kMiddleOfTheWorld;
+        return cell > 0.0F ? static_cast<std::size_t>(std::min(cell, static_cast<float>(kCellsAcross - 1)))
+                           : 0;
+    };
+    return (cellAlong(solid.origin.y) * kCellsAcross) + cellAlong(solid.origin.x);
+}
+
+void SolidBoxes::link(std::uint32_t place, std::size_t cell) noexcept {
+    nextInCell[place] = cells[cell];
+    cells[cell] = place;
+}
+
+void SolidBoxes::unlink(std::uint32_t place, std::size_t cell) noexcept {
+    std::uint32_t* at = &cells[cell];
+    while (*at != place) {
+        at = &nextInCell[*at];
+    }
+    *at = nextInCell[place];
+}
+
+void SolidBoxes::buildCells() {
+    cells.assign(kCellsAcross * kCellsAcross, kNoPlace);
+    const auto count = narrow<std::uint32_t>(boxes.size());
+    for (std::uint32_t place = 0; place < count; ++place) {
+        link(place, cellOf(boxes[place]));
+    }
+}
+
+auto solidBrushesOf(ecs::World& world, const collision::BrushHulls& hulls) -> std::vector<SolidBrushEntity> {
+    std::vector<SolidBrushEntity> solids;
+    ecs::Query<ecs::Entity, const BrushModel&, const Transform&, const BrushSolidity&>{world}.forEach(
+        [&solids, &hulls](ecs::Entity entity, const BrushModel& model, const Transform& transform,
+                          const BrushSolidity& solidity) {
+            if (solidity.solid == Solid::Bsp) {
+                solids.push_back(
+                    {.entity = entity,
+                     .model = model.index,
+                     .origin = transform.origin,
+                     .angles = transform.angles,
+                     .linked = linkedBoxOf(hulls.boundsOf(model.index), transform.origin, transform.angles)});
+            }
+        });
+    return solids;
+}
+
 auto solidsOf(ecs::World& world, const collision::BrushHulls& hulls) -> Solids {
-    return Solids{.brushes = solidBrushesOf(world, hulls), .boxes = solidBoxesOf(world)};
+    Solids solids{.brushes = solidBrushesOf(world, hulls)};
+    solids.boxes.gather(world);
+    return solids;
 }
 
 auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const ServerTrace& trace)
@@ -98,6 +277,12 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
 }
 
 auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const Solids& solids,
+                    const ServerTrace& trace) -> SolidHit {
+    return traceSolidsHit(world, hulls, solids.brushes, solids.boxes, trace);
+}
+
+auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls,
+                    std::span<const SolidBrushEntity> brushes, const SolidBoxes& boxes,
                     const ServerTrace& trace) -> SolidHit {
     SolidHit found{.trace = brushTrace(hulls, trace, collision::kWorldModel, Vec3{}, EulerAngles{},
                                        trace.start, trace.end)};
@@ -113,7 +298,7 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
     const auto isLeftOut = [&trace](ecs::Entity entity) {
         return trace.ignored == entity;
     };
-    for (const SolidBrushEntity& solid : solids.brushes) {
+    for (const SolidBrushEntity& solid : brushes) {
         if (kept.isAllSolid) {
             break;
         }
@@ -126,29 +311,28 @@ auto traceSolidsHit(ecs::World& world, const collision::BrushHulls& hulls, const
         }
     }
     const Vec3 margin{.x = kLinkGrowth, .y = kLinkGrowth, .z = kLinkGrowth};
-    for (const SolidBoxEntity& solid : solids.boxes) {
-        if (kept.isAllSolid) {
-            break;
-        }
-        if (trace.type == TraceType::NoMonsters || isLeftOut(solid.entity) ||
-            !way.intersects(solid.box.translated(solid.origin).expanded(margin))) {
-            continue;
-        }
-        if (collision::keepFirstStop(kept, boxTrace(world, trace, solid, trace.start, end))) {
-            found.entity = solid.entity;
-        }
+    if (trace.type != TraceType::NoMonsters) {
+        boxes.forEachAbout(way, [&](const SolidBoxEntity& solid) {
+            if (kept.isAllSolid || isLeftOut(solid.entity) ||
+                !way.intersects(solid.box.translated(solid.origin).expanded(margin))) {
+                return;
+            }
+            if (collision::keepFirstStop(kept, boxTrace(world, trace, solid, trace.start, end))) {
+                found.entity = solid.entity;
+            }
+        });
     }
     kept.fraction *= worldFraction;
     return found;
 }
 
-auto lineReaches(const collision::BrushHulls& hulls, const Solids& solids, Vec3 start, Vec3 end) noexcept
-    -> bool {
+auto lineReaches(const collision::BrushHulls& hulls, std::span<const SolidBrushEntity> brushes, Vec3 start,
+                 Vec3 end) noexcept -> bool {
     if (hulls.trace(collision::HullTraceQuery{.start = start, .end = end}).fraction < 1.0F) {
         return false;
     }
     const Aabb way = wayOf(ServerTrace{.start = start}, end);
-    for (const SolidBrushEntity& solid : solids.brushes) {
+    for (const SolidBrushEntity& solid : brushes) {
         if (!way.intersects(solid.linked)) {
             continue;
         }

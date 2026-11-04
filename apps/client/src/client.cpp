@@ -1121,8 +1121,8 @@ void Client::playSession(nx::Seconds elapsed) {
         if (session.bots) {
             std::ranges::move(session.bots->commands(), std::back_inserter(commands));
         }
-        const std::vector<cs::EntityCommand> entityCommands =
-            session.horde ? session.horde->commands() : std::vector<cs::EntityCommand>{};
+        const std::span<const cs::EntityCommand> entityCommands =
+            session.horde ? session.horde->commands() : std::span<const cs::EntityCommand>{};
         session.game->tick(commands, entityCommands, m_jobs.get());
         session.client.receive(session.game->snapshotFor(session.player));
     }
