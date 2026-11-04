@@ -67,6 +67,7 @@ struct VoxelProfile {
     int crouchedVoxels = 0;
     int standingVoxels = 0;
     int climbVoxels = 0;
+    int liftVoxels = 0; ///< Of a body's lift (bodyLiftOf).
     int radiusCells = 0;
     int clearanceCells = 0; ///< Of the wall clearance.
     int borderCells = 0;
@@ -75,6 +76,15 @@ struct VoxelProfile {
     int islandArea = 0; ///< In cells.
     int regionArea = 0; ///< In cells.
 };
+
+/// How far above where it stands on a flat floor a body's middle may be and still stand on its floor: a step,
+/// onto what it climbs, or what the steepest floor lifts its square box by, resting on a corner.
+[[nodiscard]] auto bodyLiftOf(const AgentProfile& profile) noexcept -> float {
+    const float normalZ = profile.minGroundNormalZ;
+    const float slope = std::sqrt(1.0F - (normalZ * normalZ)) / normalZ;
+    return std::max(profile.stepHeight.value(),
+                    profile.radius.value() * std::numbers::sqrt2_v<float> * slope);
+}
 
 [[nodiscard]] auto voxelProfileOf(const AgentProfile& profile, const BuildSettings& settings)
     -> VoxelProfile {
@@ -93,6 +103,7 @@ struct VoxelProfile {
         .standingVoxels = static_cast<int>(std::ceil(profile.standingHeight.value() / height)),
         .climbVoxels = static_cast<int>(
             std::floor(static_cast<double>(profile.stepHeight.value()) / static_cast<double>(height))),
+        .liftVoxels = static_cast<int>(std::ceil(bodyLiftOf(profile) / height)),
         .radiusCells = radius,
         .clearanceCells = clearance,
         // A tile reads past its sides as far as its floor is eroded from walls, so that the erosion
@@ -116,6 +127,7 @@ struct TileInput {
     std::array<float, 3> low{};
     std::array<float, 3> high{};
     std::vector<Aabb> ladders{};
+    BodyHull bodyHull{};
     AgentProfile profile{};
     BuildSettings settings{};
     VoxelProfile voxels{};
@@ -133,10 +145,41 @@ struct TileInput {
                                                                       : RC_NULL_AREA;
 }
 
+/// Whether `hull` keeps BodyHull's order and its planes are finite, so that a way down it ends. Errors:
+/// InvalidGeometry.
+[[nodiscard]] auto checkBodyHull(const BodyHull& hull) -> Result<void, MeshBuildError> {
+    const auto isNamedAfter = [&hull](const BodyHullChild& child, std::size_t first) {
+        const auto* index = std::get_if<std::uint32_t>(&child);
+        return index == nullptr || (*index >= first && *index < hull.nodes.size());
+    };
+    if (!isNamedAfter(hull.root, 0)) {
+        return fail(MeshBuildError::InvalidGeometry, "a body hull's root is none of its nodes");
+    }
+    for (std::size_t index = 0; index < hull.nodes.size(); ++index) {
+        const BodyHullNode& node = hull.nodes[index];
+        const Vec3 normal = node.plane.normal;
+        if (!std::isfinite(normal.x) || !std::isfinite(normal.y) || !std::isfinite(normal.z) ||
+            !std::isfinite(node.plane.distance)) {
+            return fail(MeshBuildError::InvalidGeometry,
+                        std::format("a body hull's node {}: its plane is not finite", index));
+        }
+        if (!isNamedAfter(node.children[0], index + 1) || !isNamedAfter(node.children[1], index + 1)) {
+            return fail(MeshBuildError::InvalidGeometry,
+                        std::format("a body hull's node {}: a child not after it of {} nodes", index,
+                                    hull.nodes.size()));
+        }
+    }
+    return {};
+}
+
 /// What the tiles of `geometry` are built from. Errors: InvalidGeometry, TooLarge.
 [[nodiscard]] auto tileInputOf(const Geometry& geometry, const AgentProfile& profile,
                                const BuildSettings& settings) -> Result<TileInput, MeshBuildError> {
+    if (auto checked = checkBodyHull(geometry.bodyHull); !checked) {
+        return std::unexpected{std::move(checked.error())};
+    }
     TileInput input{.ladders = geometry.ladders,
+                    .bodyHull = geometry.bodyHull,
                     .profile = profile,
                     .settings = settings,
                     .voxels = voxelProfileOf(profile, settings)};
@@ -220,6 +263,65 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
     for (std::size_t span = 0; span < count; ++span) {
         if (areas[span] != RC_NULL_AREA && std::cmp_less(spans[span].h, standingVoxels)) {
             areas[span] = areaIdOf(AreaKind::Crouch);
+        }
+    }
+}
+
+/// Whether a standing body of the profile of `input` fits on a floor at `feet`, by the body hull: its middle
+/// out of the solid within its lift, the floor's own solid, grown by its box, reaching above that on a slope.
+[[nodiscard]] auto bodyFitsAt(const TileInput& input, Vec3 feet) noexcept -> bool {
+    const Vec3 middle = feet + Vec3{.z = input.profile.standingHeight.value() * 0.5F};
+    const float voxelHeight = input.settings.cellHeight.value();
+    for (int voxel = 0; voxel <= input.voxels.liftVoxels; ++voxel) {
+        if (!isSolidAt(input.bodyHull, middle + Vec3{.z = static_cast<float>(voxel) * voxelHeight})) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether a standing body of the profile of `input` fits all along the way from `from` to `to`, a cell at a
+/// time, what a hull grows by a body's box being wider than a cell: its feet on the way, or as far as
+/// `leeway` to either side of it.
+[[nodiscard]] auto bodyPassesAlong(const TileInput& input, Vec3 from, Vec3 to, float leeway = 0.0F) noexcept
+    -> bool {
+    const Vec3 way = to - from;
+    const float distance = length(way);
+    const Vec3 aside = distance > 0.0F ? Vec3{.x = -way.y, .y = way.x} * (leeway / distance) : Vec3{};
+    const auto cells = static_cast<int>(std::ceil(distance / input.settings.cellSize.value()));
+    for (int cell = 0; cell <= cells; ++cell) {
+        const float share = cells > 0 ? static_cast<float>(cell) / static_cast<float>(cells) : 0.0F;
+        const Vec3 feet = from + (way * share);
+        if (!bodyFitsAt(input, feet) && !bodyFitsAt(input, feet + aside) &&
+            !bodyFitsAt(input, feet - aside)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Takes from the floor of `compact`, eroded by the profile's radius already, where no standing body fits,
+/// which no surface may show (BodyHull). Where only crouching fits the hull is solid over any such floor:
+/// it says nothing there.
+void removeWhereNoBodyFits(rcCompactHeightfield& compact, const TileInput& input) {
+    const std::span cells{compact.cells, narrow<std::size_t>(compact.width * compact.height)};
+    const std::span spans{compact.spans, narrow<std::size_t>(compact.spanCount)};
+    const std::span areas{compact.areas, spans.size()};
+    for (int row = 0; row < compact.height; ++row) {
+        for (int column = 0; column < compact.width; ++column) {
+            const rcCompactCell& cell = cells[narrow<std::size_t>(column + (row * compact.width))];
+            for (std::size_t span = cell.index; span < cell.index + cell.count; ++span) {
+                if (areas[span] == RC_NULL_AREA || areas[span] == areaIdOf(AreaKind::Crouch)) {
+                    continue;
+                }
+                const std::array<float, 3> floor{
+                    compact.bmin[0] + ((static_cast<float>(column) + 0.5F) * compact.cs),
+                    compact.bmin[1] + (static_cast<float>(spans[span].y) * compact.ch),
+                    compact.bmin[2] + ((static_cast<float>(row) + 0.5F) * compact.cs)};
+                if (!bodyFitsAt(input, positionOf(floor))) {
+                    areas[span] = RC_NULL_AREA;
+                }
+            }
         }
     }
 }
@@ -455,10 +557,11 @@ private:
 
 /// The link of a body leaving the floor at `start`, across the ledge its outward way `outward` faces, to
 /// the floor below `near` holds, the profile of `input` dropping from it unhurt: of the kind Jump, both
-/// ways, within the jump height, else Drop; none where a wall or a step is there instead, or no floor it
-/// lands on. It lands its radius and a cell past where the floor ends, the mesh's floor below starting its
-/// radius from the ledge, so that it lands on the mesh. How high the ledge is is the geometry's, on both
-/// sides: a polygon's corners stand up to a cell above the floor they cover.
+/// ways, within the jump height, else Drop; none where a wall or a step is there instead, no floor it lands
+/// on, or what stops a body on its way (BodyHull). It lands its radius and a cell past where the floor ends,
+/// the mesh's floor below starting its radius from the ledge, so that it lands on the mesh. How high the
+/// ledge is is the geometry's, on both sides: a polygon's corners stand up to a cell above the floor they
+/// cover.
 [[nodiscard]] auto linkFrom(Vec3 start, Vec3 outward, const TileInput& input,
                             std::span<const NearTriangle> near) -> std::optional<std::pair<Vec3, AreaKind>> {
     const AgentProfile& profile = input.profile;
@@ -485,8 +588,12 @@ private:
     if (!landing || *ledge - *landing <= step) {
         return std::nullopt;
     }
+    const Vec3 lands{.x = beyond.x, .y = beyond.y, .z = *landing};
+    if (!bodyPassesAlong(input, leaves, beyond) || !bodyPassesAlong(input, beyond, lands)) {
+        return std::nullopt;
+    }
     const AreaKind kind = *ledge - *landing <= profile.jumpHeight.value() ? AreaKind::Jump : AreaKind::Drop;
-    return std::pair{Vec3{.x = beyond.x, .y = beyond.y, .z = *landing}, kind};
+    return std::pair{lands, kind};
 }
 
 /// The heights of the floors over `point`, from `lowest` to `highest`, that the profile stands on.
@@ -518,8 +625,9 @@ constexpr float kLadderReachRadii = 4.0F;
 
 /// The floors `ladder` leads to, the lowest first, within the profile's step of each other one of them,
 /// the nearest: past each side of it, as far as kLadderReachRadii, those a body's top reaches its bottom
-/// from, and no higher than a step above its top, with no wall in the way above a step of them. A body lands
-/// its radius and a cell past where the floor starts, the mesh starting its radius from its edge.
+/// from, and no higher than a step above its top, with no wall in the way above a step of them, nor what
+/// stops a body (BodyHull) from where it touches the ladder. A body lands its radius and a cell past where
+/// the floor starts, the mesh starting its radius from its edge.
 [[nodiscard]] auto landingsOf(const Aabb& ladder, const TileInput& input, std::span<const NearTriangle> near)
     -> std::vector<LadderLanding> {
     const AgentProfile& profile = input.profile;
@@ -549,9 +657,13 @@ constexpr float kLadderReachRadii = 4.0F;
                 landing.z = floor;
                 const Vec3 from{.x = middle.x, .y = middle.y, .z = floor};
                 if (!floorsAt(landing, near, floor - step, floor + step).empty() &&
-                    std::ranges::none_of(near, [&](const NearTriangle& triangle) {
-                        return meets(from + aboveStep, landing + aboveStep, triangle);
-                    })) {
+                    std::ranges::none_of(near,
+                                         [&](const NearTriangle& triangle) {
+                                             return meets(from + aboveStep, landing + aboveStep, triangle);
+                                         }) &&
+                    // Up to its radius aside: a ladder in a corner has its floors along the wall it is on,
+                    // and a link's end comes that far to the mesh, which keeps its radius from that wall.
+                    bodyPassesAlong(input, from + (way * (side + radius)), landing, radius)) {
                     landings.push_back({.at = landing, .distance = distance});
                 }
             }
@@ -706,9 +818,9 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
 }
 
 /// Tile `tileX`, `tileY` of `input`, as Recast builds it: its voxels, the floor the profile's radius
-/// keeps away from walls and ledges, that floor along them within its wall clearance (markEdges), its
-/// regions, their outlines, the polygons of those and their details. None when it holds no floor. Errors:
-/// TileRefused.
+/// keeps away from walls and ledges, less where no body fits (removeWhereNoBodyFits), that floor along them
+/// within its wall clearance (markEdges), its regions, their outlines, the polygons of those and their
+/// details. None when it holds no floor. Errors: TileRefused.
 [[nodiscard]] auto buildTile(const TileInput& input, std::int32_t tileX, std::int32_t tileY)
     -> Result<std::optional<BuiltTile>, MeshBuildError> {
     RecastLog log;
@@ -731,6 +843,7 @@ void addLadderLinks(const TileInput& input, const TileBounds& bounds, TileLinks&
         return refused(log, tileX, tileY, "its floor kept from walls");
     }
     markCrouching(*compact, voxels.standingVoxels);
+    removeWhereNoBodyFits(*compact, input);
     if (auto marked = markEdges(log, *compact, voxels.clearanceCells, tileX, tileY); !marked) {
         return std::unexpected{std::move(marked.error())};
     }
@@ -852,12 +965,22 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 4;
+constexpr std::uint32_t kTilesVersion = 5;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
 constexpr std::size_t kVertexKeyBytes = 3 * sizeof(float);
 constexpr std::size_t kTriangleKeyBytes = (3 * sizeof(std::uint32_t)) + sizeof(AreaKind);
+
+/// Adds to `bytes` what a side of a node of a body hull is: which of the two, and its value.
+void appendChild(std::vector<std::byte>& bytes, const BodyHullChild& child) {
+    appendLittleEndian(bytes, narrow<std::uint8_t>(child.index()));
+    if (const auto* index = std::get_if<std::uint32_t>(&child)) {
+        appendLittleEndian(bytes, *index);
+    } else {
+        appendLittleEndian(bytes, std::to_underlying(std::get<BodyHullLeaf>(child)));
+    }
+}
 
 } // namespace
 
@@ -900,6 +1023,16 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
              {ladder.min.x, ladder.min.y, ladder.min.z, ladder.max.x, ladder.max.y, ladder.max.z}) {
             appendLittleEndian(bytes, value);
         }
+    }
+    appendChild(bytes, geometry.bodyHull.root);
+    appendLittleEndian(bytes, std::uint64_t{geometry.bodyHull.nodes.size()});
+    for (const BodyHullNode& node : geometry.bodyHull.nodes) {
+        for (const float value :
+             {node.plane.normal.x, node.plane.normal.y, node.plane.normal.z, node.plane.distance}) {
+            appendLittleEndian(bytes, value);
+        }
+        appendChild(bytes, node.children[0]);
+        appendChild(bytes, node.children[1]);
     }
     return MeshKey{hash64(bytes)};
 }

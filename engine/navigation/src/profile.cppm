@@ -90,7 +90,9 @@ struct BuildSettings {
 enum class MeshBuildError : std::uint8_t {
     InvalidProfile, ///< A profile breaks its rules (AgentProfile) or the voxels' limits; the detail says how.
     InvalidSettings, ///< The settings break their rules (checkSettings); the detail says how.
-    InvalidGeometry, ///< A triangle names a vertex the geometry lacks, or a vertex is not finite.
+    /// A triangle names a vertex the geometry lacks, a vertex is not finite, or a node of its body hull is
+    /// out of order or not finite.
+    InvalidGeometry,
     TooLarge,    ///< More tiles, or a tile with more polygons, than Detour numbers, or the geometry taller
                  ///< than Recast's voxels reach; the detail says which.
     TileRefused, ///< Recast refused a tile, out of memory or of its own numbers; the detail has its message.
