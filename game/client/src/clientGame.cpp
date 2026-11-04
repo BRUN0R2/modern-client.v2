@@ -254,7 +254,8 @@ void ClientGame::writeCorpses(const EntityCatalog& catalog, nx::Seconds corpseSt
                             .frame = estimatedFrameOf(sequence, state.animation.frame,
                                                       shown.since(state.animation.advancedAt, m_last.rate),
                                                       state.animation.framerate),
-                            .amount = amount});
+                            .amount = amount,
+                            .isDucked = state.isDucked});
     }
     entityCorpses.forgetUnasked();
 }

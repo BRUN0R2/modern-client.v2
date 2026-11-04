@@ -58,6 +58,108 @@ TEST_F(EntityBodyTest, DamageUsesTheHitGroupAndDeathRemovesSolidityOnce) {
     EXPECT_EQ(nx::game::attackEntity(world, *made, {.damage = nx::Damage{100}}).damage, nx::Damage{});
 }
 
+/// A floor at z = 0, on which each of a body's boxes stands.
+[[nodiscard]] auto floorHulls() -> nx::collision::BrushHulls {
+    using nx::collision::Contents;
+    using nx::collision::HullChild;
+    using nx::collision::HullNode;
+    using nx::collision::HullNodeIndex;
+    const nx::Plane standingOrigin{.normal = {.z = 1.0F}, .distance = -cs::kStandingBox.min.z};
+    const nx::Plane duckedOrigin{.normal = {.z = 1.0F}, .distance = -cs::kDuckedBox.min.z};
+    // A last node none is rooted at: movement takes a hull rooted at the last for an empty one.
+    auto created = nx::collision::BrushHulls::create(
+        {.planes = {standingOrigin, duckedOrigin},
+         .clipNodes = {HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Solid}},
+                       HullNode{.plane = {1}, .children = {Contents::Empty, Contents::Solid}},
+                       HullNode{.plane = {0}, .children = {Contents::Empty, Contents::Empty}}},
+         .models = {nx::collision::BrushModel{
+             .hulls = nx::collision::HullRoots{{HullChild{Contents::Empty}, HullChild{HullNodeIndex{0}},
+                                                HullChild{Contents::Empty}, HullChild{HullNodeIndex{1}}}}}}});
+    EXPECT_TRUE(created.has_value());
+    return std::move(created).value();
+}
+
+TEST_F(EntityBodyTest, ABodyDucksAsItsCommandHoldsItsKeyAndStandsUpWhenItLetsGo) {
+    constexpr int kTicksDown = 50; // a duck takes 0.4 seconds
+    auto files = nx::assets::Vfs::create(std::array{directory.path()});
+    ASSERT_TRUE(files.has_value());
+    cs::EntityDefinition definition = nx::test::entityDefinition();
+    definition.id = "crouching";
+    definition.crouchIdleSequence = "wave";
+    auto crouching = catalog.add(*files, definition, cs::ModelTextures::Skipped);
+    ASSERT_TRUE(crouching.has_value());
+    const nx::collision::BrushHulls floor = floorHulls();
+    auto made = cs::spawnEntityBody(world, floor, *crouching, {.origin = {.z = 64.0F}});
+    ASSERT_TRUE(made.has_value());
+    const nx::game::Transform& placed = *world.get<nx::game::Transform>(*made);
+    const float standing = placed.origin.z;
+    const nx::game::BoxSolidity& solidity = *world.get<nx::game::BoxSolidity>(*made);
+    const cs::EntityBody& body = *world.get<cs::EntityBody>(*made);
+    const cs::EntitySequences& sequences = catalog.type(*crouching).sequences;
+    const auto run = [&](nx::Flags<cs::Button> buttons) {
+        const std::array commands{cs::EntityCommand{.entity = *made, .command = {.buttons = buttons}}};
+        std::ignore = cs::runEntityBodies(world, floor, commands);
+        nx::game::advanceTick(world);
+    };
+    // A line across, above a ducked body's box and within a standing one's.
+    const auto meetsItsTop = [&] {
+        const nx::Vec3 across{.x = 64.0F};
+        const nx::Vec3 height{.z = standing + cs::kDuckedBox.max.z};
+        const nx::Aabb traced{.min = {.z = -1.0F}, .max = {.z = 1.0F}};
+        return world.get<nx::game::ClipMethod>(*made)
+                   ->clip(world, *made, traced, height - across, height + across)
+                   .fraction < 1.0F;
+    };
+    EXPECT_TRUE(meetsItsTop());
+    for (int tick = 0; tick < kTicksDown; ++tick) {
+        run({cs::Button::Duck});
+    }
+    EXPECT_TRUE(body.movement.isDucked);
+    EXPECT_NEAR(placed.origin.z, standing + cs::kStandingBox.min.z - cs::kDuckedBox.min.z, 0.1F)
+        << "its origin lower, over the same feet";
+    EXPECT_EQ(solidity.box.max.z, cs::kDuckedBox.max.z);
+    EXPECT_EQ(world.get<nx::game::Body>(*made)->box.max.z, cs::kDuckedBox.max.z);
+    EXPECT_TRUE(cs::entityStatesOf(world).front().isDucked);
+    EXPECT_EQ(body.animation.sequence, sequences.crouchIdle);
+    EXPECT_FALSE(meetsItsTop());
+    run({});
+    EXPECT_FALSE(body.movement.isDucked);
+    EXPECT_NEAR(placed.origin.z, standing, 0.1F);
+    EXPECT_EQ(solidity.box.max.z, cs::kStandingBox.max.z);
+    EXPECT_FALSE(cs::entityStatesOf(world).front().isDucked);
+    EXPECT_EQ(body.animation.sequence, sequences.idle);
+}
+
+TEST_F(EntityBodyTest, ABodyWalksDuckedAtAThirdOfItsSpeedButNeverTooSlowToGoAtAll) {
+    constexpr int kTicks = 300;
+    constexpr float kFastSpeed = 300.0F;
+    auto files = nx::assets::Vfs::create(std::array{directory.path()});
+    ASSERT_TRUE(files.has_value());
+    cs::EntityDefinition definition = nx::test::entityDefinition();
+    definition.id = "fast";
+    definition.speed = nx::UnitsPerSecond{kFastSpeed};
+    auto fast = catalog.add(*files, definition, cs::ModelTextures::Skipped);
+    ASSERT_TRUE(fast.has_value());
+    const nx::collision::BrushHulls floor = floorHulls();
+    const auto speedDucked = [&](cs::EntityTypeIndex walking, float walk) {
+        auto made = cs::spawnEntityBody(world, floor, walking, {.origin = {.z = 64.0F}});
+        EXPECT_TRUE(made.has_value());
+        const std::array commands{cs::EntityCommand{
+            .entity = *made,
+            .command = {.move = {.forward = nx::UnitsPerSecond{walk}}, .buttons = {cs::Button::Duck}}}};
+        for (int tick = 0; tick < kTicks; ++tick) {
+            std::ignore = cs::runEntityBodies(world, floor, commands);
+            nx::game::advanceTick(world);
+        }
+        return world.get<cs::EntityBody>(*made)->movement.velocity.x;
+    };
+    constexpr float kLeastDuckedWalk = 80.0F;
+    constexpr float kTolerance = 0.5F;
+    EXPECT_NEAR(speedDucked(type, nx::test::entityDefinition().speed.value()), kLeastDuckedWalk, kTolerance)
+        << "a third of 160 gained it 2.7 units a second";
+    EXPECT_NEAR(speedDucked(*fast, kFastSpeed), kFastSpeed * 0.333F, kTolerance);
+}
+
 TEST_F(EntityBodyTest, ABodyFarFromEveryPlayerMovesLessOftenAndAsFarInLongerSteps) {
     constexpr std::uint32_t kTicks = 160;
     constexpr float kFar = 8000.0F;

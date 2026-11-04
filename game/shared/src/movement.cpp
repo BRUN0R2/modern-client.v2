@@ -65,8 +65,6 @@ constexpr float kRollScale = 4.0F;
 /// more (PM_DropPunchAngle).
 constexpr double kPunchDrop = 10.0;
 constexpr double kPunchDropShare = 0.5;
-/// Ducking or ducked, a player's keys ask for this share of their speed.
-constexpr double kDuckSpeedShare = 0.333;
 /// A duck on the ground starts with this much time and ends when it is down to this share of it:
 /// it takes 0.4 s, the eyes easing down meanwhile. In the air it is at once.
 constexpr nx::Milliseconds kDuckTime{1000.0F};
