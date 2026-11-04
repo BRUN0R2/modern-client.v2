@@ -97,6 +97,19 @@ template <class Element>
 [[nodiscard]] auto feetOf(nx::Vec3 origin) -> nx::Vec3 {
     return origin + nx::Vec3{.z = cs::kStandingBox.min.z};
 }
+
+[[nodiscard]] auto boxOf(const cs::EntityState& body) noexcept -> const nx::Aabb& {
+    return body.isDucked ? cs::kDuckedBox : cs::kStandingBox;
+}
+
+[[nodiscard]] auto feetOf(const cs::EntityState& body) -> nx::Vec3 {
+    return body.origin + nx::Vec3{.z = boxOf(body).min.z};
+}
+
+[[nodiscard]] auto eyeOf(const cs::EntityState& body) -> nx::Vec3 {
+    const nx::HammerUnits height = body.isDucked ? cs::kDuckedViewHeight : cs::kStandingViewHeight;
+    return body.origin + nx::Vec3{.z = height.value()};
+}
 [[nodiscard]] auto distanceSquaredAcross(nx::Vec3 first, nx::Vec3 second) -> double {
     const double x = double{first.x} - double{second.x};
     const double y = double{first.y} - double{second.y};
@@ -438,12 +451,9 @@ void Horde::findTurns(const cs::EntityStates& bodies, std::span<const cs::Percep
             member.turnsWaited = 0;
             nx::agents::Agent* const agent = agentOfSlot[std::to_underlying(member.entity.index())];
             nx::invariant(agent != nullptr, "Horde: an attached brain");
-            turns[first + count] = {.member = &member,
-                                    .body = &*body,
-                                    .agent = agent,
-                                    .eye = body->origin + nx::Vec3{.z = cs::kStandingViewHeight.value()}};
+            turns[first + count] = {.member = &member, .body = &*body, .agent = agent, .eye = eyeOf(*body)};
             requests[first + count] = {.brain = &agent->brain,
-                                       .feet = feetOf(body->origin),
+                                       .feet = feetOf(*body),
                                        .velocity = body->velocity,
                                        .maxSpeed = settings.body.speed,
                                        .body = member.entity,
@@ -514,7 +524,7 @@ void Horde::perceive(std::span<const cs::PerceptionTarget> targets,
                 time.rate);
             // Felt where they are, last: the players its body touches.
             agent.brain.sense(
-                cs::touchedBy({.entity = entity, .origin = turn.body->origin, .box = cs::kStandingBox},
+                cs::touchedBy({.entity = entity, .origin = turn.body->origin, .box = boxOf(*turn.body)},
                               targets),
                 time.now, time.rate);
         }
@@ -610,9 +620,9 @@ void Horde::writeSteeredAround(const cs::EntityStates& bodies) {
         for (const cs::EntityState& body : bodies.all().subspan(first, last - first)) {
             if (body.health > nx::HitPoints{}) {
                 parts[first + count++] = {.entity = body.entity,
-                                          .feet = feetOf(body.origin),
+                                          .feet = feetOf(body),
                                           .velocity = body.velocity,
-                                          .radius = nx::HammerUnits{cs::kStandingBox.max.x}};
+                                          .radius = nx::HammerUnits{boxOf(body).max.x}};
             }
         }
         written[batch] = {.first = first, .count = count};

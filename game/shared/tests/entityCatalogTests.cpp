@@ -44,6 +44,51 @@ TEST(EntityCatalog, ValidatesAnimationNamesAndDeduplicatesModelsAcrossTypes) {
     EXPECT_TRUE(catalog.add(*vfs, definition, cs::ModelTextures::Read).has_value());
 }
 
+TEST(EntityCatalog, ADuckedBodyPlaysWhatItHasForThatElseWhatItPlaysStanding) {
+    nx::test::TemporaryDirectory directory;
+    nx::test::writeEntityModel(directory);
+    auto vfs = nx::assets::Vfs::create(std::array{directory.path()});
+    ASSERT_TRUE(vfs.has_value());
+    cs::EntityCatalog catalog;
+    auto definition = nx::test::entityDefinition();
+    auto standing = catalog.add(*vfs, definition, cs::ModelTextures::Skipped);
+    ASSERT_TRUE(standing.has_value());
+    EXPECT_EQ(catalog.type(*standing).sequences.crouchIdle, catalog.type(*standing).sequences.idle);
+    EXPECT_EQ(catalog.type(*standing).sequences.crouchWalk, catalog.type(*standing).sequences.walk);
+    definition.id = "crouching";
+    definition.crouchIdleSequence = "wave";
+    definition.crouchWalkSequence = "wave";
+    auto crouching = catalog.add(*vfs, definition, cs::ModelTextures::Skipped);
+    ASSERT_TRUE(crouching.has_value());
+    EXPECT_EQ(catalog.type(*crouching).sequences.crouchIdle, catalog.type(*crouching).sequences.attack);
+    EXPECT_EQ(catalog.type(*crouching).sequences.crouchWalk, catalog.type(*crouching).sequences.attack);
+    definition.id = "missingCrouch";
+    definition.crouchWalkSequence = "missing";
+    const auto missing = catalog.add(*vfs, definition, cs::ModelTextures::Skipped);
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_EQ(missing.error().code, cs::EntityError::UnknownSequence);
+}
+
+TEST(EntityCatalog, AModelIsDrawnItsOwnOffsetDuckedElseTheOneItHasStanding) {
+    auto definition = nx::test::entityDefinition();
+    definition.modelOffset = {.z = nx::HammerUnits{2.0F}};
+    EXPECT_EQ(cs::modelOffsetOf(definition, true).z, 2.0F);
+    definition.crouchedModelOffset = cs::EntityModelOffset{.z = nx::HammerUnits{18.0F}};
+    EXPECT_EQ(cs::modelOffsetOf(definition, true).z, 18.0F);
+    EXPECT_EQ(cs::modelOffsetOf(definition, false).z, 2.0F);
+
+    nx::test::TemporaryDirectory directory;
+    nx::test::writeEntityModel(directory);
+    auto vfs = nx::assets::Vfs::create(std::array{directory.path()});
+    ASSERT_TRUE(vfs.has_value());
+    cs::EntityCatalog catalog;
+    definition.crouchedModelOffset =
+        cs::EntityModelOffset{.z = nx::HammerUnits{std::numeric_limits<float>::infinity()}};
+    const auto refused = catalog.add(*vfs, definition, cs::ModelTextures::Skipped);
+    ASSERT_FALSE(refused.has_value());
+    EXPECT_EQ(refused.error().code, cs::EntityError::InvalidDefinition);
+}
+
 TEST(EntityCatalog, RejectsInvalidStatsAndDuplicateIdsWithoutChangingLiveDefinitions) {
     nx::test::TemporaryDirectory directory;
     nx::test::writeEntityModel(directory);

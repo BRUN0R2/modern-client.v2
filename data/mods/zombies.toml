@@ -75,6 +75,11 @@ idleSequence = "idle1"
 walkSequence = "walk"
 attackSequence = "ref_shoot_knife"
 deathSequence = "death1"
+# What it plays ducked, at rest and walking. A model whose crouched sequences keep their feet where they are
+# standing, unlike a player's, is drawn higher then, as a ducked body's origin is 18 units lower: name that in
+# crouchedModelOffset. Leave out what its model lacks: it plays what it plays standing.
+crouchIdleSequence = "crouch_idle"
+crouchWalkSequence = "crouchrun"
 hitGroups = { generic = 1.0, head = 4.0, chest = 1.0, stomach = 1.25, arm = 1.0, leg = 0.75, shield = 0.0, other = 1.0 }
 # The palette entry of its blood (BLOOD_COLOR_RED); leave it out for a body that does not bleed.
 bloodColor = 247

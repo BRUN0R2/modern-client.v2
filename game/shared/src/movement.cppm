@@ -163,6 +163,9 @@ inline constexpr nx::Aabb kStandingBox{.min = {.x = -16.0F, .y = -16.0F, .z = -3
 inline constexpr nx::Aabb kDuckedBox{.min = {.x = -16.0F, .y = -16.0F, .z = -18.0F},
                                      .max = {.x = 16.0F, .y = 16.0F, .z = 18.0F}};
 
+/// How much of what its keys ask a body goes at, ducking or ducked.
+inline constexpr double kDuckSpeedShare = 0.333;
+
 /// The height of a standing player's eyes above its origin, and of a ducked player's.
 inline constexpr nx::HammerUnits kStandingViewHeight{17.0F};
 inline constexpr nx::HammerUnits kDuckedViewHeight{12.0F};

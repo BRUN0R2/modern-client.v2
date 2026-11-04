@@ -26,6 +26,25 @@ constexpr std::array kMoveBands{MoveBand{.reach = 1024.0F, .ticksPerMove = 1},
                                 MoveBand{.reach = 4096.0F, .ticksPerMove = 4}};
 constexpr std::uint32_t kFarthestTicksPerMove = 8;
 
+/// The least a body's keys come to ducked, about what a player's knife walk does (250 units a second, a third
+/// of it): under 60, what they gain it each tick its friction takes (PM_Accelerate, PM_Friction), and a body
+/// of 180 units a second or less crawled at 3.
+constexpr float kLeastDuckedWalk = 80.0F;
+
+/// `move` and `maxSpeed` of a body of `speed` going ducked, its keys asking as much more as keeps them at
+/// kLeastDuckedWalk.
+void keepDuckedWalk(MoveIntent& move, nx::UnitsPerSecond& maxSpeed, nx::UnitsPerSecond speed) noexcept {
+    const auto ducked = static_cast<float>(double{speed.value()} * kDuckSpeedShare);
+    if (ducked >= kLeastDuckedWalk) {
+        return;
+    }
+    const float raised = kLeastDuckedWalk / ducked;
+    maxSpeed = maxSpeed * raised;
+    move.forward = move.forward * raised;
+    move.side = move.side * raised;
+    move.up = move.up * raised;
+}
+
 /// How many ticks go by between the moves of a body at `origin`, the players at `watchers`; none, each tick.
 [[nodiscard]] auto ticksPerMoveAt(nx::Vec3 origin, std::span<const nx::Vec3> watchers) noexcept
     -> std::uint32_t {
@@ -84,10 +103,10 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
     nx::assets::SequenceIndex sequence = sequences.idle;
     switch (motion) {
     case EntityMotion::Idle:
-        sequence = sequences.idle;
+        sequence = body.movement.isDucked ? sequences.crouchIdle : sequences.idle;
         break;
     case EntityMotion::Walking:
-        sequence = sequences.walk;
+        sequence = body.movement.isDucked ? sequences.crouchWalk : sequences.walk;
         break;
     case EntityMotion::Attacking:
         sequence = sequences.attack;
@@ -113,11 +132,11 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
     const nx::game::Transform& transform = *world.get<nx::game::Transform>(entity);
     const nx::assets::StudioSequence& sequence =
         model.files->view->sequences()[body.animation.sequence.value];
-    return poseBones(skeletonOf(*model.files->view), sequence,
-                     model.animations[body.animation.sequence.value],
-                     {.frame = serverFrameOf(sequence, body.animation.frame),
-                      .placement = nx::affine(nx::rotationMatrix(transform.angles),
-                                              transform.origin + type.definition.modelOffset.vector())});
+    return poseBones(
+        skeletonOf(*model.files->view), sequence, model.animations[body.animation.sequence.value],
+        {.frame = serverFrameOf(sequence, body.animation.frame),
+         .placement = nx::affine(nx::rotationMatrix(transform.angles),
+                                 transform.origin + modelOffsetOf(type.definition, body.movement.isDucked))});
 }
 
 /// The hitboxes of the model of entity body `entity` of `world`.
@@ -148,9 +167,9 @@ void play(EntityBody& body, const EntityType& type, EntityMotion motion, nx::Gam
 [[nodiscard]] auto clipEntity(nx::ecs::World& world, nx::ecs::Entity entity, const nx::Aabb& traced,
                               nx::Vec3 start, nx::Vec3 end) -> nx::collision::Trace {
     if (traced.min != traced.max) {
-        return nx::collision::traceBox(
-            {.min = kStandingBox.min - traced.max, .max = kStandingBox.max - traced.min},
-            world.get<nx::game::Transform>(entity)->origin, start, end);
+        const nx::Aabb& box = world.get<nx::game::BoxSolidity>(entity)->box;
+        return nx::collision::traceBox({.min = box.min - traced.max, .max = box.max - traced.min},
+                                       world.get<nx::game::Transform>(entity)->origin, start, end);
     }
     const auto hitboxes = hitboxesOf(world, entity);
     const nx::collision::HitboxTrace hit =
@@ -225,6 +244,7 @@ struct BodyMade {
     std::optional<EntityStep> step{};
     std::optional<nx::Vec3> strikesAlong{};
     std::vector<nx::collision::ModelIndex> touched{};
+    std::optional<nx::Aabb> box{}; ///< The box it ducked or stood up into.
 };
 
 /// A tick of `body` of `entity`: asked what `commands`, by entity, ask of it, or at rest; `near` and
@@ -254,7 +274,6 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
     // far as all the ticks since its last move take it.
     const std::int64_t ticks = std::max<std::int64_t>(time.now.tick() - body.movedAt.tick() + 1, 1);
     command.duration = nx::tickLengthOf(time.rate) * static_cast<float>(ticks);
-    command.buttons.reset(Button::Duck);
     // Knocked back, it walks no faster than its share of its speed, held back while staggered: the
     // speed it may walk at, as a weapon caps a player's (pmove->maxspeed), rather than a share of the
     // walk it asks for, which left one asked to walk slowly where it was: a body at rest loses
@@ -269,13 +288,18 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
             command.move = {};
         }
     }
+    if (command.buttons.test(Button::Duck) || body.movement.isDucked || body.movement.isDucking) {
+        keepDuckedWalk(command.move, body.movement.maxSpeed, type.definition.speed);
+    }
     const nx::Vec3 before = transform.origin;
+    const bool wasDucked = body.movement.isDucked;
     body.movement.origin = before;
     boxesNear(moving.stoppers, before, entity, near);
     brushEntitiesNear(moving.brushes, before, nearBrushes);
     MovementResult moved =
         simulateMovement(body.movement, command, MovementSettings{}, moving.hulls, nearBrushes, near);
     body.movement = moved.state;
+    solid = bodyOf(body.movement);
     std::optional<EntityStep> step;
     if (type.definition.stride && body.movement.isOnGround) {
         // A step each stride it walks on the ground, as its feet meet it.
@@ -284,12 +308,11 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
         if (body.walked >= *type.definition.stride) {
             body.walked = nx::HammerUnits{std::fmod(body.walked.value(), type.definition.stride->value())};
             step = EntityStep{.entity = entity,
-                              .position = body.movement.origin + nx::Vec3{.z = kStandingBox.min.z}};
+                              .position = body.movement.origin + nx::Vec3{.z = solid.box.min.z}};
         }
     }
     transform.origin = body.movement.origin;
     transform.angles = {.yaw = command.viewAngles.yaw};
-    solid = bodyOf(body.movement);
     body.movedFrom = before;
     body.movedAt = time.now.ticksLater(1);
     body.ticksPerMove = ticksPerMoveAt(transform.origin, moving.watchers);
@@ -304,11 +327,14 @@ void moveBody(const BodyMoveWorld& moving, nx::ecs::Entity entity, std::span<con
              nx::length(body.movement.velocity) > 0.0F ? EntityMotion::Walking : EntityMotion::Idle, time.now,
              moving.catalog);
     }
-    if (step || strikesAlong || !moved.touchedModels.empty()) {
+    const std::optional<nx::Aabb> box =
+        body.movement.isDucked != wasDucked ? std::optional{solid.box} : std::nullopt;
+    if (step || strikesAlong || !moved.touchedModels.empty() || box) {
         made.push_back({.entity = entity,
                         .step = step,
                         .strikesAlong = strikesAlong,
-                        .touched = std::move(moved.touchedModels)});
+                        .touched = std::move(moved.touchedModels),
+                        .box = box});
     }
 }
 } // namespace
@@ -439,6 +465,11 @@ auto runEntityBodies(nx::ecs::World& world, const nx::collision::BrushHulls& hul
     // have changed what is solid.
     std::optional<std::vector<nx::game::SolidBrushEntity>> strikesMeet;
     for (const BodyMade& move : made) {
+        // Killed by a touch earlier among these, it has none.
+        nx::game::BoxSolidity* const solidity = world.get<nx::game::BoxSolidity>(move.entity);
+        if (move.box && solidity != nullptr) {
+            solidity->box = *move.box;
+        }
         if (move.step) {
             done.steps.push_back(*move.step);
         }
@@ -519,7 +550,8 @@ void writeEntityStates(nx::ecs::World& world, std::vector<EntityState>& states, 
                                             .health = body.health,
                                             .movedFrom = body.movedFrom,
                                             .movedAt = body.movedAt,
-                                            .ticksPerMove = body.ticksPerMove};
+                                            .ticksPerMove = body.ticksPerMove,
+                                            .isDucked = body.movement.isDucked};
             }
         }
     };

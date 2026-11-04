@@ -9,13 +9,17 @@ import nx.assets;
 
 namespace cs {
 namespace {
+[[nodiscard]] auto isFinite(const EntityModelOffset& offset) noexcept -> bool {
+    return std::isfinite(offset.x.value()) && std::isfinite(offset.y.value()) &&
+           std::isfinite(offset.z.value());
+}
+
 [[nodiscard]] auto validate(const EntityDefinition& definition) -> nx::Result<void, EntityError> {
     if (definition.id.empty() || definition.model.empty() || !nx::assets::VfsPath::parse(definition.model) ||
-        !std::isfinite(definition.modelOffset.x.value()) ||
-        !std::isfinite(definition.modelOffset.y.value()) ||
-        !std::isfinite(definition.modelOffset.z.value())) {
+        !isFinite(definition.modelOffset) ||
+        (definition.crouchedModelOffset && !isFinite(*definition.crouchedModelOffset))) {
         return nx::fail(EntityError::InvalidDefinition,
-                        "an id, a VFS model path and a finite model offset are required");
+                        "an id, a VFS model path and finite model offsets are required");
     }
     const auto positive = [](float value) {
         return std::isfinite(value) && value > 0.0F;
@@ -46,6 +50,16 @@ namespace {
         return nx::fail(EntityError::InvalidDefinition, "a stride must be finite and more than none");
     }
     return {};
+}
+
+/// The sequence of `view` named `name`; none without one of that name.
+[[nodiscard]] auto sequenceNamed(const nx::assets::MdlView& view, std::string_view name)
+    -> std::optional<nx::assets::SequenceIndex> {
+    const auto found = std::ranges::find(view.sequences(), name, &nx::assets::StudioSequence::label);
+    if (name.empty() || found == view.sequences().end()) {
+        return std::nullopt;
+    }
+    return nx::assets::SequenceIndex{nx::narrow<std::uint32_t>(found - view.sequences().begin())};
 }
 } // namespace
 
@@ -84,12 +98,27 @@ auto EntityCatalog::add(const nx::assets::Vfs& vfs, EntityDefinition definition,
                                std::pair{&definition.attackSequence, &sequences.attack},
                                std::pair{&definition.deathSequence, &sequences.death}};
     for (const auto& [name, destination] : requested) {
-        const auto found = std::ranges::find(view.sequences(), *name, &nx::assets::StudioSequence::label);
-        if (name->empty() || found == view.sequences().end()) {
+        const std::optional<nx::assets::SequenceIndex> found = sequenceNamed(view, *name);
+        if (!found) {
             return nx::fail(EntityError::UnknownSequence,
                             std::format("{}: no sequence {:?}", definition.model, *name));
         }
-        *destination = nx::assets::SequenceIndex{nx::narrow<std::uint32_t>(found - view.sequences().begin())};
+        *destination = *found;
+    }
+    sequences.crouchIdle = sequences.idle;
+    sequences.crouchWalk = sequences.walk;
+    const std::array crouched{std::pair{&definition.crouchIdleSequence, &sequences.crouchIdle},
+                              std::pair{&definition.crouchWalkSequence, &sequences.crouchWalk}};
+    for (const auto& [name, destination] : crouched) {
+        if (!*name) {
+            continue;
+        }
+        const std::optional<nx::assets::SequenceIndex> found = sequenceNamed(view, **name);
+        if (!found) {
+            return nx::fail(EntityError::UnknownSequence,
+                            std::format("{}: no sequence {:?}", definition.model, **name));
+        }
+        *destination = *found;
     }
     if (view.sequences()[sequences.death.value].isLooping) {
         return nx::fail(EntityError::InvalidDefinition, "a death sequence must not loop");

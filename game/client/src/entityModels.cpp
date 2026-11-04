@@ -104,7 +104,7 @@ void EntityModels::pose(const EntityCatalog& catalog, std::span<const ShownEntit
             const EntityType& type = catalog.type(entity.type);
             nx::expects(type.model.value < models.size(), "EntityModels: upload before drawing");
             const AnimatedModel& file = catalog.model(type.model);
-            const nx::Vec3 origin = entity.origin + type.definition.modelOffset.vector();
+            const nx::Vec3 origin = entity.origin + modelOffsetOf(type.definition, entity.isDucked);
             const nx::assets::MdlView& view = *file.files->view;
             if (frame.world.mayShow(
                     shownBoxOf(origin, std::array{view.sequences()[entity.sequence.value].bounds}))) {
@@ -205,7 +205,7 @@ void EntityModels::writeBodies(const EntityCatalog& catalog, const ShownCrowd& c
                 continue; // a corpse: posed by the CPU, blended as it fades
             }
             const EntityType& type = catalog.type(state.type);
-            const nx::Vec3 offset = type.definition.modelOffset.vector();
+            const nx::Vec3 offset = modelOffsetOf(type.definition, state.isDucked);
             const nx::Vec3 origin = state.origin + offset;
             const auto slot = std::size_t{std::to_underlying(state.entity.index())};
             LitBody& lit = litBodies[slot];

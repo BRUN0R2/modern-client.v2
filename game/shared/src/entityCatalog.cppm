@@ -49,7 +49,8 @@ struct EntityModelOffset {
     }
 };
 
-/// The first movement adapter uses the standing player hull. Models may have a different origin.
+/// A body moves as a player does, standing or ducked, in a player's boxes. Models may have a different
+/// origin.
 struct EntityDefinition {
     std::string id{};
     std::string model{};
@@ -63,6 +64,13 @@ struct EntityDefinition {
     std::string walkSequence{};
     std::string attackSequence{};
     std::string deathSequence{};
+    /// What its body plays ducked, at rest and walking; none, what it plays standing.
+    std::optional<std::string> crouchIdleSequence{};
+    std::optional<std::string> crouchWalkSequence{};
+    /// How far its model is drawn from its body's origin ducked; none, modelOffset. A ducked body's origin is
+    /// 18 units lower over the same feet: a player's model has its crouched sequences there, and a model
+    /// whose sequences keep their feet where they are standing is drawn that much higher.
+    std::optional<EntityModelOffset> crouchedModelOffset{};
     HitGroupShares hitGroups{};
     /// The palette entry of its blood's color (m_bloodColor: 247, BLOOD_COLOR_RED); none for a body that
     /// does not bleed (DONT_BLEED).
@@ -74,12 +82,23 @@ struct EntityDefinition {
     std::optional<nx::HammerUnits> stride{};
 };
 
-/// The sequences of a type's model its body plays by its EntityMotion, found by their names.
+/// How far the model of `definition` is drawn from its body's origin, the body ducked or not.
+[[nodiscard]] inline auto modelOffsetOf(const EntityDefinition& definition, bool isDucked) noexcept
+    -> nx::Vec3 {
+    return (isDucked ? definition.crouchedModelOffset.value_or(definition.modelOffset)
+                     : definition.modelOffset)
+        .vector();
+}
+
+/// The sequences of a type's model its body plays by its EntityMotion, found by their names; ducked, those
+/// it has for that, else the ones it plays standing.
 struct EntitySequences {
     nx::assets::SequenceIndex idle{};
     nx::assets::SequenceIndex walk{};
     nx::assets::SequenceIndex attack{};
     nx::assets::SequenceIndex death{};
+    nx::assets::SequenceIndex crouchIdle{};
+    nx::assets::SequenceIndex crouchWalk{};
 };
 
 /// A type of the catalog: its definition, its model and its sequences, validated.
@@ -123,6 +142,7 @@ struct EntityState {
     nx::Vec3 movedFrom{};           ///< Where its last move started: it shows going from there to `origin`.
     nx::GameTime movedAt{};         ///< When its last move ended, as a snapshot tells the time.
     std::uint32_t ticksPerMove = 1; ///< How many ticks it shows going for: its next move comes then.
+    bool isDucked = false;          ///< Its box is the ducked one, its origin lower over the same feet.
 };
 
 /// A step an entity's body took in a tick, as it walked a stride on the ground: the body, and where its
@@ -141,6 +161,7 @@ struct ShownEntity {
     nx::assets::SequenceIndex sequence{};
     SequenceFrame frame{};
     std::uint8_t amount = std::numeric_limits<std::uint8_t>::max();
+    bool isDucked = false; ///< As it died (modelOffsetOf).
 };
 
 } // namespace cs
@@ -171,6 +192,9 @@ struct nx::meta::Description<cs::EntityDefinition> {
         nx::meta::field<&cs::EntityDefinition::walkSequence>("walkSequence"),
         nx::meta::field<&cs::EntityDefinition::attackSequence>("attackSequence"),
         nx::meta::field<&cs::EntityDefinition::deathSequence>("deathSequence"),
+        nx::meta::field<&cs::EntityDefinition::crouchIdleSequence>("crouchIdleSequence"),
+        nx::meta::field<&cs::EntityDefinition::crouchWalkSequence>("crouchWalkSequence"),
+        nx::meta::field<&cs::EntityDefinition::crouchedModelOffset>("crouchedModelOffset"),
         nx::meta::field<&cs::EntityDefinition::hitGroups>("hitGroups"),
         nx::meta::field<&cs::EntityDefinition::bloodColor>("bloodColor"),
         nx::meta::field<&cs::EntityDefinition::knockback>("knockback"),
