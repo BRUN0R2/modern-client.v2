@@ -10,7 +10,7 @@
 | Integration | GoogleTest (`nxIntegrationTests`) | Modules together: a world moved by parallel ECS systems, the same with any number of workers ([below](#determinism)) | Every PR |
 | Render | GoogleTest on lavapipe | Offscreen draws read back, with no validation error ([below](#c-test-conventions)) | Every PR |
 | Performance | Google Benchmark (`nxBenchEcs`, `nxBenchJobs`, `nxBenchLightStyles`, `nxBenchClient`, `nxBenchNavigation`, `nxBenchServer`) | ECS, Job System, light-style snapshots, client hot paths and the server's tick | Built on every PR, run by hand ([below](#performance)) |
-| Fuzzing | libFuzzer | The readers of the GoldSrc formats | Nightly; every PR replays the corpora as tests |
+| Fuzzing | libFuzzer | The readers of the GoldSrc formats, and the Rook parser | Nightly; every PR replays the corpora as tests |
 | Rook conformance | Suite in `rook/spec/` | Every syntax rule and every syntax diagnostic (`R0001` to `R0099`): source that must parse, source that must not, and trees | Every PR |
 | Real content | `nxcheck` | Every file of a legitimate Counter-Strike 1.6 installation through the readers | By hand, after a reader changes ([below](#real-content)) |
 
@@ -25,7 +25,7 @@
 | Render | Reference images | Renderer passes with tolerance | Every PR |
 | Parity | Fixtures from the original | Movement, weapons, economy, rules | Nightly |
 | Performance | Benchmarks on a dedicated machine | Hot paths and the full frame | Nightly |
-| Fuzzing (more targets) | libFuzzer | Network decoder, `rookc`, the Rook verifier | Nightly |
+| Fuzzing (more targets) | libFuzzer | Network decoder, the rest of `rookc`, the Rook verifier | Nightly |
 | Stress | Simulated clients | 1024 players, mass entities | Weekly |
 | *Soak* | Long-running server | 24 h+ with bots: stable memory, no timing degradation | Per release |
 

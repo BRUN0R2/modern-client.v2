@@ -26,3 +26,6 @@ rookAddModuleLibrary(rookCompiler
 if(ROOK_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+if(ROOK_BUILD_TESTS OR ROOK_FUZZ)
+    add_subdirectory(fuzz)
+endif()

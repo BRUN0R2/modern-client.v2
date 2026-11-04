@@ -620,6 +620,7 @@ Project backlog, by milestone ([docs/19-roadmap.md](19-roadmap.md)).
 - [ ] `--explain`, and diagnostics in Portuguese
 - [x] Conformance suite of the syntax, with source that must not parse
 - [ ] Conformance suite of the rest of the language, with the checker
+- [x] Fuzz target of the parser
 
 ### VM and host
 - [ ] Bytecode verifier in a target of its own, enforcing the nominal types and fuzzed from its first commit

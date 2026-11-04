@@ -285,7 +285,7 @@ Rules:
 | `LayerCheck.*` (CTest only) | The layer check of [01 §1.1](01-architecture.md#11-module-catalog) configured on a fixture of empty modules (`tests/cmake/layerCheck`) |
 | `Rook.BuildsOnItsOwn` (CTest only) | `rook/` configured, built and tested alone, with the compiler of the preset and nothing else |
 | `nxBench*` | Benchmarks (Google Benchmark): `nxBenchJobs`, `nxBenchEcs`, `nxBenchLightStyles`, `nxBenchClient`. Not CTest tests; they measure only in release builds (`build/release-<platform>/bin/`); workloads and comparison procedure in [18](18-testing-and-quality.md#performance) |
-| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzKeyValues`, `fuzzTga`, `fuzzFont`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
+| `fuzz*` | Fuzz targets of the parsers (`tests/fuzz`): `fuzzWad`, `fuzzWav`, `fuzzBsp`, `fuzzSpr`, `fuzzMdl`, `fuzzKeyValues`, `fuzzTga`, `fuzzFont`; and of the Rook parser (`rook/compiler/fuzz`): `fuzzRookParser`. In the usual presets each replays its corpus as a CTest test (`fuzzWad.corpus`); in `fuzz-windows-msvc`, libFuzzer fuzzes it |
 
 ## 7. Continuous integration
 
@@ -300,7 +300,7 @@ and on demand. **Running today:**
 
 The `.github/workflows/fuzz.yml` workflow runs every night and on demand: the `fuzz` job builds
 `fuzz-windows-msvc` and fuzzes each target for 10 minutes. A pull request that changes the
-fuzzing itself (`tests/fuzz`, the triplets, the presets, `nxTargets.cmake` or the workflow) runs
+fuzzing itself (`tests/fuzz`, `rook/compiler/fuzz`, the triplets, the presets, `nxTargets.cmake`, `rookTargets.cmake` or the workflow) runs
 it too, for a minute per target, so the nightly job never meets a broken build. A crash fails the
 run, and the input that caused it is kept as an artifact, to join the target's corpus as a test.
 
@@ -332,7 +332,7 @@ depend on what comes preinstalled on the runner image, nor on a download server 
 | `render-golden` | Every PR | Reference images with a software renderer (lavapipe) |
 | `parity` | Nightly | Parity suite on a dedicated *runner* with a legitimate copy of the game ([18](18-testing-and-quality.md#parity-tests)) |
 | `bench` | Nightly | Benchmarks on a dedicated machine. A regression above the threshold fails |
-| `fuzz` (more targets) | Nightly | The network decoder and `rookc`, as they arrive; a Linux job with Clang |
+| `fuzz` (more targets) | Nightly | The network decoder and the rest of `rookc`, as they arrive; a Linux job with Clang |
 | `stress` | Weekly | Server with 1024 simulated clients |
 | `package` | Release tag | Binaries, `THIRD_PARTY_NOTICES.md`, symbols, Docker image of `nextds` |
 

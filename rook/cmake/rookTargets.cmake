@@ -86,6 +86,50 @@ function(rookAddProgram target)
     rookTargetDefaults(${target})
 endfunction()
 
+# rookAddFuzzer(<target> SOURCES <files>... DEPENDS <targets>... CORPUS <absolute directories>...)
+#
+# Creates a fuzz target: SOURCES define rook::fuzzing::fuzz (compiler/fuzz/fuzzTarget.hpp). Its CTest test
+# depends on the build:
+#   * with ROOK_FUZZ (the flags of libFuzzer come from whoever configures), libFuzzer fuzzes it for
+#     ROOK_FUZZ_SECONDS from CORPUS; new inputs go to the build tree and the input of a crash to
+#     fuzzArtifacts/;
+#   * otherwise it runs once on every file under CORPUS, so the seeds and every crash ever found stay
+#     tests of every build.
+function(rookAddFuzzer target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "SOURCES;DEPENDS;CORPUS")
+
+    if(NOT arg_SOURCES OR NOT arg_CORPUS)
+        message(FATAL_ERROR "rookAddFuzzer(${target}): SOURCES and CORPUS are required")
+    endif()
+
+    add_executable(${target} ${arg_SOURCES})
+    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(${target} PRIVATE rook::std ${arg_DEPENDS})
+    rookTargetDefaults(${target})
+
+    if(ROOK_FUZZ)
+        # Whoever configures instruments every unit; libFuzzer supplies main and calls the entry point.
+        target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/libFuzzerEntry.cpp")
+        if(NOT MSVC)
+            target_link_options(${target} PRIVATE -fsanitize=fuzzer)
+        endif()
+        set(workCorpus "${CMAKE_CURRENT_BINARY_DIR}/${target}Corpus")
+        set(artifacts "${CMAKE_BINARY_DIR}/fuzzArtifacts")
+        file(MAKE_DIRECTORY "${workCorpus}" "${artifacts}")
+        # An input that runs past ROOK_FUZZ_INPUT_SECONDS is a hang libFuzzer reports and keeps among
+        # the artifacts, rather than one the test's timeout kills without a trace.
+        add_test(NAME ${target}
+            COMMAND ${target} "${workCorpus}" ${arg_CORPUS}
+                -max_total_time=${ROOK_FUZZ_SECONDS} -timeout=${ROOK_FUZZ_INPUT_SECONDS}
+                "-artifact_prefix=${artifacts}/")
+        math(EXPR timeout "${ROOK_FUZZ_SECONDS} * 2 + 60") # libFuzzer stops itself; this is a backstop
+        set_tests_properties(${target} PROPERTIES TIMEOUT ${timeout})
+    else()
+        target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/corpusDriver.cpp")
+        add_test(NAME ${target}.corpus COMMAND ${target} ${arg_CORPUS})
+    endif()
+endfunction()
+
 # rookAddTest(<target> SOURCES <files>... [DEPENDS <targets>...])
 #
 # Creates a GoogleTest executable and registers each test case with CTest. Where GoogleTest is not

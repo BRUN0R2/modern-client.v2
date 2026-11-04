@@ -3,8 +3,8 @@
 Toolchain and SDK of the **Rook** plugin language
 ([docs/14-rook-language.md](../docs/14-rook-language.md)). The first part of step 1 of
 [ADR-0033's order](../docs/adr/0033-rook-compiler-and-types.md#4-the-order) exists: a lexer and an error-tolerant parser that read any bytes into a lossless syntax tree and
-diagnostics, and the conformance suite that proves them. The programs come next, then name resolution, type
-checking, `rook/format`, the verifier, the VM and the LSP.
+diagnostics, the conformance suite that proves them, and a fuzz target. The programs come next, then name
+resolution, type checking, `rook/format`, the verifier, the VM and the LSP.
 
 | Directory | Contents | State |
 |-----------|----------|-------|
@@ -47,8 +47,10 @@ the project ([01 §1.1](../docs/01-architecture.md#11-module-catalog)).
 
 | Option | Default | Purpose |
 |--------|---------|---------|
-| `ROOK_BUILD_TESTS` | `ON` | The conformance suite and the unit tests |
+| `ROOK_BUILD_TESTS` | `ON` | The conformance suite, the unit tests and the fuzz target's replay |
 | `ROOK_WARNINGS_AS_ERRORS` | `ON` | `/WX`, `-Werror` |
+| `ROOK_FUZZ` | `OFF` | Link the fuzz target with libFuzzer, for which `CMAKE_CXX_FLAGS` must instrument every unit; off, it replays its corpus |
+| `ROOK_FUZZ_SECONDS`, `ROOK_FUZZ_INPUT_SECONDS` | `60`, `30` | How long `ROOK_FUZZ` runs, and how long one input may |
 
 ## License
 
