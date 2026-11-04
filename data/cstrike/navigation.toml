@@ -9,20 +9,22 @@
 # rather keep from them where there is room, the floor within it of the kind "edge"; `standingHeight`,
 # and `crouchedHeight`, under which it crouches; `stepHeight`, the highest step it walks up;
 # `jumpHeight`, the highest ledge it jumps onto, which its links of the kind "jump" span, jumped up and
-# dropped down; `dropHeight`, the highest it drops from unhurt, how far below a body off the mesh the
-# floor it drops to is looked for, which its links of the kind "drop" span, dropped down only;
-# `minGroundNormalZ`, the least upward share of a floor's unit normal it stands on; and `areaCosts`, the
-# kinds of area ("floor", "crouch", "water", "edge", "jump", "drop", "ladder") that cost it more than
-# their length, each 1 or more.
+# dropped down; `crouchedJumpHeight`, the highest it jumps onto ducking in the air, which its links of the
+# kind "crouchedJump" span, optional; `dropHeight`, the highest it drops from unhurt, how far below a body
+# off the mesh the floor it drops to is looked for, which its links of the kind "drop" span, dropped down
+# only; `minGroundNormalZ`, the least upward share of a floor's unit normal it stands on; and `areaCosts`,
+# the kinds of area ("floor", "crouch", "water", "edge", "jump", "drop", "ladder", "crouchedJump") that cost
+# it more than their length, each 1 or more.
 #
 # The player's is Counter-Strike's movement (cs::kStandingBox, cs::kDuckedBox, sv_stepsize and the
-# ground's normal, cs::kMinGroundNormalZ), with the jump of Condition Zero's bots (ReGameDLL_CS's
-# nav.h; GPL, consulted: docs/20 section 3), and the drop of playerHarm.toml's `fall.safeSpeed`, 500
+# ground's normal, cs::kMinGroundNormalZ), with the jumps of Condition Zero's bots (ReGameDLL_CS's
+# nav.h; GPL, consulted: docs/20 section 3), each some units under what the movement reaches, 45 standing
+# and 63 ducked in the air, and the drop of playerHarm.toml's `fall.safeSpeed`, 500
 # units a second, reached falling 500² / (2 × 800) units at sv_gravity 800; a kind of area costs it as
 # many times its length as it is slower there: crouched a third of its speed (0.333), in water four
-# fifths (0.8); a jump twice its length, as a Condition Zero bot's path weighs a jump area (CSBot's
-# PathCost, its jumpPenalty), a drop it takes unhurt its length, and a ladder as many times as it climbs
-# slower than it runs (200 units a second, 250). Its square box reaches 22.6 units
+# fifths (0.8); a jump twice its length, crouched or not, as a Condition Zero bot's path weighs a jump area
+# (CSBot's PathCost, its jumpPenalty), a drop it takes unhurt its length, and a ladder as many times as it
+# climbs slower than it runs (200 units a second, 250). Its square box reaches 22.6 units
 # from its middle on a diagonal, past its radius, and catches corners: its ways keep a player's half
 # width farther from walls where there is room, the floor along them costing twice its length, so that
 # a way through the middle a little longer is the cheaper.
@@ -35,6 +37,7 @@ standingHeight = 72.0
 crouchedHeight = 36.0
 stepHeight = 18.0
 jumpHeight = 41.8
+crouchedJumpHeight = 58.0
 dropHeight = 156.25
 minGroundNormalZ = 0.7
 areaCosts = [
@@ -43,6 +46,7 @@ areaCosts = [
     { area = "edge", cost = 2.0 },
     { area = "jump", cost = 2.0 },
     { area = "ladder", cost = 1.25 },
+    { area = "crouchedJump", cost = 2.0 },
 ]
 
 # The voxels Recast fills with a map: `cellSize` across, a quarter of the player's radius, so that a

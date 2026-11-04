@@ -551,7 +551,8 @@ private:
         radii.push_back(radius);
         flags.push_back(kWalkablePolygon);
         areas.push_back(areaIdOf(kind));
-        const bool goesBothWays = kind == AreaKind::Jump || kind == AreaKind::Ladder;
+        const bool goesBothWays =
+            kind == AreaKind::Jump || kind == AreaKind::CrouchedJump || kind == AreaKind::Ladder;
         ways.push_back(goesBothWays ? std::uint8_t{DT_OFFMESH_CON_BIDIR} : std::uint8_t{0});
         ids.push_back(id);
     }
@@ -576,7 +577,8 @@ private:
 
 /// The link of a body leaving the floor at `start`, across the ledge its outward way `outward` faces, to
 /// the floor below `near` holds, the profile of `input` dropping from it unhurt: of the kind Jump, both
-/// ways, within the jump height, else Drop; none where a wall or a step is there instead, no floor it lands
+/// ways, within the jump height, CrouchedJump, both ways, within the crouched one, else Drop; none where a
+/// wall or a step is there instead, no floor it lands
 /// on, or what stops a body on its way (BodyHull). It lands its radius and a cell past where the floor ends,
 /// the mesh's floor below starting its radius from the ledge, so that it lands on the mesh. How high the
 /// ledge is is the geometry's, on both sides: a polygon's corners stand up to a cell above the floor they
@@ -611,8 +613,13 @@ private:
     if (!bodyPassesAlong(input, leaves, beyond) || !bodyPassesAlong(input, beyond, lands)) {
         return std::nullopt;
     }
-    const AreaKind kind = *ledge - *landing <= profile.jumpHeight.value() ? AreaKind::Jump : AreaKind::Drop;
-    return std::pair{lands, kind};
+    const float height = *ledge - *landing;
+    if (height <= profile.jumpHeight.value()) {
+        return std::pair{lands, AreaKind::Jump};
+    }
+    return std::pair{lands, profile.crouchedJumpHeight && height <= profile.crouchedJumpHeight->value()
+                                ? AreaKind::CrouchedJump
+                                : AreaKind::Drop};
 }
 
 /// The heights of the floors over `point`, from `lowest` to `highest`, that the profile stands on.
@@ -984,7 +991,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 6;
+constexpr std::uint32_t kTilesVersion = 7;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -1027,7 +1034,8 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
     for (const float value :
          {profile.radius.value(), profile.wallClearance.value(), profile.standingHeight.value(),
           profile.crouchedHeight.value(), profile.stepHeight.value(), profile.jumpHeight.value(),
-          profile.dropHeight.value(), profile.minGroundNormalZ}) {
+          profile.crouchedJumpHeight.value_or(HammerUnits{}).value(), profile.dropHeight.value(),
+          profile.minGroundNormalZ}) {
         appendLittleEndian(bytes, value);
     }
     for (const float value :

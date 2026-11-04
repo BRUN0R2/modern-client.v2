@@ -331,6 +331,38 @@ TEST(NavigationMeshTest, ALedgeItJumpsOntoIsLinkedBothWaysAndOneItDropsFromDownO
     EXPECT_GT(drops, 0U);
 }
 
+TEST(NavigationMeshTest, ALedgeOnlyACrouchedJumpReachesIsLinkedBothWaysOfItsOwnKind) {
+    // On a floor at 0, a box 50 tall: higher than a jump and within one ducking in the air.
+    constexpr Vec3 kLow{.x = 256.0F, .y = 128.0F, .z = -16.0F};
+    constexpr Vec3 kHigh{.x = 512.0F, .y = 384.0F, .z = 50.0F};
+    Geometry geometry;
+    nx::test::addFloor(geometry, {.x = 0.0F, .y = 0.0F}, {.x = 768.0F, .y = 512.0F}, 0.0F);
+    nx::test::addBox(geometry, kLow, kHigh);
+    nx::navigation::AgentProfile jumping = nx::test::playerProfile();
+    jumping.crouchedJumpHeight = nx::HammerUnits{58.0F};
+    const Vec3 top{.x = 384.0F, .y = 256.0F, .z = kHigh.z};
+    const Vec3 floor{.x = 128.0F, .y = 256.0F};
+    {
+        const NavigationMesh mesh = nx::test::playerMesh(geometry, 3, jumping);
+        const MeshOutline outline = mesh.outline();
+        ASSERT_FALSE(outline.links.empty());
+        for (const MeshLink& link : outline.links) {
+            EXPECT_EQ(link.kind, AreaKind::CrouchedJump);
+        }
+        nx::navigation::NavigationQuery query{mesh};
+        EXPECT_TRUE(query.isReachable(floor, top).value_or(false)) << "up";
+        EXPECT_TRUE(query.isReachable(top, floor).value_or(false)) << "down";
+    }
+    // None but a drop for a profile that does not, down only.
+    const NavigationMesh mesh = nx::test::playerMesh(geometry);
+    for (const MeshLink& link : mesh.outline().links) {
+        EXPECT_EQ(link.kind, AreaKind::Drop);
+    }
+    nx::navigation::NavigationQuery query{mesh};
+    EXPECT_FALSE(query.isReachable(floor, top).value_or(true));
+    EXPECT_TRUE(query.isReachable(top, floor).value_or(false));
+}
+
 TEST(NavigationMeshTest, NoLinkLeavesALedgeHigherThanItDropsFromNorTheFloorAlongAWall) {
     // A box 200 tall on a floor: its top is too high to drop from unhurt, and its sides are walls to the
     // floor about it.
@@ -395,6 +427,24 @@ TEST(NavigationMeshTest, ATriangleOfAMissingVertexIsRefused) {
         NavigationMesh::build(*jobs, geometry, nx::test::playerProfile(), nx::test::testSettings());
     ASSERT_FALSE(mesh.has_value());
     EXPECT_EQ(mesh.error().code, MeshBuildError::InvalidGeometry);
+}
+
+TEST(NavigationMeshTest, ACrouchedJumpOutOfItsRangeIsRefused) {
+    const nx::navigation::BuildSettings settings = nx::test::testSettings();
+    nx::navigation::AgentProfile lower = nx::test::playerProfile();
+    lower.crouchedJumpHeight = nx::HammerUnits{lower.jumpHeight.value() - 1.0F};
+    nx::navigation::AgentProfile higher = nx::test::playerProfile();
+    higher.crouchedJumpHeight = nx::HammerUnits{higher.dropHeight.value() + 1.0F};
+    nx::navigation::AgentProfile notFinite = nx::test::playerProfile();
+    notFinite.crouchedJumpHeight = nx::HammerUnits{std::numeric_limits<float>::infinity()};
+    for (const nx::navigation::AgentProfile& profile : {lower, higher, notFinite}) {
+        const auto checked = nx::navigation::checkProfile(profile, settings);
+        ASSERT_FALSE(checked.has_value());
+        EXPECT_EQ(checked.error().code, MeshBuildError::InvalidProfile);
+    }
+    nx::navigation::AgentProfile within = nx::test::playerProfile();
+    within.crouchedJumpHeight = nx::HammerUnits{58.0F};
+    EXPECT_TRUE(nx::navigation::checkProfile(within, settings).has_value());
 }
 
 TEST(NavigationMeshTest, AProfileBreakingItsRulesIsRefused) {

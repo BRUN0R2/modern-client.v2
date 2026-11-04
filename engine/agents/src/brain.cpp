@@ -411,7 +411,10 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     // kept it in the shaft. Off the ground a duck is at once, so as it gets there: going up, as near as its
     // head meets what is over that floor; going down, within a step, since ducked at the top of a ladder a
     // body walks to it at a third of its speed.
-    const auto crouchesLanding = [&] {
+    const auto crouchesAcross = [&] {
+        if (crossing->kind == navigation::AreaKind::CrouchedJump && crossing->end.z > crossing->start.z) {
+            return true; // from the jump on: measured, from when it leaves the ground to its top alike
+        }
         const float heightLeft = crossing->end.z - feet.z;
         const bool isThere = crossing->end.z > crossing->start.z
                                  ? heightLeft <= profile.standingHeight.value()
@@ -425,7 +428,7 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
         } else {
             headFor(decision.intent, feet, crossing->end);
         }
-        decision.intent.crouches = crouchesLanding();
+        decision.intent.crouches = crouchesAcross();
         return decision;
     }
     const Vec3 walkablePosition = corridor->moveAgent(query, feet);
@@ -440,10 +443,15 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     }
     std::optional<navigation::MeshLink> nextLink;
     if (beginCrossing(decision, feet, query, nextLink)) {
-        decision.intent.crouches = crouchesLanding();
+        decision.intent.crouches = crouchesAcross();
         return decision;
     }
-    decision.intent.crouches = corridor->crouchesWithin(query, crouchLead);
+    // Up to a crouched jump it goes standing, its link's start room enough for that: what lifts its feet is
+    // ducking in the air, and from the ground ducked already it fell short.
+    const bool jumpsCrouchedNext = nextLink && nextLink->kind == navigation::AreaKind::CrouchedJump &&
+                                   nextLink->end.z > nextLink->start.z &&
+                                   groundDistance(feet, nextLink->start) <= crouchLead.value();
+    decision.intent.crouches = !jumpsCrouchedNext && corridor->crouchesWithin(query, crouchLead);
     // Toward the first corner on from the last it reached that is farther than arrival, the turn after it
     // anticipated (calcSmoothSteerDirection). Its funnel lists a corner it reached until it crosses the edge
     // of the polygon the corner ends, which a body that cannot turn on the spot, rounding it wide, may not

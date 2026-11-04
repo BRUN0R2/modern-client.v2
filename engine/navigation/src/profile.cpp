@@ -105,6 +105,14 @@ auto checkProfile(const AgentProfile& profile, const BuildSettings& settings)
                                                    "no less than a step",
                                                    profile.dropHeight, profile.stepHeight));
     }
+    if (profile.crouchedJumpHeight && !(std::isfinite(profile.crouchedJumpHeight->value()) &&
+                                        *profile.crouchedJumpHeight >= profile.jumpHeight &&
+                                        *profile.crouchedJumpHeight <= profile.dropHeight)) {
+        return invalidProfile(
+            profile, std::format("jumping {} crouched, {} standing and dropping {}: it must be "
+                                 "from the one up to the other",
+                                 *profile.crouchedJumpHeight, profile.jumpHeight, profile.dropHeight));
+    }
     if (!std::isfinite(profile.wallClearance.value()) || profile.wallClearance < HammerUnits{}) {
         return invalidProfile(profile, "a wall clearance must be finite and none or more");
     }

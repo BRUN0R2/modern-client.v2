@@ -173,6 +173,9 @@ TEST(MeshFileTest, AKeyChangesWithWhatShapesTheTilesAlone) {
     higherJump.jumpHeight = nx::HammerUnits{higherJump.jumpHeight.value() + 10.0F};
     nx::navigation::AgentProfile higherDrop = nx::test::playerProfile();
     higherDrop.dropHeight = nx::HammerUnits{higherDrop.dropHeight.value() + 10.0F};
+    nx::navigation::AgentProfile crouchedJump = nx::test::playerProfile();
+    crouchedJump.crouchedJumpHeight = nx::HammerUnits{58.0F};
+    EXPECT_NE(nx::navigation::meshKeyOf(geometry, crouchedJump, nx::test::testSettings()), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, higherJump, nx::test::testSettings()), key);
     EXPECT_NE(nx::navigation::meshKeyOf(geometry, higherDrop, nx::test::testSettings()), key);
 

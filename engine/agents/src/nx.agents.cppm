@@ -158,8 +158,9 @@ struct Intent {
     /// speeds it asks, turning what goes into the ladder's face into going up it and what looks down into
     /// coming down (PM_LadderMove); none off one.
     std::optional<Vec3> climb{};
-    /// It holds its duck key: on or coming to floor of the kind Crouch. A body's keys ask a third of their
-    /// speed then, of all it asks however it steers.
+    /// It holds its duck key: on or coming to floor of the kind Crouch, or across a link of the kind
+    /// CrouchedJump going up. A body's keys ask a third of their speed then, of all it asks however it
+    /// steers.
     bool crouches = false;
     /// What ahead on its way it slows down for, the nearest first, approachCount of them: each corner it
     /// sees ahead with the way on after it, passed at the cosine of half the way's turn there (straight on
