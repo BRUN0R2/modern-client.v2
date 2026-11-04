@@ -87,6 +87,25 @@ constexpr float kWayConeCosine = std::numbers::sqrt2_v<float> / 2.0F;
                dot(toBody, way) >= kWayConeCosine * distance && groundDistance(body.feet, end) < ownDistance;
     });
 }
+/// How far below level a body looks climbing down a ladder it walks over to from behind, and one it has in
+/// front of it, as far as its view turns: past 45 degrees what looks down outweighs what goes into the
+/// ladder's face, and from behind, what goes into it brings it round to the ladder's front.
+constexpr float kLookDownFromBehindDegrees = 60.0F;
+constexpr float kLookDownInFrontDegrees = 89.0F;
+
+/// `way`, a unit direction on the ground plane, looking `degrees` below level.
+[[nodiscard]] auto lookingDown(Vec3 way, float degrees) noexcept -> Vec3 {
+    const float radians = degrees * std::numbers::pi_v<float> / 180.0F;
+    return (way * std::cos(radians)) - Vec3{.z = std::sin(radians)};
+}
+
+/// `vector` as a unit direction across the ground, `otherwise` when it has no length across.
+[[nodiscard]] auto wayAcross(Vec3 vector, Vec3 otherwise) noexcept -> Vec3 {
+    const Vec3 across = acrossOf(vector);
+    const float size = length(across);
+    return size > 0.0F ? across / size : otherwise;
+}
+
 /// Heads `intent` for `point` from `feet`, across the ground: its way and where it faces; as it is when
 /// its feet are right below or above it.
 void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
@@ -97,6 +116,29 @@ void headFor(Intent& intent, Vec3 feet, Vec3 point) noexcept {
         intent.ahead = intent.direction;
     }
 }
+/// Climbs `intent` across `link`, a ladder, from `feet`, as Brain::decide says, a body of `radius` and
+/// `stepHeight`.
+void climbAcross(Intent& intent, Vec3 feet, const navigation::MeshLink& link, float radius,
+                 float stepHeight) noexcept {
+    const Vec3 span = acrossOf(link.end - link.start);
+    const Vec3 way = wayAcross(link.ladder - feet, wayAcross(span, Vec3{.x = 1.0F}));
+    if (link.end.z > link.start.z) {
+        const bool isUp = feet.z + stepHeight >= link.end.z;
+        const Vec3 going = isUp ? wayAcross(link.end - feet, way) : way;
+        intent.direction = going;
+        intent.ahead = going;
+        intent.climb = going;
+        return;
+    }
+    // A floor on the ladder's far side, which it walks over to from: its way stays the same as it comes round
+    // to the ladder's front. One on the same side has it in front of it all the way.
+    const bool isFromBehind = length(span) > radius;
+    const Vec3 going = isFromBehind ? span / length(span) : way;
+    intent.direction = going;
+    intent.ahead = going;
+    intent.climb = lookingDown(going, isFromBehind ? kLookDownFromBehindDegrees : kLookDownInFrontDegrees);
+}
+
 /// Whether a body at `feet` crossed `link`: it stands within `stepHeight` of the height of the link's end,
 /// as far from its start across as the end is, but `slack`, the way it drops or jumps over.
 [[nodiscard]] auto hasCrossed(const navigation::MeshLink& link, Vec3 feet, float stepHeight,
@@ -286,8 +328,12 @@ void Brain::planIfNeeded(Vec3 feet, Vec3 goal, std::optional<ecs::Entity> pursue
     const bool isAwayFromCorridor =
         walksAlong && (!standsAt || groundDistance(corridor->moveAgent(query, feet), *standsAt) >
                                         rules.replanDistance.value());
+    // A body off the mesh may land on it at any moment; how far a way is not there changes only as it or its
+    // goal moves.
+    const bool wasOffTheMesh = pathError == navigation::NavigationError::OutsideMesh;
     if (!crossing &&
         (target != pursued || !plannedGoal || isAwayFromCorridor || movedFarEnough(feet, goal) ||
+         wasOffTheMesh ||
          (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value()))) {
         if (target != pursued) {
             avoided.clear(); // another pursuit, which got stuck nowhere yet
@@ -350,12 +396,18 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query) -> Decision {
     if (pathError) {
         decision.behavior = Behavior::Blocked;
         decision.navigationError = pathError;
+        // Off the mesh it may be holding a ladder, which holds it there for good: a jump lets go of it.
+        decision.intent.jumps = pathError == navigation::NavigationError::OutsideMesh;
         return decision;
     }
     invariant(corridor.has_value(), "Brain: a planned corridor or a reported path error");
     std::ignore = corridor->moveTarget(query, goal);
     if (crossing) {
-        headFor(decision.intent, feet, crossing->end);
+        if (crossing->kind == navigation::AreaKind::Ladder) {
+            climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
+        } else {
+            headFor(decision.intent, feet, crossing->end);
+        }
         return decision;
     }
     const Vec3 walkablePosition = corridor->moveAgent(query, feet);
@@ -452,6 +504,11 @@ auto Brain::beginCrossing(Decision& decision, Vec3 feet, navigation::NavigationQ
     if (!crossing) {
         next = corridor->nextLink(query);
         return false;
+    }
+    if (crossing->kind == navigation::AreaKind::Ladder) {
+        const navigation::AgentProfile& profile = query.mesh().profile();
+        climbAcross(decision.intent, feet, *crossing, profile.radius.value(), profile.stepHeight.value());
+        return true;
     }
     // A link up it jumps once, from its start; one down it walks off.
     decision.intent.jumps = crossing->end.z > crossing->start.z;

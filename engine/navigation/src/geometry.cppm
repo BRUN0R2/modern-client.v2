@@ -22,10 +22,12 @@ struct GeometryTriangle {
     AreaKind kind = AreaKind::Floor; ///< What it is where it is floor.
 };
 
-/// What a mesh is built from: the surfaces of what is solid.
+/// What a mesh is built from: the surfaces of what is solid, and the ladders that join its floors, each
+/// the box of its volume, upright, which a body climbs where it touches it (AreaKind::Ladder).
 struct Geometry {
     std::vector<Vec3> vertices{};
     std::vector<GeometryTriangle> triangles{};
+    std::vector<Aabb> ladders{};
 };
 
 /// Adds to `geometry` the convex polygon `corners`, in the order of GeometryTriangle::corners, as a fan
