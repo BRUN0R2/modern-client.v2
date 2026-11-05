@@ -35,7 +35,7 @@ struct Rules {
     /// fought (saw a target it recognized), the later, so that what it perceived while it fought waits for
     /// it to look into once the fight is over.
     Seconds memoryLifetime{};
-    /// How near a target it sees must be to be attacked.
+    /// How near a target it sees must be to be attacked: its feet, or the point it is aimed at.
     HammerUnits attackDistance{};
     /// How near the corridor's end counts as arrived.
     HammerUnits arrivalDistance{};
