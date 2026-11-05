@@ -568,6 +568,20 @@ TEST(AgentBrain, ALinkItFailsTwiceInARowIsOneItsWaysKeepOffWhileTheyHaveAnother)
     EXPECT_GT(nx::length(way[1] - linkStart), 1.0F) << "by another";
 }
 
+TEST(AgentBrain, ABodyOnATargetsHeadStrikesItsEyesThoughItsFeetAreOutOfReach) {
+    auto mesh = floorMesh();
+    nx::navigation::NavigationQuery query{mesh};
+    nx::ecs::World world;
+    const auto target = world.spawn();
+    nx::agents::Brain brain{rules()};
+    const float reach = rules().attackDistance.value();
+    brain.perceive(std::array{nx::agents::Observation{.entity = target,
+                                                      .position = {.z = -2.0F * reach},
+                                                      .aimAt = nx::Vec3{.z = -reach / 2.0F}}},
+                   {}, nx::kDefaultTickRate);
+    EXPECT_EQ(brain.decide({}, query).behavior, nx::agents::Behavior::Attack);
+}
+
 TEST(AgentBrain, ABodyJumpsUpALedgeOfItsCrouchedJumpDuckingUntilItLandsAndWalksOffItUpright) {
     const Platform box{.low = {.x = 384, .y = 128, .z = -16}, .high = {.x = 640, .y = 384, .z = 50}};
     nx::navigation::AgentProfile jumping = nx::test::playerProfile();

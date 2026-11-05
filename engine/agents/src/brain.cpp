@@ -436,7 +436,11 @@ auto Brain::decide(Vec3 feet, navigation::NavigationQuery& query, bool isOnGroun
             .behavior = selected->isVisible ? Behavior::Chase : Behavior::Investigate,
             .target = pursued,
         };
-        if (selected->isVisible && length(goal - feet) <= rules.attackDistance.value()) {
+        // Near its feet, or its eyes, what is under it: from up on a body's head its feet are out of reach,
+        // while the strike goes from its own eyes down.
+        const Vec3 aimedAt = selected->observation.aimAt.value_or(goal);
+        if (selected->isVisible &&
+            std::min(length(goal - feet), length(aimedAt - feet)) <= rules.attackDistance.value()) {
             decision.behavior = Behavior::Attack;
             decision.intent.attacks = true;
             return decision;
