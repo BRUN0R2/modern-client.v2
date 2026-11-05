@@ -129,6 +129,8 @@ struct TileInput {
     std::vector<Aabb> ladders{};
     BodyHull bodyHull{};
     BodyHull crouchedBodyHull{};
+    std::vector<PlacedBodyHull> brushBodyHulls{};
+    std::vector<PlacedBodyHull> crouchedBrushBodyHulls{};
     AgentProfile profile{};
     BuildSettings settings{};
     VoxelProfile voxels{};
@@ -176,7 +178,13 @@ struct TileInput {
 /// What the tiles of `geometry` are built from. Errors: InvalidGeometry, TooLarge.
 [[nodiscard]] auto tileInputOf(const Geometry& geometry, const AgentProfile& profile,
                                const BuildSettings& settings) -> Result<TileInput, MeshBuildError> {
-    for (const BodyHull* const hull : {&geometry.bodyHull, &geometry.crouchedBodyHull}) {
+    std::vector<const BodyHull*> hulls{&geometry.bodyHull, &geometry.crouchedBodyHull};
+    for (const auto* const placed : {&geometry.brushBodyHulls, &geometry.crouchedBrushBodyHulls}) {
+        for (const PlacedBodyHull& brush : *placed) {
+            hulls.push_back(&brush.hull);
+        }
+    }
+    for (const BodyHull* const hull : hulls) {
         if (auto checked = checkBodyHull(*hull); !checked) {
             return std::unexpected{std::move(checked.error())};
         }
@@ -184,6 +192,8 @@ struct TileInput {
     TileInput input{.ladders = geometry.ladders,
                     .bodyHull = geometry.bodyHull,
                     .crouchedBodyHull = geometry.crouchedBodyHull,
+                    .brushBodyHulls = geometry.brushBodyHulls,
+                    .crouchedBrushBodyHulls = geometry.crouchedBrushBodyHulls,
                     .profile = profile,
                     .settings = settings,
                     .voxels = voxelProfileOf(profile, settings)};
@@ -271,15 +281,34 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
     }
 }
 
-/// Whether a body of `height` fits on a floor at `feet`, by `hull`, the hull of a body of that height: its
-/// middle out of the solid within its lift, the floor's own solid, grown by its box, reaching above that on a
-/// slope.
-[[nodiscard]] auto bodyFitsAt(const TileInput& input, const BodyHull& hull, HammerUnits height,
-                              Vec3 feet) noexcept -> bool {
-    const Vec3 middle = feet + Vec3{.z = height.value() * 0.5F};
+/// A body of a profile: what stops it, the world's hull and the brush entities', and how tall it is.
+struct ProfileBody {
+    const BodyHull& world;
+    std::span<const PlacedBodyHull> brushes;
+    HammerUnits height{};
+
+    [[nodiscard]] auto isSolidAt(Vec3 middle) const noexcept -> bool {
+        return navigation::isSolidAt(world, middle) || navigation::isSolidAt(brushes, middle);
+    }
+};
+
+[[nodiscard]] auto standingBodyOf(const TileInput& input) noexcept -> ProfileBody {
+    return {.world = input.bodyHull, .brushes = input.brushBodyHulls, .height = input.profile.standingHeight};
+}
+
+[[nodiscard]] auto duckedBodyOf(const TileInput& input) noexcept -> ProfileBody {
+    return {.world = input.crouchedBodyHull,
+            .brushes = input.crouchedBrushBodyHulls,
+            .height = input.profile.crouchedHeight};
+}
+
+/// Whether `body` fits on a floor at `feet`: its middle out of the solid within its lift, the floor's own
+/// solid, grown by its box, reaching above that on a slope.
+[[nodiscard]] auto bodyFitsAt(const TileInput& input, const ProfileBody& body, Vec3 feet) noexcept -> bool {
+    const Vec3 middle = feet + Vec3{.z = body.height.value() * 0.5F};
     const float voxelHeight = input.settings.cellHeight.value();
     for (int voxel = 0; voxel <= input.voxels.liftVoxels; ++voxel) {
-        if (!isSolidAt(hull, middle + Vec3{.z = static_cast<float>(voxel) * voxelHeight})) {
+        if (!body.isSolidAt(middle + Vec3{.z = static_cast<float>(voxel) * voxelHeight})) {
             return true;
         }
     }
@@ -288,7 +317,7 @@ void markCrouching(rcCompactHeightfield& compact, int standingVoxels) {
 
 /// Whether a standing body of the profile of `input` fits on a floor at `feet`.
 [[nodiscard]] auto standingBodyFitsAt(const TileInput& input, Vec3 feet) noexcept -> bool {
-    return bodyFitsAt(input, input.bodyHull, input.profile.standingHeight, feet);
+    return bodyFitsAt(input, standingBodyOf(input), feet);
 }
 
 /// Whether a standing body of the profile of `input` fits all along the way from `from` to `to`, a cell at a
@@ -336,10 +365,9 @@ void sortFloorByBodies(rcCompactHeightfield& compact, const TileInput& input) {
                 if (areas[span] != areaIdOf(AreaKind::Crouch) && standingBodyFitsAt(input, feet)) {
                     continue;
                 }
-                areas[span] =
-                    crouches && bodyFitsAt(input, input.crouchedBodyHull, profile.crouchedHeight, feet)
-                        ? areaIdOf(AreaKind::Crouch)
-                        : std::uint8_t{RC_NULL_AREA};
+                areas[span] = crouches && bodyFitsAt(input, duckedBodyOf(input), feet)
+                                  ? areaIdOf(AreaKind::Crouch)
+                                  : std::uint8_t{RC_NULL_AREA};
             }
         }
     }
@@ -991,7 +1019,7 @@ namespace {
 /// The version of the tiles this unit builds, in every key (meshKeyOf): raise it whenever what a build
 /// makes of the same geometry, profile and settings changes, here or with the recastnavigation port, so
 /// that no mesh kept before is taken for one built now.
-constexpr std::uint32_t kTilesVersion = 7;
+constexpr std::uint32_t kTilesVersion = 8;
 
 /// The bytes a key hashes for each vertex (its three coordinates) and each triangle (its three corners
 /// and its kind), to reserve them.
@@ -1067,6 +1095,15 @@ auto meshKeyOf(const Geometry& geometry, const AgentProfile& profile, const Buil
     }
     appendHull(bytes, geometry.bodyHull);
     appendHull(bytes, geometry.crouchedBodyHull);
+    for (const auto* const placed : {&geometry.brushBodyHulls, &geometry.crouchedBrushBodyHulls}) {
+        appendLittleEndian(bytes, std::uint64_t{placed->size()});
+        for (const PlacedBodyHull& brush : *placed) {
+            for (const float value : {brush.origin.x, brush.origin.y, brush.origin.z}) {
+                appendLittleEndian(bytes, value);
+            }
+            appendHull(bytes, brush.hull);
+        }
+    }
     return MeshKey{hash64(bytes)};
 }
 
