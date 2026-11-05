@@ -1293,6 +1293,13 @@ auto Corridor::steer(NavigationQuery& query, const SteeringRequest& request) -> 
     for (const SteeringBody& body :
          request.bodies.first(std::min(request.bodies.size(), kMostSteeringBodies))) {
         const std::array<float, 3> feet = detail::detourOf(body.feet);
+        // Over a body already, which so does not stop it, it goes its way: the avoidance takes any move
+        // relative to one it overlaps for a collision and only going in step with it for none, so that two
+        // pushed one way went on that way together, however far from where they were going, as long as they
+        // overlapped.
+        if (dtVdist2DSqr(position, feet.data()) < dtSqr(radius + body.radius.value())) {
+            continue;
+        }
         const std::array<float, 3> velocity = acrossOf(body.velocity);
         avoidance.addCircle(feet.data(), body.radius.value(), velocity.data(), velocity.data());
     }
