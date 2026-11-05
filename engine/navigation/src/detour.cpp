@@ -137,12 +137,25 @@ struct AvoidedPolygon {
 };
 
 /// Detour's filter of a way: `base`'s, each polygon of `avoided` (sorted by polygon, each once, outliving
-/// the filter) costing its share times its own. Detour is built with its filter virtual for it
+/// the filter) costing its share times its own, and no link it shuns. Detour is built with its filter virtual
+/// for it
 /// (DT_VIRTUAL_QUERYFILTER, cmake/ports/recastnavigation).
 class WayFilter final : public dtQueryFilter {
 public:
-    WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided) noexcept
-        : dtQueryFilter{base}, avoidedPolygons{avoided} {}
+    WayFilter(const dtQueryFilter& base, std::span<const AvoidedPolygon> avoided,
+              const PathRequest& request) noexcept
+        : dtQueryFilter{base}, avoidedPolygons{avoided}, shunnedLinks{request.shunned} {}
+
+    [[nodiscard]] auto passFilter(dtPolyRef polygonRef, const dtMeshTile* tile, const dtPoly* polygon) const
+        -> bool override {
+        if (!dtQueryFilter::passFilter(polygonRef, tile, polygon)) {
+            return false;
+        }
+        if (polygon->getType() != DT_POLYTYPE_OFFMESH_CONNECTION) {
+            return true;
+        }
+        return !isShunned(*tile, *polygon);
+    }
 
     [[nodiscard]] auto getCost(const float* from, const float* to, dtPolyRef previous,
                                const dtMeshTile* previousTile, const dtPoly* previousPolygon,
@@ -156,7 +169,29 @@ public:
     }
 
 private:
+    [[nodiscard]] auto isShunned(const dtMeshTile& tile, const dtPoly& polygon) const -> bool {
+        if (shunnedLinks.empty()) {
+            return false;
+        }
+        const std::span vertices{tile.verts, narrow<std::size_t>(tile.header->vertCount) * kCoordinates};
+        const auto endOf = [&](std::size_t end) {
+            return detail::positionOf(
+                vertices.subspan(std::size_t{polygon.verts[end]} * kCoordinates).first<kCoordinates>());
+        };
+        const Vec3 one = endOf(0);
+        const Vec3 other = endOf(1);
+        constexpr float kSameEnd = 0.5F;
+        const auto isAt = [](Vec3 first, Vec3 second) {
+            return length(first - second) <= kSameEnd;
+        };
+        return std::ranges::any_of(shunnedLinks, [&](const MeshLink& link) {
+            return (isAt(link.start, one) && isAt(link.end, other)) ||
+                   (isAt(link.start, other) && isAt(link.end, one));
+        });
+    }
+
     std::span<const AvoidedPolygon> avoidedPolygons;
+    std::span<const MeshLink> shunnedLinks;
 };
 
 /// The bits that number `count` things, at least one.
@@ -846,7 +881,7 @@ auto NavigationQuery::findPath(const PathRequest& request) -> Result<Path, Navig
         return std::unexpected{to.error()};
     }
     const WayFilter filter{request.costs ? filterOf(*request.costs) : detourState->filter,
-                           detourState->avoidedPolygonsOf(request.avoided)};
+                           detourState->avoidedPolygonsOf(request.avoided), request};
     const auto polygons = detourState->polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
@@ -1009,7 +1044,7 @@ auto Corridor::plan(NavigationQuery& query, const PathRequest& request) -> Resul
         return std::unexpected{to.error()};
     }
     const WayFilter filter{request.costs ? filterOf(*request.costs) : search.filter,
-                           search.avoidedPolygonsOf(request.avoided)};
+                           search.avoidedPolygonsOf(request.avoided), request};
     const auto polygons = search.polygonPath(*from, *to, filter);
     if (!polygons) {
         return std::unexpected{polygons.error()};
