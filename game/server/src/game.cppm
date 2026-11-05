@@ -94,6 +94,14 @@ struct BodyStatus {
     std::optional<Team> team{};
 };
 
+/// The rounds of a gun: in its clip, how many that holds, and how many of its ammo its holder carries
+/// besides.
+struct GunRounds {
+    std::uint32_t clip = 0;
+    std::uint32_t clipSize = 0;
+    std::uint32_t carried = 0;
+};
+
 /// What a player knows of itself, as its own client is told it: its team, whether it is alive, when it
 /// last spawned (alive already or not: a round's start spawns the living too), its eye and its feet, how
 /// it moves, where it looks (pev->v_angle, which the game turns as it spawns), how fast it may run
@@ -111,6 +119,7 @@ struct PlayerOwnState {
     nx::UnitsPerSecond maxSpeed{};
     std::optional<WeaponSlot> heldSlot{};
     std::optional<HurtFrom> hurtFrom{};
+    std::optional<GunRounds> heldRounds{}; ///< Of the gun it holds; none while it holds none, or a knife.
 };
 
 } // namespace cs
