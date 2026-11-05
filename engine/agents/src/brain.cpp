@@ -62,6 +62,9 @@ constexpr float kCrouchLeadRadii = 6.0F;
     const float lengths = length(toCorner) * length(beyond);
     return lengths > 0.0F ? std::clamp(dot(toCorner, beyond) / lengths, 0.0F, 1.0F) : 1.0F;
 }
+/// How many links a brain keeps away from at a time, having failed them.
+constexpr std::size_t kMostShunnedLinks = 4;
+
 /// The speed a body can still stop from by friction alone within `distance`, as PM_Friction slows it by
 /// `rules`: below its stop speed it loses stopSpeed times braking a second, so the root of twice that times
 /// the distance; faster, it loses braking times its speed a second, down to its stop speed within how much
@@ -338,6 +341,7 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
             // Back on the ground below the link's end, as it fell off a ledge it jumped at. Its corridor goes
             // on from up there, and its one jump is spent: pushing on at the ledge's face, it stayed until
             // its watch gave its way up, and then its goal.
+            noteLinkFailed(*crossing);
             forgetCorridor();
             plannedGoal.reset();
         }
@@ -361,19 +365,42 @@ void Brain::planIfNeeded(Vec3 feet, bool isOnGround, Vec3 goal, std::optional<ec
          (pathError && plannedFrom && groundDistance(*plannedFrom, feet) >= rules.replanDistance.value()))) {
         if (target != pursued) {
             avoided.clear(); // another pursuit, which got stuck nowhere yet
+            shunnedLinks.clear();
         }
         target = pursued;
         plannedGoal = goal;
         plannedFrom = feet;
         forgetCorridor();
         pathError.reset();
-        auto planned = navigation::Corridor::plan(query, {.from = feet, .to = goal, .avoided = avoided});
+        const navigation::PathRequest request{
+            .from = feet, .to = goal, .avoided = avoided, .shunned = shunnedLinks};
+        auto planned = navigation::Corridor::plan(query, request);
+        if (!planned && !shunnedLinks.empty()) {
+            // No way but over what it failed: what stopped it may be gone.
+            shunnedLinks.clear();
+            navigation::PathRequest overAny = request;
+            overAny.shunned = {};
+            planned = navigation::Corridor::plan(query, overAny);
+        }
         if (planned) {
             corridor.emplace(std::move(*planned));
         } else {
             pathError = planned.error().code;
         }
     }
+}
+
+void Brain::noteLinkFailed(const navigation::MeshLink& link) {
+    if (failedLink != link) {
+        // Once may be another body in the way, or a push: it goes at it again.
+        failedLink = link;
+        return;
+    }
+    failedLink.reset();
+    if (shunnedLinks.size() == kMostShunnedLinks) {
+        shunnedLinks.erase(shunnedLinks.begin());
+    }
+    shunnedLinks.push_back(link);
 }
 
 void Brain::finishArrival(const Memory* selected) {

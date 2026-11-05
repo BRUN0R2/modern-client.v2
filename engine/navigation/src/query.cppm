@@ -25,13 +25,14 @@ struct AvoidedPlace {
 };
 
 /// What a way is asked for: from where, to where, what each kind of area costs it, the mesh's profile's
-/// costs when none are given, and the places it keeps away from, a polygon several of them reach costing
-/// the most any of them makes it.
+/// costs when none are given, the places it keeps away from, a polygon several of them reach costing
+/// the most any of them makes it, and the links it goes over none of, either way.
 struct PathRequest {
     Vec3 from{};
     Vec3 to{};
     std::optional<AreaCosts> costs{};
     std::span<const AvoidedPlace> avoided{};
+    std::span<const MeshLink> shunned{};
 };
 
 /// A way on a mesh: the points an agent walks straight between, the first on the mesh nearest the

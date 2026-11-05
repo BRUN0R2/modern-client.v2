@@ -46,7 +46,9 @@ convex polygons, through Recast and Detour.
   link up, having slowed down for what the link's way turns across its own, since in the air a body
   flies on, and heads for its end without steering, as DetourCrowd moves an agent over a link. It has
   crossed only on the ground, at the height of the end and as far from the start; back on the ground
-  below that height it fell short, and searches its way anew from where it stands. The
+  below that height it fell short, and searches its way anew from where it stands. Back short of one link
+  twice in a row, its ways keep off that link (`PathRequest::shunned`) for as long as they have another: nothing
+  else tells it that a ledge has no room for what the link takes. The
   ledge its next link leaves from is no wall to its steering. A decision reuses its next-link lookup
   to anticipate the way over it when braking; after an attempted crossing fails and may have changed
   the corridor, it looks again.
